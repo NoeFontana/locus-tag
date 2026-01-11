@@ -44,7 +44,7 @@ pub fn extract_quads_fast(
 
         // Filter: fill ratio (should be ~50-80% for a tag with inner pattern)
         let fill = stat.pixel_count as f32 / bbox_area as f32;
-        if fill < 0.3 || fill > 0.95 {
+        if !(0.3..=0.95).contains(&fill) {
             continue;
         }
 
@@ -125,7 +125,7 @@ pub fn extract_quads_fast(
 }
 
 /// Legacy extract_quads for backward compatibility.
-pub fn extract_quads<'a>(arena: &'a Bump, img: &ImageView, labels: &[u32]) -> Vec<Detection> {
+pub fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detection> {
     // Create a fake LabelResult with stats computed on-the-fly
     let mut detections = Vec::new();
     let num_labels = (labels.len() / 32) + 1;
@@ -256,9 +256,9 @@ fn polygon_center(points: &[Point]) -> [f64; 2] {
     let mut cx = 0.0;
     let mut cy = 0.0;
     let n = points.len() - 1;
-    for i in 0..n {
-        cx += points[i].x;
-        cy += points[i].y;
+    for p in points.iter().take(n) {
+        cx += p.x;
+        cy += p.y;
     }
     [cx / n as f64, cy / n as f64]
 }
@@ -390,14 +390,17 @@ fn trace_boundary<'a>(
             let nx = curr_x as isize + dx[dir];
             let ny = curr_y as isize + dy[dir];
 
-            if nx >= 0 && nx < width as isize && ny >= 0 && ny < height as isize {
-                if labels[ny as usize * width + nx as usize] == target_label {
-                    curr_x = nx as usize;
-                    curr_y = ny as usize;
-                    enter_dir = (dir + 5) % 8;
-                    found = true;
-                    break;
-                }
+            if nx >= 0
+                && nx < width as isize
+                && ny >= 0
+                && ny < height as isize
+                && labels[ny as usize * width + nx as usize] == target_label
+            {
+                curr_x = nx as usize;
+                curr_y = ny as usize;
+                enter_dir = (dir + 5) % 8;
+                found = true;
+                break;
             }
         }
 

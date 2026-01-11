@@ -8,9 +8,10 @@ resolver = "2"
 [workspace.lints.rust]
 unsafe_code = "deny" # Force explicit allow
 missing_docs = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(multiversion_simd)', 'cfg(simd)', 'cfg(retpoline)', 'cfg(retpoline-indirect-branches)', 'cfg(retpoline-indirect-calls)'] }
 
 [workspace.lints.clippy]
-pedantic = "warn"
+pedantic = { level = "warn", priority = -1 }
 unwrap_used = "deny" # Production safety
 panic = "deny"
 cast_possible_truncation = "allow" # Common in image processing
