@@ -271,26 +271,6 @@ impl TagDecoder for GenericDecoder {
     }
 }
 
-/// Rotates the bit pattern of a tag by 90 degrees clockwise.
-///
-/// # Arguments
-/// * `bits` - The 64-bit integer representing the tag grid.
-/// * `dim` - The dimension of the tag grid (e.g., 6).
-#[must_use]
-pub fn rotate90(bits: u64, dim: usize) -> u64 {
-    let mut res = 0u64;
-    for y in 0..dim {
-        for x in 0..dim {
-            if (bits >> (y * dim + x)) & 1 != 0 {
-                let nx = dim - 1 - y;
-                let ny = x;
-                res |= 1 << (ny * dim + nx);
-            }
-        }
-    }
-    res
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -12,10 +12,12 @@ multiversion = "0.7"
 tracing = "0.1"
 rerun = { version = "0.20", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
+rand = { version = "0.8", optional = true }
 
 [dev-dependencies]
 divan = "0.1"
 proptest = "1.6"
+rand_chacha = "0.3"
 
 [[bench]]
 name = "threshold_bench"
@@ -29,10 +31,17 @@ harness = false
 name = "dictionary_bench"
 harness = false
 
+[[bench]]
+name = "comprehensive"
+harness = false
+required-features = ["extended-bench"]
+
 [features]
 default = []
 viz = ["dep:rerun"]
 serde = ["dep:serde"]
+extended-tests = ["dep:rand"]
+extended-bench = ["dep:rand"]
 
 [lints]
 workspace = true
