@@ -1,3 +1,6 @@
+#![allow(missing_docs)]
+#![allow(clippy::unwrap_used)]
+
 use divan::bench;
 use locus_core::image::ImageView;
 use locus_core::threshold::ThresholdEngine;

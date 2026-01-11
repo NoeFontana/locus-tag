@@ -1,5 +1,6 @@
 /// Generate a synthetic AprilTag-like image for testing.
 /// This is a simplified version of the OpenCV generator.
+#[must_use]
 pub fn generate_synthetic_tag(
     width: usize,
     height: usize,
@@ -8,7 +9,7 @@ pub fn generate_synthetic_tag(
     y: usize,
     tag_size: usize,
 ) -> (Vec<u8>, [[f64; 2]; 4]) {
-    let mut data = vec![128u8; width * height];
+    let mut data = vec![0u8; width * height];
     let padding = 20;
 
     // White quiet zone
@@ -55,6 +56,7 @@ pub fn generate_synthetic_tag(
 
 /// Compute mean Euclidean distance between detected and ground truth corners.
 /// Handles 4 rotations and 2 winding orders to find the minimum error.
+#[must_use]
 pub fn compute_corner_error(detected: [[f64; 2]; 4], ground_truth: [[f64; 2]; 4]) -> f64 {
     let mut min_error = f64::MAX;
 

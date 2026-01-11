@@ -1,6 +1,5 @@
 import argparse
 import time
-from pathlib import Path
 
 import cv2
 import locus
@@ -72,7 +71,7 @@ def benchmark_locus(images, ground_truth, iterations):
 
     _ = locus.detect_tags(images[0])  # Warm up
 
-    for img, gt in zip(images, ground_truth):
+    for img, gt in zip(images, ground_truth, strict=False):
         for _ in range(iterations):
             start = time.perf_counter()
             detections = locus.detect_tags(img)
@@ -100,7 +99,7 @@ def benchmark_opencv(images, ground_truth, iterations):
     id_correct = 0
     corner_errors = []
 
-    for img, gt in zip(images, ground_truth):
+    for img, gt in zip(images, ground_truth, strict=False):
         for _ in range(iterations):
             start = time.perf_counter()
             corners, ids, _ = detector.detectMarkers(img)
@@ -127,7 +126,7 @@ def benchmark_apriltag(images, ground_truth, iterations):
     id_correct = 0
     corner_errors = []
 
-    for img, gt in zip(images, ground_truth):
+    for img, gt in zip(images, ground_truth, strict=False):
         for _ in range(iterations):
             start = time.perf_counter()
             detections = at_detector.detect(img)

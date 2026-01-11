@@ -32,13 +32,13 @@ impl<'a> UnionFind<'a> {
         let root_i = self.find(i);
         let root_j = self.find(j);
         if root_i != root_j {
-            if self.rank[root_i as usize] < self.rank[root_j as usize] {
-                self.parent[root_i as usize] = root_j;
-            } else if self.rank[root_i as usize] > self.rank[root_j as usize] {
-                self.parent[root_j as usize] = root_i;
-            } else {
-                self.parent[root_i as usize] = root_j;
-                self.rank[root_j as usize] += 1;
+            match self.rank[root_i as usize].cmp(&self.rank[root_j as usize]) {
+                std::cmp::Ordering::Less => self.parent[root_i as usize] = root_j,
+                std::cmp::Ordering::Greater => self.parent[root_j as usize] = root_i,
+                std::cmp::Ordering::Equal => {
+                    self.parent[root_i as usize] = root_j;
+                    self.rank[root_j as usize] += 1;
+                }
             }
         }
     }

@@ -13,4 +13,6 @@ pyo3 = { version = "0.23", features = ["extension-module", "abi3-py310"] }
 numpy = "0.23"
 locus-core = { path = "../locus-core" }
 bumpalo = "3.16"
+[lints]
+workspace = true
 

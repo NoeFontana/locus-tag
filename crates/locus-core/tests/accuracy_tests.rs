@@ -1,3 +1,7 @@
+#![allow(missing_docs)]
+#![allow(clippy::unwrap_used)]
+#![allow(clippy::uninlined_format_args)]
+
 use bumpalo::Bump;
 use locus_core::Detector;
 use locus_core::image::ImageView;

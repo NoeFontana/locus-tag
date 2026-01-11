@@ -1,3 +1,7 @@
+#![allow(missing_docs)]
+#![allow(clippy::unwrap_used)]
+#![allow(clippy::uninlined_format_args)]
+
 use bumpalo::Bump;
 use divan::bench;
 use locus_core::Detector;
@@ -58,7 +62,6 @@ fn bench_segmentation_640x480(bencher: divan::Bencher) {
     let width = 640;
     let height = 480;
     let data = create_test_image(width, height);
-    let arena = Bump::new();
     let mut binarized = vec![0u8; width * height];
     let engine = locus_core::threshold::ThresholdEngine::new();
     let img = ImageView::new(&data, width, height, width).unwrap();

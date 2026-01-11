@@ -8,13 +8,19 @@ resolver = "2"
 [workspace.lints.rust]
 unsafe_code = "deny" # Force explicit allow
 missing_docs = "warn"
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(multiversion_simd)', 'cfg(simd)', 'cfg(retpoline)', 'cfg(retpoline-indirect-branches)', 'cfg(retpoline-indirect-calls)'] }
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(multiversion_simd)',
+    'cfg(simd)',
+    'cfg(target_feature, values("avx2", "bmi1", "bmi2", "popcnt", "lzcnt", "avx512f", "avx512bw", "avx512dq", "avx512vl", "neon", "retpoline", "retpoline-indirect-branches", "retpoline-indirect-calls"))'
+] }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 unwrap_used = "deny" # Production safety
 panic = "deny"
 cast_possible_truncation = "allow" # Common in image processing
+cast_precision_loss = "allow" # f64 has enough precision for pixel coordinates
+doc_markdown = "allow" # Avoids false positives with "AprilTag" etc.
 
 [profile.release]
 opt-level = 3

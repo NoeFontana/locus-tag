@@ -1,6 +1,5 @@
 import argparse
 import time
-from pathlib import Path
 
 import cv2
 import locus
@@ -119,7 +118,7 @@ class BenchmarkSuite:
         latencies = []
         for _ in range(iterations):
             start = time.perf_counter()
-            detections = locus.detect_tags(img)
+            locus.detect_tags(img)
             latencies.append(time.perf_counter() - start)
 
         # Accuracy check (once)
@@ -133,7 +132,7 @@ class BenchmarkSuite:
         latencies = []
         for _ in range(iterations):
             start = time.perf_counter()
-            detections = locus.detect_tags_gradient(img)
+            locus.detect_tags_gradient(img)
             latencies.append(time.perf_counter() - start)
 
         f, e = self.match_and_compute_errors(

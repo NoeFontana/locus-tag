@@ -1,5 +1,9 @@
 //! Gradient computation for edge-based quad detection.
 
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::missing_panics_doc)]
+
 use crate::image::ImageView;
 
 /// Gradient data for a single pixel.
@@ -15,6 +19,7 @@ pub struct Gradient {
 
 /// Compute Sobel gradients for the entire image.
 /// Returns a flat array of Gradient structs.
+#[must_use]
 pub fn compute_sobel(img: &ImageView) -> Vec<Gradient> {
     let w = img.width;
     let h = img.height;
@@ -26,14 +31,14 @@ pub fn compute_sobel(img: &ImageView) -> Vec<Gradient> {
 
     for y in 1..h - 1 {
         for x in 1..w - 1 {
-            let p00 = img.get_pixel(x - 1, y - 1) as i16;
-            let p10 = img.get_pixel(x, y - 1) as i16;
-            let p20 = img.get_pixel(x + 1, y - 1) as i16;
-            let p01 = img.get_pixel(x - 1, y) as i16;
-            let p21 = img.get_pixel(x + 1, y) as i16;
-            let p02 = img.get_pixel(x - 1, y + 1) as i16;
-            let p12 = img.get_pixel(x, y + 1) as i16;
-            let p22 = img.get_pixel(x + 1, y + 1) as i16;
+            let p00 = i16::from(img.get_pixel(x - 1, y - 1));
+            let p10 = i16::from(img.get_pixel(x, y - 1));
+            let p20 = i16::from(img.get_pixel(x + 1, y - 1));
+            let p01 = i16::from(img.get_pixel(x - 1, y));
+            let p21 = i16::from(img.get_pixel(x + 1, y));
+            let p02 = i16::from(img.get_pixel(x - 1, y + 1));
+            let p12 = i16::from(img.get_pixel(x, y + 1));
+            let p22 = i16::from(img.get_pixel(x + 1, y + 1));
 
             let gx = -p00 + p20 - 2 * p01 + 2 * p21 - p02 + p22;
             let gy = -p00 - 2 * p10 - p20 + p02 + 2 * p12 + p22;
@@ -64,6 +69,7 @@ pub struct LineSegment {
 
 /// Extract line segments from gradient image using a simplified LSD approach.
 /// This is a greedy region-growing algorithm on gradient direction.
+#[must_use]
 pub fn extract_line_segments(
     grads: &[Gradient],
     width: usize,
@@ -81,7 +87,7 @@ pub fn extract_line_segments(
             }
 
             // Seed point found - grow a line segment
-            let seed_angle = (grads[idx].gy as f32).atan2(grads[idx].gx as f32);
+            let seed_angle = f32::from(grads[idx].gy).atan2(f32::from(grads[idx].gx));
 
             let mut points: Vec<(usize, usize)> = vec![(x, y)];
             used[idx] = true;
@@ -90,7 +96,9 @@ pub fn extract_line_segments(
             let mut changed = true;
             while changed && points.len() < 500 {
                 changed = false;
-                let (lx, ly) = *points.last().unwrap();
+                let (lx, ly) = *points
+                    .last()
+                    .expect("Points list should not be empty during refinement");
 
                 for dy in -1i32..=1 {
                     for dx in -1i32..=1 {
@@ -108,7 +116,7 @@ pub fn extract_line_segments(
                             continue;
                         }
 
-                        let angle = (grads[nidx].gy as f32).atan2(grads[nidx].gx as f32);
+                        let angle = f32::from(grads[nidx].gy).atan2(f32::from(grads[nidx].gx));
                         let angle_diff = (angle - seed_angle).abs();
                         let angle_diff = angle_diff.min(std::f32::consts::PI - angle_diff);
 
@@ -146,6 +154,7 @@ pub fn extract_line_segments(
 }
 
 /// Find quads by grouping 4 line segments that form a closed quadrilateral.
+#[must_use]
 pub fn find_quads_from_segments(segments: &[LineSegment]) -> Vec<[[f32; 2]; 4]> {
     let mut quads = Vec::new();
 
@@ -206,7 +215,7 @@ fn try_form_quad(
 
     // Validate quad: check area and convexity
     let area = quad_area(&[c0, c1, c2, c3]);
-    if !(400.0..=100000.0).contains(&area) {
+    if !(400.0..=100_000.0).contains(&area) {
         return None;
     }
 
