@@ -4,6 +4,7 @@
 #![allow(unsafe_code)]
 
 use crate::Detection;
+use crate::config::DetectorConfig;
 use crate::image::ImageView;
 use crate::segmentation::LabelResult;
 use bumpalo::Bump;
@@ -19,20 +20,32 @@ pub struct Point {
     pub y: f64,
 }
 
-/// Minimum average gradient magnitude for a valid edge.
-/// Values below this suggest the "edge" is just noise or shading.
-const MIN_EDGE_ALIGNMENT_SCORE: f64 = 10.0;
-
 /// Fast quad extraction using bounding box stats from CCL.
 /// Only traces contours for components that pass geometric filters.
+/// Uses default configuration.
 pub fn extract_quads_fast(
     arena: &Bump,
     img: &ImageView,
     label_result: &LabelResult,
 ) -> Vec<Detection> {
+    extract_quads_with_config(arena, img, label_result, &DetectorConfig::default())
+}
+
+/// Quad extraction with custom configuration.
+///
+/// This is the main entry point for quad detection with custom parameters.
+pub fn extract_quads_with_config(
+    arena: &Bump,
+    img: &ImageView,
+    label_result: &LabelResult,
+    config: &DetectorConfig,
+) -> Vec<Detection> {
     let mut detections = Vec::new();
     let labels = label_result.labels;
     let stats = &label_result.component_stats;
+
+    // Compute minimum edge length squared once
+    let min_edge_len_sq = config.quad_min_edge_length * config.quad_min_edge_length;
 
     for (label_idx, stat) in stats.iter().enumerate() {
         let label = (label_idx + 1) as u32;
@@ -43,19 +56,19 @@ pub fn extract_quads_fast(
         let bbox_area = bbox_w * bbox_h;
 
         // Filter: too small or too large
-        if bbox_area < 400 || bbox_area > (img.width * img.height / 4) as u32 {
+        if bbox_area < config.quad_min_area || bbox_area > (img.width * img.height / 4) as u32 {
             continue;
         }
 
         // Filter: not roughly square (aspect ratio)
         let aspect = bbox_w.max(bbox_h) as f32 / bbox_w.min(bbox_h).max(1) as f32;
-        if aspect > 3.0 {
+        if aspect > config.quad_max_aspect_ratio {
             continue;
         }
 
         // Filter: fill ratio (should be ~50-80% for a tag with inner pattern)
         let fill = stat.pixel_count as f32 / bbox_area as f32;
-        if !(0.3..=0.95).contains(&fill) {
+        if fill < config.quad_min_fill_ratio || fill > config.quad_max_fill_ratio {
             continue;
         }
 
@@ -94,12 +107,13 @@ pub fn extract_quads_fast(
                 let perimeter = contour.len() as f64;
                 let compactness = (12.566 * area) / (perimeter * perimeter);
 
-                if area > 400.0 && compactness > 0.5 {
+                let min_area_f64 = f64::from(config.quad_min_area);
+                if area > min_area_f64 && compactness > 0.5 {
                     let mut ok = true;
                     for i in 0..4 {
                         let d2 = (simplified[i].x - simplified[i + 1].x).powi(2)
                             + (simplified[i].y - simplified[i + 1].y).powi(2);
-                        if d2 < 100.0 {
+                        if d2 < min_edge_len_sq {
                             ok = false;
                             break;
                         }
@@ -116,7 +130,8 @@ pub fn extract_quads_fast(
                         ];
 
                         // Filter: weak edge alignment
-                        if calculate_edge_score(img, corners) > MIN_EDGE_ALIGNMENT_SCORE {
+                        let edge_score = calculate_edge_score(img, corners);
+                        if edge_score > config.quad_min_edge_score {
                             detections.push(Detection {
                                 id: label,
                                 center,

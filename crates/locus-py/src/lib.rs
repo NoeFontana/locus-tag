@@ -5,7 +5,10 @@ use locus_core::image::ImageView;
 use numpy::{PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::prelude::*;
 
-/// Re-export Detection for Python
+// ============================================================================
+// Detection and Stats (Python-compatible wrappers)
+// ============================================================================
+
 /// Python-compatible detection result.
 #[pyclass]
 #[derive(Clone)]
@@ -72,6 +75,189 @@ impl From<locus_core::Detection> for Detection {
     }
 }
 
+// ============================================================================
+// TagFamily enum for per-call decoder selection
+// ============================================================================
+
+/// Tag family enum for selecting which decoders to use.
+#[pyclass(eq, eq_int)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TagFamily {
+    /// AprilTag 36h11 family (587 codes).
+    AprilTag36h11 = 0,
+    /// AprilTag 16h5 family (30 codes).
+    AprilTag16h5 = 1,
+    /// ArUco 4x4_50 dictionary.
+    ArUco4x4_50 = 2,
+    /// ArUco 4x4_100 dictionary.
+    ArUco4x4_100 = 3,
+}
+
+impl From<TagFamily> for locus_core::config::TagFamily {
+    fn from(f: TagFamily) -> Self {
+        match f {
+            TagFamily::AprilTag36h11 => locus_core::config::TagFamily::AprilTag36h11,
+            TagFamily::AprilTag16h5 => locus_core::config::TagFamily::AprilTag16h5,
+            TagFamily::ArUco4x4_50 => locus_core::config::TagFamily::ArUco4x4_50,
+            TagFamily::ArUco4x4_100 => locus_core::config::TagFamily::ArUco4x4_100,
+        }
+    }
+}
+
+// ============================================================================
+// Detector class with persistent state
+// ============================================================================
+
+/// The main detector class. Holds reusable detector state.
+///
+/// Use this for efficient repeated detection on multiple images.
+///
+/// Example:
+///     detector = locus.Detector()
+///     detections = detector.detect(image)
+///
+///     # With custom config
+///     detector = locus.Detector(
+///         threshold_tile_size=16,
+///         quad_min_area=200,
+///     )
+#[pyclass(unsendable)]
+pub struct Detector {
+    inner: locus_core::Detector,
+}
+
+#[pymethods]
+impl Detector {
+    /// Create a new detector with optional configuration.
+    ///
+    /// Args:
+    ///     threshold_tile_size: Tile size for adaptive thresholding (default: 8)
+    ///     threshold_min_range: Min intensity range for valid tiles (default: 10)
+    ///     quad_min_area: Minimum quad area in pixels (default: 400)
+    ///     quad_max_aspect_ratio: Maximum bounding box aspect ratio (default: 3.0)
+    ///     quad_min_fill_ratio: Minimum pixel fill ratio (default: 0.3)
+    ///     quad_max_fill_ratio: Maximum pixel fill ratio (default: 0.95)
+    ///     quad_min_edge_length: Minimum edge length in pixels (default: 4.0)
+    ///     quad_min_edge_score: Minimum edge gradient score (default: 10.0)
+    #[new]
+    #[pyo3(signature = (
+        threshold_tile_size = 8,
+        threshold_min_range = 10,
+        quad_min_area = 400,
+        quad_max_aspect_ratio = 3.0,
+        quad_min_fill_ratio = 0.3,
+        quad_max_fill_ratio = 0.95,
+        quad_min_edge_length = 4.0,
+        quad_min_edge_score = 10.0
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        threshold_tile_size: usize,
+        threshold_min_range: u8,
+        quad_min_area: u32,
+        quad_max_aspect_ratio: f32,
+        quad_min_fill_ratio: f32,
+        quad_max_fill_ratio: f32,
+        quad_min_edge_length: f64,
+        quad_min_edge_score: f64,
+    ) -> Self {
+        let config = locus_core::DetectorConfig {
+            threshold_tile_size,
+            threshold_min_range,
+            quad_min_area,
+            quad_max_aspect_ratio,
+            quad_min_fill_ratio,
+            quad_max_fill_ratio,
+            quad_min_edge_length,
+            quad_min_edge_score,
+        };
+        Self {
+            inner: locus_core::Detector::with_config(config),
+        }
+    }
+
+    /// Detect tags in the image using default decoders.
+    #[allow(clippy::cast_sign_loss)]
+    fn detect(&mut self, img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
+        let view = create_image_view(&img)?;
+        let detections = self.inner.detect(&view);
+        Ok(detections.into_iter().map(Detection::from).collect())
+    }
+
+    /// Detect tags using specific tag families (for performance).
+    ///
+    /// Args:
+    ///     img: Grayscale image as numpy array
+    ///     families: List of TagFamily to decode
+    #[allow(clippy::cast_sign_loss)]
+    fn detect_families(
+        &mut self,
+        img: PyReadonlyArray2<u8>,
+        families: Vec<TagFamily>,
+    ) -> PyResult<Vec<Detection>> {
+        let view = create_image_view(&img)?;
+        let core_families: Vec<locus_core::config::TagFamily> =
+            families.into_iter().map(Into::into).collect();
+        let options = locus_core::DetectOptions::with_families(&core_families);
+        let detections = self.inner.detect_with_options(&view, &options);
+        Ok(detections.into_iter().map(Detection::from).collect())
+    }
+
+    /// Detect tags with timing statistics.
+    #[allow(clippy::cast_sign_loss)]
+    fn detect_with_stats(
+        &mut self,
+        img: PyReadonlyArray2<u8>,
+    ) -> PyResult<(Vec<Detection>, PipelineStats)> {
+        let view = create_image_view(&img)?;
+        let (detections, stats) = self.inner.detect_with_stats(&view);
+        Ok((
+            detections.into_iter().map(Detection::from).collect(),
+            PipelineStats::from(stats),
+        ))
+    }
+
+    /// Set the tag families to decode by default.
+    fn set_families(&mut self, families: Vec<TagFamily>) {
+        let core_families: Vec<locus_core::config::TagFamily> =
+            families.into_iter().map(Into::into).collect();
+        self.inner.set_families(&core_families);
+    }
+}
+
+// ============================================================================
+// Helper functions
+// ============================================================================
+
+/// Create an ImageView from a PyReadonlyArray2, validating strides.
+#[allow(clippy::cast_sign_loss)]
+fn create_image_view<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageView<'a>> {
+    let shape = img.shape();
+    let height = shape[0];
+    let width = shape[1];
+    let strides = img.strides();
+    let stride = strides[0] as usize;
+
+    if strides[1] != 1 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Image must have C-contiguous rows (inner stride must be 1)",
+        ));
+    }
+
+    let required_size = if height > 0 && width > 0 {
+        (height - 1) * stride + width
+    } else {
+        0
+    };
+
+    let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
+    ImageView::new(data, width, height, stride).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+// ============================================================================
+// Legacy function-based API (for backward compatibility)
+// ============================================================================
+
 /// A dummy detection function for Phase 0 verification.
 #[pyfunction]
 fn dummy_detect() -> String {
@@ -82,41 +268,9 @@ fn dummy_detect() -> String {
 #[pyfunction]
 #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
 fn detect_tags(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
-    let shape = img.shape();
-    let height = shape[0];
-    let width = shape[1];
-
-    // Extract strides from NumPy array
-    let strides = img.strides();
-    let stride = strides[0] as usize; // Stride of the first dimension (rows)
-
-    // Safety: we ensure the second dimension has a stride of 1 (C-contiguous rows).
-    // This is a common constraint for many CV algorithms.
-    if strides[1] != 1 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "Image must have C-contiguous rows (inner stride must be 1)",
-        ));
-    }
-
-    // Calculate the total extent of the memory we might access.
-    // The last byte accessed is at index: (height - 1) * stride + (width - 1).
-    // So the required size is that index + 1.
-    let required_size = if height > 0 && width > 0 {
-        (height - 1) * stride + width
-    } else {
-        0
-    };
-
-    // Access raw data via buffer protocol.
-    // We create a slice that covers the entire extent of the strided image.
-    let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
-
-    let views = ImageView::new(data, width, height, stride)
-        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
-
+    let view = create_image_view(&img)?;
     let mut detector = locus_core::Detector::new();
-    let detections = detector.detect(&views);
-
+    let detections = detector.detect(&view);
     Ok(detections.into_iter().map(Detection::from).collect())
 }
 
@@ -124,30 +278,9 @@ fn detect_tags(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
 #[pyfunction]
 #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
 fn detect_tags_with_stats(img: PyReadonlyArray2<u8>) -> PyResult<(Vec<Detection>, PipelineStats)> {
-    let shape = img.shape();
-    let height = shape[0];
-    let width = shape[1];
-    let strides = img.strides();
-    let stride = strides[0] as usize;
-
-    if strides[1] != 1 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "Inner stride must be 1",
-        ));
-    }
-
-    let required_size = if height > 0 && width > 0 {
-        (height - 1) * stride + width
-    } else {
-        0
-    };
-    let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
-    let view = ImageView::new(data, width, height, stride)
-        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
-
+    let view = create_image_view(&img)?;
     let mut detector = locus_core::Detector::new();
     let (detections, stats) = detector.detect_with_stats(&view);
-
     Ok((
         detections.into_iter().map(Detection::from).collect(),
         PipelineStats::from(stats),
@@ -158,31 +291,9 @@ fn detect_tags_with_stats(img: PyReadonlyArray2<u8>) -> PyResult<(Vec<Detection>
 #[pyfunction]
 #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
 fn detect_tags_gradient(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
-    let shape = img.shape();
-    let height = shape[0];
-    let width = shape[1];
-    let strides = img.strides();
-    let stride = strides[0] as usize;
-
-    if strides[1] != 1 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "Image must have C-contiguous rows (inner stride must be 1)",
-        ));
-    }
-
-    let required_size = if height > 0 && width > 0 {
-        (height - 1) * stride + width
-    } else {
-        0
-    };
-
-    let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
-    let view = ImageView::new(data, width, height, stride)
-        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
-
+    let view = create_image_view(&img)?;
     let mut detector = locus_core::Detector::new();
     let detections = detector.detect_gradient(&view);
-
     Ok(detections.into_iter().map(Detection::from).collect())
 }
 
@@ -190,43 +301,16 @@ fn detect_tags_gradient(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
 #[pyfunction]
 #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
 fn debug_threshold(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
-    let shape = img.shape();
-    let height = shape[0];
-    let width = shape[1];
-    let strides = img.strides();
-    let stride = strides[0] as usize;
-
-    if strides[1] != 1 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "Inner stride must be 1",
-        ));
-    }
-
-    let required_size = if height > 0 && width > 0 {
-        (height - 1) * stride + width
-    } else {
-        0
-    };
-
-    let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
-    let view = ImageView::new(data, width, height, stride)
-        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
-
-    let mut detector = locus_core::Detector::new();
-    // We need to reach into the internal threshold engine for this specific debug helper
-    // or we can just expose a helper that returns the binarized image from the arena.
-    // For now, let's keep it simple as we are refactoring.
+    let view = create_image_view(&img)?;
+    let width = view.width;
+    let height = view.height;
 
     let mut output = vec![0u8; width * height];
-    // This is slightly inefficient (copies) but it's a debug helper.
-    let _detections = detector.detect(&view); // This runs thresholding too but ignores output
-
-    // Let's re-run thresholding into our output vec for this debug function
-    let stats = locus_core::threshold::ThresholdEngine::new().compute_tile_stats(&view);
-    locus_core::threshold::ThresholdEngine::new().apply_threshold(&view, &stats, &mut output);
+    let engine = locus_core::threshold::ThresholdEngine::new();
+    let stats = engine.compute_tile_stats(&view);
+    engine.apply_threshold(&view, &stats, &mut output);
 
     Python::with_gil(|py| {
-        use numpy::PyArrayMethods;
         let array = numpy::PyArray1::from_vec(py, output);
         let array2d = array.reshape([height, width]).map_err(|_| {
             pyo3::exceptions::PyRuntimeError::new_err("Failed to reshape NumPy array")
@@ -239,33 +323,10 @@ fn debug_threshold(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
 #[pyfunction]
 #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
 fn debug_segmentation(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
-    let shape = img.shape();
-    let height = shape[0];
-    let width = shape[1];
-    let strides = img.strides();
-    let stride = strides[0] as usize;
+    let view = create_image_view(&img)?;
+    let width = view.width;
+    let height = view.height;
 
-    if strides[1] != 1 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "Inner stride must be 1",
-        ));
-    }
-
-    let required_size = if height > 0 && width > 0 {
-        (height - 1) * stride + width
-    } else {
-        0
-    };
-
-    let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
-    let view = ImageView::new(data, width, height, stride)
-        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
-
-    let _detector = locus_core::Detector::new();
-
-    // Run the pipeline to get labels
-    // We need a helper in locus-core to access intermediate labels or return them
-    // For now, let's just re-implement the labeling here manually or add a pub helper.
     let engine = locus_core::threshold::ThresholdEngine::new();
     let stats = engine.compute_tile_stats(&view);
     let mut binarized = vec![0u8; width * height];
@@ -273,12 +334,9 @@ fn debug_segmentation(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
 
     let arena = bumpalo::Bump::new();
     let labels = locus_core::segmentation::label_components(&arena, &binarized, width, height);
-
-    // Copy labels to a Vec for Python
     let labels_vec = labels.to_vec();
 
     Python::with_gil(|py| {
-        use numpy::PyArrayMethods;
         let array = numpy::PyArray1::from_vec(py, labels_vec);
         let array2d = array.reshape([height, width]).map_err(|_| {
             pyo3::exceptions::PyRuntimeError::new_err("Failed to reshape NumPy array")
@@ -287,11 +345,20 @@ fn debug_segmentation(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
     })
 }
 
+// ============================================================================
+// Module registration
+// ============================================================================
+
 /// The locus Python module.
 #[pymodule]
 fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Classes
     m.add_class::<Detection>()?;
     m.add_class::<PipelineStats>()?;
+    m.add_class::<TagFamily>()?;
+    m.add_class::<Detector>()?;
+
+    // Legacy functions (for backward compatibility)
     m.add_function(wrap_pyfunction!(dummy_detect, m)?)?;
     m.add_function(wrap_pyfunction!(detect_tags, m)?)?;
     m.add_function(wrap_pyfunction!(detect_tags_gradient, m)?)?;

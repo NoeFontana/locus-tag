@@ -2,7 +2,33 @@
 //!
 //! This crate implements the high-performance AprilTag detection pipeline,
 //! including adaptive thresholding, segmentation, quad extraction, and decoding.
+//!
+//! # Configuration
+//!
+//! The detector supports two levels of configuration:
+//! - [`config::DetectorConfig`]: Pipeline-level settings (immutable after construction)
+//! - [`config::DetectOptions`]: Per-call detection options
+//!
+//! # Example
+//!
+//! ```ignore
+//! use locus_core::{Detector, config::{DetectorConfig, DetectOptions}};
+//!
+//! // Create detector with custom config
+//! let config = DetectorConfig::builder()
+//!     .threshold_tile_size(16)
+//!     .build();
+//! let mut detector = Detector::with_config(config);
+//!
+//! // Detect with custom options
+//! let options = DetectOptions::builder()
+//!     .quad_min_area(200)
+//!     .build();
+//! let detections = detector.detect_with_options(&img, &options);
+//! ```
 
+/// Configuration types for the detector pipeline.
+pub mod config;
 /// Tag decoding traits and implementations.
 pub mod decoder;
 /// Tag family dictionaries (AprilTag, ArUco).
@@ -19,6 +45,8 @@ pub mod segmentation;
 pub mod test_utils;
 /// Adaptive thresholding implementation.
 pub mod threshold;
+
+pub use config::{DetectOptions, DetectorConfig};
 
 use crate::decoder::TagDecoder;
 use crate::image::ImageView;
@@ -55,19 +83,30 @@ pub struct PipelineStats {
 }
 
 /// The main entry point for detecting AprilTags.
+///
+/// The detector holds reusable state (arena allocator, threshold engine)
+/// and can be configured at construction time via [`DetectorConfig`].
 pub struct Detector {
     arena: Bump,
+    config: DetectorConfig,
     threshold_engine: ThresholdEngine,
     decoders: Vec<Box<dyn TagDecoder + Send + Sync>>,
 }
 
 impl Detector {
-    /// Create a new detector instance.
+    /// Create a new detector instance with default configuration.
     #[must_use]
     pub fn new() -> Self {
+        Self::with_config(DetectorConfig::default())
+    }
+
+    /// Create a detector with custom pipeline configuration.
+    #[must_use]
+    pub fn with_config(config: DetectorConfig) -> Self {
         Self {
             arena: Bump::new(),
-            threshold_engine: ThresholdEngine::new(),
+            config,
+            threshold_engine: ThresholdEngine::from_config(&config),
             decoders: vec![Box::new(crate::decoder::AprilTag36h11)],
         }
     }
@@ -77,13 +116,39 @@ impl Detector {
         self.decoders.push(decoder);
     }
 
-    /// Primary detection entry point.
+    /// Clear all decoders and set new ones based on tag families.
+    pub fn set_families(&mut self, families: &[config::TagFamily]) {
+        self.decoders.clear();
+        for family in families {
+            self.decoders.push(family_to_decoder(*family));
+        }
+    }
+
+    /// Primary detection entry point using detector's configured decoders.
     pub fn detect(&mut self, img: &ImageView) -> Vec<Detection> {
-        self.detect_with_stats(img).0
+        self.detect_with_options(img, &DetectOptions::default())
+    }
+
+    /// Detection with custom per-call options (e.g., specific tag families).
+    pub fn detect_with_options(
+        &mut self,
+        img: &ImageView,
+        options: &DetectOptions,
+    ) -> Vec<Detection> {
+        self.detect_with_stats_and_options(img, options).0
     }
 
     /// Detection with detailed timing statistics.
     pub fn detect_with_stats(&mut self, img: &ImageView) -> (Vec<Detection>, PipelineStats) {
+        self.detect_with_stats_and_options(img, &DetectOptions::default())
+    }
+
+    /// Detection with both custom options and timing statistics.
+    pub fn detect_with_stats_and_options(
+        &mut self,
+        img: &ImageView,
+        options: &DetectOptions,
+    ) -> (Vec<Detection>, PipelineStats) {
         let mut stats = PipelineStats::default();
         let start_total = std::time::Instant::now();
 
@@ -111,40 +176,38 @@ impl Detector {
 
         // 3. Quad Fitting (Fast path with pre-filtering)
         let start_quad = std::time::Instant::now();
-        let candidates = crate::quad::extract_quads_fast(&self.arena, img, &label_result);
+        let candidates =
+            crate::quad::extract_quads_with_config(&self.arena, img, &label_result, &self.config);
         stats.quad_extraction_ms = start_quad.elapsed().as_secs_f64() * 1000.0;
 
-        // 4. Decoding (Single-threaded for low latency on small candidate sets)
+        // 4. Decoding - select decoders based on options
         let start_decode = std::time::Instant::now();
         let src_points = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]];
+
+        // Build decoder list: use options.families if specified, else use self.decoders
+        let temp_decoders: Vec<Box<dyn TagDecoder + Send + Sync>>;
+        let active_decoders: &[Box<dyn TagDecoder + Send + Sync>] = if options.families.is_empty() {
+            &self.decoders
+        } else {
+            temp_decoders = options
+                .families
+                .iter()
+                .map(|f| family_to_decoder(*f))
+                .collect();
+            &temp_decoders
+        };
 
         let mut final_detections = Vec::new();
         for mut cand in candidates {
             if let Some(h) = crate::decoder::Homography::from_pairs(&src_points, &cand.corners) {
-                for decoder in &self.decoders {
-                    let mut bits = 0u64;
-                    let points = decoder.sample_points();
-
-                    // Safety check: currently only support up to 64 bits
-                    if points.len() > 64 {
-                        continue;
-                    }
-
-                    for (i, point) in points.iter().enumerate() {
-                        let img_p = h.project([point.0, point.1]);
-                        // Using unchecked access might be faster but sticking to safe abstraction
-                        let val = img.sample_bilinear(img_p[0], img_p[1]);
-
-                        if val > 128.0 {
-                            bits |= 1 << i;
+                for decoder in active_decoders {
+                    if let Some(bits) = crate::decoder::sample_grid(img, &h, decoder.as_ref()) {
+                        if let Some((id, hamming)) = decoder.decode(bits) {
+                            cand.id = id;
+                            cand.hamming = hamming;
+                            final_detections.push(cand);
+                            break;
                         }
-                    }
-
-                    if let Some((id, hamming)) = decoder.decode(bits) {
-                        cand.id = id;
-                        cand.hamming = hamming;
-                        final_detections.push(cand);
-                        break;
                     }
                 }
             }
@@ -207,4 +270,14 @@ impl Default for Detector {
 #[must_use]
 pub fn core_info() -> String {
     "Locus Core v0.1.0 Engine".to_string()
+}
+
+/// Convert a TagFamily enum to a boxed decoder instance.
+fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send + Sync> {
+    match family {
+        config::TagFamily::AprilTag36h11 => Box::new(decoder::AprilTag36h11),
+        config::TagFamily::AprilTag16h5 => Box::new(decoder::AprilTag16h5),
+        config::TagFamily::ArUco4x4_50 => Box::new(decoder::ArUco4x4_50),
+        config::TagFamily::ArUco4x4_100 => Box::new(decoder::ArUco4x4_100),
+    }
 }

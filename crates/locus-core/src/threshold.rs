@@ -1,3 +1,4 @@
+use crate::config::DetectorConfig;
 use crate::image::ImageView;
 use multiversion::multiversion;
 
@@ -14,6 +15,8 @@ pub struct TileStats {
 pub struct ThresholdEngine {
     /// Size of the tiles used for local thresholding statistics.
     pub tile_size: usize,
+    /// Minimum intensity range for a tile to be considered valid.
+    pub min_range: u8,
 }
 
 impl Default for ThresholdEngine {
@@ -26,7 +29,19 @@ impl ThresholdEngine {
     /// Create a new ThresholdEngine with default settings.
     #[must_use]
     pub fn new() -> Self {
-        Self { tile_size: 8 }
+        Self {
+            tile_size: 8,
+            min_range: 10,
+        }
+    }
+
+    /// Create a ThresholdEngine from detector configuration.
+    #[must_use]
+    pub fn from_config(config: &DetectorConfig) -> Self {
+        Self {
+            tile_size: config.threshold_tile_size,
+            min_range: config.threshold_min_range,
+        }
     }
 
     /// Compute min/max statistics for each tile in the image.
@@ -87,7 +102,7 @@ impl ThresholdEngine {
                 }
 
                 let idx = ty * tiles_wide + tx;
-                if nmax.saturating_sub(nmin) < 10 {
+                if nmax.saturating_sub(nmin) < self.min_range {
                     tile_valid[idx] = 0;
                 } else {
                     tile_valid[idx] = 255;
@@ -159,8 +174,9 @@ fn threshold_row_simd(src: &[u8], dst: &mut [u8], thresholds: &[u8], valid_mask:
         let t = thresholds[i];
         let m = valid_mask[i];
         // Branchless: (s > t) produces 0 or 1, multiply by 255
-        let pass = u8::from(s > t).wrapping_neg(); // 0xFF if true, 0x00 if false
-        dst[i] = pass & m;
+        let pass = u8::from(s >= t).wrapping_neg(); // 0xFF if true, 0x00 if false
+        // Invalid tiles (m=0) should be white (255) to avoid merging with black tags
+        dst[i] = (pass & m) | !m;
     }
 }
 
@@ -190,11 +206,18 @@ mod tests {
             threshold_row_simd(&src, &mut dst, &[thresh; 16], &valid);
 
             for (i, &s) in src.iter().enumerate() {
-                if s > thresh {
+                if s >= thresh {
                     assert_eq!(dst[i], 255);
                 } else {
                     assert_eq!(dst[i], 0);
                 }
+            }
+
+            // Test invalid tile (mask=0) should be white (255)
+            let invalid = vec![0u8; 16];
+            threshold_row_simd(&src, &mut dst, &[thresh; 16], &invalid);
+            for d in dst {
+                assert_eq!(d, 255);
             }
         }
     }

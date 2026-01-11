@@ -1,0 +1,288 @@
+//! Configuration types for the detector pipeline.
+//!
+//! This module provides two configuration types:
+//! - [`DetectorConfig`]: Pipeline-level configuration (immutable after construction)
+//! - [`DetectOptions`]: Per-call options (e.g., which tag families to decode)
+
+// ============================================================================
+// DetectorConfig: Pipeline-level configuration
+// ============================================================================
+
+/// Pipeline-level configuration for the detector.
+///
+/// These settings affect the fundamental behavior of the detection pipeline
+/// and are immutable after the `Detector` is constructed. Use the builder
+/// pattern for ergonomic construction.
+///
+/// # Example
+/// ```
+/// use locus_core::config::DetectorConfig;
+///
+/// let config = DetectorConfig::builder()
+///     .threshold_tile_size(16)
+///     .quad_min_area(200)
+///     .build();
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct DetectorConfig {
+    // Threshold parameters
+    /// Tile size for adaptive thresholding (default: 8).
+    /// Larger tiles are faster but less adaptive to local contrast.
+    pub threshold_tile_size: usize,
+    /// Minimum intensity range in a tile to be considered valid (default: 10).
+    /// Tiles with lower range are treated as uniform (no edges).
+    pub threshold_min_range: u8,
+
+    // Quad filtering parameters
+    /// Minimum quad area in pixels (default: 400).
+    pub quad_min_area: u32,
+    /// Maximum aspect ratio of bounding box (default: 3.0).
+    pub quad_max_aspect_ratio: f32,
+    /// Minimum fill ratio (pixel count / bbox area) (default: 0.3).
+    pub quad_min_fill_ratio: f32,
+    /// Maximum fill ratio (default: 0.95).
+    pub quad_max_fill_ratio: f32,
+    /// Minimum edge length in pixels (default: 4.0).
+    pub quad_min_edge_length: f64,
+    /// Minimum edge gradient score (default: 10.0).
+    /// Higher values reject weak edges (low contrast boundaries).
+    pub quad_min_edge_score: f64,
+}
+
+impl Default for DetectorConfig {
+    fn default() -> Self {
+        Self {
+            threshold_tile_size: 8,
+            threshold_min_range: 10,
+            quad_min_area: 400,
+            quad_max_aspect_ratio: 3.0,
+            quad_min_fill_ratio: 0.3,
+            quad_max_fill_ratio: 0.95,
+            quad_min_edge_length: 4.0,
+            quad_min_edge_score: 10.0,
+        }
+    }
+}
+
+impl DetectorConfig {
+    /// Create a new builder for `DetectorConfig`.
+    #[must_use]
+    pub fn builder() -> DetectorConfigBuilder {
+        DetectorConfigBuilder::default()
+    }
+}
+
+/// Builder for [`DetectorConfig`].
+#[derive(Default)]
+pub struct DetectorConfigBuilder {
+    threshold_tile_size: Option<usize>,
+    threshold_min_range: Option<u8>,
+    quad_min_area: Option<u32>,
+    quad_max_aspect_ratio: Option<f32>,
+    quad_min_fill_ratio: Option<f32>,
+    quad_max_fill_ratio: Option<f32>,
+    quad_min_edge_length: Option<f64>,
+    quad_min_edge_score: Option<f64>,
+}
+
+impl DetectorConfigBuilder {
+    /// Set the tile size for adaptive thresholding.
+    #[must_use]
+    pub fn threshold_tile_size(mut self, size: usize) -> Self {
+        self.threshold_tile_size = Some(size);
+        self
+    }
+
+    /// Set the minimum intensity range for valid tiles.
+    #[must_use]
+    pub fn threshold_min_range(mut self, range: u8) -> Self {
+        self.threshold_min_range = Some(range);
+        self
+    }
+
+    /// Set the minimum quad area.
+    #[must_use]
+    pub fn quad_min_area(mut self, area: u32) -> Self {
+        self.quad_min_area = Some(area);
+        self
+    }
+
+    /// Set the maximum aspect ratio.
+    #[must_use]
+    pub fn quad_max_aspect_ratio(mut self, ratio: f32) -> Self {
+        self.quad_max_aspect_ratio = Some(ratio);
+        self
+    }
+
+    /// Set the minimum fill ratio.
+    #[must_use]
+    pub fn quad_min_fill_ratio(mut self, ratio: f32) -> Self {
+        self.quad_min_fill_ratio = Some(ratio);
+        self
+    }
+
+    /// Set the maximum fill ratio.
+    #[must_use]
+    pub fn quad_max_fill_ratio(mut self, ratio: f32) -> Self {
+        self.quad_max_fill_ratio = Some(ratio);
+        self
+    }
+
+    /// Set the minimum edge length.
+    #[must_use]
+    pub fn quad_min_edge_length(mut self, length: f64) -> Self {
+        self.quad_min_edge_length = Some(length);
+        self
+    }
+
+    /// Set the minimum edge gradient score.
+    #[must_use]
+    pub fn quad_min_edge_score(mut self, score: f64) -> Self {
+        self.quad_min_edge_score = Some(score);
+        self
+    }
+
+    /// Build the configuration, using defaults for unset fields.
+    #[must_use]
+    pub fn build(self) -> DetectorConfig {
+        let d = DetectorConfig::default();
+        DetectorConfig {
+            threshold_tile_size: self.threshold_tile_size.unwrap_or(d.threshold_tile_size),
+            threshold_min_range: self.threshold_min_range.unwrap_or(d.threshold_min_range),
+            quad_min_area: self.quad_min_area.unwrap_or(d.quad_min_area),
+            quad_max_aspect_ratio: self
+                .quad_max_aspect_ratio
+                .unwrap_or(d.quad_max_aspect_ratio),
+            quad_min_fill_ratio: self.quad_min_fill_ratio.unwrap_or(d.quad_min_fill_ratio),
+            quad_max_fill_ratio: self.quad_max_fill_ratio.unwrap_or(d.quad_max_fill_ratio),
+            quad_min_edge_length: self.quad_min_edge_length.unwrap_or(d.quad_min_edge_length),
+            quad_min_edge_score: self.quad_min_edge_score.unwrap_or(d.quad_min_edge_score),
+        }
+    }
+}
+
+// ============================================================================
+// DetectOptions: Per-call detection options
+// ============================================================================
+
+/// Tag family identifier for per-call decoder selection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum TagFamily {
+    /// AprilTag 36h11 family (587 codes, 11-bit hamming distance).
+    AprilTag36h11,
+    /// AprilTag 16h5 family (30 codes, 5-bit hamming distance).
+    AprilTag16h5,
+    /// ArUco 4x4_50 dictionary.
+    ArUco4x4_50,
+    /// ArUco 4x4_100 dictionary.
+    ArUco4x4_100,
+}
+
+impl TagFamily {
+    /// Returns all available tag families.
+    #[must_use]
+    pub const fn all() -> &'static [TagFamily] {
+        &[
+            TagFamily::AprilTag36h11,
+            TagFamily::AprilTag16h5,
+            TagFamily::ArUco4x4_50,
+            TagFamily::ArUco4x4_100,
+        ]
+    }
+}
+
+/// Per-call detection options.
+///
+/// These allow customizing which tag families to decode for a specific call,
+/// enabling performance optimization when you know which tags to expect.
+///
+/// # Example
+/// ```
+/// use locus_core::config::{DetectOptions, TagFamily};
+///
+/// // Only search for AprilTag 36h11 tags (fastest)
+/// let options = DetectOptions::with_families(&[TagFamily::AprilTag36h11]);
+///
+/// // Search for multiple families
+/// let multi = DetectOptions::with_families(&[
+///     TagFamily::AprilTag36h11,
+///     TagFamily::ArUco4x4_50,
+/// ]);
+/// ```
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct DetectOptions {
+    /// Tag families to attempt decoding. Empty means use detector defaults.
+    pub families: Vec<TagFamily>,
+}
+
+impl Default for DetectOptions {
+    fn default() -> Self {
+        Self {
+            families: Vec::new(), // Empty = use detector's configured decoders
+        }
+    }
+}
+
+impl DetectOptions {
+    /// Create options that decode only the specified tag families.
+    #[must_use]
+    pub fn with_families(families: &[TagFamily]) -> Self {
+        Self {
+            families: families.to_vec(),
+        }
+    }
+
+    /// Create options that decode all known tag families.
+    #[must_use]
+    pub fn all_families() -> Self {
+        Self {
+            families: TagFamily::all().to_vec(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detector_config_builder() {
+        let config = DetectorConfig::builder()
+            .threshold_tile_size(16)
+            .quad_min_area(1000)
+            .build();
+        assert_eq!(config.threshold_tile_size, 16);
+        assert_eq!(config.quad_min_area, 1000);
+        // Check defaults
+        assert_eq!(config.threshold_min_range, 10);
+    }
+
+    #[test]
+    fn test_detector_config_defaults() {
+        let config = DetectorConfig::default();
+        assert_eq!(config.threshold_tile_size, 8);
+        assert_eq!(config.quad_min_area, 400);
+    }
+
+    #[test]
+    fn test_detect_options_families() {
+        let opt = DetectOptions::with_families(&[TagFamily::AprilTag36h11]);
+        assert_eq!(opt.families.len(), 1);
+        assert_eq!(opt.families[0], TagFamily::AprilTag36h11);
+    }
+
+    #[test]
+    fn test_detect_options_default_empty() {
+        let opt = DetectOptions::default();
+        assert!(opt.families.is_empty());
+    }
+
+    #[test]
+    fn test_all_families() {
+        let opt = DetectOptions::all_families();
+        assert_eq!(opt.families.len(), 4);
+    }
+}

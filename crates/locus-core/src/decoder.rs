@@ -78,7 +78,7 @@ impl Homography {
 pub fn sample_grid(
     img: &crate::image::ImageView,
     homography: &Homography,
-    decoder: &impl TagDecoder,
+    decoder: &(impl TagDecoder + ?Sized),
 ) -> Option<u64> {
     let points = decoder.sample_points();
     let mut intensities = Vec::with_capacity(points.len());
