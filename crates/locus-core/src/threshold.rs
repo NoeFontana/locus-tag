@@ -12,6 +12,12 @@ pub struct ThresholdEngine {
     pub tile_size: usize,
 }
 
+impl Default for ThresholdEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ThresholdEngine {
     pub fn new() -> Self {
         Self { tile_size: 8 }
@@ -112,7 +118,7 @@ impl ThresholdEngine {
 #[multiversion(targets = "simd")]
 fn compute_row_tile_stats_simd(src_row: &[u8], stats: &mut [TileStats], tile_size: usize) {
     let tiles = stats.len();
-    for tx in 0..tiles {
+    for (tx, stat) in stats.iter_mut().enumerate().take(tiles) {
         let x = tx * tile_size;
         let chunk = &src_row[x..x + tile_size];
 
@@ -123,8 +129,8 @@ fn compute_row_tile_stats_simd(src_row: &[u8], stats: &mut [TileStats], tile_siz
             rmax = rmax.max(p);
         }
 
-        stats[tx].min = stats[tx].min.min(rmin);
-        stats[tx].max = stats[tx].max.max(rmax);
+        stat.min = stat.min.min(rmin);
+        stat.max = stat.max.max(rmax);
     }
 }
 

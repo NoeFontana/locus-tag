@@ -179,7 +179,7 @@ fn try_form_quad(
 
     for (i, &seg) in [s0, s1, s2, s3].iter().enumerate() {
         let a = angles[i].abs();
-        if a < 0.5 || a > std::f32::consts::PI - 0.5 {
+        if !(0.5..=std::f32::consts::PI - 0.5).contains(&a) {
             horizontal.push(seg);
         } else if (a - std::f32::consts::FRAC_PI_2).abs() < 0.5 {
             vertical.push(seg);
@@ -198,7 +198,7 @@ fn try_form_quad(
 
     // Validate quad: check area and convexity
     let area = quad_area(&[c0, c1, c2, c3]);
-    if area < 400.0 || area > 100000.0 {
+    if !(400.0..=100000.0).contains(&area) {
         return None;
     }
 

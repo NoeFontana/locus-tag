@@ -169,7 +169,7 @@ pub fn label_components_with_stats<'a>(
         stats.max_x = stats.max_x.max(run.x_end as u16);
         stats.min_y = stats.min_y.min(run.y as u16);
         stats.max_y = stats.max_y.max(run.y as u16);
-        stats.pixel_count += (run.x_end - run.x_start + 1) as u32;
+        stats.pixel_count += run.x_end - run.x_start + 1;
     }
 
     // Pass 4: Assign labels to pixels

@@ -184,7 +184,7 @@ fn debug_segmentation(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
     let view = ImageView::new(data, width, height, stride)
         .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
 
-    let mut detector = locus_core::Detector::new();
+    let _detector = locus_core::Detector::new();
 
     // Run the pipeline to get labels
     // We need a helper in locus-core to access intermediate labels or return them
