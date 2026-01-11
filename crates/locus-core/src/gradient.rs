@@ -5,8 +5,11 @@ use crate::image::ImageView;
 /// Gradient data for a single pixel.
 #[derive(Clone, Copy, Default)]
 pub struct Gradient {
+    /// Gradient in x-direction.
     pub gx: i16,
+    /// Gradient in y-direction.
     pub gy: i16,
+    /// Gradient magnitude.
     pub mag: u16,
 }
 
@@ -47,10 +50,15 @@ pub fn compute_sobel(img: &ImageView) -> Vec<Gradient> {
 /// A detected line segment.
 #[derive(Clone, Copy, Debug)]
 pub struct LineSegment {
+    /// Start x coordinate.
     pub x0: f32,
+    /// Start y coordinate.
     pub y0: f32,
+    /// End x coordinate.
     pub x1: f32,
+    /// End y coordinate.
     pub y1: f32,
+    /// Angle of the gradient.
     pub angle: f32,
 }
 
