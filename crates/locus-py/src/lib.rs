@@ -74,15 +74,13 @@ impl From<locus_core::Detection> for Detection {
 
 /// A dummy detection function for Phase 0 verification.
 #[pyfunction]
-fn dummy_detect() -> PyResult<String> {
-    Ok(format!(
-        "{} - Python Bindings Active",
-        locus_core::core_info()
-    ))
+fn dummy_detect() -> String {
+    format!("{} - Python Bindings Active", locus_core::core_info())
 }
 
 /// Detect tags in an image. Zero-copy ingestion of NumPy arrays.
 #[pyfunction]
+#[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
 fn detect_tags(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
     let shape = img.shape();
     let height = shape[0];
@@ -124,6 +122,7 @@ fn detect_tags(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
 
 /// Detect tags and return timing stats.
 #[pyfunction]
+#[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
 fn detect_tags_with_stats(img: PyReadonlyArray2<u8>) -> PyResult<(Vec<Detection>, PipelineStats)> {
     let shape = img.shape();
     let height = shape[0];
@@ -157,6 +156,7 @@ fn detect_tags_with_stats(img: PyReadonlyArray2<u8>) -> PyResult<(Vec<Detection>
 
 /// Detect tags using the gradient-based pipeline (faster).
 #[pyfunction]
+#[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
 fn detect_tags_gradient(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
     let shape = img.shape();
     let height = shape[0];
@@ -188,6 +188,7 @@ fn detect_tags_gradient(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
 
 /// For debugging: Apply thresholding and return the binarized image.
 #[pyfunction]
+#[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
 fn debug_threshold(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
     let shape = img.shape();
     let height = shape[0];
@@ -236,6 +237,7 @@ fn debug_threshold(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
 
 /// For debugging: Return the labeled connected components.
 #[pyfunction]
+#[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
 fn debug_segmentation(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
     let shape = img.shape();
     let height = shape[0];

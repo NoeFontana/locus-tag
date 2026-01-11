@@ -1004,7 +1004,8 @@ def generate_point_array(name: str, points: list) -> str:
     """Generate Rust array for sample points."""
     lines = [f"/// Sample points for {name} (canonical coordinates)."]
     lines.append(f"#[rustfmt::skip]")
-    lines.append(f"pub const {name}: [(f64, f64); {len(points)}] = [")
+    lines.append(f"#[allow(clippy::unreadable_literal)]")
+    lines.append(f"pub static {name}: [(f64, f64); {len(points)}] = [")
 
     for i in range(0, len(points), 2):
         chunk = points[i : i + 2]
@@ -1020,12 +1021,17 @@ def generate_rust_array(name: str, codes: list, dim: int, bit_order: list) -> st
     # Convert all codes to row-major ordering
     converted = [spiral_to_rowmajor(c, dim, bit_order) for c in codes]
 
-    lines = [f"pub const {name}: [u64; {len(converted)}] = ["]
+    lines = [f"pub static {name}: [u64; {len(converted)}] = ["]
 
     # Format 4 codes per line
     for i in range(0, len(converted), 4):
         chunk = converted[i : i + 4]
-        hex_strs = [f"0x{c:012x}" for c in chunk]
+        # Format as 0x1234_5678_9abc
+        hex_strs = []
+        for c in chunk:
+            s = f"{c:012x}"
+            hex_strs.append(f"0x{s[:4]}_{s[4:8]}_{s[8:]}")
+
         lines.append(f"    {', '.join(hex_strs)},")
 
     lines.append("];")
@@ -1034,12 +1040,15 @@ def generate_rust_array(name: str, codes: list, dim: int, bit_order: list) -> st
 
 def generate_rust_array_raw(name: str, codes: list) -> str:
     """Generate Rust array declaration for codes already in row-major order (no conversion)."""
-    lines = [f"pub const {name}: [u64; {len(codes)}] = ["]
+    lines = [f"pub static {name}: [u64; {len(codes)}] = ["]
 
     # Format 4 codes per line
     for i in range(0, len(codes), 4):
         chunk = codes[i : i + 4]
-        hex_strs = [f"0x{c:012x}" for c in chunk]
+        hex_strs = []
+        for c in chunk:
+            s = f"{c:012x}"
+            hex_strs.append(f"0x{s[:4]}_{s[4:8]}_{s[8:]}")
         lines.append(f"    {', '.join(hex_strs)},")
 
     lines.append("];")
@@ -1175,10 +1184,8 @@ def generate_dictionaries_rs() -> str:
         "                let mut rbits = bits;",
         "                for _ in 0..4 {",
         "                    let hamming = (rbits ^ code).count_ones();",
-        "                    if hamming <= max_hamming {",
-        "                        if best.map_or(true, |(_, h)| hamming < h) {",
-        "                            best = Some((id as u16, hamming));",
-        "                        }",
+        "                    if hamming <= max_hamming && best.is_none_or(|(_, h)| hamming < h) {",
+        "                        best = Some((id as u16, hamming));",
         "                    }",
         "                    if self.sample_points.len() == self.dimension * self.dimension {",
         "                        rbits = rotate90(rbits, self.dimension);",
@@ -1213,7 +1220,6 @@ def generate_dictionaries_rs() -> str:
         "// AprilTag 36h11 (587 codes)",
         "// ============================================================================",
         "",
-        "#[rustfmt::skip]",
         generate_point_array("APRILTAG_36H11_POINTS", points_36h11),
         "",
         "/// AprilTag 36h11 code table (587 entries, row-major bit ordering).",
@@ -1231,7 +1237,6 @@ def generate_dictionaries_rs() -> str:
         "// AprilTag 16h5 (30 codes)",
         "// ============================================================================",
         "",
-        "#[rustfmt::skip]",
         generate_point_array("APRILTAG_16H5_POINTS", points_16h5),
         "",
         "/// AprilTag 16h5 code table (30 entries, row-major bit ordering).",
@@ -1249,7 +1254,6 @@ def generate_dictionaries_rs() -> str:
         "// ArUco 4x4_50 (50 codes)",
         "// ============================================================================",
         "",
-        "#[rustfmt::skip]",
         generate_point_array("ARUCO_4X4_POINTS", points_aruco),
         "",
         "/// ArUco 4x4_50 code table (50 entries, row-major bit ordering).",
@@ -1284,7 +1288,6 @@ def generate_dictionaries_rs() -> str:
                 "// AprilTag 41h12",
                 "// ============================================================================",
                 "",
-                "#[rustfmt::skip]",
                 generate_point_array("APRILTAG_41H12_POINTS", points_41h12),
                 "",
                 "/// AprilTag 41h12 code table.",
