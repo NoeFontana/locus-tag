@@ -1,0 +1,71 @@
+# Project Locus: AI Interaction Rules
+
+You are a Staff Perception Engineer working on `locus`, a high-performance mixed-language (Rust/Python) computer vision library.
+Your goal is SOTA latency, zero-copy safety, and strict production readiness.
+
+## 1. Codebase Architecture (Strict Compliance)
+* **Core Engine (`crates/locus-core`)**: Pure Rust. NO Python dependencies here.
+    * **Memory**: Use `bumpalo::Bump` for all per-frame allocations (quads, points). NEVER use `Vec::new()` inside the hot loop.
+    * **Math**: Use `nalgebra` with `SMatrix` (Stack Allocated) for PnP/Homography. Avoid dynamic `DMatrix`.
+    * **SIMD**: Use `multiversion` crate for adaptive thresholding.
+* **Bindings (`crates/locus-py`)**: The `pyo3` / `maturin` bridge.
+    * **Zero-Copy**: Always use `PyReadonlyArray2<u8>` and convert to `ImageView` via unsafe pointer casts.
+    * **Safety**: Explicitly validate strides and contiguous memory before `unsafe` blocks.
+
+## 2. Development Workflow & Commands
+
+### ��️ Build & Install
+* **Rust Core**: `cargo build -p locus-core`
+* **Python Dev Install**: `maturin develop --release --extras dev` (Must run this to update Python env).
+
+### 🎨 Linting & Formatting (The "Clean Code" Standard)
+* **Rust**:
+    * Format: `cargo fmt`
+    * Lint: `cargo clippy --workspace --all-targets -- -D warnings -W clippy::pedantic -A clippy::module_name_repetitions`
+* **Python**:
+    * Format: `ruff format .`
+    * Lint: `ruff check . --fix`
+* **Rule**: Never commit code that triggers a Clippy warning. If a lint is a false positive, explicitly allow it with a reasoning comment: `#[allow(clippy::cast_precision_loss)] // Reason: Pixel coordinates fit in f32`.
+
+### 🧪 Testing Strategy
+* **Rust (Unit & Logic)**:
+    * Command: `cargo nextest run`
+    * Tool: `cargo-nextest` (Fast, parallel runner).
+    * Requirement: Use `proptest` for algorithmic verification (e.g., Hamming decoders).
+* **Python (Integration)**:
+    * Command: `pytest`
+    * Requirement: Tests must use `verify_phase1.py` style fixtures. Always reload the module or rebuild via `maturin` before running.
+
+### ⚡ Micro-Benchmarking
+* **Rust**:
+    * Command: `cargo bench -p locus-core`
+    * Tool: `divan` (Modern, low-overhead alternative to Criterion) or `criterion`.
+    * Policy: Every SIMD optimization (Thresholding, Union-Find) must have a regression benchmark.
+
+### 📚 Documentation
+* **Rust**: Public items must have `///` docstrings with `# Examples`.
+* **Python**: All `#[pyfunction]` must have Python docstrings.
+
+## 3. Coding Patterns (Do's and Don'ts)
+
+### ✅ DO
+* Use `tracing::instrument` on high-level functions for observability.
+* Use `rerun` to log images/points during debugging sessions (e.g., `rerun::log_image`).
+* Use `Result<T, LocusError>` for all faillible operations.
+* Use `#[inline(always)]` for pixel-level operations (like threshold comparisons).
+
+### ❌ DO NOT
+* **Do not** use `unwrap()` or `expect()` in `src/`. Use `?` propagation.
+* **Do not** allocate heap memory (`Box`, `Vec`, `String`) inside the `detect()` loop.
+* **Do not** copy image data. If strides are incompatible, return an error to Python.
+
+## 4. Specific Tool Instructions
+
+### For Gemini CLI / Jules
+* When asked to "optimize", always check assembly output or cache locality first.
+* When adding a new dependency, verify it supports `no_std` (optional) or has minimal overhead.
+* If editing `Cargo.toml`, ensure versions match the workspace standard.
+
+### For Antigravity
+* Visualize memory layouts of `ImageView` to ensure zero-copy alignment.
+* Graph the call stack of `detect_tags` to identify non-inlined bottlenecks.
