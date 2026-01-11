@@ -247,3 +247,76 @@ fn quad_area(corners: &[[f32; 2]; 4]) -> f32 {
     }
     area.abs() * 0.5
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::image::ImageView;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn prop_sobel_magnitude_bounds(
+            width in 3..64usize,
+            height in 3..64usize,
+            data in prop::collection::vec(0..=255u8, 64*64)
+        ) {
+            let slice = &data[..width * height];
+            let view = ImageView::new(slice, width, height, width).unwrap();
+            let grads = compute_sobel(&view);
+
+            for g in grads {
+                assert!(g.mag <= 1000);
+            }
+        }
+
+        #[test]
+        fn prop_sobel_orientation_ramp(
+            width in 3..10usize,
+            height in 3..10usize,
+            is_horizontal in prop::bool::ANY
+        ) {
+            let mut data = vec![0u8; width * height];
+            for y in 0..height {
+                for x in 0..width {
+                    data[y * width + x] = if is_horizontal { x as u8 * 10 } else { y as u8 * 10 };
+                }
+            }
+
+            let view = ImageView::new(&data, width, height, width).unwrap();
+            let grads = compute_sobel(&view);
+
+            // Checking interior pixels
+            for y in 1..height-1 {
+                for x in 1..width-1 {
+                    let g = grads[y * width + x];
+                    if is_horizontal {
+                        assert!(g.gx > 0);
+                        assert_eq!(g.gy, 0);
+                    } else {
+                        assert_eq!(g.gx, 0);
+                        assert!(g.gy > 0);
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn prop_quad_area_invariants(
+            c in prop::collection::vec((0.0..100.0f32, 0.0..100.0f32), 4)
+        ) {
+            let corners = [
+                [c[0].0, c[0].1],
+                [c[1].0, c[1].1],
+                [c[2].0, c[2].1],
+                [c[3].0, c[3].1],
+            ];
+            let area = quad_area(&corners);
+            assert!(area >= 0.0);
+
+            // Area should be zero if points are identical
+            let identical_corners = [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]];
+            assert_eq!(quad_area(&identical_corners), 0.0);
+        }
+    }
+}
