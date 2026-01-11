@@ -221,6 +221,37 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_threshold_engine_e2e() {
+        let width = 16;
+        let height = 16;
+        let mut data = vec![128u8; width * height];
+        // Draw a black square in a white background area to test adaptive threshold
+        for y in 4..12 {
+            for x in 4..12 {
+                data[y * width + x] = 50;
+            }
+        }
+        for y in 0..height {
+            for x in 0..width {
+                if x < 2 || x > 14 || y < 2 || y > 14 {
+                    data[y * width + x] = 200;
+                }
+            }
+        }
+
+        let img = ImageView::new(&data, width, height, width).unwrap();
+        let engine = ThresholdEngine::new();
+        let stats = engine.compute_tile_stats(&img);
+        let mut output = vec![0u8; width * height];
+        engine.apply_threshold(&img, &stats, &mut output);
+
+        // At (8,8), it should be black (0) because it's 50 and thresh should be around (50+200)/2 = 125
+        assert_eq!(output[8 * width + 8], 0);
+        // At (1,1), it should be white (255)
+        assert_eq!(output[1 * width + 1], 255);
+    }
 }
 
 #[multiversion(targets = "simd")]

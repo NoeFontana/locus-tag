@@ -190,7 +190,7 @@ impl Detector {
     ///     img: Grayscale image as numpy array
     ///     families: List of TagFamily to decode
     #[allow(clippy::cast_sign_loss)]
-    fn detect_families(
+    fn detect_with_options(
         &mut self,
         img: PyReadonlyArray2<u8>,
         families: Vec<TagFamily>,

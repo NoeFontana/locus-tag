@@ -3430,6 +3430,7 @@ dependencies = [
  "proptest",
  "rayon",
  "rerun",
+ "serde",
  "tracing",
 ]
 

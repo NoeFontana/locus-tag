@@ -90,7 +90,7 @@ fn test_pose_accuracy() {
     let img = ImageView::new(&data, width, height, width).unwrap();
 
     // We use extract_quads_fast because generate_synthetic_tag doesn't produce valid bit patterns
-    let mut arena = Bump::new();
+    let arena = Bump::new();
     let binarized = arena.alloc_slice_fill_copy(width * height, 0u8);
     let thresh_engine = locus_core::threshold::ThresholdEngine::new();
     thresh_engine.apply_threshold(&img, &thresh_engine.compute_tile_stats(&img), binarized);

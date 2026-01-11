@@ -288,12 +288,5 @@ pub fn core_info() -> String {
     "Locus Core v0.1.0 Engine".to_string()
 }
 
-/// Convert a TagFamily enum to a boxed decoder instance.
-fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send + Sync> {
-    match family {
-        config::TagFamily::AprilTag36h11 => Box::new(decoder::AprilTag36h11),
-        config::TagFamily::AprilTag16h5 => Box::new(decoder::AprilTag16h5),
-        config::TagFamily::ArUco4x4_50 => Box::new(decoder::ArUco4x4_50),
-        config::TagFamily::ArUco4x4_100 => Box::new(decoder::ArUco4x4_100),
-    }
-}
+// Use family_to_decoder from the decoder module.
+pub use decoder::family_to_decoder;

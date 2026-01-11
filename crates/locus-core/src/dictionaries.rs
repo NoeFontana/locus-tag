@@ -26,7 +26,6 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 use std::borrow::Cow;
 use std::collections::HashMap;
 
@@ -130,9 +129,9 @@ impl TagDictionary {
                 return Some((id, 0));
             }
             if self.sample_points.len() == self.dimension * self.dimension {
-                 rbits = rotate90(rbits, self.dimension);
+                rbits = rotate90(rbits, self.dimension);
             } else {
-                 break;
+                break;
             }
         }
 
@@ -356,7 +355,13 @@ pub static APRILTAG_36H11_CODES: [u64; 587] = [
 
 /// AprilTag 36h11 dictionary singleton.
 pub static APRILTAG_36H11: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {
-    TagDictionary::new("36h11", 6, 11, &APRILTAG_36H11_CODES, &APRILTAG_36H11_POINTS)
+    TagDictionary::new(
+        "36h11",
+        6,
+        11,
+        &APRILTAG_36H11_CODES,
+        &APRILTAG_36H11_POINTS,
+    )
 });
 
 // ============================================================================
@@ -1042,5 +1047,42 @@ pub static APRILTAG_41H12_CODES: [u64; 2115] = [
 
 /// AprilTag 41h12 dictionary singleton.
 pub static APRILTAG_41H12: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {
-    TagDictionary::new("41h12", 9, 12, &APRILTAG_41H12_CODES, &APRILTAG_41H12_POINTS)
+    TagDictionary::new(
+        "41h12",
+        9,
+        12,
+        &APRILTAG_41H12_CODES,
+        &APRILTAG_41H12_POINTS,
+    )
 });
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_aruco_4x4_50_sanity() {
+        let dict = &*ARUCO_4X4_50;
+        assert_eq!(dict.dimension, 4);
+        // The header comments say 4x4_50.
+        // Let's verify decoding works for exact matches.
+
+        // Test ID 0
+        let code_0 = dict.get_code(0).expect("ID 0 should exist");
+        if let Some((id, dist)) = dict.decode(code_0, 0) {
+            assert_eq!(id, 0);
+            assert_eq!(dist, 0);
+        } else {
+            panic!("Failed to decode perfect code for ID 0");
+        }
+
+        // Test ID 1
+        let code_1 = dict.get_code(1).expect("ID 1 should exist");
+        if let Some((id, dist)) = dict.decode(code_1, 0) {
+            assert_eq!(id, 1);
+            assert_eq!(dist, 0);
+        } else {
+            panic!("Failed to decode perfect code for ID 1");
+        }
+    }
+}

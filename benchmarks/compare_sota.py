@@ -64,14 +64,24 @@ def compute_corner_error(detected_corners, gt_corners):
     return min_error
 
 
-def benchmark_locus(images, ground_truth, iterations):
+import rerun as rr
+
+
+def benchmark_locus(images, ground_truth, iterations, use_rerun=False):
     latencies = []
     id_correct = 0
     corner_errors = []
 
     _ = locus.detect_tags(images[0])  # Warm up
 
-    for img, gt in zip(images, ground_truth, strict=False):
+    if use_rerun:
+        rr.init("locus_benchmark", spawn=True)
+
+    for i, (img, gt) in enumerate(zip(images, ground_truth, strict=False)):
+        if use_rerun:
+            rr.set_time_sequence("frame_idx", i)
+            rr.log("image", rr.Image(img))
+
         for _ in range(iterations):
             start = time.perf_counter()
             detections = locus.detect_tags(img)
@@ -81,7 +91,15 @@ def benchmark_locus(images, ground_truth, iterations):
                 det = detections[0]
                 if det.id == gt["id"]:
                     id_correct += 1
-                corner_errors.append(compute_corner_error(det.corners, gt["corners"]))
+                err = compute_corner_error(det.corners, gt["corners"])
+                corner_errors.append(err)
+
+                if use_rerun:
+                    rr.log(
+                        "image/detection",
+                        rr.LineStrips2D([det.corners + [det.corners[0]]]),
+                        labels=[f"ID: {det.id}"],
+                    )
             else:
                 corner_errors.append(float("inf"))
 
@@ -149,20 +167,26 @@ def main():
     parser = argparse.ArgumentParser(description="Fair Locus SOTA Benchmark")
     parser.add_argument("--iterations", type=int, default=100, help="Iterations per image")
     parser.add_argument("--synthetic", action="store_true", help="Use synthetic data")
+    parser.add_argument("--data-path", type=str, help="Path to real dataset")
+    parser.add_argument("--rerun", action="store_true", help="Enable Rerun visualization")
     args = parser.parse_args()
 
-    if args.synthetic:
+    if args.data_path:
+        print(f"Loading real data from {args.data_path}...")
+        # Placeholder for real data loader (e.g. UMich AprilTag)
+        images, ground_truth = generate_synthetic_data()
+    elif args.synthetic:
         print("Generating synthetic data with ground truth...")
         images, ground_truth = generate_synthetic_data()
     else:
-        print("Real data mode not yet supported with ground truth. Using synthetic.")
+        print("Real data mode requires --data-path or --synthetic. Defaulting to synthetic.")
         images, ground_truth = generate_synthetic_data()
 
     print(f"Benchmarking with {len(images)} images, {args.iterations} iterations each.")
     print("All libraries run on same resolution (640x480), no downsampling.\n")
 
     libraries = [
-        ("locus", benchmark_locus),
+        ("locus", lambda imgs, gt, it: benchmark_locus(imgs, gt, it, args.rerun)),
         ("opencv", benchmark_opencv),
         ("apriltag", benchmark_apriltag),
     ]
