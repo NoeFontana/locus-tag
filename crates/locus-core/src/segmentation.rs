@@ -57,6 +57,10 @@ pub struct ComponentStats {
     pub max_y: u16,
     /// Total number of pixels in the component.
     pub pixel_count: u32,
+    /// First encountered pixel X (for boundary start).
+    pub first_pixel_x: u16,
+    /// First encountered pixel Y (for boundary start).
+    pub first_pixel_y: u16,
 }
 
 impl Default for ComponentStats {
@@ -67,6 +71,8 @@ impl Default for ComponentStats {
             min_y: u16::MAX,
             max_y: 0,
             pixel_count: 0,
+            first_pixel_x: 0,
+            first_pixel_y: 0,
         }
     }
 }
@@ -182,7 +188,11 @@ pub fn label_components_with_stats<'a>(
         if root_to_label[root] == 0 {
             root_to_label[root] = next_label;
             next_label += 1;
-            component_stats.push(ComponentStats::default());
+            let mut new_stat = ComponentStats::default();
+            // First run of this component: record the first pixel
+            new_stat.first_pixel_x = run.x_start as u16;
+            new_stat.first_pixel_y = run.y as u16;
+            component_stats.push(new_stat);
         }
         let label_idx = (root_to_label[root] - 1) as usize;
         let stats = &mut component_stats[label_idx];

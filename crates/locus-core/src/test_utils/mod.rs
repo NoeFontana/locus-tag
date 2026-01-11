@@ -87,7 +87,7 @@ pub fn compute_corner_error(detected: [[f64; 2]; 4], ground_truth: [[f64; 2]; 4]
     min_error
 }
 /// Complex multi-tag scene generation for integration testing.
-#[cfg(any(test, feature = "extended-tests", feature = "extended-bench"))]
+#[cfg(any(feature = "extended-tests", feature = "extended-bench"))]
 pub mod scene;
-#[cfg(any(test, feature = "extended-tests", feature = "extended-bench"))]
+#[cfg(any(feature = "extended-tests", feature = "extended-bench"))]
 pub use scene::{SceneBuilder, TagPlacement};

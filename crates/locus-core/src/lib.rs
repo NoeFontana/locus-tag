@@ -160,28 +160,39 @@ impl Detector {
 
         // 1. Thresholding
         let start_thresh = std::time::Instant::now();
-        let tile_stats = self.threshold_engine.compute_tile_stats(img);
+        let tile_stats = {
+            let _span = tracing::info_span!("threshold_tiles").entered();
+            self.threshold_engine.compute_tile_stats(img)
+        };
         let binarized = self
             .arena
             .alloc_slice_fill_copy(img.width * img.height, 0u8);
-        self.threshold_engine
-            .apply_threshold(img, &tile_stats, binarized);
+        {
+            let _span = tracing::info_span!("threshold_apply").entered();
+            self.threshold_engine
+                .apply_threshold(img, &tile_stats, binarized);
+        }
         stats.threshold_ms = start_thresh.elapsed().as_secs_f64() * 1000.0;
 
         // 2. Segmentation (Connected Components with stats)
         let start_seg = std::time::Instant::now();
-        let label_result = crate::segmentation::label_components_with_stats(
-            &self.arena,
-            binarized,
-            img.width,
-            img.height,
-        );
+        let label_result = {
+            let _span = tracing::info_span!("segmentation").entered();
+            crate::segmentation::label_components_with_stats(
+                &self.arena,
+                binarized,
+                img.width,
+                img.height,
+            )
+        };
         stats.segmentation_ms = start_seg.elapsed().as_secs_f64() * 1000.0;
 
         // 3. Quad Fitting (Fast path with pre-filtering)
         let start_quad = std::time::Instant::now();
-        let candidates =
-            crate::quad::extract_quads_with_config(&self.arena, img, &label_result, &self.config);
+        let candidates = {
+            let _span = tracing::info_span!("quad_extraction").entered();
+            crate::quad::extract_quads_with_config(&self.arena, img, &label_result, &self.config)
+        };
         stats.quad_extraction_ms = start_quad.elapsed().as_secs_f64() * 1000.0;
 
         // 4. Decoding - select decoders based on options

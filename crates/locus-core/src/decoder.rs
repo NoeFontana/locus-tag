@@ -82,17 +82,18 @@ pub fn sample_grid(
     decoder: &(impl TagDecoder + ?Sized),
 ) -> Option<u64> {
     let points = decoder.sample_points();
-    let mut intensities = Vec::with_capacity(points.len());
+    // Stack-allocated buffer for up to 64 sample points (covers all standard tag families)
+    let mut intensities = [0.0f64; 64];
+    let n = points.len().min(64);
 
     let mut min_val = f64::MAX;
     let mut max_val = f64::MIN;
 
-    for &p in points {
+    for (i, &p) in points.iter().take(n).enumerate() {
         // Project canonical point to image coordinates
         let img_p = homography.project([p.0, p.1]);
 
         // Check bounds (with slight margin for interpolation)
-        // We need x < width - 1 to ensure floor(x)+1 is a valid index
         if img_p[0] < 0.0
             || img_p[0] >= (img.width - 1) as f64
             || img_p[1] < 0.0
@@ -103,7 +104,7 @@ pub fn sample_grid(
 
         // SAFETY: Bounds checked above. x < width-1 implies floor(x)+1 < width.
         let val = unsafe { img.sample_bilinear_unchecked(img_p[0], img_p[1]) };
-        intensities.push(val);
+        intensities[i] = val;
 
         if val < min_val {
             min_val = val;
@@ -114,7 +115,6 @@ pub fn sample_grid(
     }
 
     // Adaptive threshold: halfway between min and max intensity observed in the grid.
-    // This handles varying lighting conditions per tag.
     let range = max_val - min_val;
     if range < 20.0 {
         // Contrast too low to be a valid tag
@@ -124,7 +124,7 @@ pub fn sample_grid(
     let threshold = min_val + range * 0.5;
     let mut bits = 0u64;
 
-    for (i, &val) in intensities.iter().enumerate() {
+    for (i, &val) in intensities[..n].iter().enumerate() {
         if val > threshold {
             bits |= 1 << i;
         }
@@ -274,6 +274,7 @@ impl TagDecoder for GenericDecoder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dictionaries::rotate90;
     use proptest::prelude::*;
 
     proptest! {

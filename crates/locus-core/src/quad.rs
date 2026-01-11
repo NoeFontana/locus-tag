@@ -73,30 +73,9 @@ pub fn extract_quads_with_config(
         }
 
         // Passed filters - trace boundary and fit quad
-        let start_x = stat.min_x as usize;
-        let start_y = stat.min_y as usize;
-
-        // Find actual boundary start point
-        let mut found = false;
-        let mut sx = start_x;
-        let mut sy = start_y;
-        for y in stat.min_y..=stat.max_y {
-            for x in stat.min_x..=stat.max_x {
-                if labels[y as usize * img.width + x as usize] == label {
-                    sx = x as usize;
-                    sy = y as usize;
-                    found = true;
-                    break;
-                }
-            }
-            if found {
-                break;
-            }
-        }
-
-        if !found {
-            continue;
-        }
+        // Use pre-computed first pixel from CCL stats (O(1) instead of O(w*h))
+        let sx = stat.first_pixel_x as usize;
+        let sy = stat.first_pixel_y as usize;
 
         let contour = trace_boundary(arena, labels, img.width, img.height, sx, sy, label);
 
