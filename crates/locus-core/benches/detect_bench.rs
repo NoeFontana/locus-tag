@@ -1,3 +1,4 @@
+use bumpalo::Bump;
 use divan::bench;
 use locus_core::Detector;
 use locus_core::image::ImageView;
@@ -38,7 +39,66 @@ fn create_test_image(width: usize, height: usize) -> Vec<u8> {
 }
 
 #[bench]
-fn bench_detect_640x480(bencher: divan::Bencher) {
+fn bench_thresholding_640x480(bencher: divan::Bencher) {
+    let width = 640;
+    let height = 480;
+    let data = create_test_image(width, height);
+    let img = ImageView::new(&data, width, height, width).unwrap();
+    let engine = locus_core::threshold::ThresholdEngine::new();
+    let mut output = vec![0u8; width * height];
+
+    bencher.bench_local(move || {
+        let stats = engine.compute_tile_stats(&img);
+        engine.apply_threshold(&img, &stats, &mut output);
+    });
+}
+
+#[bench]
+fn bench_segmentation_640x480(bencher: divan::Bencher) {
+    let width = 640;
+    let height = 480;
+    let data = create_test_image(width, height);
+    let arena = Bump::new();
+    let mut binarized = vec![0u8; width * height];
+    let engine = locus_core::threshold::ThresholdEngine::new();
+    let img = ImageView::new(&data, width, height, width).unwrap();
+    let stats = engine.compute_tile_stats(&img);
+    engine.apply_threshold(&img, &stats, &mut binarized);
+
+    bencher.bench_local(move || {
+        // We can't easily reset an arena across bench iterations if it's moved
+        // but for segmentation we only care about the time to label.
+        // In a real app we reset every frame.
+        let local_arena = Bump::new();
+        locus_core::segmentation::label_components(&local_arena, &binarized, width, height);
+    });
+}
+
+#[bench]
+fn bench_quad_extraction_640x480(bencher: divan::Bencher) {
+    let width = 640;
+    let height = 480;
+    let data = create_test_image(width, height);
+    let arena = Bump::new();
+    let mut binarized = vec![0u8; width * height];
+    let engine = locus_core::threshold::ThresholdEngine::new();
+    let img = ImageView::new(&data, width, height, width).unwrap();
+    let stats = engine.compute_tile_stats(&img);
+    engine.apply_threshold(&img, &stats, &mut binarized);
+
+    // Pre-label components. Note: labels refer to data in 'arena'.
+    let labels = locus_core::segmentation::label_components(&arena, &binarized, width, height);
+
+    bencher.bench_local(move || {
+        // Quad extraction needs an arena to store quads.
+        // It doesn't modify labels.
+        let local_arena = Bump::new();
+        locus_core::quad::extract_quads(&local_arena, &img, labels);
+    });
+}
+
+#[bench]
+fn bench_full_detect_640x480(bencher: divan::Bencher) {
     let width = 640;
     let height = 480;
     let data = create_test_image(width, height);
@@ -49,31 +109,9 @@ fn bench_detect_640x480(bencher: divan::Bencher) {
 }
 
 #[bench]
-fn bench_detect_gradient_640x480(bencher: divan::Bencher) {
+fn bench_full_detect_gradient_640x480(bencher: divan::Bencher) {
     let width = 640;
     let height = 480;
-    let data = create_test_image(width, height);
-    let img = ImageView::new(&data, width, height, width).unwrap();
-    let mut detector = Detector::new();
-
-    bencher.bench_local(move || detector.detect_gradient(&img));
-}
-
-#[bench]
-fn bench_detect_1080p(bencher: divan::Bencher) {
-    let width = 1920;
-    let height = 1080;
-    let data = create_test_image(width, height);
-    let img = ImageView::new(&data, width, height, width).unwrap();
-    let mut detector = Detector::new();
-
-    bencher.bench_local(move || detector.detect(&img));
-}
-
-#[bench]
-fn bench_detect_gradient_1080p(bencher: divan::Bencher) {
-    let width = 1920;
-    let height = 1080;
     let data = create_test_image(width, height);
     let img = ImageView::new(&data, width, height, width).unwrap();
     let mut detector = Detector::new();
