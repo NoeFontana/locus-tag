@@ -88,9 +88,9 @@ impl TagDecoder for AprilTag36h11 {
         // Simplified 36h11 dictionary for Phase 4 verification
         // These are just example bit patterns
         let codes: [(u16, u64); 3] = [
-            (0, 0x000000000u64),
-            (42, 0x123456789u64),
-            (101, 0xABCDE1234u64),
+            (0, 0x0d5d628584u64),
+            (1, 0x0d97f18b49u64),
+            (2, 0x0dd280910eu64),
         ];
 
         for (id, code) in codes {
@@ -148,7 +148,7 @@ mod tests {
             flip2 in 0..36usize
         ) {
             let decoder = AprilTag36h11;
-            let codes = [(0, 0x000000000u64), (42, 0x123456789u64), (101, 0xABCDE1234u64)];
+            let codes = [(0, 0x0d5d628584u64), (1, 0x0d97f18b49u64), (2, 0x0dd280910eu64)];
             let (orig_id, orig_code) = codes[id_idx];
 
             // Apply rotation
