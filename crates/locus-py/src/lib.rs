@@ -17,6 +17,33 @@ pub struct Detection {
     pub decision_margin: f64,
 }
 
+#[pyclass]
+#[derive(Clone, Default)]
+pub struct PipelineStats {
+    #[pyo3(get)]
+    pub threshold_ms: f64,
+    #[pyo3(get)]
+    pub segmentation_ms: f64,
+    #[pyo3(get)]
+    pub quad_extraction_ms: f64,
+    #[pyo3(get)]
+    pub decoding_ms: f64,
+    #[pyo3(get)]
+    pub total_ms: f64,
+}
+
+impl From<locus_core::PipelineStats> for PipelineStats {
+    fn from(s: locus_core::PipelineStats) -> Self {
+        Self {
+            threshold_ms: s.threshold_ms,
+            segmentation_ms: s.segmentation_ms,
+            quad_extraction_ms: s.quad_extraction_ms,
+            decoding_ms: s.decoding_ms,
+            total_ms: s.total_ms,
+        }
+    }
+}
+
 impl From<locus_core::Detection> for Detection {
     fn from(d: locus_core::Detection) -> Self {
         Self {
@@ -70,14 +97,46 @@ fn detect_tags(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
     // We create a slice that covers the entire extent of the strided image.
     let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
 
+    let views = ImageView::new(data, width, height, stride)
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+
+    let mut detector = locus_core::Detector::new();
+    let detections = detector.detect(&views);
+
+    Ok(detections.into_iter().map(Detection::from).collect())
+}
+
+/// Detect tags and return timing stats.
+#[pyfunction]
+fn detect_tags_with_stats(img: PyReadonlyArray2<u8>) -> PyResult<(Vec<Detection>, PipelineStats)> {
+    let shape = img.shape();
+    let height = shape[0];
+    let width = shape[1];
+    let strides = img.strides();
+    let stride = strides[0] as usize;
+
+    if strides[1] != 1 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Inner stride must be 1",
+        ));
+    }
+
+    let required_size = if height > 0 && width > 0 {
+        (height - 1) * stride + width
+    } else {
+        0
+    };
+    let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
     let view = ImageView::new(data, width, height, stride)
         .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
 
-    // Use the optimized Detector pipeline
     let mut detector = locus_core::Detector::new();
-    let detections = detector.detect(&view);
+    let (detections, stats) = detector.detect_with_stats(&view);
 
-    Ok(detections.into_iter().map(Detection::from).collect())
+    Ok((
+        detections.into_iter().map(Detection::from).collect(),
+        PipelineStats::from(stats),
+    ))
 }
 
 /// Detect tags using the gradient-based pipeline (faster).
@@ -214,9 +273,11 @@ fn debug_segmentation(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
 #[pymodule]
 fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Detection>()?;
+    m.add_class::<PipelineStats>()?;
     m.add_function(wrap_pyfunction!(dummy_detect, m)?)?;
     m.add_function(wrap_pyfunction!(detect_tags, m)?)?;
     m.add_function(wrap_pyfunction!(detect_tags_gradient, m)?)?;
+    m.add_function(wrap_pyfunction!(detect_tags_with_stats, m)?)?;
     m.add_function(wrap_pyfunction!(debug_threshold, m)?)?;
     m.add_function(wrap_pyfunction!(debug_segmentation, m)?)?;
     Ok(())

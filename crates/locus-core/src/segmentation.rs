@@ -126,26 +126,36 @@ pub fn label_components_with_stats<'a>(
     }
 
     let mut uf = UnionFind::new_in(arena, runs.len());
-    let mut prev_row_start = 0;
-    let mut curr_row_start = 0;
+    let mut curr_row_range = 0..0; // Initialize curr_row_range
+    let mut i = 0;
 
-    // Pass 2: Link runs between adjacent rows
-    for i in 0..runs.len() {
-        let curr = &runs[i];
+    // Pass 2: Link runs between adjacent rows using two-pointer linear scan
+    while i < runs.len() {
+        let y = runs[i].y;
 
-        if runs[curr_row_start].y < curr.y {
-            prev_row_start = curr_row_start;
-            curr_row_start = i;
+        // Identify the range of runs in the current row
+        let start = i;
+        while i < runs.len() && runs[i].y == y {
+            i += 1;
         }
+        let prev_row_range = curr_row_range; // Now correctly uses the previously assigned curr_row_range
+        curr_row_range = start..i;
 
-        if curr.y > 0 {
-            for j in prev_row_start..curr_row_start {
-                let prev = &runs[j];
-                if prev.y != curr.y - 1 {
-                    continue;
+        if y > 0 && !prev_row_range.is_empty() && runs[prev_row_range.start].y == y - 1 {
+            let mut p_idx = prev_row_range.start;
+            for c_idx in curr_row_range.clone() {
+                let curr = &runs[c_idx];
+
+                // Advance prev pointer until it overlaps or passes curr
+                while p_idx < prev_row_range.end && runs[p_idx].x_end < curr.x_start {
+                    p_idx += 1;
                 }
-                if prev.x_start <= curr.x_end && curr.x_start <= prev.x_end {
-                    uf.union(curr.id, prev.id);
+
+                // Link all overlapping runs in the previous row
+                let mut temp_p = p_idx;
+                while temp_p < prev_row_range.end && runs[temp_p].x_start <= curr.x_end {
+                    uf.union(curr.id, runs[temp_p].id);
+                    temp_p += 1;
                 }
             }
         }
