@@ -53,12 +53,16 @@ impl Detector {
         self.threshold_engine
             .apply_threshold(img, &stats, binarized);
 
-        // 2. Segmentation (Connected Components)
-        let labels =
-            crate::segmentation::label_components(&self.arena, binarized, img.width, img.height);
+        // 2. Segmentation (Connected Components with stats)
+        let label_result = crate::segmentation::label_components_with_stats(
+            &self.arena,
+            binarized,
+            img.width,
+            img.height,
+        );
 
-        // 3. Quad Fitting
-        let candidates = crate::quad::extract_quads(&self.arena, img, labels);
+        // 3. Quad Fitting (Fast path with pre-filtering)
+        let candidates = crate::quad::extract_quads_fast(&self.arena, img, &label_result);
 
         // 4. Decoding (Single-threaded for low latency on small candidate sets)
         let src_points = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]];

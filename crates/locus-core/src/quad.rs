@@ -1,7 +1,10 @@
 use crate::Detection;
 use crate::image::ImageView;
+use crate::segmentation::{ComponentStats, LabelResult};
 use bumpalo::Bump;
+use bumpalo::collections::Vec as BumpVec;
 use multiversion::multiversion;
+use nalgebra::SMatrix;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Point {
@@ -9,55 +12,120 @@ pub struct Point {
     pub y: f64,
 }
 
-use bumpalo::collections::Vec as BumpVec;
+/// Fast quad extraction using bounding box stats from CCL.
+/// Only traces contours for components that pass geometric filters.
+pub fn extract_quads_fast(
+    arena: &Bump,
+    img: &ImageView,
+    label_result: &LabelResult,
+) -> Vec<Detection> {
+    let mut detections = Vec::new();
+    let labels = label_result.labels;
+    let stats = &label_result.component_stats;
 
-/// Simplify a contour using the Douglas-Peucker algorithm.
-pub fn douglas_peucker<'a>(arena: &'a Bump, points: &[Point], epsilon: f64) -> BumpVec<'a, Point> {
-    if points.len() < 3 {
-        let mut v = BumpVec::new_in(arena);
-        v.extend_from_slice(points);
-        return v;
-    }
+    for (label_idx, stat) in stats.iter().enumerate() {
+        let label = (label_idx + 1) as u32;
 
-    let mut dmax = 0.0;
-    let mut index = 0;
-    let end = points.len() - 1;
+        // Fast geometric filtering using bounding box
+        let bbox_w = (stat.max_x - stat.min_x) as u32 + 1;
+        let bbox_h = (stat.max_y - stat.min_y) as u32 + 1;
+        let bbox_area = bbox_w * bbox_h;
 
-    for i in 1..end {
-        let d = perpendicular_distance(points[i], points[0], points[end]);
-        if d > dmax {
-            index = i;
-            dmax = d;
+        // Filter: too small or too large
+        if bbox_area < 400 || bbox_area > (img.width * img.height / 4) as u32 {
+            continue;
+        }
+
+        // Filter: not roughly square (aspect ratio)
+        let aspect = bbox_w.max(bbox_h) as f32 / bbox_w.min(bbox_h).max(1) as f32;
+        if aspect > 3.0 {
+            continue;
+        }
+
+        // Filter: fill ratio (should be ~50-80% for a tag with inner pattern)
+        let fill = stat.pixel_count as f32 / bbox_area as f32;
+        if fill < 0.3 || fill > 0.95 {
+            continue;
+        }
+
+        // Passed filters - trace boundary and fit quad
+        let start_x = stat.min_x as usize;
+        let start_y = stat.min_y as usize;
+
+        // Find actual boundary start point
+        let mut found = false;
+        let mut sx = start_x;
+        let mut sy = start_y;
+        for y in stat.min_y..=stat.max_y {
+            for x in stat.min_x..=stat.max_x {
+                if labels[y as usize * img.width + x as usize] == label {
+                    sx = x as usize;
+                    sy = y as usize;
+                    found = true;
+                    break;
+                }
+            }
+            if found {
+                break;
+            }
+        }
+
+        if !found {
+            continue;
+        }
+
+        let contour = trace_boundary(arena, labels, img.width, img.height, sx, sy, label);
+
+        if contour.len() >= 30 {
+            let simplified = douglas_peucker(arena, &contour, 4.0);
+            if simplified.len() == 5 {
+                let area = polygon_area(&simplified);
+                let perimeter = contour.len() as f64;
+                let compactness = (12.566 * area) / (perimeter * perimeter);
+
+                if area > 400.0 && compactness > 0.5 {
+                    let mut ok = true;
+                    for i in 0..4 {
+                        let d2 = (simplified[i].x - simplified[i + 1].x).powi(2)
+                            + (simplified[i].y - simplified[i + 1].y).powi(2);
+                        if d2 < 100.0 {
+                            ok = false;
+                            break;
+                        }
+                    }
+
+                    if ok {
+                        // Refine corners to sub-pixel accuracy
+                        let corners = [
+                            refine_corner(img, simplified[0]),
+                            refine_corner(img, simplified[1]),
+                            refine_corner(img, simplified[2]),
+                            refine_corner(img, simplified[3]),
+                        ];
+
+                        detections.push(Detection {
+                            id: label,
+                            center: polygon_center(&simplified),
+                            corners: [
+                                [corners[0].x, corners[0].y],
+                                [corners[1].x, corners[1].y],
+                                [corners[2].x, corners[2].y],
+                                [corners[3].x, corners[3].y],
+                            ],
+                            hamming: 0,
+                            decision_margin: area,
+                        });
+                    }
+                }
+            }
         }
     }
-
-    if dmax > epsilon {
-        let mut rec_results1 = douglas_peucker(arena, &points[0..=index], epsilon);
-        let rec_results2 = douglas_peucker(arena, &points[index..=end], epsilon);
-
-        rec_results1.pop(); // Remove duplicate point
-        rec_results1.extend(rec_results2);
-        rec_results1
-    } else {
-        let mut v = BumpVec::new_in(arena);
-        v.push(points[0]);
-        v.push(points[end]);
-        v
-    }
+    detections
 }
 
-fn perpendicular_distance(p: Point, a: Point, b: Point) -> f64 {
-    let dx = b.x - a.x;
-    let dy = b.y - a.y;
-    let mag = (dx * dx + dy * dy).sqrt();
-    if mag < 1e-9 {
-        return ((p.x - a.x).powi(2) + (p.y - a.y).powi(2)).sqrt();
-    }
-    ((dy * p.x - dx * p.y + b.x * a.y - b.y * a.x).abs()) / mag
-}
-
-/// Extract quads from labeled connected components.
+/// Legacy extract_quads for backward compatibility.
 pub fn extract_quads<'a>(arena: &'a Bump, img: &ImageView, labels: &[u32]) -> Vec<Detection> {
+    // Create a fake LabelResult with stats computed on-the-fly
     let mut detections = Vec::new();
     let num_labels = (labels.len() / 32) + 1;
     let processed_labels = arena.alloc_slice_fill_copy(num_labels, 0u32);
@@ -77,9 +145,6 @@ pub fn extract_quads<'a>(arena: &'a Bump, img: &ImageView, labels: &[u32]) -> Ve
                 continue;
             }
 
-            // A label can only be a "top-left" corner of a component if
-            // the pixel above or to the left is not the same label.
-            // This avoids many redundant 'processed_labels' checks.
             if labels[idx - 1] == label || labels[prev_row_off + x] == label {
                 continue;
             }
@@ -133,6 +198,51 @@ pub fn extract_quads<'a>(arena: &'a Bump, img: &ImageView, labels: &[u32]) -> Ve
     detections
 }
 
+/// Simplify a contour using the Douglas-Peucker algorithm.
+pub fn douglas_peucker<'a>(arena: &'a Bump, points: &[Point], epsilon: f64) -> BumpVec<'a, Point> {
+    if points.len() < 3 {
+        let mut v = BumpVec::new_in(arena);
+        v.extend_from_slice(points);
+        return v;
+    }
+
+    let mut dmax = 0.0;
+    let mut index = 0;
+    let end = points.len() - 1;
+
+    for i in 1..end {
+        let d = perpendicular_distance(points[i], points[0], points[end]);
+        if d > dmax {
+            index = i;
+            dmax = d;
+        }
+    }
+
+    if dmax > epsilon {
+        let mut rec_results1 = douglas_peucker(arena, &points[0..=index], epsilon);
+        let rec_results2 = douglas_peucker(arena, &points[index..=end], epsilon);
+
+        rec_results1.pop();
+        rec_results1.extend(rec_results2);
+        rec_results1
+    } else {
+        let mut v = BumpVec::new_in(arena);
+        v.push(points[0]);
+        v.push(points[end]);
+        v
+    }
+}
+
+fn perpendicular_distance(p: Point, a: Point, b: Point) -> f64 {
+    let dx = b.x - a.x;
+    let dy = b.y - a.y;
+    let mag = (dx * dx + dy * dy).sqrt();
+    if mag < 1e-9 {
+        return ((p.x - a.x).powi(2) + (p.y - a.y).powi(2)).sqrt();
+    }
+    ((dy * p.x - dx * p.y + b.x * a.y - b.y * a.x).abs()) / mag
+}
+
 fn polygon_area(points: &[Point]) -> f64 {
     let mut area = 0.0;
     for i in 0..points.len() - 1 {
@@ -151,8 +261,6 @@ fn polygon_center(points: &[Point]) -> [f64; 2] {
     }
     [cx / n as f64, cy / n as f64]
 }
-
-use nalgebra::SMatrix;
 
 /// Refine corners to sub-pixel accuracy based on image gradients.
 pub fn refine_corner(img: &ImageView, p: Point) -> Point {
@@ -214,7 +322,7 @@ fn trace_boundary<'a>(
 
     let mut curr_x = start_x;
     let mut curr_y = start_y;
-    let mut enter_dir = 0; // Direction we entered from
+    let mut enter_dir = 0;
 
     loop {
         points.push(Point {
@@ -223,7 +331,6 @@ fn trace_boundary<'a>(
         });
 
         let mut found = false;
-        // Check 8 neighbors clockwise starting from (enter_dir + 1)
         for i in 0..8 {
             let dir = (enter_dir + i) % 8;
             let nx = curr_x as isize + dx[dir];
@@ -233,7 +340,7 @@ fn trace_boundary<'a>(
                 if labels[ny as usize * width + nx as usize] == target_label {
                     curr_x = nx as usize;
                     curr_y = ny as usize;
-                    enter_dir = (dir + 5) % 8; // Backtrack direction for next step
+                    enter_dir = (dir + 5) % 8;
                     found = true;
                     break;
                 }
