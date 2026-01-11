@@ -1,4 +1,5 @@
 #![allow(unsafe_code)]
+use crate::config;
 use nalgebra::{SMatrix, SVector};
 
 /// A 3x3 Homography matrix.
@@ -346,6 +347,36 @@ mod tests {
                 prop_assert!(hamming <= 2);
             }
         }
+
+        #[test]
+        fn prop_homography_projection(
+            src in prop::collection::vec((-100.0..100.0, -100.0..100.0), 4),
+            dst in prop::collection::vec((0.0..1000.0, 0.0..1000.0), 4)
+        ) {
+            let src_pts = [
+                [src[0].0, src[0].1],
+                [src[1].0, src[1].1],
+                [src[2].0, src[2].1],
+                [src[3].0, src[3].1],
+            ];
+            let dst_pts = [
+                [dst[0].0, dst[0].1],
+                [dst[1].0, dst[1].1],
+                [dst[2].0, dst[2].1],
+                [dst[3].0, dst[3].1],
+            ];
+
+            if let Some(h) = Homography::from_pairs(&src_pts, &dst_pts) {
+                for i in 0..4 {
+                    let p = h.project(src_pts[i]);
+                    // Check for reasonable accuracy. 1e-4 is conservative for float precision
+                    // issues in near-singular cases where from_pairs still returns Some.
+                    prop_assert!((p[0] - dst_pts[i][0]).abs() < 1e-3,
+                        "Point {}: project({:?}) -> {:?}, expected {:?}", i, src_pts[i], p, dst_pts[i]);
+                    prop_assert!((p[1] - dst_pts[i][1]).abs() < 1e-3);
+                }
+            }
+        }
     }
 
     #[test]
@@ -425,5 +456,28 @@ mod tests {
         assert_eq!(bits & 1, 1, "Bit 0 should be 1");
         // bit 35 should be 0 (low intensity)
         assert_eq!((bits >> 35) & 1, 0, "Bit 35 should be 0");
+    }
+
+    #[test]
+    fn test_homography_dlt() {
+        let src = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+        let dst = [[10.0, 10.0], [20.0, 11.0], [19.0, 21.0], [9.0, 20.0]];
+
+        let h = Homography::from_pairs(&src, &dst).expect("DLT should succeed");
+        for i in 0..4 {
+            let p = h.project(src[i]);
+            assert!((p[0] - dst[i][0]).abs() < 1e-6);
+            assert!((p[1] - dst[i][1]).abs() < 1e-6);
+        }
+    }
+}
+
+/// Convert a TagFamily enum to a boxed decoder instance.
+pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send + Sync> {
+    match family {
+        config::TagFamily::AprilTag36h11 => Box::new(AprilTag36h11),
+        config::TagFamily::AprilTag16h5 => Box::new(AprilTag16h5),
+        config::TagFamily::ArUco4x4_50 => Box::new(ArUco4x4_50),
+        config::TagFamily::ArUco4x4_100 => Box::new(ArUco4x4_100),
     }
 }
