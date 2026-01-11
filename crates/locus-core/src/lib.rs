@@ -3,6 +3,7 @@ pub mod gradient;
 pub mod image;
 pub mod quad;
 pub mod segmentation;
+pub mod test_utils;
 pub mod threshold;
 
 use crate::decoder::TagDecoder;

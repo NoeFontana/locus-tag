@@ -118,3 +118,26 @@ fn bench_full_detect_gradient_640x480(bencher: divan::Bencher) {
 
     bencher.bench_local(move || detector.detect_gradient(&img));
 }
+
+#[bench]
+fn bench_accuracy_640x480(bencher: divan::Bencher) {
+    let width = 640;
+    let height = 480;
+    let (data, gt_corners) =
+        locus_core::test_utils::generate_synthetic_tag(width, height, 0, 100, 100, 120);
+    let img = ImageView::new(&data, width, height, width).unwrap();
+    let mut detector = Detector::new();
+
+    bencher.bench_local(move || {
+        let detections = detector.detect(&img);
+
+        // We don't assert here to avoid failing the benchmark, but we measure
+        if !detections.is_empty() {
+            let err =
+                locus_core::test_utils::compute_corner_error(detections[0].corners, gt_corners);
+            // This is a bit of a hack to report accuracy in benchmarks
+            // In a better setup we'd use a custom reporter
+            divan::black_box(err);
+        }
+    });
+}
