@@ -120,6 +120,42 @@ impl TagDecoder for AprilTag16h5 {
     }
 }
 
+/// Decoder for the ArUco 4x4_50 family.
+pub struct ArUco4x4_50;
+
+impl TagDecoder for ArUco4x4_50 {
+    fn name(&self) -> &'static str {
+        "4X4_50"
+    }
+    fn dimension(&self) -> usize {
+        4
+    }
+
+    fn decode(&self, bits: u64) -> Option<(u32, u32)> {
+        crate::dictionaries::ARUCO_4X4_50
+            .decode(bits, 1)
+            .map(|(id, hamming)| (u32::from(id), hamming))
+    }
+}
+
+/// Decoder for the ArUco 4x4_100 family.
+pub struct ArUco4x4_100;
+
+impl TagDecoder for ArUco4x4_100 {
+    fn name(&self) -> &'static str {
+        "4X4_100"
+    }
+    fn dimension(&self) -> usize {
+        4
+    }
+
+    fn decode(&self, bits: u64) -> Option<(u32, u32)> {
+        crate::dictionaries::ARUCO_4X4_100
+            .decode(bits, 1)
+            .map(|(id, hamming)| (u32::from(id), hamming))
+    }
+}
+
 /// Rotates the bit pattern of a tag by 90 degrees clockwise.
 ///
 /// # Arguments
