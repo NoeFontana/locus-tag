@@ -212,6 +212,7 @@ fn refine_pose_oi(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     #[test]
     fn test_pose_projection() {
@@ -261,5 +262,72 @@ mod tests {
         // Check rotation (identity)
         let diff_rot = est_pose.rotation - gt_rot;
         assert!(diff_rot.norm() < 1e-3);
+    }
+
+    proptest! {
+        #[test]
+        fn prop_intrinsics_inversion(
+            fx in 100.0..2000.0f64,
+            fy in 100.0..2000.0f64,
+            cx in 0.0..1000.0f64,
+            cy in 0.0..1000.0f64
+        ) {
+            let intrinsics = CameraIntrinsics::new(fx, fy, cx, cy);
+            let k = intrinsics.as_matrix();
+            let k_inv = intrinsics.inv_matrix();
+            let identity = k * k_inv;
+
+            let expected = Matrix3::<f64>::identity();
+            for i in 0..3 {
+                for j in 0..3 {
+                    prop_assert!((identity[(i, j)] - expected[(i, j)]).abs() < 1e-9);
+                }
+            }
+        }
+
+        #[test]
+        fn prop_pose_recovery_stability(
+            tx in -0.5..0.5f64,
+            ty in -0.5..0.5f64,
+            tz in 0.5..5.0f64, // Tag must be in front of camera
+            roll in -0.5..0.5f64,
+            pitch in -0.5..0.5f64,
+            yaw in -0.5..0.5f64,
+            noise in 0.0..0.1f64 // pixels of noise
+        ) {
+            let intrinsics = CameraIntrinsics::new(800.0, 800.0, 400.0, 300.0);
+            let translation = Vector3::new(tx, ty, tz);
+
+            // Create rotation from Euler angles using Rotation3
+            let r_obj = nalgebra::Rotation3::from_euler_angles(roll, pitch, yaw);
+            let rotation = r_obj.matrix().into_owned();
+            let gt_pose = Pose::new(rotation, translation);
+
+            let tag_size = 0.16;
+            let s = tag_size * 0.5;
+            let obj_pts = [
+                Vector3::new(-s, -s, 0.0),
+                Vector3::new(s, -s, 0.0),
+                Vector3::new(s, s, 0.0),
+                Vector3::new(-s, s, 0.0),
+            ];
+
+            let mut img_pts = [[0.0, 0.0]; 4];
+            for i in 0..4 {
+                let p = gt_pose.project(&obj_pts[i], &intrinsics);
+                // Add tiny bit of noise
+                img_pts[i] = [p[0] + noise, p[1] + noise];
+            }
+
+            if let Some(est_pose) = estimate_tag_pose(&intrinsics, &img_pts, tag_size) {
+                // Check if recovered pose is reasonably close
+                // Note: noise decreases accuracy, so we use a loose threshold
+                let t_err = (est_pose.translation - translation).norm();
+                prop_assert!(t_err < 0.1 + noise * 0.1, "Translation error {} too high for noise {}", t_err, noise);
+
+                let r_err = (est_pose.rotation - rotation).norm();
+                prop_assert!(r_err < 0.1 + noise * 0.1, "Rotation error {} too high for noise {}", r_err, noise);
+            }
+        }
     }
 }
