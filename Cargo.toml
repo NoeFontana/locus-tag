@@ -5,6 +5,16 @@ members = [
 ]
 resolver = "2"
 
+[workspace.lints.rust]
+unsafe_code = "deny" # Force explicit allow
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+pedantic = "warn"
+unwrap_used = "deny" # Production safety
+panic = "deny"
+cast_possible_truncation = "allow" # Common in image processing
+
 [profile.release]
 opt-level = 3
 lto = true
