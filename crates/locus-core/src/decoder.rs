@@ -2,6 +2,7 @@ use nalgebra::{SMatrix, SVector};
 
 /// A 3x3 Homography matrix.
 pub struct Homography {
+    /// The 3x3 homography matrix.
     pub h: SMatrix<f64, 3, 3>,
 }
 
@@ -68,12 +69,19 @@ impl Homography {
     }
 }
 
+/// A trait for decoding binary payloads from extracted tags.
 pub trait TagDecoder: Send + Sync {
+    /// Returns the name of the decoder family (e.g., "AprilTag36h11").
     fn name(&self) -> &str;
+    /// Returns the dimension of the tag grid (e.g., 6 for 36h11).
     fn dimension(&self) -> usize;
+    /// Decodes the extracted bits into a tag ID and hamming distance.
+    ///
+    /// Returns `Some((id, hamming))` if decoding is successful, `None` otherwise.
     fn decode(&self, bits: u64) -> Option<(u32, u32)>; // (id, hamming)
 }
 
+/// Decoder for the AprilTag 36h11 family.
 pub struct AprilTag36h11;
 
 impl TagDecoder for AprilTag36h11 {
@@ -88,9 +96,9 @@ impl TagDecoder for AprilTag36h11 {
         // Simplified 36h11 dictionary for Phase 4 verification
         // These are just example bit patterns
         let codes: [(u16, u64); 3] = [
-            (0, 0x0d5d628584u64),
-            (1, 0x0d97f18b49u64),
-            (2, 0x0dd280910eu64),
+            (0, 0x000d_5d62_8584_u64),
+            (1, 0x000d_97f1_8b49_u64),
+            (2, 0x000d_d280_910e_u64),
         ];
 
         for (id, code) in codes {
@@ -107,6 +115,11 @@ impl TagDecoder for AprilTag36h11 {
     }
 }
 
+/// Rotates the bit pattern of a tag by 90 degrees clockwise.
+///
+/// # Arguments
+/// * `bits` - The 64-bit integer representing the tag grid.
+/// * `dim` - The dimension of the tag grid (e.g., 6).
 pub fn rotate90(bits: u64, dim: usize) -> u64 {
     let mut res = 0u64;
     for y in 0..dim {
