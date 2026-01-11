@@ -5,6 +5,8 @@
 
 /// Tag decoding traits and implementations.
 pub mod decoder;
+/// Tag family dictionaries (AprilTag, ArUco).
+pub mod dictionaries;
 /// Gradient computation for edge refinement.
 pub mod gradient;
 /// Image buffer abstractions.
