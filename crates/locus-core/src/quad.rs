@@ -95,17 +95,18 @@ pub fn extract_quads_fast(
                     }
 
                     if ok {
-                        // Refine corners to sub-pixel accuracy
+                        // Compute center first, then refine corners
+                        let center = polygon_center(&simplified);
                         let corners = [
-                            refine_corner(img, simplified[0]),
-                            refine_corner(img, simplified[1]),
-                            refine_corner(img, simplified[2]),
-                            refine_corner(img, simplified[3]),
+                            refine_corner(img, simplified[0], center),
+                            refine_corner(img, simplified[1], center),
+                            refine_corner(img, simplified[2], center),
+                            refine_corner(img, simplified[3], center),
                         ];
 
                         detections.push(Detection {
                             id: label,
-                            center: polygon_center(&simplified),
+                            center,
                             corners: [
                                 [corners[0].x, corners[0].y],
                                 [corners[1].x, corners[1].y],
@@ -262,47 +263,100 @@ fn polygon_center(points: &[Point]) -> [f64; 2] {
     [cx / n as f64, cy / n as f64]
 }
 
-/// Refine corners to sub-pixel accuracy based on image gradients.
-pub fn refine_corner(img: &ImageView, p: Point) -> Point {
-    let win_size = 3;
-    let mut ata = SMatrix::<f64, 2, 2>::zeros();
-    let mut atb = SMatrix::<f64, 2, 1>::zeros();
+/// Refine corners to sub-pixel accuracy using gradient-based edge search.
+///
+/// Searches along the direction from tag center to corner to find the true
+/// outer edge of the tag (bright-to-dark transition).
+pub fn refine_corner(img: &ImageView, p: Point, center: [f64; 2]) -> Point {
+    // Direction from center to corner (points outward)
+    let dir_x = p.x - center[0];
+    let dir_y = p.y - center[1];
+    let dir_len = (dir_x * dir_x + dir_y * dir_y).sqrt();
 
-    let ix = p.x as isize;
-    let iy = p.y as isize;
+    if dir_len < 1.0 {
+        return p;
+    }
 
-    for dy in -win_size..=win_size {
-        for dx in -win_size..=win_size {
-            let x = ix + dx;
-            let y = iy + dy;
+    // Normalize direction
+    let dx = dir_x / dir_len;
+    let dy = dir_y / dir_len;
 
-            if x > 0 && x < (img.width - 1) as isize && y > 0 && y < (img.height - 1) as isize {
-                let gx = (img.get_pixel(x as usize + 1, y as usize) as f64
-                    - img.get_pixel(x as usize - 1, y as usize) as f64)
-                    * 0.5;
-                let gy = (img.get_pixel(x as usize, y as usize + 1) as f64
-                    - img.get_pixel(x as usize, y as usize - 1) as f64)
-                    * 0.5;
+    // Search along the ray from corner outward (and slightly inward)
+    let mut best_x = p.x;
+    let mut best_y = p.y;
+    let mut best_mag = 0.0f64;
 
-                ata[(0, 0)] += gx * gx;
-                ata[(0, 1)] += gx * gy;
-                ata[(1, 1)] += gy * gy;
+    // Sample 11 points: 5 inward, current, 5 outward
+    for step in -3..=7 {
+        let x = p.x + dx * step as f64;
+        let y = p.y + dy * step as f64;
 
-                atb[(0, 0)] += gx * (gx * x as f64 + gy * y as f64);
-                atb[(1, 0)] += gy * (gx * x as f64 + gy * y as f64);
+        let ix = x as isize;
+        let iy = y as isize;
+
+        if ix > 1 && ix < (img.width - 2) as isize && iy > 1 && iy < (img.height - 2) as isize {
+            let gx = (img.get_pixel((ix + 1) as usize, iy as usize) as f64
+                - img.get_pixel((ix - 1) as usize, iy as usize) as f64)
+                * 0.5;
+            let gy = (img.get_pixel(ix as usize, (iy + 1) as usize) as f64
+                - img.get_pixel(ix as usize, (iy - 1) as usize) as f64)
+                * 0.5;
+            let mag = gx * gx + gy * gy;
+
+            if mag > best_mag {
+                best_mag = mag;
+                best_x = x;
+                best_y = y;
             }
         }
     }
-    ata[(1, 0)] = ata[(0, 1)];
 
-    if let Some(inv) = ata.try_inverse() {
-        let res = inv * atb;
-        Point {
-            x: res[(0, 0)],
-            y: res[(1, 0)],
+    // Quadratic sub-pixel refinement along the search direction
+    let best_ix = best_x as isize;
+    let best_iy = best_y as isize;
+
+    if best_ix > 1
+        && best_ix < (img.width - 2) as isize
+        && best_iy > 1
+        && best_iy < (img.height - 2) as isize
+    {
+        // Sample gradient magnitudes at best-1, best, best+1 along direction
+        let mut mags = [0.0f64; 3];
+        for (i, offset) in [-1.0, 0.0, 1.0].iter().enumerate() {
+            let x = best_x + dx * offset;
+            let y = best_y + dy * offset;
+            let ix = x as isize;
+            let iy = y as isize;
+
+            if ix > 0 && ix < (img.width - 1) as isize && iy > 0 && iy < (img.height - 1) as isize {
+                let gx = (img.get_pixel((ix + 1) as usize, iy as usize) as f64
+                    - img.get_pixel((ix - 1) as usize, iy as usize) as f64)
+                    * 0.5;
+                let gy = (img.get_pixel(ix as usize, (iy + 1) as usize) as f64
+                    - img.get_pixel(ix as usize, (iy - 1) as usize) as f64)
+                    * 0.5;
+                mags[i] = gx * gx + gy * gy;
+            }
         }
-    } else {
-        p
+
+        // Quadratic interpolation for sub-pixel peak
+        let num = mags[2] - mags[0];
+        let den = 2.0 * (mags[0] + mags[2] - 2.0 * mags[1]);
+        let sub_offset = if den.abs() > 1e-6 {
+            (-num / den).clamp(-0.5, 0.5)
+        } else {
+            0.0
+        };
+
+        return Point {
+            x: best_x + dx * sub_offset,
+            y: best_y + dy * sub_offset,
+        };
+    }
+
+    Point {
+        x: best_x,
+        y: best_y,
     }
 }
 
