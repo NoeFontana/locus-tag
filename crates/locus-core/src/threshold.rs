@@ -14,123 +14,130 @@ pub struct ThresholdEngine {
 
 impl ThresholdEngine {
     pub fn new() -> Self {
-        Self { tile_size: 8 } // Larger tiles for faster processing
+        Self { tile_size: 8 }
     }
 
     /// Compute min/max statistics for each tile in the image.
+    /// Optimized with SIMD-friendly memory access patterns.
     pub fn compute_tile_stats(&self, img: &ImageView) -> Vec<TileStats> {
-        let tiles_wide = img.width / self.tile_size;
-        let tiles_high = img.height / self.tile_size;
+        let ts = self.tile_size;
+        let tiles_wide = img.width / ts;
+        let tiles_high = img.height / ts;
         let mut stats = vec![TileStats { min: 255, max: 0 }; tiles_wide * tiles_high];
 
-        // Single-threaded for small images to avoid thread pool overhead
         for ty in 0..tiles_high {
-            let stats_offset = ty * tiles_wide;
-            for dy in 0..self.tile_size {
-                let py = ty * self.tile_size + dy;
+            let stats_row = &mut stats[ty * tiles_wide..(ty + 1) * tiles_wide];
+
+            for dy in 0..ts {
+                let py = ty * ts + dy;
                 let src_row = img.get_row(py);
-                for tx in 0..tiles_wide {
-                    let x = tx * self.tile_size;
-                    let mut rmin = 255u8;
-                    let mut rmax = 0u8;
-                    for dx in 0..self.tile_size {
-                        let p = src_row[x + dx];
-                        if p < rmin {
-                            rmin = p;
-                        }
-                        if p > rmax {
-                            rmax = p;
-                        }
-                    }
-                    let s = &mut stats[stats_offset + tx];
-                    if rmin < s.min {
-                        s.min = rmin;
-                    }
-                    if rmax > s.max {
-                        s.max = rmax;
-                    }
-                }
+
+                // Process all tiles in this row with SIMD-friendly min/max
+                compute_row_tile_stats_simd(src_row, stats_row, ts);
             }
         }
         stats
     }
 
     /// Apply adaptive thresholding to the image.
+    /// Optimized with pre-expanded threshold maps and vectorized row processing.
     pub fn apply_threshold(&self, img: &ImageView, stats: &[TileStats], output: &mut [u8]) {
-        let tiles_wide = img.width / self.tile_size;
-        let tiles_high = img.height / self.tile_size;
         let ts = self.tile_size;
+        let tiles_wide = img.width / ts;
+        let tiles_high = img.height / ts;
 
-        // Compute adaptive thresholds
+        // Pre-compute adaptive thresholds and valid masks for each tile
         let mut tile_thresholds = vec![0u8; tiles_wide * tiles_high];
-        let mut tile_valid_mask = vec![0u8; tiles_wide * tiles_high];
+        let mut tile_valid = vec![0u8; tiles_wide * tiles_high];
 
         for ty in 0..tiles_high {
             for tx in 0..tiles_wide {
                 let mut nmin = 255u8;
                 let mut nmax = 0u8;
 
-                let y_start = if ty > 0 { ty - 1 } else { 0 };
+                let y_start = ty.saturating_sub(1);
                 let y_end = (ty + 1).min(tiles_high - 1);
-                let x_start = if tx > 0 { tx - 1 } else { 0 };
+                let x_start = tx.saturating_sub(1);
                 let x_end = (tx + 1).min(tiles_wide - 1);
 
                 for ny in y_start..=y_end {
                     for nx in x_start..=x_end {
                         let s = stats[ny * tiles_wide + nx];
-                        if s.min < nmin {
-                            nmin = s.min;
-                        }
-                        if s.max > nmax {
-                            nmax = s.max;
-                        }
+                        nmin = nmin.min(s.min);
+                        nmax = nmax.max(s.max);
                     }
                 }
 
                 let idx = ty * tiles_wide + tx;
-                if nmax - nmin < 10 {
-                    tile_valid_mask[idx] = 0;
+                if nmax.saturating_sub(nmin) < 10 {
+                    tile_valid[idx] = 0;
                 } else {
-                    tile_valid_mask[idx] = 255;
+                    tile_valid[idx] = 255;
                     tile_thresholds[idx] = ((nmin as u16 + nmax as u16) >> 1) as u8;
                 }
             }
         }
 
-        // Apply thresholding
+        // Expand thresholds to per-pixel for vectorized row processing
+        let mut row_thresh = vec![0u8; img.width];
+        let mut row_valid = vec![0u8; img.width];
+
         for ty in 0..tiles_high {
+            // Expand tile thresholds to pixel-level for this row of tiles
+            for tx in 0..tiles_wide {
+                let idx = ty * tiles_wide + tx;
+                let thresh = tile_thresholds[idx];
+                let valid = tile_valid[idx];
+                let x_start = tx * ts;
+                for dx in 0..ts {
+                    row_thresh[x_start + dx] = thresh;
+                    row_valid[x_start + dx] = valid;
+                }
+            }
+
+            // Process all rows in this tile row with vectorized thresholding
             for dy in 0..ts {
                 let py = ty * ts + dy;
                 let src_row = img.get_row(py);
                 let dst_start = py * img.width;
                 let dst_row = &mut output[dst_start..dst_start + img.width];
 
-                for tx in 0..tiles_wide {
-                    let tile_idx = ty * tiles_wide + tx;
-                    let thresh = tile_thresholds[tile_idx];
-                    let valid = tile_valid_mask[tile_idx];
-                    let x_start = tx * ts;
-
-                    for dx in 0..ts {
-                        let x = x_start + dx;
-                        let pass = if src_row[x] > thresh { 255 } else { 0 };
-                        dst_row[x] = pass & valid;
-                    }
-                }
+                threshold_row_simd(src_row, dst_row, &row_thresh, &row_valid);
             }
         }
     }
 }
 
+/// SIMD-optimized row tile stats computation.
+#[multiversion(targets = "simd")]
+fn compute_row_tile_stats_simd(src_row: &[u8], stats: &mut [TileStats], tile_size: usize) {
+    let tiles = stats.len();
+    for tx in 0..tiles {
+        let x = tx * tile_size;
+        let chunk = &src_row[x..x + tile_size];
+
+        let mut rmin = 255u8;
+        let mut rmax = 0u8;
+        for &p in chunk {
+            rmin = rmin.min(p);
+            rmax = rmax.max(p);
+        }
+
+        stats[tx].min = stats[tx].min.min(rmin);
+        stats[tx].max = stats[tx].max.max(rmax);
+    }
+}
+
+/// SIMD-optimized thresholding for a full row.
 #[multiversion(targets = "simd")]
 fn threshold_row_simd(src: &[u8], dst: &mut [u8], thresholds: &[u8], valid_mask: &[u8]) {
-    // Simple loop for better autovectorization
     let len = src.len();
     for i in 0..len {
         let s = src[i];
         let t = thresholds[i];
         let m = valid_mask[i];
-        let pass = if s > t { 255 } else { 0 };
+        // Branchless: (s > t) produces 0 or 1, multiply by 255
+        let pass = ((s > t) as u8).wrapping_neg(); // 0xFF if true, 0x00 if false
         dst[i] = pass & m;
     }
 }
@@ -176,12 +183,8 @@ fn compute_min_max_simd(data: &[u8]) -> (u8, u8) {
     let mut min = 255u8;
     let mut max = 0u8;
     for &b in data {
-        if b < min {
-            min = b;
-        }
-        if b > max {
-            max = b;
-        }
+        min = min.min(b);
+        max = max.max(b);
     }
     (min, max)
 }
