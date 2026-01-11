@@ -3,9 +3,13 @@
 /// A view into an image buffer with explicit stride support.
 /// This allows handling NumPy arrays with padding or non-standard layouts.
 pub struct ImageView<'a> {
+    /// The raw image data slice.
     pub data: &'a [u8],
+    /// The width of the image in pixels.
     pub width: usize,
+    /// The height of the image in pixels.
     pub height: usize,
+    /// The stride (bytes per row) of the image.
     pub stride: usize,
 }
 
