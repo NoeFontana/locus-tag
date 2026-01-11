@@ -1,3 +1,4 @@
+#![allow(unsafe_code)]
 use nalgebra::{SMatrix, SVector};
 
 /// A 3x3 Homography matrix.
@@ -63,12 +64,72 @@ impl Homography {
     }
 
     /// Project a point using the homography.
-    #[must_use]
     pub fn project(&self, p: [f64; 2]) -> [f64; 2] {
         let res = self.h * SVector::<f64, 3>::new(p[0], p[1], 1.0);
         let w = res[2];
         [res[0] / w, res[1] / w]
     }
+}
+
+/// Sample the bit grid from the image using the homography and decoder points.
+///
+/// Uses bilinear interpolation for sampling and a spatially adaptive threshold
+/// (based on min/max stats of the grid) to determine bit values.
+pub fn sample_grid(
+    img: &crate::image::ImageView,
+    homography: &Homography,
+    decoder: &impl TagDecoder,
+) -> Option<u64> {
+    let points = decoder.sample_points();
+    let mut intensities = Vec::with_capacity(points.len());
+
+    let mut min_val = f64::MAX;
+    let mut max_val = f64::MIN;
+
+    for &p in points {
+        // Project canonical point to image coordinates
+        let img_p = homography.project([p.0, p.1]);
+
+        // Check bounds (with slight margin for interpolation)
+        // We need x < width - 1 to ensure floor(x)+1 is a valid index
+        if img_p[0] < 0.0
+            || img_p[0] >= (img.width - 1) as f64
+            || img_p[1] < 0.0
+            || img_p[1] >= (img.height - 1) as f64
+        {
+            return None; // Point outside image
+        }
+
+        // SAFETY: Bounds checked above. x < width-1 implies floor(x)+1 < width.
+        let val = unsafe { img.sample_bilinear_unchecked(img_p[0], img_p[1]) };
+        intensities.push(val);
+
+        if val < min_val {
+            min_val = val;
+        }
+        if val > max_val {
+            max_val = val;
+        }
+    }
+
+    // Adaptive threshold: halfway between min and max intensity observed in the grid.
+    // This handles varying lighting conditions per tag.
+    let range = max_val - min_val;
+    if range < 20.0 {
+        // Contrast too low to be a valid tag
+        return None;
+    }
+
+    let threshold = min_val + range * 0.5;
+    let mut bits = 0u64;
+
+    for (i, &val) in intensities.iter().enumerate() {
+        if val > threshold {
+            bits |= 1 << i;
+        }
+    }
+
+    Some(bits)
 }
 
 /// A trait for decoding binary payloads from extracted tags.
@@ -297,5 +358,72 @@ mod tests {
             let result = decoder.decode(code);
             assert_eq!(result, Some((u32::from(id), 0)), "ID {id} should decode");
         }
+    }
+
+    #[test]
+    fn test_grid_sampling() {
+        let width = 64;
+        let height = 64;
+        let stride = 64;
+        let mut data = vec![0u8; width * height];
+
+        // Draw a simulated 36h6 tag (6x6 bits)
+        // Center at 32, 32. Tag size 36x36 pixels.
+        // Each bit is 6x6 pixels.
+        // We will set bit 0 (top-left) to 255 (white), others 0 (black).
+        // Plus a white border for contrast calculation.
+        // We need min/max to be different by > 20.
+
+        // Fill background with gray = 100
+        for i in 0..data.len() {
+            data[i] = 100;
+        }
+
+        // Set bit 0 region to 200 (White)
+        // Canonical (-0.625, -0.625) -> Image coords.
+        // Assume identity homography mapping:
+        // -1 -> 14, +1 -> 50 (width 36 centered at 32)
+        // scale = 18. offset = 32.
+
+        // Bit 0 center is -0.625.
+        // Image x = 32 + 18 * -0.625 = 32 - 11.25 = 20.75
+        // Let's paint a blob at 21, 21.
+        for y in 18..24 {
+            for x in 18..24 {
+                data[y * width + x] = 200;
+            }
+        }
+
+        // Set another region (last bit) to 50 (Black) to ensure dynamic range
+        // Last bit 35 is at (0.625, 0.625).
+        // Image x = 32 + 18 * 0.625 = 43.25
+        for y in 40..46 {
+            for x in 40..46 {
+                data[y * width + x] = 50;
+            }
+        }
+
+        let img = crate::image::ImageView::new(&data, width, height, stride).unwrap();
+
+        // Construct Homography that maps canonical [-1, 1] to image [14, 50]
+        // This is a simple scaling matrix:
+        // [ sx  0  tx ]
+        // [ 0  sy  ty ]
+        // [ 0   0   1 ]
+        // sx = 18, tx = 32.
+        let mut h = SMatrix::<f64, 3, 3>::identity();
+        h[(0, 0)] = 18.0;
+        h[(0, 2)] = 32.0;
+        h[(1, 1)] = 18.0;
+        h[(1, 2)] = 32.0;
+        let homography = Homography { h };
+
+        let decoder = AprilTag36h11;
+        let bits = sample_grid(&img, &homography, &decoder).expect("Should sample successfully");
+
+        // bit 0 should be 1 (high intensity)
+        assert_eq!(bits & 1, 1, "Bit 0 should be 1");
+        // bit 35 should be 0 (low intensity)
+        assert_eq!((bits >> 35) & 1, 0, "Bit 35 should be 0");
     }
 }

@@ -1,6 +1,7 @@
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::similar_names)]
+#![allow(unsafe_code)]
 
 use crate::Detection;
 use crate::image::ImageView;
@@ -408,13 +409,17 @@ fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
             let iy = y as isize;
 
             if ix > 0 && ix < (img.width - 1) as isize && iy > 0 && iy < (img.height - 1) as isize {
-                let gx = (f64::from(img.get_pixel((ix + 1) as usize, iy as usize))
-                    - f64::from(img.get_pixel((ix - 1) as usize, iy as usize)))
-                    * 0.5;
-                let gy = (f64::from(img.get_pixel(ix as usize, (iy + 1) as usize))
-                    - f64::from(img.get_pixel(ix as usize, (iy - 1) as usize)))
-                    * 0.5;
-                edge_mag_sum += (gx * gx + gy * gy).sqrt();
+                // SAFETY: We checked bounds above. ix, iy >= 1 and <= width/height - 2.
+                // So (ix +/- 1) are safely within [0, width-1].
+                unsafe {
+                    let gx = (f64::from(img.get_pixel_unchecked((ix + 1) as usize, iy as usize))
+                        - f64::from(img.get_pixel_unchecked((ix - 1) as usize, iy as usize)))
+                        * 0.5;
+                    let gy = (f64::from(img.get_pixel_unchecked(ix as usize, (iy + 1) as usize))
+                        - f64::from(img.get_pixel_unchecked(ix as usize, (iy - 1) as usize)))
+                        * 0.5;
+                    edge_mag_sum += (gx * gx + gy * gy).sqrt();
+                }
             }
         }
 

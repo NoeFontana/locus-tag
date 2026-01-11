@@ -3,6 +3,7 @@
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
+#![allow(unsafe_code)]
 
 /// A view into an image buffer with explicit stride support.
 /// This allows handling NumPy arrays with padding or non-standard layouts.
@@ -62,7 +63,22 @@ impl<'a> ImageView<'a> {
     pub fn get_pixel(&self, x: usize, y: usize) -> u8 {
         let x = x.min(self.width - 1);
         let y = y.min(self.height - 1);
-        self.data[y * self.stride + x]
+        // SAFETY: clamping ensures bounds
+        unsafe { *self.data.get_unchecked(y * self.stride + x) }
+    }
+
+    /// Get a pixel value at (x, y) without bounds checking.
+    ///
+    /// # Safety
+    /// Caller must ensure `x < width` and `y < height`.
+    #[inline(always)]
+    #[must_use]
+    pub unsafe fn get_pixel_unchecked(&self, x: usize, y: usize) -> u8 {
+        // debug_assert ensures we catch violations in debug mode
+        debug_assert!(x < self.width, "x {} out of bounds {}", x, self.width);
+        debug_assert!(y < self.height, "y {} out of bounds {}", y, self.height);
+        // SAFETY: Caller guarantees bounds
+        unsafe { *self.data.get_unchecked(y * self.stride + x) }
     }
 
     /// Sample pixel value with bilinear interpolation at sub-pixel coordinates.
@@ -89,6 +105,54 @@ impl<'a> ImageView<'a> {
         let v1 = v01 * (1.0 - dx) + v11 * dx;
 
         v0 * (1.0 - dy) + v1 * dy
+    }
+
+    /// Sample pixel value with bilinear interpolation at sub-pixel coordinates without bounds checking.
+    ///
+    /// # Safety
+    /// Caller must ensure `0.0 <= x <= width - 1.001` and `0.0 <= y <= height - 1.001`
+    /// such that floor(x), floor(x)+1, floor(y), floor(y)+1 are all valid indices.
+    #[inline(always)]
+    #[must_use]
+    pub unsafe fn sample_bilinear_unchecked(&self, x: f64, y: f64) -> f64 {
+        let x0 = x as usize; // Truncate is effectively floor for positive numbers
+        let y0 = y as usize;
+        let x1 = x0 + 1;
+        let y1 = y0 + 1;
+
+        debug_assert!(x1 < self.width, "x1 {} out of bounds {}", x1, self.width);
+        debug_assert!(y1 < self.height, "y1 {} out of bounds {}", y1, self.height);
+
+        let dx = x - x0 as f64;
+        let dy = y - y0 as f64;
+
+        // Use unchecked pixel access
+        // We know strides and offsets are valid because of the assertions (in debug) and caller contract (in release)
+        // SAFETY: Caller guarantees checks.
+        let row0 = unsafe { self.get_row_unchecked(y0) };
+        let row1 = unsafe { self.get_row_unchecked(y1) };
+
+        // We can access x0/x1 directly from the row slice
+        // SAFETY: Caller guarantees checks.
+        unsafe {
+            let v00 = f64::from(*row0.get_unchecked(x0));
+            let v10 = f64::from(*row0.get_unchecked(x1));
+            let v01 = f64::from(*row1.get_unchecked(x0));
+            let v11 = f64::from(*row1.get_unchecked(x1));
+
+            let v0 = v00 * (1.0 - dx) + v10 * dx;
+            let v1 = v01 * (1.0 - dx) + v11 * dx;
+
+            v0 * (1.0 - dy) + v1 * dy
+        }
+    }
+
+    /// Unsafe accessor for a specific row.
+    #[inline(always)]
+    unsafe fn get_row_unchecked(&self, y: usize) -> &[u8] {
+        let start = y * self.stride;
+        // SAFETY: Caller guarantees y < height. Width and stride are invariants.
+        unsafe { &self.data.get_unchecked(start..start + self.width) }
     }
 }
 
