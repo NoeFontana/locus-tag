@@ -143,6 +143,7 @@ pub fn extract_quads_with_config(
                                 ],
                                 hamming: 0,
                                 decision_margin: area,
+                                pose: None,
                             });
                         }
                     }
@@ -218,6 +219,7 @@ pub fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detec
                                 ],
                                 hamming: 0,
                                 decision_margin: area,
+                                pose: None,
                             });
                         }
                     }

@@ -37,6 +37,8 @@ pub mod dictionaries;
 pub mod gradient;
 /// Image buffer abstractions.
 pub mod image;
+/// 3D Pose Estimation (PnP).
+pub mod pose;
 /// Quad extraction and geometric primitives.
 pub mod quad;
 /// Connected components labeling using Union-Find.
@@ -65,6 +67,8 @@ pub struct Detection {
     pub hamming: u32,
     /// The decision margin of the decoding (higher is more confident).
     pub decision_margin: f64,
+    /// The 3D pose of the tag relative to the camera (if requested).
+    pub pose: Option<crate::pose::Pose>,
 }
 
 /// Statistics for the detection pipeline stages.
@@ -205,6 +209,18 @@ impl Detector {
                         if let Some((id, hamming)) = decoder.decode(bits) {
                             cand.id = id;
                             cand.hamming = hamming;
+
+                            // Compute 3D pose if requested
+                            if let (Some(intrinsics), Some(tag_size)) =
+                                (options.intrinsics, options.tag_size)
+                            {
+                                cand.pose = crate::pose::estimate_tag_pose(
+                                    &intrinsics,
+                                    &cand.corners,
+                                    tag_size,
+                                );
+                            }
+
                             final_detections.push(cand);
                             break;
                         }

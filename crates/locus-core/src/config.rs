@@ -216,22 +216,35 @@ impl TagFamily {
 pub struct DetectOptions {
     /// Tag families to attempt decoding. Empty means use detector defaults.
     pub families: Vec<TagFamily>,
+    /// Camera intrinsics for 3D pose estimation. If None, pose is not computed.
+    pub intrinsics: Option<crate::pose::CameraIntrinsics>,
+    /// Physical size of the tag in world units (e.g. meters) for 3D pose estimation.
+    pub tag_size: Option<f64>,
 }
 
 impl Default for DetectOptions {
     fn default() -> Self {
         Self {
             families: Vec::new(), // Empty = use detector's configured decoders
+            intrinsics: None,
+            tag_size: None,
         }
     }
 }
 
 impl DetectOptions {
+    /// Create a new builder for `DetectOptions`.
+    #[must_use]
+    pub fn builder() -> DetectOptionsBuilder {
+        DetectOptionsBuilder::default()
+    }
     /// Create options that decode only the specified tag families.
     #[must_use]
     pub fn with_families(families: &[TagFamily]) -> Self {
         Self {
             families: families.to_vec(),
+            intrinsics: None,
+            tag_size: None,
         }
     }
 
@@ -240,6 +253,49 @@ impl DetectOptions {
     pub fn all_families() -> Self {
         Self {
             families: TagFamily::all().to_vec(),
+            intrinsics: None,
+            tag_size: None,
+        }
+    }
+}
+
+/// Builder for [`DetectOptions`].
+#[derive(Default)]
+pub struct DetectOptionsBuilder {
+    families: Vec<TagFamily>,
+    intrinsics: Option<crate::pose::CameraIntrinsics>,
+    tag_size: Option<f64>,
+}
+
+impl DetectOptionsBuilder {
+    /// Set the tag families to decode.
+    #[must_use]
+    pub fn families(mut self, families: &[TagFamily]) -> Self {
+        self.families = families.to_vec();
+        self
+    }
+
+    /// Set camera intrinsics for pose estimation.
+    #[must_use]
+    pub fn intrinsics(mut self, fx: f64, fy: f64, cx: f64, cy: f64) -> Self {
+        self.intrinsics = Some(crate::pose::CameraIntrinsics::new(fx, fy, cx, cy));
+        self
+    }
+
+    /// Set physical tag size for pose estimation.
+    #[must_use]
+    pub fn tag_size(mut self, size: f64) -> Self {
+        self.tag_size = Some(size);
+        self
+    }
+
+    /// Build the options.
+    #[must_use]
+    pub fn build(self) -> DetectOptions {
+        DetectOptions {
+            families: self.families,
+            intrinsics: self.intrinsics,
+            tag_size: self.tag_size,
         }
     }
 }
