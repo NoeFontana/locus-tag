@@ -159,6 +159,7 @@ impl<'a> ImageView<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     #[test]
     fn test_image_view_stride() {
@@ -177,5 +178,91 @@ mod tests {
         let data = vec![1, 2, 3];
         let result = ImageView::new(&data, 2, 2, 2);
         assert!(result.is_err());
+    }
+
+    proptest! {
+        #[test]
+        fn prop_image_view_creation(
+            width in 0..1000usize,
+            height in 0..1000usize,
+            stride_extra in 0..100usize,
+            has_enough_data in prop::bool::ANY
+        ) {
+            let stride = width + stride_extra;
+            let required_size = if height > 0 {
+                (height - 1) * stride + width
+            } else {
+                0
+            };
+
+            let data_len = if has_enough_data {
+                required_size
+            } else {
+                required_size.saturating_sub(1)
+            };
+
+            let data = vec![0u8; data_len];
+            let result = ImageView::new(&data, width, height, stride);
+
+            if height > 0 && !has_enough_data {
+                assert!(result.is_err());
+            } else {
+                assert!(result.is_ok());
+            }
+        }
+
+        #[test]
+        fn prop_get_pixel_clamping(
+            width in 1..100usize,
+            height in 1..100usize,
+            x in 0..200usize,
+            y in 0..200usize
+        ) {
+            let data = vec![0u8; height * width];
+            let view = ImageView::new(&data, width, height, width).unwrap();
+            let p = view.get_pixel(x, y);
+            // Clamping should prevent panic
+            assert_eq!(p, 0);
+        }
+
+        #[test]
+        fn prop_sample_bilinear_invariants(
+            width in 2..20usize,
+            height in 2..20usize,
+            data in prop::collection::vec(0..=255u8, 20*20),
+            x in 0.0..20.0f64,
+            y in 0.0..20.0f64
+        ) {
+            let real_width = width.min(20);
+            let real_height = height.min(20);
+            let slice = &data[..real_width * real_height];
+            let view = ImageView::new(slice, real_width, real_height, real_width).unwrap();
+
+            let x = x % real_width as f64;
+            let y = y % real_height as f64;
+
+            let val = view.sample_bilinear(x, y);
+
+            // Result should be within [0, 255]
+            assert!(val >= 0.0 && val <= 255.0);
+
+            // If inside 2x2 neighborhood, val should be within min/max of those 4 pixels
+            let x0 = x.floor() as usize;
+            let y0 = y.floor() as usize;
+            let x1 = x0 + 1;
+            let y1 = y0 + 1;
+
+            if x1 < real_width && y1 < real_height {
+                let v00 = view.get_pixel(x0, y0);
+                let v10 = view.get_pixel(x1, y0);
+                let v01 = view.get_pixel(x0, y1);
+                let v11 = view.get_pixel(x1, y1);
+
+                let min = v00.min(v10).min(v01).min(v11) as f64;
+                let max = v00.max(v10).max(v01).max(v11) as f64;
+
+                assert!(val >= min - 1e-9 && val <= max + 1e-9, "Value {} not in [{}, {}] for x={}, y={}", val, min, max, x, y);
+            }
+        }
     }
 }
