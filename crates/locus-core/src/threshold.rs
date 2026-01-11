@@ -4,11 +4,15 @@ use multiversion::multiversion;
 /// Statistics for a single tile.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TileStats {
+    /// Minimum pixel value in the tile.
     pub min: u8,
+    /// Maximum pixel value in the tile.
     pub max: u8,
 }
 
+/// Adaptive thresholding engine using tile-based stats.
 pub struct ThresholdEngine {
+    /// Size of the tiles used for local thresholding statistics.
     pub tile_size: usize,
 }
 
@@ -19,6 +23,7 @@ impl Default for ThresholdEngine {
 }
 
 impl ThresholdEngine {
+    /// Create a new ThresholdEngine with default settings.
     pub fn new() -> Self {
         Self { tile_size: 8 }
     }
@@ -120,7 +125,11 @@ impl ThresholdEngine {
 }
 
 /// SIMD-optimized row tile stats computation.
-#[multiversion(targets = "simd")]
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
 fn compute_row_tile_stats_simd(src_row: &[u8], stats: &mut [TileStats], tile_size: usize) {
     let tiles = stats.len();
     for (tx, stat) in stats.iter_mut().enumerate().take(tiles) {
@@ -176,7 +185,7 @@ mod tests {
         fn test_binarization_invariants(src in prop::collection::vec(0..=255u8, 16), thresh in 0..=255u8) {
             let mut dst = vec![0u8; 16];
             let valid = vec![255u8; 16];
-            threshold_row_simd(&src, &mut dst, &vec![thresh; 16], &valid);
+            threshold_row_simd(&src, &mut dst, &[thresh; 16], &valid);
 
             for (i, &s) in src.iter().enumerate() {
                 if s > thresh {
