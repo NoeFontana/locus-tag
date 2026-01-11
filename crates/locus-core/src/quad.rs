@@ -58,47 +58,54 @@ fn perpendicular_distance(p: Point, a: Point, b: Point) -> f64 {
 
 /// Extract quads from labeled connected components.
 pub fn extract_quads<'a>(arena: &'a Bump, img: &ImageView, labels: &[u32]) -> Vec<Detection> {
-    let mut detections = Vec::new(); // Final output can be standard Vec
-    let processed_labels = arena.alloc_slice_fill_copy(labels.len() / 32 + 1, 0u32);
+    let mut detections = Vec::new();
+    let num_labels = (labels.len() / 32) + 1;
+    let processed_labels = arena.alloc_slice_fill_copy(num_labels, 0u32);
 
-    for y in 1..img.height - 1 {
-        for x in 1..img.width - 1 {
-            let idx = y * img.width + x;
+    let width = img.width;
+    let height = img.height;
+
+    for y in 1..height - 1 {
+        let row_off = y * width;
+        let prev_row_off = (y - 1) * width;
+
+        for x in 1..width - 1 {
+            let idx = row_off + x;
             let label = labels[idx];
+
             if label == 0 {
                 continue;
             }
 
-            // Check if label already processed
+            // A label can only be a "top-left" corner of a component if
+            // the pixel above or to the left is not the same label.
+            // This avoids many redundant 'processed_labels' checks.
+            if labels[idx - 1] == label || labels[prev_row_off + x] == label {
+                continue;
+            }
+
             let bit_idx = (label as usize) / 32;
             let bit_mask = 1 << (label % 32);
             if processed_labels[bit_idx] & bit_mask != 0 {
                 continue;
             }
 
-            // Found a new component - trace it
-            let contour = trace_boundary(arena, labels, img.width, img.height, x, y, label);
             processed_labels[bit_idx] |= bit_mask;
+            let contour = trace_boundary(arena, labels, width, height, x, y, label);
 
             if contour.len() >= 30 {
-                // Min perimeter (around 8x8)
-                let simplified = douglas_peucker(arena, &contour, 5.0); // More aggressive simplification
+                let simplified = douglas_peucker(arena, &contour, 4.0);
                 if simplified.len() == 5 {
                     let area = polygon_area(&simplified);
                     let perimeter = contour.len() as f64;
-
-                    // Circularity or Compactness check: 4*pi*A / P^2
-                    // For a square, it's 4*pi*s^2 / (4s)^2 = pi/4 ~ 0.785
                     let compactness = (12.566 * area) / (perimeter * perimeter);
 
                     if area > 400.0 && compactness > 0.5 {
-                        // Ensure corners are not too close
                         let mut ok = true;
                         for i in 0..4 {
                             let d2 = (simplified[i].x - simplified[i + 1].x).powi(2)
                                 + (simplified[i].y - simplified[i + 1].y).powi(2);
                             if d2 < 100.0 {
-                                // Min side length 10
                                 ok = false;
                                 break;
                             }
@@ -109,22 +116,10 @@ pub fn extract_quads<'a>(arena: &'a Bump, img: &ImageView, labels: &[u32]) -> Ve
                                 id: label,
                                 center: polygon_center(&simplified),
                                 corners: [
-                                    {
-                                        let rp = refine_corner(img, simplified[0]);
-                                        [rp.x, rp.y]
-                                    },
-                                    {
-                                        let rp = refine_corner(img, simplified[1]);
-                                        [rp.x, rp.y]
-                                    },
-                                    {
-                                        let rp = refine_corner(img, simplified[2]);
-                                        [rp.x, rp.y]
-                                    },
-                                    {
-                                        let rp = refine_corner(img, simplified[3]);
-                                        [rp.x, rp.y]
-                                    },
+                                    [simplified[0].x, simplified[0].y],
+                                    [simplified[1].x, simplified[1].y],
+                                    [simplified[2].x, simplified[2].y],
+                                    [simplified[3].x, simplified[3].y],
                                 ],
                                 hamming: 0,
                                 decision_margin: area,

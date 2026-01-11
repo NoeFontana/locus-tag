@@ -14,133 +14,124 @@ pub struct ThresholdEngine {
 
 impl ThresholdEngine {
     pub fn new() -> Self {
-        Self { tile_size: 4 }
+        Self { tile_size: 8 } // Larger tiles for faster processing
     }
 
-    /// Compute min/max statistics for each 4x4 tile in the image.
+    /// Compute min/max statistics for each tile in the image.
     pub fn compute_tile_stats(&self, img: &ImageView) -> Vec<TileStats> {
         let tiles_wide = img.width / self.tile_size;
         let tiles_high = img.height / self.tile_size;
         let mut stats = vec![TileStats { min: 255, max: 0 }; tiles_wide * tiles_high];
 
-        use rayon::prelude::*;
-
-        stats
-            .par_chunks_exact_mut(tiles_wide)
-            .enumerate()
-            .for_each(|(ty, stats_row)| {
-                for dy in 0..self.tile_size {
-                    let py = ty * self.tile_size + dy;
-                    let src_row = img.get_row(py);
-                    for tx in 0..tiles_wide {
-                        let x_off = tx * 4;
-                        let tile_pixels = &src_row[x_off..x_off + 4];
-                        let (rmin, rmax) = compute_min_max_simd(tile_pixels);
-                        if rmin < stats_row[tx].min {
-                            stats_row[tx].min = rmin;
+        // Single-threaded for small images to avoid thread pool overhead
+        for ty in 0..tiles_high {
+            let stats_offset = ty * tiles_wide;
+            for dy in 0..self.tile_size {
+                let py = ty * self.tile_size + dy;
+                let src_row = img.get_row(py);
+                for tx in 0..tiles_wide {
+                    let x = tx * self.tile_size;
+                    let mut rmin = 255u8;
+                    let mut rmax = 0u8;
+                    for dx in 0..self.tile_size {
+                        let p = src_row[x + dx];
+                        if p < rmin {
+                            rmin = p;
                         }
-                        if rmax > stats_row[tx].max {
-                            stats_row[tx].max = rmax;
+                        if p > rmax {
+                            rmax = p;
                         }
                     }
+                    let s = &mut stats[stats_offset + tx];
+                    if rmin < s.min {
+                        s.min = rmin;
+                    }
+                    if rmax > s.max {
+                        s.max = rmax;
+                    }
                 }
-            });
+            }
+        }
         stats
     }
 
     /// Apply adaptive thresholding to the image.
-    /// Highly optimized for SIMD and cache locality.
     pub fn apply_threshold(&self, img: &ImageView, stats: &[TileStats], output: &mut [u8]) {
         let tiles_wide = img.width / self.tile_size;
         let tiles_high = img.height / self.tile_size;
+        let ts = self.tile_size;
 
-        // Using a stack buffer for thresholds/mask to avoid heap allocation in the hot loop
-        // for most common resolutions (up to 4K).
+        // Compute adaptive thresholds
         let mut tile_thresholds = vec![0u8; tiles_wide * tiles_high];
         let mut tile_valid_mask = vec![0u8; tiles_wide * tiles_high];
 
-        use rayon::prelude::*;
+        for ty in 0..tiles_high {
+            for tx in 0..tiles_wide {
+                let mut nmin = 255u8;
+                let mut nmax = 0u8;
 
-        tile_thresholds
-            .par_chunks_exact_mut(tiles_wide)
-            .zip(tile_valid_mask.par_chunks_exact_mut(tiles_wide))
-            .enumerate()
-            .for_each(|(ty, (t_row, v_row))| {
-                for tx in 0..tiles_wide {
-                    let mut nmin = 255u8;
-                    let mut nmax = 0u8;
+                let y_start = if ty > 0 { ty - 1 } else { 0 };
+                let y_end = (ty + 1).min(tiles_high - 1);
+                let x_start = if tx > 0 { tx - 1 } else { 0 };
+                let x_end = (tx + 1).min(tiles_wide - 1);
 
-                    let y_start = if ty > 0 { ty - 1 } else { 0 };
-                    let y_end = (ty + 1).min(tiles_high - 1);
-                    let x_start = if tx > 0 { tx - 1 } else { 0 };
-                    let x_end = (tx + 1).min(tiles_wide - 1);
-
-                    for ny in y_start..=y_end {
-                        let n_row_offset = ny * tiles_wide;
-                        for nx in x_start..=x_end {
-                            let s = stats[n_row_offset + nx];
-                            if s.min < nmin {
-                                nmin = s.min;
-                            }
-                            if s.max > nmax {
-                                nmax = s.max;
-                            }
+                for ny in y_start..=y_end {
+                    for nx in x_start..=x_end {
+                        let s = stats[ny * tiles_wide + nx];
+                        if s.min < nmin {
+                            nmin = s.min;
+                        }
+                        if s.max > nmax {
+                            nmax = s.max;
                         }
                     }
+                }
 
-                    if nmax - nmin < 10 {
-                        v_row[tx] = 0;
-                    } else {
-                        v_row[tx] = 255;
-                        t_row[tx] = ((nmin as u16 + nmax as u16) >> 1) as u8;
+                let idx = ty * tiles_wide + tx;
+                if nmax - nmin < 10 {
+                    tile_valid_mask[idx] = 0;
+                } else {
+                    tile_valid_mask[idx] = 255;
+                    tile_thresholds[idx] = ((nmin as u16 + nmax as u16) >> 1) as u8;
+                }
+            }
+        }
+
+        // Apply thresholding
+        for ty in 0..tiles_high {
+            for dy in 0..ts {
+                let py = ty * ts + dy;
+                let src_row = img.get_row(py);
+                let dst_start = py * img.width;
+                let dst_row = &mut output[dst_start..dst_start + img.width];
+
+                for tx in 0..tiles_wide {
+                    let tile_idx = ty * tiles_wide + tx;
+                    let thresh = tile_thresholds[tile_idx];
+                    let valid = tile_valid_mask[tile_idx];
+                    let x_start = tx * ts;
+
+                    for dx in 0..ts {
+                        let x = x_start + dx;
+                        let pass = if src_row[x] > thresh { 255 } else { 0 };
+                        dst_row[x] = pass & valid;
                     }
                 }
-            });
-
-        // Apply thresholding row-by-row in parallel
-        output
-            .par_chunks_exact_mut(img.width * self.tile_size)
-            .enumerate()
-            .for_each(|(ty, output_tiles_blocks)| {
-                let mut row_thresholds = [0u8; 4096];
-                let mut row_valid = [0u8; 4096];
-
-                let tile_row_idx = ty * tiles_wide;
-                for tx in 0..tiles_wide {
-                    let val = tile_thresholds[tile_row_idx + tx];
-                    let valid = tile_valid_mask[tile_row_idx + tx];
-                    let x_off = tx * 4;
-                    row_thresholds[x_off] = val;
-                    row_thresholds[x_off + 1] = val;
-                    row_thresholds[x_off + 2] = val;
-                    row_thresholds[x_off + 3] = val;
-                    row_valid[x_off] = valid;
-                    row_valid[x_off + 1] = valid;
-                    row_valid[x_off + 2] = valid;
-                    row_valid[x_off + 3] = valid;
-                }
-
-                for dy in 0..4 {
-                    let py = ty * 4 + dy;
-                    let src_row = img.get_row(py);
-                    let dst_row = &mut output_tiles_blocks[dy * img.width..(dy + 1) * img.width];
-                    threshold_row_simd(
-                        src_row,
-                        dst_row,
-                        &row_thresholds[..img.width],
-                        &row_valid[..img.width],
-                    );
-                }
-            });
+            }
+        }
     }
 }
 
 #[multiversion(targets = "simd")]
 fn threshold_row_simd(src: &[u8], dst: &mut [u8], thresholds: &[u8], valid_mask: &[u8]) {
-    for i in 0..src.len() {
-        // Branching-free: (src[i] > thresholds[i]) as u8 * 255 & valid_mask[i]
-        let pass = if src[i] > thresholds[i] { 255 } else { 0 };
-        dst[i] = pass & valid_mask[i];
+    // Simple loop for better autovectorization
+    let len = src.len();
+    for i in 0..len {
+        let s = src[i];
+        let t = thresholds[i];
+        let m = valid_mask[i];
+        let pass = if s > t { 255 } else { 0 };
+        dst[i] = pass & m;
     }
 }
 

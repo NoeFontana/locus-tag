@@ -1,4 +1,5 @@
 pub mod decoder;
+pub mod gradient;
 pub mod image;
 pub mod quad;
 pub mod segmentation;
@@ -59,29 +60,27 @@ impl Detector {
         // 3. Quad Fitting
         let candidates = crate::quad::extract_quads(&self.arena, img, labels);
 
-        // 4. Decoding
-        let mut final_detections = Vec::new();
-
+        // 4. Decoding (Single-threaded for low latency on small candidate sets)
         let src_points = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]];
 
+        let mut final_detections = Vec::new();
         for mut cand in candidates {
             if let Some(h) = crate::decoder::Homography::from_pairs(&src_points, &cand.corners) {
                 for decoder in &self.decoders {
-                    // Sample bits
-                    let dim = decoder.dimension() + 2; // +2 for black border
+                    let dim = decoder.dimension();
+                    let grid_dim = (dim + 2) as f64;
                     let mut bits = 0u64;
 
-                    // Sample content grid
-                    for y in 0..decoder.dimension() {
-                        for x in 0..decoder.dimension() {
-                            let tx = -1.0 + 2.0 * (x as f64 + 1.5) / dim as f64;
-                            let ty = -1.0 + 2.0 * (y as f64 + 1.5) / dim as f64;
+                    for y in 0..dim {
+                        for x in 0..dim {
+                            let tx = -1.0 + 2.0 * (x as f64 + 1.5) / grid_dim;
+                            let ty = -1.0 + 2.0 * (y as f64 + 1.5) / grid_dim;
 
                             let img_p = h.project([tx, ty]);
                             let val = img.sample_bilinear(img_p[0], img_p[1]);
 
                             if val > 128.0 {
-                                bits |= 1 << (y * decoder.dimension() + x);
+                                bits |= 1 << (y * dim + x);
                             }
                         }
                     }
@@ -90,13 +89,50 @@ impl Detector {
                         cand.id = id;
                         cand.hamming = hamming;
                         final_detections.push(cand);
-                        break; // Stop after first matching decoder for this quad
+                        break;
                     }
                 }
             }
         }
 
         final_detections
+    }
+
+    /// Fast detection using decimation (2x downsampled).
+    pub fn detect_gradient(&mut self, img: &ImageView) -> Vec<Detection> {
+        // Decimate the image 2x
+        let new_w = img.width / 2;
+        let new_h = img.height / 2;
+
+        // Simple 2x2 averaging downsample
+        let mut downsampled = vec![0u8; new_w * new_h];
+        for y in 0..new_h {
+            for x in 0..new_w {
+                let p00 = img.get_pixel(x * 2, y * 2) as u16;
+                let p10 = img.get_pixel(x * 2 + 1, y * 2) as u16;
+                let p01 = img.get_pixel(x * 2, y * 2 + 1) as u16;
+                let p11 = img.get_pixel(x * 2 + 1, y * 2 + 1) as u16;
+                downsampled[y * new_w + x] = ((p00 + p10 + p01 + p11) / 4) as u8;
+            }
+        }
+
+        let view =
+            ImageView::new(&downsampled, new_w, new_h, new_w).expect("Valid downsampled image");
+
+        // Run detection on downsampled image
+        let mut detections = self.detect(&view);
+
+        // Scale corners back to original resolution
+        for det in &mut detections {
+            det.center[0] *= 2.0;
+            det.center[1] *= 2.0;
+            for corner in &mut det.corners {
+                corner[0] *= 2.0;
+                corner[1] *= 2.0;
+            }
+        }
+
+        detections
     }
 }
 
