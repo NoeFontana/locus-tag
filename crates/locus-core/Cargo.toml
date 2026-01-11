@@ -1,0 +1,16 @@
+[package]
+name = "locus-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nalgebra = "0.33"
+rayon = "1.10"
+bumpalo = { version = "3.16", features = ["collections"] }
+multiversion = "0.7"
+tracing = "0.1"
+rerun = { version = "0.20", optional = true }
+
+[features]
+default = []
+viz = ["dep:rerun"]

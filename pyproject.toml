@@ -1,0 +1,17 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "locus-tag"
+version = "0.1.0"
+description = "A vibe coding experiment in generating a high-performance computer vision library for fiducial marker detection."
+authors = [{name = "Noé Fontana"}]
+requires-python = ">=3.10"
+dependencies = ["numpy"]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "locus"
+python-source = "crates/locus-py"
+manifest-path = "crates/locus-py/Cargo.toml"
