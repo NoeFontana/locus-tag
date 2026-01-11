@@ -9,156 +9,176 @@ from pupil_apriltags import Detector as AprilTagDetector
 
 
 def generate_synthetic_data(num_images=5, size=(640, 480)):
-    """Generate synthetic images with tags for benchmarking."""
+    """Generate synthetic images with known ground truth tags."""
     dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
 
     images = []
+    ground_truth = []
+
     for i in range(num_images):
-        # Generate a standard AprilTag (ID 0, 1, or 2)
         tag_id = i % 3
         tag_size = 120
         tag_img = cv2.aruco.generateImageMarker(dictionary, tag_id, tag_size)
 
-        # Place it in a larger image
         img = np.zeros(size, dtype=np.uint8) + 128
         x, y = 100 + i * 40, 100 + i * 20
 
-        # Add a white "quiet zone" around the tag to help detectors
         padding = 20
         img[y - padding : y + tag_size + padding, x - padding : x + tag_size + padding] = 255
         img[y : y + tag_size, x : x + tag_size] = tag_img
 
         images.append(img)
-    return images
+
+        # Ground truth corners (top-left, top-right, bottom-right, bottom-left)
+        gt_corners = np.array(
+            [[x, y], [x + tag_size, y], [x + tag_size, y + tag_size], [x, y + tag_size]],
+            dtype=np.float32,
+        )
+        ground_truth.append({"id": tag_id, "corners": gt_corners})
+
+    return images, ground_truth
 
 
-def benchmark_locus(images, iterations):
+def compute_corner_error(detected_corners, gt_corners):
+    """Compute mean Euclidean distance between detected and ground truth corners."""
+    if detected_corners is None or len(detected_corners) != 4:
+        return float("inf")
+    detected = np.array(detected_corners).reshape(4, 2)
+    gt = np.array(gt_corners).reshape(4, 2)
+
+    # Find best matching rotation and flip (corners may be in different order/winding)
+    min_error = float("inf")
+    for rotation in range(4):
+        rotated = np.roll(detected, rotation, axis=0)
+        error = np.mean(np.linalg.norm(rotated - gt, axis=1))
+        min_error = min(min_error, error)
+    # Also try reversed winding
+    detected_flipped = detected[::-1]
+    for rotation in range(4):
+        rotated = np.roll(detected_flipped, rotation, axis=0)
+        error = np.mean(np.linalg.norm(rotated - gt, axis=1))
+        min_error = min(min_error, error)
+    return min_error
+
+
+def benchmark_locus(images, ground_truth, iterations):
     latencies = []
-    detections_count = 0
-    # Warm up
-    _ = locus.detect_tags(images[0])
+    id_correct = 0
+    corner_errors = []
 
-    for img in images:
+    _ = locus.detect_tags(images[0])  # Warm up
+
+    for img, gt in zip(images, ground_truth):
         for _ in range(iterations):
             start = time.perf_counter()
             detections = locus.detect_tags(img)
             latencies.append(time.perf_counter() - start)
-            detections_count += len(detections)
-    return latencies, detections_count
+
+            if detections:
+                det = detections[0]
+                if det.id == gt["id"]:
+                    id_correct += 1
+                corner_errors.append(compute_corner_error(det.corners, gt["corners"]))
+            else:
+                corner_errors.append(float("inf"))
+
+    return latencies, id_correct / (len(images) * iterations), np.median(corner_errors)
 
 
-def benchmark_locus_gradient(images, iterations):
-    latencies = []
-    detections_count = 0
-    # Warm up
-    _ = locus.detect_tags_gradient(images[0])
-
-    for img in images:
-        for _ in range(iterations):
-            start = time.perf_counter()
-            detections = locus.detect_tags_gradient(img)
-            latencies.append(time.perf_counter() - start)
-            detections_count += len(detections)
-    return latencies, detections_count
-
-
-def benchmark_opencv(images, iterations):
-    # ArUco AprilTag 36h11 dictionary for comparison
+def benchmark_opencv(images, ground_truth, iterations):
     dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
     parameters = cv2.aruco.DetectorParameters()
     detector = cv2.aruco.ArucoDetector(dictionary, parameters)
 
-    # Warm up
-    _, _, _ = detector.detectMarkers(images[0])
+    _, _, _ = detector.detectMarkers(images[0])  # Warm up
 
     latencies = []
-    detections_count = 0
-    for img in images:
+    id_correct = 0
+    corner_errors = []
+
+    for img, gt in zip(images, ground_truth):
         for _ in range(iterations):
             start = time.perf_counter()
             corners, ids, _ = detector.detectMarkers(img)
             latencies.append(time.perf_counter() - start)
-            if ids is not None:
-                detections_count += len(ids)
-    return latencies, detections_count
+
+            if ids is not None and len(ids) > 0:
+                detected_id = ids[0][0]
+                if detected_id == gt["id"]:
+                    id_correct += 1
+                # OpenCV corners are in shape (1, 4, 2)
+                corner_errors.append(compute_corner_error(corners[0].reshape(4, 2), gt["corners"]))
+            else:
+                corner_errors.append(float("inf"))
+
+    return latencies, id_correct / (len(images) * iterations), np.median(corner_errors)
 
 
-def benchmark_apriltag(images, iterations):
+def benchmark_apriltag(images, ground_truth, iterations):
     at_detector = AprilTagDetector(families="tag36h11", nthreads=1)
 
-    # Warm up
-    _ = at_detector.detect(images[0])
+    _ = at_detector.detect(images[0])  # Warm up
 
     latencies = []
-    detections_count = 0
-    for img in images:
+    id_correct = 0
+    corner_errors = []
+
+    for img, gt in zip(images, ground_truth):
         for _ in range(iterations):
             start = time.perf_counter()
             detections = at_detector.detect(img)
             latencies.append(time.perf_counter() - start)
-            detections_count += len(detections)
-    return latencies, detections_count
+
+            if detections:
+                det = detections[0]
+                if det.tag_id == gt["id"]:
+                    id_correct += 1
+                # apriltag corners are in a different order, try all rotations
+                detected_corners = det.corners.reshape(4, 2)
+                corner_errors.append(compute_corner_error(detected_corners, gt["corners"]))
+            else:
+                corner_errors.append(float("inf"))
+
+    return latencies, id_correct / (len(images) * iterations), np.median(corner_errors)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Locus SOTA Benchmark")
+    parser = argparse.ArgumentParser(description="Fair Locus SOTA Benchmark")
     parser.add_argument("--iterations", type=int, default=100, help="Iterations per image")
     parser.add_argument("--synthetic", action="store_true", help="Use synthetic data")
     args = parser.parse_args()
 
-    # Data loading
     if args.synthetic:
-        print("Generating synthetic data...")
-        images = generate_synthetic_data()
+        print("Generating synthetic data with ground truth...")
+        images, ground_truth = generate_synthetic_data()
     else:
-        # Try to load from tests/data/umich if it exists
-        data_dir = Path("tests/data/umich")
-        # Check if dir exists and has images
-        image_paths = []
-        if data_dir.exists():
-            image_paths = list(data_dir.rglob("*.png")) + list(data_dir.rglob("*.jpg"))
-
-        if not image_paths:
-            print("No real data found in tests/data/umich, falling back to synthetic.")
-            images = generate_synthetic_data()
-        else:
-            print(f"Loading {len(image_paths)} images from {data_dir}...")
-            # Use a subset if many images
-            if len(image_paths) > 20:
-                print("Limiting to 20 images for benchmarking.")
-                image_paths = image_paths[:20]
-            images = [cv2.imread(str(p), cv2.IMREAD_GRAYSCALE) for p in image_paths]
+        print("Real data mode not yet supported with ground truth. Using synthetic.")
+        images, ground_truth = generate_synthetic_data()
 
     print(f"Benchmarking with {len(images)} images, {args.iterations} iterations each.")
-
-    results = {}
-    metrics = {}
+    print("All libraries run on same resolution (640x480), no downsampling.\n")
 
     libraries = [
         ("locus", benchmark_locus),
-        ("locus_grad", benchmark_locus_gradient),
         ("opencv", benchmark_opencv),
         ("apriltag", benchmark_apriltag),
     ]
 
+    results = {}
     for name, func in libraries:
         print(f"Running {name}...")
-        lat, count = func(images, args.iterations)
-        results[name] = lat
-        metrics[name] = count
+        lat, id_acc, corner_err = func(images, ground_truth, args.iterations)
+        results[name] = {"latencies": lat, "id_accuracy": id_acc, "corner_error": corner_err}
 
     # Print summary
-    print("\nBenchmark Results:")
-    print(
-        f"{'Library':<15} | {'Mean (ms)':<10} | {'Median (ms)':<11} | {'99th (ms)':<10} | {'Detections/Img':<15}"
-    )
-    print("-" * 80)
-    for name in results.keys():
-        latencies = results[name]
-        lat_ms = np.array(latencies) * 1000
-        detections = metrics[name] / (len(images) * args.iterations)
+    print("\n=== Fair Benchmark Results ===")
+    print(f"{'Library':<12} | {'Median (ms)':<12} | {'ID Accuracy':<12} | {'Corner Err (px)':<15}")
+    print("-" * 60)
+    for name, data in results.items():
+        lat_ms = np.array(data["latencies"]) * 1000
+        corner_err = data["corner_error"] if data["corner_error"] != float("inf") else 999.9
         print(
-            f"{name:<15} | {np.mean(lat_ms):<10.3f} | {np.median(lat_ms):<11.3f} | {np.percentile(lat_ms, 99):<10.3f} | {detections:<15.2f}"
+            f"{name:<12} | {np.median(lat_ms):<12.3f} | {data['id_accuracy'] * 100:<11.1f}% | {corner_err:<15.2f}"
         )
 
 
