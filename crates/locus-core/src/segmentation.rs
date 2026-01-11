@@ -209,3 +209,108 @@ pub fn label_components_with_stats<'a>(
         component_stats,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bumpalo::Bump;
+    use proptest::prelude::*;
+
+    #[test]
+    fn test_union_find() {
+        let arena = Bump::new();
+        let mut uf = UnionFind::new_in(&arena, 10);
+
+        uf.union(1, 2);
+        uf.union(2, 3);
+        uf.union(5, 6);
+
+        assert_eq!(uf.find(1), uf.find(3));
+        assert_eq!(uf.find(1), uf.find(2));
+        assert_ne!(uf.find(1), uf.find(5));
+
+        uf.union(3, 5);
+        assert_eq!(uf.find(1), uf.find(6));
+    }
+
+    #[test]
+    fn test_label_components_simple() {
+        let arena = Bump::new();
+        // 4x4 image with two separate 2x2 squares
+        // 0 = background (black), 255 = foreground (white)
+        // Tag detector looks for black components (0)
+        let binary = [
+            0, 0, 255, 255, 0, 0, 255, 255, 255, 255, 0, 0, 255, 255, 0, 0,
+        ];
+        let width = 4;
+        let height = 4;
+
+        let result = label_components_with_stats(&arena, &binary, width, height);
+
+        assert_eq!(result.component_stats.len(), 2);
+
+        // Component 1 (top-left)
+        let s1 = result.component_stats[0];
+        assert_eq!(s1.pixel_count, 4);
+        assert_eq!(s1.min_x, 0);
+        assert_eq!(s1.max_x, 1);
+        assert_eq!(s1.min_y, 0);
+        assert_eq!(s1.max_y, 1);
+
+        // Component 2 (bottom-right)
+        let s2 = result.component_stats[1];
+        assert_eq!(s2.pixel_count, 4);
+        assert_eq!(s2.min_x, 2);
+        assert_eq!(s2.max_x, 3);
+        assert_eq!(s2.min_y, 2);
+        assert_eq!(s2.max_y, 3);
+    }
+
+    proptest! {
+        #[test]
+        fn prop_union_find_reflexivity(size in 1..1000usize) {
+            let arena = Bump::new();
+            let mut uf = UnionFind::new_in(&arena, size);
+            for i in 0..size as u32 {
+                assert_eq!(uf.find(i), i);
+            }
+        }
+
+        #[test]
+        fn prop_union_find_transitivity(size in 1..1000usize, pairs in prop::collection::vec((0..1000u32, 0..1000u32), 0..100)) {
+            let arena = Bump::new();
+            let real_size = size.max(1001); // Ensure indices are in range
+            let mut uf = UnionFind::new_in(&arena, real_size);
+
+            for (a, b) in pairs {
+                let a = a % real_size as u32;
+                let b = b % real_size as u32;
+                uf.union(a, b);
+                assert_eq!(uf.find(a), uf.find(b));
+            }
+        }
+
+        #[test]
+        fn prop_label_components_no_panic(
+            width in 1..64usize,
+            height in 1..64usize,
+            data in prop::collection::vec(0..=1u8, 64 * 64)
+        ) {
+            let arena = Bump::new();
+            let binary: Vec<u8> = data.iter().map(|&b| if b == 0 { 0 } else { 255 }).collect();
+            let real_width = width.min(64);
+            let real_height = height.min(64);
+            let slice = &binary[..real_width * real_height];
+
+            let result = label_components_with_stats(&arena, slice, real_width, real_height);
+
+            for stat in result.component_stats {
+                assert!(stat.pixel_count > 0);
+                assert!(stat.max_x < real_width as u16);
+                assert!(stat.max_y < real_height as u16);
+                assert!(stat.min_x <= stat.max_x);
+                assert!(stat.min_y <= stat.max_y);
+            }
+        }
+    }
+}
