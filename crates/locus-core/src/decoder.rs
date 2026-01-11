@@ -89,7 +89,7 @@ pub trait TagDecoder: Send + Sync {
 pub struct AprilTag36h11;
 
 impl TagDecoder for AprilTag36h11 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "36h11"
     }
     fn dimension(&self) -> usize {
@@ -112,7 +112,7 @@ impl TagDecoder for AprilTag36h11 {
 pub struct AprilTag16h5;
 
 impl TagDecoder for AprilTag16h5 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "16h5"
     }
     fn dimension(&self) -> usize {
@@ -134,7 +134,7 @@ impl TagDecoder for AprilTag16h5 {
 pub struct ArUco4x4_50;
 
 impl TagDecoder for ArUco4x4_50 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "4X4_50"
     }
     fn dimension(&self) -> usize {
@@ -156,7 +156,7 @@ impl TagDecoder for ArUco4x4_50 {
 pub struct ArUco4x4_100;
 
 impl TagDecoder for ArUco4x4_100 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "4X4_100"
     }
     fn dimension(&self) -> usize {
@@ -180,6 +180,8 @@ pub struct GenericDecoder {
 }
 
 impl GenericDecoder {
+    /// Create a new generic decoder from a dictionary.
+    #[must_use]
     pub fn new(dict: crate::dictionaries::TagDictionary) -> Self {
         Self {
             dict: std::sync::Arc::new(dict),
@@ -293,7 +295,7 @@ mod tests {
                 .get_code(id)
                 .expect("valid ID");
             let result = decoder.decode(code);
-            assert_eq!(result, Some((u32::from(id), 0)), "ID {} should decode", id);
+            assert_eq!(result, Some((u32::from(id), 0)), "ID {id} should decode");
         }
     }
 }

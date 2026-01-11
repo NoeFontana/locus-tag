@@ -1,3 +1,8 @@
+#![allow(clippy::unwrap_used)]
+//! Benchmarks for TagDictionary decoding performance.
+//!
+//! Run with `cargo bench --bench dictionary_bench`.
+
 use divan::Bencher;
 use locus_core::dictionaries::{APRILTAG_36H11, ARUCO_4X4_50};
 
@@ -78,7 +83,7 @@ fn bench_aruco_hamming_1(bencher: Bencher) {
 #[divan::bench]
 fn bench_rejection(bencher: Bencher) {
     // Random bits unlikely to be a valid tag
-    let noise = 0xAAAAAAAAAAAAAAAA;
+    let noise = 0xAAAA_AAAA_AAAA_AAAA;
 
     bencher.bench_local(move || divan::black_box(APRILTAG_36H11.decode(noise, 1)));
 }
