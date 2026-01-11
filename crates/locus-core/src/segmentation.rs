@@ -42,35 +42,89 @@ impl<'a> UnionFind<'a> {
     }
 }
 
+/// A detected run of foreground/background pixels in a row.
+#[derive(Clone, Copy, Debug)]
+struct Run {
+    y: u32,
+    x_start: u32,
+    x_end: u32,
+    id: u32, // Component ID (index into UnionFind)
+}
+
 pub fn label_components<'a>(
     arena: &'a Bump,
     binary: &[u8],
     width: usize,
     height: usize,
 ) -> &'a [u32] {
-    let mut uf = UnionFind::new_in(arena, width * height);
+    let mut runs = BumpVec::new_in(arena);
 
-    // Optimized first pass: 4-connectivity
+    // Pass 1: Extract runs
     for y in 0..height {
         let row_off = y * width;
-        for x in 0..width {
-            let idx = row_off + x;
-            if binary[idx] == 0 {
-                if x > 0 && binary[idx - 1] == 0 {
-                    uf.union(idx as u32, (idx - 1) as u32);
+        let mut x = 0;
+        while x < width {
+            if binary[row_off + x] == 0 {
+                let start = x;
+                while x < width && binary[row_off + x] == 0 {
+                    x += 1;
                 }
-                if y > 0 && binary[idx - width] == 0 {
-                    uf.union(idx as u32, (idx - width) as u32);
+                runs.push(Run {
+                    y: y as u32,
+                    x_start: start as u32,
+                    x_end: (x - 1) as u32,
+                    id: runs.len() as u32,
+                });
+            } else {
+                x += 1;
+            }
+        }
+    }
+
+    if runs.is_empty() {
+        return arena.alloc_slice_fill_copy(width * height, 0u32);
+    }
+
+    let mut uf = UnionFind::new_in(arena, runs.len());
+    let mut prev_row_start = 0;
+    let mut curr_row_start = 0;
+
+    // Pass 2: Link runs between adjacent rows
+    for i in 0..runs.len() {
+        let curr = &runs[i];
+
+        // Update row pointers
+        if runs[curr_row_start].y < curr.y {
+            prev_row_start = curr_row_start;
+            curr_row_start = i;
+        }
+
+        // If not first row, check overlaps with previous row
+        if curr.y > 0 {
+            for j in prev_row_start..curr_row_start {
+                let prev = &runs[j];
+                if prev.y != curr.y - 1 {
+                    continue;
+                }
+
+                // Check horizontal overlap for 4-connectivity (standard RLE CCL)
+                // For 8-connectivity, use: prev.x_start <= curr.x_end + 1 && curr.x_start <= prev.x_end + 1
+                if prev.x_start <= curr.x_end && curr.x_start <= prev.x_end {
+                    uf.union(curr.id, prev.id);
                 }
             }
         }
     }
 
+    // Pass 3: Relabel pixels
     let labels = arena.alloc_slice_fill_copy(width * height, 0u32);
-    for i in 0..(width * height) {
-        if binary[i] == 0 {
-            labels[i] = uf.find(i as u32) + 1;
+    for run in runs {
+        let root = uf.find(run.id);
+        let row_off = run.y as usize * width;
+        for x in run.x_start..=run.x_end {
+            labels[row_off + x as usize] = root + 1;
         }
     }
+
     labels
 }
