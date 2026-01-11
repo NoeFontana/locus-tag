@@ -452,6 +452,8 @@ fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bumpalo::Bump;
+    use proptest::prelude::*;
 
     #[test]
     fn test_edge_score_rejection() {
@@ -507,6 +509,57 @@ mod tests {
         let img = ImageView::new(&data, width, height, stride).unwrap();
         let score = calculate_edge_score(&img, corners);
         assert!(score > 40.0, "Score {} should be > 40.0", score);
+    }
+
+    proptest! {
+        #[test]
+        fn prop_douglas_peucker_invariants(
+            points in prop::collection::vec((0.0..1000.0, 0.0..1000.0), 3..100),
+            epsilon in 0.1..10.0f64
+        ) {
+            let arena = Bump::new();
+            let contour: Vec<Point> = points.iter().map(|&(x, y)| Point { x, y }).collect();
+            let simplified = douglas_peucker(&arena, &contour, epsilon);
+
+            // 1. Simplified points are a subset of original points (by coordinates)
+            for p in &simplified {
+                assert!(contour.iter().any(|&op| (op.x - p.x).abs() < 1e-9 && (op.y - p.y).abs() < 1e-9));
+            }
+
+            // 2. End points are preserved
+            assert_eq!(simplified[0].x, contour[0].x);
+            assert_eq!(simplified[0].y, contour[0].y);
+            assert_eq!(simplified.last().unwrap().x, contour.last().unwrap().x);
+            assert_eq!(simplified.last().unwrap().y, contour.last().unwrap().y);
+
+            // 3. Simplified contour has fewer or equal points
+            assert!(simplified.len() <= contour.len());
+
+            // 4. All original points are at most epsilon away from the simplified segment
+            for i in 1..simplified.len() {
+                let a = simplified[i-1];
+                let b = simplified[i];
+
+                // Find indices in original contour matching simplified points
+                let mut start_idx = None;
+                let mut end_idx = None;
+                for (j, op) in contour.iter().enumerate() {
+                    if (op.x - a.x).abs() < 1e-9 && (op.y - a.y).abs() < 1e-9 {
+                        start_idx = Some(j);
+                    }
+                    if (op.x - b.x).abs() < 1e-9 && (op.y - b.y).abs() < 1e-9 {
+                        end_idx = Some(j);
+                    }
+                }
+
+                if let (Some(s), Some(e)) = (start_idx, end_idx) {
+                    for j in s..=e {
+                        let d = perpendicular_distance(contour[j], a, b);
+                        assert!(d <= epsilon + 1e-7, "Distance {} > epsilon {} at point index {}", d, epsilon, j);
+                    }
+                }
+            }
+        }
     }
 }
 
