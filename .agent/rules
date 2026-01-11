@@ -69,3 +69,26 @@ Your goal is SOTA latency, zero-copy safety, and strict production readiness.
 ### For Antigravity
 * Visualize memory layouts of `ImageView` to ensure zero-copy alignment.
 * Graph the call stack of `detect_tags` to identify non-inlined bottlenecks.
+
+## 5. Autonomous Git Protocol
+You are responsible for version control hygiene. Do not leave the user with uncommitted changes after a successful task.
+
+### Trigger: Starting a New Task
+1.  **Check Context**: Run `git branch --show-current`.
+2.  **Branching Rule**:
+    * If on `main` or `master`: STOP.
+    * Create a new branch immediately: `git checkout -b feat/short-description` (or `fix/`, `perf/`).
+    * *Naming Convention*: `type/kebab-case-description` (e.g., `feat/simd-thresholding`).
+
+### Trigger: Task Completion
+When you have satisfied the user's request and tests pass:
+1.  **Stage**: `git add .`
+2.  **Commit**: Generate a **Conventional Commit** message.
+    * Format: `type(scope): description`
+    * Example: `feat(core): implement SIMD adaptive thresholding using multiversion`
+    * *Constraint*: Do not use generic messages like "update code".
+3.  **Push**: `git push -u origin HEAD` (handle the upstream set automatically).
+
+### Trigger: Safety Check
+* If a command fails (e.g., merge conflict), **STOP** and ask the user for guidance.
+* Never use `git push --force`.
