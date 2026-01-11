@@ -11,6 +11,16 @@ multiversion = "0.7"
 tracing = "0.1"
 rerun = { version = "0.20", optional = true }
 
+[dev-dependencies]
+divan = "0.1"
+proptest = "1.6"
+
+[[bench]]
+name = "threshold_bench"
+harness = false
+
 [features]
+
+
 default = []
 viz = ["dep:rerun"]

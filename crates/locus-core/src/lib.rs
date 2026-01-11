@@ -1,4 +1,6 @@
 pub mod image;
+pub mod threshold;
+
 
 pub struct Detection {
     pub id: u32,
