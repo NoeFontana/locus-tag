@@ -13,7 +13,10 @@ impl<'a> ImageView<'a> {
     /// Create a new ImageView after validating that the buffer size matches the dimensions and stride.
     pub fn new(data: &'a [u8], width: usize, height: usize, stride: usize) -> Result<Self, String> {
         if stride < width {
-            return Err(format!("Stride ({}) cannot be less than width ({})", stride, width));
+            return Err(format!(
+                "Stride ({}) cannot be less than width ({})",
+                stride, width
+            ));
         }
         let required_size = if height > 0 {
             (height - 1) * stride + width
@@ -23,10 +26,19 @@ impl<'a> ImageView<'a> {
         if data.len() < required_size {
             return Err(format!(
                 "Buffer size ({}) is too small for {}x{} image with stride {} (required: {})",
-                data.len(), width, height, stride, required_size
+                data.len(),
+                width,
+                height,
+                stride,
+                required_size
             ));
         }
-        Ok(Self { data, width, height, stride })
+        Ok(Self {
+            data,
+            width,
+            height,
+            stride,
+        })
     }
 
     /// Safe accessor for a specific row.
@@ -37,11 +49,36 @@ impl<'a> ImageView<'a> {
         &self.data[start..start + self.width]
     }
 
-    /// Safe accessor for a specific pixel.
-    #[inline(always)]
+    /// Get a pixel value at (x, y) with boundary clamping.
     pub fn get_pixel(&self, x: usize, y: usize) -> u8 {
-        assert!(x < self.width, "Column index {} out of bounds", x);
-        self.get_row(y)[x]
+        let x = x.min(self.width - 1);
+        let y = y.min(self.height - 1);
+        self.data[y * self.stride + x]
+    }
+
+    /// Sample pixel value with bilinear interpolation at sub-pixel coordinates.
+    pub fn sample_bilinear(&self, x: f64, y: f64) -> f64 {
+        if x < 0.0 || x >= (self.width - 1) as f64 || y < 0.0 || y >= (self.height - 1) as f64 {
+            return self.get_pixel(x.round() as usize, y.round() as usize) as f64;
+        }
+
+        let x0 = x.floor() as usize;
+        let y0 = y.floor() as usize;
+        let x1 = x0 + 1;
+        let y1 = y0 + 1;
+
+        let dx = x - x0 as f64;
+        let dy = y - y0 as f64;
+
+        let v00 = self.get_pixel(x0, y0) as f64;
+        let v10 = self.get_pixel(x1, y0) as f64;
+        let v01 = self.get_pixel(x0, y1) as f64;
+        let v11 = self.get_pixel(x1, y1) as f64;
+
+        let v0 = v00 * (1.0 - dx) + v10 * dx;
+        let v1 = v01 * (1.0 - dx) + v11 * dx;
+
+        v0 * (1.0 - dy) + v1 * dy
     }
 }
 
