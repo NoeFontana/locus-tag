@@ -11,23 +11,36 @@ use crate::image::ImageView;
 use crate::threshold::ThresholdEngine;
 use bumpalo::Bump;
 
+/// Result of a tag detection.
 pub struct Detection {
+    /// The decoded ID of the tag.
     pub id: u32,
+    /// The center coordinates of the tag in image pixels (x, y).
     pub center: [f64; 2],
+    /// The 4 corners of the tag in image pixels.
     pub corners: [[f64; 2]; 4],
+    /// The number of hamming errors corrected during decoding.
     pub hamming: u32,
+    /// The decision margin of the decoding (higher is more confident).
     pub decision_margin: f64,
 }
 
+/// Statistics for the detection pipeline stages.
 #[derive(Default, Debug, Clone)]
 pub struct PipelineStats {
+    /// Time taken for adaptive thresholding in milliseconds.
     pub threshold_ms: f64,
+    /// Time taken for connected components labeling in milliseconds.
     pub segmentation_ms: f64,
+    /// Time taken for quad extraction and fitting in milliseconds.
     pub quad_extraction_ms: f64,
+    /// Time taken for decoding in milliseconds.
     pub decoding_ms: f64,
+    /// Total pipeline time in milliseconds.
     pub total_ms: f64,
 }
 
+/// The main entry point for detecting AprilTags.
 pub struct Detector {
     arena: Bump,
     threshold_engine: ThresholdEngine,
@@ -171,6 +184,7 @@ impl Default for Detector {
     }
 }
 
+/// Returns version and build information for the core library.
 pub fn core_info() -> String {
     "Locus Core v0.1.0 Engine".to_string()
 }
