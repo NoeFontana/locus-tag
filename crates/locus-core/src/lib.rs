@@ -122,21 +122,21 @@ impl Detector {
         for mut cand in candidates {
             if let Some(h) = crate::decoder::Homography::from_pairs(&src_points, &cand.corners) {
                 for decoder in &self.decoders {
-                    let dim = decoder.dimension();
-                    let grid_dim = (dim + 2) as f64;
                     let mut bits = 0u64;
+                    let points = decoder.sample_points();
 
-                    for y in 0..dim {
-                        for x in 0..dim {
-                            let tx = -1.0 + 2.0 * (x as f64 + 1.5) / grid_dim;
-                            let ty = -1.0 + 2.0 * (y as f64 + 1.5) / grid_dim;
+                    // Safety check: currently only support up to 64 bits
+                    if points.len() > 64 {
+                        continue;
+                    }
 
-                            let img_p = h.project([tx, ty]);
-                            let val = img.sample_bilinear(img_p[0], img_p[1]);
+                    for (i, point) in points.iter().enumerate() {
+                        let img_p = h.project([point.0, point.1]);
+                        // Using unchecked access might be faster but sticking to safe abstraction
+                        let val = img.sample_bilinear(img_p[0], img_p[1]);
 
-                            if val > 128.0 {
-                                bits |= 1 << (y * dim + x);
-                            }
+                        if val > 128.0 {
+                            bits |= 1 << i;
                         }
                     }
 

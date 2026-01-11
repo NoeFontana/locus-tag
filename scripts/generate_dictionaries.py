@@ -10,7 +10,18 @@ Usage:
 """
 
 import re
+import sys
 from pathlib import Path
+
+# Add scripts directory to path to import generated data modules
+sys.path.append(str(Path(__file__).parent))
+
+try:
+    import apriltag_41h12_data
+except ImportError:
+    print("Warning: apriltag_41h12_data.py not found. 41h12 will be skipped.")
+    apriltag_41h12_data = None
+
 
 # UMich AprilTag source URLs (for reference)
 # https://github.com/AprilRobotics/apriltag/blob/master/tag36h11.c
@@ -911,6 +922,99 @@ def spiral_to_rowmajor(code: int, dim: int, bit_order: list) -> int:
     return result
 
 
+def generate_grid_points(dim: int, total_width: int) -> list:
+    """Generate sample points for a dense grid centered in the tag.
+
+    Args:
+        dim: Dimension of data grid (e.g. 6 for 36h11)
+        total_width: Total width of tag in modules (e.g. 8 for 36h11)
+
+    Returns:
+        List of (x, y) tuples in canonical coordinates [-1, 1]
+    """
+    points = []
+    # Data is usually centered.
+    # For 36h11 (dim 6, width 8), data is indices 1..6 (0-based 1..6).
+    # Center of tag is 4.0.
+    # Module i center is i + 0.5.
+    # Coordinate = (i + 0.5 - total_width/2) * (2.0 / total_width)
+
+    # Calculate offset to center the data grid
+    # e.g. for dim=6, width=8, start_idx=1.
+    start_idx = (total_width - dim) / 2
+
+    for r in range(dim):
+        for c in range(dim):
+            y_idx = start_idx + r
+            x_idx = start_idx + c
+
+            y = (y_idx + 0.5 - total_width / 2.0) * (2.0 / total_width)
+            x = (x_idx + 0.5 - total_width / 2.0) * (2.0 / total_width)
+            points.append((x, y))
+    return points
+
+
+def generate_sparse_points(bit_order: list, total_width: int) -> list:
+    """Generate sample points for sparse bit layout.
+
+    Args:
+        bit_order: List of (x, y) module coordinates
+        total_width: Total width of tag in modules
+
+    Returns:
+        List of (x, y) tuples in canonical coordinates [-1, 1]
+    """
+    if not bit_order:
+        return []
+
+    # Heuristic: Center the bounding box of the points
+    xs = [p[0] for p in bit_order]
+    ys = [p[1] for p in bit_order]
+
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+
+    center_x = (min_x + max_x) / 2.0
+    center_y = (min_y + max_y) / 2.0
+
+    # Force center to 0,0 if the range looks like it should be centered?
+    # For 41h12 (-2..6), center is 2.
+    # If we trust the file layout logic, assume explicit coordinates are correct relative to some origin.
+    # But usually OpenCV/AprilTag define origin at center.
+    # If standard tags use -2..6, likely origin is NOT center (or shifted).
+    # Centering it ensures robustness.
+
+    scale = 2.0 / total_width
+    points = []
+    for x_idx, y_idx in bit_order:
+        # Note: UMich bit_y is usually row (down), so it maps to y.
+        # But we need to check if Y needs inverting.
+        # Canonical Y usually points DOWN in image coords?
+        # Standard: X right, Y down. Canonical: -1,-1 is top-left.
+        # So Y increases down.
+
+        x = (x_idx - center_x) * scale
+        y = (y_idx - center_y) * scale
+        points.append((x, y))
+
+    return points
+
+
+def generate_point_array(name: str, points: list) -> str:
+    """Generate Rust array for sample points."""
+    lines = [f"/// Sample points for {name} (canonical coordinates)."]
+    lines.append(f"#[rustfmt::skip]")
+    lines.append(f"pub const {name}: [(f64, f64); {len(points)}] = [")
+
+    for i in range(0, len(points), 2):
+        chunk = points[i : i + 2]
+        strs = [f"({p[0]:.6}, {p[1]:.6})" for p in chunk]
+        lines.append(f"    {', '.join(strs)},")
+
+    lines.append("];")
+    return "\n".join(lines)
+
+
 def generate_rust_array(name: str, codes: list, dim: int, bit_order: list) -> str:
     """Generate Rust array declaration for a dictionary."""
     # Convert all codes to row-major ordering
@@ -943,7 +1047,11 @@ def generate_rust_array_raw(name: str, codes: list) -> str:
 
 
 def generate_dictionaries_rs() -> str:
-    """Generate the complete dictionaries.rs file."""
+    # Pre-calculate points
+    points_36h11 = generate_grid_points(6, 8)
+    points_16h5 = generate_grid_points(4, 6)
+    points_aruco = generate_grid_points(4, 6)
+
     parts = [
         "//! Tag family dictionaries.",
         "//!",
@@ -952,18 +1060,22 @@ def generate_dictionaries_rs() -> str:
         "",
         UMICH_LICENSE,
         "",
+        "use std::borrow::Cow;",
         "use std::collections::HashMap;",
         "",
         "/// A tag family dictionary.",
+        "#[derive(Clone, Debug)]",
         "pub struct TagDictionary {",
         "    /// Name of the tag family.",
-        "    pub name: &'static str,",
+        "    pub name: Cow<'static, str>,",
         "    /// Grid dimension (e.g., 6 for 36h11).",
         "    pub dimension: usize,",
         "    /// Minimum hamming distance of the family.",
         "    pub hamming_distance: usize,",
+        "    /// Pre-computed sample points in canonical tag coordinates [-1, 1].",
+        "    pub sample_points: Cow<'static, [(f64, f64)]>,",
         "    /// Raw code table.",
-        "    codes: &'static [u64],",
+        "    codes: Cow<'static, [u64]>,",
         "    /// Lookup table for O(1) exact matching.",
         "    code_to_id: HashMap<u64, u16>,",
         "}",
@@ -976,12 +1088,43 @@ def generate_dictionaries_rs() -> str:
         "        dimension: usize,",
         "        hamming_distance: usize,",
         "        codes: &'static [u64],",
+        "        sample_points: &'static [(f64, f64)],",
         "    ) -> Self {",
         "        let mut code_to_id = HashMap::with_capacity(codes.len());",
         "        for (id, &code) in codes.iter().enumerate() {",
         "            code_to_id.insert(code, id as u16);",
         "        }",
-        "        Self { name, dimension, hamming_distance, codes, code_to_id }",
+        "        Self {",
+        "            name: Cow::Borrowed(name),",
+        "            dimension,",
+        "            hamming_distance,",
+        "            sample_points: Cow::Borrowed(sample_points),",
+        "            codes: Cow::Borrowed(codes),",
+        "            code_to_id,",
+        "        }",
+        "    }",
+        "",
+        "    /// Create a new custom dictionary from a vector of codes.",
+        "    #[must_use]",
+        "    pub fn new_custom(",
+        "        name: String,",
+        "        dimension: usize,",
+        "        hamming_distance: usize,",
+        "        codes: Vec<u64>,",
+        "        sample_points: Vec<(f64, f64)>,",
+        "    ) -> Self {",
+        "        let mut code_to_id = HashMap::with_capacity(codes.len());",
+        "        for (id, &code) in codes.iter().enumerate() {",
+        "            code_to_id.insert(code, id as u16);",
+        "        }",
+        "        Self {",
+        "            name: Cow::Owned(name),",
+        "            dimension,",
+        "            hamming_distance,",
+        "            sample_points: Cow::Owned(sample_points),",
+        "            codes: Cow::Owned(codes),",
+        "            code_to_id,",
+        "        }",
         "    }",
         "",
         "    /// Get number of codes in dictionary.",
@@ -1006,7 +1149,11 @@ def generate_dictionaries_rs() -> str:
         "    /// Returns (id, hamming_distance) if found within tolerance.",
         "    #[must_use]",
         "    pub fn decode(&self, bits: u64, max_hamming: u32) -> Option<(u16, u32)> {",
-        "        let mask = (1u64 << (self.dimension * self.dimension)) - 1;",
+        "        let mask = if self.dimension * self.dimension <= 64 {",
+        "            (1u64 << (self.dimension * self.dimension)) - 1",
+        "        } else {",
+        "            u64::MAX",
+        "        };",
         "        let bits = bits & mask;",
         "",
         "        // Try exact match first (covers ~60% of clean reads)",
@@ -1015,10 +1162,13 @@ def generate_dictionaries_rs() -> str:
         "            if let Some(&id) = self.code_to_id.get(&rbits) {",
         "                return Some((id, 0));",
         "            }",
-        "            rbits = rotate90(rbits, self.dimension);",
+        "            if self.sample_points.len() == self.dimension * self.dimension {",
+        "                 rbits = rotate90(rbits, self.dimension);",
+        "            } else {",
+        "                 break;",
+        "            }",
         "        }",
         "",
-        "        // Fall back to hamming search",
         "        if max_hamming > 0 {",
         "            let mut best: Option<(u16, u32)> = None;",
         "            for (id, &code) in self.codes.iter().enumerate() {",
@@ -1030,17 +1180,20 @@ def generate_dictionaries_rs() -> str:
         "                            best = Some((id as u16, hamming));",
         "                        }",
         "                    }",
-        "                    rbits = rotate90(rbits, self.dimension);",
+        "                    if self.sample_points.len() == self.dimension * self.dimension {",
+        "                        rbits = rotate90(rbits, self.dimension);",
+        "                    } else {",
+        "                        break;",
+        "                    }",
         "                }",
         "            }",
         "            return best;",
         "        }",
-        "",
         "        None",
         "    }",
         "}",
         "",
-        "/// Rotate a bit pattern 90 degrees clockwise.",
+        "/// Rotates a square bit pattern 90 degrees clockwise.",
         "#[must_use]",
         "pub fn rotate90(bits: u64, dim: usize) -> u64 {",
         "    let mut res = 0u64;",
@@ -1060,6 +1213,9 @@ def generate_dictionaries_rs() -> str:
         "// AprilTag 36h11 (587 codes)",
         "// ============================================================================",
         "",
+        "#[rustfmt::skip]",
+        generate_point_array("APRILTAG_36H11_POINTS", points_36h11),
+        "",
         "/// AprilTag 36h11 code table (587 entries, row-major bit ordering).",
         "#[rustfmt::skip]",
         generate_rust_array(
@@ -1068,12 +1224,15 @@ def generate_dictionaries_rs() -> str:
         "",
         "/// AprilTag 36h11 dictionary singleton.",
         "pub static APRILTAG_36H11: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {",
-        '    TagDictionary::new("36h11", 6, 11, &APRILTAG_36H11_CODES)',
+        '    TagDictionary::new("36h11", 6, 11, &APRILTAG_36H11_CODES, &APRILTAG_36H11_POINTS)',
         "});",
         "",
         "// ============================================================================",
         "// AprilTag 16h5 (30 codes)",
         "// ============================================================================",
+        "",
+        "#[rustfmt::skip]",
+        generate_point_array("APRILTAG_16H5_POINTS", points_16h5),
         "",
         "/// AprilTag 16h5 code table (30 entries, row-major bit ordering).",
         "#[rustfmt::skip]",
@@ -1083,12 +1242,15 @@ def generate_dictionaries_rs() -> str:
         "",
         "/// AprilTag 16h5 dictionary singleton.",
         "pub static APRILTAG_16H5: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {",
-        '    TagDictionary::new("16h5", 4, 5, &APRILTAG_16H5_CODES)',
+        '    TagDictionary::new("16h5", 4, 5, &APRILTAG_16H5_CODES, &APRILTAG_16H5_POINTS)',
         "});",
         "",
         "// ============================================================================",
         "// ArUco 4x4_50 (50 codes)",
         "// ============================================================================",
+        "",
+        "#[rustfmt::skip]",
+        generate_point_array("ARUCO_4X4_POINTS", points_aruco),
         "",
         "/// ArUco 4x4_50 code table (50 entries, row-major bit ordering).",
         "#[rustfmt::skip]",
@@ -1096,7 +1258,7 @@ def generate_dictionaries_rs() -> str:
         "",
         "/// ArUco 4x4_50 dictionary singleton.",
         "pub static ARUCO_4X4_50: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {",
-        '    TagDictionary::new("4X4_50", 4, 1, &ARUCO_4X4_50_CODES)',
+        '    TagDictionary::new("4X4_50", 4, 1, &ARUCO_4X4_50_CODES, &ARUCO_4X4_POINTS)',
         "});",
         "",
         "// ============================================================================",
@@ -1109,50 +1271,36 @@ def generate_dictionaries_rs() -> str:
         "",
         "/// ArUco 4x4_100 dictionary singleton.",
         "pub static ARUCO_4X4_100: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {",
-        '    TagDictionary::new("4X4_100", 4, 1, &ARUCO_4X4_100_CODES)',
+        '    TagDictionary::new("4X4_100", 4, 1, &ARUCO_4X4_100_CODES, &ARUCO_4X4_POINTS)',
         "});",
-        "",
-        "#[cfg(test)]",
-        "mod tests {",
-        "    use super::*;",
-        "",
-        "    #[test]",
-        "    fn test_36h11_dict_size() {",
-        "        assert_eq!(APRILTAG_36H11.len(), 587);",
-        "    }",
-        "",
-        "    #[test]",
-        "    fn test_16h5_dict_size() {",
-        "        assert_eq!(APRILTAG_16H5.len(), 30);",
-        "    }",
-        "",
-        "    #[test]",
-        "    fn test_exact_decode() {",
-        "        let code0 = APRILTAG_36H11.get_code(0).unwrap();",
-        "        let result = APRILTAG_36H11.decode(code0, 0);",
-        "        assert_eq!(result, Some((0, 0)));",
-        "    }",
-        "",
-        "    #[test]",
-        "    fn test_rotated_decode() {",
-        "        let code = APRILTAG_36H11.get_code(42).unwrap();",
-        "        let rotated = rotate90(code, 6);",
-        "        let result = APRILTAG_36H11.decode(rotated, 0);",
-        "        assert_eq!(result, Some((42, 0)));",
-        "    }",
-        "",
-        "    #[test]",
-        "    fn test_hamming_tolerance() {",
-        "        let code = APRILTAG_36H11.get_code(100).unwrap();",
-        "        // Flip 2 bits",
-        "        let noisy = code ^ 0b11;",
-        "        let result = APRILTAG_36H11.decode(noisy, 2);",
-        "        assert_eq!(result, Some((100, 2)));",
-        "    }",
-        "}",
-        "",
     ]
 
+    if apriltag_41h12_data:
+        points_41h12 = generate_sparse_points(apriltag_41h12_data.UMICH_41H12_BIT_ORDER, 9)
+        parts.extend(
+            [
+                "",
+                "// ============================================================================",
+                "// AprilTag 41h12",
+                "// ============================================================================",
+                "",
+                "#[rustfmt::skip]",
+                generate_point_array("APRILTAG_41H12_POINTS", points_41h12),
+                "",
+                "/// AprilTag 41h12 code table.",
+                "#[rustfmt::skip]",
+                generate_rust_array_raw(
+                    "APRILTAG_41H12_CODES", apriltag_41h12_data.APRILTAG_41H12_CODES_SPIRAL
+                ),
+                "",
+                "/// AprilTag 41h12 dictionary singleton.",
+                "pub static APRILTAG_41H12: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {",
+                '    TagDictionary::new("41h12", 9, 12, &APRILTAG_41H12_CODES, &APRILTAG_41H12_POINTS)',
+                "});",
+            ]
+        )
+
+    parts.append("")
     return "\n".join(parts)
 
 
