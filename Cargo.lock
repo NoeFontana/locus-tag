@@ -3437,6 +3437,7 @@ dependencies = [
 name = "locus-py"
 version = "0.1.0"
 dependencies = [
+ "bumpalo",
  "locus-core",
  "numpy",
  "pyo3",

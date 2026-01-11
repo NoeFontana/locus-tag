@@ -19,6 +19,10 @@ proptest = "1.6"
 name = "threshold_bench"
 harness = false
 
+[[bench]]
+name = "detect_bench"
+harness = false
+
 [features]
 
 
