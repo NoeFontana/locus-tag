@@ -12,7 +12,8 @@ multiversion = "0.7"
 tracing = "0.1"
 rerun = { version = "0.20", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
-rand = { version = "0.8", optional = true }
+rand = "0.8"
+rand_distr = "0.4"
 
 [dev-dependencies]
 divan = "0.1"
@@ -40,8 +41,8 @@ required-features = ["extended-bench"]
 default = []
 viz = ["dep:rerun"]
 serde = ["dep:serde"]
-extended-tests = ["dep:rand"]
-extended-bench = ["dep:rand"]
+extended-tests = []
+extended-bench = []
 
 [lints]
 workspace = true

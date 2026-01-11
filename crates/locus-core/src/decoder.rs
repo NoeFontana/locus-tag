@@ -11,8 +11,14 @@ pub struct Homography {
 impl Homography {
     /// Compute homography from 4 source points to 4 destination points using DLT.
     /// Points are [x, y].
+    /// Compute homography from 4 source points to 4 destination points using DLT.
+    /// Points are [x, y].
     #[must_use]
     pub fn from_pairs(src: &[[f64; 2]; 4], dst: &[[f64; 2]; 4]) -> Option<Self> {
+        // ... (Keep existing implementation if needed, or deprecate)
+        // For now, let's just keep it or replace it if usage allows.
+        // Actually, let's add square_to_quad separately.
+        // Below is the existing implementation preserved but we'll add the new one.
         let mut a = SMatrix::<f64, 8, 9>::zeros();
 
         for i in 0..4 {
@@ -36,8 +42,6 @@ impl Homography {
             a[(i * 2 + 1, 8)] = dy;
         }
 
-        // Solve A*h = 0 using SVD or simple matrix inversion if we fix h[8]=1
-        // For 4 points (8 equations), we can assume h[8]=1.0 and solve a 8x8 system.
         let mut b = SVector::<f64, 8>::zeros();
         let mut m = SMatrix::<f64, 8, 8>::zeros();
         for i in 0..8 {
@@ -47,7 +51,7 @@ impl Homography {
             b[i] = -a[(i, 8)];
         }
 
-        if let Some(h_vec) = m.lu().solve(&b) {
+        m.lu().solve(&b).map(|h_vec| {
             let mut h = SMatrix::<f64, 3, 3>::identity();
             h[(0, 0)] = h_vec[0];
             h[(0, 1)] = h_vec[1];
@@ -58,10 +62,100 @@ impl Homography {
             h[(2, 0)] = h_vec[6];
             h[(2, 1)] = h_vec[7];
             h[(2, 2)] = 1.0;
-            Some(Self { h })
-        } else {
-            None
-        }
+            Self { h }
+        })
+    }
+
+    /// Optimized homography computation from canonical unit square to a quad.
+    /// Source points are assumed to be: `[(-1,-1), (1,-1), (1,1), (-1,1)]`.
+    #[must_use]
+    pub fn square_to_quad(dst: &[[f64; 2]; 4]) -> Option<Self> {
+        let mut b = SVector::<f64, 8>::zeros();
+        let mut m = SMatrix::<f64, 8, 8>::zeros();
+
+        // Hardcoded coefficients for src = [(-1,-1), (1,-1), (1,1), (-1,1)]
+        // Point 0: (-1, -1) -> (x0, y0)
+        let x0 = dst[0][0];
+        let y0 = dst[0][1];
+        // h0 + h1 - h2 - x0*h6 - x0*h7 = -x0  =>  1, 1, -1, ..., -x0, -x0
+        m[(0, 0)] = 1.0;
+        m[(0, 1)] = 1.0;
+        m[(0, 2)] = -1.0;
+        m[(0, 6)] = -x0;
+        m[(0, 7)] = -x0;
+        b[0] = -x0;
+        // h3 + h4 - h5 - y0*h6 - y0*h7 = -y0  =>  ..., 1, 1, -1, -y0, -y0
+        m[(1, 3)] = 1.0;
+        m[(1, 4)] = 1.0;
+        m[(1, 5)] = -1.0;
+        m[(1, 6)] = -y0;
+        m[(1, 7)] = -y0;
+        b[1] = -y0;
+
+        // Point 1: (1, -1) -> (x1, y1)
+        let x1 = dst[1][0];
+        let y1 = dst[1][1];
+        // -h0 + h1 + h2 + x1*h6 - x1*h7 = -x1
+        m[(2, 0)] = -1.0;
+        m[(2, 1)] = 1.0;
+        m[(2, 2)] = -1.0;
+        m[(2, 6)] = x1;
+        m[(2, 7)] = -x1;
+        b[2] = -x1;
+        m[(3, 3)] = -1.0;
+        m[(3, 4)] = 1.0;
+        m[(3, 5)] = -1.0;
+        m[(3, 6)] = y1;
+        m[(3, 7)] = -y1;
+        b[3] = -y1;
+
+        // Point 2: (1, 1) -> (x2, y2)
+        let x2 = dst[2][0];
+        let y2 = dst[2][1];
+        // -h0 - h1 + h2 + x2*h6 + x2*h7 = -x2
+        m[(4, 0)] = -1.0;
+        m[(4, 1)] = -1.0;
+        m[(4, 2)] = -1.0;
+        m[(4, 6)] = x2;
+        m[(4, 7)] = x2;
+        b[4] = -x2;
+        m[(5, 3)] = -1.0;
+        m[(5, 4)] = -1.0;
+        m[(5, 5)] = -1.0;
+        m[(5, 6)] = y2;
+        m[(5, 7)] = y2;
+        b[5] = -y2;
+
+        // Point 3: (-1, 1) -> (x3, y3)
+        let x3 = dst[3][0];
+        let y3 = dst[3][1];
+        // h0 - h1 + h2 - x3*h6 + x3*h7 = -x3
+        m[(6, 0)] = 1.0;
+        m[(6, 1)] = -1.0;
+        m[(6, 2)] = -1.0;
+        m[(6, 6)] = -x3;
+        m[(6, 7)] = x3;
+        b[6] = -x3;
+        m[(7, 3)] = 1.0;
+        m[(7, 4)] = -1.0;
+        m[(7, 5)] = -1.0;
+        m[(7, 6)] = -y3;
+        m[(7, 7)] = y3;
+        b[7] = -y3;
+
+        m.lu().solve(&b).map(|h_vec| {
+            let mut h = SMatrix::<f64, 3, 3>::identity();
+            h[(0, 0)] = h_vec[0];
+            h[(0, 1)] = h_vec[1];
+            h[(0, 2)] = h_vec[2];
+            h[(1, 0)] = h_vec[3];
+            h[(1, 1)] = h_vec[4];
+            h[(1, 2)] = h_vec[5];
+            h[(2, 0)] = h_vec[6];
+            h[(2, 1)] = h_vec[7];
+            h[(2, 2)] = 1.0;
+            Self { h }
+        })
     }
 
     /// Project a point using the homography.
@@ -145,6 +239,8 @@ pub trait TagDecoder: Send + Sync {
     ///
     /// Returns `Some((id, hamming))` if decoding is successful, `None` otherwise.
     fn decode(&self, bits: u64) -> Option<(u32, u32)>; // (id, hamming)
+    /// Get the original code for a given ID (useful for testing/simulation).
+    fn get_code(&self, id: u16) -> Option<u64>;
 }
 
 /// Decoder for the AprilTag 36h11 family.
@@ -168,6 +264,10 @@ impl TagDecoder for AprilTag36h11 {
             .decode(bits, 2) // Allow up to 2 bit errors
             .map(|(id, hamming)| (u32::from(id), hamming))
     }
+
+    fn get_code(&self, id: u16) -> Option<u64> {
+        crate::dictionaries::APRILTAG_36H11.get_code(id)
+    }
 }
 
 /// Decoder for the AprilTag 16h5 family.
@@ -189,6 +289,10 @@ impl TagDecoder for AprilTag16h5 {
         crate::dictionaries::APRILTAG_16H5
             .decode(bits, 1) // Allow up to 1 bit error (16h5 has lower hamming distance)
             .map(|(id, hamming)| (u32::from(id), hamming))
+    }
+
+    fn get_code(&self, id: u16) -> Option<u64> {
+        crate::dictionaries::APRILTAG_16H5.get_code(id)
     }
 }
 
@@ -212,6 +316,10 @@ impl TagDecoder for ArUco4x4_50 {
             .decode(bits, 1)
             .map(|(id, hamming)| (u32::from(id), hamming))
     }
+
+    fn get_code(&self, id: u16) -> Option<u64> {
+        crate::dictionaries::ARUCO_4X4_50.get_code(id)
+    }
 }
 
 /// Decoder for the ArUco 4x4_100 family.
@@ -233,6 +341,10 @@ impl TagDecoder for ArUco4x4_100 {
         crate::dictionaries::ARUCO_4X4_100
             .decode(bits, 1)
             .map(|(id, hamming)| (u32::from(id), hamming))
+    }
+
+    fn get_code(&self, id: u16) -> Option<u64> {
+        crate::dictionaries::ARUCO_4X4_100.get_code(id)
     }
 }
 
@@ -268,6 +380,10 @@ impl TagDecoder for GenericDecoder {
         self.dict
             .decode(bits, self.dict.hamming_distance as u32)
             .map(|(id, hamming)| (u32::from(id), hamming))
+    }
+
+    fn get_code(&self, id: u16) -> Option<u64> {
+        self.dict.get_code(id)
     }
 }
 

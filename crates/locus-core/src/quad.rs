@@ -56,7 +56,8 @@ pub fn extract_quads_with_config(
         let bbox_area = bbox_w * bbox_h;
 
         // Filter: too small or too large
-        if bbox_area < config.quad_min_area || bbox_area > (img.width * img.height / 4) as u32 {
+        if bbox_area < config.quad_min_area || bbox_area > (img.width * img.height * 9 / 10) as u32
+        {
             continue;
         }
 
@@ -305,19 +306,24 @@ pub fn refine_corner(img: &ImageView, p: Point, center: [f64; 2]) -> Point {
         let ix = x as isize;
         let iy = y as isize;
 
+        // Use a safe margin to allow accessing neighbors without checks
         if ix > 1 && ix < (img.width - 2) as isize && iy > 1 && iy < (img.height - 2) as isize {
-            let gx = (f64::from(img.get_pixel((ix + 1) as usize, iy as usize))
-                - f64::from(img.get_pixel((ix - 1) as usize, iy as usize)))
-                * 0.5;
-            let gy = (f64::from(img.get_pixel(ix as usize, (iy + 1) as usize))
-                - f64::from(img.get_pixel(ix as usize, (iy - 1) as usize)))
-                * 0.5;
-            let mag = gx * gx + gy * gy;
+            unsafe {
+                let ix_u = ix as usize;
+                let iy_u = iy as usize;
+                let gx = (f64::from(img.get_pixel_unchecked(ix_u + 1, iy_u))
+                    - f64::from(img.get_pixel_unchecked(ix_u - 1, iy_u)))
+                    * 0.5;
+                let gy = (f64::from(img.get_pixel_unchecked(ix_u, iy_u + 1))
+                    - f64::from(img.get_pixel_unchecked(ix_u, iy_u - 1)))
+                    * 0.5;
+                let mag = gx * gx + gy * gy;
 
-            if mag > best_mag {
-                best_mag = mag;
-                best_x = x;
-                best_y = y;
+                if mag > best_mag {
+                    best_mag = mag;
+                    best_x = x;
+                    best_y = y;
+                }
             }
         }
     }
@@ -340,13 +346,17 @@ pub fn refine_corner(img: &ImageView, p: Point, center: [f64; 2]) -> Point {
             let iy = y as isize;
 
             if ix > 0 && ix < (img.width - 1) as isize && iy > 0 && iy < (img.height - 1) as isize {
-                let gx = (f64::from(img.get_pixel((ix + 1) as usize, iy as usize))
-                    - f64::from(img.get_pixel((ix - 1) as usize, iy as usize)))
-                    * 0.5;
-                let gy = (f64::from(img.get_pixel(ix as usize, (iy + 1) as usize))
-                    - f64::from(img.get_pixel(ix as usize, (iy - 1) as usize)))
-                    * 0.5;
-                mags[i] = gx * gx + gy * gy;
+                unsafe {
+                    let ix_u = ix as usize;
+                    let iy_u = iy as usize;
+                    let gx = (f64::from(img.get_pixel_unchecked(ix_u + 1, iy_u))
+                        - f64::from(img.get_pixel_unchecked(ix_u - 1, iy_u)))
+                        * 0.5;
+                    let gy = (f64::from(img.get_pixel_unchecked(ix_u, iy_u + 1))
+                        - f64::from(img.get_pixel_unchecked(ix_u, iy_u - 1)))
+                        * 0.5;
+                    mags[i] = gx * gx + gy * gy;
+                }
             }
         }
 

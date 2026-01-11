@@ -1,86 +1,128 @@
-/// Generate a synthetic AprilTag-like image for testing.
-/// This is a simplified version of the OpenCV generator.
-#[must_use]
-pub fn generate_synthetic_tag(
-    width: usize,
-    height: usize,
-    _tag_id: u32,
-    x: usize,
-    y: usize,
+use rand::prelude::*;
+use rand_distr::{Distribution, Normal};
+
+/// Generate a synthetic image containing a single AprilTag or ArUco tag.
+///
+/// This generates a tag with a white quiet zone, placed on a white background,
+/// matching the setup used in Python benchmarks.
+pub fn generate_test_image(
+    family: crate::config::TagFamily,
+    id: u16,
     tag_size: usize,
+    canvas_size: usize,
+    noise_sigma: f32,
 ) -> (Vec<u8>, [[f64; 2]; 4]) {
-    let mut data = vec![0u8; width * height];
-    let padding = 20;
+    let mut data = vec![255u8; canvas_size * canvas_size];
 
-    // White quiet zone
-    for py in (y.saturating_sub(padding))..((y + tag_size + padding).min(height)) {
-        for px in (x.saturating_sub(padding))..((x + tag_size + padding).min(width)) {
-            data[py * width + px] = 255;
+    // Calculate tag position (centered)
+    let margin = (canvas_size - tag_size) / 2;
+    let quiet_zone = tag_size / 5;
+
+    // Draw white quiet zone (optional since background is 255, but adds robustness)
+    for y in margin.saturating_sub(quiet_zone)..(margin + tag_size + quiet_zone).min(canvas_size) {
+        for x in
+            margin.saturating_sub(quiet_zone)..(margin + tag_size + quiet_zone).min(canvas_size)
+        {
+            data[y * canvas_size + x] = 255;
         }
     }
 
-    // Black border
-    for py in y..(y + tag_size) {
-        for px in x..(x + tag_size) {
-            if py < height && px < width {
-                data[py * width + px] = 0;
+    // Generate tag pattern (bits)
+    let decoder = crate::decoder::family_to_decoder(family);
+    let code = decoder.get_code(id).expect("Invalid tag ID for family");
+    let dim = decoder.dimension();
+
+    let cell_size = tag_size / (dim + 2); // dim + 2 for black border
+    let actual_tag_size = cell_size * (dim + 2);
+    let start_x = margin + (tag_size - actual_tag_size) / 2;
+    let start_y = margin + (tag_size - actual_tag_size) / 2;
+
+    // Draw black border
+    for y in 0..(dim + 2) {
+        for x in 0..(dim + 2) {
+            if x == 0 || x == dim + 1 || y == 0 || y == dim + 1 {
+                draw_cell(&mut data, canvas_size, start_x, start_y, x, y, cell_size, 0);
+            } else {
+                let row = y - 1;
+                let col = x - 1;
+                let bit = (code >> (row * dim + col)) & 1;
+                let val = if bit != 0 { 255 } else { 0 };
+                draw_cell(
+                    &mut data,
+                    canvas_size,
+                    start_x,
+                    start_y,
+                    x,
+                    y,
+                    cell_size,
+                    val,
+                );
             }
         }
     }
 
-    // Interior (simplified tag pattern based on tag_id)
-    let border_width = tag_size / 8;
-    for py in (y + border_width)..(y + tag_size - border_width) {
-        for px in (x + border_width)..(x + tag_size - border_width) {
-            if py < height && px < width {
-                // Alternating pattern with ~50% white bits to ensure fill ratio passes (approx 0.6 total)
-                let tx = (px - x - border_width) / border_width;
-                let ty = (py - y - border_width) / border_width;
+    if noise_sigma > 0.0 {
+        let mut rng = thread_rng();
+        let normal = Normal::new(0.0, f64::from(noise_sigma)).unwrap();
 
-                let bit = if (tx + ty).is_multiple_of(2) { 255 } else { 0 };
-                data[py * width + px] = bit;
-            }
+        for pixel in &mut data {
+            let noise = normal.sample(&mut rng) as i32;
+            let val = (*pixel as i32 + noise).clamp(0, 255);
+            *pixel = val as u8;
         }
     }
 
-    let ts = (tag_size - 1) as f64;
-    let ground_truth = [
-        [x as f64, y as f64],
-        [(x as f64 + ts), y as f64],
-        [(x as f64 + ts), (y as f64 + ts)],
-        [x as f64, (y as f64 + ts)],
+    let gt_corners = [
+        [start_x as f64, start_y as f64],
+        [(start_x + actual_tag_size) as f64, start_y as f64],
+        [
+            (start_x + actual_tag_size) as f64,
+            (start_y + actual_tag_size) as f64,
+        ],
+        [start_x as f64, (start_y + actual_tag_size) as f64],
     ];
 
-    (data, ground_truth)
+    (data, gt_corners)
+}
+
+fn draw_cell(
+    data: &mut [u8],
+    stride: usize,
+    start_x: usize,
+    start_y: usize,
+    cx: usize,
+    cy: usize,
+    size: usize,
+    val: u8,
+) {
+    let px = start_x + cx * size;
+    let py = start_y + cy * size;
+    for y in py..(py + size) {
+        for x in px..(px + size) {
+            data[y * stride + x] = val;
+        }
+    }
 }
 
 /// Compute mean Euclidean distance between detected and ground truth corners.
-/// Handles 4 rotations and 2 winding orders to find the minimum error.
+/// Handles 4 rotations to find the minimum error.
 #[must_use]
-pub fn compute_corner_error(detected: [[f64; 2]; 4], ground_truth: [[f64; 2]; 4]) -> f64 {
+pub fn compute_corner_error(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 4]) -> f64 {
     let mut min_error = f64::MAX;
 
-    // Try both winding orders
-    let windings = [
-        detected,
-        [detected[3], detected[2], detected[1], detected[0]], // Flipped
-    ];
-
-    for points in windings {
-        // Try all 4 rotations
-        for rot in 0..4 {
-            let mut sum_dist = 0.0;
-            for i in 0..4 {
-                let d = &points[(i + rot) % 4];
-                let g = &ground_truth[i];
-                let dx = d[0] - g[0];
-                let dy = d[1] - g[1];
-                sum_dist += (dx * dx + dy * dy).sqrt();
-            }
-            let avg_dist = sum_dist / 4.0;
-            if avg_dist < min_error {
-                min_error = avg_dist;
-            }
+    // Try all 4 rotations
+    for rot in 0..4 {
+        let mut sum_dist = 0.0;
+        for i in 0..4 {
+            let d = &detected[(i + rot) % 4];
+            let g = &ground_truth[i];
+            let dx = d[0] - g[0];
+            let dy = d[1] - g[1];
+            sum_dist += (dx * dx + dy * dy).sqrt();
+        }
+        let avg_dist = sum_dist / 4.0;
+        if avg_dist < min_error {
+            min_error = avg_dist;
         }
     }
 

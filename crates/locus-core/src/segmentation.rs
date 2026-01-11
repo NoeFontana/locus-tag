@@ -163,14 +163,15 @@ pub fn label_components_with_stats<'a>(
             for c_idx in curr_row_range.clone() {
                 let curr = &runs[c_idx];
 
+                // 8-connectivity check: overlap if [xs1, xe1] and [xs2-1, xe2+1] intersect
                 // Advance prev pointer until it overlaps or passes curr
-                while p_idx < prev_row_range.end && runs[p_idx].x_end < curr.x_start {
+                while p_idx < prev_row_range.end && runs[p_idx].x_end + 1 < curr.x_start {
                     p_idx += 1;
                 }
 
-                // Link all overlapping runs in the previous row
+                // Link all overlapping (including diagonal) runs in the previous row
                 let mut temp_p = p_idx;
-                while temp_p < prev_row_range.end && runs[temp_p].x_start <= curr.x_end {
+                while temp_p < prev_row_range.end && runs[temp_p].x_start <= curr.x_end + 1 {
                     uf.union(curr.id, runs[temp_p].id);
                     temp_p += 1;
                 }
@@ -246,14 +247,15 @@ mod tests {
     #[test]
     fn test_label_components_simple() {
         let arena = Bump::new();
-        // 4x4 image with two separate 2x2 squares
+        // 6x6 image with two separate 2x2 squares that are NOT 8-connected.
         // 0 = background (black), 255 = foreground (white)
         // Tag detector looks for black components (0)
         let binary = [
-            0, 0, 255, 255, 0, 0, 255, 255, 255, 255, 0, 0, 255, 255, 0, 0,
+            0, 0, 255, 255, 255, 255, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 0, 0, 255, 255, 255, 255, 0, 0, 255, 255, 255, 255, 255, 255, 255,
         ];
-        let width = 4;
-        let height = 4;
+        let width = 6;
+        let height = 6;
 
         let result = label_components_with_stats(&arena, &binary, width, height);
 
@@ -267,13 +269,13 @@ mod tests {
         assert_eq!(s1.min_y, 0);
         assert_eq!(s1.max_y, 1);
 
-        // Component 2 (bottom-right)
+        // Component 2 (middle-rightish)
         let s2 = result.component_stats[1];
         assert_eq!(s2.pixel_count, 4);
-        assert_eq!(s2.min_x, 2);
-        assert_eq!(s2.max_x, 3);
-        assert_eq!(s2.min_y, 2);
-        assert_eq!(s2.max_y, 3);
+        assert_eq!(s2.min_x, 3);
+        assert_eq!(s2.max_x, 4);
+        assert_eq!(s2.min_y, 3);
+        assert_eq!(s2.max_y, 4);
     }
 
     proptest! {

@@ -104,9 +104,48 @@ impl ThresholdEngine {
                 let idx = ty * tiles_wide + tx;
                 if nmax.saturating_sub(nmin) < self.min_range {
                     tile_valid[idx] = 0;
+                    // Use a rough estimate for now, will be refined in propagation pass
+                    tile_thresholds[idx] = ((u16::from(nmin) + u16::from(nmax)) >> 1) as u8;
                 } else {
                     tile_valid[idx] = 255;
                     tile_thresholds[idx] = ((u16::from(nmin) + u16::from(nmax)) >> 1) as u8;
+                }
+            }
+        }
+
+        // --- Propagation Pass ---
+        // Fill thresholds for invalid tiles from their neighbors to stay
+        // consistent within large uniform regions.
+        for _ in 0..2 {
+            // 2 iterations are usually enough for local consistency
+            for ty in 0..tiles_high {
+                for tx in 0..tiles_wide {
+                    let idx = ty * tiles_wide + tx;
+                    if tile_valid[idx] == 0 {
+                        let mut sum_thresh = 0u32;
+                        let mut count = 0u32;
+
+                        let y_start = ty.saturating_sub(1);
+                        let y_end = (ty + 1).min(tiles_high - 1);
+                        let x_start = tx.saturating_sub(1);
+                        let x_end = (tx + 1).min(tiles_wide - 1);
+
+                        for ny in y_start..=y_end {
+                            let row_off = ny * tiles_wide;
+                            for nx in x_start..=x_end {
+                                let n_idx = row_off + nx;
+                                if tile_valid[n_idx] > 0 {
+                                    sum_thresh += u32::from(tile_thresholds[n_idx]);
+                                    count += 1;
+                                }
+                            }
+                        }
+
+                        if count > 0 {
+                            tile_thresholds[idx] = (sum_thresh / count) as u8;
+                            tile_valid[idx] = 128; // Partial valid (propagated)
+                        }
+                    }
                 }
             }
         }
@@ -175,8 +214,11 @@ fn threshold_row_simd(src: &[u8], dst: &mut [u8], thresholds: &[u8], valid_mask:
         let m = valid_mask[i];
         // Branchless: (s > t) produces 0 or 1, multiply by 255
         let pass = u8::from(s >= t).wrapping_neg(); // 0xFF if true, 0x00 if false
-        // Invalid tiles (m=0) should be white (255) to avoid merging with black tags
-        dst[i] = (pass & m) | !m;
+
+        // Use mask m > 0 to treat both original (255) and propagated (128) tiles as valid.
+        // If valid, use pass. If invalid (m=0), force white (255).
+        let is_valid = u8::from(m > 0).wrapping_neg(); // 0xFF if m > 0, 0x00 otherwise
+        dst[i] = (pass & is_valid) | !is_valid;
     }
 }
 

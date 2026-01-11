@@ -197,8 +197,6 @@ impl Detector {
 
         // 4. Decoding - select decoders based on options
         let start_decode = std::time::Instant::now();
-        let src_points = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]];
-
         // Build decoder list: use options.families if specified, else use self.decoders
         let temp_decoders: Vec<Box<dyn TagDecoder + Send + Sync>>;
         let active_decoders: &[Box<dyn TagDecoder + Send + Sync>] = if options.families.is_empty() {
@@ -214,7 +212,7 @@ impl Detector {
 
         let mut final_detections = Vec::new();
         for mut cand in candidates {
-            if let Some(h) = crate::decoder::Homography::from_pairs(&src_points, &cand.corners) {
+            if let Some(h) = crate::decoder::Homography::square_to_quad(&cand.corners) {
                 for decoder in active_decoders {
                     if let Some(bits) = crate::decoder::sample_grid(img, &h, decoder.as_ref()) {
                         if let Some((id, hamming)) = decoder.decode(bits) {

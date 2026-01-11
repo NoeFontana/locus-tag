@@ -50,7 +50,7 @@ class Detector:
         if not options.families:
             return self._inner.detect(img)
 
-        return self._inner.detect_families(img, options.families)
+        return self._inner.detect_with_options(img, options.families)
 
     def detect_with_stats(self, img):
         """Detect tags and return performance statistics."""
