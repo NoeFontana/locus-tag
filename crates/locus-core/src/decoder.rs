@@ -120,3 +120,63 @@ pub fn rotate90(bits: u64, dim: usize) -> u64 {
     }
     res
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn test_rotation_invariants(bits in 0..u64::MAX) {
+            let dim = 6;
+            let r1 = rotate90(bits, dim);
+            let r2 = rotate90(r1, dim);
+            let r3 = rotate90(r2, dim);
+            let r4 = rotate90(r3, dim);
+
+            // Mask to dim*dim bits to avoid noise in upper bits
+            let mask = (1u64 << (dim * dim)) - 1;
+            prop_assert_eq!(bits & mask, r4 & mask);
+        }
+
+        #[test]
+        fn test_hamming_robustness(
+            id_idx in 0..3usize,
+            rotation in 0..4usize,
+            flip1 in 0..36usize,
+            flip2 in 0..36usize
+        ) {
+            let decoder = AprilTag36h11;
+            let codes = [(0, 0x000000000u64), (42, 0x123456789u64), (101, 0xABCDE1234u64)];
+            let (orig_id, orig_code) = codes[id_idx];
+
+            // Apply rotation
+            let mut test_bits = orig_code;
+            for _ in 0..rotation {
+                test_bits = rotate90(test_bits, 6);
+            }
+
+            // Flip bits
+            test_bits ^= 1 << flip1;
+            test_bits ^= 1 << flip2;
+
+            let result = decoder.decode(test_bits);
+            prop_assert!(result.is_some());
+            let (decoded_id, _) = result.unwrap();
+            prop_assert_eq!(decoded_id, orig_id);
+        }
+
+        #[test]
+        fn test_false_positive_resistance(bits in 0..u64::MAX) {
+            let decoder = AprilTag36h11;
+            // Most random bitstreams should not match our very small dictionary
+            // This is just a sanity check for the skeleton
+            if let Some((id, hamming)) = decoder.decode(bits) {
+                // If it decodes, it must have low hamming distance
+                prop_assert!(hamming <= 2);
+                prop_assert!(id == 0 || id == 42 || id == 101);
+            }
+        }
+    }
+}
