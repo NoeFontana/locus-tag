@@ -8,12 +8,14 @@ pub struct UnionFind<'a> {
 }
 
 impl<'a> UnionFind<'a> {
+    /// Create a new UnionFind structure backed by the provided arena.
     pub fn new_in(arena: &'a Bump, size: usize) -> Self {
         let parent = arena.alloc_slice_fill_with(size, |i| i as u32);
         let rank = arena.alloc_slice_fill_copy(size, 0u8);
         Self { parent, rank }
     }
 
+    /// Find the representative (root) of the set containing `i`.
     #[inline]
     pub fn find(&mut self, i: u32) -> u32 {
         let mut root = i;
@@ -24,6 +26,7 @@ impl<'a> UnionFind<'a> {
         root
     }
 
+    /// Unite the sets containing `i` and `j`.
     #[inline]
     pub fn union(&mut self, i: u32, j: u32) {
         let root_i = self.find(i);
@@ -44,10 +47,15 @@ impl<'a> UnionFind<'a> {
 /// Bounding box and statistics for a connected component.
 #[derive(Clone, Copy, Debug)]
 pub struct ComponentStats {
+    /// Minimum x coordinate.
     pub min_x: u16,
+    /// Maximum x coordinate.
     pub max_x: u16,
+    /// Minimum y coordinate.
     pub min_y: u16,
+    /// Maximum y coordinate.
     pub max_y: u16,
+    /// Total number of pixels in the component.
     pub pixel_count: u32,
 }
 
@@ -65,7 +73,9 @@ impl Default for ComponentStats {
 
 /// Result of connected component labeling.
 pub struct LabelResult<'a> {
+    /// Flat array of pixel labels (row-major).
     pub labels: &'a [u32],
+    /// Statistics for each component (indexed by label - 1).
     pub component_stats: Vec<ComponentStats>,
 }
 
@@ -78,6 +88,7 @@ struct Run {
     id: u32,
 }
 
+/// Label connected components in a binary image.
 pub fn label_components<'a>(
     arena: &'a Bump,
     binary: &[u8],
