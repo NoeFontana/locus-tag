@@ -77,6 +77,8 @@ pub trait TagDecoder: Send + Sync {
     fn name(&self) -> &str;
     /// Returns the dimension of the tag grid (e.g., 6 for 36h11).
     fn dimension(&self) -> usize;
+    /// Returns the ideal sample points in canonical coordinates [-1, 1].
+    fn sample_points(&self) -> &[(f64, f64)];
     /// Decodes the extracted bits into a tag ID and hamming distance.
     ///
     /// Returns `Some((id, hamming))` if decoding is successful, `None` otherwise.
@@ -87,12 +89,16 @@ pub trait TagDecoder: Send + Sync {
 pub struct AprilTag36h11;
 
 impl TagDecoder for AprilTag36h11 {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "36h11"
     }
     fn dimension(&self) -> usize {
         6
     } // 6x6 grid of bits (excluding border)
+
+    fn sample_points(&self) -> &[(f64, f64)] {
+        &crate::dictionaries::APRILTAG_36H11.sample_points
+    }
 
     fn decode(&self, bits: u64) -> Option<(u32, u32)> {
         // Use the full 587-code dictionary with O(1) exact match + hamming search
@@ -106,12 +112,16 @@ impl TagDecoder for AprilTag36h11 {
 pub struct AprilTag16h5;
 
 impl TagDecoder for AprilTag16h5 {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "16h5"
     }
     fn dimension(&self) -> usize {
         4
     } // 4x4 grid of bits (excluding border)
+
+    fn sample_points(&self) -> &[(f64, f64)] {
+        &crate::dictionaries::APRILTAG_16H5.sample_points
+    }
 
     fn decode(&self, bits: u64) -> Option<(u32, u32)> {
         crate::dictionaries::APRILTAG_16H5
@@ -124,11 +134,15 @@ impl TagDecoder for AprilTag16h5 {
 pub struct ArUco4x4_50;
 
 impl TagDecoder for ArUco4x4_50 {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "4X4_50"
     }
     fn dimension(&self) -> usize {
         4
+    }
+
+    fn sample_points(&self) -> &[(f64, f64)] {
+        &crate::dictionaries::ARUCO_4X4_50.sample_points
     }
 
     fn decode(&self, bits: u64) -> Option<(u32, u32)> {
@@ -142,16 +156,53 @@ impl TagDecoder for ArUco4x4_50 {
 pub struct ArUco4x4_100;
 
 impl TagDecoder for ArUco4x4_100 {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "4X4_100"
     }
     fn dimension(&self) -> usize {
         4
     }
 
+    fn sample_points(&self) -> &[(f64, f64)] {
+        &crate::dictionaries::ARUCO_4X4_100.sample_points
+    }
+
     fn decode(&self, bits: u64) -> Option<(u32, u32)> {
         crate::dictionaries::ARUCO_4X4_100
             .decode(bits, 1)
+            .map(|(id, hamming)| (u32::from(id), hamming))
+    }
+}
+
+/// Generic decoder for any TagDictionary (static or custom).
+pub struct GenericDecoder {
+    dict: std::sync::Arc<crate::dictionaries::TagDictionary>,
+}
+
+impl GenericDecoder {
+    pub fn new(dict: crate::dictionaries::TagDictionary) -> Self {
+        Self {
+            dict: std::sync::Arc::new(dict),
+        }
+    }
+}
+
+impl TagDecoder for GenericDecoder {
+    fn name(&self) -> &str {
+        &self.dict.name
+    }
+
+    fn dimension(&self) -> usize {
+        self.dict.dimension
+    }
+
+    fn sample_points(&self) -> &[(f64, f64)] {
+        &self.dict.sample_points
+    }
+
+    fn decode(&self, bits: u64) -> Option<(u32, u32)> {
+        self.dict
+            .decode(bits, self.dict.hamming_distance as u32)
             .map(|(id, hamming)| (u32::from(id), hamming))
     }
 }

@@ -24,6 +24,10 @@ harness = false
 name = "detect_bench"
 harness = false
 
+[[bench]]
+name = "dictionary_bench"
+harness = false
+
 [features]
 default = []
 viz = ["dep:rerun"]
