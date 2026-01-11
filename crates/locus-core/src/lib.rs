@@ -19,6 +19,15 @@ pub struct Detection {
     pub decision_margin: f64,
 }
 
+#[derive(Default, Debug, Clone)]
+pub struct PipelineStats {
+    pub threshold_ms: f64,
+    pub segmentation_ms: f64,
+    pub quad_extraction_ms: f64,
+    pub decoding_ms: f64,
+    pub total_ms: f64,
+}
+
 pub struct Detector {
     arena: Bump,
     threshold_engine: ThresholdEngine,
@@ -42,30 +51,43 @@ impl Detector {
 
     /// Primary detection entry point.
     pub fn detect(&mut self, img: &ImageView) -> Vec<Detection> {
+        self.detect_with_stats(img).0
+    }
+
+    /// Detection with detailed timing statistics.
+    pub fn detect_with_stats(&mut self, img: &ImageView) -> (Vec<Detection>, PipelineStats) {
+        let mut stats = PipelineStats::default();
+        let start_total = std::time::Instant::now();
+
         self.arena.reset();
 
         // 1. Thresholding
-        let stats = self.threshold_engine.compute_tile_stats(img);
-
-        // Allocate binarized image in arena (zero-copy/no-temp-vec)
+        let start_thresh = std::time::Instant::now();
+        let tile_stats = self.threshold_engine.compute_tile_stats(img);
         let binarized = self
             .arena
             .alloc_slice_fill_copy(img.width * img.height, 0u8);
         self.threshold_engine
-            .apply_threshold(img, &stats, binarized);
+            .apply_threshold(img, &tile_stats, binarized);
+        stats.threshold_ms = start_thresh.elapsed().as_secs_f64() * 1000.0;
 
         // 2. Segmentation (Connected Components with stats)
+        let start_seg = std::time::Instant::now();
         let label_result = crate::segmentation::label_components_with_stats(
             &self.arena,
             binarized,
             img.width,
             img.height,
         );
+        stats.segmentation_ms = start_seg.elapsed().as_secs_f64() * 1000.0;
 
         // 3. Quad Fitting (Fast path with pre-filtering)
+        let start_quad = std::time::Instant::now();
         let candidates = crate::quad::extract_quads_fast(&self.arena, img, &label_result);
+        stats.quad_extraction_ms = start_quad.elapsed().as_secs_f64() * 1000.0;
 
         // 4. Decoding (Single-threaded for low latency on small candidate sets)
+        let start_decode = std::time::Instant::now();
         let src_points = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]];
 
         let mut final_detections = Vec::new();
@@ -99,8 +121,10 @@ impl Detector {
                 }
             }
         }
+        stats.decoding_ms = start_decode.elapsed().as_secs_f64() * 1000.0;
+        stats.total_ms = start_total.elapsed().as_secs_f64() * 1000.0;
 
-        final_detections
+        (final_detections, stats)
     }
 
     /// Fast detection using decimation (2x downsampled).

@@ -52,25 +52,30 @@ impl ThresholdEngine {
         let tiles_wide = img.width / ts;
         let tiles_high = img.height / ts;
 
-        // Pre-compute adaptive thresholds and valid masks for each tile
         let mut tile_thresholds = vec![0u8; tiles_wide * tiles_high];
         let mut tile_valid = vec![0u8; tiles_wide * tiles_high];
 
         for ty in 0..tiles_high {
+            let y_start = ty.saturating_sub(1);
+            let y_end = (ty + 1).min(tiles_high - 1);
+
             for tx in 0..tiles_wide {
                 let mut nmin = 255u8;
                 let mut nmax = 0u8;
 
-                let y_start = ty.saturating_sub(1);
-                let y_end = (ty + 1).min(tiles_high - 1);
                 let x_start = tx.saturating_sub(1);
                 let x_end = (tx + 1).min(tiles_wide - 1);
 
                 for ny in y_start..=y_end {
+                    let row_off = ny * tiles_wide;
                     for nx in x_start..=x_end {
-                        let s = stats[ny * tiles_wide + nx];
-                        nmin = nmin.min(s.min);
-                        nmax = nmax.max(s.max);
+                        let s = stats[row_off + nx];
+                        if s.min < nmin {
+                            nmin = s.min;
+                        }
+                        if s.max > nmax {
+                            nmax = s.max;
+                        }
                     }
                 }
 
@@ -84,30 +89,30 @@ impl ThresholdEngine {
             }
         }
 
-        // Expand thresholds to per-pixel for vectorized row processing
+        // Expanded buffers are reused across rows
         let mut row_thresh = vec![0u8; img.width];
         let mut row_valid = vec![0u8; img.width];
 
         for ty in 0..tiles_high {
-            // Expand tile thresholds to pixel-level for this row of tiles
-            for tx in 0..tiles_wide {
-                let idx = ty * tiles_wide + tx;
-                let thresh = tile_thresholds[idx];
-                let valid = tile_valid[idx];
+            // Expand tile thresholds to pixel-level for this tile-row
+            let tile_row_thresh = &tile_thresholds[ty * tiles_wide..(ty + 1) * tiles_wide];
+            let tile_row_valid = &tile_valid[ty * tiles_wide..(ty + 1) * tiles_wide];
+
+            for (tx, (&thresh, &valid)) in tile_row_thresh
+                .iter()
+                .zip(tile_row_valid.iter())
+                .enumerate()
+            {
                 let x_start = tx * ts;
-                for dx in 0..ts {
-                    row_thresh[x_start + dx] = thresh;
-                    row_valid[x_start + dx] = valid;
-                }
+                row_thresh[x_start..x_start + ts].fill(thresh);
+                row_valid[x_start..x_start + ts].fill(valid);
             }
 
-            // Process all rows in this tile row with vectorized thresholding
             for dy in 0..ts {
                 let py = ty * ts + dy;
                 let src_row = img.get_row(py);
                 let dst_start = py * img.width;
                 let dst_row = &mut output[dst_start..dst_start + img.width];
-
                 threshold_row_simd(src_row, dst_row, &row_thresh, &row_valid);
             }
         }
