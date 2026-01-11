@@ -18,6 +18,10 @@ pub struct Point {
     pub y: f64,
 }
 
+/// Minimum average gradient magnitude for a valid edge.
+/// Values below this suggest the "edge" is just noise or shading.
+const MIN_EDGE_ALIGNMENT_SCORE: f64 = 10.0;
+
 /// Fast quad extraction using bounding box stats from CCL.
 /// Only traces contours for components that pass geometric filters.
 pub fn extract_quads_fast(
@@ -110,18 +114,21 @@ pub fn extract_quads_fast(
                             refine_corner(img, simplified[3], center),
                         ];
 
-                        detections.push(Detection {
-                            id: label,
-                            center,
-                            corners: [
-                                [corners[0].x, corners[0].y],
-                                [corners[1].x, corners[1].y],
-                                [corners[2].x, corners[2].y],
-                                [corners[3].x, corners[3].y],
-                            ],
-                            hamming: 0,
-                            decision_margin: area,
-                        });
+                        // Filter: weak edge alignment
+                        if calculate_edge_score(img, corners) > MIN_EDGE_ALIGNMENT_SCORE {
+                            detections.push(Detection {
+                                id: label,
+                                center,
+                                corners: [
+                                    [corners[0].x, corners[0].y],
+                                    [corners[1].x, corners[1].y],
+                                    [corners[2].x, corners[2].y],
+                                    [corners[3].x, corners[3].y],
+                                ],
+                                hamming: 0,
+                                decision_margin: area,
+                            });
+                        }
                     }
                 }
             }
@@ -364,6 +371,120 @@ pub fn refine_corner(img: &ImageView, p: Point, center: [f64; 2]) -> Point {
     Point {
         x: best_x,
         y: best_y,
+    }
+}
+
+/// Calculate the minimum average gradient magnitude along the 4 edges of the quad.
+///
+/// Returns the lowest score among the 4 edges. If any edge is very weak,
+/// the return value will be low, indicating a likely false positive.
+fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
+    let mut min_score = f64::MAX;
+
+    for i in 0..4 {
+        let p1 = corners[i];
+        let p2 = corners[(i + 1) % 4];
+
+        let dx = p2.x - p1.x;
+        let dy = p2.y - p1.y;
+        let len = (dx * dx + dy * dy).sqrt();
+
+        if len < 4.0 {
+            // Tiny edge, likely noise or degenerate
+            return 0.0;
+        }
+
+        // Sample points along the edge (excluding corners to avoid corner effects)
+        let n_samples = (len as usize).min(10).max(3); // At least 3, at most 10
+        let mut edge_mag_sum = 0.0;
+
+        for k in 1..=n_samples {
+            // t goes from roughly 0.1 to 0.9 to avoid corners
+            let t = k as f64 / (n_samples + 1) as f64;
+            let x = p1.x + dx * t;
+            let y = p1.y + dy * t;
+
+            let ix = x as isize;
+            let iy = y as isize;
+
+            if ix > 0 && ix < (img.width - 1) as isize && iy > 0 && iy < (img.height - 1) as isize {
+                let gx = (f64::from(img.get_pixel((ix + 1) as usize, iy as usize))
+                    - f64::from(img.get_pixel((ix - 1) as usize, iy as usize)))
+                    * 0.5;
+                let gy = (f64::from(img.get_pixel(ix as usize, (iy + 1) as usize))
+                    - f64::from(img.get_pixel(ix as usize, (iy - 1) as usize)))
+                    * 0.5;
+                edge_mag_sum += (gx * gx + gy * gy).sqrt();
+            }
+        }
+
+        let avg_mag = edge_mag_sum / n_samples as f64;
+        if avg_mag < min_score {
+            min_score = avg_mag;
+        }
+    }
+
+    min_score
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_edge_score_rejection() {
+        // Create a 20x20 image mostly gray
+        let width = 20;
+        let height = 20;
+        let stride = 20;
+        let mut data = vec![128u8; width * height];
+
+        // Draw a weak quad (contrast 10)
+        // Center 10,10. Size 8x8.
+        // Inside 128, Outside 138. Gradient ~5.
+        // 5 < 10, should be rejected.
+        for y in 6..14 {
+            for x in 6..14 {
+                data[y * width + x] = 138;
+            }
+        }
+
+        let img = ImageView::new(&data, width, height, stride).unwrap();
+
+        let corners = [
+            Point { x: 6.0, y: 6.0 },
+            Point { x: 14.0, y: 6.0 },
+            Point { x: 14.0, y: 14.0 },
+            Point { x: 6.0, y: 14.0 },
+        ];
+
+        let score = calculate_edge_score(&img, corners);
+        // Gradient should be roughly (138-128)/2 = 5 per pixel boundary?
+        // Sobel-like (p(x+1)-p(x-1))/2.
+        // At edge x=6: left=128, right=138. (138-128)/2 = 5.
+        // Magnitude 5.0.
+        // Threshold is 10.0.
+        assert!(score < 10.0, "Score {} should be < 10.0", score);
+
+        // Draw a strong quad (contrast 50)
+        // Inside 200, Outside 50. Gradient ~75.
+        // 75 > 10, should pass.
+        for y in 6..14 {
+            for x in 6..14 {
+                data[y * width + x] = 200;
+            }
+        }
+        // Restore background
+        for y in 0..height {
+            for x in 0..width {
+                if x < 6 || x >= 14 || y < 6 || y >= 14 {
+                    data[y * width + x] = 50;
+                }
+            }
+        }
+        let img = ImageView::new(&data, width, height, stride).unwrap();
+        let score = calculate_edge_score(&img, corners);
+        assert!(score > 40.0, "Score {} should be > 40.0", score);
     }
 }
 
