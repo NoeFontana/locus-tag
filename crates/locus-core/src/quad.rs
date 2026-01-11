@@ -1,14 +1,16 @@
 use crate::Detection;
 use crate::image::ImageView;
-use crate::segmentation::{ComponentStats, LabelResult};
+use crate::segmentation::LabelResult;
 use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
 use multiversion::multiversion;
-use nalgebra::SMatrix;
 
+/// A 2D point with subpixel precision.
 #[derive(Clone, Copy, Debug)]
 pub struct Point {
+    /// X coordinate.
     pub x: f64,
+    /// Y coordinate.
     pub y: f64,
 }
 
@@ -360,7 +362,11 @@ pub fn refine_corner(img: &ImageView, p: Point, center: [f64; 2]) -> Point {
     }
 }
 
-#[multiversion(targets = "simd")]
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
 fn trace_boundary<'a>(
     arena: &'a Bump,
     labels: &[u32],
