@@ -30,8 +30,12 @@ def generate_synthetic_data(num_images=5, size=(640, 480)):
         images.append(img)
 
         # Ground truth corners (top-left, top-right, bottom-right, bottom-left)
+        # Tag occupies pixels [x, x+tag_size-1] x [y, y+tag_size-1]
+        # Corners are at the edges of the tag, so the outside corner is at x-0.5, y-0.5
+        # But we measure at pixel centers, so the corner pixel is at x, x+tag_size-1
+        ts = tag_size - 1  # rightmost/bottommost pixel of tag
         gt_corners = np.array(
-            [[x, y], [x + tag_size, y], [x + tag_size, y + tag_size], [x, y + tag_size]],
+            [[x, y], [x + ts, y], [x + ts, y + ts], [x, y + ts]],
             dtype=np.float32,
         )
         ground_truth.append({"id": tag_id, "corners": gt_corners})
