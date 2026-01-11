@@ -24,12 +24,14 @@ impl Default for ThresholdEngine {
 
 impl ThresholdEngine {
     /// Create a new ThresholdEngine with default settings.
+    #[must_use]
     pub fn new() -> Self {
         Self { tile_size: 8 }
     }
 
     /// Compute min/max statistics for each tile in the image.
     /// Optimized with SIMD-friendly memory access patterns.
+    #[must_use]
     pub fn compute_tile_stats(&self, img: &ImageView) -> Vec<TileStats> {
         let ts = self.tile_size;
         let tiles_wide = img.width / ts;
@@ -89,7 +91,7 @@ impl ThresholdEngine {
                     tile_valid[idx] = 0;
                 } else {
                     tile_valid[idx] = 255;
-                    tile_thresholds[idx] = ((nmin as u16 + nmax as u16) >> 1) as u8;
+                    tile_thresholds[idx] = ((u16::from(nmin) + u16::from(nmax)) >> 1) as u8;
                 }
             }
         }
@@ -157,7 +159,7 @@ fn threshold_row_simd(src: &[u8], dst: &mut [u8], thresholds: &[u8], valid_mask:
         let t = thresholds[i];
         let m = valid_mask[i];
         // Branchless: (s > t) produces 0 or 1, multiply by 255
-        let pass = ((s > t) as u8).wrapping_neg(); // 0xFF if true, 0x00 if false
+        let pass = u8::from(s > t).wrapping_neg(); // 0xFF if true, 0x00 if false
         dst[i] = pass & m;
     }
 }

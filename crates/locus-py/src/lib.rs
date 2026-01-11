@@ -1,33 +1,49 @@
+//! Python bindings for the Locus Tag library.
+#![allow(unsafe_code)]
+
 use locus_core::image::ImageView;
 use numpy::{PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::prelude::*;
 
 /// Re-export Detection for Python
+/// Python-compatible detection result.
 #[pyclass]
+#[derive(Clone)]
 pub struct Detection {
+    /// Tag ID.
     #[pyo3(get)]
     pub id: u32,
+    /// Center coordinates (x, y).
     #[pyo3(get)]
     pub center: [f64; 2],
+    /// Corner coordinates (4x2).
     #[pyo3(get)]
     pub corners: [[f64; 2]; 4],
+    /// Hamming distance.
     #[pyo3(get)]
     pub hamming: u32,
+    /// Decision margin.
     #[pyo3(get)]
     pub decision_margin: f64,
 }
 
+/// Python-compatible pipeline statistics.
 #[pyclass]
 #[derive(Clone, Default)]
 pub struct PipelineStats {
+    /// Adaptive thresholding time (ms).
     #[pyo3(get)]
     pub threshold_ms: f64,
+    /// Segmentation time (ms).
     #[pyo3(get)]
     pub segmentation_ms: f64,
+    /// Quad extraction time (ms).
     #[pyo3(get)]
     pub quad_extraction_ms: f64,
+    /// Decoding time (ms).
     #[pyo3(get)]
     pub decoding_ms: f64,
+    /// Total time (ms).
     #[pyo3(get)]
     pub total_ms: f64,
 }

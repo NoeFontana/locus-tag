@@ -9,6 +9,7 @@ pub struct Homography {
 impl Homography {
     /// Compute homography from 4 source points to 4 destination points using DLT.
     /// Points are [x, y].
+    #[must_use] 
     pub fn from_pairs(src: &[[f64; 2]; 4], dst: &[[f64; 2]; 4]) -> Option<Self> {
         let mut a = SMatrix::<f64, 8, 9>::zeros();
 
@@ -62,6 +63,7 @@ impl Homography {
     }
 
     /// Project a point using the homography.
+    #[must_use] 
     pub fn project(&self, p: [f64; 2]) -> [f64; 2] {
         let res = self.h * SVector::<f64, 3>::new(p[0], p[1], 1.0);
         let w = res[2];
@@ -85,7 +87,7 @@ pub trait TagDecoder: Send + Sync {
 pub struct AprilTag36h11;
 
 impl TagDecoder for AprilTag36h11 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "36h11"
     }
     fn dimension(&self) -> usize {
@@ -106,7 +108,7 @@ impl TagDecoder for AprilTag36h11 {
             for _ in 0..4 {
                 let hamming = (rbits ^ code).count_ones();
                 if hamming <= 2 {
-                    return Some((id as u32, hamming));
+                    return Some((u32::from(id), hamming));
                 }
                 rbits = rotate90(rbits, self.dimension());
             }
@@ -120,6 +122,7 @@ impl TagDecoder for AprilTag36h11 {
 /// # Arguments
 /// * `bits` - The 64-bit integer representing the tag grid.
 /// * `dim` - The dimension of the tag grid (e.g., 6).
+#[must_use] 
 pub fn rotate90(bits: u64, dim: usize) -> u64 {
     let mut res = 0u64;
     for y in 0..dim {
@@ -161,7 +164,7 @@ mod tests {
             flip2 in 0..36usize
         ) {
             let decoder = AprilTag36h11;
-            let codes = [(0, 0x0d5d628584u64), (1, 0x0d97f18b49u64), (2, 0x0dd280910eu64)];
+            let codes = [(0, 0x000d_5d62_8584_u64), (1, 0x000d_97f1_8b49_u64), (2, 0x000d_d280_910e_u64)];
             let (orig_id, orig_code) = codes[id_idx];
 
             // Apply rotation
@@ -176,7 +179,7 @@ mod tests {
 
             let result = decoder.decode(test_bits);
             prop_assert!(result.is_some());
-            let (decoded_id, _) = result.unwrap();
+            let (decoded_id, _) = result.expect("Should decode valid pattern");
             prop_assert_eq!(decoded_id, orig_id);
         }
 

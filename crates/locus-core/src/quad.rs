@@ -1,3 +1,7 @@
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::similar_names)]
+
 use crate::Detection;
 use crate::image::ImageView;
 use crate::segmentation::LabelResult;
@@ -29,8 +33,8 @@ pub fn extract_quads_fast(
         let label = (label_idx + 1) as u32;
 
         // Fast geometric filtering using bounding box
-        let bbox_w = (stat.max_x - stat.min_x) as u32 + 1;
-        let bbox_h = (stat.max_y - stat.min_y) as u32 + 1;
+        let bbox_w = u32::from(stat.max_x - stat.min_x) + 1;
+        let bbox_h = u32::from(stat.max_y - stat.min_y) + 1;
         let bbox_area = bbox_w * bbox_h;
 
         // Filter: too small or too large
@@ -269,6 +273,7 @@ fn polygon_center(points: &[Point]) -> [f64; 2] {
 ///
 /// Searches along the direction from tag center to corner to find the true
 /// outer edge of the tag (bright-to-dark transition).
+#[must_use]
 pub fn refine_corner(img: &ImageView, p: Point, center: [f64; 2]) -> Point {
     // Direction from center to corner (points outward)
     let dir_x = p.x - center[0];
@@ -290,18 +295,18 @@ pub fn refine_corner(img: &ImageView, p: Point, center: [f64; 2]) -> Point {
 
     // Sample 11 points: 5 inward, current, 5 outward
     for step in -3..=7 {
-        let x = p.x + dx * step as f64;
-        let y = p.y + dy * step as f64;
+        let x = p.x + dx * f64::from(step);
+        let y = p.y + dy * f64::from(step);
 
         let ix = x as isize;
         let iy = y as isize;
 
         if ix > 1 && ix < (img.width - 2) as isize && iy > 1 && iy < (img.height - 2) as isize {
-            let gx = (img.get_pixel((ix + 1) as usize, iy as usize) as f64
-                - img.get_pixel((ix - 1) as usize, iy as usize) as f64)
+            let gx = (f64::from(img.get_pixel((ix + 1) as usize, iy as usize))
+                - f64::from(img.get_pixel((ix - 1) as usize, iy as usize)))
                 * 0.5;
-            let gy = (img.get_pixel(ix as usize, (iy + 1) as usize) as f64
-                - img.get_pixel(ix as usize, (iy - 1) as usize) as f64)
+            let gy = (f64::from(img.get_pixel(ix as usize, (iy + 1) as usize))
+                - f64::from(img.get_pixel(ix as usize, (iy - 1) as usize)))
                 * 0.5;
             let mag = gx * gx + gy * gy;
 
@@ -331,11 +336,11 @@ pub fn refine_corner(img: &ImageView, p: Point, center: [f64; 2]) -> Point {
             let iy = y as isize;
 
             if ix > 0 && ix < (img.width - 1) as isize && iy > 0 && iy < (img.height - 1) as isize {
-                let gx = (img.get_pixel((ix + 1) as usize, iy as usize) as f64
-                    - img.get_pixel((ix - 1) as usize, iy as usize) as f64)
+                let gx = (f64::from(img.get_pixel((ix + 1) as usize, iy as usize))
+                    - f64::from(img.get_pixel((ix - 1) as usize, iy as usize)))
                     * 0.5;
-                let gy = (img.get_pixel(ix as usize, (iy + 1) as usize) as f64
-                    - img.get_pixel(ix as usize, (iy - 1) as usize) as f64)
+                let gy = (f64::from(img.get_pixel(ix as usize, (iy + 1) as usize))
+                    - f64::from(img.get_pixel(ix as usize, (iy - 1) as usize)))
                     * 0.5;
                 mags[i] = gx * gx + gy * gy;
             }

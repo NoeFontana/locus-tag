@@ -1,6 +1,3 @@
-import time
-
-import cv2
 import locus
 import numpy as np
 from benchmark_suite import BenchmarkSuite

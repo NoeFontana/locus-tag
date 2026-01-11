@@ -2,6 +2,7 @@
 name = "locus-core"
 version = "0.1.0"
 edition = "2024"
+# No lints here
 
 [dependencies]
 nalgebra = "0.33"
@@ -24,7 +25,8 @@ name = "detect_bench"
 harness = false
 
 [features]
-
-
 default = []
 viz = ["dep:rerun"]
+
+[lints]
+workspace = true

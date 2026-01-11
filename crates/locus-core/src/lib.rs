@@ -1,9 +1,21 @@
+//! Core detection logic for the Locus Tag library.
+//!
+//! This crate implements the high-performance AprilTag detection pipeline,
+//! including adaptive thresholding, segmentation, quad extraction, and decoding.
+
+/// Tag decoding traits and implementations.
 pub mod decoder;
+/// Gradient computation for edge refinement.
 pub mod gradient;
+/// Image buffer abstractions.
 pub mod image;
+/// Quad extraction and geometric primitives.
 pub mod quad;
+/// Connected components labeling using Union-Find.
 pub mod segmentation;
+/// Utilities for testing and synthetic data generation.
 pub mod test_utils;
+/// Adaptive thresholding implementation.
 pub mod threshold;
 
 use crate::decoder::TagDecoder;
@@ -49,6 +61,7 @@ pub struct Detector {
 
 impl Detector {
     /// Create a new detector instance.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             arena: Bump::new(),
@@ -141,6 +154,10 @@ impl Detector {
     }
 
     /// Fast detection using decimation (2x downsampled).
+    /// Detects tags using a gradient-based downsampling approach for speed.
+    ///
+    /// # Panics
+    /// Panics if the downsampled image cannot be created (should not happen with valid dimensions).
     pub fn detect_gradient(&mut self, img: &ImageView) -> Vec<Detection> {
         // Decimate the image 2x
         let new_w = img.width / 2;
@@ -150,10 +167,10 @@ impl Detector {
         let mut downsampled = vec![0u8; new_w * new_h];
         for y in 0..new_h {
             for x in 0..new_w {
-                let p00 = img.get_pixel(x * 2, y * 2) as u16;
-                let p10 = img.get_pixel(x * 2 + 1, y * 2) as u16;
-                let p01 = img.get_pixel(x * 2, y * 2 + 1) as u16;
-                let p11 = img.get_pixel(x * 2 + 1, y * 2 + 1) as u16;
+                let p00 = u16::from(img.get_pixel(x * 2, y * 2));
+                let p10 = u16::from(img.get_pixel(x * 2 + 1, y * 2));
+                let p01 = u16::from(img.get_pixel(x * 2, y * 2 + 1));
+                let p11 = u16::from(img.get_pixel(x * 2 + 1, y * 2 + 1));
                 downsampled[y * new_w + x] = ((p00 + p10 + p01 + p11) / 4) as u8;
             }
         }
@@ -185,6 +202,7 @@ impl Default for Detector {
 }
 
 /// Returns version and build information for the core library.
+#[must_use]
 pub fn core_info() -> String {
     "Locus Core v0.1.0 Engine".to_string()
 }
