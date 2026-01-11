@@ -80,6 +80,37 @@ fn detect_tags(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
     Ok(detections.into_iter().map(Detection::from).collect())
 }
 
+/// Detect tags using the gradient-based pipeline (faster).
+#[pyfunction]
+fn detect_tags_gradient(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
+    let shape = img.shape();
+    let height = shape[0];
+    let width = shape[1];
+    let strides = img.strides();
+    let stride = strides[0] as usize;
+
+    if strides[1] != 1 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Image must have C-contiguous rows (inner stride must be 1)",
+        ));
+    }
+
+    let required_size = if height > 0 && width > 0 {
+        (height - 1) * stride + width
+    } else {
+        0
+    };
+
+    let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
+    let view = ImageView::new(data, width, height, stride)
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+
+    let mut detector = locus_core::Detector::new();
+    let detections = detector.detect_gradient(&view);
+
+    Ok(detections.into_iter().map(Detection::from).collect())
+}
+
 /// For debugging: Apply thresholding and return the binarized image.
 #[pyfunction]
 fn debug_threshold(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
@@ -185,6 +216,7 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Detection>()?;
     m.add_function(wrap_pyfunction!(dummy_detect, m)?)?;
     m.add_function(wrap_pyfunction!(detect_tags, m)?)?;
+    m.add_function(wrap_pyfunction!(detect_tags_gradient, m)?)?;
     m.add_function(wrap_pyfunction!(debug_threshold, m)?)?;
     m.add_function(wrap_pyfunction!(debug_segmentation, m)?)?;
     Ok(())

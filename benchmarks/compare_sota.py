@@ -47,6 +47,21 @@ def benchmark_locus(images, iterations):
     return latencies, detections_count
 
 
+def benchmark_locus_gradient(images, iterations):
+    latencies = []
+    detections_count = 0
+    # Warm up
+    _ = locus.detect_tags_gradient(images[0])
+
+    for img in images:
+        for _ in range(iterations):
+            start = time.perf_counter()
+            detections = locus.detect_tags_gradient(img)
+            latencies.append(time.perf_counter() - start)
+            detections_count += len(detections)
+    return latencies, detections_count
+
+
 def benchmark_opencv(images, iterations):
     # ArUco AprilTag 36h11 dictionary for comparison
     dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
@@ -121,6 +136,7 @@ def main():
 
     libraries = [
         ("locus", benchmark_locus),
+        ("locus_grad", benchmark_locus_gradient),
         ("opencv", benchmark_opencv),
         ("apriltag", benchmark_apriltag),
     ]
