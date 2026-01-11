@@ -12,39 +12,61 @@ Your goal is SOTA latency, zero-copy safety, and strict production readiness.
     * **Zero-Copy**: Always use `PyReadonlyArray2<u8>` and convert to `ImageView` via unsafe pointer casts.
     * **Safety**: Explicitly validate strides and contiguous memory before `unsafe` blocks.
 
-## 2. Development Workflow & Commands
+---
 
-### ��️ Build & Install
-* **Rust Core**: `cargo build -p locus-core`
-* **Python Dev Install**: `maturin develop --release --extras dev` (Must run this to update Python env).
+## 2. Quality Gates (Mandatory Before Completion)
 
-### 🎨 Linting & Formatting (The "Clean Code" Standard)
-* **Rust**:
-    * Format: `cargo fmt`
-    * Lint: `cargo clippy --workspace --all-targets -- -D warnings -W clippy::pedantic -A clippy::module_name_repetitions`
-* **Python**:
-    * Format: `ruff format .`
-    * Lint: `ruff check . --fix`
+Before reporting a task as complete, you MUST pass ALL of the following quality gates:
+
+### 🔧 Build & Install
+\`\`\`bash
+cargo build --workspace           # Rust compilation
+maturin develop --release         # Python wheel install
+\`\`\`
+
+### 🎨 Formatting (Non-Negotiable)
+\`\`\`bash
+# Rust
+cargo fmt --all -- --check        # Must pass with no changes required
+
+# Python
+ruff format benchmarks/ --check   # Dry-run format check
+\`\`\`
+
+### 🔍 Linting (Zero Warnings Policy)
+\`\`\`bash
+# Rust (Workspace-wide pedantic linting)
+cargo clippy --workspace --all-targets -- -D warnings
+
+# Python
+ruff check benchmarks/ --fix      # Apply auto-fixes then verify
+\`\`\`
 * **Rule**: Never commit code that triggers a Clippy warning. If a lint is a false positive, explicitly allow it with a reasoning comment: `#[allow(clippy::cast_precision_loss)] // Reason: Pixel coordinates fit in f32`.
 
-### 🧪 Testing Strategy
-* **Rust (Unit & Logic)**:
-    * Command: `cargo nextest run`
-    * Tool: `cargo-nextest` (Fast, parallel runner).
-    * Requirement: Use `proptest` for algorithmic verification (e.g., Hamming decoders).
-* **Python (Integration)**:
-    * Command: `pytest`
-    * Requirement: Tests must use `verify_phase1.py` style fixtures. Always reload the module or rebuild via `maturin` before running.
+### 🧪 Testing (Regression Prevention)
+\`\`\`bash
+# Rust (Unit & Property Tests)
+cargo nextest run --workspace     # Fast parallel test runner
 
-### ⚡ Micro-Benchmarking
-* **Rust**:
-    * Command: `cargo bench -p locus-core`
-    * Tool: `divan` (Modern, low-overhead alternative to Criterion) or `criterion`.
-    * Policy: Every SIMD optimization (Thresholding, Union-Find) must have a regression benchmark.
+# Python (Integration Tests)
+pytest                            # If applicable
+\`\`\`
+* **Requirement**: Use `proptest` for algorithmic verification (e.g., Hamming decoders).
+* **No Regressions**: If you modify critical code paths (thresholding, CCL, decoding), run the relevant benchmark before AND after to ensure no regression.
 
-### 📚 Documentation
-* **Rust**: Public items must have `///` docstrings with `# Examples`.
-* **Python**: All `#[pyfunction]` must have Python docstrings.
+### ⚡ Benchmarking (Performance Accountability)
+\`\`\`bash
+# Rust Micro-benchmarks
+cargo bench -p locus-core         # Uses divan or criterion
+
+# Python End-to-End Profiling
+python3 benchmarks/profile_bottlenecks.py   # Stage-level timing
+python3 benchmarks/benchmark_suite.py       # SOTA comparison
+\`\`\`
+* **Policy**: Every SIMD optimization (Thresholding, Union-Find) must have a regression benchmark.
+* **Non-Regression Threshold**: If a benchmark shows >5% slowdown (outside run-to-run noise), you must investigate and resolve before completing the task.
+
+---
 
 ## 3. Coding Patterns (Do's and Don'ts)
 
@@ -59,7 +81,15 @@ Your goal is SOTA latency, zero-copy safety, and strict production readiness.
 * **Do not** allocate heap memory (`Box`, `Vec`, `String`) inside the `detect()` loop.
 * **Do not** copy image data. If strides are incompatible, return an error to Python.
 
-## 4. Specific Tool Instructions
+---
+
+## 4. Documentation Standards
+* **Rust**: Public items must have `///` docstrings with `# Examples`.
+* **Python**: All `#[pyfunction]` must have Python docstrings.
+
+---
+
+## 5. Specific Tool Instructions
 
 ### For Gemini CLI / Jules
 * When asked to "optimize", always check assembly output or cache locality first.
@@ -70,7 +100,9 @@ Your goal is SOTA latency, zero-copy safety, and strict production readiness.
 * Visualize memory layouts of `ImageView` to ensure zero-copy alignment.
 * Graph the call stack of `detect_tags` to identify non-inlined bottlenecks.
 
-## 5. Autonomous Git Protocol
+---
+
+## 6. Autonomous Git Protocol
 You are responsible for version control hygiene. Do not leave the user with uncommitted changes after a successful task.
 
 ### Trigger: Starting a New Task

@@ -13,6 +13,9 @@ class BenchmarkSuite:
         self.resolution = resolution
         self.dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
         self.at_detector = AprilTagDetector(families="tag36h11", nthreads=1)
+        self.at_detector_acc = AprilTagDetector(
+            families="tag36h11", nthreads=1, quad_decimate=1.0, refine_edges=1
+        )
         self.ocv_detector = cv2.aruco.ArucoDetector(self.dictionary, cv2.aruco.DetectorParameters())
 
     def generate_image(self, num_tags, noise_sigma=0.0, blur_k=0):
@@ -143,11 +146,24 @@ class BenchmarkSuite:
         latencies = []
         for _ in range(iterations):
             start = time.perf_counter()
-            detections = self.at_detector.detect(img)
+            _ = self.at_detector.detect(img)
             latencies.append(time.perf_counter() - start)
 
         f, e = self.match_and_compute_errors(
             self.at_detector.detect(img), gt_list, self.compute_corner_error, "tag_id"
+        )
+        return np.mean(latencies), f / len(gt_list), np.median(e) if e else float("inf")
+
+    def run_benchmark_apriltag_accurate(self, img, gt_list, iterations):
+        _ = self.at_detector_acc.detect(img)
+        latencies = []
+        for _ in range(iterations):
+            start = time.perf_counter()
+            _ = self.at_detector_acc.detect(img)
+            latencies.append(time.perf_counter() - start)
+
+        f, e = self.match_and_compute_errors(
+            self.at_detector_acc.detect(img), gt_list, self.compute_corner_error, "tag_id"
         )
         return np.mean(latencies), f / len(gt_list), np.median(e) if e else float("inf")
 
@@ -171,6 +187,7 @@ def main():
         ("Locus", suite.run_benchmark_locus),
         ("LocusGrad", suite.run_benchmark_locus_gradient),
         ("AprilTag", suite.run_benchmark_apriltag),
+        ("AprilTagAcc", suite.run_benchmark_apriltag_accurate),
     ]
 
     for count in target_counts:
