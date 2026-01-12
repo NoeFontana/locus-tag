@@ -1,7 +1,10 @@
 //! Core detection logic for the Locus Tag library.
 //!
-//! This crate implements the high-performance AprilTag detection pipeline,
-//! including adaptive thresholding, segmentation, quad extraction, and decoding.
+//! Locus is a high-performance AprilTag and ArUco detector implemented in Rust.
+//! This project serves as an experiment in LLM-assisted library development,
+//! targeting 1-10ms latencies.
+//!
+//! The pipeline includes adaptive thresholding, segmentation, quad extraction, and decoding.
 //!
 //! # Configuration
 //!

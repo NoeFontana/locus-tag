@@ -1,6 +1,7 @@
 # Locus
 
-High-performance AprilTag and ArUco detector in Rust with zero-copy Python bindings.
+A high-performance AprilTag and ArUco detector in Rust with Python bindings.
+This project is an experiment in LLM-assisted library development, targeting 1-10ms latencies for modern computer vision tasks.
 
 ## Performance (1080p, 1-thread)
 
