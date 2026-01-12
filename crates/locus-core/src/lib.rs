@@ -84,6 +84,10 @@ pub struct PipelineStats {
     pub decoding_ms: f64,
     /// Total pipeline time in milliseconds.
     pub total_ms: f64,
+    /// Number of quad candidates passed to decoder.
+    pub num_candidates: usize,
+    /// Number of final detections.
+    pub num_detections: usize,
 }
 
 /// The main entry point for detecting AprilTags.
@@ -194,6 +198,7 @@ impl Detector {
             crate::quad::extract_quads_with_config(&self.arena, img, &label_result, &self.config)
         };
         stats.quad_extraction_ms = start_quad.elapsed().as_secs_f64() * 1000.0;
+        stats.num_candidates = candidates.len();
 
         // 4. Decoding - select decoders based on options
         let start_decode = std::time::Instant::now();
@@ -238,6 +243,7 @@ impl Detector {
             }
         }
         stats.decoding_ms = start_decode.elapsed().as_secs_f64() * 1000.0;
+        stats.num_detections = final_detections.len();
         stats.total_ms = start_total.elapsed().as_secs_f64() * 1000.0;
 
         (final_detections, stats)

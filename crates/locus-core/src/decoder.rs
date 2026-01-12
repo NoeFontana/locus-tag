@@ -183,21 +183,57 @@ pub fn sample_grid(
     let mut min_val = f64::MAX;
     let mut max_val = f64::MIN;
 
+    // Extract homography coefficients for faster access
+    let h00 = homography.h[(0, 0)];
+    let h01 = homography.h[(0, 1)];
+    let h02 = homography.h[(0, 2)];
+    let h10 = homography.h[(1, 0)];
+    let h11 = homography.h[(1, 1)];
+    let h12 = homography.h[(1, 2)];
+    let h20 = homography.h[(2, 0)];
+    let h21 = homography.h[(2, 1)];
+    let h22 = homography.h[(2, 2)];
+
     for (i, &p) in points.iter().take(n).enumerate() {
-        // Project canonical point to image coordinates
-        let img_p = homography.project([p.0, p.1]);
+        // Inlined project: h * [px, py, 1.0]
+        let x = p.0;
+        let y = p.1;
+        let wz = h20 * x + h21 * y + h22;
+        let img_x = (h00 * x + h01 * y + h02) / wz;
+        let img_y = (h10 * x + h11 * y + h12) / wz;
 
         // Check bounds (with slight margin for interpolation)
-        if img_p[0] < 0.0
-            || img_p[0] >= (img.width - 1) as f64
-            || img_p[1] < 0.0
-            || img_p[1] >= (img.height - 1) as f64
+        if img_x < 0.0
+            || img_x >= (img.width - 1) as f64
+            || img_y < 0.0
+            || img_y >= (img.height - 1) as f64
         {
             return None; // Point outside image
         }
 
-        // SAFETY: Bounds checked above. x < width-1 implies floor(x)+1 < width.
-        let val = unsafe { img.sample_bilinear_unchecked(img_p[0], img_p[1]) };
+        // Inlined bilinear interpolation
+        let xf = img_x.floor();
+        let yf = img_y.floor();
+        let ix = xf as usize;
+        let iy = yf as usize;
+        let dx = img_x - xf;
+        let dy = img_y - yf;
+
+        // SAFETY: Bounds checked above.
+        let val = unsafe {
+            let row0 = img.get_row_unchecked(iy);
+            let row1 = img.get_row_unchecked(iy + 1);
+
+            let v00 = f64::from(*row0.get_unchecked(ix));
+            let v10 = f64::from(*row0.get_unchecked(ix + 1));
+            let v01 = f64::from(*row1.get_unchecked(ix));
+            let v11 = f64::from(*row1.get_unchecked(ix + 1));
+
+            let top = v00 + dx * (v10 - v00);
+            let bot = v01 + dx * (v11 - v01);
+            top + dy * (bot - top)
+        };
+
         intensities[i] = val;
 
         if val < min_val {

@@ -150,23 +150,19 @@ impl ThresholdEngine {
             }
         }
 
-        // Expanded buffers are reused across rows
-        let mut row_thresh = vec![0u8; img.width];
+        let mut row_thresholds = vec![0u8; img.width];
         let mut row_valid = vec![0u8; img.width];
 
         for ty in 0..tiles_high {
-            // Expand tile thresholds to pixel-level for this tile-row
-            let tile_row_thresh = &tile_thresholds[ty * tiles_wide..(ty + 1) * tiles_wide];
-            let tile_row_valid = &tile_valid[ty * tiles_wide..(ty + 1) * tiles_wide];
-
-            for (tx, (&thresh, &valid)) in tile_row_thresh
-                .iter()
-                .zip(tile_row_valid.iter())
-                .enumerate()
-            {
-                let x_start = tx * ts;
-                row_thresh[x_start..x_start + ts].fill(thresh);
-                row_valid[x_start..x_start + ts].fill(valid);
+            // Expand tile stats to row buffers
+            for tx in 0..tiles_wide {
+                let idx = ty * tiles_wide + tx;
+                let thresh = tile_thresholds[idx];
+                let valid = tile_valid[idx];
+                for i in 0..ts {
+                    row_thresholds[tx * ts + i] = thresh;
+                    row_valid[tx * ts + i] = valid;
+                }
             }
 
             for dy in 0..ts {
@@ -174,7 +170,8 @@ impl ThresholdEngine {
                 let src_row = img.get_row(py);
                 let dst_start = py * img.width;
                 let dst_row = &mut output[dst_start..dst_start + img.width];
-                threshold_row_simd(src_row, dst_row, &row_thresh, &row_valid);
+
+                threshold_row_simd(src_row, dst_row, &row_thresholds, &row_valid);
             }
         }
     }
@@ -187,11 +184,8 @@ impl ThresholdEngine {
     "aarch64+neon"
 ))]
 fn compute_row_tile_stats_simd(src_row: &[u8], stats: &mut [TileStats], tile_size: usize) {
-    let tiles = stats.len();
-    for (tx, stat) in stats.iter_mut().enumerate().take(tiles) {
-        let x = tx * tile_size;
-        let chunk = &src_row[x..x + tile_size];
-
+    let chunks = src_row.chunks_exact(tile_size);
+    for (chunk, stat) in chunks.zip(stats.iter_mut()) {
         let mut rmin = 255u8;
         let mut rmax = 0u8;
         for &p in chunk {
@@ -205,7 +199,12 @@ fn compute_row_tile_stats_simd(src_row: &[u8], stats: &mut [TileStats], tile_siz
 }
 
 /// SIMD-optimized thresholding for a full row.
-#[multiversion(targets = "simd")]
+/// SIMD-optimized thresholding for a full row.
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
 fn threshold_row_simd(src: &[u8], dst: &mut [u8], thresholds: &[u8], valid_mask: &[u8]) {
     let len = src.len();
     for i in 0..len {

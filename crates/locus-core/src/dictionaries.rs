@@ -32,6 +32,8 @@ pub struct TagDictionary {
     codes: Cow<'static, [u64]>,
     /// Lookup table for O(1) exact matching.
     code_to_id: HashMap<u64, u16>,
+    /// All 4 rotated versions of all codes (for Hamming search).
+    rotated_codes: Vec<(u64, u16)>,
 }
 
 impl TagDictionary {
@@ -44,9 +46,15 @@ impl TagDictionary {
         codes: &'static [u64],
         sample_points: &'static [(f64, f64)],
     ) -> Self {
-        let mut code_to_id = HashMap::with_capacity(codes.len());
+        let mut code_to_id = HashMap::with_capacity(codes.len() * 4);
+        let mut rotated_codes = Vec::with_capacity(codes.len() * 4);
         for (id, &code) in codes.iter().enumerate() {
-            code_to_id.insert(code, id as u16);
+            let mut r = code;
+            for _ in 0..4 {
+                code_to_id.insert(r, id as u16);
+                rotated_codes.push((r, id as u16));
+                r = rotate90(r, dimension);
+            }
         }
         Self {
             name: Cow::Borrowed(name),
@@ -55,6 +63,7 @@ impl TagDictionary {
             sample_points: Cow::Borrowed(sample_points),
             codes: Cow::Borrowed(codes),
             code_to_id,
+            rotated_codes,
         }
     }
 
@@ -67,9 +76,15 @@ impl TagDictionary {
         codes: Vec<u64>,
         sample_points: Vec<(f64, f64)>,
     ) -> Self {
-        let mut code_to_id = HashMap::with_capacity(codes.len());
+        let mut code_to_id = HashMap::with_capacity(codes.len() * 4);
+        let mut rotated_codes = Vec::with_capacity(codes.len() * 4);
         for (id, &code) in codes.iter().enumerate() {
-            code_to_id.insert(code, id as u16);
+            let mut r = code;
+            for _ in 0..4 {
+                code_to_id.insert(r, id as u16);
+                rotated_codes.push((r, id as u16));
+                r = rotate90(r, dimension);
+            }
         }
         Self {
             name: Cow::Owned(name),
@@ -78,6 +93,7 @@ impl TagDictionary {
             sample_points: Cow::Owned(sample_points),
             codes: Cow::Owned(codes),
             code_to_id,
+            rotated_codes,
         }
     }
 
@@ -110,32 +126,19 @@ impl TagDictionary {
         };
         let bits = bits & mask;
 
-        // Try exact match first (covers ~60% of clean reads)
-        let mut rbits = bits;
-        for _ in 0..4 {
-            if let Some(&id) = self.code_to_id.get(&rbits) {
-                return Some((id, 0));
-            }
-            if self.sample_points.len() == self.dimension * self.dimension {
-                rbits = rotate90(rbits, self.dimension);
-            } else {
-                break;
-            }
+        // Try exact match first (covers ~60% of clean reads) - now O(1) with all rotations in map
+        if let Some(&id) = self.code_to_id.get(&bits) {
+            return Some((id, 0));
         }
 
         if max_hamming > 0 {
             let mut best: Option<(u16, u32)> = None;
-            for (id, &code) in self.codes.iter().enumerate() {
-                let mut rbits = bits;
-                for _ in 0..4 {
-                    let hamming = (rbits ^ code).count_ones();
-                    if hamming <= max_hamming && best.is_none_or(|(_, h)| hamming < h) {
-                        best = Some((id as u16, hamming));
-                    }
-                    if self.sample_points.len() == self.dimension * self.dimension {
-                        rbits = rotate90(rbits, self.dimension);
-                    } else {
-                        break;
+            for &(code_rot, id) in &self.rotated_codes {
+                let hamming = (bits ^ code_rot).count_ones();
+                if hamming <= max_hamming && best.is_none_or(|(_, h)| hamming < h) {
+                    best = Some((id, hamming));
+                    if hamming == 1 {
+                        // Early exit if we found a very good match (optional optimization)
                     }
                 }
             }

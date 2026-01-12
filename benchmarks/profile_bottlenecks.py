@@ -7,13 +7,15 @@ def profile_locus():
     suite = BenchmarkSuite()
 
     scenarios = [
-        ("Clean (1 target)", {"targets": 1, "noise": 0.0}),
-        ("Clean (20 targets)", {"targets": 20, "noise": 0.0}),
-        ("Noisy (5 targets, sigma=10)", {"targets": 5, "noise": 10.0}),
+        ("Single Tag (1 target)", {"targets": 1, "noise": 0.0}),
+        ("Medium Density (20 targets)", {"targets": 20, "noise": 0.0}),
+        ("High Density (200 targets)", {"targets": 200, "noise": 0.0}),
     ]
 
-    print(f"{'Scenario':<30} | {'Thresh':<8} | {'Seg':<8} | {'Quad':<8} | {'Dec':<8} | {'Total'}")
-    print("-" * 80)
+    print(
+        f"{'Scenario':<30} | {'Thresh':<8} | {'Seg':<8} | {'Quad':<8} | {'Dec':<8} | {'Cands':<6} | {'Dets':<6} | {'Total'}"
+    )
+    print("-" * 110)
 
     for name, cfg in scenarios:
         img, gt = suite.generate_image(cfg["targets"], noise_sigma=cfg["noise"])
@@ -30,10 +32,12 @@ def profile_locus():
         avg_seg = np.mean([s.segmentation_ms for s in stats_list])
         avg_quad = np.mean([s.quad_extraction_ms for s in stats_list])
         avg_dec = np.mean([s.decoding_ms for s in stats_list])
+        avg_cands = np.mean([s.num_candidates for s in stats_list])
+        avg_dets = np.mean([s.num_detections for s in stats_list])
         avg_total = np.mean([s.total_ms for s in stats_list])
 
         print(
-            f"{name:<30} | {avg_thresh:<8.2f} | {avg_seg:<8.2f} | {avg_quad:<8.2f} | {avg_dec:<8.2f} | {avg_total:.2f} ms"
+            f"{name:<30} | {avg_thresh:<8.2f} | {avg_seg:<8.2f} | {avg_quad:<8.2f} | {avg_dec:<8.2f} | {avg_cands:<6.1f} | {avg_dets:<6.1f} | {avg_total:.2f} ms"
         )
 
 

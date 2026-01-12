@@ -113,24 +113,26 @@ pub fn label_components_with_stats<'a>(
 ) -> LabelResult<'a> {
     let mut runs = BumpVec::new_in(arena);
 
-    // Pass 1: Extract runs
+    // Pass 1: Extract runs - Optimized with position()
     for y in 0..height {
-        let row_off = y * width;
+        let row = &binary[y * width..(y + 1) * width];
         let mut x = 0;
         while x < width {
-            if binary[row_off + x] == 0 {
-                let start = x;
-                while x < width && binary[row_off + x] == 0 {
-                    x += 1;
+            if let Some(pos) = row[x..].iter().position(|&p| p == 0) {
+                let start = x + pos;
+                let mut end = start + 1;
+                while end < width && row[end] == 0 {
+                    end += 1;
                 }
                 runs.push(Run {
                     y: y as u32,
                     x_start: start as u32,
-                    x_end: (x - 1) as u32,
+                    x_end: (end - 1) as u32,
                     id: runs.len() as u32,
                 });
+                x = end;
             } else {
-                x += 1;
+                break;
             }
         }
     }
@@ -184,13 +186,16 @@ pub fn label_components_with_stats<'a>(
     let mut component_stats: Vec<ComponentStats> = Vec::new();
     let mut next_label = 1u32;
 
+    // Pre-resolve roots to avoid repeated find() in Pass 4
+    let mut run_roots = Vec::with_capacity(runs.len());
+
     for run in &runs {
         let root = uf.find(run.id) as usize;
+        run_roots.push(root);
         if root_to_label[root] == 0 {
             root_to_label[root] = next_label;
             next_label += 1;
             let mut new_stat = ComponentStats::default();
-            // First run of this component: record the first pixel
             new_stat.first_pixel_x = run.x_start as u16;
             new_stat.first_pixel_y = run.y as u16;
             component_stats.push(new_stat);
@@ -204,15 +209,12 @@ pub fn label_components_with_stats<'a>(
         stats.pixel_count += run.x_end - run.x_start + 1;
     }
 
-    // Pass 4: Assign labels to pixels
+    // Pass 4: Assign labels to pixels - Optimized with slice fill
     let labels = arena.alloc_slice_fill_copy(width * height, 0u32);
-    for run in runs {
-        let root = uf.find(run.id) as usize;
-        let label = root_to_label[root];
+    for (run, root) in runs.iter().zip(run_roots) {
+        let label = root_to_label[root as usize];
         let row_off = run.y as usize * width;
-        for x in run.x_start..=run.x_end {
-            labels[row_off + x as usize] = label;
-        }
+        labels[row_off + run.x_start as usize..=row_off + run.x_end as usize].fill(label);
     }
 
     LabelResult {

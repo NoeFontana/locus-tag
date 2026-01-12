@@ -33,6 +33,14 @@ name = "dictionary_bench"
 harness = false
 
 [[bench]]
+name = "decoding_bench"
+harness = false
+
+[[bench]]
+name = "segmentation_bench"
+harness = false
+
+[[bench]]
 name = "comprehensive"
 harness = false
 required-features = ["extended-bench"]

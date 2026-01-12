@@ -49,6 +49,12 @@ pub struct PipelineStats {
     /// Total time (ms).
     #[pyo3(get)]
     pub total_ms: f64,
+    /// Number of quad candidates.
+    #[pyo3(get)]
+    pub num_candidates: usize,
+    /// Number of final detections.
+    #[pyo3(get)]
+    pub num_detections: usize,
 }
 
 impl From<locus_core::PipelineStats> for PipelineStats {
@@ -59,6 +65,8 @@ impl From<locus_core::PipelineStats> for PipelineStats {
             quad_extraction_ms: s.quad_extraction_ms,
             decoding_ms: s.decoding_ms,
             total_ms: s.total_ms,
+            num_candidates: s.num_candidates,
+            num_detections: s.num_detections,
         }
     }
 }

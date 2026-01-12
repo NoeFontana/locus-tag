@@ -149,7 +149,7 @@ impl<'a> ImageView<'a> {
 
     /// Unsafe accessor for a specific row.
     #[inline(always)]
-    unsafe fn get_row_unchecked(&self, y: usize) -> &[u8] {
+    pub(crate) unsafe fn get_row_unchecked(&self, y: usize) -> &[u8] {
         let start = y * self.stride;
         // SAFETY: Caller guarantees y < height. Width and stride are invariants.
         unsafe { &self.data.get_unchecked(start..start + self.width) }
