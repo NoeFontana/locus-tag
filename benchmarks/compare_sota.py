@@ -136,7 +136,7 @@ def benchmark_opencv(images, ground_truth, iterations):
 
 
 def benchmark_apriltag(images, ground_truth, iterations):
-    at_detector = AprilTagDetector(families="tag36h11", nthreads=1)
+    at_detector = AprilTagDetector(families="tag36h11", nthreads=1, quad_decimate=1.0)
 
     _ = at_detector.detect(images[0])  # Warm up
 

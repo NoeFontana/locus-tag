@@ -45,7 +45,7 @@ impl ThresholdEngine {
     }
 
     /// Compute min/max statistics for each tile in the image.
-    /// Optimized with SIMD-friendly memory access patterns.
+    /// Optimized with SIMD-friendly memory access patterns and subsampling (stride 2).
     #[must_use]
     pub fn compute_tile_stats(&self, img: &ImageView) -> Vec<TileStats> {
         let ts = self.tile_size;
@@ -56,7 +56,9 @@ impl ThresholdEngine {
         for ty in 0..tiles_high {
             let stats_row = &mut stats[ty * tiles_wide..(ty + 1) * tiles_wide];
 
-            for dy in 0..ts {
+            // Subsampling: Only process every other row within a tile (stride 2)
+            // This statistically approximates the min/max sufficient for thresholding
+            for dy in (0..ts).step_by(2) {
                 let py = ty * ts + dy;
                 let src_row = img.get_row(py);
 
@@ -177,7 +179,7 @@ impl ThresholdEngine {
     }
 }
 
-/// SIMD-optimized row tile stats computation.
+/// SIMD-optimized row tile stats computation with subsampling (stride 2).
 #[multiversion(targets(
     "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
@@ -188,7 +190,8 @@ fn compute_row_tile_stats_simd(src_row: &[u8], stats: &mut [TileStats], tile_siz
     for (chunk, stat) in chunks.zip(stats.iter_mut()) {
         let mut rmin = 255u8;
         let mut rmax = 0u8;
-        for &p in chunk {
+        // Subsampling: Only process every other pixel in the row (stride 2)
+        for &p in chunk.iter().step_by(2) {
             rmin = rmin.min(p);
             rmax = rmax.max(p);
         }

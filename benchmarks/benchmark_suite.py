@@ -11,11 +11,12 @@ class BenchmarkSuite:
     def __init__(self, resolution=(1280, 720)):
         self.resolution = resolution
         self.dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
-        self.at_detector = AprilTagDetector(families="tag36h11", nthreads=1)
-        self.at_detector_acc = AprilTagDetector(
-            families="tag36h11", nthreads=1, quad_decimate=1.0, refine_edges=1
-        )
-        self.ocv_detector = cv2.aruco.ArucoDetector(self.dictionary, cv2.aruco.DetectorParameters())
+        # Standardize: explicit decimate=1.0 for fair comparison with Locus Full Res
+        self.at_detector = AprilTagDetector(families="tag36h11", nthreads=1, quad_decimate=1.0)
+
+        parameters = cv2.aruco.DetectorParameters()
+        # Ensure OpenCV is single-threaded if possible (hard to enforce strictly via API, but we try standard settings)
+        self.ocv_detector = cv2.aruco.ArucoDetector(self.dictionary, parameters)
 
     def generate_image(self, num_tags, noise_sigma=0.0, blur_k=0):
         img = np.zeros((self.resolution[1], self.resolution[0]), dtype=np.uint8) + 128
@@ -153,17 +154,30 @@ class BenchmarkSuite:
         )
         return np.mean(latencies), f / len(gt_list), np.median(e) if e else float("inf")
 
-    def run_benchmark_apriltag_accurate(self, img, gt_list, iterations):
-        _ = self.at_detector_acc.detect(img)
+    def run_benchmark_opencv(self, img, gt_list, iterations):
+        # Initial warmup
+        _ = self.ocv_detector.detectMarkers(img)
         latencies = []
         for _ in range(iterations):
             start = time.perf_counter()
-            _ = self.at_detector_acc.detect(img)
+            _ = self.ocv_detector.detectMarkers(img)
             latencies.append(time.perf_counter() - start)
 
-        f, e = self.match_and_compute_errors(
-            self.at_detector_acc.detect(img), gt_list, self.compute_corner_error, "tag_id"
-        )
+        corners, ids, _ = self.ocv_detector.detectMarkers(img)
+
+        # Convert OpenCV format to simpler object list for matching
+        class OCVDet:
+            def __init__(self, id, corners):
+                self.id = id[0]
+                self.corners = corners[0]
+                self.center = np.mean(self.corners, axis=0)
+
+        detections = []
+        if ids is not None:
+            for i, id_arr in enumerate(ids):
+                detections.append(OCVDet(id_arr, corners[i]))
+
+        f, e = self.match_and_compute_errors(detections, gt_list, self.compute_corner_error, "id")
         return np.mean(latencies), f / len(gt_list), np.median(e) if e else float("inf")
 
 
@@ -185,8 +199,8 @@ def main():
     benchmarks = [
         ("Locus", suite.run_benchmark_locus),
         ("LocusGrad", suite.run_benchmark_locus_gradient),
-        ("AprilTag", suite.run_benchmark_apriltag),
-        ("AprilTagAcc", suite.run_benchmark_apriltag_accurate),
+        ("AprilTag", suite.run_benchmark_apriltag),  # Now decimate=1.0 by default in __init__
+        ("OpenCV", suite.run_benchmark_opencv),
     ]
 
     for count in target_counts:
