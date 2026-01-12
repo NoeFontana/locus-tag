@@ -1,0 +1,9 @@
+[default.extend-words]
+locus = "locus"
+aruco = "aruco"
+nalgebra = "nalgebra"
+pyo3 = "pyo3"
+maturin = "maturin"
+bumpalo = "bumpalo"
+divan = "divan"
+multiversion = "multiversion"
