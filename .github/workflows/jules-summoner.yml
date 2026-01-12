@@ -1,0 +1,41 @@
+name: Summon Jules on Failure
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+
+permissions:
+  issues: write
+  actions: read
+
+jobs:
+  summon-jules:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    steps:
+      - name: Download Failure Logs
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Issue for Jules
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          REPO: ${{ github.repository }}
+        run: |
+          RUN_URL="https://github.com/$REPO/actions/runs/$RUN_ID"
+
+          BODY="@jules The CI workflow failed. Please analyze the failure and open a PR to fix it.
+
+          Failed Run: $RUN_URL
+
+          Please look at the logs linked above, reproduce the error, and fix it."
+
+          gh issue create \
+            --title "🚨 CI Failure: Run #$RUN_ID" \
+            --body "$BODY" \
+            --label "jules-fix"
