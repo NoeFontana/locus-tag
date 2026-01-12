@@ -9,7 +9,6 @@ Usage:
     python scripts/generate_dictionaries.py
 """
 
-import re
 import sys
 from pathlib import Path
 
@@ -1003,8 +1002,8 @@ def generate_sparse_points(bit_order: list, total_width: int) -> list:
 def generate_point_array(name: str, points: list) -> str:
     """Generate Rust array for sample points."""
     lines = [f"/// Sample points for {name} (canonical coordinates)."]
-    lines.append(f"#[rustfmt::skip]")
-    lines.append(f"#[allow(clippy::unreadable_literal)]")
+    lines.append("#[rustfmt::skip]")
+    lines.append("#[allow(clippy::unreadable_literal)]")
     lines.append(f"pub static {name}: [(f64, f64); {len(points)}] = [")
 
     for i in range(0, len(points), 2):

@@ -1,5 +1,3 @@
-from typing import List
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from .locus import TagFamily
@@ -32,7 +30,7 @@ class DetectOptions(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    families: List[TagFamily] = Field(default_factory=list)
+    families: list[TagFamily] = Field(default_factory=list)
 
     @classmethod
     def all(cls) -> "DetectOptions":

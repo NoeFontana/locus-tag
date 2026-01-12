@@ -70,7 +70,7 @@ def test_config():
     if len(results_edge) == 0:
         print("SUCCESS: Strict edge score config filtered out the tag")
     else:
-        print(f"FAILURE: Strict edge score config found tags")
+        print("FAILURE: Strict edge score config found tags")
         exit(1)
 
     # 4. Test Persistence (Arena reuse) calls

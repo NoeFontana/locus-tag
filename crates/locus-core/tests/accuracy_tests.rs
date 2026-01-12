@@ -3,7 +3,7 @@
 #![allow(clippy::uninlined_format_args)]
 
 use locus_core::Detector;
-use locus_core::test_utils::{compute_corner_error, generate_test_image};
+use locus_core::test_utils::compute_corner_error;
 
 #[test]
 fn test_accuracy_synthetic() {

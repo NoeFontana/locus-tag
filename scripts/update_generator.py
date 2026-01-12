@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import sys
+import re
 from pathlib import Path
 
 target_file = Path("scripts/generate_dictionaries.py")
@@ -323,8 +323,6 @@ new_func = """def generate_dictionaries_rs() -> str:
     parts.append("")
     return "\\n".join(parts)
 """
-
-import re
 
 # Regex to find definition of generate_dictionaries_rs and replace until main
 content = re.sub(

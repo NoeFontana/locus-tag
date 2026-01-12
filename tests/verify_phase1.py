@@ -1,10 +1,12 @@
-import numpy as np
-import locus
 import sys
+
+import locus
+import numpy as np
+
 
 def test_zero_copy():
     print("Testing zero-copy ingestion...")
-    
+
     # 1. Standard C-contiguous array
     img = np.zeros((1080, 1920), dtype=np.uint8)
     img[50, 60] = 255
@@ -12,14 +14,14 @@ def test_zero_copy():
     print(f"Standard array: {len(detections)} detections found.")
     assert len(detections) == 1
     assert detections[0].id == 42
-    
+
     # 2. Strided array (padding)
     # Create an array that is larger and then slice it to create non-trivial strides
     full_img = np.zeros((1080, 2000), dtype=np.uint8)
     img_strided = full_img[:, :1920]
     assert img_strided.strides[0] == 2000
     assert img_strided.strides[1] == 1
-    
+
     detections = locus.detect_tags(img_strided)
     print(f"Strided array: {len(detections)} detections found.")
     assert len(detections) == 1
@@ -35,6 +37,6 @@ def test_zero_copy():
 
     print("Verification successful!")
 
+
 if __name__ == "__main__":
     test_zero_copy()
-

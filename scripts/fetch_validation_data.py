@@ -1,4 +1,3 @@
-import os
 import tarfile
 import urllib.request
 from pathlib import Path

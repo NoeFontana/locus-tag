@@ -1,5 +1,4 @@
 import cv2
-import numpy as np
 
 
 def get_apriltag_bits(tag_id, family=cv2.aruco.DICT_APRILTAG_36h11):

@@ -9,7 +9,6 @@ Usage:
 """
 
 import cv2
-import numpy as np
 
 
 def extract_aruco_codes(dict_id: int, dict_name: str, marker_size: int) -> list[int]:
@@ -76,8 +75,6 @@ def main():
     # DICT_4X4 family
     dict_4x4_50 = extract_aruco_codes(cv2.aruco.DICT_4X4_50, "DICT_4X4_50", 4)
     dict_4x4_100 = extract_aruco_codes(cv2.aruco.DICT_4X4_100, "DICT_4X4_100", 4)
-    dict_4x4_250 = extract_aruco_codes(cv2.aruco.DICT_4X4_250, "DICT_4X4_250", 4)
-    dict_4x4_1000 = extract_aruco_codes(cv2.aruco.DICT_4X4_1000, "DICT_4X4_1000", 4)
 
     print()
     print("=" * 60)

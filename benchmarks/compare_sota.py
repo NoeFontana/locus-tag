@@ -4,6 +4,7 @@ import time
 import cv2
 import locus
 import numpy as np
+import rerun as rr
 from pupil_apriltags import Detector as AprilTagDetector
 
 
@@ -62,9 +63,6 @@ def compute_corner_error(detected_corners, gt_corners):
         error = np.mean(np.linalg.norm(rotated - gt, axis=1))
         min_error = min(min_error, error)
     return min_error
-
-
-import rerun as rr
 
 
 def benchmark_locus(images, ground_truth, iterations, use_rerun=False):

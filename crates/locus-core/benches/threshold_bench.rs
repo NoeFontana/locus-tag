@@ -26,7 +26,6 @@ fn bench_threshold_1080p_stats_checkered_subsampled(bencher: divan::Bencher) {
     let height = 1080;
     let data = generate_checkered(width, height);
     let img = ImageView::new(&data, width, height, width).unwrap();
-    let engine = ThresholdEngine::new();
     let ts = 8; // default
 
     bencher.bench_local(move || {
