@@ -32,14 +32,23 @@ fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/icra2020")
 }
 
-fn load_image(name: &str) -> locus_core::image::Image {
+struct OwnedImage {
+    data: Vec<u8>,
+    width: usize,
+    height: usize,
+}
+
+fn load_image(name: &str) -> OwnedImage {
     let path = fixtures_dir().join(name);
     let img = image::open(&path)
         .unwrap_or_else(|e| panic!("Failed to load image {}: {}", path.display(), e))
         .into_luma8();
     let (width, height) = img.dimensions();
-    locus_core::image::Image::from_vec(width as usize, height as usize, img.into_raw())
-        .expect("Failed to create Image")
+    OwnedImage {
+        data: img.into_raw(),
+        width: width as usize,
+        height: height as usize,
+    }
 }
 
 fn load_ground_truth(name: &str) -> GroundTruth {
@@ -72,7 +81,8 @@ fn test_icra2020_forward_0037() {
     };
 
     let mut detector = Detector::new();
-    let img_view = img.as_view();
+    let img_view =
+        locus_core::image::ImageView::new(&img.data, img.width, img.height, img.width).unwrap();
     let detections = detector.detect_with_options(&img_view, &options);
 
     // Build lookup maps
@@ -103,10 +113,10 @@ fn test_icra2020_forward_0037() {
     for det in &detections {
         if let Some(gt_tag) = gt.tags.iter().find(|t| t.tag_id == det.id) {
             let det_corners: [[f64; 2]; 4] = [
-                [det.corners[0].0, det.corners[0].1],
-                [det.corners[1].0, det.corners[1].1],
-                [det.corners[2].0, det.corners[2].1],
-                [det.corners[3].0, det.corners[3].1],
+                [det.corners[0][0], det.corners[0][1]],
+                [det.corners[1][0], det.corners[1][1]],
+                [det.corners[2][0], det.corners[2][1]],
+                [det.corners[3][0], det.corners[3][1]],
             ];
             let err = corner_error(&det_corners, &gt_tag.corners);
             corner_errors.push(err);

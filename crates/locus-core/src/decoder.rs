@@ -159,6 +159,7 @@ impl Homography {
     }
 
     /// Project a point using the homography.
+    #[must_use]
     pub fn project(&self, p: [f64; 2]) -> [f64; 2] {
         let res = self.h * SVector::<f64, 3>::new(p[0], p[1], 1.0);
         let w = res[2];
@@ -170,6 +171,7 @@ impl Homography {
 ///
 /// Uses bilinear interpolation for sampling and a spatially adaptive threshold
 /// (based on min/max stats of the grid) to determine bit values.
+#[allow(clippy::cast_sign_loss)]
 pub fn sample_grid(
     img: &crate::image::ImageView,
     homography: &Homography,
@@ -727,6 +729,7 @@ mod tests {
 }
 
 /// Convert a TagFamily enum to a boxed decoder instance.
+#[must_use]
 pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send + Sync> {
     match family {
         config::TagFamily::AprilTag36h11 => Box::new(AprilTag36h11),

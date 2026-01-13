@@ -5,7 +5,14 @@ use rand_distr::{Distribution, Normal};
 ///
 /// This generates a tag with a white quiet zone, placed on a white background,
 /// matching the setup used in Python benchmarks.
-pub fn generate_test_image(
+/// rotation (rad), translation (x,y), scaling (pixels).
+#[must_use]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::missing_panics_doc
+)]
+pub fn generate_synthetic_test_image(
     family: crate::config::TagFamily,
     id: u16,
     tag_size: usize,
@@ -63,11 +70,11 @@ pub fn generate_test_image(
 
     if noise_sigma > 0.0 {
         let mut rng = thread_rng();
-        let normal = Normal::new(0.0, f64::from(noise_sigma)).unwrap();
+        let normal = Normal::new(0.0, f64::from(noise_sigma)).expect("Invalid noise params");
 
         for pixel in &mut data {
             let noise = normal.sample(&mut rng) as i32;
-            let val = (*pixel as i32 + noise).clamp(0, 255);
+            let val = (i32::from(*pixel) + noise).clamp(0, 255);
             *pixel = val as u8;
         }
     }
@@ -85,6 +92,7 @@ pub fn generate_test_image(
     (data, gt_corners)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_cell(
     data: &mut [u8],
     stride: usize,
@@ -166,11 +174,13 @@ impl Default for TestImageParams {
     }
 }
 
-/// Generate a test image with extended photometric parameters.
+/// Generate a test image based on the provided parameters.
+/// Includes tag generation, placement, and photometric adjustments.
 #[must_use]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 pub fn generate_test_image_with_params(params: &TestImageParams) -> (Vec<u8>, [[f64; 2]; 4]) {
     // First generate base image
-    let (mut data, corners) = generate_test_image(
+    let (mut data, corners) = generate_synthetic_test_image(
         params.family,
         params.id,
         params.tag_size,
@@ -180,26 +190,32 @@ pub fn generate_test_image_with_params(params: &TestImageParams) -> (Vec<u8>, [[
 
     // Apply brightness and contrast adjustments
     if params.brightness_offset != 0 || (params.contrast_scale - 1.0).abs() > 0.001 {
-        apply_brightness_contrast(&mut data, params.brightness_offset, params.contrast_scale);
+        apply_brightness_contrast(
+            &mut data,
+            i32::from(params.brightness_offset),
+            params.contrast_scale,
+        );
     }
 
     (data, corners)
 }
 
-/// Apply brightness offset and contrast scaling to image data.
-pub fn apply_brightness_contrast(data: &mut [u8], brightness: i16, contrast: f32) {
-    for pixel in data.iter_mut() {
-        // Apply contrast around mid-gray (128)
-        let adjusted = ((*pixel as f32 - 128.0) * contrast + 128.0) as i32;
-        // Apply brightness
-        let with_brightness = adjusted + i32::from(brightness);
-        // Clamp to valid range
+/// Apply brightness and contrast to an image.
+/// `brightness`: -255 to +255
+/// `contrast`: 0.0 to 127.0 (1.0 = no change)
+#[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+pub fn apply_brightness_contrast(image: &mut [u8], brightness: i32, contrast: f32) {
+    for pixel in image.iter_mut() {
+        let b = f32::from(*pixel);
+        let with_contrast = (b - 128.0) * contrast + 128.0;
+        let with_brightness = with_contrast as i32 + brightness;
         *pixel = with_brightness.clamp(0, 255) as u8;
     }
 }
 
 /// Count black pixels in binary data.
 #[must_use]
+#[allow(clippy::naive_bytecount)]
 pub fn count_black_pixels(data: &[u8]) -> usize {
     data.iter().filter(|&&p| p == 0).count()
 }
@@ -207,11 +223,28 @@ pub fn count_black_pixels(data: &[u8]) -> usize {
 /// Check if the tag's outer black border is correctly binarized.
 /// Returns the ratio of correctly black pixels in the 1-cell-wide border (0.0 to 1.0).
 #[must_use]
+#[allow(clippy::cast_sign_loss)]
 pub fn measure_border_integrity(binary: &[u8], width: usize, corners: &[[f64; 2]; 4]) -> f64 {
-    let min_x = corners.iter().map(|c| c[0]).fold(f64::MAX, f64::min) as usize;
-    let max_x = corners.iter().map(|c| c[0]).fold(f64::MIN, f64::max) as usize;
-    let min_y = corners.iter().map(|c| c[1]).fold(f64::MAX, f64::min) as usize;
-    let max_y = corners.iter().map(|c| c[1]).fold(f64::MIN, f64::max) as usize;
+    let min_x = corners
+        .iter()
+        .map(|c| c[0])
+        .fold(f64::MAX, f64::min)
+        .max(0.0) as usize;
+    let max_x = corners
+        .iter()
+        .map(|c| c[0])
+        .fold(f64::MIN, f64::max)
+        .max(0.0) as usize;
+    let min_y = corners
+        .iter()
+        .map(|c| c[1])
+        .fold(f64::MAX, f64::min)
+        .max(0.0) as usize;
+    let max_y = corners
+        .iter()
+        .map(|c| c[1])
+        .fold(f64::MIN, f64::max)
+        .max(0.0) as usize;
 
     let height = binary.len() / width;
     let min_x = min_x.min(width.saturating_sub(1));

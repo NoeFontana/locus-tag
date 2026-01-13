@@ -60,7 +60,7 @@ impl Default for DetectorConfig {
             quad_min_fill_ratio: 0.3,
             quad_max_fill_ratio: 0.95,
             quad_min_edge_length: 3.0, // Lowered from 4.0 for small tags
-            quad_min_edge_score: 10.0,
+            quad_min_edge_score: 5.0,  // Lowered from 10.0 for small/blurry tags
         }
     }
 }
@@ -213,6 +213,7 @@ impl TagFamily {
 /// ```
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Default)]
 pub struct DetectOptions {
     /// Tag families to attempt decoding. Empty means use detector defaults.
     pub families: Vec<TagFamily>,
@@ -220,16 +221,6 @@ pub struct DetectOptions {
     pub intrinsics: Option<crate::pose::CameraIntrinsics>,
     /// Physical size of the tag in world units (e.g. meters) for 3D pose estimation.
     pub tag_size: Option<f64>,
-}
-
-impl Default for DetectOptions {
-    fn default() -> Self {
-        Self {
-            families: Vec::new(), // Empty = use detector's configured decoders
-            intrinsics: None,
-            tag_size: None,
-        }
-    }
 }
 
 impl DetectOptions {

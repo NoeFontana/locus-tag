@@ -156,7 +156,7 @@ impl Detector {
         quad_min_fill_ratio = 0.3,
         quad_max_fill_ratio = 0.95,
         quad_min_edge_length = 3.0,
-        quad_min_edge_score = 10.0
+        quad_min_edge_score = 5.0
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -185,7 +185,7 @@ impl Detector {
     }
 
     /// Detect tags in the image using default decoders.
-    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
     fn detect(&mut self, img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
         let view = create_image_view(&img)?;
         let detections = self.inner.detect(&view);
@@ -197,7 +197,7 @@ impl Detector {
     /// Args:
     ///     img: Grayscale image as numpy array
     ///     families: List of TagFamily to decode
-    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
     fn detect_with_options(
         &mut self,
         img: PyReadonlyArray2<u8>,
@@ -212,7 +212,7 @@ impl Detector {
     }
 
     /// Detect tags with timing statistics.
-    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
     fn detect_with_stats(
         &mut self,
         img: PyReadonlyArray2<u8>,

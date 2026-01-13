@@ -195,9 +195,11 @@ pub fn label_components_with_stats<'a>(
         if root_to_label[root] == 0 {
             root_to_label[root] = next_label;
             next_label += 1;
-            let mut new_stat = ComponentStats::default();
-            new_stat.first_pixel_x = run.x_start as u16;
-            new_stat.first_pixel_y = run.y as u16;
+            let new_stat = ComponentStats {
+                first_pixel_x: run.x_start as u16,
+                first_pixel_y: run.y as u16,
+                ..Default::default()
+            };
             component_stats.push(new_stat);
         }
         let label_idx = (root_to_label[root] - 1) as usize;
@@ -212,7 +214,7 @@ pub fn label_components_with_stats<'a>(
     // Pass 4: Assign labels to pixels - Optimized with slice fill
     let labels = arena.alloc_slice_fill_copy(width * height, 0u32);
     for (run, root) in runs.iter().zip(run_roots) {
-        let label = root_to_label[root as usize];
+        let label = root_to_label[root];
         let row_off = run.y as usize * width;
         labels[row_off + run.x_start as usize..=row_off + run.x_end as usize].fill(label);
     }

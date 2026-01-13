@@ -16,7 +16,7 @@ fn test_accuracy_synthetic() {
     ];
 
     for (family, tag_id, size) in test_cases {
-        let (data, gt_corners) = locus_core::test_utils::generate_test_image(
+        let (data, gt_corners) = locus_core::test_utils::generate_synthetic_test_image(
             family,
             tag_id as u16,
             size,
@@ -68,8 +68,13 @@ fn test_pose_accuracy() {
     let cy = 240.0;
 
     // Generate synthetic tag with valid bit pattern
-    let (data, _gt_corners) =
-        locus_core::test_utils::generate_test_image(family, tag_id, tag_size_px, canvas_size, 0.0);
+    let (data, _gt_corners) = locus_core::test_utils::generate_synthetic_test_image(
+        family,
+        tag_id,
+        tag_size_px,
+        canvas_size,
+        0.0,
+    );
     let img =
         locus_core::image::ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
 

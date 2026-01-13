@@ -222,25 +222,25 @@ impl Detector {
         for mut cand in candidates {
             if let Some(h) = crate::decoder::Homography::square_to_quad(&cand.corners) {
                 for decoder in active_decoders {
-                    if let Some(bits) = crate::decoder::sample_grid(img, &h, decoder.as_ref()) {
-                        if let Some((id, hamming)) = decoder.decode(bits) {
-                            cand.id = id;
-                            cand.hamming = hamming;
+                    if let Some(bits) = crate::decoder::sample_grid(img, &h, decoder.as_ref())
+                        && let Some((id, hamming)) = decoder.decode(bits)
+                    {
+                        cand.id = id;
+                        cand.hamming = hamming;
 
-                            // Compute 3D pose if requested
-                            if let (Some(intrinsics), Some(tag_size)) =
-                                (options.intrinsics, options.tag_size)
-                            {
-                                cand.pose = crate::pose::estimate_tag_pose(
-                                    &intrinsics,
-                                    &cand.corners,
-                                    tag_size,
-                                );
-                            }
-
-                            final_detections.push(cand);
-                            break;
+                        // Compute 3D pose if requested
+                        if let (Some(intrinsics), Some(tag_size)) =
+                            (options.intrinsics, options.tag_size)
+                        {
+                            cand.pose = crate::pose::estimate_tag_pose(
+                                &intrinsics,
+                                &cand.corners,
+                                tag_size,
+                            );
                         }
+
+                        final_detections.push(cand);
+                        break;
                     }
                 }
             }

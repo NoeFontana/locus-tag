@@ -83,51 +83,63 @@ pub fn extract_quads_with_config(
         if contour.len() >= 30 {
             // Adaptive epsilon: 2% of perimeter (like OpenCV approxPolyDP)
             let perimeter = contour.len() as f64;
-            let epsilon = (perimeter * 0.02).max(4.0);
+            let epsilon = (perimeter * 0.02).max(2.0);
             let simplified = douglas_peucker(arena, &contour, epsilon);
-            if simplified.len() == 5 {
-                let area = polygon_area(&simplified);
-                let perimeter = contour.len() as f64;
-                let compactness = (12.566 * area) / (perimeter * perimeter);
+            // Allow somewhat jagged quads (up to 10 points) and reduce them
+            if simplified.len() >= 5 && simplified.len() <= 11 {
+                let simpl_len = simplified.len();
+                let reduced = if simpl_len == 5 {
+                    simplified
+                } else {
+                    reduce_to_quad(arena, &simplified)
+                };
 
-                let min_area_f64 = f64::from(config.quad_min_area);
-                if area > min_area_f64 && compactness > 0.5 {
-                    let mut ok = true;
-                    for i in 0..4 {
-                        let d2 = (simplified[i].x - simplified[i + 1].x).powi(2)
-                            + (simplified[i].y - simplified[i + 1].y).powi(2);
-                        if d2 < min_edge_len_sq {
-                            ok = false;
-                            break;
+                // Must have successfully reduced to 4 corners (+1 closing)
+                if reduced.len() == 5 {
+                    let area = polygon_area(&reduced);
+                    let perimeter = contour.len() as f64;
+                    // Relax compactness check slightly for small jagged tags (was 0.5)
+                    let compactness = (12.566 * area) / (perimeter * perimeter);
+
+                    let min_area_f64 = f64::from(config.quad_min_area);
+                    if area > min_area_f64 && compactness > 0.4 {
+                        let mut ok = true;
+                        for i in 0..4 {
+                            let d2 = (reduced[i].x - reduced[i + 1].x).powi(2)
+                                + (reduced[i].y - reduced[i + 1].y).powi(2);
+                            if d2 < min_edge_len_sq {
+                                ok = false;
+                                break;
+                            }
                         }
-                    }
 
-                    if ok {
-                        // Compute center first, then refine corners
-                        let center = polygon_center(&simplified);
-                        let corners = [
-                            refine_corner(img, simplified[0], center),
-                            refine_corner(img, simplified[1], center),
-                            refine_corner(img, simplified[2], center),
-                            refine_corner(img, simplified[3], center),
-                        ];
+                        if ok {
+                            // Compute center first, then refine corners
+                            let center = polygon_center(&reduced);
+                            let corners = [
+                                refine_corner(img, reduced[0], center),
+                                refine_corner(img, reduced[1], center),
+                                refine_corner(img, reduced[2], center),
+                                refine_corner(img, reduced[3], center),
+                            ];
 
-                        // Filter: weak edge alignment
-                        let edge_score = calculate_edge_score(img, corners);
-                        if edge_score > config.quad_min_edge_score {
-                            detections.push(Detection {
-                                id: label,
-                                center,
-                                corners: [
-                                    [corners[0].x, corners[0].y],
-                                    [corners[1].x, corners[1].y],
-                                    [corners[2].x, corners[2].y],
-                                    [corners[3].x, corners[3].y],
-                                ],
-                                hamming: 0,
-                                decision_margin: area,
-                                pose: None,
-                            });
+                            // Filter: weak edge alignment
+                            let edge_score = calculate_edge_score(img, corners);
+                            if edge_score > config.quad_min_edge_score {
+                                detections.push(Detection {
+                                    id: label,
+                                    center,
+                                    corners: [
+                                        [corners[0].x, corners[0].y],
+                                        [corners[1].x, corners[1].y],
+                                        [corners[2].x, corners[2].y],
+                                        [corners[3].x, corners[3].y],
+                                    ],
+                                    hamming: 0,
+                                    decision_margin: area,
+                                    pose: None,
+                                });
+                            }
                         }
                     }
                 }
@@ -384,6 +396,55 @@ pub fn refine_corner(img: &ImageView, p: Point, center: [f64; 2]) -> Point {
     }
 }
 
+/// Reducing a polygon to a quad (4 vertices + 1 closing) by iteratively removing
+/// the vertex that forms the smallest area triangle with its neighbors.
+/// This is robust for noisy/jagged shapes that are approximately quadrilateral.
+fn reduce_to_quad<'a>(arena: &'a Bump, poly: &[Point]) -> BumpVec<'a, Point> {
+    if poly.len() <= 5 {
+        return BumpVec::from_iter_in(poly.iter().copied(), arena);
+    }
+
+    // Work on a mutable copy
+    let mut current = BumpVec::from_iter_in(poly.iter().copied(), arena);
+    // Remove closing point for processing
+    current.pop();
+
+    while current.len() > 4 {
+        let n = current.len();
+        let mut min_area = f64::MAX;
+        let mut min_idx = 0;
+
+        for i in 0..n {
+            let p_prev = current[(i + n - 1) % n];
+            let p_curr = current[i];
+            let p_next = current[(i + 1) % n];
+
+            // Triangle area: 0.5 * |x1(y2 - y3) + x2(y3 - y1) + x3(y1 - y2)|
+            let area = (p_prev.x * (p_curr.y - p_next.y)
+                + p_curr.x * (p_next.y - p_prev.y)
+                + p_next.x * (p_prev.y - p_curr.y))
+                .abs()
+                * 0.5;
+
+            if area < min_area {
+                min_area = area;
+                min_idx = i;
+            }
+        }
+
+        // Remove the vertex contributing least to the shape
+        current.remove(min_idx);
+    }
+
+    // Re-close the loop
+    if !current.is_empty() {
+        let first = current[0];
+        current.push(first);
+    }
+
+    current
+}
+
 /// Calculate the minimum average gradient magnitude along the 4 edges of the quad.
 ///
 /// Returns the lowest score among the 4 edges. If any edge is very weak,
@@ -405,7 +466,7 @@ fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
         }
 
         // Sample points along the edge (excluding corners to avoid corner effects)
-        let n_samples = (len as usize).min(10).max(3); // At least 3, at most 10
+        let n_samples = (len as usize).clamp(3, 10); // At least 3, at most 10
         let mut edge_mag_sum = 0.0;
 
         for k in 1..=n_samples {

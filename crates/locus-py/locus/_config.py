@@ -14,12 +14,12 @@ class DetectorConfig(BaseModel):
     threshold_tile_size: int = Field(default=8, ge=2, le=64)
     threshold_min_range: int = Field(default=10, ge=0, le=255)
 
-    quad_min_area: int = Field(default=400, ge=10)
+    quad_min_area: int = Field(default=100, ge=10)
     quad_max_aspect_ratio: float = Field(default=3.0, ge=1.0)
     quad_min_fill_ratio: float = Field(default=0.3, ge=0.0, le=1.0)
     quad_max_fill_ratio: float = Field(default=0.95, ge=0.0, le=1.0)
-    quad_min_edge_length: float = Field(default=4.0, ge=0.0)
-    quad_min_edge_score: float = Field(default=10.0, ge=0.0)
+    quad_min_edge_length: float = Field(default=3.0, ge=0.0)
+    quad_min_edge_score: float = Field(default=5.0, ge=0.0)
 
 
 class DetectOptions(BaseModel):

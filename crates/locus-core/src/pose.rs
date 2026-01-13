@@ -1,3 +1,4 @@
+#![allow(clippy::many_single_char_names, clippy::similar_names)]
 use nalgebra::{Matrix3, Vector3};
 
 /// Camera intrinsics parameters.
@@ -15,16 +16,19 @@ pub struct CameraIntrinsics {
 
 impl CameraIntrinsics {
     /// Create new intrinsics.
+    #[must_use]
     pub fn new(fx: f64, fy: f64, cx: f64, cy: f64) -> Self {
         Self { fx, fy, cx, cy }
     }
 
     /// Convert to a 3x3 matrix.
+    #[must_use]
     pub fn as_matrix(&self) -> Matrix3<f64> {
         Matrix3::new(self.fx, 0.0, self.cx, 0.0, self.fy, self.cy, 0.0, 0.0, 1.0)
     }
 
     /// Get inverse matrix.
+    #[must_use]
     pub fn inv_matrix(&self) -> Matrix3<f64> {
         Matrix3::new(
             1.0 / self.fx,
@@ -40,6 +44,7 @@ impl CameraIntrinsics {
     }
 }
 
+// 3D Pose Estimation using PnP (Perspective-n-Point).
 /// A 3D pose representing rotation and translation.
 #[derive(Debug, Clone, Copy)]
 pub struct Pose {
@@ -51,6 +56,7 @@ pub struct Pose {
 
 impl Pose {
     /// Create a new pose.
+    #[must_use]
     pub fn new(rotation: Matrix3<f64>, translation: Vector3<f64>) -> Self {
         Self {
             rotation,
@@ -59,6 +65,7 @@ impl Pose {
     }
 
     /// Project a 3D point into the image using this pose and intrinsics.
+    #[must_use]
     pub fn project(&self, point: &Vector3<f64>, intrinsics: &CameraIntrinsics) -> [f64; 2] {
         let p_cam = self.rotation * point + self.translation;
         let x = (p_cam.x / p_cam.z) * intrinsics.fx + intrinsics.cx;
@@ -73,6 +80,10 @@ impl Pose {
 /// * `intrinsics` - Camera intrinsics.
 /// * `corners` - Detected corners in image coordinates [[x, y]; 4].
 /// * `tag_size` - Physical size of the tag in world units (e.g., meters).
+///
+/// # Panics
+/// Panics if SVD decomposition fails during orthogonalization (extremely rare).
+#[must_use]
 pub fn estimate_tag_pose(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],

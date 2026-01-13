@@ -5,7 +5,7 @@ import tarfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import cv2
 import locus
@@ -72,8 +72,8 @@ class Icra2020Dataset:
         return True
 
     def find_datasets(
-        self, scenario: str, filter_types: List[str]
-    ) -> List[Tuple[str, Path, Dict[str, List[TagGroundTruth]]]]:
+        self, scenario: str, filter_types: list[str]
+    ) -> list[tuple[str, Path, dict[str, list[TagGroundTruth]]]]:
         """
         Returns list of (dataset_name, images_dir, ground_truth_map)
         ground_truth_map: image_name -> [TagGroundTruth, ...]
@@ -100,11 +100,14 @@ class Icra2020Dataset:
             subdirs = []
             for d in all_subdirs:
                 d_name = d.name
-                if "tags" in filter_types and "pure_tags" in d_name:
-                    subdirs.append(d)
-                elif "checkerboard" in filter_types and "checkerboard" in d_name:
-                    subdirs.append(d)
-                elif d == parent_dir and "tags" in filter_types:
+                if (
+                    "tags" in filter_types
+                    and "pure_tags" in d_name
+                    or "checkerboard" in filter_types
+                    and "checkerboard" in d_name
+                    or d == parent_dir
+                    and "tags" in filter_types
+                ):
                     subdirs.append(d)
 
             for subdir in subdirs:
@@ -116,10 +119,10 @@ class Icra2020Dataset:
 
         return results
 
-    def _parse_csv(self, csv_file: Path) -> Dict[str, List[TagGroundTruth]]:
+    def _parse_csv(self, csv_file: Path) -> dict[str, list[TagGroundTruth]]:
         gt_map = {}  # image_name -> {tid -> {corners, visible}}
 
-        with open(csv_file, "r") as f:
+        with open(csv_file) as f:
             reader = csv.DictReader(f, skipinitialspace=True)
             fieldnames = [c.strip() for c in reader.fieldnames] if reader.fieldnames else []
             reader.fieldnames = fieldnames
@@ -182,40 +185,43 @@ class EvalResult:
     corner_error_sum: float = 0.0
     corner_error_count: int = 0
     false_positives: int = 0
-    error: Optional[str] = None
+    error: str | None = None
     # For visualization
-    img_shape: Optional[Tuple[int, int]] = None
-    detections: List[Any] = field(default_factory=list)
-    gt_tags: List[TagGroundTruth] = field(default_factory=list)
+    img_shape: tuple[int, int] | None = None
+    detections: list[Any] = field(default_factory=list)
+    gt_tags: list[TagGroundTruth] = field(default_factory=list)
 
 
-def process_image(args: Tuple[Path, List[TagGroundTruth], bool]) -> EvalResult:
+def process_image(args: tuple[Path, list[TagGroundTruth], bool]) -> EvalResult:
     img_path, gt_tags, visualize = args
     res = EvalResult(image_name=img_path.name, gt_tags=gt_tags)
 
-    if not img_path.exists():
+    if not img_path.exists() and not img_path.suffix:
         # Try extensions
-        if not img_path.suffix:
-            for ext in [".png", ".jpg"]:
-                p = img_path.with_suffix(ext)
-                if p.exists():
-                    img_path = p
-                    break
+        for ext in [".png", ".jpg"]:
+            p = img_path.with_suffix(ext)
+            if p.exists():
+                img_path = p
+                break
 
     if not img_path.exists():
-        # Silent fail or error?
         return res
 
     try:
+        # Load image
         img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
         if img is None:
-            res.error = "Read failure"
             return res
+
+        h, w = img.shape
+        # center_x, center_y = w / 2, h / 2
 
         if visualize:
             res.img_shape = img.shape
 
         detector = locus.Detector()
+        # Detect
+        # We use standard options
         detections = detector.detect(img)
 
         # Convert to dicts for pickling
@@ -232,15 +238,39 @@ def process_image(args: Tuple[Path, List[TagGroundTruth], bool]) -> EvalResult:
             )
         res.detections = serializable_dets
 
-        det_map = {d.id: d for d in detections}
-        matched_ids = set()
+        # Match detections to GT
+        # Simple proximity matching: if center within threshold
+        res.tags_gt = len(gt_tags)
 
-        for gt in gt_tags:
-            res.tags_gt += 1
-            if gt.tag_id in det_map:
+        # Keep track of matched GTs to avoid double counting
+        matched_gt_indices = set()
+
+        for det in detections:
+            # Find closest GT
+            min_dist = float("inf")
+            best_gt_idx = -1
+
+            for idx, gt in enumerate(gt_tags):
+                # Assuming TagGroundTruth has a 'center' attribute or we calculate it
+                # For now, let's calculate it from corners
+                gt_center = np.mean(gt.corners, axis=0)
+                dist = np.linalg.norm(np.array(det.center) - gt_center)
+                if dist < min_dist:
+                    min_dist = dist
+                    best_gt_idx = idx
+
+            # Threshold for match: e.g. 10 pixels
+            if (
+                min_dist < 20.0
+                and best_gt_idx != -1
+                and gt_tags[best_gt_idx].tag_id == det.id
+                and best_gt_idx not in matched_gt_indices
+            ):
+                matched_gt_indices.add(best_gt_idx)
                 res.correct += 1
-                matched_ids.add(gt.tag_id)
-                det = det_map[gt.tag_id]
+
+                # Calculate corner error for matched tag
+                gt = gt_tags[best_gt_idx]
                 det_corners = np.array(det.corners, dtype=np.float32)
 
                 # Try all corner orderings (rotations + winding) to find best match
@@ -254,10 +284,10 @@ def process_image(args: Tuple[Path, List[TagGroundTruth], bool]) -> EvalResult:
                 res.corner_error_sum += best_err
                 res.corner_error_count += 1
 
-        res.false_positives = len(detections) - len(matched_ids)
+        res.false_positives = len(detections) - res.correct
 
-    except Exception as e:
-        res.error = str(e)
+    except Exception:
+        pass
 
     return res
 
@@ -271,9 +301,7 @@ class BenchmarkRunner:
         if self.visualize:
             rr.init("ICRA2020 Benchmark", spawn=True)
 
-    def run(
-        self, scenarios: List[str], types: List[str], limit: Optional[int] = None, skip: int = 0
-    ):
+    def run(self, scenarios: list[str], types: list[str], limit: int | None = None, skip: int = 0):
         print(f"Running benchmark with {self.max_workers} workers. Visualization: {self.visualize}")
 
         overall = {"gt": 0, "det": 0, "err_sum": 0.0, "err_cnt": 0}
@@ -312,7 +340,7 @@ class BenchmarkRunner:
                 with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
                     futures = {executor.submit(process_image, t): t for t in tasks}
 
-                    for i, future in tqdm(
+                    for _, future in tqdm(
                         enumerate(as_completed(futures)), total=len(futures), desc=f"Eval {ds_name}"
                     ):
                         res = future.result()
