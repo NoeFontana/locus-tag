@@ -222,25 +222,22 @@ impl Detector {
         for mut cand in candidates {
             if let Some(h) = crate::decoder::Homography::square_to_quad(&cand.corners) {
                 for decoder in active_decoders {
-                    if let Some(bits) = crate::decoder::sample_grid(img, &h, decoder.as_ref())
-                        && let Some((id, hamming)) = decoder.decode(bits)
-                    {
-                        cand.id = id;
-                        cand.hamming = hamming;
-
-                        // Compute 3D pose if requested
-                        if let (Some(intrinsics), Some(tag_size)) =
-                            (options.intrinsics, options.tag_size)
-                        {
-                            cand.pose = crate::pose::estimate_tag_pose(
-                                &intrinsics,
-                                &cand.corners,
-                                tag_size,
-                            );
+                    if let Some(bits) = crate::decoder::sample_grid(img, &h, decoder.as_ref()) {
+                        if let Some((id, hamming)) = decoder.decode(bits) {
+                            cand.id = id;
+                            cand.hamming = hamming;
+                            if let (Some(intrinsics), Some(tag_size)) =
+                                (options.intrinsics, options.tag_size)
+                            {
+                                cand.pose = crate::pose::estimate_tag_pose(
+                                    &intrinsics,
+                                    &cand.corners,
+                                    tag_size,
+                                );
+                            }
+                            final_detections.push(cand);
+                            break;
                         }
-
-                        final_detections.push(cand);
-                        break;
                     }
                 }
             }
@@ -250,47 +247,6 @@ impl Detector {
         stats.total_ms = start_total.elapsed().as_secs_f64() * 1000.0;
 
         (final_detections, stats)
-    }
-
-    /// Fast detection using decimation (2x downsampled).
-    /// Detects tags using a gradient-based downsampling approach for speed.
-    ///
-    /// # Panics
-    /// Panics if the downsampled image cannot be created (should not happen with valid dimensions).
-    pub fn detect_gradient(&mut self, img: &ImageView) -> Vec<Detection> {
-        // Decimate the image 2x
-        let new_w = img.width / 2;
-        let new_h = img.height / 2;
-
-        // Simple 2x2 averaging downsample
-        let mut downsampled = vec![0u8; new_w * new_h];
-        for y in 0..new_h {
-            for x in 0..new_w {
-                let p00 = u16::from(img.get_pixel(x * 2, y * 2));
-                let p10 = u16::from(img.get_pixel(x * 2 + 1, y * 2));
-                let p01 = u16::from(img.get_pixel(x * 2, y * 2 + 1));
-                let p11 = u16::from(img.get_pixel(x * 2 + 1, y * 2 + 1));
-                downsampled[y * new_w + x] = ((p00 + p10 + p01 + p11) / 4) as u8;
-            }
-        }
-
-        let view =
-            ImageView::new(&downsampled, new_w, new_h, new_w).expect("Valid downsampled image");
-
-        // Run detection on downsampled image
-        let mut detections = self.detect(&view);
-
-        // Scale corners back to original resolution
-        for det in &mut detections {
-            det.center[0] *= 2.0;
-            det.center[1] *= 2.0;
-            for corner in &mut det.corners {
-                corner[0] *= 2.0;
-                corner[1] *= 2.0;
-            }
-        }
-
-        detections
     }
 }
 

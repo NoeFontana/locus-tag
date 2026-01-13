@@ -55,12 +55,12 @@ impl Default for DetectorConfig {
         Self {
             threshold_tile_size: 8,
             threshold_min_range: 10,
-            quad_min_area: 100, // Lowered from 400 to detect 15px+ tags
+            quad_min_area: 400,
             quad_max_aspect_ratio: 3.0,
             quad_min_fill_ratio: 0.3,
             quad_max_fill_ratio: 0.95,
-            quad_min_edge_length: 3.0, // Lowered from 4.0 for small tags
-            quad_min_edge_score: 5.0,  // Lowered from 10.0 for small/blurry tags
+            quad_min_edge_length: 4.0,
+            quad_min_edge_score: 10.0,
         }
     }
 }
