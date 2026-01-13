@@ -296,6 +296,206 @@ mod tests {
         // At (1,1), it should be white (255)
         assert_eq!(output[1 * width + 1], 255);
     }
+
+    // ========================================================================
+    // THRESHOLD ROBUSTNESS TESTS
+    // ========================================================================
+
+    use crate::config::TagFamily;
+    use crate::test_utils::{
+        TestImageParams, generate_test_image_with_params, measure_border_integrity,
+    };
+
+    /// Test threshold preserves tag structure at varying sizes (distance proxy).
+    /// Note: AprilTag 36h11 has 8x8 cells, so 4px/bit = 32px minimum.
+    #[test]
+    fn test_threshold_preserves_tag_structure_at_varying_sizes() {
+        let canvas_size = 640;
+        // Minimum 32px for 4 pixels per bit (AprilTag 36h11 = 8x8 cells)
+        let tag_sizes = [32, 48, 64, 100, 150, 200, 300];
+
+        for tag_size in tag_sizes {
+            let params = TestImageParams {
+                family: TagFamily::AprilTag36h11,
+                id: 0,
+                tag_size,
+                canvas_size,
+                ..Default::default()
+            };
+
+            let (data, corners) = generate_test_image_with_params(&params);
+            let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
+
+            let engine = ThresholdEngine::new();
+            let stats = engine.compute_tile_stats(&img);
+            let mut binary = vec![0u8; canvas_size * canvas_size];
+            engine.apply_threshold(&img, &stats, &mut binary);
+
+            let integrity = measure_border_integrity(&binary, canvas_size, &corners);
+
+            // For tags >= 32px (4px/bit), we expect good binarization (>50% border detected)
+            assert!(
+                integrity > 0.5,
+                "Tag size {} failed: border integrity = {:.2}% (expected >50%)",
+                tag_size,
+                integrity * 100.0
+            );
+
+            println!(
+                "Tag size {:>3}px: border integrity = {:.1}%",
+                tag_size,
+                integrity * 100.0
+            );
+        }
+    }
+
+    /// Test threshold robustness to brightness and contrast variations.
+    #[test]
+    fn test_threshold_robustness_brightness_contrast() {
+        let canvas_size = 320;
+        let tag_size = 120;
+        let brightness_offsets = [-50, -25, 0, 25, 50];
+        let contrast_scales = [0.50, 0.75, 1.0, 1.25, 1.50];
+
+        for &brightness in &brightness_offsets {
+            for &contrast in &contrast_scales {
+                let params = TestImageParams {
+                    family: TagFamily::AprilTag36h11,
+                    id: 0,
+                    tag_size,
+                    canvas_size,
+                    brightness_offset: brightness,
+                    contrast_scale: contrast,
+                    ..Default::default()
+                };
+
+                let (data, corners) = generate_test_image_with_params(&params);
+                let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
+
+                let engine = ThresholdEngine::new();
+                let stats = engine.compute_tile_stats(&img);
+                let mut binary = vec![0u8; canvas_size * canvas_size];
+                engine.apply_threshold(&img, &stats, &mut binary);
+
+                let integrity = measure_border_integrity(&binary, canvas_size, &corners);
+
+                // For moderate conditions, expect good integrity
+                let is_moderate = brightness.abs() <= 25 && contrast >= 0.75;
+                if is_moderate {
+                    assert!(
+                        integrity > 0.4,
+                        "Brightness {}, Contrast {:.2}: integrity {:.1}% too low",
+                        brightness,
+                        contrast,
+                        integrity * 100.0
+                    );
+                }
+
+                println!(
+                    "Brightness {:>3}, Contrast {:.2}: integrity = {:.1}%",
+                    brightness,
+                    contrast,
+                    integrity * 100.0
+                );
+            }
+        }
+    }
+
+    /// Test threshold robustness to varying noise levels.
+    #[test]
+    fn test_threshold_robustness_noise() {
+        let canvas_size = 320;
+        let tag_size = 120;
+        let noise_levels = [0.0, 5.0, 10.0, 15.0, 20.0, 30.0];
+
+        for &noise_sigma in &noise_levels {
+            let params = TestImageParams {
+                family: TagFamily::AprilTag36h11,
+                id: 0,
+                tag_size,
+                canvas_size,
+                noise_sigma,
+                ..Default::default()
+            };
+
+            let (data, corners) = generate_test_image_with_params(&params);
+            let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
+
+            let engine = ThresholdEngine::new();
+            let stats = engine.compute_tile_stats(&img);
+            let mut binary = vec![0u8; canvas_size * canvas_size];
+            engine.apply_threshold(&img, &stats, &mut binary);
+
+            let integrity = measure_border_integrity(&binary, canvas_size, &corners);
+
+            // For noise <= 15, expect reasonable integrity
+            if noise_sigma <= 15.0 {
+                assert!(
+                    integrity > 0.45,
+                    "Noise σ={:.1}: integrity {:.1}% too low",
+                    noise_sigma,
+                    integrity * 100.0
+                );
+            }
+
+            println!(
+                "Noise σ={:>4.1}: integrity = {:.1}%",
+                noise_sigma,
+                integrity * 100.0
+            );
+        }
+    }
+
+    proptest! {
+        /// Fuzz test threshold with random combinations of parameters.
+        /// Minimum tag size 32px to ensure 4 pixels per bit.
+        #[test]
+        fn test_threshold_combined_conditions_no_panic(
+            tag_size in 32_usize..200,  // 32px = 4px/bit for AprilTag 36h11
+            brightness in -40_i16..40,
+            contrast in 0.6_f32..1.4,
+            noise in 0.0_f32..20.0
+        ) {
+            let canvas_size = 320;
+
+            // Skip invalid combinations (tag too big for canvas)
+            if tag_size >= canvas_size - 40 {
+                return Ok(());
+            }
+
+            let params = TestImageParams {
+                family: TagFamily::AprilTag36h11,
+                id: 0,
+                tag_size,
+                canvas_size,
+                noise_sigma: noise,
+                brightness_offset: brightness,
+                contrast_scale: contrast,
+            };
+
+            let (data, _corners) = generate_test_image_with_params(&params);
+            let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
+
+            let engine = ThresholdEngine::new();
+            let stats = engine.compute_tile_stats(&img);
+            let mut binary = vec![0u8; canvas_size * canvas_size];
+
+            // Should not panic
+            engine.apply_threshold(&img, &stats, &mut binary);
+
+            // Basic sanity: output should have both black and white pixels
+            let black_count = binary.iter().filter(|&&p| p == 0).count();
+            let white_count = binary.iter().filter(|&&p| p == 255).count();
+
+            // Valid binary image should have both colors (only 0 and 255)
+            prop_assert!(black_count + white_count == binary.len(),
+                "Binary output contains non-binary values");
+
+            // With a tag present, we expect some black and white pixels
+            prop_assert!(black_count > 0, "No black pixels in output");
+            prop_assert!(white_count > 0, "No white pixels in output");
+        }
+    }
 }
 
 #[multiversion(targets = "simd")]

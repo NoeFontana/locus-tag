@@ -128,6 +128,172 @@ pub fn compute_corner_error(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 
 
     min_error
 }
+
+// ============================================================================
+// ROBUSTNESS TEST UTILITIES
+// ============================================================================
+
+/// Parameters for generating test images with photometric variations.
+#[derive(Clone, Debug)]
+pub struct TestImageParams {
+    /// Tag family to generate.
+    pub family: crate::config::TagFamily,
+    /// Tag ID to generate.
+    pub id: u16,
+    /// Tag size in pixels.
+    pub tag_size: usize,
+    /// Canvas size in pixels.
+    pub canvas_size: usize,
+    /// Gaussian noise standard deviation (0.0 = no noise).
+    pub noise_sigma: f32,
+    /// Brightness offset (-255 to +255).
+    pub brightness_offset: i16,
+    /// Contrast scale (1.0 = no change, 0.5 = reduce, 1.5 = increase).
+    pub contrast_scale: f32,
+}
+
+impl Default for TestImageParams {
+    fn default() -> Self {
+        Self {
+            family: crate::config::TagFamily::AprilTag36h11,
+            id: 0,
+            tag_size: 100,
+            canvas_size: 320,
+            noise_sigma: 0.0,
+            brightness_offset: 0,
+            contrast_scale: 1.0,
+        }
+    }
+}
+
+/// Generate a test image with extended photometric parameters.
+#[must_use]
+pub fn generate_test_image_with_params(params: &TestImageParams) -> (Vec<u8>, [[f64; 2]; 4]) {
+    // First generate base image
+    let (mut data, corners) = generate_test_image(
+        params.family,
+        params.id,
+        params.tag_size,
+        params.canvas_size,
+        params.noise_sigma,
+    );
+
+    // Apply brightness and contrast adjustments
+    if params.brightness_offset != 0 || (params.contrast_scale - 1.0).abs() > 0.001 {
+        apply_brightness_contrast(&mut data, params.brightness_offset, params.contrast_scale);
+    }
+
+    (data, corners)
+}
+
+/// Apply brightness offset and contrast scaling to image data.
+pub fn apply_brightness_contrast(data: &mut [u8], brightness: i16, contrast: f32) {
+    for pixel in data.iter_mut() {
+        // Apply contrast around mid-gray (128)
+        let adjusted = ((*pixel as f32 - 128.0) * contrast + 128.0) as i32;
+        // Apply brightness
+        let with_brightness = adjusted + i32::from(brightness);
+        // Clamp to valid range
+        *pixel = with_brightness.clamp(0, 255) as u8;
+    }
+}
+
+/// Count black pixels in binary data.
+#[must_use]
+pub fn count_black_pixels(data: &[u8]) -> usize {
+    data.iter().filter(|&&p| p == 0).count()
+}
+
+/// Check if the tag's outer black border is correctly binarized.
+/// Returns the ratio of correctly black pixels in the 1-cell-wide border (0.0 to 1.0).
+#[must_use]
+pub fn measure_border_integrity(binary: &[u8], width: usize, corners: &[[f64; 2]; 4]) -> f64 {
+    let min_x = corners.iter().map(|c| c[0]).fold(f64::MAX, f64::min) as usize;
+    let max_x = corners.iter().map(|c| c[0]).fold(f64::MIN, f64::max) as usize;
+    let min_y = corners.iter().map(|c| c[1]).fold(f64::MAX, f64::min) as usize;
+    let max_y = corners.iter().map(|c| c[1]).fold(f64::MIN, f64::max) as usize;
+
+    let height = binary.len() / width;
+    let min_x = min_x.min(width.saturating_sub(1));
+    let max_x = max_x.min(width.saturating_sub(1));
+    let min_y = min_y.min(height.saturating_sub(1));
+    let max_y = max_y.min(height.saturating_sub(1));
+
+    if max_x <= min_x || max_y <= min_y {
+        return 0.0;
+    }
+
+    let tag_width = max_x - min_x;
+    let tag_height = max_y - min_y;
+
+    // For AprilTag 36h11: 8 cells total, border is 1 cell = 1/8 of tag
+    let cell_size_x = tag_width / 8;
+    let cell_size_y = tag_height / 8;
+
+    if cell_size_x == 0 || cell_size_y == 0 {
+        return 0.0;
+    }
+
+    let mut black_count = 0usize;
+    let mut total_count = 0usize;
+
+    // Top border row
+    for y in min_y..(min_y + cell_size_y).min(max_y) {
+        for x in min_x..=max_x {
+            if y < height && x < width {
+                total_count += 1;
+                if binary[y * width + x] == 0 {
+                    black_count += 1;
+                }
+            }
+        }
+    }
+
+    // Bottom border row
+    let bottom_start = max_y.saturating_sub(cell_size_y);
+    for y in bottom_start..=max_y {
+        for x in min_x..=max_x {
+            if y < height && x < width {
+                total_count += 1;
+                if binary[y * width + x] == 0 {
+                    black_count += 1;
+                }
+            }
+        }
+    }
+
+    // Left border column (excluding corners)
+    for y in (min_y + cell_size_y)..(max_y.saturating_sub(cell_size_y)) {
+        for x in min_x..(min_x + cell_size_x).min(max_x) {
+            if y < height && x < width {
+                total_count += 1;
+                if binary[y * width + x] == 0 {
+                    black_count += 1;
+                }
+            }
+        }
+    }
+
+    // Right border column (excluding corners)
+    let right_start = max_x.saturating_sub(cell_size_x);
+    for y in (min_y + cell_size_y)..(max_y.saturating_sub(cell_size_y)) {
+        for x in right_start..=max_x {
+            if y < height && x < width {
+                total_count += 1;
+                if binary[y * width + x] == 0 {
+                    black_count += 1;
+                }
+            }
+        }
+    }
+
+    if total_count == 0 {
+        0.0
+    } else {
+        black_count as f64 / total_count as f64
+    }
+}
+
 /// Complex multi-tag scene generation for integration testing.
 #[cfg(any(feature = "extended-tests", feature = "extended-bench"))]
 pub mod scene;

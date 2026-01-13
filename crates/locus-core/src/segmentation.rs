@@ -327,4 +327,170 @@ mod tests {
             }
         }
     }
+
+    // ========================================================================
+    // SEGMENTATION ROBUSTNESS TESTS
+    // ========================================================================
+
+    use crate::config::TagFamily;
+    use crate::image::ImageView;
+    use crate::test_utils::{TestImageParams, generate_test_image_with_params};
+    use crate::threshold::ThresholdEngine;
+
+    /// Helper: Generate a binarized tag image at the given size.
+    fn generate_binarized_tag(tag_size: usize, canvas_size: usize) -> (Vec<u8>, [[f64; 2]; 4]) {
+        let params = TestImageParams {
+            family: TagFamily::AprilTag36h11,
+            id: 0,
+            tag_size,
+            canvas_size,
+            ..Default::default()
+        };
+
+        let (data, corners) = generate_test_image_with_params(&params);
+        let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
+
+        let engine = ThresholdEngine::new();
+        let stats = engine.compute_tile_stats(&img);
+        let mut binary = vec![0u8; canvas_size * canvas_size];
+        engine.apply_threshold(&img, &stats, &mut binary);
+
+        (binary, corners)
+    }
+
+    /// Test segmentation at varying tag sizes.
+    #[test]
+    fn test_segmentation_at_varying_tag_sizes() {
+        let canvas_size = 640;
+        let tag_sizes = [32, 64, 100, 200, 300];
+
+        for tag_size in tag_sizes {
+            let arena = Bump::new();
+            let (binary, corners) = generate_binarized_tag(tag_size, canvas_size);
+
+            let result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size);
+
+            assert!(
+                !result.component_stats.is_empty(),
+                "Tag size {}: No components found",
+                tag_size
+            );
+
+            let largest = result
+                .component_stats
+                .iter()
+                .max_by_key(|s| s.pixel_count)
+                .unwrap();
+
+            let expected_min_x = corners[0][0] as u16;
+            let expected_max_x = corners[1][0] as u16;
+            let tolerance = 5;
+
+            assert!(
+                (largest.min_x as i32 - expected_min_x as i32).abs() <= tolerance,
+                "Tag size {}: min_x mismatch",
+                tag_size
+            );
+            assert!(
+                (largest.max_x as i32 - expected_max_x as i32).abs() <= tolerance,
+                "Tag size {}: max_x mismatch",
+                tag_size
+            );
+
+            println!(
+                "Tag size {:>3}px: {} components, largest has {} px",
+                tag_size,
+                result.component_stats.len(),
+                largest.pixel_count
+            );
+        }
+    }
+
+    /// Test component pixel counts are reasonable for clean binarization.
+    #[test]
+    fn test_segmentation_component_accuracy() {
+        let canvas_size = 320;
+        let tag_size = 120;
+
+        let arena = Bump::new();
+        let (binary, corners) = generate_binarized_tag(tag_size, canvas_size);
+
+        let result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size);
+
+        let largest = result
+            .component_stats
+            .iter()
+            .max_by_key(|s| s.pixel_count)
+            .unwrap();
+
+        let expected_min = (tag_size * tag_size / 3) as u32;
+        let expected_max = (tag_size * tag_size) as u32;
+
+        assert!(largest.pixel_count >= expected_min);
+        assert!(largest.pixel_count <= expected_max);
+
+        let gt_width = (corners[1][0] - corners[0][0]).abs() as i32;
+        let gt_height = (corners[2][1] - corners[0][1]).abs() as i32;
+        let bbox_width = (largest.max_x - largest.min_x) as i32;
+        let bbox_height = (largest.max_y - largest.min_y) as i32;
+
+        assert!((bbox_width - gt_width).abs() <= 2);
+        assert!((bbox_height - gt_height).abs() <= 2);
+
+        println!(
+            "Component accuracy: {} pixels, bbox={}x{} (GT: {}x{})",
+            largest.pixel_count, bbox_width, bbox_height, gt_width, gt_height
+        );
+    }
+
+    /// Test segmentation with noisy binary boundaries.
+    #[test]
+    fn test_segmentation_noisy_boundaries() {
+        use rand::prelude::*;
+
+        let canvas_size = 320;
+        let tag_size = 120;
+
+        let arena = Bump::new();
+        let (mut binary, _corners) = generate_binarized_tag(tag_size, canvas_size);
+
+        let mut rng = rand::thread_rng();
+        let noise_rate = 0.05;
+
+        for y in 1..(canvas_size - 1) {
+            for x in 1..(canvas_size - 1) {
+                let idx = y * canvas_size + x;
+                let current = binary[idx];
+                let left = binary[idx - 1];
+                let right = binary[idx + 1];
+                let up = binary[idx - canvas_size];
+                let down = binary[idx + canvas_size];
+
+                let is_edge =
+                    current != left || current != right || current != up || current != down;
+                if is_edge && rng.gen_range(0.0..1.0_f32) < noise_rate {
+                    binary[idx] = if current == 0 { 255 } else { 0 };
+                }
+            }
+        }
+
+        let result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size);
+
+        assert!(!result.component_stats.is_empty());
+
+        let largest = result
+            .component_stats
+            .iter()
+            .max_by_key(|s| s.pixel_count)
+            .unwrap();
+
+        let min_expected = (tag_size * tag_size / 4) as u32;
+        assert!(largest.pixel_count >= min_expected);
+
+        println!(
+            "Noisy segmentation: {} components, largest has {} px",
+            result.component_stats.len(),
+            largest.pixel_count
+        );
+    }
 }

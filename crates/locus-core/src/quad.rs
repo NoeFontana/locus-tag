@@ -550,6 +550,131 @@ mod tests {
             }
         }
     }
+
+    // ========================================================================
+    // QUAD EXTRACTION ROBUSTNESS TESTS
+    // ========================================================================
+
+    use crate::config::TagFamily;
+    use crate::segmentation::label_components_with_stats;
+    use crate::test_utils::{
+        TestImageParams, compute_corner_error, generate_test_image_with_params,
+    };
+    use crate::threshold::ThresholdEngine;
+
+    /// Helper: Generate a tag image and run through threshold + segmentation + quad extraction.
+    fn run_quad_extraction(tag_size: usize, canvas_size: usize) -> (Vec<Detection>, [[f64; 2]; 4]) {
+        let params = TestImageParams {
+            family: TagFamily::AprilTag36h11,
+            id: 0,
+            tag_size,
+            canvas_size,
+            ..Default::default()
+        };
+
+        let (data, corners) = generate_test_image_with_params(&params);
+        let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
+
+        let engine = ThresholdEngine::new();
+        let stats = engine.compute_tile_stats(&img);
+        let mut binary = vec![0u8; canvas_size * canvas_size];
+        engine.apply_threshold(&img, &stats, &mut binary);
+
+        let arena = Bump::new();
+        let label_result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size);
+        let detections = extract_quads_fast(&arena, &img, &label_result);
+
+        (detections, corners)
+    }
+
+    /// Test quad extraction at varying tag sizes.
+    #[test]
+    fn test_quad_extraction_at_varying_sizes() {
+        let canvas_size = 640;
+        let tag_sizes = [32, 48, 64, 100, 150, 200, 300];
+
+        for tag_size in tag_sizes {
+            let (detections, _corners) = run_quad_extraction(tag_size, canvas_size);
+            let detected = !detections.is_empty();
+
+            if tag_size >= 48 {
+                assert!(detected, "Tag size {}: No quad detected", tag_size);
+            }
+
+            if detected {
+                println!(
+                    "Tag size {:>3}px: {} quads, center=[{:.1},{:.1}]",
+                    tag_size,
+                    detections.len(),
+                    detections[0].center[0],
+                    detections[0].center[1]
+                );
+            } else {
+                println!("Tag size {:>3}px: No quad detected", tag_size);
+            }
+        }
+    }
+
+    /// Test corner detection accuracy vs ground truth.
+    #[test]
+    fn test_quad_corner_accuracy() {
+        let canvas_size = 640;
+        let tag_sizes = [100, 150, 200, 300];
+
+        for tag_size in tag_sizes {
+            let (detections, gt_corners) = run_quad_extraction(tag_size, canvas_size);
+
+            assert!(
+                !detections.is_empty(),
+                "Tag size {}: No detection",
+                tag_size
+            );
+
+            let det_corners = detections[0].corners;
+            let error = compute_corner_error(&det_corners, &gt_corners);
+
+            let max_error = 5.0;
+            assert!(
+                error < max_error,
+                "Tag size {}: Corner error {:.2}px exceeds max",
+                tag_size,
+                error
+            );
+
+            println!("Tag size {:>3}px: Corner error = {:.2}px", tag_size, error);
+        }
+    }
+
+    /// Test that quad center is approximately correct.
+    #[test]
+    fn test_quad_center_accuracy() {
+        let canvas_size = 640;
+        let tag_size = 150;
+
+        let (detections, gt_corners) = run_quad_extraction(tag_size, canvas_size);
+        assert!(!detections.is_empty(), "No detection");
+
+        let expected_cx =
+            (gt_corners[0][0] + gt_corners[1][0] + gt_corners[2][0] + gt_corners[3][0]) / 4.0;
+        let expected_cy =
+            (gt_corners[0][1] + gt_corners[1][1] + gt_corners[2][1] + gt_corners[3][1]) / 4.0;
+
+        let det_center = detections[0].center;
+        let dx = det_center[0] - expected_cx;
+        let dy = det_center[1] - expected_cy;
+        let center_error = (dx * dx + dy * dy).sqrt();
+
+        assert!(
+            center_error < 2.0,
+            "Center error {:.2}px exceeds 2px",
+            center_error
+        );
+
+        println!(
+            "Quad center: detected=[{:.1},{:.1}], expected=[{:.1},{:.1}], error={:.2}px",
+            det_center[0], det_center[1], expected_cx, expected_cy, center_error
+        );
+    }
 }
 
 #[multiversion(targets(
