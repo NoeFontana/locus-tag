@@ -147,6 +147,15 @@ impl<'a> ImageView<'a> {
         }
     }
 
+    /// Compute the gradient [gx, gy] at sub-pixel coordinates using bilinear interpolation.
+    #[must_use]
+    pub fn sample_gradient_bilinear(&self, x: f64, y: f64) -> [f64; 2] {
+        // Simple central difference of bilinearly sampled points
+        let gx = (self.sample_bilinear(x + 1.0, y) - self.sample_bilinear(x - 1.0, y)) * 0.5;
+        let gy = (self.sample_bilinear(x, y + 1.0) - self.sample_bilinear(x, y - 1.0)) * 0.5;
+        [gx, gy]
+    }
+
     /// Unsafe accessor for a specific row.
     #[inline(always)]
     pub(crate) unsafe fn get_row_unchecked(&self, y: usize) -> &[u8] {

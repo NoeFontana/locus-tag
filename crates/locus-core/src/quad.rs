@@ -117,10 +117,10 @@ pub fn extract_quads_with_config(
                             // Compute center first, then refine corners
                             let center = polygon_center(&reduced);
                             let corners = [
-                                refine_corner(img, reduced[0], center),
-                                refine_corner(img, reduced[1], center),
-                                refine_corner(img, reduced[2], center),
-                                refine_corner(img, reduced[3], center),
+                                refine_corner(img, reduced[0], reduced[3], reduced[1]),
+                                refine_corner(img, reduced[1], reduced[0], reduced[2]),
+                                refine_corner(img, reduced[2], reduced[1], reduced[3]),
+                                refine_corner(img, reduced[3], reduced[2], reduced[0]),
                             ];
 
                             // Filter: weak edge alignment
@@ -289,111 +289,102 @@ fn polygon_center(points: &[Point]) -> [f64; 2] {
     [cx / n as f64, cy / n as f64]
 }
 
-/// Refine corners to sub-pixel accuracy using gradient-based edge search.
+/// Refine corners to sub-pixel accuracy using line intersection.
 ///
-/// Searches along the direction from tag center to corner to find the true
-/// outer edge of the tag (bright-to-dark transition).
+/// Fits lines to the two edges meeting at a corner and computes their intersection.
+/// This is much more accurate than diagonal searching for perspective-distorted tags.
 #[must_use]
-pub fn refine_corner(img: &ImageView, p: Point, center: [f64; 2]) -> Point {
-    // Direction from center to corner (points outward)
-    let dir_x = p.x - center[0];
-    let dir_y = p.y - center[1];
-    let dir_len = (dir_x * dir_x + dir_y * dir_y).sqrt();
+pub fn refine_corner(img: &ImageView, p: Point, p_prev: Point, p_next: Point) -> Point {
+    // Fit lines to the two edges: (p_prev, p) and (p, p_next)
+    let line1 = fit_edge_line(img, p_prev, p);
+    let line2 = fit_edge_line(img, p, p_next);
 
-    if dir_len < 1.0 {
-        return p;
-    }
+    if let (Some(l1), Some(l2)) = (line1, line2) {
+        // Intersect lines: a1*x + b1*y + c1 = 0 and a2*x + b2*y + c2 = 0
+        let det = l1.0 * l2.1 - l2.0 * l1.1;
+        if det.abs() > 1e-6 {
+            let x = (l1.1 * l2.2 - l2.1 * l1.2) / det;
+            let y = (l2.0 * l1.2 - l1.0 * l2.2) / det;
 
-    // Normalize direction
-    let dx = dir_x / dir_len;
-    let dy = dir_y / dir_len;
-
-    // Search along the ray from corner outward (and slightly inward)
-    let mut best_x = p.x;
-    let mut best_y = p.y;
-    let mut best_mag = 0.0f64;
-
-    // Sample 11 points: 5 inward, current, 5 outward
-    for step in -3..=7 {
-        let x = p.x + dx * f64::from(step);
-        let y = p.y + dy * f64::from(step);
-
-        let ix = x as isize;
-        let iy = y as isize;
-
-        // Use a safe margin to allow accessing neighbors without checks
-        if ix > 1 && ix < (img.width - 2) as isize && iy > 1 && iy < (img.height - 2) as isize {
-            unsafe {
-                let ix_u = ix as usize;
-                let iy_u = iy as usize;
-                let gx = (f64::from(img.get_pixel_unchecked(ix_u + 1, iy_u))
-                    - f64::from(img.get_pixel_unchecked(ix_u - 1, iy_u)))
-                    * 0.5;
-                let gy = (f64::from(img.get_pixel_unchecked(ix_u, iy_u + 1))
-                    - f64::from(img.get_pixel_unchecked(ix_u, iy_u - 1)))
-                    * 0.5;
-                let mag = gx * gx + gy * gy;
-
-                if mag > best_mag {
-                    best_mag = mag;
-                    best_x = x;
-                    best_y = y;
-                }
+            // Sanity check: intersection must be near original point
+            let dist_sq = (x - p.x).powi(2) + (y - p.y).powi(2);
+            if dist_sq < 4.0 {
+                return Point { x, y };
             }
         }
     }
 
-    // Quadratic sub-pixel refinement along the search direction
-    let best_ix = best_x as isize;
-    let best_iy = best_y as isize;
+    p
+}
 
-    if best_ix > 1
-        && best_ix < (img.width - 2) as isize
-        && best_iy > 1
-        && best_iy < (img.height - 2) as isize
-    {
-        // Sample gradient magnitudes at best-1, best, best+1 along direction
-        let mut mags = [0.0f64; 3];
-        for (i, offset) in [-1.0, 0.0, 1.0].iter().enumerate() {
-            let x = best_x + dx * offset;
-            let y = best_y + dy * offset;
-            let ix = x as isize;
-            let iy = y as isize;
+/// Fit a line (a*x + b*y + c = 0) to an edge by sampling gradient peaks.
+fn fit_edge_line(img: &ImageView, p1: Point, p2: Point) -> Option<(f64, f64, f64)> {
+    let dx = p2.x - p1.x;
+    let dy = p2.y - p1.y;
+    let len = (dx * dx + dy * dy).sqrt();
+    if len < 4.0 {
+        return None;
+    }
 
-            if ix > 0 && ix < (img.width - 1) as isize && iy > 0 && iy < (img.height - 1) as isize {
-                unsafe {
-                    let ix_u = ix as usize;
-                    let iy_u = iy as usize;
-                    let gx = (f64::from(img.get_pixel_unchecked(ix_u + 1, iy_u))
-                        - f64::from(img.get_pixel_unchecked(ix_u - 1, iy_u)))
-                        * 0.5;
-                    let gy = (f64::from(img.get_pixel_unchecked(ix_u, iy_u + 1))
-                        - f64::from(img.get_pixel_unchecked(ix_u, iy_u - 1)))
-                        * 0.5;
-                    mags[i] = gx * gx + gy * gy;
-                }
+    let nx = -dy / len;
+    let ny = dx / len;
+
+    let mut sum_d = 0.0;
+    let mut count = 0;
+
+    let n_samples = (len as usize).clamp(5, 15);
+    for i in 1..=n_samples {
+        let t = i as f64 / (n_samples + 1) as f64;
+        let px = p1.x + dx * t;
+        let py = p1.y + dy * t;
+
+        let mut best_px = px;
+        let mut best_py = py;
+        let mut best_mag = 0.0;
+
+        for step in -3..=3 {
+            let sx = px + nx * f64::from(step);
+            let sy = py + ny * f64::from(step);
+
+            let g = img.sample_gradient_bilinear(sx, sy);
+            let mag = g[0] * g[0] + g[1] * g[1];
+            if mag > best_mag {
+                best_mag = mag;
+                best_px = sx;
+                best_py = sy;
             }
         }
 
-        // Quadratic interpolation for sub-pixel peak
-        let num = mags[2] - mags[0];
-        let den = 2.0 * (mags[0] + mags[2] - 2.0 * mags[1]);
-        let sub_offset = if den.abs() > 1e-6 {
-            (-num / den).clamp(-0.5, 0.5)
-        } else {
-            0.0
-        };
+        if best_mag > 25.0 {
+            let mut mags = [0.0f64; 3];
+            for (j, offset) in [-1.0, 0.0, 1.0].iter().enumerate() {
+                let sx = best_px + nx * offset;
+                let sy = best_py + ny * offset;
+                let g = img.sample_gradient_bilinear(sx, sy);
+                mags[j] = g[0] * g[0] + g[1] * g[1];
+            }
 
-        return Point {
-            x: best_x + dx * sub_offset,
-            y: best_y + dy * sub_offset,
-        };
+            let num = mags[2] - mags[0];
+            let den = 2.0 * (mags[0] + mags[2] - 2.0 * mags[1]);
+            let sub_offset = if den.abs() > 1e-6 {
+                (-num / den).clamp(-0.5, 0.5)
+            } else {
+                0.0
+            };
+
+            let refined_x = best_px + nx * sub_offset;
+            let refined_y = best_py + ny * sub_offset;
+
+            sum_d += -(nx * refined_x + ny * refined_y);
+            count += 1;
+        }
     }
 
-    Point {
-        x: best_x,
-        y: best_y,
+    if count < 3 {
+        return None;
     }
+
+    Some((nx, ny, sum_d / count as f64))
 }
 
 /// Reducing a polygon to a quad (4 vertices + 1 closing) by iteratively removing
@@ -475,22 +466,8 @@ fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
             let x = p1.x + dx * t;
             let y = p1.y + dy * t;
 
-            let ix = x as isize;
-            let iy = y as isize;
-
-            if ix > 0 && ix < (img.width - 1) as isize && iy > 0 && iy < (img.height - 1) as isize {
-                // SAFETY: We checked bounds above. ix, iy >= 1 and <= width/height - 2.
-                // So (ix +/- 1) are safely within [0, width-1].
-                unsafe {
-                    let gx = (f64::from(img.get_pixel_unchecked((ix + 1) as usize, iy as usize))
-                        - f64::from(img.get_pixel_unchecked((ix - 1) as usize, iy as usize)))
-                        * 0.5;
-                    let gy = (f64::from(img.get_pixel_unchecked(ix as usize, (iy + 1) as usize))
-                        - f64::from(img.get_pixel_unchecked(ix as usize, (iy - 1) as usize)))
-                        * 0.5;
-                    edge_mag_sum += (gx * gx + gy * gy).sqrt();
-                }
-            }
+            let g = img.sample_gradient_bilinear(x, y);
+            edge_mag_sum += (g[0] * g[0] + g[1] * g[1]).sqrt();
         }
 
         let avg_mag = edge_mag_sum / n_samples as f64;

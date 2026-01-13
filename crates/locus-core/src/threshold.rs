@@ -58,7 +58,7 @@ impl ThresholdEngine {
 
             // Subsampling: Only process every other row within a tile (stride 2)
             // This statistically approximates the min/max sufficient for thresholding
-            for dy in (0..ts).step_by(2) {
+            for dy in 0..ts {
                 let py = ty * ts + dy;
                 let src_row = img.get_row(py);
 
@@ -191,7 +191,7 @@ fn compute_row_tile_stats_simd(src_row: &[u8], stats: &mut [TileStats], tile_siz
         let mut rmin = 255u8;
         let mut rmax = 0u8;
         // Subsampling: Only process every other pixel in the row (stride 2)
-        for &p in chunk.iter().step_by(2) {
+        for &p in chunk.iter() {
             rmin = rmin.min(p);
             rmax = rmax.max(p);
         }
