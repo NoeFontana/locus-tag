@@ -6,7 +6,6 @@ from .locus import (
     debug_segmentation,
     debug_threshold,
     detect_tags,
-    detect_tags_gradient,
     detect_tags_with_stats,
     dummy_detect,
 )
@@ -69,7 +68,6 @@ __all__ = [
     "DetectorConfig",
     "DetectOptions",
     "detect_tags",
-    "detect_tags_gradient",
     "detect_tags_with_stats",
     "dummy_detect",
     "debug_threshold",

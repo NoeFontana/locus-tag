@@ -151,12 +151,12 @@ impl Detector {
     #[pyo3(signature = (
         threshold_tile_size = 8,
         threshold_min_range = 10,
-        quad_min_area = 100,
+        quad_min_area = 400,
         quad_max_aspect_ratio = 3.0,
         quad_min_fill_ratio = 0.3,
         quad_max_fill_ratio = 0.95,
-        quad_min_edge_length = 3.0,
-        quad_min_edge_score = 5.0
+        quad_min_edge_length = 4.0,
+        quad_min_edge_score = 10.0
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -295,16 +295,6 @@ fn detect_tags_with_stats(img: PyReadonlyArray2<u8>) -> PyResult<(Vec<Detection>
     ))
 }
 
-/// Detect tags using the gradient-based pipeline (faster).
-#[pyfunction]
-#[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
-fn detect_tags_gradient(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
-    let view = create_image_view(&img)?;
-    let mut detector = locus_core::Detector::new();
-    let detections = detector.detect_gradient(&view);
-    Ok(detections.into_iter().map(Detection::from).collect())
-}
-
 /// For debugging: Apply thresholding and return the binarized image.
 #[pyfunction]
 #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
@@ -369,7 +359,6 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Legacy functions (for backward compatibility)
     m.add_function(wrap_pyfunction!(dummy_detect, m)?)?;
     m.add_function(wrap_pyfunction!(detect_tags, m)?)?;
-    m.add_function(wrap_pyfunction!(detect_tags_gradient, m)?)?;
     m.add_function(wrap_pyfunction!(detect_tags_with_stats, m)?)?;
     m.add_function(wrap_pyfunction!(debug_threshold, m)?)?;
     m.add_function(wrap_pyfunction!(debug_segmentation, m)?)?;
