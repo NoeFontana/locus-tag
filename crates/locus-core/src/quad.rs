@@ -81,7 +81,10 @@ pub fn extract_quads_with_config(
         let contour = trace_boundary(arena, labels, img.width, img.height, sx, sy, label);
 
         if contour.len() >= 30 {
-            let simplified = douglas_peucker(arena, &contour, 4.0);
+            // Adaptive epsilon: 2% of perimeter (like OpenCV approxPolyDP)
+            let perimeter = contour.len() as f64;
+            let epsilon = (perimeter * 0.02).max(4.0);
+            let simplified = douglas_peucker(arena, &contour, epsilon);
             if simplified.len() == 5 {
                 let area = polygon_area(&simplified);
                 let perimeter = contour.len() as f64;

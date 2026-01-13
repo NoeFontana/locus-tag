@@ -243,8 +243,15 @@ def process_image(args: Tuple[Path, List[TagGroundTruth], bool]) -> EvalResult:
                 det = det_map[gt.tag_id]
                 det_corners = np.array(det.corners, dtype=np.float32)
 
-                err = np.sqrt(np.mean(np.sum((gt.corners - det_corners) ** 2, axis=1)))
-                res.corner_error_sum += err
+                # Try all corner orderings (rotations + winding) to find best match
+                best_err = float("inf")
+                for ordering in [det_corners, det_corners[::-1]]:  # CCW and CW
+                    for rot in range(4):
+                        rotated = np.roll(ordering, rot, axis=0)
+                        err = np.sqrt(np.mean(np.sum((gt.corners - rotated) ** 2, axis=1)))
+                        best_err = min(best_err, err)
+
+                res.corner_error_sum += best_err
                 res.corner_error_count += 1
 
         res.false_positives = len(detections) - len(matched_ids)
