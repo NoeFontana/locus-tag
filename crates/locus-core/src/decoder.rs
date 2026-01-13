@@ -603,6 +603,127 @@ mod tests {
             assert!((p[1] - dst[i][1]).abs() < 1e-6);
         }
     }
+
+    // ========================================================================
+    // END-TO-END DECODER ROBUSTNESS TESTS
+    // ========================================================================
+
+    use crate::config::TagFamily;
+    use crate::image::ImageView;
+    use crate::quad::extract_quads_fast;
+    use crate::segmentation::label_components_with_stats;
+    use crate::test_utils::{TestImageParams, generate_test_image_with_params};
+    use crate::threshold::ThresholdEngine;
+    use bumpalo::Bump;
+
+    /// Run full pipeline from image to decoded tags.
+    fn run_full_pipeline(tag_size: usize, canvas_size: usize, tag_id: u16) -> Vec<(u32, u32)> {
+        let params = TestImageParams {
+            family: TagFamily::AprilTag36h11,
+            id: tag_id,
+            tag_size,
+            canvas_size,
+            ..Default::default()
+        };
+
+        let (data, _corners) = generate_test_image_with_params(&params);
+        let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
+
+        let engine = ThresholdEngine::new();
+        let stats = engine.compute_tile_stats(&img);
+        let mut binary = vec![0u8; canvas_size * canvas_size];
+        engine.apply_threshold(&img, &stats, &mut binary);
+
+        let arena = Bump::new();
+        let label_result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size);
+        let quads = extract_quads_fast(&arena, &img, &label_result);
+
+        let decoder = AprilTag36h11;
+        let mut decoded = Vec::new();
+
+        for quad in &quads {
+            let dst = [
+                [quad.corners[0][0], quad.corners[0][1]],
+                [quad.corners[1][0], quad.corners[1][1]],
+                [quad.corners[2][0], quad.corners[2][1]],
+                [quad.corners[3][0], quad.corners[3][1]],
+            ];
+
+            if let Some(h) = Homography::square_to_quad(&dst) {
+                if let Some(bits) = sample_grid(&img, &h, &decoder) {
+                    if let Some((id, hamming)) = decoder.decode(bits) {
+                        decoded.push((id, hamming));
+                    }
+                }
+            }
+        }
+
+        decoded
+    }
+
+    /// Test E2E pipeline decodes correctly at varying sizes.
+    #[test]
+    fn test_e2e_decoding_at_varying_sizes() {
+        let canvas_size = 640;
+        let tag_sizes = [64, 100, 150, 200, 300];
+        let test_id: u16 = 42;
+
+        for tag_size in tag_sizes {
+            let decoded = run_full_pipeline(tag_size, canvas_size, test_id);
+            let found = decoded.iter().any(|(id, _)| *id == u32::from(test_id));
+
+            if tag_size >= 64 {
+                assert!(found, "Tag size {}: ID {} not found", tag_size, test_id);
+            }
+
+            if found {
+                let (_, hamming) = decoded
+                    .iter()
+                    .find(|(id, _)| *id == u32::from(test_id))
+                    .unwrap();
+                println!(
+                    "Tag size {:>3}px: ID {} with hamming {}",
+                    tag_size, test_id, hamming
+                );
+            }
+        }
+    }
+
+    /// Test that multiple tag IDs decode correctly.
+    #[test]
+    fn test_e2e_multiple_ids() {
+        let canvas_size = 400;
+        let tag_size = 150;
+        let test_ids: [u16; 5] = [0, 42, 100, 200, 500];
+
+        for &test_id in &test_ids {
+            let decoded = run_full_pipeline(tag_size, canvas_size, test_id);
+            let found = decoded.iter().any(|(id, _)| *id == u32::from(test_id));
+            assert!(found, "ID {} not decoded", test_id);
+
+            let (_, hamming) = decoded
+                .iter()
+                .find(|(id, _)| *id == u32::from(test_id))
+                .unwrap();
+            assert_eq!(*hamming, 0, "ID {} should have 0 hamming", test_id);
+            println!("ID {:>3}: Decoded with hamming {}", test_id, hamming);
+        }
+    }
+
+    /// Test decoding with edge ID values.
+    #[test]
+    fn test_e2e_edge_ids() {
+        let canvas_size = 400;
+        let tag_size = 150;
+        let edge_ids: [u16; 2] = [0, 586];
+
+        for &test_id in &edge_ids {
+            let decoded = run_full_pipeline(tag_size, canvas_size, test_id);
+            let found = decoded.iter().any(|(id, _)| *id == u32::from(test_id));
+            assert!(found, "Edge ID {} not decoded", test_id);
+            println!("Edge ID {}: Decoded", test_id);
+        }
+    }
 }
 
 /// Convert a TagFamily enum to a boxed decoder instance.
