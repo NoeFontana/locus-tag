@@ -219,9 +219,11 @@ def process_image(args: tuple[Path, list[TagGroundTruth], bool]) -> EvalResult:
         if visualize:
             res.img_shape = img.shape
 
-        detector = locus.Detector()
+        detector = locus.Detector(
+            quad_max_aspect_ratio=20.0,
+            quad_min_edge_score=2.0,
+        )
         # Detect
-        # We use standard options
         detections = detector.detect(img)
 
         # Convert to dicts for pickling
@@ -329,7 +331,7 @@ class BenchmarkRunner:
                     tasks = tasks[:limit]
                     print(f"  (Limited to {len(tasks)} images for debugging)")
 
-                run_stats = {"gt": 0, "det": 0, "err_sum": 0.0, "err_cnt": 0}
+                run_stats = {"gt": 0, "det": 0, "err_sum": 0.0, "err_cnt": 0, "fp": 0}
 
                 # Sequential matching for rerun?
                 # Rerun in parallel is tricky due to unrelated timelines if not careful.
@@ -349,6 +351,7 @@ class BenchmarkRunner:
                         run_stats["det"] += res.correct
                         run_stats["err_sum"] += res.corner_error_sum
                         run_stats["err_cnt"] += res.corner_error_count
+                        run_stats["fp"] += res.false_positives
 
                         if self.visualize:
                             self._log_visualization(ds_name, img_dir, res)
@@ -358,12 +361,15 @@ class BenchmarkRunner:
                     (run_stats["err_sum"] / run_stats["err_cnt"]) if run_stats["err_cnt"] > 0 else 0
                 )
 
-                report.append((ds_name, run_stats["gt"], run_stats["det"], recall, avg_err))
+                report.append(
+                    (ds_name, run_stats["gt"], run_stats["det"], recall, avg_err, run_stats["fp"])
+                )
 
                 overall["gt"] += run_stats["gt"]
                 overall["det"] += run_stats["det"]
                 overall["err_sum"] += run_stats["err_sum"]
                 overall["err_cnt"] += run_stats["err_cnt"]
+                overall["fp"] = overall.get("fp", 0) + run_stats["fp"]
 
         self._print_report(report, overall)
 
@@ -412,20 +418,31 @@ class BenchmarkRunner:
             )
 
     def _print_report(self, report, overall):
-        print("\n" + "=" * 80)
-        print(f"{'Dataset':<35} | {'Tags':<6} | {'Det':<6} | {'Recall %':<10} | {'Error (px)':<10}")
-        print("-" * 80)
+        print("\n" + "=" * 100)
+        print(
+            f"{'Dataset':<35} | {'Tags':<6} | {'Det':<6} | {'Recall %':<10} | {'Error (px)':<10} | {'FP':<5} | {'Prec %':<8}"
+        )
+        print("-" * 100)
         for row in sorted(report, key=lambda x: x[0]):
-            ds, gt, det, rec, err = row
-            print(f"{ds:<35} | {gt:<6} | {det:<6} | {rec:<10.2f} | {err:<10.4f}")
-        print("-" * 80)
+            ds, gt, det, rec, err, fp = row
+            prec = (det / (det + fp) * 100) if (det + fp) > 0 else 100.0
+            print(
+                f"{ds:<35} | {gt:<6} | {det:<6} | {rec:<10.2f} | {err:<10.4f} | {fp:<5} | {prec:<8.2f}"
+            )
+        print("-" * 100)
 
         tot_rec = (overall["det"] / overall["gt"] * 100) if overall["gt"] > 0 else 0
         tot_err = (overall["err_sum"] / overall["err_cnt"]) if overall["err_cnt"] > 0 else 0
-        print(
-            f"{'TOTAL':<35} | {overall['gt']:<6} | {overall['det']:<6} | {tot_rec:<10.2f} | {tot_err:<10.4f}"
+        tot_fp = overall.get("fp", 0)
+        tot_prec = (
+            (overall["det"] / (overall["det"] + tot_fp) * 100)
+            if (overall["det"] + tot_fp) > 0
+            else 100.0
         )
-        print("=" * 80)
+        print(
+            f"{'TOTAL':<35} | {overall['gt']:<6} | {overall['det']:<6} | {tot_rec:<10.2f} | {tot_err:<10.4f} | {tot_fp:<5} | {tot_prec:<8.2f}"
+        )
+        print("=" * 100)
 
 
 if __name__ == "__main__":
