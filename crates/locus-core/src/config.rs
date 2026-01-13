@@ -55,11 +55,11 @@ impl Default for DetectorConfig {
         Self {
             threshold_tile_size: 8,
             threshold_min_range: 10,
-            quad_min_area: 400,
+            quad_min_area: 100, // Lowered from 400 to detect 15px+ tags
             quad_max_aspect_ratio: 3.0,
             quad_min_fill_ratio: 0.3,
             quad_max_fill_ratio: 0.95,
-            quad_min_edge_length: 4.0,
+            quad_min_edge_length: 3.0, // Lowered from 4.0 for small tags
             quad_min_edge_score: 10.0,
         }
     }
@@ -320,7 +320,7 @@ mod tests {
     fn test_detector_config_defaults() {
         let config = DetectorConfig::default();
         assert_eq!(config.threshold_tile_size, 8);
-        assert_eq!(config.quad_min_area, 400);
+        assert_eq!(config.quad_min_area, 100);
     }
 
     #[test]

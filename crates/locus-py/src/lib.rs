@@ -151,11 +151,11 @@ impl Detector {
     #[pyo3(signature = (
         threshold_tile_size = 8,
         threshold_min_range = 10,
-        quad_min_area = 400,
+        quad_min_area = 100,
         quad_max_aspect_ratio = 3.0,
         quad_min_fill_ratio = 0.3,
         quad_max_fill_ratio = 0.95,
-        quad_min_edge_length = 4.0,
+        quad_min_edge_length = 3.0,
         quad_min_edge_score = 10.0
     ))]
     #[allow(clippy::too_many_arguments)]
