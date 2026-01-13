@@ -150,7 +150,7 @@ impl Detector {
     #[new]
     #[pyo3(signature = (
         threshold_tile_size = 8,
-        threshold_min_range = 10,
+        threshold_min_range = 5,
         quad_min_area = 400,
         quad_max_aspect_ratio = 3.0,
         quad_min_fill_ratio = 0.3,

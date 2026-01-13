@@ -53,8 +53,8 @@ pub struct DetectorConfig {
 impl Default for DetectorConfig {
     fn default() -> Self {
         Self {
-            threshold_tile_size: 8,
-            threshold_min_range: 10,
+            threshold_tile_size: 8, // Standard 8x8 tiles
+            threshold_min_range: 5, // Lower threshold for detecting low-contrast edges
             quad_min_area: 400,
             quad_max_aspect_ratio: 3.0,
             quad_min_fill_ratio: 0.3,
@@ -304,14 +304,14 @@ mod tests {
         assert_eq!(config.threshold_tile_size, 16);
         assert_eq!(config.quad_min_area, 1000);
         // Check defaults
-        assert_eq!(config.threshold_min_range, 10);
+        assert_eq!(config.threshold_min_range, 5);
     }
 
     #[test]
     fn test_detector_config_defaults() {
         let config = DetectorConfig::default();
         assert_eq!(config.threshold_tile_size, 8);
-        assert_eq!(config.quad_min_area, 100);
+        assert_eq!(config.quad_min_area, 400);
     }
 
     #[test]
