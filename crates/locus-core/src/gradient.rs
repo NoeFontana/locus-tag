@@ -248,6 +248,160 @@ fn quad_area(corners: &[[f32; 2]; 4]) -> f32 {
     area.abs() * 0.5
 }
 
+/// Fit a quad from a small component using on-demand gradient computation.
+///
+/// This is the optimized version that computes Sobel gradients only within
+/// the component's bounding box, avoiding full-image gradient computation.
+///
+/// # Arguments
+/// * `img` - The grayscale image
+/// * `labels` - Component labels from CCL
+/// * `label` - The specific component label to fit
+/// * `min_x`, `min_y`, `max_x`, `max_y` - Bounding box of the component
+///
+/// # Returns
+/// Quad corners if successfully fitted, None otherwise
+#[allow(clippy::cast_possible_wrap)]
+#[allow(clippy::cast_sign_loss)]
+#[allow(clippy::similar_names)]
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn fit_quad_from_component(
+    img: &ImageView,
+    labels: &[u32],
+    label: u32,
+    min_x: usize,
+    min_y: usize,
+    max_x: usize,
+    max_y: usize,
+) -> Option<[[f32; 2]; 4]> {
+    let width = img.width;
+    let height = img.height;
+
+    // Expand bbox by 1 for gradient computation
+    let x0 = min_x.saturating_sub(1);
+    let y0 = min_y.saturating_sub(1);
+    let x1 = (max_x + 2).min(width);
+    let y1 = (max_y + 2).min(height);
+
+    // Collect boundary pixels with inline Sobel gradient
+    let mut boundary_points: Vec<(usize, usize, f32)> = Vec::new();
+
+    for y in y0.max(1)..y1.min(height - 1) {
+        for x in x0.max(1)..x1.min(width - 1) {
+            let idx = y * width + x;
+            if labels[idx] != label {
+                continue;
+            }
+
+            // Check if boundary
+            if labels[idx - 1] == label
+                && labels[idx + 1] == label
+                && labels[idx - width] == label
+                && labels[idx + width] == label
+            {
+                continue; // Interior pixel, skip
+            }
+
+            // Compute Sobel gradient inline for this pixel only
+            let p00 = i16::from(img.get_pixel(x - 1, y - 1));
+            let p10 = i16::from(img.get_pixel(x, y - 1));
+            let p20 = i16::from(img.get_pixel(x + 1, y - 1));
+            let p01 = i16::from(img.get_pixel(x - 1, y));
+            let p21 = i16::from(img.get_pixel(x + 1, y));
+            let p02 = i16::from(img.get_pixel(x - 1, y + 1));
+            let p12 = i16::from(img.get_pixel(x, y + 1));
+            let p22 = i16::from(img.get_pixel(x + 1, y + 1));
+
+            let gx = -p00 + p20 - 2 * p01 + 2 * p21 - p02 + p22;
+            let gy = -p00 - 2 * p10 - p20 + p02 + 2 * p12 + p22;
+            let mag = (gx.abs() + gy.abs()) as u16;
+
+            if mag > 50 {
+                let angle = (gy as f32).atan2(gx as f32);
+                boundary_points.push((x, y, angle));
+            }
+        }
+    }
+
+    if boundary_points.len() < 12 {
+        // At least 3 per edge
+        return None;
+    }
+
+    // Cluster into 4 directions using simple k-means on angles
+    let mut centroids = [
+        0.0f32,
+        std::f32::consts::FRAC_PI_2,
+        std::f32::consts::PI,
+        -std::f32::consts::FRAC_PI_2,
+    ];
+    let mut assignments = vec![0usize; boundary_points.len()];
+
+    for _ in 0..5 {
+        // Assignment step
+        for (i, (_x, _y, angle)) in boundary_points.iter().enumerate() {
+            let mut best_cluster = 0;
+            let mut best_dist = f32::MAX;
+            for (c, &centroid) in centroids.iter().enumerate() {
+                let diff = angle_diff(*angle, centroid);
+                if diff < best_dist {
+                    best_dist = diff;
+                    best_cluster = c;
+                }
+            }
+            assignments[i] = best_cluster;
+        }
+
+        // Update step
+        for c in 0..4 {
+            let mut sum_sin = 0.0f32;
+            let mut sum_cos = 0.0f32;
+            for (i, (_x, _y, angle)) in boundary_points.iter().enumerate() {
+                if assignments[i] == c {
+                    sum_sin += angle.sin();
+                    sum_cos += angle.cos();
+                }
+            }
+            if sum_sin.abs() > 1e-6 || sum_cos.abs() > 1e-6 {
+                centroids[c] = sum_sin.atan2(sum_cos);
+            }
+        }
+    }
+
+    // Fit line to each cluster
+    let mut lines: Vec<LineSegment> = Vec::new();
+    for c in 0..4 {
+        let cluster_points: Vec<(f32, f32)> = boundary_points
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| assignments[*i] == c)
+            .map(|(_, (x, y, _))| (*x as f32, *y as f32))
+            .collect();
+
+        if cluster_points.len() < 3 {
+            continue;
+        }
+
+        let (x0, y0) = cluster_points[0];
+        let (x1, y1) = cluster_points[cluster_points.len() - 1];
+
+        lines.push(LineSegment {
+            x0,
+            y0,
+            x1,
+            y1,
+            angle: centroids[c],
+        });
+    }
+
+    if lines.len() < 4 {
+        return None;
+    }
+
+    find_quads_from_segments(&lines).into_iter().next()
+}
+
 /// Fit a quad from boundary pixels using gradient direction clustering.
 ///
 /// For small tags (~9px), there are essentially 4 gradient directions

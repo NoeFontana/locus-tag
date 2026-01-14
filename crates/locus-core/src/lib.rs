@@ -205,6 +205,7 @@ impl Detector {
         stats.segmentation_ms = start_seg.elapsed().as_secs_f64() * 1000.0;
 
         // 3. Quad Fitting (Fast path with pre-filtering)
+        // Gradients are computed lazily inside extract_quads for small components only
         let start_quad = std::time::Instant::now();
         let candidates = {
             let _span = tracing::info_span!("quad_extraction").entered();

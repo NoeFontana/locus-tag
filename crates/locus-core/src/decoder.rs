@@ -638,12 +638,12 @@ mod tests {
 
         let arena = Bump::new();
         let label_result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size);
-        let quads = extract_quads_fast(&arena, &img, &label_result);
+        let detections = extract_quads_fast(&arena, &img, &label_result);
 
         let decoder = AprilTag36h11;
         let mut decoded = Vec::new();
 
-        for quad in &quads {
+        for quad in &detections {
             let dst = [
                 [quad.corners[0][0], quad.corners[0][1]],
                 [quad.corners[1][0], quad.corners[1][1]],

@@ -78,6 +78,104 @@ pub fn extract_quads_with_config(
         let sx = stat.first_pixel_x as usize;
         let sy = stat.first_pixel_y as usize;
 
+        // For small components, try the 9-pixel foundation (gradient-based fitting)
+        // Computes gradients only within the component's bounding box for efficiency
+        if bbox_area < 600 {
+            if let Some(grad_corners) = crate::gradient::fit_quad_from_component(
+                img,
+                labels,
+                label,
+                stat.min_x as usize,
+                stat.min_y as usize,
+                stat.max_x as usize,
+                stat.max_y as usize,
+            ) {
+                let corners = [
+                    refine_corner(
+                        img,
+                        Point {
+                            x: grad_corners[0][0] as f64,
+                            y: grad_corners[0][1] as f64,
+                        },
+                        Point {
+                            x: grad_corners[3][0] as f64,
+                            y: grad_corners[3][1] as f64,
+                        },
+                        Point {
+                            x: grad_corners[1][0] as f64,
+                            y: grad_corners[1][1] as f64,
+                        },
+                    ),
+                    refine_corner(
+                        img,
+                        Point {
+                            x: grad_corners[1][0] as f64,
+                            y: grad_corners[1][1] as f64,
+                        },
+                        Point {
+                            x: grad_corners[0][0] as f64,
+                            y: grad_corners[0][1] as f64,
+                        },
+                        Point {
+                            x: grad_corners[2][0] as f64,
+                            y: grad_corners[2][1] as f64,
+                        },
+                    ),
+                    refine_corner(
+                        img,
+                        Point {
+                            x: grad_corners[2][0] as f64,
+                            y: grad_corners[2][1] as f64,
+                        },
+                        Point {
+                            x: grad_corners[1][0] as f64,
+                            y: grad_corners[1][1] as f64,
+                        },
+                        Point {
+                            x: grad_corners[3][0] as f64,
+                            y: grad_corners[3][1] as f64,
+                        },
+                    ),
+                    refine_corner(
+                        img,
+                        Point {
+                            x: grad_corners[3][0] as f64,
+                            y: grad_corners[3][1] as f64,
+                        },
+                        Point {
+                            x: grad_corners[2][0] as f64,
+                            y: grad_corners[2][1] as f64,
+                        },
+                        Point {
+                            x: grad_corners[0][0] as f64,
+                            y: grad_corners[0][1] as f64,
+                        },
+                    ),
+                ];
+
+                let edge_score = calculate_edge_score(img, corners);
+                if edge_score > config.quad_min_edge_score {
+                    detections.push(Detection {
+                        id: label,
+                        center: [
+                            (grad_corners[0][0] + grad_corners[2][0]) as f64 / 2.0,
+                            (grad_corners[0][1] + grad_corners[2][1]) as f64 / 2.0,
+                        ],
+                        corners: [
+                            [corners[0].x, corners[0].y],
+                            [corners[1].x, corners[1].y],
+                            [corners[2].x, corners[2].y],
+                            [corners[3].x, corners[3].y],
+                        ],
+                        hamming: 0,
+                        decision_margin: bbox_area as f64,
+                        pose: None,
+                    });
+                    continue;
+                }
+            }
+        }
+
         let contour = trace_boundary(arena, labels, img.width, img.height, sx, sy, label);
 
         if contour.len() >= 30 {
@@ -623,7 +721,7 @@ mod tests {
 
         let arena = Bump::new();
         let label_result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size);
-        let detections = extract_quads_fast(&arena, &img, &label_result);
+        let detections = extract_quads_fast(&arena, &img, &label_result, None);
 
         (detections, corners)
     }
