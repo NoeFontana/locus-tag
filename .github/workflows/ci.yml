@@ -33,10 +33,24 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       
       - name: Check Formatting
-        run: cargo fmt --all -- --check
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo fmt --all -- --check 2>&1 | tee rust-fmt.log
       
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy --all-targets --all-features -- -D warnings 2>&1 | tee rust-clippy.log
+
+      - name: Upload Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-logs-lint-rust
+          path: "*.log"
+          retention-days: 1
 
   test-rust:
     name: Test Rust
@@ -48,10 +62,26 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Run Tests
-        run: cargo nextest run --all-features
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo nextest run --all-features 2>&1 | tee test-rust.log
 
       - name: Run Doc Tests
-        run: cargo test --doc
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --doc 2>&1 | tee test-rust-doc.log
+
+      - name: Upload Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-logs-test-rust
+          path: |
+            target/
+            *.log
+          retention-days: 1
 
   lint-python:
     name: Lint Python
@@ -61,10 +91,24 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       
       - name: Ruff Check
-        run: uv run ruff check .
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run ruff check . 2>&1 | tee ruff-check.log
       
       - name: Ruff Format
-        run: uv run ruff format --check .
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run ruff format --check . 2>&1 | tee ruff-format.log
+
+      - name: Upload Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-logs-lint-python
+          path: "*.log"
+          retention-days: 1
 
   test-python:
     name: Test Python
@@ -89,4 +133,15 @@ jobs:
         run: maturin develop --release --manifest-path crates/locus-py/Cargo.toml
 
       - name: Run tests
-        run: pytest
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest 2>&1 | tee test-python-${{ matrix.python-version }}.log
+
+      - name: Upload Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-logs-test-python-${{ matrix.python-version }}
+          path: "*.log"
+          retention-days: 1

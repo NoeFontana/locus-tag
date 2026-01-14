@@ -20,22 +20,48 @@ jobs:
         with:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ./logs
+
+      - name: Prepare Log Snippet
+        id: log-snippet
+        run: |
+          # Find the largest log file or fallback to a default message
+          LOG_FILE=$(find ./logs -type f -name "*.log" | head -n 1)
+
+          if [ -f "$LOG_FILE" ]; then
+            echo "Extracting tail of $LOG_FILE..."
+            # Keep only the last 50 lines to avoid hitting GitHub API body limits
+            LOG_CONTENT=$(tail -n 50 "$LOG_FILE")
+          else
+            LOG_CONTENT="No log file found in artifact. Check CI workflow uploads."
+          fi
+
+          # Write to GITHUB_ENV to handle multiline strings safely
+          {
+            echo 'LOG_Snippet<<EOF'
+            echo "$LOG_CONTENT"
+            echo 'EOF'
+          } >> $GITHUB_ENV
 
       - name: Create Issue for Jules
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_ID: ${{ github.event.workflow_run.id }}
           REPO: ${{ github.repository }}
+          LOGS: ${{ env.LOG_Snippet }}
         run: |
           RUN_URL="https://github.com/$REPO/actions/runs/$RUN_ID"
 
-          BODY="@jules The CI workflow failed. Please analyze the failure and open a PR to fix it.
-
-          Failed Run: $RUN_URL
-
-          Please look at the logs linked above, reproduce the error, and fix it."
-
+          # Create body with proper formatting
           gh issue create \
             --title "🚨 CI Failure: Run #$RUN_ID" \
-            --body "$BODY" \
+            --body "@jules The CI workflow failed. Please analyze the failure.
+
+            **Failed Run:** $RUN_URL
+
+            ### Log Snippet (Last 50 Lines)
+            \`\`\`text
+            $LOGS
+            \`\`\`
+            " \
             --label "jules-fix"
