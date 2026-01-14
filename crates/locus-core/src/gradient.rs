@@ -248,6 +248,139 @@ fn quad_area(corners: &[[f32; 2]; 4]) -> f32 {
     area.abs() * 0.5
 }
 
+/// Fit a quad from boundary pixels using gradient direction clustering.
+///
+/// For small tags (~9px), there are essentially 4 gradient directions
+/// (one per edge). This function:
+/// 1. Extracts boundary pixels from the component
+/// 2. Clusters them by gradient direction into 4 groups
+/// 3. Fits a line to each group
+/// 4. Intersects lines to find quad corners
+///
+/// Returns None if a valid quad cannot be formed.
+#[allow(clippy::cast_possible_wrap)]
+#[allow(clippy::cast_sign_loss)]
+#[allow(clippy::similar_names)]
+#[must_use]
+pub fn fit_quad_from_gradients(
+    grads: &[Gradient],
+    labels: &[u32],
+    label: u32,
+    width: usize,
+    height: usize,
+    min_edge_pixels: usize,
+) -> Option<[[f32; 2]; 4]> {
+    // Collect boundary pixels: pixels in this component adjacent to different component
+    let mut boundary_points: Vec<(usize, usize, f32)> = Vec::new(); // (x, y, angle)
+
+    for y in 1..height - 1 {
+        for x in 1..width - 1 {
+            let idx = y * width + x;
+            if labels[idx] != label {
+                continue;
+            }
+
+            // Check if boundary (any neighbor is different)
+            let is_boundary = labels[idx - 1] != label
+                || labels[idx + 1] != label
+                || labels[idx - width] != label
+                || labels[idx + width] != label;
+
+            if is_boundary && grads[idx].mag > 50 {
+                let angle = f32::from(grads[idx].gy).atan2(f32::from(grads[idx].gx));
+                boundary_points.push((x, y, angle));
+            }
+        }
+    }
+
+    if boundary_points.len() < min_edge_pixels * 4 {
+        return None; // Not enough boundary points
+    }
+
+    // Cluster into 4 directions using simple k-means on angles
+    // Initialize with 4 orthogonal directions
+    let mut centroids = [
+        0.0f32,
+        std::f32::consts::FRAC_PI_2,
+        std::f32::consts::PI,
+        -std::f32::consts::FRAC_PI_2,
+    ];
+    let mut assignments = vec![0usize; boundary_points.len()];
+
+    for _ in 0..5 {
+        // 5 iterations of k-means
+        // Assignment step
+        for (i, (_x, _y, angle)) in boundary_points.iter().enumerate() {
+            let mut best_cluster = 0;
+            let mut best_dist = f32::MAX;
+            for (c, &centroid) in centroids.iter().enumerate() {
+                let diff = angle_diff(*angle, centroid);
+                if diff < best_dist {
+                    best_dist = diff;
+                    best_cluster = c;
+                }
+            }
+            assignments[i] = best_cluster;
+        }
+
+        // Update step
+        for c in 0..4 {
+            let mut sum_sin = 0.0f32;
+            let mut sum_cos = 0.0f32;
+            for (i, (_x, _y, angle)) in boundary_points.iter().enumerate() {
+                if assignments[i] == c {
+                    sum_sin += angle.sin();
+                    sum_cos += angle.cos();
+                }
+            }
+            if sum_sin.abs() > 1e-6 || sum_cos.abs() > 1e-6 {
+                centroids[c] = sum_sin.atan2(sum_cos);
+            }
+        }
+    }
+
+    // Fit line to each cluster
+    let mut lines: Vec<LineSegment> = Vec::new();
+    for c in 0..4 {
+        let cluster_points: Vec<(f32, f32)> = boundary_points
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| assignments[*i] == c)
+            .map(|(_, (x, y, _))| (*x as f32, *y as f32))
+            .collect();
+
+        if cluster_points.len() < min_edge_pixels {
+            continue;
+        }
+
+        // Simple line fit: use endpoints (could use least squares)
+        let (x0, y0) = cluster_points[0];
+        let (x1, y1) = cluster_points[cluster_points.len() - 1];
+
+        lines.push(LineSegment {
+            x0,
+            y0,
+            x1,
+            y1,
+            angle: centroids[c],
+        });
+    }
+
+    if lines.len() < 4 {
+        return None;
+    }
+
+    // Find 4 line segments that form a quad
+    find_quads_from_segments(&lines).into_iter().next()
+}
+
+/// Compute angle difference in range [0, π/2] (perpendicular equivalence)
+fn angle_diff(a: f32, b: f32) -> f32 {
+    let diff = (a - b).abs();
+    let diff = diff % std::f32::consts::PI;
+    diff.min(std::f32::consts::PI - diff)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
