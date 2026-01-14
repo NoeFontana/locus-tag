@@ -329,13 +329,71 @@ pub fn fit_quad_from_component(
         return None;
     }
 
-    // Cluster into 4 directions using simple k-means on angles
+    // PCA-based centroid initialization for rotation-invariance
+    // Compute covariance matrix of gradient vectors to find dominant direction
+    let n = boundary_points.len() as f32;
+
+    // First pass: collect (gx, gy) vectors for PCA
+    // We need to re-extract gradient vectors (not just angles) for covariance
+    let mut gx_sum = 0.0f32;
+    let mut gy_sum = 0.0f32;
+    let mut gxx_sum = 0.0f32;
+    let mut gyy_sum = 0.0f32;
+    let mut gxy_sum = 0.0f32;
+
+    for (_x, _y, angle) in &boundary_points {
+        // Convert angle back to unit gradient vector
+        let gx = angle.cos();
+        let gy = angle.sin();
+        gx_sum += gx;
+        gy_sum += gy;
+        gxx_sum += gx * gx;
+        gyy_sum += gy * gy;
+        gxy_sum += gx * gy;
+    }
+
+    // Covariance matrix elements (centered)
+    let mean_gx = gx_sum / n;
+    let mean_gy = gy_sum / n;
+    let cov_xx = gxx_sum / n - mean_gx * mean_gx;
+    let cov_yy = gyy_sum / n - mean_gy * mean_gy;
+    let cov_xy = gxy_sum / n - mean_gx * mean_gy;
+
+    // Find principal eigenvector of 2x2 covariance matrix
+    // For 2x2 symmetric matrix [[a,b],[b,c]], eigenvector for larger eigenvalue:
+    // λ = (a+c)/2 + sqrt(((a-c)/2)^2 + b^2)
+    // v = [b, λ - a] or [λ - c, b] (normalized)
+    let trace = cov_xx + cov_yy;
+    let det = cov_xx * cov_yy - cov_xy * cov_xy;
+    let discriminant = (trace * trace / 4.0 - det).max(0.0);
+    let lambda1 = trace / 2.0 + discriminant.sqrt();
+
+    // Principal eigenvector direction (dominant gradient angle)
+    let theta = if cov_xy.abs() > 1e-6 {
+        (lambda1 - cov_xx).atan2(cov_xy)
+    } else if cov_xx >= cov_yy {
+        0.0 // Horizontal dominant
+    } else {
+        std::f32::consts::FRAC_PI_2 // Vertical dominant
+    };
+
+    // Initialize centroids at θ, θ+90°, θ+180°, θ+270° (rotation-invariant)
     let mut centroids = [
-        0.0f32,
-        std::f32::consts::FRAC_PI_2,
-        std::f32::consts::PI,
-        -std::f32::consts::FRAC_PI_2,
+        theta,
+        theta + std::f32::consts::FRAC_PI_2,
+        theta + std::f32::consts::PI,
+        theta - std::f32::consts::FRAC_PI_2,
     ];
+    // Normalize angles to [-π, π]
+    for c in &mut centroids {
+        while *c > std::f32::consts::PI {
+            *c -= 2.0 * std::f32::consts::PI;
+        }
+        while *c < -std::f32::consts::PI {
+            *c += 2.0 * std::f32::consts::PI;
+        }
+    }
+
     let mut assignments = vec![0usize; boundary_points.len()];
 
     for _ in 0..5 {
