@@ -30,7 +30,7 @@ impl ThresholdEngine {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            tile_size: 8, // Standard 8x8 tiles
+            tile_size: 4, // Smaller tiles for sub-10px tag support // Standard 8x8 tiles
             min_range: 5, // Lower for low-contrast edge detection
         }
     }

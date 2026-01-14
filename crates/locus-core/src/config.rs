@@ -53,7 +53,7 @@ pub struct DetectorConfig {
 impl Default for DetectorConfig {
     fn default() -> Self {
         Self {
-            threshold_tile_size: 8, // Standard 8x8 tiles
+            threshold_tile_size: 4, // Smaller tiles for sub-10px tag support // Standard 8x8 tiles
             threshold_min_range: 5, // Lower threshold for detecting low-contrast edges
             quad_min_area: 64,      // Support 9px+ tags (9-Pixel Foundation)
             quad_max_aspect_ratio: 3.0,
