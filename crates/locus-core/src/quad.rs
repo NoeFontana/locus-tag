@@ -178,7 +178,7 @@ pub fn extract_quads_with_config(
 
         let contour = trace_boundary(arena, labels, img.width, img.height, sx, sy, label);
 
-        if contour.len() >= 30 {
+        if contour.len() >= 12 {  // Lowered from 30 to support 8px+ tags
             // Adaptive epsilon: 2% of perimeter (like OpenCV approxPolyDP)
             let perimeter = contour.len() as f64;
             let epsilon = (perimeter * 0.02).max(2.0);
@@ -200,7 +200,7 @@ pub fn extract_quads_with_config(
                     let compactness = (12.566 * area) / (perimeter * perimeter);
 
                     let min_area_f64 = f64::from(config.quad_min_area);
-                    if area > min_area_f64 && compactness > 0.4 {
+                    if area > 30.0 && compactness > 0.3 { // Lowered for small 8px+ tags
                         let mut ok = true;
                         for i in 0..4 {
                             let d2 = (reduced[i].x - reduced[i + 1].x).powi(2)
@@ -282,7 +282,7 @@ pub fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detec
             processed_labels[bit_idx] |= bit_mask;
             let contour = trace_boundary(arena, labels, width, height, x, y, label);
 
-            if contour.len() >= 30 {
+            if contour.len() >= 12 {  // Lowered from 30 to support 8px+ tags
                 let simplified = douglas_peucker(arena, &contour, 4.0);
                 if simplified.len() == 5 {
                     let area = polygon_area(&simplified);

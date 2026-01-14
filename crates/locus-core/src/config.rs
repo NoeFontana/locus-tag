@@ -55,7 +55,7 @@ impl Default for DetectorConfig {
         Self {
             threshold_tile_size: 8, // Standard 8x8 tiles
             threshold_min_range: 5, // Lower threshold for detecting low-contrast edges
-            quad_min_area: 400,
+            quad_min_area: 64,      // Support 9px+ tags (9-Pixel Foundation)
             quad_max_aspect_ratio: 3.0,
             quad_min_fill_ratio: 0.3,
             quad_max_fill_ratio: 0.95,

@@ -220,6 +220,7 @@ def process_image(args: tuple[Path, list[TagGroundTruth], bool]) -> EvalResult:
             res.img_shape = img.shape
 
         detector = locus.Detector(
+            quad_min_area=64,  # Support 9px+ tags
             quad_max_aspect_ratio=20.0,
             quad_min_edge_score=2.0,
         )
