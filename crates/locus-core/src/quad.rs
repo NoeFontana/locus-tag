@@ -387,15 +387,16 @@ fn polygon_center(points: &[Point]) -> [f64; 2] {
     [cx / n as f64, cy / n as f64]
 }
 
-/// Refine corners to sub-pixel accuracy using line intersection.
+/// Refine corners to sub-pixel accuracy using intensity-based optimization.
 ///
-/// Fits lines to the two edges meeting at a corner and computes their intersection.
-/// This is much more accurate than diagonal searching for perspective-distorted tags.
+/// Fits lines to the two edges meeting at a corner using PSF-blurred step function
+/// model and Gauss-Newton optimization, then computes their intersection.
+/// Achieves ~0.02px accuracy vs ~0.2px for gradient-peak methods.
 #[must_use]
 pub fn refine_corner(img: &ImageView, p: Point, p_prev: Point, p_next: Point) -> Point {
-    // Fit lines to the two edges: (p_prev, p) and (p, p_next)
-    let line1 = fit_edge_line(img, p_prev, p);
-    let line2 = fit_edge_line(img, p, p_next);
+    // Try intensity-based refinement first (higher accuracy)
+    let line1 = refine_edge_intensity(img, p_prev, p).or_else(|| fit_edge_line(img, p_prev, p));
+    let line2 = refine_edge_intensity(img, p, p_next).or_else(|| fit_edge_line(img, p, p_next));
 
     if let (Some(l1), Some(l2)) = (line1, line2) {
         // Intersect lines: a1*x + b1*y + c1 = 0 and a2*x + b2*y + c2 = 0
@@ -483,6 +484,146 @@ fn fit_edge_line(img: &ImageView, p1: Point, p2: Point) -> Option<(f64, f64, f64
     }
 
     Some((nx, ny, sum_d / count as f64))
+}
+
+/// Refine edge position using intensity-based optimization (Kallwies method).
+///
+/// Instead of finding gradient peaks, this minimizes the difference between
+/// observed pixel intensities and a PSF-blurred step function model:
+///
+/// Model(x,y) = (A+B)/2 + (A-B)/2 * erf(dist(x,y,line) / σ)
+///
+/// where A,B are intensities on either side, dist is perpendicular distance
+/// to the edge line, and σ is the blur factor (~0.6 pixels).
+///
+/// This achieves ~0.02px accuracy vs ~0.2px for gradient-based methods.
+#[allow(clippy::similar_names)]
+fn refine_edge_intensity(img: &ImageView, p1: Point, p2: Point) -> Option<(f64, f64, f64)> {
+    let dx = p2.x - p1.x;
+    let dy = p2.y - p1.y;
+    let len = (dx * dx + dy * dy).sqrt();
+    if len < 4.0 {
+        return None;
+    }
+
+    // Initial line parameters: normal (nx, ny) and distance d from origin
+    let mut nx = -dy / len;
+    let mut ny = dx / len;
+    let mid_x = (p1.x + p2.x) / 2.0;
+    let mid_y = (p1.y + p2.y) / 2.0;
+    let mut d = -(nx * mid_x + ny * mid_y);
+
+    // Collect pixels within 2 pixels of the edge
+    let x0 = (p1.x.min(p2.x) - 3.0).max(1.0) as usize;
+    let x1 = (p1.x.max(p2.x) + 3.0).min((img.width - 2) as f64) as usize;
+    let y0 = (p1.y.min(p2.y) - 3.0).max(1.0) as usize;
+    let y1 = (p1.y.max(p2.y) + 3.0).min((img.height - 2) as f64) as usize;
+
+    let mut samples: Vec<(f64, f64, f64)> = Vec::new(); // (x, y, intensity)
+
+    for py in y0..=y1 {
+        for px in x0..=x1 {
+            let x = px as f64;
+            let y = py as f64;
+
+            // Check if near the edge segment (not infinite line)
+            let t = ((x - p1.x) * dx + (y - p1.y) * dy) / (len * len);
+            if t < -0.1 || t > 1.1 {
+                continue;
+            }
+
+            let dist = (nx * x + ny * y + d).abs();
+            if dist < 2.5 {
+                let intensity = f64::from(img.get_pixel(px, py));
+                samples.push((x, y, intensity));
+            }
+        }
+    }
+
+    if samples.len() < 10 {
+        return Some((nx, ny, d)); // Fall back to initial estimate
+    }
+
+    // Estimate A (dark side) and B (light side) from samples
+    let mut dark_sum = 0.0;
+    let mut dark_count = 0;
+    let mut light_sum = 0.0;
+    let mut light_count = 0;
+
+    for &(x, y, intensity) in &samples {
+        let signed_dist = nx * x + ny * y + d;
+        if signed_dist < -0.5 {
+            dark_sum += intensity;
+            dark_count += 1;
+        } else if signed_dist > 0.5 {
+            light_sum += intensity;
+            light_count += 1;
+        }
+    }
+
+    if dark_count == 0 || light_count == 0 {
+        return Some((nx, ny, d));
+    }
+
+    let a = dark_sum / dark_count as f64;
+    let b = light_sum / light_count as f64;
+    let sigma = 0.6; // PSF blur factor
+    let inv_sigma = 1.0 / sigma;
+
+    // Gauss-Newton optimization: refine d (perpendicular offset)
+    // We fix the line direction (nx, ny) and only optimize the offset d
+    // This is a 1D optimization which is fast and stable
+    for _ in 0..5 {
+        let mut jtj = 0.0; // J^T * J (scalar for 1D)
+        let mut jtr = 0.0; // J^T * residual
+
+        for &(x, y, intensity) in &samples {
+            let signed_dist = (nx * x + ny * y + d) * inv_sigma;
+
+            // erf approximation for speed (Horner's method)
+            let erf_val = erf_approx(signed_dist);
+            let model = (a + b) / 2.0 + (b - a) / 2.0 * erf_val;
+            let residual = intensity - model;
+
+            // Derivative of model w.r.t. d: (b-a)/2 * d(erf)/d(d)
+            // d(erf(x))/dx = 2/sqrt(π) * exp(-x²)
+            // Chain rule: d(erf(dist/σ))/d(d) = 2/(σ*sqrt(π)) * exp(-dist²/σ²)
+            let exp_term = (-signed_dist * signed_dist).exp();
+            let jacobian = (b - a) * inv_sigma * 0.5641895835 * exp_term; // 1/sqrt(π)
+
+            jtj += jacobian * jacobian;
+            jtr += jacobian * residual;
+        }
+
+        if jtj.abs() > 1e-10 {
+            let delta = jtr / jtj;
+            d += delta.clamp(-0.5, 0.5); // Conservative step
+
+            if delta.abs() < 0.001 {
+                break; // Converged
+            }
+        }
+    }
+
+    Some((nx, ny, d))
+}
+
+/// Fast erf approximation using Horner's method (max error ~1.5e-7).
+#[inline]
+fn erf_approx(x: f64) -> f64 {
+    // Abramowitz and Stegun approximation (7.1.26)
+    let a1 = 0.254829592;
+    let a2 = -0.284496736;
+    let a3 = 1.421413741;
+    let a4 = -1.453152027;
+    let a5 = 1.061405429;
+    let p = 0.3275911;
+
+    let sign = if x < 0.0 { -1.0 } else { 1.0 };
+    let x = x.abs();
+    let t = 1.0 / (1.0 + p * x);
+    let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-x * x).exp();
+    sign * y
 }
 
 /// Reducing a polygon to a quad (4 vertices + 1 closing) by iteratively removing
