@@ -225,6 +225,147 @@ pub fn label_components_with_stats<'a>(
     }
 }
 
+/// Threshold-model-aware connected component labeling.
+///
+/// Instead of connecting pixels based on binary value (0 = black), this function
+/// connects pixels based on their *signed deviation* from the local threshold.
+/// This preserves the shape of small tag corners where pure binary would see noise.
+///
+/// # Arguments
+/// * `arena` - Bump allocator for temporary storage
+/// * `grayscale` - Original grayscale image
+/// * `threshold_map` - Per-pixel threshold values (from adaptive thresholding)
+/// * `width` - Image width
+/// * `height` - Image height
+///
+/// # Returns
+/// Same `LabelResult` as `label_components_with_stats`, but with improved connectivity
+/// for small features.
+#[allow(clippy::cast_sign_loss)]
+#[allow(clippy::cast_possible_wrap)]
+pub fn label_components_threshold_model<'a>(
+    arena: &'a Bump,
+    grayscale: &[u8],
+    threshold_map: &[u8],
+    width: usize,
+    height: usize,
+) -> LabelResult<'a> {
+    // Compute signed deviation: negative = dark (below threshold), positive = light
+    // We only care about dark regions (tag interior) for now
+    let mut runs = BumpVec::new_in(arena);
+
+    // Pass 1: Extract runs of "consistently dark" pixels
+    // A pixel is "dark" if (grayscale - threshold) < -margin
+    // This is more robust than binary == 0 because it considers the local model
+    const MARGIN: i16 = 2; // Pixels must be at least 2 below threshold
+
+    for y in 0..height {
+        let row_gs = &grayscale[y * width..(y + 1) * width];
+        let row_th = &threshold_map[y * width..(y + 1) * width];
+
+        let mut x = 0;
+        while x < width {
+            // Find start of dark run: gs < threshold - margin
+            let deviation = i16::from(row_gs[x]) - i16::from(row_th[x]);
+            if deviation < -MARGIN {
+                let start = x;
+                x += 1;
+                // Continue while consistently dark
+                while x < width {
+                    let dev = i16::from(row_gs[x]) - i16::from(row_th[x]);
+                    if dev >= -MARGIN {
+                        break;
+                    }
+                    x += 1;
+                }
+                runs.push(Run {
+                    y: y as u32,
+                    x_start: start as u32,
+                    x_end: (x - 1) as u32,
+                    id: runs.len() as u32,
+                });
+            } else {
+                x += 1;
+            }
+        }
+    }
+
+    if runs.is_empty() {
+        return LabelResult {
+            labels: arena.alloc_slice_fill_copy(width * height, 0u32),
+            component_stats: Vec::new(),
+        };
+    }
+
+    // Pass 2-4 are the same as label_components_with_stats
+    let mut uf = UnionFind::new_in(arena, runs.len());
+    let mut curr_row_range = 0..0;
+    let mut i = 0;
+
+    while i < runs.len() {
+        let y = runs[i].y;
+        let start = i;
+        while i < runs.len() && runs[i].y == y {
+            i += 1;
+        }
+        let prev_row_range = curr_row_range;
+        curr_row_range = start..i;
+
+        if y > 0 && !prev_row_range.is_empty() && runs[prev_row_range.start].y == y - 1 {
+            let mut p_idx = prev_row_range.start;
+            for c_idx in curr_row_range.clone() {
+                let curr = &runs[c_idx];
+                while p_idx < prev_row_range.end && runs[p_idx].x_end + 1 < curr.x_start {
+                    p_idx += 1;
+                }
+                let mut temp_p = p_idx;
+                while temp_p < prev_row_range.end && runs[temp_p].x_start <= curr.x_end + 1 {
+                    uf.union(curr.id, runs[temp_p].id);
+                    temp_p += 1;
+                }
+            }
+        }
+    }
+
+    let mut root_to_label: Vec<u32> = vec![0; runs.len()];
+    let mut component_stats: Vec<ComponentStats> = Vec::new();
+    let mut next_label = 1u32;
+    let mut run_roots = Vec::with_capacity(runs.len());
+
+    for run in &runs {
+        let root = uf.find(run.id) as usize;
+        run_roots.push(root);
+        if root_to_label[root] == 0 {
+            root_to_label[root] = next_label;
+            next_label += 1;
+            component_stats.push(ComponentStats {
+                first_pixel_x: run.x_start as u16,
+                first_pixel_y: run.y as u16,
+                ..Default::default()
+            });
+        }
+        let label_idx = (root_to_label[root] - 1) as usize;
+        let stats = &mut component_stats[label_idx];
+        stats.min_x = stats.min_x.min(run.x_start as u16);
+        stats.max_x = stats.max_x.max(run.x_end as u16);
+        stats.min_y = stats.min_y.min(run.y as u16);
+        stats.max_y = stats.max_y.max(run.y as u16);
+        stats.pixel_count += run.x_end - run.x_start + 1;
+    }
+
+    let labels = arena.alloc_slice_fill_copy(width * height, 0u32);
+    for (run, root) in runs.iter().zip(run_roots) {
+        let label = root_to_label[root];
+        let row_off = run.y as usize * width;
+        labels[row_off + run.x_start as usize..=row_off + run.x_end as usize].fill(label);
+    }
+
+    LabelResult {
+        labels,
+        component_stats,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

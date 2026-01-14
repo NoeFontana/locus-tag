@@ -177,6 +177,123 @@ impl ThresholdEngine {
             }
         }
     }
+
+    /// Apply adaptive thresholding and return both binary and threshold maps.
+    ///
+    /// This is needed for threshold-model-aware segmentation, which uses the
+    /// per-pixel threshold values to connect pixels by their deviation sign.
+    pub fn apply_threshold_with_map(
+        &self,
+        img: &ImageView,
+        stats: &[TileStats],
+        binary_output: &mut [u8],
+        threshold_output: &mut [u8],
+    ) {
+        let ts = self.tile_size;
+        let tiles_wide = img.width / ts;
+        let tiles_high = img.height / ts;
+
+        let mut tile_thresholds = vec![0u8; tiles_wide * tiles_high];
+        let mut tile_valid = vec![0u8; tiles_wide * tiles_high];
+
+        // Same tile threshold computation as apply_threshold
+        for ty in 0..tiles_high {
+            let y_start = ty.saturating_sub(1);
+            let y_end = (ty + 1).min(tiles_high - 1);
+
+            for tx in 0..tiles_wide {
+                let mut nmin = 255u8;
+                let mut nmax = 0u8;
+
+                let x_start = tx.saturating_sub(1);
+                let x_end = (tx + 1).min(tiles_wide - 1);
+
+                for ny in y_start..=y_end {
+                    let row_off = ny * tiles_wide;
+                    for nx in x_start..=x_end {
+                        let s = stats[row_off + nx];
+                        if s.min < nmin {
+                            nmin = s.min;
+                        }
+                        if s.max > nmax {
+                            nmax = s.max;
+                        }
+                    }
+                }
+
+                let idx = ty * tiles_wide + tx;
+                if nmax.saturating_sub(nmin) < self.min_range {
+                    tile_valid[idx] = 0;
+                    tile_thresholds[idx] = ((u16::from(nmin) + u16::from(nmax)) >> 1) as u8;
+                } else {
+                    tile_valid[idx] = 255;
+                    tile_thresholds[idx] = ((u16::from(nmin) + u16::from(nmax)) >> 1) as u8;
+                }
+            }
+        }
+
+        // Propagation pass
+        for _ in 0..2 {
+            for ty in 0..tiles_high {
+                for tx in 0..tiles_wide {
+                    let idx = ty * tiles_wide + tx;
+                    if tile_valid[idx] == 0 {
+                        let mut sum_thresh = 0u32;
+                        let mut count = 0u32;
+
+                        let y_start = ty.saturating_sub(1);
+                        let y_end = (ty + 1).min(tiles_high - 1);
+                        let x_start = tx.saturating_sub(1);
+                        let x_end = (tx + 1).min(tiles_wide - 1);
+
+                        for ny in y_start..=y_end {
+                            let row_off = ny * tiles_wide;
+                            for nx in x_start..=x_end {
+                                let n_idx = row_off + nx;
+                                if tile_valid[n_idx] > 0 {
+                                    sum_thresh += u32::from(tile_thresholds[n_idx]);
+                                    count += 1;
+                                }
+                            }
+                        }
+
+                        if count > 0 {
+                            tile_thresholds[idx] = (sum_thresh / count) as u8;
+                            tile_valid[idx] = 128;
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut row_thresholds = vec![0u8; img.width];
+        let mut row_valid = vec![0u8; img.width];
+
+        for ty in 0..tiles_high {
+            for tx in 0..tiles_wide {
+                let idx = ty * tiles_wide + tx;
+                let thresh = tile_thresholds[idx];
+                let valid = tile_valid[idx];
+                for i in 0..ts {
+                    row_thresholds[tx * ts + i] = thresh;
+                    row_valid[tx * ts + i] = valid;
+                }
+            }
+
+            for dy in 0..ts {
+                let py = ty * ts + dy;
+                let src_row = img.get_row(py);
+                let dst_start = py * img.width;
+
+                // Write binary output
+                let bin_row = &mut binary_output[dst_start..dst_start + img.width];
+                threshold_row_simd(src_row, bin_row, &row_thresholds, &row_valid);
+
+                // Write threshold map
+                threshold_output[dst_start..dst_start + img.width].copy_from_slice(&row_thresholds);
+            }
+        }
+    }
 }
 
 /// SIMD-optimized row tile stats computation with subsampling (stride 2).

@@ -165,7 +165,7 @@ impl Detector {
 
         self.arena.reset();
 
-        // 1. Thresholding
+        // 1. Thresholding (with threshold map for model-aware segmentation)
         let start_thresh = std::time::Instant::now();
         let tile_stats = {
             let _span = tracing::info_span!("threshold_tiles").entered();
@@ -174,20 +174,30 @@ impl Detector {
         let binarized = self
             .arena
             .alloc_slice_fill_copy(img.width * img.height, 0u8);
+        let threshold_map = self
+            .arena
+            .alloc_slice_fill_copy(img.width * img.height, 0u8);
         {
             let _span = tracing::info_span!("threshold_apply").entered();
-            self.threshold_engine
-                .apply_threshold(img, &tile_stats, binarized);
+            self.threshold_engine.apply_threshold_with_map(
+                img,
+                &tile_stats,
+                binarized,
+                threshold_map,
+            );
         }
         stats.threshold_ms = start_thresh.elapsed().as_secs_f64() * 1000.0;
 
-        // 2. Segmentation (Connected Components with stats)
+        // 2. Segmentation (Threshold-model-aware clustering)
+        // Connects pixels based on deviation from local threshold, not just binary value.
+        // This preserves small tag corners better than pure binary segmentation.
         let start_seg = std::time::Instant::now();
         let label_result = {
             let _span = tracing::info_span!("segmentation").entered();
-            crate::segmentation::label_components_with_stats(
+            crate::segmentation::label_components_threshold_model(
                 &self.arena,
-                binarized,
+                img.data,
+                threshold_map,
                 img.width,
                 img.height,
             )
