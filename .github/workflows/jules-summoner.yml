@@ -15,32 +15,58 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     steps:
-      - name: Download Failure Logs
+      - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: ./logs
+          # We REMOVED the 'name:' input. 
+          # This tells the action to download ALL artifacts from the failed run.
 
-      - name: Prepare Log Snippet
-        id: log-snippet
+      - name: Prepare Log Summary
+        id: log-summary
         run: |
-          # Find the largest log file or fallback to a default message
-          LOG_FILE=$(find ./logs -type f -name "*.log" | head -n 1)
-
-          if [ -f "$LOG_FILE" ]; then
-            echo "Extracting tail of $LOG_FILE..."
-            # Keep only the last 50 lines to avoid hitting GitHub API body limits
-            LOG_CONTENT=$(tail -n 50 "$LOG_FILE")
-          else
-            LOG_CONTENT="No log file found in artifact. Check CI workflow uploads."
+          LOG_SUMMARY=""
+          
+          # Loop through ALL .log files found in the artifacts
+          # (Handles multiple failures like Rust + Python Matrix)
+          while IFS= read -r log_file; do
+            filename=$(basename "$log_file")
+            
+            # Header for this specific log
+            LOG_SUMMARY+=$'\n\n### 📄 Log: '"$filename"$'\n'
+            LOG_SUMMARY+=$'```text\n'
+            
+            # SMART TAIL:
+            # 1. Try to grep for "error" context if it exists
+            # 2. Fallback to tail -n 100 (50 is too short for Rust)
+            if grep -iq "error" "$log_file"; then
+              # Get lines containing 'error' and 5 lines of context around them
+              # Limit to last 20 matches to keep it readable
+              SNIPPET=$(grep -C 5 -i "error" "$log_file" | tail -n 100)
+              LOG_SUMMARY+="... (Smart Grep 'error') ..."$'\n'
+              LOG_SUMMARY+="$SNIPPET"
+            else
+              # Fallback: Just the end
+              LOG_SUMMARY+="$(tail -n 100 "$log_file")"
+            fi
+            
+            LOG_SUMMARY+=$'\n```'
+            
+          done < <(find ./logs -type f -name "*.log")
+          
+          if [ -z "$LOG_SUMMARY" ]; then
+            LOG_SUMMARY="No log files found in artifacts."
           fi
-
-          # Write to GITHUB_ENV to handle multiline strings safely
+          
+          # Generate random delimiter to prevent EOF collisions
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          
           {
-            echo 'LOG_Snippet<<EOF'
-            echo "$LOG_CONTENT"
-            echo 'EOF'
+            echo "LOGS<<$EOF"
+            echo "$LOG_SUMMARY"
+            echo "$EOF"
           } >> $GITHUB_ENV
 
       - name: Create Issue for Jules
@@ -48,18 +74,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_ID: ${{ github.event.workflow_run.id }}
           REPO: ${{ github.repository }}
-          LOGS: ${{ env.LOG_Snippet }}
+          LOGS: ${{ env.LOGS }}
         run: |
           RUN_URL="https://github.com/$REPO/actions/runs/$RUN_ID"
-
-          # Create body with proper formatting
+          
           gh issue create \
             --title "🚨 CI Failure: Run #$RUN_ID" \
             --body "@jules The CI workflow failed. Please analyze the failure.
-
+            
             **Failed Run:** $RUN_URL
-
-            ### Log Snippet (Last 50 Lines)
+            
+            ### Log Snippet
             \`\`\`text
             $LOGS
             \`\`\`
