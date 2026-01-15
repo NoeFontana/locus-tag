@@ -165,12 +165,9 @@ impl Detector {
 
         self.arena.reset();
 
-        // 1. Thresholding (with threshold map for model-aware segmentation)
+        // 1. Thresholding - Use integral image-based per-pixel adaptive threshold
+        // This produces OpenCV-like results for better small tag detection
         let start_thresh = std::time::Instant::now();
-        let tile_stats = {
-            let _span = tracing::info_span!("threshold_tiles").entered();
-            self.threshold_engine.compute_tile_stats(img)
-        };
         let binarized = self
             .arena
             .alloc_slice_fill_copy(img.width * img.height, 0u8);
@@ -178,26 +175,25 @@ impl Detector {
             .arena
             .alloc_slice_fill_copy(img.width * img.height, 0u8);
         {
-            let _span = tracing::info_span!("threshold_apply").entered();
-            self.threshold_engine.apply_threshold_with_map(
-                img,
-                &tile_stats,
-                binarized,
-                threshold_map,
-            );
+            let _span = tracing::info_span!("threshold_integral").entered();
+            // Compute integral image for O(1) local mean per pixel
+            let integral = crate::threshold::compute_integral_image(img);
+            // Apply per-pixel adaptive threshold with radius=6 (13x13 window), C=3
+            crate::threshold::adaptive_threshold_integral(img, &integral, binarized, 6, 3);
+            // For threshold_map, store the local mean (for threshold-model segmentation)
+            // Recompute as we need per-pixel thresholds
+            compute_threshold_map(img, &integral, threshold_map, 6, 3);
         }
         stats.threshold_ms = start_thresh.elapsed().as_secs_f64() * 1000.0;
 
-        // 2. Segmentation (Threshold-model-aware clustering)
-        // Connects pixels based on deviation from local threshold, not just binary value.
-        // This preserves small tag corners better than pure binary segmentation.
+        // 2. Segmentation - Standard binary CCL
+        // Use the binarized image directly for connected component labeling
         let start_seg = std::time::Instant::now();
         let label_result = {
             let _span = tracing::info_span!("segmentation").entered();
-            crate::segmentation::label_components_threshold_model(
+            crate::segmentation::label_components_with_stats(
                 &self.arena,
-                img.data,
-                threshold_map,
+                binarized,
                 img.width,
                 img.height,
             )
@@ -275,3 +271,43 @@ pub fn core_info() -> String {
 
 // Use family_to_decoder from the decoder module.
 pub use decoder::family_to_decoder;
+
+/// Compute per-pixel threshold map from integral image.
+///
+/// Stores local mean - C for each pixel, used by threshold-model segmentation.
+fn compute_threshold_map(
+    img: &image::ImageView,
+    integral: &[u32],
+    output: &mut [u8],
+    radius: usize,
+    c: i16,
+) {
+    let w = img.width;
+    let h = img.height;
+    let stride = w + 1;
+
+    for y in 0..h {
+        let dst_offset = y * w;
+
+        let y0 = y.saturating_sub(radius);
+        let y1 = (y + radius + 1).min(h);
+        let actual_height = (y1 - y0) as u32;
+
+        for x in 0..w {
+            let x0 = x.saturating_sub(radius);
+            let x1 = (x + radius + 1).min(w);
+            let actual_width = (x1 - x0) as u32;
+            let actual_area = actual_width * actual_height;
+
+            let i00 = integral[y0 * stride + x0];
+            let i01 = integral[y0 * stride + x1];
+            let i10 = integral[y1 * stride + x0];
+            let i11 = integral[y1 * stride + x1];
+
+            let sum = i11 - i01 - i10 + i00;
+            let mean = (sum / actual_area) as i16;
+            let threshold = (mean - c).clamp(0, 255) as u8;
+            output[dst_offset + x] = threshold;
+        }
+    }
+}

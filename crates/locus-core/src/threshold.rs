@@ -625,3 +625,124 @@ fn compute_min_max_simd(data: &[u8]) -> (u8, u8) {
     }
     (min, max)
 }
+
+// =============================================================================
+// INTEGRAL IMAGE-BASED ADAPTIVE THRESHOLD (SOTA)
+// =============================================================================
+//
+// This implements OpenCV-style ADAPTIVE_THRESH_MEAN_C using integral images:
+// 1. Compute integral image in O(W*H)
+// 2. For each pixel, compute local mean in O(1) using integral image
+// 3. Threshold: pixel < (local_mean - C) ? black : white
+//
+// This produces per-pixel adaptive thresholds for small tag detection.
+
+/// Compute integral image (cumulative sum) for fast box filter computation.
+///
+/// The integral image I at (x,y) contains sum of all pixels in rectangle (0,0)-(x,y).
+/// This allows O(1) computation of sum over any rectangle.
+///
+/// Memory layout: (width+1) * (height+1) to handle border cases without branches.
+#[must_use]
+pub fn compute_integral_image(img: &ImageView) -> Vec<u32> {
+    let w = img.width;
+    let h = img.height;
+    let stride = w + 1;
+
+    // Allocate with extra row and column of zeros for border handling
+    let mut integral = vec![0u32; stride * (h + 1)];
+
+    // First pass: compute cumulative row sums
+    for y in 0..h {
+        let src_row = img.get_row(y);
+        let dst_offset = (y + 1) * stride + 1;
+
+        let mut row_sum = 0u32;
+        for x in 0..w {
+            row_sum += u32::from(src_row[x]);
+            // Add current row sum to the value from row above
+            integral[dst_offset + x] = row_sum + integral[dst_offset + x - stride];
+        }
+    }
+
+    integral
+}
+
+/// Apply per-pixel adaptive threshold using integral image.
+///
+/// This mimics OpenCV's ADAPTIVE_THRESH_MEAN_C:
+/// - For each pixel, compute mean of (2*radius+1) x (2*radius+1) neighborhood
+/// - Pixel is black (0) if value < (mean - C), else white (255)
+///
+/// Parameters:
+/// - `radius`: Half-size of the neighborhood (e.g., 6 for 13x13 window)
+/// - `c`: Constant subtracted from mean (typically 3-5)
+#[multiversion(targets = "simd")]
+pub fn adaptive_threshold_integral(
+    img: &ImageView,
+    integral: &[u32],
+    output: &mut [u8],
+    radius: usize,
+    c: i16,
+) {
+    let w = img.width;
+    let h = img.height;
+    let stride = w + 1;
+
+    // Precompute window area for division
+    let window_size = (2 * radius + 1) as u32;
+    let area = window_size * window_size;
+
+    for y in 0..h {
+        let src_row = img.get_row(y);
+        let dst_offset = y * w;
+
+        // Clamp window bounds for this row
+        let y0 = y.saturating_sub(radius);
+        let y1 = (y + radius + 1).min(h);
+        let actual_height = (y1 - y0) as u32;
+
+        for x in 0..w {
+            // Clamp window bounds for this column
+            let x0 = x.saturating_sub(radius);
+            let x1 = (x + radius + 1).min(w);
+            let actual_width = (x1 - x0) as u32;
+            let actual_area = actual_width * actual_height;
+
+            // Compute sum using integral image: I(x1,y1) - I(x0,y1) - I(x1,y0) + I(x0,y0)
+            let i00 = integral[y0 * stride + x0];
+            let i01 = integral[y0 * stride + x1];
+            let i10 = integral[y1 * stride + x0];
+            let i11 = integral[y1 * stride + x1];
+
+            let sum = i11 - i01 - i10 + i00;
+            let mean = (sum / actual_area) as i16;
+
+            // Threshold with constant C
+            let threshold = (mean - c).max(0) as u8;
+            output[dst_offset + x] = if src_row[x] < threshold { 0 } else { 255 };
+        }
+    }
+}
+
+/// Fast adaptive threshold combining integral image approach with SIMD.
+///
+/// This is the main entry point for SOTA adaptive thresholding:
+/// - Computes integral image once
+/// - Applies per-pixel adaptive threshold with local mean
+/// - Uses default parameters tuned for AprilTag detection
+pub fn apply_adaptive_threshold_fast(img: &ImageView, output: &mut [u8]) {
+    // OpenCV uses blockSize=13 (radius=6) and C=3 as good defaults
+    apply_adaptive_threshold_with_params(img, output, 6, 3);
+}
+
+/// Adaptive threshold with custom parameters.
+pub fn apply_adaptive_threshold_with_params(
+    img: &ImageView,
+    output: &mut [u8],
+    radius: usize,
+    c: i16,
+) {
+    let integral = compute_integral_image(img);
+    adaptive_threshold_integral(img, &integral, output, radius, c);
+}
