@@ -79,6 +79,7 @@ jobs:
           RUN_URL="https://github.com/$REPO/actions/runs/$RUN_ID"
           
           gh issue create \
+            --repo "$REPO" \
             --title "🚨 CI Failure: Run #$RUN_ID" \
             --body "@jules The CI workflow failed. Please analyze the failure.
             
