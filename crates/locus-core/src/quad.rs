@@ -179,12 +179,14 @@ pub fn extract_quads_with_config(
         let contour = trace_boundary(arena, labels, img.width, img.height, sx, sy, label);
 
         if contour.len() >= 12 {
-            // Lowered from 30 to support 8px+ tags
-            // Adaptive epsilon: 2% of perimeter (like OpenCV approxPolyDP)
+            // Apply chain approximation to remove redundant points on straight lines
+            let simple_contour = chain_approximation(arena, &contour);
+
+            // Adaptive epsilon: 2% of perimeter
             let perimeter = contour.len() as f64;
-            let epsilon = (perimeter * 0.02).max(2.0);
-            let simplified = douglas_peucker(arena, &contour, epsilon);
-            // Allow somewhat jagged quads (up to 10 points) and reduce them
+            let epsilon = (perimeter * 0.02).max(1.0);
+            let simplified = douglas_peucker(arena, &simple_contour, epsilon);
+
             if simplified.len() >= 4 && simplified.len() <= 11 {
                 // Allow perfect quads (4 points)
                 let simpl_len = simplified.len();
@@ -975,6 +977,11 @@ mod tests {
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
+/// SOTA Boundary Tracing using robust border following.
+///
+/// This implementation uses a state-machine based approach to follow the border
+/// of a connected component. It is designed to be robust and efficient,
+/// avoiding expensive operations in the inner loop.
 fn trace_boundary<'a>(
     arena: &'a Bump,
     labels: &[u32],
@@ -985,42 +992,79 @@ fn trace_boundary<'a>(
     target_label: u32,
 ) -> BumpVec<'a, Point> {
     let mut points = BumpVec::new_in(arena);
+
+    // Moore Neighborhood directions (CW order starting from Top)
+    // index: 0, 1, 2, 3, 4, 5, 6, 7
+    // dir:   T, TR, R, BR, B, BL, L, TL
     let dx = [0, 1, 1, 1, 0, -1, -1, -1];
     let dy = [-1, -1, 0, 1, 1, 1, 0, -1];
 
     let mut curr_x = start_x;
     let mut curr_y = start_y;
-    let mut enter_dir = 0;
+    let mut walk_dir = 2; // Initial guess: we found the leftmost-topmost, so move Right
 
-    loop {
+    for _ in 0..10000 {
         points.push(Point {
             x: curr_x as f64,
             y: curr_y as f64,
         });
 
         let mut found = false;
+        // Search neighbors CCW starting from "relative left" of movement
+        // If we moved in walk_dir, we start searching from (walk_dir + 6) % 8
         for i in 0..8 {
-            let dir = (enter_dir + i) % 8;
+            let dir = (walk_dir + 6 + i) % 8;
             let nx = curr_x as isize + dx[dir];
             let ny = curr_y as isize + dy[dir];
 
-            if nx >= 0
-                && nx < width as isize
-                && ny >= 0
-                && ny < height as isize
-                && labels[ny as usize * width + nx as usize] == target_label
-            {
-                curr_x = nx as usize;
-                curr_y = ny as usize;
-                enter_dir = (dir + 5) % 8;
-                found = true;
-                break;
+            if nx >= 0 && nx < width as isize && ny >= 0 && ny < height as isize {
+                if labels[ny as usize * width + nx as usize] == target_label {
+                    curr_x = nx as usize;
+                    curr_y = ny as usize;
+                    walk_dir = dir;
+                    found = true;
+                    break;
+                }
             }
         }
 
-        if !found || (curr_x == start_x && curr_y == start_y) || points.len() > 10000 {
+        if !found || (curr_x == start_x && curr_y == start_y) {
             break;
         }
     }
+
     points
+}
+
+/// Simplified version of CHAIN_APPROX_SIMPLE:
+/// Removes all redundant points on straight lines.
+pub fn chain_approximation<'a>(arena: &'a Bump, points: &[Point]) -> BumpVec<'a, Point> {
+    if points.len() < 3 {
+        let mut v = BumpVec::new_in(arena);
+        v.extend_from_slice(points);
+        return v;
+    }
+
+    let mut result = BumpVec::new_in(arena);
+    result.push(points[0]);
+
+    for i in 1..points.len() - 1 {
+        let p_prev = points[i - 1];
+        let p_curr = points[i];
+        let p_next = points[i + 1];
+
+        let dx1 = p_curr.x - p_prev.x;
+        let dy1 = p_curr.y - p_prev.y;
+        let dx2 = p_next.x - p_curr.x;
+        let dy2 = p_next.y - p_curr.y;
+
+        // If directions are strictly different, it's a corner
+        // Using exact float comparison is safe here because these are pixel coordinates (integers)
+        if (dx1 * dy2 - dx2 * dy1).abs() > 1e-6 {
+            result.push(p_curr);
+        }
+    }
+
+    result.push(*points.last().unwrap_or(&points[0]));
+    result
 }

@@ -60,7 +60,7 @@ impl Default for DetectorConfig {
             quad_min_fill_ratio: 0.3,
             quad_max_fill_ratio: 0.95,
             quad_min_edge_length: 4.0,
-            quad_min_edge_score: 10.0,
+            quad_min_edge_score: 2.0,
         }
     }
 }
