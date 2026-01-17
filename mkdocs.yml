@@ -35,4 +35,5 @@ plugins:
 
 nav:
   - Home: index.md
+  - Coordinate Systems: coordinates.md
   - API Reference: api.md

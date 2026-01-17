@@ -285,7 +285,7 @@ pub fn fit_quad_from_component(
     let y1 = (max_y + 2).min(height);
 
     // Collect boundary pixels with inline Sobel gradient
-    let mut boundary_points: Vec<(usize, usize, f32)> = Vec::new();
+    let mut boundary_points: Vec<(usize, usize, f32, f32)> = Vec::new();
 
     for y in y0.max(1)..y1.min(height - 1) {
         for x in x0.max(1)..x1.min(width - 1) {
@@ -317,9 +317,9 @@ pub fn fit_quad_from_component(
             let gy = -p00 - 2 * p10 - p20 + p02 + 2 * p12 + p22;
             let mag = (gx.abs() + gy.abs()) as u16;
 
-            if mag > 50 {
+            if mag > 20 {
                 let angle = (gy as f32).atan2(gx as f32);
-                boundary_points.push((x, y, angle));
+                boundary_points.push((x, y, angle, mag as f32));
             }
         }
     }
@@ -331,60 +331,53 @@ pub fn fit_quad_from_component(
 
     // PCA-based centroid initialization for rotation-invariance
     // Compute covariance matrix of gradient vectors to find dominant direction
-    let n = boundary_points.len() as f32;
-
-    // First pass: collect (gx, gy) vectors for PCA
-    // We need to re-extract gradient vectors (not just angles) for covariance
+    // Weight by magnitude to ignore noise
+    let mut weight_sum = 0.0f32;
     let mut gx_sum = 0.0f32;
     let mut gy_sum = 0.0f32;
     let mut gxx_sum = 0.0f32;
     let mut gyy_sum = 0.0f32;
     let mut gxy_sum = 0.0f32;
 
-    for (_x, _y, angle) in &boundary_points {
-        // Convert angle back to unit gradient vector
+    for (_x, _y, angle, mag) in &boundary_points {
+        let w = *mag;
         let gx = angle.cos();
         let gy = angle.sin();
-        gx_sum += gx;
-        gy_sum += gy;
-        gxx_sum += gx * gx;
-        gyy_sum += gy * gy;
-        gxy_sum += gx * gy;
+        weight_sum += w;
+        gx_sum += gx * w;
+        gy_sum += gy * w;
+        gxx_sum += gx * gx * w;
+        gyy_sum += gy * gy * w;
+        gxy_sum += gx * gy * w;
     }
 
     // Covariance matrix elements (centered)
-    let mean_gx = gx_sum / n;
-    let mean_gy = gy_sum / n;
-    let cov_xx = gxx_sum / n - mean_gx * mean_gx;
-    let cov_yy = gyy_sum / n - mean_gy * mean_gy;
-    let cov_xy = gxy_sum / n - mean_gx * mean_gy;
+    let mean_gx = gx_sum / weight_sum;
+    let mean_gy = gy_sum / weight_sum;
+    let cov_xx = gxx_sum / weight_sum - mean_gx * mean_gx;
+    let cov_yy = gyy_sum / weight_sum - mean_gy * mean_gy;
+    let cov_xy = gxy_sum / weight_sum - mean_gx * mean_gy;
 
-    // Find principal eigenvector of 2x2 covariance matrix
-    // For 2x2 symmetric matrix [[a,b],[b,c]], eigenvector for larger eigenvalue:
-    // λ = (a+c)/2 + sqrt(((a-c)/2)^2 + b^2)
-    // v = [b, λ - a] or [λ - c, b] (normalized)
+    // Find principal eigenvector
     let trace = cov_xx + cov_yy;
     let det = cov_xx * cov_yy - cov_xy * cov_xy;
     let discriminant = (trace * trace / 4.0 - det).max(0.0);
     let lambda1 = trace / 2.0 + discriminant.sqrt();
 
-    // Principal eigenvector direction (dominant gradient angle)
     let theta = if cov_xy.abs() > 1e-6 {
         (lambda1 - cov_xx).atan2(cov_xy)
     } else if cov_xx >= cov_yy {
-        0.0 // Horizontal dominant
+        0.0
     } else {
-        std::f32::consts::FRAC_PI_2 // Vertical dominant
+        std::f32::consts::FRAC_PI_2
     };
 
-    // Initialize centroids at θ, θ+90°, θ+180°, θ+270° (rotation-invariant)
     let mut centroids = [
         theta,
         theta + std::f32::consts::FRAC_PI_2,
         theta + std::f32::consts::PI,
         theta - std::f32::consts::FRAC_PI_2,
     ];
-    // Normalize angles to [-π, π]
     for c in &mut centroids {
         while *c > std::f32::consts::PI {
             *c -= 2.0 * std::f32::consts::PI;
@@ -398,7 +391,7 @@ pub fn fit_quad_from_component(
 
     for _ in 0..5 {
         // Assignment step
-        for (i, (_x, _y, angle)) in boundary_points.iter().enumerate() {
+        for (i, (_x, _y, angle, _mag)) in boundary_points.iter().enumerate() {
             let mut best_cluster = 0;
             let mut best_dist = f32::MAX;
             for (c, &centroid) in centroids.iter().enumerate() {
@@ -411,14 +404,14 @@ pub fn fit_quad_from_component(
             assignments[i] = best_cluster;
         }
 
-        // Update step
+        // Update step (Weighted by magnitude)
         for c in 0..4 {
             let mut sum_sin = 0.0f32;
             let mut sum_cos = 0.0f32;
-            for (i, (_x, _y, angle)) in boundary_points.iter().enumerate() {
+            for (i, (_x, _y, angle, mag)) in boundary_points.iter().enumerate() {
                 if assignments[i] == c {
-                    sum_sin += angle.sin();
-                    sum_cos += angle.cos();
+                    sum_sin += angle.sin() * mag;
+                    sum_cos += angle.cos() * mag;
                 }
             }
             if sum_sin.abs() > 1e-6 || sum_cos.abs() > 1e-6 {
@@ -427,40 +420,43 @@ pub fn fit_quad_from_component(
         }
     }
 
-    // Fit line to each cluster using Least Squares
+    // Fit line to each cluster using Weighted Least Squares (WLS)
     let mut lines: Vec<LineSegment> = Vec::new();
     for c in 0..4 {
-        let cluster_points: Vec<(f32, f32)> = boundary_points
+        let cluster_points: Vec<(f32, f32, f32)> = boundary_points
             .iter()
             .enumerate()
             .filter(|(i, _)| assignments[*i] == c)
-            .map(|(_, (x, y, _))| (*x as f32, *y as f32))
+            .map(|(_, &(x, y, _, mag))| (x as f32, y as f32, mag))
             .collect();
 
         if cluster_points.len() < 3 {
             continue;
         }
 
-        // Least Squares Line Fitting
-        let n = cluster_points.len() as f32;
-        let mut sum_x = 0.0f32;
-        let mut sum_y = 0.0f32;
-        for &(x, y) in &cluster_points {
-            sum_x += x;
-            sum_y += y;
+        // Weighted Least Squares Line Fitting
+        let mut sum_w = 0.0f32;
+        let mut sum_wx = 0.0f32;
+        let mut sum_wy = 0.0f32;
+        for &(x, y, mag) in &cluster_points {
+            let w = mag * mag; // QUADRATIC weighting for maximum precision on sharp edges
+            sum_w += w;
+            sum_wx += x * w;
+            sum_wy += y * w;
         }
-        let mean_x = sum_x / n;
-        let mean_y = sum_y / n;
+        let mean_x = sum_wx / sum_w;
+        let mean_y = sum_wy / sum_w;
 
         let mut cov_xx = 0.0f32;
         let mut cov_yy = 0.0f32;
         let mut cov_xy = 0.0f32;
-        for &(x, y) in &cluster_points {
+        for &(x, y, mag) in &cluster_points {
+            let w = mag * mag;
             let dx = x - mean_x;
             let dy = y - mean_y;
-            cov_xx += dx * dx;
-            cov_yy += dy * dy;
-            cov_xy += dx * dy;
+            cov_xx += dx * dx * w;
+            cov_yy += dy * dy * w;
+            cov_xy += dx * dy * w;
         }
 
         // Robust principal direction using atan2(2b, a-c)
@@ -471,7 +467,7 @@ pub fn fit_quad_from_component(
         // Line segment for intersection logic
         let mut min_t = f32::MAX;
         let mut max_t = f32::MIN;
-        for &(x, y) in &cluster_points {
+        for &(x, y, _) in &cluster_points {
             let t = (x - mean_x) * nx + (y - mean_y) * ny;
             min_t = min_t.min(t);
             max_t = max_t.max(t);
@@ -537,7 +533,7 @@ pub fn fit_quad_from_gradients(
                 || labels[idx - width] != label
                 || labels[idx + width] != label;
 
-            if is_boundary && grads[idx].mag > 50 {
+            if is_boundary && grads[idx].mag > 20 {
                 let angle = f32::from(grads[idx].gy).atan2(f32::from(grads[idx].gx));
                 boundary_points.push((x, y, angle));
             }

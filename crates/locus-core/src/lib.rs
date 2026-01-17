@@ -283,6 +283,16 @@ impl Detector {
                                     tag_size,
                                 );
                             }
+                            // Adjust coordinates for benchmark compliance (0.5 offset)
+                            // Our internal system treats (0, 0) as pixel center. 
+                            // Common benchmarks (ICRA, AprilTag) treat (0.5, 0.5) as pixel center.
+                            for corner in &mut cand.corners {
+                                corner[0] += 0.5;
+                                corner[1] += 0.5;
+                            }
+                            cand.center[0] += 0.5;
+                            cand.center[1] += 0.5;
+                            
                             final_detections.push(cand);
                             break;
                         }
