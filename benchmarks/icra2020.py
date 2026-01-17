@@ -221,11 +221,12 @@ def process_image(args: tuple[Path, list[TagGroundTruth], bool]) -> EvalResult:
             res.img_shape = img.shape
 
         detector = locus.Detector(
-            quad_min_area=16,  # Relaxed area to the limit
+            quad_min_area=8,  # Lowered to detect smaller tags
             quad_max_aspect_ratio=20.0,
-            quad_min_edge_score=0.5, # Be extremely permissive
-            enable_bilateral=False,
-            enable_adaptive_window=False,
+            quad_min_edge_score=0.3, # Lowered for small tags with weak gradients
+            threshold_min_range=2,  # Lower to capture low-contrast edges
+            enable_bilateral=False,  # Disabled for speed
+            enable_adaptive_window=False,  # Disabled for speed
         )
         # Detect with stats
         detections, stats = detector.detect_with_stats(img)

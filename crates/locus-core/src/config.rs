@@ -71,19 +71,19 @@ impl Default for DetectorConfig {
     fn default() -> Self {
         Self {
             threshold_tile_size: 4, 
-            threshold_min_range: 3, // Lowered from 5 to capture very low contrast edges at tilt
+            threshold_min_range: 2, // Lowered from 3 to capture very low contrast edges
             enable_bilateral: true,
             bilateral_sigma_space: 0.8,
             bilateral_sigma_color: 30.0,
             enable_adaptive_window: true,
             threshold_min_radius: 2,
             threshold_max_radius: 7,
-            quad_min_area: 25,      // Slightly lowered from 32 for tiny slanted tags
+            quad_min_area: 16,      // Lowered from 25 for small/distant tags
             quad_max_aspect_ratio: 8.0, // Increased from 3.0 to support extreme foreshortening
             quad_min_fill_ratio: 0.15, // Lowered from 0.3 for thin quads at tilt
             quad_max_fill_ratio: 0.98,
             quad_min_edge_length: 3.0, // Lowered from 4.0
-            quad_min_edge_score: 0.5,  // Lowered from 1.0
+            quad_min_edge_score: 0.4,  // Slightly lowered from 0.5
             subpixel_refinement_sigma: 0.6,
         }
     }
