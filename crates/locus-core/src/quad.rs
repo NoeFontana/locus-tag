@@ -493,14 +493,21 @@ fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, si
     // (x, y, intensity, projection)
     let mut samples = BumpVec::new_in(arena);
 
-    for py in y0..=y1 {
-        for px in x0..=x1 {
+    // For large edges, use subsampling to reduce compute while maintaining accuracy
+    // Stride of 2 for very large edges (>100px), else 1
+    let stride = if len > 100.0 { 2 } else { 1 };
+
+    let mut py = y0;
+    while py <= y1 {
+        let mut px = x0;
+        while px <= x1 {
             let x = px as f64;
             let y = py as f64;
 
             // Check if near the edge segment (not infinite line)
             let t = ((x - p1.x) * dx + (y - p1.y) * dy) / (len * len);
             if t < -0.1 || t > 1.1 {
+                px += stride;
                 continue;
             }
 
@@ -511,7 +518,9 @@ fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, si
                 let projection = nx * x + ny * y;
                 samples.push((x, y, intensity, projection));
             }
+            px += stride;
         }
+        py += stride;
     }
 
     if samples.len() < 10 {
