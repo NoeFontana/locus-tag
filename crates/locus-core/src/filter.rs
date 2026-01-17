@@ -37,58 +37,67 @@ pub fn bilateral_filter(
 ) {
     let w = img.width;
     let h = img.height;
-
-    // Precompute spatial Gaussian weights
-    let diameter = 2 * radius + 1;
-    let mut spatial_weights = vec![0.0f32; diameter * diameter];
-    let space_coeff = -1.0 / (2.0 * sigma_space * sigma_space);
     
-    for dy in 0..diameter {
-        for dx in 0..diameter {
-            let dist_sq = ((dx as i32 - radius as i32).pow(2) 
-                + (dy as i32 - radius as i32).pow(2)) as f32;
-            spatial_weights[dy * diameter + dx] = (space_coeff * dist_sq).exp();
-        }
-    }
-
-    // Precompute color Gaussian lookup table (0-255 intensity difference)
+    // Internal buffer for cross-pass
+    let mut temp = vec![0u8; w * h];
+    
+    // Precompute color Gaussian LUT
     let mut color_lut = [0.0f32; 256];
     let color_coeff = -1.0 / (2.0 * sigma_color * sigma_color);
     for i in 0..256 {
         color_lut[i] = (color_coeff * (i as f32).powi(2)).exp();
     }
+    
+    // Precompute 1D spatial Gaussian LUT
+    let diameter = 2 * radius + 1;
+    let mut spatial_lut = vec![0.0f32; diameter];
+    let space_coeff = -1.0 / (2.0 * sigma_space * sigma_space);
+    for i in 0..diameter {
+        let d = (i as i32 - radius as i32) as f32;
+        spatial_lut[i] = (space_coeff * d * d).exp();
+    }
 
-    // Apply bilateral filter
+    // Pass 1: Horizontal
     for y in 0..h {
+        let src_row = img.get_row(y);
+        let dst_row = &mut temp[y * w..(y + 1) * w];
+        
         for x in 0..w {
-            let center_val = img.get_pixel(x, y);
+            let center_val = src_row[x];
             let mut sum_weights = 0.0f32;
             let mut filtered_val = 0.0f32;
+            
+            for dx in 0..diameter {
+                let nx = (x as i32 + dx as i32 - radius as i32).clamp(0, w as i32 - 1) as usize;
+                let neighbor_val = src_row[nx];
+                let color_diff = (center_val as i32 - neighbor_val as i32).unsigned_abs() as usize;
+                
+                let weight = spatial_lut[dx] * color_lut[color_diff];
+                filtered_val += neighbor_val as f32 * weight;
+                sum_weights += weight;
+            }
+            dst_row[x] = (filtered_val / sum_weights).clamp(0.0, 255.0) as u8;
+        }
+    }
 
-            // Iterate over kernel window
+    // Pass 2: Vertical
+    for x in 0..w {
+        for y in 0..h {
+            let center_idx = y * w + x;
+            let center_val = temp[center_idx];
+            let mut sum_weights = 0.0f32;
+            let mut filtered_val = 0.0f32;
+            
             for dy in 0..diameter {
                 let ny = (y as i32 + dy as i32 - radius as i32).clamp(0, h as i32 - 1) as usize;
+                let neighbor_val = temp[ny * w + x];
+                let color_diff = (center_val as i32 - neighbor_val as i32).unsigned_abs() as usize;
                 
-                for dx in 0..diameter {
-                    let nx = (x as i32 + dx as i32 - radius as i32).clamp(0, w as i32 - 1) as usize;
-                    
-                    let neighbor_val = img.get_pixel(nx, ny);
-                    let color_diff = (center_val as i32 - neighbor_val as i32).unsigned_abs() as usize;
-                    
-                    // Combined spatial and color weight
-                    let weight = spatial_weights[dy * diameter + dx] * color_lut[color_diff];
-                    
-                    filtered_val += neighbor_val as f32 * weight;
-                    sum_weights += weight;
-                }
+                let weight = spatial_lut[dy] * color_lut[color_diff];
+                filtered_val += neighbor_val as f32 * weight;
+                sum_weights += weight;
             }
-
-            // Normalize and clamp
-            output[y * w + x] = if sum_weights > 0.0 {
-                (filtered_val / sum_weights).clamp(0.0, 255.0) as u8
-            } else {
-                center_val
-            };
+            output[y * w + x] = (filtered_val / sum_weights).clamp(0.0, 255.0) as u8;
         }
     }
 }
@@ -153,6 +162,52 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
             let normalized = (grad / 1448.0 * 255.0).clamp(0.0, 255.0) as u8;
             
             output[y * w + x] = normalized;
+        }
+    }
+}
+
+/// Apply a 3x3 Laplacian sharpening filter to enhance edges.
+///
+/// This filter uses the kernel:
+/// ```
+/// [ 0  -1   0 ]
+/// [-1   5  -1 ]
+/// [ 0  -1   0 ]
+/// ```
+///
+/// # Parameters
+/// - `img`: Input grayscale image
+/// - `output`: Output buffer (must be img.width * img.height)
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+pub fn laplacian_sharpen(img: &ImageView, output: &mut [u8]) {
+    let w = img.width;
+    let h = img.height;
+
+    for y in 0..h {
+        let y0 = y.saturating_sub(1);
+        let y1 = y;
+        let y2 = (y + 1).min(h - 1);
+        
+        for x in 0..w {
+            let x0 = x.saturating_sub(1);
+            let x1 = x;
+            let x2 = (x + 1).min(w - 1);
+
+            // Sample 3x3 neighborhood (cross pattern)
+            let p11 = img.get_pixel(x1, y1) as i32;
+            let p01 = img.get_pixel(x1, y0) as i32;
+            let p10 = img.get_pixel(x0, y1) as i32;
+            let p12 = img.get_pixel(x2, y1) as i32;
+            let p21 = img.get_pixel(x1, y2) as i32;
+
+            // Apply sharpening: 5*center - (sum of 4 neighbors)
+            let sharpened = 5 * p11 - (p01 + p10 + p12 + p21);
+            
+            output[y * w + x] = sharpened.clamp(0, 255) as u8;
         }
     }
 }
@@ -270,5 +325,31 @@ mod tests {
         
         // All gradients should be low for uniform image
         assert!(gradient.iter().all(|&g| g < 10));
+    }
+
+    #[test]
+    fn test_laplacian_sharpen_enhances_edges() {
+        let width = 8;
+        let height = 8;
+        let mut data = vec![100u8; width * height];
+        // Create a horizontal line (edge)
+        for x in 0..width {
+            data[4 * width + x] = 200;
+        }
+        
+        let img = ImageView::new(&data, width, height, width).unwrap();
+        let mut output = vec![0u8; width * height];
+        
+        laplacian_sharpen(&img, &mut output);
+        
+        // The value at 4,4 (center of edge) should be higher than 200 due to sharpening
+        // Center is 200, neighbors are 100 (top), 200 (left), 200 (right), 100 (bottom)
+        // 5*200 - (100 + 200 + 200 + 100) = 1000 - 600 = 400 -> 255
+        assert!(output[4 * width + 4] > 200);
+        
+        // The value at 3,4 (just above edge) should be lower than 100
+        // Center is 100, neighbors are 100, 100, 100, 200
+        // 5*100 - (100 + 100 + 100 + 200) = 500 - 500 = 0
+        assert_eq!(output[3 * width + 4], 0);
     }
 }

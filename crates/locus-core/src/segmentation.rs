@@ -425,7 +425,7 @@ mod tests {
         let width = 6;
         let height = 6;
 
-        let result = label_components_with_stats(&arena, &binary, width, height);
+        let result = label_components_with_stats(&arena, &binary, width, height, false);
 
         assert_eq!(result.component_stats.len(), 2);
 
@@ -482,7 +482,7 @@ mod tests {
             let real_height = height.min(64);
             let slice = &binary[..real_width * real_height];
 
-            let result = label_components_with_stats(&arena, slice, real_width, real_height);
+            let result = label_components_with_stats(&arena, slice, real_width, real_height, true);
 
             for stat in result.component_stats {
                 assert!(stat.pixel_count > 0);
@@ -534,7 +534,7 @@ mod tests {
             let arena = Bump::new();
             let (binary, corners) = generate_binarized_tag(tag_size, canvas_size);
 
-            let result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size);
+            let result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size, true);
 
             assert!(
                 !result.component_stats.is_empty(),
@@ -581,7 +581,7 @@ mod tests {
         let arena = Bump::new();
         let (binary, corners) = generate_binarized_tag(tag_size, canvas_size);
 
-        let result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size);
+        let result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size, true);
 
         let largest = result
             .component_stats
@@ -640,7 +640,7 @@ mod tests {
             }
         }
 
-        let result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size);
+        let result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size, true);
 
         assert!(!result.component_stats.is_empty());
 

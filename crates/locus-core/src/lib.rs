@@ -124,6 +124,11 @@ impl Detector {
         }
     }
 
+    /// Get the current detector configuration.
+    pub fn get_config(&self) -> DetectorConfig {
+        self.config
+    }
+
     /// Add a decoder to the pipeline.
     pub fn add_decoder(&mut self, decoder: Box<dyn TagDecoder + Send + Sync>) {
         self.decoders.push(decoder);
@@ -165,9 +170,68 @@ impl Detector {
         let mut stats = PipelineStats::default();
         let start_total = std::time::Instant::now();
 
-        self.arena.reset();
+        // 0. Upscaling (Nearest Neighbor)
+        let upscale_factor = self.config.upscale_factor.max(1);
+        
+        // We need to manage the lifetime of the upscaled image buffer.
+        let mut _upscale_buf: Vec<u8> = Vec::new(); 
+        
+        let (detection_img, effective_scale) = if upscale_factor > 1 {
+            // Apply automatic parameter scaling for upscaled mode
+            // 1. Scale threshold window to match feature size
+            // 2. Relax edge score to handle NN aliasing
+            // We modify a clone of options? No, config is in self.
+            // We must temporarily modify self.config parameters that are used downstream.
+            // Note: This is a bit hacky but ensures consistency without user manual tuning.
+            
+            // Actually, we can't easily modify self.config temporarily without mutability dances if we call &self methods.
+            // But we ARE &mut self.
+            // So we can:
+            // 1. Store original config values.
+            // 2. Modify config.
+            // 3. Restore at end.
+            
+            // Logic handled in orchestration block below.
+            
+            let new_w = img.width * upscale_factor;
+            let new_h = img.height * upscale_factor;
+            _upscale_buf = vec![0u8; new_w * new_h];
+            
+            for y in 0..img.height {
+                let src_row = y * img.width;
+                for rep_y in 0..upscale_factor {
+                    let dst_row = (y * upscale_factor + rep_y) * new_w;
+                    for x in 0..img.width {
+                        let val = img.data[src_row + x];
+                        for rep_x in 0..upscale_factor {
+                            _upscale_buf[dst_row + x * upscale_factor + rep_x] = val;
+                        }
+                    }
+                }
+            }
+            (
+                ImageView::new(&_upscale_buf, new_w, new_h, new_w).expect("valid upscaled view"),
+                upscale_factor as f64,
+            )
+        } else {
+            (*img, 1.0)
+        };
+        let img = &detection_img; // Shadowing for pipeline scope
 
-        // 1. Thresholding with optional bilateral pre-filtering and adaptive window
+        // Backup config for potential restoration
+        let original_tile_size = self.config.threshold_tile_size;
+        let original_max_radius = self.config.threshold_max_radius;
+        let original_edge_score = self.config.quad_min_edge_score;
+
+        if upscale_factor > 1 {
+             // Auto-scale parameters
+             self.config.threshold_tile_size *= upscale_factor;
+             self.config.threshold_max_radius *= upscale_factor;
+             self.config.quad_min_edge_score /= (upscale_factor as f64);
+        }
+
+        self.arena.reset();
+        let img = img; // Simplify reference
         let start_thresh = std::time::Instant::now();
         
         // 1a. Optional bilateral pre-filtering for edge-preserving noise reduction
@@ -186,23 +250,34 @@ impl Detector {
             *img
         };
 
+        // 1b. Optional Laplacian sharpening to enhance edges for small tags
+        let sharpened_img = if self.config.enable_sharpening {
+            let sharpened = self.arena.alloc_slice_fill_copy(filtered_img.width * filtered_img.height, 0u8);
+            crate::filter::laplacian_sharpen(&filtered_img, sharpened);
+            
+            ImageView::new(sharpened, filtered_img.width, filtered_img.height, filtered_img.width)
+                .expect("valid sharpened view")
+        } else {
+            filtered_img
+        };
+
         let binarized = self.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
         let threshold_map = self.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
         
         {
             let _span = tracing::info_span!("threshold_adaptive").entered();
             // Compute integral image for O(1) local mean per pixel
-            let integral = crate::threshold::compute_integral_image(&filtered_img);
+            let integral = crate::threshold::compute_integral_image(&sharpened_img);
             
-            // 1b. Apply adaptive or fixed-window threshold
+            // 1c. Apply adaptive or fixed-window threshold
             if self.config.enable_adaptive_window {
                 // Compute gradient map for adaptive window sizing
                 let gradient = self.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
-                crate::filter::compute_gradient_map(&filtered_img, gradient);
+                crate::filter::compute_gradient_map(&sharpened_img, gradient);
                 
                 // Apply gradient-based adaptive window threshold
                 crate::threshold::adaptive_threshold_gradient_window(
-                    &filtered_img,
+                    &sharpened_img,
                     gradient,
                     &integral,
                     binarized,
@@ -214,7 +289,7 @@ impl Detector {
             } else {
                 // Fallback to fixed 13x13 window (radius=6)
                 crate::threshold::adaptive_threshold_integral(
-                    &filtered_img,
+                    &sharpened_img,
                     &integral,
                     binarized,
                     6,
@@ -223,7 +298,7 @@ impl Detector {
             }
             
             // For threshold_map, store the local mean (for potential threshold-model segmentation)
-            compute_threshold_map(&filtered_img, &integral, threshold_map, 6, 3);
+            compute_threshold_map(&sharpened_img, &integral, threshold_map, 6, 3);
         }
         stats.threshold_ms = start_thresh.elapsed().as_secs_f64() * 1000.0;
 
@@ -234,7 +309,7 @@ impl Detector {
             let _span = tracing::info_span!("segmentation").entered();
             crate::segmentation::label_components_threshold_model(
                 &self.arena,
-                img.data,
+                sharpened_img.data,
                 threshold_map,
                 img.width,
                 img.height,
@@ -243,12 +318,17 @@ impl Detector {
         };
         stats.segmentation_ms = start_seg.elapsed().as_secs_f64() * 1000.0;
 
-        // 3. Quad Fitting (Fast path with pre-filtering)
+        // 3. Quad Extraction
         // Gradients are computed lazily inside extract_quads for small components only
         let start_quad = std::time::Instant::now();
         let candidates = {
             let _span = tracing::info_span!("quad_extraction").entered();
-            crate::quad::extract_quads_with_config(&self.arena, img, &label_result, &self.config)
+            crate::quad::extract_quads_with_config(
+                &self.arena,
+                &sharpened_img,
+                &label_result,
+                &self.config,
+            )
         };
         stats.quad_extraction_ms = start_quad.elapsed().as_secs_f64() * 1000.0;
         stats.num_candidates = candidates.len();
@@ -272,19 +352,12 @@ impl Detector {
         for mut cand in candidates {
             if let Some(h) = crate::decoder::Homography::square_to_quad(&cand.corners) {
                 for decoder in active_decoders {
-                    if let Some(bits) = crate::decoder::sample_grid(img, &h, decoder.as_ref()) {
+                    if let Some(bits) = crate::decoder::sample_grid(&sharpened_img, &h, decoder.as_ref(), self.config.decoder_min_contrast) {
                         if let Some((id, hamming)) = decoder.decode(bits) {
                             cand.id = id;
                             cand.hamming = hamming;
-                            if let (Some(intrinsics), Some(tag_size)) =
-                                (options.intrinsics, options.tag_size)
-                            {
-                                cand.pose = crate::pose::estimate_tag_pose(
-                                    &intrinsics,
-                                    &cand.corners,
-                                    tag_size,
-                                );
-                            }
+                            
+                            
                             // Adjust coordinates for benchmark compliance (0.5 offset)
                             // Our internal system treats (0, 0) as pixel center. 
                             // Common benchmarks (ICRA, AprilTag) treat (0.5, 0.5) as pixel center.
@@ -294,6 +367,17 @@ impl Detector {
                             }
                             cand.center[0] += 0.5;
                             cand.center[1] += 0.5;
+
+                            // Estimate pose using current corners (1x or recursed 1x)
+                            if let (Some(intrinsics), Some(tag_size)) =
+                                (options.intrinsics, options.tag_size)
+                            {
+                                cand.pose = crate::pose::estimate_tag_pose(
+                                    &intrinsics,
+                                    &cand.corners,
+                                    tag_size,
+                                );
+                            }
                             
                             final_detections.push(cand);
                             break;
@@ -304,8 +388,35 @@ impl Detector {
         }
         stats.decoding_ms = start_decode.elapsed().as_secs_f64() * 1000.0;
         stats.num_detections = final_detections.len();
+        
+        // Scale back coordinates if upscaling was used
+        if upscale_factor > 1 {
+            let inv_scale = 1.0 / effective_scale;
+             for d in &mut final_detections {
+                 // Scale coordinates
+                  for corner in &mut d.corners {
+                        corner[0] = (corner[0] - 0.5) * inv_scale + 0.5;
+                        corner[1] = (corner[1] - 0.5) * inv_scale + 0.5;
+                  }
+                  d.center[0] = (d.center[0] - 0.5) * inv_scale + 0.5;
+                  d.center[1] = (d.center[1] - 0.5) * inv_scale + 0.5;
+                  
+                  // Re-estimate pose with corrected corners
+                  if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size) {
+                       d.pose = crate::pose::estimate_tag_pose(&intrinsics, &d.corners, tag_size);
+                  }
+             }
+        }
+        
         stats.total_ms = start_total.elapsed().as_secs_f64() * 1000.0;
 
+        // Restore config if modified
+        if upscale_factor > 1 {
+            self.config.threshold_tile_size = original_tile_size;
+            self.config.threshold_max_radius = original_max_radius;
+            self.config.quad_min_edge_score = original_edge_score;
+        }
+        
         (final_detections, stats)
     }
 }
@@ -330,7 +441,7 @@ pub use decoder::family_to_decoder;
 /// Stores local mean - C for each pixel, used by threshold-model segmentation.
 fn compute_threshold_map(
     img: &image::ImageView,
-    integral: &[u32],
+    integral: &[u64],
     output: &mut [u8],
     radius: usize,
     c: i16,
@@ -359,7 +470,7 @@ fn compute_threshold_map(
 
             // Prevent underflow: add first, then subtract
             let sum = (i11 + i00) - (i01 + i10);
-            let mean = (sum / actual_area) as i16;
+            let mean = (sum / u64::from(actual_area)) as i16;
             let threshold = (mean - c).clamp(0, 255) as u8;
             output[dst_offset + x] = threshold;
         }

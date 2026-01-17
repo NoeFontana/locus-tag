@@ -117,7 +117,7 @@ impl From<TagFamily> for locus_core::config::TagFamily {
 // ============================================================================
 
 /// Segmentation connectivity mode.
-#[pyclass(eq, eq_int)]
+#[pyclass(eq, eq_int, module = "locus")]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SegmentationConnectivity {
     /// 4-connectivity: Pixels connect horizontally and vertically only.
@@ -132,6 +132,22 @@ impl From<SegmentationConnectivity> for locus_core::config::SegmentationConnecti
             SegmentationConnectivity::Four => locus_core::config::SegmentationConnectivity::Four,
             SegmentationConnectivity::Eight => locus_core::config::SegmentationConnectivity::Eight,
         }
+    }
+}
+
+#[pymethods]
+impl SegmentationConnectivity {
+    fn __getstate__(&self) -> u8 {
+        *self as u8
+    }
+
+    fn __setstate__(&mut self, state: u8) -> PyResult<()> {
+        *self = match state {
+            0 => SegmentationConnectivity::Four,
+            1 => SegmentationConnectivity::Eight,
+            _ => return Err(pyo3::exceptions::PyValueError::new_err("Invalid state")),
+        };
+        Ok(())
     }
 }
 
@@ -184,6 +200,7 @@ impl Detector {
         enable_bilateral = true,
         bilateral_sigma_space = 0.8,
         bilateral_sigma_color = 30.0,
+        enable_sharpening = false,
         enable_adaptive_window = true,
         threshold_min_radius = 2,
         threshold_max_radius = 7,
@@ -195,6 +212,8 @@ impl Detector {
         quad_min_edge_score = 0.4,
         subpixel_refinement_sigma = 0.6,
         segmentation_connectivity = SegmentationConnectivity::Eight,
+        upscale_factor = 1,
+        decoder_min_contrast = 20.0,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -203,6 +222,7 @@ impl Detector {
         enable_bilateral: bool,
         bilateral_sigma_space: f32,
         bilateral_sigma_color: f32,
+        enable_sharpening: bool,
         enable_adaptive_window: bool,
         threshold_min_radius: usize,
         threshold_max_radius: usize,
@@ -214,6 +234,8 @@ impl Detector {
         quad_min_edge_score: f64,
         subpixel_refinement_sigma: f64,
         segmentation_connectivity: SegmentationConnectivity,
+        upscale_factor: usize,
+        decoder_min_contrast: f64,
     ) -> Self {
         let config = locus_core::DetectorConfig {
             threshold_tile_size,
@@ -221,6 +243,7 @@ impl Detector {
             enable_bilateral,
             bilateral_sigma_space,
             bilateral_sigma_color,
+            enable_sharpening,
             enable_adaptive_window,
             threshold_min_radius,
             threshold_max_radius,
@@ -232,10 +255,18 @@ impl Detector {
             quad_min_edge_score,
             subpixel_refinement_sigma,
             segmentation_connectivity: segmentation_connectivity.into(),
+            upscale_factor,
+            decoder_min_contrast,
         };
         Self {
             inner: locus_core::Detector::with_config(config),
         }
+    }
+
+    /// DEBUG: Get the current sharpening status.
+    #[getter]
+    fn enable_sharpening(&self) -> bool {
+        self.inner.get_config().enable_sharpening
     }
 
     /// Detect tags in the image using default decoders.

@@ -644,22 +644,23 @@ fn compute_min_max_simd(data: &[u8]) -> (u8, u8) {
 ///
 /// Memory layout: (width+1) * (height+1) to handle border cases without branches.
 #[must_use]
-pub fn compute_integral_image(img: &ImageView) -> Vec<u32> {
+pub fn compute_integral_image(img: &ImageView) -> Vec<u64> {
     let w = img.width;
     let h = img.height;
     let stride = w + 1;
 
     // Allocate with extra row and column of zeros for border handling
-    let mut integral = vec![0u32; stride * (h + 1)];
+    // Use u64 to prevent overflow on large images (e.g., 20MP upscaled)
+    let mut integral = vec![0u64; stride * (h + 1)];
 
     // First pass: compute cumulative row sums
     for y in 0..h {
         let src_row = img.get_row(y);
         let dst_offset = (y + 1) * stride + 1;
 
-        let mut row_sum = 0u32;
+        let mut row_sum = 0u64;
         for x in 0..w {
-            row_sum += u32::from(src_row[x]);
+            row_sum += u64::from(src_row[x]);
             // Add current row sum to the value from row above
             integral[dst_offset + x] = row_sum + integral[dst_offset + x - stride];
         }
@@ -680,7 +681,7 @@ pub fn compute_integral_image(img: &ImageView) -> Vec<u32> {
 #[multiversion(targets = "simd")]
 pub fn adaptive_threshold_integral(
     img: &ImageView,
-    integral: &[u32],
+    integral: &[u64],
     output: &mut [u8],
     radius: usize,
     c: i16,
@@ -717,7 +718,7 @@ pub fn adaptive_threshold_integral(
 
             // Prevent underflow: add first, then subtract
             let sum = (i11 + i00) - (i01 + i10);
-            let mean = (sum / actual_area) as i16;
+            let mean = (sum / u64::from(actual_area)) as i16;
 
             // Threshold with constant C
             let threshold = (mean - c).max(0) as u8;
@@ -776,7 +777,7 @@ pub fn apply_adaptive_threshold_with_params(
 pub fn adaptive_threshold_gradient_window(
     img: &ImageView,
     gradient_map: &[u8],
-    integral: &[u32],
+    integral: &[u64],
     output: &mut [u8],
     min_radius: usize,
     max_radius: usize,
@@ -828,7 +829,7 @@ pub fn adaptive_threshold_gradient_window(
 
             // Prevent underflow: add first, then subtract
             let sum = (i11 + i00) - (i01 + i10);
-            let mean = (sum / actual_area) as i16;
+            let mean = (sum / u64::from(actual_area)) as i16;
 
             // Apply threshold
             let threshold = (mean - c).max(0) as u8;

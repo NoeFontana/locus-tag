@@ -30,7 +30,11 @@ def benchmark_checkerboard():
     gt = load_ground_truth(root)
     img_dir = root / "checkerboard_corners_images"
     
-    detector = locus.Detector()
+    detector = locus.Detector(
+        segmentation_connectivity=locus.SegmentationConnectivity.Four,
+        quad_min_area=8, # Relax area just in case
+        upscale_factor=2,
+    )
     
     total_tags = 0
     detected_tags = 0

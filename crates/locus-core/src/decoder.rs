@@ -336,11 +336,16 @@ fn compute_otsu_threshold(values: &[f64]) -> f64 {
 ///
 /// Uses bilinear interpolation for sampling and a spatially adaptive threshold
 /// (based on min/max stats of the grid) to determine bit values.
+///
+/// # Parameters
+/// - `min_contrast`: Minimum contrast range for Otsu-based classification.
+///   Default is 20.0. Lower values (e.g., 10.0) improve recall on small/blurry tags.
 #[allow(clippy::cast_sign_loss)]
 pub fn sample_grid(
     img: &crate::image::ImageView,
     homography: &Homography,
     decoder: &(impl TagDecoder + ?Sized),
+    min_contrast: f64,
 ) -> Option<u64> {
     let points = decoder.sample_points();
     // Stack-allocated buffer for up to 64 sample points (covers all standard tag families)
@@ -438,7 +443,7 @@ pub fn sample_grid(
     // If sufficient contrast, use Otsu threshold (robust for AprilTag's bimodal distribution)
     let mut bits = 0u64;
     
-    if contrast_range > 20.0 {
+    if contrast_range > min_contrast {
         // Good contrast: use Otsu threshold
         for (i, _) in points.iter().take(n).enumerate() {
             if intensities[i] > otsu_threshold {
@@ -804,7 +809,7 @@ mod tests {
         let homography = Homography { h };
 
         let decoder = AprilTag36h11;
-        let bits = sample_grid(&img, &homography, &decoder).expect("Should sample successfully");
+        let bits = sample_grid(&img, &homography, &decoder, 20.0).expect("Should sample successfully");
 
         // bit 0 should be 1 (high intensity)
         assert_eq!(bits & 1, 1, "Bit 0 should be 1");
@@ -856,7 +861,7 @@ mod tests {
         engine.apply_threshold(&img, &stats, &mut binary);
 
         let arena = Bump::new();
-        let label_result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size);
+        let label_result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size, true);
         let detections = extract_quads_fast(&arena, &img, &label_result);
 
         let decoder = AprilTag36h11;
@@ -871,7 +876,7 @@ mod tests {
             ];
 
             if let Some(h) = Homography::square_to_quad(&dst) {
-                if let Some(bits) = sample_grid(&img, &h, &decoder) {
+                if let Some(bits) = sample_grid(&img, &h, &decoder, 20.0) {
                     if let Some((id, hamming)) = decoder.decode(bits) {
                         decoded.push((id, hamming));
                     }

@@ -92,6 +92,7 @@ pub fn extract_quads_with_config(
             ) {
                 let corners = [
                     refine_corner(
+                        arena,
                         img,
                         Point {
                             x: grad_corners[0][0] as f64,
@@ -108,6 +109,7 @@ pub fn extract_quads_with_config(
                         config.subpixel_refinement_sigma,
                     ),
                     refine_corner(
+                        arena,
                         img,
                         Point {
                             x: grad_corners[1][0] as f64,
@@ -124,6 +126,7 @@ pub fn extract_quads_with_config(
                         config.subpixel_refinement_sigma,
                     ),
                     refine_corner(
+                        arena,
                         img,
                         Point {
                             x: grad_corners[2][0] as f64,
@@ -140,6 +143,7 @@ pub fn extract_quads_with_config(
                         config.subpixel_refinement_sigma,
                     ),
                     refine_corner(
+                        arena,
                         img,
                         Point {
                             x: grad_corners[3][0] as f64,
@@ -233,10 +237,10 @@ pub fn extract_quads_with_config(
                             // Compute center first, then refine corners
                             let center = polygon_center(&reduced);
                             let corners = [
-                                refine_corner(img, reduced[0], reduced[3], reduced[1], config.subpixel_refinement_sigma),
-                                refine_corner(img, reduced[1], reduced[0], reduced[2], config.subpixel_refinement_sigma),
-                                refine_corner(img, reduced[2], reduced[1], reduced[3], config.subpixel_refinement_sigma),
-                                refine_corner(img, reduced[3], reduced[2], reduced[0], config.subpixel_refinement_sigma),
+                                refine_corner(arena, img, reduced[0], reduced[3], reduced[1], config.subpixel_refinement_sigma),
+                                refine_corner(arena, img, reduced[1], reduced[0], reduced[2], config.subpixel_refinement_sigma),
+                                refine_corner(arena, img, reduced[2], reduced[1], reduced[3], config.subpixel_refinement_sigma),
+                                refine_corner(arena, img, reduced[3], reduced[2], reduced[0], config.subpixel_refinement_sigma),
                             ];
 
                             // Filter: weak edge alignment
@@ -412,10 +416,10 @@ fn polygon_center(points: &[Point]) -> [f64; 2] {
 /// model and Gauss-Newton optimization, then computes their intersection.
 /// Achieves ~0.02px accuracy vs ~0.2px for gradient-peak methods.
 #[must_use]
-pub fn refine_corner(img: &ImageView, p: Point, p_prev: Point, p_next: Point, sigma: f64) -> Point {
+pub fn refine_corner(arena: &Bump, img: &ImageView, p: Point, p_prev: Point, p_next: Point, sigma: f64) -> Point {
     // Try intensity-based refinement first (higher accuracy)
-    let line1 = refine_edge_intensity(img, p_prev, p, sigma).or_else(|| fit_edge_line(img, p_prev, p));
-    let line2 = refine_edge_intensity(img, p, p_next, sigma).or_else(|| fit_edge_line(img, p, p_next));
+    let line1 = refine_edge_intensity(arena, img, p_prev, p, sigma).or_else(|| fit_edge_line(img, p_prev, p));
+    let line2 = refine_edge_intensity(arena, img, p, p_next, sigma).or_else(|| fit_edge_line(img, p, p_next));
 
     if let (Some(l1), Some(l2)) = (line1, line2) {
         // Intersect lines: a1*x + b1*y + c1 = 0 and a2*x + b2*y + c2 = 0
@@ -473,7 +477,7 @@ fn fit_edge_line(img: &ImageView, p1: Point, p2: Point) -> Option<(f64, f64, f64
             }
         }
 
-        if best_mag > 25.0 {
+        if best_mag > 10.0 {
             let mut mags = [0.0f64; 3];
             for (j, offset) in [-1.0, 0.0, 1.0].iter().enumerate() {
                 let sx = best_px + nx * offset;
@@ -517,7 +521,8 @@ fn fit_edge_line(img: &ImageView, p1: Point, p2: Point) -> Option<(f64, f64, f64
 ///
 /// This achieves ~0.02px accuracy vs ~0.2px for gradient-based methods.
 #[allow(clippy::similar_names)]
-fn refine_edge_intensity(img: &ImageView, p1: Point, p2: Point, sigma: f64) -> Option<(f64, f64, f64)> {
+// Collected in the quad extraction process
+fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, sigma: f64) -> Option<(f64, f64, f64)> {
     let dx = p2.x - p1.x;
     let dy = p2.y - p1.y;
     let len = (dx * dx + dy * dy).sqrt();
@@ -538,7 +543,9 @@ fn refine_edge_intensity(img: &ImageView, p1: Point, p2: Point, sigma: f64) -> O
     let y0 = (p1.y.min(p2.y) - 3.0).max(1.0) as usize;
     let y1 = (p1.y.max(p2.y) + 3.0).min((img.height - 2) as f64) as usize;
 
-    let mut samples: Vec<(f64, f64, f64)> = Vec::new(); // (x, y, intensity)
+    // Use arena for samples to avoid heap allocation in hot loop
+    // (x, y, intensity, projection)
+    let mut samples = BumpVec::new_in(arena);
 
     for py in y0..=y1 {
         for px in x0..=x1 {
@@ -551,10 +558,12 @@ fn refine_edge_intensity(img: &ImageView, p1: Point, p2: Point, sigma: f64) -> O
                 continue;
             }
 
-            let dist = (nx * x + ny * y + d).abs();
-            if dist < 2.5 {
+            let dist_signed = nx * x + ny * y + d;
+            if dist_signed.abs() < 2.5 {
                 let intensity = f64::from(img.get_pixel(px, py));
-                samples.push((x, y, intensity));
+                // Pre-calculate nx*x + ny*y
+                let projection = nx * x + ny * y;
+                samples.push((x, y, intensity, projection));
             }
         }
     }
@@ -569,8 +578,8 @@ fn refine_edge_intensity(img: &ImageView, p1: Point, p2: Point, sigma: f64) -> O
     let mut light_sum = 0.0;
     let mut light_count = 0;
 
-    for &(x, y, intensity) in &samples {
-        let signed_dist = nx * x + ny * y + d;
+    for &(_x, _y, intensity, projection) in &samples {
+        let signed_dist = projection + d;
         if signed_dist < -0.5 {
             dark_sum += intensity;
             dark_count += 1;
@@ -595,20 +604,17 @@ fn refine_edge_intensity(img: &ImageView, p1: Point, p2: Point, sigma: f64) -> O
         let mut jtj = 0.0; // J^T * J (scalar for 1D)
         let mut jtr = 0.0; // J^T * residual
 
-        for &(x, y, intensity) in &samples {
-            let signed_dist = (nx * x + ny * y + d) * inv_sigma;
-
-            // erf approximation for speed (Horner's method)
-            let erf_val = erf_approx(signed_dist);
-            let model = (a + b) / 2.0 + (b - a) / 2.0 * erf_val;
+        for &(_x, _y, intensity, projection) in &samples {
+            let signed_dist = (projection + d) * inv_sigma;
+            
+            // Fast approximation of exp(-x^2): 1.0 / (1 + x^2 + 0.5*x^4)
+            let x2 = signed_dist * signed_dist;
+            let exp_term = 1.0 / (1.0 + x2 + 0.5 * x2 * x2);
+            
+            let model = (a + b) * 0.5 + (b - a) * 0.5 * signed_dist.tanh(); // erf approx
             let residual = intensity - model;
-
-            // Derivative of model w.r.t. d: (b-a)/2 * d(erf)/d(d)
-            // d(erf(x))/dx = 2/sqrt(π) * exp(-x²)
-            // Chain rule: d(erf(dist/σ))/d(d) = 2/(σ*sqrt(π)) * exp(-dist²/σ²)
-            let exp_term = (-signed_dist * signed_dist).exp();
-            let jacobian = (b - a) * inv_sigma * 0.5641895835 * exp_term; // 1/sqrt(π)
-
+            
+            let jacobian = (b - a) * 0.5 * exp_term * inv_sigma;
             jtj += jacobian * jacobian;
             jtr += jacobian * residual;
         }
@@ -624,24 +630,6 @@ fn refine_edge_intensity(img: &ImageView, p1: Point, p2: Point, sigma: f64) -> O
     }
 
     Some((nx, ny, d))
-}
-
-/// Fast erf approximation using Horner's method (max error ~1.5e-7).
-#[inline]
-fn erf_approx(x: f64) -> f64 {
-    // Abramowitz and Stegun approximation (7.1.26)
-    let a1 = 0.254829592;
-    let a2 = -0.284496736;
-    let a3 = 1.421413741;
-    let a4 = -1.453152027;
-    let a5 = 1.061405429;
-    let p = 0.3275911;
-
-    let sign = if x < 0.0 { -1.0 } else { 1.0 };
-    let x = x.abs();
-    let t = 1.0 / (1.0 + p * x);
-    let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-x * x).exp();
-    sign * y
 }
 
 /// Reducing a polygon to a quad (4 vertices + 1 closing) by iteratively removing
@@ -879,8 +867,8 @@ mod tests {
         engine.apply_threshold(&img, &stats, &mut binary);
 
         let arena = Bump::new();
-        let label_result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size);
-        let detections = extract_quads_fast(&arena, &img, &label_result, None);
+        let label_result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size, true);
+        let detections = extract_quads_fast(&arena, &img, &label_result);
 
         (detections, corners)
     }

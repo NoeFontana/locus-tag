@@ -21,6 +21,25 @@ class Detector:
     configuration interface.
     """
 
+    @classmethod
+    def checkerboard(cls, **kwargs) -> "Detector":
+        """
+        Create a detector optimized for checkerboard patterns.
+        
+        This profile enables sharpening, uses 4-way connectivity, and 
+        disables bilateral filtering to maximize edge recall for small tags.
+        """
+        config = {
+            "enable_sharpening": True,
+            "enable_bilateral": False,
+            "segmentation_connectivity": SegmentationConnectivity.Four,
+            "decoder_min_contrast": 10.0,
+            "quad_min_area": 8,
+            "quad_min_edge_length": 2.0,
+        }
+        config.update(kwargs)
+        return cls(**config)
+
     def __init__(self, config: DetectorConfig = None, **kwargs):
         if config is None:
             # Allow passing individual parameters as kwargs
@@ -33,6 +52,7 @@ class Detector:
             enable_bilateral=config.enable_bilateral,
             bilateral_sigma_space=config.bilateral_sigma_space,
             bilateral_sigma_color=config.bilateral_sigma_color,
+            enable_sharpening=config.enable_sharpening,
             enable_adaptive_window=config.enable_adaptive_window,
             threshold_min_radius=config.threshold_min_radius,
             threshold_max_radius=config.threshold_max_radius,
@@ -44,6 +64,8 @@ class Detector:
             quad_min_edge_score=config.quad_min_edge_score,
             subpixel_refinement_sigma=config.subpixel_refinement_sigma,
             segmentation_connectivity=config.segmentation_connectivity,
+            upscale_factor=config.upscale_factor,
+            decoder_min_contrast=config.decoder_min_contrast,
         )
 
     def detect(self, img):
@@ -67,6 +89,11 @@ class Detector:
     def set_families(self, families: list[TagFamily]):
         """Set the default tag families to decode."""
         self._inner.set_families(families)
+
+    @property
+    def enable_sharpening(self) -> bool:
+        """Check if sharpening is enabled."""
+        return self._inner.enable_sharpening
 
 
 __all__ = [

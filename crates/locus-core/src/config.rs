@@ -55,6 +55,9 @@ pub struct DetectorConfig {
     /// Higher values = more smoothing across edges.
     pub bilateral_sigma_color: f32,
     
+    /// Enable Laplacian sharpening to enhance edges for small tags (default: false).
+    pub enable_sharpening: bool,
+    
     /// Enable adaptive threshold window sizing based on gradient (default: true).
     pub enable_adaptive_window: bool,
     /// Minimum threshold window radius for high-gradient regions (default: 2 = 5x5).
@@ -79,6 +82,16 @@ pub struct DetectorConfig {
     pub subpixel_refinement_sigma: f64,
     /// Segmentation connectivity (4-way or 8-way).
     pub segmentation_connectivity: SegmentationConnectivity,
+    /// Factor to upscale the image before detection (1 = no upscaling).
+    /// Increasing this to 2 allows detecting smaller tags (e.g., < 15px)
+    /// at the cost of processing speed (O(N^2)). Nearest-neighbor interpolation is used.
+    pub upscale_factor: usize,
+    
+    // Decoder parameters
+    /// Minimum contrast range for Otsu-based bit classification (default: 20.0).
+    /// For checkerboard patterns with densely packed tags, lower values (e.g., 10.0)
+    /// can improve recall on small/blurry tags.
+    pub decoder_min_contrast: f64,
 }
 
 impl Default for DetectorConfig {
@@ -89,6 +102,7 @@ impl Default for DetectorConfig {
             enable_bilateral: true,
             bilateral_sigma_space: 0.8,
             bilateral_sigma_color: 30.0,
+            enable_sharpening: false,
             enable_adaptive_window: true,
             threshold_min_radius: 2,
             threshold_max_radius: 7,
@@ -100,6 +114,8 @@ impl Default for DetectorConfig {
             quad_min_edge_score: 0.4,  // Slightly lowered from 0.5
             subpixel_refinement_sigma: 0.6,
             segmentation_connectivity: SegmentationConnectivity::Eight,
+            upscale_factor: 1,
+            decoder_min_contrast: 20.0,
         }
     }
 }
@@ -120,6 +136,7 @@ pub struct DetectorConfigBuilder {
     enable_bilateral: Option<bool>,
     bilateral_sigma_space: Option<f32>,
     bilateral_sigma_color: Option<f32>,
+    enable_sharpening: Option<bool>,
     enable_adaptive_window: Option<bool>,
     threshold_min_radius: Option<usize>,
     threshold_max_radius: Option<usize>,
@@ -131,6 +148,8 @@ pub struct DetectorConfigBuilder {
     pub quad_min_edge_score: Option<f64>,
     pub subpixel_refinement_sigma: Option<f64>,
     pub segmentation_connectivity: Option<SegmentationConnectivity>,
+    pub upscale_factor: Option<usize>,
+    pub decoder_min_contrast: Option<f64>,
 }
 
 impl DetectorConfigBuilder {
@@ -211,6 +230,13 @@ impl DetectorConfigBuilder {
         self
     }
 
+    /// Enable or disable Laplacian sharpening.
+    #[must_use]
+    pub fn enable_sharpening(mut self, enable: bool) -> Self {
+        self.enable_sharpening = Some(enable);
+        self
+    }
+
     /// Enable or disable adaptive threshold window sizing.
     #[must_use]
     pub fn enable_adaptive_window(mut self, enable: bool) -> Self {
@@ -242,6 +268,7 @@ impl DetectorConfigBuilder {
             enable_bilateral: self.enable_bilateral.unwrap_or(d.enable_bilateral),
             bilateral_sigma_space: self.bilateral_sigma_space.unwrap_or(d.bilateral_sigma_space),
             bilateral_sigma_color: self.bilateral_sigma_color.unwrap_or(d.bilateral_sigma_color),
+            enable_sharpening: self.enable_sharpening.unwrap_or(d.enable_sharpening),
             enable_adaptive_window: self.enable_adaptive_window.unwrap_or(d.enable_adaptive_window),
             threshold_min_radius: self.threshold_min_radius.unwrap_or(d.threshold_min_radius),
             threshold_max_radius: self.threshold_max_radius.unwrap_or(d.threshold_max_radius),
@@ -255,6 +282,8 @@ impl DetectorConfigBuilder {
             quad_min_edge_score: self.quad_min_edge_score.unwrap_or(d.quad_min_edge_score),
             subpixel_refinement_sigma: self.subpixel_refinement_sigma.unwrap_or(d.subpixel_refinement_sigma),
             segmentation_connectivity: self.segmentation_connectivity.unwrap_or(d.segmentation_connectivity),
+            upscale_factor: self.upscale_factor.unwrap_or(d.upscale_factor),
+            decoder_min_contrast: self.decoder_min_contrast.unwrap_or(d.decoder_min_contrast),
         }
     }
 
@@ -262,6 +291,21 @@ impl DetectorConfigBuilder {
     #[must_use]
     pub fn segmentation_connectivity(mut self, connectivity: SegmentationConnectivity) -> Self {
         self.segmentation_connectivity = Some(connectivity);
+        self
+    }
+
+    /// Set the upscale factor (1 = no upscaling, 2 = 2x, etc.).
+    #[must_use]
+    pub fn upscale_factor(mut self, factor: usize) -> Self {
+        self.upscale_factor = Some(factor);
+        self
+    }
+
+    /// Set the minimum contrast for decoder bit classification.
+    /// Lower values (e.g., 10.0) improve recall on small/blurry checkerboard tags.
+    #[must_use]
+    pub fn decoder_min_contrast(mut self, contrast: f64) -> Self {
+        self.decoder_min_contrast = Some(contrast);
         self
     }
 }
@@ -408,14 +452,14 @@ mod tests {
         assert_eq!(config.threshold_tile_size, 16);
         assert_eq!(config.quad_min_area, 1000);
         // Check defaults
-        assert_eq!(config.threshold_min_range, 5);
+        assert_eq!(config.threshold_min_range, 2);
     }
 
     #[test]
     fn test_detector_config_defaults() {
         let config = DetectorConfig::default();
-        assert_eq!(config.threshold_tile_size, 8);
-        assert_eq!(config.quad_min_area, 400);
+        assert_eq!(config.threshold_tile_size, 4);
+        assert_eq!(config.quad_min_area, 16);
     }
 
     #[test]
