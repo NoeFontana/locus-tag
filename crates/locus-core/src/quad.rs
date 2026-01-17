@@ -917,8 +917,7 @@ mod tests {
 /// SOTA Boundary Tracing using robust border following.
 ///
 /// This implementation uses a state-machine based approach to follow the border
-/// of a connected component. It is designed to be robust and efficient,
-/// avoiding expensive operations in the inner loop.
+/// of a connected component. Uses precomputed offsets for speed.
 fn trace_boundary<'a>(
     arena: &'a Bump,
     labels: &[u32],
@@ -930,15 +929,28 @@ fn trace_boundary<'a>(
 ) -> BumpVec<'a, Point> {
     let mut points = BumpVec::new_in(arena);
 
-    // Moore Neighborhood directions (CW order starting from Top)
-    // index: 0, 1, 2, 3, 4, 5, 6, 7
-    // dir:   T, TR, R, BR, B, BL, L, TL
-    let dx = [0, 1, 1, 1, 0, -1, -1, -1];
-    let dy = [-1, -1, 0, 1, 1, 1, 0, -1];
+    // Precompute offsets for Moore neighborhood (CW order starting from Top)
+    // This avoids repeated multiplication in the hot loop
+    let w = width as isize;
+    let offsets: [isize; 8] = [
+        -w,         // 0: T
+        -w + 1,     // 1: TR
+        1,          // 2: R
+        w + 1,      // 3: BR
+        w,          // 4: B
+        w - 1,      // 5: BL
+        -1,         // 6: L
+        -w - 1,     // 7: TL
+    ];
+    
+    // Direction deltas for bounds checking
+    let dx: [isize; 8] = [0, 1, 1, 1, 0, -1, -1, -1];
+    let dy: [isize; 8] = [-1, -1, 0, 1, 1, 1, 0, -1];
 
-    let mut curr_x = start_x;
-    let mut curr_y = start_y;
-    let mut walk_dir = 2; // Initial guess: we found the leftmost-topmost, so move Right
+    let mut curr_x = start_x as isize;
+    let mut curr_y = start_y as isize;
+    let mut curr_idx = start_y * width + start_x;
+    let mut walk_dir = 2usize; // Initial: move Right
 
     for _ in 0..10000 {
         points.push(Point {
@@ -947,17 +959,20 @@ fn trace_boundary<'a>(
         });
 
         let mut found = false;
-        // Search neighbors CCW starting from "relative left" of movement
-        // If we moved in walk_dir, we start searching from (walk_dir + 6) % 8
+        let search_start = (walk_dir + 6) % 8;
+        
         for i in 0..8 {
-            let dir = (walk_dir + 6 + i) % 8;
-            let nx = curr_x as isize + dx[dir];
-            let ny = curr_y as isize + dy[dir];
+            let dir = (search_start + i) % 8;
+            let nx = curr_x + dx[dir];
+            let ny = curr_y + dy[dir];
 
-            if nx >= 0 && nx < width as isize && ny >= 0 && ny < height as isize {
-                if labels[ny as usize * width + nx as usize] == target_label {
-                    curr_x = nx as usize;
-                    curr_y = ny as usize;
+            // Branchless bounds check using unsigned comparison
+            if (nx as usize) < width && (ny as usize) < height {
+                let nidx = (curr_idx as isize + offsets[dir]) as usize;
+                if labels[nidx] == target_label {
+                    curr_x = nx;
+                    curr_y = ny;
+                    curr_idx = nidx;
                     walk_dir = dir;
                     found = true;
                     break;
@@ -965,7 +980,7 @@ fn trace_boundary<'a>(
             }
         }
 
-        if !found || (curr_x == start_x && curr_y == start_y) {
+        if !found || (curr_x == start_x as isize && curr_y == start_y as isize) {
             break;
         }
     }
