@@ -176,19 +176,52 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
             dst_row[x] = ((gx.abs() + gy.abs()) >> 4).min(255) as u8;
         }
 
-        // 2. Interior (Vectorizable)
+        // 2. Interior (Vectorized with 4x unroll for SIMD autovectorization)
         if w > 2 {
-            for x in 1..w - 1 {
-                // Interior: x-1, x, x+1 are always valid
+            let interior_end = w - 1;
+            let mut x = 1;
+            
+            // Process 4 pixels at a time
+            while x + 3 < interior_end {
+                // Prefetch rows for cache efficiency
+                let x1 = x;
+                let x2 = x + 1;
+                let x3 = x + 2;
+                let x4 = x + 3;
+                
+                // Load values once
+                let r0_m1 = [r0[x1-1] as i32, r0[x2-1] as i32, r0[x3-1] as i32, r0[x4-1] as i32];
+                let r0_p1 = [r0[x1+1] as i32, r0[x2+1] as i32, r0[x3+1] as i32, r0[x4+1] as i32];
+                let r1_m1 = [r1[x1-1] as i32, r1[x2-1] as i32, r1[x3-1] as i32, r1[x4-1] as i32];
+                let r1_p1 = [r1[x1+1] as i32, r1[x2+1] as i32, r1[x3+1] as i32, r1[x4+1] as i32];
+                let r2_c = [r2[x1] as i32, r2[x2] as i32, r2[x3] as i32, r2[x4] as i32];
+                let r0_c = [r0[x1] as i32, r0[x2] as i32, r0[x3] as i32, r0[x4] as i32];
+                let r2_m1 = [r2[x1-1] as i32, r2[x2-1] as i32, r2[x3-1] as i32, r2[x4-1] as i32];
+                let r2_p1 = [r2[x1+1] as i32, r2[x2+1] as i32, r2[x3+1] as i32, r2[x4+1] as i32];
+                
+                // Compute 4 gradients in parallel
+                for i in 0..4 {
+                    let gx = 3 * (r0_p1[i] - r0_m1[i])
+                           + 10 * (r1_p1[i] - r1_m1[i])
+                           + 3 * (r2_p1[i] - r2_m1[i]);
+                    let gy = 3 * (r2_m1[i] - r0_m1[i])
+                           + 10 * (r2_c[i] - r0_c[i])
+                           + 3 * (r2_p1[i] - r0_p1[i]);
+                    dst_row[x + i] = ((gx.abs() + gy.abs()) >> 4).min(255) as u8;
+                }
+                x += 4;
+            }
+            
+            // Handle remaining pixels
+            while x < interior_end {
                 let gx = 3 * (r0[x + 1] as i32 - r0[x - 1] as i32)
                     + 10 * (r1[x + 1] as i32 - r1[x - 1] as i32)
                     + 3 * (r2[x + 1] as i32 - r2[x - 1] as i32);
-
                 let gy = 3 * (r2[x - 1] as i32 - r0[x - 1] as i32)
                     + 10 * (r2[x] as i32 - r0[x] as i32)
                     + 3 * (r2[x + 1] as i32 - r0[x + 1] as i32);
-
                 dst_row[x] = ((gx.abs() + gy.abs()) >> 4).min(255) as u8;
+                x += 1;
             }
         }
 
