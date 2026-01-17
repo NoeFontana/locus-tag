@@ -39,11 +39,14 @@ The system is architected as a "Universal Quad Detector":
 ## 4. Coding Standards & Constraints
 * **Safety & Panic Policy:**
     * `#![deny(clippy::unwrap_used)]`. Return `Result` for all failures.
-    * No heap allocation inside the hot loop (per-pixel or per-quad).
+    * **Zero Heap Allocation:** No `Vec`, `Box`, or `HashMap` creation inside the `detect()` hot loop.
+* **Performance Invariants:**
+    * **Cache Locality:** Prefer flat arrays over linked structures or arrays of pointers.
+    * **Branch Prediction:** Avoid heavy branching in pixel-loops; use masks or CMOVs where possible.
 * **Testing Strategy:**
     * **Runner:** `cargo-nextest` for parallel execution.
-    * **Property Testing:** `proptest` to fuzz the Hamming decoder logic against random bit-flips.
-    * **Benchmarking:** `criterion` (with PGO hints) and `divan` (for lower overhead micro-benchmarks).
+    * **Property Testing:** `proptest` to fuzz the Hamming decoder logic.
+    * **Evaluation:** Always check Recall vs. RMSE vs. Latency using `tests/evaluate_forward_performance.py`.
 * **Style:** `clippy::pedantic` and `rustfmt`.
 
 ## 5. Validation Data Sources
@@ -55,5 +58,6 @@ The system is architected as a "Universal Quad Detector":
 When generating code for Locus, act as a **Staff Perception Engineer**.
 * **Focus on Latency:** Always scrutinize memory layout and cache lines.
 * **Explain "Unsafe":** Document *why* a pointer dereference is safe (e.g., "Invariant: stride checked at entry").
-* **Modern Tooling:** Suggest using `rerun` to visualize bugs instead of just `println!`.
+* **Modern Tooling:** Use `rerun` to visualize intermediate results (threshold, quads) whenever debugging recall issues.
 * **Strict Types:** Use "New Type" idioms (e.g., `struct TagId(u16)`) to prevent integer confusion.
+* **RMSE Optimization:** When refining corners, ensure sub-pixel accuracy is prioritized to minimize RMSE in downstream pose estimation.
