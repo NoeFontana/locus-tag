@@ -34,239 +34,169 @@ pub fn extract_quads_fast(
 /// Quad extraction with custom configuration.
 ///
 /// This is the main entry point for quad detection with custom parameters.
+/// Components are processed in parallel for maximum throughput.
 pub fn extract_quads_with_config(
-    arena: &Bump,
+    _arena: &Bump,
     img: &ImageView,
     label_result: &LabelResult,
     config: &DetectorConfig,
 ) -> Vec<Detection> {
-    let mut detections = Vec::new();
+    use rayon::prelude::*;
+
     let labels = label_result.labels;
     let stats = &label_result.component_stats;
-
-    // Compute minimum edge length squared once
     let min_edge_len_sq = config.quad_min_edge_length * config.quad_min_edge_length;
 
-    for (label_idx, stat) in stats.iter().enumerate() {
-        let label = (label_idx + 1) as u32;
+    // Process components in parallel, each with its own thread-local arena
+    stats
+        .par_iter()
+        .enumerate()
+        .filter_map(|(label_idx, stat)| {
+            // Thread-local arena for this component
+            let arena = Bump::new();
+            
+            let label = (label_idx + 1) as u32;
 
-        // Fast geometric filtering using bounding box
-        let bbox_w = u32::from(stat.max_x - stat.min_x) + 1;
-        let bbox_h = u32::from(stat.max_y - stat.min_y) + 1;
-        let bbox_area = bbox_w * bbox_h;
+            // Fast geometric filtering using bounding box
+            let bbox_w = u32::from(stat.max_x - stat.min_x) + 1;
+            let bbox_h = u32::from(stat.max_y - stat.min_y) + 1;
+            let bbox_area = bbox_w * bbox_h;
 
-        // Filter: too small or too large
-        if bbox_area < config.quad_min_area || bbox_area > (img.width * img.height * 9 / 10) as u32
-        {
-            continue;
-        }
+            // Filter: too small or too large
+            if bbox_area < config.quad_min_area || bbox_area > (img.width * img.height * 9 / 10) as u32 {
+                return None;
+            }
 
-        // Filter: not roughly square (aspect ratio)
-        let aspect = bbox_w.max(bbox_h) as f32 / bbox_w.min(bbox_h).max(1) as f32;
-        if aspect > config.quad_max_aspect_ratio {
-            continue;
-        }
+            // Filter: not roughly square (aspect ratio)
+            let aspect = bbox_w.max(bbox_h) as f32 / bbox_w.min(bbox_h).max(1) as f32;
+            if aspect > config.quad_max_aspect_ratio {
+                return None;
+            }
 
-        // Filter: fill ratio (should be ~50-80% for a tag with inner pattern)
-        let fill = stat.pixel_count as f32 / bbox_area as f32;
-        if fill < config.quad_min_fill_ratio || fill > config.quad_max_fill_ratio {
-            continue;
-        }
+            // Filter: fill ratio (should be ~50-80% for a tag with inner pattern)
+            let fill = stat.pixel_count as f32 / bbox_area as f32;
+            if fill < config.quad_min_fill_ratio || fill > config.quad_max_fill_ratio {
+                return None;
+            }
 
-        // Passed filters - trace boundary and fit quad
-        // Use pre-computed first pixel from CCL stats (O(1) instead of O(w*h))
-        let sx = stat.first_pixel_x as usize;
-        let sy = stat.first_pixel_y as usize;
+            // Passed filters - trace boundary and fit quad
+            let sx = stat.first_pixel_x as usize;
+            let sy = stat.first_pixel_y as usize;
 
-        // For small components, try the 9-pixel foundation (gradient-based fitting)
-        // Computes gradients only within the component's bounding box for efficiency
-        if bbox_area < 1200 {
-            if let Some(grad_corners) = crate::gradient::fit_quad_from_component(
-                img,
-                labels,
-                label,
-                stat.min_x as usize,
-                stat.min_y as usize,
-                stat.max_x as usize,
-                stat.max_y as usize,
-            ) {
-                let corners = [
-                    refine_corner(
-                        arena,
-                        img,
-                        Point {
-                            x: grad_corners[0][0] as f64,
-                            y: grad_corners[0][1] as f64,
-                        },
-                        Point {
-                            x: grad_corners[3][0] as f64,
-                            y: grad_corners[3][1] as f64,
-                        },
-                        Point {
-                            x: grad_corners[1][0] as f64,
-                            y: grad_corners[1][1] as f64,
-                        },
-                        config.subpixel_refinement_sigma,
-                    ),
-                    refine_corner(
-                        arena,
-                        img,
-                        Point {
-                            x: grad_corners[1][0] as f64,
-                            y: grad_corners[1][1] as f64,
-                        },
-                        Point {
-                            x: grad_corners[0][0] as f64,
-                            y: grad_corners[0][1] as f64,
-                        },
-                        Point {
-                            x: grad_corners[2][0] as f64,
-                            y: grad_corners[2][1] as f64,
-                        },
-                        config.subpixel_refinement_sigma,
-                    ),
-                    refine_corner(
-                        arena,
-                        img,
-                        Point {
-                            x: grad_corners[2][0] as f64,
-                            y: grad_corners[2][1] as f64,
-                        },
-                        Point {
-                            x: grad_corners[1][0] as f64,
-                            y: grad_corners[1][1] as f64,
-                        },
-                        Point {
-                            x: grad_corners[3][0] as f64,
-                            y: grad_corners[3][1] as f64,
-                        },
-                        config.subpixel_refinement_sigma,
-                    ),
-                    refine_corner(
-                        arena,
-                        img,
-                        Point {
-                            x: grad_corners[3][0] as f64,
-                            y: grad_corners[3][1] as f64,
-                        },
-                        Point {
-                            x: grad_corners[2][0] as f64,
-                            y: grad_corners[2][1] as f64,
-                        },
-                        Point {
-                            x: grad_corners[0][0] as f64,
-                            y: grad_corners[0][1] as f64,
-                        },
-                        config.subpixel_refinement_sigma,
-                    ),
-                ];
+            // For small components, try the 9-pixel foundation (gradient-based fitting)
+            if bbox_area < 1200 {
+                if let Some(grad_corners) = crate::gradient::fit_quad_from_component(
+                    img, labels, label,
+                    stat.min_x as usize, stat.min_y as usize,
+                    stat.max_x as usize, stat.max_y as usize,
+                ) {
+                    let corners = [
+                        refine_corner(&arena, img, Point { x: grad_corners[0][0] as f64, y: grad_corners[0][1] as f64 },
+                                     Point { x: grad_corners[3][0] as f64, y: grad_corners[3][1] as f64 },
+                                     Point { x: grad_corners[1][0] as f64, y: grad_corners[1][1] as f64 },
+                                     config.subpixel_refinement_sigma),
+                        refine_corner(&arena, img, Point { x: grad_corners[1][0] as f64, y: grad_corners[1][1] as f64 },
+                                     Point { x: grad_corners[0][0] as f64, y: grad_corners[0][1] as f64 },
+                                     Point { x: grad_corners[2][0] as f64, y: grad_corners[2][1] as f64 },
+                                     config.subpixel_refinement_sigma),
+                        refine_corner(&arena, img, Point { x: grad_corners[2][0] as f64, y: grad_corners[2][1] as f64 },
+                                     Point { x: grad_corners[1][0] as f64, y: grad_corners[1][1] as f64 },
+                                     Point { x: grad_corners[3][0] as f64, y: grad_corners[3][1] as f64 },
+                                     config.subpixel_refinement_sigma),
+                        refine_corner(&arena, img, Point { x: grad_corners[3][0] as f64, y: grad_corners[3][1] as f64 },
+                                     Point { x: grad_corners[2][0] as f64, y: grad_corners[2][1] as f64 },
+                                     Point { x: grad_corners[0][0] as f64, y: grad_corners[0][1] as f64 },
+                                     config.subpixel_refinement_sigma),
+                    ];
 
-                let edge_score = calculate_edge_score(img, corners);
-                if edge_score > config.quad_min_edge_score {
-                    detections.push(Detection {
-                        id: label,
-                        center: [
-                            (grad_corners[0][0] + grad_corners[2][0]) as f64 / 2.0,
-                            (grad_corners[0][1] + grad_corners[2][1]) as f64 / 2.0,
-                        ],
-                        corners: [
-                            [corners[0].x, corners[0].y],
-                            [corners[1].x, corners[1].y],
-                            [corners[2].x, corners[2].y],
-                            [corners[3].x, corners[3].y],
-                        ],
-                        hamming: 0,
-                        decision_margin: bbox_area as f64,
-                        pose: None,
-                    });
-                    continue;
+                    let edge_score = calculate_edge_score(img, corners);
+                    if edge_score > config.quad_min_edge_score {
+                        return Some(Detection {
+                            id: label,
+                            center: [
+                                (grad_corners[0][0] + grad_corners[2][0]) as f64 / 2.0,
+                                (grad_corners[0][1] + grad_corners[2][1]) as f64 / 2.0,
+                            ],
+                            corners: [
+                                [corners[0].x, corners[0].y],
+                                [corners[1].x, corners[1].y],
+                                [corners[2].x, corners[2].y],
+                                [corners[3].x, corners[3].y],
+                            ],
+                            hamming: 0,
+                            decision_margin: bbox_area as f64,
+                            pose: None,
+                        });
+                    }
                 }
             }
-        }
 
-        let contour = trace_boundary(arena, labels, img.width, img.height, sx, sy, label);
+            let contour = trace_boundary(&arena, labels, img.width, img.height, sx, sy, label);
 
-        if contour.len() >= 12 {
-            // Apply chain approximation to remove redundant points on straight lines
-            let simple_contour = chain_approximation(arena, &contour);
+            if contour.len() >= 12 {
+                let simple_contour = chain_approximation(&arena, &contour);
+                let perimeter = contour.len() as f64;
+                let epsilon = (perimeter * 0.02).max(1.0);
+                let simplified = douglas_peucker(&arena, &simple_contour, epsilon);
 
-            // Adaptive epsilon: 2% of perimeter
-            let perimeter = contour.len() as f64;
-            let epsilon = (perimeter * 0.02).max(1.0);
-            let simplified = douglas_peucker(arena, &simple_contour, epsilon);
+                if simplified.len() >= 4 && simplified.len() <= 11 {
+                    let simpl_len = simplified.len();
+                    let reduced = if simpl_len == 5 {
+                        simplified
+                    } else if simpl_len == 4 {
+                        let mut closed = BumpVec::new_in(&arena);
+                        for p in simplified.iter() { closed.push(*p); }
+                        closed.push(simplified[0]);
+                        closed
+                    } else {
+                        reduce_to_quad(&arena, &simplified)
+                    };
 
-            if simplified.len() >= 4 && simplified.len() <= 11 {
-                // Allow perfect quads (4 points)
-                let simpl_len = simplified.len();
-                // Handle already-perfect quads (4 or 5 points) or reduce jagged polygons
-                let reduced = if simpl_len == 5 {
-                    simplified
-                } else if simpl_len == 4 {
-                    // Perfect quad without closing point - add it
-                    let mut closed = BumpVec::new_in(arena);
-                    for p in simplified.iter() {
-                        closed.push(*p);
-                    }
-                    closed.push(simplified[0]); // Close the polygon
-                    closed
-                } else {
-                    reduce_to_quad(arena, &simplified)
-                };
+                    if reduced.len() == 5 {
+                        let area = polygon_area(&reduced);
+                        let compactness = (12.566 * area) / (perimeter * perimeter);
 
-                // Must have successfully reduced to 4 corners (+1 closing)
-                if reduced.len() == 5 {
-                    let area = polygon_area(&reduced);
-                    let perimeter = contour.len() as f64;
-                    // Relax compactness check slightly for small jagged tags (was 0.5)
-                    let compactness = (12.566 * area) / (perimeter * perimeter);
-
-                    let min_area_f64 = config.quad_min_area as f64;
-                    if area > min_area_f64 && compactness > 0.1 {
-                        // Lowered for small 8px+ tags
-                        let mut ok = true;
-                        for i in 0..4 {
-                            let d2 = (reduced[i].x - reduced[i + 1].x).powi(2)
-                                + (reduced[i].y - reduced[i + 1].y).powi(2);
-                            if d2 < min_edge_len_sq {
-                                ok = false;
-                                break;
+                        if area > config.quad_min_area as f64 && compactness > 0.1 {
+                            let mut ok = true;
+                            for i in 0..4 {
+                                let d2 = (reduced[i].x - reduced[i + 1].x).powi(2)
+                                    + (reduced[i].y - reduced[i + 1].y).powi(2);
+                                if d2 < min_edge_len_sq { ok = false; break; }
                             }
-                        }
 
-                        if ok {
-                            // Compute center first, then refine corners
-                            let center = polygon_center(&reduced);
-                            let corners = [
-                                refine_corner(arena, img, reduced[0], reduced[3], reduced[1], config.subpixel_refinement_sigma),
-                                refine_corner(arena, img, reduced[1], reduced[0], reduced[2], config.subpixel_refinement_sigma),
-                                refine_corner(arena, img, reduced[2], reduced[1], reduced[3], config.subpixel_refinement_sigma),
-                                refine_corner(arena, img, reduced[3], reduced[2], reduced[0], config.subpixel_refinement_sigma),
-                            ];
+                            if ok {
+                                let center = polygon_center(&reduced);
+                                let corners = [
+                                    refine_corner(&arena, img, reduced[0], reduced[3], reduced[1], config.subpixel_refinement_sigma),
+                                    refine_corner(&arena, img, reduced[1], reduced[0], reduced[2], config.subpixel_refinement_sigma),
+                                    refine_corner(&arena, img, reduced[2], reduced[1], reduced[3], config.subpixel_refinement_sigma),
+                                    refine_corner(&arena, img, reduced[3], reduced[2], reduced[0], config.subpixel_refinement_sigma),
+                                ];
 
-                            // Filter: weak edge alignment
-                            let edge_score = calculate_edge_score(img, corners);
-                            if edge_score > config.quad_min_edge_score {
-                                detections.push(Detection {
-                                    id: label,
-                                    center,
-                                    corners: [
-                                        [corners[0].x, corners[0].y],
-                                        [corners[1].x, corners[1].y],
-                                        [corners[2].x, corners[2].y],
-                                        [corners[3].x, corners[3].y],
-                                    ],
-                                    hamming: 0,
-                                    decision_margin: area,
-                                    pose: None,
-                                });
+                                let edge_score = calculate_edge_score(img, corners);
+                                if edge_score > config.quad_min_edge_score {
+                                    return Some(Detection {
+                                        id: label,
+                                        center,
+                                        corners: [
+                                            [corners[0].x, corners[0].y],
+                                            [corners[1].x, corners[1].y],
+                                            [corners[2].x, corners[2].y],
+                                            [corners[3].x, corners[3].y],
+                                        ],
+                                        hamming: 0,
+                                        decision_margin: area,
+                                        pose: None,
+                                    });
+                                }
                             }
                         }
                     }
                 }
             }
-        }
-    }
-    detections
+            None
+        })
+        .collect()
 }
 
 /// Legacy extract_quads for backward compatibility.
