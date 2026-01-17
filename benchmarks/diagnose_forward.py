@@ -65,9 +65,15 @@ def analyze_forward():
         # Load image
         img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
         
-        # Run detection
+        # Run detection (normal)
         detections, stats = detector.detect_with_stats(img)
         detected_ids = {d.id for d in detections}
+        
+        if img_name == "0000.png":
+            # Test 2x Upscaling Hypothesis
+            img_2x = cv2.resize(img, (0, 0), fx=2.0, fy=2.0, interpolation=cv2.INTER_LINEAR)
+            detections_2x, _ = detector.detect_with_stats(img_2x)
+            print(f"DEBUG: 1x Detections: {len(detections)}, 2x Detections: {len(detections_2x)}")
         
         missed_tags = []
         for tid, corners in gt[img_name].items():

@@ -100,8 +100,9 @@ pub fn label_components<'a>(
     binary: &[u8],
     width: usize,
     height: usize,
+    use_8_connectivity: bool,
 ) -> &'a [u32] {
-    label_components_with_stats(arena, binary, width, height).labels
+    label_components_with_stats(arena, binary, width, height, use_8_connectivity).labels
 }
 
 /// Label components and compute bounding box stats for each.
@@ -110,6 +111,7 @@ pub fn label_components_with_stats<'a>(
     binary: &[u8],
     width: usize,
     height: usize,
+    use_8_connectivity: bool,
 ) -> LabelResult<'a> {
     let mut runs = BumpVec::new_in(arena);
 
@@ -165,17 +167,26 @@ pub fn label_components_with_stats<'a>(
             for c_idx in curr_row_range.clone() {
                 let curr = &runs[c_idx];
 
-                // 8-connectivity check: overlap if [xs1, xe1] and [xs2-1, xe2+1] intersect
-                // Advance prev pointer until it overlaps or passes curr
-                while p_idx < prev_row_range.end && runs[p_idx].x_end + 1 < curr.x_start {
-                    p_idx += 1;
-                }
-
-                // Link all overlapping (including diagonal) runs in the previous row
-                let mut temp_p = p_idx;
-                while temp_p < prev_row_range.end && runs[temp_p].x_start <= curr.x_end + 1 {
-                    uf.union(curr.id, runs[temp_p].id);
-                    temp_p += 1;
+                if use_8_connectivity {
+                    // 8-connectivity check: overlap if [xs1, xe1] and [xs2-1, xe2+1] intersect
+                    while p_idx < prev_row_range.end && runs[p_idx].x_end + 1 < curr.x_start {
+                        p_idx += 1;
+                    }
+                    let mut temp_p = p_idx;
+                    while temp_p < prev_row_range.end && runs[temp_p].x_start <= curr.x_end + 1 {
+                        uf.union(curr.id, runs[temp_p].id);
+                        temp_p += 1;
+                    }
+                } else {
+                    // 4-connectivity check: overlap if [xs1, xe1] and [xs2, xe2] intersect
+                    while p_idx < prev_row_range.end && runs[p_idx].x_end < curr.x_start {
+                        p_idx += 1;
+                    }
+                    let mut temp_p = p_idx;
+                    while temp_p < prev_row_range.end && runs[temp_p].x_start <= curr.x_end {
+                        uf.union(curr.id, runs[temp_p].id);
+                        temp_p += 1;
+                    }
                 }
             }
         }
@@ -249,6 +260,7 @@ pub fn label_components_threshold_model<'a>(
     threshold_map: &[u8],
     width: usize,
     height: usize,
+    use_8_connectivity: bool,
 ) -> LabelResult<'a> {
     // Compute signed deviation: negative = dark (below threshold), positive = light
     // We only care about dark regions (tag interior) for now
@@ -315,13 +327,24 @@ pub fn label_components_threshold_model<'a>(
             let mut p_idx = prev_row_range.start;
             for c_idx in curr_row_range.clone() {
                 let curr = &runs[c_idx];
-                while p_idx < prev_row_range.end && runs[p_idx].x_end + 1 < curr.x_start {
-                    p_idx += 1;
-                }
-                let mut temp_p = p_idx;
-                while temp_p < prev_row_range.end && runs[temp_p].x_start <= curr.x_end + 1 {
-                    uf.union(curr.id, runs[temp_p].id);
-                    temp_p += 1;
+                if use_8_connectivity {
+                    while p_idx < prev_row_range.end && runs[p_idx].x_end + 1 < curr.x_start {
+                        p_idx += 1;
+                    }
+                    let mut temp_p = p_idx;
+                    while temp_p < prev_row_range.end && runs[temp_p].x_start <= curr.x_end + 1 {
+                        uf.union(curr.id, runs[temp_p].id);
+                        temp_p += 1;
+                    }
+                } else {
+                    while p_idx < prev_row_range.end && runs[p_idx].x_end < curr.x_start {
+                        p_idx += 1;
+                    }
+                    let mut temp_p = p_idx;
+                    while temp_p < prev_row_range.end && runs[temp_p].x_start <= curr.x_end {
+                        uf.union(curr.id, runs[temp_p].id);
+                        temp_p += 1;
+                    }
                 }
             }
         }

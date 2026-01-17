@@ -238,6 +238,7 @@ impl Detector {
                 threshold_map,
                 img.width,
                 img.height,
+                self.config.segmentation_connectivity == config::SegmentationConnectivity::Eight,
             )
         };
         stats.segmentation_ms = start_seg.elapsed().as_secs_f64() * 1000.0;

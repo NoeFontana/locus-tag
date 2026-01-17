@@ -113,6 +113,29 @@ impl From<TagFamily> for locus_core::config::TagFamily {
 }
 
 // ============================================================================
+// SegmentationConnectivity enum
+// ============================================================================
+
+/// Segmentation connectivity mode.
+#[pyclass(eq, eq_int)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SegmentationConnectivity {
+    /// 4-connectivity: Pixels connect horizontally and vertically only.
+    Four = 0,
+    /// 8-connectivity: Pixels connect horizontally, vertically, and diagonally.
+    Eight = 1,
+}
+
+impl From<SegmentationConnectivity> for locus_core::config::SegmentationConnectivity {
+    fn from(c: SegmentationConnectivity) -> Self {
+        match c {
+            SegmentationConnectivity::Four => locus_core::config::SegmentationConnectivity::Four,
+            SegmentationConnectivity::Eight => locus_core::config::SegmentationConnectivity::Eight,
+        }
+    }
+}
+
+// ============================================================================
 // Detector class with persistent state
 // ============================================================================
 
@@ -153,6 +176,7 @@ impl Detector {
     ///     quad_max_fill_ratio: Maximum pixel fill ratio (default: 0.95)
     ///     quad_min_edge_length: Minimum edge length in pixels (default: 4.0)
     ///     quad_min_edge_score: Minimum edge gradient score (default: 0.4)
+    ///     segmentation_connectivity: Connectivity mode (default: Eight)
     #[new]
     #[pyo3(signature = (
         threshold_tile_size = 4,
@@ -170,6 +194,7 @@ impl Detector {
         quad_min_edge_length = 3.0,
         quad_min_edge_score = 0.4,
         subpixel_refinement_sigma = 0.6,
+        segmentation_connectivity = SegmentationConnectivity::Eight,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -188,6 +213,7 @@ impl Detector {
         quad_min_edge_length: f64,
         quad_min_edge_score: f64,
         subpixel_refinement_sigma: f64,
+        segmentation_connectivity: SegmentationConnectivity,
     ) -> Self {
         let config = locus_core::DetectorConfig {
             threshold_tile_size,
@@ -205,6 +231,7 @@ impl Detector {
             quad_min_edge_length,
             quad_min_edge_score,
             subpixel_refinement_sigma,
+            segmentation_connectivity: segmentation_connectivity.into(),
         };
         Self {
             inner: locus_core::Detector::with_config(config),
@@ -358,7 +385,7 @@ fn debug_segmentation(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
     engine.apply_threshold(&view, &stats, &mut binarized);
 
     let arena = bumpalo::Bump::new();
-    let labels = locus_core::segmentation::label_components(&arena, &binarized, width, height);
+    let labels = locus_core::segmentation::label_components(&arena, &binarized, width, height, false);
     let labels_vec = labels.to_vec();
 
     Python::with_gil(|py| {
@@ -381,6 +408,7 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Detection>()?;
     m.add_class::<PipelineStats>()?;
     m.add_class::<TagFamily>()?;
+    m.add_class::<SegmentationConnectivity>()?;
     m.add_class::<Detector>()?;
 
     // Legacy functions (for backward compatibility)

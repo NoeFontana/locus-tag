@@ -1,3 +1,4 @@
+
 # Locus
 
 A high-performance AprilTag and ArUco detector in Rust with Python bindings.
@@ -27,3 +28,24 @@ tags = locus.detect_tags(img)
 for t in tags:
     print(f"ID: {t.id}, Corners: {t.corners}")
 ```
+
+### Checkerboard Support
+
+Locus supports detecting tags embedded in checkerboard patterns (where corners touch black squares).
+This requires switching to **4-way connectivity**, as 8-way connectivity (default) merges touching corners.
+
+```python
+import locus
+
+# Configure for checkerboard tags
+detector = locus.Detector(
+    segmentation_connectivity=locus.SegmentationConnectivity.Four
+)
+
+tags = detector.detect(img)
+```
+
+| Mode | Use Case |
+| :--- | :--- |
+| `Eight` (Default) | **Isolated Tags**. Best performance and robustness to broken borders. |
+| `Four` | **Checkerboards**. Required when tag corners touch other black elements. |

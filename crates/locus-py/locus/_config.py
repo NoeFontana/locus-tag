@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from .locus import TagFamily
+from .locus import TagFamily, SegmentationConnectivity
 
 
 class DetectorConfig(BaseModel):
@@ -9,7 +9,7 @@ class DetectorConfig(BaseModel):
     These settings are typically set once during detector instantiation.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     threshold_tile_size: int = Field(default=4, ge=2, le=64)
     threshold_min_range: int = Field(default=5, ge=0, le=255)
@@ -28,6 +28,8 @@ class DetectorConfig(BaseModel):
     quad_max_fill_ratio: float = Field(default=0.95, ge=0.0, le=1.0)
     quad_min_edge_length: float = Field(default=4.0, ge=0.0)
     quad_min_edge_score: float = Field(default=1.0, ge=0.0)
+    subpixel_refinement_sigma: float = Field(default=0.6, ge=0.0)
+    segmentation_connectivity: SegmentationConnectivity = Field(default=SegmentationConnectivity.Eight)
 
 
 class DetectOptions(BaseModel):

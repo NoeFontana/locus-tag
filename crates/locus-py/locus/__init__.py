@@ -3,6 +3,7 @@ from .locus import (
     Detection,
     PipelineStats,
     TagFamily,
+    SegmentationConnectivity,
     debug_segmentation,
     debug_threshold,
     detect_tags,
@@ -41,6 +42,8 @@ class Detector:
             quad_max_fill_ratio=config.quad_max_fill_ratio,
             quad_min_edge_length=config.quad_min_edge_length,
             quad_min_edge_score=config.quad_min_edge_score,
+            subpixel_refinement_sigma=config.subpixel_refinement_sigma,
+            segmentation_connectivity=config.segmentation_connectivity,
         )
 
     def detect(self, img):
@@ -71,6 +74,7 @@ __all__ = [
     "Detector",
     "PipelineStats",
     "TagFamily",
+    "SegmentationConnectivity",
     "DetectorConfig",
     "DetectOptions",
     "detect_tags",

@@ -8,6 +8,18 @@
 // DetectorConfig: Pipeline-level configuration
 // ============================================================================
 
+/// Segmentation connectivity mode.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum SegmentationConnectivity {
+    /// 4-connectivity: Pixels connect horizontally and vertically only.
+    /// Required for separating checkerboard corners.
+    Four,
+    /// 8-connectivity: Pixels connect horizontally, vertically, and diagonally.
+    /// Better for isolated tags with broken borders.
+    Eight,
+}
+
 /// Pipeline-level configuration for the detector.
 ///
 /// These settings affect the fundamental behavior of the detection pipeline
@@ -65,6 +77,8 @@ pub struct DetectorConfig {
     pub quad_min_edge_score: f64,
     /// PSF blur factor for subpixel refinement (e.g., 0.6)
     pub subpixel_refinement_sigma: f64,
+    /// Segmentation connectivity (4-way or 8-way).
+    pub segmentation_connectivity: SegmentationConnectivity,
 }
 
 impl Default for DetectorConfig {
@@ -85,6 +99,7 @@ impl Default for DetectorConfig {
             quad_min_edge_length: 3.0, // Lowered from 4.0
             quad_min_edge_score: 0.4,  // Slightly lowered from 0.5
             subpixel_refinement_sigma: 0.6,
+            segmentation_connectivity: SegmentationConnectivity::Eight,
         }
     }
 }
@@ -115,6 +130,7 @@ pub struct DetectorConfigBuilder {
     quad_min_edge_length: Option<f64>,
     pub quad_min_edge_score: Option<f64>,
     pub subpixel_refinement_sigma: Option<f64>,
+    pub segmentation_connectivity: Option<SegmentationConnectivity>,
 }
 
 impl DetectorConfigBuilder {
@@ -238,7 +254,15 @@ impl DetectorConfigBuilder {
             quad_min_edge_length: self.quad_min_edge_length.unwrap_or(d.quad_min_edge_length),
             quad_min_edge_score: self.quad_min_edge_score.unwrap_or(d.quad_min_edge_score),
             subpixel_refinement_sigma: self.subpixel_refinement_sigma.unwrap_or(d.subpixel_refinement_sigma),
+            segmentation_connectivity: self.segmentation_connectivity.unwrap_or(d.segmentation_connectivity),
         }
+    }
+
+    /// Set the segmentation connectivity.
+    #[must_use]
+    pub fn segmentation_connectivity(mut self, connectivity: SegmentationConnectivity) -> Self {
+        self.segmentation_connectivity = Some(connectivity);
+        self
     }
 }
 
