@@ -102,8 +102,8 @@ pub struct PipelineStats {
 pub struct Detector {
     arena: Bump,
     config: DetectorConfig,
-    threshold_engine: ThresholdEngine,
     decoders: Vec<Box<dyn TagDecoder + Send + Sync>>,
+    upscale_buf: Vec<u8>,
 }
 
 impl Detector {
@@ -119,8 +119,8 @@ impl Detector {
         Self {
             arena: Bump::new(),
             config,
-            threshold_engine: ThresholdEngine::from_config(&config),
             decoders: vec![Box::new(crate::decoder::AprilTag36h11)],
+            upscale_buf: Vec::new(),
         }
     }
 
@@ -195,7 +195,7 @@ impl Detector {
             
             let new_w = img.width * upscale_factor;
             let new_h = img.height * upscale_factor;
-            _upscale_buf = vec![0u8; new_w * new_h];
+            self.upscale_buf.resize(new_w * new_h, 0);
             
             for y in 0..img.height {
                 let src_row = y * img.width;
@@ -204,13 +204,13 @@ impl Detector {
                     for x in 0..img.width {
                         let val = img.data[src_row + x];
                         for rep_x in 0..upscale_factor {
-                            _upscale_buf[dst_row + x * upscale_factor + rep_x] = val;
+                            self.upscale_buf[dst_row + x * upscale_factor + rep_x] = val;
                         }
                     }
                 }
             }
             (
-                ImageView::new(&_upscale_buf, new_w, new_h, new_w).expect("valid upscaled view"),
+                ImageView::new(&self.upscale_buf, new_w, new_h, new_w).expect("valid upscaled view"),
                 upscale_factor as f64,
             )
         } else {
@@ -227,7 +227,7 @@ impl Detector {
              // Auto-scale parameters
              self.config.threshold_tile_size *= upscale_factor;
              self.config.threshold_max_radius *= upscale_factor;
-             self.config.quad_min_edge_score /= (upscale_factor as f64);
+             self.config.quad_min_edge_score /= upscale_factor as f64;
         }
 
         self.arena.reset();
@@ -238,6 +238,7 @@ impl Detector {
         let filtered_img = if self.config.enable_bilateral {
             let filtered = self.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
             crate::filter::bilateral_filter(
+                &self.arena,
                 img,
                 filtered,
                 3, // spatial radius
@@ -267,7 +268,9 @@ impl Detector {
         {
             let _span = tracing::info_span!("threshold_adaptive").entered();
             // Compute integral image for O(1) local mean per pixel
-            let integral = crate::threshold::compute_integral_image(&sharpened_img);
+            let stride = sharpened_img.width + 1;
+            let integral = self.arena.alloc_slice_fill_copy(stride * (sharpened_img.height + 1), 0u64);
+            crate::threshold::compute_integral_image(&sharpened_img, integral);
             
             // 1c. Apply adaptive or fixed-window threshold
             if self.config.enable_adaptive_window {

@@ -347,6 +347,9 @@ pub fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detec
 }
 
 /// Simplify a contour using the Douglas-Peucker algorithm.
+/// 
+/// Leverages an iterative implementation with a manual stack to avoid
+/// the overhead of recursive function calls and multiple temporary allocations.
 pub fn douglas_peucker<'a>(arena: &'a Bump, points: &[Point], epsilon: f64) -> BumpVec<'a, Point> {
     if points.len() < 3 {
         let mut v = BumpVec::new_in(arena);
@@ -354,31 +357,44 @@ pub fn douglas_peucker<'a>(arena: &'a Bump, points: &[Point], epsilon: f64) -> B
         return v;
     }
 
-    let mut dmax = 0.0;
-    let mut index = 0;
-    let end = points.len() - 1;
+    let n = points.len();
+    let mut keep = BumpVec::from_iter_in((0..n).map(|_| false), arena);
+    keep[0] = true;
+    keep[n - 1] = true;
 
-    for i in 1..end {
-        let d = perpendicular_distance(points[i], points[0], points[end]);
-        if d > dmax {
-            index = i;
-            dmax = d;
+    let mut stack = BumpVec::new_in(arena);
+    stack.push((0, n - 1));
+
+    while let Some((start, end)) = stack.pop() {
+        if end - start < 2 {
+            continue;
+        }
+
+        let mut dmax = 0.0;
+        let mut index = start;
+
+        for i in start + 1..end {
+            let d = perpendicular_distance(points[i], points[start], points[end]);
+            if d > dmax {
+                index = i;
+                dmax = d;
+            }
+        }
+
+        if dmax > epsilon {
+            keep[index] = true;
+            stack.push((start, index));
+            stack.push((index, end));
         }
     }
 
-    if dmax > epsilon {
-        let mut rec_results1 = douglas_peucker(arena, &points[0..=index], epsilon);
-        let rec_results2 = douglas_peucker(arena, &points[index..=end], epsilon);
-
-        rec_results1.pop();
-        rec_results1.extend(rec_results2);
-        rec_results1
-    } else {
-        let mut v = BumpVec::new_in(arena);
-        v.push(points[0]);
-        v.push(points[end]);
-        v
+    let mut simplified = BumpVec::new_in(arena);
+    for (i, &k) in keep.iter().enumerate() {
+        if k {
+            simplified.push(points[i]);
+        }
     }
+    simplified
 }
 
 fn perpendicular_distance(p: Point, a: Point, b: Point) -> f64 {
@@ -531,8 +547,8 @@ fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, si
     }
 
     // Initial line parameters: normal (nx, ny) and distance d from origin
-    let mut nx = -dy / len;
-    let mut ny = dx / len;
+    let nx = -dy / len;
+    let ny = dx / len;
     let mid_x = (p1.x + p2.x) / 2.0;
     let mid_y = (p1.y + p2.y) / 2.0;
     let mut d = -(nx * mid_x + ny * mid_y);

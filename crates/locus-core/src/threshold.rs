@@ -641,12 +641,16 @@ fn compute_min_max_simd(data: &[u8]) -> (u8, u8) {
 /// Compute integral image (cumulative sum) for fast box filter computation.
 ///
 /// Uses a 2-pass parallel implementation for maximum throughput on modern multicore CPUs.
-#[must_use]
-pub fn compute_integral_image(img: &ImageView) -> Vec<u64> {
+/// The `integral` buffer must have size `(img.width + 1) * (img.height + 1)`.
+pub fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
     let w = img.width;
     let h = img.height;
     let stride = w + 1;
-    let mut integral = vec![0u64; stride * (h + 1)];
+
+    // Zero the first row efficiently
+    for x in 0..stride {
+        integral[x] = 0;
+    }
 
     use rayon::prelude::*;
 
@@ -672,22 +676,25 @@ pub fn compute_integral_image(img: &ImageView) -> Vec<u64> {
         let start_x = b * BLOCK_SIZE;
         let end_x = (start_x + BLOCK_SIZE).min(stride);
         
-        let _col_sums = vec![0u64; end_x - start_x];
+        // Initialize cumulative sum for this column block
+        // We use a small on-stack or small-vec if needed, but since BLOCK_SIZE is small (128),
+        // we can just use a fixed-size array if we want to avoid allocation entirely.
+        let mut col_sums = [0u64; BLOCK_SIZE];
         
         // Safety: We are writing to unique columns in each parallel task.
         unsafe {
             let base_ptr = integral.as_ptr() as *mut u64;
             for y in 1..=h {
                 let row_ptr = base_ptr.add(y * stride + start_x);
-                for (i, x) in (start_x..end_x).enumerate() {
-                    let val_ptr = row_ptr.add(i);
-                    *val_ptr += *base_ptr.add((y - 1) * stride + x);
+                for i in 0..(end_x - start_x) {
+                    let val = *row_ptr.add(i);
+                    let new_sum = val + col_sums[i];
+                    *row_ptr.add(i) = new_sum;
+                    col_sums[i] = new_sum;
                 }
             }
         }
     });
-
-    integral
 }
 
 /// Apply per-pixel adaptive threshold using integral image.
@@ -827,7 +834,8 @@ pub fn apply_adaptive_threshold_with_params(
     radius: usize,
     c: i16,
 ) {
-    let integral = compute_integral_image(img);
+    let mut integral = vec![0u64; (img.width + 1) * (img.height + 1)];
+    compute_integral_image(img, &mut integral);
     adaptive_threshold_integral(img, &integral, output, radius, c);
 }
 

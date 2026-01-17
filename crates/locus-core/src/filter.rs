@@ -6,6 +6,7 @@
 //! reducing noise in uniform regions.
 
 use crate::image::ImageView;
+use bumpalo::Bump;
 use multiversion::multiversion;
 
 /// Apply bilateral filter for edge-preserving noise reduction.
@@ -30,6 +31,7 @@ use multiversion::multiversion;
     "aarch64+neon"
 ))]
 pub fn bilateral_filter(
+    arena: &Bump,
     img: &ImageView,
     output: &mut [u8],
     radius: usize,
@@ -40,7 +42,7 @@ pub fn bilateral_filter(
     let h = img.height;
     
     // Internal buffer for cross-pass
-    let temp = vec![0u8; w * h];
+    let temp = arena.alloc_slice_fill_copy(w * h, 0u8);
     
     // Precompute color Gaussian LUT
     let mut color_lut = [0.0f32; 256];
@@ -51,9 +53,9 @@ pub fn bilateral_filter(
     
     // Precompute 1D spatial Gaussian LUT
     let diameter = 2 * radius + 1;
-    let mut spatial_lut = vec![0.0f32; diameter];
+    let mut spatial_lut = [0.0f32; 31]; // Support radius up to 15
     let space_coeff = -1.0 / (2.0 * sigma_space * sigma_space);
-    for i in 0..diameter {
+    for i in 0..diameter.min(31) {
         let d = (i as i32 - radius as i32) as f32;
         spatial_lut[i] = (space_coeff * d * d).exp();
     }
@@ -160,31 +162,48 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
         let r1 = img.get_row(y1);
         let r2 = img.get_row(y2);
 
-        for x in 0..w {
-            let x0 = x.saturating_sub(1);
-            let x1 = x;
-            let x2 = (x + 1).min(w - 1);
-
-            // Sample 3x3 neighborhood from pre-fetched rows
-            let p00 = r0[x0] as i32;
-            let p01 = r0[x1] as i32;
-            let p02 = r0[x2] as i32;
-            let p10 = r1[x0] as i32;
-            let p12 = r1[x2] as i32;
-            let p20 = r2[x0] as i32;
-            let p21 = r2[x1] as i32;
-            let p22 = r2[x2] as i32;
-
-            // Apply Scharr kernels
+        // 1. Left border
+        {
+            let x = 0;
+            let x0 = 0;
+            let x1 = 0;
+            let x2 = 1.min(w - 1);
+            let p00 = r0[x0] as i32; let p01 = r0[x1] as i32; let p02 = r0[x2] as i32;
+            let p10 = r1[x0] as i32;                        let p12 = r1[x2] as i32;
+            let p20 = r2[x0] as i32; let p21 = r2[x1] as i32; let p22 = r2[x2] as i32;
             let gx = -3 * p00 + 3 * p02 - 10 * p10 + 10 * p12 - 3 * p20 + 3 * p22;
             let gy = -3 * p00 - 10 * p01 - 3 * p02 + 3 * p20 + 10 * p21 + 3 * p22;
+            dst_row[x] = ((gx.abs() + gy.abs()) >> 4).min(255) as u8;
+        }
 
-            // Gradient magnitude (L2 norm)
-            let grad = ((gx * gx + gy * gy) as f32).sqrt();
-            
-            // Normalize to [0, 255] range
-            let normalized = (grad * (255.0 / 1448.0)).clamp(0.0, 255.0) as u8;
-            dst_row[x] = normalized;
+        // 2. Interior (Vectorizable)
+        if w > 2 {
+            for x in 1..w - 1 {
+                // Interior: x-1, x, x+1 are always valid
+                let gx = 3 * (r0[x + 1] as i32 - r0[x - 1] as i32)
+                    + 10 * (r1[x + 1] as i32 - r1[x - 1] as i32)
+                    + 3 * (r2[x + 1] as i32 - r2[x - 1] as i32);
+
+                let gy = 3 * (r2[x - 1] as i32 - r0[x - 1] as i32)
+                    + 10 * (r2[x] as i32 - r0[x] as i32)
+                    + 3 * (r2[x + 1] as i32 - r0[x + 1] as i32);
+
+                dst_row[x] = ((gx.abs() + gy.abs()) >> 4).min(255) as u8;
+            }
+        }
+
+        // 3. Right border
+        if w > 1 {
+            let x = w - 1;
+            let x0 = w - 2;
+            let x1 = w - 1;
+            let x2 = w - 1;
+            let p00 = r0[x0] as i32; let p01 = r0[x1] as i32; let p02 = r0[x2] as i32;
+            let p10 = r1[x0] as i32;                        let p12 = r1[x2] as i32;
+            let p20 = r2[x0] as i32; let p21 = r2[x1] as i32; let p22 = r2[x2] as i32;
+            let gx = -3 * p00 + 3 * p02 - 10 * p10 + 10 * p12 - 3 * p20 + 3 * p22;
+            let gy = -3 * p00 - 10 * p01 - 3 * p02 + 3 * p20 + 10 * p21 + 3 * p22;
+            dst_row[x] = ((gx.abs() + gy.abs()) >> 4).min(255) as u8;
         }
     });
 }

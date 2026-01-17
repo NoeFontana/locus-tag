@@ -1,8 +1,8 @@
-
 use divan::bench;
 use locus_core::image::ImageView;
 use locus_core::threshold::{adaptive_threshold_integral, adaptive_threshold_gradient_window, compute_integral_image};
 use locus_core::filter::{compute_gradient_map, bilateral_filter};
+use bumpalo::Bump;
 
 fn main() {
     divan::main();
@@ -35,8 +35,11 @@ fn bench_integral_image_1080p(bencher: divan::Bencher) {
     let height = 1080;
     let data = generate_checkered(width, height);
     let img = ImageView::new(&data, width, height, width).unwrap();
+    let mut integral = vec![0u64; (width + 1) * (height + 1)];
 
-    bencher.bench_local(move || compute_integral_image(&img));
+    bencher.bench_local(move || {
+        compute_integral_image(&img, &mut integral);
+    });
 }
 
 #[bench]
@@ -45,7 +48,8 @@ fn bench_adaptive_integral_1080p(bencher: divan::Bencher) {
     let height = 1080;
     let data = generate_checkered(width, height);
     let img = ImageView::new(&data, width, height, width).unwrap();
-    let integral = compute_integral_image(&img);
+    let mut integral = vec![0u64; (width + 1) * (height + 1)];
+    compute_integral_image(&img, &mut integral);
     let mut output = vec![0u8; width * height];
 
     bencher.bench_local(move || {
@@ -59,7 +63,8 @@ fn bench_adaptive_gradient_1080p(bencher: divan::Bencher) {
     let height = 1080;
     let data = generate_checkered(width, height);
     let img = ImageView::new(&data, width, height, width).unwrap();
-    let integral = compute_integral_image(&img);
+    let mut integral = vec![0u64; (width + 1) * (height + 1)];
+    compute_integral_image(&img, &mut integral);
     let mut gradient = vec![0u8; width * height];
     compute_gradient_map(&img, &mut gradient);
     let mut output = vec![0u8; width * height];
@@ -76,8 +81,9 @@ fn bench_bilateral_r3_1080p(bencher: divan::Bencher) {
     let data = generate_checkered(width, height);
     let img = ImageView::new(&data, width, height, width).unwrap();
     let mut output = vec![0u8; width * height];
+    let arena = Bump::new();
 
     bencher.bench_local(move || {
-        bilateral_filter(&img, &mut output, 3, 0.8, 30.0);
+        bilateral_filter(&arena, &img, &mut output, 3, 0.8, 30.0);
     });
 }
