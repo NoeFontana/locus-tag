@@ -1,3 +1,4 @@
+#![allow(unsafe_code)]
 use crate::config::DetectorConfig;
 use crate::image::ImageView;
 use multiversion::multiversion;
@@ -639,46 +640,68 @@ fn compute_min_max_simd(data: &[u8]) -> (u8, u8) {
 
 /// Compute integral image (cumulative sum) for fast box filter computation.
 ///
-/// The integral image I at (x,y) contains sum of all pixels in rectangle (0,0)-(x,y).
-/// This allows O(1) computation of sum over any rectangle.
-///
-/// Memory layout: (width+1) * (height+1) to handle border cases without branches.
+/// Uses a 2-pass parallel implementation for maximum throughput on modern multicore CPUs.
 #[must_use]
 pub fn compute_integral_image(img: &ImageView) -> Vec<u64> {
     let w = img.width;
     let h = img.height;
     let stride = w + 1;
-
-    // Allocate with extra row and column of zeros for border handling
-    // Use u64 to prevent overflow on large images (e.g., 20MP upscaled)
     let mut integral = vec![0u64; stride * (h + 1)];
 
-    // First pass: compute cumulative row sums
-    for y in 0..h {
-        let src_row = img.get_row(y);
-        let dst_offset = (y + 1) * stride + 1;
+    use rayon::prelude::*;
 
-        let mut row_sum = 0u64;
+    // 1st Pass: Compute horizontal cumulative sums (prefix sum per row)
+    // This part is perfectly parallel.
+    integral.par_chunks_exact_mut(stride).enumerate().skip(1).for_each(|(y_idx, row)| {
+        let y = y_idx - 1;
+        let src_row = img.get_row(y);
+        let mut sum = 0u64;
+        // row[0] is already 0
         for x in 0..w {
-            row_sum += u64::from(src_row[x]);
-            // Add current row sum to the value from row above
-            integral[dst_offset + x] = row_sum + integral[dst_offset + x - stride];
+            sum += u64::from(src_row[x]);
+            row[x + 1] = sum;
         }
-    }
+    });
+
+    // 2nd Pass: Vertical cumulative sums
+    // For large images, we process in vertical blocks to stay in cache.
+    const BLOCK_SIZE: usize = 128;
+    let num_blocks = (stride + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    (0..num_blocks).into_par_iter().for_each(|b| {
+        let start_x = b * BLOCK_SIZE;
+        let end_x = (start_x + BLOCK_SIZE).min(stride);
+        
+        let _col_sums = vec![0u64; end_x - start_x];
+        
+        // Safety: We are writing to unique columns in each parallel task.
+        unsafe {
+            let base_ptr = integral.as_ptr() as *mut u64;
+            for y in 1..=h {
+                let row_ptr = base_ptr.add(y * stride + start_x);
+                for (i, x) in (start_x..end_x).enumerate() {
+                    let val_ptr = row_ptr.add(i);
+                    *val_ptr += *base_ptr.add((y - 1) * stride + x);
+                }
+            }
+        }
+    });
 
     integral
 }
 
 /// Apply per-pixel adaptive threshold using integral image.
 ///
-/// This mimics OpenCV's ADAPTIVE_THRESH_MEAN_C:
-/// - For each pixel, compute mean of (2*radius+1) x (2*radius+1) neighborhood
-/// - Pixel is black (0) if value < (mean - C), else white (255)
-///
-/// Parameters:
-/// - `radius`: Half-size of the neighborhood (e.g., 6 for 13x13 window)
-/// - `c`: Constant subtracted from mean (typically 3-5)
+/// Optimized with parallel processing and branchless thresholding.
 #[multiversion(targets = "simd")]
+/// Apply per-pixel adaptive threshold using integral image.
+///
+/// Optimized with parallel processing, interior-loop vectorization, and fixed-point arithmetic.
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
 pub fn adaptive_threshold_integral(
     img: &ImageView,
     integral: &[u64],
@@ -690,41 +713,100 @@ pub fn adaptive_threshold_integral(
     let h = img.height;
     let stride = w + 1;
 
-    // Precompute window area for division
-    let window_size = (2 * radius + 1) as u32;
-    let area = window_size * window_size;
+    use rayon::prelude::*;
 
-    for y in 0..h {
+    // Precompute interior area inverse (fixed-point 1.31)
+    let side = (2 * radius + 1) as u32;
+    let area = side * side;
+    let inv_area_fixed = ((1u64 << 31) / area as u64) as u32;
+
+    (0..h).into_par_iter().for_each(|y| {
+        let y_offset = y * w;
         let src_row = img.get_row(y);
-        let dst_offset = y * w;
+        
+        // Safety: Unique row per thread
+        let dst_row = unsafe {
+            let ptr = output.as_ptr() as *mut u8;
+            std::slice::from_raw_parts_mut(ptr.add(y_offset), w)
+        };
 
-        // Clamp window bounds for this row
         let y0 = y.saturating_sub(radius);
         let y1 = (y + radius + 1).min(h);
-        let actual_height = (y1 - y0) as u32;
 
-        for x in 0..w {
-            // Clamp window bounds for this column
-            let x0 = x.saturating_sub(radius);
-            let x1 = (x + radius + 1).min(w);
-            let actual_width = (x1 - x0) as u32;
-            let actual_area = actual_width * actual_height;
+        // Define interior region for this row
+        let x_start = radius;
+        let x_end = w.saturating_sub(radius + 1);
 
-            // Compute sum using integral image: I(x1,y1) - I(x0,y1) - I(x1,y0) + I(x0,y0)
+        // 1. Process Left Border
+        for x in 0..x_start.min(w) {
+            let x0 = 0; // saturating_sub(radius) is 0
+            let x1 = x + radius + 1;
+            let actual_area = (x1 - x0) * (y1 - y0);
+
             let i00 = integral[y0 * stride + x0];
             let i01 = integral[y0 * stride + x1];
             let i10 = integral[y1 * stride + x0];
             let i11 = integral[y1 * stride + x1];
 
-            // Prevent underflow: add first, then subtract
             let sum = (i11 + i00) - (i01 + i10);
-            let mean = (sum / u64::from(actual_area)) as i16;
-
-            // Threshold with constant C
+            let mean = (sum / actual_area as u64) as i16;
             let threshold = (mean - c).max(0) as u8;
-            output[dst_offset + x] = if src_row[x] < threshold { 0 } else { 255 };
+            dst_row[x] = if src_row[x] < threshold { 0 } else { 255 };
         }
-    }
+
+        // 2. Process Interior (Vectorizable)
+        if x_end > x_start && y >= radius && y + radius + 1 <= h {
+            let row00 = &integral[y0 * stride + (x_start - radius)..];
+            let row01 = &integral[y0 * stride + (x_start + radius + 1)..];
+            let row10 = &integral[y1 * stride + (x_start - radius)..];
+            let row11 = &integral[y1 * stride + (x_start + radius + 1)..];
+            
+            let interior_src = &src_row[x_start..x_end];
+            let interior_dst = &mut dst_row[x_start..x_end];
+
+            for i in 0..(x_end - x_start) {
+                let sum = (row11[i] + row00[i]) - (row01[i] + row10[i]);
+                // Fixed-point division: (sum * inv_area) >> 31
+                let mean = ((sum * inv_area_fixed as u64) >> 31) as i16;
+                let threshold = (mean - c).max(0) as u8;
+                interior_dst[i] = if interior_src[i] < threshold { 0 } else { 255 };
+            }
+        } else if x_end > x_start {
+            // Interior X but border Y
+            for x in x_start..x_end {
+                let x0 = x - radius;
+                let x1 = x + radius + 1;
+                let actual_area = (x1 - x0) * (y1 - y0);
+
+                let i00 = integral[y0 * stride + x0];
+                let i01 = integral[y0 * stride + x1];
+                let i10 = integral[y1 * stride + x0];
+                let i11 = integral[y1 * stride + x1];
+
+                let sum = (i11 + i00) - (i01 + i10);
+                let mean = (sum / actual_area as u64) as i16;
+                let threshold = (mean - c).max(0) as u8;
+                dst_row[x] = if src_row[x] < threshold { 0 } else { 255 };
+            }
+        }
+
+        // 3. Process Right Border
+        for x in x_end.max(x_start)..w {
+            let x0 = x.saturating_sub(radius);
+            let x1 = w; // (x + radius + 1).min(w)
+            let actual_area = (x1 - x0) * (y1 - y0);
+
+            let i00 = integral[y0 * stride + x0];
+            let i01 = integral[y0 * stride + x1];
+            let i10 = integral[y1 * stride + x0];
+            let i11 = integral[y1 * stride + x1];
+
+            let sum = (i11 + i00) - (i01 + i10);
+            let mean = (sum / actual_area as u64) as i16;
+            let threshold = (mean - c).max(0) as u8;
+            dst_row[x] = if src_row[x] < threshold { 0 } else { 255 };
+        }
+    });
 }
 
 /// Fast adaptive threshold combining integral image approach with SIMD.
@@ -751,29 +833,12 @@ pub fn apply_adaptive_threshold_with_params(
 
 /// Apply per-pixel adaptive threshold with gradient-based window sizing.
 ///
-/// For small tag detection, this function adapts the threshold window size based on
-/// local gradient magnitude:
-/// - **High gradient (edges)**: Use small window to avoid overlapping adjacent tag cells
-/// - **Low gradient (uniform)**: Use large window for robust noise suppression
-///
-/// This solves the problem where a fixed 13x13 window is too large for tags <32px,
-/// causing threshold values to leak across tag cell boundaries.
-///
-/// # Parameters
-/// - `img`: Input grayscale image
-/// - `gradient_map`: Pre-computed gradient magnitude map (from `filter::compute_gradient_map`)
-/// - `integral`: Pre-computed integral image (from `compute_integral_image`)
-/// - `output`: Output binary image
-/// - `min_radius`: Window radius for high-gradient regions (default: 2 = 5x5 window)
-/// - `max_radius`: Window radius for low-gradient regions (default: 7 = 15x15 window)
-/// - `gradient_threshold`: Gradient value that separates edge/uniform regions (default: 40)
-/// - `c`: Constant subtracted from local mean (default: 3)
-///
-/// # Implementation Notes
-/// - Window radius is linearly interpolated based on gradient magnitude
-/// - SIMD-friendly computation using integral images
-/// - Typical overhead vs fixed-window: <5% (parameter computation is cheap)
-#[multiversion(targets = "simd")]
+/// Highly optimized using Parallel processing, precomputed LUTs, and branchless logic.
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
 pub fn adaptive_threshold_gradient_window(
     img: &ImageView,
     gradient_map: &[u8],
@@ -786,54 +851,146 @@ pub fn adaptive_threshold_gradient_window(
 ) {
     let w = img.width;
     let h = img.height;
-    let stride = w + 1; // Integral image stride
+    let stride = w + 1;
 
-    // Precompute gradient threshold as f32 for interpolation
+    // Precompute radius and area reciprocal LUTs (fixed-point 1.31)
+    let mut radius_lut = [0usize; 256];
+    let mut inv_area_lut = [0u32; 256];
     let grad_thresh_f32 = f32::from(gradient_threshold);
 
-    for y in 0..h {
+    for g in 0..256 {
+        let r = if g as u8 >= gradient_threshold {
+            min_radius
+        } else {
+            let t = g as f32 / grad_thresh_f32;
+            let r = max_radius as f32 * (1.0 - t) + min_radius as f32 * t;
+            r as usize
+        };
+        radius_lut[g] = r;
+        let side = (2 * r + 1) as u32;
+        let area = side * side;
+        inv_area_lut[g] = ((1u64 << 31) / area as u64) as u32;
+    }
+
+    use rayon::prelude::*;
+
+    (0..h).into_par_iter().for_each(|y| {
+        let y_offset = y * w;
         let src_row = img.get_row(y);
-        let dst_offset = y * w;
+        
+        // Safety: Unique row per thread
+        let dst_row = unsafe {
+            let ptr = output.as_ptr() as *mut u8;
+            std::slice::from_raw_parts_mut(ptr.add(y_offset), w)
+        };
 
         for x in 0..w {
-            // Sample gradient magnitude at this pixel
-            let grad = gradient_map[y * w + x];
+            let grad = gradient_map[y_offset + x];
+            let radius = radius_lut[grad as usize];
             
-            // Adaptively select window radius based on gradient
-            // High gradient (edge) -> use min_radius
-            // Low gradient (uniform) -> use max_radius
-            let radius = if grad >= gradient_threshold {
-                min_radius
-            } else {
-                // Linear interpolation between max and min radius
-                let t = f32::from(grad) / grad_thresh_f32;
-                let r = max_radius as f32 * (1.0 - t) + min_radius as f32 * t;
-                r as usize
-            };
-
-            // Clamp window bounds
             let y0 = y.saturating_sub(radius);
             let y1 = (y + radius + 1).min(h);
             let x0 = x.saturating_sub(radius);
             let x1 = (x + radius + 1).min(w);
             
-            let actual_width = (x1 - x0) as u32;
-            let actual_height = (y1 - y0) as u32;
-            let actual_area = actual_width * actual_height;
-
-            // Compute sum using integral image
             let i00 = integral[y0 * stride + x0];
             let i01 = integral[y0 * stride + x1];
             let i10 = integral[y1 * stride + x0];
             let i11 = integral[y1 * stride + x1];
 
-            // Prevent underflow: add first, then subtract
             let sum = (i11 + i00) - (i01 + i10);
-            let mean = (sum / u64::from(actual_area)) as i16;
+            
+            // Fixed-point mean computation
+            let mean = if x >= radius && x + radius + 1 <= w && y >= radius && y + radius + 1 <= h {
+                ((sum * inv_area_lut[grad as usize] as u64) >> 31) as i16
+            } else {
+                let actual_area = (x1 - x0) * (y1 - y0);
+                (sum / actual_area as u64) as i16
+            };
 
-            // Apply threshold
             let threshold = (mean - c).max(0) as u8;
-            output[dst_offset + x] = if src_row[x] < threshold { 0 } else { 255 };
+            dst_row[x] = if src_row[x] < threshold { 0 } else { 255 };
         }
-    }
+    });
+}
+
+/// Compute a map of local mean values.
+///
+/// Optimized with parallelism and vectorization.
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+pub fn compute_threshold_map(
+    img: &ImageView,
+    integral: &[u64],
+    output: &mut [u8],
+    radius: usize,
+    c: i16,
+) {
+    let w = img.width;
+    let h = img.height;
+    let stride = w + 1;
+
+    use rayon::prelude::*;
+
+    // Precompute interior area inverse
+    let side = (2 * radius + 1) as u32;
+    let area = side * side;
+    let inv_area_fixed = ((1u64 << 31) / area as u64) as u32;
+
+    (0..h).into_par_iter().for_each(|y| {
+        let y_offset = y * w;
+        
+        // Safety: Unique row per thread
+        let dst_row = unsafe {
+            let ptr = output.as_ptr() as *mut u8;
+            std::slice::from_raw_parts_mut(ptr.add(y_offset), w)
+        };
+
+        let y0 = y.saturating_sub(radius);
+        let y1 = (y + radius + 1).min(h);
+
+        let x_start = radius;
+        let x_end = w.saturating_sub(radius + 1);
+
+        // 1. Process Left Border
+        for x in 0..x_start.min(w) {
+            let x0 = 0;
+            let x1 = x + radius + 1;
+            let actual_area = (x1 - x0) * (y1 - y0);
+            let sum = (integral[y1 * stride + x1] + integral[y0 * stride + x0]) - 
+                      (integral[y0 * stride + x1] + integral[y1 * stride + x0]);
+            let mean = (sum / actual_area as u64) as i16;
+            dst_row[x] = (mean - c).clamp(0, 255) as u8;
+        }
+
+        // 2. Process Interior (Vectorizable)
+        if x_end > x_start && y >= radius && y + radius + 1 <= h {
+            let row00 = &integral[y0 * stride + (x_start - radius)..];
+            let row01 = &integral[y0 * stride + (x_start + radius + 1)..];
+            let row10 = &integral[y1 * stride + (x_start - radius)..];
+            let row11 = &integral[y1 * stride + (x_start + radius + 1)..];
+            
+            let interior_dst = &mut dst_row[x_start..x_end];
+
+            for i in 0..(x_end - x_start) {
+                let sum = (row11[i] + row00[i]) - (row01[i] + row10[i]);
+                let mean = ((sum * inv_area_fixed as u64) >> 31) as i16;
+                interior_dst[i] = (mean - c).clamp(0, 255) as u8;
+            }
+        }
+
+        // 3. Process Right Border
+        for x in x_end.max(x_start)..w {
+            let x0 = x.saturating_sub(radius);
+            let x1 = w;
+            let actual_area = (x1 - x0) * (y1 - y0);
+            let sum = (integral[y1 * stride + x1] + integral[y0 * stride + x0]) - 
+                      (integral[y0 * stride + x1] + integral[y1 * stride + x0]);
+            let mean = (sum / actual_area as u64) as i16;
+            dst_row[x] = (mean - c).clamp(0, 255) as u8;
+        }
+    });
 }

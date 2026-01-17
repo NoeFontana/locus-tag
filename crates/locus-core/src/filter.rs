@@ -1,3 +1,4 @@
+#![allow(unsafe_code)]
 //! Edge-preserving filtering for improved small tag detection.
 //!
 //! This module implements bilateral filtering and gradient computation
@@ -39,7 +40,7 @@ pub fn bilateral_filter(
     let h = img.height;
     
     // Internal buffer for cross-pass
-    let mut temp = vec![0u8; w * h];
+    let temp = vec![0u8; w * h];
     
     // Precompute color Gaussian LUT
     let mut color_lut = [0.0f32; 256];
@@ -57,10 +58,16 @@ pub fn bilateral_filter(
         spatial_lut[i] = (space_coeff * d * d).exp();
     }
 
-    // Pass 1: Horizontal
-    for y in 0..h {
+    use rayon::prelude::*;
+
+    // Pass 1: Horizontal (Parallel)
+    (0..h).into_par_iter().for_each(|y| {
         let src_row = img.get_row(y);
-        let dst_row = &mut temp[y * w..(y + 1) * w];
+        // Safety: temp is only written to unique rows
+        let dst_row = unsafe {
+            let ptr = temp.as_ptr() as *mut u8;
+            std::slice::from_raw_parts_mut(ptr.add(y * w), w)
+        };
         
         for x in 0..w {
             let center_val = src_row[x];
@@ -78,28 +85,33 @@ pub fn bilateral_filter(
             }
             dst_row[x] = (filtered_val / sum_weights).clamp(0.0, 255.0) as u8;
         }
-    }
+    });
 
-    // Pass 2: Vertical
-    for x in 0..w {
-        for y in 0..h {
-            let center_idx = y * w + x;
-            let center_val = temp[center_idx];
+    // Pass 2: Vertical (Parallel and Cache-Friendly)
+    (0..h).into_par_iter().for_each(|y| {
+        // Safety: output is only written to unique rows
+        let dst_row = unsafe {
+            let ptr = output.as_ptr() as *mut u8;
+            std::slice::from_raw_parts_mut(ptr.add(y * w), w)
+        };
+        
+        for x in 0..w {
+            let center_val = temp[y * w + x];
             let mut sum_weights = 0.0f32;
             let mut filtered_val = 0.0f32;
             
             for dy in 0..diameter {
                 let ny = (y as i32 + dy as i32 - radius as i32).clamp(0, h as i32 - 1) as usize;
-                let neighbor_val = temp[ny * w + x];
+                let neighbor_val = temp[ny * w + x]; // Memory access is row-wise for adjacent x
                 let color_diff = (center_val as i32 - neighbor_val as i32).unsigned_abs() as usize;
                 
                 let weight = spatial_lut[dy] * color_lut[color_diff];
                 filtered_val += neighbor_val as f32 * weight;
                 sum_weights += weight;
             }
-            output[y * w + x] = (filtered_val / sum_weights).clamp(0.0, 255.0) as u8;
+            dst_row[x] = (filtered_val / sum_weights).clamp(0.0, 255.0) as u8;
         }
-    }
+    });
 }
 
 /// Compute gradient magnitude map using Scharr operator.
@@ -130,40 +142,51 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
     // -10   0  10          0    0   0
     //  -3   0   3          3   10   3
 
-    for y in 0..h {
+    use rayon::prelude::*;
+
+    // Process rows in parallel
+    (0..h).into_par_iter().for_each(|y| {
+        // Safety: Unique row per thread
+        let dst_row = unsafe {
+            let ptr = output.as_ptr() as *mut u8;
+            std::slice::from_raw_parts_mut(ptr.add(y * w), w)
+        };
+
+        let y0 = y.saturating_sub(1);
+        let y1 = y;
+        let y2 = (y + 1).min(h - 1);
+
+        let r0 = img.get_row(y0);
+        let r1 = img.get_row(y1);
+        let r2 = img.get_row(y2);
+
         for x in 0..w {
-            // Handle borders by clamping
             let x0 = x.saturating_sub(1);
             let x1 = x;
             let x2 = (x + 1).min(w - 1);
-            let y0 = y.saturating_sub(1);
-            let y1 = y;
-            let y2 = (y + 1).min(h - 1);
 
-            // Sample 3x3 neighborhood
-            let p00 = img.get_pixel(x0, y0) as i32;
-            let p01 = img.get_pixel(x1, y0) as i32;
-            let p02 = img.get_pixel(x2, y0) as i32;
-            let p10 = img.get_pixel(x0, y1) as i32;
-            let p12 = img.get_pixel(x2, y1) as i32;
-            let p20 = img.get_pixel(x0, y2) as i32;
-            let p21 = img.get_pixel(x1, y2) as i32;
-            let p22 = img.get_pixel(x2, y2) as i32;
+            // Sample 3x3 neighborhood from pre-fetched rows
+            let p00 = r0[x0] as i32;
+            let p01 = r0[x1] as i32;
+            let p02 = r0[x2] as i32;
+            let p10 = r1[x0] as i32;
+            let p12 = r1[x2] as i32;
+            let p20 = r2[x0] as i32;
+            let p21 = r2[x1] as i32;
+            let p22 = r2[x2] as i32;
 
             // Apply Scharr kernels
             let gx = -3 * p00 + 3 * p02 - 10 * p10 + 10 * p12 - 3 * p20 + 3 * p22;
             let gy = -3 * p00 - 10 * p01 - 3 * p02 + 3 * p20 + 10 * p21 + 3 * p22;
 
-            // Gradient magnitude using L2 norm
+            // Gradient magnitude (L2 norm)
             let grad = ((gx * gx + gy * gy) as f32).sqrt();
             
             // Normalize to [0, 255] range
-            // Scharr max theoretical magnitude ≈ 1448 (for 0->255 edge)
-            let normalized = (grad / 1448.0 * 255.0).clamp(0.0, 255.0) as u8;
-            
-            output[y * w + x] = normalized;
+            let normalized = (grad * (255.0 / 1448.0)).clamp(0.0, 255.0) as u8;
+            dst_row[x] = normalized;
         }
-    }
+    });
 }
 
 /// Apply a 3x3 Laplacian sharpening filter to enhance edges.
@@ -187,29 +210,40 @@ pub fn laplacian_sharpen(img: &ImageView, output: &mut [u8]) {
     let w = img.width;
     let h = img.height;
 
-    for y in 0..h {
+    use rayon::prelude::*;
+
+    (0..h).into_par_iter().for_each(|y| {
         let y0 = y.saturating_sub(1);
         let y1 = y;
         let y2 = (y + 1).min(h - 1);
         
+        let r0 = img.get_row(y0);
+        let r1 = img.get_row(y1);
+        let r2 = img.get_row(y2);
+        
+        // Safety: Unique row per thread
+        let dst_row = unsafe {
+            let ptr = output.as_ptr() as *mut u8;
+            std::slice::from_raw_parts_mut(ptr.add(y * w), w)
+        };
+
         for x in 0..w {
             let x0 = x.saturating_sub(1);
             let x1 = x;
             let x2 = (x + 1).min(w - 1);
 
-            // Sample 3x3 neighborhood (cross pattern)
-            let p11 = img.get_pixel(x1, y1) as i32;
-            let p01 = img.get_pixel(x1, y0) as i32;
-            let p10 = img.get_pixel(x0, y1) as i32;
-            let p12 = img.get_pixel(x2, y1) as i32;
-            let p21 = img.get_pixel(x1, y2) as i32;
+            // Sample from pre-fetched rows
+            let p11 = r1[x1] as i32;
+            let p01 = r0[x1] as i32;
+            let p10 = r1[x0] as i32;
+            let p12 = r1[x2] as i32;
+            let p21 = r2[x1] as i32;
 
             // Apply sharpening: 5*center - (sum of 4 neighbors)
             let sharpened = 5 * p11 - (p01 + p10 + p12 + p21);
-            
-            output[y * w + x] = sharpened.clamp(0, 255) as u8;
+            dst_row[x] = sharpened.clamp(0, 255) as u8;
         }
-    }
+    });
 }
 
 #[cfg(test)]

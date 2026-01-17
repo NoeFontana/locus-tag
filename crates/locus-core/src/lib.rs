@@ -298,7 +298,7 @@ impl Detector {
             }
             
             // For threshold_map, store the local mean (for potential threshold-model segmentation)
-            compute_threshold_map(&sharpened_img, &integral, threshold_map, 6, 3);
+            crate::threshold::compute_threshold_map(&sharpened_img, &integral, threshold_map, 6, 3);
         }
         stats.threshold_ms = start_thresh.elapsed().as_secs_f64() * 1000.0;
 
@@ -436,43 +436,3 @@ pub fn core_info() -> String {
 // Use family_to_decoder from the decoder module.
 pub use decoder::family_to_decoder;
 
-/// Compute per-pixel threshold map from integral image.
-///
-/// Stores local mean - C for each pixel, used by threshold-model segmentation.
-fn compute_threshold_map(
-    img: &image::ImageView,
-    integral: &[u64],
-    output: &mut [u8],
-    radius: usize,
-    c: i16,
-) {
-    let w = img.width;
-    let h = img.height;
-    let stride = w + 1;
-
-    for y in 0..h {
-        let dst_offset = y * w;
-
-        let y0 = y.saturating_sub(radius);
-        let y1 = (y + radius + 1).min(h);
-        let actual_height = (y1 - y0) as u32;
-
-        for x in 0..w {
-            let x0 = x.saturating_sub(radius);
-            let x1 = (x + radius + 1).min(w);
-            let actual_width = (x1 - x0) as u32;
-            let actual_area = actual_width * actual_height;
-
-            let i00 = integral[y0 * stride + x0];
-            let i01 = integral[y0 * stride + x1];
-            let i10 = integral[y1 * stride + x0];
-            let i11 = integral[y1 * stride + x1];
-
-            // Prevent underflow: add first, then subtract
-            let sum = (i11 + i00) - (i01 + i10);
-            let mean = (sum / u64::from(actual_area)) as i16;
-            let threshold = (mean - c).clamp(0, 255) as u8;
-            output[dst_offset + x] = threshold;
-        }
-    }
-}
