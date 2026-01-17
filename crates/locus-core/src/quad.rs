@@ -80,7 +80,7 @@ pub fn extract_quads_with_config(
 
         // For small components, try the 9-pixel foundation (gradient-based fitting)
         // Computes gradients only within the component's bounding box for efficiency
-        if bbox_area < 600 {
+        if bbox_area < 1200 {
             if let Some(grad_corners) = crate::gradient::fit_quad_from_component(
                 img,
                 labels,

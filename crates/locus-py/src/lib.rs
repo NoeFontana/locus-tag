@@ -139,29 +139,47 @@ impl Detector {
     /// Create a new detector with optional configuration.
     ///
     /// Args:
-    ///     threshold_tile_size: Tile size for adaptive thresholding (default: 8)
-    ///     threshold_min_range: Min intensity range for valid tiles (default: 10)
-    ///     quad_min_area: Minimum quad area in pixels (default: 400)
+    ///     threshold_tile_size: Tile size for adaptive thresholding (default: 4)
+    ///     threshold_min_range: Min intensity range for valid tiles (default: 5)
+    ///     enable_bilateral: Enable bilateral pre-filtering (default: false)
+    ///     bilateral_sigma_space: Bilateral spatial sigma (default: 3.0)
+    ///     bilateral_sigma_color: Bilateral color sigma (default: 30.0)
+    ///     enable_adaptive_window: Enable adaptive window sizing (default: false)
+    ///     threshold_min_radius: Min threshold window radius (default: 2)
+    ///     threshold_max_radius: Max threshold window radius (default: 7)
+    ///     quad_min_area: Minimum quad area in pixels (default: 64)
     ///     quad_max_aspect_ratio: Maximum bounding box aspect ratio (default: 3.0)
     ///     quad_min_fill_ratio: Minimum pixel fill ratio (default: 0.3)
     ///     quad_max_fill_ratio: Maximum pixel fill ratio (default: 0.95)
     ///     quad_min_edge_length: Minimum edge length in pixels (default: 4.0)
-    ///     quad_min_edge_score: Minimum edge gradient score (default: 10.0)
+    ///     quad_min_edge_score: Minimum edge gradient score (default: 2.0)
     #[new]
     #[pyo3(signature = (
-        threshold_tile_size = 8,
+        threshold_tile_size = 4,
         threshold_min_range = 5,
-        quad_min_area = 400,
+        enable_bilateral = true,
+        bilateral_sigma_space = 0.8,
+        bilateral_sigma_color = 30.0,
+        enable_adaptive_window = true,
+        threshold_min_radius = 2,
+        threshold_max_radius = 7,
+        quad_min_area = 32,
         quad_max_aspect_ratio = 3.0,
         quad_min_fill_ratio = 0.3,
         quad_max_fill_ratio = 0.95,
         quad_min_edge_length = 4.0,
-        quad_min_edge_score = 10.0
+        quad_min_edge_score = 1.0
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         threshold_tile_size: usize,
         threshold_min_range: u8,
+        enable_bilateral: bool,
+        bilateral_sigma_space: f32,
+        bilateral_sigma_color: f32,
+        enable_adaptive_window: bool,
+        threshold_min_radius: usize,
+        threshold_max_radius: usize,
         quad_min_area: u32,
         quad_max_aspect_ratio: f32,
         quad_min_fill_ratio: f32,
@@ -172,6 +190,12 @@ impl Detector {
         let config = locus_core::DetectorConfig {
             threshold_tile_size,
             threshold_min_range,
+            enable_bilateral,
+            bilateral_sigma_space,
+            bilateral_sigma_color,
+            enable_adaptive_window,
+            threshold_min_radius,
+            threshold_max_radius,
             quad_min_area,
             quad_max_aspect_ratio,
             quad_min_fill_ratio,

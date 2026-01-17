@@ -196,68 +196,109 @@ pub fn sample_grid(
     let h21 = homography.h[(2, 1)];
     let h22 = homography.h[(2, 2)];
 
+    // Use 3x3 supersampling for maximum robustness against blur
+    // Cell size is 0.25 for 36h11 (dim 8), so 0.02 is very tight and stays deep inside the cell center
+    let offsets = [-0.02, 0.0, 0.02];
+
     for (i, &p) in points.iter().take(n).enumerate() {
-        // Inlined project: h * [px, py, 1.0]
-        let x = p.0;
-        let y = p.1;
-        let wz = h20 * x + h21 * y + h22;
-        let img_x = (h00 * x + h01 * y + h02) / wz;
-        let img_y = (h10 * x + h11 * y + h12) / wz;
+        let mut sum_val = 0.0;
+        let mut count = 0;
 
-        // Check bounds (with slight margin for interpolation)
-        if img_x < 0.0
-            || img_x >= (img.width - 1) as f64
-            || img_y < 0.0
-            || img_y >= (img.height - 1) as f64
-        {
-            return None; // Point outside image
+        for &ox in &offsets {
+            for &oy in &offsets {
+                let x = p.0 + ox;
+                let y = p.1 + oy;
+                
+                // Inlined project: h * [px, py, 1.0]
+                let wz = h20 * x + h21 * y + h22;
+                let img_x = (h00 * x + h01 * y + h02) / wz;
+                let img_y = (h10 * x + h11 * y + h12) / wz;
+
+                // Check bounds (with slight margin for interpolation)
+                if img_x < 0.0
+                    || img_x >= (img.width - 1) as f64
+                    || img_y < 0.0
+                    || img_y >= (img.height - 1) as f64
+                {
+                    continue; // Skip individual point, but try to keep others
+                }
+
+                // Inlined bilinear interpolation
+                let xf = img_x.floor();
+                let yf = img_y.floor();
+                let ix = xf as usize;
+                let iy = yf as usize;
+                let dx = img_x - xf;
+                let dy = img_y - yf;
+
+                // SAFETY: Bounds checked above.
+                let val = unsafe {
+                    let row0 = img.get_row_unchecked(iy);
+                    let row1 = img.get_row_unchecked(iy + 1);
+
+                    let v00 = f64::from(*row0.get_unchecked(ix));
+                    let v10 = f64::from(*row0.get_unchecked(ix + 1));
+                    let v01 = f64::from(*row1.get_unchecked(ix));
+                    let v11 = f64::from(*row1.get_unchecked(ix + 1));
+
+                    let top = v00 + dx * (v10 - v00);
+                    let bot = v01 + dx * (v11 - v01);
+                    top + dy * (bot - top)
+                };
+                sum_val += val;
+                count += 1;
+            }
         }
 
-        // Inlined bilinear interpolation
-        let xf = img_x.floor();
-        let yf = img_y.floor();
-        let ix = xf as usize;
-        let iy = yf as usize;
-        let dx = img_x - xf;
-        let dy = img_y - yf;
-
-        // SAFETY: Bounds checked above.
-        let val = unsafe {
-            let row0 = img.get_row_unchecked(iy);
-            let row1 = img.get_row_unchecked(iy + 1);
-
-            let v00 = f64::from(*row0.get_unchecked(ix));
-            let v10 = f64::from(*row0.get_unchecked(ix + 1));
-            let v01 = f64::from(*row1.get_unchecked(ix));
-            let v11 = f64::from(*row1.get_unchecked(ix + 1));
-
-            let top = v00 + dx * (v10 - v00);
-            let bot = v01 + dx * (v11 - v01);
-            top + dy * (bot - top)
-        };
-
-        intensities[i] = val;
-
-        if val < min_val {
-            min_val = val;
+        if count == 0 {
+            return None; // All samples outside image
         }
-        if val > max_val {
-            max_val = val;
+
+        let avg_val = sum_val / count as f64;
+        intensities[i] = avg_val;
+
+        if avg_val < min_val {
+            min_val = avg_val;
+        }
+        if avg_val > max_val {
+            max_val = avg_val;
         }
     }
 
-    // Adaptive threshold: halfway between min and max intensity observed in the grid.
-    let range = max_val - min_val;
-    if range < 20.0 {
-        // Contrast too low to be a valid tag
-        return None;
-    }
-
-    let threshold = min_val + range * 0.5;
+    // Spatially adaptive thresholding: 4 quadrants
+    // This handles non-uniform lighting across the tag
     let mut bits = 0u64;
+    
+    // We divide bits by their canonical coordinates p.0 and p.1
+    let mut quad_sums = [0.0; 4];
+    let mut quad_counts = [0; 4];
+    
+    for (i, &p) in points.iter().take(n).enumerate() {
+        let qi = if p.0 < 0.0 {
+            if p.1 < 0.0 { 0 } else { 1 }
+        } else {
+            if p.1 < 0.0 { 2 } else { 3 }
+        };
+        quad_sums[qi] += intensities[i];
+        quad_counts[qi] += 1;
+    }
+    
+    let quad_thresholds = [
+        if quad_counts[0] > 0 { quad_sums[0] / quad_counts[0] as f64 } else { 0.0 },
+        if quad_counts[1] > 0 { quad_sums[1] / quad_counts[1] as f64 } else { 0.0 },
+        if quad_counts[2] > 0 { quad_sums[2] / quad_counts[2] as f64 } else { 0.0 },
+        if quad_counts[3] > 0 { quad_sums[3] / quad_counts[3] as f64 } else { 0.0 },
+    ];
 
-    for (i, &val) in intensities[..n].iter().enumerate() {
-        if val > threshold {
+    for (i, &p) in points.iter().take(n).enumerate() {
+        let qi = if p.0 < 0.0 {
+            if p.1 < 0.0 { 0 } else { 1 }
+        } else {
+            if p.1 < 0.0 { 2 } else { 3 }
+        };
+        
+        let threshold = quad_thresholds[qi];
+        if intensities[i] > threshold {
             bits |= 1 << i;
         }
     }
@@ -299,7 +340,7 @@ impl TagDecoder for AprilTag36h11 {
     fn decode(&self, bits: u64) -> Option<(u32, u32)> {
         // Use the full 587-code dictionary with O(1) exact match + hamming search
         crate::dictionaries::APRILTAG_36H11
-            .decode(bits, 2) // Allow up to 2 bit errors
+            .decode(bits, 4) // Allow up to 4 bit errors for maximum recall
             .map(|(id, hamming)| (u32::from(id), hamming))
     }
 

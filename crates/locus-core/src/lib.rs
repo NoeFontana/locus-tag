@@ -36,6 +36,8 @@ pub mod config;
 pub mod decoder;
 /// Tag family dictionaries (AprilTag, ArUco).
 pub mod dictionaries;
+/// Edge-preserving filtering for small tag detection.
+pub mod filter;
 /// Gradient computation for edge refinement.
 pub mod gradient;
 /// Image buffer abstractions.
@@ -165,24 +167,63 @@ impl Detector {
 
         self.arena.reset();
 
-        // 1. Thresholding - Use integral image-based per-pixel adaptive threshold
-        // This produces OpenCV-like results for better small tag detection
+        // 1. Thresholding with optional bilateral pre-filtering and adaptive window
         let start_thresh = std::time::Instant::now();
-        let binarized = self
-            .arena
-            .alloc_slice_fill_copy(img.width * img.height, 0u8);
-        let threshold_map = self
-            .arena
-            .alloc_slice_fill_copy(img.width * img.height, 0u8);
+        
+        // 1a. Optional bilateral pre-filtering for edge-preserving noise reduction
+        let filtered_img = if self.config.enable_bilateral {
+            let filtered = self.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
+            crate::filter::bilateral_filter(
+                img,
+                filtered,
+                3, // spatial radius
+                self.config.bilateral_sigma_space,
+                self.config.bilateral_sigma_color,
+            );
+            ImageView::new(filtered, img.width, img.height, img.width)
+                .expect("valid filtered view")
+        } else {
+            *img
+        };
+
+        let binarized = self.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
+        let threshold_map = self.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
+        
         {
-            let _span = tracing::info_span!("threshold_integral").entered();
+            let _span = tracing::info_span!("threshold_adaptive").entered();
             // Compute integral image for O(1) local mean per pixel
-            let integral = crate::threshold::compute_integral_image(img);
-            // Apply per-pixel adaptive threshold with radius=6 (13x13 window), C=3
-            crate::threshold::adaptive_threshold_integral(img, &integral, binarized, 6, 3);
-            // For threshold_map, store the local mean (for threshold-model segmentation)
-            // Recompute as we need per-pixel thresholds
-            compute_threshold_map(img, &integral, threshold_map, 6, 3);
+            let integral = crate::threshold::compute_integral_image(&filtered_img);
+            
+            // 1b. Apply adaptive or fixed-window threshold
+            if self.config.enable_adaptive_window {
+                // Compute gradient map for adaptive window sizing
+                let gradient = self.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
+                crate::filter::compute_gradient_map(&filtered_img, gradient);
+                
+                // Apply gradient-based adaptive window threshold
+                crate::threshold::adaptive_threshold_gradient_window(
+                    &filtered_img,
+                    gradient,
+                    &integral,
+                    binarized,
+                    self.config.threshold_min_radius,
+                    self.config.threshold_max_radius,
+                    40, // gradient threshold to distinguish edges from uniform regions
+                    3,  // constant C
+                );
+            } else {
+                // Fallback to fixed 13x13 window (radius=6)
+                crate::threshold::adaptive_threshold_integral(
+                    &filtered_img,
+                    &integral,
+                    binarized,
+                    6,
+                    3,
+                );
+            }
+            
+            // For threshold_map, store the local mean (for potential threshold-model segmentation)
+            compute_threshold_map(&filtered_img, &integral, threshold_map, 6, 3);
         }
         stats.threshold_ms = start_thresh.elapsed().as_secs_f64() * 1000.0;
 
@@ -304,7 +345,8 @@ fn compute_threshold_map(
             let i10 = integral[y1 * stride + x0];
             let i11 = integral[y1 * stride + x1];
 
-            let sum = i11 - i01 - i10 + i00;
+            // Prevent underflow: add first, then subtract
+            let sum = (i11 + i00) - (i01 + i10);
             let mean = (sum / actual_area) as i16;
             let threshold = (mean - c).clamp(0, 255) as u8;
             output[dst_offset + x] = threshold;

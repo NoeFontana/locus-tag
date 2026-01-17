@@ -11,15 +11,23 @@ class DetectorConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    threshold_tile_size: int = Field(default=8, ge=2, le=64)
-    threshold_min_range: int = Field(default=10, ge=0, le=255)
+    threshold_tile_size: int = Field(default=4, ge=2, le=64)
+    threshold_min_range: int = Field(default=5, ge=0, le=255)
 
-    quad_min_area: int = Field(default=100, ge=10)
+    enable_bilateral: bool = Field(default=True)
+    bilateral_sigma_space: float = Field(default=0.8, ge=0.1)
+    bilateral_sigma_color: float = Field(default=30.0, ge=0.1)
+
+    enable_adaptive_window: bool = Field(default=True)
+    threshold_min_radius: int = Field(default=2, ge=1)
+    threshold_max_radius: int = Field(default=7, ge=1)
+
+    quad_min_area: int = Field(default=32, ge=1)
     quad_max_aspect_ratio: float = Field(default=3.0, ge=1.0)
     quad_min_fill_ratio: float = Field(default=0.3, ge=0.0, le=1.0)
     quad_max_fill_ratio: float = Field(default=0.95, ge=0.0, le=1.0)
-    quad_min_edge_length: float = Field(default=3.0, ge=0.0)
-    quad_min_edge_score: float = Field(default=5.0, ge=0.0)
+    quad_min_edge_length: float = Field(default=4.0, ge=0.0)
+    quad_min_edge_score: float = Field(default=1.0, ge=0.0)
 
 
 class DetectOptions(BaseModel):

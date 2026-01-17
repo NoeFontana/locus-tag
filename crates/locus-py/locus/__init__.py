@@ -29,6 +29,12 @@ class Detector:
         self._inner = _RustDetector(
             threshold_tile_size=config.threshold_tile_size,
             threshold_min_range=config.threshold_min_range,
+            enable_bilateral=config.enable_bilateral,
+            bilateral_sigma_space=config.bilateral_sigma_space,
+            bilateral_sigma_color=config.bilateral_sigma_color,
+            enable_adaptive_window=config.enable_adaptive_window,
+            threshold_min_radius=config.threshold_min_radius,
+            threshold_max_radius=config.threshold_max_radius,
             quad_min_area=config.quad_min_area,
             quad_max_aspect_ratio=config.quad_max_aspect_ratio,
             quad_min_fill_ratio=config.quad_min_fill_ratio,

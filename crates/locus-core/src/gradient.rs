@@ -215,7 +215,7 @@ fn try_form_quad(
 
     // Validate quad: check area and convexity
     let area = quad_area(&[c0, c1, c2, c3]);
-    if !(400.0..=100_000.0).contains(&area) {
+    if !(16.0..=1_000_000.0).contains(&area) {
         return None;
     }
 
@@ -427,7 +427,7 @@ pub fn fit_quad_from_component(
         }
     }
 
-    // Fit line to each cluster
+    // Fit line to each cluster using Least Squares
     let mut lines: Vec<LineSegment> = Vec::new();
     for c in 0..4 {
         let cluster_points: Vec<(f32, f32)> = boundary_points
@@ -441,15 +441,54 @@ pub fn fit_quad_from_component(
             continue;
         }
 
-        let (x0, y0) = cluster_points[0];
-        let (x1, y1) = cluster_points[cluster_points.len() - 1];
+        // Least Squares Line Fitting
+        let n = cluster_points.len() as f32;
+        let mut sum_x = 0.0f32;
+        let mut sum_y = 0.0f32;
+        for &(x, y) in &cluster_points {
+            sum_x += x;
+            sum_y += y;
+        }
+        let mean_x = sum_x / n;
+        let mean_y = sum_y / n;
+
+        let mut cov_xx = 0.0f32;
+        let mut cov_yy = 0.0f32;
+        let mut cov_xy = 0.0f32;
+        for &(x, y) in &cluster_points {
+            let dx = x - mean_x;
+            let dy = y - mean_y;
+            cov_xx += dx * dx;
+            cov_yy += dy * dy;
+            cov_xy += dx * dy;
+        }
+
+        // Robust principal direction using atan2(2b, a-c)
+        let direction = 0.5 * (2.0 * cov_xy).atan2(cov_xx - cov_yy);
+        let nx = direction.cos();
+        let ny = direction.sin();
+
+        // Line segment for intersection logic
+        let mut min_t = f32::MAX;
+        let mut max_t = f32::MIN;
+        for &(x, y) in &cluster_points {
+            let t = (x - mean_x) * nx + (y - mean_y) * ny;
+            min_t = min_t.min(t);
+            max_t = max_t.max(t);
+        }
+
+        // Correct angle for grouping: quad extractor expects GRADIENT direction
+        let mut grad_angle = direction + std::f32::consts::FRAC_PI_2;
+        if grad_angle > std::f32::consts::PI {
+            grad_angle -= 2.0 * std::f32::consts::PI;
+        }
 
         lines.push(LineSegment {
-            x0,
-            y0,
-            x1,
-            y1,
-            angle: centroids[c],
+            x0: mean_x + nx * min_t,
+            y0: mean_y + ny * min_t,
+            x1: mean_x + nx * max_t,
+            y1: mean_y + ny * max_t,
+            angle: grad_angle,
         });
     }
 

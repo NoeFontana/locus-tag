@@ -7,6 +7,7 @@
 
 /// A view into an image buffer with explicit stride support.
 /// This allows handling NumPy arrays with padding or non-standard layouts.
+#[derive(Copy, Clone)]
 pub struct ImageView<'a> {
     /// The raw image data slice.
     pub data: &'a [u8],

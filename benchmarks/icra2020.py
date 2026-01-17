@@ -185,6 +185,7 @@ class EvalResult:
     corner_error_sum: float = 0.0
     corner_error_count: int = 0
     false_positives: int = 0
+    num_candidates: int = 0
     error: str | None = None
     # For visualization
     img_shape: tuple[int, int] | None = None
@@ -220,12 +221,15 @@ def process_image(args: tuple[Path, list[TagGroundTruth], bool]) -> EvalResult:
             res.img_shape = img.shape
 
         detector = locus.Detector(
-            quad_min_area=64,  # Support 9px+ tags
+            quad_min_area=16,  # Relaxed area to the limit
             quad_max_aspect_ratio=20.0,
-            quad_min_edge_score=2.0,
+            quad_min_edge_score=0.5, # Be extremely permissive
+            enable_bilateral=False,
+            enable_adaptive_window=False,
         )
-        # Detect
-        detections = detector.detect(img)
+        # Detect with stats
+        detections, stats = detector.detect_with_stats(img)
+        res.num_candidates = stats.num_candidates
 
         # Convert to dicts for pickling
         serializable_dets = []
@@ -307,7 +311,7 @@ class BenchmarkRunner:
     def run(self, scenarios: list[str], types: list[str], limit: int | None = None, skip: int = 0):
         print(f"Running benchmark with {self.max_workers} workers. Visualization: {self.visualize}")
 
-        overall = {"gt": 0, "det": 0, "err_sum": 0.0, "err_cnt": 0}
+        overall = {"gt": 0, "det": 0, "err_sum": 0.0, "err_cnt": 0, "candidates": 0}
         report = []
 
         for scenario in scenarios:
@@ -332,7 +336,7 @@ class BenchmarkRunner:
                     tasks = tasks[:limit]
                     print(f"  (Limited to {len(tasks)} images for debugging)")
 
-                run_stats = {"gt": 0, "det": 0, "err_sum": 0.0, "err_cnt": 0, "fp": 0}
+                run_stats = {"gt": 0, "det": 0, "err_sum": 0.0, "err_cnt": 0, "fp": 0, "candidates": 0}
 
                 # Sequential matching for rerun?
                 # Rerun in parallel is tricky due to unrelated timelines if not careful.
@@ -353,6 +357,7 @@ class BenchmarkRunner:
                         run_stats["err_sum"] += res.corner_error_sum
                         run_stats["err_cnt"] += res.corner_error_count
                         run_stats["fp"] += res.false_positives
+                        run_stats["candidates"] += res.num_candidates
 
                         if self.visualize:
                             self._log_visualization(ds_name, img_dir, res)
@@ -363,7 +368,7 @@ class BenchmarkRunner:
                 )
 
                 report.append(
-                    (ds_name, run_stats["gt"], run_stats["det"], recall, avg_err, run_stats["fp"])
+                    (ds_name, run_stats["gt"], run_stats["det"], recall, avg_err, run_stats["fp"], run_stats["candidates"])
                 )
 
                 overall["gt"] += run_stats["gt"]
@@ -371,6 +376,7 @@ class BenchmarkRunner:
                 overall["err_sum"] += run_stats["err_sum"]
                 overall["err_cnt"] += run_stats["err_cnt"]
                 overall["fp"] = overall.get("fp", 0) + run_stats["fp"]
+                overall["candidates"] += run_stats["candidates"]
 
         self._print_report(report, overall)
 
@@ -419,18 +425,18 @@ class BenchmarkRunner:
             )
 
     def _print_report(self, report, overall):
-        print("\n" + "=" * 100)
+        print("\n" + "=" * 115)
         print(
-            f"{'Dataset':<35} | {'Tags':<6} | {'Det':<6} | {'Recall %':<10} | {'Error (px)':<10} | {'FP':<5} | {'Prec %':<8}"
+            f"{'Dataset':<35} | {'Tags':<6} | {'Det':<6} | {'Recall %':<10} | {'Error (px)':<10} | {'FP':<5} | {'Prec %':<8} | {'Quads':<8}"
         )
-        print("-" * 100)
+        print("-" * 115)
         for row in sorted(report, key=lambda x: x[0]):
-            ds, gt, det, rec, err, fp = row
+            ds, gt, det, rec, err, fp, quads = row
             prec = (det / (det + fp) * 100) if (det + fp) > 0 else 100.0
             print(
-                f"{ds:<35} | {gt:<6} | {det:<6} | {rec:<10.2f} | {err:<10.4f} | {fp:<5} | {prec:<8.2f}"
+                f"{ds:<35} | {gt:<6} | {det:<6} | {rec:<10.2f} | {err:<10.4f} | {fp:<5} | {prec:<8.2f} | {quads:<8}"
             )
-        print("-" * 100)
+        print("-" * 115)
 
         tot_rec = (overall["det"] / overall["gt"] * 100) if overall["gt"] > 0 else 0
         tot_err = (overall["err_sum"] / overall["err_cnt"]) if overall["err_cnt"] > 0 else 0
@@ -441,9 +447,9 @@ class BenchmarkRunner:
             else 100.0
         )
         print(
-            f"{'TOTAL':<35} | {overall['gt']:<6} | {overall['det']:<6} | {tot_rec:<10.2f} | {tot_err:<10.4f} | {tot_fp:<5} | {tot_prec:<8.2f}"
+            f"{'TOTAL':<35} | {overall['gt']:<6} | {overall['det']:<6} | {tot_rec:<10.2f} | {tot_err:<10.4f} | {tot_fp:<5} | {tot_prec:<8.2f} | {overall['candidates']:<8}"
         )
-        print("=" * 100)
+        print("=" * 115)
 
 
 if __name__ == "__main__":

@@ -34,6 +34,22 @@ pub struct DetectorConfig {
     /// Tiles with lower range are treated as uniform (no edges).
     pub threshold_min_range: u8,
 
+    // Adaptive filtering parameters
+    /// Enable bilateral pre-filtering for edge-preserving noise reduction (default: true).
+    pub enable_bilateral: bool,
+    /// Bilateral spatial sigma for spatial smoothing (default: 3.0).
+    pub bilateral_sigma_space: f32,
+    /// Bilateral color sigma for edge preservation (default: 30.0).
+    /// Higher values = more smoothing across edges.
+    pub bilateral_sigma_color: f32,
+    
+    /// Enable adaptive threshold window sizing based on gradient (default: true).
+    pub enable_adaptive_window: bool,
+    /// Minimum threshold window radius for high-gradient regions (default: 2 = 5x5).
+    pub threshold_min_radius: usize,
+    /// Maximum threshold window radius for low-gradient regions (default: 7 = 15x15).
+    pub threshold_max_radius: usize,
+
     // Quad filtering parameters
     /// Minimum quad area in pixels (default: 400).
     pub quad_min_area: u32,
@@ -53,14 +69,20 @@ pub struct DetectorConfig {
 impl Default for DetectorConfig {
     fn default() -> Self {
         Self {
-            threshold_tile_size: 4, // Smaller tiles for sub-10px tag support // Standard 8x8 tiles
+            threshold_tile_size: 4, // Smaller tiles for sub-10px tag support
             threshold_min_range: 5, // Lower threshold for detecting low-contrast edges
-            quad_min_area: 64,      // Support 9px+ tags (9-Pixel Foundation)
+            enable_bilateral: true,  // Enable edge-preserving noise reduction
+            bilateral_sigma_space: 0.8,
+            bilateral_sigma_color: 30.0,
+            enable_adaptive_window: true,  // Enable gradient-based window sizing
+            threshold_min_radius: 2,
+            threshold_max_radius: 7,
+            quad_min_area: 32,      // Support small 8px+ tags
             quad_max_aspect_ratio: 3.0,
             quad_min_fill_ratio: 0.3,
             quad_max_fill_ratio: 0.95,
             quad_min_edge_length: 4.0,
-            quad_min_edge_score: 2.0,
+            quad_min_edge_score: 1.0,
         }
     }
 }
@@ -78,6 +100,12 @@ impl DetectorConfig {
 pub struct DetectorConfigBuilder {
     threshold_tile_size: Option<usize>,
     threshold_min_range: Option<u8>,
+    enable_bilateral: Option<bool>,
+    bilateral_sigma_space: Option<f32>,
+    bilateral_sigma_color: Option<f32>,
+    enable_adaptive_window: Option<bool>,
+    threshold_min_radius: Option<usize>,
+    threshold_max_radius: Option<usize>,
     quad_min_area: Option<u32>,
     quad_max_aspect_ratio: Option<f32>,
     quad_min_fill_ratio: Option<f32>,
@@ -143,6 +171,48 @@ impl DetectorConfigBuilder {
         self
     }
 
+    /// Enable or disable bilateral pre-filtering.
+    #[must_use]
+    pub fn enable_bilateral(mut self, enable: bool) -> Self {
+        self.enable_bilateral = Some(enable);
+        self
+    }
+
+    /// Set bilateral spatial sigma.
+    #[must_use]
+    pub fn bilateral_sigma_space(mut self, sigma: f32) -> Self {
+        self.bilateral_sigma_space = Some(sigma);
+        self
+    }
+
+    /// Set bilateral color sigma.
+    #[must_use]
+    pub fn bilateral_sigma_color(mut self, sigma: f32) -> Self {
+        self.bilateral_sigma_color = Some(sigma);
+        self
+    }
+
+    /// Enable or disable adaptive threshold window sizing.
+    #[must_use]
+    pub fn enable_adaptive_window(mut self, enable: bool) -> Self {
+        self.enable_adaptive_window = Some(enable);
+        self
+    }
+
+    /// Set minimum threshold window radius.
+    #[must_use]
+    pub fn threshold_min_radius(mut self, radius: usize) -> Self {
+        self.threshold_min_radius = Some(radius);
+        self
+    }
+
+    /// Set maximum threshold window radius.
+    #[must_use]
+    pub fn threshold_max_radius(mut self, radius: usize) -> Self {
+        self.threshold_max_radius = Some(radius);
+        self
+    }
+
     /// Build the configuration, using defaults for unset fields.
     #[must_use]
     pub fn build(self) -> DetectorConfig {
@@ -150,6 +220,12 @@ impl DetectorConfigBuilder {
         DetectorConfig {
             threshold_tile_size: self.threshold_tile_size.unwrap_or(d.threshold_tile_size),
             threshold_min_range: self.threshold_min_range.unwrap_or(d.threshold_min_range),
+            enable_bilateral: self.enable_bilateral.unwrap_or(d.enable_bilateral),
+            bilateral_sigma_space: self.bilateral_sigma_space.unwrap_or(d.bilateral_sigma_space),
+            bilateral_sigma_color: self.bilateral_sigma_color.unwrap_or(d.bilateral_sigma_color),
+            enable_adaptive_window: self.enable_adaptive_window.unwrap_or(d.enable_adaptive_window),
+            threshold_min_radius: self.threshold_min_radius.unwrap_or(d.threshold_min_radius),
+            threshold_max_radius: self.threshold_max_radius.unwrap_or(d.threshold_max_radius),
             quad_min_area: self.quad_min_area.unwrap_or(d.quad_min_area),
             quad_max_aspect_ratio: self
                 .quad_max_aspect_ratio
