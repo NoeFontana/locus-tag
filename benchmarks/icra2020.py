@@ -282,11 +282,15 @@ def process_image(args: tuple[Path, list[TagGroundTruth], bool]) -> EvalResult:
 
                 # Try all corner orderings (rotations + winding) to find best match
                 best_err = float("inf")
+                best_vecs = None
                 for ordering in [det_corners, det_corners[::-1]]:  # CCW and CW
                     for rot in range(4):
                         rotated = np.roll(ordering, rot, axis=0)
-                        err = np.sqrt(np.mean(np.sum((gt.corners - rotated) ** 2, axis=1)))
-                        best_err = min(best_err, err)
+                        diffs = gt.corners - rotated
+                        err = np.sqrt(np.mean(np.sum(diffs**2, axis=1)))
+                        if err < best_err:
+                            best_err = err
+                            best_vecs = diffs
 
                 res.corner_error_sum += best_err
                 res.corner_error_count += 1
@@ -306,7 +310,8 @@ class BenchmarkRunner:
         self.max_workers = multiprocessing.cpu_count()
 
         if self.visualize:
-            rr.init("ICRA2020 Benchmark", spawn=True)
+            rr.init("ICRA2020 Benchmark", spawn=False)
+            rr.save("locus_benchmark.rrd")
 
     def run(self, scenarios: list[str], types: list[str], limit: int | None = None, skip: int = 0):
         print(f"Running benchmark with {self.max_workers} workers. Visualization: {self.visualize}")
