@@ -105,6 +105,7 @@ pub fn extract_quads_with_config(
                             x: grad_corners[1][0] as f64,
                             y: grad_corners[1][1] as f64,
                         },
+                        config.subpixel_refinement_sigma,
                     ),
                     refine_corner(
                         img,
@@ -120,6 +121,7 @@ pub fn extract_quads_with_config(
                             x: grad_corners[2][0] as f64,
                             y: grad_corners[2][1] as f64,
                         },
+                        config.subpixel_refinement_sigma,
                     ),
                     refine_corner(
                         img,
@@ -135,6 +137,7 @@ pub fn extract_quads_with_config(
                             x: grad_corners[3][0] as f64,
                             y: grad_corners[3][1] as f64,
                         },
+                        config.subpixel_refinement_sigma,
                     ),
                     refine_corner(
                         img,
@@ -150,6 +153,7 @@ pub fn extract_quads_with_config(
                             x: grad_corners[0][0] as f64,
                             y: grad_corners[0][1] as f64,
                         },
+                        config.subpixel_refinement_sigma,
                     ),
                 ];
 
@@ -212,8 +216,8 @@ pub fn extract_quads_with_config(
                     // Relax compactness check slightly for small jagged tags (was 0.5)
                     let compactness = (12.566 * area) / (perimeter * perimeter);
 
-                    let min_area_f64 = f64::from(config.quad_min_area);
-                    if area > 30.0 && compactness > 0.3 {
+                    let min_area_f64 = config.quad_min_area as f64;
+                    if area > min_area_f64 && compactness > 0.1 {
                         // Lowered for small 8px+ tags
                         let mut ok = true;
                         for i in 0..4 {
@@ -229,10 +233,10 @@ pub fn extract_quads_with_config(
                             // Compute center first, then refine corners
                             let center = polygon_center(&reduced);
                             let corners = [
-                                refine_corner(img, reduced[0], reduced[3], reduced[1]),
-                                refine_corner(img, reduced[1], reduced[0], reduced[2]),
-                                refine_corner(img, reduced[2], reduced[1], reduced[3]),
-                                refine_corner(img, reduced[3], reduced[2], reduced[0]),
+                                refine_corner(img, reduced[0], reduced[3], reduced[1], config.subpixel_refinement_sigma),
+                                refine_corner(img, reduced[1], reduced[0], reduced[2], config.subpixel_refinement_sigma),
+                                refine_corner(img, reduced[2], reduced[1], reduced[3], config.subpixel_refinement_sigma),
+                                refine_corner(img, reduced[3], reduced[2], reduced[0], config.subpixel_refinement_sigma),
                             ];
 
                             // Filter: weak edge alignment
@@ -408,10 +412,10 @@ fn polygon_center(points: &[Point]) -> [f64; 2] {
 /// model and Gauss-Newton optimization, then computes their intersection.
 /// Achieves ~0.02px accuracy vs ~0.2px for gradient-peak methods.
 #[must_use]
-pub fn refine_corner(img: &ImageView, p: Point, p_prev: Point, p_next: Point) -> Point {
+pub fn refine_corner(img: &ImageView, p: Point, p_prev: Point, p_next: Point, sigma: f64) -> Point {
     // Try intensity-based refinement first (higher accuracy)
-    let line1 = refine_edge_intensity(img, p_prev, p).or_else(|| fit_edge_line(img, p_prev, p));
-    let line2 = refine_edge_intensity(img, p, p_next).or_else(|| fit_edge_line(img, p, p_next));
+    let line1 = refine_edge_intensity(img, p_prev, p, sigma).or_else(|| fit_edge_line(img, p_prev, p));
+    let line2 = refine_edge_intensity(img, p, p_next, sigma).or_else(|| fit_edge_line(img, p, p_next));
 
     if let (Some(l1), Some(l2)) = (line1, line2) {
         // Intersect lines: a1*x + b1*y + c1 = 0 and a2*x + b2*y + c2 = 0
@@ -513,7 +517,7 @@ fn fit_edge_line(img: &ImageView, p1: Point, p2: Point) -> Option<(f64, f64, f64
 ///
 /// This achieves ~0.02px accuracy vs ~0.2px for gradient-based methods.
 #[allow(clippy::similar_names)]
-fn refine_edge_intensity(img: &ImageView, p1: Point, p2: Point) -> Option<(f64, f64, f64)> {
+fn refine_edge_intensity(img: &ImageView, p1: Point, p2: Point, sigma: f64) -> Option<(f64, f64, f64)> {
     let dx = p2.x - p1.x;
     let dy = p2.y - p1.y;
     let len = (dx * dx + dy * dy).sqrt();
@@ -582,13 +586,12 @@ fn refine_edge_intensity(img: &ImageView, p1: Point, p2: Point) -> Option<(f64, 
 
     let a = dark_sum / dark_count as f64;
     let b = light_sum / light_count as f64;
-    let sigma = 0.6; // PSF blur factor
     let inv_sigma = 1.0 / sigma;
 
     // Gauss-Newton optimization: refine d (perpendicular offset)
     // We fix the line direction (nx, ny) and only optimize the offset d
     // This is a 1D optimization which is fast and stable
-    for _ in 0..5 {
+    for _iter in 0..5 {
         let mut jtj = 0.0; // J^T * J (scalar for 1D)
         let mut jtr = 0.0; // J^T * residual
 

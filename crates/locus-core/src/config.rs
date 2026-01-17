@@ -61,28 +61,30 @@ pub struct DetectorConfig {
     pub quad_max_fill_ratio: f32,
     /// Minimum edge length in pixels (default: 4.0).
     pub quad_min_edge_length: f64,
-    /// Minimum edge gradient score (default: 10.0).
-    /// Higher values reject weak edges (low contrast boundaries).
+    /// Minimum edge alignment score (0.0 to 1.0)
     pub quad_min_edge_score: f64,
+    /// PSF blur factor for subpixel refinement (e.g., 0.6)
+    pub subpixel_refinement_sigma: f64,
 }
 
 impl Default for DetectorConfig {
     fn default() -> Self {
         Self {
-            threshold_tile_size: 4, // Smaller tiles for sub-10px tag support
-            threshold_min_range: 5, // Lower threshold for detecting low-contrast edges
-            enable_bilateral: true,  // Enable edge-preserving noise reduction
+            threshold_tile_size: 4, 
+            threshold_min_range: 3, // Lowered from 5 to capture very low contrast edges at tilt
+            enable_bilateral: true,
             bilateral_sigma_space: 0.8,
             bilateral_sigma_color: 30.0,
-            enable_adaptive_window: true,  // Enable gradient-based window sizing
+            enable_adaptive_window: true,
             threshold_min_radius: 2,
             threshold_max_radius: 7,
-            quad_min_area: 32,      // Support small 8px+ tags
-            quad_max_aspect_ratio: 3.0,
-            quad_min_fill_ratio: 0.3,
-            quad_max_fill_ratio: 0.95,
-            quad_min_edge_length: 4.0,
-            quad_min_edge_score: 1.0,
+            quad_min_area: 25,      // Slightly lowered from 32 for tiny slanted tags
+            quad_max_aspect_ratio: 8.0, // Increased from 3.0 to support extreme foreshortening
+            quad_min_fill_ratio: 0.15, // Lowered from 0.3 for thin quads at tilt
+            quad_max_fill_ratio: 0.98,
+            quad_min_edge_length: 3.0, // Lowered from 4.0
+            quad_min_edge_score: 0.5,  // Lowered from 1.0
+            subpixel_refinement_sigma: 0.6,
         }
     }
 }
@@ -111,7 +113,8 @@ pub struct DetectorConfigBuilder {
     quad_min_fill_ratio: Option<f32>,
     quad_max_fill_ratio: Option<f32>,
     quad_min_edge_length: Option<f64>,
-    quad_min_edge_score: Option<f64>,
+    pub quad_min_edge_score: Option<f64>,
+    pub subpixel_refinement_sigma: Option<f64>,
 }
 
 impl DetectorConfigBuilder {
@@ -234,6 +237,7 @@ impl DetectorConfigBuilder {
             quad_max_fill_ratio: self.quad_max_fill_ratio.unwrap_or(d.quad_max_fill_ratio),
             quad_min_edge_length: self.quad_min_edge_length.unwrap_or(d.quad_min_edge_length),
             quad_min_edge_score: self.quad_min_edge_score.unwrap_or(d.quad_min_edge_score),
+            subpixel_refinement_sigma: self.subpixel_refinement_sigma.unwrap_or(d.subpixel_refinement_sigma),
         }
     }
 }

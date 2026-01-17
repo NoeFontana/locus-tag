@@ -167,6 +167,171 @@ impl Homography {
     }
 }
 
+/// Refine corner positions using edge-based optimization with the homography.
+///
+/// After successful decoding, we fit lines to each edge using gradient-weighted
+/// least squares, then compute corners as line intersections. This provides
+/// more accurate corner localization than the initial detection.
+#[must_use]
+pub fn refine_corners_with_homography(
+    img: &crate::image::ImageView,
+    corners: &[[f64; 2]; 4],
+    _homography: &Homography,
+) -> [[f64; 2]; 4] {
+    // Fit a line to each of the 4 edges
+    let mut lines = [(0.0f64, 0.0f64, 0.0f64); 4]; // (a, b, c) where ax + by + c = 0
+    let mut line_valid = [false; 4];
+    
+    for i in 0..4 {
+        let next = (i + 1) % 4;
+        let p1 = corners[i];
+        let p2 = corners[next];
+        
+        let dx = p2[0] - p1[0];
+        let dy = p2[1] - p1[1];
+        let len = (dx * dx + dy * dy).sqrt();
+        
+        if len < 4.0 {
+            continue;
+        }
+        
+        // Normal direction (perpendicular to edge)
+        let nx = -dy / len;
+        let ny = dx / len;
+        
+        // Collect weighted samples along the edge
+        let mut sum_w = 0.0;
+        let mut sum_d = 0.0;
+        let n_samples = (len as usize).clamp(5, 20);
+        
+        for s in 1..=n_samples {
+            let t = s as f64 / (n_samples + 1) as f64;
+            let px = p1[0] + dx * t;
+            let py = p1[1] + dy * t;
+            
+            // Search for gradient peak perpendicular to edge
+            let mut best_pos = (px, py);
+            let mut best_mag = 0.0;
+            
+            for step in -3..=3 {
+                let sx = px + nx * step as f64;
+                let sy = py + ny * step as f64;
+                
+                if sx < 1.0 || sx >= (img.width - 2) as f64 
+                   || sy < 1.0 || sy >= (img.height - 2) as f64 {
+                    continue;
+                }
+                
+                let g = img.sample_gradient_bilinear(sx, sy);
+                let mag = (g[0] * g[0] + g[1] * g[1]).sqrt();
+                
+                if mag > best_mag {
+                    best_mag = mag;
+                    best_pos = (sx, sy);
+                }
+            }
+            
+            if best_mag > 5.0 {
+                // Distance from best_pos to original line
+                let d = nx * best_pos.0 + ny * best_pos.1;
+                sum_w += best_mag;
+                sum_d += d * best_mag;
+            }
+        }
+        
+        if sum_w > 1.0 {
+            // Line equation: nx * x + ny * y + c = 0
+            let c = -sum_d / sum_w;
+            lines[i] = (nx, ny, c);
+            line_valid[i] = true;
+        }
+    }
+    
+    // If we don't have all 4 lines, return original corners
+    if !line_valid.iter().all(|&v| v) {
+        return *corners;
+    }
+    
+    // Compute corner intersections
+    let mut refined = *corners;
+    for i in 0..4 {
+        let prev = (i + 3) % 4;
+        let (a1, b1, c1) = lines[prev];
+        let (a2, b2, c2) = lines[i];
+        
+        let det = a1 * b2 - a2 * b1;
+        if det.abs() > 1e-6 {
+            let x = (b1 * c2 - b2 * c1) / det;
+            let y = (a2 * c1 - a1 * c2) / det;
+            
+            // Sanity check: intersection should be near original corner
+            let dist_sq = (x - corners[i][0]).powi(2) + (y - corners[i][1]).powi(2);
+            if dist_sq < 4.0 {
+                refined[i] = [x, y];
+            }
+        }
+    }
+    
+    refined
+}
+
+/// Compute optimal threshold using Otsu's method for bimodal distributions.
+/// Returns the threshold that maximizes inter-class variance.
+fn compute_otsu_threshold(values: &[f64]) -> f64 {
+    if values.is_empty() {
+        return 128.0;
+    }
+    
+    let n = values.len() as f64;
+    let total_sum: f64 = values.iter().sum();
+    let total_mean = total_sum / n;
+    
+    // Find min/max to define search range
+    let min_val = values.iter().cloned().fold(f64::MAX, f64::min);
+    let max_val = values.iter().cloned().fold(f64::MIN, f64::max);
+    
+    if (max_val - min_val) < 1.0 {
+        return (min_val + max_val) / 2.0;
+    }
+    
+    // Search for optimal threshold
+    let mut best_threshold = (min_val + max_val) / 2.0;
+    let mut best_variance = 0.0;
+    
+    // Use 16 candidate thresholds between min and max
+    for i in 1..16 {
+        let t = min_val + (max_val - min_val) * (i as f64 / 16.0);
+        
+        let mut w0 = 0.0;
+        let mut sum0 = 0.0;
+        
+        for &v in values {
+            if v <= t {
+                w0 += 1.0;
+                sum0 += v;
+            }
+        }
+        
+        let w1 = n - w0;
+        if w0 < 1.0 || w1 < 1.0 {
+            continue;
+        }
+        
+        let mean0 = sum0 / w0;
+        let mean1 = (total_sum - sum0) / w1;
+        
+        // Inter-class variance
+        let variance = w0 * w1 * (mean0 - mean1) * (mean0 - mean1);
+        
+        if variance > best_variance {
+            best_variance = variance;
+            best_threshold = t;
+        }
+    }
+    
+    best_threshold
+}
+
 /// Sample the bit grid from the image using the homography and decoder points.
 ///
 /// Uses bilinear interpolation for sampling and a spatially adaptive threshold
@@ -196,9 +361,9 @@ pub fn sample_grid(
     let h21 = homography.h[(2, 1)];
     let h22 = homography.h[(2, 2)];
 
-    // Use 3x3 supersampling for maximum robustness against blur
-    // Cell size is 0.25 for 36h11 (dim 8), so 0.02 is very tight and stays deep inside the cell center
-    let offsets = [-0.02, 0.0, 0.02];
+    // Use 3x3 supersampling for robustness against blur
+    // Cell size is ~0.25, so 0.05 stays well within the 0.5 center region
+    let offsets = [-0.05, 0.0, 0.05];
 
     for (i, &p) in points.iter().take(n).enumerate() {
         let mut sum_val = 0.0;
@@ -265,41 +430,54 @@ pub fn sample_grid(
         }
     }
 
-    // Spatially adaptive thresholding: 4 quadrants
-    // This handles non-uniform lighting across the tag
+    // Use Otsu's method for robust bit classification
+    // This automatically finds the optimal threshold for bimodal distributions
+    let otsu_threshold = compute_otsu_threshold(&intensities[..n]);
+    let contrast_range = max_val - min_val;
+    
+    // If sufficient contrast, use Otsu threshold (robust for AprilTag's bimodal distribution)
     let mut bits = 0u64;
     
-    // We divide bits by their canonical coordinates p.0 and p.1
-    let mut quad_sums = [0.0; 4];
-    let mut quad_counts = [0; 4];
-    
-    for (i, &p) in points.iter().take(n).enumerate() {
-        let qi = if p.0 < 0.0 {
-            if p.1 < 0.0 { 0 } else { 1 }
-        } else {
-            if p.1 < 0.0 { 2 } else { 3 }
-        };
-        quad_sums[qi] += intensities[i];
-        quad_counts[qi] += 1;
-    }
-    
-    let quad_thresholds = [
-        if quad_counts[0] > 0 { quad_sums[0] / quad_counts[0] as f64 } else { 0.0 },
-        if quad_counts[1] > 0 { quad_sums[1] / quad_counts[1] as f64 } else { 0.0 },
-        if quad_counts[2] > 0 { quad_sums[2] / quad_counts[2] as f64 } else { 0.0 },
-        if quad_counts[3] > 0 { quad_sums[3] / quad_counts[3] as f64 } else { 0.0 },
-    ];
-
-    for (i, &p) in points.iter().take(n).enumerate() {
-        let qi = if p.0 < 0.0 {
-            if p.1 < 0.0 { 0 } else { 1 }
-        } else {
-            if p.1 < 0.0 { 2 } else { 3 }
-        };
+    if contrast_range > 20.0 {
+        // Good contrast: use Otsu threshold
+        for (i, _) in points.iter().take(n).enumerate() {
+            if intensities[i] > otsu_threshold {
+                bits |= 1 << i;
+            }
+        }
+    } else {
+        // Low contrast: fall back to quadrant-based thresholding
+        let mut quad_sums = [0.0; 4];
+        let mut quad_counts = [0; 4];
         
-        let threshold = quad_thresholds[qi];
-        if intensities[i] > threshold {
-            bits |= 1 << i;
+        for (i, &p) in points.iter().take(n).enumerate() {
+            let qi = if p.0 < 0.0 {
+                if p.1 < 0.0 { 0 } else { 1 }
+            } else {
+                if p.1 < 0.0 { 2 } else { 3 }
+            };
+            quad_sums[qi] += intensities[i];
+            quad_counts[qi] += 1;
+        }
+        
+        let quad_thresholds = [
+            if quad_counts[0] > 0 { quad_sums[0] / quad_counts[0] as f64 } else { otsu_threshold },
+            if quad_counts[1] > 0 { quad_sums[1] / quad_counts[1] as f64 } else { otsu_threshold },
+            if quad_counts[2] > 0 { quad_sums[2] / quad_counts[2] as f64 } else { otsu_threshold },
+            if quad_counts[3] > 0 { quad_sums[3] / quad_counts[3] as f64 } else { otsu_threshold },
+        ];
+
+        for (i, &p) in points.iter().take(n).enumerate() {
+            let qi = if p.0 < 0.0 {
+                if p.1 < 0.0 { 0 } else { 1 }
+            } else {
+                if p.1 < 0.0 { 2 } else { 3 }
+            };
+            
+            let threshold = quad_thresholds[qi];
+            if intensities[i] > threshold {
+                bits |= 1 << i;
+            }
         }
     }
 

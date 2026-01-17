@@ -187,31 +187,46 @@ fn try_form_quad(
     s2: &LineSegment,
     s3: &LineSegment,
 ) -> Option<[[f32; 2]; 4]> {
-    // Check that we have roughly 4 perpendicular segments
-    let angles = [s0.angle, s1.angle, s2.angle, s3.angle];
-
-    // Group by approximate perpendicularity (horizontal-ish vs vertical-ish)
-    let mut horizontal = Vec::new();
-    let mut vertical = Vec::new();
-
-    for (i, &seg) in [s0, s1, s2, s3].iter().enumerate() {
-        let a = angles[i].abs();
-        if !(0.5..=std::f32::consts::PI - 0.5).contains(&a) {
-            horizontal.push(seg);
-        } else if (a - std::f32::consts::FRAC_PI_2).abs() < 0.5 {
-            vertical.push(seg);
+    // Cluster segments into two groups by their gradient direction (roughly parallel pairs)
+    // We sort segments by angle to easily find two pairs.
+    let mut segs = [*s0, *s1, *s2, *s3];
+    segs.sort_by(|a, b| a.angle.partial_cmp(&b.angle).unwrap());
+    
+    // Check if we have two pairs of roughly parallel segments.
+    // Parallel segments have angles ~PI apart or very similar (depending on sign/direction).
+    // A better way is to check that we have two groups of 2 segments each,
+    // where within each group segments are roughly parallel, and between groups they are roughly perpendicular.
+    
+    // Group 1: segs[0] and segs[1]? No, angles might be [0, 0.1, 1.5, 1.6]
+    // Let's try to find a gap.
+    let mut group1 = Vec::with_capacity(2);
+    let mut group2 = Vec::with_capacity(2);
+    group1.push(segs[0]);
+    
+    for i in 1..4 {
+        let diff = angle_diff(segs[0].angle, segs[i].angle);
+        if diff < 0.6 { // Within ~35 degrees
+            group1.push(segs[i]);
+        } else {
+            group2.push(segs[i]);
         }
     }
 
-    if horizontal.len() != 2 || vertical.len() != 2 {
+    if group1.len() != 2 || group2.len() != 2 {
+        return None;
+    }
+
+    // Ensure the two groups are roughly perpendicular
+    let angle_between_groups = angle_diff(group1[0].angle, group2[0].angle);
+    if (angle_between_groups - std::f32::consts::FRAC_PI_2).abs() > 0.6 {
         return None;
     }
 
     // Compute intersections
-    let c0 = line_intersection(horizontal[0], vertical[0])?;
-    let c1 = line_intersection(horizontal[0], vertical[1])?;
-    let c2 = line_intersection(horizontal[1], vertical[1])?;
-    let c3 = line_intersection(horizontal[1], vertical[0])?;
+    let c0 = line_intersection(&group1[0], &group2[0])?;
+    let c1 = line_intersection(&group1[0], &group2[1])?;
+    let c2 = line_intersection(&group1[1], &group2[1])?;
+    let c3 = line_intersection(&group1[1], &group2[0])?;
 
     // Validate quad: check area and convexity
     let area = quad_area(&[c0, c1, c2, c3]);

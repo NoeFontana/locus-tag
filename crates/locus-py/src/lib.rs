@@ -168,7 +168,8 @@ impl Detector {
         quad_min_fill_ratio = 0.3,
         quad_max_fill_ratio = 0.95,
         quad_min_edge_length = 4.0,
-        quad_min_edge_score = 1.0
+        quad_min_edge_score = 1.0,
+        subpixel_refinement_sigma = 0.6,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -186,6 +187,7 @@ impl Detector {
         quad_max_fill_ratio: f32,
         quad_min_edge_length: f64,
         quad_min_edge_score: f64,
+        subpixel_refinement_sigma: f64,
     ) -> Self {
         let config = locus_core::DetectorConfig {
             threshold_tile_size,
@@ -202,6 +204,7 @@ impl Detector {
             quad_max_fill_ratio,
             quad_min_edge_length,
             quad_min_edge_score,
+            subpixel_refinement_sigma,
         };
         Self {
             inner: locus_core::Detector::with_config(config),

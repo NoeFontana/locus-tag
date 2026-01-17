@@ -232,9 +232,10 @@ impl Detector {
         let start_seg = std::time::Instant::now();
         let label_result = {
             let _span = tracing::info_span!("segmentation").entered();
-            crate::segmentation::label_components_with_stats(
+            crate::segmentation::label_components_threshold_model(
                 &self.arena,
-                binarized,
+                img.data,
+                threshold_map,
                 img.width,
                 img.height,
             )
