@@ -243,3 +243,126 @@ fn test_bilinear_at_image_corners() {
     let _ = img.get_pixel(9, 9);
     let _ = img.get_pixel(100, 100); // Should clamp, not panic
 }
+
+// =============================================================================
+// DEGENERATE QUAD TESTS (Geometric Stability)
+// =============================================================================
+
+/// Test that the homography solver gracefully rejects collinear corners.
+///
+/// When 3+ corners are collinear, the DLT matrix becomes singular.
+/// This must return None, not panic or produce NaN.
+#[test]
+fn test_homography_collinear_corners() {
+    use locus_core::decoder::Homography;
+    
+    // All points on a line (collinear)
+    let collinear_quad: [[f64; 2]; 4] = [
+        [0.0, 0.0],
+        [10.0, 10.0],
+        [20.0, 20.0],
+        [30.0, 30.0],
+    ];
+    
+    let result = Homography::square_to_quad(&collinear_quad);
+    assert!(
+        result.is_none(),
+        "Homography should return None for collinear corners, not panic"
+    );
+}
+
+/// Test that the homography solver handles zero-area "line" polygons.
+#[test]
+fn test_homography_zero_area_line() {
+    use locus_core::decoder::Homography;
+    
+    // Two pairs of identical points (degenerate line)
+    let zero_area: [[f64; 2]; 4] = [
+        [0.0, 0.0],
+        [100.0, 0.0],
+        [100.0, 0.0],
+        [0.0, 0.0],
+    ];
+    
+    let result = Homography::square_to_quad(&zero_area);
+    assert!(
+        result.is_none(),
+        "Homography should return None for zero-area polygon"
+    );
+}
+
+/// Test that the homography solver handles self-intersecting "bowtie" polygons.
+#[test]
+fn test_homography_bowtie_self_intersecting() {
+    use locus_core::decoder::Homography;
+    
+    // Bowtie: corners cross over each other
+    let bowtie: [[f64; 2]; 4] = [
+        [0.0, 0.0],   // TL
+        [100.0, 100.0], // BR (crossed!)
+        [100.0, 0.0], // TR
+        [0.0, 100.0], // BL (crossed!)
+    ];
+    
+    let result = Homography::square_to_quad(&bowtie);
+    // May return Some (mathematically valid homography) or None (rejected)
+    // The key is: NO PANIC, and if Some, no NaN in matrix
+    if let Some(h) = result {
+        for i in 0..3 {
+            for j in 0..3 {
+                assert!(
+                    !h.h[(i, j)].is_nan(),
+                    "Homography matrix contains NaN at ({}, {})",
+                    i, j
+                );
+            }
+        }
+    }
+}
+
+/// Test that homography handles very small quads (near-zero area).
+#[test]
+fn test_homography_tiny_quad() {
+    use locus_core::decoder::Homography;
+    
+    // Extremely small quad (sub-pixel)
+    let tiny: [[f64; 2]; 4] = [
+        [50.0, 50.0],
+        [50.001, 50.0],
+        [50.001, 50.001],
+        [50.0, 50.001],
+    ];
+    
+    // Should not panic - may return None or unstable homography
+    let result = Homography::square_to_quad(&tiny);
+    if let Some(h) = result {
+        // Check no NaN
+        for i in 0..3 {
+            for j in 0..3 {
+                assert!(!h.h[(i, j)].is_nan(), "Homography contains NaN");
+                assert!(!h.h[(i, j)].is_infinite(), "Homography contains Inf");
+            }
+        }
+    }
+}
+
+/// Test that duplicate corners are handled gracefully.
+#[test]
+fn test_homography_duplicate_corners() {
+    use locus_core::decoder::Homography;
+    
+    // All four corners are the same point
+    let degenerate: [[f64; 2]; 4] = [
+        [50.0, 50.0],
+        [50.0, 50.0],
+        [50.0, 50.0],
+        [50.0, 50.0],
+    ];
+    
+    let result = Homography::square_to_quad(&degenerate);
+    assert!(
+        result.is_none(),
+        "Homography should return None for degenerate point"
+    );
+}
+
