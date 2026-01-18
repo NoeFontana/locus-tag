@@ -15,6 +15,26 @@ fn point_strategy() -> impl Strategy<Value = [f64; 2]> {
     ]
 }
 
+/// Strategy for invalid numerical values (NaN, Inf).
+fn invalid_point_strategy() -> impl Strategy<Value = [[f64; 2]; 4]> {
+    prop::collection::vec(
+        prop_oneof![
+            Just(f64::NAN),
+            Just(f64::INFINITY),
+            Just(f64::NEG_INFINITY),
+            (-1e10..1e10)
+        ],
+        8
+    ).prop_map(|v| {
+        [
+            [v[0], v[1]],
+            [v[2], v[3]],
+            [v[4], v[5]],
+            [v[6], v[7]],
+        ]
+    })
+}
+
 /// Helper to check if a quad is convex and CCW.
 /// A quad (p0, p1, p2, p3) is convex if all internal angles are < 180 deg
 /// and it's CCW if cross products of consecutive edges are positive.
@@ -50,15 +70,15 @@ fn valid_quad_strategy() -> impl Strategy<Value = [[f64; 2]; 4]> {
         .prop_filter("Must be convex and CCW", |pts| is_convex_ccw(pts))
 }
 
-/// Strategy for degenerate quads (collinear or coincident).
-fn degenerate_quad_strategy() -> impl Strategy<Value = [[f64; 2]; 4]> {
+/// Strategy for degenerate quads (strictly collinear or coincident).
+fn collinear_quad_strategy() -> impl Strategy<Value = [[f64; 2]; 4]> {
     prop_oneof![
         // Coincident points: p0 == p1
         point_strategy().prop_map(|p| [p, p, [p[0] + 10.0, p[1]], [p[0], p[1] + 10.0]]),
         
-        // Collinear points: p0, p1, p2 on the same line
+        // Collinear points: p0, p1, p2 on the same line (y = p[1])
         point_strategy().prop_map(|p| {
-            [p, [p[0] + 10.0, p[1]], [p[0] + 20.0, p[1]], [p[0], p[1] + 10.0]]
+            [p, [p[0] + 10.0, p[1]], [p[0] + 20.0, p[1]], [p[0] + 30.0, p[1]]]
         }),
         
         // All points same
@@ -121,19 +141,31 @@ proptest! {
         }
     }
 
-    /// Property: Degenerate quads never panic and return None or handle gracefully (no NaN).
+    /// Property: Collinear points (Phase 2: Line Test) MUST return None.
     #[test]
-    fn test_homography_degenerate_safety(
-        src in degenerate_quad_strategy(),
+    fn test_homography_line_test_singularity(
+        src in collinear_quad_strategy(),
         dst in valid_quad_strategy()
     ) {
         let h = Homography::from_pairs(&src, &dst);
-        if let Some(h_val) = h {
-            let p = h_val.project([0.0, 0.0]);
-            assert!(!p[0].is_nan());
-            assert!(!p[1].is_nan());
-            assert!(!p[0].is_infinite());
-            assert!(!p[1].is_infinite());
+        
+        // Rigorous check: Collinear source points should NOT result in a valid homography.
+        // If it returns Some, it's a "ghost" solution due to numerical noise in LU.
+        if let Some(_h_val) = h {
+            // Check reprojection error - it should be high or it's a miracle
+            // Actually, we expect it to be None.
+            panic!("DLT returned a solution for collinear points: {:?}", src);
         }
+    }
+
+    /// Property: Invalid numbers (NaN, Inf) never panic (Phase 2: NaN Check).
+    #[test]
+    fn test_homography_nan_safety(
+        src in invalid_point_strategy(),
+        dst in invalid_point_strategy()
+    ) {
+        // This should never panic
+        let _ = Homography::from_pairs(&src, &dst);
+        let _ = Homography::square_to_quad(&src);
     }
 }

@@ -51,7 +51,7 @@ impl Homography {
             b[i] = -a[(i, 8)];
         }
 
-        m.lu().solve(&b).map(|h_vec| {
+        m.lu().solve(&b).and_then(|h_vec| {
             let mut h = SMatrix::<f64, 3, 3>::identity();
             h[(0, 0)] = h_vec[0];
             h[(0, 1)] = h_vec[1];
@@ -62,7 +62,15 @@ impl Homography {
             h[(2, 0)] = h_vec[6];
             h[(2, 1)] = h_vec[7];
             h[(2, 2)] = 1.0;
-            Self { h }
+            let res = Self { h };
+            for i in 0..4 {
+                let p_proj = res.project(src[i]);
+                let err_sq = (p_proj[0] - dst[i][0]).powi(2) + (p_proj[1] - dst[i][1]).powi(2);
+                if !(err_sq <= 1e-4) {
+                    return None;
+                }
+            }
+            Some(res)
         })
     }
 
@@ -143,7 +151,7 @@ impl Homography {
         m[(7, 7)] = y3;
         b[7] = -y3;
 
-        m.lu().solve(&b).map(|h_vec| {
+        m.lu().solve(&b).and_then(|h_vec| {
             let mut h = SMatrix::<f64, 3, 3>::identity();
             h[(0, 0)] = h_vec[0];
             h[(0, 1)] = h_vec[1];
@@ -154,7 +162,16 @@ impl Homography {
             h[(2, 0)] = h_vec[6];
             h[(2, 1)] = h_vec[7];
             h[(2, 2)] = 1.0;
-            Self { h }
+            let res = Self { h };
+            let src_unit = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]];
+            for i in 0..4 {
+                let p_proj = res.project(src_unit[i]);
+                let err_sq = (p_proj[0] - dst[i][0]).powi(2) + (p_proj[1] - dst[i][1]).powi(2);
+                if !(err_sq <= 1e-4) {
+                    return None;
+                }
+            }
+            Some(res)
         })
     }
 
