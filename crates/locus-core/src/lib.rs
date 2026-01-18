@@ -53,8 +53,8 @@ pub mod test_utils;
 /// Adaptive thresholding implementation.
 pub mod threshold;
 
-pub use config::{DetectOptions, DetectorConfig};
-
+pub use crate::config::{DetectOptions, DetectorConfig, TagFamily};
+use rayon::prelude::*;
 use crate::decoder::TagDecoder;
 use crate::image::ImageView;
 use crate::threshold::ThresholdEngine;
@@ -351,19 +351,23 @@ impl Detector {
             &temp_decoders
         };
 
-        let mut final_detections = Vec::new();
-        for mut cand in candidates {
-            if let Some(h) = crate::decoder::Homography::square_to_quad(&cand.corners) {
+        let mut final_detections: Vec<Detection> = candidates
+            .into_par_iter()
+            .filter_map(|mut cand| {
+                let h = crate::decoder::Homography::square_to_quad(&cand.corners)?;
+                
                 for decoder in active_decoders {
-                    if let Some(bits) = crate::decoder::sample_grid(&sharpened_img, &h, decoder.as_ref(), self.config.decoder_min_contrast) {
+                    if let Some(bits) = crate::decoder::sample_grid(
+                        &sharpened_img,
+                        &h,
+                        decoder.as_ref(),
+                        self.config.decoder_min_contrast,
+                    ) {
                         if let Some((id, hamming)) = decoder.decode(bits) {
                             cand.id = id;
                             cand.hamming = hamming;
-                            
-                            
+
                             // Adjust coordinates for benchmark compliance (0.5 offset)
-                            // Our internal system treats (0, 0) as pixel center. 
-                            // Common benchmarks (ICRA, AprilTag) treat (0.5, 0.5) as pixel center.
                             for corner in &mut cand.corners {
                                 corner[0] += 0.5;
                                 corner[1] += 0.5;
@@ -371,7 +375,7 @@ impl Detector {
                             cand.center[0] += 0.5;
                             cand.center[1] += 0.5;
 
-                            // Estimate pose using current corners (1x or recursed 1x)
+                            // Estimate pose if requested
                             if let (Some(intrinsics), Some(tag_size)) =
                                 (options.intrinsics, options.tag_size)
                             {
@@ -381,14 +385,14 @@ impl Detector {
                                     tag_size,
                                 );
                             }
-                            
-                            final_detections.push(cand);
-                            break;
+
+                            return Some(cand);
                         }
                     }
                 }
-            }
-        }
+                None
+            })
+            .collect();
         stats.decoding_ms = start_decode.elapsed().as_secs_f64() * 1000.0;
         stats.num_detections = final_detections.len();
         

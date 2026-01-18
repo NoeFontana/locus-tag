@@ -284,7 +284,7 @@ fn compute_otsu_threshold(values: &[f64]) -> f64 {
     
     let n = values.len() as f64;
     let total_sum: f64 = values.iter().sum();
-    let total_mean = total_sum / n;
+    let _total_mean = total_sum / n;
     
     // Find min/max to define search range
     let min_val = values.iter().cloned().fold(f64::MAX, f64::min);

@@ -1,5 +1,6 @@
 use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
+use rayon::prelude::*;
 
 /// A disjoint-set forest (Union-Find) with path compression and rank optimization.
 pub struct UnionFind<'a> {
@@ -271,35 +272,45 @@ pub fn label_components_threshold_model<'a>(
     // This is more robust than binary == 0 because it considers the local model
     const MARGIN: i16 = 2; // Pixels must be at least 2 below threshold
 
-    for y in 0..height {
-        let row_gs = &grayscale[y * width..(y + 1) * width];
-        let row_th = &threshold_map[y * width..(y + 1) * width];
+    let all_runs: Vec<Vec<Run>> = (0..height)
+        .into_par_iter()
+        .map(|y| {
+            let row_gs = &grayscale[y * width..(y + 1) * width];
+            let row_th = &threshold_map[y * width..(y + 1) * width];
+            let mut row_runs = Vec::new();
 
-        let mut x = 0;
-        while x < width {
-            // Find start of dark run: gs < threshold - margin
-            let deviation = i16::from(row_gs[x]) - i16::from(row_th[x]);
-            if deviation < -MARGIN {
-                let start = x;
-                x += 1;
-                // Continue while consistently dark
-                while x < width {
-                    let dev = i16::from(row_gs[x]) - i16::from(row_th[x]);
-                    if dev >= -MARGIN {
-                        break;
+            let mut x = 0;
+            while x < width {
+                // Find start of dark run: gs < threshold - margin
+                let deviation = i16::from(row_gs[x]) - i16::from(row_th[x]);
+                if deviation < -MARGIN {
+                    let start = x;
+                    x += 1;
+                    // Continue while consistently dark
+                    while x < width {
+                        let dev = i16::from(row_gs[x]) - i16::from(row_th[x]);
+                        if dev >= -MARGIN {
+                            break;
+                        }
+                        x += 1;
                     }
+                    row_runs.push(Run {
+                        y: y as u32,
+                        x_start: start as u32,
+                        x_end: (x - 1) as u32,
+                        id: 0, // Assigned correctly later
+                    });
+                } else {
                     x += 1;
                 }
-                runs.push(Run {
-                    y: y as u32,
-                    x_start: start as u32,
-                    x_end: (x - 1) as u32,
-                    id: runs.len() as u32,
-                });
-            } else {
-                x += 1;
             }
-        }
+            row_runs
+        })
+        .collect();
+
+    for (id, mut run) in all_runs.into_iter().flatten().enumerate() {
+        run.id = id as u32;
+        runs.push(run);
     }
 
     if runs.is_empty() {
@@ -377,11 +388,17 @@ pub fn label_components_threshold_model<'a>(
     }
 
     let labels = arena.alloc_slice_fill_copy(width * height, 0u32);
+    let mut runs_by_y: Vec<Vec<(usize, usize, u32)>> = vec![Vec::new(); height];
     for (run, root) in runs.iter().zip(run_roots) {
         let label = root_to_label[root];
-        let row_off = run.y as usize * width;
-        labels[row_off + run.x_start as usize..=row_off + run.x_end as usize].fill(label);
+        runs_by_y[run.y as usize].push((run.x_start as usize, run.x_end as usize, label));
     }
+
+    labels.par_chunks_exact_mut(width).enumerate().for_each(|(y, row)| {
+        for &(x_start, x_end, label) in &runs_by_y[y] {
+            row[x_start..=x_end].fill(label);
+        }
+    });
 
     LabelResult {
         labels,
