@@ -2,12 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::path::{Path, PathBuf};
 
-
 #[derive(Debug, Clone)]
 pub struct ImageGroundTruth {
-    #[allow(dead_code)]
-    pub filename: String,
     pub tag_ids: HashSet<u32>,
+    pub corners: HashMap<u32, [[f64; 2]; 4]>,
 }
 
 /// Resolves the root directory of the ICRA 2020 dataset.
@@ -56,9 +54,6 @@ pub fn resolve_dataset_root() -> Option<PathBuf> {
 }
 
 /// Loads the ground truth `tags.csv` into a map of Filename -> GroundTruth.
-/// 
-/// The CSV is expected to have columns: `filename,tag_id,...` logic depends on actual file format.
-/// Since I don't see the file, I'll implement a generic parser that aggregates by filename.
 pub fn load_ground_truth(dataset_root: &Path) -> Option<HashMap<String, ImageGroundTruth>> {
     let csv_path = if dataset_root.join("tags.csv").exists() {
         dataset_root.join("tags.csv")
@@ -68,37 +63,43 @@ pub fn load_ground_truth(dataset_root: &Path) -> Option<HashMap<String, ImageGro
 
     let mut map: HashMap<String, ImageGroundTruth> = HashMap::new();
     
-    // Using the csv crate
     let mut rdr = csv::ReaderBuilder::new()
-        .has_headers(true) // Assumption/Constraint
+        .has_headers(true)
         .from_path(csv_path)
         .expect("Failed to open tags.csv");
 
-    // We assume headers like: image_name, tag_id, ...
-    // If we don't know the format, we might need to inspect it. 
-    // But per instructions: "Implement a parser for tags.csv... containing filename, tag_ids"
-    
-    // Let's try to handle standard "filename, class_id/tag_id" format.
-    // We'll read loosely.
-    
     for result in rdr.records() {
         let record = result.expect("Failed to parse CSV record");
         
-        // Assumption: Column 0 is filename, Column 1 is tag_id
-        if record.len() < 2 { continue; }
+        // image,tag_id,corner,ground_truth_x,ground_truth_y,...
+        if record.len() < 5 { continue; }
         
         let filename = record[0].to_string();
-        let tag_id_str = &record[1];
+        let tag_id = match record[1].trim().parse::<u32>() {
+            Ok(id) => id,
+            Err(_) => continue,
+        };
+        let corner_idx = match record[2].trim().parse::<usize>() {
+            Ok(idx) if idx < 4 => idx,
+            _ => continue,
+        };
+        let gx = match record[3].trim().parse::<f64>() {
+            Ok(x) => x,
+            Err(_) => continue,
+        };
+        let gy = match record[4].trim().parse::<f64>() {
+            Ok(y) => y,
+            Err(_) => continue,
+        };
         
-        // Parse tag ID
-        if let Ok(tag_id) = tag_id_str.trim().parse::<u32>() {
-            map.entry(filename.clone())
-                .or_insert_with(|| ImageGroundTruth {
-                    filename,
-                    tag_ids: HashSet::new(),
-                })
-                .tag_ids.insert(tag_id);
-        }
+        let entry = map.entry(filename).or_insert_with(|| ImageGroundTruth {
+            tag_ids: HashSet::new(),
+            corners: HashMap::new(),
+        });
+
+        entry.tag_ids.insert(tag_id);
+        let corners = entry.corners.entry(tag_id).or_insert([[0.0; 2]; 4]);
+        corners[corner_idx] = [gx, gy];
     }
     
     Some(map)
