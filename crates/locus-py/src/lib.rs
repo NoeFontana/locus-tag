@@ -273,7 +273,8 @@ impl Detector {
     /// Detect tags in the image using default decoders.
     #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
     fn detect(&mut self, img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
-        let view = create_image_view(&img)?;
+        let source = create_image_view(&img)?;
+        let view = source.as_view()?;
         let detections = self.inner.detect(&view);
         Ok(detections.into_iter().map(Detection::from).collect())
     }
@@ -289,7 +290,8 @@ impl Detector {
         img: PyReadonlyArray2<u8>,
         families: Vec<TagFamily>,
     ) -> PyResult<Vec<Detection>> {
-        let view = create_image_view(&img)?;
+        let source = create_image_view(&img)?;
+        let view = source.as_view()?;
         let core_families: Vec<locus_core::config::TagFamily> =
             families.into_iter().map(Into::into).collect();
         let options = locus_core::DetectOptions::with_families(&core_families);
@@ -303,7 +305,8 @@ impl Detector {
         &mut self,
         img: PyReadonlyArray2<u8>,
     ) -> PyResult<(Vec<Detection>, PipelineStats)> {
-        let view = create_image_view(&img)?;
+        let source = create_image_view(&img)?;
+        let view = source.as_view()?;
         let (detections, stats) = self.inner.detect_with_stats(&view);
         Ok((
             detections.into_iter().map(Detection::from).collect(),
@@ -323,29 +326,83 @@ impl Detector {
 // Helper functions
 // ============================================================================
 
-/// Create an ImageView from a PyReadonlyArray2, validating strides.
+/// Holds either a borrowed slice or an owned vector for image data.
+enum ImageSource<'a> {
+    Borrowed(ImageView<'a>),
+    Owned(Vec<u8>, usize, usize, usize), // data, width, height, stride
+}
+
+impl<'a> ImageSource<'a> {
+    fn as_view(&self) -> PyResult<ImageView<'_>> {
+        match self {
+            ImageSource::Borrowed(view) => Ok(*view),
+            ImageSource::Owned(data, width, height, stride) => {
+                ImageView::new(data, *width, *height, *stride)
+                    .map_err(pyo3::exceptions::PyRuntimeError::new_err)
+            }
+        }
+    }
+}
+
+/// Create an ImageView from a PyReadonlyArray2, handling non-contiguous layouts via copy.
 #[allow(clippy::cast_sign_loss)]
-fn create_image_view<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageView<'a>> {
+fn create_image_view<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageSource<'a>> {
     let shape = img.shape();
     let height = shape[0];
     let width = shape[1];
     let strides = img.strides();
-    let stride = strides[0] as usize;
+    let stride_y = strides[0] as usize;
+    let stride_x = strides[1];
 
-    if strides[1] != 1 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "Image must have C-contiguous rows (inner stride must be 1)",
-        ));
-    }
+    // Check for C-contiguous behavior (inner stride == 1)
+    if stride_x == 1 {
+        let required_size = if height > 0 && width > 0 {
+            (height - 1) * stride_y + width
+        } else {
+            0
+        };
 
-    let required_size = if height > 0 && width > 0 {
-        (height - 1) * stride + width
+        // If the slice is safe, we borrow directly
+        // Note: PyReadonlyArray2::data() returns a raw pointer. We must ensure it's valid.
+        // If it's contiguous with inner stride 1, we can treat it as a slice (with gaps if stride_y > width).
+        // locus_core::ImageView handles stride > width correctly.
+        
+        let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
+        let view = ImageView::new(data, width, height, stride_y)
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+        
+        Ok(ImageSource::Borrowed(view))
     } else {
-        0
-    };
+        // Non-contiguous (e.g. sliced columns, generalized slicing)
+        // We MUST copy to a contiguous buffer to be safe.
+        // Log a warning so the user knows this is slow.
+        tracing::warn!(
+            "Non-contiguous array passed to locus (stride_x: {}). Triggering fallback copy. \
+             To avoid this overhead, ensure input is C-contiguous (e.g., numpy.ascontiguousarray).", 
+            stride_x
+        );
 
-    let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
-    ImageView::new(data, width, height, stride).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+        // Copy logic: We can use numpy's to_vec or similar, but since we are inside a PyReadonlyArray,
+        // we can iterate or let ndarray handle it.
+        // However, PyReadonlyArray2 derefs to ArrayView2.
+        
+        let valid_array = img.as_array();
+        
+        // We want a contiguous row-major vector.
+        // to_owned() usually produces a standard layout Array2.
+        // as_standard_layout() + to_owned()?
+        
+        // Simplest safe way: make a standard layout copy.
+        // data needs to be row-major (C style).
+        
+        // Note: 'as_slice' returns None if not contiguous.
+        // We need to construct a contiguous vector.
+        let contiguous_array = valid_array.as_standard_layout().to_owned();
+        let (nrows, ncols) = (contiguous_array.nrows(), contiguous_array.ncols());
+        let (vec_data, _offset) = contiguous_array.into_raw_vec_and_offset();
+        
+        Ok(ImageSource::Owned(vec_data, ncols, nrows, ncols)) // stride = width for packed
+    }
 }
 
 // ============================================================================
@@ -362,7 +419,8 @@ fn dummy_detect() -> String {
 #[pyfunction]
 #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
 fn detect_tags(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
-    let view = create_image_view(&img)?;
+    let source = create_image_view(&img)?;
+    let view = source.as_view()?;
     let mut detector = locus_core::Detector::new();
     let detections = detector.detect(&view);
     Ok(detections.into_iter().map(Detection::from).collect())
@@ -372,7 +430,8 @@ fn detect_tags(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
 #[pyfunction]
 #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
 fn detect_tags_with_stats(img: PyReadonlyArray2<u8>) -> PyResult<(Vec<Detection>, PipelineStats)> {
-    let view = create_image_view(&img)?;
+    let source = create_image_view(&img)?;
+    let view = source.as_view()?;
     let mut detector = locus_core::Detector::new();
     let (detections, stats) = detector.detect_with_stats(&view);
     Ok((
@@ -385,7 +444,8 @@ fn detect_tags_with_stats(img: PyReadonlyArray2<u8>) -> PyResult<(Vec<Detection>
 #[pyfunction]
 #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
 fn debug_threshold(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
-    let view = create_image_view(&img)?;
+    let source = create_image_view(&img)?;
+    let view = source.as_view()?;
     let width = view.width;
     let height = view.height;
 
@@ -407,7 +467,8 @@ fn debug_threshold(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
 #[pyfunction]
 #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
 fn debug_segmentation(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
-    let view = create_image_view(&img)?;
+    let source = create_image_view(&img)?;
+    let view = source.as_view()?;
     let width = view.width;
     let height = view.height;
 

@@ -3697,6 +3697,7 @@ dependencies = [
  "locus-core",
  "numpy",
  "pyo3",
+ "tracing",
 ]
 
 [[package]]
