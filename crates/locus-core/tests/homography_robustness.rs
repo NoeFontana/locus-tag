@@ -168,4 +168,95 @@ proptest! {
         let _ = Homography::from_pairs(&src, &dst);
         let _ = Homography::square_to_quad(&src);
     }
+
+    /// Property: Extreme slant (Phase 3: Horizon Effect).
+    /// Simulates a 1x1m tag at 10m distance, rotated by 80-85 degrees.
+    #[test]
+    fn test_homography_extreme_slant_precision(
+        slant_deg in 80.0..85.0f64,
+        z_dist in 5.0..15.0f64
+    ) {
+        // Intrinsics: 640x480 camera
+        let fx = 600.0;
+        let fy = 600.0;
+        let cx = 320.0;
+        let cy = 240.0;
+
+        // Tag corners in 3D (1x1m centered at origin)
+        let world_corners = [
+            [-0.5, -0.5, 0.0],
+            [ 0.5, -0.5, 0.0],
+            [ 0.5,  0.5, 0.0],
+            [-0.5,  0.5, 0.0],
+        ];
+
+        // Rotation: slant around Y axis
+        let theta = slant_deg.to_radians();
+        let cos_t = theta.cos();
+        let sin_t = theta.sin();
+
+        // Project corners to image
+        let mut img_corners = [[0.0; 2]; 4];
+        for i in 0..4 {
+            let wx = world_corners[i][0];
+            let wy = world_corners[i][1];
+            
+            // Rotate around Y: x' = x*cos + z*sin, z' = -x*sin + z*cos
+            // Translation: z' += z_dist
+            let rx = wx * cos_t;
+            let ry = wy;
+            let rz = -wx * sin_t + z_dist;
+            
+            img_corners[i][0] = fx * (rx / rz) + cx;
+            img_corners[i][1] = fy * (ry / rz) + cy;
+        }
+
+        // Target: canonical square
+        let src_sq = [
+            [-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]
+        ];
+
+        if let Some(h) = Homography::from_pairs(&src_sq, &img_corners) {
+            // Project center (0, 0)
+            let p_center = h.project([0.0, 0.0]);
+            
+            // Ground truth center projection
+            let g_cx = fx * (0.0 / z_dist) + cx;
+            let g_cy = fy * (0.0 / z_dist) + cy;
+            
+            let err_x = (p_center[0] - g_cx).abs();
+            let err_y = (p_center[1] - g_cy).abs();
+            let err_total = (err_x * err_x + err_y * err_y).sqrt();
+            
+            // Phase 3: Precision Gate - Error must be < 0.5 pixels
+            assert!(err_total < 0.5, "Extreme slant ({:.1} deg) center error too large: {:.4}px", slant_deg, err_total);
+        }
+    }
+
+    /// Property: Optimizer Cross-Check (Phase 3).
+    /// square_to_quad must be identical to from_pairs(unit_square, dst).
+    #[test]
+    fn test_homography_optimizer_cross_check(
+        dst in valid_quad_strategy()
+    ) {
+        let src_sq = [
+            [-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]
+        ];
+
+        let h_gen = Homography::from_pairs(&src_sq, &dst);
+        let h_opt = Homography::square_to_quad(&dst);
+
+        match (h_gen, h_opt) {
+            (Some(g), Some(o)) => {
+                for i in 0..3 {
+                    for j in 0..3 {
+                        let diff = (g.h[(i, j)] - o.h[(i, j)]).abs();
+                        assert!(diff < 1e-6, "Optimizer divergence at ({}, {}): diff={:.2e}", i, j, diff);
+                    }
+                }
+            },
+            (None, None) => {},
+            _ => panic!("Solver consensus failed between DLT and optimized solver"),
+        }
+    }
 }
