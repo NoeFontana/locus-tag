@@ -38,18 +38,23 @@
 //!
 //! # Example
 //!
-//! ```ignore
-//! use locus_core::{Detector, config::{DetectorConfig, DetectOptions}};
-//!
+//! ```
+//! # use locus_core::{Detector, config::{DetectorConfig, DetectOptions, TagFamily}};
+//! # use locus_core::image::ImageView;
 //! // Create detector with custom config
 //! let config = DetectorConfig::builder()
 //!     .threshold_tile_size(16)
+//!     .quad_min_area(200)
 //!     .build();
 //! let mut detector = Detector::with_config(config);
 //!
-//! // Detect with custom options
+//! // Create a dummy image for demonstration
+//! # let pixels = vec![128u8; 64 * 64];
+//! # let img = ImageView::new(&pixels, 64, 64, 64).unwrap();
+//!
+//! // Detect with custom options (e.g., specific tag family)
 //! let options = DetectOptions::builder()
-//!     .quad_min_area(200)
+//!     .families(&[TagFamily::AprilTag36h11])
 //!     .build();
 //! let detections = detector.detect_with_options(&img, &options);
 //! ```

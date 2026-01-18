@@ -162,6 +162,29 @@ flowchart LR
     QuadCandidates -->|Refine| Homographies
 ```
 
+### Arena Lifecycle (Per-Frame)
+
+The `Bump` arena is reset at the start of each frame, instantly freeing all ephemeral allocations in O(1) time. This pattern eliminates per-object deallocation overhead.
+
+```mermaid
+sequenceDiagram
+    participant Frame as detect() Call
+    participant Arena as Bump Arena
+    participant Allocs as Ephemeral Data
+
+    Frame->>Arena: arena.reset()
+    Note over Arena: All prior allocations freed (O(1))
+    
+    Frame->>Arena: alloc(binarized_image)
+    Frame->>Arena: alloc(integral_image)
+    Frame->>Arena: alloc(contours)
+    Arena->>Allocs: Pointer bumps only
+    
+    Note over Frame: Pipeline runs...
+    Frame->>Frame: Return Vec<Detection>
+    Note over Arena: Memory reused on next call
+```
+
 ## Observability & Debugging
 
 Locus includes built-in instrumentation for performance profiling and visual debugging.
