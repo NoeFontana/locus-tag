@@ -49,3 +49,28 @@ tags = detector.detect(img)
 | :--- | :--- |
 | `Eight` (Default) | **Isolated Tags**. Best performance and robustness to broken borders. |
 | `Four` | **Checkerboards**. Required when tag corners touch other black elements. |
+
+## Development & Testing
+
+Locus includes a rigorous regression suite to ensure detection quality on standard datasets (ICRA 2020).
+
+### Running Regression Tests
+
+The regression suite validates that `Locus` strictly matches or exceeds the ground truth for thousands of images. It is skipped by default if the dataset is missing.
+
+The suite runs 8 parallel tests covering different scenarios:
+- **Standard (8-way)**: `forward`, `rotation`, `random`, `circle`
+- **Checkerboard (4-way)**: `checkerboard_forward`, `checkerboard_rotation`, `checkerboard_random`, `checkerboard_circle`
+
+1. **Download the Dataset**: Ensure you have the ICRA 2020 dataset (images and `tags.csv`).
+2. **Set Environment Variable**: Point to the dataset root.
+   ```bash
+   export LOCUS_DATASET_DIR=/path/to/icra2020
+   ```
+3. **Run the Test**:
+   ```bash
+   cargo test --test regression_icra2020 --release
+   ```
+   *Note: `--release` is recommended for performance on large datasets.*
+
+**Strict Mode**: The test will fail (panic) if any image yields fewer detections than the ground truth.
