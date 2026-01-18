@@ -14,7 +14,7 @@
 //!
 //! Codes are extracted directly from OpenCV's predefined dictionaries to ensure
 //! compatibility with `cv2.aruco.generateImageMarker()`.
-
+//!
 use std::borrow::Cow;
 use std::collections::HashMap;
 
@@ -31,10 +31,10 @@ pub struct TagDictionary {
     pub sample_points: Cow<'static, [(f64, f64)]>,
     /// Raw code table.
     codes: Cow<'static, [u64]>,
-    /// Lookup table for O(1) exact matching.
-    code_to_id: HashMap<u64, u16>,
-    /// All 4 rotated versions of all codes (for Hamming search).
-    rotated_codes: Vec<(u64, u16)>,
+    /// Lookup table for O(1) exact matching. Maps bits to (ID, rotation_count).
+    code_to_id: HashMap<u64, (u16, u8)>,
+    /// All 4 rotated versions of all codes (for Hamming search). Stores (bits, ID, rotation_count).
+    rotated_codes: Vec<(u64, u16, u8)>,
 }
 
 impl TagDictionary {
@@ -51,9 +51,9 @@ impl TagDictionary {
         let mut rotated_codes = Vec::with_capacity(codes.len() * 4);
         for (id, &code) in codes.iter().enumerate() {
             let mut r = code;
-            for _ in 0..4 {
-                code_to_id.insert(r, id as u16);
-                rotated_codes.push((r, id as u16));
+            for rot in 0..4 {
+                code_to_id.insert(r, (id as u16, rot as u8));
+                rotated_codes.push((r, id as u16, rot as u8));
                 r = rotate90(r, dimension);
             }
         }
@@ -81,9 +81,9 @@ impl TagDictionary {
         let mut rotated_codes = Vec::with_capacity(codes.len() * 4);
         for (id, &code) in codes.iter().enumerate() {
             let mut r = code;
-            for _ in 0..4 {
-                code_to_id.insert(r, id as u16);
-                rotated_codes.push((r, id as u16));
+            for rot in 0..4 {
+                code_to_id.insert(r, (id as u16, rot as u8));
+                rotated_codes.push((r, id as u16, rot as u8));
                 r = rotate90(r, dimension);
             }
         }
@@ -117,9 +117,10 @@ impl TagDictionary {
     }
 
     /// Decode bits, trying all 4 rotations.
-    /// Returns (id, hamming_distance) if found within tolerance.
+    /// Returns (id, hamming_distance, rotation_count) if found within tolerance.
+    /// rotation_count is 0-3, representing 90-degree CW increments.
     #[must_use]
-    pub fn decode(&self, bits: u64, max_hamming: u32) -> Option<(u16, u32)> {
+    pub fn decode(&self, bits: u64, max_hamming: u32) -> Option<(u16, u32, u8)> {
         let mask = if self.dimension * self.dimension <= 64 {
             (1u64 << (self.dimension * self.dimension)) - 1
         } else {
@@ -128,18 +129,18 @@ impl TagDictionary {
         let bits = bits & mask;
 
         // Try exact match first (covers ~60% of clean reads) - now O(1) with all rotations in map
-        if let Some(&id) = self.code_to_id.get(&bits) {
-            return Some((id, 0));
+        if let Some(&(id, rot)) = self.code_to_id.get(&bits) {
+            return Some((id, 0, rot));
         }
 
         if max_hamming > 0 {
-            let mut best: Option<(u16, u32)> = None;
-            for &(code_rot, id) in &self.rotated_codes {
+            let mut best: Option<(u16, u32, u8)> = None;
+            for &(code_rot, id, rot) in &self.rotated_codes {
                 let hamming = (bits ^ code_rot).count_ones();
-                if hamming <= max_hamming && best.is_none_or(|(_, h)| hamming < h) {
-                    best = Some((id, hamming));
-                    if hamming == 1 {
-                        // Early exit if we found a very good match (optional optimization)
+                if hamming <= max_hamming && best.as_ref().map_or(true, |&(_, h, _)| hamming < h) {
+                    best = Some((id, hamming, rot));
+                    if hamming == 0 {
+                        break;
                     }
                 }
             }
@@ -425,7 +426,7 @@ pub static ARUCO_4X4_50_CODES: [u64; 50] = [
     0x00000000f379, 0x00000000d30f, 0x000000007510, 0x000000009490,
     0x00000000ae18, 0x00000000ff20, 0x000000006fb0, 0x000000005a38,
     0x0000000018e8, 0x000000001454, 0x00000000314c, 0x000000004d1c,
-    0x000000001724, 0x00000000d774, 0x00000000fcb4, 0x0000000026d2,
+    0x000000001724, 0x00000000d774, 0x0000000026d2, 0x00000000fcb4,
     0x00000000740a, 0x00000000c80a,
 ];
 

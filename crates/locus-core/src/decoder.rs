@@ -510,10 +510,11 @@ pub trait TagDecoder: Send + Sync {
     fn dimension(&self) -> usize;
     /// Returns the ideal sample points in canonical coordinates [-1, 1].
     fn sample_points(&self) -> &[(f64, f64)];
-    /// Decodes the extracted bits into a tag ID and hamming distance.
+    /// Decodes the extracted bits into a tag ID, hamming distance, and rotation count.
     ///
-    /// Returns `Some((id, hamming))` if decoding is successful, `None` otherwise.
-    fn decode(&self, bits: u64) -> Option<(u32, u32)>; // (id, hamming)
+    /// Returns `Some((id, hamming, rotation))` if decoding is successful, `None` otherwise.
+    /// `rotation` is 0-3, representing 90-degree CW increments.
+    fn decode(&self, bits: u64) -> Option<(u32, u32, u8)>; // (id, hamming, rotation)
     /// Get the original code for a given ID (useful for testing/simulation).
     fn get_code(&self, id: u16) -> Option<u64>;
 }
@@ -533,11 +534,11 @@ impl TagDecoder for AprilTag36h11 {
         &crate::dictionaries::APRILTAG_36H11.sample_points
     }
 
-    fn decode(&self, bits: u64) -> Option<(u32, u32)> {
+    fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
         // Use the full 587-code dictionary with O(1) exact match + hamming search
         crate::dictionaries::APRILTAG_36H11
             .decode(bits, 4) // Allow up to 4 bit errors for maximum recall
-            .map(|(id, hamming)| (u32::from(id), hamming))
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 
     fn get_code(&self, id: u16) -> Option<u64> {
@@ -560,10 +561,10 @@ impl TagDecoder for AprilTag16h5 {
         &crate::dictionaries::APRILTAG_16H5.sample_points
     }
 
-    fn decode(&self, bits: u64) -> Option<(u32, u32)> {
+    fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
         crate::dictionaries::APRILTAG_16H5
             .decode(bits, 1) // Allow up to 1 bit error (16h5 has lower hamming distance)
-            .map(|(id, hamming)| (u32::from(id), hamming))
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 
     fn get_code(&self, id: u16) -> Option<u64> {
@@ -586,10 +587,10 @@ impl TagDecoder for ArUco4x4_50 {
         &crate::dictionaries::ARUCO_4X4_50.sample_points
     }
 
-    fn decode(&self, bits: u64) -> Option<(u32, u32)> {
+    fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
         crate::dictionaries::ARUCO_4X4_50
             .decode(bits, 1)
-            .map(|(id, hamming)| (u32::from(id), hamming))
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 
     fn get_code(&self, id: u16) -> Option<u64> {
@@ -612,10 +613,10 @@ impl TagDecoder for ArUco4x4_100 {
         &crate::dictionaries::ARUCO_4X4_100.sample_points
     }
 
-    fn decode(&self, bits: u64) -> Option<(u32, u32)> {
+    fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
         crate::dictionaries::ARUCO_4X4_100
             .decode(bits, 1)
-            .map(|(id, hamming)| (u32::from(id), hamming))
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 
     fn get_code(&self, id: u16) -> Option<u64> {
@@ -651,10 +652,10 @@ impl TagDecoder for GenericDecoder {
         &self.dict.sample_points
     }
 
-    fn decode(&self, bits: u64) -> Option<(u32, u32)> {
+    fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
         self.dict
             .decode(bits, self.dict.hamming_distance as u32)
-            .map(|(id, hamming)| (u32::from(id), hamming))
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 
     fn get_code(&self, id: u16) -> Option<u64> {
@@ -706,7 +707,7 @@ mod tests {
 
             let result = decoder.decode(test_bits);
             prop_assert!(result.is_some());
-            let (decoded_id, _) = result.expect("Should decode valid pattern");
+            let (decoded_id, _, _) = result.expect("Should decode valid pattern");
             prop_assert_eq!(decoded_id, u32::from(orig_id));
         }
 
@@ -714,7 +715,7 @@ mod tests {
         fn test_false_positive_resistance(bits in 0..u64::MAX) {
             let decoder = AprilTag36h11;
             // Random bitstreams should rarely match any of the 587 codes
-            if let Some((_id, hamming)) = decoder.decode(bits) {
+            if let Some((_id, hamming, _rot)) = decoder.decode(bits) {
                 // If it decodes, it must have low hamming distance
                 prop_assert!(hamming <= 4);
             }
@@ -759,7 +760,11 @@ mod tests {
                 .get_code(id)
                 .expect("valid ID");
             let result = decoder.decode(code);
-            assert_eq!(result, Some((u32::from(id), 0)), "ID {id} should decode");
+            assert!(result.is_some());
+            let (id_out, hamming_out, rot_out) = result.unwrap();
+            assert_eq!(id_out, u32::from(id));
+            assert_eq!(hamming_out, 0);
+            assert_eq!(rot_out, 0);
         }
     }
 
@@ -890,7 +895,7 @@ mod tests {
 
             if let Some(h) = Homography::square_to_quad(&dst) {
                 if let Some(bits) = sample_grid(&img, &h, &decoder, 20.0) {
-                    if let Some((id, hamming)) = decoder.decode(bits) {
+                    if let Some((id, hamming, _rot)) = decoder.decode(bits) {
                         decoded.push((id, hamming));
                     }
                 }

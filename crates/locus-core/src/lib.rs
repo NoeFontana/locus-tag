@@ -390,9 +390,19 @@ impl Detector {
                         decoder.as_ref(),
                         self.config.decoder_min_contrast,
                     )
-                        && let Some((id, hamming)) = decoder.decode(bits) {
+                        && let Some((id, hamming, rot)) = decoder.decode(bits) {
                             cand.id = id;
                             cand.hamming = hamming;
+
+                            // The internal detector (both small and large quads) now ensures CW order.
+                            // We re-orient based on the tag's decoded rotation to find the physical TL.
+                            // Standard output: 0:TL, 1:TR, 2:BR, 3:BL (Clockwise)
+                            let mut reordered = [[0.0; 2]; 4];
+                            for i in 0..4 {
+                                let src_idx = (i + usize::from(rot)) % 4;
+                                reordered[i] = cand.corners[src_idx];
+                            }
+                            cand.corners = reordered;
 
                             // Adjust coordinates for benchmark compliance (0.5 offset)
                             for corner in &mut cand.corners {

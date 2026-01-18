@@ -153,23 +153,30 @@ pub fn extract_quads_with_config(
 
                     if reduced.len() == 5 {
                         let area = polygon_area(&reduced);
-                        let compactness = (12.566 * area) / (perimeter * perimeter);
+                        let compactness = (12.566 * area.abs()) / (perimeter * perimeter);
 
-                        if area > f64::from(config.quad_min_area) && compactness > 0.1 {
+                        if area.abs() > f64::from(config.quad_min_area) && compactness > 0.1 {
+                            // Standardize to CW for consistency
+                            let quad_pts = if area > 0.0 {
+                                [reduced[0], reduced[1], reduced[2], reduced[3]]
+                            } else {
+                                [reduced[0], reduced[3], reduced[2], reduced[1]]
+                            };
+
                             let mut ok = true;
                             for i in 0..4 {
-                                let d2 = (reduced[i].x - reduced[i + 1].x).powi(2)
-                                    + (reduced[i].y - reduced[i + 1].y).powi(2);
+                                let d2 = (quad_pts[i].x - quad_pts[(i + 1) % 4].x).powi(2)
+                                    + (quad_pts[i].y - quad_pts[(i + 1) % 4].y).powi(2);
                                 if d2 < min_edge_len_sq { ok = false; break; }
                             }
 
                             if ok {
                                 let center = polygon_center(&reduced);
                                 let corners = [
-                                    refine_corner(&arena, img, reduced[0], reduced[3], reduced[1], config.subpixel_refinement_sigma),
-                                    refine_corner(&arena, img, reduced[1], reduced[0], reduced[2], config.subpixel_refinement_sigma),
-                                    refine_corner(&arena, img, reduced[2], reduced[1], reduced[3], config.subpixel_refinement_sigma),
-                                    refine_corner(&arena, img, reduced[3], reduced[2], reduced[0], config.subpixel_refinement_sigma),
+                                    refine_corner(&arena, img, quad_pts[0], quad_pts[3], quad_pts[1], config.subpixel_refinement_sigma),
+                                    refine_corner(&arena, img, quad_pts[1], quad_pts[0], quad_pts[2], config.subpixel_refinement_sigma),
+                                    refine_corner(&arena, img, quad_pts[2], quad_pts[1], quad_pts[3], config.subpixel_refinement_sigma),
+                                    refine_corner(&arena, img, quad_pts[3], quad_pts[2], quad_pts[0], config.subpixel_refinement_sigma),
                                 ];
 
                                 let edge_score = calculate_edge_score(img, corners);
@@ -341,7 +348,7 @@ fn polygon_area(points: &[Point]) -> f64 {
     for i in 0..points.len() - 1 {
         area += (points[i].x * points[i + 1].y) - (points[i + 1].x * points[i].y);
     }
-    area.abs() * 0.5
+    area * 0.5
 }
 
 fn polygon_center(points: &[Point]) -> [f64; 2] {

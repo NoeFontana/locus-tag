@@ -176,7 +176,14 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
         
         for det in &detections {
             if let Some(gt_corners) = gt.corners.get(&det.id) {
-                total_rmse += calculate_rmse(det.corners, *gt_corners);
+                // Map library standard (CW: TL, TR, BR, BL) to ICRA 2020 convention (TR, TL, BL, BR)
+                let reordered_det = [
+                    det.corners[1], // ICRA Idx 0 <- Lib 1 (TR)
+                    det.corners[0], // ICRA Idx 1 <- Lib 0 (TL)
+                    det.corners[3], // ICRA Idx 2 <- Lib 3 (BL)
+                    det.corners[2], // ICRA Idx 3 <- Lib 2 (BR)
+                ];
+                total_rmse += calculate_rmse(reordered_det, *gt_corners);
                 match_count += 1;
             }
         }

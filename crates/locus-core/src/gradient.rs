@@ -230,11 +230,16 @@ fn try_form_quad(
 
     // Validate quad: check area and convexity
     let area = quad_area(&[c0, c1, c2, c3]);
-    if !(16.0..=1_000_000.0).contains(&area) {
+    if area.abs() < 16.0 || area.abs() > 1_000_000.0 {
         return None;
     }
 
-    Some([c0, c1, c2, c3])
+    // In image coordinates (Y-down), positive shoelace sum means Clockwise.
+    if area > 0.0 {
+        Some([c0, c1, c2, c3])
+    } else {
+        Some([c0, c3, c2, c1]) // Reverse CCW to CW
+    }
 }
 
 fn line_intersection(s1: &LineSegment, s2: &LineSegment) -> Option<[f32; 2]> {
@@ -260,7 +265,7 @@ fn quad_area(corners: &[[f32; 2]; 4]) -> f32 {
         area += corners[i][0] * corners[j][1];
         area -= corners[j][0] * corners[i][1];
     }
-    area.abs() * 0.5
+    area * 0.5
 }
 
 /// Fit a quad from a small component using on-demand gradient computation.
