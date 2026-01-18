@@ -259,4 +259,81 @@ proptest! {
             _ => panic!("Solver consensus failed between DLT and optimized solver"),
         }
     }
+
+    /// Property: Monte Carlo Noise Injection (Phase 4: Noise Gate).
+    /// Verifies that small input noise doesn't cause disproportionate output error.
+    #[test]
+    fn test_homography_noise_robustness(
+        // Noise sigma in pixels
+        noise_sigma in 0.01..0.2f64,
+        // Canonical points scale (to simulate realistic pixel coordinates)
+        scale in 100.0..1000.0f64
+    ) {
+        let src_sq = [
+            [-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]
+        ];
+        
+        // Ground truth destination: a slightly rotated and translated quad
+        let center_x = 500.0;
+        let center_y = 500.0;
+        let angle: f64 = 0.2; // some rotation
+        let cos_a = angle.cos();
+        let sin_a = angle.sin();
+        
+        let mut dst_gt = [[0.0; 2]; 4];
+        for i in 0..4 {
+            let x = src_sq[i][0] * scale;
+            let y = src_sq[i][1] * scale;
+            dst_gt[i][0] = center_x + x * cos_a - y * sin_a;
+            dst_gt[i][1] = center_y + x * sin_a + y * cos_a;
+        }
+        
+        let h_gt = Homography::from_pairs(&src_sq, &dst_gt).expect("GT must be valid");
+        
+        // Add Gaussian noise (approximated here for the test)
+        // Since proptest doesn't have a built-in normal distribution strategist easily available here,
+        // we'll use 8 uniform samples to approximate a normal distribution (Central Limit Theorem).
+        let mut noisy_dst = dst_gt;
+        let mut seed = 42u64;
+        let mut pseudo_rand = || {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            (seed as f64) / (u64::MAX as f64)
+        };
+
+        for i in 0..4 {
+            // Box-Muller or CLT for noise
+            let mut noise_x = 0.0;
+            let mut noise_y = 0.0;
+            for _ in 0..4 {
+                noise_x += pseudo_rand() - 0.5;
+                noise_y += pseudo_rand() - 0.5;
+            }
+            // Variance of sum of 4 U(-0.5, 0.5) is 4 * (1/12) = 1/3. 
+            // So scale by sqrt(3) * sigma to get N(0, sigma^2)
+            noisy_dst[i][0] += noise_x * 1.732 * noise_sigma;
+            noisy_dst[i][1] += noise_y * 1.732 * noise_sigma;
+        }
+        
+        if let Some(h_noisy) = Homography::from_pairs(&src_sq, &noisy_dst) {
+            // Check internal grid of points
+            let k = 3.5; // Error amplification factor threshold
+            let max_err_allowed = k * noise_sigma;
+            
+            for gx in -5..=5 {
+                for gy in -5..=5 {
+                    let p = [gx as f64 * 0.2, gy as f64 * 0.2];
+                    let p_gt = h_gt.project(p);
+                    let p_noisy = h_noisy.project(p);
+                    
+                    let err_x = (p_gt[0] - p_noisy[0]).abs();
+                    let err_y = (p_gt[1] - p_noisy[1]).abs();
+                    let err = (err_x * err_x + err_y * err_y).sqrt();
+                    
+                    assert!(err < max_err_allowed, 
+                        "Noise amplification too high: err={:.4}px > {:.4}px (k*sigma) at point {:?}", 
+                        err, max_err_allowed, p);
+                }
+            }
+        }
+    }
 }
