@@ -267,6 +267,7 @@ impl ThresholdEngine {
         }
 
         // Propagation pass
+        /*
         for _ in 0..2 {
             for ty in 0..tiles_high {
                 for tx in 0..tiles_wide {
@@ -299,6 +300,7 @@ impl ThresholdEngine {
                 }
             }
         }
+        */
 
         // Write thresholds and binary output in parallel
         binary_output.par_chunks_mut(ts * img.width).enumerate().for_each(|(ty, bin_tile_rows)| {

@@ -98,7 +98,7 @@ impl Default for DetectorConfig {
     fn default() -> Self {
         Self {
             threshold_tile_size: 4, 
-            threshold_min_range: 2, // Lowered from 3 to capture very low contrast edges
+            threshold_min_range: 10, // Increased from 2 to reduce noise with tiled thresholding
             enable_bilateral: true,
             bilateral_sigma_space: 0.8,
             bilateral_sigma_color: 30.0,
@@ -145,10 +145,15 @@ pub struct DetectorConfigBuilder {
     quad_min_fill_ratio: Option<f32>,
     quad_max_fill_ratio: Option<f32>,
     quad_min_edge_length: Option<f64>,
+    /// Minimum gradient magnitude along edges (rejects weak candidates).
     pub quad_min_edge_score: Option<f64>,
+    /// Sigma for Gaussian in subpixel refinement.
     pub subpixel_refinement_sigma: Option<f64>,
+    /// Connectivity mode for segmentation (4 or 8).
     pub segmentation_connectivity: Option<SegmentationConnectivity>,
+    /// Upscale factor for low-res images (1 = no upscale).
     pub upscale_factor: Option<usize>,
+    /// Minimum contrast for decoder to accept a tag.
     pub decoder_min_contrast: Option<f64>,
 }
 

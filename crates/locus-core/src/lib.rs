@@ -57,7 +57,6 @@ pub use crate::config::{DetectOptions, DetectorConfig, TagFamily};
 use rayon::prelude::*;
 use crate::decoder::TagDecoder;
 use crate::image::ImageView;
-use crate::threshold::ThresholdEngine;
 use bumpalo::Bump;
 
 /// Result of a tag detection.
@@ -317,6 +316,7 @@ impl Detector {
                 img.width,
                 img.height,
                 self.config.segmentation_connectivity == config::SegmentationConnectivity::Eight,
+                self.config.quad_min_area, // Keep the noise suppression
             )
         };
         stats.segmentation_ms = start_seg.elapsed().as_secs_f64() * 1000.0;

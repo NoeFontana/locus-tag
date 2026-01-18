@@ -262,6 +262,7 @@ pub fn label_components_threshold_model<'a>(
     width: usize,
     height: usize,
     use_8_connectivity: bool,
+    min_area: u32,
 ) -> LabelResult<'a> {
     // Compute signed deviation: negative = dark (below threshold), positive = light
     // We only care about dark regions (tag interior) for now
@@ -361,25 +362,22 @@ pub fn label_components_threshold_model<'a>(
         }
     }
 
-    let mut root_to_label: Vec<u32> = vec![0; runs.len()];
-    let mut component_stats: Vec<ComponentStats> = Vec::new();
-    let mut next_label = 1u32;
-    let mut run_roots = Vec::with_capacity(runs.len());
+    // Pass 3: Aggregate stats for ALL potential components
+    let mut root_to_temp_idx = vec![usize::MAX; runs.len()];
+    let mut temp_stats = Vec::new();
 
     for run in &runs {
         let root = uf.find(run.id) as usize;
-        run_roots.push(root);
-        if root_to_label[root] == 0 {
-            root_to_label[root] = next_label;
-            next_label += 1;
-            component_stats.push(ComponentStats {
+        if root_to_temp_idx[root] == usize::MAX {
+            root_to_temp_idx[root] = temp_stats.len();
+            temp_stats.push(ComponentStats {
                 first_pixel_x: run.x_start as u16,
                 first_pixel_y: run.y as u16,
                 ..Default::default()
             });
         }
-        let label_idx = (root_to_label[root] - 1) as usize;
-        let stats = &mut component_stats[label_idx];
+        let s_idx = root_to_temp_idx[root];
+        let stats = &mut temp_stats[s_idx];
         stats.min_x = stats.min_x.min(run.x_start as u16);
         stats.max_x = stats.max_x.max(run.x_end as u16);
         stats.min_y = stats.min_y.min(run.y as u16);
@@ -387,11 +385,33 @@ pub fn label_components_threshold_model<'a>(
         stats.pixel_count += run.x_end - run.x_start + 1;
     }
 
+    // Pass 4: Filter by area and assign final labels
+    let mut component_stats = Vec::with_capacity(temp_stats.len());
+    let mut root_to_final_label = vec![0u32; runs.len()];
+    let mut next_label = 1u32;
+
+    for root in 0..runs.len() {
+        let s_idx = root_to_temp_idx[root];
+        if s_idx != usize::MAX {
+            let s = temp_stats[s_idx];
+            if s.pixel_count >= min_area {
+                component_stats.push(s);
+                root_to_final_label[root] = next_label;
+                next_label += 1;
+            }
+        }
+    }
+
+    // Pass 5: Parallel label writing for surviving components
     let labels = arena.alloc_slice_fill_copy(width * height, 0u32);
     let mut runs_by_y: Vec<Vec<(usize, usize, u32)>> = vec![Vec::new(); height];
-    for (run, root) in runs.iter().zip(run_roots) {
-        let label = root_to_label[root];
-        runs_by_y[run.y as usize].push((run.x_start as usize, run.x_end as usize, label));
+    
+    for run in &runs {
+        let root = uf.find(run.id) as usize;
+        let label = root_to_final_label[root];
+        if label > 0 {
+            runs_by_y[run.y as usize].push((run.x_start as usize, run.x_end as usize, label));
+        }
     }
 
     labels.par_chunks_exact_mut(width).enumerate().for_each(|(y, row)| {
