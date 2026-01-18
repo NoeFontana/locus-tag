@@ -190,7 +190,7 @@ fn try_form_quad(
     // Cluster segments into two groups by their gradient direction (roughly parallel pairs)
     // We sort segments by angle to easily find two pairs.
     let mut segs = [*s0, *s1, *s2, *s3];
-    segs.sort_by(|a, b| a.angle.partial_cmp(&b.angle).unwrap());
+    segs.sort_by(|a, b| a.angle.total_cmp(&b.angle));
     
     // Check if we have two pairs of roughly parallel segments.
     // Parallel segments have angles ~PI apart or very similar (depending on sign/direction).
@@ -333,8 +333,8 @@ pub fn fit_quad_from_component(
             let mag = (gx.abs() + gy.abs()) as u16;
 
             if mag > 20 {
-                let angle = (gy as f32).atan2(gx as f32);
-                boundary_points.push((x, y, angle, mag as f32));
+                let angle = f32::from(gy).atan2(f32::from(gx));
+                boundary_points.push((x, y, angle, f32::from(mag)));
             }
         }
     }

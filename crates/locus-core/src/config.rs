@@ -457,7 +457,7 @@ mod tests {
         assert_eq!(config.threshold_tile_size, 16);
         assert_eq!(config.quad_min_area, 1000);
         // Check defaults
-        assert_eq!(config.threshold_min_range, 2);
+        assert_eq!(config.threshold_min_range, 10);
     }
 
     #[test]

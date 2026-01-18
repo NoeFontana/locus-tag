@@ -137,6 +137,7 @@ impl From<SegmentationConnectivity> for locus_core::config::SegmentationConnecti
 
 #[pymethods]
 impl SegmentationConnectivity {
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     fn __getstate__(&self) -> u8 {
         *self as u8
     }

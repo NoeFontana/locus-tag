@@ -306,7 +306,7 @@ impl ThresholdEngine {
         binary_output.par_chunks_mut(ts * img.width).enumerate().for_each(|(ty, bin_tile_rows)| {
             // Safety: Each thread writes to unique portion of threshold_output
             let thresh_tile_rows = unsafe {
-                let ptr = threshold_output.as_ptr() as *mut u8;
+                let ptr = threshold_output.as_ptr().cast_mut();
                 std::slice::from_raw_parts_mut(ptr.add(ty * ts * img.width), ts * img.width)
             };
 
@@ -350,7 +350,7 @@ fn compute_row_tile_stats_simd(src_row: &[u8], stats: &mut [TileStats], tile_siz
         let mut rmin = 255u8;
         let mut rmax = 0u8;
         // Subsampling: Only process every other pixel in the row (stride 2)
-        for &p in chunk.iter() {
+        for &p in chunk {
             rmin = rmin.min(p);
             rmax = rmax.max(p);
         }
@@ -711,7 +711,7 @@ pub fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
     // 2nd Pass: Vertical cumulative sums
     // For large images, we process in vertical blocks to stay in cache.
     const BLOCK_SIZE: usize = 128;
-    let num_blocks = (stride + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    let num_blocks = stride.div_ceil(BLOCK_SIZE);
 
     (0..num_blocks).into_par_iter().for_each(|b| {
         let start_x = b * BLOCK_SIZE;
@@ -724,14 +724,14 @@ pub fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
         
         // Safety: We are writing to unique columns in each parallel task.
         unsafe {
-            let base_ptr = integral.as_ptr() as *mut u64;
+            let base_ptr = integral.as_ptr().cast_mut();
             for y in 1..=h {
                 let row_ptr = base_ptr.add(y * stride + start_x);
-                for i in 0..(end_x - start_x) {
-                    let val = *row_ptr.add(i);
-                    let new_sum = val + col_sums[i];
+                for (i, val) in col_sums.iter_mut().enumerate().take(end_x - start_x) {
+                    let old_val = *row_ptr.add(i);
+                    let new_sum = old_val + *val;
                     *row_ptr.add(i) = new_sum;
-                    col_sums[i] = new_sum;
+                    *val = new_sum;
                 }
             }
         }
@@ -766,7 +766,7 @@ pub fn adaptive_threshold_integral(
     // Precompute interior area inverse (fixed-point 1.31)
     let side = (2 * radius + 1) as u32;
     let area = side * side;
-    let inv_area_fixed = ((1u64 << 31) / area as u64) as u32;
+    let inv_area_fixed = ((1u64 << 31) / u64::from(area)) as u32;
 
     (0..h).into_par_iter().for_each(|y| {
         let y_offset = y * w;
@@ -774,7 +774,7 @@ pub fn adaptive_threshold_integral(
         
         // Safety: Unique row per thread
         let dst_row = unsafe {
-            let ptr = output.as_ptr() as *mut u8;
+            let ptr = output.as_ptr().cast_mut();
             std::slice::from_raw_parts_mut(ptr.add(y_offset), w)
         };
 
@@ -803,7 +803,7 @@ pub fn adaptive_threshold_integral(
         }
 
         // 2. Process Interior (Vectorizable)
-        if x_end > x_start && y >= radius && y + radius + 1 <= h {
+        if x_end > x_start && y >= radius && y + radius < h {
             let row00 = &integral[y0 * stride + (x_start - radius)..];
             let row01 = &integral[y0 * stride + (x_start + radius + 1)..];
             let row10 = &integral[y1 * stride + (x_start - radius)..];
@@ -815,7 +815,7 @@ pub fn adaptive_threshold_integral(
             for i in 0..(x_end - x_start) {
                 let sum = (row11[i] + row00[i]) - (row01[i] + row10[i]);
                 // Fixed-point division: (sum * inv_area) >> 31
-                let mean = ((sum * inv_area_fixed as u64) >> 31) as i16;
+                let mean = ((sum * u64::from(inv_area_fixed)) >> 31) as i16;
                 let threshold = (mean - c).max(0) as u8;
                 interior_dst[i] = if interior_src[i] < threshold { 0 } else { 255 };
             }
@@ -918,7 +918,7 @@ pub fn adaptive_threshold_gradient_window(
         radius_lut[g] = r;
         let side = (2 * r + 1) as u32;
         let area = side * side;
-        inv_area_lut[g] = ((1u64 << 31) / area as u64) as u32;
+        inv_area_lut[g] = ((1u64 << 31) / u64::from(area)) as u32;
     }
 
     use rayon::prelude::*;
@@ -929,7 +929,7 @@ pub fn adaptive_threshold_gradient_window(
         
         // Safety: Unique row per thread
         let dst_row = unsafe {
-            let ptr = output.as_ptr() as *mut u8;
+            let ptr = output.as_ptr().cast_mut();
             std::slice::from_raw_parts_mut(ptr.add(y_offset), w)
         };
 
@@ -950,8 +950,8 @@ pub fn adaptive_threshold_gradient_window(
             let sum = (i11 + i00) - (i01 + i10);
             
             // Fixed-point mean computation
-            let mean = if x >= radius && x + radius + 1 <= w && y >= radius && y + radius + 1 <= h {
-                ((sum * inv_area_lut[grad as usize] as u64) >> 31) as i16
+            let mean = if x >= radius && x + radius < w && y >= radius && y + radius < h {
+                ((sum * u64::from(inv_area_lut[grad as usize])) >> 31) as i16
             } else {
                 let actual_area = (x1 - x0) * (y1 - y0);
                 (sum / actual_area as u64) as i16
@@ -987,14 +987,14 @@ pub fn compute_threshold_map(
     // Precompute interior area inverse
     let side = (2 * radius + 1) as u32;
     let area = side * side;
-    let inv_area_fixed = ((1u64 << 31) / area as u64) as u32;
+    let inv_area_fixed = ((1u64 << 31) / u64::from(area)) as u32;
 
     (0..h).into_par_iter().for_each(|y| {
         let y_offset = y * w;
         
         // Safety: Unique row per thread
         let dst_row = unsafe {
-            let ptr = output.as_ptr() as *mut u8;
+            let ptr = output.as_ptr().cast_mut();
             std::slice::from_raw_parts_mut(ptr.add(y_offset), w)
         };
 
@@ -1016,7 +1016,7 @@ pub fn compute_threshold_map(
         }
 
         // 2. Process Interior (Vectorizable)
-        if x_end > x_start && y >= radius && y + radius + 1 <= h {
+        if x_end > x_start && y >= radius && y + radius < h {
             let row00 = &integral[y0 * stride + (x_start - radius)..];
             let row01 = &integral[y0 * stride + (x_start + radius + 1)..];
             let row10 = &integral[y1 * stride + (x_start - radius)..];
@@ -1026,7 +1026,7 @@ pub fn compute_threshold_map(
 
             for i in 0..(x_end - x_start) {
                 let sum = (row11[i] + row00[i]) - (row01[i] + row10[i]);
-                let mean = ((sum * inv_area_fixed as u64) >> 31) as i16;
+                let mean = ((sum * u64::from(inv_area_fixed)) >> 31) as i16;
                 interior_dst[i] = (mean - c).clamp(0, 255) as u8;
             }
         }

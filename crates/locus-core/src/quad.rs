@@ -84,28 +84,28 @@ pub fn extract_quads_with_config(
             let sy = stat.first_pixel_y as usize;
 
             // For small components, try the 9-pixel foundation (gradient-based fitting)
-            if bbox_area < 1200 {
-                if let Some(grad_corners) = crate::gradient::fit_quad_from_component(
+            if bbox_area < 1200
+                && let Some(grad_corners) = crate::gradient::fit_quad_from_component(
                     img, labels, label,
                     stat.min_x as usize, stat.min_y as usize,
                     stat.max_x as usize, stat.max_y as usize,
                 ) {
                     let corners = [
-                        refine_corner(&arena, img, Point { x: grad_corners[0][0] as f64, y: grad_corners[0][1] as f64 },
-                                     Point { x: grad_corners[3][0] as f64, y: grad_corners[3][1] as f64 },
-                                     Point { x: grad_corners[1][0] as f64, y: grad_corners[1][1] as f64 },
+                        refine_corner(&arena, img, Point { x: f64::from(grad_corners[0][0]), y: f64::from(grad_corners[0][1]) },
+                                     Point { x: f64::from(grad_corners[3][0]), y: f64::from(grad_corners[3][1]) },
+                                     Point { x: f64::from(grad_corners[1][0]), y: f64::from(grad_corners[1][1]) },
                                      config.subpixel_refinement_sigma),
-                        refine_corner(&arena, img, Point { x: grad_corners[1][0] as f64, y: grad_corners[1][1] as f64 },
-                                     Point { x: grad_corners[0][0] as f64, y: grad_corners[0][1] as f64 },
-                                     Point { x: grad_corners[2][0] as f64, y: grad_corners[2][1] as f64 },
+                        refine_corner(&arena, img, Point { x: f64::from(grad_corners[1][0]), y: f64::from(grad_corners[1][1]) },
+                                     Point { x: f64::from(grad_corners[0][0]), y: f64::from(grad_corners[0][1]) },
+                                     Point { x: f64::from(grad_corners[2][0]), y: f64::from(grad_corners[2][1]) },
                                      config.subpixel_refinement_sigma),
-                        refine_corner(&arena, img, Point { x: grad_corners[2][0] as f64, y: grad_corners[2][1] as f64 },
-                                     Point { x: grad_corners[1][0] as f64, y: grad_corners[1][1] as f64 },
-                                     Point { x: grad_corners[3][0] as f64, y: grad_corners[3][1] as f64 },
+                        refine_corner(&arena, img, Point { x: f64::from(grad_corners[2][0]), y: f64::from(grad_corners[2][1]) },
+                                     Point { x: f64::from(grad_corners[1][0]), y: f64::from(grad_corners[1][1]) },
+                                     Point { x: f64::from(grad_corners[3][0]), y: f64::from(grad_corners[3][1]) },
                                      config.subpixel_refinement_sigma),
-                        refine_corner(&arena, img, Point { x: grad_corners[3][0] as f64, y: grad_corners[3][1] as f64 },
-                                     Point { x: grad_corners[2][0] as f64, y: grad_corners[2][1] as f64 },
-                                     Point { x: grad_corners[0][0] as f64, y: grad_corners[0][1] as f64 },
+                        refine_corner(&arena, img, Point { x: f64::from(grad_corners[3][0]), y: f64::from(grad_corners[3][1]) },
+                                     Point { x: f64::from(grad_corners[2][0]), y: f64::from(grad_corners[2][1]) },
+                                     Point { x: f64::from(grad_corners[0][0]), y: f64::from(grad_corners[0][1]) },
                                      config.subpixel_refinement_sigma),
                     ];
 
@@ -114,8 +114,8 @@ pub fn extract_quads_with_config(
                         return Some(Detection {
                             id: label,
                             center: [
-                                (grad_corners[0][0] + grad_corners[2][0]) as f64 / 2.0,
-                                (grad_corners[0][1] + grad_corners[2][1]) as f64 / 2.0,
+                                f64::from(grad_corners[0][0] + grad_corners[2][0]) / 2.0,
+                                f64::from(grad_corners[0][1] + grad_corners[2][1]) / 2.0,
                             ],
                             corners: [
                                 [corners[0].x, corners[0].y],
@@ -124,12 +124,11 @@ pub fn extract_quads_with_config(
                                 [corners[3].x, corners[3].y],
                             ],
                             hamming: 0,
-                            decision_margin: bbox_area as f64,
+                            decision_margin: f64::from(bbox_area),
                             pose: None,
                         });
                     }
                 }
-            }
 
             let contour = trace_boundary(&arena, labels, img.width, img.height, sx, sy, label);
 
@@ -145,7 +144,7 @@ pub fn extract_quads_with_config(
                         simplified
                     } else if simpl_len == 4 {
                         let mut closed = BumpVec::new_in(&arena);
-                        for p in simplified.iter() { closed.push(*p); }
+                        for p in &simplified { closed.push(*p); }
                         closed.push(simplified[0]);
                         closed
                     } else {
@@ -156,7 +155,7 @@ pub fn extract_quads_with_config(
                         let area = polygon_area(&reduced);
                         let compactness = (12.566 * area) / (perimeter * perimeter);
 
-                        if area > config.quad_min_area as f64 && compactness > 0.1 {
+                        if area > f64::from(config.quad_min_area) && compactness > 0.1 {
                             let mut ok = true;
                             for i in 0..4 {
                                 let d2 = (reduced[i].x - reduced[i + 1].x).powi(2)
@@ -452,7 +451,7 @@ fn fit_edge_line(img: &ImageView, p1: Point, p2: Point) -> Option<(f64, f64, f64
         return None;
     }
 
-    Some((nx, ny, sum_d / count as f64))
+    Some((nx, ny, sum_d / f64::from(count)))
 }
 
 /// Refine edge position using intensity-based optimization (Kallwies method).
@@ -479,8 +478,8 @@ fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, si
     // Initial line parameters: normal (nx, ny) and distance d from origin
     let nx = -dy / len;
     let ny = dx / len;
-    let mid_x = (p1.x + p2.x) / 2.0;
-    let mid_y = (p1.y + p2.y) / 2.0;
+    let mid_x = f64::midpoint(p1.x, p2.x);
+    let mid_y = f64::midpoint(p1.y, p2.y);
     let mut d = -(nx * mid_x + ny * mid_y);
 
     // Collect pixels within 2 pixels of the edge
@@ -506,7 +505,7 @@ fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, si
 
             // Check if near the edge segment (not infinite line)
             let t = ((x - p1.x) * dx + (y - p1.y) * dy) / (len * len);
-            if t < -0.1 || t > 1.1 {
+            if !(-0.1..=1.1).contains(&t) {
                 px += stride;
                 continue;
             }
@@ -548,8 +547,8 @@ fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, si
         return Some((nx, ny, d));
     }
 
-    let a = dark_sum / dark_count as f64;
-    let b = light_sum / light_count as f64;
+    let a = dark_sum / f64::from(dark_count);
+    let b = light_sum / f64::from(light_count);
     let inv_sigma = 1.0 / sigma;
 
     // Gauss-Newton optimization: refine d (perpendicular offset)

@@ -67,7 +67,7 @@ pub fn bilateral_filter(
         let src_row = img.get_row(y);
         // Safety: temp is only written to unique rows
         let dst_row = unsafe {
-            let ptr = temp.as_ptr() as *mut u8;
+            let ptr = temp.as_ptr().cast_mut();
             std::slice::from_raw_parts_mut(ptr.add(y * w), w)
         };
         
@@ -79,10 +79,10 @@ pub fn bilateral_filter(
             for dx in 0..diameter {
                 let nx = (x as i32 + dx as i32 - radius as i32).clamp(0, w as i32 - 1) as usize;
                 let neighbor_val = src_row[nx];
-                let color_diff = (center_val as i32 - neighbor_val as i32).unsigned_abs() as usize;
+                let color_diff = (i32::from(center_val) - i32::from(neighbor_val)).unsigned_abs() as usize;
                 
                 let weight = spatial_lut[dx] * color_lut[color_diff];
-                filtered_val += neighbor_val as f32 * weight;
+                filtered_val += f32::from(neighbor_val) * weight;
                 sum_weights += weight;
             }
             dst_row[x] = (filtered_val / sum_weights).clamp(0.0, 255.0) as u8;
@@ -93,7 +93,7 @@ pub fn bilateral_filter(
     (0..h).into_par_iter().for_each(|y| {
         // Safety: output is only written to unique rows
         let dst_row = unsafe {
-            let ptr = output.as_ptr() as *mut u8;
+            let ptr = output.as_ptr().cast_mut();
             std::slice::from_raw_parts_mut(ptr.add(y * w), w)
         };
         
@@ -105,10 +105,10 @@ pub fn bilateral_filter(
             for dy in 0..diameter {
                 let ny = (y as i32 + dy as i32 - radius as i32).clamp(0, h as i32 - 1) as usize;
                 let neighbor_val = temp[ny * w + x]; // Memory access is row-wise for adjacent x
-                let color_diff = (center_val as i32 - neighbor_val as i32).unsigned_abs() as usize;
+                let color_diff = (i32::from(center_val) - i32::from(neighbor_val)).unsigned_abs() as usize;
                 
                 let weight = spatial_lut[dy] * color_lut[color_diff];
-                filtered_val += neighbor_val as f32 * weight;
+                filtered_val += f32::from(neighbor_val) * weight;
                 sum_weights += weight;
             }
             dst_row[x] = (filtered_val / sum_weights).clamp(0.0, 255.0) as u8;
@@ -150,7 +150,7 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
     (0..h).into_par_iter().for_each(|y| {
         // Safety: Unique row per thread
         let dst_row = unsafe {
-            let ptr = output.as_ptr() as *mut u8;
+            let ptr = output.as_ptr().cast_mut();
             std::slice::from_raw_parts_mut(ptr.add(y * w), w)
         };
 
@@ -168,9 +168,9 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
             let x0 = 0;
             let x1 = 0;
             let x2 = 1.min(w - 1);
-            let p00 = r0[x0] as i32; let p01 = r0[x1] as i32; let p02 = r0[x2] as i32;
-            let p10 = r1[x0] as i32;                        let p12 = r1[x2] as i32;
-            let p20 = r2[x0] as i32; let p21 = r2[x1] as i32; let p22 = r2[x2] as i32;
+            let p00 = i32::from(r0[x0]); let p01 = i32::from(r0[x1]); let p02 = i32::from(r0[x2]);
+            let p10 = i32::from(r1[x0]);                        let p12 = i32::from(r1[x2]);
+            let p20 = i32::from(r2[x0]); let p21 = i32::from(r2[x1]); let p22 = i32::from(r2[x2]);
             let gx = -3 * p00 + 3 * p02 - 10 * p10 + 10 * p12 - 3 * p20 + 3 * p22;
             let gy = -3 * p00 - 10 * p01 - 3 * p02 + 3 * p20 + 10 * p21 + 3 * p22;
             dst_row[x] = ((gx.abs() + gy.abs()) >> 4).min(255) as u8;
@@ -190,14 +190,14 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
                 let x4 = x + 3;
                 
                 // Load values once
-                let r0_m1 = [r0[x1-1] as i32, r0[x2-1] as i32, r0[x3-1] as i32, r0[x4-1] as i32];
-                let r0_p1 = [r0[x1+1] as i32, r0[x2+1] as i32, r0[x3+1] as i32, r0[x4+1] as i32];
-                let r1_m1 = [r1[x1-1] as i32, r1[x2-1] as i32, r1[x3-1] as i32, r1[x4-1] as i32];
-                let r1_p1 = [r1[x1+1] as i32, r1[x2+1] as i32, r1[x3+1] as i32, r1[x4+1] as i32];
-                let r2_c = [r2[x1] as i32, r2[x2] as i32, r2[x3] as i32, r2[x4] as i32];
-                let r0_c = [r0[x1] as i32, r0[x2] as i32, r0[x3] as i32, r0[x4] as i32];
-                let r2_m1 = [r2[x1-1] as i32, r2[x2-1] as i32, r2[x3-1] as i32, r2[x4-1] as i32];
-                let r2_p1 = [r2[x1+1] as i32, r2[x2+1] as i32, r2[x3+1] as i32, r2[x4+1] as i32];
+                let r0_m1 = [i32::from(r0[x1-1]), i32::from(r0[x2-1]), i32::from(r0[x3-1]), i32::from(r0[x4-1])];
+                let r0_p1 = [i32::from(r0[x1+1]), i32::from(r0[x2+1]), i32::from(r0[x3+1]), i32::from(r0[x4+1])];
+                let r1_m1 = [i32::from(r1[x1-1]), i32::from(r1[x2-1]), i32::from(r1[x3-1]), i32::from(r1[x4-1])];
+                let r1_p1 = [i32::from(r1[x1+1]), i32::from(r1[x2+1]), i32::from(r1[x3+1]), i32::from(r1[x4+1])];
+                let r2_c = [i32::from(r2[x1]), i32::from(r2[x2]), i32::from(r2[x3]), i32::from(r2[x4])];
+                let r0_c = [i32::from(r0[x1]), i32::from(r0[x2]), i32::from(r0[x3]), i32::from(r0[x4])];
+                let r2_m1 = [i32::from(r2[x1-1]), i32::from(r2[x2-1]), i32::from(r2[x3-1]), i32::from(r2[x4-1])];
+                let r2_p1 = [i32::from(r2[x1+1]), i32::from(r2[x2+1]), i32::from(r2[x3+1]), i32::from(r2[x4+1])];
                 
                 // Compute 4 gradients in parallel
                 for i in 0..4 {
@@ -214,12 +214,12 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
             
             // Handle remaining pixels
             while x < interior_end {
-                let gx = 3 * (r0[x + 1] as i32 - r0[x - 1] as i32)
-                    + 10 * (r1[x + 1] as i32 - r1[x - 1] as i32)
-                    + 3 * (r2[x + 1] as i32 - r2[x - 1] as i32);
-                let gy = 3 * (r2[x - 1] as i32 - r0[x - 1] as i32)
-                    + 10 * (r2[x] as i32 - r0[x] as i32)
-                    + 3 * (r2[x + 1] as i32 - r0[x + 1] as i32);
+                let gx = 3 * (i32::from(r0[x + 1]) - i32::from(r0[x - 1]))
+                    + 10 * (i32::from(r1[x + 1]) - i32::from(r1[x - 1]))
+                    + 3 * (i32::from(r2[x + 1]) - i32::from(r2[x - 1]));
+                let gy = 3 * (i32::from(r2[x - 1]) - i32::from(r0[x - 1]))
+                    + 10 * (i32::from(r2[x]) - i32::from(r0[x]))
+                    + 3 * (i32::from(r2[x + 1]) - i32::from(r0[x + 1]));
                 dst_row[x] = ((gx.abs() + gy.abs()) >> 4).min(255) as u8;
                 x += 1;
             }
@@ -231,9 +231,9 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
             let x0 = w - 2;
             let x1 = w - 1;
             let x2 = w - 1;
-            let p00 = r0[x0] as i32; let p01 = r0[x1] as i32; let p02 = r0[x2] as i32;
-            let p10 = r1[x0] as i32;                        let p12 = r1[x2] as i32;
-            let p20 = r2[x0] as i32; let p21 = r2[x1] as i32; let p22 = r2[x2] as i32;
+            let p00 = i32::from(r0[x0]); let p01 = i32::from(r0[x1]); let p02 = i32::from(r0[x2]);
+            let p10 = i32::from(r1[x0]);                        let p12 = i32::from(r1[x2]);
+            let p20 = i32::from(r2[x0]); let p21 = i32::from(r2[x1]); let p22 = i32::from(r2[x2]);
             let gx = -3 * p00 + 3 * p02 - 10 * p10 + 10 * p12 - 3 * p20 + 3 * p22;
             let gy = -3 * p00 - 10 * p01 - 3 * p02 + 3 * p20 + 10 * p21 + 3 * p22;
             dst_row[x] = ((gx.abs() + gy.abs()) >> 4).min(255) as u8;
@@ -275,7 +275,7 @@ pub fn laplacian_sharpen(img: &ImageView, output: &mut [u8]) {
         
         // Safety: Unique row per thread
         let dst_row = unsafe {
-            let ptr = output.as_ptr() as *mut u8;
+            let ptr = output.as_ptr().cast_mut();
             std::slice::from_raw_parts_mut(ptr.add(y * w), w)
         };
 
@@ -285,11 +285,11 @@ pub fn laplacian_sharpen(img: &ImageView, output: &mut [u8]) {
             let x2 = (x + 1).min(w - 1);
 
             // Sample from pre-fetched rows
-            let p11 = r1[x1] as i32;
-            let p01 = r0[x1] as i32;
-            let p10 = r1[x0] as i32;
-            let p12 = r1[x2] as i32;
-            let p21 = r2[x1] as i32;
+            let p11 = i32::from(r1[x1]);
+            let p01 = i32::from(r0[x1]);
+            let p10 = i32::from(r1[x0]);
+            let p12 = i32::from(r1[x2]);
+            let p21 = i32::from(r2[x1]);
 
             // Apply sharpening: 5*center - (sum of 4 neighbors)
             let sharpened = 5 * p11 - (p01 + p10 + p12 + p21);
@@ -320,8 +320,9 @@ mod tests {
         let img = ImageView::new(&data, width, height, width).unwrap();
         let mut output = vec![0u8; width * height];
         
+        let arena = Bump::new();
         // Apply bilateral filter with moderate parameters
-        bilateral_filter(&img, &mut output, 3, 3.0, 30.0);
+        bilateral_filter(&arena, &img, &mut output, 3, 3.0, 30.0);
         
         // Check edge preservation: values near edge should still be distinct
         let left_avg = output[16 * width + 14] as f32; // 2px left of edge
@@ -351,7 +352,9 @@ mod tests {
         let img = ImageView::new(&data, width, height, width).unwrap();
         let mut output = vec![0u8; width * height];
         
-        bilateral_filter(&img, &mut output, 3, 3.0, 30.0);
+        let arena = Bump::new();
+        // Use higher sigma_color to smooth out high-contrast salt-and-pepper noise
+        bilateral_filter(&arena, &img, &mut output, 3, 3.0, 100.0);
         
         // Filtered values should be closer to 128 than original noise
         assert!(

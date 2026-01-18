@@ -6,6 +6,29 @@
 //!
 //! The pipeline includes adaptive thresholding, segmentation, quad extraction, and decoding.
 //!
+//! # Architecture Overview
+//!
+//! The Locus pipeline follows a Data-Oriented Design approach optimized for strict latency budgets:
+//!
+//! 1. **Preprocessing (Adaptive Thresholding)**:
+//!    - Integral image computation for constant-time local window stats.
+//!    - Multiversion SIMD kernels for min/max filtering.
+//!    - Optional bilateral filtering and sharpening.
+//!
+//! 2. **Segmentation**:
+//!    - Threshold-model aware connected components labeling (CCL).
+//!    - Union-Find data structure with flat arrays for cache locality.
+//!
+//! 3. **Quad Extraction**:
+//!    - Contour tracing and polygon approximation (Douglas-Peucker).
+//!    - Sub-pixel corner refinement using intensity-based optimization.
+//!    - Geometric heuristics filtering (area, aspect ratio).
+//!
+//! 4. **Decoding**:
+//!    - Homography-based grid sampling.
+//!    - Plugin architecture for multiple tag families (Apriltag 36h11, ArUco).
+//!    - Hamming error correction.
+//!
 //! # Configuration
 //!
 //! The detector supports two levels of configuration:
@@ -161,6 +184,9 @@ impl Detector {
     }
 
     /// Detection with both custom options and timing statistics.
+    ///
+    /// # Panics
+    /// Panics if the upscaled image buffer cannot be created or viewed.
     pub fn detect_with_stats_and_options(
         &mut self,
         img: &ImageView,
@@ -230,7 +256,7 @@ impl Detector {
         }
 
         self.arena.reset();
-        let img = img; // Simplify reference
+        // let img = img; // Simplify reference - removed redundant binder
         let start_thresh = std::time::Instant::now();
         
         // 1a. Optional bilateral pre-filtering for edge-preserving noise reduction
@@ -281,7 +307,7 @@ impl Detector {
                 crate::threshold::adaptive_threshold_gradient_window(
                     &sharpened_img,
                     gradient,
-                    &integral,
+                    integral,
                     binarized,
                     self.config.threshold_min_radius,
                     self.config.threshold_max_radius,
@@ -292,7 +318,7 @@ impl Detector {
                 // Fallback to fixed 13x13 window (radius=6)
                 crate::threshold::adaptive_threshold_integral(
                     &sharpened_img,
-                    &integral,
+                    integral,
                     binarized,
                     6,
                     3,
@@ -300,7 +326,7 @@ impl Detector {
             }
             
             // For threshold_map, store the local mean (for potential threshold-model segmentation)
-            crate::threshold::compute_threshold_map(&sharpened_img, &integral, threshold_map, 6, 3);
+            crate::threshold::compute_threshold_map(&sharpened_img, integral, threshold_map, 6, 3);
         }
         stats.threshold_ms = start_thresh.elapsed().as_secs_f64() * 1000.0;
 
@@ -362,8 +388,8 @@ impl Detector {
                         &h,
                         decoder.as_ref(),
                         self.config.decoder_min_contrast,
-                    ) {
-                        if let Some((id, hamming)) = decoder.decode(bits) {
+                    )
+                        && let Some((id, hamming)) = decoder.decode(bits) {
                             cand.id = id;
                             cand.hamming = hamming;
 
@@ -388,7 +414,6 @@ impl Detector {
 
                             return Some(cand);
                         }
-                    }
                 }
                 None
             })
