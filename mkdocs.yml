@@ -1,6 +1,6 @@
 site_name: Locus
 site_description: High-performance fiducial marker detector.
-job_name: locus
+
 site_url: https://noefontana.github.io/locus-tag/
 repo_url: https://github.com/NoeFontana/locus-tag
 repo_name: NoeFontana/locus-tag
@@ -11,6 +11,7 @@ theme:
     - navigation.expand
     - navigation.indexes
     - content.code.copy
+    - content.code.annotate
   palette:
     - scheme: default
       primary: teal
@@ -25,6 +26,19 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
 
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
 plugins:
   - search
   - mkdocstrings:
@@ -35,5 +49,6 @@ plugins:
 
 nav:
   - Home: index.md
+  - Architecture: architecture.md
   - Coordinate Systems: coordinates.md
   - API Reference: api.md

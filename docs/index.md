@@ -6,6 +6,7 @@
 - **High Performance**: Written in Rust with SIMD optimizations.
 - **Zero-Copy**: Efficient Python integration via NumPy.
 - **Easy to Use**: Pythonic API with type hints.
+- **Documented Architecture**: See the [System Architecture](architecture.md) for design details.
 
 ## Installation
 

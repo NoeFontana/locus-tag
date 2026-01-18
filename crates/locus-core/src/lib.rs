@@ -14,6 +14,7 @@
 //!    - Integral image computation for constant-time local window stats.
 //!    - Multiversion SIMD kernels for min/max filtering.
 //!    - Optional bilateral filtering and sharpening.
+//!    - See the [Architecture Guide](../architecture/index.html) for memory layout details.
 //!
 //! 2. **Segmentation**:
 //!    - Threshold-model aware connected components labeling (CCL).
