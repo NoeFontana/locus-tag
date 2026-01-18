@@ -366,3 +366,93 @@ fn test_homography_duplicate_corners() {
     );
 }
 
+// =============================================================================
+// WHITE NOISE STRESS TEST (False Positive Rejection)
+// =============================================================================
+
+/// Test that the detector does not hallucinate tags in pure random noise.
+///
+/// In low-light conditions, camera gain creates grain. A "high recall" detector
+/// that is too sensitive will find false positives in this noise.
+///
+/// This test generates 100 random noise images and asserts 0 total detections.
+#[test]
+fn test_no_false_positives_in_white_noise() {
+    use rand::prelude::*;
+    
+    const WIDTH: usize = 320;
+    const HEIGHT: usize = 240;
+    const NUM_IMAGES: usize = 100;
+    
+    let mut rng = thread_rng();
+    let mut total_false_positives = 0;
+    let mut false_positive_images: Vec<usize> = Vec::new();
+    
+    for image_idx in 0..NUM_IMAGES {
+        // Generate pure uniform random noise
+        let mut noise_data = vec![0u8; WIDTH * HEIGHT];
+        rng.fill_bytes(&mut noise_data);
+        
+        let img = ImageView::new(&noise_data, WIDTH, HEIGHT, WIDTH).unwrap();
+        let mut detector = Detector::new();
+        let options = DetectOptions::with_families(&[TagFamily::AprilTag36h11]);
+        
+        let detections = detector.detect_with_options(&img, &options);
+        
+        if !detections.is_empty() {
+            total_false_positives += detections.len();
+            false_positive_images.push(image_idx);
+        }
+    }
+    
+    assert_eq!(
+        total_false_positives, 0,
+        "Detector found {} false positive(s) in {} random noise images. \
+         Images with false positives: {:?}. \
+         Consider tightening quad_min_edge_score or decoder Hamming threshold.",
+        total_false_positives,
+        NUM_IMAGES,
+        false_positive_images
+    );
+}
+
+/// Test false positive rejection in structured noise (gradient patterns).
+#[test]
+fn test_no_false_positives_in_gradient_noise() {
+    const WIDTH: usize = 256;
+    const HEIGHT: usize = 256;
+    
+    // Horizontal gradient
+    let mut gradient = vec![0u8; WIDTH * HEIGHT];
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            gradient[y * WIDTH + x] = x as u8;
+        }
+    }
+    
+    let img = ImageView::new(&gradient, WIDTH, HEIGHT, WIDTH).unwrap();
+    let mut detector = Detector::new();
+    let detections = detector.detect(&img);
+    
+    assert!(
+        detections.is_empty(),
+        "Detector found {} false positive(s) in gradient image",
+        detections.len()
+    );
+    
+    // Diagonal gradient
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            gradient[y * WIDTH + x] = ((x + y) / 2) as u8;
+        }
+    }
+    
+    let img = ImageView::new(&gradient, WIDTH, HEIGHT, WIDTH).unwrap();
+    let detections = detector.detect(&img);
+    
+    assert!(
+        detections.is_empty(),
+        "Detector found {} false positive(s) in diagonal gradient",
+        detections.len()
+    );
+}
