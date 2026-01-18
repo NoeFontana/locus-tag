@@ -244,7 +244,7 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
 /// Apply a 3x3 Laplacian sharpening filter to enhance edges.
 ///
 /// This filter uses the kernel:
-/// ```
+/// ```text
 /// [ 0  -1   0 ]
 /// [-1   5  -1 ]
 /// [ 0  -1   0 ]

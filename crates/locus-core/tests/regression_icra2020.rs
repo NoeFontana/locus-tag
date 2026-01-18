@@ -52,13 +52,7 @@ struct RegressionReport {
 }
 
 fn calculate_rmse(det_corners: [[f64; 2]; 4], gt_corners: [[f64; 2]; 4]) -> f64 {
-    let mut sum_sq = 0.0;
-    for i in 0..4 {
-        let dx = det_corners[i][0] - gt_corners[i][0];
-        let dy = det_corners[i][1] - gt_corners[i][1];
-        sum_sq += dx * dx + dy * dy;
-    }
-    (sum_sq / 4.0).sqrt()
+    locus_core::test_utils::compute_rmse(&det_corners, &gt_corners)
 }
 
 fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
@@ -251,3 +245,96 @@ define_regression_test!(test_regression_icra2020_checkerboard_forward, "forward"
 define_regression_test!(test_regression_icra2020_checkerboard_rotation, "rotation", true);
 define_regression_test!(test_regression_icra2020_checkerboard_random, "random", true);
 define_regression_test!(test_regression_icra2020_checkerboard_circle, "circle", true);
+
+// ============================================================================
+// FIXTURE-BASED SMOKE TEST (runs without full dataset)
+// ============================================================================
+
+/// Quick smoke test using local fixture (0037.png from ICRA2020 forward sequence).
+/// This always runs regardless of whether the full ICRA2020 dataset is installed.
+#[test]
+fn test_fixture_forward_0037() {
+    use std::collections::HashSet;
+    use std::fs;
+    use std::path::PathBuf;
+    use serde::Deserialize;
+    
+    #[derive(Debug, Deserialize)]
+    struct FixtureGT {
+        #[allow(dead_code)]
+        image: String,
+        expected_min_recall: f64,
+        expected_max_corner_error_px: f64,
+        tags: Vec<FixtureTag>,
+    }
+    
+    #[derive(Debug, Deserialize)]
+    struct FixtureTag {
+        tag_id: u32,
+        corners: [[f64; 2]; 4],
+    }
+    
+    let fixtures_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/icra2020");
+    let gt_path = fixtures_dir.join("0037.json");
+    let img_path = fixtures_dir.join("0037.png");
+    
+    // Load ground truth
+    let gt_content = fs::read_to_string(&gt_path)
+        .unwrap_or_else(|e| panic!("Failed to load fixture GT: {}", e));
+    let gt: FixtureGT = serde_json::from_str(&gt_content)
+        .unwrap_or_else(|e| panic!("Failed to parse fixture GT: {}", e));
+    
+    // Load image
+    let img = image::open(&img_path)
+        .unwrap_or_else(|e| panic!("Failed to load fixture image: {}", e))
+        .into_luma8();
+    let (width, height) = img.dimensions();
+    let img_view = ImageView::new(img.as_raw(), width as usize, height as usize, width as usize)
+        .expect("Failed to create ImageView");
+    
+    // Detect
+    let mut detector = Detector::new();
+    let options = DetectOptions {
+        families: vec![TagFamily::AprilTag36h11],
+        ..Default::default()
+    };
+    let detections = detector.detect_with_options(&img_view, &options);
+    
+    // Calculate metrics
+    let gt_ids: HashSet<u32> = gt.tags.iter().map(|t| t.tag_id).collect();
+    let det_ids: HashSet<u32> = detections.iter().map(|d| d.id).collect();
+    let matched: HashSet<u32> = gt_ids.intersection(&det_ids).copied().collect();
+    let recall = matched.len() as f64 / gt_ids.len() as f64;
+    
+    // Calculate corner errors for matched tags
+    let mut total_rmse = 0.0;
+    let mut match_count = 0;
+    for det in &detections {
+        if let Some(gt_tag) = gt.tags.iter().find(|t| t.tag_id == det.id) {
+            // Map to ICRA convention for comparison
+            let reordered_det = [
+                det.corners[1], // ICRA Idx 0 <- Lib 1 (TR)
+                det.corners[0], // ICRA Idx 1 <- Lib 0 (TL)
+                det.corners[3], // ICRA Idx 2 <- Lib 3 (BL)
+                det.corners[2], // ICRA Idx 3 <- Lib 2 (BR)
+            ];
+            total_rmse += calculate_rmse(reordered_det, gt_tag.corners);
+            match_count += 1;
+        }
+    }
+    let avg_rmse = if match_count > 0 { total_rmse / match_count as f64 } else { 0.0 };
+    
+    // Assertions
+    assert!(
+        recall >= gt.expected_min_recall,
+        "Recall {:.2}% below threshold {:.2}%",
+        recall * 100.0,
+        gt.expected_min_recall * 100.0
+    );
+    assert!(
+        avg_rmse <= gt.expected_max_corner_error_px,
+        "Corner error {:.2}px exceeds threshold {:.2}px",
+        avg_rmse,
+        gt.expected_max_corner_error_px
+    );
+}

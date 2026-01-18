@@ -137,6 +137,24 @@ pub fn compute_corner_error(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 
     min_error
 }
 
+/// Compute RMSE corner error between detected and ground truth corners.
+///
+/// Unlike `compute_corner_error`, this does NOT try rotations - it assumes corners
+/// are already in the correct order. Use this when comparing against ground truth
+/// datasets with known corner ordering conventions.
+///
+/// Formula: sqrt( (sum of squared distances for all 4 corners) / 4 )
+#[must_use]
+pub fn compute_rmse(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 4]) -> f64 {
+    let mut sum_sq = 0.0;
+    for i in 0..4 {
+        let dx = detected[i][0] - ground_truth[i][0];
+        let dy = detected[i][1] - ground_truth[i][1];
+        sum_sq += dx * dx + dy * dy;
+    }
+    (sum_sq / 4.0).sqrt()
+}
+
 // ============================================================================
 // ROBUSTNESS TEST UTILITIES
 // ============================================================================
