@@ -409,14 +409,6 @@ impl Detector {
                             }
                             cand.corners = reordered;
 
-                            // Adjust coordinates for benchmark compliance (0.5 offset)
-                            for corner in &mut cand.corners {
-                                corner[0] += 0.5;
-                                corner[1] += 0.5;
-                            }
-                            cand.center[0] += 0.5;
-                            cand.center[1] += 0.5;
-
                             // Estimate pose if requested
                             if let (Some(intrinsics), Some(tag_size)) =
                                 (options.intrinsics, options.tag_size)
@@ -437,21 +429,21 @@ impl Detector {
         stats.decoding_ms = start_decode.elapsed().as_secs_f64() * 1000.0;
         stats.num_detections = final_detections.len();
         
-        // Scale back coordinates if upscaling was used
-        if upscale_factor > 1 {
-            let inv_scale = 1.0 / effective_scale;
-             for d in &mut final_detections {
-                  for corner in &mut d.corners {
-                        corner[0] = (corner[0] - 0.5) * inv_scale + 0.5;
-                        corner[1] = (corner[1] - 0.5) * inv_scale + 0.5;
-                  }
-                  d.center[0] = (d.center[0] - 0.5) * inv_scale + 0.5;
-                  d.center[1] = (d.center[1] - 0.5) * inv_scale + 0.5;
-                  
-                  if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size) {
-                       d.pose = crate::pose::estimate_tag_pose(&intrinsics, &d.corners, tag_size);
-                  }
-             }
+        // Final coordinate adjustment and scaling
+        // We apply a +0.5 shift to all coordinates to align pixel centers (index + 0.5) 
+        // with the boundary-based coordinate system (index + 1.0) expected by users/tests.
+        let inv_scale = if upscale_factor > 1 { 1.0 / effective_scale } else { 1.0 };
+        for d in &mut final_detections {
+            for corner in &mut d.corners {
+                corner[0] = (corner[0] + 0.5) * inv_scale;
+                corner[1] = (corner[1] + 0.5) * inv_scale;
+            }
+            d.center[0] = (d.center[0] + 0.5) * inv_scale;
+            d.center[1] = (d.center[1] + 0.5) * inv_scale;
+
+            if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size) {
+                d.pose = crate::pose::estimate_tag_pose(&intrinsics, &d.corners, tag_size);
+            }
         }
         
         stats.total_ms = start_total.elapsed().as_secs_f64() * 1000.0;

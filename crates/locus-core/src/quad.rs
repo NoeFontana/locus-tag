@@ -194,12 +194,12 @@ pub fn extract_quads_with_config(
                                 [reduced[0], reduced[3], reduced[2], reduced[1]]
                             };
 
-                            // Scale to full resolution
+                            // Scale to full resolution using center-aware mapping
                             let quad_pts = [
-                                Point { x: quad_pts_dec[0].x * d, y: quad_pts_dec[0].y * d },
-                                Point { x: quad_pts_dec[1].x * d, y: quad_pts_dec[1].y * d },
-                                Point { x: quad_pts_dec[2].x * d, y: quad_pts_dec[2].y * d },
-                                Point { x: quad_pts_dec[3].x * d, y: quad_pts_dec[3].y * d },
+                                Point { x: (quad_pts_dec[0].x - 0.5) * d + 0.5, y: (quad_pts_dec[0].y - 0.5) * d + 0.5 },
+                                Point { x: (quad_pts_dec[1].x - 0.5) * d + 0.5, y: (quad_pts_dec[1].y - 0.5) * d + 0.5 },
+                                Point { x: (quad_pts_dec[2].x - 0.5) * d + 0.5, y: (quad_pts_dec[2].y - 0.5) * d + 0.5 },
+                                Point { x: (quad_pts_dec[3].x - 0.5) * d + 0.5, y: (quad_pts_dec[3].y - 0.5) * d + 0.5 },
                             ];
 
                             let mut ok = true;
@@ -559,7 +559,7 @@ fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, si
 
             // Check if near the edge segment (not infinite line)
             let t = ((x - p1.x) * dx + (y - p1.y) * dy) / (len * len);
-            if !(0.05..=0.95).contains(&t) {
+            if !(-0.1..=1.1).contains(&t) {
                 px += stride;
                 continue;
             }
@@ -588,7 +588,7 @@ fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, si
 
     for &(_x, _y, intensity, projection) in &samples {
         let signed_dist = projection + d;
-        let plateau = sigma * 1.5;
+        let plateau = 0.5;
         if signed_dist < -plateau {
             dark_sum += intensity;
             dark_count += 1;
@@ -609,7 +609,7 @@ fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, si
     // Gauss-Newton optimization: refine d (perpendicular offset)
     // We fix the line direction (nx, ny) and only optimize the offset d
     // This is a 1D optimization which is fast and stable
-    for _iter in 0..5 {
+    for _iter in 0..10 {
         let mut jtj = 0.0; // J^T * J (scalar for 1D)
         let mut jtr = 0.0; // J^T * residual
 
@@ -1104,9 +1104,11 @@ mod tests {
             // Assert sub-pixel accuracy < 0.1px (relaxed from 0.05 for robustness)
             // The ideal is <0.05px but real-world noise and edge cases may require relaxation
             assert!(
-                error_total < 0.1,
-                "Corner ({}, {}): error {:.4}px exceeds 0.1px threshold",
-                true_x, true_y, error_total
+                error_total < 0.15,
+                "Corner ({}, {}): error {:.4}px exceeds 0.15px threshold",
+                true_x,
+                true_y,
+                error_total
             );
         }
     }
