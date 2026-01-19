@@ -883,7 +883,7 @@ mod tests {
         let detections = extract_quads_fast(&arena, &img, &label_result);
 
         let decoder = AprilTag36h11;
-        let mut decoded = Vec::new();
+        let mut results = Vec::new();
 
         for quad in &detections {
             let dst = [
@@ -896,13 +896,13 @@ mod tests {
             if let Some(h) = Homography::square_to_quad(&dst) {
                 if let Some(bits) = sample_grid(&img, &h, &decoder, 20.0) {
                     if let Some((id, hamming, _rot)) = decoder.decode(bits) {
-                        decoded.push((id, hamming));
+                        results.push((id, hamming));
                     }
                 }
             }
         }
 
-        decoded
+        results
     }
 
     /// Test E2E pipeline decodes correctly at varying sizes.
