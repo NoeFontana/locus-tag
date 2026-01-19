@@ -2,7 +2,7 @@
 
 This plan follows the TDD workflow to reach >75% recall and <0.3px RMSE on the ICRA 2020 `forward` dataset.
 
-## Phase 1: Diagnostics and Baseline
+## Phase 1: Diagnostics and Baseline [checkpoint: 91bcd94]
 - [x] Task: Establish baseline performance by running `cargo test --test regression_icra2020 test_regression_icra2020_forward --release`. 1ebbb10
 - [x] Task: Identify failure modes using `rerun` visualization (e.g., missed quads, decoding failures, poor sub-pixel fit).
 - [x] Task: Select 5 "critical failure" images from the `forward` sequence to serve as TDD anchors. (Selected sparsely: 0001, 0012, 0022, 0030, 0040)
