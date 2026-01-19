@@ -27,17 +27,42 @@
 
 use locus_core::{DetectOptions, Detector, config::TagFamily};
 use locus_core::image::ImageView;
-use rayon::prelude::*;
+// use rayon::prelude::*; // Removed as we use sequential processing for reliable timing
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
 mod common;
 
+#[derive(Serialize, Default, Clone)]
+struct PipelineMetrics {
+    threshold_ms: f64,
+    segmentation_ms: f64,
+    quad_extraction_ms: f64,
+    decoding_ms: f64,
+    total_ms: f64,
+    num_candidates: usize,
+    num_detections: usize,
+}
+
+impl From<locus_core::PipelineStats> for PipelineMetrics {
+    fn from(stats: locus_core::PipelineStats) -> Self {
+        Self {
+            threshold_ms: stats.threshold_ms,
+            segmentation_ms: stats.segmentation_ms,
+            quad_extraction_ms: stats.quad_extraction_ms,
+            decoding_ms: stats.decoding_ms,
+            total_ms: stats.total_ms,
+            num_candidates: stats.num_candidates,
+            num_detections: stats.num_detections,
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct ImageMetrics {
     recall: f64,
     avg_rmse: f64,
-    latency_ms: f64,
+    stats: PipelineMetrics,
     detected_ids: BTreeSet<u32>,
 }
 
@@ -46,7 +71,7 @@ struct RegressionReport {
     // Sorted list of entries ensures deterministic snapshots
     entries: BTreeMap<String, ImageMetrics>,
     // Aggregate Metrics
-    mean_latency_ms: f64,
+    mean_stats: PipelineMetrics,
     mean_recall: f64,
     mean_rmse: f64,
 }
@@ -120,8 +145,8 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
 
     println!("Found {} images for testing.", image_paths.len());
 
-    // 4. Parallel Detection (Map)
-    let results: Vec<(String, ImageMetrics)> = image_paths.par_iter().map(|image_path: &std::path::PathBuf| {
+    // 4. Sequential Detection (for reliable timing)
+    let results: Vec<(String, ImageMetrics)> = image_paths.iter().map(|image_path: &std::path::PathBuf| {
         let filename = image_path.file_name().unwrap().to_string_lossy().to_string();
         let gt = ground_truth.get(&filename).unwrap(); // Invariant: filtered in step 3
         
@@ -144,7 +169,7 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
                 return (filename, ImageMetrics {
                     recall: 0.0,
                     avg_rmse: 0.0,
-                    latency_ms: 0.0,
+                    stats: PipelineMetrics::default(),
                     detected_ids: BTreeSet::new(),
                 });
             }
@@ -155,9 +180,7 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
             .expect("Failed to create ImageView");
 
         // DETECTION & TIMING
-        let start = std::time::Instant::now();
-        let detections = detector.detect_with_options(&input_view, &options);
-        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let (detections, stats) = detector.detect_with_stats_and_options(&input_view, &options);
         
         // METRICS CALCULATION
         let detected_ids: BTreeSet<u32> = detections.iter().map(|d| d.id).collect();
@@ -187,28 +210,44 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
         (filename, ImageMetrics {
             recall,
             avg_rmse,
-            latency_ms,
+            stats: PipelineMetrics::from(stats),
             detected_ids,
         })
     }).collect();
 
     // 4. Aggregate Results (Reduce)
     let mut entries = BTreeMap::new();
-    let mut sum_latency = 0.0;
     let mut sum_recall = 0.0;
     let mut sum_rmse = 0.0;
+    let mut sum_stats = PipelineMetrics::default();
     let count = results.len() as f64;
 
     for (filename, metrics) in results {
-        sum_latency += metrics.latency_ms;
         sum_recall += metrics.recall;
         sum_rmse += metrics.avg_rmse;
+        
+        sum_stats.threshold_ms += metrics.stats.threshold_ms;
+        sum_stats.segmentation_ms += metrics.stats.segmentation_ms;
+        sum_stats.quad_extraction_ms += metrics.stats.quad_extraction_ms;
+        sum_stats.decoding_ms += metrics.stats.decoding_ms;
+        sum_stats.total_ms += metrics.stats.total_ms;
+        sum_stats.num_candidates += metrics.stats.num_candidates;
+        sum_stats.num_detections += metrics.stats.num_detections;
+        
         entries.insert(filename, metrics);
     }
 
     let report = RegressionReport { 
         entries,
-        mean_latency_ms: if count > 0.0 { sum_latency / count } else { 0.0 },
+        mean_stats: PipelineMetrics {
+            threshold_ms: sum_stats.threshold_ms / count,
+            segmentation_ms: sum_stats.segmentation_ms / count,
+            quad_extraction_ms: sum_stats.quad_extraction_ms / count,
+            decoding_ms: sum_stats.decoding_ms / count,
+            total_ms: sum_stats.total_ms / count,
+            num_candidates: (sum_stats.num_candidates as f64 / count) as usize,
+            num_detections: (sum_stats.num_detections as f64 / count) as usize,
+        },
         mean_recall: if count > 0.0 { sum_recall / count } else { 0.0 },
         mean_rmse: if count > 0.0 { sum_rmse / count } else { 0.0 },
     };
@@ -216,11 +255,25 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
     // 5. Snapshot Assertion
     // Use the subfolder name as part of the snapshot name to prevent collisions
     let snapshot_name = format!("icra2020_{}_{}", subfolder, if use_checkerboard { "checkerboard" } else { "standard" });
-    
-    // We redact latency as it is non-deterministic and would cause flakes
+
+    println!("Report for {}:", snapshot_name);
+    println!("  Recall:          {:.2}%", report.mean_recall * 100.0);
+    println!("  RMSE:            {:.4} px", report.mean_rmse);
+    println!("  Avg Total:       {:.2} ms", report.mean_stats.total_ms);
+    println!("  Avg Threshold:   {:.2} ms", report.mean_stats.threshold_ms);
+    println!("  Avg Segmentation: {:.2} ms", report.mean_stats.segmentation_ms);
+    println!("  Avg Quad Extr:   {:.2} ms", report.mean_stats.quad_extraction_ms);
+    println!("  Avg Decoding:    {:.2} ms", report.mean_stats.decoding_ms);
+    println!("  Avg Candidates:  {}", report.mean_stats.num_candidates);
+
+    // We redact per-image latency to avoid 400+ lines of jitter in diffs,
+    // but we KEEP mean_stats unredacted so performance shifts are visible in PRs.
     insta::assert_yaml_snapshot!(snapshot_name, report, {
-        ".entries.*.latency_ms" => "[latency]",
-        ".mean_latency_ms" => "[latency]"
+        ".entries.*.stats.threshold_ms" => "[latency]",
+        ".entries.*.stats.segmentation_ms" => "[latency]",
+        ".entries.*.stats.quad_extraction_ms" => "[latency]",
+        ".entries.*.stats.decoding_ms" => "[latency]",
+        ".entries.*.stats.total_ms" => "[latency]"
     });
 }
 

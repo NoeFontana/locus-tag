@@ -6,7 +6,14 @@ entries:
   0000.png:
     recall: 0.05844155844155844
     avg_rmse: 0.09430479628818839
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 644
+      num_detections: 9
     detected_ids:
       - 7
       - 30
@@ -20,7 +27,14 @@ entries:
   0001.png:
     recall: 0.07792207792207792
     avg_rmse: 0.10283583753558057
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 631
+      num_detections: 12
     detected_ids:
       - 30
       - 33
@@ -37,7 +51,14 @@ entries:
   0002.png:
     recall: 0.07792207792207792
     avg_rmse: 0.1345492448449409
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 658
+      num_detections: 12
     detected_ids:
       - 48
       - 52
@@ -54,20 +75,41 @@ entries:
   0003.png:
     recall: 0.006493506493506494
     avg_rmse: 0.21522008379939536
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 659
+      num_detections: 1
     detected_ids:
       - 48
   0004.png:
     recall: 0.012987012987012988
     avg_rmse: 0.4489014997073224
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 628
+      num_detections: 2
     detected_ids:
       - 73
       - 76
   0005.png:
     recall: 0.03896103896103896
     avg_rmse: 0.27258009531466115
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 636
+      num_detections: 6
     detected_ids:
       - 27
       - 32
@@ -78,7 +120,14 @@ entries:
   0006.png:
     recall: 0.08441558441558442
     avg_rmse: 0.20137475322219658
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 630
+      num_detections: 13
     detected_ids:
       - 1
       - 9
@@ -96,7 +145,14 @@ entries:
   0007.png:
     recall: 0.16233766233766234
     avg_rmse: 0.18146260155746183
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 630
+      num_detections: 25
     detected_ids:
       - 0
       - 2
@@ -126,7 +182,14 @@ entries:
   0008.png:
     recall: 0.16883116883116883
     avg_rmse: 0.23887875146830553
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 634
+      num_detections: 26
     detected_ids:
       - 2
       - 8
@@ -157,7 +220,14 @@ entries:
   0009.png:
     recall: 0.17532467532467533
     avg_rmse: 0.226954914291303
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 641
+      num_detections: 27
     detected_ids:
       - 7
       - 8
@@ -189,7 +259,14 @@ entries:
   0010.png:
     recall: 0.2922077922077922
     avg_rmse: 0.2857450498279785
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 629
+      num_detections: 45
     detected_ids:
       - 0
       - 4
@@ -239,7 +316,14 @@ entries:
   0011.png:
     recall: 0.38961038961038963
     avg_rmse: 0.26182781011561673
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 634
+      num_detections: 60
     detected_ids:
       - 1
       - 4
@@ -304,7 +388,14 @@ entries:
   0012.png:
     recall: 0.4675324675324675
     avg_rmse: 0.2808888025294894
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 623
+      num_detections: 72
     detected_ids:
       - 0
       - 1
@@ -381,7 +472,14 @@ entries:
   0013.png:
     recall: 0.4025974025974026
     avg_rmse: 0.29444581254612684
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 635
+      num_detections: 62
     detected_ids:
       - 7
       - 8
@@ -448,7 +546,14 @@ entries:
   0014.png:
     recall: 0.551948051948052
     avg_rmse: 0.29833826197427044
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 631
+      num_detections: 85
     detected_ids:
       - 1
       - 8
@@ -538,7 +643,14 @@ entries:
   0015.png:
     recall: 0.7207792207792207
     avg_rmse: 0.311891443040389
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 622
+      num_detections: 111
     detected_ids:
       - 1
       - 3
@@ -654,7 +766,14 @@ entries:
   0016.png:
     recall: 0.8181818181818182
     avg_rmse: 0.34140450205176176
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 625
+      num_detections: 126
     detected_ids:
       - 1
       - 3
@@ -785,7 +904,14 @@ entries:
   0017.png:
     recall: 0.7337662337662337
     avg_rmse: 0.2816186582533698
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 621
+      num_detections: 113
     detected_ids:
       - 0
       - 1
@@ -903,7 +1029,14 @@ entries:
   0018.png:
     recall: 0.8961038961038961
     avg_rmse: 0.24401131227453582
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 628
+      num_detections: 138
     detected_ids:
       - 0
       - 1
@@ -1046,7 +1179,14 @@ entries:
   0019.png:
     recall: 0.8051948051948052
     avg_rmse: 0.262126100581783
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 622
+      num_detections: 124
     detected_ids:
       - 0
       - 1
@@ -1175,7 +1315,14 @@ entries:
   0020.png:
     recall: 0.8636363636363636
     avg_rmse: 0.2782329305699913
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 629
+      num_detections: 134
     detected_ids:
       - 0
       - 1
@@ -1314,7 +1461,14 @@ entries:
   0021.png:
     recall: 0.948051948051948
     avg_rmse: 0.2676773043596016
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 614
+      num_detections: 146
     detected_ids:
       - 0
       - 1
@@ -1465,7 +1619,14 @@ entries:
   0022.png:
     recall: 0.9935064935064936
     avg_rmse: 0.28224868068098924
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 614
+      num_detections: 153
     detected_ids:
       - 0
       - 1
@@ -1623,7 +1784,14 @@ entries:
   0023.png:
     recall: 0.9805194805194806
     avg_rmse: 0.2432080049809876
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 604
+      num_detections: 151
     detected_ids:
       - 0
       - 1
@@ -1779,7 +1947,14 @@ entries:
   0024.png:
     recall: 1
     avg_rmse: 0.25855762168350566
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 633
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -1938,7 +2113,14 @@ entries:
   0025.png:
     recall: 1
     avg_rmse: 0.23810309490716572
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 616
+      num_detections: 155
     detected_ids:
       - 0
       - 1
@@ -2098,7 +2280,14 @@ entries:
   0026.png:
     recall: 1
     avg_rmse: 0.24884297496189847
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 623
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -2257,7 +2446,14 @@ entries:
   0027.png:
     recall: 1
     avg_rmse: 0.2381450534023525
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 604
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -2416,7 +2612,14 @@ entries:
   0028.png:
     recall: 1
     avg_rmse: 0.23207292193597123
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 609
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -2575,7 +2778,14 @@ entries:
   0029.png:
     recall: 1
     avg_rmse: 0.2521318461066833
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 606
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -2734,7 +2944,14 @@ entries:
   0030.png:
     recall: 1
     avg_rmse: 0.2632345287053076
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 614
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -2893,7 +3110,14 @@ entries:
   0031.png:
     recall: 1
     avg_rmse: 0.2138000064616377
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 595
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -3052,7 +3276,14 @@ entries:
   0032.png:
     recall: 1
     avg_rmse: 0.261477670401991
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 588
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -3211,7 +3442,14 @@ entries:
   0033.png:
     recall: 0.9935064935064936
     avg_rmse: 0.2685165489580448
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 587
+      num_detections: 153
     detected_ids:
       - 0
       - 1
@@ -3369,7 +3607,14 @@ entries:
   0034.png:
     recall: 1
     avg_rmse: 0.21452578418367568
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 585
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -3528,7 +3773,14 @@ entries:
   0035.png:
     recall: 1
     avg_rmse: 0.21477327068401456
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 602
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -3687,7 +3939,14 @@ entries:
   0036.png:
     recall: 1
     avg_rmse: 0.24899006710162316
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 587
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -3846,7 +4105,14 @@ entries:
   0037.png:
     recall: 1
     avg_rmse: 0.22124676290051556
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 588
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -4005,7 +4271,14 @@ entries:
   0038.png:
     recall: 1
     avg_rmse: 0.2409343853586935
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 579
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -4164,7 +4437,14 @@ entries:
   0039.png:
     recall: 1
     avg_rmse: 0.251568682233838
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 581
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -4323,7 +4603,14 @@ entries:
   0040.png:
     recall: 1
     avg_rmse: 0.25837353521934275
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 582
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -4482,7 +4769,14 @@ entries:
   0041.png:
     recall: 1
     avg_rmse: 0.18457429281225762
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 580
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -4641,7 +4935,14 @@ entries:
   0042.png:
     recall: 1
     avg_rmse: 0.19217139839904088
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 543
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -4800,7 +5101,14 @@ entries:
   0043.png:
     recall: 1
     avg_rmse: 0.20611632167860558
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 532
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -4959,7 +5267,14 @@ entries:
   0044.png:
     recall: 1
     avg_rmse: 0.08398242562919564
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 530
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -5118,7 +5433,14 @@ entries:
   0045.png:
     recall: 1
     avg_rmse: 0.20974018532510885
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 519
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -5277,7 +5599,14 @@ entries:
   0046.png:
     recall: 1
     avg_rmse: 0.23344065971367084
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 464
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -5436,7 +5765,14 @@ entries:
   0047.png:
     recall: 1
     avg_rmse: 0.25399575473402763
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 460
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -5595,7 +5931,14 @@ entries:
   0048.png:
     recall: 1
     avg_rmse: 0.20154826136118292
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 398
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -5754,7 +6097,14 @@ entries:
   0049.png:
     recall: 1
     avg_rmse: 0.26079259142940214
-    latency_ms: "[latency]"
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 293
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -5910,6 +6260,13 @@ entries:
       - 157
       - 158
       - 159
-mean_latency_ms: "[latency]"
+mean_stats:
+  threshold_ms: 776.0746914999999
+  segmentation_ms: 185.75955657999998
+  quad_extraction_ms: 159.6856955
+  decoding_ms: 87.22829116000003
+  total_ms: 1208.7503761799999
+  num_candidates: 592
+  num_detections: 113
 mean_recall: 0.7344155844155845
 mean_rmse: 0.24004767796210008
