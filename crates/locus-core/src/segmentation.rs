@@ -265,6 +265,7 @@ pub fn label_components_threshold_model<'a>(
     height: usize,
     use_8_connectivity: bool,
     min_area: u32,
+    margin: i16,
 ) -> LabelResult<'a> {
     // Compute signed deviation: negative = dark (below threshold), positive = light
     // We only care about dark regions (tag interior) for now
@@ -273,7 +274,6 @@ pub fn label_components_threshold_model<'a>(
     // Pass 1: Extract runs of "consistently dark" pixels
     // A pixel is "dark" if (grayscale - threshold) < -margin
     // This is more robust than binary == 0 because it considers the local model
-    const MARGIN: i16 = 2; // Pixels must be at least 2 below threshold
 
     let all_runs: Vec<Vec<Run>> = (0..height)
         .into_par_iter()
@@ -286,13 +286,13 @@ pub fn label_components_threshold_model<'a>(
             while x < width {
                 // Find start of dark run: gs < threshold - margin
                 let deviation = i16::from(row_gs[x]) - i16::from(row_th[x]);
-                if deviation < -MARGIN {
+                if deviation < -margin {
                     let start = x;
                     x += 1;
                     // Continue while consistently dark
                     while x < width {
                         let dev = i16::from(row_gs[x]) - i16::from(row_th[x]);
-                        if dev >= -MARGIN {
+                        if dev >= -margin {
                             break;
                         }
                         x += 1;

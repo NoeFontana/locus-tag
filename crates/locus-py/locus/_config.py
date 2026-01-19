@@ -9,7 +9,7 @@ class DetectorConfig(BaseModel):
     These settings are typically set once during detector instantiation.
     """
 
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+    model_config = ConfigDict(frozen=False, arbitrary_types_allowed=True)
 
     threshold_tile_size: int = Field(default=4, ge=2, le=64)
     threshold_min_range: int = Field(default=2, ge=0, le=255)
@@ -22,16 +22,19 @@ class DetectorConfig(BaseModel):
 
     enable_adaptive_window: bool = Field(default=True)
     threshold_min_radius: int = Field(default=2, ge=1)
-    threshold_max_radius: int = Field(default=7, ge=1)
+    threshold_max_radius: int = Field(default=10, ge=1)
+    adaptive_threshold_constant: int = Field(default=3)
+    adaptive_threshold_gradient_threshold: int = Field(default=20, ge=0, le=255)
 
-    quad_min_area: int = Field(default=16, ge=1)
-    quad_max_aspect_ratio: float = Field(default=3.0, ge=1.0)
-    quad_min_fill_ratio: float = Field(default=0.3, ge=0.0, le=1.0)
-    quad_max_fill_ratio: float = Field(default=0.95, ge=0.0, le=1.0)
-    quad_min_edge_length: float = Field(default=4.0, ge=0.0)
-    quad_min_edge_score: float = Field(default=0.4, ge=0.0)
+    quad_min_area: int = Field(default=8, ge=1)
+    quad_max_aspect_ratio: float = Field(default=8.0, ge=1.0)
+    quad_min_fill_ratio: float = Field(default=0.15, ge=0.0, le=1.0)
+    quad_max_fill_ratio: float = Field(default=0.98, ge=0.0, le=1.0)
+    quad_min_edge_length: float = Field(default=3.0, ge=0.0)
+    quad_min_edge_score: float = Field(default=0.3, ge=0.0)
     subpixel_refinement_sigma: float = Field(default=0.6, ge=0.0)
-    segmentation_connectivity: SegmentationConnectivity = Field(default=SegmentationConnectivity.Eight)
+    segmentation_margin: int = Field(default=2)
+    segmentation_connectivity: SegmentationConnectivity = Field(default_factory=lambda: SegmentationConnectivity.Eight)
     upscale_factor: int = Field(default=1, ge=1)
     decoder_min_contrast: float = Field(default=20.0, ge=0.0)
 

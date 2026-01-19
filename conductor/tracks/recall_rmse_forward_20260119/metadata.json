@@ -1,0 +1,8 @@
+{
+  "track_id": "recall_rmse_forward_20260119",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-01-19T12:00:00Z",
+  "updated_at": "2026-01-19T12:00:00Z",
+  "description": "Restore recall >75% and RMSE <0.3px on the ICRA 2020 forward dataset."
+}
