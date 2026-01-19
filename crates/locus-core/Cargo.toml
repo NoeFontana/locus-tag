@@ -58,7 +58,7 @@ required-features = ["extended-bench"]
 [features]
 default = []
 viz = ["dep:rerun"]
-serde = ["dep:serde"]
+serde = ["dep:serde", "nalgebra/serde-serialize"]
 extended-tests = []
 extended-bench = []
 

@@ -438,7 +438,7 @@ mod tests {
         }
         for y in 0..height {
             for x in 0..width {
-                if x < 2 || x > 14 || y < 2 || y > 14 {
+                if !(2..=14).contains(&x) || !(2..=14).contains(&y) {
                     data[y * width + x] = 200;
                 }
             }
@@ -453,7 +453,39 @@ mod tests {
         // At (8,8), it should be black (0) because it's 50 and thresh should be around (50+200)/2 = 125
         assert_eq!(output[8 * width + 8], 0);
         // At (1,1), it should be white (255)
-        assert_eq!(output[1 * width + 1], 255);
+        assert_eq!(output[width + 1], 255);
+    }
+
+    #[test]
+    fn test_threshold_with_decimation() {
+        let width = 32;
+        let height = 32;
+        let mut data = vec![200u8; width * height];
+        // Draw a black square (16x16) in the center
+        for y in 8..24 {
+            for x in 8..24 {
+                data[y * width + x] = 50;
+            }
+        }
+
+        let img = ImageView::new(&data, width, height, width).unwrap();
+        
+        // Decimate by 2 -> 16x16
+        let mut decimated_data = vec![0u8; 16 * 16];
+        let decimated_img = img.decimate_to(2, &mut decimated_data).expect("decimation failed");
+        
+        assert_eq!(decimated_img.width, 16);
+        assert_eq!(decimated_img.height, 16);
+
+        let engine = ThresholdEngine::new();
+        let stats = engine.compute_tile_stats(&decimated_img);
+        let mut output = vec![0u8; 16 * 16];
+        engine.apply_threshold(&decimated_img, &stats, &mut output);
+
+        // At (4,4) in decimated image (which is 8,8 in original), it should be black (0)
+        assert_eq!(output[4 * 16 + 4], 0);
+        // At (0,0) in decimated image, it should be white (255)
+        assert_eq!(output[0], 255);
     }
 
     // ========================================================================
@@ -883,6 +915,7 @@ pub fn apply_adaptive_threshold_with_params(
 /// Apply per-pixel adaptive threshold with gradient-based window sizing.
 ///
 /// Highly optimized using Parallel processing, precomputed LUTs, and branchless logic.
+#[allow(clippy::too_many_arguments)]
 #[multiversion(targets(
     "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",

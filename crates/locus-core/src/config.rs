@@ -366,7 +366,6 @@ impl TagFamily {
 /// ```
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Default)]
 pub struct DetectOptions {
     /// Tag families to attempt decoding. Empty means use detector defaults.
     pub families: Vec<TagFamily>,
@@ -374,6 +373,20 @@ pub struct DetectOptions {
     pub intrinsics: Option<crate::pose::CameraIntrinsics>,
     /// Physical size of the tag in world units (e.g. meters) for 3D pose estimation.
     pub tag_size: Option<f64>,
+    /// Decimation factor for preprocessing (1 = no decimation).
+    /// Preprocessing and segmentation operate on a downsampled image of size (W/D, H/D).
+    pub decimation: usize,
+}
+
+impl Default for DetectOptions {
+    fn default() -> Self {
+        Self {
+            families: Vec::new(),
+            intrinsics: None,
+            tag_size: None,
+            decimation: 1,
+        }
+    }
 }
 
 impl DetectOptions {
@@ -389,6 +402,7 @@ impl DetectOptions {
             families: families.to_vec(),
             intrinsics: None,
             tag_size: None,
+            decimation: 1,
         }
     }
 
@@ -399,16 +413,28 @@ impl DetectOptions {
             families: TagFamily::all().to_vec(),
             intrinsics: None,
             tag_size: None,
+            decimation: 1,
         }
     }
 }
 
 /// Builder for [`DetectOptions`].
-#[derive(Default)]
 pub struct DetectOptionsBuilder {
     families: Vec<TagFamily>,
     intrinsics: Option<crate::pose::CameraIntrinsics>,
     tag_size: Option<f64>,
+    decimation: usize,
+}
+
+impl Default for DetectOptionsBuilder {
+    fn default() -> Self {
+        Self {
+            families: Vec::new(),
+            intrinsics: None,
+            tag_size: None,
+            decimation: 1,
+        }
+    }
 }
 
 impl DetectOptionsBuilder {
@@ -433,6 +459,13 @@ impl DetectOptionsBuilder {
         self
     }
 
+    /// Set the decimation factor (1 = no decimation).
+    #[must_use]
+    pub fn decimation(mut self, decimation: usize) -> Self {
+        self.decimation = decimation.max(1);
+        self
+    }
+
     /// Build the options.
     #[must_use]
     pub fn build(self) -> DetectOptions {
@@ -440,6 +473,7 @@ impl DetectOptionsBuilder {
             families: self.families,
             intrinsics: self.intrinsics,
             tag_size: self.tag_size,
+            decimation: self.decimation,
         }
     }
 }
