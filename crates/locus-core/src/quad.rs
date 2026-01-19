@@ -11,6 +11,25 @@ use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
 use multiversion::multiversion;
 
+/// Approximate error function (erf) using the Abramowitz and Stegun approximation.
+pub(crate) fn erf_approx(x: f64) -> f64 {
+    let sign = if x < 0.0 { -1.0 } else { 1.0 };
+    let x = x.abs();
+
+    // Constants for approximation
+    let a1 = 0.254_829_592;
+    let a2 = -0.284_496_736;
+    let a3 = 1.421_413_741;
+    let a4 = -1.453_152_027;
+    let a5 = 1.061_405_429;
+    let p = 0.327_591_1;
+
+    let t = 1.0 / (1.0 + p * x);
+    let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-x * x).exp();
+
+    sign * y
+}
+
 /// A 2D point with subpixel precision.
 #[derive(Clone, Copy, Debug)]
 pub struct Point {
@@ -28,24 +47,28 @@ pub fn extract_quads_fast(
     img: &ImageView,
     label_result: &LabelResult,
 ) -> Vec<Detection> {
-    extract_quads_with_config(arena, img, label_result, &DetectorConfig::default())
+    extract_quads_with_config(arena, img, label_result, &DetectorConfig::default(), 1, img)
 }
 
 /// Quad extraction with custom configuration.
 ///
 /// This is the main entry point for quad detection with custom parameters.
 /// Components are processed in parallel for maximum throughput.
+#[allow(clippy::too_many_lines)]
 pub fn extract_quads_with_config(
     _arena: &Bump,
     img: &ImageView,
     label_result: &LabelResult,
     config: &DetectorConfig,
+    decimation: usize,
+    refinement_img: &ImageView,
 ) -> Vec<Detection> {
     use rayon::prelude::*;
 
     let labels = label_result.labels;
     let stats = &label_result.component_stats;
     let min_edge_len_sq = config.quad_min_edge_length * config.quad_min_edge_length;
+    let d = decimation as f64;
 
     // Process components in parallel, each with its own thread-local arena
     stats
@@ -85,37 +108,45 @@ pub fn extract_quads_with_config(
 
             // For small components, try the 9-pixel foundation (gradient-based fitting)
             if bbox_area < 1200
-                && let Some(grad_corners) = crate::gradient::fit_quad_from_component(
+                && let Some(grad_corners_dec) = crate::gradient::fit_quad_from_component(
                     img, labels, label,
                     stat.min_x as usize, stat.min_y as usize,
                     stat.max_x as usize, stat.max_y as usize,
                 ) {
-                    let corners = [
-                        refine_corner(&arena, img, Point { x: f64::from(grad_corners[0][0]), y: f64::from(grad_corners[0][1]) },
-                                     Point { x: f64::from(grad_corners[3][0]), y: f64::from(grad_corners[3][1]) },
-                                     Point { x: f64::from(grad_corners[1][0]), y: f64::from(grad_corners[1][1]) },
-                                     config.subpixel_refinement_sigma),
-                        refine_corner(&arena, img, Point { x: f64::from(grad_corners[1][0]), y: f64::from(grad_corners[1][1]) },
-                                     Point { x: f64::from(grad_corners[0][0]), y: f64::from(grad_corners[0][1]) },
-                                     Point { x: f64::from(grad_corners[2][0]), y: f64::from(grad_corners[2][1]) },
-                                     config.subpixel_refinement_sigma),
-                        refine_corner(&arena, img, Point { x: f64::from(grad_corners[2][0]), y: f64::from(grad_corners[2][1]) },
-                                     Point { x: f64::from(grad_corners[1][0]), y: f64::from(grad_corners[1][1]) },
-                                     Point { x: f64::from(grad_corners[3][0]), y: f64::from(grad_corners[3][1]) },
-                                     config.subpixel_refinement_sigma),
-                        refine_corner(&arena, img, Point { x: f64::from(grad_corners[3][0]), y: f64::from(grad_corners[3][1]) },
-                                     Point { x: f64::from(grad_corners[2][0]), y: f64::from(grad_corners[2][1]) },
-                                     Point { x: f64::from(grad_corners[0][0]), y: f64::from(grad_corners[0][1]) },
-                                     config.subpixel_refinement_sigma),
+                    // Scale initial guess to full resolution
+                    let grad_corners = [
+                        [f64::from(grad_corners_dec[0][0]) * d, f64::from(grad_corners_dec[0][1]) * d],
+                        [f64::from(grad_corners_dec[1][0]) * d, f64::from(grad_corners_dec[1][1]) * d],
+                        [f64::from(grad_corners_dec[2][0]) * d, f64::from(grad_corners_dec[2][1]) * d],
+                        [f64::from(grad_corners_dec[3][0]) * d, f64::from(grad_corners_dec[3][1]) * d],
                     ];
 
-                    let edge_score = calculate_edge_score(img, corners);
+                    let corners = [
+                        refine_corner(&arena, refinement_img, Point { x: grad_corners[0][0], y: grad_corners[0][1] },
+                                     Point { x: grad_corners[3][0], y: grad_corners[3][1] },
+                                     Point { x: grad_corners[1][0], y: grad_corners[1][1] },
+                                     config.subpixel_refinement_sigma, decimation),
+                        refine_corner(&arena, refinement_img, Point { x: grad_corners[1][0], y: grad_corners[1][1] },
+                                     Point { x: grad_corners[0][0], y: grad_corners[0][1] },
+                                     Point { x: grad_corners[2][0], y: grad_corners[2][1] },
+                                     config.subpixel_refinement_sigma, decimation),
+                        refine_corner(&arena, refinement_img, Point { x: grad_corners[2][0], y: grad_corners[2][1] },
+                                     Point { x: grad_corners[1][0], y: grad_corners[1][1] },
+                                     Point { x: grad_corners[3][0], y: grad_corners[3][1] },
+                                     config.subpixel_refinement_sigma, decimation),
+                        refine_corner(&arena, refinement_img, Point { x: grad_corners[3][0], y: grad_corners[3][1] },
+                                     Point { x: grad_corners[2][0], y: grad_corners[2][1] },
+                                     Point { x: grad_corners[0][0], y: grad_corners[0][1] },
+                                     config.subpixel_refinement_sigma, decimation),
+                    ];
+
+                    let edge_score = calculate_edge_score(refinement_img, corners);
                     if edge_score > config.quad_min_edge_score {
                         return Some(Detection {
                             id: label,
                             center: [
-                                f64::from(grad_corners[0][0] + grad_corners[2][0]) / 2.0,
-                                f64::from(grad_corners[0][1] + grad_corners[2][1]) / 2.0,
+                                f64::midpoint(grad_corners[0][0], grad_corners[2][0]),
+                                f64::midpoint(grad_corners[0][1], grad_corners[2][1]),
                             ],
                             corners: [
                                 [corners[0].x, corners[0].y],
@@ -157,11 +188,19 @@ pub fn extract_quads_with_config(
 
                         if area.abs() > f64::from(config.quad_min_area) && compactness > 0.1 {
                             // Standardize to CW for consistency
-                            let quad_pts = if area > 0.0 {
+                            let quad_pts_dec = if area > 0.0 {
                                 [reduced[0], reduced[1], reduced[2], reduced[3]]
                             } else {
                                 [reduced[0], reduced[3], reduced[2], reduced[1]]
                             };
+
+                            // Scale to full resolution
+                            let quad_pts = [
+                                Point { x: quad_pts_dec[0].x * d, y: quad_pts_dec[0].y * d },
+                                Point { x: quad_pts_dec[1].x * d, y: quad_pts_dec[1].y * d },
+                                Point { x: quad_pts_dec[2].x * d, y: quad_pts_dec[2].y * d },
+                                Point { x: quad_pts_dec[3].x * d, y: quad_pts_dec[3].y * d },
+                            ];
 
                             let mut ok = true;
                             for i in 0..4 {
@@ -171,19 +210,21 @@ pub fn extract_quads_with_config(
                             }
 
                             if ok {
-                                let center = polygon_center(&reduced);
                                 let corners = [
-                                    refine_corner(&arena, img, quad_pts[0], quad_pts[3], quad_pts[1], config.subpixel_refinement_sigma),
-                                    refine_corner(&arena, img, quad_pts[1], quad_pts[0], quad_pts[2], config.subpixel_refinement_sigma),
-                                    refine_corner(&arena, img, quad_pts[2], quad_pts[1], quad_pts[3], config.subpixel_refinement_sigma),
-                                    refine_corner(&arena, img, quad_pts[3], quad_pts[2], quad_pts[0], config.subpixel_refinement_sigma),
+                                    refine_corner(&arena, refinement_img, quad_pts[0], quad_pts[3], quad_pts[1], config.subpixel_refinement_sigma, decimation),
+                                    refine_corner(&arena, refinement_img, quad_pts[1], quad_pts[0], quad_pts[2], config.subpixel_refinement_sigma, decimation),
+                                    refine_corner(&arena, refinement_img, quad_pts[2], quad_pts[1], quad_pts[3], config.subpixel_refinement_sigma, decimation),
+                                    refine_corner(&arena, refinement_img, quad_pts[3], quad_pts[2], quad_pts[0], config.subpixel_refinement_sigma, decimation),
                                 ];
 
-                                let edge_score = calculate_edge_score(img, corners);
+                                let edge_score = calculate_edge_score(refinement_img, corners);
                                 if edge_score > config.quad_min_edge_score {
                                     return Some(Detection {
                                         id: label,
-                                        center,
+                                        center: [
+                                            (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4.0,
+                                            (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4.0,
+                                        ],
                                         corners: [
                                             [corners[0].x, corners[0].y],
                                             [corners[1].x, corners[1].y],
@@ -191,7 +232,7 @@ pub fn extract_quads_with_config(
                                             [corners[3].x, corners[3].y],
                                         ],
                                         hamming: 0,
-                                        decision_margin: area,
+                                        decision_margin: area * d * d, // Area in full-res
                                         pose: None,
                                     });
                                 }
@@ -368,10 +409,10 @@ fn polygon_center(points: &[Point]) -> [f64; 2] {
 /// model and Gauss-Newton optimization, then computes their intersection.
 /// Achieves ~0.02px accuracy vs ~0.2px for gradient-peak methods.
 #[must_use]
-pub fn refine_corner(arena: &Bump, img: &ImageView, p: Point, p_prev: Point, p_next: Point, sigma: f64) -> Point {
+pub fn refine_corner(arena: &Bump, img: &ImageView, p: Point, p_prev: Point, p_next: Point, sigma: f64, decimation: usize) -> Point {
     // Try intensity-based refinement first (higher accuracy)
-    let line1 = refine_edge_intensity(arena, img, p_prev, p, sigma).or_else(|| fit_edge_line(img, p_prev, p));
-    let line2 = refine_edge_intensity(arena, img, p, p_next, sigma).or_else(|| fit_edge_line(img, p, p_next));
+    let line1 = refine_edge_intensity(arena, img, p_prev, p, sigma, decimation).or_else(|| fit_edge_line(img, p_prev, p, decimation));
+    let line2 = refine_edge_intensity(arena, img, p, p_next, sigma, decimation).or_else(|| fit_edge_line(img, p, p_next, decimation));
 
     if let (Some(l1), Some(l2)) = (line1, line2) {
         // Intersect lines: a1*x + b1*y + c1 = 0 and a2*x + b2*y + c2 = 0
@@ -382,7 +423,8 @@ pub fn refine_corner(arena: &Bump, img: &ImageView, p: Point, p_prev: Point, p_n
 
             // Sanity check: intersection must be near original point
             let dist_sq = (x - p.x).powi(2) + (y - p.y).powi(2);
-            if dist_sq < 4.0 {
+            let max_dist = if decimation > 1 { (decimation as f64) + 2.0 } else { 2.0 };
+            if dist_sq < max_dist * max_dist {
                 return Point { x, y };
             }
         }
@@ -392,7 +434,7 @@ pub fn refine_corner(arena: &Bump, img: &ImageView, p: Point, p_prev: Point, p_n
 }
 
 /// Fit a line (a*x + b*y + c = 0) to an edge by sampling gradient peaks.
-fn fit_edge_line(img: &ImageView, p1: Point, p2: Point) -> Option<(f64, f64, f64)> {
+fn fit_edge_line(img: &ImageView, p1: Point, p2: Point, decimation: usize) -> Option<(f64, f64, f64)> {
     let dx = p2.x - p1.x;
     let dy = p2.y - p1.y;
     let len = (dx * dx + dy * dy).sqrt();
@@ -407,6 +449,9 @@ fn fit_edge_line(img: &ImageView, p1: Point, p2: Point) -> Option<(f64, f64, f64
     let mut count = 0;
 
     let n_samples = (len as usize).clamp(5, 15);
+    // Original search range was 3 pixels
+    let r = if decimation > 1 { (decimation as i32) + 1 } else { 3 };
+
     for i in 1..=n_samples {
         let t = i as f64 / (n_samples + 1) as f64;
         let px = p1.x + dx * t;
@@ -416,7 +461,7 @@ fn fit_edge_line(img: &ImageView, p1: Point, p2: Point) -> Option<(f64, f64, f64
         let mut best_py = py;
         let mut best_mag = 0.0;
 
-        for step in -3..=3 {
+        for step in -r..=r {
             let sx = px + nx * f64::from(step);
             let sy = py + ny * f64::from(step);
 
@@ -474,7 +519,7 @@ fn fit_edge_line(img: &ImageView, p1: Point, p2: Point) -> Option<(f64, f64, f64
 /// This achieves ~0.02px accuracy vs ~0.2px for gradient-based methods.
 #[allow(clippy::similar_names)]
 // Collected in the quad extraction process
-fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, sigma: f64) -> Option<(f64, f64, f64)> {
+fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, sigma: f64, decimation: usize) -> Option<(f64, f64, f64)> {
     let dx = p2.x - p1.x;
     let dy = p2.y - p1.y;
     let len = (dx * dx + dy * dy).sqrt();
@@ -489,11 +534,13 @@ fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, si
     let mid_y = f64::midpoint(p1.y, p2.y);
     let mut d = -(nx * mid_x + ny * mid_y);
 
-    // Collect pixels within 2 pixels of the edge
-    let x0 = (p1.x.min(p2.x) - 3.0).max(1.0) as usize;
-    let x1 = (p1.x.max(p2.x) + 3.0).min((img.width - 2) as f64) as usize;
-    let y0 = (p1.y.min(p2.y) - 3.0).max(1.0) as usize;
-    let y1 = (p1.y.max(p2.y) + 3.0).min((img.height - 2) as f64) as usize;
+    // Collect pixels within a window of the edge. 
+    // Original window was 2.5 pixels
+    let window = if decimation > 1 { (decimation as f64) + 1.0 } else { 2.5 };
+    let x0 = (p1.x.min(p2.x) - window - 0.5).max(1.0) as usize;
+    let x1 = (p1.x.max(p2.x) + window + 0.5).min((img.width - 2) as f64) as usize;
+    let y0 = (p1.y.min(p2.y) - window - 0.5).max(1.0) as usize;
+    let y1 = (p1.y.max(p2.y) + window + 0.5).min((img.height - 2) as f64) as usize;
 
     // Use arena for samples to avoid heap allocation in hot loop
     // (x, y, intensity, projection)
@@ -512,13 +559,13 @@ fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, si
 
             // Check if near the edge segment (not infinite line)
             let t = ((x - p1.x) * dx + (y - p1.y) * dy) / (len * len);
-            if !(-0.1..=1.1).contains(&t) {
+            if !(0.05..=0.95).contains(&t) {
                 px += stride;
                 continue;
             }
 
             let dist_signed = nx * x + ny * y + d;
-            if dist_signed.abs() < 2.5 {
+            if dist_signed.abs() < window {
                 let intensity = f64::from(img.get_pixel(px, py));
                 // Pre-calculate nx*x + ny*y
                 let projection = nx * x + ny * y;
@@ -541,10 +588,11 @@ fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, si
 
     for &(_x, _y, intensity, projection) in &samples {
         let signed_dist = projection + d;
-        if signed_dist < -0.5 {
+        let plateau = sigma * 1.5;
+        if signed_dist < -plateau {
             dark_sum += intensity;
             dark_count += 1;
-        } else if signed_dist > 0.5 {
+        } else if signed_dist > plateau {
             light_sum += intensity;
             light_count += 1;
         }
@@ -568,14 +616,14 @@ fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, si
         for &(_x, _y, intensity, projection) in &samples {
             let signed_dist = (projection + d) * inv_sigma;
             
-            // Fast approximation of exp(-x^2): 1.0 / (1 + x^2 + 0.5*x^4)
             let x2 = signed_dist * signed_dist;
-            let exp_term = 1.0 / (1.0 + x2 + 0.5 * x2 * x2);
+            let exp_term = (-x2).exp();
             
-            let model = (a + b) * 0.5 + (b - a) * 0.5 * signed_dist.tanh(); // erf approx
+            let model = (a + b) * 0.5 + (b - a) * 0.5 * erf_approx(signed_dist);
             let residual = intensity - model;
             
-            let jacobian = (b - a) * 0.5 * exp_term * inv_sigma;
+            // Derivative of erf(x) is (2/sqrt(pi)) * exp(-x^2)
+            let jacobian = (b - a) * 0.5 * std::f64::consts::FRAC_2_SQRT_PI * exp_term * inv_sigma;
             jtj += jacobian * jacobian;
             jtr += jacobian * residual;
         }
@@ -927,26 +975,6 @@ mod tests {
     // SUB-PIXEL CORNER REFINEMENT ACCURACY TESTS
     // ========================================================================
 
-    /// Approximate error function (erf) for anti-aliased edge generation.
-    /// Uses the Abramowitz and Stegun approximation.
-    fn erf_approx(x: f64) -> f64 {
-        let sign = if x < 0.0 { -1.0 } else { 1.0 };
-        let x = x.abs();
-        
-        // Constants for approximation
-        let a1 = 0.254829592;
-        let a2 = -0.284496736;
-        let a3 = 1.421413741;
-        let a4 = -1.453152027;
-        let a5 = 1.061405429;
-        let p = 0.3275911;
-        
-        let t = 1.0 / (1.0 + p * x);
-        let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-x * x).exp();
-        
-        sign * y
-    }
-
     /// Generate a synthetic image with an anti-aliased vertical edge.
     /// 
     /// The edge is placed at `edge_x` (sub-pixel position) using the PSF model:
@@ -966,7 +994,7 @@ mod tests {
         for y in 0..height {
             for x in 0..width {
                 let px = x as f64;
-                let intensity = (a + b) / 2.0 + (b - a) / 2.0 * erf_approx((px - edge_x) / sigma);
+                let intensity = f64::midpoint(a, b) + (b - a) / 2.0 * erf_approx((px - edge_x) / sigma);
                 data[y * width + x] = intensity.clamp(0.0, 255.0) as u8;
             }
         }
@@ -1062,7 +1090,7 @@ mod tests {
             let p_prev = Point { x: true_x.round(), y: true_y.round() - 10.0 };
             let p_next = Point { x: true_x.round() - 10.0, y: true_y.round() };
             
-            let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma);
+            let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1);
             
             let error_x = (refined.x - true_x).abs();
             let error_y = (refined.y - true_y).abs();
@@ -1103,7 +1131,7 @@ mod tests {
         let p_prev = Point { x: true_edge_x.round(), y: corner_y - 10.0 };
         let p_next = Point { x: true_edge_x.round() - 10.0, y: corner_y };
         
-        let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma);
+        let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1);
         
         // The x-coordinate should be refined to near the true edge position
         // y-coordinate depends on the horizontal edge (which doesn't exist in this test)

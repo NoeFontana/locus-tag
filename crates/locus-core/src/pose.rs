@@ -3,6 +3,7 @@ use nalgebra::{Matrix3, Vector3};
 
 /// Camera intrinsics parameters.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CameraIntrinsics {
     /// Focal length in x (pixels).
     pub fx: f64,
@@ -47,6 +48,7 @@ impl CameraIntrinsics {
 // 3D Pose Estimation using PnP (Perspective-n-Point).
 /// A 3D pose representing rotation and translation.
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Pose {
     /// 3x3 Rotation matrix.
     pub rotation: Matrix3<f64>,

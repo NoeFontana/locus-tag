@@ -107,6 +107,7 @@ pub fn label_components<'a>(
 }
 
 /// Label components and compute bounding box stats for each.
+#[allow(clippy::too_many_lines)]
 pub fn label_components_with_stats<'a>(
     arena: &'a Bump,
     binary: &[u8],
@@ -253,6 +254,7 @@ pub fn label_components_with_stats<'a>(
 /// # Returns
 /// Same `LabelResult` as `label_components_with_stats`, but with improved connectivity
 /// for small features.
+#[allow(clippy::too_many_lines)]
 #[allow(clippy::cast_sign_loss)]
 #[allow(clippy::cast_possible_wrap)]
 pub fn label_components_threshold_model<'a>(
@@ -481,6 +483,37 @@ mod tests {
         assert_eq!(s2.max_x, 4);
         assert_eq!(s2.min_y, 3);
         assert_eq!(s2.max_y, 4);
+    }
+
+    #[test]
+    fn test_segmentation_with_decimation() {
+        let arena = Bump::new();
+        let width = 32;
+        let height = 32;
+        let mut binary = vec![255u8; width * height];
+        // Draw a 10x10 black square at (10,10)
+        for y in 10..20 {
+            for x in 10..20 {
+                binary[y * width + x] = 0;
+            }
+        }
+
+                    use crate::image::ImageView;
+                    let img = ImageView::new(&binary, width, height, width).expect("valid creation");
+                    
+                    // Decimate by 2 -> 16x16
+                    let mut decimated_data = vec![0u8; 16 * 16];
+                    let decimated_img = img.decimate_to(2, &mut decimated_data).expect("decimation failed");        
+        // In decimated image, square should be roughly at (5,5) with size 5x5
+        let result = label_components_with_stats(&arena, decimated_img.data, 16, 16, true);
+        
+        assert_eq!(result.component_stats.len(), 1);
+        let s = result.component_stats[0];
+        assert_eq!(s.pixel_count, 25);
+        assert_eq!(s.min_x, 5);
+        assert_eq!(s.max_x, 9);
+        assert_eq!(s.min_y, 5);
+        assert_eq!(s.max_y, 9);
     }
 
     proptest! {
