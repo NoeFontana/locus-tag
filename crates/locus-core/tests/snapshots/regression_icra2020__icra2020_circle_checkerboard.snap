@@ -1,6 +1,5 @@
 ---
 source: crates/locus-core/tests/regression_icra2020.rs
-assertion_line: 220
 expression: report
 ---
 entries:
@@ -23,14 +22,14 @@ entries:
     detected_ids: []
   0003.png:
     recall: 0.012987012987012988
-    avg_rmse: 132.6930466228693
+    avg_rmse: 0.4139310216392352
     latency_ms: "[latency]"
     detected_ids:
       - 44
       - 67
   0004.png:
     recall: 0.07792207792207792
-    avg_rmse: 113.81566770702733
+    avg_rmse: 0.7113308519538378
     latency_ms: "[latency]"
     detected_ids:
       - 20
@@ -48,7 +47,7 @@ entries:
       - 554
   0005.png:
     recall: 0.16883116883116883
-    avg_rmse: 103.7293660813655
+    avg_rmse: 1.008808065623005
     latency_ms: "[latency]"
     detected_ids:
       - 16
@@ -79,7 +78,7 @@ entries:
       - 159
   0006.png:
     recall: 0.2532467532467532
-    avg_rmse: 96.07419789092904
+    avg_rmse: 0.69617065777321
     latency_ms: "[latency]"
     detected_ids:
       - 15
@@ -123,7 +122,7 @@ entries:
       - 159
   0007.png:
     recall: 0.3246753246753247
-    avg_rmse: 90.29848051547074
+    avg_rmse: 0.6006808755649146
     latency_ms: "[latency]"
     detected_ids:
       - 16
@@ -178,7 +177,7 @@ entries:
       - 159
   0008.png:
     recall: 0.38311688311688313
-    avg_rmse: 84.91547008110068
+    avg_rmse: 0.6865721600592694
     latency_ms: "[latency]"
     detected_ids:
       - 12
@@ -242,7 +241,7 @@ entries:
       - 159
   0009.png:
     recall: 0.36363636363636365
-    avg_rmse: 86.69350689188423
+    avg_rmse: 0.6870524397947962
     latency_ms: "[latency]"
     detected_ids:
       - 17
@@ -303,7 +302,7 @@ entries:
       - 159
   0010.png:
     recall: 0.3961038961038961
-    avg_rmse: 83.91403049121234
+    avg_rmse: 0.5521145076112428
     latency_ms: "[latency]"
     detected_ids:
       - 12
@@ -369,7 +368,7 @@ entries:
       - 159
   0011.png:
     recall: 0.43506493506493504
-    avg_rmse: 80.72170421945371
+    avg_rmse: 0.5405189140256121
     latency_ms: "[latency]"
     detected_ids:
       - 11
@@ -441,7 +440,7 @@ entries:
       - 159
   0012.png:
     recall: 0.5
-    avg_rmse: 76.49641534498349
+    avg_rmse: 0.589402083294307
     latency_ms: "[latency]"
     detected_ids:
       - 9
@@ -523,7 +522,7 @@ entries:
       - 159
   0013.png:
     recall: 0.5064935064935064
-    avg_rmse: 75.99778189151941
+    avg_rmse: 0.5983767969188215
     latency_ms: "[latency]"
     detected_ids:
       - 11
@@ -606,7 +605,7 @@ entries:
       - 159
   0014.png:
     recall: 0.5194805194805194
-    avg_rmse: 75.08927145531968
+    avg_rmse: 0.552199417198178
     latency_ms: "[latency]"
     detected_ids:
       - 11
@@ -691,7 +690,7 @@ entries:
       - 159
   0015.png:
     recall: 0.5974025974025974
-    avg_rmse: 70.88858197846837
+    avg_rmse: 0.5901806085783009
     latency_ms: "[latency]"
     detected_ids:
       - 7
@@ -788,7 +787,7 @@ entries:
       - 159
   0016.png:
     recall: 0.6168831168831169
-    avg_rmse: 70.08160151376966
+    avg_rmse: 0.5579409573150841
     latency_ms: "[latency]"
     detected_ids:
       - 9
@@ -888,7 +887,7 @@ entries:
       - 159
   0017.png:
     recall: 0.6493506493506493
-    avg_rmse: 68.35912291155869
+    avg_rmse: 0.6135308122276765
     latency_ms: "[latency]"
     detected_ids:
       - 7
@@ -993,7 +992,7 @@ entries:
       - 159
   0018.png:
     recall: 0.6948051948051948
-    avg_rmse: 66.34404725117936
+    avg_rmse: 0.6065182206910775
     latency_ms: "[latency]"
     detected_ids:
       - 5
@@ -1105,7 +1104,7 @@ entries:
       - 159
   0019.png:
     recall: 0.7272727272727273
-    avg_rmse: 65.05194288489999
+    avg_rmse: 0.5697162944971816
     latency_ms: "[latency]"
     detected_ids:
       - 8
@@ -1222,7 +1221,7 @@ entries:
       - 159
   0020.png:
     recall: 0.7012987012987013
-    avg_rmse: 65.68214519181635
+    avg_rmse: 0.5668069361495877
     latency_ms: "[latency]"
     detected_ids:
       - 7
@@ -1336,7 +1335,7 @@ entries:
       - 554
   0021.png:
     recall: 0.7662337662337663
-    avg_rmse: 63.17179836350753
+    avg_rmse: 0.5943722016524358
     latency_ms: "[latency]"
     detected_ids:
       - 5
@@ -1460,7 +1459,7 @@ entries:
       - 554
   0022.png:
     recall: 0.8246753246753247
-    avg_rmse: 60.86295617895777
+    avg_rmse: 0.5831923253959104
     latency_ms: "[latency]"
     detected_ids:
       - 4
@@ -1592,7 +1591,7 @@ entries:
       - 159
   0023.png:
     recall: 0.8376623376623377
-    avg_rmse: 60.368117567868765
+    avg_rmse: 0.5479271685948489
     latency_ms: "[latency]"
     detected_ids:
       - 2
@@ -1726,7 +1725,7 @@ entries:
       - 159
   0024.png:
     recall: 0.8506493506493507
-    avg_rmse: 59.86725807721517
+    avg_rmse: 0.5316498972090156
     latency_ms: "[latency]"
     detected_ids:
       - 3
@@ -1862,7 +1861,7 @@ entries:
       - 159
   0025.png:
     recall: 0.8896103896103896
-    avg_rmse: 58.57593908418138
+    avg_rmse: 0.4967743877529131
     latency_ms: "[latency]"
     detected_ids:
       - 3
@@ -2004,7 +2003,7 @@ entries:
       - 159
   0026.png:
     recall: 0.9090909090909091
-    avg_rmse: 57.85864782383499
+    avg_rmse: 0.5029986992858401
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -2149,7 +2148,7 @@ entries:
       - 159
   0027.png:
     recall: 0.9155844155844156
-    avg_rmse: 57.41542463560227
+    avg_rmse: 0.5086219520376196
     latency_ms: "[latency]"
     detected_ids:
       - 1
@@ -2295,7 +2294,7 @@ entries:
       - 159
   0028.png:
     recall: 0.961038961038961
-    avg_rmse: 56.2376188728798
+    avg_rmse: 0.5270351934191382
     latency_ms: "[latency]"
     detected_ids:
       - 1
@@ -2448,7 +2447,7 @@ entries:
       - 159
   0029.png:
     recall: 0.935064935064935
-    avg_rmse: 56.651680838340404
+    avg_rmse: 0.5189948483523021
     latency_ms: "[latency]"
     detected_ids:
       - 1
@@ -2597,7 +2596,7 @@ entries:
       - 159
   0030.png:
     recall: 0.9675324675324676
-    avg_rmse: 55.74447659297024
+    avg_rmse: 0.49222869225863414
     latency_ms: "[latency]"
     detected_ids:
       - 1
@@ -2751,7 +2750,7 @@ entries:
       - 159
   0031.png:
     recall: 0.987012987012987
-    avg_rmse: 55.09939943979771
+    avg_rmse: 0.4801458136872837
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -2908,7 +2907,7 @@ entries:
       - 159
   0032.png:
     recall: 0.974025974025974
-    avg_rmse: 55.32872038120565
+    avg_rmse: 0.4931922138719825
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -3063,7 +3062,7 @@ entries:
       - 159
   0033.png:
     recall: 0.987012987012987
-    avg_rmse: 54.771611540718425
+    avg_rmse: 0.4842763254127565
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -3220,7 +3219,7 @@ entries:
       - 159
   0034.png:
     recall: 1
-    avg_rmse: 54.39590709582731
+    avg_rmse: 0.45990062699279693
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -3379,7 +3378,7 @@ entries:
       - 159
   0035.png:
     recall: 1
-    avg_rmse: 54.30446679369097
+    avg_rmse: 0.492501256952401
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -3539,7 +3538,7 @@ entries:
       - 341
   0036.png:
     recall: 1
-    avg_rmse: 54.22140433359213
+    avg_rmse: 0.5451368775227361
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -3698,7 +3697,7 @@ entries:
       - 159
   0037.png:
     recall: 1
-    avg_rmse: 54.00309356186662
+    avg_rmse: 0.4703998741819334
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -3857,7 +3856,7 @@ entries:
       - 159
   0038.png:
     recall: 0.9935064935064936
-    avg_rmse: 53.841435312763316
+    avg_rmse: 0.52074218168926
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -4015,7 +4014,7 @@ entries:
       - 159
   0039.png:
     recall: 0.9935064935064936
-    avg_rmse: 53.75317323047247
+    avg_rmse: 0.5390353858336729
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -4173,7 +4172,7 @@ entries:
       - 159
   0040.png:
     recall: 0.9935064935064936
-    avg_rmse: 53.62934256676625
+    avg_rmse: 0.4800171207864814
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -4331,7 +4330,7 @@ entries:
       - 159
   0041.png:
     recall: 1
-    avg_rmse: 53.46383154138326
+    avg_rmse: 0.45299875221744046
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -4490,7 +4489,7 @@ entries:
       - 159
   0042.png:
     recall: 0.9935064935064936
-    avg_rmse: 53.426917597241356
+    avg_rmse: 0.49667762136413524
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -4648,7 +4647,7 @@ entries:
       - 159
   0043.png:
     recall: 1
-    avg_rmse: 53.12589004366413
+    avg_rmse: 0.5323578585436387
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -4807,7 +4806,7 @@ entries:
       - 159
   0044.png:
     recall: 1
-    avg_rmse: 52.932612715783605
+    avg_rmse: 0.4929051312142236
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -4966,7 +4965,7 @@ entries:
       - 159
   0045.png:
     recall: 0.9935064935064936
-    avg_rmse: 52.87478144996071
+    avg_rmse: 0.534102540024826
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -5124,7 +5123,7 @@ entries:
       - 159
   0046.png:
     recall: 1
-    avg_rmse: 52.661169956034726
+    avg_rmse: 0.49560507522774905
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -5283,7 +5282,7 @@ entries:
       - 159
   0047.png:
     recall: 1
-    avg_rmse: 52.588459564181434
+    avg_rmse: 0.5149389071025271
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -5442,7 +5441,7 @@ entries:
       - 159
   0048.png:
     recall: 1
-    avg_rmse: 52.44042448748126
+    avg_rmse: 0.47286969784194827
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -5601,7 +5600,7 @@ entries:
       - 159
   0049.png:
     recall: 0.9935064935064936
-    avg_rmse: 52.295177235908795
+    avg_rmse: 0.5166726727913233
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -5759,7 +5758,7 @@ entries:
       - 159
   0050.png:
     recall: 1
-    avg_rmse: 52.08743466285546
+    avg_rmse: 0.393935485655459
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -5918,7 +5917,7 @@ entries:
       - 159
   0051.png:
     recall: 0.9935064935064936
-    avg_rmse: 52.07920385828103
+    avg_rmse: 0.440087516548221
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -6076,7 +6075,7 @@ entries:
       - 159
   0052.png:
     recall: 1
-    avg_rmse: 51.92471463662593
+    avg_rmse: 0.506492603275435
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -6235,7 +6234,7 @@ entries:
       - 159
   0053.png:
     recall: 1
-    avg_rmse: 51.782384988038956
+    avg_rmse: 0.4976064383177138
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -6394,7 +6393,7 @@ entries:
       - 159
   0054.png:
     recall: 1
-    avg_rmse: 51.5040557660115
+    avg_rmse: 0.4984719987391379
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -6553,7 +6552,7 @@ entries:
       - 159
   0055.png:
     recall: 1
-    avg_rmse: 51.41425127897537
+    avg_rmse: 0.4631823526265214
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -6712,7 +6711,7 @@ entries:
       - 159
   0056.png:
     recall: 1
-    avg_rmse: 51.42100553825807
+    avg_rmse: 0.47522250065988386
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -6871,7 +6870,7 @@ entries:
       - 159
   0057.png:
     recall: 1
-    avg_rmse: 51.27237518899079
+    avg_rmse: 0.49570734651492837
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -7030,7 +7029,7 @@ entries:
       - 159
   0058.png:
     recall: 1
-    avg_rmse: 51.033098807621336
+    avg_rmse: 0.4498346741655509
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -7189,7 +7188,7 @@ entries:
       - 159
   0059.png:
     recall: 1
-    avg_rmse: 50.90004910896378
+    avg_rmse: 0.5085129591282634
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -7348,7 +7347,7 @@ entries:
       - 159
   0060.png:
     recall: 1
-    avg_rmse: 50.95727687089806
+    avg_rmse: 0.5096367874976818
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -7507,7 +7506,7 @@ entries:
       - 159
   0061.png:
     recall: 1
-    avg_rmse: 50.854145249851705
+    avg_rmse: 0.5158037702572124
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -7666,7 +7665,7 @@ entries:
       - 159
   0062.png:
     recall: 1
-    avg_rmse: 50.55561577463244
+    avg_rmse: 0.4873694293006196
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -7825,7 +7824,7 @@ entries:
       - 159
   0063.png:
     recall: 1
-    avg_rmse: 50.492794169816285
+    avg_rmse: 0.44143470763424364
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -7984,7 +7983,7 @@ entries:
       - 159
   0064.png:
     recall: 1
-    avg_rmse: 50.43372021988498
+    avg_rmse: 0.44127745778773864
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -8143,7 +8142,7 @@ entries:
       - 159
   0065.png:
     recall: 1
-    avg_rmse: 50.38269756920004
+    avg_rmse: 0.4098107184664783
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -8302,7 +8301,7 @@ entries:
       - 159
   0066.png:
     recall: 1
-    avg_rmse: 50.24898773249967
+    avg_rmse: 0.4469173756074809
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -8461,7 +8460,7 @@ entries:
       - 159
   0067.png:
     recall: 1
-    avg_rmse: 50.10936753698329
+    avg_rmse: 0.4514899623190681
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -8620,7 +8619,7 @@ entries:
       - 159
   0068.png:
     recall: 1
-    avg_rmse: 50.01447460622562
+    avg_rmse: 0.49583349934378124
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -8779,7 +8778,7 @@ entries:
       - 159
   0069.png:
     recall: 1
-    avg_rmse: 49.92001794227022
+    avg_rmse: 0.4235813695404873
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -8938,7 +8937,7 @@ entries:
       - 159
   0070.png:
     recall: 1
-    avg_rmse: 49.882527078436965
+    avg_rmse: 0.4624808925874922
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -9097,7 +9096,7 @@ entries:
       - 159
   0071.png:
     recall: 1
-    avg_rmse: 49.77110909636526
+    avg_rmse: 0.4492567610269381
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -9256,7 +9255,7 @@ entries:
       - 159
   0072.png:
     recall: 1
-    avg_rmse: 49.69606188518254
+    avg_rmse: 0.4651564938780307
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -9415,7 +9414,7 @@ entries:
       - 159
   0073.png:
     recall: 1
-    avg_rmse: 49.64214500632066
+    avg_rmse: 0.47491810886823865
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -9574,7 +9573,7 @@ entries:
       - 159
   0074.png:
     recall: 1
-    avg_rmse: 49.5783877697651
+    avg_rmse: 0.4487113212968944
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -9733,7 +9732,7 @@ entries:
       - 159
   0075.png:
     recall: 1
-    avg_rmse: 49.358187481290564
+    avg_rmse: 0.3652054462634385
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -9892,7 +9891,7 @@ entries:
       - 159
   0076.png:
     recall: 1
-    avg_rmse: 49.42693452854931
+    avg_rmse: 0.3880251350133669
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -10051,7 +10050,7 @@ entries:
       - 159
   0077.png:
     recall: 1
-    avg_rmse: 49.33607141499523
+    avg_rmse: 0.4310018582996772
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -10210,7 +10209,7 @@ entries:
       - 159
   0078.png:
     recall: 1
-    avg_rmse: 49.24822601698504
+    avg_rmse: 0.34758586752133813
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -10369,7 +10368,7 @@ entries:
       - 159
   0079.png:
     recall: 1
-    avg_rmse: 49.21200152651618
+    avg_rmse: 0.3968032935453384
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -10528,7 +10527,7 @@ entries:
       - 159
   0080.png:
     recall: 1
-    avg_rmse: 49.14283782422056
+    avg_rmse: 0.3616692270430295
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -10687,7 +10686,7 @@ entries:
       - 159
   0081.png:
     recall: 1
-    avg_rmse: 49.10528429267143
+    avg_rmse: 0.3864779969857274
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -10846,7 +10845,7 @@ entries:
       - 159
   0082.png:
     recall: 1
-    avg_rmse: 49.07915227749584
+    avg_rmse: 0.35210590146058973
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -11005,7 +11004,7 @@ entries:
       - 159
   0083.png:
     recall: 1
-    avg_rmse: 49.03655950341586
+    avg_rmse: 0.32849095249832866
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -11164,7 +11163,7 @@ entries:
       - 159
   0084.png:
     recall: 1
-    avg_rmse: 49.01024278118614
+    avg_rmse: 0.3167449501728303
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -11323,7 +11322,7 @@ entries:
       - 159
   0085.png:
     recall: 1
-    avg_rmse: 48.97364191077354
+    avg_rmse: 0.34285432940260047
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -11482,7 +11481,7 @@ entries:
       - 159
   0086.png:
     recall: 1
-    avg_rmse: 48.97240180575287
+    avg_rmse: 0.320695664370006
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -11641,7 +11640,7 @@ entries:
       - 159
   0087.png:
     recall: 1
-    avg_rmse: 48.95251090452236
+    avg_rmse: 0.2855058350259455
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -11800,7 +11799,7 @@ entries:
       - 159
   0088.png:
     recall: 1
-    avg_rmse: 48.941954063106316
+    avg_rmse: 0.274578694189995
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -11959,7 +11958,7 @@ entries:
       - 159
   0089.png:
     recall: 1
-    avg_rmse: 48.942112782794254
+    avg_rmse: 0.2640345621560666
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -12118,7 +12117,7 @@ entries:
       - 159
   0090.png:
     recall: 1
-    avg_rmse: 48.96433142544043
+    avg_rmse: 0.21423200364597594
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -12277,7 +12276,7 @@ entries:
       - 159
   0091.png:
     recall: 1
-    avg_rmse: 48.933082188625086
+    avg_rmse: 0.31973262096640265
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -12436,7 +12435,7 @@ entries:
       - 159
   0092.png:
     recall: 1
-    avg_rmse: 48.96393738630243
+    avg_rmse: 0.35087769233563554
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -12595,7 +12594,7 @@ entries:
       - 159
   0093.png:
     recall: 1
-    avg_rmse: 49.01795851865362
+    avg_rmse: 0.36561230821241764
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -12754,7 +12753,7 @@ entries:
       - 159
   0094.png:
     recall: 1
-    avg_rmse: 49.090467979299895
+    avg_rmse: 0.4035211104795247
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -12913,7 +12912,7 @@ entries:
       - 159
   0095.png:
     recall: 1
-    avg_rmse: 49.19338933568145
+    avg_rmse: 0.39751472076313316
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -13073,7 +13072,7 @@ entries:
       - 554
   0096.png:
     recall: 1
-    avg_rmse: 49.25726606386966
+    avg_rmse: 0.36269199369941335
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -13232,7 +13231,7 @@ entries:
       - 159
   0097.png:
     recall: 1
-    avg_rmse: 49.271090699795955
+    avg_rmse: 0.42848050106583613
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -13391,7 +13390,7 @@ entries:
       - 159
   0098.png:
     recall: 1
-    avg_rmse: 49.39298549152089
+    avg_rmse: 0.3956805903248307
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -13550,7 +13549,7 @@ entries:
       - 159
   0099.png:
     recall: 1
-    avg_rmse: 49.460641050362284
+    avg_rmse: 0.43059207153893436
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -13709,7 +13708,7 @@ entries:
       - 159
   0100.png:
     recall: 1
-    avg_rmse: 49.58517402247177
+    avg_rmse: 0.4612245907033054
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -13868,7 +13867,7 @@ entries:
       - 159
   0101.png:
     recall: 1
-    avg_rmse: 49.59820129426967
+    avg_rmse: 0.43259470956439533
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -14027,7 +14026,7 @@ entries:
       - 159
   0102.png:
     recall: 1
-    avg_rmse: 49.74742226825884
+    avg_rmse: 0.37736871631119273
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -14187,7 +14186,7 @@ entries:
       - 554
   0103.png:
     recall: 1
-    avg_rmse: 49.76472058813325
+    avg_rmse: 0.4949465705275859
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -14346,7 +14345,7 @@ entries:
       - 159
   0104.png:
     recall: 1
-    avg_rmse: 49.87025183261898
+    avg_rmse: 0.530318386584235
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -14505,7 +14504,7 @@ entries:
       - 159
   0105.png:
     recall: 1
-    avg_rmse: 49.94125768196507
+    avg_rmse: 0.4477873693923035
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -14664,7 +14663,7 @@ entries:
       - 159
   0106.png:
     recall: 1
-    avg_rmse: 50.043748645252876
+    avg_rmse: 0.5012449007343777
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -14824,7 +14823,7 @@ entries:
       - 554
   0107.png:
     recall: 1
-    avg_rmse: 50.14051902922526
+    avg_rmse: 0.4987851908853931
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -14983,7 +14982,7 @@ entries:
       - 159
   0108.png:
     recall: 1
-    avg_rmse: 50.20708785055084
+    avg_rmse: 0.48697181688153046
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -15142,7 +15141,7 @@ entries:
       - 159
   0109.png:
     recall: 1
-    avg_rmse: 50.311758723816496
+    avg_rmse: 0.5256600982342531
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -15301,7 +15300,7 @@ entries:
       - 159
   0110.png:
     recall: 1
-    avg_rmse: 50.34041237331725
+    avg_rmse: 0.546301447155539
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -15461,7 +15460,7 @@ entries:
       - 554
   0111.png:
     recall: 1
-    avg_rmse: 50.53930444445165
+    avg_rmse: 0.43639436455208336
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -15620,7 +15619,7 @@ entries:
       - 159
   0112.png:
     recall: 1
-    avg_rmse: 50.596600950708755
+    avg_rmse: 0.4856301277284213
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -15779,7 +15778,7 @@ entries:
       - 159
   0113.png:
     recall: 1
-    avg_rmse: 50.74312543910271
+    avg_rmse: 0.5145820930570063
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -15938,7 +15937,7 @@ entries:
       - 159
   0114.png:
     recall: 1
-    avg_rmse: 50.81251557866078
+    avg_rmse: 0.5206113721670534
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -16097,7 +16096,7 @@ entries:
       - 159
   0115.png:
     recall: 1
-    avg_rmse: 50.96242926459681
+    avg_rmse: 0.5211802231122591
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -16256,7 +16255,7 @@ entries:
       - 159
   0116.png:
     recall: 1
-    avg_rmse: 51.032764167343224
+    avg_rmse: 0.5309202656106876
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -16415,7 +16414,7 @@ entries:
       - 159
   0117.png:
     recall: 1
-    avg_rmse: 51.15264123723571
+    avg_rmse: 0.5610747139738682
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -16574,7 +16573,7 @@ entries:
       - 159
   0118.png:
     recall: 1
-    avg_rmse: 51.28592418788841
+    avg_rmse: 0.52149740874946
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -16733,7 +16732,7 @@ entries:
       - 159
   0119.png:
     recall: 1
-    avg_rmse: 51.36718447155599
+    avg_rmse: 0.5537946304355134
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -16892,7 +16891,7 @@ entries:
       - 159
   0120.png:
     recall: 1
-    avg_rmse: 51.46866924998402
+    avg_rmse: 0.5985876412793819
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -17051,7 +17050,7 @@ entries:
       - 159
   0121.png:
     recall: 1
-    avg_rmse: 51.55577491407481
+    avg_rmse: 0.6125415048917596
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -17211,7 +17210,7 @@ entries:
       - 554
   0122.png:
     recall: 1
-    avg_rmse: 51.60887809094995
+    avg_rmse: 0.6147879652851581
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -17370,7 +17369,7 @@ entries:
       - 159
   0123.png:
     recall: 1
-    avg_rmse: 51.860583513531026
+    avg_rmse: 0.6166026501092555
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -17529,7 +17528,7 @@ entries:
       - 159
   0124.png:
     recall: 1
-    avg_rmse: 52.00596604950692
+    avg_rmse: 0.5761979189678972
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -17688,7 +17687,7 @@ entries:
       - 159
   0125.png:
     recall: 1
-    avg_rmse: 52.093901054005784
+    avg_rmse: 0.6170673286766262
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -17847,7 +17846,7 @@ entries:
       - 159
   0126.png:
     recall: 1
-    avg_rmse: 52.24209449061951
+    avg_rmse: 0.6153673831695462
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -18006,7 +18005,7 @@ entries:
       - 159
   0127.png:
     recall: 1
-    avg_rmse: 52.35492276932983
+    avg_rmse: 0.6107533891380946
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -18165,7 +18164,7 @@ entries:
       - 159
   0128.png:
     recall: 0.9935064935064936
-    avg_rmse: 52.62589800641968
+    avg_rmse: 0.5558594955109983
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -18323,7 +18322,7 @@ entries:
       - 159
   0129.png:
     recall: 0.9935064935064936
-    avg_rmse: 53.5271400550692
+    avg_rmse: 1.7109349112879702
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -18482,7 +18481,7 @@ entries:
       - 554
   0130.png:
     recall: 1
-    avg_rmse: 52.61176597314638
+    avg_rmse: 0.5814414646341789
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -18641,7 +18640,7 @@ entries:
       - 159
   0131.png:
     recall: 1
-    avg_rmse: 52.669742730366735
+    avg_rmse: 0.6253001537493843
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -18800,7 +18799,7 @@ entries:
       - 159
   0132.png:
     recall: 1
-    avg_rmse: 52.75213714368947
+    avg_rmse: 0.616483602461743
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -18959,7 +18958,7 @@ entries:
       - 159
   0133.png:
     recall: 0.9935064935064936
-    avg_rmse: 52.47656071656047
+    avg_rmse: 0.6449349035229717
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -19117,7 +19116,7 @@ entries:
       - 159
   0134.png:
     recall: 1
-    avg_rmse: 52.93952426930583
+    avg_rmse: 0.6172624423182144
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -19276,7 +19275,7 @@ entries:
       - 159
   0135.png:
     recall: 1
-    avg_rmse: 53.012943843747244
+    avg_rmse: 0.5747643849264805
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -19435,7 +19434,7 @@ entries:
       - 159
   0136.png:
     recall: 1
-    avg_rmse: 53.115301341903276
+    avg_rmse: 0.6576453544883595
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -19594,7 +19593,7 @@ entries:
       - 159
   0137.png:
     recall: 1
-    avg_rmse: 53.21980609026715
+    avg_rmse: 0.6056995922166787
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -19753,7 +19752,7 @@ entries:
       - 159
   0138.png:
     recall: 1
-    avg_rmse: 53.36416357799866
+    avg_rmse: 0.5801344358422075
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -19912,7 +19911,7 @@ entries:
       - 159
   0139.png:
     recall: 0.9935064935064936
-    avg_rmse: 53.54895775168073
+    avg_rmse: 0.6022614123743791
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -20071,7 +20070,7 @@ entries:
       - 554
   0140.png:
     recall: 1
-    avg_rmse: 53.612169016494
+    avg_rmse: 0.6203941407054058
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -20230,7 +20229,7 @@ entries:
       - 159
   0141.png:
     recall: 1
-    avg_rmse: 53.61394811992734
+    avg_rmse: 0.6444628473044054
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -20389,7 +20388,7 @@ entries:
       - 159
   0142.png:
     recall: 0.9935064935064936
-    avg_rmse: 53.85047123974949
+    avg_rmse: 0.6011267501050234
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -20547,7 +20546,7 @@ entries:
       - 159
   0143.png:
     recall: 1
-    avg_rmse: 53.80367584763496
+    avg_rmse: 0.5713058828496228
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -20706,7 +20705,7 @@ entries:
       - 159
   0144.png:
     recall: 0.9935064935064936
-    avg_rmse: 53.807860071173145
+    avg_rmse: 0.566085397482461
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -20864,7 +20863,7 @@ entries:
       - 159
   0145.png:
     recall: 1
-    avg_rmse: 53.76318341645478
+    avg_rmse: 0.574880204170955
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -21023,7 +21022,7 @@ entries:
       - 159
   0146.png:
     recall: 1
-    avg_rmse: 53.81944843248309
+    avg_rmse: 0.5339696709897795
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -21182,7 +21181,7 @@ entries:
       - 159
   0147.png:
     recall: 1
-    avg_rmse: 53.78473226860051
+    avg_rmse: 0.564743420761309
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -21341,7 +21340,7 @@ entries:
       - 159
   0148.png:
     recall: 0.974025974025974
-    avg_rmse: 54.535315826477515
+    avg_rmse: 0.5543263621896714
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -21496,7 +21495,7 @@ entries:
       - 158
   0149.png:
     recall: 0.9805194805194806
-    avg_rmse: 54.35620260460116
+    avg_rmse: 0.5169778014279169
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -21652,7 +21651,7 @@ entries:
       - 157
   0150.png:
     recall: 0.987012987012987
-    avg_rmse: 54.17942634540166
+    avg_rmse: 0.5525612644563656
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -21809,7 +21808,7 @@ entries:
       - 159
   0151.png:
     recall: 0.9545454545454546
-    avg_rmse: 55.04857254621213
+    avg_rmse: 0.513375813744303
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -21961,7 +21960,7 @@ entries:
       - 159
   0152.png:
     recall: 0.987012987012987
-    avg_rmse: 54.0592932617967
+    avg_rmse: 0.5217757646838519
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -22118,7 +22117,7 @@ entries:
       - 159
   0153.png:
     recall: 0.935064935064935
-    avg_rmse: 55.62318775524077
+    avg_rmse: 0.5354321643643244
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -22267,7 +22266,7 @@ entries:
       - 157
   0154.png:
     recall: 0.922077922077922
-    avg_rmse: 55.82157512685795
+    avg_rmse: 0.4947633706506055
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -22414,7 +22413,7 @@ entries:
       - 158
   0155.png:
     recall: 0.9090909090909091
-    avg_rmse: 56.231496808239314
+    avg_rmse: 0.5503622673165791
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -22559,7 +22558,7 @@ entries:
       - 158
   0156.png:
     recall: 0.8636363636363636
-    avg_rmse: 57.67891274445857
+    avg_rmse: 0.5701212149591126
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -22697,7 +22696,7 @@ entries:
       - 156
   0157.png:
     recall: 0.8311688311688312
-    avg_rmse: 58.833223175528175
+    avg_rmse: 0.5575066576665123
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -22830,7 +22829,7 @@ entries:
       - 155
   0158.png:
     recall: 0.8181818181818182
-    avg_rmse: 58.90987930924209
+    avg_rmse: 0.5069338261375431
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -22961,7 +22960,7 @@ entries:
       - 157
   0159.png:
     recall: 0.7922077922077922
-    avg_rmse: 59.767915648191256
+    avg_rmse: 0.4989848152340119
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -23088,7 +23087,7 @@ entries:
       - 154
   0160.png:
     recall: 0.7337662337662337
-    avg_rmse: 62.22468069039701
+    avg_rmse: 0.5198375328596399
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -23206,7 +23205,7 @@ entries:
       - 155
   0161.png:
     recall: 0.7077922077922078
-    avg_rmse: 63.18985038738099
+    avg_rmse: 0.5168675876858748
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -23320,7 +23319,7 @@ entries:
       - 152
   0162.png:
     recall: 0.6948051948051948
-    avg_rmse: 63.778445093299695
+    avg_rmse: 0.4581385872341642
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -23432,7 +23431,7 @@ entries:
       - 152
   0163.png:
     recall: 0.6688311688311688
-    avg_rmse: 64.89530413710916
+    avg_rmse: 0.4806257821161802
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -23540,7 +23539,7 @@ entries:
       - 153
   0164.png:
     recall: 0.6558441558441559
-    avg_rmse: 65.45498478017487
+    avg_rmse: 0.540102841307067
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -23646,7 +23645,7 @@ entries:
       - 152
   0165.png:
     recall: 0.6103896103896104
-    avg_rmse: 67.74999746755944
+    avg_rmse: 0.4772544255347779
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -23745,7 +23744,7 @@ entries:
       - 153
   0166.png:
     recall: 0.5454545454545454
-    avg_rmse: 70.4351795034799
+    avg_rmse: 0.6443763220165808
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -23834,7 +23833,7 @@ entries:
       - 149
   0167.png:
     recall: 0.512987012987013
-    avg_rmse: 72.37759146179144
+    avg_rmse: 0.646102951977397
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -23918,7 +23917,7 @@ entries:
       - 147
   0168.png:
     recall: 0.4805194805194805
-    avg_rmse: 74.27629738526909
+    avg_rmse: 0.5213132956285572
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -23997,7 +23996,7 @@ entries:
       - 148
   0169.png:
     recall: 0.44805194805194803
-    avg_rmse: 75.52322705407559
+    avg_rmse: 0.5772884478408927
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -24072,7 +24071,7 @@ entries:
       - 579
   0170.png:
     recall: 0.42857142857142855
-    avg_rmse: 77.3649906003716
+    avg_rmse: 0.5685928780716416
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -24143,7 +24142,7 @@ entries:
       - 146
   0171.png:
     recall: 0.4155844155844156
-    avg_rmse: 78.3114791278964
+    avg_rmse: 0.6054999333136963
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -24213,7 +24212,7 @@ entries:
       - 554
   0172.png:
     recall: 0.38961038961038963
-    avg_rmse: 80.14600433918032
+    avg_rmse: 0.6538295456284556
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -24278,7 +24277,7 @@ entries:
       - 145
   0173.png:
     recall: 0.3181818181818182
-    avg_rmse: 86.9835442957232
+    avg_rmse: 0.6558616411922513
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -24332,7 +24331,7 @@ entries:
       - 143
   0174.png:
     recall: 0.2532467532467532
-    avg_rmse: 92.18177565812837
+    avg_rmse: 0.7493960499085143
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -24376,7 +24375,7 @@ entries:
       - 141
   0175.png:
     recall: 0.16233766233766234
-    avg_rmse: 101.99310740668344
+    avg_rmse: 0.8131499001721807
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -24407,7 +24406,7 @@ entries:
       - 139
   0176.png:
     recall: 0.08441558441558442
-    avg_rmse: 99.34046505912403
+    avg_rmse: 0.9816949216021708
     latency_ms: "[latency]"
     detected_ids:
       - 0
@@ -24425,7 +24424,7 @@ entries:
       - 92
   0177.png:
     recall: 0.012987012987012988
-    avg_rmse: 100.2803613708812
+    avg_rmse: 0.6382347680659768
     latency_ms: "[latency]"
     detected_ids:
       - 23
@@ -24447,4 +24446,4 @@ entries:
     detected_ids: []
 mean_latency_ms: "[latency]"
 mean_recall: 0.8437970868910092
-mean_rmse: 56.18621458824409
+mean_rmse: 0.5065488660703011

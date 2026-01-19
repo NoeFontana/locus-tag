@@ -229,16 +229,18 @@ fn try_form_quad(
     let c3 = line_intersection(&group1[1], &group2[0])?;
 
     // Validate quad: check area and convexity
+    // In image coordinates (Y-down), positive shoelace sum means Clockwise.
     let area = quad_area(&[c0, c1, c2, c3]);
+
+    // Check magnitude first to avoid branching
     if area.abs() < 16.0 || area.abs() > 1_000_000.0 {
         return None;
     }
 
-    // In image coordinates (Y-down), positive shoelace sum means Clockwise.
     if area > 0.0 {
-        Some([c0, c1, c2, c3])
+        Some([c0, c1, c2, c3])     // CW
     } else {
-        Some([c0, c3, c2, c1]) // Reverse CCW to CW
+        Some([c0, c3, c2, c1])     // Flip CCW to CW
     }
 }
 
@@ -515,56 +517,19 @@ pub fn fit_quad_from_component(
     find_quads_from_segments(&lines).into_iter().next()
 }
 
-/// Fit a quad from boundary pixels using gradient direction clustering.
-///
-/// For small tags (~9px), there are essentially 4 gradient directions
-/// (one per edge). This function:
-/// 1. Extracts boundary pixels from the component
-/// 2. Clusters them by gradient direction into 4 groups
-/// 3. Fits a line to each group
-/// 4. Intersects lines to find quad corners
-///
-/// Returns None if a valid quad cannot be formed.
-#[allow(clippy::cast_possible_wrap)]
-#[allow(clippy::cast_sign_loss)]
-#[allow(clippy::similar_names)]
-#[must_use]
-pub fn fit_quad_from_gradients(
-    grads: &[Gradient],
-    labels: &[u32],
-    label: u32,
-    width: usize,
-    height: usize,
-    min_edge_pixels: usize,
+
+
+/// Core solver that clusters boundary points into 4 groups and computes the quad.
+/// 
+/// 1. K-means clustering of gradient angles -> 4 groups (Right, Down, Left, Up)
+/// 2. Line fitting for each cluster
+/// 3. Intersection of lines to form CW quad [TL, TR, BR, BL]
+fn solve_quad_from_boundary_points(
+    boundary_points: &[(f32, f32, f32)], // x, y, angle
+    _img_width: usize, // Unused for now but kept for context if needed for boundary checks
+    min_pixels: usize,
 ) -> Option<[[f32; 2]; 4]> {
-    // Collect boundary pixels: pixels in this component adjacent to different component
-    let mut boundary_points: Vec<(usize, usize, f32)> = Vec::new(); // (x, y, angle)
-
-    for y in 1..height - 1 {
-        for x in 1..width - 1 {
-            let idx = y * width + x;
-            if labels[idx] != label {
-                continue;
-            }
-
-            // Check if boundary (any neighbor is different)
-            let is_boundary = labels[idx - 1] != label
-                || labels[idx + 1] != label
-                || labels[idx - width] != label
-                || labels[idx + width] != label;
-
-            if is_boundary && grads[idx].mag > 20 {
-                let angle = f32::from(grads[idx].gy).atan2(f32::from(grads[idx].gx));
-                boundary_points.push((x, y, angle));
-            }
-        }
-    }
-
-    if boundary_points.len() < min_edge_pixels * 4 {
-        return None; // Not enough boundary points
-    }
-
-    // Cluster into 4 directions using simple k-means on angles
+     // Cluster into 4 directions using simple k-means on angles
     // Initialize with 4 orthogonal directions
     let mut centroids = [
         0.0f32,
@@ -607,38 +572,122 @@ pub fn fit_quad_from_gradients(
     }
 
     // Fit line to each cluster
-    let mut lines: Vec<LineSegment> = Vec::new();
+    let mut lines = [LineSegment {
+        x0: 0.0,
+        y0: 0.0,
+        x1: 0.0,
+        y1: 0.0,
+        angle: 0.0,
+    }; 4];
+    
+    // Check if all clusters have enough points
     for c in 0..4 {
-        let cluster_points: Vec<(f32, f32)> = boundary_points
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| assignments[*i] == c)
-            .map(|(_, (x, y, _))| (*x as f32, *y as f32))
-            .collect();
-
-        if cluster_points.len() < min_edge_pixels {
-            continue;
+        // We reuse the iterator logic but need to be careful with allocations.
+        // For performance, we can do a single pass to compute stats for all clusters.
+        let mut sum_x = 0.0f32;
+        let mut sum_y = 0.0f32;
+        let mut count = 0usize;
+        
+        // This is slightly inefficient iterating 4 times, but N is small (<100 points usually).
+        // Optimized: Single pass over points would be better if we had arrays for sums.
+        for (i, (x, y, _)) in boundary_points.iter().enumerate() {
+            if assignments[i] == c {
+                sum_x += *x;
+                sum_y += *y;
+                count += 1;
+            }
         }
 
-        // Simple line fit: use endpoints (could use least squares)
-        let (x0, y0) = cluster_points[0];
-        let (x1, y1) = cluster_points[cluster_points.len() - 1];
+        if count < min_pixels {
+            return None;
+        }
 
-        lines.push(LineSegment {
-            x0,
-            y0,
-            x1,
-            y1,
-            angle: centroids[c],
-        });
+        let mean_x = sum_x / count as f32;
+        let mean_y = sum_y / count as f32;
+
+        // Compute dominant direction (PCA or simple angle average)
+        // Here we just use the centroid angle as the line normal/direction
+        let angle = centroids[c];
+        let nx = angle.cos();
+        let ny = angle.sin();
+        
+        // Form line segment roughly through the mean with correct orientation
+        // We need an arbitrary extent for intersection
+        lines[c] = LineSegment {
+            x0: mean_x - nx * 100.0, 
+            y0: mean_y - ny * 100.0,
+            x1: mean_x + nx * 100.0,
+            y1: mean_y + ny * 100.0,
+            angle,
+        };
     }
 
-    if lines.len() < 4 {
+    // Direct intersection of ordered clusters:
+    // 0: Right (0), 1: Down (PI/2), 2: Left (PI), 3: Up (-PI/2)
+    // Corners for Clockwise (CW) winding in Y-Down image coordinates:
+    // Intersections for CW [TL, TR, BR, BL]:
+    // TL = Intersection of Left (2) and Top (3).
+    // TR = Intersection of Top (3) and Right (0).
+    // BR = Intersection of Right (0) and Bottom (1).
+    // BL = Intersection of Bottom (1) and Left (2).
+    
+    let tl = line_intersection(&lines[2], &lines[3])?;
+    let tr = line_intersection(&lines[3], &lines[0])?;
+    let br = line_intersection(&lines[0], &lines[1])?;
+    let bl = line_intersection(&lines[1], &lines[2])?;
+    
+    let corners = [tl, tr, br, bl];
+
+    // Verify convex and strictly Positive area (CW)
+    let area = quad_area(&corners);
+    if area < 16.0 || area > 1_000_000.0 {
         return None;
     }
+    
+    Some(corners)
+}
 
-    // Find 4 line segments that form a quad
-    find_quads_from_segments(&lines).into_iter().next()
+/// Fit a quad from boundary pixels using gradient direction clustering.
+#[allow(clippy::cast_possible_wrap)]
+#[allow(clippy::cast_sign_loss)]
+#[allow(clippy::similar_names)]
+#[must_use]
+pub fn fit_quad_from_gradients(
+    grads: &[Gradient],
+    labels: &[u32],
+    label: u32,
+    width: usize,
+    height: usize,
+    min_edge_pixels: usize,
+) -> Option<[[f32; 2]; 4]> {
+    // Collect boundary pixels
+    let mut boundary_points: Vec<(f32, f32, f32)> = Vec::with_capacity(min_edge_pixels * 4); // (x, y, angle)
+
+    for y in 1..height - 1 {
+        for x in 1..width - 1 {
+            let idx = y * width + x;
+            if labels[idx] != label {
+                continue;
+            }
+
+            // Check if boundary (any neighbor is different)
+            let is_boundary = labels[idx - 1] != label
+                || labels[idx + 1] != label
+                || labels[idx - width] != label
+                || labels[idx + width] != label;
+
+            if is_boundary && grads[idx].mag > 20 {
+                let angle = f32::from(grads[idx].gy).atan2(f32::from(grads[idx].gx));
+                boundary_points.push((x as f32, y as f32, angle));
+            }
+        }
+    }
+
+    if boundary_points.len() < min_edge_pixels * 4 {
+        return None; // Not enough boundary points
+    }
+
+    solve_quad_from_boundary_points(&boundary_points, width, min_edge_pixels)
 }
 
 /// Compute angle difference in range [0, π/2] (perpendicular equivalence)
@@ -712,7 +761,15 @@ mod tests {
                 [c[3].0, c[3].1],
             ];
             let area = quad_area(&corners);
-            assert!(area >= 0.0);
+            
+            // Shoelace formula returns signed area. 
+            // Asserting area >= 0.0 is incorrect for random points (random winding).
+            // Instead, verify that reversing the order negates the area.
+            let mut corners_rev = corners;
+            corners_rev.reverse();
+            let area_rev = quad_area(&corners_rev);
+            
+            assert!((area + area_rev).abs() < 0.01);
 
             // Area should be zero if points are identical
             let identical_corners = [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]];

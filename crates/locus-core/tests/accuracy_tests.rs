@@ -26,7 +26,11 @@ fn test_accuracy_synthetic() {
         let img = locus_core::image::ImageView::new(&data, canvas_size, canvas_size, canvas_size)
             .unwrap();
 
-        let mut detector = Detector::new();
+        let config = locus_core::config::DetectorConfig::builder()
+            .threshold_min_range(0) // Synthetic images have 0 noise
+            .quad_min_fill_ratio(0.1) // Synthetic tags might yield thin borders -> low fill
+            .build();
+        let mut detector = Detector::with_config(config);
         detector.set_families(&[family]);
         let detections = detector.detect(&img);
 
