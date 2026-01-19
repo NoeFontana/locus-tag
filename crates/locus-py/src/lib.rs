@@ -271,11 +271,15 @@ impl Detector {
     }
 
     /// Detect tags in the image using default decoders.
+    #[pyo3(signature = (img, decimation = 1))]
     #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
-    fn detect(&mut self, img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
+    fn detect(&mut self, img: PyReadonlyArray2<u8>, decimation: usize) -> PyResult<Vec<Detection>> {
         let source = create_image_view(&img)?;
         let view = source.as_view()?;
-        let detections = self.inner.detect(&view);
+        let options = locus_core::DetectOptions::builder()
+            .decimation(decimation)
+            .build();
+        let detections = self.inner.detect_with_options(&view, &options);
         Ok(detections.into_iter().map(Detection::from).collect())
     }
 
