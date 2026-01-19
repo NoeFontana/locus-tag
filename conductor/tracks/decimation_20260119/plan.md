@@ -9,12 +9,12 @@ In this phase, we will update the internal `locus-core` detection pipeline to su
 - [x] Task: Update internal image representation and thresholding to handle decimation [fc1413d]
     - [x] Write Tests: Create unit tests in `crates/locus-core/src/threshold.rs` to verify thresholding on decimated inputs.
     - [x] Implement: Modify the adaptive thresholding logic to skip pixels based on the decimation factor $.
-- [ ] Task: Update segmentation and quad detection for decimated coordinate space
-    - [ ] Write Tests: Create tests in `crates/locus-core/src/segmentation.rs` to verify component extraction on decimated grids.
-    - [ ] Implement: Adjust Union-Find and Quad extraction to operate on the reduced coordinate space.
-- [ ] Task: Implement high-resolution sub-pixel refinement
-    - [ ] Write Tests: Create a test case where a decimated quad is refined against the original high-res gradient.
-    - [ ] Implement: Scale the decimated quad corners by $ and pass them to the existing gradient-based refinement engine using the original image.
+- [x] Task: Update segmentation and quad detection for decimated coordinate space [dfd6f5a]
+    - [x] Write Tests: Create tests in `crates/locus-core/src/segmentation.rs` to verify component extraction on decimated grids.
+    - [x] Implement: Adjust Union-Find and Quad extraction to operate on the reduced coordinate space.
+- [x] Task: Implement high-resolution sub-pixel refinement [dfd6f5a]
+    - [x] Write Tests: Create a test case where a decimated quad is refined against the original high-res gradient.
+    - [x] Implement: Scale the decimated quad corners by $ and pass them to the existing gradient-based refinement engine using the original image.
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Core Rust Implementation' (Protocol in workflow.md)
 
 ## Phase 2: Python Bindings & API (locus-py)
