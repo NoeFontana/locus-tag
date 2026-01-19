@@ -320,8 +320,8 @@ impl Detector {
                     binarized,
                     self.config.threshold_min_radius,
                     self.config.threshold_max_radius,
-                    40, // gradient threshold to distinguish edges from uniform regions
-                    3,  // constant C
+                    self.config.adaptive_threshold_gradient_threshold,
+                    self.config.adaptive_threshold_constant,
                 );
             } else {
                 // Fallback to fixed 13x13 window (radius=6)
@@ -330,12 +330,13 @@ impl Detector {
                     integral,
                     binarized,
                     6,
-                    3,
+                    self.config.adaptive_threshold_constant,
                 );
             }
             
             // For threshold_map, store the local mean (for potential threshold-model segmentation)
-            crate::threshold::compute_threshold_map(&sharpened_img, integral, threshold_map, 6, 3);
+            let map_radius = if self.config.enable_adaptive_window { self.config.threshold_max_radius } else { 6 };
+            crate::threshold::compute_threshold_map(&sharpened_img, integral, threshold_map, map_radius, self.config.adaptive_threshold_constant);
         }
         stats.threshold_ms = start_thresh.elapsed().as_secs_f64() * 1000.0;
 
@@ -351,6 +352,7 @@ impl Detector {
                 img.height,
                 self.config.segmentation_connectivity == config::SegmentationConnectivity::Eight,
                 self.config.quad_min_area, // Keep the noise suppression
+                self.config.segmentation_margin,
             )
         };
         stats.segmentation_ms = start_seg.elapsed().as_secs_f64() * 1000.0;

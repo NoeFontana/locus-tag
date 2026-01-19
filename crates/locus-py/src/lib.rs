@@ -101,6 +101,16 @@ pub enum TagFamily {
     ArUco4x4_100 = 3,
 }
 
+#[pymethods]
+impl TagFamily {
+    fn __reduce__(&self) -> (PyObject, (u8,)) {
+        Python::with_gil(|py| {
+            let cls = py.get_type::<Self>();
+            (cls.into_any().unbind(), (*self as u8,))
+        })
+    }
+}
+
 impl From<TagFamily> for locus_core::config::TagFamily {
     fn from(f: TagFamily) -> Self {
         match f {
@@ -137,18 +147,11 @@ impl From<SegmentationConnectivity> for locus_core::config::SegmentationConnecti
 
 #[pymethods]
 impl SegmentationConnectivity {
-    #[allow(clippy::trivially_copy_pass_by_ref)]
-    fn __getstate__(&self) -> u8 {
-        *self as u8
-    }
-
-    fn __setstate__(&mut self, state: u8) -> PyResult<()> {
-        *self = match state {
-            0 => SegmentationConnectivity::Four,
-            1 => SegmentationConnectivity::Eight,
-            _ => return Err(pyo3::exceptions::PyValueError::new_err("Invalid state")),
-        };
-        Ok(())
+    fn __reduce__(&self) -> (PyObject, (u8,)) {
+        Python::with_gil(|py| {
+            let cls = py.get_type::<Self>();
+            (cls.into_any().unbind(), (*self as u8,))
+        })
     }
 }
 
@@ -201,17 +204,20 @@ impl Detector {
         enable_bilateral = true,
         bilateral_sigma_space = 0.8,
         bilateral_sigma_color = 30.0,
-        enable_sharpening = false,
+        enable_sharpening = true,
         enable_adaptive_window = true,
         threshold_min_radius = 2,
-        threshold_max_radius = 7,
-        quad_min_area = 16,
+        threshold_max_radius = 10,
+        adaptive_threshold_constant = 3,
+        adaptive_threshold_gradient_threshold = 20,
+        quad_min_area = 8,
         quad_max_aspect_ratio = 8.0,
         quad_min_fill_ratio = 0.15,
         quad_max_fill_ratio = 0.98,
         quad_min_edge_length = 3.0,
-        quad_min_edge_score = 0.4,
+        quad_min_edge_score = 0.3,
         subpixel_refinement_sigma = 0.6,
+        segmentation_margin = 2,
         segmentation_connectivity = SegmentationConnectivity::Eight,
         upscale_factor = 1,
         decoder_min_contrast = 20.0,
@@ -227,6 +233,8 @@ impl Detector {
         enable_adaptive_window: bool,
         threshold_min_radius: usize,
         threshold_max_radius: usize,
+        adaptive_threshold_constant: i16,
+        adaptive_threshold_gradient_threshold: u8,
         quad_min_area: u32,
         quad_max_aspect_ratio: f32,
         quad_min_fill_ratio: f32,
@@ -234,6 +242,7 @@ impl Detector {
         quad_min_edge_length: f64,
         quad_min_edge_score: f64,
         subpixel_refinement_sigma: f64,
+        segmentation_margin: i16,
         segmentation_connectivity: SegmentationConnectivity,
         upscale_factor: usize,
         decoder_min_contrast: f64,
@@ -248,6 +257,8 @@ impl Detector {
             enable_adaptive_window,
             threshold_min_radius,
             threshold_max_radius,
+            adaptive_threshold_constant,
+            adaptive_threshold_gradient_threshold,
             quad_min_area,
             quad_max_aspect_ratio,
             quad_min_fill_ratio,
@@ -255,6 +266,7 @@ impl Detector {
             quad_min_edge_length,
             quad_min_edge_score,
             subpixel_refinement_sigma,
+            segmentation_margin,
             segmentation_connectivity: segmentation_connectivity.into(),
             upscale_factor,
             decoder_min_contrast,

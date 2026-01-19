@@ -55,7 +55,7 @@ pub struct DetectorConfig {
     /// Higher values = more smoothing across edges.
     pub bilateral_sigma_color: f32,
     
-    /// Enable Laplacian sharpening to enhance edges for small tags (default: false).
+    /// Enable Laplacian sharpening to enhance edges for small tags (default: true).
     pub enable_sharpening: bool,
     
     /// Enable adaptive threshold window sizing based on gradient (default: true).
@@ -64,6 +64,10 @@ pub struct DetectorConfig {
     pub threshold_min_radius: usize,
     /// Maximum threshold window radius for low-gradient regions (default: 7 = 15x15).
     pub threshold_max_radius: usize,
+    /// Constant subtracted from local mean in adaptive thresholding (default: 3).
+    pub adaptive_threshold_constant: i16,
+    /// Gradient magnitude threshold above which the minimum window radius is used (default: 40).
+    pub adaptive_threshold_gradient_threshold: u8,
 
     // Quad filtering parameters
     /// Minimum quad area in pixels (default: 400).
@@ -80,6 +84,8 @@ pub struct DetectorConfig {
     pub quad_min_edge_score: f64,
     /// PSF blur factor for subpixel refinement (e.g., 0.6)
     pub subpixel_refinement_sigma: f64,
+    /// Minimum deviation from threshold for a pixel to be connected in threshold-model CCL (default: 2).
+    pub segmentation_margin: i16,
     /// Segmentation connectivity (4-way or 8-way).
     pub segmentation_connectivity: SegmentationConnectivity,
     /// Factor to upscale the image before detection (1 = no upscaling).
@@ -98,21 +104,24 @@ impl Default for DetectorConfig {
     fn default() -> Self {
         Self {
             threshold_tile_size: 4, 
-            threshold_min_range: 10, // Increased from 2 to reduce noise with tiled thresholding
-            enable_bilateral: true,
+            threshold_min_range: 2, // Lowered from 10 to improve recall
+            enable_bilateral: false,
             bilateral_sigma_space: 0.8,
             bilateral_sigma_color: 30.0,
-            enable_sharpening: false,
+            enable_sharpening: true,
             enable_adaptive_window: true,
             threshold_min_radius: 2,
-            threshold_max_radius: 7,
-            quad_min_area: 16,      // Lowered from 25 for small/distant tags
+            threshold_max_radius: 10, // Increased from 7
+            adaptive_threshold_constant: 3,
+            adaptive_threshold_gradient_threshold: 20, // Lowered from 40
+            quad_min_area: 8,      // Lowered from 16 for small/distant tags
             quad_max_aspect_ratio: 8.0, // Increased from 3.0 to support extreme foreshortening
             quad_min_fill_ratio: 0.15, // Lowered from 0.3 for thin quads at tilt
             quad_max_fill_ratio: 0.98,
             quad_min_edge_length: 3.0, // Lowered from 4.0
-            quad_min_edge_score: 0.4,  // Slightly lowered from 0.5
+            quad_min_edge_score: 0.3,  // Lowered from 0.4
             subpixel_refinement_sigma: 0.6,
+            segmentation_margin: 2,
             segmentation_connectivity: SegmentationConnectivity::Eight,
             upscale_factor: 1,
             decoder_min_contrast: 20.0,
@@ -140,6 +149,8 @@ pub struct DetectorConfigBuilder {
     enable_adaptive_window: Option<bool>,
     threshold_min_radius: Option<usize>,
     threshold_max_radius: Option<usize>,
+    adaptive_threshold_constant: Option<i16>,
+    adaptive_threshold_gradient_threshold: Option<u8>,
     quad_min_area: Option<u32>,
     quad_max_aspect_ratio: Option<f32>,
     quad_min_fill_ratio: Option<f32>,
@@ -149,6 +160,8 @@ pub struct DetectorConfigBuilder {
     pub quad_min_edge_score: Option<f64>,
     /// Sigma for Gaussian in subpixel refinement.
     pub subpixel_refinement_sigma: Option<f64>,
+    /// Margin for threshold-model segmentation.
+    pub segmentation_margin: Option<i16>,
     /// Connectivity mode for segmentation (4 or 8).
     pub segmentation_connectivity: Option<SegmentationConnectivity>,
     /// Upscale factor for low-res images (1 = no upscale).
@@ -263,6 +276,20 @@ impl DetectorConfigBuilder {
         self
     }
 
+    /// Set the constant subtracted from local mean in adaptive thresholding.
+    #[must_use]
+    pub fn adaptive_threshold_constant(mut self, c: i16) -> Self {
+        self.adaptive_threshold_constant = Some(c);
+        self
+    }
+
+    /// Set the gradient threshold for adaptive window sizing.
+    #[must_use]
+    pub fn adaptive_threshold_gradient_threshold(mut self, threshold: u8) -> Self {
+        self.adaptive_threshold_gradient_threshold = Some(threshold);
+        self
+    }
+
     /// Build the configuration, using defaults for unset fields.
     #[must_use]
     pub fn build(self) -> DetectorConfig {
@@ -277,6 +304,8 @@ impl DetectorConfigBuilder {
             enable_adaptive_window: self.enable_adaptive_window.unwrap_or(d.enable_adaptive_window),
             threshold_min_radius: self.threshold_min_radius.unwrap_or(d.threshold_min_radius),
             threshold_max_radius: self.threshold_max_radius.unwrap_or(d.threshold_max_radius),
+            adaptive_threshold_constant: self.adaptive_threshold_constant.unwrap_or(d.adaptive_threshold_constant),
+            adaptive_threshold_gradient_threshold: self.adaptive_threshold_gradient_threshold.unwrap_or(d.adaptive_threshold_gradient_threshold),
             quad_min_area: self.quad_min_area.unwrap_or(d.quad_min_area),
             quad_max_aspect_ratio: self
                 .quad_max_aspect_ratio
@@ -286,6 +315,7 @@ impl DetectorConfigBuilder {
             quad_min_edge_length: self.quad_min_edge_length.unwrap_or(d.quad_min_edge_length),
             quad_min_edge_score: self.quad_min_edge_score.unwrap_or(d.quad_min_edge_score),
             subpixel_refinement_sigma: self.subpixel_refinement_sigma.unwrap_or(d.subpixel_refinement_sigma),
+            segmentation_margin: self.segmentation_margin.unwrap_or(d.segmentation_margin),
             segmentation_connectivity: self.segmentation_connectivity.unwrap_or(d.segmentation_connectivity),
             upscale_factor: self.upscale_factor.unwrap_or(d.upscale_factor),
             decoder_min_contrast: self.decoder_min_contrast.unwrap_or(d.decoder_min_contrast),
@@ -296,6 +326,13 @@ impl DetectorConfigBuilder {
     #[must_use]
     pub fn segmentation_connectivity(mut self, connectivity: SegmentationConnectivity) -> Self {
         self.segmentation_connectivity = Some(connectivity);
+        self
+    }
+
+    /// Set the segmentation margin for threshold-model CCL.
+    #[must_use]
+    pub fn segmentation_margin(mut self, margin: i16) -> Self {
+        self.segmentation_margin = Some(margin);
         self
     }
 
