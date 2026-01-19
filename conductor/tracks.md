@@ -4,5 +4,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Implement a configurable decimation strategy**
+- [x] **Track: Implement a configurable decimation strategy**
   *Link: [./tracks/decimation_20260119/](./tracks/decimation_20260119/)*
