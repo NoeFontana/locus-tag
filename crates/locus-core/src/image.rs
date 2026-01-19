@@ -5,6 +5,8 @@
 #![allow(clippy::missing_panics_doc)]
 #![allow(unsafe_code)]
 
+use rayon::prelude::*;
+
 /// A view into an image buffer with explicit stride support.
 /// This allows handling NumPy arrays with padding or non-standard layouts.
 #[derive(Copy, Clone)]
@@ -208,6 +210,38 @@ impl<'a> ImageView<'a> {
         // SAFETY: Caller guarantees y < height. Width and stride are invariants.
         unsafe { &self.data.get_unchecked(start..start + self.width) }
     }
+
+    /// Create a decimated copy of the image by subsampling every `factor` pixels.
+    ///
+    /// The `output` buffer must have size at least `(width/factor) * (height/factor)`.
+    pub fn decimate_to<'b>(&self, factor: usize, output: &'b mut [u8]) -> Result<ImageView<'b>, String> {
+        let factor = factor.max(1);
+        if factor == 1 {
+            let len = self.data.len();
+            if output.len() < len {
+                return Err(format!("Output buffer too small: {} < {}", output.len(), len));
+            }
+            output[..len].copy_from_slice(self.data);
+            return ImageView::new(&output[..len], self.width, self.height, self.width);
+        }
+
+        let new_w = self.width / factor;
+        let new_h = self.height / factor;
+
+        if output.len() < new_w * new_h {
+            return Err(format!("Output buffer too small for decimation: {} < {}", output.len(), new_w * new_h));
+        }
+
+        output.par_chunks_exact_mut(new_w).enumerate().take(new_h).for_each(|(y, out_row)| {
+            let src_y = y * factor;
+            let src_row = self.get_row(src_y);
+            for x in 0..new_w {
+                out_row[x] = src_row[x * factor];
+            }
+        });
+
+        ImageView::new(&output[..new_w * new_h], new_w, new_h, new_w)
+    }
 }
 
 #[cfg(test)]
@@ -273,7 +307,7 @@ mod tests {
             y in 0..200usize
         ) {
             let data = vec![0u8; height * width];
-            let view = ImageView::new(&data, width, height, width).unwrap();
+            let view = ImageView::new(&data, width, height, width).expect("valid creation");
             let p = view.get_pixel(x, y);
             // Clamping should prevent panic
             assert_eq!(p, 0);
@@ -290,7 +324,7 @@ mod tests {
             let real_width = width.min(20);
             let real_height = height.min(20);
             let slice = &data[..real_width * real_height];
-            let view = ImageView::new(slice, real_width, real_height, real_width).unwrap();
+            let view = ImageView::new(slice, real_width, real_height, real_width).expect("valid creation");
 
             let x = x % real_width as f64;
             let y = y % real_height as f64;
@@ -298,7 +332,7 @@ mod tests {
             let val = view.sample_bilinear(x, y);
 
             // Result should be within [0, 255]
-            assert!(val >= 0.0 && val <= 255.0);
+            assert!((0.0..=255.0).contains(&val));
 
             // If inside 2x2 neighborhood, val should be within min/max of those 4 pixels
             let x0 = x.floor() as usize;
@@ -312,10 +346,10 @@ mod tests {
                 let v01 = view.get_pixel(x0, y1);
                 let v11 = view.get_pixel(x1, y1);
 
-                let min = v00.min(v10).min(v01).min(v11) as f64;
-                let max = v00.max(v10).max(v01).max(v11) as f64;
+                let min = f64::from(v00.min(v10).min(v01).min(v11));
+                let max = f64::from(v00.max(v10).max(v01).max(v11));
 
-                assert!(val >= min - 1e-9 && val <= max + 1e-9, "Value {} not in [{}, {}] for x={}, y={}", val, min, max, x, y);
+                assert!(val >= min - 1e-9 && val <= max + 1e-9, "Value {val} not in [{min}, {max}] for x={x}, y={y}");
             }
         }
     }

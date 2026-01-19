@@ -82,10 +82,10 @@ pub mod test_utils;
 /// Adaptive thresholding implementation.
 pub mod threshold;
 
+pub use crate::image::ImageView;
 pub use crate::config::{DetectOptions, DetectorConfig, TagFamily};
 use rayon::prelude::*;
 use crate::decoder::TagDecoder;
-use crate::image::ImageView;
 use bumpalo::Bump;
 
 /// Result of a tag detection.
@@ -193,6 +193,7 @@ impl Detector {
     ///
     /// # Panics
     /// Panics if the upscaled image buffer cannot be created or viewed.
+    #[allow(clippy::too_many_lines, clippy::unwrap_used)]
     pub fn detect_with_stats_and_options(
         &mut self,
         img: &ImageView,
@@ -201,29 +202,21 @@ impl Detector {
         let mut stats = PipelineStats::default();
         let start_total = std::time::Instant::now();
 
-        // 0. Upscaling (Nearest Neighbor)
+        // 0. Decimation or Upscaling
+        let decimation = options.decimation.max(1);
         let upscale_factor = self.config.upscale_factor.max(1);
         
-        // We need to manage the lifetime of the upscaled image buffer.
-        let mut _upscale_buf: Vec<u8> = Vec::new(); 
+        self.arena.reset();
         
-        let (detection_img, effective_scale) = if upscale_factor > 1 {
-            // Apply automatic parameter scaling for upscaled mode
-            // 1. Scale threshold window to match feature size
-            // 2. Relax edge score to handle NN aliasing
-            // We modify a clone of options? No, config is in self.
-            // We must temporarily modify self.config parameters that are used downstream.
-            // Note: This is a bit hacky but ensures consistency without user manual tuning.
-            
-            // Actually, we can't easily modify self.config temporarily without mutability dances if we call &self methods.
-            // But we ARE &mut self.
-            // So we can:
-            // 1. Store original config values.
-            // 2. Modify config.
-            // 3. Restore at end.
-            
-            // Logic handled in orchestration block below.
-            
+        // We handle decimation and upscaling as mutually exclusive for simplicity in the hot path,
+        // though upscaling is usually for tiny tags and decimation for high-res streams.
+        let (detection_img, effective_scale, refinement_img) = if decimation > 1 {
+            let new_w = img.width / decimation;
+            let new_h = img.height / decimation;
+            let decimated_data = self.arena.alloc_slice_fill_copy(new_w * new_h, 0u8);
+            let decimated_img = img.decimate_to(decimation, decimated_data).expect("decimation failed");
+            (decimated_img, 1.0 / decimation as f64, *img)
+        } else if upscale_factor > 1 {
             let new_w = img.width * upscale_factor;
             let new_h = img.height * upscale_factor;
             self.upscale_buf.resize(new_w * new_h, 0);
@@ -240,32 +233,42 @@ impl Detector {
                     }
                 }
             }
-            (
-                ImageView::new(&self.upscale_buf, new_w, new_h, new_w).expect("valid upscaled view"),
-                upscale_factor as f64,
-            )
+            let upscaled_img = ImageView::new(&self.upscale_buf, new_w, new_h, new_w).expect("valid upscaled view");
+            (upscaled_img, upscale_factor as f64, upscaled_img)
         } else {
-            (*img, 1.0)
+            (*img, 1.0, *img)
         };
+        
         let img = &detection_img; // Shadowing for pipeline scope
 
         // Backup config for potential restoration
         let original_tile_size = self.config.threshold_tile_size;
         let original_max_radius = self.config.threshold_max_radius;
         let original_edge_score = self.config.quad_min_edge_score;
+        let original_quad_min_area = self.config.quad_min_area;
+        let original_quad_min_edge_length = self.config.quad_min_edge_length;
 
         if upscale_factor > 1 {
-             // Auto-scale parameters
+             // Auto-scale parameters for upscaling
              self.config.threshold_tile_size *= upscale_factor;
              self.config.threshold_max_radius *= upscale_factor;
              self.config.quad_min_edge_score /= upscale_factor as f64;
+        } else if decimation > 1 {
+             // Auto-scale parameters for decimation (downscaling)
+             self.config.threshold_tile_size = (self.config.threshold_tile_size / decimation).max(1);
+             self.config.threshold_max_radius = (self.config.threshold_max_radius / decimation).max(1);
+             let factor_sq = (decimation * decimation) as f64;
+             #[allow(clippy::cast_sign_loss)]
+             {
+                 self.config.quad_min_area = (f64::from(self.config.quad_min_area) / factor_sq).max(1.0) as u32;
+             }
+             self.config.quad_min_edge_length = (self.config.quad_min_edge_length / decimation as f64).max(1.0);
         }
 
-        self.arena.reset();
         // let img = img; // Simplify reference - removed redundant binder
         let start_thresh = std::time::Instant::now();
         
-        // 1a. Optional bilateral pre-filtering for edge-preserving noise reduction
+        // 1a. Optional bilateral pre-filtering
         let filtered_img = if self.config.enable_bilateral {
             let filtered = self.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
             crate::filter::bilateral_filter(
@@ -282,7 +285,7 @@ impl Detector {
             *img
         };
 
-        // 1b. Optional Laplacian sharpening to enhance edges for small tags
+        // 1b. Optional Laplacian sharpening
         let sharpened_img = if self.config.enable_sharpening {
             let sharpened = self.arena.alloc_slice_fill_copy(filtered_img.width * filtered_img.height, 0u8);
             crate::filter::laplacian_sharpen(&filtered_img, sharpened);
@@ -337,7 +340,6 @@ impl Detector {
         stats.threshold_ms = start_thresh.elapsed().as_secs_f64() * 1000.0;
 
         // 2. Segmentation - Standard binary CCL
-        // Use the binarized image directly for connected component labeling
         let start_seg = std::time::Instant::now();
         let label_result = {
             let _span = tracing::info_span!("segmentation").entered();
@@ -354,7 +356,6 @@ impl Detector {
         stats.segmentation_ms = start_seg.elapsed().as_secs_f64() * 1000.0;
 
         // 3. Quad Extraction
-        // Gradients are computed lazily inside extract_quads for small components only
         let start_quad = std::time::Instant::now();
         let candidates = {
             let _span = tracing::info_span!("quad_extraction").entered();
@@ -363,14 +364,15 @@ impl Detector {
                 &sharpened_img,
                 &label_result,
                 &self.config,
+                decimation,
+                &refinement_img,
             )
         };
         stats.quad_extraction_ms = start_quad.elapsed().as_secs_f64() * 1000.0;
         stats.num_candidates = candidates.len();
 
-        // 4. Decoding - select decoders based on options
+        // 4. Decoding
         let start_decode = std::time::Instant::now();
-        // Build decoder list: use options.families if specified, else use self.decoders
         let temp_decoders: Vec<Box<dyn TagDecoder + Send + Sync>>;
         let active_decoders: &[Box<dyn TagDecoder + Send + Sync>] = if options.families.is_empty() {
             &self.decoders
@@ -389,8 +391,9 @@ impl Detector {
                 let h = crate::decoder::Homography::square_to_quad(&cand.corners)?;
                 
                 for decoder in active_decoders {
+                    // Decoding must always happen on the full resolution refinement_img
                     if let Some(bits) = crate::decoder::sample_grid(
-                        &sharpened_img,
+                        &refinement_img,
                         &h,
                         decoder.as_ref(),
                         self.config.decoder_min_contrast,
@@ -399,13 +402,10 @@ impl Detector {
                             cand.id = id;
                             cand.hamming = hamming;
 
-                            // The internal detector (both small and large quads) now ensures CW order.
-                            // We re-orient based on the tag's decoded rotation to find the physical TL.
-                            // Standard output: 0:TL, 1:TR, 2:BR, 3:BL (Clockwise)
                             let mut reordered = [[0.0; 2]; 4];
-                            for i in 0..4 {
+                            for (i, item) in reordered.iter_mut().enumerate() {
                                 let src_idx = (i + usize::from(rot)) % 4;
-                                reordered[i] = cand.corners[src_idx];
+                                *item = cand.corners[src_idx];
                             }
                             cand.corners = reordered;
 
@@ -441,7 +441,6 @@ impl Detector {
         if upscale_factor > 1 {
             let inv_scale = 1.0 / effective_scale;
              for d in &mut final_detections {
-                 // Scale coordinates
                   for corner in &mut d.corners {
                         corner[0] = (corner[0] - 0.5) * inv_scale + 0.5;
                         corner[1] = (corner[1] - 0.5) * inv_scale + 0.5;
@@ -449,7 +448,6 @@ impl Detector {
                   d.center[0] = (d.center[0] - 0.5) * inv_scale + 0.5;
                   d.center[1] = (d.center[1] - 0.5) * inv_scale + 0.5;
                   
-                  // Re-estimate pose with corrected corners
                   if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size) {
                        d.pose = crate::pose::estimate_tag_pose(&intrinsics, &d.corners, tag_size);
                   }
@@ -458,12 +456,12 @@ impl Detector {
         
         stats.total_ms = start_total.elapsed().as_secs_f64() * 1000.0;
 
-        // Restore config if modified
-        if upscale_factor > 1 {
-            self.config.threshold_tile_size = original_tile_size;
-            self.config.threshold_max_radius = original_max_radius;
-            self.config.quad_min_edge_score = original_edge_score;
-        }
+        // Restore config
+        self.config.threshold_tile_size = original_tile_size;
+        self.config.threshold_max_radius = original_max_radius;
+        self.config.quad_min_edge_score = original_edge_score;
+        self.config.quad_min_area = original_quad_min_area;
+        self.config.quad_min_edge_length = original_quad_min_edge_length;
         
         (final_detections, stats)
     }
