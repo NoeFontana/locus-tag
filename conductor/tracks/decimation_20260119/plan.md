@@ -6,9 +6,9 @@ This plan outlines the steps to implement a configurable decimation strategy in 
 
 In this phase, we will update the internal `locus-core` detection pipeline to support a decimation factor.
 
-- [ ] Task: Update internal image representation and thresholding to handle decimation
-    - [ ] Write Tests: Create unit tests in `crates/locus-core/src/threshold.rs` to verify thresholding on decimated inputs.
-    - [ ] Implement: Modify the adaptive thresholding logic to skip pixels based on the decimation factor $.
+- [x] Task: Update internal image representation and thresholding to handle decimation [fc1413d]
+    - [x] Write Tests: Create unit tests in `crates/locus-core/src/threshold.rs` to verify thresholding on decimated inputs.
+    - [x] Implement: Modify the adaptive thresholding logic to skip pixels based on the decimation factor $.
 - [ ] Task: Update segmentation and quad detection for decimated coordinate space
     - [ ] Write Tests: Create tests in `crates/locus-core/src/segmentation.rs` to verify component extraction on decimated grids.
     - [ ] Implement: Adjust Union-Find and Quad extraction to operate on the reduced coordinate space.
@@ -36,7 +36,7 @@ In this final phase, we will verify the performance and accuracy gains.
 - [ ] Task: Performance benchmarking (Rust)
     - [ ] Write Tests: Create or update a Criterion benchmark in `crates/locus-core/benches/` to compare latency of =1$ vs =2$ on 1080p images.
     - [ ] Implement: Run `cargo bench` and document the speedup in the preprocessing phases.
-- [ ] Task: Accuracy validation (RMSE)
-    - [ ] Write Tests: Use `tests/evaluate_forward_performance.py` to compare RMSE and Recall between =1$ and =2$.
-    - [ ] Implement: Verify that RMSE degradation is minimal as specified in the acceptance criteria.
+- [ ] Task: Accuracy validation (RMSE, Rust)
+    - [ ] Write Tests: Use `test_decimation.rs` to compare RMSE and Recall between =1$ and =2$.
+    - [ ] Implement: Verify that RMSE and recall degradation is minimal (<1%) as specified in the acceptance criteria.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Validation & Benchmarking' (Protocol in workflow.md)
