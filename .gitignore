@@ -1,2 +1,3 @@
 tests/data
 /site/
+*.rrd
