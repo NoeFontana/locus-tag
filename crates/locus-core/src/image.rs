@@ -157,7 +157,7 @@ impl<'a> ImageView<'a> {
         // instead of 4 separate bilinear samples.
         // For a high-quality sub-pixel gradient, we sample the 4 nearest integer locations
         // and interpolate their finite-difference gradients.
-        
+
         if x < 1.0 || x >= (self.width - 2) as f64 || y < 1.0 || y >= (self.height - 2) as f64 {
             let gx = (self.sample_bilinear(x + 1.0, y) - self.sample_bilinear(x - 1.0, y)) * 0.5;
             let gy = (self.sample_bilinear(x, y + 1.0) - self.sample_bilinear(x, y - 1.0)) * 0.5;
@@ -182,10 +182,14 @@ impl<'a> ImageView<'a> {
                 for i in 0..2 {
                     let cx = x0 + i;
                     let cy = y0 + j;
-                    
-                    let gx = (f64::from(self.get_pixel_unchecked(cx + 1, cy)) - f64::from(self.get_pixel_unchecked(cx - 1, cy))) * 0.5;
-                    let gy = (f64::from(self.get_pixel_unchecked(cx, cy + 1)) - f64::from(self.get_pixel_unchecked(cx, cy - 1))) * 0.5;
-                    
+
+                    let gx = (f64::from(self.get_pixel_unchecked(cx + 1, cy))
+                        - f64::from(self.get_pixel_unchecked(cx - 1, cy)))
+                        * 0.5;
+                    let gy = (f64::from(self.get_pixel_unchecked(cx, cy + 1))
+                        - f64::from(self.get_pixel_unchecked(cx, cy - 1)))
+                        * 0.5;
+
                     match (i, j) {
                         (0, 0) => g00 = [gx, gy],
                         (1, 0) => g10 = [gx, gy],
@@ -197,9 +201,11 @@ impl<'a> ImageView<'a> {
             }
         }
 
-        let gx = (g00[0] * (1.0 - dx) + g10[0] * dx) * (1.0 - dy) + (g01[0] * (1.0 - dx) + g11[0] * dx) * dy;
-        let gy = (g00[1] * (1.0 - dx) + g10[1] * dx) * (1.0 - dy) + (g01[1] * (1.0 - dx) + g11[1] * dx) * dy;
-        
+        let gx = (g00[0] * (1.0 - dx) + g10[0] * dx) * (1.0 - dy)
+            + (g01[0] * (1.0 - dx) + g11[0] * dx) * dy;
+        let gy = (g00[1] * (1.0 - dx) + g10[1] * dx) * (1.0 - dy)
+            + (g01[1] * (1.0 - dx) + g11[1] * dx) * dy;
+
         [gx, gy]
     }
 
@@ -214,12 +220,20 @@ impl<'a> ImageView<'a> {
     /// Create a decimated copy of the image by subsampling every `factor` pixels.
     ///
     /// The `output` buffer must have size at least `(width/factor) * (height/factor)`.
-    pub fn decimate_to<'b>(&self, factor: usize, output: &'b mut [u8]) -> Result<ImageView<'b>, String> {
+    pub fn decimate_to<'b>(
+        &self,
+        factor: usize,
+        output: &'b mut [u8],
+    ) -> Result<ImageView<'b>, String> {
         let factor = factor.max(1);
         if factor == 1 {
             let len = self.data.len();
             if output.len() < len {
-                return Err(format!("Output buffer too small: {} < {}", output.len(), len));
+                return Err(format!(
+                    "Output buffer too small: {} < {}",
+                    output.len(),
+                    len
+                ));
             }
             output[..len].copy_from_slice(self.data);
             return ImageView::new(&output[..len], self.width, self.height, self.width);
@@ -229,16 +243,24 @@ impl<'a> ImageView<'a> {
         let new_h = self.height / factor;
 
         if output.len() < new_w * new_h {
-            return Err(format!("Output buffer too small for decimation: {} < {}", output.len(), new_w * new_h));
+            return Err(format!(
+                "Output buffer too small for decimation: {} < {}",
+                output.len(),
+                new_w * new_h
+            ));
         }
 
-        output.par_chunks_exact_mut(new_w).enumerate().take(new_h).for_each(|(y, out_row)| {
-            let src_y = y * factor;
-            let src_row = self.get_row(src_y);
-            for x in 0..new_w {
-                out_row[x] = src_row[x * factor];
-            }
-        });
+        output
+            .par_chunks_exact_mut(new_w)
+            .enumerate()
+            .take(new_h)
+            .for_each(|(y, out_row)| {
+                let src_y = y * factor;
+                let src_row = self.get_row(src_y);
+                for x in 0..new_w {
+                    out_row[x] = src_row[x * factor];
+                }
+            });
 
         ImageView::new(&output[..new_w * new_h], new_w, new_h, new_w)
     }

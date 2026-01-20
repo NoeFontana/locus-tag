@@ -382,11 +382,11 @@ fn create_image_view<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageSou
         // Note: PyReadonlyArray2::data() returns a raw pointer. We must ensure it's valid.
         // If it's contiguous with inner stride 1, we can treat it as a slice (with gaps if stride_y > width).
         // locus_core::ImageView handles stride > width correctly.
-        
+
         let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
         let view = ImageView::new(data, width, height, stride_y)
             .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
-        
+
         Ok(ImageSource::Borrowed(view))
     } else {
         // Non-contiguous (e.g. sliced columns, generalized slicing)
@@ -394,29 +394,29 @@ fn create_image_view<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageSou
         // Log a warning so the user knows this is slow.
         tracing::warn!(
             "Non-contiguous array passed to locus (stride_x: {}). Triggering fallback copy. \
-             To avoid this overhead, ensure input is C-contiguous (e.g., numpy.ascontiguousarray).", 
+             To avoid this overhead, ensure input is C-contiguous (e.g., numpy.ascontiguousarray).",
             stride_x
         );
 
         // Copy logic: We can use numpy's to_vec or similar, but since we are inside a PyReadonlyArray,
         // we can iterate or let ndarray handle it.
         // However, PyReadonlyArray2 derefs to ArrayView2.
-        
+
         let valid_array = img.as_array();
-        
+
         // We want a contiguous row-major vector.
         // to_owned() usually produces a standard layout Array2.
         // as_standard_layout() + to_owned()?
-        
+
         // Simplest safe way: make a standard layout copy.
         // data needs to be row-major (C style).
-        
+
         // Note: 'as_slice' returns None if not contiguous.
         // We need to construct a contiguous vector.
         let contiguous_array = valid_array.as_standard_layout().to_owned();
         let (nrows, ncols) = (contiguous_array.nrows(), contiguous_array.ncols());
         let (vec_data, _offset) = contiguous_array.into_raw_vec_and_offset();
-        
+
         Ok(ImageSource::Owned(vec_data, ncols, nrows, ncols)) // stride = width for packed
     }
 }
@@ -494,7 +494,8 @@ fn debug_segmentation(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
     engine.apply_threshold(&view, &stats, &mut binarized);
 
     let arena = bumpalo::Bump::new();
-    let labels = locus_core::segmentation::label_components(&arena, &binarized, width, height, false);
+    let labels =
+        locus_core::segmentation::label_components(&arena, &binarized, width, height, false);
     let labels_vec = labels.to_vec();
 
     Python::with_gil(|py| {

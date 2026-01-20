@@ -1,8 +1,10 @@
-use divan::bench;
-use locus_core::image::ImageView;
-use locus_core::threshold::{adaptive_threshold_integral, adaptive_threshold_gradient_window, compute_integral_image};
-use locus_core::filter::{compute_gradient_map, bilateral_filter};
 use bumpalo::Bump;
+use divan::bench;
+use locus_core::filter::{bilateral_filter, compute_gradient_map};
+use locus_core::image::ImageView;
+use locus_core::threshold::{
+    adaptive_threshold_gradient_window, adaptive_threshold_integral, compute_integral_image,
+};
 
 fn main() {
     divan::main();

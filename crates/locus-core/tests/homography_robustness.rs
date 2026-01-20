@@ -24,15 +24,9 @@ fn invalid_point_strategy() -> impl Strategy<Value = [[f64; 2]; 4]> {
             Just(f64::NEG_INFINITY),
             (-1e10..1e10)
         ],
-        8
-    ).prop_map(|v| {
-        [
-            [v[0], v[1]],
-            [v[2], v[3]],
-            [v[4], v[5]],
-            [v[6], v[7]],
-        ]
-    })
+        8,
+    )
+    .prop_map(|v| [[v[0], v[1]], [v[2], v[3]], [v[4], v[5]], [v[6], v[7]]])
 }
 
 /// Helper to check if a quad is convex and CCW.
@@ -75,12 +69,15 @@ fn collinear_quad_strategy() -> impl Strategy<Value = [[f64; 2]; 4]> {
     prop_oneof![
         // Coincident points: p0 == p1
         point_strategy().prop_map(|p| [p, p, [p[0] + 10.0, p[1]], [p[0], p[1] + 10.0]]),
-        
         // Collinear points: p0, p1, p2 on the same line (y = p[1])
         point_strategy().prop_map(|p| {
-            [p, [p[0] + 10.0, p[1]], [p[0] + 20.0, p[1]], [p[0] + 30.0, p[1]]]
+            [
+                p,
+                [p[0] + 10.0, p[1]],
+                [p[0] + 20.0, p[1]],
+                [p[0] + 30.0, p[1]],
+            ]
         }),
-        
         // All points same
         point_strategy().prop_map(|p| [p, p, p, p]),
     ]
@@ -102,12 +99,12 @@ proptest! {
                 let p_proj = h.project(src[i]);
                 let err_x = (p_proj[0] - dst[i][0]).abs();
                 let err_y = (p_proj[1] - dst[i][1]).abs();
-                
+
                 // Tolerance must scale with the magnitude of the coordinates.
                 // For points ~2000, 1e-4 is reasonably tight for unnormalized DLT.
                 let max_coord = dst[i][0].abs().max(dst[i][1].abs()).max(1.0);
                 let tol = 1e-7 * max_coord;
-                
+
                 assert!(err_x < tol, "Reprojection error X too large: {} at point {} (tol: {})", err_x, i, tol);
                 assert!(err_y < tol, "Reprojection error Y too large: {} at point {} (tol: {})", err_y, i, tol);
             }
@@ -122,17 +119,17 @@ proptest! {
         let src = [
             [-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]
         ];
-        
+
         let h1 = Homography::from_pairs(&src, &dst);
         let h2 = Homography::square_to_quad(&dst);
-        
+
         match (h1.as_ref(), h2.as_ref()) {
             (Some(h1_ref), Some(h2_ref)) => {
                 // Test a sample point
                 let p = [0.5, -0.2];
                 let p1 = h1_ref.project(p);
                 let p2 = h2_ref.project(p);
-                
+
                 assert!((p1[0] - p2[0]).abs() < 1e-9);
                 assert!((p1[1] - p2[1]).abs() < 1e-9);
             },
@@ -148,7 +145,7 @@ proptest! {
         dst in valid_quad_strategy()
     ) {
         let h = Homography::from_pairs(&src, &dst);
-        
+
         // Rigorous check: Collinear source points should NOT result in a valid homography.
         // If it returns Some, it's a "ghost" solution due to numerical noise in LU.
         if let Some(_h_val) = h {
@@ -200,13 +197,13 @@ proptest! {
         for i in 0..4 {
             let wx = world_corners[i][0];
             let wy = world_corners[i][1];
-            
+
             // Rotate around Y: x' = x*cos + z*sin, z' = -x*sin + z*cos
             // Translation: z' += z_dist
             let rx = wx * cos_t;
             let ry = wy;
             let rz = -wx * sin_t + z_dist;
-            
+
             img_corners[i][0] = fx * (rx / rz) + cx;
             img_corners[i][1] = fy * (ry / rz) + cy;
         }
@@ -219,15 +216,15 @@ proptest! {
         if let Some(h) = Homography::from_pairs(&src_sq, &img_corners) {
             // Project center (0, 0)
             let p_center = h.project([0.0, 0.0]);
-            
+
             // Ground truth center projection
             let g_cx = fx * (0.0 / z_dist) + cx;
             let g_cy = fy * (0.0 / z_dist) + cy;
-            
+
             let err_x = (p_center[0] - g_cx).abs();
             let err_y = (p_center[1] - g_cy).abs();
             let err_total = (err_x * err_x + err_y * err_y).sqrt();
-            
+
             // Phase 3: Precision Gate - Error must be < 0.5 pixels
             assert!(err_total < 0.5, "Extreme slant ({:.1} deg) center error too large: {:.4}px", slant_deg, err_total);
         }
@@ -272,14 +269,14 @@ proptest! {
         let src_sq = [
             [-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]
         ];
-        
+
         // Ground truth destination: a slightly rotated and translated quad
         let center_x = 500.0;
         let center_y = 500.0;
         let angle: f64 = 0.2; // some rotation
         let cos_a = angle.cos();
         let sin_a = angle.sin();
-        
+
         let mut dst_gt = [[0.0; 2]; 4];
         for i in 0..4 {
             let x = src_sq[i][0] * scale;
@@ -287,9 +284,9 @@ proptest! {
             dst_gt[i][0] = center_x + x * cos_a - y * sin_a;
             dst_gt[i][1] = center_y + x * sin_a + y * cos_a;
         }
-        
+
         let h_gt = Homography::from_pairs(&src_sq, &dst_gt).expect("GT must be valid");
-        
+
         // Add Gaussian noise (approximated here for the test)
         // Since proptest doesn't have a built-in normal distribution strategist easily available here,
         // we'll use 8 uniform samples to approximate a normal distribution (Central Limit Theorem).
@@ -308,29 +305,29 @@ proptest! {
                 noise_x += pseudo_rand() - 0.5;
                 noise_y += pseudo_rand() - 0.5;
             }
-            // Variance of sum of 4 U(-0.5, 0.5) is 4 * (1/12) = 1/3. 
+            // Variance of sum of 4 U(-0.5, 0.5) is 4 * (1/12) = 1/3.
             // So scale by sqrt(3) * sigma to get N(0, sigma^2)
             noisy_dst[i][0] += noise_x * 1.732 * noise_sigma;
             noisy_dst[i][1] += noise_y * 1.732 * noise_sigma;
         }
-        
+
         if let Some(h_noisy) = Homography::from_pairs(&src_sq, &noisy_dst) {
             // Check internal grid of points
             let k = 3.5; // Error amplification factor threshold
             let max_err_allowed = k * noise_sigma;
-            
+
             for gx in -5..=5 {
                 for gy in -5..=5 {
                     let p = [gx as f64 * 0.2, gy as f64 * 0.2];
                     let p_gt = h_gt.project(p);
                     let p_noisy = h_noisy.project(p);
-                    
+
                     let err_x = (p_gt[0] - p_noisy[0]).abs();
                     let err_y = (p_gt[1] - p_noisy[1]).abs();
                     let err = (err_x * err_x + err_y * err_y).sqrt();
-                    
-                    assert!(err < max_err_allowed, 
-                        "Noise amplification too high: err={:.4}px > {:.4}px (k*sigma) at point {:?}", 
+
+                    assert!(err < max_err_allowed,
+                        "Noise amplification too high: err={:.4}px > {:.4}px (k*sigma) at point {:?}",
                         err, max_err_allowed, p);
                 }
             }

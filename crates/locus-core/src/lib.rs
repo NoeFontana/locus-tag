@@ -82,11 +82,11 @@ pub mod test_utils;
 /// Adaptive thresholding implementation.
 pub mod threshold;
 
-pub use crate::image::ImageView;
 pub use crate::config::{DetectOptions, DetectorConfig, TagFamily};
-use rayon::prelude::*;
 use crate::decoder::TagDecoder;
+pub use crate::image::ImageView;
 use bumpalo::Bump;
+use rayon::prelude::*;
 
 /// Result of a tag detection.
 pub struct Detection {
@@ -205,22 +205,24 @@ impl Detector {
         // 0. Decimation or Upscaling
         let decimation = options.decimation.max(1);
         let upscale_factor = self.config.upscale_factor.max(1);
-        
+
         self.arena.reset();
-        
+
         // We handle decimation and upscaling as mutually exclusive for simplicity in the hot path,
         // though upscaling is usually for tiny tags and decimation for high-res streams.
         let (detection_img, effective_scale, refinement_img) = if decimation > 1 {
             let new_w = img.width / decimation;
             let new_h = img.height / decimation;
             let decimated_data = self.arena.alloc_slice_fill_copy(new_w * new_h, 0u8);
-            let decimated_img = img.decimate_to(decimation, decimated_data).expect("decimation failed");
+            let decimated_img = img
+                .decimate_to(decimation, decimated_data)
+                .expect("decimation failed");
             (decimated_img, 1.0 / decimation as f64, *img)
         } else if upscale_factor > 1 {
             let new_w = img.width * upscale_factor;
             let new_h = img.height * upscale_factor;
             self.upscale_buf.resize(new_w * new_h, 0);
-            
+
             for y in 0..img.height {
                 let src_row = y * img.width;
                 for rep_y in 0..upscale_factor {
@@ -233,12 +235,13 @@ impl Detector {
                     }
                 }
             }
-            let upscaled_img = ImageView::new(&self.upscale_buf, new_w, new_h, new_w).expect("valid upscaled view");
+            let upscaled_img = ImageView::new(&self.upscale_buf, new_w, new_h, new_w)
+                .expect("valid upscaled view");
             (upscaled_img, upscale_factor as f64, upscaled_img)
         } else {
             (*img, 1.0, *img)
         };
-        
+
         let img = &detection_img; // Shadowing for pipeline scope
 
         // Backup config for potential restoration
@@ -249,28 +252,33 @@ impl Detector {
         let original_quad_min_edge_length = self.config.quad_min_edge_length;
 
         if upscale_factor > 1 {
-             // Auto-scale parameters for upscaling
-             self.config.threshold_tile_size *= upscale_factor;
-             self.config.threshold_max_radius *= upscale_factor;
-             self.config.quad_min_edge_score /= upscale_factor as f64;
+            // Auto-scale parameters for upscaling
+            self.config.threshold_tile_size *= upscale_factor;
+            self.config.threshold_max_radius *= upscale_factor;
+            self.config.quad_min_edge_score /= upscale_factor as f64;
         } else if decimation > 1 {
-             // Auto-scale parameters for decimation (downscaling)
-             self.config.threshold_tile_size = (self.config.threshold_tile_size / decimation).max(1);
-             self.config.threshold_max_radius = (self.config.threshold_max_radius / decimation).max(1);
-             let factor_sq = (decimation * decimation) as f64;
-             #[allow(clippy::cast_sign_loss)]
-             {
-                 self.config.quad_min_area = (f64::from(self.config.quad_min_area) / factor_sq).max(1.0) as u32;
-             }
-             self.config.quad_min_edge_length = (self.config.quad_min_edge_length / decimation as f64).max(1.0);
+            // Auto-scale parameters for decimation (downscaling)
+            self.config.threshold_tile_size = (self.config.threshold_tile_size / decimation).max(1);
+            self.config.threshold_max_radius =
+                (self.config.threshold_max_radius / decimation).max(1);
+            let factor_sq = (decimation * decimation) as f64;
+            #[allow(clippy::cast_sign_loss)]
+            {
+                self.config.quad_min_area =
+                    (f64::from(self.config.quad_min_area) / factor_sq).max(1.0) as u32;
+            }
+            self.config.quad_min_edge_length =
+                (self.config.quad_min_edge_length / decimation as f64).max(1.0);
         }
 
         // let img = img; // Simplify reference - removed redundant binder
         let start_thresh = std::time::Instant::now();
-        
+
         // 1a. Optional bilateral pre-filtering
         let filtered_img = if self.config.enable_bilateral {
-            let filtered = self.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
+            let filtered = self
+                .arena
+                .alloc_slice_fill_copy(img.width * img.height, 0u8);
             crate::filter::bilateral_filter(
                 &self.arena,
                 img,
@@ -279,39 +287,53 @@ impl Detector {
                 self.config.bilateral_sigma_space,
                 self.config.bilateral_sigma_color,
             );
-            ImageView::new(filtered, img.width, img.height, img.width)
-                .expect("valid filtered view")
+            ImageView::new(filtered, img.width, img.height, img.width).expect("valid filtered view")
         } else {
             *img
         };
 
         // 1b. Optional Laplacian sharpening
         let sharpened_img = if self.config.enable_sharpening {
-            let sharpened = self.arena.alloc_slice_fill_copy(filtered_img.width * filtered_img.height, 0u8);
+            let sharpened = self
+                .arena
+                .alloc_slice_fill_copy(filtered_img.width * filtered_img.height, 0u8);
             crate::filter::laplacian_sharpen(&filtered_img, sharpened);
-            
-            ImageView::new(sharpened, filtered_img.width, filtered_img.height, filtered_img.width)
-                .expect("valid sharpened view")
+
+            ImageView::new(
+                sharpened,
+                filtered_img.width,
+                filtered_img.height,
+                filtered_img.width,
+            )
+            .expect("valid sharpened view")
         } else {
             filtered_img
         };
 
-        let binarized = self.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
-        let threshold_map = self.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
-        
+        let binarized = self
+            .arena
+            .alloc_slice_fill_copy(img.width * img.height, 0u8);
+        let threshold_map = self
+            .arena
+            .alloc_slice_fill_copy(img.width * img.height, 0u8);
+
         {
             let _span = tracing::info_span!("threshold_adaptive").entered();
             // Compute integral image for O(1) local mean per pixel
             let stride = sharpened_img.width + 1;
-            let integral = self.arena.alloc_slice_fill_copy(stride * (sharpened_img.height + 1), 0u64);
+            let integral = self
+                .arena
+                .alloc_slice_fill_copy(stride * (sharpened_img.height + 1), 0u64);
             crate::threshold::compute_integral_image(&sharpened_img, integral);
-            
+
             // 1c. Apply adaptive or fixed-window threshold
             if self.config.enable_adaptive_window {
                 // Compute gradient map for adaptive window sizing
-                let gradient = self.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
+                let gradient = self
+                    .arena
+                    .alloc_slice_fill_copy(img.width * img.height, 0u8);
                 crate::filter::compute_gradient_map(&sharpened_img, gradient);
-                
+
                 // Apply gradient-based adaptive window threshold
                 crate::threshold::adaptive_threshold_gradient_window(
                     &sharpened_img,
@@ -333,10 +355,20 @@ impl Detector {
                     self.config.adaptive_threshold_constant,
                 );
             }
-            
+
             // For threshold_map, store the local mean (for potential threshold-model segmentation)
-            let map_radius = if self.config.enable_adaptive_window { self.config.threshold_max_radius } else { 6 };
-            crate::threshold::compute_threshold_map(&sharpened_img, integral, threshold_map, map_radius, self.config.adaptive_threshold_constant);
+            let map_radius = if self.config.enable_adaptive_window {
+                self.config.threshold_max_radius
+            } else {
+                6
+            };
+            crate::threshold::compute_threshold_map(
+                &sharpened_img,
+                integral,
+                threshold_map,
+                map_radius,
+                self.config.adaptive_threshold_constant,
+            );
         }
         stats.threshold_ms = start_thresh.elapsed().as_secs_f64() * 1000.0;
 
@@ -391,7 +423,7 @@ impl Detector {
             .into_par_iter()
             .filter_map(|mut cand| {
                 let h = crate::decoder::Homography::square_to_quad(&cand.corners)?;
-                
+
                 for decoder in active_decoders {
                     // Decoding must always happen on the full resolution refinement_img
                     if let Some(bits) = crate::decoder::sample_grid(
@@ -399,42 +431,46 @@ impl Detector {
                         &h,
                         decoder.as_ref(),
                         self.config.decoder_min_contrast,
-                    )
-                        && let Some((id, hamming, rot)) = decoder.decode(bits) {
-                            cand.id = id;
-                            cand.hamming = hamming;
+                    ) && let Some((id, hamming, rot)) = decoder.decode(bits)
+                    {
+                        cand.id = id;
+                        cand.hamming = hamming;
 
-                            let mut reordered = [[0.0; 2]; 4];
-                            for (i, item) in reordered.iter_mut().enumerate() {
-                                let src_idx = (i + usize::from(rot)) % 4;
-                                *item = cand.corners[src_idx];
-                            }
-                            cand.corners = reordered;
-
-                            // Estimate pose if requested
-                            if let (Some(intrinsics), Some(tag_size)) =
-                                (options.intrinsics, options.tag_size)
-                            {
-                                cand.pose = crate::pose::estimate_tag_pose(
-                                    &intrinsics,
-                                    &cand.corners,
-                                    tag_size,
-                                );
-                            }
-
-                            return Some(cand);
+                        let mut reordered = [[0.0; 2]; 4];
+                        for (i, item) in reordered.iter_mut().enumerate() {
+                            let src_idx = (i + usize::from(rot)) % 4;
+                            *item = cand.corners[src_idx];
                         }
+                        cand.corners = reordered;
+
+                        // Estimate pose if requested
+                        if let (Some(intrinsics), Some(tag_size)) =
+                            (options.intrinsics, options.tag_size)
+                        {
+                            cand.pose = crate::pose::estimate_tag_pose(
+                                &intrinsics,
+                                &cand.corners,
+                                tag_size,
+                            );
+                        }
+
+                        return Some(cand);
+                    }
                 }
                 None
             })
             .collect();
         stats.decoding_ms = start_decode.elapsed().as_secs_f64() * 1000.0;
         stats.num_detections = final_detections.len();
-        
+
         // Final coordinate adjustment and scaling
-        // We apply a +0.5 shift to all coordinates to align pixel centers (index + 0.5) 
+        // We apply a +0.5 shift to all coordinates to align pixel centers (index + 0.5)
         // with the boundary-based coordinate system (index + 1.0) expected by users/tests.
-        let inv_scale = if upscale_factor > 1 { 1.0 / effective_scale } else { 1.0 };
+        let inv_scale = if upscale_factor > 1 {
+            1.0 / effective_scale
+        } else {
+            1.0
+        };
         for d in &mut final_detections {
             for corner in &mut d.corners {
                 corner[0] = (corner[0] + 0.5) * inv_scale;
@@ -447,7 +483,7 @@ impl Detector {
                 d.pose = crate::pose::estimate_tag_pose(&intrinsics, &d.corners, tag_size);
             }
         }
-        
+
         stats.total_ms = start_total.elapsed().as_secs_f64() * 1000.0;
 
         // Restore config
@@ -456,7 +492,7 @@ impl Detector {
         self.config.quad_min_edge_score = original_edge_score;
         self.config.quad_min_area = original_quad_min_area;
         self.config.quad_min_edge_length = original_quad_min_edge_length;
-        
+
         (final_detections, stats)
     }
 }
@@ -475,4 +511,3 @@ pub fn core_info() -> String {
 
 // Use family_to_decoder from the decoder module.
 pub use decoder::family_to_decoder;
-

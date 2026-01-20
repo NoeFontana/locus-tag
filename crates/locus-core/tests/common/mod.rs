@@ -9,11 +9,11 @@ pub struct ImageGroundTruth {
 }
 
 /// Resolves the root directory of the ICRA 2020 dataset.
-/// 
+///
 /// Priority:
 /// 1. `LOCUS_DATASET_DIR` environment variable.
 /// 2. `tests/data/icra2020` relative to workspace root.
-/// 
+///
 /// Returns `None` if the dataset cannot be found (test should skip).
 pub fn resolve_dataset_root() -> Option<PathBuf> {
     // 1. Environment variable
@@ -25,7 +25,10 @@ pub fn resolve_dataset_root() -> Option<PathBuf> {
                 return Some(path);
             }
         }
-        eprintln!("Strict Warning: LOCUS_DATASET_DIR set to {:?} but it doesn't look like an ICRA2020 dataset (no tags.csv or forward/ folder).", path);
+        eprintln!(
+            "Strict Warning: LOCUS_DATASET_DIR set to {:?} but it doesn't look like an ICRA2020 dataset (no tags.csv or forward/ folder).",
+            path
+        );
     }
 
     // 2. Relative path fallback
@@ -39,14 +42,14 @@ pub fn resolve_dataset_root() -> Option<PathBuf> {
 
     for p in &candidates {
         if p.exists() {
-             // If tags.csv exists, great.
-             if p.join("tags.csv").exists() {
-                 return Some(p.to_path_buf());
-             }
-             // If standard subdirs exist, accept it too.
-             if p.join("forward").exists() || p.join("rotation").exists() {
-                 return Some(p.to_path_buf());
-             }
+            // If tags.csv exists, great.
+            if p.join("tags.csv").exists() {
+                return Some(p.to_path_buf());
+            }
+            // If standard subdirs exist, accept it too.
+            if p.join("forward").exists() || p.join("rotation").exists() {
+                return Some(p.to_path_buf());
+            }
         }
     }
 
@@ -62,7 +65,7 @@ pub fn load_ground_truth(dataset_root: &Path) -> Option<HashMap<String, ImageGro
     };
 
     let mut map: HashMap<String, ImageGroundTruth> = HashMap::new();
-    
+
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(true)
         .from_path(csv_path)
@@ -70,10 +73,12 @@ pub fn load_ground_truth(dataset_root: &Path) -> Option<HashMap<String, ImageGro
 
     for result in rdr.records() {
         let record = result.expect("Failed to parse CSV record");
-        
+
         // image,tag_id,corner,ground_truth_x,ground_truth_y,...
-        if record.len() < 5 { continue; }
-        
+        if record.len() < 5 {
+            continue;
+        }
+
         let filename = record[0].to_string();
         let tag_id = match record[1].trim().parse::<u32>() {
             Ok(id) => id,
@@ -91,7 +96,7 @@ pub fn load_ground_truth(dataset_root: &Path) -> Option<HashMap<String, ImageGro
             Ok(y) => y,
             Err(_) => continue,
         };
-        
+
         let entry = map.entry(filename).or_insert_with(|| ImageGroundTruth {
             tag_ids: HashSet::new(),
             corners: HashMap::new(),
@@ -101,6 +106,6 @@ pub fn load_ground_truth(dataset_root: &Path) -> Option<HashMap<String, ImageGro
         let corners = entry.corners.entry(tag_id).or_insert([[0.0; 2]; 4]);
         corners[corner_idx] = [gx, gy];
     }
-    
+
     Some(map)
 }

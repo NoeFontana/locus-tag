@@ -1,14 +1,17 @@
 mod common;
 
-use locus_core::{DetectOptions, Detector, config::TagFamily};
 use locus_core::image::ImageView;
+use locus_core::{DetectOptions, Detector, config::TagFamily};
 use std::path::PathBuf;
 
 fn run_single_image_test(subfolder: &str, filename: &str, min_recall: f64, max_rmse: f64) {
-    let dataset_root = common::resolve_dataset_root()
-        .expect("ICRA2020 dataset not found. Set LOCUS_DATASET_DIR.");
-    
-    let img_path = dataset_root.join(subfolder).join("pure_tags_images").join(filename);
+    let dataset_root =
+        common::resolve_dataset_root().expect("ICRA2020 dataset not found. Set LOCUS_DATASET_DIR.");
+
+    let img_path = dataset_root
+        .join(subfolder)
+        .join("pure_tags_images")
+        .join(filename);
     if !img_path.exists() {
         panic!("Test image not found: {:?}", img_path);
     }
@@ -17,14 +20,23 @@ fn run_single_image_test(subfolder: &str, filename: &str, min_recall: f64, max_r
     let ground_truth_map = common::load_ground_truth(&local_csv_dir)
         .or_else(|| common::load_ground_truth(&dataset_root))
         .expect("No tags.csv found");
-    
-    let gt = ground_truth_map.get(filename).expect("Image not in ground truth");
+
+    let gt = ground_truth_map
+        .get(filename)
+        .expect("Image not in ground truth");
 
     // Open image
-    let img = image::open(&img_path).expect("Failed to load image").into_luma8();
+    let img = image::open(&img_path)
+        .expect("Failed to load image")
+        .into_luma8();
     let (width, height) = img.dimensions();
-    let input_view = ImageView::new(img.as_raw(), width as usize, height as usize, width as usize)
-        .expect("Failed to create ImageView");
+    let input_view = ImageView::new(
+        img.as_raw(),
+        width as usize,
+        height as usize,
+        width as usize,
+    )
+    .expect("Failed to create ImageView");
 
     let mut detector = Detector::new();
     let options = DetectOptions {
@@ -67,18 +79,43 @@ fn run_single_image_test(subfolder: &str, filename: &str, min_recall: f64, max_r
                 match_count += 1;
                 matched_gt_ids.insert(det.id);
             } else {
-                println!("  Tag {}: Ignored distant detection (dist={:.1}px)", det.id, dist_sq.sqrt());
+                println!(
+                    "  Tag {}: Ignored distant detection (dist={:.1}px)",
+                    det.id,
+                    dist_sq.sqrt()
+                );
             }
         }
     }
     let recall = matched_gt_ids.len() as f64 / gt.tag_ids.len() as f64;
-    let avg_rmse = if match_count > 0 { total_rmse / match_count as f64 } else { 0.0 };
+    let avg_rmse = if match_count > 0 {
+        total_rmse / match_count as f64
+    } else {
+        0.0
+    };
 
-    println!("Image {}: Recall={:.2}%, RMSE={:.4} px", filename, recall * 100.0, avg_rmse);
+    println!(
+        "Image {}: Recall={:.2}%, RMSE={:.4} px",
+        filename,
+        recall * 100.0,
+        avg_rmse
+    );
 
-    assert!(recall >= min_recall, "Recall {:.2}% below target {:.2}% for {}", recall * 100.0, min_recall * 100.0, filename);
+    assert!(
+        recall >= min_recall,
+        "Recall {:.2}% below target {:.2}% for {}",
+        recall * 100.0,
+        min_recall * 100.0,
+        filename
+    );
     if recall > 0.0 {
-        assert!(avg_rmse <= max_rmse, "RMSE {:.4} px above target {:.4} px for {}", avg_rmse, max_rmse, filename);
+        assert!(
+            avg_rmse <= max_rmse,
+            "RMSE {:.4} px above target {:.4} px for {}",
+            avg_rmse,
+            max_rmse,
+            filename
+        );
     }
 }
 

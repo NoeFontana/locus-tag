@@ -40,17 +40,17 @@ pub fn bilateral_filter(
 ) {
     let w = img.width;
     let h = img.height;
-    
+
     // Internal buffer for cross-pass
     let temp = arena.alloc_slice_fill_copy(w * h, 0u8);
-    
+
     // Precompute color Gaussian LUT
     let mut color_lut = [0.0f32; 256];
     let color_coeff = -1.0 / (2.0 * sigma_color * sigma_color);
     for i in 0..256 {
         color_lut[i] = (color_coeff * (i as f32).powi(2)).exp();
     }
-    
+
     // Precompute 1D spatial Gaussian LUT
     let diameter = 2 * radius + 1;
     let mut spatial_lut = [0.0f32; 31]; // Support radius up to 15
@@ -70,17 +70,18 @@ pub fn bilateral_filter(
             let ptr = temp.as_ptr().cast_mut();
             std::slice::from_raw_parts_mut(ptr.add(y * w), w)
         };
-        
+
         for x in 0..w {
             let center_val = src_row[x];
             let mut sum_weights = 0.0f32;
             let mut filtered_val = 0.0f32;
-            
+
             for dx in 0..diameter {
                 let nx = (x as i32 + dx as i32 - radius as i32).clamp(0, w as i32 - 1) as usize;
                 let neighbor_val = src_row[nx];
-                let color_diff = (i32::from(center_val) - i32::from(neighbor_val)).unsigned_abs() as usize;
-                
+                let color_diff =
+                    (i32::from(center_val) - i32::from(neighbor_val)).unsigned_abs() as usize;
+
                 let weight = spatial_lut[dx] * color_lut[color_diff];
                 filtered_val += f32::from(neighbor_val) * weight;
                 sum_weights += weight;
@@ -96,17 +97,18 @@ pub fn bilateral_filter(
             let ptr = output.as_ptr().cast_mut();
             std::slice::from_raw_parts_mut(ptr.add(y * w), w)
         };
-        
+
         for x in 0..w {
             let center_val = temp[y * w + x];
             let mut sum_weights = 0.0f32;
             let mut filtered_val = 0.0f32;
-            
+
             for dy in 0..diameter {
                 let ny = (y as i32 + dy as i32 - radius as i32).clamp(0, h as i32 - 1) as usize;
                 let neighbor_val = temp[ny * w + x]; // Memory access is row-wise for adjacent x
-                let color_diff = (i32::from(center_val) - i32::from(neighbor_val)).unsigned_abs() as usize;
-                
+                let color_diff =
+                    (i32::from(center_val) - i32::from(neighbor_val)).unsigned_abs() as usize;
+
                 let weight = spatial_lut[dy] * color_lut[color_diff];
                 filtered_val += f32::from(neighbor_val) * weight;
                 sum_weights += weight;
@@ -168,9 +170,14 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
             let x0 = 0;
             let x1 = 0;
             let x2 = 1.min(w - 1);
-            let p00 = i32::from(r0[x0]); let p01 = i32::from(r0[x1]); let p02 = i32::from(r0[x2]);
-            let p10 = i32::from(r1[x0]);                        let p12 = i32::from(r1[x2]);
-            let p20 = i32::from(r2[x0]); let p21 = i32::from(r2[x1]); let p22 = i32::from(r2[x2]);
+            let p00 = i32::from(r0[x0]);
+            let p01 = i32::from(r0[x1]);
+            let p02 = i32::from(r0[x2]);
+            let p10 = i32::from(r1[x0]);
+            let p12 = i32::from(r1[x2]);
+            let p20 = i32::from(r2[x0]);
+            let p21 = i32::from(r2[x1]);
+            let p22 = i32::from(r2[x2]);
             let gx = -3 * p00 + 3 * p02 - 10 * p10 + 10 * p12 - 3 * p20 + 3 * p22;
             let gy = -3 * p00 - 10 * p01 - 3 * p02 + 3 * p20 + 10 * p21 + 3 * p22;
             dst_row[x] = ((gx.abs() + gy.abs()) >> 4).min(255) as u8;
@@ -180,7 +187,7 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
         if w > 2 {
             let interior_end = w - 1;
             let mut x = 1;
-            
+
             // Process 4 pixels at a time
             while x + 3 < interior_end {
                 // Prefetch rows for cache efficiency
@@ -188,30 +195,70 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
                 let x2 = x + 1;
                 let x3 = x + 2;
                 let x4 = x + 3;
-                
+
                 // Load values once
-                let r0_m1 = [i32::from(r0[x1-1]), i32::from(r0[x2-1]), i32::from(r0[x3-1]), i32::from(r0[x4-1])];
-                let r0_p1 = [i32::from(r0[x1+1]), i32::from(r0[x2+1]), i32::from(r0[x3+1]), i32::from(r0[x4+1])];
-                let r1_m1 = [i32::from(r1[x1-1]), i32::from(r1[x2-1]), i32::from(r1[x3-1]), i32::from(r1[x4-1])];
-                let r1_p1 = [i32::from(r1[x1+1]), i32::from(r1[x2+1]), i32::from(r1[x3+1]), i32::from(r1[x4+1])];
-                let r2_c = [i32::from(r2[x1]), i32::from(r2[x2]), i32::from(r2[x3]), i32::from(r2[x4])];
-                let r0_c = [i32::from(r0[x1]), i32::from(r0[x2]), i32::from(r0[x3]), i32::from(r0[x4])];
-                let r2_m1 = [i32::from(r2[x1-1]), i32::from(r2[x2-1]), i32::from(r2[x3-1]), i32::from(r2[x4-1])];
-                let r2_p1 = [i32::from(r2[x1+1]), i32::from(r2[x2+1]), i32::from(r2[x3+1]), i32::from(r2[x4+1])];
-                
+                let r0_m1 = [
+                    i32::from(r0[x1 - 1]),
+                    i32::from(r0[x2 - 1]),
+                    i32::from(r0[x3 - 1]),
+                    i32::from(r0[x4 - 1]),
+                ];
+                let r0_p1 = [
+                    i32::from(r0[x1 + 1]),
+                    i32::from(r0[x2 + 1]),
+                    i32::from(r0[x3 + 1]),
+                    i32::from(r0[x4 + 1]),
+                ];
+                let r1_m1 = [
+                    i32::from(r1[x1 - 1]),
+                    i32::from(r1[x2 - 1]),
+                    i32::from(r1[x3 - 1]),
+                    i32::from(r1[x4 - 1]),
+                ];
+                let r1_p1 = [
+                    i32::from(r1[x1 + 1]),
+                    i32::from(r1[x2 + 1]),
+                    i32::from(r1[x3 + 1]),
+                    i32::from(r1[x4 + 1]),
+                ];
+                let r2_c = [
+                    i32::from(r2[x1]),
+                    i32::from(r2[x2]),
+                    i32::from(r2[x3]),
+                    i32::from(r2[x4]),
+                ];
+                let r0_c = [
+                    i32::from(r0[x1]),
+                    i32::from(r0[x2]),
+                    i32::from(r0[x3]),
+                    i32::from(r0[x4]),
+                ];
+                let r2_m1 = [
+                    i32::from(r2[x1 - 1]),
+                    i32::from(r2[x2 - 1]),
+                    i32::from(r2[x3 - 1]),
+                    i32::from(r2[x4 - 1]),
+                ];
+                let r2_p1 = [
+                    i32::from(r2[x1 + 1]),
+                    i32::from(r2[x2 + 1]),
+                    i32::from(r2[x3 + 1]),
+                    i32::from(r2[x4 + 1]),
+                ];
+
                 // Compute 4 gradients in parallel
                 for i in 0..4 {
                     let gx = 3 * (r0_p1[i] - r0_m1[i])
-                           + 10 * (r1_p1[i] - r1_m1[i])
-                           + 3 * (r2_p1[i] - r2_m1[i]);
+                        + 10 * (r1_p1[i] - r1_m1[i])
+                        + 3 * (r2_p1[i] - r2_m1[i]);
                     let gy = 3 * (r2_m1[i] - r0_m1[i])
-                           + 10 * (r2_c[i] - r0_c[i])
-                           + 3 * (r2_p1[i] - r0_p1[i]);
+                        + 10 * (r2_c[i] - r0_c[i])
+                        + 3 * (r2_p1[i] - r0_p1[i]);
                     dst_row[x + i] = ((gx.abs() + gy.abs()) >> 4).min(255) as u8;
                 }
                 x += 4;
             }
-            
+
             // Handle remaining pixels
             while x < interior_end {
                 let gx = 3 * (i32::from(r0[x + 1]) - i32::from(r0[x - 1]))
@@ -231,9 +278,14 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
             let x0 = w - 2;
             let x1 = w - 1;
             let x2 = w - 1;
-            let p00 = i32::from(r0[x0]); let p01 = i32::from(r0[x1]); let p02 = i32::from(r0[x2]);
-            let p10 = i32::from(r1[x0]);                        let p12 = i32::from(r1[x2]);
-            let p20 = i32::from(r2[x0]); let p21 = i32::from(r2[x1]); let p22 = i32::from(r2[x2]);
+            let p00 = i32::from(r0[x0]);
+            let p01 = i32::from(r0[x1]);
+            let p02 = i32::from(r0[x2]);
+            let p10 = i32::from(r1[x0]);
+            let p12 = i32::from(r1[x2]);
+            let p20 = i32::from(r2[x0]);
+            let p21 = i32::from(r2[x1]);
+            let p22 = i32::from(r2[x2]);
             let gx = -3 * p00 + 3 * p02 - 10 * p10 + 10 * p12 - 3 * p20 + 3 * p22;
             let gy = -3 * p00 - 10 * p01 - 3 * p02 + 3 * p20 + 10 * p21 + 3 * p22;
             dst_row[x] = ((gx.abs() + gy.abs()) >> 4).min(255) as u8;
@@ -268,11 +320,11 @@ pub fn laplacian_sharpen(img: &ImageView, output: &mut [u8]) {
         let y0 = y.saturating_sub(1);
         let y1 = y;
         let y2 = (y + 1).min(h - 1);
-        
+
         let r0 = img.get_row(y0);
         let r1 = img.get_row(y1);
         let r2 = img.get_row(y2);
-        
+
         // Safety: Unique row per thread
         let dst_row = unsafe {
             let ptr = output.as_ptr().cast_mut();
@@ -309,25 +361,25 @@ mod tests {
         let width = 32;
         let height = 32;
         let mut data = vec![50u8; width * height];
-        
+
         // Create vertical edge at x=16
         for y in 0..height {
             for x in 16..width {
                 data[y * width + x] = 200;
             }
         }
-        
+
         let img = ImageView::new(&data, width, height, width).unwrap();
         let mut output = vec![0u8; width * height];
-        
+
         let arena = Bump::new();
         // Apply bilateral filter with moderate parameters
         bilateral_filter(&arena, &img, &mut output, 3, 3.0, 30.0);
-        
+
         // Check edge preservation: values near edge should still be distinct
         let left_avg = output[16 * width + 14] as f32; // 2px left of edge
         let right_avg = output[16 * width + 18] as f32; // 2px right of edge
-        
+
         // Edge should still be sharp (>100 intensity difference)
         assert!(
             (right_avg - left_avg).abs() > 100.0,
@@ -343,19 +395,19 @@ mod tests {
         let width = 32;
         let height = 32;
         let mut data = vec![128u8; width * height];
-        
+
         // Add salt-and-pepper noise
         data[16 * width + 16] = 255;
         data[17 * width + 16] = 0;
         data[16 * width + 17] = 255;
-        
+
         let img = ImageView::new(&data, width, height, width).unwrap();
         let mut output = vec![0u8; width * height];
-        
+
         let arena = Bump::new();
         // Use higher sigma_color to smooth out high-contrast salt-and-pepper noise
         bilateral_filter(&arena, &img, &mut output, 3, 3.0, 100.0);
-        
+
         // Filtered values should be closer to 128 than original noise
         assert!(
             (output[16 * width + 16] as i32 - 128).abs() < 50,
@@ -369,27 +421,23 @@ mod tests {
         let width = 32;
         let height = 32;
         let mut data = vec![50u8; width * height];
-        
+
         // Vertical edge at x=16
         for y in 0..height {
             for x in 16..width {
                 data[y * width + x] = 200;
             }
         }
-        
+
         let img = ImageView::new(&data, width, height, width).unwrap();
         let mut gradient = vec![0u8; width * height];
-        
+
         compute_gradient_map(&img, &mut gradient);
-        
+
         // Gradient should be high at edge (x=15,16)
         let edge_grad = gradient[16 * width + 15];
-        assert!(
-            edge_grad > 100,
-            "Gradient too low at edge: {}",
-            edge_grad
-        );
-        
+        assert!(edge_grad > 100, "Gradient too low at edge: {}", edge_grad);
+
         // Gradient should be low in uniform regions
         let uniform_grad = gradient[16 * width + 8];
         assert!(
@@ -405,13 +453,13 @@ mod tests {
         let width = 8;
         let height = 8;
         let data = vec![128u8; width * height];
-        
+
         let img = ImageView::new(&data, width, height, width).unwrap();
         let mut gradient = vec![0u8; width * height];
-        
+
         // Should not panic
         compute_gradient_map(&img, &mut gradient);
-        
+
         // All gradients should be low for uniform image
         assert!(gradient.iter().all(|&g| g < 10));
     }
@@ -425,17 +473,17 @@ mod tests {
         for x in 0..width {
             data[4 * width + x] = 200;
         }
-        
+
         let img = ImageView::new(&data, width, height, width).unwrap();
         let mut output = vec![0u8; width * height];
-        
+
         laplacian_sharpen(&img, &mut output);
-        
+
         // The value at 4,4 (center of edge) should be higher than 200 due to sharpening
         // Center is 200, neighbors are 100 (top), 200 (left), 200 (right), 100 (bottom)
         // 5*200 - (100 + 200 + 200 + 100) = 1000 - 600 = 400 -> 255
         assert!(output[4 * width + 4] > 200);
-        
+
         // The value at 3,4 (just above edge) should be lower than 100
         // Center is 100, neighbors are 100, 100, 100, 200
         // 5*100 - (100 + 100 + 100 + 200) = 500 - 500 = 0

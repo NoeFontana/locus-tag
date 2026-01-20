@@ -25,8 +25,8 @@
 
 #![allow(missing_docs)]
 
-use locus_core::{DetectOptions, Detector, config::TagFamily};
 use locus_core::image::ImageView;
+use locus_core::{DetectOptions, Detector, config::TagFamily};
 // use rayon::prelude::*; // Removed as we use sequential processing for reliable timing
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
@@ -85,25 +85,29 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
     let dataset_root = match common::resolve_dataset_root() {
         Some(path) => path,
         None => {
-            println!("SKIPPING: ICRA2020 dataset not found. Set LOCUS_DATASET_DIR to run regression tests.");
+            println!(
+                "SKIPPING: ICRA2020 dataset not found. Set LOCUS_DATASET_DIR to run regression tests."
+            );
             return;
         }
     };
 
-    // We try to find the actual image directory. 
+    // We try to find the actual image directory.
     let candidates = [
         dataset_root.join(subfolder).join("pure_tags_images"),
         dataset_root.join(subfolder),
     ];
-    
-    let search_dir = candidates.iter().find(|p| p.exists())
-        .map(|p| p.clone());
+
+    let search_dir = candidates.iter().find(|p| p.exists()).map(|p| p.clone());
 
     let search_dir = match search_dir {
         Some(d) => d,
         None => {
-             println!("SKIPPING: Sub-dataset {:?} not found in {:?}.", subfolder, dataset_root);
-             return;
+            println!(
+                "SKIPPING: Sub-dataset {:?} not found in {:?}.",
+                subfolder, dataset_root
+            );
+            return;
         }
     };
 
@@ -118,7 +122,10 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
         println!("Loading Master Ground Truth from {:?}", dataset_root);
         gt
     } else {
-        println!("SKIPPING: No tags.csv found in {:?} or {:?}.", local_csv_dir, dataset_root);
+        println!(
+            "SKIPPING: No tags.csv found in {:?} or {:?}.",
+            local_csv_dir, dataset_root
+        );
         return;
     };
     println!("Loaded Ground Truth for {} images.", ground_truth.len());
@@ -126,7 +133,7 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
     // 3. Collect Images (Walker)
     let mut image_paths = Vec::new();
     let walker = walkdir::WalkDir::new(&search_dir).into_iter();
-    
+
     for entry in walker.filter_map(Result::ok) {
         let path = entry.path();
         if path.extension().map_or(false, |e| e == "png" || e == "jpg") {
@@ -139,93 +146,123 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
     }
 
     if image_paths.is_empty() {
-        println!("WARNING: No images found in {:?} that match Ground Truth. Skipping.", search_dir);
+        println!(
+            "WARNING: No images found in {:?} that match Ground Truth. Skipping.",
+            search_dir
+        );
         return;
     }
 
     println!("Found {} images for testing.", image_paths.len());
 
     // 4. Sequential Detection (for reliable timing)
-    let results: Vec<(String, ImageMetrics)> = image_paths.iter().map(|image_path: &std::path::PathBuf| {
-        let filename = image_path.file_name().unwrap().to_string_lossy().to_string();
-        let gt = ground_truth.get(&filename).unwrap(); // Invariant: filtered in step 3
-        
-        let mut config = locus_core::DetectorConfig::default();
-        if use_checkerboard {
-            config.segmentation_connectivity = locus_core::config::SegmentationConnectivity::Four;
-        }
-        
-        let mut detector = Detector::with_config(config);
-        let options = DetectOptions {
-            families: vec![TagFamily::AprilTag36h11], 
-            ..Default::default()
-        };
-        
-        // Open image
-        let img = match image::open(image_path) {
-            Ok(i) => i.into_luma8(),
-            Err(e) => {
-                eprintln!("Failed to load {}: {}", filename, e);
-                return (filename, ImageMetrics {
-                    recall: 0.0,
-                    avg_rmse: 0.0,
-                    stats: PipelineMetrics::default(),
-                    detected_ids: BTreeSet::new(),
-                });
+    let results: Vec<(String, ImageMetrics)> = image_paths
+        .iter()
+        .map(|image_path: &std::path::PathBuf| {
+            let filename = image_path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
+            let gt = ground_truth.get(&filename).unwrap(); // Invariant: filtered in step 3
+
+            let mut config = locus_core::DetectorConfig::default();
+            if use_checkerboard {
+                config.segmentation_connectivity =
+                    locus_core::config::SegmentationConnectivity::Four;
             }
-        };
-        
-        let (width, height) = img.dimensions();
-        let input_view = ImageView::new(img.as_raw(), width as usize, height as usize, width as usize)
+
+            let mut detector = Detector::with_config(config);
+            let options = DetectOptions {
+                families: vec![TagFamily::AprilTag36h11],
+                ..Default::default()
+            };
+
+            // Open image
+            let img = match image::open(image_path) {
+                Ok(i) => i.into_luma8(),
+                Err(e) => {
+                    eprintln!("Failed to load {}: {}", filename, e);
+                    return (
+                        filename,
+                        ImageMetrics {
+                            recall: 0.0,
+                            avg_rmse: 0.0,
+                            stats: PipelineMetrics::default(),
+                            detected_ids: BTreeSet::new(),
+                        },
+                    );
+                }
+            };
+
+            let (width, height) = img.dimensions();
+            let input_view = ImageView::new(
+                img.as_raw(),
+                width as usize,
+                height as usize,
+                width as usize,
+            )
             .expect("Failed to create ImageView");
 
-        // DETECTION & TIMING
-        let (detections, stats) = detector.detect_with_stats_and_options(&input_view, &options);
-        
-        // METRICS CALCULATION
-        let mut total_rmse = 0.0;
-        let mut match_count = 0;
-        let mut matched_gt_ids = BTreeSet::new();
-        
-        for det in &detections {
-            if let Some(gt_corners) = gt.corners.get(&det.id) {
-                // Calculate center of GT tag
-                let mut gt_cx = 0.0;
-                let mut gt_cy = 0.0;
-                for p in gt_corners {
-                    gt_cx += p[0];
-                    gt_cy += p[1];
-                }
-                gt_cx /= 4.0;
-                gt_cy /= 4.0;
+            // DETECTION & TIMING
+            let (detections, stats) = detector.detect_with_stats_and_options(&input_view, &options);
 
-                // Only match if center is within 20 pixels
-                let dist_sq = (det.center[0] - gt_cx).powi(2) + (det.center[1] - gt_cy).powi(2);
-                if dist_sq < 20.0 * 20.0 {
-                    // Map library standard (CW: TL, TR, BR, BL) to ICRA 2020 convention (TR, TL, BL, BR)
-                    let reordered_det = [
-                        det.corners[1], // ICRA Idx 0 <- Lib 1 (TR)
-                        det.corners[0], // ICRA Idx 1 <- Lib 0 (TL)
-                        det.corners[3], // ICRA Idx 2 <- Lib 3 (BL)
-                        det.corners[2], // ICRA Idx 3 <- Lib 2 (BR)
-                    ];
-                    total_rmse += calculate_rmse(reordered_det, *gt_corners);
-                    match_count += 1;
-                    matched_gt_ids.insert(det.id);
+            // METRICS CALCULATION
+            let mut total_rmse = 0.0;
+            let mut match_count = 0;
+            let mut matched_gt_ids = BTreeSet::new();
+
+            for det in &detections {
+                if let Some(gt_corners) = gt.corners.get(&det.id) {
+                    // Calculate center of GT tag
+                    let mut gt_cx = 0.0;
+                    let mut gt_cy = 0.0;
+                    for p in gt_corners {
+                        gt_cx += p[0];
+                        gt_cy += p[1];
+                    }
+                    gt_cx /= 4.0;
+                    gt_cy /= 4.0;
+
+                    // Only match if center is within 20 pixels
+                    let dist_sq = (det.center[0] - gt_cx).powi(2) + (det.center[1] - gt_cy).powi(2);
+                    if dist_sq < 20.0 * 20.0 {
+                        // Map library standard (CW: TL, TR, BR, BL) to ICRA 2020 convention (TR, TL, BL, BR)
+                        let reordered_det = [
+                            det.corners[1], // ICRA Idx 0 <- Lib 1 (TR)
+                            det.corners[0], // ICRA Idx 1 <- Lib 0 (TL)
+                            det.corners[3], // ICRA Idx 2 <- Lib 3 (BL)
+                            det.corners[2], // ICRA Idx 3 <- Lib 2 (BR)
+                        ];
+                        total_rmse += calculate_rmse(reordered_det, *gt_corners);
+                        match_count += 1;
+                        matched_gt_ids.insert(det.id);
+                    }
                 }
             }
-        }
-        
-        let recall = if gt.tag_ids.is_empty() { 1.0 } else { matched_gt_ids.len() as f64 / gt.tag_ids.len() as f64 };
-        let avg_rmse = if match_count > 0 { total_rmse / match_count as f64 } else { 0.0 };
-        
-        (filename, ImageMetrics {
-            recall,
-            avg_rmse,
-            stats: PipelineMetrics::from(stats),
-            detected_ids: detections.iter().map(|d| d.id).collect(),
+
+            let recall = if gt.tag_ids.is_empty() {
+                1.0
+            } else {
+                matched_gt_ids.len() as f64 / gt.tag_ids.len() as f64
+            };
+            let avg_rmse = if match_count > 0 {
+                total_rmse / match_count as f64
+            } else {
+                0.0
+            };
+
+            (
+                filename,
+                ImageMetrics {
+                    recall,
+                    avg_rmse,
+                    stats: PipelineMetrics::from(stats),
+                    detected_ids: detections.iter().map(|d| d.id).collect(),
+                },
+            )
         })
-    }).collect();
+        .collect();
 
     // 4. Aggregate Results (Reduce)
     let mut entries = BTreeMap::new();
@@ -237,7 +274,7 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
     for (filename, metrics) in results {
         sum_recall += metrics.recall;
         sum_rmse += metrics.avg_rmse;
-        
+
         sum_stats.threshold_ms += metrics.stats.threshold_ms;
         sum_stats.segmentation_ms += metrics.stats.segmentation_ms;
         sum_stats.quad_extraction_ms += metrics.stats.quad_extraction_ms;
@@ -245,11 +282,11 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
         sum_stats.total_ms += metrics.stats.total_ms;
         sum_stats.num_candidates += metrics.stats.num_candidates;
         sum_stats.num_detections += metrics.stats.num_detections;
-        
+
         entries.insert(filename, metrics);
     }
 
-    let report = RegressionReport { 
+    let report = RegressionReport {
         entries,
         mean_stats: PipelineMetrics {
             threshold_ms: sum_stats.threshold_ms / count,
@@ -266,15 +303,32 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
 
     // 5. Snapshot Assertion
     // Use the subfolder name as part of the snapshot name to prevent collisions
-    let snapshot_name = format!("icra2020_{}_{}", subfolder, if use_checkerboard { "checkerboard" } else { "standard" });
+    let snapshot_name = format!(
+        "icra2020_{}_{}",
+        subfolder,
+        if use_checkerboard {
+            "checkerboard"
+        } else {
+            "standard"
+        }
+    );
 
     println!("Report for {}:", snapshot_name);
     println!("  Recall:          {:.2}%", report.mean_recall * 100.0);
     println!("  RMSE:            {:.4} px", report.mean_rmse);
     println!("  Avg Total:       {:.2} ms", report.mean_stats.total_ms);
-    println!("  Avg Threshold:   {:.2} ms", report.mean_stats.threshold_ms);
-    println!("  Avg Segmentation: {:.2} ms", report.mean_stats.segmentation_ms);
-    println!("  Avg Quad Extr:   {:.2} ms", report.mean_stats.quad_extraction_ms);
+    println!(
+        "  Avg Threshold:   {:.2} ms",
+        report.mean_stats.threshold_ms
+    );
+    println!(
+        "  Avg Segmentation: {:.2} ms",
+        report.mean_stats.segmentation_ms
+    );
+    println!(
+        "  Avg Quad Extr:   {:.2} ms",
+        report.mean_stats.quad_extraction_ms
+    );
     println!("  Avg Decoding:    {:.2} ms", report.mean_stats.decoding_ms);
     println!("  Avg Candidates:  {}", report.mean_stats.num_candidates);
 
@@ -288,7 +342,6 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
         ".entries.*.stats.total_ms" => "[latency]"
     });
 }
-
 
 macro_rules! define_regression_test {
     ($name:ident, $subfolder:expr, $checkerboard:expr) => {
@@ -306,8 +359,16 @@ define_regression_test!(test_regression_icra2020_random, "random", false);
 define_regression_test!(test_regression_icra2020_circle, "circle", false);
 
 // Checkerboard Datasets (4-way connectivity) - Run on same folders, but with 4-way mode
-define_regression_test!(test_regression_icra2020_checkerboard_forward, "forward", true);
-define_regression_test!(test_regression_icra2020_checkerboard_rotation, "rotation", true);
+define_regression_test!(
+    test_regression_icra2020_checkerboard_forward,
+    "forward",
+    true
+);
+define_regression_test!(
+    test_regression_icra2020_checkerboard_rotation,
+    "rotation",
+    true
+);
 define_regression_test!(test_regression_icra2020_checkerboard_random, "random", true);
 define_regression_test!(test_regression_icra2020_checkerboard_circle, "circle", true);
 
@@ -319,11 +380,11 @@ define_regression_test!(test_regression_icra2020_checkerboard_circle, "circle", 
 /// This always runs regardless of whether the full ICRA2020 dataset is installed.
 #[test]
 fn test_fixture_forward_0037() {
+    use serde::Deserialize;
     use std::collections::HashSet;
     use std::fs;
     use std::path::PathBuf;
-    use serde::Deserialize;
-    
+
     #[derive(Debug, Deserialize)]
     struct FixtureGT {
         #[allow(dead_code)]
@@ -332,31 +393,36 @@ fn test_fixture_forward_0037() {
         expected_max_corner_error_px: f64,
         tags: Vec<FixtureTag>,
     }
-    
+
     #[derive(Debug, Deserialize)]
     struct FixtureTag {
         tag_id: u32,
         corners: [[f64; 2]; 4],
     }
-    
+
     let fixtures_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/icra2020");
     let gt_path = fixtures_dir.join("0037.json");
     let img_path = fixtures_dir.join("0037.png");
-    
+
     // Load ground truth
-    let gt_content = fs::read_to_string(&gt_path)
-        .unwrap_or_else(|e| panic!("Failed to load fixture GT: {}", e));
+    let gt_content =
+        fs::read_to_string(&gt_path).unwrap_or_else(|e| panic!("Failed to load fixture GT: {}", e));
     let gt: FixtureGT = serde_json::from_str(&gt_content)
         .unwrap_or_else(|e| panic!("Failed to parse fixture GT: {}", e));
-    
+
     // Load image
     let img = image::open(&img_path)
         .unwrap_or_else(|e| panic!("Failed to load fixture image: {}", e))
         .into_luma8();
     let (width, height) = img.dimensions();
-    let img_view = ImageView::new(img.as_raw(), width as usize, height as usize, width as usize)
-        .expect("Failed to create ImageView");
-    
+    let img_view = ImageView::new(
+        img.as_raw(),
+        width as usize,
+        height as usize,
+        width as usize,
+    )
+    .expect("Failed to create ImageView");
+
     // Detect
     let mut detector = Detector::new();
     let options = DetectOptions {
@@ -364,13 +430,13 @@ fn test_fixture_forward_0037() {
         ..Default::default()
     };
     let detections = detector.detect_with_options(&img_view, &options);
-    
+
     // Calculate metrics
     let gt_ids: HashSet<u32> = gt.tags.iter().map(|t| t.tag_id).collect();
     let det_ids: HashSet<u32> = detections.iter().map(|d| d.id).collect();
     let matched: HashSet<u32> = gt_ids.intersection(&det_ids).copied().collect();
     let recall = matched.len() as f64 / gt_ids.len() as f64;
-    
+
     // Calculate corner errors for matched tags
     let mut total_rmse = 0.0;
     let mut match_count = 0;
@@ -387,8 +453,12 @@ fn test_fixture_forward_0037() {
             match_count += 1;
         }
     }
-    let avg_rmse = if match_count > 0 { total_rmse / match_count as f64 } else { 0.0 };
-    
+    let avg_rmse = if match_count > 0 {
+        total_rmse / match_count as f64
+    } else {
+        0.0
+    };
+
     // Assertions
     assert!(
         recall >= gt.expected_min_recall,

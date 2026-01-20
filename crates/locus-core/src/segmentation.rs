@@ -407,7 +407,7 @@ pub fn label_components_threshold_model<'a>(
     // Pass 5: Parallel label writing for surviving components
     let labels = arena.alloc_slice_fill_copy(width * height, 0u32);
     let mut runs_by_y: Vec<Vec<(usize, usize, u32)>> = vec![Vec::new(); height];
-    
+
     for run in &runs {
         let root = uf.find(run.id) as usize;
         let label = root_to_final_label[root];
@@ -416,11 +416,14 @@ pub fn label_components_threshold_model<'a>(
         }
     }
 
-    labels.par_chunks_exact_mut(width).enumerate().for_each(|(y, row)| {
-        for &(x_start, x_end, label) in &runs_by_y[y] {
-            row[x_start..=x_end].fill(label);
-        }
-    });
+    labels
+        .par_chunks_exact_mut(width)
+        .enumerate()
+        .for_each(|(y, row)| {
+            for &(x_start, x_end, label) in &runs_by_y[y] {
+                row[x_start..=x_end].fill(label);
+            }
+        });
 
     LabelResult {
         labels,
@@ -498,15 +501,17 @@ mod tests {
             }
         }
 
-                    use crate::image::ImageView;
-                    let img = ImageView::new(&binary, width, height, width).expect("valid creation");
-                    
-                    // Decimate by 2 -> 16x16
-                    let mut decimated_data = vec![0u8; 16 * 16];
-                    let decimated_img = img.decimate_to(2, &mut decimated_data).expect("decimation failed");        
+        use crate::image::ImageView;
+        let img = ImageView::new(&binary, width, height, width).expect("valid creation");
+
+        // Decimate by 2 -> 16x16
+        let mut decimated_data = vec![0u8; 16 * 16];
+        let decimated_img = img
+            .decimate_to(2, &mut decimated_data)
+            .expect("decimation failed");
         // In decimated image, square should be roughly at (5,5) with size 5x5
         let result = label_components_with_stats(&arena, decimated_img.data, 16, 16, true);
-        
+
         assert_eq!(result.component_stats.len(), 1);
         let s = result.component_stats[0];
         assert_eq!(s.pixel_count, 25);
@@ -604,7 +609,8 @@ mod tests {
             let arena = Bump::new();
             let (binary, corners) = generate_binarized_tag(tag_size, canvas_size);
 
-            let result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size, true);
+            let result =
+                label_components_with_stats(&arena, &binary, canvas_size, canvas_size, true);
 
             assert!(
                 !result.component_stats.is_empty(),

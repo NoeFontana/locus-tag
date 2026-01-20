@@ -5,8 +5,11 @@
 //! - Malformed inputs
 //! - Boundary conditions
 
-use locus_core::{Detector, config::{DetectOptions, TagFamily}};
 use locus_core::image::ImageView;
+use locus_core::{
+    Detector,
+    config::{DetectOptions, TagFamily},
+};
 use rand::prelude::*;
 
 /// Test that the detection pipeline correctly handles strided buffers.
@@ -20,46 +23,47 @@ fn test_strided_buffer_detection() {
     const HEIGHT: usize = 200;
     const PADDING: usize = 13; // Non-power-of-2 to catch alignment assumptions
     const STRIDE: usize = WIDTH + PADDING;
-    
+
     let mut rng = thread_rng();
-    
+
     // Create buffer with random garbage (simulating uninitialized padding)
     let mut buffer = vec![0u8; HEIGHT * STRIDE];
     rng.fill_bytes(&mut buffer);
-    
+
     // Generate a synthetic tag and copy it into the strided buffer
     let (tag_data, _gt_corners) = locus_core::test_utils::generate_synthetic_test_image(
         TagFamily::AprilTag36h11,
-        42, // tag ID
-        80, // tag size
+        42,    // tag ID
+        80,    // tag size
         WIDTH, // canvas size = width (for easy copying)
-        0.0, // no noise
+        0.0,   // no noise
     );
-    
+
     // Copy tag data row-by-row respecting stride
     for y in 0..HEIGHT {
         let src_start = y * WIDTH;
         let dst_start = y * STRIDE;
-        buffer[dst_start..dst_start + WIDTH].copy_from_slice(&tag_data[src_start..src_start + WIDTH]);
+        buffer[dst_start..dst_start + WIDTH]
+            .copy_from_slice(&tag_data[src_start..src_start + WIDTH]);
         // Padding bytes remain random garbage - this is intentional
     }
-    
+
     // Create ImageView with explicit stride
-    let img = ImageView::new(&buffer, WIDTH, HEIGHT, STRIDE)
-        .expect("Failed to create strided ImageView");
-    
+    let img =
+        ImageView::new(&buffer, WIDTH, HEIGHT, STRIDE).expect("Failed to create strided ImageView");
+
     // Run detection
     let mut detector = Detector::new();
     let options = DetectOptions::with_families(&[TagFamily::AprilTag36h11]);
     let detections = detector.detect_with_options(&img, &options);
-    
+
     // Assert: Tag must be detected
     assert!(
         !detections.is_empty(),
         "Strided buffer test FAILED: No tags detected. \
          This likely means a kernel is using width instead of stride."
     );
-    
+
     // Assert: Correct tag ID
     assert!(
         detections.iter().any(|d| d.id == 42),
@@ -75,11 +79,11 @@ fn test_64_byte_aligned_stride() {
     const HEIGHT: usize = 150;
     // Round up to next 64-byte boundary
     const STRIDE: usize = ((WIDTH + 63) / 64) * 64; // 192
-    
+
     let mut rng = thread_rng();
     let mut buffer = vec![0u8; HEIGHT * STRIDE];
     rng.fill_bytes(&mut buffer);
-    
+
     let (tag_data, _) = locus_core::test_utils::generate_synthetic_test_image(
         TagFamily::AprilTag36h11,
         7,
@@ -87,16 +91,17 @@ fn test_64_byte_aligned_stride() {
         WIDTH,
         0.0,
     );
-    
+
     // Copy with stride
     for y in 0..HEIGHT {
-        buffer[y * STRIDE..y * STRIDE + WIDTH].copy_from_slice(&tag_data[y * WIDTH..(y + 1) * WIDTH]);
+        buffer[y * STRIDE..y * STRIDE + WIDTH]
+            .copy_from_slice(&tag_data[y * WIDTH..(y + 1) * WIDTH]);
     }
-    
+
     let img = ImageView::new(&buffer, WIDTH, HEIGHT, STRIDE).unwrap();
     let mut detector = Detector::new();
     let detections = detector.detect(&img);
-    
+
     assert!(
         detections.iter().any(|d| d.id == 7),
         "64-byte aligned stride test FAILED: Tag ID 7 not detected"
@@ -109,7 +114,7 @@ fn test_minimum_image_size() {
     // Very small image - should not panic
     let data = vec![128u8; 16 * 16];
     let img = ImageView::new(&data, 16, 16, 16).unwrap();
-    
+
     let mut detector = Detector::new();
     // Should not panic, even if no tags found
     let _detections = detector.detect(&img);
@@ -119,7 +124,7 @@ fn test_minimum_image_size() {
 #[test]
 fn test_invalid_stride_rejected() {
     let data = vec![0u8; 100];
-    
+
     // Stride less than width should fail
     let result = ImageView::new(&data, 10, 10, 9);
     assert!(result.is_err(), "ImageView should reject stride < width");
@@ -140,7 +145,7 @@ fn test_tag_touching_top_left_edge() {
     // Create a small canvas where the tag starts at pixel (0, 0)
     const SIZE: usize = 100;
     let mut data = vec![255u8; SIZE * SIZE];
-    
+
     // Draw a simple tag pattern starting at (0, 0)
     // Black border on top and left edges
     let tag_dim = 50;
@@ -152,10 +157,10 @@ fn test_tag_touching_top_left_edge() {
             }
         }
     }
-    
+
     let img = ImageView::new(&data, SIZE, SIZE, SIZE).unwrap();
     let mut detector = Detector::new();
-    
+
     // This should NOT panic - that's the main assertion
     let _detections = detector.detect(&img);
     // We don't require detection (no quiet zone), just no crash
@@ -166,10 +171,10 @@ fn test_tag_touching_top_left_edge() {
 fn test_tag_touching_bottom_right_edge() {
     const SIZE: usize = 100;
     let mut data = vec![255u8; SIZE * SIZE];
-    
+
     let tag_dim = 50;
     let offset = SIZE - tag_dim;
-    
+
     for y in offset..SIZE {
         for x in offset..SIZE {
             let rel_x = x - offset;
@@ -179,10 +184,10 @@ fn test_tag_touching_bottom_right_edge() {
             }
         }
     }
-    
+
     let img = ImageView::new(&data, SIZE, SIZE, SIZE).unwrap();
     let mut detector = Detector::new();
-    
+
     // Should NOT panic
     let _detections = detector.detect(&img);
 }
@@ -199,11 +204,11 @@ fn test_real_tag_no_quiet_zone() {
         160,
         0.0,
     );
-    
+
     // Crop to remove most of the quiet zone (aggressive crop)
     const CROP_SIZE: usize = 90;
     const CROP_OFFSET: usize = 35; // Start cropping at offset to catch tag edge
-    
+
     let mut cropped = vec![255u8; CROP_SIZE * CROP_SIZE];
     for y in 0..CROP_SIZE {
         for x in 0..CROP_SIZE {
@@ -214,11 +219,11 @@ fn test_real_tag_no_quiet_zone() {
             }
         }
     }
-    
+
     let img = ImageView::new(&cropped, CROP_SIZE, CROP_SIZE, CROP_SIZE).unwrap();
     let mut detector = Detector::new();
     let options = DetectOptions::with_families(&[TagFamily::AprilTag36h11]);
-    
+
     // Should NOT panic - crash check is the primary assertion
     let _detections = detector.detect_with_options(&img, &options);
     // Note: Detection may or may not succeed depending on quiet zone requirements
@@ -230,12 +235,12 @@ fn test_real_tag_no_quiet_zone() {
 fn test_bilinear_at_image_corners() {
     let data = vec![128u8; 10 * 10];
     let img = ImageView::new(&data, 10, 10, 10).unwrap();
-    
+
     // These should not panic due to underflow
     let _ = img.sample_bilinear(0.0, 0.0);
     let _ = img.sample_bilinear(0.5, 0.5);
     let _ = img.sample_bilinear(8.9, 8.9); // Near bottom-right
-    
+
     // With clamping, these edge cases should also work
     let _ = img.get_pixel(0, 0);
     let _ = img.get_pixel(9, 9);
@@ -253,15 +258,10 @@ fn test_bilinear_at_image_corners() {
 #[test]
 fn test_homography_collinear_corners() {
     use locus_core::decoder::Homography;
-    
+
     // All points on a line (collinear)
-    let collinear_quad: [[f64; 2]; 4] = [
-        [0.0, 0.0],
-        [10.0, 10.0],
-        [20.0, 20.0],
-        [30.0, 30.0],
-    ];
-    
+    let collinear_quad: [[f64; 2]; 4] = [[0.0, 0.0], [10.0, 10.0], [20.0, 20.0], [30.0, 30.0]];
+
     let result = Homography::square_to_quad(&collinear_quad);
     assert!(
         result.is_none(),
@@ -273,15 +273,10 @@ fn test_homography_collinear_corners() {
 #[test]
 fn test_homography_zero_area_line() {
     use locus_core::decoder::Homography;
-    
+
     // Two pairs of identical points (degenerate line)
-    let zero_area: [[f64; 2]; 4] = [
-        [0.0, 0.0],
-        [100.0, 0.0],
-        [100.0, 0.0],
-        [0.0, 0.0],
-    ];
-    
+    let zero_area: [[f64; 2]; 4] = [[0.0, 0.0], [100.0, 0.0], [100.0, 0.0], [0.0, 0.0]];
+
     let result = Homography::square_to_quad(&zero_area);
     assert!(
         result.is_none(),
@@ -293,15 +288,15 @@ fn test_homography_zero_area_line() {
 #[test]
 fn test_homography_bowtie_self_intersecting() {
     use locus_core::decoder::Homography;
-    
+
     // Bowtie: corners cross over each other
     let bowtie: [[f64; 2]; 4] = [
-        [0.0, 0.0],   // TL
+        [0.0, 0.0],     // TL
         [100.0, 100.0], // BR (crossed!)
-        [100.0, 0.0], // TR
-        [0.0, 100.0], // BL (crossed!)
+        [100.0, 0.0],   // TR
+        [0.0, 100.0],   // BL (crossed!)
     ];
-    
+
     let result = Homography::square_to_quad(&bowtie);
     // May return Some (mathematically valid homography) or None (rejected)
     // The key is: NO PANIC, and if Some, no NaN in matrix
@@ -311,7 +306,8 @@ fn test_homography_bowtie_self_intersecting() {
                 assert!(
                     !h.h[(i, j)].is_nan(),
                     "Homography matrix contains NaN at ({}, {})",
-                    i, j
+                    i,
+                    j
                 );
             }
         }
@@ -322,7 +318,7 @@ fn test_homography_bowtie_self_intersecting() {
 #[test]
 fn test_homography_tiny_quad() {
     use locus_core::decoder::Homography;
-    
+
     // Extremely small quad (sub-pixel)
     let tiny: [[f64; 2]; 4] = [
         [50.0, 50.0],
@@ -330,7 +326,7 @@ fn test_homography_tiny_quad() {
         [50.001, 50.001],
         [50.0, 50.001],
     ];
-    
+
     // Should not panic - may return None or unstable homography
     let result = Homography::square_to_quad(&tiny);
     if let Some(h) = result {
@@ -348,15 +344,10 @@ fn test_homography_tiny_quad() {
 #[test]
 fn test_homography_duplicate_corners() {
     use locus_core::decoder::Homography;
-    
+
     // All four corners are the same point
-    let degenerate: [[f64; 2]; 4] = [
-        [50.0, 50.0],
-        [50.0, 50.0],
-        [50.0, 50.0],
-        [50.0, 50.0],
-    ];
-    
+    let degenerate: [[f64; 2]; 4] = [[50.0, 50.0], [50.0, 50.0], [50.0, 50.0], [50.0, 50.0]];
+
     let result = Homography::square_to_quad(&degenerate);
     assert!(
         result.is_none(),
@@ -377,40 +368,38 @@ fn test_homography_duplicate_corners() {
 #[test]
 fn test_no_false_positives_in_white_noise() {
     use rand::prelude::*;
-    
+
     const WIDTH: usize = 320;
     const HEIGHT: usize = 240;
     const NUM_IMAGES: usize = 100;
-    
+
     let mut rng = thread_rng();
     let mut total_false_positives = 0;
     let mut false_positive_images: Vec<usize> = Vec::new();
-    
+
     for image_idx in 0..NUM_IMAGES {
         // Generate pure uniform random noise
         let mut noise_data = vec![0u8; WIDTH * HEIGHT];
         rng.fill_bytes(&mut noise_data);
-        
+
         let img = ImageView::new(&noise_data, WIDTH, HEIGHT, WIDTH).unwrap();
         let mut detector = Detector::new();
         let options = DetectOptions::with_families(&[TagFamily::AprilTag36h11]);
-        
+
         let detections = detector.detect_with_options(&img, &options);
-        
+
         if !detections.is_empty() {
             total_false_positives += detections.len();
             false_positive_images.push(image_idx);
         }
     }
-    
+
     assert_eq!(
         total_false_positives, 0,
         "Detector found {} false positive(s) in {} random noise images. \
          Images with false positives: {:?}. \
          Consider tightening quad_min_edge_score or decoder Hamming threshold.",
-        total_false_positives,
-        NUM_IMAGES,
-        false_positive_images
+        total_false_positives, NUM_IMAGES, false_positive_images
     );
 }
 
@@ -419,7 +408,7 @@ fn test_no_false_positives_in_white_noise() {
 fn test_no_false_positives_in_gradient_noise() {
     const WIDTH: usize = 256;
     const HEIGHT: usize = 256;
-    
+
     // Horizontal gradient
     let mut gradient = vec![0u8; WIDTH * HEIGHT];
     for y in 0..HEIGHT {
@@ -427,27 +416,27 @@ fn test_no_false_positives_in_gradient_noise() {
             gradient[y * WIDTH + x] = x as u8;
         }
     }
-    
+
     let img = ImageView::new(&gradient, WIDTH, HEIGHT, WIDTH).unwrap();
     let mut detector = Detector::new();
     let detections = detector.detect(&img);
-    
+
     assert!(
         detections.is_empty(),
         "Detector found {} false positive(s) in gradient image",
         detections.len()
     );
-    
+
     // Diagonal gradient
     for y in 0..HEIGHT {
         for x in 0..WIDTH {
             gradient[y * WIDTH + x] = ((x + y) / 2) as u8;
         }
     }
-    
+
     let img = ImageView::new(&gradient, WIDTH, HEIGHT, WIDTH).unwrap();
     let detections = detector.detect(&img);
-    
+
     assert!(
         detections.is_empty(),
         "Detector found {} false positive(s) in diagonal gradient",
@@ -475,7 +464,7 @@ fn test_no_false_positives_in_gradient_noise() {
 fn test_adaptive_threshold_gradient_shadow() {
     const WIDTH: usize = 640;
     const HEIGHT: usize = 200;
-    
+
     // Create gradient background (0→255 linearly across x-axis)
     let mut data = vec![0u8; WIDTH * HEIGHT];
     for y in 0..HEIGHT {
@@ -483,7 +472,7 @@ fn test_adaptive_threshold_gradient_shadow() {
             data[y * WIDTH + x] = ((x * 255) / (WIDTH - 1)) as u8;
         }
     }
-    
+
     // Generate two real tags with different IDs
     let (dark_tag, _) = locus_core::test_utils::generate_synthetic_test_image(
         TagFamily::AprilTag36h11,
@@ -492,7 +481,7 @@ fn test_adaptive_threshold_gradient_shadow() {
         60, // canvas size
         0.0,
     );
-    
+
     let (bright_tag, _) = locus_core::test_utils::generate_synthetic_test_image(
         TagFamily::AprilTag36h11,
         20, // ID 20 for bright region
@@ -500,7 +489,7 @@ fn test_adaptive_threshold_gradient_shadow() {
         60,
         0.0,
     );
-    
+
     // Paste dark tag in dark region (left side, x≈80)
     // Remap intensities: 0→0, 255→50 (local contrast of 50 levels)
     let dark_offset_x = 50;
@@ -517,7 +506,7 @@ fn test_adaptive_threshold_gradient_shadow() {
             }
         }
     }
-    
+
     // Paste bright tag in bright region (right side, x≈width-80)
     // Remap intensities: 0→200, 255→255 (local contrast of 55 levels)
     let bright_offset_x = WIDTH - 110;
@@ -534,14 +523,14 @@ fn test_adaptive_threshold_gradient_shadow() {
             }
         }
     }
-    
+
     let img = ImageView::new(&data, WIDTH, HEIGHT, WIDTH).unwrap();
     let mut detector = Detector::new();
     let options = DetectOptions::with_families(&[TagFamily::AprilTag36h11]);
     let detections = detector.detect_with_options(&img, &options);
-    
+
     let detected_ids: Vec<u32> = detections.iter().map(|d| d.id).collect();
-    
+
     // STRICT ASSERTION: Both tags must be detected
     assert!(
         detected_ids.contains(&10),
@@ -550,7 +539,7 @@ fn test_adaptive_threshold_gradient_shadow() {
          threshold is regressing to global mean.",
         detected_ids
     );
-    
+
     assert!(
         detected_ids.contains(&20),
         "Adaptive threshold FAILED: Bright-zone tag (ID 20) not detected. \
