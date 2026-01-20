@@ -103,25 +103,25 @@ pub struct DetectorConfig {
 impl Default for DetectorConfig {
     fn default() -> Self {
         Self {
-            threshold_tile_size: 4, 
-            threshold_min_range: 2, // Lowered from 10 to improve recall
+            threshold_tile_size: 4,
+            threshold_min_range: 2,
             enable_bilateral: false,
             bilateral_sigma_space: 0.8,
             bilateral_sigma_color: 30.0,
             enable_sharpening: true,
             enable_adaptive_window: true,
             threshold_min_radius: 2,
-            threshold_max_radius: 10, // Increased from 7
-            adaptive_threshold_constant: 3,
-            adaptive_threshold_gradient_threshold: 20, // Lowered from 40
-            quad_min_area: 8,      // Lowered from 16 for small/distant tags
-            quad_max_aspect_ratio: 8.0, // Increased from 3.0 to support extreme foreshortening
-            quad_min_fill_ratio: 0.15, // Lowered from 0.3 for thin quads at tilt
+            threshold_max_radius: 15,
+            adaptive_threshold_constant: 0, // Most sensitive
+            adaptive_threshold_gradient_threshold: 10,
+            quad_min_area: 4,      
+            quad_max_aspect_ratio: 10.0, 
+            quad_min_fill_ratio: 0.10, 
             quad_max_fill_ratio: 0.98,
-            quad_min_edge_length: 3.0, // Lowered from 4.0
-            quad_min_edge_score: 0.3,  // Lowered from 0.4
+            quad_min_edge_length: 2.0, 
+            quad_min_edge_score: 0.1,  
             subpixel_refinement_sigma: 0.6,
-            segmentation_margin: 2,
+            segmentation_margin: 1,
             segmentation_connectivity: SegmentationConnectivity::Eight,
             upscale_factor: 1,
             decoder_min_contrast: 20.0,

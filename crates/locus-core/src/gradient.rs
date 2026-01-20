@@ -256,8 +256,16 @@ fn line_intersection(s1: &LineSegment, s2: &LineSegment) -> Option<[f32; 2]> {
     }
 
     let t = ((s2.x0 - s1.x0) * dy2 - (s2.y0 - s1.y0) * dx2) / denom;
+    let p = [s1.x0 + t * dx1, s1.y0 + t * dy1];
 
-    Some([s1.x0 + t * dx1, s1.y0 + t * dy1])
+    // Sanity check: intersection must be near one of the segments
+    // (e.g. within 100 pixels of s1.x0, s1.y0)
+    let dist_sq = (p[0] - s1.x0).powi(2) + (p[1] - s1.y0).powi(2);
+    if dist_sq > 1000.0 * 1000.0 {
+        return None;
+    }
+
+    Some(p)
 }
 
 fn quad_area(corners: &[[f32; 2]; 4]) -> f32 {
@@ -339,15 +347,15 @@ pub fn fit_quad_from_component(
             let gy = -p00 - 2 * p10 - p20 + p02 + 2 * p12 + p22;
             let mag = (gx.abs() + gy.abs()) as u16;
 
-            if mag > 20 {
+            if mag > 10 { // Lowered from 20 for low-contrast edges
                 let angle = f32::from(gy).atan2(f32::from(gx));
                 boundary_points.push((x, y, angle, f32::from(mag)));
             }
         }
     }
 
-    if boundary_points.len() < 12 {
-        // At least 3 per edge
+    if boundary_points.len() < 8 { // Lowered from 12 (min 2 per edge)
+        // At least 2 per edge
         return None;
     }
 

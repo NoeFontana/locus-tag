@@ -87,6 +87,11 @@ pub fn extract_quads_with_config(
 
             // Filter: too small or too large
             if bbox_area < config.quad_min_area || bbox_area > (img.width * img.height * 9 / 10) as u32 {
+                /*
+                if bbox_area >= 4 && bbox_area < 8 {
+                    eprintln!("Rejected small component: area={}, pixels={}", bbox_area, stat.pixel_count);
+                }
+                */
                 return None;
             }
 
@@ -581,60 +586,59 @@ fn refine_edge_intensity(arena: &Bump, img: &ImageView, p1: Point, p2: Point, si
     }
 
     // Estimate A (dark side) and B (light side) from samples
+    // Use weighted average based on distance from edge to be more robust
     let mut dark_sum = 0.0;
-    let mut dark_count = 0;
+    let mut dark_weight = 0.0;
     let mut light_sum = 0.0;
-    let mut light_count = 0;
+    let mut light_weight = 0.0;
 
     for &(_x, _y, intensity, projection) in &samples {
         let signed_dist = projection + d;
-        let plateau = 0.5;
-        if signed_dist < -plateau {
-            dark_sum += intensity;
-            dark_count += 1;
-        } else if signed_dist > plateau {
-            light_sum += intensity;
-            light_count += 1;
+        if signed_dist < -1.0 {
+            let w = (-signed_dist - 1.0).min(2.0); // Weight pixels further from edge more
+            dark_sum += intensity * w;
+            dark_weight += w;
+        } else if signed_dist > 1.0 {
+            let w = (signed_dist - 1.0).min(2.0);
+            light_sum += intensity * w;
+            light_weight += w;
         }
     }
 
-    if dark_count == 0 || light_count == 0 {
+    if dark_weight < 1.0 || light_weight < 1.0 {
         return Some((nx, ny, d));
     }
 
-    let a = dark_sum / f64::from(dark_count);
-    let b = light_sum / f64::from(light_count);
+    let a = dark_sum / dark_weight;
+    let b = light_sum / light_weight;
     let inv_sigma = 1.0 / sigma;
 
-    // Gauss-Newton optimization: refine d (perpendicular offset)
-    // We fix the line direction (nx, ny) and only optimize the offset d
-    // This is a 1D optimization which is fast and stable
-    for _iter in 0..10 {
-        let mut jtj = 0.0; // J^T * J (scalar for 1D)
-        let mut jtr = 0.0; // J^T * residual
+    // Gauss-Newton optimization: refine d (offset) and angle (implicit via nx, ny)
+    // We'll stick to 1D offset refinement for now but with a more robust iteration
+    for _iter in 0..15 {
+        let mut jtj = 0.0;
+        let mut jtr = 0.0;
 
         for &(_x, _y, intensity, projection) in &samples {
             let signed_dist = (projection + d) * inv_sigma;
-            
-            let x2 = signed_dist * signed_dist;
-            let exp_term = (-x2).exp();
+            if signed_dist.abs() > 3.0 { continue; } // Only use samples near the edge
             
             let model = (a + b) * 0.5 + (b - a) * 0.5 * erf_approx(signed_dist);
             let residual = intensity - model;
             
-            // Derivative of erf(x) is (2/sqrt(pi)) * exp(-x^2)
+            let exp_term = (-signed_dist * signed_dist).exp();
             let jacobian = (b - a) * 0.5 * std::f64::consts::FRAC_2_SQRT_PI * exp_term * inv_sigma;
+            
             jtj += jacobian * jacobian;
             jtr += jacobian * residual;
         }
 
         if jtj.abs() > 1e-10 {
             let delta = jtr / jtj;
-            d += delta.clamp(-0.5, 0.5); // Conservative step
-
-            if delta.abs() < 0.001 {
-                break; // Converged
-            }
+            d += delta.clamp(-0.5, 0.5);
+            if delta.abs() < 0.0001 { break; }
+        } else {
+            break;
         }
     }
 

@@ -9,8 +9,8 @@ This plan follows the TDD workflow to reach >75% recall and <0.3px RMSE on the I
 - [x] Task: Conductor - User Manual Verification 'Diagnostics and Baseline' (Protocol in workflow.md)
 
 ## Phase 2: Recall Recovery (Thresholding & Segmentation)
-- [ ] Task: Write failing unit tests in `crates/locus-core/tests/repro_failure.rs` for images where tags are currently missed.
-- [ ] Task: Optimize adaptive thresholding parameters (tiling, local stats) to improve initial segmentation.
+- [x] Task: Write failing unit tests in `crates/locus-core/tests/repro_failure.rs` for images where tags are currently missed. (Created crates/locus-core/tests/repro_failure_icra.rs) 91bcd94
+- [~] Task: Optimize adaptive thresholding parameters (tiling, local stats) to improve initial segmentation.
 - [ ] Task: Refine quad candidate filtering to retain more valid candidates in challenging conditions (motion blur, low contrast).
 - [ ] Task: Verify that the 5 anchor images now meet recall targets.
 - [ ] Task: Conductor - User Manual Verification 'Recall Recovery' (Protocol in workflow.md)
