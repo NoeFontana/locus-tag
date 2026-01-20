@@ -137,7 +137,7 @@ impl TagDictionary {
             let mut best: Option<(u16, u32, u8)> = None;
             for &(code_rot, id, rot) in &self.rotated_codes {
                 let hamming = (bits ^ code_rot).count_ones();
-                if hamming <= max_hamming && best.as_ref().map_or(true, |&(_, h, _)| hamming < h) {
+                if hamming <= max_hamming && best.as_ref().is_none_or(|&(_, h, _)| hamming < h) {
                     best = Some((id, hamming, rot));
                     if hamming == 0 {
                         break;

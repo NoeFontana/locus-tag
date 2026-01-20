@@ -348,7 +348,7 @@ enum ImageSource<'a> {
     Owned(Vec<u8>, usize, usize, usize), // data, width, height, stride
 }
 
-impl<'a> ImageSource<'a> {
+impl ImageSource<'_> {
     fn as_view(&self) -> PyResult<ImageView<'_>> {
         match self {
             ImageSource::Borrowed(view) => Ok(*view),

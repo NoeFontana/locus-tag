@@ -649,7 +649,7 @@ fn solve_quad_from_boundary_points(
 
     // Verify convex and strictly Positive area (CW)
     let area = quad_area(&corners);
-    if area < 16.0 || area > 1_000_000.0 {
+    if !(16.0..=1_000_000.0).contains(&area) {
         return None;
     }
 
