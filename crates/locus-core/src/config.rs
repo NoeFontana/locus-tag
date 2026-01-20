@@ -39,7 +39,7 @@ pub enum SegmentationConnectivity {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DetectorConfig {
     // Threshold parameters
-    /// Tile size for adaptive thresholding (default: 8).
+    /// Tile size for adaptive thresholding (default: 4).
     /// Larger tiles are faster but less adaptive to local contrast.
     pub threshold_tile_size: usize,
     /// Minimum intensity range in a tile to be considered valid (default: 10).
@@ -54,10 +54,10 @@ pub struct DetectorConfig {
     /// Bilateral color sigma for edge preservation (default: 30.0).
     /// Higher values = more smoothing across edges.
     pub bilateral_sigma_color: f32,
-    
+
     /// Enable Laplacian sharpening to enhance edges for small tags (default: true).
     pub enable_sharpening: bool,
-    
+
     /// Enable adaptive threshold window sizing based on gradient (default: true).
     pub enable_adaptive_window: bool,
     /// Minimum threshold window radius for high-gradient regions (default: 2 = 5x5).
@@ -70,7 +70,7 @@ pub struct DetectorConfig {
     pub adaptive_threshold_gradient_threshold: u8,
 
     // Quad filtering parameters
-    /// Minimum quad area in pixels (default: 400).
+    /// Minimum quad area in pixels (default: 16).
     pub quad_min_area: u32,
     /// Maximum aspect ratio of bounding box (default: 3.0).
     pub quad_max_aspect_ratio: f32,
@@ -92,7 +92,7 @@ pub struct DetectorConfig {
     /// Increasing this to 2 allows detecting smaller tags (e.g., < 15px)
     /// at the cost of processing speed (O(N^2)). Nearest-neighbor interpolation is used.
     pub upscale_factor: usize,
-    
+
     // Decoder parameters
     /// Minimum contrast range for Otsu-based bit classification (default: 20.0).
     /// For checkerboard patterns with densely packed tags, lower values (e.g., 10.0)
@@ -104,7 +104,7 @@ impl Default for DetectorConfig {
     fn default() -> Self {
         Self {
             threshold_tile_size: 4,
-            threshold_min_range: 2,
+            threshold_min_range: 10,
             enable_bilateral: false,
             bilateral_sigma_space: 0.8,
             bilateral_sigma_color: 30.0,
@@ -114,12 +114,12 @@ impl Default for DetectorConfig {
             threshold_max_radius: 15,
             adaptive_threshold_constant: 0, // Most sensitive
             adaptive_threshold_gradient_threshold: 10,
-            quad_min_area: 4,      
-            quad_max_aspect_ratio: 10.0, 
-            quad_min_fill_ratio: 0.10, 
+            quad_min_area: 16,
+            quad_max_aspect_ratio: 10.0,
+            quad_min_fill_ratio: 0.10,
             quad_max_fill_ratio: 0.98,
-            quad_min_edge_length: 2.0, 
-            quad_min_edge_score: 0.1,  
+            quad_min_edge_length: 2.0,
+            quad_min_edge_score: 0.1,
             subpixel_refinement_sigma: 0.6,
             segmentation_margin: 1,
             segmentation_connectivity: SegmentationConnectivity::Eight,
@@ -298,14 +298,24 @@ impl DetectorConfigBuilder {
             threshold_tile_size: self.threshold_tile_size.unwrap_or(d.threshold_tile_size),
             threshold_min_range: self.threshold_min_range.unwrap_or(d.threshold_min_range),
             enable_bilateral: self.enable_bilateral.unwrap_or(d.enable_bilateral),
-            bilateral_sigma_space: self.bilateral_sigma_space.unwrap_or(d.bilateral_sigma_space),
-            bilateral_sigma_color: self.bilateral_sigma_color.unwrap_or(d.bilateral_sigma_color),
+            bilateral_sigma_space: self
+                .bilateral_sigma_space
+                .unwrap_or(d.bilateral_sigma_space),
+            bilateral_sigma_color: self
+                .bilateral_sigma_color
+                .unwrap_or(d.bilateral_sigma_color),
             enable_sharpening: self.enable_sharpening.unwrap_or(d.enable_sharpening),
-            enable_adaptive_window: self.enable_adaptive_window.unwrap_or(d.enable_adaptive_window),
+            enable_adaptive_window: self
+                .enable_adaptive_window
+                .unwrap_or(d.enable_adaptive_window),
             threshold_min_radius: self.threshold_min_radius.unwrap_or(d.threshold_min_radius),
             threshold_max_radius: self.threshold_max_radius.unwrap_or(d.threshold_max_radius),
-            adaptive_threshold_constant: self.adaptive_threshold_constant.unwrap_or(d.adaptive_threshold_constant),
-            adaptive_threshold_gradient_threshold: self.adaptive_threshold_gradient_threshold.unwrap_or(d.adaptive_threshold_gradient_threshold),
+            adaptive_threshold_constant: self
+                .adaptive_threshold_constant
+                .unwrap_or(d.adaptive_threshold_constant),
+            adaptive_threshold_gradient_threshold: self
+                .adaptive_threshold_gradient_threshold
+                .unwrap_or(d.adaptive_threshold_gradient_threshold),
             quad_min_area: self.quad_min_area.unwrap_or(d.quad_min_area),
             quad_max_aspect_ratio: self
                 .quad_max_aspect_ratio
@@ -314,9 +324,13 @@ impl DetectorConfigBuilder {
             quad_max_fill_ratio: self.quad_max_fill_ratio.unwrap_or(d.quad_max_fill_ratio),
             quad_min_edge_length: self.quad_min_edge_length.unwrap_or(d.quad_min_edge_length),
             quad_min_edge_score: self.quad_min_edge_score.unwrap_or(d.quad_min_edge_score),
-            subpixel_refinement_sigma: self.subpixel_refinement_sigma.unwrap_or(d.subpixel_refinement_sigma),
+            subpixel_refinement_sigma: self
+                .subpixel_refinement_sigma
+                .unwrap_or(d.subpixel_refinement_sigma),
             segmentation_margin: self.segmentation_margin.unwrap_or(d.segmentation_margin),
-            segmentation_connectivity: self.segmentation_connectivity.unwrap_or(d.segmentation_connectivity),
+            segmentation_connectivity: self
+                .segmentation_connectivity
+                .unwrap_or(d.segmentation_connectivity),
             upscale_factor: self.upscale_factor.unwrap_or(d.upscale_factor),
             decoder_min_contrast: self.decoder_min_contrast.unwrap_or(d.decoder_min_contrast),
         }
