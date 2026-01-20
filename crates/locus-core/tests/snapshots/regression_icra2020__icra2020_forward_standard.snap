@@ -5,267 +5,268 @@ expression: report
 entries:
   0000.png:
     recall: 0.032467532467532464
-    avg_rmse: 0.3407904587425748
+    avg_rmse: 0.20529131504224588
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 714
+      num_candidates: 587
       num_detections: 5
     detected_ids:
-      - 7
       - 30
+      - 50
+      - 116
       - 125
       - 129
-      - 136
   0001.png:
-    recall: 0.01948051948051948
-    avg_rmse: 8.916183846442111
-    stats:
-      threshold_ms: "[latency]"
-      segmentation_ms: "[latency]"
-      quad_extraction_ms: "[latency]"
-      decoding_ms: "[latency]"
-      total_ms: "[latency]"
-      num_candidates: 726
-      num_detections: 3
-    detected_ids:
-      - 76
-      - 99
-      - 125
-  0002.png:
-    recall: 0.01948051948051948
-    avg_rmse: 0.3034406671867256
-    stats:
-      threshold_ms: "[latency]"
-      segmentation_ms: "[latency]"
-      quad_extraction_ms: "[latency]"
-      decoding_ms: "[latency]"
-      total_ms: "[latency]"
-      num_candidates: 665
-      num_detections: 3
-    detected_ids:
-      - 35
-      - 62
-      - 154
-  0003.png:
     recall: 0.012987012987012988
-    avg_rmse: 0.2859061263347499
+    avg_rmse: 0.18231824787586898
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 677
+      num_candidates: 623
       num_detections: 2
     detected_ids:
-      - 21
-      - 43
-  0004.png:
+      - 72
+      - 80
+  0002.png:
     recall: 0.032467532467532464
-    avg_rmse: 0.4339778520910401
+    avg_rmse: 0.3633698535759911
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 716
-      num_detections: 5
+      num_candidates: 604
+      num_detections: 6
     detected_ids:
-      - 48
+      - 47
       - 52
-      - 55
-      - 75
-      - 153
-  0005.png:
-    recall: 0.05844155844155844
-    avg_rmse: 0.3275029553104583
+      - 59
+      - 62
+      - 154
+      - 554
+  0003.png:
+    recall: 0.012987012987012988
+    avg_rmse: 0.26145729174008103
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 728
-      num_detections: 9
+      num_candidates: 585
+      num_detections: 2
     detected_ids:
-      - 32
-      - 37
+      - 85
+      - 159
+  0004.png:
+    recall: 0.01948051948051948
+    avg_rmse: 0.3593189645127215
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 620
+      num_detections: 3
+    detected_ids:
+      - 43
+      - 52
+      - 75
+  0005.png:
+    recall: 0.045454545454545456
+    avg_rmse: 0.395671278831693
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 609
+      num_detections: 7
+    detected_ids:
       - 76
-      - 136
+      - 100
       - 144
       - 149
-      - 151
       - 152
       - 153
+      - 159
   0006.png:
-    recall: 0.11038961038961038
-    avg_rmse: 0.39202837168404475
+    recall: 0.07142857142857142
+    avg_rmse: 0.3574209334793504
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 724
-      num_detections: 17
+      num_candidates: 608
+      num_detections: 12
     detected_ids:
+      - 0
       - 1
-      - 9
-      - 12
       - 27
       - 37
       - 49
       - 78
       - 81
-      - 87
-      - 89
+      - 85
       - 94
-      - 103
-      - 106
-      - 109
-      - 124
-      - 136
+      - 152
       - 158
+      - 554
   0007.png:
-    recall: 0.09740259740259741
-    avg_rmse: 0.4037202912217497
+    recall: 0.13636363636363635
+    avg_rmse: 0.2976672119007954
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 709
-      num_detections: 15
+      num_candidates: 619
+      num_detections: 22
     detected_ids:
+      - 0
+      - 2
       - 7
-      - 12
       - 15
-      - 19
-      - 32
+      - 17
+      - 21
+      - 27
       - 35
-      - 43
+      - 38
+      - 41
+      - 42
+      - 46
+      - 47
       - 49
-      - 51
+      - 90
+      - 94
       - 98
       - 99
-      - 100
       - 109
+      - 115
       - 124
-      - 135
+      - 554
   0008.png:
-    recall: 0.17532467532467533
-    avg_rmse: 0.4026846933675
+    recall: 0.14935064935064934
+    avg_rmse: 0.3867861022136591
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 680
-      num_detections: 27
+      num_candidates: 597
+      num_detections: 25
     detected_ids:
       - 2
-      - 4
       - 7
       - 9
       - 13
       - 17
-      - 27
-      - 32
+      - 18
+      - 31
+      - 36
       - 38
-      - 41
       - 43
       - 48
+      - 73
+      - 76
       - 80
-      - 85
       - 87
       - 96
+      - 99
       - 100
-      - 105
-      - 107
-      - 111
       - 118
-      - 128
       - 138
-      - 142
-      - 151
-      - 152
+      - 154
       - 158
+      - 159
+      - 249
+      - 554
   0009.png:
-    recall: 0.14285714285714285
-    avg_rmse: 0.4990322010037643
+    recall: 0.14935064935064934
+    avg_rmse: 0.3758278418912983
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 672
-      num_detections: 23
+      num_candidates: 635
+      num_detections: 24
     detected_ids:
-      - 0
+      - 4
       - 7
-      - 8
       - 15
       - 21
+      - 23
+      - 27
+      - 31
+      - 43
       - 49
-      - 53
-      - 59
+      - 52
+      - 70
       - 73
+      - 82
       - 85
       - 87
-      - 92
-      - 96
-      - 97
       - 100
-      - 102
+      - 104
+      - 109
       - 118
+      - 124
       - 125
       - 132
-      - 143
       - 144
-      - 153
-      - 554
+      - 148
   0010.png:
-    recall: 0.2922077922077922
-    avg_rmse: 0.3134279863537458
+    recall: 0.3181818181818182
+    avg_rmse: 0.36913896290989706
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 691
-      num_detections: 45
+      num_candidates: 617
+      num_detections: 50
     detected_ids:
-      - 0
-      - 2
+      - 4
       - 7
       - 9
-      - 11
       - 12
       - 17
+      - 26
       - 27
       - 28
       - 30
       - 32
       - 35
+      - 36
       - 37
+      - 40
+      - 41
+      - 42
       - 43
       - 44
-      - 46
-      - 48
-      - 52
       - 55
+      - 63
+      - 73
       - 76
-      - 92
-      - 93
+      - 82
+      - 89
       - 96
       - 98
       - 99
@@ -274,289 +275,379 @@ entries:
       - 105
       - 106
       - 109
-      - 119
+      - 112
       - 121
       - 124
       - 132
+      - 133
       - 138
-      - 142
-      - 143
+      - 141
       - 144
       - 147
       - 148
       - 149
+      - 150
       - 152
       - 154
       - 155
-      - 159
+      - 156
+      - 158
   0011.png:
-    recall: 0.24675324675324675
-    avg_rmse: 0.41897969143543695
+    recall: 0.42857142857142855
+    avg_rmse: 0.34677433131103025
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 714
-      num_detections: 38
+      num_candidates: 624
+      num_detections: 67
     detected_ids:
       - 1
+      - 4
       - 7
+      - 12
       - 15
+      - 16
       - 17
-      - 21
       - 23
+      - 27
+      - 28
       - 29
+      - 31
       - 32
       - 35
+      - 40
       - 43
-      - 44
       - 46
-      - 47
       - 48
+      - 50
       - 51
-      - 55
+      - 57
+      - 59
+      - 60
+      - 63
       - 69
+      - 70
       - 71
       - 73
+      - 76
       - 78
       - 81
+      - 84
+      - 85
       - 86
       - 87
+      - 88
       - 89
+      - 90
       - 94
-      - 97
+      - 100
       - 103
-      - 104
-      - 117
-      - 124
+      - 115
+      - 125
+      - 126
+      - 128
       - 129
+      - 131
       - 133
+      - 136
+      - 139
+      - 140
+      - 141
       - 142
+      - 143
+      - 146
       - 147
+      - 148
       - 150
+      - 151
+      - 152
+      - 154
       - 155
+      - 156
+      - 157
       - 158
       - 159
+      - 554
   0012.png:
-    recall: 0.2597402597402597
-    avg_rmse: 0.42291311132253445
+    recall: 0.4025974025974026
+    avg_rmse: 0.37931911968039667
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 735
-      num_detections: 41
+      num_candidates: 645
+      num_detections: 63
     detected_ids:
       - 1
+      - 4
+      - 5
       - 7
+      - 8
+      - 14
       - 17
-      - 18
+      - 19
+      - 20
       - 21
-      - 34
+      - 24
+      - 26
+      - 29
+      - 31
+      - 32
+      - 33
       - 35
       - 36
+      - 37
       - 39
-      - 41
+      - 40
       - 43
-      - 50
-      - 55
+      - 49
+      - 51
+      - 52
+      - 54
       - 58
-      - 66
+      - 61
+      - 62
       - 74
+      - 76
       - 77
-      - 85
       - 87
-      - 88
       - 94
+      - 96
       - 99
-      - 103
+      - 100
+      - 102
+      - 105
+      - 106
+      - 107
+      - 108
       - 111
-      - 115
+      - 117
       - 118
+      - 121
       - 122
-      - 123
-      - 124
-      - 125
+      - 126
       - 127
       - 129
+      - 130
       - 131
       - 132
       - 136
-      - 140
-      - 141
-      - 147
+      - 139
+      - 144
+      - 145
+      - 146
       - 148
+      - 151
+      - 153
       - 154
-      - 554
   0013.png:
-    recall: 0.2922077922077922
-    avg_rmse: 0.3859085653176939
+    recall: 0.38961038961038963
+    avg_rmse: 0.3605263218868471
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 684
-      num_detections: 45
+      num_candidates: 631
+      num_detections: 60
     detected_ids:
       - 1
       - 7
+      - 8
+      - 13
+      - 14
       - 15
       - 17
+      - 20
       - 21
+      - 23
+      - 26
       - 27
-      - 28
+      - 31
       - 32
       - 33
+      - 35
+      - 36
       - 37
       - 38
-      - 43
+      - 40
       - 44
       - 46
-      - 47
       - 48
       - 50
-      - 55
-      - 65
+      - 52
+      - 61
       - 69
-      - 70
-      - 76
+      - 75
+      - 77
       - 78
       - 80
       - 84
       - 85
       - 86
       - 89
+      - 96
       - 97
-      - 98
       - 99
-      - 102
+      - 100
       - 104
-      - 107
+      - 105
       - 108
       - 109
       - 111
+      - 121
+      - 123
       - 125
+      - 126
+      - 127
       - 130
-      - 131
-      - 132
       - 135
       - 144
+      - 147
       - 148
+      - 150
+      - 154
+      - 155
+      - 156
+      - 158
       - 159
   0014.png:
-    recall: 0.44805194805194803
-    avg_rmse: 0.3469275605309641
+    recall: 0.564935064935065
+    avg_rmse: 0.3800832643682106
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 696
-      num_detections: 69
+      num_candidates: 639
+      num_detections: 88
     detected_ids:
+      - 1
+      - 3
+      - 4
+      - 8
+      - 11
+      - 12
       - 17
       - 18
       - 21
+      - 23
       - 26
       - 27
-      - 31
+      - 29
+      - 30
       - 32
       - 33
       - 34
       - 35
+      - 36
+      - 37
       - 40
       - 41
       - 43
-      - 46
       - 47
       - 48
-      - 49
       - 51
       - 52
+      - 54
       - 55
       - 56
-      - 57
-      - 58
       - 59
       - 61
       - 63
       - 64
+      - 67
+      - 69
       - 70
       - 71
+      - 73
       - 75
       - 76
       - 77
-      - 78
       - 80
       - 81
+      - 83
       - 84
       - 85
-      - 86
       - 87
       - 88
       - 89
       - 93
       - 94
       - 95
+      - 96
       - 97
       - 99
-      - 103
+      - 100
+      - 101
+      - 102
       - 104
+      - 105
+      - 106
       - 107
+      - 108
+      - 109
+      - 110
       - 111
+      - 112
+      - 113
       - 116
       - 118
-      - 119
+      - 120
       - 123
       - 124
       - 125
-      - 126
+      - 130
+      - 132
       - 133
       - 135
-      - 140
       - 141
       - 142
       - 144
-      - 147
+      - 146
       - 148
       - 149
-      - 150
       - 153
       - 156
+      - 585
   0015.png:
-    recall: 0.4675324675324675
-    avg_rmse: 0.42794876223135997
+    recall: 0.7077922077922078
+    avg_rmse: 0.41033655179681805
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 688
-      num_detections: 73
+      num_candidates: 612
+      num_detections: 109
     detected_ids:
       - 1
       - 4
+      - 5
       - 7
       - 9
       - 12
+      - 15
       - 17
-      - 21
       - 23
       - 24
+      - 25
       - 26
       - 27
       - 28
       - 29
       - 30
+      - 31
       - 32
+      - 33
       - 34
       - 35
       - 36
@@ -565,92 +656,18 @@ entries:
       - 39
       - 40
       - 41
-      - 43
-      - 49
-      - 51
-      - 62
-      - 66
-      - 70
-      - 71
-      - 72
-      - 73
-      - 74
-      - 76
-      - 77
-      - 78
-      - 80
-      - 81
-      - 83
-      - 84
-      - 85
-      - 86
-      - 87
-      - 88
-      - 89
-      - 93
-      - 94
-      - 97
-      - 99
-      - 106
-      - 109
-      - 110
-      - 112
-      - 115
-      - 116
-      - 118
-      - 120
-      - 122
-      - 124
-      - 125
-      - 126
-      - 127
-      - 129
-      - 132
-      - 133
-      - 135
-      - 136
-      - 143
-      - 144
-      - 149
-      - 154
-      - 158
-      - 341
-  0016.png:
-    recall: 0.6428571428571429
-    avg_rmse: 0.5050645900491926
-    stats:
-      threshold_ms: "[latency]"
-      segmentation_ms: "[latency]"
-      quad_extraction_ms: "[latency]"
-      decoding_ms: "[latency]"
-      total_ms: "[latency]"
-      num_candidates: 695
-      num_detections: 99
-    detected_ids:
-      - 4
-      - 5
-      - 7
-      - 14
-      - 15
-      - 17
-      - 21
-      - 26
-      - 28
-      - 30
-      - 31
-      - 32
-      - 36
-      - 38
-      - 40
       - 42
       - 43
-      - 46
-      - 48
+      - 44
+      - 47
+      - 49
+      - 51
       - 52
-      - 58
-      - 60
+      - 54
+      - 55
+      - 59
       - 62
-      - 63
+      - 64
       - 66
       - 69
       - 70
@@ -662,6 +679,9 @@ entries:
       - 76
       - 77
       - 78
+      - 80
+      - 81
+      - 82
       - 83
       - 84
       - 85
@@ -669,7 +689,6 @@ entries:
       - 87
       - 88
       - 89
-      - 92
       - 93
       - 94
       - 95
@@ -678,14 +697,14 @@ entries:
       - 98
       - 99
       - 100
+      - 101
       - 104
+      - 105
       - 106
       - 107
       - 108
       - 109
-      - 110
-      - 111
-      - 112
+      - 115
       - 116
       - 117
       - 118
@@ -694,7 +713,121 @@ entries:
       - 121
       - 122
       - 123
-      - 126
+      - 124
+      - 125
+      - 127
+      - 128
+      - 129
+      - 130
+      - 131
+      - 132
+      - 133
+      - 134
+      - 135
+      - 136
+      - 139
+      - 141
+      - 143
+      - 144
+      - 147
+      - 148
+      - 149
+      - 150
+      - 152
+      - 154
+      - 156
+      - 157
+      - 158
+  0016.png:
+    recall: 0.7012987012987013
+    avg_rmse: 0.4295702653312427
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 615
+      num_detections: 108
+    detected_ids:
+      - 1
+      - 4
+      - 5
+      - 7
+      - 8
+      - 23
+      - 26
+      - 27
+      - 28
+      - 31
+      - 32
+      - 36
+      - 37
+      - 38
+      - 42
+      - 43
+      - 44
+      - 46
+      - 48
+      - 50
+      - 51
+      - 52
+      - 53
+      - 54
+      - 55
+      - 59
+      - 60
+      - 61
+      - 62
+      - 63
+      - 65
+      - 66
+      - 69
+      - 70
+      - 71
+      - 72
+      - 73
+      - 74
+      - 75
+      - 76
+      - 77
+      - 81
+      - 82
+      - 83
+      - 84
+      - 85
+      - 86
+      - 87
+      - 88
+      - 89
+      - 90
+      - 93
+      - 94
+      - 95
+      - 96
+      - 97
+      - 98
+      - 99
+      - 100
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
+      - 115
+      - 116
+      - 117
+      - 118
+      - 119
+      - 120
+      - 121
+      - 122
+      - 123
+      - 124
       - 127
       - 128
       - 129
@@ -716,7 +849,6 @@ entries:
       - 146
       - 147
       - 148
-      - 150
       - 151
       - 152
       - 153
@@ -727,26 +859,24 @@ entries:
       - 158
       - 159
   0017.png:
-    recall: 0.7922077922077922
-    avg_rmse: 0.4562940908202094
+    recall: 0.7012987012987013
+    avg_rmse: 0.3691571864392879
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 705
-      num_detections: 122
+      num_candidates: 599
+      num_detections: 108
     detected_ids:
       - 0
-      - 1
-      - 2
+      - 4
       - 7
-      - 8
       - 17
-      - 19
       - 21
       - 23
+      - 24
       - 25
       - 26
       - 27
@@ -778,7 +908,6 @@ entries:
       - 54
       - 55
       - 56
-      - 57
       - 58
       - 59
       - 60
@@ -789,16 +918,11 @@ entries:
       - 65
       - 66
       - 67
-      - 71
       - 72
-      - 73
       - 76
-      - 77
       - 80
       - 81
-      - 82
-      - 85
-      - 86
+      - 84
       - 87
       - 89
       - 92
@@ -809,12 +933,10 @@ entries:
       - 97
       - 98
       - 99
-      - 100
       - 101
       - 102
       - 103
       - 104
-      - 105
       - 106
       - 107
       - 108
@@ -846,38 +968,33 @@ entries:
       - 135
       - 136
       - 138
-      - 139
-      - 140
-      - 143
       - 144
       - 147
-      - 148
       - 149
       - 151
       - 153
-      - 154
       - 155
       - 156
       - 157
       - 158
+      - 159
   0018.png:
-    recall: 0.9155844155844156
-    avg_rmse: 0.4135162085367267
+    recall: 0.8506493506493507
+    avg_rmse: 0.325769787956943
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 687
-      num_detections: 141
+      num_candidates: 632
+      num_detections: 132
     detected_ids:
       - 0
       - 1
       - 2
       - 3
       - 4
-      - 5
       - 6
       - 7
       - 9
@@ -893,13 +1010,12 @@ entries:
       - 20
       - 21
       - 23
+      - 24
       - 25
       - 26
-      - 27
       - 28
       - 29
       - 30
-      - 31
       - 32
       - 33
       - 34
@@ -908,8 +1024,6 @@ entries:
       - 37
       - 38
       - 39
-      - 40
-      - 41
       - 42
       - 43
       - 46
@@ -935,7 +1049,6 @@ entries:
       - 66
       - 67
       - 69
-      - 70
       - 71
       - 72
       - 73
@@ -948,7 +1061,6 @@ entries:
       - 80
       - 81
       - 82
-      - 83
       - 84
       - 85
       - 86
@@ -959,10 +1071,10 @@ entries:
       - 92
       - 93
       - 94
-      - 95
       - 97
       - 98
       - 99
+      - 101
       - 102
       - 103
       - 104
@@ -972,7 +1084,6 @@ entries:
       - 110
       - 111
       - 112
-      - 113
       - 115
       - 116
       - 117
@@ -983,10 +1094,8 @@ entries:
       - 125
       - 126
       - 127
-      - 128
       - 129
       - 130
-      - 131
       - 133
       - 134
       - 135
@@ -1008,22 +1117,21 @@ entries:
       - 152
       - 153
       - 154
-      - 155
       - 156
       - 157
       - 158
       - 159
   0019.png:
-    recall: 0.9415584415584416
-    avg_rmse: 0.4679115725586226
+    recall: 0.7792207792207793
+    avg_rmse: 0.3309407514065993
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 646
-      num_detections: 145
+      num_candidates: 612
+      num_detections: 120
     detected_ids:
       - 0
       - 1
@@ -1031,7 +1139,6 @@ entries:
       - 3
       - 4
       - 5
-      - 6
       - 7
       - 8
       - 9
@@ -1051,23 +1158,13 @@ entries:
       - 25
       - 26
       - 27
-      - 28
       - 29
       - 30
       - 31
-      - 32
       - 33
-      - 34
       - 35
-      - 36
-      - 37
-      - 38
-      - 39
-      - 40
-      - 41
       - 42
       - 43
-      - 44
       - 46
       - 47
       - 48
@@ -1092,22 +1189,14 @@ entries:
       - 67
       - 69
       - 71
-      - 72
-      - 73
       - 74
-      - 75
       - 76
-      - 77
       - 78
       - 79
-      - 81
-      - 82
       - 83
-      - 85
       - 86
       - 87
       - 88
-      - 89
       - 90
       - 92
       - 93
@@ -1118,6 +1207,7 @@ entries:
       - 98
       - 99
       - 100
+      - 101
       - 102
       - 103
       - 104
@@ -1126,30 +1216,21 @@ entries:
       - 107
       - 108
       - 109
-      - 110
       - 111
       - 112
       - 113
       - 115
-      - 116
       - 117
       - 118
       - 119
       - 121
       - 123
-      - 124
       - 125
-      - 126
       - 127
-      - 128
       - 129
       - 130
       - 131
-      - 132
-      - 133
       - 134
-      - 135
-      - 136
       - 138
       - 139
       - 140
@@ -1160,9 +1241,11 @@ entries:
       - 145
       - 146
       - 147
+      - 148
       - 149
       - 150
       - 151
+      - 152
       - 153
       - 154
       - 155
@@ -1171,16 +1254,16 @@ entries:
       - 158
       - 159
   0020.png:
-    recall: 0.9155844155844156
-    avg_rmse: 0.4335733106875316
+    recall: 0.8961038961038961
+    avg_rmse: 0.34257382260544145
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 707
-      num_detections: 142
+      num_candidates: 612
+      num_detections: 138
     detected_ids:
       - 0
       - 1
@@ -1213,7 +1296,6 @@ entries:
       - 30
       - 31
       - 32
-      - 33
       - 34
       - 35
       - 36
@@ -1224,8 +1306,8 @@ entries:
       - 41
       - 42
       - 43
+      - 44
       - 46
-      - 47
       - 48
       - 49
       - 51
@@ -1233,12 +1315,10 @@ entries:
       - 53
       - 54
       - 55
-      - 56
       - 57
-      - 59
+      - 60
       - 61
       - 62
-      - 63
       - 64
       - 66
       - 69
@@ -1283,10 +1363,10 @@ entries:
       - 110
       - 111
       - 112
+      - 113
       - 115
       - 117
       - 118
-      - 119
       - 120
       - 121
       - 122
@@ -1297,13 +1377,14 @@ entries:
       - 127
       - 128
       - 129
+      - 130
       - 131
       - 132
       - 133
       - 134
-      - 135
       - 136
       - 138
+      - 139
       - 141
       - 142
       - 143
@@ -1317,24 +1398,22 @@ entries:
       - 151
       - 152
       - 153
-      - 154
       - 155
       - 156
       - 157
       - 158
       - 159
-      - 579
   0021.png:
-    recall: 0.9545454545454546
-    avg_rmse: 0.4450501213635295
+    recall: 0.987012987012987
+    avg_rmse: 0.37216230487514573
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 684
-      num_detections: 147
+      num_candidates: 603
+      num_detections: 152
     detected_ids:
       - 0
       - 1
@@ -1359,9 +1438,11 @@ entries:
       - 20
       - 21
       - 23
+      - 24
       - 25
       - 26
       - 27
+      - 28
       - 29
       - 30
       - 31
@@ -1372,6 +1453,7 @@ entries:
       - 36
       - 37
       - 38
+      - 39
       - 40
       - 41
       - 42
@@ -1388,7 +1470,6 @@ entries:
       - 54
       - 55
       - 57
-      - 58
       - 59
       - 60
       - 61
@@ -1419,6 +1500,7 @@ entries:
       - 87
       - 88
       - 89
+      - 90
       - 92
       - 93
       - 94
@@ -1457,11 +1539,13 @@ entries:
       - 128
       - 129
       - 130
+      - 131
       - 132
       - 133
       - 134
       - 135
       - 136
+      - 138
       - 139
       - 140
       - 141
@@ -1484,177 +1568,15 @@ entries:
       - 158
       - 159
   0022.png:
-    recall: 0.974025974025974
-    avg_rmse: 0.39761271833915934
-    stats:
-      threshold_ms: "[latency]"
-      segmentation_ms: "[latency]"
-      quad_extraction_ms: "[latency]"
-      decoding_ms: "[latency]"
-      total_ms: "[latency]"
-      num_candidates: 698
-      num_detections: 150
-    detected_ids:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      - 6
-      - 7
-      - 8
-      - 9
-      - 10
-      - 11
-      - 12
-      - 13
-      - 14
-      - 15
-      - 16
-      - 17
-      - 18
-      - 19
-      - 20
-      - 21
-      - 23
-      - 24
-      - 25
-      - 26
-      - 27
-      - 28
-      - 29
-      - 30
-      - 31
-      - 32
-      - 33
-      - 34
-      - 35
-      - 36
-      - 37
-      - 38
-      - 39
-      - 40
-      - 41
-      - 42
-      - 43
-      - 44
-      - 46
-      - 47
-      - 48
-      - 49
-      - 50
-      - 51
-      - 52
-      - 53
-      - 54
-      - 55
-      - 56
-      - 57
-      - 58
-      - 59
-      - 60
-      - 61
-      - 62
-      - 63
-      - 64
-      - 65
-      - 66
-      - 67
-      - 70
-      - 71
-      - 72
-      - 73
-      - 75
-      - 76
-      - 77
-      - 78
-      - 80
-      - 81
-      - 82
-      - 83
-      - 84
-      - 85
-      - 86
-      - 87
-      - 88
-      - 89
-      - 90
-      - 92
-      - 93
-      - 94
-      - 95
-      - 96
-      - 97
-      - 98
-      - 99
-      - 100
-      - 101
-      - 102
-      - 103
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
-      - 110
-      - 111
-      - 112
-      - 113
-      - 115
-      - 116
-      - 117
-      - 118
-      - 119
-      - 120
-      - 121
-      - 122
-      - 123
-      - 124
-      - 125
-      - 126
-      - 127
-      - 128
-      - 129
-      - 130
-      - 132
-      - 133
-      - 134
-      - 135
-      - 136
-      - 138
-      - 139
-      - 140
-      - 141
-      - 142
-      - 143
-      - 144
-      - 145
-      - 146
-      - 147
-      - 148
-      - 149
-      - 150
-      - 151
-      - 152
-      - 153
-      - 154
-      - 155
-      - 156
-      - 157
-      - 158
-      - 159
-  0023.png:
     recall: 0.9805194805194806
-    avg_rmse: 0.39323261151637634
+    avg_rmse: 0.38214575497049474
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 704
+      num_candidates: 616
       num_detections: 151
     detected_ids:
       - 0
@@ -1720,9 +1642,9 @@ entries:
       - 62
       - 63
       - 64
+      - 65
       - 66
       - 67
-      - 69
       - 70
       - 71
       - 72
@@ -1732,6 +1654,7 @@ entries:
       - 76
       - 77
       - 78
+      - 79
       - 80
       - 81
       - 82
@@ -1781,6 +1704,168 @@ entries:
       - 128
       - 129
       - 130
+      - 132
+      - 133
+      - 134
+      - 135
+      - 136
+      - 138
+      - 139
+      - 140
+      - 141
+      - 142
+      - 143
+      - 144
+      - 145
+      - 146
+      - 148
+      - 149
+      - 150
+      - 151
+      - 152
+      - 153
+      - 154
+      - 155
+      - 156
+      - 157
+      - 158
+      - 159
+  0023.png:
+    recall: 0.987012987012987
+    avg_rmse: 0.30731122679579437
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 652
+      num_detections: 153
+    detected_ids:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 10
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+      - 16
+      - 17
+      - 18
+      - 19
+      - 20
+      - 21
+      - 23
+      - 24
+      - 25
+      - 26
+      - 27
+      - 28
+      - 29
+      - 30
+      - 31
+      - 32
+      - 33
+      - 34
+      - 35
+      - 36
+      - 37
+      - 38
+      - 39
+      - 40
+      - 41
+      - 42
+      - 43
+      - 44
+      - 46
+      - 47
+      - 48
+      - 49
+      - 50
+      - 51
+      - 52
+      - 53
+      - 54
+      - 55
+      - 56
+      - 57
+      - 58
+      - 59
+      - 60
+      - 61
+      - 62
+      - 63
+      - 64
+      - 65
+      - 66
+      - 67
+      - 69
+      - 70
+      - 71
+      - 72
+      - 73
+      - 74
+      - 75
+      - 76
+      - 77
+      - 78
+      - 80
+      - 81
+      - 82
+      - 83
+      - 84
+      - 85
+      - 86
+      - 87
+      - 88
+      - 89
+      - 90
+      - 92
+      - 93
+      - 94
+      - 95
+      - 96
+      - 97
+      - 98
+      - 99
+      - 100
+      - 101
+      - 102
+      - 103
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
+      - 115
+      - 116
+      - 118
+      - 119
+      - 120
+      - 121
+      - 122
+      - 123
+      - 124
+      - 125
+      - 126
+      - 127
+      - 128
+      - 129
+      - 130
       - 131
       - 132
       - 133
@@ -1800,6 +1885,7 @@ entries:
       - 148
       - 149
       - 150
+      - 151
       - 152
       - 153
       - 154
@@ -1808,16 +1894,17 @@ entries:
       - 157
       - 158
       - 159
+      - 554
   0024.png:
     recall: 1
-    avg_rmse: 0.272511226067196
+    avg_rmse: 0.320022940522743
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 687
+      num_candidates: 609
       num_detections: 154
     detected_ids:
       - 0
@@ -1976,14 +2063,182 @@ entries:
       - 159
   0025.png:
     recall: 1
-    avg_rmse: 0.34035652324803123
+    avg_rmse: 0.30140735775741767
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 678
+      num_candidates: 612
+      num_detections: 156
+    detected_ids:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 10
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+      - 16
+      - 17
+      - 18
+      - 19
+      - 20
+      - 21
+      - 23
+      - 24
+      - 25
+      - 26
+      - 27
+      - 28
+      - 29
+      - 30
+      - 31
+      - 32
+      - 33
+      - 34
+      - 35
+      - 36
+      - 37
+      - 38
+      - 39
+      - 40
+      - 41
+      - 42
+      - 43
+      - 44
+      - 46
+      - 47
+      - 48
+      - 49
+      - 50
+      - 51
+      - 52
+      - 53
+      - 54
+      - 55
+      - 56
+      - 57
+      - 58
+      - 59
+      - 60
+      - 61
+      - 62
+      - 63
+      - 64
+      - 65
+      - 66
+      - 67
+      - 69
+      - 70
+      - 71
+      - 72
+      - 73
+      - 74
+      - 75
+      - 76
+      - 77
+      - 78
+      - 79
+      - 80
+      - 81
+      - 82
+      - 83
+      - 84
+      - 85
+      - 86
+      - 87
+      - 88
+      - 89
+      - 90
+      - 92
+      - 93
+      - 94
+      - 95
+      - 96
+      - 97
+      - 98
+      - 99
+      - 100
+      - 101
+      - 102
+      - 103
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
+      - 115
+      - 116
+      - 117
+      - 118
+      - 119
+      - 120
+      - 121
+      - 122
+      - 123
+      - 124
+      - 125
+      - 126
+      - 127
+      - 128
+      - 129
+      - 130
+      - 131
+      - 132
+      - 133
+      - 134
+      - 135
+      - 136
+      - 138
+      - 139
+      - 140
+      - 141
+      - 142
+      - 143
+      - 144
+      - 145
+      - 146
+      - 147
+      - 148
+      - 149
+      - 150
+      - 151
+      - 152
+      - 153
+      - 154
+      - 155
+      - 156
+      - 157
+      - 158
+      - 159
+      - 385
+      - 554
+  0026.png:
+    recall: 1
+    avg_rmse: 0.36638739054015607
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 602
       num_detections: 154
     detected_ids:
       - 0
@@ -2140,184 +2395,17 @@ entries:
       - 157
       - 158
       - 159
-  0026.png:
-    recall: 1
-    avg_rmse: 0.30428094170190534
-    stats:
-      threshold_ms: "[latency]"
-      segmentation_ms: "[latency]"
-      quad_extraction_ms: "[latency]"
-      decoding_ms: "[latency]"
-      total_ms: "[latency]"
-      num_candidates: 675
-      num_detections: 155
-    detected_ids:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      - 6
-      - 7
-      - 8
-      - 9
-      - 10
-      - 11
-      - 12
-      - 13
-      - 14
-      - 15
-      - 16
-      - 17
-      - 18
-      - 19
-      - 20
-      - 21
-      - 23
-      - 24
-      - 25
-      - 26
-      - 27
-      - 28
-      - 29
-      - 30
-      - 31
-      - 32
-      - 33
-      - 34
-      - 35
-      - 36
-      - 37
-      - 38
-      - 39
-      - 40
-      - 41
-      - 42
-      - 43
-      - 44
-      - 46
-      - 47
-      - 48
-      - 49
-      - 50
-      - 51
-      - 52
-      - 53
-      - 54
-      - 55
-      - 56
-      - 57
-      - 58
-      - 59
-      - 60
-      - 61
-      - 62
-      - 63
-      - 64
-      - 65
-      - 66
-      - 67
-      - 69
-      - 70
-      - 71
-      - 72
-      - 73
-      - 74
-      - 75
-      - 76
-      - 77
-      - 78
-      - 79
-      - 80
-      - 81
-      - 82
-      - 83
-      - 84
-      - 85
-      - 86
-      - 87
-      - 88
-      - 89
-      - 90
-      - 92
-      - 93
-      - 94
-      - 95
-      - 96
-      - 97
-      - 98
-      - 99
-      - 100
-      - 101
-      - 102
-      - 103
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
-      - 110
-      - 111
-      - 112
-      - 113
-      - 115
-      - 116
-      - 117
-      - 118
-      - 119
-      - 120
-      - 121
-      - 122
-      - 123
-      - 124
-      - 125
-      - 126
-      - 127
-      - 128
-      - 129
-      - 130
-      - 131
-      - 132
-      - 133
-      - 134
-      - 135
-      - 136
-      - 138
-      - 139
-      - 140
-      - 141
-      - 142
-      - 143
-      - 144
-      - 145
-      - 146
-      - 147
-      - 148
-      - 149
-      - 150
-      - 151
-      - 152
-      - 153
-      - 154
-      - 155
-      - 156
-      - 157
-      - 158
-      - 159
-      - 554
   0027.png:
     recall: 1
-    avg_rmse: 0.3074545346244267
+    avg_rmse: 0.3084171131596362
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 698
-      num_detections: 155
+      num_candidates: 641
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -2473,17 +2561,16 @@ entries:
       - 157
       - 158
       - 159
-      - 579
   0028.png:
     recall: 1
-    avg_rmse: 0.2965850142651722
+    avg_rmse: 0.33474689074293984
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 690
+      num_candidates: 618
       num_detections: 154
     detected_ids:
       - 0
@@ -2642,14 +2729,14 @@ entries:
       - 159
   0029.png:
     recall: 1
-    avg_rmse: 0.296025925669798
+    avg_rmse: 0.31576700829532034
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 675
+      num_candidates: 591
       num_detections: 154
     detected_ids:
       - 0
@@ -2808,14 +2895,14 @@ entries:
       - 159
   0030.png:
     recall: 1
-    avg_rmse: 0.2795391253335551
+    avg_rmse: 0.28405923856754833
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 661
+      num_candidates: 576
       num_detections: 154
     detected_ids:
       - 0
@@ -2974,14 +3061,14 @@ entries:
       - 159
   0031.png:
     recall: 1
-    avg_rmse: 0.25587185065544044
+    avg_rmse: 0.27717170070729086
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 689
+      num_candidates: 605
       num_detections: 154
     detected_ids:
       - 0
@@ -3140,14 +3227,14 @@ entries:
       - 159
   0032.png:
     recall: 1
-    avg_rmse: 0.27399032599412654
+    avg_rmse: 0.32991409121367254
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 698
+      num_candidates: 631
       num_detections: 154
     detected_ids:
       - 0
@@ -3306,15 +3393,15 @@ entries:
       - 159
   0033.png:
     recall: 1
-    avg_rmse: 0.2319395378870951
+    avg_rmse: 0.2702345888112356
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 667
-      num_detections: 154
+      num_candidates: 586
+      num_detections: 155
     detected_ids:
       - 0
       - 1
@@ -3472,14 +3559,14 @@ entries:
       - 159
   0034.png:
     recall: 1
-    avg_rmse: 0.12857747298976252
+    avg_rmse: 0.23891577891472687
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 668
+      num_candidates: 624
       num_detections: 154
     detected_ids:
       - 0
@@ -3638,15 +3725,15 @@ entries:
       - 159
   0035.png:
     recall: 1
-    avg_rmse: 0.21177819440729903
+    avg_rmse: 0.2390357965553136
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 656
-      num_detections: 155
+      num_candidates: 601
+      num_detections: 154
     detected_ids:
       - 0
       - 1
@@ -3802,1504 +3889,9 @@ entries:
       - 157
       - 158
       - 159
-      - 579
   0036.png:
     recall: 1
-    avg_rmse: 0.2157795160018422
-    stats:
-      threshold_ms: "[latency]"
-      segmentation_ms: "[latency]"
-      quad_extraction_ms: "[latency]"
-      decoding_ms: "[latency]"
-      total_ms: "[latency]"
-      num_candidates: 680
-      num_detections: 154
-    detected_ids:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      - 6
-      - 7
-      - 8
-      - 9
-      - 10
-      - 11
-      - 12
-      - 13
-      - 14
-      - 15
-      - 16
-      - 17
-      - 18
-      - 19
-      - 20
-      - 21
-      - 23
-      - 24
-      - 25
-      - 26
-      - 27
-      - 28
-      - 29
-      - 30
-      - 31
-      - 32
-      - 33
-      - 34
-      - 35
-      - 36
-      - 37
-      - 38
-      - 39
-      - 40
-      - 41
-      - 42
-      - 43
-      - 44
-      - 46
-      - 47
-      - 48
-      - 49
-      - 50
-      - 51
-      - 52
-      - 53
-      - 54
-      - 55
-      - 56
-      - 57
-      - 58
-      - 59
-      - 60
-      - 61
-      - 62
-      - 63
-      - 64
-      - 65
-      - 66
-      - 67
-      - 69
-      - 70
-      - 71
-      - 72
-      - 73
-      - 74
-      - 75
-      - 76
-      - 77
-      - 78
-      - 79
-      - 80
-      - 81
-      - 82
-      - 83
-      - 84
-      - 85
-      - 86
-      - 87
-      - 88
-      - 89
-      - 90
-      - 92
-      - 93
-      - 94
-      - 95
-      - 96
-      - 97
-      - 98
-      - 99
-      - 100
-      - 101
-      - 102
-      - 103
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
-      - 110
-      - 111
-      - 112
-      - 113
-      - 115
-      - 116
-      - 117
-      - 118
-      - 119
-      - 120
-      - 121
-      - 122
-      - 123
-      - 124
-      - 125
-      - 126
-      - 127
-      - 128
-      - 129
-      - 130
-      - 131
-      - 132
-      - 133
-      - 134
-      - 135
-      - 136
-      - 138
-      - 139
-      - 140
-      - 141
-      - 142
-      - 143
-      - 144
-      - 145
-      - 146
-      - 147
-      - 148
-      - 149
-      - 150
-      - 151
-      - 152
-      - 153
-      - 154
-      - 155
-      - 156
-      - 157
-      - 158
-      - 159
-  0037.png:
-    recall: 1
-    avg_rmse: 0.21047881370818608
-    stats:
-      threshold_ms: "[latency]"
-      segmentation_ms: "[latency]"
-      quad_extraction_ms: "[latency]"
-      decoding_ms: "[latency]"
-      total_ms: "[latency]"
-      num_candidates: 667
-      num_detections: 154
-    detected_ids:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      - 6
-      - 7
-      - 8
-      - 9
-      - 10
-      - 11
-      - 12
-      - 13
-      - 14
-      - 15
-      - 16
-      - 17
-      - 18
-      - 19
-      - 20
-      - 21
-      - 23
-      - 24
-      - 25
-      - 26
-      - 27
-      - 28
-      - 29
-      - 30
-      - 31
-      - 32
-      - 33
-      - 34
-      - 35
-      - 36
-      - 37
-      - 38
-      - 39
-      - 40
-      - 41
-      - 42
-      - 43
-      - 44
-      - 46
-      - 47
-      - 48
-      - 49
-      - 50
-      - 51
-      - 52
-      - 53
-      - 54
-      - 55
-      - 56
-      - 57
-      - 58
-      - 59
-      - 60
-      - 61
-      - 62
-      - 63
-      - 64
-      - 65
-      - 66
-      - 67
-      - 69
-      - 70
-      - 71
-      - 72
-      - 73
-      - 74
-      - 75
-      - 76
-      - 77
-      - 78
-      - 79
-      - 80
-      - 81
-      - 82
-      - 83
-      - 84
-      - 85
-      - 86
-      - 87
-      - 88
-      - 89
-      - 90
-      - 92
-      - 93
-      - 94
-      - 95
-      - 96
-      - 97
-      - 98
-      - 99
-      - 100
-      - 101
-      - 102
-      - 103
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
-      - 110
-      - 111
-      - 112
-      - 113
-      - 115
-      - 116
-      - 117
-      - 118
-      - 119
-      - 120
-      - 121
-      - 122
-      - 123
-      - 124
-      - 125
-      - 126
-      - 127
-      - 128
-      - 129
-      - 130
-      - 131
-      - 132
-      - 133
-      - 134
-      - 135
-      - 136
-      - 138
-      - 139
-      - 140
-      - 141
-      - 142
-      - 143
-      - 144
-      - 145
-      - 146
-      - 147
-      - 148
-      - 149
-      - 150
-      - 151
-      - 152
-      - 153
-      - 154
-      - 155
-      - 156
-      - 157
-      - 158
-      - 159
-  0038.png:
-    recall: 1
-    avg_rmse: 0.20017940118278132
-    stats:
-      threshold_ms: "[latency]"
-      segmentation_ms: "[latency]"
-      quad_extraction_ms: "[latency]"
-      decoding_ms: "[latency]"
-      total_ms: "[latency]"
-      num_candidates: 664
-      num_detections: 154
-    detected_ids:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      - 6
-      - 7
-      - 8
-      - 9
-      - 10
-      - 11
-      - 12
-      - 13
-      - 14
-      - 15
-      - 16
-      - 17
-      - 18
-      - 19
-      - 20
-      - 21
-      - 23
-      - 24
-      - 25
-      - 26
-      - 27
-      - 28
-      - 29
-      - 30
-      - 31
-      - 32
-      - 33
-      - 34
-      - 35
-      - 36
-      - 37
-      - 38
-      - 39
-      - 40
-      - 41
-      - 42
-      - 43
-      - 44
-      - 46
-      - 47
-      - 48
-      - 49
-      - 50
-      - 51
-      - 52
-      - 53
-      - 54
-      - 55
-      - 56
-      - 57
-      - 58
-      - 59
-      - 60
-      - 61
-      - 62
-      - 63
-      - 64
-      - 65
-      - 66
-      - 67
-      - 69
-      - 70
-      - 71
-      - 72
-      - 73
-      - 74
-      - 75
-      - 76
-      - 77
-      - 78
-      - 79
-      - 80
-      - 81
-      - 82
-      - 83
-      - 84
-      - 85
-      - 86
-      - 87
-      - 88
-      - 89
-      - 90
-      - 92
-      - 93
-      - 94
-      - 95
-      - 96
-      - 97
-      - 98
-      - 99
-      - 100
-      - 101
-      - 102
-      - 103
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
-      - 110
-      - 111
-      - 112
-      - 113
-      - 115
-      - 116
-      - 117
-      - 118
-      - 119
-      - 120
-      - 121
-      - 122
-      - 123
-      - 124
-      - 125
-      - 126
-      - 127
-      - 128
-      - 129
-      - 130
-      - 131
-      - 132
-      - 133
-      - 134
-      - 135
-      - 136
-      - 138
-      - 139
-      - 140
-      - 141
-      - 142
-      - 143
-      - 144
-      - 145
-      - 146
-      - 147
-      - 148
-      - 149
-      - 150
-      - 151
-      - 152
-      - 153
-      - 154
-      - 155
-      - 156
-      - 157
-      - 158
-      - 159
-  0039.png:
-    recall: 1
-    avg_rmse: 0.22854552482087417
-    stats:
-      threshold_ms: "[latency]"
-      segmentation_ms: "[latency]"
-      quad_extraction_ms: "[latency]"
-      decoding_ms: "[latency]"
-      total_ms: "[latency]"
-      num_candidates: 672
-      num_detections: 154
-    detected_ids:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      - 6
-      - 7
-      - 8
-      - 9
-      - 10
-      - 11
-      - 12
-      - 13
-      - 14
-      - 15
-      - 16
-      - 17
-      - 18
-      - 19
-      - 20
-      - 21
-      - 23
-      - 24
-      - 25
-      - 26
-      - 27
-      - 28
-      - 29
-      - 30
-      - 31
-      - 32
-      - 33
-      - 34
-      - 35
-      - 36
-      - 37
-      - 38
-      - 39
-      - 40
-      - 41
-      - 42
-      - 43
-      - 44
-      - 46
-      - 47
-      - 48
-      - 49
-      - 50
-      - 51
-      - 52
-      - 53
-      - 54
-      - 55
-      - 56
-      - 57
-      - 58
-      - 59
-      - 60
-      - 61
-      - 62
-      - 63
-      - 64
-      - 65
-      - 66
-      - 67
-      - 69
-      - 70
-      - 71
-      - 72
-      - 73
-      - 74
-      - 75
-      - 76
-      - 77
-      - 78
-      - 79
-      - 80
-      - 81
-      - 82
-      - 83
-      - 84
-      - 85
-      - 86
-      - 87
-      - 88
-      - 89
-      - 90
-      - 92
-      - 93
-      - 94
-      - 95
-      - 96
-      - 97
-      - 98
-      - 99
-      - 100
-      - 101
-      - 102
-      - 103
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
-      - 110
-      - 111
-      - 112
-      - 113
-      - 115
-      - 116
-      - 117
-      - 118
-      - 119
-      - 120
-      - 121
-      - 122
-      - 123
-      - 124
-      - 125
-      - 126
-      - 127
-      - 128
-      - 129
-      - 130
-      - 131
-      - 132
-      - 133
-      - 134
-      - 135
-      - 136
-      - 138
-      - 139
-      - 140
-      - 141
-      - 142
-      - 143
-      - 144
-      - 145
-      - 146
-      - 147
-      - 148
-      - 149
-      - 150
-      - 151
-      - 152
-      - 153
-      - 154
-      - 155
-      - 156
-      - 157
-      - 158
-      - 159
-  0040.png:
-    recall: 1
-    avg_rmse: 0.22105601273299993
-    stats:
-      threshold_ms: "[latency]"
-      segmentation_ms: "[latency]"
-      quad_extraction_ms: "[latency]"
-      decoding_ms: "[latency]"
-      total_ms: "[latency]"
-      num_candidates: 652
-      num_detections: 154
-    detected_ids:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      - 6
-      - 7
-      - 8
-      - 9
-      - 10
-      - 11
-      - 12
-      - 13
-      - 14
-      - 15
-      - 16
-      - 17
-      - 18
-      - 19
-      - 20
-      - 21
-      - 23
-      - 24
-      - 25
-      - 26
-      - 27
-      - 28
-      - 29
-      - 30
-      - 31
-      - 32
-      - 33
-      - 34
-      - 35
-      - 36
-      - 37
-      - 38
-      - 39
-      - 40
-      - 41
-      - 42
-      - 43
-      - 44
-      - 46
-      - 47
-      - 48
-      - 49
-      - 50
-      - 51
-      - 52
-      - 53
-      - 54
-      - 55
-      - 56
-      - 57
-      - 58
-      - 59
-      - 60
-      - 61
-      - 62
-      - 63
-      - 64
-      - 65
-      - 66
-      - 67
-      - 69
-      - 70
-      - 71
-      - 72
-      - 73
-      - 74
-      - 75
-      - 76
-      - 77
-      - 78
-      - 79
-      - 80
-      - 81
-      - 82
-      - 83
-      - 84
-      - 85
-      - 86
-      - 87
-      - 88
-      - 89
-      - 90
-      - 92
-      - 93
-      - 94
-      - 95
-      - 96
-      - 97
-      - 98
-      - 99
-      - 100
-      - 101
-      - 102
-      - 103
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
-      - 110
-      - 111
-      - 112
-      - 113
-      - 115
-      - 116
-      - 117
-      - 118
-      - 119
-      - 120
-      - 121
-      - 122
-      - 123
-      - 124
-      - 125
-      - 126
-      - 127
-      - 128
-      - 129
-      - 130
-      - 131
-      - 132
-      - 133
-      - 134
-      - 135
-      - 136
-      - 138
-      - 139
-      - 140
-      - 141
-      - 142
-      - 143
-      - 144
-      - 145
-      - 146
-      - 147
-      - 148
-      - 149
-      - 150
-      - 151
-      - 152
-      - 153
-      - 154
-      - 155
-      - 156
-      - 157
-      - 158
-      - 159
-  0041.png:
-    recall: 1
-    avg_rmse: 0.18145997063447714
-    stats:
-      threshold_ms: "[latency]"
-      segmentation_ms: "[latency]"
-      quad_extraction_ms: "[latency]"
-      decoding_ms: "[latency]"
-      total_ms: "[latency]"
-      num_candidates: 665
-      num_detections: 154
-    detected_ids:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      - 6
-      - 7
-      - 8
-      - 9
-      - 10
-      - 11
-      - 12
-      - 13
-      - 14
-      - 15
-      - 16
-      - 17
-      - 18
-      - 19
-      - 20
-      - 21
-      - 23
-      - 24
-      - 25
-      - 26
-      - 27
-      - 28
-      - 29
-      - 30
-      - 31
-      - 32
-      - 33
-      - 34
-      - 35
-      - 36
-      - 37
-      - 38
-      - 39
-      - 40
-      - 41
-      - 42
-      - 43
-      - 44
-      - 46
-      - 47
-      - 48
-      - 49
-      - 50
-      - 51
-      - 52
-      - 53
-      - 54
-      - 55
-      - 56
-      - 57
-      - 58
-      - 59
-      - 60
-      - 61
-      - 62
-      - 63
-      - 64
-      - 65
-      - 66
-      - 67
-      - 69
-      - 70
-      - 71
-      - 72
-      - 73
-      - 74
-      - 75
-      - 76
-      - 77
-      - 78
-      - 79
-      - 80
-      - 81
-      - 82
-      - 83
-      - 84
-      - 85
-      - 86
-      - 87
-      - 88
-      - 89
-      - 90
-      - 92
-      - 93
-      - 94
-      - 95
-      - 96
-      - 97
-      - 98
-      - 99
-      - 100
-      - 101
-      - 102
-      - 103
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
-      - 110
-      - 111
-      - 112
-      - 113
-      - 115
-      - 116
-      - 117
-      - 118
-      - 119
-      - 120
-      - 121
-      - 122
-      - 123
-      - 124
-      - 125
-      - 126
-      - 127
-      - 128
-      - 129
-      - 130
-      - 131
-      - 132
-      - 133
-      - 134
-      - 135
-      - 136
-      - 138
-      - 139
-      - 140
-      - 141
-      - 142
-      - 143
-      - 144
-      - 145
-      - 146
-      - 147
-      - 148
-      - 149
-      - 150
-      - 151
-      - 152
-      - 153
-      - 154
-      - 155
-      - 156
-      - 157
-      - 158
-      - 159
-  0042.png:
-    recall: 1
-    avg_rmse: 0.21278327143939785
-    stats:
-      threshold_ms: "[latency]"
-      segmentation_ms: "[latency]"
-      quad_extraction_ms: "[latency]"
-      decoding_ms: "[latency]"
-      total_ms: "[latency]"
-      num_candidates: 628
-      num_detections: 154
-    detected_ids:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      - 6
-      - 7
-      - 8
-      - 9
-      - 10
-      - 11
-      - 12
-      - 13
-      - 14
-      - 15
-      - 16
-      - 17
-      - 18
-      - 19
-      - 20
-      - 21
-      - 23
-      - 24
-      - 25
-      - 26
-      - 27
-      - 28
-      - 29
-      - 30
-      - 31
-      - 32
-      - 33
-      - 34
-      - 35
-      - 36
-      - 37
-      - 38
-      - 39
-      - 40
-      - 41
-      - 42
-      - 43
-      - 44
-      - 46
-      - 47
-      - 48
-      - 49
-      - 50
-      - 51
-      - 52
-      - 53
-      - 54
-      - 55
-      - 56
-      - 57
-      - 58
-      - 59
-      - 60
-      - 61
-      - 62
-      - 63
-      - 64
-      - 65
-      - 66
-      - 67
-      - 69
-      - 70
-      - 71
-      - 72
-      - 73
-      - 74
-      - 75
-      - 76
-      - 77
-      - 78
-      - 79
-      - 80
-      - 81
-      - 82
-      - 83
-      - 84
-      - 85
-      - 86
-      - 87
-      - 88
-      - 89
-      - 90
-      - 92
-      - 93
-      - 94
-      - 95
-      - 96
-      - 97
-      - 98
-      - 99
-      - 100
-      - 101
-      - 102
-      - 103
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
-      - 110
-      - 111
-      - 112
-      - 113
-      - 115
-      - 116
-      - 117
-      - 118
-      - 119
-      - 120
-      - 121
-      - 122
-      - 123
-      - 124
-      - 125
-      - 126
-      - 127
-      - 128
-      - 129
-      - 130
-      - 131
-      - 132
-      - 133
-      - 134
-      - 135
-      - 136
-      - 138
-      - 139
-      - 140
-      - 141
-      - 142
-      - 143
-      - 144
-      - 145
-      - 146
-      - 147
-      - 148
-      - 149
-      - 150
-      - 151
-      - 152
-      - 153
-      - 154
-      - 155
-      - 156
-      - 157
-      - 158
-      - 159
-  0043.png:
-    recall: 1
-    avg_rmse: 0.2281468539770524
-    stats:
-      threshold_ms: "[latency]"
-      segmentation_ms: "[latency]"
-      quad_extraction_ms: "[latency]"
-      decoding_ms: "[latency]"
-      total_ms: "[latency]"
-      num_candidates: 614
-      num_detections: 154
-    detected_ids:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      - 6
-      - 7
-      - 8
-      - 9
-      - 10
-      - 11
-      - 12
-      - 13
-      - 14
-      - 15
-      - 16
-      - 17
-      - 18
-      - 19
-      - 20
-      - 21
-      - 23
-      - 24
-      - 25
-      - 26
-      - 27
-      - 28
-      - 29
-      - 30
-      - 31
-      - 32
-      - 33
-      - 34
-      - 35
-      - 36
-      - 37
-      - 38
-      - 39
-      - 40
-      - 41
-      - 42
-      - 43
-      - 44
-      - 46
-      - 47
-      - 48
-      - 49
-      - 50
-      - 51
-      - 52
-      - 53
-      - 54
-      - 55
-      - 56
-      - 57
-      - 58
-      - 59
-      - 60
-      - 61
-      - 62
-      - 63
-      - 64
-      - 65
-      - 66
-      - 67
-      - 69
-      - 70
-      - 71
-      - 72
-      - 73
-      - 74
-      - 75
-      - 76
-      - 77
-      - 78
-      - 79
-      - 80
-      - 81
-      - 82
-      - 83
-      - 84
-      - 85
-      - 86
-      - 87
-      - 88
-      - 89
-      - 90
-      - 92
-      - 93
-      - 94
-      - 95
-      - 96
-      - 97
-      - 98
-      - 99
-      - 100
-      - 101
-      - 102
-      - 103
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
-      - 110
-      - 111
-      - 112
-      - 113
-      - 115
-      - 116
-      - 117
-      - 118
-      - 119
-      - 120
-      - 121
-      - 122
-      - 123
-      - 124
-      - 125
-      - 126
-      - 127
-      - 128
-      - 129
-      - 130
-      - 131
-      - 132
-      - 133
-      - 134
-      - 135
-      - 136
-      - 138
-      - 139
-      - 140
-      - 141
-      - 142
-      - 143
-      - 144
-      - 145
-      - 146
-      - 147
-      - 148
-      - 149
-      - 150
-      - 151
-      - 152
-      - 153
-      - 154
-      - 155
-      - 156
-      - 157
-      - 158
-      - 159
-  0044.png:
-    recall: 1
-    avg_rmse: 0.05901413183596172
-    stats:
-      threshold_ms: "[latency]"
-      segmentation_ms: "[latency]"
-      quad_extraction_ms: "[latency]"
-      decoding_ms: "[latency]"
-      total_ms: "[latency]"
-      num_candidates: 612
-      num_detections: 154
-    detected_ids:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      - 6
-      - 7
-      - 8
-      - 9
-      - 10
-      - 11
-      - 12
-      - 13
-      - 14
-      - 15
-      - 16
-      - 17
-      - 18
-      - 19
-      - 20
-      - 21
-      - 23
-      - 24
-      - 25
-      - 26
-      - 27
-      - 28
-      - 29
-      - 30
-      - 31
-      - 32
-      - 33
-      - 34
-      - 35
-      - 36
-      - 37
-      - 38
-      - 39
-      - 40
-      - 41
-      - 42
-      - 43
-      - 44
-      - 46
-      - 47
-      - 48
-      - 49
-      - 50
-      - 51
-      - 52
-      - 53
-      - 54
-      - 55
-      - 56
-      - 57
-      - 58
-      - 59
-      - 60
-      - 61
-      - 62
-      - 63
-      - 64
-      - 65
-      - 66
-      - 67
-      - 69
-      - 70
-      - 71
-      - 72
-      - 73
-      - 74
-      - 75
-      - 76
-      - 77
-      - 78
-      - 79
-      - 80
-      - 81
-      - 82
-      - 83
-      - 84
-      - 85
-      - 86
-      - 87
-      - 88
-      - 89
-      - 90
-      - 92
-      - 93
-      - 94
-      - 95
-      - 96
-      - 97
-      - 98
-      - 99
-      - 100
-      - 101
-      - 102
-      - 103
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
-      - 110
-      - 111
-      - 112
-      - 113
-      - 115
-      - 116
-      - 117
-      - 118
-      - 119
-      - 120
-      - 121
-      - 122
-      - 123
-      - 124
-      - 125
-      - 126
-      - 127
-      - 128
-      - 129
-      - 130
-      - 131
-      - 132
-      - 133
-      - 134
-      - 135
-      - 136
-      - 138
-      - 139
-      - 140
-      - 141
-      - 142
-      - 143
-      - 144
-      - 145
-      - 146
-      - 147
-      - 148
-      - 149
-      - 150
-      - 151
-      - 152
-      - 153
-      - 154
-      - 155
-      - 156
-      - 157
-      - 158
-      - 159
-  0045.png:
-    recall: 1
-    avg_rmse: 0.20658483885379933
+    avg_rmse: 0.202933068943493
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -5463,16 +4055,1510 @@ entries:
       - 157
       - 158
       - 159
-  0046.png:
+  0037.png:
     recall: 1
-    avg_rmse: 0.22464682355229423
+    avg_rmse: 0.1826308275119062
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 568
+      num_candidates: 596
+      num_detections: 154
+    detected_ids:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 10
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+      - 16
+      - 17
+      - 18
+      - 19
+      - 20
+      - 21
+      - 23
+      - 24
+      - 25
+      - 26
+      - 27
+      - 28
+      - 29
+      - 30
+      - 31
+      - 32
+      - 33
+      - 34
+      - 35
+      - 36
+      - 37
+      - 38
+      - 39
+      - 40
+      - 41
+      - 42
+      - 43
+      - 44
+      - 46
+      - 47
+      - 48
+      - 49
+      - 50
+      - 51
+      - 52
+      - 53
+      - 54
+      - 55
+      - 56
+      - 57
+      - 58
+      - 59
+      - 60
+      - 61
+      - 62
+      - 63
+      - 64
+      - 65
+      - 66
+      - 67
+      - 69
+      - 70
+      - 71
+      - 72
+      - 73
+      - 74
+      - 75
+      - 76
+      - 77
+      - 78
+      - 79
+      - 80
+      - 81
+      - 82
+      - 83
+      - 84
+      - 85
+      - 86
+      - 87
+      - 88
+      - 89
+      - 90
+      - 92
+      - 93
+      - 94
+      - 95
+      - 96
+      - 97
+      - 98
+      - 99
+      - 100
+      - 101
+      - 102
+      - 103
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
+      - 115
+      - 116
+      - 117
+      - 118
+      - 119
+      - 120
+      - 121
+      - 122
+      - 123
+      - 124
+      - 125
+      - 126
+      - 127
+      - 128
+      - 129
+      - 130
+      - 131
+      - 132
+      - 133
+      - 134
+      - 135
+      - 136
+      - 138
+      - 139
+      - 140
+      - 141
+      - 142
+      - 143
+      - 144
+      - 145
+      - 146
+      - 147
+      - 148
+      - 149
+      - 150
+      - 151
+      - 152
+      - 153
+      - 154
+      - 155
+      - 156
+      - 157
+      - 158
+      - 159
+  0038.png:
+    recall: 1
+    avg_rmse: 0.16927144301841232
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 627
+      num_detections: 154
+    detected_ids:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 10
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+      - 16
+      - 17
+      - 18
+      - 19
+      - 20
+      - 21
+      - 23
+      - 24
+      - 25
+      - 26
+      - 27
+      - 28
+      - 29
+      - 30
+      - 31
+      - 32
+      - 33
+      - 34
+      - 35
+      - 36
+      - 37
+      - 38
+      - 39
+      - 40
+      - 41
+      - 42
+      - 43
+      - 44
+      - 46
+      - 47
+      - 48
+      - 49
+      - 50
+      - 51
+      - 52
+      - 53
+      - 54
+      - 55
+      - 56
+      - 57
+      - 58
+      - 59
+      - 60
+      - 61
+      - 62
+      - 63
+      - 64
+      - 65
+      - 66
+      - 67
+      - 69
+      - 70
+      - 71
+      - 72
+      - 73
+      - 74
+      - 75
+      - 76
+      - 77
+      - 78
+      - 79
+      - 80
+      - 81
+      - 82
+      - 83
+      - 84
+      - 85
+      - 86
+      - 87
+      - 88
+      - 89
+      - 90
+      - 92
+      - 93
+      - 94
+      - 95
+      - 96
+      - 97
+      - 98
+      - 99
+      - 100
+      - 101
+      - 102
+      - 103
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
+      - 115
+      - 116
+      - 117
+      - 118
+      - 119
+      - 120
+      - 121
+      - 122
+      - 123
+      - 124
+      - 125
+      - 126
+      - 127
+      - 128
+      - 129
+      - 130
+      - 131
+      - 132
+      - 133
+      - 134
+      - 135
+      - 136
+      - 138
+      - 139
+      - 140
+      - 141
+      - 142
+      - 143
+      - 144
+      - 145
+      - 146
+      - 147
+      - 148
+      - 149
+      - 150
+      - 151
+      - 152
+      - 153
+      - 154
+      - 155
+      - 156
+      - 157
+      - 158
+      - 159
+  0039.png:
+    recall: 1
+    avg_rmse: 0.2014688008627443
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 598
+      num_detections: 154
+    detected_ids:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 10
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+      - 16
+      - 17
+      - 18
+      - 19
+      - 20
+      - 21
+      - 23
+      - 24
+      - 25
+      - 26
+      - 27
+      - 28
+      - 29
+      - 30
+      - 31
+      - 32
+      - 33
+      - 34
+      - 35
+      - 36
+      - 37
+      - 38
+      - 39
+      - 40
+      - 41
+      - 42
+      - 43
+      - 44
+      - 46
+      - 47
+      - 48
+      - 49
+      - 50
+      - 51
+      - 52
+      - 53
+      - 54
+      - 55
+      - 56
+      - 57
+      - 58
+      - 59
+      - 60
+      - 61
+      - 62
+      - 63
+      - 64
+      - 65
+      - 66
+      - 67
+      - 69
+      - 70
+      - 71
+      - 72
+      - 73
+      - 74
+      - 75
+      - 76
+      - 77
+      - 78
+      - 79
+      - 80
+      - 81
+      - 82
+      - 83
+      - 84
+      - 85
+      - 86
+      - 87
+      - 88
+      - 89
+      - 90
+      - 92
+      - 93
+      - 94
+      - 95
+      - 96
+      - 97
+      - 98
+      - 99
+      - 100
+      - 101
+      - 102
+      - 103
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
+      - 115
+      - 116
+      - 117
+      - 118
+      - 119
+      - 120
+      - 121
+      - 122
+      - 123
+      - 124
+      - 125
+      - 126
+      - 127
+      - 128
+      - 129
+      - 130
+      - 131
+      - 132
+      - 133
+      - 134
+      - 135
+      - 136
+      - 138
+      - 139
+      - 140
+      - 141
+      - 142
+      - 143
+      - 144
+      - 145
+      - 146
+      - 147
+      - 148
+      - 149
+      - 150
+      - 151
+      - 152
+      - 153
+      - 154
+      - 155
+      - 156
+      - 157
+      - 158
+      - 159
+  0040.png:
+    recall: 1
+    avg_rmse: 0.2056597484075896
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 600
+      num_detections: 154
+    detected_ids:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 10
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+      - 16
+      - 17
+      - 18
+      - 19
+      - 20
+      - 21
+      - 23
+      - 24
+      - 25
+      - 26
+      - 27
+      - 28
+      - 29
+      - 30
+      - 31
+      - 32
+      - 33
+      - 34
+      - 35
+      - 36
+      - 37
+      - 38
+      - 39
+      - 40
+      - 41
+      - 42
+      - 43
+      - 44
+      - 46
+      - 47
+      - 48
+      - 49
+      - 50
+      - 51
+      - 52
+      - 53
+      - 54
+      - 55
+      - 56
+      - 57
+      - 58
+      - 59
+      - 60
+      - 61
+      - 62
+      - 63
+      - 64
+      - 65
+      - 66
+      - 67
+      - 69
+      - 70
+      - 71
+      - 72
+      - 73
+      - 74
+      - 75
+      - 76
+      - 77
+      - 78
+      - 79
+      - 80
+      - 81
+      - 82
+      - 83
+      - 84
+      - 85
+      - 86
+      - 87
+      - 88
+      - 89
+      - 90
+      - 92
+      - 93
+      - 94
+      - 95
+      - 96
+      - 97
+      - 98
+      - 99
+      - 100
+      - 101
+      - 102
+      - 103
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
+      - 115
+      - 116
+      - 117
+      - 118
+      - 119
+      - 120
+      - 121
+      - 122
+      - 123
+      - 124
+      - 125
+      - 126
+      - 127
+      - 128
+      - 129
+      - 130
+      - 131
+      - 132
+      - 133
+      - 134
+      - 135
+      - 136
+      - 138
+      - 139
+      - 140
+      - 141
+      - 142
+      - 143
+      - 144
+      - 145
+      - 146
+      - 147
+      - 148
+      - 149
+      - 150
+      - 151
+      - 152
+      - 153
+      - 154
+      - 155
+      - 156
+      - 157
+      - 158
+      - 159
+  0041.png:
+    recall: 1
+    avg_rmse: 0.18661646493244521
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 610
+      num_detections: 154
+    detected_ids:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 10
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+      - 16
+      - 17
+      - 18
+      - 19
+      - 20
+      - 21
+      - 23
+      - 24
+      - 25
+      - 26
+      - 27
+      - 28
+      - 29
+      - 30
+      - 31
+      - 32
+      - 33
+      - 34
+      - 35
+      - 36
+      - 37
+      - 38
+      - 39
+      - 40
+      - 41
+      - 42
+      - 43
+      - 44
+      - 46
+      - 47
+      - 48
+      - 49
+      - 50
+      - 51
+      - 52
+      - 53
+      - 54
+      - 55
+      - 56
+      - 57
+      - 58
+      - 59
+      - 60
+      - 61
+      - 62
+      - 63
+      - 64
+      - 65
+      - 66
+      - 67
+      - 69
+      - 70
+      - 71
+      - 72
+      - 73
+      - 74
+      - 75
+      - 76
+      - 77
+      - 78
+      - 79
+      - 80
+      - 81
+      - 82
+      - 83
+      - 84
+      - 85
+      - 86
+      - 87
+      - 88
+      - 89
+      - 90
+      - 92
+      - 93
+      - 94
+      - 95
+      - 96
+      - 97
+      - 98
+      - 99
+      - 100
+      - 101
+      - 102
+      - 103
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
+      - 115
+      - 116
+      - 117
+      - 118
+      - 119
+      - 120
+      - 121
+      - 122
+      - 123
+      - 124
+      - 125
+      - 126
+      - 127
+      - 128
+      - 129
+      - 130
+      - 131
+      - 132
+      - 133
+      - 134
+      - 135
+      - 136
+      - 138
+      - 139
+      - 140
+      - 141
+      - 142
+      - 143
+      - 144
+      - 145
+      - 146
+      - 147
+      - 148
+      - 149
+      - 150
+      - 151
+      - 152
+      - 153
+      - 154
+      - 155
+      - 156
+      - 157
+      - 158
+      - 159
+  0042.png:
+    recall: 1
+    avg_rmse: 0.17527198277728076
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 579
+      num_detections: 154
+    detected_ids:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 10
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+      - 16
+      - 17
+      - 18
+      - 19
+      - 20
+      - 21
+      - 23
+      - 24
+      - 25
+      - 26
+      - 27
+      - 28
+      - 29
+      - 30
+      - 31
+      - 32
+      - 33
+      - 34
+      - 35
+      - 36
+      - 37
+      - 38
+      - 39
+      - 40
+      - 41
+      - 42
+      - 43
+      - 44
+      - 46
+      - 47
+      - 48
+      - 49
+      - 50
+      - 51
+      - 52
+      - 53
+      - 54
+      - 55
+      - 56
+      - 57
+      - 58
+      - 59
+      - 60
+      - 61
+      - 62
+      - 63
+      - 64
+      - 65
+      - 66
+      - 67
+      - 69
+      - 70
+      - 71
+      - 72
+      - 73
+      - 74
+      - 75
+      - 76
+      - 77
+      - 78
+      - 79
+      - 80
+      - 81
+      - 82
+      - 83
+      - 84
+      - 85
+      - 86
+      - 87
+      - 88
+      - 89
+      - 90
+      - 92
+      - 93
+      - 94
+      - 95
+      - 96
+      - 97
+      - 98
+      - 99
+      - 100
+      - 101
+      - 102
+      - 103
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
+      - 115
+      - 116
+      - 117
+      - 118
+      - 119
+      - 120
+      - 121
+      - 122
+      - 123
+      - 124
+      - 125
+      - 126
+      - 127
+      - 128
+      - 129
+      - 130
+      - 131
+      - 132
+      - 133
+      - 134
+      - 135
+      - 136
+      - 138
+      - 139
+      - 140
+      - 141
+      - 142
+      - 143
+      - 144
+      - 145
+      - 146
+      - 147
+      - 148
+      - 149
+      - 150
+      - 151
+      - 152
+      - 153
+      - 154
+      - 155
+      - 156
+      - 157
+      - 158
+      - 159
+  0043.png:
+    recall: 1
+    avg_rmse: 0.19015780233722435
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 599
+      num_detections: 154
+    detected_ids:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 10
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+      - 16
+      - 17
+      - 18
+      - 19
+      - 20
+      - 21
+      - 23
+      - 24
+      - 25
+      - 26
+      - 27
+      - 28
+      - 29
+      - 30
+      - 31
+      - 32
+      - 33
+      - 34
+      - 35
+      - 36
+      - 37
+      - 38
+      - 39
+      - 40
+      - 41
+      - 42
+      - 43
+      - 44
+      - 46
+      - 47
+      - 48
+      - 49
+      - 50
+      - 51
+      - 52
+      - 53
+      - 54
+      - 55
+      - 56
+      - 57
+      - 58
+      - 59
+      - 60
+      - 61
+      - 62
+      - 63
+      - 64
+      - 65
+      - 66
+      - 67
+      - 69
+      - 70
+      - 71
+      - 72
+      - 73
+      - 74
+      - 75
+      - 76
+      - 77
+      - 78
+      - 79
+      - 80
+      - 81
+      - 82
+      - 83
+      - 84
+      - 85
+      - 86
+      - 87
+      - 88
+      - 89
+      - 90
+      - 92
+      - 93
+      - 94
+      - 95
+      - 96
+      - 97
+      - 98
+      - 99
+      - 100
+      - 101
+      - 102
+      - 103
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
+      - 115
+      - 116
+      - 117
+      - 118
+      - 119
+      - 120
+      - 121
+      - 122
+      - 123
+      - 124
+      - 125
+      - 126
+      - 127
+      - 128
+      - 129
+      - 130
+      - 131
+      - 132
+      - 133
+      - 134
+      - 135
+      - 136
+      - 138
+      - 139
+      - 140
+      - 141
+      - 142
+      - 143
+      - 144
+      - 145
+      - 146
+      - 147
+      - 148
+      - 149
+      - 150
+      - 151
+      - 152
+      - 153
+      - 154
+      - 155
+      - 156
+      - 157
+      - 158
+      - 159
+  0044.png:
+    recall: 1
+    avg_rmse: 0.05904630851438182
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 561
+      num_detections: 154
+    detected_ids:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 10
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+      - 16
+      - 17
+      - 18
+      - 19
+      - 20
+      - 21
+      - 23
+      - 24
+      - 25
+      - 26
+      - 27
+      - 28
+      - 29
+      - 30
+      - 31
+      - 32
+      - 33
+      - 34
+      - 35
+      - 36
+      - 37
+      - 38
+      - 39
+      - 40
+      - 41
+      - 42
+      - 43
+      - 44
+      - 46
+      - 47
+      - 48
+      - 49
+      - 50
+      - 51
+      - 52
+      - 53
+      - 54
+      - 55
+      - 56
+      - 57
+      - 58
+      - 59
+      - 60
+      - 61
+      - 62
+      - 63
+      - 64
+      - 65
+      - 66
+      - 67
+      - 69
+      - 70
+      - 71
+      - 72
+      - 73
+      - 74
+      - 75
+      - 76
+      - 77
+      - 78
+      - 79
+      - 80
+      - 81
+      - 82
+      - 83
+      - 84
+      - 85
+      - 86
+      - 87
+      - 88
+      - 89
+      - 90
+      - 92
+      - 93
+      - 94
+      - 95
+      - 96
+      - 97
+      - 98
+      - 99
+      - 100
+      - 101
+      - 102
+      - 103
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
+      - 115
+      - 116
+      - 117
+      - 118
+      - 119
+      - 120
+      - 121
+      - 122
+      - 123
+      - 124
+      - 125
+      - 126
+      - 127
+      - 128
+      - 129
+      - 130
+      - 131
+      - 132
+      - 133
+      - 134
+      - 135
+      - 136
+      - 138
+      - 139
+      - 140
+      - 141
+      - 142
+      - 143
+      - 144
+      - 145
+      - 146
+      - 147
+      - 148
+      - 149
+      - 150
+      - 151
+      - 152
+      - 153
+      - 154
+      - 155
+      - 156
+      - 157
+      - 158
+      - 159
+  0045.png:
+    recall: 1
+    avg_rmse: 0.19749275078283704
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 593
+      num_detections: 154
+    detected_ids:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 10
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+      - 16
+      - 17
+      - 18
+      - 19
+      - 20
+      - 21
+      - 23
+      - 24
+      - 25
+      - 26
+      - 27
+      - 28
+      - 29
+      - 30
+      - 31
+      - 32
+      - 33
+      - 34
+      - 35
+      - 36
+      - 37
+      - 38
+      - 39
+      - 40
+      - 41
+      - 42
+      - 43
+      - 44
+      - 46
+      - 47
+      - 48
+      - 49
+      - 50
+      - 51
+      - 52
+      - 53
+      - 54
+      - 55
+      - 56
+      - 57
+      - 58
+      - 59
+      - 60
+      - 61
+      - 62
+      - 63
+      - 64
+      - 65
+      - 66
+      - 67
+      - 69
+      - 70
+      - 71
+      - 72
+      - 73
+      - 74
+      - 75
+      - 76
+      - 77
+      - 78
+      - 79
+      - 80
+      - 81
+      - 82
+      - 83
+      - 84
+      - 85
+      - 86
+      - 87
+      - 88
+      - 89
+      - 90
+      - 92
+      - 93
+      - 94
+      - 95
+      - 96
+      - 97
+      - 98
+      - 99
+      - 100
+      - 101
+      - 102
+      - 103
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
+      - 115
+      - 116
+      - 117
+      - 118
+      - 119
+      - 120
+      - 121
+      - 122
+      - 123
+      - 124
+      - 125
+      - 126
+      - 127
+      - 128
+      - 129
+      - 130
+      - 131
+      - 132
+      - 133
+      - 134
+      - 135
+      - 136
+      - 138
+      - 139
+      - 140
+      - 141
+      - 142
+      - 143
+      - 144
+      - 145
+      - 146
+      - 147
+      - 148
+      - 149
+      - 150
+      - 151
+      - 152
+      - 153
+      - 154
+      - 155
+      - 156
+      - 157
+      - 158
+      - 159
+  0046.png:
+    recall: 1
+    avg_rmse: 0.18928873195972332
+    stats:
+      threshold_ms: "[latency]"
+      segmentation_ms: "[latency]"
+      quad_extraction_ms: "[latency]"
+      decoding_ms: "[latency]"
+      total_ms: "[latency]"
+      num_candidates: 531
       num_detections: 154
     detected_ids:
       - 0
@@ -5631,14 +5717,14 @@ entries:
       - 159
   0047.png:
     recall: 1
-    avg_rmse: 0.22151418712800824
+    avg_rmse: 0.15683264591960633
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 544
+      num_candidates: 530
       num_detections: 154
     detected_ids:
       - 0
@@ -5797,14 +5883,14 @@ entries:
       - 159
   0048.png:
     recall: 1
-    avg_rmse: 0.2051393807386371
+    avg_rmse: 0.1842917409288043
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 502
+      num_candidates: 538
       num_detections: 154
     detected_ids:
       - 0
@@ -5963,14 +6049,14 @@ entries:
       - 159
   0049.png:
     recall: 1
-    avg_rmse: 0.22484796092863074
+    avg_rmse: 0.18837820745637124
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 479
+      num_candidates: 486
       num_detections: 154
     detected_ids:
       - 0
@@ -6128,12 +6214,12 @@ entries:
       - 158
       - 159
 mean_stats:
-  threshold_ms: 53.72882218000001
-  segmentation_ms: 25.859760019999996
-  quad_extraction_ms: 36.82604676
-  decoding_ms: 2.2726214999999996
-  total_ms: 118.68966912000003
-  num_candidates: 669
-  num_detections: 110
-mean_recall: 0.7164935064935065
-mean_rmse: 0.483454314496531
+  threshold_ms: 214.32988444
+  segmentation_ms: 114.97310896000003
+  quad_extraction_ms: 94.26472509999998
+  decoding_ms: 25.25391338
+  total_ms: 448.82396301999995
+  num_candidates: 603
+  num_detections: 112
+mean_recall: 0.7271428571428571
+mean_rmse: 0.28732718227077336

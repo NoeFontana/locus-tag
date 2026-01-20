@@ -183,35 +183,47 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
         let (detections, stats) = detector.detect_with_stats_and_options(&input_view, &options);
         
         // METRICS CALCULATION
-        let detected_ids: BTreeSet<u32> = detections.iter().map(|d| d.id).collect();
-        let matched_ids: Vec<u32> = detected_ids.iter().cloned().filter(|id| gt.tag_ids.contains(id)).collect();
-        
-        let recall = if gt.tag_ids.is_empty() { 1.0 } else { matched_ids.len() as f64 / gt.tag_ids.len() as f64 };
-        
         let mut total_rmse = 0.0;
         let mut match_count = 0;
+        let mut matched_gt_ids = BTreeSet::new();
         
         for det in &detections {
             if let Some(gt_corners) = gt.corners.get(&det.id) {
-                // Map library standard (CW: TL, TR, BR, BL) to ICRA 2020 convention (TR, TL, BL, BR)
-                let reordered_det = [
-                    det.corners[1], // ICRA Idx 0 <- Lib 1 (TR)
-                    det.corners[0], // ICRA Idx 1 <- Lib 0 (TL)
-                    det.corners[3], // ICRA Idx 2 <- Lib 3 (BL)
-                    det.corners[2], // ICRA Idx 3 <- Lib 2 (BR)
-                ];
-                total_rmse += calculate_rmse(reordered_det, *gt_corners);
-                match_count += 1;
+                // Calculate center of GT tag
+                let mut gt_cx = 0.0;
+                let mut gt_cy = 0.0;
+                for p in gt_corners {
+                    gt_cx += p[0];
+                    gt_cy += p[1];
+                }
+                gt_cx /= 4.0;
+                gt_cy /= 4.0;
+
+                // Only match if center is within 20 pixels
+                let dist_sq = (det.center[0] - gt_cx).powi(2) + (det.center[1] - gt_cy).powi(2);
+                if dist_sq < 20.0 * 20.0 {
+                    // Map library standard (CW: TL, TR, BR, BL) to ICRA 2020 convention (TR, TL, BL, BR)
+                    let reordered_det = [
+                        det.corners[1], // ICRA Idx 0 <- Lib 1 (TR)
+                        det.corners[0], // ICRA Idx 1 <- Lib 0 (TL)
+                        det.corners[3], // ICRA Idx 2 <- Lib 3 (BL)
+                        det.corners[2], // ICRA Idx 3 <- Lib 2 (BR)
+                    ];
+                    total_rmse += calculate_rmse(reordered_det, *gt_corners);
+                    match_count += 1;
+                    matched_gt_ids.insert(det.id);
+                }
             }
         }
         
+        let recall = if gt.tag_ids.is_empty() { 1.0 } else { matched_gt_ids.len() as f64 / gt.tag_ids.len() as f64 };
         let avg_rmse = if match_count > 0 { total_rmse / match_count as f64 } else { 0.0 };
         
         (filename, ImageMetrics {
             recall,
             avg_rmse,
             stats: PipelineMetrics::from(stats),
-            detected_ids,
+            detected_ids: detections.iter().map(|d| d.id).collect(),
         })
     }).collect();
 
