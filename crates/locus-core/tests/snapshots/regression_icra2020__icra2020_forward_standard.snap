@@ -12,7 +12,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 587
+      num_candidates: 563
       num_detections: 5
     detected_ids:
       - 30
@@ -29,7 +29,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 623
+      num_candidates: 595
       num_detections: 2
     detected_ids:
       - 72
@@ -43,7 +43,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 604
+      num_candidates: 579
       num_detections: 6
     detected_ids:
       - 47
@@ -61,7 +61,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 585
+      num_candidates: 557
       num_detections: 2
     detected_ids:
       - 85
@@ -75,7 +75,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 620
+      num_candidates: 589
       num_detections: 3
     detected_ids:
       - 43
@@ -90,7 +90,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 609
+      num_candidates: 584
       num_detections: 7
     detected_ids:
       - 76
@@ -109,7 +109,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 608
+      num_candidates: 578
       num_detections: 12
     detected_ids:
       - 0
@@ -133,7 +133,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 619
+      num_candidates: 590
       num_detections: 22
     detected_ids:
       - 0
@@ -167,7 +167,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 597
+      num_candidates: 571
       num_detections: 25
     detected_ids:
       - 2
@@ -204,7 +204,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 635
+      num_candidates: 605
       num_detections: 24
     detected_ids:
       - 4
@@ -240,7 +240,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 617
+      num_candidates: 587
       num_detections: 50
     detected_ids:
       - 4
@@ -301,7 +301,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 624
+      num_candidates: 602
       num_detections: 67
     detected_ids:
       - 1
@@ -380,7 +380,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 645
+      num_candidates: 619
       num_detections: 63
     detected_ids:
       - 1
@@ -454,7 +454,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 631
+      num_candidates: 602
       num_detections: 60
     detected_ids:
       - 1
@@ -526,7 +526,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 639
+      num_candidates: 606
       num_detections: 88
     detected_ids:
       - 1
@@ -626,7 +626,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 612
+      num_candidates: 584
       num_detections: 109
     detected_ids:
       - 1
@@ -747,7 +747,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 615
+      num_candidates: 586
       num_detections: 108
     detected_ids:
       - 1
@@ -867,7 +867,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 599
+      num_candidates: 570
       num_detections: 108
     detected_ids:
       - 0
@@ -987,7 +987,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 632
+      num_candidates: 599
       num_detections: 132
     detected_ids:
       - 0
@@ -1130,7 +1130,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 612
+      num_candidates: 583
       num_detections: 120
     detected_ids:
       - 0
@@ -1262,7 +1262,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 612
+      num_candidates: 584
       num_detections: 138
     detected_ids:
       - 0
@@ -1412,7 +1412,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 603
+      num_candidates: 571
       num_detections: 152
     detected_ids:
       - 0
@@ -1576,7 +1576,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 616
+      num_candidates: 586
       num_detections: 151
     detected_ids:
       - 0
@@ -1739,7 +1739,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 652
+      num_candidates: 624
       num_detections: 153
     detected_ids:
       - 0
@@ -1904,7 +1904,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 609
+      num_candidates: 589
       num_detections: 154
     detected_ids:
       - 0
@@ -2070,7 +2070,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 612
+      num_candidates: 583
       num_detections: 156
     detected_ids:
       - 0
@@ -2238,7 +2238,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 602
+      num_candidates: 572
       num_detections: 154
     detected_ids:
       - 0
@@ -2404,7 +2404,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 641
+      num_candidates: 618
       num_detections: 154
     detected_ids:
       - 0
@@ -2570,7 +2570,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 618
+      num_candidates: 589
       num_detections: 154
     detected_ids:
       - 0
@@ -2736,7 +2736,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 591
+      num_candidates: 558
       num_detections: 154
     detected_ids:
       - 0
@@ -2902,7 +2902,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 576
+      num_candidates: 549
       num_detections: 154
     detected_ids:
       - 0
@@ -3068,7 +3068,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 605
+      num_candidates: 573
       num_detections: 154
     detected_ids:
       - 0
@@ -3234,7 +3234,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 631
+      num_candidates: 609
       num_detections: 154
     detected_ids:
       - 0
@@ -3400,7 +3400,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 586
+      num_candidates: 560
       num_detections: 155
     detected_ids:
       - 0
@@ -3566,7 +3566,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 624
+      num_candidates: 592
       num_detections: 154
     detected_ids:
       - 0
@@ -3732,7 +3732,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 601
+      num_candidates: 573
       num_detections: 154
     detected_ids:
       - 0
@@ -3898,7 +3898,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 626
+      num_candidates: 597
       num_detections: 154
     detected_ids:
       - 0
@@ -4064,7 +4064,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 596
+      num_candidates: 569
       num_detections: 154
     detected_ids:
       - 0
@@ -4230,7 +4230,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 627
+      num_candidates: 606
       num_detections: 154
     detected_ids:
       - 0
@@ -4396,7 +4396,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 598
+      num_candidates: 570
       num_detections: 154
     detected_ids:
       - 0
@@ -4562,7 +4562,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 600
+      num_candidates: 569
       num_detections: 154
     detected_ids:
       - 0
@@ -4728,7 +4728,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 610
+      num_candidates: 586
       num_detections: 154
     detected_ids:
       - 0
@@ -4894,7 +4894,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 579
+      num_candidates: 555
       num_detections: 154
     detected_ids:
       - 0
@@ -5060,7 +5060,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 599
+      num_candidates: 571
       num_detections: 154
     detected_ids:
       - 0
@@ -5226,7 +5226,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 561
+      num_candidates: 539
       num_detections: 154
     detected_ids:
       - 0
@@ -5392,7 +5392,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 593
+      num_candidates: 577
       num_detections: 154
     detected_ids:
       - 0
@@ -5558,7 +5558,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 531
+      num_candidates: 511
       num_detections: 154
     detected_ids:
       - 0
@@ -5724,7 +5724,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 530
+      num_candidates: 512
       num_detections: 154
     detected_ids:
       - 0
@@ -5890,7 +5890,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 538
+      num_candidates: 516
       num_detections: 154
     detected_ids:
       - 0
@@ -6056,7 +6056,7 @@ entries:
       quad_extraction_ms: "[latency]"
       decoding_ms: "[latency]"
       total_ms: "[latency]"
-      num_candidates: 486
+      num_candidates: 466
       num_detections: 154
     detected_ids:
       - 0
@@ -6214,12 +6214,12 @@ entries:
       - 158
       - 159
 mean_stats:
-  threshold_ms: 214.32988444
-  segmentation_ms: 114.97310896000003
-  quad_extraction_ms: 94.26472509999998
-  decoding_ms: 25.25391338
-  total_ms: 448.82396301999995
-  num_candidates: 603
+  threshold_ms: 179.69461996
+  segmentation_ms: 112.29092638
+  quad_extraction_ms: 85.97477938000002
+  decoding_ms: 25.55377818
+  total_ms: 403.51637808000015
+  num_candidates: 576
   num_detections: 112
 mean_recall: 0.7271428571428571
 mean_rmse: 0.28732718227077336
