@@ -55,17 +55,20 @@ impl ThresholdEngine {
         let tiles_high = img.height / ts;
         let mut stats = vec![TileStats { min: 255, max: 0 }; tiles_wide * tiles_high];
 
-        stats.par_chunks_mut(tiles_wide).enumerate().for_each(|(ty, stats_row)| {
-            // Subsampling: Only process every other row within a tile (stride 2)
-            // This statistically approximates the min/max sufficient for thresholding
-            for dy in 0..ts {
-                let py = ty * ts + dy;
-                let src_row = img.get_row(py);
+        stats
+            .par_chunks_mut(tiles_wide)
+            .enumerate()
+            .for_each(|(ty, stats_row)| {
+                // Subsampling: Only process every other row within a tile (stride 2)
+                // This statistically approximates the min/max sufficient for thresholding
+                for dy in 0..ts {
+                    let py = ty * ts + dy;
+                    let src_row = img.get_row(py);
 
-                // Process all tiles in this row with SIMD-friendly min/max
-                compute_row_tile_stats_simd(src_row, stats_row, ts);
-            }
-        });
+                    // Process all tiles in this row with SIMD-friendly min/max
+                    compute_row_tile_stats_simd(src_row, stats_row, ts);
+                }
+            });
         stats
     }
 
@@ -79,38 +82,41 @@ impl ThresholdEngine {
         let mut tile_thresholds = vec![0u8; tiles_wide * tiles_high];
         let mut tile_valid = vec![0u8; tiles_wide * tiles_high];
 
-        tile_thresholds.par_chunks_mut(tiles_wide).enumerate().for_each(|(ty, t_row)| {
-            let y_start = ty.saturating_sub(1);
-            let y_end = (ty + 1).min(tiles_high - 1);
+        tile_thresholds
+            .par_chunks_mut(tiles_wide)
+            .enumerate()
+            .for_each(|(ty, t_row)| {
+                let y_start = ty.saturating_sub(1);
+                let y_end = (ty + 1).min(tiles_high - 1);
 
-            for tx in 0..tiles_wide {
-                let mut nmin = 255u8;
-                let mut nmax = 0u8;
+                for tx in 0..tiles_wide {
+                    let mut nmin = 255u8;
+                    let mut nmax = 0u8;
 
-                let x_start = tx.saturating_sub(1);
-                let x_end = (tx + 1).min(tiles_wide - 1);
+                    let x_start = tx.saturating_sub(1);
+                    let x_end = (tx + 1).min(tiles_wide - 1);
 
-                for ny in y_start..=y_end {
-                    let row_off = ny * tiles_wide;
-                    for nx in x_start..=x_end {
-                        let s = stats[row_off + nx];
-                        if s.min < nmin {
-                            nmin = s.min;
-                        }
-                        if s.max > nmax {
-                            nmax = s.max;
+                    for ny in y_start..=y_end {
+                        let row_off = ny * tiles_wide;
+                        for nx in x_start..=x_end {
+                            let s = stats[row_off + nx];
+                            if s.min < nmin {
+                                nmin = s.min;
+                            }
+                            if s.max > nmax {
+                                nmax = s.max;
+                            }
                         }
                     }
-                }
 
-                let t_idx = tx;
-                let res = ((u16::from(nmin) + u16::from(nmax)) >> 1) as u8;
-                
-                // Safety: Unique index per thread for tile_valid access via raw pointer to avoid multiple mutable borrows of the same slice
-                // However, tile_valid is not yet parallelized here. Let's fix that.
-                t_row[t_idx] = res;
-            }
-        });
+                    let t_idx = tx;
+                    let res = ((u16::from(nmin) + u16::from(nmax)) >> 1) as u8;
+
+                    // Safety: Unique index per thread for tile_valid access via raw pointer to avoid multiple mutable borrows of the same slice
+                    // However, tile_valid is not yet parallelized here. Let's fix that.
+                    t_row[t_idx] = res;
+                }
+            });
 
         // Compute tile_valid (can be done in same loop above or separate)
         for ty in 0..tiles_high {
@@ -126,12 +132,20 @@ impl ThresholdEngine {
                     let row_off = ny * tiles_wide;
                     for nx in x_start..=x_end {
                         let s = stats[row_off + nx];
-                        if s.min < nmin { nmin = s.min; }
-                        if s.max > nmax { nmax = s.max; }
+                        if s.min < nmin {
+                            nmin = s.min;
+                        }
+                        if s.max > nmax {
+                            nmax = s.max;
+                        }
                     }
                 }
                 let idx = ty * tiles_wide + tx;
-                tile_valid[idx] = if nmax.saturating_sub(nmin) < self.min_range { 0 } else { 255 };
+                tile_valid[idx] = if nmax.saturating_sub(nmin) < self.min_range {
+                    0
+                } else {
+                    255
+                };
             }
         }
 
@@ -172,29 +186,32 @@ impl ThresholdEngine {
             }
         }
 
-        output.par_chunks_mut(ts * img.width).enumerate().for_each(|(ty, output_tile_rows)| {
-            let mut row_thresholds = vec![0u8; img.width];
-            let mut row_valid = vec![0u8; img.width];
+        output
+            .par_chunks_mut(ts * img.width)
+            .enumerate()
+            .for_each(|(ty, output_tile_rows)| {
+                let mut row_thresholds = vec![0u8; img.width];
+                let mut row_valid = vec![0u8; img.width];
 
-            // Expand tile stats to row buffers
-            for tx in 0..tiles_wide {
-                let idx = ty * tiles_wide + tx;
-                let thresh = tile_thresholds[idx];
-                let valid = tile_valid[idx];
-                for i in 0..ts {
-                    row_thresholds[tx * ts + i] = thresh;
-                    row_valid[tx * ts + i] = valid;
+                // Expand tile stats to row buffers
+                for tx in 0..tiles_wide {
+                    let idx = ty * tiles_wide + tx;
+                    let thresh = tile_thresholds[idx];
+                    let valid = tile_valid[idx];
+                    for i in 0..ts {
+                        row_thresholds[tx * ts + i] = thresh;
+                        row_valid[tx * ts + i] = valid;
+                    }
                 }
-            }
 
-            for dy in 0..ts {
-                let py = ty * ts + dy;
-                let src_row = img.get_row(py);
-                let dst_row = &mut output_tile_rows[dy * img.width..(dy + 1) * img.width];
+                for dy in 0..ts {
+                    let py = ty * ts + dy;
+                    let src_row = img.get_row(py);
+                    let dst_row = &mut output_tile_rows[dy * img.width..(dy + 1) * img.width];
 
-                threshold_row_simd(src_row, dst_row, &row_thresholds, &row_valid);
-            }
-        });
+                    threshold_row_simd(src_row, dst_row, &row_thresholds, &row_valid);
+                }
+            });
     }
 
     /// Apply adaptive thresholding and return both binary and threshold maps.
@@ -215,33 +232,36 @@ impl ThresholdEngine {
         let mut tile_thresholds = vec![0u8; tiles_wide * tiles_high];
         let mut tile_valid = vec![0u8; tiles_wide * tiles_high];
 
-        tile_thresholds.par_chunks_mut(tiles_wide).enumerate().for_each(|(ty, t_row)| {
-            let y_start = ty.saturating_sub(1);
-            let y_end = (ty + 1).min(tiles_high - 1);
+        tile_thresholds
+            .par_chunks_mut(tiles_wide)
+            .enumerate()
+            .for_each(|(ty, t_row)| {
+                let y_start = ty.saturating_sub(1);
+                let y_end = (ty + 1).min(tiles_high - 1);
 
-            for tx in 0..tiles_wide {
-                let mut nmin = 255u8;
-                let mut nmax = 0u8;
+                for tx in 0..tiles_wide {
+                    let mut nmin = 255u8;
+                    let mut nmax = 0u8;
 
-                let x_start = tx.saturating_sub(1);
-                let x_end = (tx + 1).min(tiles_wide - 1);
+                    let x_start = tx.saturating_sub(1);
+                    let x_end = (tx + 1).min(tiles_wide - 1);
 
-                for ny in y_start..=y_end {
-                    let row_off = ny * tiles_wide;
-                    for nx in x_start..=x_end {
-                        let s = stats[row_off + nx];
-                        if s.min < nmin {
-                            nmin = s.min;
-                        }
-                        if s.max > nmax {
-                            nmax = s.max;
+                    for ny in y_start..=y_end {
+                        let row_off = ny * tiles_wide;
+                        for nx in x_start..=x_end {
+                            let s = stats[row_off + nx];
+                            if s.min < nmin {
+                                nmin = s.min;
+                            }
+                            if s.max > nmax {
+                                nmax = s.max;
+                            }
                         }
                     }
-                }
 
-                t_row[tx] = ((u16::from(nmin) + u16::from(nmax)) >> 1) as u8;
-            }
-        });
+                    t_row[tx] = ((u16::from(nmin) + u16::from(nmax)) >> 1) as u8;
+                }
+            });
 
         // Compute tile_valid
         for ty in 0..tiles_high {
@@ -257,12 +277,20 @@ impl ThresholdEngine {
                     let row_off = ny * tiles_wide;
                     for nx in x_start..=x_end {
                         let s = stats[row_off + nx];
-                        if s.min < nmin { nmin = s.min; }
-                        if s.max > nmax { nmax = s.max; }
+                        if s.min < nmin {
+                            nmin = s.min;
+                        }
+                        if s.max > nmax {
+                            nmax = s.max;
+                        }
                     }
                 }
                 let idx = ty * tiles_wide + tx;
-                tile_valid[idx] = if nmax.saturating_sub(nmin) < self.min_range { 0 } else { 255 };
+                tile_valid[idx] = if nmax.saturating_sub(nmin) < self.min_range {
+                    0
+                } else {
+                    255
+                };
             }
         }
 
@@ -303,38 +331,42 @@ impl ThresholdEngine {
         */
 
         // Write thresholds and binary output in parallel
-        binary_output.par_chunks_mut(ts * img.width).enumerate().for_each(|(ty, bin_tile_rows)| {
-            // Safety: Each thread writes to unique portion of threshold_output
-            let thresh_tile_rows = unsafe {
-                let ptr = threshold_output.as_ptr().cast_mut();
-                std::slice::from_raw_parts_mut(ptr.add(ty * ts * img.width), ts * img.width)
-            };
+        binary_output
+            .par_chunks_mut(ts * img.width)
+            .enumerate()
+            .for_each(|(ty, bin_tile_rows)| {
+                // Safety: Each thread writes to unique portion of threshold_output
+                let thresh_tile_rows = unsafe {
+                    let ptr = threshold_output.as_ptr().cast_mut();
+                    std::slice::from_raw_parts_mut(ptr.add(ty * ts * img.width), ts * img.width)
+                };
 
-            let mut row_thresholds = vec![0u8; img.width];
-            let mut row_valid = vec![0u8; img.width];
+                let mut row_thresholds = vec![0u8; img.width];
+                let mut row_valid = vec![0u8; img.width];
 
-            for tx in 0..tiles_wide {
-                let idx = ty * tiles_wide + tx;
-                let thresh = tile_thresholds[idx];
-                let valid = tile_valid[idx];
-                for i in 0..ts {
-                    row_thresholds[tx * ts + i] = thresh;
-                    row_valid[tx * ts + i] = valid;
+                for tx in 0..tiles_wide {
+                    let idx = ty * tiles_wide + tx;
+                    let thresh = tile_thresholds[idx];
+                    let valid = tile_valid[idx];
+                    for i in 0..ts {
+                        row_thresholds[tx * ts + i] = thresh;
+                        row_valid[tx * ts + i] = valid;
+                    }
                 }
-            }
 
-            for dy in 0..ts {
-                let py = ty * ts + dy;
-                let src_row = img.get_row(py);
-                
-                // Write binary output
-                let bin_row = &mut bin_tile_rows[dy * img.width..(dy + 1) * img.width];
-                threshold_row_simd(src_row, bin_row, &row_thresholds, &row_valid);
+                for dy in 0..ts {
+                    let py = ty * ts + dy;
+                    let src_row = img.get_row(py);
 
-                // Write threshold map
-                thresh_tile_rows[dy * img.width..(dy + 1) * img.width].copy_from_slice(&row_thresholds);
-            }
-        });
+                    // Write binary output
+                    let bin_row = &mut bin_tile_rows[dy * img.width..(dy + 1) * img.width];
+                    threshold_row_simd(src_row, bin_row, &row_thresholds, &row_valid);
+
+                    // Write threshold map
+                    thresh_tile_rows[dy * img.width..(dy + 1) * img.width]
+                        .copy_from_slice(&row_thresholds);
+                }
+            });
     }
 }
 
@@ -469,11 +501,13 @@ mod tests {
         }
 
         let img = ImageView::new(&data, width, height, width).unwrap();
-        
+
         // Decimate by 2 -> 16x16
         let mut decimated_data = vec![0u8; 16 * 16];
-        let decimated_img = img.decimate_to(2, &mut decimated_data).expect("decimation failed");
-        
+        let decimated_img = img
+            .decimate_to(2, &mut decimated_data)
+            .expect("decimation failed");
+
         assert_eq!(decimated_img.width, 16);
         assert_eq!(decimated_img.height, 16);
 
@@ -729,16 +763,20 @@ pub fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
 
     // 1st Pass: Compute horizontal cumulative sums (prefix sum per row)
     // This part is perfectly parallel.
-    integral.par_chunks_exact_mut(stride).enumerate().skip(1).for_each(|(y_idx, row)| {
-        let y = y_idx - 1;
-        let src_row = img.get_row(y);
-        let mut sum = 0u64;
-        // row[0] is already 0
-        for x in 0..w {
-            sum += u64::from(src_row[x]);
-            row[x + 1] = sum;
-        }
-    });
+    integral
+        .par_chunks_exact_mut(stride)
+        .enumerate()
+        .skip(1)
+        .for_each(|(y_idx, row)| {
+            let y = y_idx - 1;
+            let src_row = img.get_row(y);
+            let mut sum = 0u64;
+            // row[0] is already 0
+            for x in 0..w {
+                sum += u64::from(src_row[x]);
+                row[x + 1] = sum;
+            }
+        });
 
     // 2nd Pass: Vertical cumulative sums
     // For large images, we process in vertical blocks to stay in cache.
@@ -748,12 +786,12 @@ pub fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
     (0..num_blocks).into_par_iter().for_each(|b| {
         let start_x = b * BLOCK_SIZE;
         let end_x = (start_x + BLOCK_SIZE).min(stride);
-        
+
         // Initialize cumulative sum for this column block
         // We use a small on-stack or small-vec if needed, but since BLOCK_SIZE is small (128),
         // we can just use a fixed-size array if we want to avoid allocation entirely.
         let mut col_sums = [0u64; BLOCK_SIZE];
-        
+
         // Safety: We are writing to unique columns in each parallel task.
         unsafe {
             let base_ptr = integral.as_ptr().cast_mut();
@@ -803,7 +841,7 @@ pub fn adaptive_threshold_integral(
     (0..h).into_par_iter().for_each(|y| {
         let y_offset = y * w;
         let src_row = img.get_row(y);
-        
+
         // Safety: Unique row per thread
         let dst_row = unsafe {
             let ptr = output.as_ptr().cast_mut();
@@ -840,7 +878,7 @@ pub fn adaptive_threshold_integral(
             let row01 = &integral[y0 * stride + (x_start + radius + 1)..];
             let row10 = &integral[y1 * stride + (x_start - radius)..];
             let row11 = &integral[y1 * stride + (x_start + radius + 1)..];
-            
+
             let interior_src = &src_row[x_start..x_end];
             let interior_dst = &mut dst_row[x_start..x_end];
 
@@ -959,7 +997,7 @@ pub fn adaptive_threshold_gradient_window(
     (0..h).into_par_iter().for_each(|y| {
         let y_offset = y * w;
         let src_row = img.get_row(y);
-        
+
         // Safety: Unique row per thread
         let dst_row = unsafe {
             let ptr = output.as_ptr().cast_mut();
@@ -969,19 +1007,19 @@ pub fn adaptive_threshold_gradient_window(
         for x in 0..w {
             let grad = gradient_map[y_offset + x];
             let radius = radius_lut[grad as usize];
-            
+
             let y0 = y.saturating_sub(radius);
             let y1 = (y + radius + 1).min(h);
             let x0 = x.saturating_sub(radius);
             let x1 = (x + radius + 1).min(w);
-            
+
             let i00 = integral[y0 * stride + x0];
             let i01 = integral[y0 * stride + x1];
             let i10 = integral[y1 * stride + x0];
             let i11 = integral[y1 * stride + x1];
 
             let sum = (i11 + i00) - (i01 + i10);
-            
+
             // Fixed-point mean computation
             let mean = if x >= radius && x + radius < w && y >= radius && y + radius < h {
                 ((sum * u64::from(inv_area_lut[grad as usize])) >> 31) as i16
@@ -1024,7 +1062,7 @@ pub fn compute_threshold_map(
 
     (0..h).into_par_iter().for_each(|y| {
         let y_offset = y * w;
-        
+
         // Safety: Unique row per thread
         let dst_row = unsafe {
             let ptr = output.as_ptr().cast_mut();
@@ -1042,8 +1080,8 @@ pub fn compute_threshold_map(
             let x0 = 0;
             let x1 = x + radius + 1;
             let actual_area = (x1 - x0) * (y1 - y0);
-            let sum = (integral[y1 * stride + x1] + integral[y0 * stride + x0]) - 
-                      (integral[y0 * stride + x1] + integral[y1 * stride + x0]);
+            let sum = (integral[y1 * stride + x1] + integral[y0 * stride + x0])
+                - (integral[y0 * stride + x1] + integral[y1 * stride + x0]);
             let mean = (sum / actual_area as u64) as i16;
             dst_row[x] = (mean - c).clamp(0, 255) as u8;
         }
@@ -1054,7 +1092,7 @@ pub fn compute_threshold_map(
             let row01 = &integral[y0 * stride + (x_start + radius + 1)..];
             let row10 = &integral[y1 * stride + (x_start - radius)..];
             let row11 = &integral[y1 * stride + (x_start + radius + 1)..];
-            
+
             let interior_dst = &mut dst_row[x_start..x_end];
 
             for i in 0..(x_end - x_start) {
@@ -1069,8 +1107,8 @@ pub fn compute_threshold_map(
             let x0 = x.saturating_sub(radius);
             let x1 = w;
             let actual_area = (x1 - x0) * (y1 - y0);
-            let sum = (integral[y1 * stride + x1] + integral[y0 * stride + x0]) - 
-                      (integral[y0 * stride + x1] + integral[y1 * stride + x0]);
+            let sum = (integral[y1 * stride + x1] + integral[y0 * stride + x0])
+                - (integral[y0 * stride + x1] + integral[y1 * stride + x0]);
             let mean = (sum / actual_area as u64) as i16;
             dst_row[x] = (mean - c).clamp(0, 255) as u8;
         }

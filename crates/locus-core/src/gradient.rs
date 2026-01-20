@@ -191,21 +191,22 @@ fn try_form_quad(
     // We sort segments by angle to easily find two pairs.
     let mut segs = [*s0, *s1, *s2, *s3];
     segs.sort_by(|a, b| a.angle.total_cmp(&b.angle));
-    
+
     // Check if we have two pairs of roughly parallel segments.
     // Parallel segments have angles ~PI apart or very similar (depending on sign/direction).
     // A better way is to check that we have two groups of 2 segments each,
     // where within each group segments are roughly parallel, and between groups they are roughly perpendicular.
-    
+
     // Group 1: segs[0] and segs[1]? No, angles might be [0, 0.1, 1.5, 1.6]
     // Let's try to find a gap.
     let mut group1 = Vec::with_capacity(2);
     let mut group2 = Vec::with_capacity(2);
     group1.push(segs[0]);
-    
+
     for i in 1..4 {
         let diff = angle_diff(segs[0].angle, segs[i].angle);
-        if diff < 0.6 { // Within ~35 degrees
+        if diff < 0.6 {
+            // Within ~35 degrees
             group1.push(segs[i]);
         } else {
             group2.push(segs[i]);
@@ -238,9 +239,9 @@ fn try_form_quad(
     }
 
     if area > 0.0 {
-        Some([c0, c1, c2, c3])     // CW
+        Some([c0, c1, c2, c3]) // CW
     } else {
-        Some([c0, c3, c2, c1])     // Flip CCW to CW
+        Some([c0, c3, c2, c1]) // Flip CCW to CW
     }
 }
 
@@ -347,14 +348,16 @@ pub fn fit_quad_from_component(
             let gy = -p00 - 2 * p10 - p20 + p02 + 2 * p12 + p22;
             let mag = (gx.abs() + gy.abs()) as u16;
 
-            if mag > 10 { // Lowered from 20 for low-contrast edges
+            if mag > 10 {
+                // Lowered from 20 for low-contrast edges
                 let angle = f32::from(gy).atan2(f32::from(gx));
                 boundary_points.push((x, y, angle, f32::from(mag)));
             }
         }
     }
 
-    if boundary_points.len() < 8 { // Lowered from 12 (min 2 per edge)
+    if boundary_points.len() < 8 {
+        // Lowered from 12 (min 2 per edge)
         // At least 2 per edge
         return None;
     }
@@ -525,10 +528,8 @@ pub fn fit_quad_from_component(
     find_quads_from_segments(&lines).into_iter().next()
 }
 
-
-
 /// Core solver that clusters boundary points into 4 groups and computes the quad.
-/// 
+///
 /// 1. K-means clustering of gradient angles -> 4 groups (Right, Down, Left, Up)
 /// 2. Line fitting for each cluster
 /// 3. Intersection of lines to form CW quad [TL, TR, BR, BL]
@@ -537,7 +538,7 @@ fn solve_quad_from_boundary_points(
     _img_width: usize, // Unused for now but kept for context if needed for boundary checks
     min_pixels: usize,
 ) -> Option<[[f32; 2]; 4]> {
-     // Cluster into 4 directions using simple k-means on angles
+    // Cluster into 4 directions using simple k-means on angles
     // Initialize with 4 orthogonal directions
     let mut centroids = [
         0.0f32,
@@ -587,7 +588,7 @@ fn solve_quad_from_boundary_points(
         y1: 0.0,
         angle: 0.0,
     }; 4];
-    
+
     // Check if all clusters have enough points
     for c in 0..4 {
         // We reuse the iterator logic but need to be careful with allocations.
@@ -595,7 +596,7 @@ fn solve_quad_from_boundary_points(
         let mut sum_x = 0.0f32;
         let mut sum_y = 0.0f32;
         let mut count = 0usize;
-        
+
         // This is slightly inefficient iterating 4 times, but N is small (<100 points usually).
         // Optimized: Single pass over points would be better if we had arrays for sums.
         for (i, (x, y, _)) in boundary_points.iter().enumerate() {
@@ -618,11 +619,11 @@ fn solve_quad_from_boundary_points(
         let angle = centroids[c];
         let nx = angle.cos();
         let ny = angle.sin();
-        
+
         // Form line segment roughly through the mean with correct orientation
         // We need an arbitrary extent for intersection
         lines[c] = LineSegment {
-            x0: mean_x - nx * 100.0, 
+            x0: mean_x - nx * 100.0,
             y0: mean_y - ny * 100.0,
             x1: mean_x + nx * 100.0,
             y1: mean_y + ny * 100.0,
@@ -638,12 +639,12 @@ fn solve_quad_from_boundary_points(
     // TR = Intersection of Top (3) and Right (0).
     // BR = Intersection of Right (0) and Bottom (1).
     // BL = Intersection of Bottom (1) and Left (2).
-    
+
     let tl = line_intersection(&lines[2], &lines[3])?;
     let tr = line_intersection(&lines[3], &lines[0])?;
     let br = line_intersection(&lines[0], &lines[1])?;
     let bl = line_intersection(&lines[1], &lines[2])?;
-    
+
     let corners = [tl, tr, br, bl];
 
     // Verify convex and strictly Positive area (CW)
@@ -651,7 +652,7 @@ fn solve_quad_from_boundary_points(
     if area < 16.0 || area > 1_000_000.0 {
         return None;
     }
-    
+
     Some(corners)
 }
 
@@ -769,14 +770,14 @@ mod tests {
                 [c[3].0, c[3].1],
             ];
             let area = quad_area(&corners);
-            
-            // Shoelace formula returns signed area. 
+
+            // Shoelace formula returns signed area.
             // Asserting area >= 0.0 is incorrect for random points (random winding).
             // Instead, verify that reversing the order negates the area.
             let mut corners_rev = corners;
             corners_rev.reverse();
             let area_rev = quad_area(&corners_rev);
-            
+
             assert!((area + area_rev).abs() < 0.01);
 
             // Area should be zero if points are identical

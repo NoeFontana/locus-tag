@@ -198,56 +198,59 @@ pub fn refine_corners_with_homography(
     // Fit a line to each of the 4 edges
     let mut lines = [(0.0f64, 0.0f64, 0.0f64); 4]; // (a, b, c) where ax + by + c = 0
     let mut line_valid = [false; 4];
-    
+
     for i in 0..4 {
         let next = (i + 1) % 4;
         let p1 = corners[i];
         let p2 = corners[next];
-        
+
         let dx = p2[0] - p1[0];
         let dy = p2[1] - p1[1];
         let len = (dx * dx + dy * dy).sqrt();
-        
+
         if len < 4.0 {
             continue;
         }
-        
+
         // Normal direction (perpendicular to edge)
         let nx = -dy / len;
         let ny = dx / len;
-        
+
         // Collect weighted samples along the edge
         let mut sum_w = 0.0;
         let mut sum_d = 0.0;
         let n_samples = (len as usize).clamp(5, 20);
-        
+
         for s in 1..=n_samples {
             let t = s as f64 / (n_samples + 1) as f64;
             let px = p1[0] + dx * t;
             let py = p1[1] + dy * t;
-            
+
             // Search for gradient peak perpendicular to edge
             let mut best_pos = (px, py);
             let mut best_mag = 0.0;
-            
+
             for step in -3..=3 {
                 let sx = px + nx * f64::from(step);
                 let sy = py + ny * f64::from(step);
-                
-                if sx < 1.0 || sx >= (img.width - 2) as f64 
-                   || sy < 1.0 || sy >= (img.height - 2) as f64 {
+
+                if sx < 1.0
+                    || sx >= (img.width - 2) as f64
+                    || sy < 1.0
+                    || sy >= (img.height - 2) as f64
+                {
                     continue;
                 }
-                
+
                 let g = img.sample_gradient_bilinear(sx, sy);
                 let mag = (g[0] * g[0] + g[1] * g[1]).sqrt();
-                
+
                 if mag > best_mag {
                     best_mag = mag;
                     best_pos = (sx, sy);
                 }
             }
-            
+
             if best_mag > 5.0 {
                 // Distance from best_pos to original line
                 let d = nx * best_pos.0 + ny * best_pos.1;
@@ -255,7 +258,7 @@ pub fn refine_corners_with_homography(
                 sum_d += d * best_mag;
             }
         }
-        
+
         if sum_w > 1.0 {
             // Line equation: nx * x + ny * y + c = 0
             let c = -sum_d / sum_w;
@@ -263,24 +266,24 @@ pub fn refine_corners_with_homography(
             line_valid[i] = true;
         }
     }
-    
+
     // If we don't have all 4 lines, return original corners
     if !line_valid.iter().all(|&v| v) {
         return *corners;
     }
-    
+
     // Compute corner intersections
     let mut refined = *corners;
     for i in 0..4 {
         let prev = (i + 3) % 4;
         let (a1, b1, c1) = lines[prev];
         let (a2, b2, c2) = lines[i];
-        
+
         let det = a1 * b2 - a2 * b1;
         if det.abs() > 1e-6 {
             let x = (b1 * c2 - b2 * c1) / det;
             let y = (a2 * c1 - a1 * c2) / det;
-            
+
             // Sanity check: intersection should be near original corner
             let dist_sq = (x - corners[i][0]).powi(2) + (y - corners[i][1]).powi(2);
             if dist_sq < 4.0 {
@@ -288,7 +291,7 @@ pub fn refine_corners_with_homography(
             }
         }
     }
-    
+
     refined
 }
 
@@ -298,54 +301,54 @@ fn compute_otsu_threshold(values: &[f64]) -> f64 {
     if values.is_empty() {
         return 128.0;
     }
-    
+
     let n = values.len() as f64;
     let total_sum: f64 = values.iter().sum();
     let _total_mean = total_sum / n;
-    
+
     // Find min/max to define search range
     let min_val = values.iter().copied().fold(f64::MAX, f64::min);
     let max_val = values.iter().copied().fold(f64::MIN, f64::max);
-    
+
     if (max_val - min_val) < 1.0 {
         return f64::midpoint(min_val, max_val);
     }
-    
+
     // Search for optimal threshold
     let mut best_threshold = f64::midpoint(min_val, max_val);
     let mut best_variance = 0.0;
-    
+
     // Use 16 candidate thresholds between min and max
     for i in 1..16 {
         let t = min_val + (max_val - min_val) * (f64::from(i) / 16.0);
-        
+
         let mut w0 = 0.0;
         let mut sum0 = 0.0;
-        
+
         for &v in values {
             if v <= t {
                 w0 += 1.0;
                 sum0 += v;
             }
         }
-        
+
         let w1 = n - w0;
         if w0 < 1.0 || w1 < 1.0 {
             continue;
         }
-        
+
         let mean0 = sum0 / w0;
         let mean1 = (total_sum - sum0) / w1;
-        
+
         // Inter-class variance
         let variance = w0 * w1 * (mean0 - mean1) * (mean0 - mean1);
-        
+
         if variance > best_variance {
             best_variance = variance;
             best_threshold = t;
         }
     }
-    
+
     best_threshold
 }
 
@@ -395,7 +398,7 @@ pub fn sample_grid(
             for &oy in &offsets {
                 let x = p.0 + ox;
                 let y = p.1 + oy;
-                
+
                 // Inlined project: h * [px, py, 1.0]
                 let wz = h20 * x + h21 * y + h22;
                 let img_x = (h00 * x + h01 * y + h02) / wz;
@@ -456,10 +459,10 @@ pub fn sample_grid(
     // This automatically finds the optimal threshold for bimodal distributions
     let otsu_threshold = compute_otsu_threshold(&intensities[..n]);
     let contrast_range = max_val - min_val;
-    
+
     // If sufficient contrast, use Otsu threshold (robust for AprilTag's bimodal distribution)
     let mut bits = 0u64;
-    
+
     if contrast_range > min_contrast {
         // Good contrast: use Otsu threshold
         for (i, _) in points.iter().take(n).enumerate() {
@@ -471,27 +474,51 @@ pub fn sample_grid(
         // Low contrast: fall back to quadrant-based thresholding
         let mut quad_sums = [0.0; 4];
         let mut quad_counts = [0; 4];
-        
+
         for (i, &p) in points.iter().take(n).enumerate() {
             let qi = if p.0 < 0.0 {
                 usize::from(p.1 >= 0.0)
-            } else if p.1 < 0.0 { 2 } else { 3 };
+            } else if p.1 < 0.0 {
+                2
+            } else {
+                3
+            };
             quad_sums[qi] += intensities[i];
             quad_counts[qi] += 1;
         }
-        
+
         let quad_thresholds = [
-            if quad_counts[0] > 0 { quad_sums[0] / f64::from(quad_counts[0]) } else { otsu_threshold },
-            if quad_counts[1] > 0 { quad_sums[1] / f64::from(quad_counts[1]) } else { otsu_threshold },
-            if quad_counts[2] > 0 { quad_sums[2] / f64::from(quad_counts[2]) } else { otsu_threshold },
-            if quad_counts[3] > 0 { quad_sums[3] / f64::from(quad_counts[3]) } else { otsu_threshold },
+            if quad_counts[0] > 0 {
+                quad_sums[0] / f64::from(quad_counts[0])
+            } else {
+                otsu_threshold
+            },
+            if quad_counts[1] > 0 {
+                quad_sums[1] / f64::from(quad_counts[1])
+            } else {
+                otsu_threshold
+            },
+            if quad_counts[2] > 0 {
+                quad_sums[2] / f64::from(quad_counts[2])
+            } else {
+                otsu_threshold
+            },
+            if quad_counts[3] > 0 {
+                quad_sums[3] / f64::from(quad_counts[3])
+            } else {
+                otsu_threshold
+            },
         ];
 
         for (i, &p) in points.iter().take(n).enumerate() {
             let qi = if p.0 < 0.0 {
                 usize::from(p.1 >= 0.0)
-            } else if p.1 < 0.0 { 2 } else { 3 };
-            
+            } else if p.1 < 0.0 {
+                2
+            } else {
+                3
+            };
+
             let threshold = quad_thresholds[qi];
             if intensities[i] > threshold {
                 bits |= 1 << i;
@@ -827,7 +854,8 @@ mod tests {
         let homography = Homography { h };
 
         let decoder = AprilTag36h11;
-        let bits = sample_grid(&img, &homography, &decoder, 20.0).expect("Should sample successfully");
+        let bits =
+            sample_grid(&img, &homography, &decoder, 20.0).expect("Should sample successfully");
 
         // bit 0 should be 1 (high intensity)
         assert_eq!(bits & 1, 1, "Bit 0 should be 1");
@@ -879,7 +907,8 @@ mod tests {
         engine.apply_threshold(&img, &stats, &mut binary);
 
         let arena = Bump::new();
-        let label_result = label_components_with_stats(&arena, &binary, canvas_size, canvas_size, true);
+        let label_result =
+            label_components_with_stats(&arena, &binary, canvas_size, canvas_size, true);
         let detections = extract_quads_fast(&arena, &img, &label_result);
 
         let decoder = AprilTag36h11;
