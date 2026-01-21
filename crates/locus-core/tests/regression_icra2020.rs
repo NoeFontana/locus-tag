@@ -249,27 +249,26 @@ struct IcraProvider {
 impl IcraProvider {
     fn new(subfolder: &str, sample_rate: usize) -> Option<Self> {
         let root = common::resolve_dataset_root()?;
-        let search_dir = root.join(subfolder);
-        
-        // Handle "pure_tags_images" structure vs flat structure
-        let img_dir = if search_dir.join("pure_tags_images").exists() {
-            search_dir.join("pure_tags_images")
-        } else if search_dir.exists() {
-            search_dir
-        } else {
-            return None;
-        };
 
-        let gt_map = common::load_ground_truth(&root)?;
-        
-        let mut paths: Vec<_> = walkdir::WalkDir::new(&img_dir)
+        // 1. Load Ground Truth (Context-aware loading)
+        let gt_map = common::load_ground_truth(&root, subfolder)?;
+
+        // 2. Locate Image Directory
+        // Handle both flat and nested "pure_tags_images" structures gracefully
+        let candidates = [
+            root.join(subfolder).join("pure_tags_images"),
+            root.join(subfolder),
+        ];
+        let img_dir = candidates.iter().find(|p| p.is_dir())?;
+
+        let mut paths: Vec<_> = walkdir::WalkDir::new(img_dir)
             .into_iter()
             .filter_map(|e| e.ok())
             .map(|e| e.path().to_path_buf())
             .filter(|p| p.extension().map_or(false, |e| e == "png" || e == "jpg"))
             .filter(|p| gt_map.contains_key(&p.file_name().unwrap().to_string_lossy().to_string()))
             .collect();
-            
+
         paths.sort();
 
         Some(Self {
