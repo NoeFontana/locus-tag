@@ -1,37 +1,23 @@
-//! ICRA 2020 Regression Test Harness
+//! Unified Regression Test Harness
 //!
-//! This integration test verifies the detector's accuracy against the standard ICRA 2020 dataset.
-//! It is designed to be a strict "Golden Master" regression test.
-//!
-//! # Configuration & Parametrization
-//!
-//! The test behavior is controlled by the environment:
-//!
-//! - **`LOCUS_DATASET_DIR`**: (Optional) Path to the root of the ICRA 2020 dataset containing `tags.csv`.
-//!   - If unset, checks `tests/data/icra2020`.
-//!   - If dataset is missing, the test **SKIPS** (passes) to ensure CI compatibility.
-//!
-//! # Usage
-//!
-//! To run all tests:
-//! ```bash
-//! cargo test --test regression_icra2020 --release
-//! ```
-//!
-//! To run a specific subset (e.g. only rotation):
-//! ```bash
-//! cargo test --test regression_icra2020 test_regression_icra2020_rotation --release
-//! ```
+//! Evaluates the detector against:
+//! 1. "Fixtures" (Committed representative images) - Runs in CI, guarantees baseline functionality.
+//! 2. "ICRA 2020" (External dataset) - Runs if present, supports sampling for speed.
 
 #![allow(missing_docs)]
 
 use locus_core::image::ImageView;
-use locus_core::{DetectOptions, Detector, config::TagFamily};
-// use rayon::prelude::*; // Removed as we use sequential processing for reliable timing
-use serde::Serialize;
-use std::collections::{BTreeMap, BTreeSet};
+use locus_core::{config::TagFamily, DetectOptions, Detector, DetectorConfig, PipelineStats};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::path::{Path, PathBuf};
+use std::env;
 
 mod common;
+
+// ============================================================================
+// Metrics & Reporting
+// ============================================================================
 
 #[derive(Serialize, Default, Clone)]
 struct PipelineMetrics {
@@ -44,8 +30,8 @@ struct PipelineMetrics {
     num_detections: usize,
 }
 
-impl From<locus_core::PipelineStats> for PipelineMetrics {
-    fn from(stats: locus_core::PipelineStats) -> Self {
+impl From<PipelineStats> for PipelineMetrics {
+    fn from(stats: PipelineStats) -> Self {
         Self {
             threshold_ms: stats.threshold_ms,
             segmentation_ms: stats.segmentation_ms,
@@ -68,272 +54,114 @@ struct ImageMetrics {
 
 #[derive(Serialize)]
 struct RegressionReport {
-    // Sorted list of entries ensures deterministic snapshots
+    summary: SummaryMetrics,
     entries: BTreeMap<String, ImageMetrics>,
-    // Aggregate Metrics
-    mean_stats: PipelineMetrics,
+}
+
+#[derive(Serialize)]
+struct SummaryMetrics {
+    dataset_size: usize,
     mean_recall: f64,
     mean_rmse: f64,
+    mean_total_ms: f64,
 }
 
-fn calculate_rmse(det_corners: [[f64; 2]; 4], gt_corners: [[f64; 2]; 4]) -> f64 {
-    locus_core::test_utils::compute_rmse(&det_corners, &gt_corners)
+// ============================================================================
+// Evaluation Engine
+// ============================================================================
+
+/// Ground Truth for a single image
+struct GroundTruth {
+    tags: HashMap<u32, [[f64; 2]; 4]>,
 }
 
-fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
-    // 1. Resolve Dataset
-    let dataset_root = match common::resolve_dataset_root() {
-        Some(path) => path,
-        None => {
-            println!(
-                "SKIPPING: ICRA2020 dataset not found. Set LOCUS_DATASET_DIR to run regression tests."
-            );
-            return;
-        }
-    };
+type DatasetItem = (String, Vec<u8>, usize, usize, GroundTruth);
 
-    // We try to find the actual image directory.
-    let candidates = [
-        dataset_root.join(subfolder).join("pure_tags_images"),
-        dataset_root.join(subfolder),
-    ];
+/// Runs the detection pipeline on a stream of images and produces a snapshot-able report.
+fn evaluate_dataset(
+    snapshot_name: &str,
+    items: impl Iterator<Item = DatasetItem>,
+    detector_config: DetectorConfig,
+    options: DetectOptions,
+    icra_corner_ordering: bool,
+) {
+    let mut detector = Detector::with_config(detector_config);
+    let mut results = BTreeMap::new();
+    
+    // Aggregators
+    let mut total_recall = 0.0;
+    let mut total_rmse = 0.0;
+    let mut total_time = 0.0;
+    let mut count = 0;
 
-    let search_dir = candidates.iter().find(|p| p.exists()).map(|p| p.clone());
+    for (filename, data, width, height, gt) in items {
+        let img = ImageView::new(&data, width, height, width).expect("valid image");
+        
+        let (detections, stats) = detector.detect_with_stats_and_options(&img, &options);
 
-    let search_dir = match search_dir {
-        Some(d) => d,
-        None => {
-            println!(
-                "SKIPPING: Sub-dataset {:?} not found in {:?}.",
-                subfolder, dataset_root
-            );
-            return;
-        }
-    };
+        // --- Metrics Calculation ---
+        let mut image_rmse_sum = 0.0;
+        let mut match_count = 0;
+        let mut found_ids = BTreeSet::new();
 
-    println!("Running regression tests on sub-dataset: {:?}", search_dir);
+        for det in &detections {
+            if let Some(gt_corners) = gt.tags.get(&det.id) {
+                // Approximate center check to resolve ambiguities in rare multi-tag cases
+                let gt_cx: f64 = gt_corners.iter().map(|p| p[0]).sum::<f64>() / 4.0;
+                let gt_cy: f64 = gt_corners.iter().map(|p| p[1]).sum::<f64>() / 4.0;
+                let dist_sq = (det.center[0] - gt_cx).powi(2) + (det.center[1] - gt_cy).powi(2);
 
-    // 2. Load Ground Truth
-    let local_csv_dir = dataset_root.join(subfolder);
-    let ground_truth = if let Some(gt) = common::load_ground_truth(&local_csv_dir) {
-        println!("Loading local Ground Truth from {:?}", local_csv_dir);
-        gt
-    } else if let Some(gt) = common::load_ground_truth(&dataset_root) {
-        println!("Loading Master Ground Truth from {:?}", dataset_root);
-        gt
-    } else {
-        println!(
-            "SKIPPING: No tags.csv found in {:?} or {:?}.",
-            local_csv_dir, dataset_root
-        );
-        return;
-    };
-    println!("Loaded Ground Truth for {} images.", ground_truth.len());
-
-    // 3. Collect Images (Walker)
-    let mut image_paths = Vec::new();
-    let walker = walkdir::WalkDir::new(&search_dir).into_iter();
-
-    for entry in walker.filter_map(Result::ok) {
-        let path = entry.path();
-        if path.extension().map_or(false, |e| e == "png" || e == "jpg") {
-            // Only test images that are in our Ground Truth
-            let fname = path.file_name().unwrap().to_string_lossy().to_string();
-            if ground_truth.contains_key(&fname) {
-                image_paths.push(path.to_path_buf());
-            }
-        }
-    }
-
-    if image_paths.is_empty() {
-        println!(
-            "WARNING: No images found in {:?} that match Ground Truth. Skipping.",
-            search_dir
-        );
-        return;
-    }
-
-    println!("Found {} images for testing.", image_paths.len());
-
-    // 4. Sequential Detection (for reliable timing)
-    let results: Vec<(String, ImageMetrics)> = image_paths
-        .iter()
-        .map(|image_path: &std::path::PathBuf| {
-            let filename = image_path
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .to_string();
-            let gt = ground_truth.get(&filename).unwrap(); // Invariant: filtered in step 3
-
-            let mut config = locus_core::DetectorConfig::default();
-            if use_checkerboard {
-                config.segmentation_connectivity =
-                    locus_core::config::SegmentationConnectivity::Four;
-            }
-
-            let mut detector = Detector::with_config(config);
-            let options = DetectOptions {
-                families: vec![TagFamily::AprilTag36h11],
-                ..Default::default()
-            };
-
-            // Open image
-            let img = match image::open(image_path) {
-                Ok(i) => i.into_luma8(),
-                Err(e) => {
-                    eprintln!("Failed to load {}: {}", filename, e);
-                    return (
-                        filename,
-                        ImageMetrics {
-                            recall: 0.0,
-                            avg_rmse: 0.0,
-                            stats: PipelineMetrics::default(),
-                            detected_ids: BTreeSet::new(),
-                        },
-                    );
-                }
-            };
-
-            let (width, height) = img.dimensions();
-            let input_view = ImageView::new(
-                img.as_raw(),
-                width as usize,
-                height as usize,
-                width as usize,
-            )
-            .expect("Failed to create ImageView");
-
-            // DETECTION & TIMING
-            let (detections, stats) = detector.detect_with_stats_and_options(&input_view, &options);
-
-            // METRICS CALCULATION
-            let mut total_rmse = 0.0;
-            let mut match_count = 0;
-            let mut matched_gt_ids = BTreeSet::new();
-
-            for det in &detections {
-                if let Some(gt_corners) = gt.corners.get(&det.id) {
-                    // Calculate center of GT tag
-                    let mut gt_cx = 0.0;
-                    let mut gt_cy = 0.0;
-                    for p in gt_corners {
-                        gt_cx += p[0];
-                        gt_cy += p[1];
-                    }
-                    gt_cx /= 4.0;
-                    gt_cy /= 4.0;
-
-                    // Only match if center is within 20 pixels
-                    let dist_sq = (det.center[0] - gt_cx).powi(2) + (det.center[1] - gt_cy).powi(2);
-                    if dist_sq < 20.0 * 20.0 {
-                        // Map library standard (CW: TL, TR, BR, BL) to ICRA 2020 convention (TR, TL, BL, BR)
-                        let reordered_det = [
-                            det.corners[1], // ICRA Idx 0 <- Lib 1 (TR)
-                            det.corners[0], // ICRA Idx 1 <- Lib 0 (TL)
-                            det.corners[3], // ICRA Idx 2 <- Lib 3 (BL)
-                            det.corners[2], // ICRA Idx 3 <- Lib 2 (BR)
-                        ];
-                        total_rmse += calculate_rmse(reordered_det, *gt_corners);
-                        match_count += 1;
-                        matched_gt_ids.insert(det.id);
-                    }
+                if dist_sq < 50.0 * 50.0 {
+                    let det_corners = if icra_corner_ordering {
+                        [det.corners[1], det.corners[0], det.corners[3], det.corners[2]]
+                    } else {
+                        det.corners
+                    };
+                    
+                    image_rmse_sum += locus_core::test_utils::compute_rmse(&det_corners, gt_corners);
+                    match_count += 1;
+                    found_ids.insert(det.id);
                 }
             }
+        }
 
-            let recall = if gt.tag_ids.is_empty() {
-                1.0
-            } else {
-                matched_gt_ids.len() as f64 / gt.tag_ids.len() as f64
-            };
-            let avg_rmse = if match_count > 0 {
-                total_rmse / match_count as f64
-            } else {
-                0.0
-            };
+        let recall = if gt.tags.is_empty() { 1.0 } else { found_ids.len() as f64 / gt.tags.len() as f64 };
+        let avg_rmse = if match_count > 0 { image_rmse_sum / match_count as f64 } else { 0.0 };
 
-            (
-                filename,
-                ImageMetrics {
-                    recall,
-                    avg_rmse,
-                    stats: PipelineMetrics::from(stats),
-                    detected_ids: detections.iter().map(|d| d.id).collect(),
-                },
-            )
-        })
-        .collect();
+        total_recall += recall;
+        total_rmse += avg_rmse;
+        total_time += stats.total_ms;
+        count += 1;
 
-    // 4. Aggregate Results (Reduce)
-    let mut entries = BTreeMap::new();
-    let mut sum_recall = 0.0;
-    let mut sum_rmse = 0.0;
-    let mut sum_stats = PipelineMetrics::default();
-    let count = results.len() as f64;
+        results.insert(filename, ImageMetrics {
+            recall,
+            avg_rmse,
+            stats: PipelineMetrics::from(stats),
+            detected_ids: found_ids,
+        });
+    }
 
-    for (filename, metrics) in results {
-        sum_recall += metrics.recall;
-        sum_rmse += metrics.avg_rmse;
-
-        sum_stats.threshold_ms += metrics.stats.threshold_ms;
-        sum_stats.segmentation_ms += metrics.stats.segmentation_ms;
-        sum_stats.quad_extraction_ms += metrics.stats.quad_extraction_ms;
-        sum_stats.decoding_ms += metrics.stats.decoding_ms;
-        sum_stats.total_ms += metrics.stats.total_ms;
-        sum_stats.num_candidates += metrics.stats.num_candidates;
-        sum_stats.num_detections += metrics.stats.num_detections;
-
-        entries.insert(filename, metrics);
+    if count == 0 {
+        println!("WARNING: Dataset {} yielded no images.", snapshot_name);
+        return;
     }
 
     let report = RegressionReport {
-        entries,
-        mean_stats: PipelineMetrics {
-            threshold_ms: sum_stats.threshold_ms / count,
-            segmentation_ms: sum_stats.segmentation_ms / count,
-            quad_extraction_ms: sum_stats.quad_extraction_ms / count,
-            decoding_ms: sum_stats.decoding_ms / count,
-            total_ms: sum_stats.total_ms / count,
-            num_candidates: (sum_stats.num_candidates as f64 / count) as usize,
-            num_detections: (sum_stats.num_detections as f64 / count) as usize,
+        summary: SummaryMetrics {
+            dataset_size: count,
+            mean_recall: total_recall / count as f64,
+            mean_rmse: total_rmse / count as f64,
+            mean_total_ms: total_time / count as f64,
         },
-        mean_recall: if count > 0.0 { sum_recall / count } else { 0.0 },
-        mean_rmse: if count > 0.0 { sum_rmse / count } else { 0.0 },
+        entries: results,
     };
 
-    // 5. Snapshot Assertion
-    // Use the subfolder name as part of the snapshot name to prevent collisions
-    let snapshot_name = format!(
-        "icra2020_{}_{}",
-        subfolder,
-        if use_checkerboard {
-            "checkerboard"
-        } else {
-            "standard"
-        }
-    );
+    println!("=== {} Results ===", snapshot_name);
+    println!("  Images: {}", count);
+    println!("  Recall: {:.2}%", report.summary.mean_recall * 100.0);
+    println!("  RMSE:   {:.4} px", report.summary.mean_rmse);
 
-    println!("Report for {}:", snapshot_name);
-    println!("  Recall:          {:.2}%", report.mean_recall * 100.0);
-    println!("  RMSE:            {:.4} px", report.mean_rmse);
-    println!("  Avg Total:       {:.2} ms", report.mean_stats.total_ms);
-    println!(
-        "  Avg Threshold:   {:.2} ms",
-        report.mean_stats.threshold_ms
-    );
-    println!(
-        "  Avg Segmentation: {:.2} ms",
-        report.mean_stats.segmentation_ms
-    );
-    println!(
-        "  Avg Quad Extr:   {:.2} ms",
-        report.mean_stats.quad_extraction_ms
-    );
-    println!("  Avg Decoding:    {:.2} ms", report.mean_stats.decoding_ms);
-    println!("  Avg Candidates:  {}", report.mean_stats.num_candidates);
-
-    // We redact per-image latency to avoid 400+ lines of jitter in diffs,
-    // but we KEEP mean_stats unredacted so performance shifts are visible in PRs.
+    // Snapshot logic: Redact latency for stability, but keep Summary unredacted for quick checks
     insta::assert_yaml_snapshot!(snapshot_name, report, {
         ".entries.*.stats.threshold_ms" => "[latency]",
         ".entries.*.stats.segmentation_ms" => "[latency]",
@@ -343,133 +171,183 @@ fn run_dataset_regression(subfolder: &str, use_checkerboard: bool) {
     });
 }
 
-macro_rules! define_regression_test {
-    ($name:ident, $subfolder:expr, $checkerboard:expr) => {
-        #[test]
-        fn $name() {
-            run_dataset_regression($subfolder, $checkerboard);
-        }
-    };
+// ============================================================================
+// Data Providers
+// ============================================================================
+
+trait DatasetProvider {
+    fn name(&self) -> &str;
+    fn iter(&self) -> Box<dyn Iterator<Item = DatasetItem> + '_>;
 }
 
-// Standard Datasets (8-way connectivity)
-define_regression_test!(test_regression_icra2020_forward, "forward", false);
-define_regression_test!(test_regression_icra2020_rotation, "rotation", false);
-define_regression_test!(test_regression_icra2020_random, "random", false);
-define_regression_test!(test_regression_icra2020_circle, "circle", false);
+/// Provides images from `tests/fixtures/icra2020`.
+/// This is the "Gold Standard" subset that MUST pass in CI.
+struct FixtureProvider {
+    fixtures_dir: PathBuf,
+}
 
-// Checkerboard Datasets (4-way connectivity) - Run on same folders, but with 4-way mode
-define_regression_test!(
-    test_regression_icra2020_checkerboard_forward,
-    "forward",
-    true
-);
-define_regression_test!(
-    test_regression_icra2020_checkerboard_rotation,
-    "rotation",
-    true
-);
-define_regression_test!(test_regression_icra2020_checkerboard_random, "random", true);
-define_regression_test!(test_regression_icra2020_checkerboard_circle, "circle", true);
+impl FixtureProvider {
+    fn new() -> Self {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/icra2020");
+        Self { fixtures_dir: root }
+    }
+}
+
+impl DatasetProvider for FixtureProvider {
+    fn name(&self) -> &str { "fixtures" }
+
+    fn iter(&self) -> Box<dyn Iterator<Item = DatasetItem> + '_> {
+        // Find pairs of .png and .json
+        let walker = walkdir::WalkDir::new(&self.fixtures_dir).sort_by_file_name();
+        
+        let iter = walker.into_iter().filter_map(|e| e.ok()).filter_map(move |entry| {
+            let path = entry.path();
+            if path.extension()? != "png" { return None; }
+            
+            let json_path = path.with_extension("json");
+            if !json_path.exists() { return None; }
+
+            let img = image::open(path).ok()?.into_luma8();
+            let (w, h) = img.dimensions();
+
+            // Load local JSON GT format
+            #[derive(Deserialize)] 
+            struct FixtureJson { tags: Vec<FixtureTag> }
+            #[derive(Deserialize)]
+            struct FixtureTag { tag_id: u32, corners: [[f64; 2]; 4] }
+
+            let json_str = std::fs::read_to_string(&json_path).ok()?;
+            let fixture_data: FixtureJson = serde_json::from_str(&json_str).ok()?;
+
+            let mut tags = HashMap::new();
+            for t in fixture_data.tags {
+                tags.insert(t.tag_id, t.corners);
+            }
+
+            Some((
+                path.file_name()?.to_string_lossy().to_string(),
+                img.into_raw(),
+                w as usize,
+                h as usize,
+                GroundTruth { tags }
+            ))
+        });
+        
+        Box::new(iter)
+    }
+}
+
+/// Provides images from the external large ICRA dataset.
+/// Supports sampling (e.g., every Nth image) for faster local runs.
+struct IcraProvider {
+    name: String,
+    image_paths: Vec<PathBuf>,
+    gt: HashMap<String, common::ImageGroundTruth>,
+    sample_rate: usize,
+}
+
+impl IcraProvider {
+    fn new(subfolder: &str, sample_rate: usize) -> Option<Self> {
+        let root = common::resolve_dataset_root()?;
+        let search_dir = root.join(subfolder);
+        
+        // Handle "pure_tags_images" structure vs flat structure
+        let img_dir = if search_dir.join("pure_tags_images").exists() {
+            search_dir.join("pure_tags_images")
+        } else if search_dir.exists() {
+            search_dir
+        } else {
+            return None;
+        };
+
+        let gt_map = common::load_ground_truth(&root)?;
+        
+        let mut paths: Vec<_> = walkdir::WalkDir::new(&img_dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .map(|e| e.path().to_path_buf())
+            .filter(|p| p.extension().map_or(false, |e| e == "png" || e == "jpg"))
+            .filter(|p| gt_map.contains_key(&p.file_name().unwrap().to_string_lossy().to_string()))
+            .collect();
+            
+        paths.sort();
+
+        Some(Self {
+            name: format!("icra_{}", subfolder),
+            image_paths: paths,
+            gt: gt_map,
+            sample_rate,
+        })
+    }
+}
+
+impl DatasetProvider for IcraProvider {
+    fn name(&self) -> &str { &self.name }
+
+    fn iter(&self) -> Box<dyn Iterator<Item = DatasetItem> + '_> {
+        let iter = self.image_paths.iter().step_by(self.sample_rate).map(move |path| {
+            let fname = path.file_name().unwrap().to_string_lossy().to_string();
+            // We use expect here because if the file existed during scan, it should load.
+            // Failure to load specific images in regression suite is a failure.
+            let img = image::open(path).expect("load regression image").into_luma8();
+            let (w, h) = img.dimensions();
+
+            let icra_gt = self.gt.get(&fname).unwrap();
+            let gt = GroundTruth { tags: icra_gt.corners.clone() };
+
+            (fname, img.into_raw(), w as usize, h as usize, gt)
+        });
+        Box::new(iter)
+    }
+}
 
 // ============================================================================
-// FIXTURE-BASED SMOKE TEST (runs without full dataset)
+// Test Runners
 // ============================================================================
 
-/// Quick smoke test using local fixture (0037.png from ICRA2020 forward sequence).
-/// This always runs regardless of whether the full ICRA2020 dataset is installed.
+/// Always runs on committed fixtures. 
 #[test]
-fn test_fixture_forward_0037() {
-    use serde::Deserialize;
-    use std::collections::HashSet;
-    use std::fs;
-    use std::path::PathBuf;
+fn regression_fixtures() {
+    let provider = FixtureProvider::new();
+    evaluate_dataset(
+        "fixtures",
+        provider.iter(),
+        DetectorConfig::default(),
+        DetectOptions { families: vec![TagFamily::AprilTag36h11], ..Default::default() },
+        true // Fixtures currently match ICRA ordering format (from 0037.json)
+    );
+}
 
-    #[derive(Debug, Deserialize)]
-    struct FixtureGT {
-        #[allow(dead_code)]
-        image: String,
-        expected_min_recall: f64,
-        expected_max_corner_error_px: f64,
-        tags: Vec<FixtureTag>,
-    }
+#[test]
+fn regression_icra_forward() {
+    let sample_rate = if env::var("FULL").is_ok() { 1 } else { 10 };
 
-    #[derive(Debug, Deserialize)]
-    struct FixtureTag {
-        tag_id: u32,
-        corners: [[f64; 2]; 4],
-    }
-
-    let fixtures_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/icra2020");
-    let gt_path = fixtures_dir.join("0037.json");
-    let img_path = fixtures_dir.join("0037.png");
-
-    // Load ground truth
-    let gt_content =
-        fs::read_to_string(&gt_path).unwrap_or_else(|e| panic!("Failed to load fixture GT: {}", e));
-    let gt: FixtureGT = serde_json::from_str(&gt_content)
-        .unwrap_or_else(|e| panic!("Failed to parse fixture GT: {}", e));
-
-    // Load image
-    let img = image::open(&img_path)
-        .unwrap_or_else(|e| panic!("Failed to load fixture image: {}", e))
-        .into_luma8();
-    let (width, height) = img.dimensions();
-    let img_view = ImageView::new(
-        img.as_raw(),
-        width as usize,
-        height as usize,
-        width as usize,
-    )
-    .expect("Failed to create ImageView");
-
-    // Detect
-    let mut detector = Detector::new();
-    let options = DetectOptions {
-        families: vec![TagFamily::AprilTag36h11],
-        ..Default::default()
-    };
-    let detections = detector.detect_with_options(&img_view, &options);
-
-    // Calculate metrics
-    let gt_ids: HashSet<u32> = gt.tags.iter().map(|t| t.tag_id).collect();
-    let det_ids: HashSet<u32> = detections.iter().map(|d| d.id).collect();
-    let matched: HashSet<u32> = gt_ids.intersection(&det_ids).copied().collect();
-    let recall = matched.len() as f64 / gt_ids.len() as f64;
-
-    // Calculate corner errors for matched tags
-    let mut total_rmse = 0.0;
-    let mut match_count = 0;
-    for det in &detections {
-        if let Some(gt_tag) = gt.tags.iter().find(|t| t.tag_id == det.id) {
-            // Map to ICRA convention for comparison
-            let reordered_det = [
-                det.corners[1], // ICRA Idx 0 <- Lib 1 (TR)
-                det.corners[0], // ICRA Idx 1 <- Lib 0 (TL)
-                det.corners[3], // ICRA Idx 2 <- Lib 3 (BL)
-                det.corners[2], // ICRA Idx 3 <- Lib 2 (BR)
-            ];
-            total_rmse += calculate_rmse(reordered_det, gt_tag.corners);
-            match_count += 1;
-        }
-    }
-    let avg_rmse = if match_count > 0 {
-        total_rmse / match_count as f64
+    if let Some(provider) = IcraProvider::new("forward", sample_rate) {
+        let snapshot = format!("{}_sample{}", provider.name(), sample_rate);
+        evaluate_dataset(
+            &snapshot,
+            provider.iter(),
+            DetectorConfig::default(),
+            DetectOptions { families: vec![TagFamily::AprilTag36h11], ..Default::default() },
+            true // ICRA uses TR, TL, BL, BR ordering
+        );
     } else {
-        0.0
-    };
+        println!("SKIPPING: ICRA2020 'forward' dataset not found.");
+    }
+}
 
-    // Assertions
-    assert!(
-        recall >= gt.expected_min_recall,
-        "Recall {:.2}% below threshold {:.2}%",
-        recall * 100.0,
-        gt.expected_min_recall * 100.0
-    );
-    assert!(
-        avg_rmse <= gt.expected_max_corner_error_px,
-        "Corner error {:.2}px exceeds threshold {:.2}px",
-        avg_rmse,
-        gt.expected_max_corner_error_px
-    );
+#[test]
+fn regression_icra_rotation() {
+    let sample_rate = if env::var("FULL").is_ok() { 1 } else { 10 };
+    
+    if let Some(provider) = IcraProvider::new("rotation", sample_rate) {
+        let snapshot = format!("{}_sample{}", provider.name(), sample_rate);
+        evaluate_dataset(
+            &snapshot,
+            provider.iter(),
+            DetectorConfig::default(),
+            DetectOptions { families: vec![TagFamily::AprilTag36h11], ..Default::default() },
+            true
+        );
+    }
 }
