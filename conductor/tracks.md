@@ -11,3 +11,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [~] **Track: Restore recall >75% and RMSE <0.3px on the ICRA 2020 forward dataset.**
 *Link: [./tracks/recall_rmse_forward_20260119/](./tracks/recall_rmse_forward_20260119/)*
+
+---
+
+- [x] **Track: Parallelize RLE Pass in Segmentation**
+*Link: [./tracks/parallel_rle_20260121/](./tracks/parallel_rle_20260121/)*
