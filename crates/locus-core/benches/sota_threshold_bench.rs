@@ -2,6 +2,7 @@ use bumpalo::Bump;
 use divan::bench;
 use locus_core::filter::{bilateral_filter, compute_gradient_map};
 use locus_core::image::ImageView;
+use locus_core::test_utils::generate_checkered;
 use locus_core::threshold::{
     adaptive_threshold_gradient_window, adaptive_threshold_integral, compute_integral_image,
 };
@@ -10,26 +11,6 @@ fn main() {
     divan::main();
 }
 
-fn generate_checkered(width: usize, height: usize) -> Vec<u8> {
-    let mut data = vec![200u8; width * height];
-    for y in (0..height).step_by(16) {
-        for x in (0..width).step_by(16) {
-            if ((x / 16) + (y / 16)) % 2 == 0 {
-                for dy in 0..16 {
-                    if y + dy < height {
-                        let row_off = (y + dy) * width;
-                        for dx in 0..16 {
-                            if x + dx < width {
-                                data[row_off + x + dx] = 50;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    data
-}
 
 #[bench]
 fn bench_integral_image_1080p(bencher: divan::Bencher) {
