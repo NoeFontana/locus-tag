@@ -81,5 +81,6 @@ You are responsible for version control hygiene.
 
 ## 6. Performance Accountability
 * If a change touches the hot path, run `uv run python benchmarks/compare_sota.py --synthetic`.
+* **Regression Check:** Run `cargo test --release --test regression_icra2020 regression_icra_forward` to verify latency and accuracy against the ICRA 2020 dataset.
 * Median latency must stay < 1.1ms for 640x480 images on reference hardware.
 * Corner accuracy must stay < 0.2px.
