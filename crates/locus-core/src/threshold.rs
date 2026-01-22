@@ -189,9 +189,32 @@ impl ThresholdEngine {
         output
             .par_chunks_mut(ts * img.width)
             .enumerate()
-            .for_each(|(ty, output_tile_rows)| {
-                let mut row_thresholds = vec![0u8; img.width];
-                let mut row_valid = vec![0u8; img.width];
+            .for_each_init(
+                || (vec![0u8; img.width], vec![0u8; img.width]),
+                | (row_thresholds, row_valid), (ty, output_tile_rows)| {
+                // Reset buffers? No, they are fully overwritten below by the loops over tiles and pixels.
+                // Just ensure they are correct size if they were hypothetically resized (they are not).
+                // Actually, the loop logic depends on writing to `row_thresholds` and `row_valid` at specific indices.
+                // The loops:
+                // for tx in 0..tiles_wide ... row_thresholds[tx*ts+i] = ...
+                // This covers [0 .. tiles_wide*ts].
+                // If tiles_wide * ts < img.width (e.g. edge cases), remaining pixels might be stale.
+                // However, the original code `vec![0u8; img.width]` zero-inits.
+                // The previous loop logic:
+                // `for tx in 0..tiles_wide` covers up to `tiles_wide * ts`.
+                // `img.width` might be slightly larger than `tiles_wide * ts`.
+                // The original code zero-initialized the WHOLE vector.
+                // To maintain correctness, we should zero-init (or fill with default) the buffers, or at least the tail.
+                // Or better, just fill them entirely if cheap, or rely on logic correctness.
+                // Let's look at `threshold_row_simd`. It reads `thresholds[i]` and `valid_mask[i]`.
+                // It iterates `0..len` where len is `src.len()` (== img.width).
+                // If `row_thresholds` has stale garbage at the end, `threshold_row_simd` will use it.
+                // The original code produced 0s at the end (due to `vec![0u8; ...]`).
+                // So we MUST zero-init or fill the reused buffers.
+                // `row_thresholds.fill(0)` and `row_valid.fill(0)` is safe and fast enough (memset).
+
+                row_thresholds.fill(0);
+                row_valid.fill(0);
 
                 // Expand tile stats to row buffers
                 for tx in 0..tiles_wide {
@@ -209,7 +232,7 @@ impl ThresholdEngine {
                     let src_row = img.get_row(py);
                     let dst_row = &mut output_tile_rows[dy * img.width..(dy + 1) * img.width];
 
-                    threshold_row_simd(src_row, dst_row, &row_thresholds, &row_valid);
+                    threshold_row_simd(src_row, dst_row, row_thresholds, row_valid);
                 }
             });
     }
@@ -334,15 +357,17 @@ impl ThresholdEngine {
         binary_output
             .par_chunks_mut(ts * img.width)
             .enumerate()
-            .for_each(|(ty, bin_tile_rows)| {
+            .for_each_init(
+                || (vec![0u8; img.width], vec![0u8; img.width]),
+                | (row_thresholds, row_valid), (ty, bin_tile_rows)| {
                 // Safety: Each thread writes to unique portion of threshold_output
                 let thresh_tile_rows = unsafe {
                     let ptr = threshold_output.as_ptr().cast_mut();
                     std::slice::from_raw_parts_mut(ptr.add(ty * ts * img.width), ts * img.width)
                 };
 
-                let mut row_thresholds = vec![0u8; img.width];
-                let mut row_valid = vec![0u8; img.width];
+                row_thresholds.fill(0);
+                row_valid.fill(0);
 
                 for tx in 0..tiles_wide {
                     let idx = ty * tiles_wide + tx;
@@ -360,11 +385,11 @@ impl ThresholdEngine {
 
                     // Write binary output
                     let bin_row = &mut bin_tile_rows[dy * img.width..(dy + 1) * img.width];
-                    threshold_row_simd(src_row, bin_row, &row_thresholds, &row_valid);
+                    threshold_row_simd(src_row, bin_row, row_thresholds, row_valid);
 
                     // Write threshold map
                     thresh_tile_rows[dy * img.width..(dy + 1) * img.width]
-                        .copy_from_slice(&row_thresholds);
+                        .copy_from_slice(row_thresholds);
                 }
             });
     }
