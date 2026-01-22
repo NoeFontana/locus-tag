@@ -6,7 +6,7 @@ summary:
   dataset_size: 5
   mean_recall: 0.6493506493506493
   mean_rmse: 0.2813446175065445
-  mean_total_ms: 132.0994724
+  mean_total_ms: 126.8418782
 entries:
   0000.png:
     recall: 0.032467532467532464
