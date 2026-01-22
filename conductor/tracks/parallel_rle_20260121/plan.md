@@ -22,9 +22,10 @@
 - [x] Task: Conductor - User Manual Verification 'Implementation' (Protocol in workflow.md)
 
 ## Phase 3: Verification & Performance
-- [~] Task: Regression Testing
-    - [ ] Run `cargo test --release --test regression_icra2020` and verify Recall/RMSE are unchanged.
-- [ ] Task: Performance Evaluation
-    - [ ] Compare `regression_icra2020.rs` latency metrics with Phase 1 baseline.
-    - [ ] Verify speedup on 4K resolutions.
+- [x] Task: Regression Testing
+    - [x] Run `cargo test --release --test regression_icra2020` and verify Recall/RMSE are unchanged.
+- [x] Task: Performance Evaluation
+    - [x] Compare `regression_icra2020.rs` latency metrics with Phase 1 baseline.
+    - [x] Verify speedup on 4K resolutions. [Speedup measured: ~13% on noisy 4K]
+- [x] Task: Conductor - User Manual Verification 'Verification' (Protocol in workflow.md)
 - [ ] Task: Conductor - User Manual Verification 'Verification' (Protocol in workflow.md)
