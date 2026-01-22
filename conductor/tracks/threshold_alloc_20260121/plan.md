@@ -19,12 +19,12 @@
 - [x] Task: Conductor - User Manual Verification 'Refactoring' (Protocol in workflow.md)
 
 ## Phase 3: Verification
-- [~] Task: Verify Correctness
-    - [ ] Run `cargo test --release --test threshold_alloc_test` to ensure the logic still holds.
-    - [ ] Run `cargo test --release --test regression_icra2020` to verify no regressions in Recall/RMSE.
-- [ ] Task: Verify Performance
-    - [ ] Compare new `regression_icra2020` latency stats against the baseline.
-    - [ ] (Optional) Run `cargo bench` if specific micro-benchmarks exist for thresholding.
-- [ ] Task: Cleanup
-    - [ ] Remove the temporary `threshold_alloc_test.rs` if it duplicates existing coverage, or promote it if valuable.
-- [ ] Task: Conductor - User Manual Verification 'Verification' (Protocol in workflow.md)
+- [x] Task: Verify Correctness
+    - [x] Run `cargo test --release --test threshold_alloc_test` to ensure the logic still holds.
+    - [x] Run `cargo test --release --test regression_icra2020` to verify no regressions in Recall/RMSE.
+- [x] Task: Verify Performance
+    - [x] Compare new `regression_icra2020` latency stats against the baseline.
+    - [x] (Optional) Run `cargo bench` if specific micro-benchmarks exist for thresholding.
+- [x] Task: Cleanup
+    - [x] Remove the temporary `threshold_alloc_test.rs` if it duplicates existing coverage, or promote it if valuable.
+- [x] Task: Conductor - User Manual Verification 'Verification' (Protocol in workflow.md)
