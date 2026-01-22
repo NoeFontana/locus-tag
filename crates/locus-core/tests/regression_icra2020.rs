@@ -44,12 +44,23 @@ impl From<PipelineStats> for PipelineMetrics {
     }
 }
 
+fn serialize_rmse<S>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    // Round to 4 decimal places for stability
+    let rounded = (value * 10000.0).round() / 10000.0;
+    serializer.serialize_f64(rounded)
+}
+
 #[derive(Serialize)]
 struct ImageMetrics {
     recall: f64,
+    #[serde(serialize_with = "serialize_rmse")]
     avg_rmse: f64,
     stats: PipelineMetrics,
-    detected_ids: BTreeSet<u32>,
+    missed_ids: BTreeSet<u32>,
+    extra_ids: BTreeSet<u32>,
 }
 
 #[derive(Serialize)]
@@ -59,11 +70,22 @@ struct RegressionReport {
 }
 
 #[derive(Serialize)]
+struct Offender {
+    filename: String,
+    missed: usize,
+    extra: usize,
+    #[serde(serialize_with = "serialize_rmse")]
+    rmse: f64,
+}
+
+#[derive(Serialize)]
 struct SummaryMetrics {
     dataset_size: usize,
     mean_recall: f64,
+    #[serde(serialize_with = "serialize_rmse")]
     mean_rmse: f64,
     mean_total_ms: f64,
+    worst_offenders: Vec<Offender>,
 }
 
 // ============================================================================
@@ -106,7 +128,7 @@ fn evaluate_dataset(
 
         for det in &detections {
             if let Some(gt_corners) = gt.tags.get(&det.id) {
-                // Approximate center check to resolve ambiguities in rare multi-tag cases
+        // Approximate center check to resolve ambiguities in rare multi-tag cases
                 let gt_cx: f64 = gt_corners.iter().map(|p| p[0]).sum::<f64>() / 4.0;
                 let gt_cy: f64 = gt_corners.iter().map(|p| p[1]).sum::<f64>() / 4.0;
                 let dist_sq = (det.center[0] - gt_cx).powi(2) + (det.center[1] - gt_cy).powi(2);
@@ -133,11 +155,27 @@ fn evaluate_dataset(
         total_time += stats.total_ms;
         count += 1;
 
-        results.insert(filename, ImageMetrics {
+        // Compute Missed and Extra sets
+        let mut missed_ids = BTreeSet::new();
+        for &id in gt.tags.keys() {
+            if !found_ids.contains(&id) {
+                missed_ids.insert(id);
+            }
+        }
+
+        let mut extra_ids = BTreeSet::new();
+        for det in &detections {
+            if !found_ids.contains(&det.id) {
+                extra_ids.insert(det.id);
+            }
+        }
+
+        results.insert(filename.clone(), ImageMetrics {
             recall,
             avg_rmse,
             stats: PipelineMetrics::from(stats),
-            detected_ids: found_ids,
+            missed_ids: missed_ids.clone(),
+            extra_ids: extra_ids.clone(),
         });
     }
 
@@ -146,12 +184,40 @@ fn evaluate_dataset(
         return;
     }
 
+    // Identify Worst Offenders
+    // Criteria: Missed any tags, or Extra tags, or RMSE > 1.0
+    let mut offenders: Vec<Offender> = results.iter()
+        .filter_map(|(fname, m)| {
+            if !m.missed_ids.is_empty() || !m.extra_ids.is_empty() || m.avg_rmse > 1.0 {
+                Some(Offender {
+                    filename: fname.clone(),
+                    missed: m.missed_ids.len(),
+                    extra: m.extra_ids.len(),
+                    rmse: m.avg_rmse,
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+    
+    // Sort by "badness": Missed (desc), then RMSE (desc)
+    offenders.sort_by(|a, b| {
+        b.missed.cmp(&a.missed)
+            .then_with(|| b.extra.cmp(&a.extra))
+            .then_with(|| b.rmse.partial_cmp(&a.rmse).unwrap_or(std::cmp::Ordering::Equal))
+    });
+
+    // Take top 5
+    let worst_offenders: Vec<Offender> = offenders.into_iter().take(5).collect();
+
     let report = RegressionReport {
         summary: SummaryMetrics {
             dataset_size: count,
             mean_recall: total_recall / count as f64,
             mean_rmse: total_rmse / count as f64,
             mean_total_ms: total_time / count as f64,
+            worst_offenders,
         },
         entries: results,
     };
