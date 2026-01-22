@@ -883,7 +883,7 @@ pub fn adaptive_threshold_integral(
         // 1. Process Left Border
         for x in 0..x_start.min(w) {
             let x0 = 0; // saturating_sub(radius) is 0
-            let x1 = x + radius + 1;
+            let x1 = (x + radius + 1).min(w);
             let actual_area = (x1 - x0) * (y1 - y0);
 
             let i00 = integral[y0 * stride + x0];
@@ -1103,7 +1103,7 @@ pub fn compute_threshold_map(
         // 1. Process Left Border
         for x in 0..x_start.min(w) {
             let x0 = 0;
-            let x1 = x + radius + 1;
+            let x1 = (x + radius + 1).min(w);
             let actual_area = (x1 - x0) * (y1 - y0);
             let sum = (integral[y1 * stride + x1] + integral[y0 * stride + x0])
                 - (integral[y0 * stride + x1] + integral[y1 * stride + x0]);
