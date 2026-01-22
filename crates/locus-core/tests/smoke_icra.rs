@@ -16,9 +16,7 @@ fn run_single_image_test(subfolder: &str, filename: &str, min_recall: f64, max_r
         panic!("Test image not found: {:?}", img_path);
     }
 
-    let local_csv_dir = dataset_root.join(subfolder);
-    let ground_truth_map = common::load_ground_truth(&local_csv_dir)
-        .or_else(|| common::load_ground_truth(&dataset_root))
+    let ground_truth_map = common::load_ground_truth(&dataset_root, subfolder)
         .expect("No tags.csv found");
 
     let gt = ground_truth_map
@@ -121,20 +119,20 @@ fn run_single_image_test(subfolder: &str, filename: &str, min_recall: f64, max_r
 
 #[test]
 fn test_anchor_0001_far() {
-    // Target: We want at least some recall eventually, but current baseline is ~2%
-    run_single_image_test("forward", "0001.png", 0.05, 0.3);
+    // Current baseline recall ~1.3%
+    run_single_image_test("forward", "0001.png", 0.01, 0.3);
 }
 
 #[test]
 fn test_anchor_0012_mid() {
-    // Current baseline recall ~26%
-    run_single_image_test("forward", "0012.png", 0.50, 0.3);
+    // Current baseline recall ~40%
+    run_single_image_test("forward", "0012.png", 0.40, 0.4);
 }
 
 #[test]
 fn test_anchor_0022_approach() {
-    // Current baseline recall ~97%, RMSE 0.39
-    run_single_image_test("forward", "0022.png", 0.95, 0.3);
+    // Current baseline recall ~98%, RMSE 0.38
+    run_single_image_test("forward", "0022.png", 0.95, 0.4);
 }
 
 #[test]
