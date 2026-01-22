@@ -115,30 +115,40 @@ pub fn label_components_with_stats<'a>(
     height: usize,
     use_8_connectivity: bool,
 ) -> LabelResult<'a> {
-    let mut runs = BumpVec::new_in(arena);
-
-    // Pass 1: Extract runs - Optimized with position()
-    for y in 0..height {
-        let row = &binary[y * width..(y + 1) * width];
-        let mut x = 0;
-        while x < width {
-            if let Some(pos) = row[x..].iter().position(|&p| p == 0) {
-                let start = x + pos;
-                let mut end = start + 1;
-                while end < width && row[end] == 0 {
-                    end += 1;
+    // Pass 1: Extract runs - Optimized with Rayon parallel processing
+    let all_runs: Vec<Vec<Run>> = binary
+        .par_chunks(width)
+        .enumerate()
+        .map(|(y, row)| {
+            let mut row_runs = Vec::new();
+            let mut x = 0;
+            while x < width {
+                if let Some(pos) = row[x..].iter().position(|&p| p == 0) {
+                    let start = x + pos;
+                    let mut end = start + 1;
+                    while end < width && row[end] == 0 {
+                        end += 1;
+                    }
+                    row_runs.push(Run {
+                        y: y as u32,
+                        x_start: start as u32,
+                        x_end: (end - 1) as u32,
+                        id: 0, // Assigned correctly during flattening
+                    });
+                    x = end;
+                } else {
+                    break;
                 }
-                runs.push(Run {
-                    y: y as u32,
-                    x_start: start as u32,
-                    x_end: (end - 1) as u32,
-                    id: runs.len() as u32,
-                });
-                x = end;
-            } else {
-                break;
             }
-        }
+            row_runs
+        })
+        .collect();
+
+    let total_runs: usize = all_runs.iter().map(|r| r.len()).sum();
+    let mut runs: BumpVec<Run> = BumpVec::with_capacity_in(total_runs, arena);
+    for (id, mut run) in all_runs.into_iter().flatten().enumerate() {
+        run.id = id as u32;
+        runs.push(run);
     }
 
     if runs.is_empty() {
