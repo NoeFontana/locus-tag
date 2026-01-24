@@ -1,6 +1,7 @@
 from ._config import DetectOptions, DetectorConfig
 from .locus import (
     Detection,
+    FullDetectionResult,
     PipelineStats,
     SegmentationConnectivity,
     TagFamily,
@@ -38,9 +39,9 @@ class Detector:
             "quad_min_edge_length": 2.0,
         }
         config.update(kwargs)
-        return cls(**config)
+        return cls(config=DetectorConfig(**config))
 
-    def __init__(self, config: DetectorConfig = None, **kwargs):
+    def __init__(self, config: DetectorConfig | None = None, **kwargs):
         if config is None:
             # Allow passing individual parameters as kwargs
             config = DetectorConfig(**kwargs)
@@ -76,7 +77,7 @@ class Detector:
         return self._inner.detect(img, decimation=decimation)
 
     def detect_with_options(
-        self, img, options: DetectOptions = None, decimation: int = 1, **kwargs
+        self, img, options: DetectOptions | None = None, decimation: int = 1, **kwargs
     ):
         """Detect tags with per-call options."""
         if options is None:
@@ -100,10 +101,19 @@ class Detector:
         """Check if sharpening is enabled."""
         return self._inner.enable_sharpening
 
+    def extract_candidates(self, img, decimation: int = 1):
+        """Extract quad candidates without decoding."""
+        return self._inner.extract_candidates(img, decimation=decimation)
+
+    def detect_full(self, img, decimation: int = 1) -> FullDetectionResult:
+        """Perform full detection and return all intermediate debug data."""
+        return self._inner.detect_full(img, decimation=decimation)
+
 
 __all__ = [
     "Detection",
     "Detector",
+    "FullDetectionResult",
     "PipelineStats",
     "TagFamily",
     "SegmentationConnectivity",

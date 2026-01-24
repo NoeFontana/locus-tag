@@ -2,7 +2,9 @@
 #![allow(unsafe_code)]
 
 use locus_core::image::ImageView;
-use numpy::{PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
+use numpy::{IntoPyArray, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
+use pyo3::exceptions::PyRuntimeError;
+use numpy::ndarray::Array2;
 use pyo3::prelude::*;
 
 // ============================================================================
@@ -55,6 +57,61 @@ pub struct PipelineStats {
     /// Number of final detections.
     #[pyo3(get)]
     pub num_detections: usize,
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct FullDetectionResult {
+    #[pyo3(get)]
+    pub detections: Vec<Detection>,
+    #[pyo3(get)]
+    pub candidates: Vec<Detection>,
+    pub binarized: Option<Vec<u8>>,
+    pub labels: Option<Vec<u32>>,
+    #[pyo3(get)]
+    pub stats: PipelineStats,
+    pub width: usize,
+    pub height: usize,
+}
+
+#[pymethods]
+impl FullDetectionResult {
+    /// Get the binarized image as a numpy array.
+    fn get_binarized(&self, py: Python<'_>) -> PyResult<Option<PyObject>> {
+        if let Some(data) = &self.binarized {
+            let array = Array2::from_shape_vec((self.height, self.width), data.clone())
+                .map_err(|e| PyRuntimeError::new_err(format!("Shape error: {}", e)))?;
+            Ok(Some(array.into_pyarray(py).into_any().unbind()))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get the labels image as a numpy array.
+    fn get_labels(&self, py: Python<'_>) -> PyResult<Option<PyObject>> {
+        if let Some(data) = &self.labels {
+            let array = Array2::from_shape_vec((self.height, self.width), data.clone())
+                .map_err(|e| PyRuntimeError::new_err(format!("Shape error: {}", e)))?;
+            Ok(Some(array.into_pyarray(py).into_any().unbind()))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+impl From<(locus_core::FullDetectionResult, usize, usize)> for FullDetectionResult {
+    fn from(tuple: (locus_core::FullDetectionResult, usize, usize)) -> Self {
+        let (res, width, height) = tuple;
+        Self {
+            detections: res.detections.into_iter().map(Detection::from).collect(),
+            candidates: res.candidates.into_iter().map(Detection::from).collect(),
+            binarized: res.binarized,
+            labels: res.labels,
+            stats: PipelineStats::from(res.stats),
+            width,
+            height,
+        }
+    }
 }
 
 impl From<locus_core::PipelineStats> for PipelineStats {
@@ -335,6 +392,48 @@ impl Detector {
         ))
     }
 
+    /// Debugging: Extract quad candidates without decoding.
+    ///
+    /// Returns a list of all quad candidates found in the image, even those that
+    /// fail decoding. Useful for debugging segmentation and quad fitting.
+    #[pyo3(signature = (img, decimation = 1))]
+    #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
+    fn extract_candidates(
+        &mut self,
+        img: PyReadonlyArray2<u8>,
+        decimation: usize,
+    ) -> PyResult<(Vec<Detection>, PipelineStats)> {
+        let source = create_image_view(&img)?;
+        let view = source.as_view()?;
+        let options = locus_core::DetectOptions::builder()
+            .decimation(decimation)
+            .build();
+        let (candidates, stats) = self.inner.extract_candidates(&view, &options);
+        Ok((
+            candidates.into_iter().map(Detection::from).collect(),
+            PipelineStats::from(stats),
+        ))
+    }
+
+    /// Perform full detection and return all intermediate debug data.
+    #[pyo3(signature = (img, decimation = 1))]
+    #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
+    fn detect_full(
+        &mut self,
+        img: PyReadonlyArray2<u8>,
+        decimation: usize,
+    ) -> PyResult<FullDetectionResult> {
+        let source = create_image_view(&img)?;
+        let view = source.as_view()?;
+        let options = locus_core::DetectOptions::builder()
+            .decimation(decimation)
+            .build();
+        let res = self.inner.detect_full(&view, &options);
+        let width = view.width;
+        let height = view.height;
+        Ok(FullDetectionResult::from((res, width, height)))
+    }
+
     /// Set the tag families to decode by default.
     fn set_families(&mut self, families: Vec<TagFamily>) {
         let core_families: Vec<locus_core::config::TagFamily> =
@@ -521,6 +620,7 @@ fn debug_segmentation(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
 fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Classes
     m.add_class::<Detection>()?;
+    m.add_class::<FullDetectionResult>()?;
     m.add_class::<PipelineStats>()?;
     m.add_class::<TagFamily>()?;
     m.add_class::<SegmentationConnectivity>()?;
