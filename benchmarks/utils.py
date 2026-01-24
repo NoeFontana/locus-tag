@@ -190,12 +190,13 @@ class LibraryWrapper:
 
 
 class LocusWrapper(LibraryWrapper):
-    def __init__(self, config: Optional[locus.DetectorConfig] = None):
+    def __init__(self, config: Optional[locus.DetectorConfig] = None, decimation: int = 1):
         super().__init__("Locus")
         self.detector = locus.Detector(config) if config else locus.Detector()
+        self.decimation = decimation
 
     def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
-        detections, stats = self.detector.detect_with_stats(img)
+        detections, stats = self.detector.detect_with_stats(img, decimation=self.decimation)
         serializable = []
         for d in detections:
             serializable.append(
@@ -215,6 +216,7 @@ class OpenCVWrapper(LibraryWrapper):
         super().__init__("OpenCV")
         dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
         parameters = cv2.aruco.DetectorParameters()
+        parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
         self.detector = cv2.aruco.ArucoDetector(dictionary, parameters)
 
     def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
@@ -236,9 +238,11 @@ class OpenCVWrapper(LibraryWrapper):
 
 
 class AprilTagWrapper(LibraryWrapper):
-    def __init__(self, nthreads: int = 1):
+    def __init__(self, nthreads: int = 4, quad_decimate: float = 1.0):
         super().__init__("AprilTag")
-        self.detector = AprilTagDetector(families="tag36h11", nthreads=nthreads, quad_decimate=1.0)
+        self.detector = AprilTagDetector(
+            families="tag36h11", nthreads=nthreads, quad_decimate=quad_decimate
+        )
 
     def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
         raw_dets = self.detector.detect(img)
