@@ -1,6 +1,5 @@
 import argparse
 import time
-from pathlib import Path
 
 import cv2
 import locus
@@ -58,7 +57,7 @@ def run_real_benchmark(args):
             for wrapper in wrappers:
                 stats = {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []}
 
-                for img_name in tqdm(img_names, desc=f"{wrapper.name:<10}"):
+                for i, img_name in enumerate(tqdm(img_names, desc=f"{wrapper.name:<10}")):
                     img_path = img_dir / img_name
                     if not img_path.exists():
                         continue
@@ -80,7 +79,7 @@ def run_real_benchmark(args):
                     stats["err_sum"] += err_sum
 
                     if args.rerun and RERUN_AVAILABLE and wrapper.name == "Locus":
-                        log_to_rerun(ds_name, img_name, img, detections, gt_tags)
+                        log_to_rerun(ds_name, img_name, img, detections, gt_tags, frame_idx=i)
 
                 recall = (stats["det"] / stats["gt"] * 100) if stats["gt"] > 0 else 0
                 avg_err = (stats["err_sum"] / stats["det"]) if stats["det"] > 0 else 0
@@ -162,23 +161,57 @@ def generate_synthetic_image(num_tags, res, noise_sigma=0.0):
     return img, gt_data
 
 
-def log_to_rerun(ds_name, img_name, img, detections, gt_tags):
-    base = f"benchmarks/{ds_name}/{Path(img_name).stem}"
-    rr.set_time_sequence("frame_idx", 0)
-    rr.log(f"{base}/image", rr.Image(img))
+def log_to_rerun(ds_name, img_name, img, detections, gt_tags, frame_idx=0):
+    rr.set_time(timeline="frame_idx", sequence=frame_idx)
+    rr.log("benchmark/image", rr.Image(img))
 
-    for gt in gt_tags:
-        c = np.vstack([gt.corners, gt.corners[0]])
-        rr.log(f"{base}/gt/tag_{gt.tag_id}", rr.LineStrips2D(c, colors=[0, 255, 0]))
+    # 1. Log Ground Truth (Green) - Nested under image path
+    if gt_tags:
+        gt_strips = []
+        gt_ids = []
+        gt_centers = []
+        for gt in gt_tags:
+            c = np.vstack([gt.corners, gt.corners[0]])
+            gt_strips.append(c)
+            gt_ids.append(f"GT:{gt.tag_id}")
+            gt_centers.append(np.mean(gt.corners, axis=0))
 
-    for det in detections:
-        c = np.array(det["corners"])
-        c = np.vstack([c, c[0]])
-        rr.log(f"{base}/det/tag_{det['id']}", rr.LineStrips2D(c, colors=[255, 0, 0]))
+        rr.log(
+            "benchmark/image/gt",
+            rr.LineStrips2D(gt_strips, colors=[0, 255, 0], radii=1.0),
+        )
+        rr.log(
+            "benchmark/image/gt/labels",
+            rr.Points2D(gt_centers, labels=gt_ids, colors=[0, 255, 0], radii=2.0),
+        )
+
+    # 2. Log Detections (Red) - Nested under image path
+    if detections:
+        det_strips = []
+        det_ids = []
+        det_centers = []
+        for det in detections:
+            c = np.array(det["corners"])
+            c = np.vstack([c, c[0]])
+            det_strips.append(c)
+            det_ids.append(f"ID:{det['id']}")
+            det_centers.append(np.array(det["center"]))
+
+        rr.log(
+            "benchmark/image/det",
+            rr.LineStrips2D(det_strips, colors=[0, 0, 255], radii=0.5),
+        )
+        rr.log(
+            "benchmark/image/det/labels",
+            rr.Points2D(det_centers, labels=det_ids, colors=[0, 0, 255], radii=1.0),
+        )
 
 
 def main():
     parser = argparse.ArgumentParser()
+    # Add to main parser for global flags (e.g. run_bench.py --serve real)
+    rr.script_add_args(parser)
+
     subparsers = parser.add_subparsers(dest="mode", required=True)
 
     real = subparsers.add_parser("real")
@@ -188,19 +221,25 @@ def main():
     real.add_argument("--skip", type=int, default=0)
     real.add_argument("--compare", action="store_true")
     real.add_argument("--rerun", action="store_true")
+    # Add to subparser for local flags (e.g. run_bench.py real --serve)
+    rr.script_add_args(real)
 
     synth = subparsers.add_parser("synthetic")
     synth.add_argument("--targets", type=str, default="1,10,50,100")
     synth.add_argument("--noise", type=float, default=0.0)
     synth.add_argument("--iterations", type=int, default=10)
     synth.add_argument("--compare", action="store_true")
+    # Add to subparser for local flags (e.g. run_bench.py synthetic --serve)
+    rr.script_add_args(synth)
 
     args = parser.parse_args()
 
     if args.mode == "real":
         if args.rerun and RERUN_AVAILABLE:
-            rr.init("Locus Real Benchmark", spawn=True)
+            rr.script_setup(args, "locus_real_benchmark")
         run_real_benchmark(args)
+        if args.rerun and RERUN_AVAILABLE:
+            rr.script_teardown(args)
     else:
         run_synthetic_benchmark(args)
 

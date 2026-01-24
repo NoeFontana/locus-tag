@@ -1,4 +1,4 @@
-import time
+import argparse
 
 import locus
 import numpy as np
@@ -6,7 +6,11 @@ import rerun as rr
 
 
 def main():
-    rr.init("locus_visualizer", spawn=True)
+    parser = argparse.ArgumentParser(description="Visualize Locus segmentation.")
+    rr.script_add_args(parser)
+    args = parser.parse_args()
+
+    rr.script_setup(args, "locus_segmentation")
 
     # 1. Generate a synthetic image with multiple "tags" (dark on light)
     img = np.random.randint(220, 255, (1080, 1920), dtype=np.uint8)
@@ -35,8 +39,7 @@ def main():
         corners = np.vstack([corners, corners[0]])
         rr.log(f"quads/q{i}", rr.LineStrips2D(corners, labels=f"Tag {d.id}"))
 
-    # Keep alive to see output
-    time.sleep(10)
+    rr.script_teardown(args)
 
 
 if __name__ == "__main__":

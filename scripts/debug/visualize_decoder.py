@@ -1,4 +1,4 @@
-import time
+import argparse
 
 import locus
 import numpy as np
@@ -6,7 +6,11 @@ import rerun as rr
 
 
 def main():
-    rr.init("locus_decoder_viz", spawn=True)
+    parser = argparse.ArgumentParser(description="Visualize Locus tag decoding.")
+    rr.script_add_args(parser)
+    args = parser.parse_args()
+
+    rr.script_setup(args, "locus_decoder_viz")
 
     # 1. Generate a synthetic image with a known tag pattern
     # 6x6 grid + 2 border = 8x8 units
@@ -51,7 +55,7 @@ def main():
         corners = np.vstack([corners, corners[0]])
         rr.log(f"tags/tag{i}", rr.LineStrips2D(corners, labels=f"ID:{d.id} H:{d.hamming}"))
 
-    time.sleep(5)
+    rr.script_teardown(args)
 
 
 if __name__ == "__main__":
