@@ -89,6 +89,7 @@ use bumpalo::Bump;
 use rayon::prelude::*;
 
 /// Result of a tag detection.
+#[derive(Clone, Debug)]
 pub struct Detection {
     /// The decoded ID of the tag.
     pub id: u32,
@@ -121,6 +122,20 @@ pub struct PipelineStats {
     pub num_candidates: usize,
     /// Number of final detections.
     pub num_detections: usize,
+}
+
+/// Full result of a detection including intermediate data for debugging.
+pub struct FullDetectionResult {
+    /// Final detections.
+    pub detections: Vec<Detection>,
+    /// All quad candidates found before decoding.
+    pub candidates: Vec<Detection>,
+    /// The binarized image (thresholded).
+    pub binarized: Option<Vec<u8>>,
+    /// Labeled connected components image.
+    pub labels: Option<Vec<u32>>,
+    /// Pipeline statistics.
+    pub stats: PipelineStats,
 }
 
 /// The main entry point for detecting AprilTags.
@@ -199,6 +214,45 @@ impl Detector {
         img: &ImageView,
         options: &DetectOptions,
     ) -> (Vec<Detection>, PipelineStats) {
+        let res = self.detect_internal(img, options, false);
+        (res.detections, res.stats)
+    }
+
+    /// Debugging: Extract quad candidates without decoding.
+    ///
+    /// This runs the pipeline up to the quad extraction stage and returns all distinct
+    /// quads found. Useful for visualizing what the detector "sees" before the
+    /// decoder rejects invalid tags.
+    #[allow(clippy::too_many_lines, clippy::unwrap_used)]
+    pub fn extract_candidates(
+        &mut self,
+        img: &ImageView,
+        options: &DetectOptions,
+    ) -> (Vec<Detection>, PipelineStats) {
+        // This is now just a shortcut to detect_internal with a flag if we want to keep it,
+        // but it's better to just return the full result if needed.
+        // For now, let's keep the API compatible.
+        let res = self.detect_internal(img, options, true);
+        (res.candidates, res.stats)
+    }
+
+    /// Perform full detection and return all intermediate debug data.
+    pub fn detect_full(
+        &mut self,
+        img: &ImageView,
+        options: &DetectOptions,
+    ) -> FullDetectionResult {
+        self.detect_internal(img, options, true)
+    }
+
+    /// Internal unified detection pipeline.
+    #[allow(clippy::too_many_lines, clippy::unwrap_used)]
+    fn detect_internal(
+        &mut self,
+        img: &ImageView,
+        options: &DetectOptions,
+        capture_debug: bool,
+    ) -> FullDetectionResult {
         let mut stats = PipelineStats::default();
         let start_total = std::time::Instant::now();
 
@@ -242,7 +296,7 @@ impl Detector {
             (*img, 1.0, *img)
         };
 
-        let img = &detection_img; // Shadowing for pipeline scope
+        let img = &detection_img;
 
         // Backup config for potential restoration
         let original_tile_size = self.config.threshold_tile_size;
@@ -271,7 +325,6 @@ impl Detector {
                 (self.config.quad_min_edge_length / decimation as f64).max(1.0);
         }
 
-        // let img = img; // Simplify reference - removed redundant binder
         let start_thresh = std::time::Instant::now();
 
         // 1a. Optional bilateral pre-filtering
@@ -419,58 +472,61 @@ impl Detector {
             &temp_decoders
         };
 
-        let mut final_detections: Vec<Detection> = candidates
-            .into_par_iter()
-            .filter_map(|mut cand| {
-                let h = crate::decoder::Homography::square_to_quad(&cand.corners)?;
+        // We use a small closure to encapsulate decoding logic and avoid duplication.
+        // It takes an owned Detection and tries to decode it.
+        let decode_fn = |mut cand: Detection| -> Option<Detection> {
+            let h = crate::decoder::Homography::square_to_quad(&cand.corners)?;
+            for decoder in active_decoders {
+                if let Some(bits) = crate::decoder::sample_grid(
+                    &refinement_img,
+                    &h,
+                    decoder.as_ref(),
+                    self.config.decoder_min_contrast,
+                ) && let Some((id, hamming, rot)) = decoder.decode(bits)
+                {
+                    cand.id = id;
+                    cand.hamming = hamming;
 
-                for decoder in active_decoders {
-                    // Decoding must always happen on the full resolution refinement_img
-                    if let Some(bits) = crate::decoder::sample_grid(
-                        &refinement_img,
-                        &h,
-                        decoder.as_ref(),
-                        self.config.decoder_min_contrast,
-                    ) && let Some((id, hamming, rot)) = decoder.decode(bits)
-                    {
-                        cand.id = id;
-                        cand.hamming = hamming;
-
-                        let mut reordered = [[0.0; 2]; 4];
-                        for (i, item) in reordered.iter_mut().enumerate() {
-                            let src_idx = (i + usize::from(rot)) % 4;
-                            *item = cand.corners[src_idx];
-                        }
-                        cand.corners = reordered;
-
-                        // Estimate pose if requested
-                        if let (Some(intrinsics), Some(tag_size)) =
-                            (options.intrinsics, options.tag_size)
-                        {
-                            cand.pose = crate::pose::estimate_tag_pose(
-                                &intrinsics,
-                                &cand.corners,
-                                tag_size,
-                            );
-                        }
-
-                        return Some(cand);
+                    let mut reordered = [[0.0; 2]; 4];
+                    for (i, item) in reordered.iter_mut().enumerate() {
+                        let src_idx = (i + usize::from(rot)) % 4;
+                        *item = cand.corners[src_idx];
                     }
+                    cand.corners = reordered;
+
+                    if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size)
+                    {
+                        cand.pose =
+                            crate::pose::estimate_tag_pose(&intrinsics, &cand.corners, tag_size);
+                    }
+                    return Some(cand);
                 }
-                None
-            })
-            .collect();
+            }
+            None
+        };
+
+        let mut final_detections: Vec<Detection>;
+        let mut processed_candidates = Vec::new();
+
+        if capture_debug {
+            // In debug mode, we MUST clone candidates because we need them for both returning and decoding.
+            processed_candidates = candidates.clone();
+            final_detections = candidates.into_par_iter().filter_map(decode_fn).collect();
+        } else {
+            // In normal mode, we consume candidates with into_par_iter() for maximum performance.
+            final_detections = candidates.into_par_iter().filter_map(decode_fn).collect();
+        }
+
         stats.decoding_ms = start_decode.elapsed().as_secs_f64() * 1000.0;
         stats.num_detections = final_detections.len();
 
         // Final coordinate adjustment and scaling
-        // We apply a +0.5 shift to all coordinates to align pixel centers (index + 0.5)
-        // with the boundary-based coordinate system (index + 1.0) expected by users/tests.
         let inv_scale = if upscale_factor > 1 {
             1.0 / effective_scale
         } else {
             1.0
         };
+
         for d in &mut final_detections {
             for corner in &mut d.corners {
                 corner[0] = (corner[0] + 0.5) * inv_scale;
@@ -484,6 +540,17 @@ impl Detector {
             }
         }
 
+        if capture_debug {
+            for d in &mut processed_candidates {
+                for corner in &mut d.corners {
+                    corner[0] = (corner[0] + 0.5) * inv_scale;
+                    corner[1] = (corner[1] + 0.5) * inv_scale;
+                }
+                d.center[0] = (d.center[0] + 0.5) * inv_scale;
+                d.center[1] = (d.center[1] + 0.5) * inv_scale;
+            }
+        }
+
         stats.total_ms = start_total.elapsed().as_secs_f64() * 1000.0;
 
         // Restore config
@@ -493,7 +560,21 @@ impl Detector {
         self.config.quad_min_area = original_quad_min_area;
         self.config.quad_min_edge_length = original_quad_min_edge_length;
 
-        (final_detections, stats)
+        FullDetectionResult {
+            detections: final_detections,
+            candidates: processed_candidates,
+            binarized: if capture_debug {
+                Some(binarized.to_vec())
+            } else {
+                None
+            },
+            labels: if capture_debug {
+                Some(label_result.labels.to_vec())
+            } else {
+                None
+            },
+            stats,
+        }
     }
 }
 

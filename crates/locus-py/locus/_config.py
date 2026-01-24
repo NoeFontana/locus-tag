@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from .locus import TagFamily, SegmentationConnectivity
+from .locus import SegmentationConnectivity, TagFamily
 
 
 class DetectorConfig(BaseModel):
@@ -34,7 +34,9 @@ class DetectorConfig(BaseModel):
     quad_min_edge_score: float = Field(default=0.3, ge=0.0)
     subpixel_refinement_sigma: float = Field(default=0.6, ge=0.0)
     segmentation_margin: int = Field(default=2)
-    segmentation_connectivity: SegmentationConnectivity = Field(default_factory=lambda: SegmentationConnectivity.Eight)
+    segmentation_connectivity: SegmentationConnectivity = Field(
+        default_factory=lambda: SegmentationConnectivity.Eight
+    )
     upscale_factor: int = Field(default=1, ge=1)
     decoder_min_contrast: float = Field(default=20.0, ge=0.0)
 
@@ -48,6 +50,7 @@ class DetectOptions(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     families: list[TagFamily] = Field(default_factory=list)
+    decimation: int = Field(default=1, ge=1)
 
     @classmethod
     def all(cls) -> "DetectOptions":
