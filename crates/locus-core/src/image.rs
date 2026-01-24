@@ -264,6 +264,61 @@ impl<'a> ImageView<'a> {
 
         ImageView::new(&output[..new_w * new_h], new_w, new_h, new_w)
     }
+
+    /// Create an upscaled copy of the image using bilinear interpolation.
+    ///
+    /// The `output` buffer must have size at least `(width*factor) * (height*factor)`.
+    pub fn upscale_to<'b>(
+        &self,
+        factor: usize,
+        output: &'b mut [u8],
+    ) -> Result<ImageView<'b>, String> {
+        let factor = factor.max(1);
+        if factor == 1 {
+            let len = self.data.len();
+            if output.len() < len {
+                return Err(format!(
+                    "Output buffer too small: {} < {}",
+                    output.len(),
+                    len
+                ));
+            }
+            output[..len].copy_from_slice(self.data);
+            return ImageView::new(&output[..len], self.width, self.height, self.width);
+        }
+
+        let new_w = self.width * factor;
+        let new_h = self.height * factor;
+
+        if output.len() < new_w * new_h {
+            return Err(format!(
+                "Output buffer too small for upscaling: {} < {}",
+                output.len(),
+                new_w * new_h
+            ));
+        }
+
+        let scale = 1.0 / factor as f64;
+
+        output
+            .par_chunks_exact_mut(new_w)
+            .enumerate()
+            .take(new_h)
+            .for_each(|(y, out_row)| {
+                let src_y = y as f64 * scale;
+                for (x, val) in out_row.iter_mut().enumerate() {
+                    let src_x = x as f64 * scale;
+                    // We can use unchecked version for speed if we are confident,
+                    // but sample_bilinear handles bounds checks.
+                    // Given we are inside image bounds, it should be fine.
+                    // To maximize perf we might want a localized optimized loop here,
+                    // but for now reusing sample_bilinear is safe and clean.
+                    *val = self.sample_bilinear(src_x, src_y) as u8;
+                }
+            });
+
+        ImageView::new(&output[..new_w * new_h], new_w, new_h, new_w)
+    }
 }
 
 #[cfg(test)]

@@ -77,6 +77,7 @@ def run_visualization(args):
                 )
 
             # 2. Thresholding (Binarized Image)
+            # 2. Thresholding (Binarized Image)
             binarized = res.get_binarized()
             if binarized is not None:
                 rr.log("pipeline/1_threshold", rr.Image(binarized))
@@ -95,14 +96,19 @@ def run_visualization(args):
                     c = np.vstack([c, c[0]])
                     cand_strips.append(c)
 
+                cand_labels = [f"H:{cand.hamming}" for cand in res.candidates]
                 # Log to dedicated view and overlay on input
                 rr.log(
                     "pipeline/3_candidates",
-                    rr.LineStrips2D(cand_strips, colors=[100, 150, 255], radii=0.5),
+                    rr.LineStrips2D(
+                        cand_strips, colors=[100, 150, 255], radii=0.5, labels=cand_labels
+                    ),
                 )
                 rr.log(
                     "pipeline/0_input/candidates",
-                    rr.LineStrips2D(cand_strips, colors=[100, 150, 255], radii=0.5),
+                    rr.LineStrips2D(
+                        cand_strips, colors=[100, 150, 255], radii=0.5, labels=cand_labels
+                    ),
                 )
 
             # 5. Final Detections
@@ -138,6 +144,19 @@ def run_visualization(args):
             # Counts
             rr.log("pipeline/stats/counts/candidates", rr.Scalars(float(res.stats.num_candidates)))
             rr.log("pipeline/stats/counts/detections", rr.Scalars(float(res.stats.num_detections)))
+            rr.log(
+                "pipeline/stats/counts/rejected_contrast",
+                rr.Scalars(float(res.stats.num_rejected_by_contrast)),
+            )
+            rr.log(
+                "pipeline/stats/counts/rejected_hamming",
+                rr.Scalars(float(res.stats.num_rejected_by_hamming)),
+            )
+
+            print(
+                f"  Img: {img_name} -> Cand: {res.stats.num_candidates}, Det: {res.stats.num_detections}, "
+                f"Rej(Contrast): {res.stats.num_rejected_by_contrast}, Rej(Hamming): {res.stats.num_rejected_by_hamming}"
+            )
 
 
 def main():
