@@ -4,13 +4,13 @@
 A high-performance AprilTag and ArUco detector in Rust with Python bindings.
 This project is an experiment in LLM-assisted library development, targeting 1-10ms latencies for modern computer vision tasks.
 
-## Performance (1080p, 1-thread)
+## Performance (Full ICRA 2020 Dataset, 50 images)
 
-| Detector | 1 Tag | 200 Tags |
-| :--- | :--- | :--- |
-| **Locus** | **5.4 ms** | **10.9 ms** |
-| AprilTag (SOTA) | 14.2 ms | 38.6 ms |
-| OpenCV | 20.7 ms | 65.4 ms |
+| Detector | Recall | RMSE | Latency |
+| :--- | :--- | :--- | :--- |
+| **Locus** | **72.52%** | 0.30 px | **70.0 ms** |
+| AprilTag (SOTA) | 62.34% | **0.22 px** | 93.9 ms |
+| OpenCV | 33.16% | 0.92 px | 100.7 ms |
 
 ## Quick Start
 
@@ -19,36 +19,77 @@ This project is an experiment in LLM-assisted library development, targeting 1-1
 uv run maturin develop -r
 ```
 
-### Usage
+### Basic Usage
+The simplest way to detect tags using default settings:
+
 ```python
-import cv2, locus
-img = cv2.imread("image.jpg", 0)
+import cv2
+import locus
+
+# Load image in grayscale
+img = cv2.imread("image.jpg", cv2.IMREAD_GRAYSCALE)
+
+# Detect all tag families (default AprilTag 36h11)
 tags = locus.detect_tags(img)
 
 for t in tags:
-    print(f"ID: {t.id}, Corners: {t.corners}")
+    print(f"ID: {t.id}, Center: {t.center}, Corners: {t.corners}")
 ```
 
-### Checkerboard Support
+### Advanced Usage
 
-Locus supports detecting tags embedded in checkerboard patterns (where corners touch black squares).
-This requires switching to **4-way connectivity**, as 8-way connectivity (default) merges touching corners.
+For performance-critical applications, use the `Detector` class to maintain state and customize timing.
+
+#### Performance Tuning & Decimation
+If you are processing high-resolution images but your tags are large, use `decimation` to significantly speed up detection.
 
 ```python
-import locus
-
-# Configure for checkerboard tags
 detector = locus.Detector(
-    segmentation_connectivity=locus.SegmentationConnectivity.Four
+    threshold_tile_size=16, # Larger tiles are faster
+    enable_bilateral=False  # Disable for 20-30% speedup if noise is low
 )
+
+# Use decimation=2 to process at half resolution (4x speed boost)
+# Note: Use decimation=1 if some tags are very small (< 15-20 pixels)
+tags, stats = detector.detect_with_stats(img, decimation=2)
+
+print(f"Detected {len(tags)} tags in {stats.total_ms:.2f}ms")
+```
+
+#### Checkerboard & Dictionary Support
+Locus supports multiple dictionaries and specialized profiles for densely packed tags.
+
+```python
+# 1. Specialized Profile for Checkerboards
+# Uses 4-way connectivity to prevent merging touching black squares
+detector = locus.Detector.checkerboard()
+
+# 2. Selecting Specific Tag Families
+# Faster than searching for all families
+detector.set_families([
+    locus.TagFamily.AprilTag36h11,
+    locus.TagFamily.ArUco4x4_50
+])
 
 tags = detector.detect(img)
 ```
 
-| Mode | Use Case |
-| :--- | :--- |
-| `Eight` (Default) | **Isolated Tags**. Best performance and robustness to broken borders. |
-| `Four` | **Checkerboards**. Required when tag corners touch other black elements. |
+| Profile | Connection | Use Case |
+| :--- | :--- | :--- |
+| `Default` | `Eight` | **Isolated Tags**. Best robustness to broken borders/noise. |
+| `Checkerboard`| `Four` | **Dense Patterns**. Required when tag corners touch other black elements. |
+
+#### Precise Configuration
+The `DetectorConfig` class allows tuning every stage of the pipeline:
+
+```python
+config = locus.DetectorConfig(
+    quad_min_area=16,
+    subpixel_refinement_sigma=0.8,
+    decoder_min_contrast=10.0  # Boost recall on blurry tags
+)
+detector = locus.Detector(config=config)
+```
 
 ## Development & Testing
 
