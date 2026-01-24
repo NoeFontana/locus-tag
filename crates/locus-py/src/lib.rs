@@ -316,14 +316,19 @@ impl Detector {
     }
 
     /// Detect tags with timing statistics.
+    #[pyo3(signature = (img, decimation = 1))]
     #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
     fn detect_with_stats(
         &mut self,
         img: PyReadonlyArray2<u8>,
+        decimation: usize,
     ) -> PyResult<(Vec<Detection>, PipelineStats)> {
         let source = create_image_view(&img)?;
         let view = source.as_view()?;
-        let (detections, stats) = self.inner.detect_with_stats(&view);
+        let options = locus_core::DetectOptions::builder()
+            .decimation(decimation)
+            .build();
+        let (detections, stats) = self.inner.detect_with_stats_and_options(&view, &options);
         Ok((
             detections.into_iter().map(Detection::from).collect(),
             PipelineStats::from(stats),

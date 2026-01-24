@@ -31,10 +31,15 @@ def run_real_benchmark(args):
 
     results = []
 
-    wrappers = [LocusWrapper()]
+    locus_config = locus.DetectorConfig(
+        threshold_tile_size=4,
+        quad_min_area=4,
+        enable_bilateral=False,
+    )
+    wrappers = [LocusWrapper(config=locus_config, decimation=1)]
     if args.compare:
         wrappers.append(OpenCVWrapper())
-        wrappers.append(AprilTagWrapper())
+        wrappers.append(AprilTagWrapper(nthreads=8))
 
     for scenario in scenarios:
         if not loader.prepare_scenario(scenario):
@@ -87,7 +92,12 @@ def run_real_benchmark(args):
 
 
 def run_synthetic_benchmark(args):
-    wrappers = [LocusWrapper()]
+    locus_config = locus.DetectorConfig(
+        threshold_tile_size=4,
+        quad_min_area=4,
+        enable_bilateral=False,
+    )
+    wrappers = [LocusWrapper(config=locus_config, decimation=1)]
     if args.compare:
         wrappers.append(OpenCVWrapper())
         wrappers.append(AprilTagWrapper())

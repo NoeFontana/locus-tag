@@ -2,8 +2,8 @@ from ._config import DetectOptions, DetectorConfig
 from .locus import (
     Detection,
     PipelineStats,
-    TagFamily,
     SegmentationConnectivity,
+    TagFamily,
     debug_segmentation,
     debug_threshold,
     detect_tags,
@@ -25,8 +25,8 @@ class Detector:
     def checkerboard(cls, **kwargs) -> "Detector":
         """
         Create a detector optimized for checkerboard patterns.
-        
-        This profile enables sharpening, uses 4-way connectivity, and 
+
+        This profile enables sharpening, uses 4-way connectivity, and
         disables bilateral filtering to maximize edge recall for small tags.
         """
         config = {
@@ -71,23 +71,25 @@ class Detector:
             decoder_min_contrast=config.decoder_min_contrast,
         )
 
-    def detect(self, img):
+    def detect(self, img, decimation: int = 1):
         """Detect tags using configured defaults."""
-        return self._inner.detect(img)
+        return self._inner.detect(img, decimation=decimation)
 
-    def detect_with_options(self, img, options: DetectOptions = None, **kwargs):
+    def detect_with_options(
+        self, img, options: DetectOptions = None, decimation: int = 1, **kwargs
+    ):
         """Detect tags with per-call options."""
         if options is None:
-            options = DetectOptions(**kwargs)
+            options = DetectOptions(decimation=decimation, **kwargs)
 
         if not options.families:
-            return self._inner.detect(img)
+            return self._inner.detect(img, decimation=options.decimation)
 
         return self._inner.detect_with_options(img, options.families)
 
-    def detect_with_stats(self, img):
+    def detect_with_stats(self, img, decimation: int = 1):
         """Detect tags and return performance statistics."""
-        return self._inner.detect_with_stats(img)
+        return self._inner.detect_with_stats(img, decimation=decimation)
 
     def set_families(self, families: list[TagFamily]):
         """Set the default tag families to decode."""
