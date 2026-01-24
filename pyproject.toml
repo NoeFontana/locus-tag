@@ -12,6 +12,13 @@ dependencies = ["numpy"]
 
 [project.optional-dependencies]
 validation = ["pydantic>=2.0"]
+benchmark = [
+    "opencv-python-headless",
+    "pupil-apriltags",
+    "tqdm",
+    "huggingface-hub",
+    "rerun-sdk",
+]
 docs = [
     "mkdocs>=1.5.0",
     "mkdocs-material>=9.5.0",
