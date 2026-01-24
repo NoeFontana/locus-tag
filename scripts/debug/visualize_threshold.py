@@ -1,3 +1,4 @@
+import argparse
 import time
 
 import locus
@@ -6,7 +7,11 @@ import rerun as rr
 
 
 def main():
-    rr.init("locus_visualizer", spawn=True)
+    parser = argparse.ArgumentParser(description="Visualize Locus adaptive thresholding.")
+    rr.script_add_args(parser)
+    args = parser.parse_args()
+
+    rr.script_setup(args, "locus_threshold")
 
     # 1. Generate a synthetic image with a "tag" (white square) and some noise
     img = np.random.randint(0, 50, (1080, 1920), dtype=np.uint8)
@@ -26,8 +31,7 @@ def main():
 
     rr.log("thresholded", rr.Image(bin_img))
 
-    # Keep alive for a bit to see the output
-    time.sleep(5)
+    rr.script_teardown(args)
 
 
 if __name__ == "__main__":
