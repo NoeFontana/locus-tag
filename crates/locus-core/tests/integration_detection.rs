@@ -189,3 +189,37 @@ mod extended {
         assert_eq!(detections[0].id, placements[0].id);
     }
 }
+
+/// Test that both 4-way and 8-way connectivity work correctly on a multi-tag image.
+#[test]
+fn test_connectivity_modes() {
+    use locus_core::config::{DetectorConfig, SegmentationConnectivity, TagFamily};
+    use locus_core::image::ImageView;
+    use locus_core::Detector;
+
+    // Generate a synthetic image with two tags
+    let (data, _gt) = locus_core::test_utils::generate_synthetic_test_image(
+        TagFamily::AprilTag36h11,
+        1,
+        40,
+        120,
+        0.0,
+    );
+    let img = ImageView::new(&data, 120, 120, 120).unwrap();
+
+    // 1. Test Eight-way connectivity (default)
+    let config_8 = DetectorConfig::builder()
+        .segmentation_connectivity(SegmentationConnectivity::Eight)
+        .build();
+    let mut detector_8 = Detector::with_config(config_8);
+    let dets_8 = detector_8.detect(&img);
+    assert!(!dets_8.is_empty(), "Failed to detect tag with 8-way connectivity");
+
+    // 2. Test Four-way connectivity
+    let config_4 = DetectorConfig::builder()
+        .segmentation_connectivity(SegmentationConnectivity::Four)
+        .build();
+    let mut detector_4 = Detector::with_config(config_4);
+    let dets_4 = detector_4.detect(&img);
+    assert!(!dets_4.is_empty(), "Failed to detect tag with 4-way connectivity");
+}
