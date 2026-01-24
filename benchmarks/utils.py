@@ -217,6 +217,12 @@ class OpenCVWrapper(LibraryWrapper):
         dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
         parameters = cv2.aruco.DetectorParameters()
         parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+        parameters.minMarkerPerimeterRate = 0.005
+        parameters.adaptiveThreshConstant = 3
+        parameters.adaptiveThreshWinSizeStep = 5
+        parameters.minMarkerDistanceRate = 0.01
+        parameters.minDistanceToBorder = 1
+        parameters.polygonalApproxAccuracyRate = 0.01
         self.detector = cv2.aruco.ArucoDetector(dictionary, parameters)
 
     def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
@@ -238,10 +244,15 @@ class OpenCVWrapper(LibraryWrapper):
 
 
 class AprilTagWrapper(LibraryWrapper):
-    def __init__(self, nthreads: int = 4, quad_decimate: float = 1.0):
+    def __init__(self, nthreads: int = 8, quad_decimate: float = 1.0):
         super().__init__("AprilTag")
         self.detector = AprilTagDetector(
-            families="tag36h11", nthreads=nthreads, quad_decimate=quad_decimate
+            families="tag36h11",
+            nthreads=nthreads,
+            quad_decimate=quad_decimate,
+            quad_sigma=0.0,
+            decode_sharpening=0.25,
+            refine_edges=True,
         )
 
     def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
