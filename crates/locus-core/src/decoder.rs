@@ -542,6 +542,8 @@ pub trait TagDecoder: Send + Sync {
     /// Returns `Some((id, hamming, rotation))` if decoding is successful, `None` otherwise.
     /// `rotation` is 0-3, representing 90-degree CW increments.
     fn decode(&self, bits: u64) -> Option<(u32, u32, u8)>; // (id, hamming, rotation)
+    /// Decodes with custom maximum hamming distance.
+    fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)>;
     /// Get the original code for a given ID (useful for testing/simulation).
     fn get_code(&self, id: u16) -> Option<u64>;
 }
@@ -565,6 +567,12 @@ impl TagDecoder for AprilTag36h11 {
         // Use the full 587-code dictionary with O(1) exact match + hamming search
         crate::dictionaries::APRILTAG_36H11
             .decode(bits, 4) // Allow up to 4 bit errors for maximum recall
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
+    }
+
+    fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)> {
+        crate::dictionaries::APRILTAG_36H11
+            .decode(bits, max_hamming)
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 
@@ -594,6 +602,12 @@ impl TagDecoder for AprilTag16h5 {
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 
+    fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)> {
+        crate::dictionaries::APRILTAG_16H5
+            .decode(bits, max_hamming)
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
+    }
+
     fn get_code(&self, id: u16) -> Option<u64> {
         crate::dictionaries::APRILTAG_16H5.get_code(id)
     }
@@ -620,6 +634,12 @@ impl TagDecoder for ArUco4x4_50 {
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 
+    fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)> {
+        crate::dictionaries::ARUCO_4X4_50
+            .decode(bits, max_hamming)
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
+    }
+
     fn get_code(&self, id: u16) -> Option<u64> {
         crate::dictionaries::ARUCO_4X4_50.get_code(id)
     }
@@ -643,6 +663,12 @@ impl TagDecoder for ArUco4x4_100 {
     fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
         crate::dictionaries::ARUCO_4X4_100
             .decode(bits, 1)
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
+    }
+
+    fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)> {
+        crate::dictionaries::ARUCO_4X4_100
+            .decode(bits, max_hamming)
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 
@@ -682,6 +708,12 @@ impl TagDecoder for GenericDecoder {
     fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
         self.dict
             .decode(bits, self.dict.hamming_distance as u32)
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
+    }
+
+    fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)> {
+        self.dict
+            .decode(bits, max_hamming)
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 

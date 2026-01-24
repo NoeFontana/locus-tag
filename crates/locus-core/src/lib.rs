@@ -89,7 +89,7 @@ use bumpalo::Bump;
 use rayon::prelude::*;
 
 /// Result of a tag detection.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Detection {
     /// The decoded ID of the tag.
     pub id: u32,
@@ -106,7 +106,8 @@ pub struct Detection {
 }
 
 /// Statistics for the detection pipeline stages.
-#[derive(Default, Debug, Clone)]
+/// Pipeline-wide statistics for a single detection call.
+#[derive(Clone, Copy, Debug, Default)]
 pub struct PipelineStats {
     /// Time taken for adaptive thresholding in milliseconds.
     pub threshold_ms: f64,
@@ -122,6 +123,10 @@ pub struct PipelineStats {
     pub num_candidates: usize,
     /// Number of final detections.
     pub num_detections: usize,
+    /// Number of candidates rejected due to low contrast.
+    pub num_rejected_by_contrast: usize,
+    /// Number of candidates that passed contrast check but failed to match any tag code (hamming distance too high).
+    pub num_rejected_by_hamming: usize,
 }
 
 /// Full result of a detection including intermediate data for debugging.
@@ -277,19 +282,8 @@ impl Detector {
             let new_h = img.height * upscale_factor;
             self.upscale_buf.resize(new_w * new_h, 0);
 
-            for y in 0..img.height {
-                let src_row = y * img.width;
-                for rep_y in 0..upscale_factor {
-                    let dst_row = (y * upscale_factor + rep_y) * new_w;
-                    for x in 0..img.width {
-                        let val = img.data[src_row + x];
-                        for rep_x in 0..upscale_factor {
-                            self.upscale_buf[dst_row + x * upscale_factor + rep_x] = val;
-                        }
-                    }
-                }
-            }
-            let upscaled_img = ImageView::new(&self.upscale_buf, new_w, new_h, new_w)
+            let upscaled_img = img
+                .upscale_to(upscale_factor, &mut self.upscale_buf)
                 .expect("valid upscaled view");
             (upscaled_img, upscale_factor as f64, upscaled_img)
         } else {
@@ -474,48 +468,93 @@ impl Detector {
 
         // We use a small closure to encapsulate decoding logic and avoid duplication.
         // It takes an owned Detection and tries to decode it.
-        let decode_fn = |mut cand: Detection| -> Option<Detection> {
-            let h = crate::decoder::Homography::square_to_quad(&cand.corners)?;
+        // Returns (Option<Detection>, bool_failed_contrast, bool_failed_hamming, u32_best_hamming)
+        let decode_fn = |mut cand: Detection| -> (Option<Detection>, bool, bool, u32) {
+            let h = crate::decoder::Homography::square_to_quad(&cand.corners);
+            if h.is_none() {
+                return (None, false, false, u32::MAX);
+            }
+            let h = h.expect("Already checked is_some");
+
+            let mut passed_contrast = false;
+            let mut min_hamming = u32::MAX;
+
             for decoder in active_decoders {
                 if let Some(bits) = crate::decoder::sample_grid(
                     &refinement_img,
                     &h,
                     decoder.as_ref(),
                     self.config.decoder_min_contrast,
-                ) && let Some((id, hamming, rot)) = decoder.decode(bits)
-                {
-                    cand.id = id;
-                    cand.hamming = hamming;
+                ) {
+                    passed_contrast = true;
+                    // We call a lower-level decode that returns the best hamming even if > threshold.
+                    // But for now let's just use the existing decode and maybe hack it.
+                    // Actually, let's just use 255 as max_hamming to see what we get.
+                    if let Some((id, hamming, rot)) = decoder.decode_full(bits, 255) {
+                        if hamming < min_hamming {
+                            min_hamming = hamming;
+                        }
 
-                    let mut reordered = [[0.0; 2]; 4];
-                    for (i, item) in reordered.iter_mut().enumerate() {
-                        let src_idx = (i + usize::from(rot)) % 4;
-                        *item = cand.corners[src_idx];
-                    }
-                    cand.corners = reordered;
+                        // If it's within the official threshold, it's a success
+                        if hamming <= if decoder.name() == "36h11" { 4 } else { 1 } {
+                            cand.id = id;
+                            cand.hamming = hamming;
 
-                    if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size)
-                    {
-                        cand.pose =
-                            crate::pose::estimate_tag_pose(&intrinsics, &cand.corners, tag_size);
+                            let mut reordered = [[0.0; 2]; 4];
+                            for (i, item) in reordered.iter_mut().enumerate() {
+                                let src_idx = (i + usize::from(rot)) % 4;
+                                *item = cand.corners[src_idx];
+                            }
+                            cand.corners = reordered;
+
+                            if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size)
+                            {
+                                cand.pose =
+                                    crate::pose::estimate_tag_pose(&intrinsics, &cand.corners, tag_size);
+                            }
+                            return (Some(cand), false, false, hamming);
+                        }
                     }
-                    return Some(cand);
                 }
             }
-            None
+            (None, !passed_contrast, passed_contrast, min_hamming)
         };
 
-        let mut final_detections: Vec<Detection>;
+        let mut final_detections: Vec<Detection> = Vec::new();
         let mut processed_candidates = Vec::new();
+        
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let rejected_contrast = AtomicUsize::new(0);
+        let rejected_hamming = AtomicUsize::new(0);
 
-        if capture_debug {
-            // In debug mode, we MUST clone candidates because we need them for both returning and decoding.
-            processed_candidates = candidates.clone();
-            final_detections = candidates.into_par_iter().filter_map(decode_fn).collect();
-        } else {
-            // In normal mode, we consume candidates with into_par_iter() for maximum performance.
-            final_detections = candidates.into_par_iter().filter_map(decode_fn).collect();
+
+        let results: Vec<(Option<Detection>, bool, bool, u32, Detection)> = candidates
+            .into_par_iter()
+            .map(|cand| {
+                let cand_copy = if capture_debug { Some(cand.clone()) } else { None };
+                let (det, failed_contrast, failed_hamming, best_h) = decode_fn(cand);
+                (det, failed_contrast, failed_hamming, best_h, cand_copy.unwrap_or(Detection::default()))
+            })
+            .collect();
+
+        for (det, failed_contrast, failed_hamming, best_h, mut cand) in results {
+            if failed_contrast {
+                rejected_contrast.fetch_add(1, Ordering::Relaxed);
+            }
+            if failed_hamming {
+                rejected_hamming.fetch_add(1, Ordering::Relaxed);
+            }
+            if let Some(d) = det {
+                final_detections.push(d);
+            }
+            if capture_debug {
+                cand.hamming = best_h; 
+                processed_candidates.push(cand);
+            }
         }
+
+        stats.num_rejected_by_contrast = rejected_contrast.load(Ordering::Relaxed);
+        stats.num_rejected_by_hamming = rejected_hamming.load(Ordering::Relaxed);
 
         stats.decoding_ms = start_decode.elapsed().as_secs_f64() * 1000.0;
         stats.num_detections = final_detections.len();

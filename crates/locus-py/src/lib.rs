@@ -51,12 +51,17 @@ pub struct PipelineStats {
     /// Total time (ms).
     #[pyo3(get)]
     pub total_ms: f64,
-    /// Number of quad candidates.
     #[pyo3(get)]
     pub num_candidates: usize,
     /// Number of final detections.
     #[pyo3(get)]
     pub num_detections: usize,
+    /// Number of candidates rejected due to low contrast.
+    #[pyo3(get)]
+    pub num_rejected_by_contrast: usize,
+    /// Number of candidates that failed decoding.
+    #[pyo3(get)]
+    pub num_rejected_by_hamming: usize,
 }
 
 #[pyclass]
@@ -124,6 +129,8 @@ impl From<locus_core::PipelineStats> for PipelineStats {
             total_ms: s.total_ms,
             num_candidates: s.num_candidates,
             num_detections: s.num_detections,
+            num_rejected_by_contrast: s.num_rejected_by_contrast,
+            num_rejected_by_hamming: s.num_rejected_by_hamming,
         }
     }
 }
