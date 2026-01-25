@@ -12,6 +12,9 @@ This project is an experiment in LLM-assisted library development, targeting 1-1
 | AprilTag (SOTA) | 62.34% | **0.22 px** | 91.4 ms |
 | OpenCV | 33.16% | 0.92 px | 101.9 ms |
 
+Note the higher RMSE for Locus is mostly correlated by the higher recall.
+Comparing the RMSE of the same tags detected by both detectors shows that Locus' RMSE is about 7e-3 higher than AprilTag's.
+
 ## Quick Start
 
 ### Install
