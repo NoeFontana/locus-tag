@@ -8,7 +8,7 @@ import cv2
 import locus
 import numpy as np
 from huggingface_hub import hf_hub_download
-from pupil_apriltags import Detector as AprilTagDetector
+from pupil_apriltags import Detector as AprilTagDetector  # type: ignore[import-untyped]
 
 REPO_ID = "NoeFontana/apriltag-validation-data"
 DEFAULT_CACHE_DIR = Path("tests/data/icra2020")
@@ -46,17 +46,23 @@ class DatasetLoader:
 
         filename = f"{scenario}.tar.xz"
         try:
-            archive_path = hf_hub_download(
-                repo_id=REPO_ID,
-                filename=filename,
-                repo_type="dataset",
-                local_dir=self.cache_dir,
-                local_dir_use_symlinks=False,
+            from typing import Any, cast
+
+            download_func: Any = hf_hub_download
+            archive_path = cast(
+                str,
+                download_func(
+                    repo_id=REPO_ID,
+                    filename=filename,
+                    repo_type="dataset",
+                    local_dir=str(self.cache_dir),
+                    local_dir_use_symlinks=False,
+                ),
             )
-            archive_path = Path(archive_path)
-            with tarfile.open(archive_path, "r:xz") as tar:
+            archive_path_obj = Path(archive_path)
+            with tarfile.open(archive_path_obj, "r:xz") as tar:
                 tar.extractall(path=self.cache_dir)
-            archive_path.unlink()
+            archive_path_obj.unlink()
             return True
         except Exception as e:
             print(f"Error preparing scenario {scenario}: {e}")
@@ -97,7 +103,7 @@ class DatasetLoader:
         return results
 
     def _parse_csv(self, csv_file: Path) -> dict[str, list[TagGroundTruth]]:
-        gt_map = {}
+        gt_map: dict[str, dict[int, dict[str, Any]]] = {}
         with open(csv_file) as f:
             reader = csv.DictReader(f)
             for row in reader:
@@ -168,7 +174,7 @@ class Metrics:
                 gt_center = np.mean(gt.corners, axis=0)
                 dist = np.linalg.norm(det_center - gt_center)
                 if dist < min_dist:
-                    min_dist = dist
+                    min_dist = float(dist)
                     best_gt_idx = idx
 
             if best_gt_idx != -1 and min_dist < threshold:
@@ -186,6 +192,11 @@ class LibraryWrapper:
         self.name = name
 
     def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
+        """Detect tags in an image.
+        Returns:
+            detections: List of dicts with keys 'id', 'center', 'corners', 'hamming', 'margin'
+            stats: Library specific statistics (optional)
+        """
         raise NotImplementedError
 
 
@@ -259,7 +270,7 @@ class AprilTagWrapper(LibraryWrapper):
     def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
         raw_dets = self.detector.detect(img)
         detections = []
-        for d in raw_dets:
+        for d in raw_dets:  # type: ignore[attr-defined]
             detections.append(
                 {
                     "id": d.tag_id,

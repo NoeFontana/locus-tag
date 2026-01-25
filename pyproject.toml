@@ -28,6 +28,12 @@ docs = [
     "mkdocs-material>=9.5.0",
     "mkdocstrings[python]>=0.24.0",
 ]
+dev = [
+    "ruff>=0.1.0",
+    "pyrefly>=0.0.1",
+    "types-tqdm",
+    "pandas-stubs",
+]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]

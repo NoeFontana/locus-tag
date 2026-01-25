@@ -25,11 +25,13 @@ def analyze_tag_sizes(args):
 
             if not sizes:
                 continue
-            sizes = np.array(sizes)
-            print(f"  Total tags: {len(sizes)}")
-            print(f"  Mean size: {np.mean(sizes):.1f} px")
-            print(f"  Min size: {np.min(sizes):.1f} px")
-            print(f"  Small (<10px): {np.sum(sizes < 10)} ({np.mean(sizes < 10) * 100:.1f}%)")
+            sizes_arr = np.array(sizes)
+            print(f"  Total tags: {len(sizes_arr)}")
+            print(f"  Mean size: {np.mean(sizes_arr):.1f} px")
+            print(f"  Min size: {np.min(sizes_arr):.1f} px")
+            print(
+                f"  Small (<10px): {np.sum(sizes_arr < 10)} ({np.mean(sizes_arr < 10) * 100:.1f}%)"
+            )
 
 
 def diagnose_failures(args):

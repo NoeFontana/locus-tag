@@ -19,7 +19,9 @@ try:
     from scripts.data import apriltag_41h12 as apriltag_41h12_data
 except ImportError:
     print("Warning: scripts.data.apriltag_41h12 not found. 41h12 will be skipped.")
-    apriltag_41h12_data = None
+    from typing import Any
+
+    apriltag_41h12_data: Any = None
 
 
 # UMich AprilTag source URLs (for reference)

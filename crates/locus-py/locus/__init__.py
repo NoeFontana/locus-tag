@@ -101,7 +101,8 @@ class Detector:
     @property
     def enable_sharpening(self) -> bool:
         """Check if sharpening is enabled."""
-        return self._inner.enable_sharpening
+        val = self._inner.enable_sharpening
+        return bool(val)
 
     def extract_candidates(self, img, decimation: int = 1):
         """Extract quad candidates without decoding."""

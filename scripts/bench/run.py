@@ -1,8 +1,8 @@
 import argparse
 import time
+from typing import Any
 
 import cv2
-import locus
 import numpy as np
 
 try:
@@ -12,9 +12,11 @@ try:
 except ImportError:
     RERUN_AVAILABLE = False
 from tqdm import tqdm
+
 from scripts.bench.utils import (
     AprilTagWrapper,
     DatasetLoader,
+    LibraryWrapper,
     LocusWrapper,
     Metrics,
     OpenCVWrapper,
@@ -27,10 +29,11 @@ def run_real_benchmark(args):
     scenarios = args.scenarios
     types = args.types
 
-    results = []
+    # results storage
 
     # SOTA: Utilize defaults for optimized performance
-    wrappers = [LocusWrapper(decimation=1)]
+    wrappers: list[LibraryWrapper] = []
+    wrappers.append(LocusWrapper(decimation=1))
     if args.compare:
         wrappers.append(OpenCVWrapper())
         wrappers.append(AprilTagWrapper(nthreads=8))
@@ -50,7 +53,7 @@ def run_real_benchmark(args):
                 img_names = img_names[: args.limit]
 
             for wrapper in wrappers:
-                stats = {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []}
+                stats: dict[str, Any] = {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []}
 
                 for i, img_name in enumerate(tqdm(img_names, desc=f"{wrapper.name:<10}")):
                     img_path = img_dir / img_name
@@ -87,7 +90,8 @@ def run_real_benchmark(args):
 
 def run_synthetic_benchmark(args):
     # SOTA: Utilize defaults for optimized performance
-    wrappers = [LocusWrapper(decimation=1)]
+    wrappers: list[LibraryWrapper] = []
+    wrappers.append(LocusWrapper(decimation=1))
     if args.compare:
         wrappers.append(OpenCVWrapper())
         wrappers.append(AprilTagWrapper())
@@ -105,6 +109,7 @@ def run_synthetic_benchmark(args):
 
         for wrapper in wrappers:
             latencies = []
+            detections = []
             for _ in range(args.iterations):
                 start = time.perf_counter()
                 detections, _ = wrapper.detect(img)
