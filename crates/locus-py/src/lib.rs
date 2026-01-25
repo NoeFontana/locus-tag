@@ -224,6 +224,45 @@ impl SegmentationConnectivity {
 }
 
 // ============================================================================
+// CornerRefinementMode enum
+// ============================================================================
+
+/// Mode for subpixel corner refinement.
+#[pyclass(eq, eq_int, module = "locus")]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CornerRefinementMode {
+    /// No subpixel refinement (integer pixel precision).
+    None = 0,
+    /// Edge-based refinement using gradient maxima (Default).
+    Edge = 1,
+    /// GridFit: Optimizes corners by maximizing code contrast.
+    GridFit = 2,
+    /// Erf: Fits a Gaussian to the gradient profile for sub-pixel edge alignment.
+    Erf = 3,
+}
+
+impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
+    fn from(m: CornerRefinementMode) -> Self {
+        match m {
+            CornerRefinementMode::None => locus_core::config::CornerRefinementMode::None,
+            CornerRefinementMode::Edge => locus_core::config::CornerRefinementMode::Edge,
+            CornerRefinementMode::GridFit => locus_core::config::CornerRefinementMode::GridFit,
+            CornerRefinementMode::Erf => locus_core::config::CornerRefinementMode::Erf,
+        }
+    }
+}
+
+#[pymethods]
+impl CornerRefinementMode {
+    fn __reduce__(&self) -> (PyObject, (u8,)) {
+        Python::with_gil(|py| {
+            let cls = py.get_type::<Self>();
+            (cls.into_any().unbind(), (*self as u8,))
+        })
+    }
+}
+
+// ============================================================================
 // Detector class with persistent state
 // ============================================================================
 
@@ -267,28 +306,29 @@ impl Detector {
     ///     segmentation_connectivity: Connectivity mode (default: Eight)
     #[new]
     #[pyo3(signature = (
-        threshold_tile_size = 4,
-        threshold_min_range = 2,
-        enable_bilateral = true,
+        threshold_tile_size = 8,
+        threshold_min_range = 10,
+        enable_bilateral = false,
         bilateral_sigma_space = 0.8,
         bilateral_sigma_color = 30.0,
-        enable_sharpening = true,
-        enable_adaptive_window = true,
+        enable_sharpening = false,
+        enable_adaptive_window = false,
         threshold_min_radius = 2,
-        threshold_max_radius = 10,
-        adaptive_threshold_constant = 3,
-        adaptive_threshold_gradient_threshold = 20,
-        quad_min_area = 8,
-        quad_max_aspect_ratio = 8.0,
-        quad_min_fill_ratio = 0.15,
+        threshold_max_radius = 15,
+        adaptive_threshold_constant = 0,
+        adaptive_threshold_gradient_threshold = 10,
+        quad_min_area = 16,
+        quad_max_aspect_ratio = 10.0,
+        quad_min_fill_ratio = 0.10,
         quad_max_fill_ratio = 0.98,
-        quad_min_edge_length = 3.0,
-        quad_min_edge_score = 0.3,
+        quad_min_edge_length = 2.0,
+        quad_min_edge_score = 0.1,
         subpixel_refinement_sigma = 0.6,
-        segmentation_margin = 2,
+        segmentation_margin = 1,
         segmentation_connectivity = SegmentationConnectivity::Eight,
         upscale_factor = 1,
         decoder_min_contrast = 20.0,
+        refinement_mode = CornerRefinementMode::Erf,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -314,6 +354,7 @@ impl Detector {
         segmentation_connectivity: SegmentationConnectivity,
         upscale_factor: usize,
         decoder_min_contrast: f64,
+        refinement_mode: CornerRefinementMode,
     ) -> Self {
         let config = locus_core::DetectorConfig {
             threshold_tile_size,
@@ -338,6 +379,7 @@ impl Detector {
             segmentation_connectivity: segmentation_connectivity.into(),
             upscale_factor,
             decoder_min_contrast,
+            refinement_mode: refinement_mode.into(),
         };
         Self {
             inner: locus_core::Detector::with_config(config),
@@ -652,6 +694,7 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PipelineStats>()?;
     m.add_class::<TagFamily>()?;
     m.add_class::<SegmentationConnectivity>()?;
+    m.add_class::<CornerRefinementMode>()?;
     m.add_class::<Detector>()?;
 
     // Legacy functions (for backward compatibility)

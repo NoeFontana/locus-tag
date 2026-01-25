@@ -6,7 +6,7 @@ summary:
   dataset_size: 1
   mean_recall: 1
   mean_rmse: 0.2
-  mean_total_ms: 228.120798
+  mean_total_ms: 212.73624999999998
   worst_offenders: []
 entries:
   0037.png:

@@ -392,7 +392,9 @@ fn regression_icra_forward() {
         evaluate_dataset(
             &snapshot,
             provider.iter(),
-            DetectorConfig::default(),
+            DetectorConfig::builder()
+                .refinement_mode(locus_core::config::CornerRefinementMode::Erf)
+                .build(),
             DetectOptions { families: vec![TagFamily::AprilTag36h11], ..Default::default() },
             true // ICRA uses TR, TL, BL, BR ordering
         );
