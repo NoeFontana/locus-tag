@@ -30,7 +30,7 @@ pub struct TagDictionary {
     /// Pre-computed sample points in canonical tag coordinates [-1, 1].
     pub sample_points: Cow<'static, [(f64, f64)]>,
     /// Raw code table.
-    codes: Cow<'static, [u64]>,
+    pub codes: Cow<'static, [u64]>,
     /// Lookup table for O(1) exact matching. Maps bits to (ID, rotation_count).
     code_to_id: HashMap<u64, (u16, u8)>,
     /// All 4 rotated versions of all codes (for Hamming search). Stores (bits, ID, rotation_count).

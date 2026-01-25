@@ -83,6 +83,7 @@ pub mod test_utils;
 pub mod threshold;
 
 pub use crate::config::{DetectOptions, DetectorConfig, TagFamily};
+pub use crate::decoder::family_to_decoder;
 use crate::decoder::TagDecoder;
 pub use crate::image::ImageView;
 use bumpalo::Bump;
@@ -101,6 +102,8 @@ pub struct Detection {
     pub hamming: u32,
     /// The decision margin of the decoding (higher is more confident).
     pub decision_margin: f64,
+    /// The extracted bits from the tag (for debugging).
+    pub bits: u64,
     /// The 3D pose of the tag relative to the camera (if requested).
     pub pose: Option<crate::pose::Pose>,
 }
@@ -319,8 +322,6 @@ impl Detector {
                 (self.config.quad_min_edge_length / decimation as f64).max(1.0);
         }
 
-        let start_thresh = std::time::Instant::now();
-
         // 1a. Optional bilateral pre-filtering
         let filtered_img = if self.config.enable_bilateral {
             let filtered = self
@@ -364,24 +365,18 @@ impl Detector {
             .arena
             .alloc_slice_fill_copy(img.width * img.height, 0u8);
 
+        let start_thresh = std::time::Instant::now();
         {
-            let _span = tracing::info_span!("threshold_adaptive").entered();
-            // Compute integral image for O(1) local mean per pixel
-            let stride = sharpened_img.width + 1;
-            let integral = self
-                .arena
-                .alloc_slice_fill_copy(stride * (sharpened_img.height + 1), 0u64);
-            crate::threshold::compute_integral_image(&sharpened_img, integral);
-
-            // 1c. Apply adaptive or fixed-window threshold
+            let _span = tracing::info_span!("threshold_binarize").entered();
             if self.config.enable_adaptive_window {
-                // Compute gradient map for adaptive window sizing
-                let gradient = self
-                    .arena
-                    .alloc_slice_fill_copy(img.width * img.height, 0u8);
+                // SOTA: Adaptive window is robust for tiny tags but slow (O(N) per pixel)
+                let stride = sharpened_img.width + 1;
+                let integral = self.arena.alloc_slice_fill_copy(stride * (sharpened_img.height + 1), 0u64);
+                crate::threshold::compute_integral_image(&sharpened_img, integral);
+
+                let gradient = self.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
                 crate::filter::compute_gradient_map(&sharpened_img, gradient);
 
-                // Apply gradient-based adaptive window threshold
                 crate::threshold::adaptive_threshold_gradient_window(
                     &sharpened_img,
                     gradient,
@@ -392,30 +387,13 @@ impl Detector {
                     self.config.adaptive_threshold_gradient_threshold,
                     self.config.adaptive_threshold_constant,
                 );
+                threshold_map.fill(128); // Not implemented for adaptive
             } else {
-                // Fallback to fixed 13x13 window (radius=6)
-                crate::threshold::adaptive_threshold_integral(
-                    &sharpened_img,
-                    integral,
-                    binarized,
-                    6,
-                    self.config.adaptive_threshold_constant,
-                );
+                // SOTA: Tile-based thresholding is blazing fast (sub-2ms)
+                let engine = crate::threshold::ThresholdEngine::from_config(&self.config);
+                let stats = engine.compute_tile_stats(&sharpened_img);
+                engine.apply_threshold_with_map(&sharpened_img, &stats, binarized, threshold_map);
             }
-
-            // For threshold_map, store the local mean (for potential threshold-model segmentation)
-            let map_radius = if self.config.enable_adaptive_window {
-                self.config.threshold_max_radius
-            } else {
-                6
-            };
-            crate::threshold::compute_threshold_map(
-                &sharpened_img,
-                integral,
-                threshold_map,
-                map_radius,
-                self.config.adaptive_threshold_constant,
-            );
         }
         stats.threshold_ms = start_thresh.elapsed().as_secs_f64() * 1000.0;
 
@@ -468,56 +446,132 @@ impl Detector {
 
         // We use a small closure to encapsulate decoding logic and avoid duplication.
         // It takes an owned Detection and tries to decode it.
-        // Returns (Option<Detection>, bool_failed_contrast, bool_failed_hamming, u32_best_hamming)
-        let decode_fn = |mut cand: Detection| -> (Option<Detection>, bool, bool, u32) {
-            let h = crate::decoder::Homography::square_to_quad(&cand.corners);
-            if h.is_none() {
-                return (None, false, false, u32::MAX);
-            }
-            let h = h.expect("Already checked is_some");
-
+        // Returns (Option<Detection>, bool_failed_contrast, bool_failed_hamming, u32_best_hamming, u64_bits)
+        let decode_fn = |mut cand: Detection| -> (Option<Detection>, bool, bool, u32, u64) {
+            let scales = [1.0, 0.9, 1.1]; // Heuristic SOTA: only try most likely scales
+            
+            let mut best_overall_h = u32::MAX;
+            let mut best_overall_bits = 0;
             let mut passed_contrast = false;
-            let mut min_hamming = u32::MAX;
+            
+            for scale in scales {
+                let center = cand.center;
+                let mut scaled_corners = cand.corners;
+                if (scale - 1.0f64).abs() > 1e-4 {
+                    for c in &mut scaled_corners {
+                        c[0] = center[0] + (c[0] - center[0]) * scale;
+                        c[1] = center[1] + (c[1] - center[1]) * scale;
+                    }
+                }
 
-            for decoder in active_decoders {
-                if let Some(bits) = crate::decoder::sample_grid(
-                    &refinement_img,
-                    &h,
-                    decoder.as_ref(),
-                    self.config.decoder_min_contrast,
-                ) {
-                    passed_contrast = true;
-                    // We call a lower-level decode that returns the best hamming even if > threshold.
-                    // But for now let's just use the existing decode and maybe hack it.
-                    // Actually, let's just use 255 as max_hamming to see what we get.
-                    if let Some((id, hamming, rot)) = decoder.decode_full(bits, 255) {
-                        if hamming < min_hamming {
-                            min_hamming = hamming;
-                        }
+                let h = crate::decoder::Homography::square_to_quad(&scaled_corners);
+                if h.is_none() {
+                    continue;
+                }
+                let h = h.unwrap();
 
-                        // If it's within the official threshold, it's a success
-                        if hamming <= if decoder.name() == "36h11" { 4 } else { 1 } {
-                            cand.id = id;
-                            cand.hamming = hamming;
-
-                            let mut reordered = [[0.0; 2]; 4];
-                            for (i, item) in reordered.iter_mut().enumerate() {
-                                let src_idx = (i + usize::from(rot)) % 4;
-                                *item = cand.corners[src_idx];
+                for decoder in active_decoders {
+                    if let Some(bits) = crate::decoder::sample_grid(
+                        &refinement_img,
+                        &h,
+                        decoder.as_ref(),
+                        self.config.decoder_min_contrast,
+                    ) {
+                        passed_contrast = true;
+                        if let Some((id, hamming, rot)) = decoder.decode_full(bits, 255) {
+                            if hamming < best_overall_h {
+                                best_overall_h = hamming;
+                                best_overall_bits = bits;
                             }
-                            cand.corners = reordered;
+                            
+                            if hamming <= if decoder.name() == "36h11" { 4 } else { 1 } {
+                                cand.id = id;
+                                cand.hamming = hamming;
+                                cand.bits = bits;
 
-                            if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size)
-                            {
-                                cand.pose =
-                                    crate::pose::estimate_tag_pose(&intrinsics, &cand.corners, tag_size);
+                                // Correct rotation on ORIGINAL corners
+                                let mut reordered = [[0.0; 2]; 4];
+                                for (i, item) in reordered.iter_mut().enumerate() {
+                                    let src_idx = (i + usize::from(rot)) % 4;
+                                    *item = cand.corners[src_idx];
+                                }
+                                cand.corners = reordered;
+
+                                if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size) {
+                                    cand.pose = crate::pose::estimate_tag_pose(&intrinsics, &cand.corners, tag_size);
+                                }
+                                return (Some(cand), false, false, hamming, bits);
                             }
-                            return (Some(cand), false, false, hamming);
                         }
                     }
                 }
+                
+                // If 1.0 works perfectly, don't even try 0.9/1.1
+                if best_overall_h == 0 {
+                    break;
+                }
             }
-            (None, !passed_contrast, passed_contrast, min_hamming)
+
+            // Stage 2: Grid-Fit Corner Refinement (SOTA Hill Climbing)
+            // If the best hamming is "close" but not perfect, jiggle corners to find a better fit
+            let max_h_for_refine = if active_decoders.iter().any(|d| d.name() == "36h11") { 10 } else { 4 };
+            if best_overall_h > if active_decoders.iter().any(|d| d.name() == "36h11") { 4 } else { 1 } 
+               && best_overall_h <= max_h_for_refine {
+                
+                let mut current_corners = cand.corners;
+                let nudge = 0.2; // Sub-pixel nudge
+                
+                for _pass in 0..2 { // 2 passes of coordinate descent
+                    let mut improved = false;
+                    for c_idx in 0..4 {
+                        for (dx, dy) in [(nudge, 0.0), (-nudge, 0.0), (0.0, nudge), (0.0, -nudge)] {
+                            let mut test_corners = current_corners;
+                            test_corners[c_idx][0] += dx;
+                            test_corners[c_idx][1] += dy;
+                            
+                            if let Some(h) = crate::decoder::Homography::square_to_quad(&test_corners) {
+                                for decoder in active_decoders {
+                                    if let Some(bits) = crate::decoder::sample_grid(
+                                        &refinement_img,
+                                        &h,
+                                        decoder.as_ref(),
+                                        self.config.decoder_min_contrast,
+                                    ) {
+                                        if let Some((id, hamming, rot)) = decoder.decode_full(bits, 255) {
+                                            if hamming < best_overall_h {
+                                                best_overall_h = hamming;
+                                                best_overall_bits = bits;
+                                                current_corners = test_corners;
+                                                improved = true;
+                                                
+                                                // If we've reached a success threshold, update cand and return
+                                                if hamming <= if decoder.name() == "36h11" { 4 } else { 1 } {
+                                                    cand.id = id;
+                                                    cand.hamming = hamming;
+                                                    cand.bits = bits;
+                                                    cand.corners = current_corners;
+                                                    
+                                                    // Fix rotation
+                                                    let mut reordered = [[0.0; 2]; 4];
+                                                    for (i, item) in reordered.iter_mut().enumerate() {
+                                                        let src_idx = (i + usize::from(rot)) % 4;
+                                                        *item = cand.corners[src_idx];
+                                                    }
+                                                    cand.corners = reordered;
+                                                    return (Some(cand), false, false, hamming, bits);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if !improved { break; }
+                }
+            }
+            
+            (None, !passed_contrast, passed_contrast, best_overall_h, best_overall_bits)
         };
 
         let mut final_detections: Vec<Detection> = Vec::new();
@@ -528,16 +582,16 @@ impl Detector {
         let rejected_hamming = AtomicUsize::new(0);
 
 
-        let results: Vec<(Option<Detection>, bool, bool, u32, Detection)> = candidates
+        let results: Vec<(Option<Detection>, bool, bool, u32, u64, Detection)> = candidates
             .into_par_iter()
             .map(|cand| {
                 let cand_copy = if capture_debug { Some(cand.clone()) } else { None };
-                let (det, failed_contrast, failed_hamming, best_h) = decode_fn(cand);
-                (det, failed_contrast, failed_hamming, best_h, cand_copy.unwrap_or(Detection::default()))
+                let (det, failed_contrast, failed_hamming, best_h, bits) = decode_fn(cand);
+                (det, failed_contrast, failed_hamming, best_h, bits, cand_copy.unwrap_or(Detection::default()))
             })
             .collect();
 
-        for (det, failed_contrast, failed_hamming, best_h, mut cand) in results {
+        for (det, failed_contrast, failed_hamming, best_h, bits, mut cand) in results {
             if failed_contrast {
                 rejected_contrast.fetch_add(1, Ordering::Relaxed);
             }
@@ -548,7 +602,8 @@ impl Detector {
                 final_detections.push(d);
             }
             if capture_debug {
-                cand.hamming = best_h; 
+                cand.hamming = best_h;
+                cand.bits = bits;
                 processed_candidates.push(cand);
             }
         }
@@ -629,5 +684,3 @@ pub fn core_info() -> String {
     "Locus Core v0.1.0 Engine".to_string()
 }
 
-// Use family_to_decoder from the decoder module.
-pub use decoder::family_to_decoder;

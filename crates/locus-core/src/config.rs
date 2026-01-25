@@ -103,13 +103,13 @@ pub struct DetectorConfig {
 impl Default for DetectorConfig {
     fn default() -> Self {
         Self {
-            threshold_tile_size: 4,
+            threshold_tile_size: 8,
             threshold_min_range: 10,
             enable_bilateral: false,
             bilateral_sigma_space: 0.8,
             bilateral_sigma_color: 30.0,
-            enable_sharpening: true,
-            enable_adaptive_window: true,
+            enable_sharpening: false,
+            enable_adaptive_window: false,
             threshold_min_radius: 2,
             threshold_max_radius: 15,
             adaptive_threshold_constant: 0, // Most sensitive

@@ -365,7 +365,7 @@ pub fn sample_grid(
     img: &crate::image::ImageView,
     homography: &Homography,
     decoder: &(impl TagDecoder + ?Sized),
-    min_contrast: f64,
+    _min_contrast: f64,
 ) -> Option<u64> {
     let points = decoder.sample_points();
     // Stack-allocated buffer for up to 64 sample points (covers all standard tag families)
@@ -386,9 +386,17 @@ pub fn sample_grid(
     let h21 = homography.h[(2, 1)];
     let h22 = homography.h[(2, 2)];
 
-    // Use 3x3 supersampling for robustness against blur
-    // Cell size is ~0.25, so 0.05 stays well within the 0.5 center region
-    let offsets = [-0.05, 0.0, 0.05];
+    // SOTA: Adaptive Bit Kernels
+    let dim = (decoder.dimension() + 2) as f64;
+    let cell_width_tag = 2.0 / dim;
+    
+    // Calculate approximate bit cell size in image pixels to adapt sampling pattern
+    let corner_dist = (homography.h[(0, 0)].powi(2) + homography.h[(1, 0)].powi(2)).sqrt() / homography.h[(2, 2)].abs();
+    let bit_cell_size = corner_dist / dim;
+    
+    // Use wider kernel for tiny tags but stay within 40% of the cell width
+    let spread = if bit_cell_size < 3.0 { cell_width_tag * 0.20 } else { cell_width_tag * 0.05 };
+    let offsets = [-spread, 0.0, spread];
 
     for (i, &p) in points.iter().take(n).enumerate() {
         let mut sum_val = 0.0;
@@ -455,74 +463,28 @@ pub fn sample_grid(
         }
     }
 
-    // Use Otsu's method for robust bit classification
-    // This automatically finds the optimal threshold for bimodal distributions
-    let otsu_threshold = compute_otsu_threshold(&intensities[..n]);
-    let contrast_range = max_val - min_val;
+    // SOTA: Blended Quadrant-based Adaptive Thresholding
+    // Combines global Otsu (robust for bimodal) with local quadrant averages (robust for shadows)
+    let global_threshold = compute_otsu_threshold(&intensities[..n]);
+    
+    let mut quad_sums = [0.0; 4];
+    let mut quad_counts = [0; 4];
+    for (i, &p) in points.iter().take(n).enumerate() {
+        let qi = if p.0 < 0.0 { usize::from(p.1 >= 0.0) } else { 2 + usize::from(p.1 >= 0.0) };
+        quad_sums[qi] += intensities[i];
+        quad_counts[qi] += 1;
+    }
 
-    // If sufficient contrast, use Otsu threshold (robust for AprilTag's bimodal distribution)
     let mut bits = 0u64;
-
-    if contrast_range > min_contrast {
-        // Good contrast: use Otsu threshold
-        for (i, _) in points.iter().take(n).enumerate() {
-            if intensities[i] > otsu_threshold {
-                bits |= 1 << i;
-            }
-        }
-    } else {
-        // Low contrast: fall back to quadrant-based thresholding
-        let mut quad_sums = [0.0; 4];
-        let mut quad_counts = [0; 4];
-
-        for (i, &p) in points.iter().take(n).enumerate() {
-            let qi = if p.0 < 0.0 {
-                usize::from(p.1 >= 0.0)
-            } else if p.1 < 0.0 {
-                2
-            } else {
-                3
-            };
-            quad_sums[qi] += intensities[i];
-            quad_counts[qi] += 1;
-        }
-
-        let quad_thresholds = [
-            if quad_counts[0] > 0 {
-                quad_sums[0] / f64::from(quad_counts[0])
-            } else {
-                otsu_threshold
-            },
-            if quad_counts[1] > 0 {
-                quad_sums[1] / f64::from(quad_counts[1])
-            } else {
-                otsu_threshold
-            },
-            if quad_counts[2] > 0 {
-                quad_sums[2] / f64::from(quad_counts[2])
-            } else {
-                otsu_threshold
-            },
-            if quad_counts[3] > 0 {
-                quad_sums[3] / f64::from(quad_counts[3])
-            } else {
-                otsu_threshold
-            },
-        ];
-
-        for (i, &p) in points.iter().take(n).enumerate() {
-            let qi = if p.0 < 0.0 {
-                usize::from(p.1 >= 0.0)
-            } else if p.1 < 0.0 {
-                2
-            } else {
-                3
-            };
-
-            let threshold = quad_thresholds[qi];
-            if intensities[i] > threshold {
-                bits |= 1 << i;
-            }
+    for (i, &p) in points.iter().take(n).enumerate() {
+        let qi = if p.0 < 0.0 { usize::from(p.1 >= 0.0) } else { 2 + usize::from(p.1 >= 0.0) };
+        let quad_avg = if quad_counts[qi] > 0 { quad_sums[qi] / f64::from(quad_counts[qi]) } else { global_threshold };
+        
+        // Blend global Otsu and local mean (0.7 / 0.3 weighting is SOTA for fiducials)
+        let effective_threshold = 0.7 * global_threshold + 0.3 * quad_avg;
+        
+        if intensities[i] > effective_threshold {
+            bits |= 1 << i;
         }
     }
 

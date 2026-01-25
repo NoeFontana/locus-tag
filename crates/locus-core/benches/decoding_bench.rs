@@ -11,7 +11,7 @@ fn bench_decoding_200_candidates(bencher: divan::Bencher) {
     let canvas_size = 1000usize;
     let tag_size = 100usize;
     let family = locus_core::config::TagFamily::AprilTag36h11;
-    let (data, corners) = locus_core::test_utils::generate_test_image(
+    let (data, corners) = locus_core::test_utils::generate_synthetic_test_image(
         family,
         0, // id
         tag_size,
@@ -37,8 +37,8 @@ fn bench_decoding_200_candidates(bencher: divan::Bencher) {
         let mut sum_ids = 0u32;
         for corners in &candidates {
             if let Some(h) = Homography::square_to_quad(corners) {
-                if let Some(bits) = locus_core::decoder::sample_grid(&img, &h, &decoder) {
-                    if let Some((id, _)) = decoder.decode(bits) {
+                if let Some(bits) = locus_core::decoder::sample_grid(&img, &h, &decoder, 20.0) {
+                    if let Some((id, _, _)) = decoder.decode(bits) {
                         sum_ids += id;
                     }
                 }

@@ -35,6 +35,7 @@ def run_visualization(args):
         threshold_tile_size=4,
         quad_min_area=4,
         enable_bilateral=False,
+        upscale_factor=4,
     )
 
     for ds_name, img_dir, gt_map in datasets:
@@ -76,7 +77,6 @@ def run_visualization(args):
                     rr.LineStrips2D(gt_strips, colors=[0, 255, 0], radii=2.0, labels=gt_labels),
                 )
 
-            # 2. Thresholding (Binarized Image)
             # 2. Thresholding (Binarized Image)
             binarized = res.get_binarized()
             if binarized is not None:
@@ -157,6 +157,48 @@ def run_visualization(args):
                 f"  Img: {img_name} -> Cand: {res.stats.num_candidates}, Det: {res.stats.num_detections}, "
                 f"Rej(Contrast): {res.stats.num_rejected_by_contrast}, Rej(Hamming): {res.stats.num_rejected_by_hamming}"
             )
+
+            gt_tags = gt_map.get(img_name, [])
+            if gt_tags:
+                print("    GT Matches Analysis:")
+                for gt in gt_tags:
+                    # Find closest candidate by corner RMSE
+                    best_cand = None
+                    min_rmse = float("inf")
+
+                    for cand in res.candidates:
+                        cand_corners = np.array(cand.corners)
+                        for rot in range(4):
+                            shifted_corners = np.roll(cand_corners, rot, axis=0)
+                            diff = shifted_corners - gt.corners
+                            rmse = np.sqrt(np.mean(diff**2))
+                            if rmse < min_rmse:
+                                min_rmse = rmse
+                                best_cand = cand
+
+                    if best_cand and min_rmse < 20.0:  # 20px threshold
+                        status = (
+                            "DETECTED"
+                            if any(d.id == gt.tag_id for d in res.detections)
+                            else "REJECTED"
+                        )
+                        print(
+                            f"      GT ID {gt.tag_id}: Match (RMSE={min_rmse:.1f}px) -> Cand ID {best_cand.id} (Hamming {best_cand.hamming}) [{status}]"
+                        )
+
+                        if status == "REJECTED":
+                            val = best_cand.bits
+                            grid_str = ""
+                            for r in range(6):
+                                row_str = "        "
+                                for c in range(6):
+                                    idx = r * 6 + c
+                                    bit = (val >> (35 - idx)) & 1
+                                    row_str += "1" if bit else "."
+                                grid_str += row_str + "\n"
+                            print(f"{grid_str}")
+                    else:
+                        print(f"      GT ID {gt.tag_id}: NO MATCH (Min RMSE={min_rmse:.1f}px)")
 
 
 def main():
