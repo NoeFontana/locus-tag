@@ -13,7 +13,7 @@ except ImportError:
     print("Rerun not available. Please install 'rerun-sdk'.")
     RERUN_AVAILABLE = False
 
-from benchmarks.utils import DatasetLoader
+from scripts.bench.utils import DatasetLoader
 
 
 def run_visualization(args):

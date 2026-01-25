@@ -12,7 +12,7 @@ try:
 except ImportError:
     RERUN_AVAILABLE = False
 from tqdm import tqdm
-from utils import (
+from scripts.bench.utils import (
     AprilTagWrapper,
     DatasetLoader,
     LocusWrapper,

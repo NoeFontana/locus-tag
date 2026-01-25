@@ -3,7 +3,8 @@ import argparse
 import cv2
 import numpy as np
 from tqdm import tqdm
-from utils import (
+
+from scripts.bench.utils import (
     AprilTagWrapper,
     DatasetLoader,
     LocusWrapper,

@@ -12,13 +12,13 @@ Usage:
 import sys
 from pathlib import Path
 
-# Add scripts directory to path to import generated data modules
-sys.path.append(str(Path(__file__).parent))
+# Add project root to path to import scripts
+sys.path.append(str(Path(__file__).parents[2]))
 
 try:
-    import apriltag_41h12_data
+    from scripts.data import apriltag_41h12 as apriltag_41h12_data
 except ImportError:
-    print("Warning: apriltag_41h12_data.py not found. 41h12 will be skipped.")
+    print("Warning: scripts.data.apriltag_41h12 not found. 41h12 will be skipped.")
     apriltag_41h12_data = None
 
 
