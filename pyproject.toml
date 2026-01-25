@@ -9,6 +9,10 @@ description = "A vibe coding experiment in generating a high-performance compute
 authors = [{name = "Noé Fontana"}]
 requires-python = ">=3.10"
 dependencies = ["numpy"]
+ 
+[project.scripts]
+locus-bench = "scripts.bench.run:main"
+locus-viz = "scripts.debug.visualize:main"
 
 [project.optional-dependencies]
 validation = ["pydantic>=2.0"]

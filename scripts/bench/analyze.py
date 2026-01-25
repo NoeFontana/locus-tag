@@ -3,7 +3,8 @@ import argparse
 import cv2
 import numpy as np
 from tqdm import tqdm
-from utils import DatasetLoader, LocusWrapper
+
+from scripts.bench.utils import DatasetLoader, LocusWrapper
 
 
 def analyze_tag_sizes(args):
@@ -74,7 +75,7 @@ def diagnose_failures(args):
 
 
 def profile_bottlenecks(args):
-    from utils import generate_synthetic_image
+    from scripts.bench.utils import generate_synthetic_image
 
     wrapper = LocusWrapper()
 
