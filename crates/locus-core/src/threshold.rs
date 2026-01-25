@@ -1,4 +1,4 @@
-#![allow(unsafe_code)]
+#![allow(unsafe_code, clippy::cast_sign_loss)]
 use crate::config::DetectorConfig;
 use crate::image::ImageView;
 use multiversion::multiversion;
@@ -74,6 +74,7 @@ impl ThresholdEngine {
 
     /// Apply adaptive thresholding to the image.
     /// Optimized with pre-expanded threshold maps and vectorized row processing.
+    #[allow(clippy::too_many_lines, clippy::needless_range_loop)]
     pub fn apply_threshold(&self, img: &ImageView, stats: &[TileStats], output: &mut [u8]) {
         let ts = self.tile_size;
         let tiles_wide = img.width / ts;
@@ -191,56 +192,58 @@ impl ThresholdEngine {
             .enumerate()
             .for_each_init(
                 || (vec![0u8; img.width], vec![0u8; img.width]),
-                | (row_thresholds, row_valid), (ty, output_tile_rows)| {
-                // Reset buffers? No, they are fully overwritten below by the loops over tiles and pixels.
-                // Just ensure they are correct size if they were hypothetically resized (they are not).
-                // Actually, the loop logic depends on writing to `row_thresholds` and `row_valid` at specific indices.
-                // The loops:
-                // for tx in 0..tiles_wide ... row_thresholds[tx*ts+i] = ...
-                // This covers [0 .. tiles_wide*ts].
-                // If tiles_wide * ts < img.width (e.g. edge cases), remaining pixels might be stale.
-                // However, the original code `vec![0u8; img.width]` zero-inits.
-                // The previous loop logic:
-                // `for tx in 0..tiles_wide` covers up to `tiles_wide * ts`.
-                // `img.width` might be slightly larger than `tiles_wide * ts`.
-                // The original code zero-initialized the WHOLE vector.
-                // To maintain correctness, we should zero-init (or fill with default) the buffers, or at least the tail.
-                // Or better, just fill them entirely if cheap, or rely on logic correctness.
-                // Let's look at `threshold_row_simd`. It reads `thresholds[i]` and `valid_mask[i]`.
-                // It iterates `0..len` where len is `src.len()` (== img.width).
-                // If `row_thresholds` has stale garbage at the end, `threshold_row_simd` will use it.
-                // The original code produced 0s at the end (due to `vec![0u8; ...]`).
-                // So we MUST zero-init or fill the reused buffers.
-                // `row_thresholds.fill(0)` and `row_valid.fill(0)` is safe and fast enough (memset).
+                |(row_thresholds, row_valid), (ty, output_tile_rows)| {
+                    // Reset buffers? No, they are fully overwritten below by the loops over tiles and pixels.
+                    // Just ensure they are correct size if they were hypothetically resized (they are not).
+                    // Actually, the loop logic depends on writing to `row_thresholds` and `row_valid` at specific indices.
+                    // The loops:
+                    // for tx in 0..tiles_wide ... row_thresholds[tx*ts+i] = ...
+                    // This covers [0 .. tiles_wide*ts].
+                    // If tiles_wide * ts < img.width (e.g. edge cases), remaining pixels might be stale.
+                    // However, the original code `vec![0u8; img.width]` zero-inits.
+                    // The previous loop logic:
+                    // `for tx in 0..tiles_wide` covers up to `tiles_wide * ts`.
+                    // `img.width` might be slightly larger than `tiles_wide * ts`.
+                    // The original code zero-initialized the WHOLE vector.
+                    // To maintain correctness, we should zero-init (or fill with default) the buffers, or at least the tail.
+                    // Or better, just fill them entirely if cheap, or rely on logic correctness.
+                    // Let's look at `threshold_row_simd`. It reads `thresholds[i]` and `valid_mask[i]`.
+                    // It iterates `0..len` where len is `src.len()` (== img.width).
+                    // If `row_thresholds` has stale garbage at the end, `threshold_row_simd` will use it.
+                    // The original code produced 0s at the end (due to `vec![0u8; ...]`).
+                    // So we MUST zero-init or fill the reused buffers.
+                    // `row_thresholds.fill(0)` and `row_valid.fill(0)` is safe and fast enough (memset).
 
-                row_thresholds.fill(0);
-                row_valid.fill(0);
+                    row_thresholds.fill(0);
+                    row_valid.fill(0);
 
-                // Expand tile stats to row buffers
-                for tx in 0..tiles_wide {
-                    let idx = ty * tiles_wide + tx;
-                    let thresh = tile_thresholds[idx];
-                    let valid = tile_valid[idx];
-                    for i in 0..ts {
-                        row_thresholds[tx * ts + i] = thresh;
-                        row_valid[tx * ts + i] = valid;
+                    // Expand tile stats to row buffers
+                    for tx in 0..tiles_wide {
+                        let idx = ty * tiles_wide + tx;
+                        let thresh = tile_thresholds[idx];
+                        let valid = tile_valid[idx];
+                        for i in 0..ts {
+                            row_thresholds[tx * ts + i] = thresh;
+                            row_valid[tx * ts + i] = valid;
+                        }
                     }
-                }
 
-                for dy in 0..ts {
-                    let py = ty * ts + dy;
-                    let src_row = img.get_row(py);
-                    let dst_row = &mut output_tile_rows[dy * img.width..(dy + 1) * img.width];
+                    for dy in 0..ts {
+                        let py = ty * ts + dy;
+                        let src_row = img.get_row(py);
+                        let dst_row = &mut output_tile_rows[dy * img.width..(dy + 1) * img.width];
 
-                    threshold_row_simd(src_row, dst_row, row_thresholds, row_valid);
-                }
-            });
+                        threshold_row_simd(src_row, dst_row, row_thresholds, row_valid);
+                    }
+                },
+            );
     }
 
     /// Apply adaptive thresholding and return both binary and threshold maps.
     ///
     /// This is needed for threshold-model-aware segmentation, which uses the
     /// per-pixel threshold values to connect pixels by their deviation sign.
+    #[allow(clippy::needless_range_loop)]
     pub fn apply_threshold_with_map(
         &self,
         img: &ImageView,
@@ -359,39 +362,40 @@ impl ThresholdEngine {
             .enumerate()
             .for_each_init(
                 || (vec![0u8; img.width], vec![0u8; img.width]),
-                | (row_thresholds, row_valid), (ty, bin_tile_rows)| {
-                // Safety: Each thread writes to unique portion of threshold_output
-                let thresh_tile_rows = unsafe {
-                    let ptr = threshold_output.as_ptr().cast_mut();
-                    std::slice::from_raw_parts_mut(ptr.add(ty * ts * img.width), ts * img.width)
-                };
+                |(row_thresholds, row_valid), (ty, bin_tile_rows)| {
+                    // Safety: Each thread writes to unique portion of threshold_output
+                    let thresh_tile_rows = unsafe {
+                        let ptr = threshold_output.as_ptr().cast_mut();
+                        std::slice::from_raw_parts_mut(ptr.add(ty * ts * img.width), ts * img.width)
+                    };
 
-                row_thresholds.fill(0);
-                row_valid.fill(0);
+                    row_thresholds.fill(0);
+                    row_valid.fill(0);
 
-                for tx in 0..tiles_wide {
-                    let idx = ty * tiles_wide + tx;
-                    let thresh = tile_thresholds[idx];
-                    let valid = tile_valid[idx];
-                    for i in 0..ts {
-                        row_thresholds[tx * ts + i] = thresh;
-                        row_valid[tx * ts + i] = valid;
+                    for tx in 0..tiles_wide {
+                        let idx = ty * tiles_wide + tx;
+                        let thresh = tile_thresholds[idx];
+                        let valid = tile_valid[idx];
+                        for i in 0..ts {
+                            row_thresholds[tx * ts + i] = thresh;
+                            row_valid[tx * ts + i] = valid;
+                        }
                     }
-                }
 
-                for dy in 0..ts {
-                    let py = ty * ts + dy;
-                    let src_row = img.get_row(py);
+                    for dy in 0..ts {
+                        let py = ty * ts + dy;
+                        let src_row = img.get_row(py);
 
-                    // Write binary output
-                    let bin_row = &mut bin_tile_rows[dy * img.width..(dy + 1) * img.width];
-                    threshold_row_simd(src_row, bin_row, row_thresholds, row_valid);
+                        // Write binary output
+                        let bin_row = &mut bin_tile_rows[dy * img.width..(dy + 1) * img.width];
+                        threshold_row_simd(src_row, bin_row, row_thresholds, row_valid);
 
-                    // Write threshold map
-                    thresh_tile_rows[dy * img.width..(dy + 1) * img.width]
-                        .copy_from_slice(row_thresholds);
-                }
-            });
+                        // Write threshold map
+                        thresh_tile_rows[dy * img.width..(dy + 1) * img.width]
+                            .copy_from_slice(row_thresholds);
+                    }
+                },
+            );
     }
 }
 
@@ -407,12 +411,20 @@ fn compute_row_tile_stats_simd(src_row: &[u8], stats: &mut [TileStats], tile_siz
         let mut rmax = 0u8;
         // Process chunk with explicit unrolling or SIMD-ready loop
         for &p in chunk {
-            if p < rmin { rmin = p; }
-            if p > rmax { rmax = p; }
+            if p < rmin {
+                rmin = p;
+            }
+            if p > rmax {
+                rmax = p;
+            }
         }
 
-        if rmin < stat.min { stat.min = rmin; }
-        if rmax > stat.max { stat.max = rmax; }
+        if rmin < stat.min {
+            stat.min = rmin;
+        }
+        if rmax > stat.max {
+            stat.max = rmax;
+        }
     }
 }
 
@@ -429,7 +441,11 @@ fn threshold_row_simd(src: &[u8], dst: &mut [u8], thresholds: &[u8], valid_mask:
     let thresh_chunks = thresholds.chunks_exact(16);
     let mask_chunks = valid_mask.chunks_exact(16);
 
-    for (((s_c, d_c), t_c), m_c) in src_chunks.zip(dst_chunks).zip(thresh_chunks).zip(mask_chunks) {
+    for (((s_c, d_c), t_c), m_c) in src_chunks
+        .zip(dst_chunks)
+        .zip(thresh_chunks)
+        .zip(mask_chunks)
+    {
         for i in 0..16 {
             let s = s_c[i];
             let t = t_c[i];
@@ -448,18 +464,19 @@ fn threshold_row_simd(src: &[u8], dst: &mut [u8], thresholds: &[u8], valid_mask:
     // Handle tail
     let processed = (len / 16) * 16;
     for i in processed..len {
-         let s = src[i];
-         let t = thresholds[i];
-         let v = valid_mask[i];
-         dst[i] = if v > 0 {
-             if s < t { 0 } else { 255 }
-         } else {
-             255
-         };
+        let s = src[i];
+        let t = thresholds[i];
+        let v = valid_mask[i];
+        dst[i] = if v > 0 {
+            if s < t { 0 } else { 255 }
+        } else {
+            255
+        };
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::naive_bytecount, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 mod tests {
     use super::*;
     use proptest::prelude::*;
@@ -793,6 +810,7 @@ fn compute_min_max_simd(data: &[u8]) -> (u8, u8) {
 ///
 /// Uses a 2-pass parallel implementation for maximum throughput on modern multicore CPUs.
 /// The `integral` buffer must have size `(img.width + 1) * (img.height + 1)`.
+#[allow(clippy::needless_range_loop, clippy::items_after_statements)]
 pub fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
     let w = img.width;
     let h = img.height;
@@ -803,7 +821,7 @@ pub fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
         integral[x] = 0;
     }
 
-    use rayon::prelude::*;
+    // use rayon::prelude::*;
 
     // 1st Pass: Compute horizontal cumulative sums (prefix sum per row)
     // This part is perfectly parallel.
@@ -875,7 +893,7 @@ pub fn adaptive_threshold_integral(
     let h = img.height;
     let stride = w + 1;
 
-    use rayon::prelude::*;
+    // use rayon::prelude::*;
 
     // Precompute interior area inverse (fixed-point 1.31)
     let side = (2 * radius + 1) as u32;
@@ -1036,7 +1054,7 @@ pub fn adaptive_threshold_gradient_window(
         inv_area_lut[g] = ((1u64 << 31) / u64::from(area)) as u32;
     }
 
-    use rayon::prelude::*;
+    // use rayon::prelude::*;
 
     (0..h).into_par_iter().for_each(|y| {
         let y_offset = y * w;
@@ -1086,6 +1104,7 @@ pub fn adaptive_threshold_gradient_window(
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
+#[allow(clippy::cast_sign_loss, clippy::needless_range_loop)]
 pub fn compute_threshold_map(
     img: &ImageView,
     integral: &[u64],
@@ -1097,7 +1116,7 @@ pub fn compute_threshold_map(
     let h = img.height;
     let stride = w + 1;
 
-    use rayon::prelude::*;
+    // use rayon::prelude::*; // Already imported at module level
 
     // Precompute interior area inverse
     let side = (2 * radius + 1) as u32;

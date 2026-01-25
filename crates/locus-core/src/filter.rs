@@ -1,4 +1,4 @@
-#![allow(unsafe_code)]
+#![allow(unsafe_code, clippy::cast_sign_loss)]
 //! Edge-preserving filtering for improved small tag detection.
 //!
 //! This module implements bilateral filtering and gradient computation
@@ -8,6 +8,7 @@
 use crate::image::ImageView;
 use bumpalo::Bump;
 use multiversion::multiversion;
+use rayon::prelude::*;
 
 /// Apply bilateral filter for edge-preserving noise reduction.
 ///
@@ -30,6 +31,7 @@ use multiversion::multiversion;
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
+#[allow(clippy::items_after_statements, clippy::needless_range_loop, clippy::cast_possible_wrap)]
 pub fn bilateral_filter(
     arena: &Bump,
     img: &ImageView,
@@ -60,7 +62,7 @@ pub fn bilateral_filter(
         spatial_lut[i] = (space_coeff * d * d).exp();
     }
 
-    use rayon::prelude::*;
+    // use rayon::prelude::*;
 
     // Pass 1: Horizontal (Parallel)
     (0..h).into_par_iter().for_each(|y| {
@@ -136,6 +138,7 @@ pub fn bilateral_filter(
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
+#[allow(clippy::cast_sign_loss)]
 pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
     let w = img.width;
     let h = img.height;
@@ -146,7 +149,7 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
     // -10   0  10          0    0   0
     //  -3   0   3          3   10   3
 
-    use rayon::prelude::*;
+    // use rayon::prelude::*;
 
     // Process rows in parallel
     (0..h).into_par_iter().for_each(|y| {
@@ -310,11 +313,12 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
+#[allow(clippy::needless_range_loop, clippy::cast_sign_loss)]
 pub fn laplacian_sharpen(img: &ImageView, output: &mut [u8]) {
     let w = img.width;
     let h = img.height;
 
-    use rayon::prelude::*;
+    // use rayon::prelude::*;
 
     (0..h).into_par_iter().for_each(|y| {
         let y0 = y.saturating_sub(1);
@@ -351,6 +355,7 @@ pub fn laplacian_sharpen(img: &ImageView, output: &mut [u8]) {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::image::ImageView;
@@ -377,15 +382,13 @@ mod tests {
         bilateral_filter(&arena, &img, &mut output, 3, 3.0, 30.0);
 
         // Check edge preservation: values near edge should still be distinct
-        let left_avg = output[16 * width + 14] as f32; // 2px left of edge
-        let right_avg = output[16 * width + 18] as f32; // 2px right of edge
+        let left_avg = f32::from(output[16 * width + 14]); // 2px left of edge
+        let right_avg = f32::from(output[16 * width + 18]); // 2px right of edge
 
         // Edge should still be sharp (>100 intensity difference)
         assert!(
             (right_avg - left_avg).abs() > 100.0,
-            "Edge not preserved: left={}, right={}",
-            left_avg,
-            right_avg
+            "Edge not preserved: left={left_avg}, right={right_avg}"
         );
     }
 
@@ -410,7 +413,7 @@ mod tests {
 
         // Filtered values should be closer to 128 than original noise
         assert!(
-            (output[16 * width + 16] as i32 - 128).abs() < 50,
+            (i32::from(output[16 * width + 16]) - 128).abs() < 50,
             "Noise not reduced at noisy pixel"
         );
     }
@@ -436,14 +439,13 @@ mod tests {
 
         // Gradient should be high at edge (x=15,16)
         let edge_grad = gradient[16 * width + 15];
-        assert!(edge_grad > 100, "Gradient too low at edge: {}", edge_grad);
+        assert!(edge_grad > 100, "Gradient too low at edge: {edge_grad}");
 
         // Gradient should be low in uniform regions
         let uniform_grad = gradient[16 * width + 8];
         assert!(
             uniform_grad < 20,
-            "Gradient too high in uniform region: {}",
-            uniform_grad
+            "Gradient too high in uniform region: {uniform_grad}"
         );
     }
 

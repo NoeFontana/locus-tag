@@ -1,4 +1,4 @@
-#![allow(clippy::unreadable_literal)]
+#![allow(clippy::unreadable_literal, clippy::cast_sign_loss)]
 //! Tag family dictionaries.
 //!
 //! This module contains pre-generated code tables for AprilTag and ArUco families.

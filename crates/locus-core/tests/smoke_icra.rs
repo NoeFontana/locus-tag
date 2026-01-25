@@ -1,8 +1,8 @@
+#![allow(missing_docs, clippy::unnecessary_debug_formatting, clippy::similar_names)]
 mod common;
 
 use locus_core::image::ImageView;
 use locus_core::{DetectOptions, Detector, config::TagFamily};
-use std::path::PathBuf;
 
 fn run_single_image_test(subfolder: &str, filename: &str, min_recall: f64, max_rmse: f64) {
     let dataset_root =
@@ -12,12 +12,10 @@ fn run_single_image_test(subfolder: &str, filename: &str, min_recall: f64, max_r
         .join(subfolder)
         .join("pure_tags_images")
         .join(filename);
-    if !img_path.exists() {
-        panic!("Test image not found: {:?}", img_path);
-    }
+    assert!(img_path.exists(), "Test image not found: {img_path:?}");
 
-    let ground_truth_map = common::load_ground_truth(&dataset_root, subfolder)
-        .expect("No tags.csv found");
+    let ground_truth_map =
+        common::load_ground_truth(&dataset_root, subfolder).expect("No tags.csv found");
 
     let gt = ground_truth_map
         .get(filename)
@@ -87,7 +85,7 @@ fn run_single_image_test(subfolder: &str, filename: &str, min_recall: f64, max_r
     }
     let recall = matched_gt_ids.len() as f64 / gt.tag_ids.len() as f64;
     let avg_rmse = if match_count > 0 {
-        total_rmse / match_count as f64
+        total_rmse / f64::from(match_count)
     } else {
         0.0
     };
@@ -109,10 +107,7 @@ fn run_single_image_test(subfolder: &str, filename: &str, min_recall: f64, max_r
     if recall > 0.0 {
         assert!(
             avg_rmse <= max_rmse,
-            "RMSE {:.4} px above target {:.4} px for {}",
-            avg_rmse,
-            max_rmse,
-            filename
+            "RMSE {avg_rmse:.4} px above target {max_rmse:.4} px for {filename}"
         );
     }
 }

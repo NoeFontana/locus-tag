@@ -1,11 +1,11 @@
 //! Comprehensive benchmarking suite for complex scenes and pipeline stages.
 
+use bumpalo::Bump;
 use divan::bench;
 use locus_core::Detector;
 use locus_core::config::{DetectOptions, TagFamily};
 use locus_core::image::ImageView;
 use locus_core::test_utils::SceneBuilder;
-use bumpalo::Bump;
 
 fn main() {
     divan::main();
@@ -20,7 +20,13 @@ fn bench_thresholding_640x480(bencher: divan::Bencher) {
     let width = 640;
     let height = 480;
     let mut builder = SceneBuilder::new(width, height);
-    builder.add_tag(TagFamily::AprilTag36h11, 0, (width as f64 / 2.0, height as f64 / 2.0), 100.0, 0.0);
+    builder.add_tag(
+        TagFamily::AprilTag36h11,
+        0,
+        (width as f64 / 2.0, height as f64 / 2.0),
+        100.0,
+        0.0,
+    );
     let (data, _) = builder.build();
     let img = ImageView::new(&data, width, height, width).unwrap();
     let engine = locus_core::threshold::ThresholdEngine::new();
@@ -37,7 +43,13 @@ fn bench_segmentation_640x480(bencher: divan::Bencher) {
     let width = 640;
     let height = 480;
     let mut builder = SceneBuilder::new(width, height);
-    builder.add_tag(TagFamily::AprilTag36h11, 0, (width as f64 / 2.0, height as f64 / 2.0), 100.0, 0.0);
+    builder.add_tag(
+        TagFamily::AprilTag36h11,
+        0,
+        (width as f64 / 2.0, height as f64 / 2.0),
+        100.0,
+        0.0,
+    );
     let (data, _) = builder.build();
     let mut binarized = vec![0u8; width * height];
     let engine = locus_core::threshold::ThresholdEngine::new();
@@ -56,7 +68,13 @@ fn bench_quad_extraction_640x480(bencher: divan::Bencher) {
     let width = 640;
     let height = 480;
     let mut builder = SceneBuilder::new(width, height);
-    builder.add_tag(TagFamily::AprilTag36h11, 0, (width as f64 / 2.0, height as f64 / 2.0), 100.0, 0.0);
+    builder.add_tag(
+        TagFamily::AprilTag36h11,
+        0,
+        (width as f64 / 2.0, height as f64 / 2.0),
+        100.0,
+        0.0,
+    );
     let (data, _) = builder.build();
     let arena = Bump::new();
     let mut binarized = vec![0u8; width * height];
@@ -82,7 +100,13 @@ fn bench_full_detect_640x480(bencher: divan::Bencher) {
     let width = 640;
     let height = 480;
     let mut builder = SceneBuilder::new(width, height);
-    builder.add_tag(TagFamily::AprilTag36h11, 0, (width as f64 / 2.0, height as f64 / 2.0), 100.0, 0.0);
+    builder.add_tag(
+        TagFamily::AprilTag36h11,
+        0,
+        (width as f64 / 2.0, height as f64 / 2.0),
+        100.0,
+        0.0,
+    );
     let (data, _) = builder.build();
     let img = ImageView::new(&data, width, height, width).unwrap();
     let mut detector = Detector::new();

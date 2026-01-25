@@ -74,4 +74,3 @@ fn bench_threshold_1080p_apply_checkered(bencher: divan::Bencher) {
         engine.apply_threshold(&img, &stats, &mut output);
     });
 }
-

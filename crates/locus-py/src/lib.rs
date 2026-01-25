@@ -1,10 +1,10 @@
 //! Python bindings for the Locus Tag library.
-#![allow(unsafe_code)]
+#![allow(unsafe_code, clippy::unused_self, missing_docs, clippy::trivially_copy_pass_by_ref)]
 
 use locus_core::image::ImageView;
+use numpy::ndarray::Array2;
 use numpy::{IntoPyArray, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::exceptions::PyRuntimeError;
-use numpy::ndarray::Array2;
 use pyo3::prelude::*;
 
 // ============================================================================
@@ -88,7 +88,7 @@ impl FullDetectionResult {
     fn get_binarized(&self, py: Python<'_>) -> PyResult<Option<PyObject>> {
         if let Some(data) = &self.binarized {
             let array = Array2::from_shape_vec((self.height, self.width), data.clone())
-                .map_err(|e| PyRuntimeError::new_err(format!("Shape error: {}", e)))?;
+                .map_err(|e| PyRuntimeError::new_err(format!("Shape error: {e}")))?;
             Ok(Some(array.into_pyarray(py).into_any().unbind()))
         } else {
             Ok(None)
@@ -99,7 +99,7 @@ impl FullDetectionResult {
     fn get_labels(&self, py: Python<'_>) -> PyResult<Option<PyObject>> {
         if let Some(data) = &self.labels {
             let array = Array2::from_shape_vec((self.height, self.width), data.clone())
-                .map_err(|e| PyRuntimeError::new_err(format!("Shape error: {}", e)))?;
+                .map_err(|e| PyRuntimeError::new_err(format!("Shape error: {e}")))?;
             Ok(Some(array.into_pyarray(py).into_any().unbind()))
         } else {
             Ok(None)
@@ -500,14 +500,14 @@ impl Detector {
     fn get_tag_code(&self, family: TagFamily, id: u32) -> Option<u64> {
         let core_family: locus_core::config::TagFamily = family.into();
         match core_family {
-             locus_core::config::TagFamily::AprilTag36h11 => {
-                 if (id as usize) < locus_core::dictionaries::APRILTAG_36H11.codes.len() {
-                     Some(locus_core::dictionaries::APRILTAG_36H11.codes[id as usize])
-                 } else {
-                     None
-                 }
-             },
-             _ => None // Not implemented for others yet in this quick debug helper
+            locus_core::config::TagFamily::AprilTag36h11 => {
+                if (id as usize) < locus_core::dictionaries::APRILTAG_36H11.codes.len() {
+                    Some(locus_core::dictionaries::APRILTAG_36H11.codes[id as usize])
+                } else {
+                    None
+                }
+            },
+            _ => None, // Not implemented for others yet in this quick debug helper
         }
     }
 }
@@ -529,7 +529,7 @@ impl ImageSource<'_> {
             ImageSource::Owned(data, width, height, stride) => {
                 ImageView::new(data, *width, *height, *stride)
                     .map_err(pyo3::exceptions::PyRuntimeError::new_err)
-            }
+            },
         }
     }
 }

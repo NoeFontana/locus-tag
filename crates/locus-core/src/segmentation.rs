@@ -39,7 +39,7 @@ impl<'a> UnionFind<'a> {
                 std::cmp::Ordering::Equal => {
                     self.parent[root_i as usize] = root_j;
                     self.rank[root_j as usize] += 1;
-                }
+                },
             }
         }
     }
@@ -144,7 +144,7 @@ pub fn label_components_with_stats<'a>(
         })
         .collect();
 
-    let total_runs: usize = all_runs.iter().map(|r| r.len()).sum();
+    let total_runs: usize = all_runs.iter().map(std::vec::Vec::len).sum();
     let mut runs: BumpVec<Run> = BumpVec::with_capacity_in(total_runs, arena);
     for (id, mut run) in all_runs.into_iter().flatten().enumerate() {
         run.id = id as u32;
@@ -266,7 +266,7 @@ pub fn label_components_with_stats<'a>(
 /// for small features.
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::cast_sign_loss)]
-#[allow(clippy::cast_possible_wrap)]
+#[allow(clippy::cast_possible_wrap, clippy::too_many_arguments)]
 pub fn label_components_threshold_model<'a>(
     arena: &'a Bump,
     grayscale: &[u8],
@@ -442,6 +442,7 @@ pub fn label_components_threshold_model<'a>(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::cast_sign_loss)]
 mod tests {
     use super::*;
     use bumpalo::Bump;
@@ -511,8 +512,8 @@ mod tests {
             }
         }
 
-        use crate::image::ImageView;
-        let img = ImageView::new(&binary, width, height, width).expect("valid creation");
+        // use statement moved to top of module or block
+        let img = crate::image::ImageView::new(&binary, width, height, width).expect("valid creation");
 
         // Decimate by 2 -> 16x16
         let mut decimated_data = vec![0u8; 16 * 16];
@@ -624,8 +625,7 @@ mod tests {
 
             assert!(
                 !result.component_stats.is_empty(),
-                "Tag size {}: No components found",
-                tag_size
+                "Tag size {tag_size}: No components found"
             );
 
             let largest = result
@@ -639,14 +639,12 @@ mod tests {
             let tolerance = 5;
 
             assert!(
-                (largest.min_x as i32 - expected_min_x as i32).abs() <= tolerance,
-                "Tag size {}: min_x mismatch",
-                tag_size
+                (i32::from(largest.min_x) - i32::from(expected_min_x)).abs() <= tolerance,
+                "Tag size {tag_size}: min_x mismatch"
             );
             assert!(
-                (largest.max_x as i32 - expected_max_x as i32).abs() <= tolerance,
-                "Tag size {}: max_x mismatch",
-                tag_size
+                (i32::from(largest.max_x) - i32::from(expected_max_x)).abs() <= tolerance,
+                "Tag size {tag_size}: max_x mismatch"
             );
 
             println!(
@@ -683,8 +681,8 @@ mod tests {
 
         let gt_width = (corners[1][0] - corners[0][0]).abs() as i32;
         let gt_height = (corners[2][1] - corners[0][1]).abs() as i32;
-        let bbox_width = (largest.max_x - largest.min_x) as i32;
-        let bbox_height = (largest.max_y - largest.min_y) as i32;
+        let bbox_width = i32::from(largest.max_x - largest.min_x);
+        let bbox_height = i32::from(largest.max_y - largest.min_y);
 
         assert!((bbox_width - gt_width).abs() <= 2);
         assert!((bbox_height - gt_height).abs() <= 2);
@@ -780,7 +778,7 @@ mod tests {
         for y in 0..height {
             if y % 10 == 0 {
                 for x in 0..width {
-                    if (x < 100 || x >= 200 || y < 100 || y >= 200) && (x + y) % 31 == 0 {
+                    if (!(100..200).contains(&x) || !(100..200).contains(&y)) && (x + y) % 31 == 0 {
                         binary[y * width + x] = 0;
                     }
                 }
