@@ -126,6 +126,18 @@ def run_synthetic_benchmark(args):
             print(
                 f"{count:<8} | {wrapper.name:<10} | {np.mean(latencies):<12.3f} | {recall:<7.1f}% | {avg_err:<10.3f}"
             )
+            # Try to get stats from the last run
+            _, stats = wrapper.detect(img)
+            if stats is not None:
+                print(
+                    f"       [Stats] Thresh: {stats.threshold_ms:.2f}ms, Seg: {stats.segmentation_ms:.2f}ms, Quad: {stats.quad_extraction_ms:.2f}ms, Decode: {stats.decoding_ms:.2f}ms"
+                )
+                print(
+                    f"       [Stats] Candidates: {stats.num_candidates}, Detections: {stats.num_detections}"
+                )
+                print(
+                    f"       [Stats] Rejected: Contrast: {stats.num_rejected_by_contrast}, Hamming: {stats.num_rejected_by_hamming}"
+                )
 
 
 def generate_synthetic_image(num_tags, res, noise_sigma=0.0):

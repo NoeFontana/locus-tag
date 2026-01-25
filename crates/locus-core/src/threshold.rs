@@ -395,7 +395,6 @@ impl ThresholdEngine {
     }
 }
 
-/// SIMD-optimized row tile stats computation with subsampling (stride 2).
 #[multiversion(targets(
     "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
@@ -406,19 +405,17 @@ fn compute_row_tile_stats_simd(src_row: &[u8], stats: &mut [TileStats], tile_siz
     for (chunk, stat) in chunks.zip(stats.iter_mut()) {
         let mut rmin = 255u8;
         let mut rmax = 0u8;
-        // Subsampling: Only process every other pixel in the row (stride 2)
+        // Process chunk with explicit unrolling or SIMD-ready loop
         for &p in chunk {
-            rmin = rmin.min(p);
-            rmax = rmax.max(p);
+            if p < rmin { rmin = p; }
+            if p > rmax { rmax = p; }
         }
 
-        stat.min = stat.min.min(rmin);
-        stat.max = stat.max.max(rmax);
+        if rmin < stat.min { stat.min = rmin; }
+        if rmax > stat.max { stat.max = rmax; }
     }
 }
 
-/// SIMD-optimized thresholding for a full row.
-/// SIMD-optimized thresholding for a full row.
 #[multiversion(targets(
     "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
@@ -426,17 +423,39 @@ fn compute_row_tile_stats_simd(src_row: &[u8], stats: &mut [TileStats], tile_siz
 ))]
 fn threshold_row_simd(src: &[u8], dst: &mut [u8], thresholds: &[u8], valid_mask: &[u8]) {
     let len = src.len();
-    for i in 0..len {
-        let s = src[i];
-        let t = thresholds[i];
-        let m = valid_mask[i];
-        // Branchless: (s > t) produces 0 or 1, multiply by 255
-        let pass = u8::from(s >= t).wrapping_neg(); // 0xFF if true, 0x00 if false
+    // Use chunks_exact to help compiler vectorize (e.g. into 16 or 32-byte chunks)
+    let src_chunks = src.chunks_exact(16);
+    let dst_chunks = dst.chunks_exact_mut(16);
+    let thresh_chunks = thresholds.chunks_exact(16);
+    let mask_chunks = valid_mask.chunks_exact(16);
 
-        // Use mask m > 0 to treat both original (255) and propagated (128) tiles as valid.
-        // If valid, use pass. If invalid (m=0), force white (255).
-        let is_valid = u8::from(m > 0).wrapping_neg(); // 0xFF if m > 0, 0x00 otherwise
-        dst[i] = (pass & is_valid) | !is_valid;
+    for (((s_c, d_c), t_c), m_c) in src_chunks.zip(dst_chunks).zip(thresh_chunks).zip(mask_chunks) {
+        for i in 0..16 {
+            let s = s_c[i];
+            let t = t_c[i];
+            let v = m_c[i];
+            // Branchless comparison and mask
+            // If v > 0 (valid tile), use comparison. If v == 0, result is 255 (white).
+            let res = if v > 0 {
+                if s < t { 0 } else { 255 }
+            } else {
+                255
+            };
+            d_c[i] = res;
+        }
+    }
+
+    // Handle tail
+    let processed = (len / 16) * 16;
+    for i in processed..len {
+         let s = src[i];
+         let t = thresholds[i];
+         let v = valid_mask[i];
+         dst[i] = if v > 0 {
+             if s < t { 0 } else { 255 }
+         } else {
+             255
+         };
     }
 }
 

@@ -236,6 +236,7 @@ pub fn extract_quads_with_config(
                         ],
                         hamming: 0,
                         decision_margin: f64::from(bbox_area),
+                        bits: 0,
                         pose: None,
                     });
                 }
@@ -370,6 +371,7 @@ pub fn extract_quads_with_config(
                                         ],
                                         hamming: 0,
                                         decision_margin: area * d * d, // Area in full-res
+                                        bits: 0,
                                         pose: None,
                                     });
                                 }
@@ -449,6 +451,7 @@ pub fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detec
                                 ],
                                 hamming: 0,
                                 decision_margin: area,
+                                bits: 0,
                                 pose: None,
                             });
                         }

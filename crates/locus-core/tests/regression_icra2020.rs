@@ -10,7 +10,7 @@ use locus_core::image::ImageView;
 use locus_core::{config::TagFamily, DetectOptions, Detector, DetectorConfig, PipelineStats};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::env;
 
 mod common;

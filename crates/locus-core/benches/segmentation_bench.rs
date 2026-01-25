@@ -18,7 +18,7 @@ fn bench_segmentation_1080p_empty(bencher: divan::Bencher) {
 
     bencher.bench_local(|| {
         arena.reset();
-        label_components_with_stats(&arena, &binary, width, height);
+        label_components_with_stats(&arena, &binary, width, height, true);
     });
 }
 
@@ -50,6 +50,6 @@ fn bench_segmentation_1080p_checkered(bencher: divan::Bencher) {
 
     bencher.bench_local(|| {
         arena.reset();
-        label_components_with_stats(&arena, &binary, width, height);
+        label_components_with_stats(&arena, &binary, width, height, true);
     });
 }

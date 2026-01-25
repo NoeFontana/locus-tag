@@ -2,7 +2,7 @@ import csv
 import tarfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import cv2
 import locus
@@ -190,15 +190,16 @@ class LibraryWrapper:
 
 
 class LocusWrapper(LibraryWrapper):
-    def __init__(self, config: Optional[locus.DetectorConfig] = None, decimation: int = 1):
+    def __init__(self, config: locus.DetectorConfig | None = None, decimation: int = 1):
         super().__init__("Locus")
         self.detector = locus.Detector(config) if config else locus.Detector()
         self.decimation = decimation
 
     def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
-        detections, stats = self.detector.detect_with_stats(img, decimation=self.decimation)
+        raw_dets, stats = self.detector.detect_with_stats(img, decimation=self.decimation)
+
         serializable = []
-        for d in detections:
+        for d in raw_dets:
             serializable.append(
                 {
                     "id": d.id,

@@ -30,6 +30,9 @@ pub struct Detection {
     /// Decision margin.
     #[pyo3(get)]
     pub decision_margin: f64,
+    /// Extracted bits from the tag.
+    #[pyo3(get)]
+    pub bits: u64,
 }
 
 /// Python-compatible pipeline statistics.
@@ -143,6 +146,7 @@ impl From<locus_core::Detection> for Detection {
             corners: d.corners,
             hamming: d.hamming,
             decision_margin: d.decision_margin,
+            bits: d.bits,
         }
     }
 }
@@ -436,8 +440,10 @@ impl Detector {
             .decimation(decimation)
             .build();
         let res = self.inner.detect_full(&view, &options);
-        let width = view.width;
-        let height = view.height;
+        // If upscaling is enabled in config, the binarized/labeled images will be larger.
+        let upscale = self.inner.get_config().upscale_factor;
+        let width = view.width * upscale;
+        let height = view.height * upscale;
         Ok(FullDetectionResult::from((res, width, height)))
     }
 
@@ -446,6 +452,21 @@ impl Detector {
         let core_families: Vec<locus_core::config::TagFamily> =
             families.into_iter().map(Into::into).collect();
         self.inner.set_families(&core_families);
+    }
+
+    /// Get the identification code (bits) for a specific tag ID and family.
+    fn get_tag_code(&self, family: TagFamily, id: u32) -> Option<u64> {
+        let core_family: locus_core::config::TagFamily = family.into();
+        match core_family {
+             locus_core::config::TagFamily::AprilTag36h11 => {
+                 if (id as usize) < locus_core::dictionaries::APRILTAG_36H11.codes.len() {
+                     Some(locus_core::dictionaries::APRILTAG_36H11.codes[id as usize])
+                 } else {
+                     None
+                 }
+             },
+             _ => None // Not implemented for others yet in this quick debug helper
+        }
     }
 }
 
