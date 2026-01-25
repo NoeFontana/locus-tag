@@ -21,8 +21,8 @@ pub fn resolve_dataset_root() -> Option<PathBuf> {
             return Some(path);
         }
         eprintln!(
-            "Warning: LOCUS_DATASET_DIR is set to {:?} but it is not a directory.",
-            path
+            "Warning: LOCUS_DATASET_DIR is set to {} but it is not a directory.",
+            path.display()
         );
     }
 
@@ -36,7 +36,7 @@ pub fn resolve_dataset_root() -> Option<PathBuf> {
 
     for p in &candidates {
         if p.is_dir() {
-            return Some(p.to_path_buf());
+            return Some(p.clone());
         }
     }
 

@@ -297,6 +297,8 @@ fn quad_area(corners: &[[f32; 2]; 4]) -> f32 {
 #[allow(clippy::similar_names)]
 #[allow(clippy::too_many_arguments)]
 #[must_use]
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::needless_range_loop)]
 pub fn fit_quad_from_component(
     img: &ImageView,
     labels: &[u32],
@@ -533,6 +535,7 @@ pub fn fit_quad_from_component(
 /// 1. K-means clustering of gradient angles -> 4 groups (Right, Down, Left, Up)
 /// 2. Line fitting for each cluster
 /// 3. Intersection of lines to form CW quad [TL, TR, BR, BL]
+#[allow(clippy::needless_range_loop)]
 fn solve_quad_from_boundary_points(
     boundary_points: &[(f32, f32, f32)], // x, y, angle
     _img_width: usize, // Unused for now but kept for context if needed for boundary checks
@@ -707,6 +710,7 @@ fn angle_diff(a: f32, b: f32) -> f32 {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::float_cmp)]
 mod tests {
     use super::*;
     use crate::image::ImageView;

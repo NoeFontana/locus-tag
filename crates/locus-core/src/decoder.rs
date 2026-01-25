@@ -1,4 +1,4 @@
-#![allow(unsafe_code)]
+#![allow(unsafe_code, clippy::cast_sign_loss)]
 use crate::config;
 use nalgebra::{SMatrix, SVector};
 
@@ -66,7 +66,7 @@ impl Homography {
             for i in 0..4 {
                 let p_proj = res.project(src[i]);
                 let err_sq = (p_proj[0] - dst[i][0]).powi(2) + (p_proj[1] - dst[i][1]).powi(2);
-                if !(err_sq <= 1e-4) {
+                if err_sq > 1e-4 {
                     return None;
                 }
             }
@@ -167,7 +167,7 @@ impl Homography {
             for i in 0..4 {
                 let p_proj = res.project(src_unit[i]);
                 let err_sq = (p_proj[0] - dst[i][0]).powi(2) + (p_proj[1] - dst[i][1]).powi(2);
-                if !(err_sq <= 1e-4) {
+                if err_sq > 1e-4 {
                     return None;
                 }
             }
@@ -312,15 +312,14 @@ pub fn refine_corners_gridfit(
 
     // Optimization parameters
     let step_sizes = [0.5, 0.25, 0.125]; // Coarse to fine
-    let _window = 1; // Search neighborhood (+/- window * step)
+    // let _window = 1;
 
     // Compute initial contrast
-    if let Some(h) = Homography::square_to_quad(&current_corners) {
-        if let Some(contrast) = compute_grid_contrast(img, &h, decoder, bits) {
+    if let Some(h) = Homography::square_to_quad(&current_corners)
+        && let Some(contrast) = compute_grid_contrast(img, &h, decoder, bits) {
             best_contrast = contrast;
         }
-    }
-    
+
     // We assume the initial decode was valid, so we should have a valid contrast.
     // If not, just return original corners.
     if best_contrast < 0.0 {
@@ -332,7 +331,7 @@ pub fn refine_corners_gridfit(
     for &step in &step_sizes {
         let mut improved = true;
         let mut iters = 0;
-        
+
         while improved && iters < 5 {
             improved = false;
             iters += 1;
@@ -341,39 +340,36 @@ pub fn refine_corners_gridfit(
                 for axis in 0..2 {
                     // Try moving -step, 0, +step
                     let original_val = current_corners[i][axis];
-                    
+
                     let candidate_vals = [original_val - step, original_val + step];
-                    
+
                     for &val in &candidate_vals {
                         current_corners[i][axis] = val;
-                        
+
                         // Check hypothesis
                         let mut valid = false;
-                        if let Some(h) = Homography::square_to_quad(&current_corners) {
-                            if let Some(contrast) = compute_grid_contrast(img, &h, decoder, bits) {
-                                if contrast > best_contrast {
+                        if let Some(h) = Homography::square_to_quad(&current_corners)
+                            && let Some(contrast) = compute_grid_contrast(img, &h, decoder, bits)
+                                && contrast > best_contrast {
                                     best_contrast = contrast;
                                     best_corners = current_corners;
                                     improved = true;
                                     valid = true;
                                 }
-                            }
-                        }
-                        
-                        if !valid {
-                             // Revert if worse or invalid
-                             current_corners[i][axis] = original_val;
-                        } else {
+
+                        if valid {
                             // If we improved, we keep the change and 'original_val' for next iteration is effectively updated
                             // But wait, the loop continues to optimized other corners.
                             // We need to make sure 'current_corners' reflects the best state.
                             // Since we updated current_corners in place and verified it's better, we leave it.
                             // If we didn't improve, we reverted.
                             break; // Greedy: take first improvement in this axis direction? or search both?
-                                   // Let's stick with the change if it improved.
+                            // Let's stick with the change if it improved.
                         }
+                        // Revert if worse or invalid
+                        current_corners[i][axis] = original_val;
                     }
-                    
+
                     // Ensure current matches best before moving to next coordinate
                     current_corners = best_corners;
                 }
@@ -394,12 +390,18 @@ fn compute_grid_contrast(
 ) -> Option<f64> {
     let points = decoder.sample_points();
     let _n = points.len();
-    
+
     // Pre-calculate homography terms for speed
-    let h00 = h.h[(0, 0)]; let h01 = h.h[(0, 1)]; let h02 = h.h[(0, 2)];
-    let h10 = h.h[(1, 0)]; let h11 = h.h[(1, 1)]; let h12 = h.h[(1, 2)];
-    let h20 = h.h[(2, 0)]; let h21 = h.h[(2, 1)]; let h22 = h.h[(2, 2)];
-    
+    let h00 = h.h[(0, 0)];
+    let h01 = h.h[(0, 1)];
+    let h02 = h.h[(0, 2)];
+    let h10 = h.h[(1, 0)];
+    let h11 = h.h[(1, 1)];
+    let h12 = h.h[(1, 2)];
+    let h20 = h.h[(2, 0)];
+    let h21 = h.h[(2, 1)];
+    let h22 = h.h[(2, 2)];
+
     let mut sum_white = 0.0;
     let mut cnt_white = 0;
     let mut sum_black = 0.0;
@@ -408,15 +410,21 @@ fn compute_grid_contrast(
     for (i, &p) in points.iter().enumerate() {
         // Project
         let wz = h20 * p.0 + h21 * p.1 + h22;
-        if wz.abs() < 1e-6 { return None; }
+        if wz.abs() < 1e-6 {
+            return None;
+        }
         let img_x = (h00 * p.0 + h01 * p.1 + h02) / wz;
         let img_y = (h10 * p.0 + h11 * p.1 + h12) / wz;
-        
+
         // Check bounds
-        if img_x < 0.0 || img_x >= (img.width - 1) as f64 || img_y < 0.0 || img_y >= (img.height - 1) as f64 {
-            return None; 
+        if img_x < 0.0
+            || img_x >= (img.width - 1) as f64
+            || img_y < 0.0
+            || img_y >= (img.height - 1) as f64
+        {
+            return None;
         }
-        
+
         // Bilinear sample
         let xf = img_x.floor();
         let yf = img_y.floor();
@@ -424,19 +432,19 @@ fn compute_grid_contrast(
         let iy = yf as usize;
         let dx = img_x - xf;
         let dy = img_y - yf;
-        
+
         let val = unsafe {
-             let row0 = img.get_row_unchecked(iy);
-             let row1 = img.get_row_unchecked(iy + 1);
-             let v00 = f64::from(*row0.get_unchecked(ix));
-             let v10 = f64::from(*row0.get_unchecked(ix + 1));
-             let v01 = f64::from(*row1.get_unchecked(ix));
-             let v11 = f64::from(*row1.get_unchecked(ix + 1));
-             let top = v00 + dx * (v10 - v00);
-             let bot = v01 + dx * (v11 - v01);
-             top + dy * (bot - top)
+            let row0 = img.get_row_unchecked(iy);
+            let row1 = img.get_row_unchecked(iy + 1);
+            let v00 = f64::from(*row0.get_unchecked(ix));
+            let v10 = f64::from(*row0.get_unchecked(ix + 1));
+            let v01 = f64::from(*row1.get_unchecked(ix));
+            let v11 = f64::from(*row1.get_unchecked(ix + 1));
+            let top = v00 + dx * (v10 - v00);
+            let bot = v01 + dx * (v11 - v01);
+            top + dy * (bot - top)
         };
-        
+
         let expected_bit = (bits >> i) & 1;
         if expected_bit == 1 {
             sum_white += val;
@@ -446,14 +454,14 @@ fn compute_grid_contrast(
             cnt_black += 1;
         }
     }
-    
+
     if cnt_white == 0 || cnt_black == 0 {
         return None;
     }
-    
+
     let mean_white = sum_white / f64::from(cnt_white);
     let mean_black = sum_black / f64::from(cnt_black);
-    
+
     Some(mean_white - mean_black)
 }
 
@@ -461,6 +469,7 @@ fn compute_grid_contrast(
 ///
 /// This assumes the edge intensity profile is an Error Function (convolution of step edge with Gaussian PSF).
 /// We minimize the photometric error between the image and the ERF model using Gauss-Newton.
+#[allow(clippy::cast_sign_loss, clippy::too_many_lines, clippy::similar_names)]
 pub fn refine_corners_erf(
     arena: &bumpalo::Bump,
     img: &crate::image::ImageView,
@@ -496,7 +505,7 @@ pub fn refine_corners_erf(
         if det.abs() > 1e-6 {
             let x = (b1 * c2 - b2 * c1) / det;
             let y = (a2 * c1 - a1 * c2) / det;
-            
+
             // Sanity check
             let dist_sq = (x - corners[i][0]).powi(2) + (y - corners[i][1]).powi(2);
             if dist_sq < 4.0 {
@@ -508,6 +517,7 @@ pub fn refine_corners_erf(
 }
 
 /// Fit a line (nx*x + ny*y + d = 0) to an edge using the ERF intensity model.
+#[allow(clippy::too_many_lines, clippy::many_single_char_names)]
 fn fit_edge_erf(
     arena: &bumpalo::Bump,
     img: &crate::image::ImageView,
@@ -518,11 +528,13 @@ fn fit_edge_erf(
     let dx = p2[0] - p1[0];
     let dy = p2[1] - p1[1];
     let len = (dx * dx + dy * dy).sqrt();
-    if len < 4.0 { return None; }
+    if len < 4.0 {
+        return None;
+    }
 
     let nx = -dy / len;
     let ny = dx / len;
-    
+
     // Initial d from input corners
     let mut d = -(nx * p1[0] + ny * p1[1]);
 
@@ -538,51 +550,58 @@ fn fit_edge_erf(
     let mut best_grad = 0.0;
     // Tighter search, more steps for sub-pixel initialization
     for k in -6..=6 {
-         let offset = f64::from(k) * 0.4;
-         let mut sum_g = 0.0;
-         let mut count = 0;
-         let scan_d = d + offset;
-         for py in y0..=y1 {
-             for px in x0..=x1 {
-                 let x = px as f64; let y = py as f64;
-                 let dist = nx * x + ny * y + scan_d;
-                 if dist.abs() < 1.0 {
-                     let g = img.sample_gradient_bilinear(x, y);
-                     // Maximize gradient along normal
-                     sum_g += (g[0]*nx + g[1]*ny).abs();
-                     count += 1;
-                 }
-             }
-         }
-         if count > 0 && sum_g > best_grad {
-             best_grad = sum_g;
-             best_offset = offset;
-         }
+        let offset = f64::from(k) * 0.4;
+        let mut sum_g = 0.0;
+        let mut count = 0;
+        let scan_d = d + offset;
+        for py in y0..=y1 {
+            for px in x0..=x1 {
+                let x = px as f64;
+                let y = py as f64;
+                let dist = nx * x + ny * y + scan_d;
+                if dist.abs() < 1.0 {
+                    let g = img.sample_gradient_bilinear(x, y);
+                    // Maximize gradient along normal
+                    sum_g += (g[0] * nx + g[1] * ny).abs();
+                    count += 1;
+                }
+            }
+        }
+        if count > 0 && sum_g > best_grad {
+            best_grad = sum_g;
+            best_offset = offset;
+        }
     }
     d += best_offset;
 
     let mut samples = bumpalo::collections::Vec::with_capacity_in(128, arena);
-    
+
     // Collect samples along the edge
     for py in y0..=y1 {
         for px in x0..=x1 {
             let x = px as f64;
             let y = py as f64;
-            
+
             // Perpendicular distance
             let dist = nx * x + ny * y + d;
-            if dist.abs() > window { continue; }
-            
+            if dist.abs() > window {
+                continue;
+            }
+
             // Projection along edge
             let t = ((x - p1[0]) * dx + (y - p1[1]) * dy) / (len * len);
-            if !(-0.1..=1.1).contains(&t) { continue; }
-            
+            if !(-0.1..=1.1).contains(&t) {
+                continue;
+            }
+
             let val = f64::from(img.get_pixel(px, py));
             samples.push((x, y, val));
         }
     }
-    
-    if samples.len() < 10 { return None; }
+
+    if samples.len() < 10 {
+        return None;
+    }
 
     // Initial estimation of A and B using the scanned d
     let mut a = 128.0;
@@ -598,58 +617,65 @@ fn fit_edge_erf(
         let mut dark_weight = 0.0;
         let mut light_sum = 0.0;
         let mut light_weight = 0.0;
-        
+
         for &(x, y, _) in &samples {
             let dist = nx * x + ny * y + d;
             let val = img.sample_bilinear(x, y); // Use bilinear for sub-pixel accuracy
-            
+
             if dist < -1.0 {
-                let w = (-dist - 0.5).min(2.0).max(0.1);
+                let w = (-dist - 0.5).clamp(0.1, 2.0);
                 dark_sum += val * w;
                 dark_weight += w;
             } else if dist > 1.0 {
-                let w = (dist - 0.5).min(2.0).max(0.1);
+                let w = (dist - 0.5).clamp(0.1, 2.0);
                 light_sum += val * w;
                 light_weight += w;
             }
         }
-        
+
         if dark_weight > 0.0 && light_weight > 0.0 {
             a = dark_sum / dark_weight;
             b = light_sum / light_weight;
         }
-        
-        if (b - a).abs() < 5.0 { break; }
+
+        if (b - a).abs() < 5.0 {
+            break;
+        }
 
         // 2. GN update for d
         let mut sum_jtj = 0.0;
-        let mut sum_jtr = 0.0;
+        let mut sum_jt_res = 0.0;
         let k = (b - a) / (sqrt_pi * sigma);
-        
+
         for &(x, y, _) in &samples {
             let dist = nx * x + ny * y + d;
             let s = dist * inv_sigma;
-            if s.abs() > 3.0 { continue; }
-            
+            if s.abs() > 3.0 {
+                continue;
+            }
+
             let val = img.sample_bilinear(x, y);
             let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::quad::erf_approx(s);
             let residual = val - model;
-            
+
             let jac = k * (-s * s).exp();
-            
+
             sum_jtj += jac * jac;
-            sum_jtr += jac * residual;
+            sum_jt_res += jac * residual;
         }
-        
-        if sum_jtj < 1e-6 { break; }
-        let step = sum_jtr / sum_jtj;
+
+        if sum_jtj < 1e-6 {
+            break;
+        }
+        let step = sum_jt_res / sum_jtj;
         d += step.clamp(-0.5, 0.5); // Dampen steps
-        if step.abs() < 1e-4 { break; }
+        if step.abs() < 1e-4 {
+            break;
+        }
     }
 
     Some((nx, ny, d))
 }
-
 
 /// Returns the threshold that maximizes inter-class variance.
 fn compute_otsu_threshold(values: &[f64]) -> f64 {
@@ -659,7 +685,6 @@ fn compute_otsu_threshold(values: &[f64]) -> f64 {
 
     let n = values.len() as f64;
     let total_sum: f64 = values.iter().sum();
-    let _total_mean = total_sum / n;
 
     // Find min/max to define search range
     let min_val = values.iter().copied().fold(f64::MAX, f64::min);
@@ -715,7 +740,7 @@ fn compute_otsu_threshold(values: &[f64]) -> f64 {
 /// # Parameters
 /// - `min_contrast`: Minimum contrast range for Otsu-based classification.
 ///   Default is 20.0. Lower values (e.g., 10.0) improve recall on small/blurry tags.
-#[allow(clippy::cast_sign_loss)]
+#[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
 pub fn sample_grid(
     img: &crate::image::ImageView,
     homography: &Homography,
@@ -744,13 +769,18 @@ pub fn sample_grid(
     // SOTA: Adaptive Bit Kernels
     let dim = (decoder.dimension() + 2) as f64;
     let cell_width_tag = 2.0 / dim;
-    
+
     // Calculate approximate bit cell size in image pixels to adapt sampling pattern
-    let corner_dist = (homography.h[(0, 0)].powi(2) + homography.h[(1, 0)].powi(2)).sqrt() / homography.h[(2, 2)].abs();
+    let corner_dist = (homography.h[(0, 0)].powi(2) + homography.h[(1, 0)].powi(2)).sqrt()
+        / homography.h[(2, 2)].abs();
     let bit_cell_size = corner_dist / dim;
-    
+
     // Use wider kernel for tiny tags but stay within 40% of the cell width
-    let spread = if bit_cell_size < 3.0 { cell_width_tag * 0.20 } else { cell_width_tag * 0.05 };
+    let spread = if bit_cell_size < 3.0 {
+        cell_width_tag * 0.20
+    } else {
+        cell_width_tag * 0.05
+    };
     let offsets = [-spread, 0.0, spread];
 
     for (i, &p) in points.iter().take(n).enumerate() {
@@ -821,23 +851,35 @@ pub fn sample_grid(
     // SOTA: Blended Quadrant-based Adaptive Thresholding
     // Combines global Otsu (robust for bimodal) with local quadrant averages (robust for shadows)
     let global_threshold = compute_otsu_threshold(&intensities[..n]);
-    
+
     let mut quad_sums = [0.0; 4];
     let mut quad_counts = [0; 4];
     for (i, &p) in points.iter().take(n).enumerate() {
-        let qi = if p.0 < 0.0 { usize::from(p.1 >= 0.0) } else { 2 + usize::from(p.1 >= 0.0) };
+        let qi = if p.0 < 0.0 {
+            usize::from(p.1 >= 0.0)
+        } else {
+            2 + usize::from(p.1 >= 0.0)
+        };
         quad_sums[qi] += intensities[i];
         quad_counts[qi] += 1;
     }
 
     let mut bits = 0u64;
     for (i, &p) in points.iter().take(n).enumerate() {
-        let qi = if p.0 < 0.0 { usize::from(p.1 >= 0.0) } else { 2 + usize::from(p.1 >= 0.0) };
-        let quad_avg = if quad_counts[qi] > 0 { quad_sums[qi] / f64::from(quad_counts[qi]) } else { global_threshold };
-        
+        let qi = if p.0 < 0.0 {
+            usize::from(p.1 >= 0.0)
+        } else {
+            2 + usize::from(p.1 >= 0.0)
+        };
+        let quad_avg = if quad_counts[qi] > 0 {
+            quad_sums[qi] / f64::from(quad_counts[qi])
+        } else {
+            global_threshold
+        };
+
         // Blend global Otsu and local mean (0.7 / 0.3 weighting is SOTA for fiducials)
         let effective_threshold = 0.7 * global_threshold + 0.3 * quad_avg;
-        
+
         if intensities[i] > effective_threshold {
             bits |= 1 << i;
         }
@@ -1039,7 +1081,19 @@ impl TagDecoder for GenericDecoder {
     }
 }
 
+/// Convert a TagFamily enum to a boxed decoder instance.
+#[must_use]
+pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send + Sync> {
+    match family {
+        config::TagFamily::AprilTag36h11 => Box::new(AprilTag36h11),
+        config::TagFamily::AprilTag16h5 => Box::new(AprilTag16h5),
+        config::TagFamily::ArUco4x4_50 => Box::new(ArUco4x4_50),
+        config::TagFamily::ArUco4x4_100 => Box::new(ArUco4x4_100),
+    }
+}
+
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::dictionaries::rotate90;
@@ -1159,9 +1213,7 @@ mod tests {
         // We need min/max to be different by > 20.
 
         // Fill background with gray = 100
-        for i in 0..data.len() {
-            data[i] = 100;
-        }
+        data.fill(100);
 
         // Set bit 0 region to 200 (White)
         // Canonical (-0.625, -0.625) -> Image coords.
@@ -1271,13 +1323,11 @@ mod tests {
                 [quad.corners[3][0], quad.corners[3][1]],
             ];
 
-            if let Some(h) = Homography::square_to_quad(&dst) {
-                if let Some(bits) = sample_grid(&img, &h, &decoder, 20.0) {
-                    if let Some((id, hamming, _rot)) = decoder.decode(bits) {
+            if let Some(h) = Homography::square_to_quad(&dst)
+                && let Some(bits) = sample_grid(&img, &h, &decoder, 20.0)
+                    && let Some((id, hamming, _rot)) = decoder.decode(bits) {
                         results.push((id, hamming));
                     }
-                }
-            }
         }
 
         results
@@ -1295,7 +1345,7 @@ mod tests {
             let found = decoded.iter().any(|(id, _)| *id == u32::from(test_id));
 
             if tag_size >= 64 {
-                assert!(found, "Tag size {}: ID {} not found", tag_size, test_id);
+                assert!(found, "Tag size {tag_size}: ID {test_id} not found");
             }
 
             if found {
@@ -1304,8 +1354,7 @@ mod tests {
                     .find(|(id, _)| *id == u32::from(test_id))
                     .unwrap();
                 println!(
-                    "Tag size {:>3}px: ID {} with hamming {}",
-                    tag_size, test_id, hamming
+                    "Tag size {tag_size:>3}px: ID {test_id} with hamming {hamming}"
                 );
             }
         }
@@ -1321,14 +1370,14 @@ mod tests {
         for &test_id in &test_ids {
             let decoded = run_full_pipeline(tag_size, canvas_size, test_id);
             let found = decoded.iter().any(|(id, _)| *id == u32::from(test_id));
-            assert!(found, "ID {} not decoded", test_id);
+            assert!(found, "ID {test_id} not decoded");
 
             let (_, hamming) = decoded
                 .iter()
                 .find(|(id, _)| *id == u32::from(test_id))
                 .unwrap();
-            assert_eq!(*hamming, 0, "ID {} should have 0 hamming", test_id);
-            println!("ID {:>3}: Decoded with hamming {}", test_id, hamming);
+            assert_eq!(*hamming, 0, "ID {test_id} should have 0 hamming");
+            println!("ID {test_id:>3}: Decoded with hamming {hamming}");
         }
     }
 
@@ -1342,19 +1391,8 @@ mod tests {
         for &test_id in &edge_ids {
             let decoded = run_full_pipeline(tag_size, canvas_size, test_id);
             let found = decoded.iter().any(|(id, _)| *id == u32::from(test_id));
-            assert!(found, "Edge ID {} not decoded", test_id);
-            println!("Edge ID {}: Decoded", test_id);
+            assert!(found, "Edge ID {test_id} not decoded");
+            println!("Edge ID {test_id}: Decoded");
         }
-    }
-}
-
-/// Convert a TagFamily enum to a boxed decoder instance.
-#[must_use]
-pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send + Sync> {
-    match family {
-        config::TagFamily::AprilTag36h11 => Box::new(AprilTag36h11),
-        config::TagFamily::AprilTag16h5 => Box::new(AprilTag16h5),
-        config::TagFamily::ArUco4x4_50 => Box::new(ArUco4x4_50),
-        config::TagFamily::ArUco4x4_100 => Box::new(ArUco4x4_100),
     }
 }

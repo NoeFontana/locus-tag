@@ -1,6 +1,7 @@
 #![allow(missing_docs)]
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::uninlined_format_args)]
+#![allow(clippy::cast_sign_loss)]
 
 use locus_core::Detector;
 use locus_core::test_utils::compute_corner_error;
@@ -193,9 +194,9 @@ mod extended {
 /// Test that both 4-way and 8-way connectivity work correctly on a multi-tag image.
 #[test]
 fn test_connectivity_modes() {
+    use locus_core::Detector;
     use locus_core::config::{DetectorConfig, SegmentationConnectivity, TagFamily};
     use locus_core::image::ImageView;
-    use locus_core::Detector;
 
     // Generate a synthetic image with two tags
     let (data, _gt) = locus_core::test_utils::generate_synthetic_test_image(
@@ -213,7 +214,10 @@ fn test_connectivity_modes() {
         .build();
     let mut detector_8 = Detector::with_config(config_8);
     let dets_8 = detector_8.detect(&img);
-    assert!(!dets_8.is_empty(), "Failed to detect tag with 8-way connectivity");
+    assert!(
+        !dets_8.is_empty(),
+        "Failed to detect tag with 8-way connectivity"
+    );
 
     // 2. Test Four-way connectivity
     let config_4 = DetectorConfig::builder()
@@ -221,5 +225,8 @@ fn test_connectivity_modes() {
         .build();
     let mut detector_4 = Detector::with_config(config_4);
     let dets_4 = detector_4.detect(&img);
-    assert!(!dets_4.is_empty(), "Failed to detect tag with 4-way connectivity");
+    assert!(
+        !dets_4.is_empty(),
+        "Failed to detect tag with 4-way connectivity"
+    );
 }

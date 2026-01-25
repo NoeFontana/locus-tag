@@ -911,6 +911,7 @@ fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::float_cmp)]
 mod tests {
     use super::*;
     use bumpalo::Bump;
@@ -949,7 +950,7 @@ mod tests {
         // At edge x=6: left=128, right=138. (138-128)/2 = 5.
         // Magnitude 5.0.
         // Threshold is 10.0.
-        assert!(score < 10.0, "Score {} should be < 10.0", score);
+        assert!(score < 10.0, "Score {score} should be < 10.0");
 
         // Draw a strong quad (contrast 50)
         // Inside 200, Outside 50. Gradient ~75.
@@ -962,14 +963,14 @@ mod tests {
         // Restore background
         for y in 0..height {
             for x in 0..width {
-                if x < 6 || x >= 14 || y < 6 || y >= 14 {
+                if !(6..14).contains(&x) || !(6..14).contains(&y) {
                     data[y * width + x] = 50;
                 }
             }
         }
         let img = ImageView::new(&data, width, height, stride).unwrap();
         let score = calculate_edge_score(&img, corners);
-        assert!(score > 40.0, "Score {} should be > 40.0", score);
+        assert!(score > 40.0, "Score {score} should be > 40.0");
     }
 
     proptest! {
@@ -1014,9 +1015,9 @@ mod tests {
                 }
 
                 if let (Some(s), Some(e)) = (start_idx, end_idx) {
-                    for j in s..=e {
-                        let d = perpendicular_distance(contour[j], a, b);
-                        assert!(d <= epsilon + 1e-7, "Distance {} > epsilon {} at point index {}", d, epsilon, j);
+                    for op in contour.iter().take(e + 1).skip(s) {
+                        let d = perpendicular_distance(*op, a, b);
+                        assert!(d <= epsilon + 1e-7, "Distance {d} > epsilon {epsilon} at point");
                     }
                 }
             }
@@ -1071,7 +1072,7 @@ mod tests {
             let detected = !detections.is_empty();
 
             if tag_size >= 48 {
-                assert!(detected, "Tag size {}: No quad detected", tag_size);
+                assert!(detected, "Tag size {tag_size}: No quad detected");
             }
 
             if detected {
@@ -1083,7 +1084,7 @@ mod tests {
                     detections[0].center[1]
                 );
             } else {
-                println!("Tag size {:>3}px: No quad detected", tag_size);
+                println!("Tag size {tag_size:>3}px: No quad detected");
             }
         }
     }
@@ -1099,8 +1100,7 @@ mod tests {
 
             assert!(
                 !detections.is_empty(),
-                "Tag size {}: No detection",
-                tag_size
+                "Tag size {tag_size}: No detection"
             );
 
             let det_corners = detections[0].corners;
@@ -1109,12 +1109,10 @@ mod tests {
             let max_error = 5.0;
             assert!(
                 error < max_error,
-                "Tag size {}: Corner error {:.2}px exceeds max",
-                tag_size,
-                error
+                "Tag size {tag_size}: Corner error {error:.2}px exceeds max"
             );
 
-            println!("Tag size {:>3}px: Corner error = {:.2}px", tag_size, error);
+            println!("Tag size {tag_size:>3}px: Corner error = {error:.2}px");
         }
     }
 
@@ -1139,8 +1137,7 @@ mod tests {
 
         assert!(
             center_error < 2.0,
-            "Center error {:.2}px exceeds 2px",
-            center_error
+            "Center error {center_error:.2}px exceeds 2px"
         );
 
         println!(
@@ -1293,10 +1290,7 @@ mod tests {
             // The ideal is <0.05px but real-world noise and edge cases may require relaxation
             assert!(
                 error_total < 0.15,
-                "Corner ({}, {}): error {:.4}px exceeds 0.15px threshold",
-                true_x,
-                true_y,
-                error_total
+                "Corner ({true_x}, {true_y}): error {error_total:.4}px exceeds 0.15px threshold"
             );
         }
     }
@@ -1344,9 +1338,7 @@ mod tests {
         // Vertical edge localization should be very accurate
         assert!(
             error_x < 0.1,
-            "Vertical edge x={}: error {:.4}px exceeds 0.1px threshold",
-            true_edge_x,
-            error_x
+            "Vertical edge x={true_edge_x}: error {error_x:.4}px exceeds 0.1px threshold"
         );
     }
 }

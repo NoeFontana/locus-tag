@@ -1,3 +1,4 @@
+#![allow(missing_docs, clippy::unwrap_used)]
 use locus_core::config::TagFamily;
 use locus_core::test_utils::{
     TestImageParams, compute_corner_error, generate_test_image_with_params,
@@ -39,14 +40,13 @@ fn test_decimation_basic() {
     let det_corners = detections[0].corners;
     let error = compute_corner_error(&det_corners, &gt_corners);
 
-    println!("Decimation 2 error: {:.4}px", error);
-    println!("Stats: {:?}", stats);
+    println!("Decimation 2 error: {error:.4}px");
+    println!("Stats: {stats:?}");
 
     // We expect high accuracy even with decimation because of high-res refinement
     assert!(
         error < 1.0,
-        "Error {:.4}px too high for decimation=2",
-        error
+        "Error {error:.4}px too high for decimation=2"
     );
 }
 

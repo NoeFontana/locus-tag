@@ -1,3 +1,4 @@
+#![allow(missing_docs, clippy::unwrap_used)]
 use divan::bench;
 use locus_core::decoder::{AprilTag36h11, Homography, TagDecoder};
 use locus_core::image::ImageView;
@@ -25,7 +26,7 @@ fn bench_decoding_200_candidates(bencher: divan::Bencher) {
     let mut candidates = Vec::with_capacity(200);
     for i in 0..200 {
         let mut jittered = corners;
-        let offset = (i as f64 * 0.01) % 0.5;
+        let offset = (f64::from(i) * 0.01) % 0.5;
         for p in &mut jittered {
             p[0] += offset;
             p[1] += offset;
@@ -36,13 +37,11 @@ fn bench_decoding_200_candidates(bencher: divan::Bencher) {
     bencher.bench_local(move || {
         let mut sum_ids = 0u32;
         for corners in &candidates {
-            if let Some(h) = Homography::square_to_quad(corners) {
-                if let Some(bits) = locus_core::decoder::sample_grid(&img, &h, &decoder, 20.0) {
-                    if let Some((id, _, _)) = decoder.decode(bits) {
+            if let Some(h) = Homography::square_to_quad(corners)
+                && let Some(bits) = locus_core::decoder::sample_grid(&img, &h, &decoder, 20.0)
+                    && let Some((id, _, _)) = decoder.decode(bits) {
                         sum_ids += id;
                     }
-                }
-            }
         }
         divan::black_box(sum_ids);
     });
@@ -52,8 +51,8 @@ fn bench_decoding_200_candidates(bencher: divan::Bencher) {
 fn bench_homography_200_only(bencher: divan::Bencher) {
     let mut candidates = Vec::with_capacity(200);
     for i in 0..200 {
-        let x = (i % 10) as f64 * 50.0 + 100.0;
-        let y = (i / 10) as f64 * 40.0 + 100.0;
+        let x = f64::from(i % 10) * 50.0 + 100.0;
+        let y = f64::from(i / 10) * 40.0 + 100.0;
         let corners = [[x, y], [x + 30.0, y], [x + 30.0, y + 30.0], [x, y + 30.0]];
         candidates.push(corners);
     }

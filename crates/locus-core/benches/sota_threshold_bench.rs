@@ -1,3 +1,4 @@
+#![allow(missing_docs, clippy::unwrap_used)]
 use bumpalo::Bump;
 use divan::bench;
 use locus_core::filter::{bilateral_filter, compute_gradient_map};
@@ -10,7 +11,6 @@ use locus_core::threshold::{
 fn main() {
     divan::main();
 }
-
 
 #[bench]
 fn bench_integral_image_1080p(bencher: divan::Bencher) {

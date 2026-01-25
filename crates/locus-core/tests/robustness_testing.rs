@@ -1,3 +1,10 @@
+#![allow(
+    missing_docs,
+    clippy::panic,
+    clippy::needless_range_loop,
+    clippy::unwrap_used,
+    clippy::unreadable_literal
+)]
 //! Robustness tests for edge cases and hostile production environments.
 //!
 //! These tests verify the detector handles:
@@ -12,8 +19,8 @@ use locus_core::{
     config::{DetectOptions, TagFamily},
 };
 use proptest::prelude::*;
-use rand::prelude::*;
 use rand::RngCore;
+use rand::prelude::*;
 
 /// Test that the detection pipeline correctly handles strided buffers.
 ///
@@ -81,7 +88,7 @@ fn test_64_byte_aligned_stride() {
     const WIDTH: usize = 150;
     const HEIGHT: usize = 150;
     // Round up to next 64-byte boundary
-    const STRIDE: usize = ((WIDTH + 63) / 64) * 64; // 192
+    const STRIDE: usize = WIDTH.div_ceil(64) * 64; // 192
 
     let mut rng = thread_rng();
     let mut buffer = vec![0u8; HEIGHT * STRIDE];
@@ -199,6 +206,10 @@ fn test_tag_touching_bottom_right_edge() {
 /// Uses synthetic tag generation, then crops to remove quiet zone.
 #[test]
 fn test_real_tag_no_quiet_zone() {
+    // Crop to remove most of the quiet zone (aggressive crop)
+    const CROP_SIZE: usize = 90;
+    const CROP_OFFSET: usize = 35; // Start cropping at offset to catch tag edge
+
     // Generate a larger image with tag centered
     let (full_data, _) = locus_core::test_utils::generate_synthetic_test_image(
         TagFamily::AprilTag36h11,
@@ -209,8 +220,7 @@ fn test_real_tag_no_quiet_zone() {
     );
 
     // Crop to remove most of the quiet zone (aggressive crop)
-    const CROP_SIZE: usize = 90;
-    const CROP_OFFSET: usize = 35; // Start cropping at offset to catch tag edge
+
 
     let mut cropped = vec![255u8; CROP_SIZE * CROP_SIZE];
     for y in 0..CROP_SIZE {
@@ -308,9 +318,7 @@ fn test_homography_bowtie_self_intersecting() {
             for j in 0..3 {
                 assert!(
                     !h.h[(i, j)].is_nan(),
-                    "Homography matrix contains NaN at ({}, {})",
-                    i,
-                    j
+                    "Homography matrix contains NaN at ({i}, {j})"
                 );
             }
         }
@@ -399,10 +407,9 @@ fn test_no_false_positives_in_white_noise() {
 
     assert_eq!(
         total_false_positives, 0,
-        "Detector found {} false positive(s) in {} random noise images. \
-         Images with false positives: {:?}. \
-         Consider tightening quad_min_edge_score or decoder Hamming threshold.",
-        total_false_positives, NUM_IMAGES, false_positive_images
+        "Detector found {total_false_positives} false positive(s) in {NUM_IMAGES} random noise images. \
+         Images with false positives: {false_positive_images:?}. \
+         Consider tightening quad_min_edge_score or decoder Hamming threshold."
     );
 }
 
@@ -433,7 +440,7 @@ fn test_no_false_positives_in_gradient_noise() {
     // Diagonal gradient
     for y in 0..HEIGHT {
         for x in 0..WIDTH {
-            gradient[y * WIDTH + x] = ((x + y) / 2) as u8;
+            gradient[y * WIDTH + x] = usize::midpoint(x, y) as u8;
         }
     }
 
@@ -501,7 +508,7 @@ fn test_adaptive_threshold_gradient_shadow() {
         for tx in 0..60 {
             let src_val = dark_tag[ty * 60 + tx];
             // Dark zone: black stays 0, white becomes 50
-            let remapped = (src_val as u32 * 50 / 255) as u8;
+            let remapped = (u32::from(src_val) * 50 / 255) as u8;
             let x = dark_offset_x + tx;
             let y = dark_offset_y + ty;
             if x < WIDTH && y < HEIGHT {
@@ -518,7 +525,7 @@ fn test_adaptive_threshold_gradient_shadow() {
         for tx in 0..60 {
             let src_val = bright_tag[ty * 60 + tx];
             // Bright zone: black becomes 200, white stays 255
-            let remapped = 200 + (src_val as u32 * 55 / 255) as u8;
+            let remapped = 200 + (u32::from(src_val) * 55 / 255) as u8;
             let x = bright_offset_x + tx;
             let y = bright_offset_y + ty;
             if x < WIDTH && y < HEIGHT {
@@ -538,17 +545,15 @@ fn test_adaptive_threshold_gradient_shadow() {
     assert!(
         detected_ids.contains(&10),
         "Adaptive threshold FAILED: Dark-zone tag (ID 10) not detected. \
-         Detected IDs: {:?}. This indicates the local window is too large or \
-         threshold is regressing to global mean.",
-        detected_ids
+         Detected IDs: {detected_ids:?}. This indicates the local window is too large or \
+         threshold is regressing to global mean."
     );
 
     assert!(
         detected_ids.contains(&20),
         "Adaptive threshold FAILED: Bright-zone tag (ID 20) not detected. \
-         Detected IDs: {:?}. This indicates the local window is too large or \
-         threshold is regressing to global mean.",
-        detected_ids
+         Detected IDs: {detected_ids:?}. This indicates the local window is too large or \
+         threshold is regressing to global mean."
     );
 }
 
@@ -612,7 +617,7 @@ fn valid_quad_strategy() -> impl Strategy<Value = [[f64; 2]; 4]> {
             pts.copy_from_slice(&v);
             pts
         })
-        .prop_filter("Must be convex and CCW", |pts| is_convex_ccw(pts))
+        .prop_filter("Must be convex and CCW", is_convex_ccw)
 }
 
 /// Strategy for degenerate quads (strictly collinear or coincident).
@@ -652,8 +657,8 @@ proptest! {
                 let max_coord = dst[i][0].abs().max(dst[i][1].abs()).max(1.0);
                 let tol = 1e-7 * max_coord;
 
-                assert!(err_x < tol, "Reprojection error X too large: {} at point {} (tol: {})", err_x, i, tol);
-                assert!(err_y < tol, "Reprojection error Y too large: {} at point {} (tol: {})", err_y, i, tol);
+                assert!(err_x < tol, "Reprojection error X too large: {err_x} at point {i} (tol: {tol})");
+                assert!(err_y < tol, "Reprojection error Y too large: {err_y} at point {i} (tol: {tol})");
             }
         }
     }
@@ -698,7 +703,7 @@ proptest! {
         if let Some(_h_val) = h {
             // Check reprojection error - it should be high or it's a miracle
             // Actually, we expect it to be None.
-            panic!("DLT returned a solution for collinear points: {:?}", src);
+            panic!("DLT returned a solution for collinear points: {src:?}");
         }
     }
 
@@ -773,7 +778,7 @@ proptest! {
             let err_total = (err_x * err_x + err_y * err_y).sqrt();
 
             // Phase 3: Precision Gate - Error must be < 0.5 pixels
-            assert!(err_total < 0.5, "Extreme slant ({:.1} deg) center error too large: {:.4}px", slant_deg, err_total);
+            assert!(err_total < 0.5, "Extreme slant ({slant_deg:.1} deg) center error too large: {err_total:.4}px");
         }
     }
 
@@ -795,7 +800,7 @@ proptest! {
                 for i in 0..3 {
                     for j in 0..3 {
                         let diff = (g.h[(i, j)] - o.h[(i, j)]).abs();
-                        assert!(diff < 1e-6, "Optimizer divergence at ({}, {}): diff={:.2e}", i, j, diff);
+                        assert!(diff < 1e-6, "Optimizer divergence at ({i}, {j}): diff={diff:.2e}");
                     }
                 }
             },
@@ -865,7 +870,7 @@ proptest! {
 
             for gx in -5..=5 {
                 for gy in -5..=5 {
-                    let p = [gx as f64 * 0.2, gy as f64 * 0.2];
+                    let p = [f64::from(gx) * 0.2, f64::from(gy) * 0.2];
                     let p_gt = h_gt.project(p);
                     let p_noisy = h_noisy.project(p);
 
@@ -874,8 +879,7 @@ proptest! {
                     let err = (err_x * err_x + err_y * err_y).sqrt();
 
                     assert!(err < max_err_allowed,
-                        "Noise amplification too high: err={:.4}px > {:.4}px (k*sigma) at point {:?}",
-                        err, max_err_allowed, p);
+                        "Noise amplification too high: err={err:.4}px > {max_err_allowed:.4}px (k*sigma) at point {p:?}");
                 }
             }
         }
