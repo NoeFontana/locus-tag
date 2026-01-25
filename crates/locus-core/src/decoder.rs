@@ -469,7 +469,6 @@ fn compute_grid_contrast(
 ///
 /// This assumes the edge intensity profile is an Error Function (convolution of step edge with Gaussian PSF).
 /// We minimize the photometric error between the image and the ERF model using Gauss-Newton.
-#[allow(clippy::cast_sign_loss, clippy::too_many_lines, clippy::similar_names)]
 pub fn refine_corners_erf(
     arena: &bumpalo::Bump,
     img: &crate::image::ImageView,
@@ -516,8 +515,193 @@ pub fn refine_corners_erf(
     refined
 }
 
+/// Helper for ERF edge fitting
+struct EdgeFitter<'a> {
+    img: &'a crate::image::ImageView<'a>,
+    p1: [f64; 2],
+    dx: f64,
+    dy: f64,
+    len: f64,
+    nx: f64,
+    ny: f64,
+    d: f64,
+}
+
+impl<'a> EdgeFitter<'a> {
+    fn new(img: &'a crate::image::ImageView<'a>, p1: [f64; 2], p2: [f64; 2]) -> Option<Self> {
+        let dx = p2[0] - p1[0];
+        let dy = p2[1] - p1[1];
+        let len = (dx * dx + dy * dy).sqrt();
+        if len < 4.0 {
+            return None;
+        }
+        let nx = -dy / len;
+        let ny = dx / len;
+        // Initial d from input corners
+        let d = -(nx * p1[0] + ny * p1[1]);
+
+        Some(Self {
+            img,
+            p1,
+            dx,
+            dy,
+            len,
+            nx,
+            ny,
+            d,
+        })
+    }
+
+    fn scan_initial_d(&mut self) {
+        let window = 2.5;
+        let (x0, x1, y0, y1) = self.get_scan_bounds(window);
+
+        let mut best_offset = 0.0;
+        let mut best_grad = 0.0;
+
+        for k in -6..=6 {
+            let offset = f64::from(k) * 0.4;
+            let mut sum_g = 0.0;
+            let mut count = 0;
+            let scan_d = self.d + offset;
+
+            for py in y0..=y1 {
+                for px in x0..=x1 {
+                    let x = px as f64;
+                    let y = py as f64;
+                    let dist = self.nx * x + self.ny * y + scan_d;
+                    if dist.abs() < 1.0 {
+                        let g = self.img.sample_gradient_bilinear(x, y);
+                        sum_g += (g[0] * self.nx + g[1] * self.ny).abs();
+                        count += 1;
+                    }
+                }
+            }
+
+            if count > 0 && sum_g > best_grad {
+                best_grad = sum_g;
+                best_offset = offset;
+            }
+        }
+        self.d += best_offset;
+    }
+
+    fn collect_samples(
+        &self,
+        arena: &'a bumpalo::Bump,
+    ) -> bumpalo::collections::Vec<'a, (f64, f64, f64)> {
+        let window = 2.5;
+        let (x0, x1, y0, y1) = self.get_scan_bounds(window);
+
+        let mut samples = bumpalo::collections::Vec::with_capacity_in(128, arena);
+
+        for py in y0..=y1 {
+            for px in x0..=x1 {
+                let x = px as f64;
+                let y = py as f64;
+
+                let dist = self.nx * x + self.ny * y + self.d;
+                if dist.abs() > window {
+                    continue;
+                }
+
+                let t = ((x - self.p1[0]) * self.dx + (y - self.p1[1]) * self.dy)
+                    / (self.len * self.len);
+
+                if (-0.1..=1.1).contains(&t) {
+                    let val = f64::from(self.img.get_pixel(px, py));
+                    samples.push((x, y, val));
+                }
+            }
+        }
+        samples
+    }
+
+    fn refine(&mut self, samples: &[(f64, f64, f64)], sigma: f64) {
+        if samples.len() < 10 {
+            return;
+        }
+        let mut a = 128.0;
+        let mut b = 128.0;
+        let inv_sigma = 1.0 / sigma;
+        let sqrt_pi = std::f64::consts::PI.sqrt();
+
+        for _ in 0..15 {
+            let mut dark_sum = 0.0;
+            let mut dark_weight = 0.0;
+            let mut light_sum = 0.0;
+            let mut light_weight = 0.0;
+
+            for &(x, y, _) in samples {
+                let dist = self.nx * x + self.ny * y + self.d;
+                let val = self.img.sample_bilinear(x, y);
+                if dist < -1.0 {
+                    let w = (-dist - 0.5).clamp(0.1, 2.0);
+                    dark_sum += val * w;
+                    dark_weight += w;
+                } else if dist > 1.0 {
+                    let w = (dist - 0.5).clamp(0.1, 2.0);
+                    light_sum += val * w;
+                    light_weight += w;
+                }
+            }
+
+            if dark_weight > 0.0 && light_weight > 0.0 {
+                a = dark_sum / dark_weight;
+                b = light_sum / light_weight;
+            }
+
+            if (b - a).abs() < 5.0 {
+                break;
+            }
+
+            let mut sum_jtj = 0.0;
+            let mut sum_jt_res = 0.0;
+            let k = (b - a) / (sqrt_pi * sigma);
+
+            for &(x, y, _) in samples {
+                let dist = self.nx * x + self.ny * y + self.d;
+                let s = dist * inv_sigma;
+                if s.abs() > 3.0 {
+                    continue;
+                }
+                let val = self.img.sample_bilinear(x, y);
+                let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::quad::erf_approx(s);
+                let residual = val - model;
+                let jac = k * (-s * s).exp();
+                sum_jtj += jac * jac;
+                sum_jt_res += jac * residual;
+            }
+
+            if sum_jtj < 1e-6 {
+                break;
+            }
+            let step = sum_jt_res / sum_jtj;
+            self.d += step.clamp(-0.5, 0.5);
+            if step.abs() < 1e-4 {
+                break;
+            }
+        }
+    }
+
+    #[allow(clippy::cast_sign_loss)]
+    fn get_scan_bounds(&self, window: f64) -> (usize, usize, usize, usize) {
+        let p2_0 = self.p1[0] + self.dx;
+        let p2_1 = self.p1[1] + self.dy;
+        
+        // Clamp to valid image coordinates (padding of 1 pixel)
+        let w_limit = (self.img.width - 2) as f64;
+        let h_limit = (self.img.height - 2) as f64;
+
+        let x0 = (self.p1[0].min(p2_0) - window - 0.5).clamp(1.0, w_limit) as usize;
+        let x1 = (self.p1[0].max(p2_0) + window + 0.5).clamp(1.0, w_limit) as usize;
+        let y0 = (self.p1[1].min(p2_1) - window - 0.5).clamp(1.0, h_limit) as usize;
+        let y1 = (self.p1[1].max(p2_1) + window + 0.5).clamp(1.0, h_limit) as usize;
+        (x0, x1, y0, y1)
+    }
+}
+
 /// Fit a line (nx*x + ny*y + d = 0) to an edge using the ERF intensity model.
-#[allow(clippy::too_many_lines, clippy::many_single_char_names)]
 fn fit_edge_erf(
     arena: &bumpalo::Bump,
     img: &crate::image::ImageView,
@@ -525,157 +709,17 @@ fn fit_edge_erf(
     p2: [f64; 2],
     sigma: f64,
 ) -> Option<(f64, f64, f64)> {
-    let dx = p2[0] - p1[0];
-    let dy = p2[1] - p1[1];
-    let len = (dx * dx + dy * dy).sqrt();
-    if len < 4.0 {
-        return None;
-    }
-
-    let nx = -dy / len;
-    let ny = dx / len;
-
-    // Initial d from input corners
-    let mut d = -(nx * p1[0] + ny * p1[1]);
-
-    // Window for sampling
-    let window = 2.5; // Optimized for precision-to-noise ratio
-    let x0 = (p1[0].min(p2[0]) - window - 0.5).max(1.0) as usize;
-    let x1 = (p1[0].max(p2[0]) + window + 0.5).min((img.width - 2) as f64) as usize;
-    let y0 = (p1[1].min(p2[1]) - window - 0.5).max(1.0) as usize;
-    let y1 = (p1[1].max(p2[1]) + window + 0.5).min((img.height - 2) as f64) as usize;
-
-    // SOTA Improvement: Initial edge scan to find true intensity peak
-    let mut best_offset = 0.0;
-    let mut best_grad = 0.0;
-    // Tighter search, more steps for sub-pixel initialization
-    for k in -6..=6 {
-        let offset = f64::from(k) * 0.4;
-        let mut sum_g = 0.0;
-        let mut count = 0;
-        let scan_d = d + offset;
-        for py in y0..=y1 {
-            for px in x0..=x1 {
-                let x = px as f64;
-                let y = py as f64;
-                let dist = nx * x + ny * y + scan_d;
-                if dist.abs() < 1.0 {
-                    let g = img.sample_gradient_bilinear(x, y);
-                    // Maximize gradient along normal
-                    sum_g += (g[0] * nx + g[1] * ny).abs();
-                    count += 1;
-                }
-            }
-        }
-        if count > 0 && sum_g > best_grad {
-            best_grad = sum_g;
-            best_offset = offset;
-        }
-    }
-    d += best_offset;
-
-    let mut samples = bumpalo::collections::Vec::with_capacity_in(128, arena);
-
-    // Collect samples along the edge
-    for py in y0..=y1 {
-        for px in x0..=x1 {
-            let x = px as f64;
-            let y = py as f64;
-
-            // Perpendicular distance
-            let dist = nx * x + ny * y + d;
-            if dist.abs() > window {
-                continue;
-            }
-
-            // Projection along edge
-            let t = ((x - p1[0]) * dx + (y - p1[1]) * dy) / (len * len);
-            if !(-0.1..=1.1).contains(&t) {
-                continue;
-            }
-
-            let val = f64::from(img.get_pixel(px, py));
-            samples.push((x, y, val));
-        }
-    }
-
+    let mut fitter = EdgeFitter::new(img, p1, p2)?;
+    fitter.scan_initial_d();
+    let samples = fitter.collect_samples(arena);
     if samples.len() < 10 {
-        return None;
+         return None;
     }
-
-    // Initial estimation of A and B using the scanned d
-    let mut a = 128.0;
-    let mut b = 128.0;
-
-    // Gauss-Newton to refine d and intensities A, B
-    let inv_sigma = 1.0 / sigma;
-    let sqrt_pi = std::f64::consts::PI.sqrt();
-
-    for _iter in 0..15 {
-        // 1. Estimate A and B given current d
-        let mut dark_sum = 0.0;
-        let mut dark_weight = 0.0;
-        let mut light_sum = 0.0;
-        let mut light_weight = 0.0;
-
-        for &(x, y, _) in &samples {
-            let dist = nx * x + ny * y + d;
-            let val = img.sample_bilinear(x, y); // Use bilinear for sub-pixel accuracy
-
-            if dist < -1.0 {
-                let w = (-dist - 0.5).clamp(0.1, 2.0);
-                dark_sum += val * w;
-                dark_weight += w;
-            } else if dist > 1.0 {
-                let w = (dist - 0.5).clamp(0.1, 2.0);
-                light_sum += val * w;
-                light_weight += w;
-            }
-        }
-
-        if dark_weight > 0.0 && light_weight > 0.0 {
-            a = dark_sum / dark_weight;
-            b = light_sum / light_weight;
-        }
-
-        if (b - a).abs() < 5.0 {
-            break;
-        }
-
-        // 2. GN update for d
-        let mut sum_jtj = 0.0;
-        let mut sum_jt_res = 0.0;
-        let k = (b - a) / (sqrt_pi * sigma);
-
-        for &(x, y, _) in &samples {
-            let dist = nx * x + ny * y + d;
-            let s = dist * inv_sigma;
-            if s.abs() > 3.0 {
-                continue;
-            }
-
-            let val = img.sample_bilinear(x, y);
-            let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::quad::erf_approx(s);
-            let residual = val - model;
-
-            let jac = k * (-s * s).exp();
-
-            sum_jtj += jac * jac;
-            sum_jt_res += jac * residual;
-        }
-
-        if sum_jtj < 1e-6 {
-            break;
-        }
-        let step = sum_jt_res / sum_jtj;
-        d += step.clamp(-0.5, 0.5); // Dampen steps
-        if step.abs() < 1e-4 {
-            break;
-        }
-    }
-
-    Some((nx, ny, d))
+    fitter.refine(&samples, sigma);
+    Some((fitter.nx, fitter.ny, fitter.d))
 }
+
+
 
 /// Returns the threshold that maximizes inter-class variance.
 fn compute_otsu_threshold(values: &[f64]) -> f64 {

@@ -1,4 +1,4 @@
-#![allow(clippy::unreadable_literal, clippy::cast_sign_loss)]
+#![allow(clippy::unreadable_literal)]
 //! Tag family dictionaries.
 //!
 //! This module contains pre-generated code tables for AprilTag and ArUco families.
@@ -51,9 +51,9 @@ impl TagDictionary {
         let mut rotated_codes = Vec::with_capacity(codes.len() * 4);
         for (id, &code) in codes.iter().enumerate() {
             let mut r = code;
-            for rot in 0..4 {
-                code_to_id.insert(r, (id as u16, rot as u8));
-                rotated_codes.push((r, id as u16, rot as u8));
+            for rot in 0u8..4 {
+                code_to_id.insert(r, (id as u16, rot));
+                rotated_codes.push((r, id as u16, rot));
                 r = rotate90(r, dimension);
             }
         }
@@ -81,9 +81,9 @@ impl TagDictionary {
         let mut rotated_codes = Vec::with_capacity(codes.len() * 4);
         for (id, &code) in codes.iter().enumerate() {
             let mut r = code;
-            for rot in 0..4 {
-                code_to_id.insert(r, (id as u16, rot as u8));
-                rotated_codes.push((r, id as u16, rot as u8));
+            for rot in 0u8..4 {
+                code_to_id.insert(r, (id as u16, rot));
+                rotated_codes.push((r, id as u16, rot));
                 r = rotate90(r, dimension);
             }
         }
