@@ -497,6 +497,36 @@ impl Detector {
                                 }
                                 cand.corners = reordered;
 
+                                // SOTA: Always perform ERF refinement for finalists if requested
+                                if self.config.refinement_mode == crate::config::CornerRefinementMode::Erf {
+                                    let decode_arena = bumpalo::Bump::new();
+                                    let refined_corners = crate::decoder::refine_corners_erf(
+                                        &decode_arena,
+                                        &refinement_img,
+                                        &cand.corners,
+                                        self.config.subpixel_refinement_sigma,
+                                    );
+                                    
+                                    // Verify that refined corners still yield a valid decode
+                                    if let Some(h_ref) = crate::decoder::Homography::square_to_quad(&refined_corners) {
+                                        if let Some(bits_ref) = crate::decoder::sample_grid(
+                                            &refinement_img,
+                                            &h_ref,
+                                            decoder.as_ref(),
+                                            self.config.decoder_min_contrast,
+                                        ) {
+                                            if let Some((id_ref, hamming_ref, _)) = decoder.decode_full(bits_ref, 255) {
+                                                // Only keep if it's the same tag and hamming is not worse
+                                                if id_ref == id && hamming_ref <= hamming {
+                                                    cand.corners = refined_corners;
+                                                    cand.hamming = hamming_ref;
+                                                    cand.bits = bits_ref;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
                                 if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size) {
                                     cand.pose = crate::pose::estimate_tag_pose(&intrinsics, &cand.corners, tag_size);
                                 }
@@ -512,62 +542,189 @@ impl Detector {
                 }
             }
 
-            // Stage 2: Grid-Fit Corner Refinement (SOTA Hill Climbing)
-            // If the best hamming is "close" but not perfect, jiggle corners to find a better fit
+            // Stage 2: Configurable Corner Refinement
             let max_h_for_refine = if active_decoders.iter().any(|d| d.name() == "36h11") { 10 } else { 4 };
             if best_overall_h > if active_decoders.iter().any(|d| d.name() == "36h11") { 4 } else { 1 } 
                && best_overall_h <= max_h_for_refine {
                 
                 let mut current_corners = cand.corners;
-                let nudge = 0.2; // Sub-pixel nudge
-                
-                for _pass in 0..2 { // 2 passes of coordinate descent
-                    let mut improved = false;
-                    for c_idx in 0..4 {
-                        for (dx, dy) in [(nudge, 0.0), (-nudge, 0.0), (0.0, nudge), (0.0, -nudge)] {
-                            let mut test_corners = current_corners;
-                            test_corners[c_idx][0] += dx;
-                            test_corners[c_idx][1] += dy;
-                            
-                            if let Some(h) = crate::decoder::Homography::square_to_quad(&test_corners) {
-                                for decoder in active_decoders {
-                                    if let Some(bits) = crate::decoder::sample_grid(
-                                        &refinement_img,
-                                        &h,
-                                        decoder.as_ref(),
-                                        self.config.decoder_min_contrast,
-                                    ) {
-                                        if let Some((id, hamming, rot)) = decoder.decode_full(bits, 255) {
-                                            if hamming < best_overall_h {
-                                                best_overall_h = hamming;
-                                                best_overall_bits = bits;
-                                                current_corners = test_corners;
-                                                improved = true;
-                                                
-                                                // If we've reached a success threshold, update cand and return
-                                                if hamming <= if decoder.name() == "36h11" { 4 } else { 1 } {
-                                                    cand.id = id;
-                                                    cand.hamming = hamming;
-                                                    cand.bits = bits;
-                                                    cand.corners = current_corners;
-                                                    
-                                                    // Fix rotation
-                                                    let mut reordered = [[0.0; 2]; 4];
-                                                    for (i, item) in reordered.iter_mut().enumerate() {
-                                                        let src_idx = (i + usize::from(rot)) % 4;
-                                                        *item = cand.corners[src_idx];
+
+                match self.config.refinement_mode {
+                    crate::config::CornerRefinementMode::None => {},
+                    crate::config::CornerRefinementMode::Edge => {
+                        // Current edge-based subpixel refinement (Gradient Hill Climbing)
+                        let nudge = 0.2; 
+                        
+                        for _pass in 0..2 { 
+                            let mut pass_improved = false;
+                            for c_idx in 0..4 {
+                                for (dx, dy) in [(nudge, 0.0), (-nudge, 0.0), (0.0, nudge), (0.0, -nudge)] {
+                                    let mut test_corners = current_corners;
+                                    test_corners[c_idx][0] += dx;
+                                    test_corners[c_idx][1] += dy;
+                                    
+                                    if let Some(h) = crate::decoder::Homography::square_to_quad(&test_corners) {
+                                        for decoder in active_decoders {
+                                            if let Some(bits) = crate::decoder::sample_grid(
+                                                &refinement_img,
+                                                &h,
+                                                decoder.as_ref(),
+                                                self.config.decoder_min_contrast,
+                                            ) {
+                                                if let Some((id, hamming, rot)) = decoder.decode_full(bits, 255) {
+                                                    if hamming < best_overall_h {
+                                                        best_overall_h = hamming;
+                                                        best_overall_bits = bits;
+                                                        current_corners = test_corners;
+                                                        pass_improved = true;
+                                                        // Success check
+                                                        if hamming <= if decoder.name() == "36h11" { 4 } else { 1 } {
+                                                            cand.id = id;
+                                                            cand.hamming = hamming;
+                                                            cand.bits = bits;
+                                                            cand.corners = current_corners;
+                                                            
+                                                            // Fix rotation
+                                                            let mut reordered = [[0.0; 2]; 4];
+                                                            for (i, item) in reordered.iter_mut().enumerate() {
+                                                                let src_idx = (i + usize::from(rot)) % 4;
+                                                                *item = cand.corners[src_idx];
+                                                            }
+                                                            cand.corners = reordered;
+                                                            return (Some(cand), false, false, hamming, bits);
+                                                        }
                                                     }
-                                                    cand.corners = reordered;
-                                                    return (Some(cand), false, false, hamming, bits);
                                                 }
                                             }
                                         }
                                     }
                                 }
                             }
+                            if !pass_improved { break; }
+                        }
+                    },
+                    crate::config::CornerRefinementMode::GridFit => {
+                        // New GridFit optimization
+                        for decoder in active_decoders {
+                             // Recover ID and rotation from the best bits to construct the ideal target
+                             if let Some((id, hamming, rot)) = decoder.decode_full(best_overall_bits, 255) {
+                                 // Only proceed if this decoder explains the bits as well as our best guess
+                                 if hamming == best_overall_h {
+                                     // Fetch canonical code
+                                     if let Some(mut target_bits) = decoder.get_code(id as u16) {
+                                         // Rotate to match observed orientation
+                                         for _ in 0..rot {
+                                             target_bits = crate::dictionaries::rotate90(target_bits, decoder.dimension());
+                                         }
+                                         
+                                         // Run GridFit with the CLEAN target pattern
+                                         let refined = crate::decoder::refine_corners_gridfit(
+                                             &refinement_img,
+                                             &current_corners,
+                                             decoder.as_ref(), // Use the decoder to get sample points
+                                             target_bits // Maximize contrast against GROUND TRUTH CODE
+                                         );
+                                         
+                                         // Check if refined corners actually improve Hamming
+                                         if let Some(h) = crate::decoder::Homography::square_to_quad(&refined) {
+                                            if let Some(bits) = crate::decoder::sample_grid(&refinement_img, &h, decoder.as_ref(), self.config.decoder_min_contrast) {
+                                                if let Some((id, hamming, rot)) = decoder.decode_full(bits, 255) {
+                                                    if hamming < best_overall_h {
+                                                         best_overall_h = hamming;
+                                                         best_overall_bits = bits;
+                                                         current_corners = refined;
+                                                         // Success check
+                                                         if hamming <= if decoder.name() == "36h11" { 4 } else { 1 } {
+                                                             cand.id = id;
+                                                             cand.hamming = hamming;
+                                                             cand.bits = bits;
+                                                             cand.corners = current_corners;
+                                                             
+                                                              // Fix rotation
+                                                              let mut reordered = [[0.0; 2]; 4];
+                                                              for (i, item) in reordered.iter_mut().enumerate() {
+                                                                  let src_idx = (i + usize::from(rot)) % 4;
+                                                                  *item = cand.corners[src_idx];
+                                                              }
+                                                              cand.corners = reordered;
+
+                                                             return (Some(cand), false, false, hamming, bits);
+                                                         }
+                                                    }
+                                                }
+                                            }
+                                         }
+                                     }
+                                 }
+                             }
+                        }
+                    },
+                    crate::config::CornerRefinementMode::Erf => {
+                        let nudge = 0.2;
+                        for _pass in 0..2 {
+                            let mut pass_improved = false;
+                            for c_idx in 0..4 {
+                                for (dx, dy) in [(nudge, 0.0), (-nudge, 0.0), (0.0, nudge), (0.0, -nudge)] {
+                                    let mut test_corners = current_corners;
+                                    test_corners[c_idx][0] += dx;
+                                    test_corners[c_idx][1] += dy;
+                                    
+                                    if let Some(h) = crate::decoder::Homography::square_to_quad(&test_corners) {
+                                        for decoder in active_decoders {
+                                            if let Some(bits) = crate::decoder::sample_grid(&refinement_img, &h, decoder.as_ref(), self.config.decoder_min_contrast) {
+                                                if let Some((id, hamming, rot)) = decoder.decode_full(bits, 255) {
+                                                    if hamming < best_overall_h {
+                                                        best_overall_h = hamming;
+                                                        best_overall_bits = bits;
+                                                        current_corners = test_corners;
+                                                        pass_improved = true;
+                                                        
+                                                        if hamming <= if decoder.name() == "36h11" { 4 } else { 1 } {
+                                                            cand.id = id;
+                                                            cand.hamming = hamming;
+                                                            cand.bits = bits;
+                                                            cand.corners = current_corners;
+                                                            
+                                                            // Final ERF polish for maximum precision
+                                                            let decode_arena = bumpalo::Bump::new();
+                                                            let refined = crate::decoder::refine_corners_erf(
+                                                                &decode_arena,
+                                                                &refinement_img,
+                                                                &cand.corners,
+                                                                self.config.subpixel_refinement_sigma,
+                                                            );
+                                                            
+                                                            // Verify refined corners
+                                                            if let Some(h_ref) = crate::decoder::Homography::square_to_quad(&refined) {
+                                                                if let Some(bits_ref) = crate::decoder::sample_grid(&refinement_img, &h_ref, decoder.as_ref(), self.config.decoder_min_contrast) {
+                                                                    if let Some((id_ref, hamming_ref, _)) = decoder.decode_full(bits_ref, 255) {
+                                                                        if id_ref == id && hamming_ref <= hamming {
+                                                                            cand.corners = refined;
+                                                                            cand.hamming = hamming_ref;
+                                                                            cand.bits = bits_ref;
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            let mut reordered = [[0.0; 2]; 4];
+                                                            for (i, item) in reordered.iter_mut().enumerate() {
+                                                                let src_idx = (i + usize::from(rot)) % 4;
+                                                                *item = cand.corners[src_idx];
+                                                            }
+                                                            cand.corners = reordered;
+                                                            return (Some(cand), false, false, hamming, bits);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if !pass_improved { break; }
                         }
                     }
-                    if !improved { break; }
                 }
             }
             

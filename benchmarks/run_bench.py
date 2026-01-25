@@ -29,12 +29,8 @@ def run_real_benchmark(args):
 
     results = []
 
-    locus_config = locus.DetectorConfig(
-        threshold_tile_size=4,
-        quad_min_area=4,
-        enable_bilateral=False,
-    )
-    wrappers = [LocusWrapper(config=locus_config, decimation=1)]
+    # SOTA: Utilize defaults for optimized performance
+    wrappers = [LocusWrapper(decimation=1)]
     if args.compare:
         wrappers.append(OpenCVWrapper())
         wrappers.append(AprilTagWrapper(nthreads=8))
@@ -90,12 +86,8 @@ def run_real_benchmark(args):
 
 
 def run_synthetic_benchmark(args):
-    locus_config = locus.DetectorConfig(
-        threshold_tile_size=4,
-        quad_min_area=4,
-        enable_bilateral=False,
-    )
-    wrappers = [LocusWrapper(config=locus_config, decimation=1)]
+    # SOTA: Utilize defaults for optimized performance
+    wrappers = [LocusWrapper(decimation=1)]
     if args.compare:
         wrappers.append(OpenCVWrapper())
         wrappers.append(AprilTagWrapper())

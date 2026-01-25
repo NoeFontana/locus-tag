@@ -20,6 +20,20 @@ pub enum SegmentationConnectivity {
     Eight,
 }
 
+/// Mode for subpixel corner refinement.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum CornerRefinementMode {
+    /// No subpixel refinement (integer pixel precision).
+    None,
+    /// Edge-based refinement using gradient maxima (Default).
+    Edge,
+    /// GridFit: Optimizes corners by maximizing code contrast.
+    GridFit,
+    /// Erf: Fits a Gaussian to the gradient profile for sub-pixel edge alignment.
+    Erf,
+}
+
 /// Pipeline-level configuration for the detector.
 ///
 /// These settings affect the fundamental behavior of the detection pipeline
@@ -98,6 +112,8 @@ pub struct DetectorConfig {
     /// For checkerboard patterns with densely packed tags, lower values (e.g., 10.0)
     /// can improve recall on small/blurry tags.
     pub decoder_min_contrast: f64,
+    /// Strategy for refining corner positions (default: Edge).
+    pub refinement_mode: CornerRefinementMode,
 }
 
 impl Default for DetectorConfig {
@@ -125,6 +141,7 @@ impl Default for DetectorConfig {
             segmentation_connectivity: SegmentationConnectivity::Eight,
             upscale_factor: 1,
             decoder_min_contrast: 20.0,
+            refinement_mode: CornerRefinementMode::Erf,
         }
     }
 }
@@ -168,6 +185,8 @@ pub struct DetectorConfigBuilder {
     pub upscale_factor: Option<usize>,
     /// Minimum contrast for decoder to accept a tag.
     pub decoder_min_contrast: Option<f64>,
+    /// Refinement mode.
+    pub refinement_mode: Option<CornerRefinementMode>,
 }
 
 impl DetectorConfigBuilder {
@@ -333,6 +352,7 @@ impl DetectorConfigBuilder {
                 .unwrap_or(d.segmentation_connectivity),
             upscale_factor: self.upscale_factor.unwrap_or(d.upscale_factor),
             decoder_min_contrast: self.decoder_min_contrast.unwrap_or(d.decoder_min_contrast),
+            refinement_mode: self.refinement_mode.unwrap_or(d.refinement_mode),
         }
     }
 
@@ -362,6 +382,13 @@ impl DetectorConfigBuilder {
     #[must_use]
     pub fn decoder_min_contrast(mut self, contrast: f64) -> Self {
         self.decoder_min_contrast = Some(contrast);
+        self
+    }
+
+    /// Set the corner refinement mode.
+    #[must_use]
+    pub fn refinement_mode(mut self, mode: CornerRefinementMode) -> Self {
+        self.refinement_mode = Some(mode);
         self
     }
 }

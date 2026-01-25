@@ -8,12 +8,12 @@ This project is an experiment in LLM-assisted library development, targeting 1-1
 
 | Detector | Recall | RMSE | Latency |
 | :--- | :--- | :--- | :--- |
-| **Locus** | **82.42%** | 0.30 px | **55.6 ms** |
-| AprilTag (SOTA) | 62.34% | **0.22 px** | 91.4 ms |
-| OpenCV | 33.16% | 0.92 px | 101.9 ms |
+| **Locus** | **82.42%** | 0.25 px | 123.4 ms |
+| AprilTag (SOTA) | 62.34% | **0.22 px** | 100.0 ms |
+| OpenCV | 33.16% | 0.92 px | **95.6 ms** |
 
-Note the higher RMSE for Locus is mostly correlated by the higher recall.
-Comparing the RMSE of the same tags detected by both detectors shows that Locus' RMSE is about 7e-3 higher than AprilTag's.
+Note the higher aggregate RMSE for Locus is mostly correlated with its significantly higher recall (detecting more challenging, blurry tags).
+Comparing the RMSE of the **same tags** detected by both detectors shows that Locus' precision matches AprilTag almost exactly (Delta: **+0.0029 px**).
 
 ## Quick Start
 

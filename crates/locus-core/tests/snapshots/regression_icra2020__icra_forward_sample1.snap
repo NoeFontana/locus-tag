@@ -5,33 +5,33 @@ expression: report
 summary:
   dataset_size: 50
   mean_recall: 0.8242857142857143
-  mean_rmse: 0.321
-  mean_total_ms: 109.01802657999998
+  mean_rmse: 0.2811
+  mean_total_ms: 114.14465122000001
   worst_offenders:
     - filename: 0003.png
       missed: 134
       extra: 0
-      rmse: 0.3489
+      rmse: 0.3345
     - filename: 0004.png
       missed: 127
       extra: 0
-      rmse: 0.3381
+      rmse: 0.3367
     - filename: 0001.png
       missed: 126
       extra: 2
-      rmse: 1.1722
+      rmse: 1.1667
     - filename: 0000.png
       missed: 126
       extra: 2
-      rmse: 0.2629
+      rmse: 0.2639
     - filename: 0002.png
       missed: 118
       extra: 3
-      rmse: 0.283
+      rmse: 0.2758
 entries:
   0000.png:
     recall: 0.18181818181818182
-    avg_rmse: 0.2629
+    avg_rmse: 0.2639
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -172,7 +172,7 @@ entries:
       - 405
   0001.png:
     recall: 0.18181818181818182
-    avg_rmse: 1.1722
+    avg_rmse: 1.1667
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -313,7 +313,7 @@ entries:
       - 354
   0002.png:
     recall: 0.23376623376623376
-    avg_rmse: 0.283
+    avg_rmse: 0.2758
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -447,7 +447,7 @@ entries:
       - 554
   0003.png:
     recall: 0.12987012987012986
-    avg_rmse: 0.3489
+    avg_rmse: 0.3345
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -594,7 +594,7 @@ entries:
     extra_ids: []
   0004.png:
     recall: 0.17532467532467533
-    avg_rmse: 0.3381
+    avg_rmse: 0.3367
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -734,7 +734,7 @@ entries:
     extra_ids: []
   0005.png:
     recall: 0.3246753246753247
-    avg_rmse: 0.3612
+    avg_rmse: 0.3519
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -852,7 +852,7 @@ entries:
       - 379
   0006.png:
     recall: 0.37012987012987014
-    avg_rmse: 0.3372
+    avg_rmse: 0.3321
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -963,7 +963,7 @@ entries:
       - 223
   0007.png:
     recall: 0.6233766233766234
-    avg_rmse: 0.3031
+    avg_rmse: 0.2859
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1035,7 +1035,7 @@ entries:
       - 564
   0008.png:
     recall: 0.5064935064935064
-    avg_rmse: 0.3591
+    avg_rmse: 0.3364
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1126,7 +1126,7 @@ entries:
       - 572
   0009.png:
     recall: 0.7012987012987013
-    avg_rmse: 0.3503
+    avg_rmse: 0.3295
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1186,7 +1186,7 @@ entries:
       - 414
   0010.png:
     recall: 0.6818181818181818
-    avg_rmse: 0.442
+    avg_rmse: 0.4211
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1248,7 +1248,7 @@ entries:
     extra_ids: []
   0011.png:
     recall: 0.7857142857142857
-    avg_rmse: 0.3657
+    avg_rmse: 0.353
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1294,7 +1294,7 @@ entries:
     extra_ids: []
   0012.png:
     recall: 0.8896103896103896
-    avg_rmse: 0.3548
+    avg_rmse: 0.3326
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1325,7 +1325,7 @@ entries:
       - 554
   0013.png:
     recall: 0.564935064935065
-    avg_rmse: 0.3624
+    avg_rmse: 0.3426
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1408,7 +1408,7 @@ entries:
       - 581
   0014.png:
     recall: 0.7272727272727273
-    avg_rmse: 0.3491
+    avg_rmse: 0.3284
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1465,7 +1465,7 @@ entries:
       - 564
   0015.png:
     recall: 0.7662337662337663
-    avg_rmse: 0.3808
+    avg_rmse: 0.3544
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1514,7 +1514,7 @@ entries:
     extra_ids: []
   0016.png:
     recall: 0.8961038961038961
-    avg_rmse: 0.3946
+    avg_rmse: 0.3712
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1546,7 +1546,7 @@ entries:
       - 458
   0017.png:
     recall: 0.7857142857142857
-    avg_rmse: 0.3797
+    avg_rmse: 0.3584
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1595,7 +1595,7 @@ entries:
       - 472
   0018.png:
     recall: 0.8571428571428571
-    avg_rmse: 0.3909
+    avg_rmse: 0.3173
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1633,7 +1633,7 @@ entries:
       - 561
   0019.png:
     recall: 0.9025974025974026
-    avg_rmse: 0.3813
+    avg_rmse: 0.3078
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1661,7 +1661,7 @@ entries:
     extra_ids: []
   0020.png:
     recall: 0.948051948051948
-    avg_rmse: 0.395
+    avg_rmse: 0.3201
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1684,7 +1684,7 @@ entries:
       - 554
   0021.png:
     recall: 0.987012987012987
-    avg_rmse: 0.3871
+    avg_rmse: 0.315
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1700,7 +1700,7 @@ entries:
       - 554
   0022.png:
     recall: 0.9935064935064936
-    avg_rmse: 0.3837
+    avg_rmse: 0.2876
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1715,7 +1715,7 @@ entries:
       - 472
   0023.png:
     recall: 1
-    avg_rmse: 0.3773
+    avg_rmse: 0.2797
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1728,7 +1728,7 @@ entries:
     extra_ids: []
   0024.png:
     recall: 1
-    avg_rmse: 0.6573
+    avg_rmse: 0.598
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1741,7 +1741,7 @@ entries:
     extra_ids: []
   0025.png:
     recall: 1
-    avg_rmse: 0.3891
+    avg_rmse: 0.3148
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1756,7 +1756,7 @@ entries:
       - 374
   0026.png:
     recall: 1
-    avg_rmse: 0.3735
+    avg_rmse: 0.2729
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1770,7 +1770,7 @@ entries:
       - 374
   0027.png:
     recall: 1
-    avg_rmse: 0.3791
+    avg_rmse: 0.2978
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1784,7 +1784,7 @@ entries:
       - 487
   0028.png:
     recall: 1
-    avg_rmse: 0.3642
+    avg_rmse: 0.2759
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1798,7 +1798,7 @@ entries:
       - 379
   0029.png:
     recall: 1
-    avg_rmse: 0.3507
+    avg_rmse: 0.2663
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1812,7 +1812,7 @@ entries:
       - 554
   0030.png:
     recall: 1
-    avg_rmse: 0.3586
+    avg_rmse: 0.2868
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1826,7 +1826,7 @@ entries:
       - 554
   0031.png:
     recall: 1
-    avg_rmse: 0.303
+    avg_rmse: 0.2398
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1839,7 +1839,7 @@ entries:
     extra_ids: []
   0032.png:
     recall: 1
-    avg_rmse: 0.2821
+    avg_rmse: 0.1894
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1853,7 +1853,7 @@ entries:
       - 554
   0033.png:
     recall: 1
-    avg_rmse: 0.2701
+    avg_rmse: 0.1718
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1867,7 +1867,7 @@ entries:
       - 379
   0034.png:
     recall: 1
-    avg_rmse: 0.2925
+    avg_rmse: 0.1766
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1881,7 +1881,7 @@ entries:
       - 238
   0035.png:
     recall: 1
-    avg_rmse: 0.3298
+    avg_rmse: 0.1971
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1895,7 +1895,7 @@ entries:
       - 554
   0036.png:
     recall: 1
-    avg_rmse: 0.2309
+    avg_rmse: 0.1153
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1908,7 +1908,7 @@ entries:
     extra_ids: []
   0037.png:
     recall: 1
-    avg_rmse: 0.2
+    avg_rmse: 0.1515
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1921,7 +1921,7 @@ entries:
     extra_ids: []
   0038.png:
     recall: 1
-    avg_rmse: 0.1291
+    avg_rmse: 0.1241
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1934,7 +1934,7 @@ entries:
     extra_ids: []
   0039.png:
     recall: 1
-    avg_rmse: 0.1418
+    avg_rmse: 0.141
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1947,7 +1947,7 @@ entries:
     extra_ids: []
   0040.png:
     recall: 1
-    avg_rmse: 0.1017
+    avg_rmse: 0.1014
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1960,7 +1960,7 @@ entries:
     extra_ids: []
   0041.png:
     recall: 1
-    avg_rmse: 0.124
+    avg_rmse: 0.1234
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1973,7 +1973,7 @@ entries:
     extra_ids: []
   0042.png:
     recall: 1
-    avg_rmse: 0.1204
+    avg_rmse: 0.1198
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -1986,7 +1986,7 @@ entries:
     extra_ids: []
   0043.png:
     recall: 1
-    avg_rmse: 0.1351
+    avg_rmse: 0.1345
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -2000,7 +2000,7 @@ entries:
       - 554
   0044.png:
     recall: 1
-    avg_rmse: 0.4746
+    avg_rmse: 0.4723
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -2015,7 +2015,7 @@ entries:
       - 499
   0045.png:
     recall: 1
-    avg_rmse: 0.1414
+    avg_rmse: 0.1409
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -2030,7 +2030,7 @@ entries:
       - 524
   0046.png:
     recall: 1
-    avg_rmse: 0.1211
+    avg_rmse: 0.1208
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -2056,7 +2056,7 @@ entries:
     extra_ids: []
   0048.png:
     recall: 1
-    avg_rmse: 0.1452
+    avg_rmse: 0.1448
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
@@ -2071,7 +2071,7 @@ entries:
       - 568
   0049.png:
     recall: 1
-    avg_rmse: 0.098
+    avg_rmse: 0.0978
     stats:
       threshold_ms: "[latency]"
       segmentation_ms: "[latency]"
