@@ -640,9 +640,10 @@ fn debug_threshold(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
     let height = view.height;
 
     let mut output = vec![0u8; width * height];
+    let arena = bumpalo::Bump::new();
     let engine = locus_core::threshold::ThresholdEngine::new();
-    let stats = engine.compute_tile_stats(&view);
-    engine.apply_threshold(&view, &stats, &mut output);
+    let stats = engine.compute_tile_stats(&arena, &view);
+    engine.apply_threshold(&arena, &view, &stats, &mut output);
 
     Python::with_gil(|py| {
         let array = numpy::PyArray1::from_vec(py, output);
@@ -662,12 +663,12 @@ fn debug_segmentation(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
     let width = view.width;
     let height = view.height;
 
-    let engine = locus_core::threshold::ThresholdEngine::new();
-    let stats = engine.compute_tile_stats(&view);
-    let mut binarized = vec![0u8; width * height];
-    engine.apply_threshold(&view, &stats, &mut binarized);
-
     let arena = bumpalo::Bump::new();
+    let engine = locus_core::threshold::ThresholdEngine::new();
+    let stats = engine.compute_tile_stats(&arena, &view);
+    let mut binarized = vec![0u8; width * height];
+    engine.apply_threshold(&arena, &view, &stats, &mut binarized);
+
     let labels =
         locus_core::segmentation::label_components(&arena, &binarized, width, height, false);
     let labels_vec = labels.to_vec();

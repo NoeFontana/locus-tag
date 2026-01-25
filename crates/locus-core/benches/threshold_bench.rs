@@ -17,8 +17,9 @@ fn bench_threshold_1080p_stats_checkered(bencher: divan::Bencher) {
     let data = generate_checkered(width, height);
     let img = ImageView::new(&data, width, height, width).unwrap();
     let engine = ThresholdEngine::new();
+    let arena = bumpalo::Bump::new();
 
-    bencher.bench_local(move || engine.compute_tile_stats(&img));
+    bencher.bench_local(move || engine.compute_tile_stats(&arena, &img));
 }
 
 #[bench]
@@ -67,10 +68,11 @@ fn bench_threshold_1080p_apply_checkered(bencher: divan::Bencher) {
     let data = generate_checkered(width, height);
     let img = ImageView::new(&data, width, height, width).unwrap();
     let engine = ThresholdEngine::new();
-    let stats = engine.compute_tile_stats(&img);
+    let arena = bumpalo::Bump::new();
+    let stats = engine.compute_tile_stats(&arena, &img);
     let mut output = vec![0u8; width * height];
 
     bencher.bench_local(move || {
-        engine.apply_threshold(&img, &stats, &mut output);
+        engine.apply_threshold(&arena, &img, &stats, &mut output);
     });
 }

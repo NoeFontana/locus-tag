@@ -116,6 +116,7 @@ pub fn extract_quads_with_config(
             // For small components, try the 9-pixel foundation (gradient-based fitting)
             if bbox_area < 1200
                 && let Some(grad_corners_dec) = crate::gradient::fit_quad_from_component(
+                    &arena,
                     img,
                     labels,
                     label,
@@ -1048,12 +1049,11 @@ mod tests {
         let (data, corners) = generate_test_image_with_params(&params);
         let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
 
-        let engine = ThresholdEngine::new();
-        let stats = engine.compute_tile_stats(&img);
-        let mut binary = vec![0u8; canvas_size * canvas_size];
-        engine.apply_threshold(&img, &stats, &mut binary);
-
         let arena = Bump::new();
+        let engine = ThresholdEngine::new();
+        let stats = engine.compute_tile_stats(&arena, &img);
+        let mut binary = vec![0u8; canvas_size * canvas_size];
+        engine.apply_threshold(&arena, &img, &stats, &mut binary);
         let label_result =
             label_components_with_stats(&arena, &binary, canvas_size, canvas_size, true);
         let detections = extract_quads_fast(&arena, &img, &label_result);

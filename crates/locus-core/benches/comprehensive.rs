@@ -32,9 +32,10 @@ fn bench_thresholding_640x480(bencher: divan::Bencher) {
     let engine = locus_core::threshold::ThresholdEngine::new();
     let mut output = vec![0u8; width * height];
 
+    let arena = Bump::new();
     bencher.bench_local(move || {
-        let stats = engine.compute_tile_stats(&img);
-        engine.apply_threshold(&img, &stats, &mut output);
+        let stats = engine.compute_tile_stats(&arena, &img);
+        engine.apply_threshold(&arena, &img, &stats, &mut output);
     });
 }
 
@@ -54,8 +55,9 @@ fn bench_segmentation_640x480(bencher: divan::Bencher) {
     let mut binarized = vec![0u8; width * height];
     let engine = locus_core::threshold::ThresholdEngine::new();
     let img = ImageView::new(&data, width, height, width).unwrap();
-    let stats = engine.compute_tile_stats(&img);
-    engine.apply_threshold(&img, &stats, &mut binarized);
+    let arena = Bump::new();
+    let stats = engine.compute_tile_stats(&arena, &img);
+    engine.apply_threshold(&arena, &img, &stats, &mut binarized);
 
     bencher.bench_local(move || {
         let local_arena = Bump::new();
@@ -80,8 +82,8 @@ fn bench_quad_extraction_640x480(bencher: divan::Bencher) {
     let mut binarized = vec![0u8; width * height];
     let engine = locus_core::threshold::ThresholdEngine::new();
     let img = ImageView::new(&data, width, height, width).unwrap();
-    let stats = engine.compute_tile_stats(&img);
-    engine.apply_threshold(&img, &stats, &mut binarized);
+    let stats = engine.compute_tile_stats(&arena, &img);
+    engine.apply_threshold(&arena, &img, &stats, &mut binarized);
 
     let labels = locus_core::segmentation::label_components(&arena, &binarized, width, height);
 
