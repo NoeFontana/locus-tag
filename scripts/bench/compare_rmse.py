@@ -29,7 +29,7 @@ def compute_errors(detections, gt_tags):
             gt_center = np.mean(gt.corners, axis=0)
             dist = np.linalg.norm(det_center - gt_center)
             if dist < min_dist:
-                min_dist = dist
+                min_dist = float(dist)
                 best_gt_idx = idx
 
         if best_gt_idx != -1 and min_dist < 20.0:
@@ -113,7 +113,7 @@ def main():
 
     # Intersection
     if common_errors:
-        l_errs, a_errs = zip(*common_errors)
+        l_errs, a_errs = zip(*common_errors, strict=True)
         rmse_l_common = np.mean(l_errs)
         rmse_a_common = np.mean(a_errs)
         print(f"INTERSECTION (Count: {len(common_errors)})")
@@ -130,7 +130,7 @@ def main():
         rmse_l_only = np.mean(locus_only_errors)
         print(f"LOCUS ONLY (Count: {len(locus_only_errors)})")
         print(f"  RMSE:          {rmse_l_only:.4f} px")
-        print(f"  (These are tags AprilTag missed)")
+        print("  (These are tags AprilTag missed)")
     else:
         print("Locus detected no unique tags.")
 

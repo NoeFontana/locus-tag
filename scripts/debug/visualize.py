@@ -191,8 +191,8 @@ def run_visualization(args):
                             grid_str = ""
                             for r in range(6):
                                 row_str = "        "
-                                for c in range(6):
-                                    idx = r * 6 + c
+                                for c2 in range(6):
+                                    idx = r * 6 + c2
                                     bit = (val >> (35 - idx)) & 1
                                     row_str += "1" if bit else "."
                                 grid_str += row_str + "\n"

@@ -1,8 +1,11 @@
+import contextlib
+from typing import cast
+
+import cv2
 import locus
 import numpy as np
-import cv2
 import pytest
-import sys
+
 
 def test_zero_copy_ingestion():
     """Verify that the detector handles various numpy layouts correctly."""
@@ -11,7 +14,7 @@ def test_zero_copy_ingestion():
     # Draw a simple white box to ensure we don't crash on actual data
     img[20:80, 20:80] = 255
     img[30:70, 30:70] = 0
-    
+
     detections = locus.detect_tags(img)
     assert isinstance(detections, list)
 
@@ -20,14 +23,14 @@ def test_zero_copy_ingestion():
     img_strided = full_img[:, :100]
     assert img_strided.strides[0] == 120
     assert img_strided.strides[1] == 1
-    
+
     detections = locus.detect_tags(img_strided)
     assert isinstance(detections, list)
 
     # 3. Non-contiguous slice (step > 1)
     img_sliced = img[:, ::2]
-    assert not img_sliced.flags['C_CONTIGUOUS']
-    
+    assert not img_sliced.flags["C_CONTIGUOUS"]
+
     detections = locus.detect_tags(img_sliced)
     assert isinstance(detections, list)
 
@@ -39,12 +42,13 @@ def test_zero_copy_ingestion():
     except ValueError as e:
         assert "contiguous" in str(e).lower()
 
+
 def test_detector_api():
     """Test the high-level Detector class and parameter validation."""
     # Create an ArUco 4x4_50 tag image
     dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
     tag_img = cv2.aruco.generateImageMarker(dictionary, 0, 100)
-    
+
     canvas = np.ones((400, 400), dtype=np.uint8) * 128
     canvas[150:250, 150:250] = tag_img
 
@@ -70,20 +74,22 @@ def test_detector_api():
         res = detector.detect_with_options(canvas, families=[locus.TagFamily.ArUco4x4_50])
         assert len(res) == 1
 
+
 def test_config_object():
     """Test that DetectorConfig correctly validates parameters."""
     from locus import DetectorConfig
-    
+
     cfg = DetectorConfig(threshold_tile_size=16, quad_min_area=500)
     assert cfg.threshold_tile_size == 16
     assert cfg.quad_min_area == 500
-    
+
     # Test Pydantic validation (if enabled in the wrapper)
-    try:
-        DetectorConfig(upscale_factor=0) # Should be >= 1
+    # Test Pydantic validation (if enabled in the wrapper)
+    with contextlib.suppress(Exception):
+        val = cast(int, 0)
+        DetectorConfig(upscale_factor=val)  # Should be >= 1
         # If no validation, this might pass depending on implementation
-    except Exception:
-        pass
+
 
 if __name__ == "__main__":
     # If run directly without pytest
