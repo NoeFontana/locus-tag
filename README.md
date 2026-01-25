@@ -8,9 +8,9 @@ This project is an experiment in LLM-assisted library development, targeting 1-1
 
 | Detector | Recall | RMSE | Latency |
 | :--- | :--- | :--- | :--- |
-| **Locus** | **72.52%** | 0.30 px | **70.0 ms** |
-| AprilTag (SOTA) | 62.34% | **0.22 px** | 93.9 ms |
-| OpenCV | 33.16% | 0.92 px | 100.7 ms |
+| **Locus** | **82.42%** | 0.30 px | **55.6 ms** |
+| AprilTag (SOTA) | 62.34% | **0.22 px** | 91.4 ms |
+| OpenCV | 33.16% | 0.92 px | 101.9 ms |
 
 ## Quick Start
 
