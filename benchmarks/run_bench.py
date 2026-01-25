@@ -15,7 +15,6 @@ from tqdm import tqdm
 from utils import (
     AprilTagWrapper,
     DatasetLoader,
-    EvalResult,
     LocusWrapper,
     Metrics,
     OpenCVWrapper,
