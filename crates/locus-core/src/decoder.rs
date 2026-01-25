@@ -1346,12 +1346,11 @@ mod tests {
         let (data, _corners) = generate_test_image_with_params(&params);
         let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
 
-        let engine = ThresholdEngine::new();
-        let stats = engine.compute_tile_stats(&img);
-        let mut binary = vec![0u8; canvas_size * canvas_size];
-        engine.apply_threshold(&img, &stats, &mut binary);
-
         let arena = Bump::new();
+        let engine = ThresholdEngine::new();
+        let stats = engine.compute_tile_stats(&arena, &img);
+        let mut binary = vec![0u8; canvas_size * canvas_size];
+        engine.apply_threshold(&arena, &img, &stats, &mut binary);
         let label_result =
             label_components_with_stats(&arena, &binary, canvas_size, canvas_size, true);
         let detections = extract_quads_fast(&arena, &img, &label_result);

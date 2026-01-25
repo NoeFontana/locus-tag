@@ -392,8 +392,8 @@ impl Detector {
             } else {
                 // SOTA: Tile-based thresholding is blazing fast (sub-2ms)
                 let engine = crate::threshold::ThresholdEngine::from_config(&self.config);
-                let stats = engine.compute_tile_stats(&sharpened_img);
-                engine.apply_threshold_with_map(&sharpened_img, &stats, binarized, threshold_map);
+                let stats = engine.compute_tile_stats(&self.arena, &sharpened_img);
+                engine.apply_threshold_with_map(&self.arena, &sharpened_img, &stats, binarized, threshold_map);
             }
         }
         stats.threshold_ms = start_thresh.elapsed().as_secs_f64() * 1000.0;
@@ -405,6 +405,7 @@ impl Detector {
             crate::segmentation::label_components_threshold_model(
                 &self.arena,
                 sharpened_img.data,
+                sharpened_img.stride,
                 threshold_map,
                 img.width,
                 img.height,

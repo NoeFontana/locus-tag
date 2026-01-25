@@ -575,7 +575,7 @@ mod tests {
     #[test]
     fn test_detector_config_defaults() {
         let config = DetectorConfig::default();
-        assert_eq!(config.threshold_tile_size, 4);
+        assert_eq!(config.threshold_tile_size, 8);
         assert_eq!(config.quad_min_area, 16);
     }
 

@@ -270,6 +270,7 @@ pub fn label_components_with_stats<'a>(
 pub fn label_components_threshold_model<'a>(
     arena: &'a Bump,
     grayscale: &[u8],
+    grayscale_stride: usize,
     threshold_map: &[u8],
     width: usize,
     height: usize,
@@ -288,7 +289,7 @@ pub fn label_components_threshold_model<'a>(
     let all_runs: Vec<Vec<Run>> = (0..height)
         .into_par_iter()
         .map(|y| {
-            let row_gs = &grayscale[y * width..(y + 1) * width];
+            let row_gs = &grayscale[y * grayscale_stride..y * grayscale_stride + width];
             let row_th = &threshold_map[y * width..(y + 1) * width];
             let mut row_runs = Vec::new();
 
@@ -602,10 +603,11 @@ mod tests {
         let (data, corners) = generate_test_image_with_params(&params);
         let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
 
+        let arena = Bump::new();
         let engine = ThresholdEngine::new();
-        let stats = engine.compute_tile_stats(&img);
+        let stats = engine.compute_tile_stats(&arena, &img);
         let mut binary = vec![0u8; canvas_size * canvas_size];
-        engine.apply_threshold(&img, &stats, &mut binary);
+        engine.apply_threshold(&arena, &img, &stats, &mut binary);
 
         (binary, corners)
     }

@@ -1,6 +1,8 @@
 #![allow(unsafe_code, clippy::cast_sign_loss)]
 use crate::config::DetectorConfig;
 use crate::image::ImageView;
+use bumpalo::Bump;
+use bumpalo::collections::Vec as BumpVec;
 use multiversion::multiversion;
 use rayon::prelude::*;
 
@@ -49,11 +51,12 @@ impl ThresholdEngine {
     /// Compute min/max statistics for each tile in the image.
     /// Optimized with SIMD-friendly memory access patterns and subsampling (stride 2).
     #[must_use]
-    pub fn compute_tile_stats(&self, img: &ImageView) -> Vec<TileStats> {
+    pub fn compute_tile_stats<'a>(&self, arena: &'a Bump, img: &ImageView) -> BumpVec<'a, TileStats> {
         let ts = self.tile_size;
         let tiles_wide = img.width / ts;
         let tiles_high = img.height / ts;
-        let mut stats = vec![TileStats { min: 255, max: 0 }; tiles_wide * tiles_high];
+        let mut stats = BumpVec::with_capacity_in(tiles_wide * tiles_high, arena);
+        stats.resize(tiles_wide * tiles_high, TileStats { min: 255, max: 0 });
 
         stats
             .par_chunks_mut(tiles_wide)
@@ -75,13 +78,21 @@ impl ThresholdEngine {
     /// Apply adaptive thresholding to the image.
     /// Optimized with pre-expanded threshold maps and vectorized row processing.
     #[allow(clippy::too_many_lines, clippy::needless_range_loop)]
-    pub fn apply_threshold(&self, img: &ImageView, stats: &[TileStats], output: &mut [u8]) {
+    pub fn apply_threshold(
+        &self,
+        arena: &Bump,
+        img: &ImageView,
+        stats: &[TileStats],
+        output: &mut [u8],
+    ) {
         let ts = self.tile_size;
         let tiles_wide = img.width / ts;
         let tiles_high = img.height / ts;
 
-        let mut tile_thresholds = vec![0u8; tiles_wide * tiles_high];
-        let mut tile_valid = vec![0u8; tiles_wide * tiles_high];
+        let mut tile_thresholds = BumpVec::with_capacity_in(tiles_wide * tiles_high, arena);
+        tile_thresholds.resize(tiles_wide * tiles_high, 0u8);
+        let mut tile_valid = BumpVec::with_capacity_in(tiles_wide * tiles_high, arena);
+        tile_valid.resize(tiles_wide * tiles_high, 0u8);
 
         tile_thresholds
             .par_chunks_mut(tiles_wide)
@@ -187,12 +198,18 @@ impl ThresholdEngine {
             }
         }
 
+        let thresholds_slice = tile_thresholds.as_slice();
+        let valid_slice = tile_valid.as_slice();
+
         output
             .par_chunks_mut(ts * img.width)
             .enumerate()
             .for_each_init(
                 || (vec![0u8; img.width], vec![0u8; img.width]),
                 |(row_thresholds, row_valid), (ty, output_tile_rows)| {
+                    if ty >= tiles_high {
+                        return;
+                    }
                     // Reset buffers? No, they are fully overwritten below by the loops over tiles and pixels.
                     // Just ensure they are correct size if they were hypothetically resized (they are not).
                     // Actually, the loop logic depends on writing to `row_thresholds` and `row_valid` at specific indices.
@@ -220,8 +237,8 @@ impl ThresholdEngine {
                     // Expand tile stats to row buffers
                     for tx in 0..tiles_wide {
                         let idx = ty * tiles_wide + tx;
-                        let thresh = tile_thresholds[idx];
-                        let valid = tile_valid[idx];
+                        let thresh = thresholds_slice[idx];
+                        let valid = valid_slice[idx];
                         for i in 0..ts {
                             row_thresholds[tx * ts + i] = thresh;
                             row_valid[tx * ts + i] = valid;
@@ -246,6 +263,7 @@ impl ThresholdEngine {
     #[allow(clippy::needless_range_loop)]
     pub fn apply_threshold_with_map(
         &self,
+        arena: &Bump,
         img: &ImageView,
         stats: &[TileStats],
         binary_output: &mut [u8],
@@ -255,8 +273,10 @@ impl ThresholdEngine {
         let tiles_wide = img.width / ts;
         let tiles_high = img.height / ts;
 
-        let mut tile_thresholds = vec![0u8; tiles_wide * tiles_high];
-        let mut tile_valid = vec![0u8; tiles_wide * tiles_high];
+        let mut tile_thresholds = BumpVec::with_capacity_in(tiles_wide * tiles_high, arena);
+        tile_thresholds.resize(tiles_wide * tiles_high, 0u8);
+        let mut tile_valid = BumpVec::with_capacity_in(tiles_wide * tiles_high, arena);
+        tile_valid.resize(tiles_wide * tiles_high, 0u8);
 
         tile_thresholds
             .par_chunks_mut(tiles_wide)
@@ -357,12 +377,18 @@ impl ThresholdEngine {
         */
 
         // Write thresholds and binary output in parallel
+        let thresholds_slice = tile_thresholds.as_slice();
+        let valid_slice = tile_valid.as_slice();
+
         binary_output
             .par_chunks_mut(ts * img.width)
             .enumerate()
             .for_each_init(
                 || (vec![0u8; img.width], vec![0u8; img.width]),
                 |(row_thresholds, row_valid), (ty, bin_tile_rows)| {
+                    if ty >= tiles_high {
+                        return;
+                    }
                     // Safety: Each thread writes to unique portion of threshold_output
                     let thresh_tile_rows = unsafe {
                         let ptr = threshold_output.as_ptr().cast_mut();
@@ -374,8 +400,8 @@ impl ThresholdEngine {
 
                     for tx in 0..tiles_wide {
                         let idx = ty * tiles_wide + tx;
-                        let thresh = tile_thresholds[idx];
-                        let valid = tile_valid[idx];
+                        let thresh = thresholds_slice[idx];
+                        let valid = valid_slice[idx];
                         for i in 0..ts {
                             row_thresholds[tx * ts + i] = thresh;
                             row_valid[tx * ts + i] = valid;
@@ -539,9 +565,10 @@ mod tests {
 
         let img = ImageView::new(&data, width, height, width).unwrap();
         let engine = ThresholdEngine::new();
-        let stats = engine.compute_tile_stats(&img);
+        let arena = Bump::new();
+        let stats = engine.compute_tile_stats(&arena, &img);
         let mut output = vec![0u8; width * height];
-        engine.apply_threshold(&img, &stats, &mut output);
+        engine.apply_threshold(&arena, &img, &stats, &mut output);
 
         // At (8,8), it should be black (0) because it's 50 and thresh should be around (50+200)/2 = 125
         assert_eq!(output[8 * width + 8], 0);
@@ -571,11 +598,11 @@ mod tests {
 
         assert_eq!(decimated_img.width, 16);
         assert_eq!(decimated_img.height, 16);
-
+        let arena = Bump::new();
         let engine = ThresholdEngine::new();
-        let stats = engine.compute_tile_stats(&decimated_img);
+        let stats = engine.compute_tile_stats(&arena, &decimated_img);
         let mut output = vec![0u8; 16 * 16];
-        engine.apply_threshold(&decimated_img, &stats, &mut output);
+        engine.apply_threshold(&arena, &decimated_img, &stats, &mut output);
 
         // At (4,4) in decimated image (which is 8,8 in original), it should be black (0)
         assert_eq!(output[4 * 16 + 4], 0);
@@ -613,9 +640,10 @@ mod tests {
             let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
 
             let engine = ThresholdEngine::new();
-            let stats = engine.compute_tile_stats(&img);
+            let arena = Bump::new();
+            let stats = engine.compute_tile_stats(&arena, &img);
             let mut binary = vec![0u8; canvas_size * canvas_size];
-            engine.apply_threshold(&img, &stats, &mut binary);
+            engine.apply_threshold(&arena, &img, &stats, &mut binary);
 
             let integrity = measure_border_integrity(&binary, canvas_size, &corners);
 
@@ -659,9 +687,10 @@ mod tests {
                 let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
 
                 let engine = ThresholdEngine::new();
-                let stats = engine.compute_tile_stats(&img);
+                let arena = Bump::new();
+                let stats = engine.compute_tile_stats(&arena, &img);
                 let mut binary = vec![0u8; canvas_size * canvas_size];
-                engine.apply_threshold(&img, &stats, &mut binary);
+                engine.apply_threshold(&arena, &img, &stats, &mut binary);
 
                 let integrity = measure_border_integrity(&binary, canvas_size, &corners);
 
@@ -708,9 +737,10 @@ mod tests {
             let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
 
             let engine = ThresholdEngine::new();
-            let stats = engine.compute_tile_stats(&img);
+            let arena = Bump::new();
+            let stats = engine.compute_tile_stats(&arena, &img);
             let mut binary = vec![0u8; canvas_size * canvas_size];
-            engine.apply_threshold(&img, &stats, &mut binary);
+            engine.apply_threshold(&arena, &img, &stats, &mut binary);
 
             let integrity = measure_border_integrity(&binary, canvas_size, &corners);
 
@@ -763,11 +793,12 @@ mod tests {
             let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
 
             let engine = ThresholdEngine::new();
-            let stats = engine.compute_tile_stats(&img);
+            let arena = Bump::new();
+            let stats = engine.compute_tile_stats(&arena, &img);
             let mut binary = vec![0u8; canvas_size * canvas_size];
 
             // Should not panic
-            engine.apply_threshold(&img, &stats, &mut binary);
+            engine.apply_threshold(&arena, &img, &stats, &mut binary);
 
             // Basic sanity: output should have both black and white pixels
             let black_count = binary.iter().filter(|&&p| p == 0).count();
