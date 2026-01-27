@@ -113,8 +113,11 @@ The refactored suite covers standard and checkerboard scenarios on full datasets
    ```
 3. **Run the Test**:
    ```bash
-   # Parallel check
+   # Quick check (fixtures + forward only, approx 10s)
    cargo test --release --test regression_icra2020
+
+   # Comprehensive check (all datasets, approx 2 mins)
+   cargo test --release --test regression_icra2020 -- --ignored
 
    # Accurate latency measurement (sequential)
    cargo test --release --test regression_icra2020 -- --test-threads=1

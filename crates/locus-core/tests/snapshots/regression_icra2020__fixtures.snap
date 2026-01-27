@@ -6,5 +6,5 @@ summary:
   dataset_size: 1
   mean_recall: 1
   mean_rmse: 0.1515
-  mean_total_ms: 163.585834
+  mean_total_ms: 308.18855099999996
   worst_offenders: []
