@@ -1,0 +1,30 @@
+---
+source: crates/locus-core/tests/regression_icra2020.rs
+expression: report
+---
+summary:
+  dataset_size: 400
+  mean_recall: 0.8997318286175613
+  mean_rmse: 0.7716
+  mean_total_ms: 231.55524681500006
+  worst_offenders:
+    - filename: 0040.png
+      missed: 38
+      extra: 3
+      rmse: 1.1228
+    - filename: 0126.png
+      missed: 38
+      extra: 2
+      rmse: 0.8312
+    - filename: 0010.png
+      missed: 34
+      extra: 1
+      rmse: 0.6932
+    - filename: 0352.png
+      missed: 32
+      extra: 1
+      rmse: 0.4294
+    - filename: 0172.png
+      missed: 32
+      extra: 0
+      rmse: 1.0181

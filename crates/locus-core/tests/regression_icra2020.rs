@@ -468,6 +468,18 @@ macro_rules! test_icra {
             }
         }
     };
+    (IGNORED $name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident) => {
+        #[test]
+        #[ignore = "Lengthy regression test"]
+        fn $name() {
+            if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
+                let snapshot = provider.name().to_string();
+                RegressionHarness::new(snapshot)
+                    .with_preset(ConfigPreset::$preset)
+                    .run(provider);
+            }
+        }
+    };
 }
 
 #[test]
@@ -490,4 +502,35 @@ test_icra!(
     Some("checkerboard_corners_images"),
     Checkerboard
 );
-test_icra!(regression_icra_rotation, "rotation", None, PlainBoard);
+
+// Lengthy tests (Ignored by default)
+test_icra!(
+    IGNORED regression_icra_circle,
+    "circle",
+    Some("pure_tags_images"),
+    PlainBoard
+);
+test_icra!(
+    IGNORED regression_icra_circle_checkerboard,
+    "circle",
+    Some("checkerboard_corners_images"),
+    Checkerboard
+);
+test_icra!(
+    IGNORED regression_icra_random,
+    "random",
+    Some("pure_tags_images"),
+    PlainBoard
+);
+test_icra!(
+    IGNORED regression_icra_random_checkerboard,
+    "random",
+    Some("checkerboard_corners_images"),
+    Checkerboard
+);
+test_icra!(
+    IGNORED regression_icra_rotation,
+    "rotation",
+    Some("pure_tags_images"),
+    PlainBoard
+);
