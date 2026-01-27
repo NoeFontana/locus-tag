@@ -102,9 +102,9 @@ Locus includes a rigorous regression suite to ensure detection quality on standa
 
 The regression suite validates that `Locus` strictly matches or exceeds the ground truth for thousands of images. It is skipped by default if the dataset is missing.
 
-The suite runs 8 parallel tests covering different scenarios:
-- **Standard (8-way)**: `forward`, `rotation`, `random`, `circle`
-- **Checkerboard (4-way)**: `checkerboard_forward`, `checkerboard_rotation`, `checkerboard_random`, `checkerboard_circle`
+The refactored suite covers standard and checkerboard scenarios on full datasets:
+- **Standard**: `regression_fixtures`, `regression_icra_forward`, `regression_icra_rotation`
+- **Checkerboard**: `regression_icra_forward_checkerboard`
 
 1. **Download the Dataset**: Ensure you have the ICRA 2020 dataset (images and `tags.csv`).
 2. **Set Environment Variable**: Point to the dataset root.
@@ -113,8 +113,10 @@ The suite runs 8 parallel tests covering different scenarios:
    ```
 3. **Run the Test**:
    ```bash
-   cargo test --test regression_icra2020 --release
-   ```
-   *Note: `--release` is recommended for performance on large datasets.*
+   # Parallel check
+   cargo test --release --test regression_icra2020
 
-**Strict Mode**: The test will fail (panic) if any image yields fewer detections than the ground truth.
+   # Accurate latency measurement (sequential)
+   cargo test --release --test regression_icra2020 -- --test-threads=1
+   ```
+   *Note: `--release` is mandatory for performance benchmarking.*

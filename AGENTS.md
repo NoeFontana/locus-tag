@@ -22,9 +22,9 @@ Use the Forward dataset to evaluate recall and latency impact of changes.
   uv run python tests/evaluate_forward_performance.py
   ```
 - **Regression Benchmark (ICRA 2020):**
-  Use the Rust-based regression suite for latency/accuracy checks against a standard dataset.
+  Use the Rust-based regression suite for latency/accuracy checks. For accurate timing, always run sequentially.
   ```bash
-  cargo test --release --test regression_icra2020 regression_icra_forward
+  cargo test --release --test regression_icra2020 -- --test-threads=1
   ```
 - **Profile with Tracy (Rust):**
   Add `tracing::span!(...)` in hot paths and run with the `tracy` feature.

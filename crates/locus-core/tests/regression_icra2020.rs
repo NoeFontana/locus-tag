@@ -20,10 +20,36 @@ use locus_core::image::ImageView;
 use locus_core::{DetectOptions, Detector, DetectorConfig, PipelineStats, config::TagFamily};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::env;
 use std::path::PathBuf;
 
 mod common;
+
+// ============================================================================
+// Configuration Presets
+// ============================================================================
+
+#[derive(Clone, Copy, Debug)]
+pub enum ConfigPreset {
+    /// Optimized for isolated tags on plain backgrounds.
+    PlainBoard,
+    /// Optimized for touching tags in checkerboard patterns.
+    Checkerboard,
+}
+
+impl ConfigPreset {
+    pub fn detector_config(self) -> DetectorConfig {
+        match self {
+            Self::PlainBoard => DetectorConfig::builder()
+                .refinement_mode(locus_core::config::CornerRefinementMode::Erf)
+                .build(),
+            Self::Checkerboard => DetectorConfig::builder()
+                .segmentation_connectivity(locus_core::config::SegmentationConnectivity::Four)
+                .decoder_min_contrast(10.0)
+                .refinement_mode(locus_core::config::CornerRefinementMode::Erf)
+                .build(),
+        }
+    }
+}
 
 // ============================================================================
 // Metrics & Reporting
@@ -76,7 +102,6 @@ struct ImageMetrics {
 #[derive(Serialize)]
 struct RegressionReport {
     summary: SummaryMetrics,
-    entries: BTreeMap<String, ImageMetrics>,
 }
 
 #[derive(Serialize)]
@@ -103,178 +128,181 @@ struct SummaryMetrics {
 // ============================================================================
 
 /// Ground Truth for a single image
-struct GroundTruth {
-    tags: HashMap<u32, [[f64; 2]; 4]>,
+pub struct GroundTruth {
+    pub tags: HashMap<u32, [[f64; 2]; 4]>,
 }
 
 type DatasetItem = (String, Vec<u8>, usize, usize, GroundTruth);
 
-/// Runs the detection pipeline on a stream of images and produces a snapshot-able report.
-fn evaluate_dataset(
-    snapshot_name: &str,
-    items: impl Iterator<Item = DatasetItem>,
-    detector_config: DetectorConfig,
+/// Unified harness for running regression tests.
+pub struct RegressionHarness {
+    snapshot_name: String,
+    config: DetectorConfig,
     options: DetectOptions,
     icra_corner_ordering: bool,
-) {
-    let mut detector = Detector::with_config(detector_config);
-    let mut results = BTreeMap::new();
+}
 
-    // Aggregators
-    let mut total_recall = 0.0;
-    let mut total_rmse = 0.0;
-    let mut total_time = 0.0;
-    let mut count = 0;
+impl RegressionHarness {
+    pub fn new(snapshot_name: impl Into<String>) -> Self {
+        Self {
+            snapshot_name: snapshot_name.into(),
+            config: DetectorConfig::default(),
+            options: DetectOptions {
+                families: vec![TagFamily::AprilTag36h11],
+                ..Default::default()
+            },
+            icra_corner_ordering: true,
+        }
+    }
 
-    for (filename, data, width, height, gt) in items {
-        let img = ImageView::new(&data, width, height, width).expect("valid image");
+    pub fn with_preset(mut self, preset: ConfigPreset) -> Self {
+        self.config = preset.detector_config();
+        self
+    }
 
-        let (detections, stats) = detector.detect_with_stats_and_options(&img, &options);
+    pub fn run(self, provider: impl DatasetProvider) {
+        let mut detector = Detector::with_config(self.config);
+        let mut results = BTreeMap::new();
 
-        // --- Metrics Calculation ---
-        let mut image_rmse_sum = 0.0;
-        let mut match_count = 0;
-        let mut found_ids = BTreeSet::new();
+        // Aggregators
+        let mut total_recall = 0.0;
+        let mut total_rmse = 0.0;
+        let mut total_time = 0.0;
+        let mut count = 0;
 
-        for det in &detections {
-            if let Some(gt_corners) = gt.tags.get(&det.id) {
-                // Approximate center check to resolve ambiguities in rare multi-tag cases
-                let gt_cx: f64 = gt_corners.iter().map(|p| p[0]).sum::<f64>() / 4.0;
-                let gt_cy: f64 = gt_corners.iter().map(|p| p[1]).sum::<f64>() / 4.0;
-                let dist_sq = (det.center[0] - gt_cx).powi(2) + (det.center[1] - gt_cy).powi(2);
+        for (filename, data, width, height, gt) in provider.iter() {
+            let img = ImageView::new(&data, width, height, width).expect("valid image");
+            let (detections, stats) = detector.detect_with_stats_and_options(&img, &self.options);
 
-                if dist_sq < 50.0 * 50.0 {
-                    let det_corners = if icra_corner_ordering {
-                        [
-                            det.corners[1],
-                            det.corners[0],
-                            det.corners[3],
-                            det.corners[2],
-                        ]
-                    } else {
-                        det.corners
-                    };
+            // --- Metrics Calculation ---
+            let mut image_rmse_sum = 0.0;
+            let mut match_count = 0;
+            let mut found_ids = BTreeSet::new();
 
-                    image_rmse_sum +=
-                        locus_core::test_utils::compute_rmse(&det_corners, gt_corners);
-                    match_count += 1;
-                    found_ids.insert(det.id);
+            for det in &detections {
+                if let Some(gt_corners) = gt.tags.get(&det.id) {
+                    let gt_cx: f64 = gt_corners.iter().map(|p| p[0]).sum::<f64>() / 4.0;
+                    let gt_cy: f64 = gt_corners.iter().map(|p| p[1]).sum::<f64>() / 4.0;
+                    let dist_sq = (det.center[0] - gt_cx).powi(2) + (det.center[1] - gt_cy).powi(2);
+
+                    if dist_sq < 50.0 * 50.0 {
+                        let det_corners = if self.icra_corner_ordering {
+                            [
+                                det.corners[1],
+                                det.corners[0],
+                                det.corners[3],
+                                det.corners[2],
+                            ]
+                        } else {
+                            det.corners
+                        };
+
+                        image_rmse_sum +=
+                            locus_core::test_utils::compute_rmse(&det_corners, gt_corners);
+                        match_count += 1;
+                        found_ids.insert(det.id);
+                    }
                 }
             }
-        }
 
-        let recall = if gt.tags.is_empty() {
-            1.0
-        } else {
-            found_ids.len() as f64 / gt.tags.len() as f64
-        };
-        let avg_rmse = if match_count > 0 {
-            image_rmse_sum / f64::from(match_count)
-        } else {
-            0.0
-        };
-
-        total_recall += recall;
-        total_rmse += avg_rmse;
-        total_time += stats.total_ms;
-        count += 1;
-
-        // Compute Missed and Extra sets
-        let mut missed_ids = BTreeSet::new();
-        for &id in gt.tags.keys() {
-            if !found_ids.contains(&id) {
-                missed_ids.insert(id);
-            }
-        }
-
-        let mut extra_ids = BTreeSet::new();
-        for det in &detections {
-            if !found_ids.contains(&det.id) {
-                extra_ids.insert(det.id);
-            }
-        }
-
-        results.insert(
-            filename.clone(),
-            ImageMetrics {
-                recall,
-                avg_rmse,
-                stats: PipelineMetrics::from(stats),
-                missed_ids: missed_ids.clone(),
-                extra_ids: extra_ids.clone(),
-            },
-        );
-    }
-
-    if count == 0 {
-        println!("WARNING: Dataset {snapshot_name} yielded no images.");
-        return;
-    }
-
-    // Identify Worst Offenders
-    // Criteria: Missed any tags, or Extra tags, or RMSE > 1.0
-    let mut offenders: Vec<Offender> = results
-        .iter()
-        .filter_map(|(fname, m)| {
-            if !m.missed_ids.is_empty() || !m.extra_ids.is_empty() || m.avg_rmse > 1.0 {
-                Some(Offender {
-                    filename: fname.clone(),
-                    missed: m.missed_ids.len(),
-                    extra: m.extra_ids.len(),
-                    rmse: m.avg_rmse,
-                })
+            let recall = if gt.tags.is_empty() {
+                1.0
             } else {
-                None
+                found_ids.len() as f64 / gt.tags.len() as f64
+            };
+            let avg_rmse = if match_count > 0 {
+                image_rmse_sum / f64::from(match_count)
+            } else {
+                0.0
+            };
+
+            total_recall += recall;
+            total_rmse += avg_rmse;
+            total_time += stats.total_ms;
+            count += 1;
+
+            let mut missed_ids = BTreeSet::new();
+            for &id in gt.tags.keys() {
+                if !found_ids.contains(&id) {
+                    missed_ids.insert(id);
+                }
             }
-        })
-        .collect();
 
-    // Sort by "badness": Missed (desc), then RMSE (desc)
-    offenders.sort_by(|a, b| {
-        b.missed
-            .cmp(&a.missed)
-            .then_with(|| b.extra.cmp(&a.extra))
-            .then_with(|| {
-                b.rmse
-                    .partial_cmp(&a.rmse)
-                    .unwrap_or(std::cmp::Ordering::Equal)
+            let mut extra_ids = BTreeSet::new();
+            for det in &detections {
+                if !found_ids.contains(&det.id) {
+                    extra_ids.insert(det.id);
+                }
+            }
+
+            results.insert(
+                filename.clone(),
+                ImageMetrics {
+                    recall,
+                    avg_rmse,
+                    stats: PipelineMetrics::from(stats),
+                    missed_ids,
+                    extra_ids,
+                },
+            );
+        }
+
+        if count == 0 {
+            println!("WARNING: Dataset {} yielded no images.", self.snapshot_name);
+            return;
+        }
+
+        let mut offenders: Vec<Offender> = results
+            .iter()
+            .filter_map(|(fname, m)| {
+                if !m.missed_ids.is_empty() || !m.extra_ids.is_empty() || m.avg_rmse > 1.0 {
+                    Some(Offender {
+                        filename: fname.clone(),
+                        missed: m.missed_ids.len(),
+                        extra: m.extra_ids.len(),
+                        rmse: m.avg_rmse,
+                    })
+                } else {
+                    None
+                }
             })
-    });
+            .collect();
 
-    // Take top 5
-    let worst_offenders: Vec<Offender> = offenders.into_iter().take(5).collect();
+        offenders.sort_by(|a, b| {
+            b.missed
+                .cmp(&a.missed)
+                .then_with(|| b.extra.cmp(&a.extra))
+                .then_with(|| {
+                    b.rmse
+                        .partial_cmp(&a.rmse)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+        });
 
-    let report = RegressionReport {
-        summary: SummaryMetrics {
-            dataset_size: count,
-            mean_recall: total_recall / count as f64,
-            mean_rmse: total_rmse / count as f64,
-            mean_total_ms: total_time / count as f64,
-            worst_offenders,
-        },
-        entries: results,
-    };
+        let report = RegressionReport {
+            summary: SummaryMetrics {
+                dataset_size: count,
+                mean_recall: total_recall / count as f64,
+                mean_rmse: total_rmse / count as f64,
+                mean_total_ms: total_time / count as f64,
+                worst_offenders: offenders.into_iter().take(5).collect(),
+            },
+        };
 
-    println!("=== {snapshot_name} Results ===");
-    println!("  Images: {count}");
-    println!("  Recall: {:.2}%", report.summary.mean_recall * 100.0);
-    println!("  RMSE:   {:.4} px", report.summary.mean_rmse);
+        println!("=== {} Results ===", self.snapshot_name);
+        println!("  Images: {count}");
+        println!("  Recall: {:.2}%", report.summary.mean_recall * 100.0);
+        println!("  RMSE:   {:.4} px", report.summary.mean_rmse);
 
-    // Snapshot logic: Redact latency for stability, but keep Summary unredacted for quick checks
-    insta::assert_yaml_snapshot!(snapshot_name, report, {
-        ".entries.*.stats.threshold_ms" => "[latency]",
-        ".entries.*.stats.segmentation_ms" => "[latency]",
-        ".entries.*.stats.quad_extraction_ms" => "[latency]",
-        ".entries.*.stats.decoding_ms" => "[latency]",
-        ".entries.*.stats.total_ms" => "[latency]"
-    });
+        insta::assert_yaml_snapshot!(self.snapshot_name, report);
+    }
 }
 
 // ============================================================================
 // Data Providers
 // ============================================================================
 
-trait DatasetProvider {
+pub trait DatasetProvider {
     fn name(&self) -> &str;
     fn iter(&self) -> Box<dyn Iterator<Item = DatasetItem> + '_>;
 }
@@ -356,11 +384,10 @@ struct IcraProvider {
     name: String,
     image_paths: Vec<PathBuf>,
     gt: HashMap<String, common::ImageGroundTruth>,
-    sample_rate: usize,
 }
 
 impl IcraProvider {
-    fn new(subfolder: &str, sample_rate: usize) -> Option<Self> {
+    fn new(subfolder: &str, img_subfolder: Option<&str>) -> Option<Self> {
         let root = common::resolve_dataset_root()?;
 
         // 1. Load Ground Truth (Context-aware loading)
@@ -368,10 +395,13 @@ impl IcraProvider {
 
         // 2. Locate Image Directory
         // Handle both flat and nested "pure_tags_images" structures gracefully
-        let candidates = [
-            root.join(subfolder).join("pure_tags_images"),
-            root.join(subfolder),
-        ];
+        let mut candidates = Vec::new();
+        if let Some(sub) = img_subfolder {
+            candidates.push(root.join(subfolder).join(sub));
+        }
+        candidates.push(root.join(subfolder).join("pure_tags_images"));
+        candidates.push(root.join(subfolder));
+
         let img_dir = candidates.iter().find(|p| p.is_dir())?;
 
         let mut paths: Vec<_> = walkdir::WalkDir::new(img_dir)
@@ -385,10 +415,13 @@ impl IcraProvider {
         paths.sort();
 
         Some(Self {
-            name: format!("icra_{subfolder}"),
+            name: format!(
+                "icra_{}_{}",
+                subfolder,
+                img_subfolder.unwrap_or("default")
+            ),
             image_paths: paths,
             gt: gt_map,
-            sample_rate,
         })
     }
 }
@@ -399,26 +432,22 @@ impl DatasetProvider for IcraProvider {
     }
 
     fn iter(&self) -> Box<dyn Iterator<Item = DatasetItem> + '_> {
-        let iter = self
-            .image_paths
-            .iter()
-            .step_by(self.sample_rate)
-            .map(move |path| {
-                let fname = path.file_name().unwrap().to_string_lossy().to_string();
-                // We use expect here because if the file existed during scan, it should load.
-                // Failure to load specific images in regression suite is a failure.
-                let img = image::open(path)
-                    .expect("load regression image")
-                    .into_luma8();
-                let (w, h) = img.dimensions();
+        let iter = self.image_paths.iter().map(move |path| {
+            let fname = path.file_name().unwrap().to_string_lossy().to_string();
+            // We use expect here because if the file existed during scan, it should load.
+            // Failure to load specific images in regression suite is a failure.
+            let img = image::open(path)
+                .expect("load regression image")
+                .into_luma8();
+            let (w, h) = img.dimensions();
 
-                let icra_gt = self.gt.get(&fname).unwrap();
-                let gt = GroundTruth {
-                    tags: icra_gt.corners.clone(),
-                };
+            let icra_gt = self.gt.get(&fname).unwrap();
+            let gt = GroundTruth {
+                tags: icra_gt.corners.clone(),
+            };
 
-                (fname, img.into_raw(), w as usize, h as usize, gt)
-            });
+            (fname, img.into_raw(), w as usize, h as usize, gt)
+        });
         Box::new(iter)
     }
 }
@@ -427,60 +456,38 @@ impl DatasetProvider for IcraProvider {
 // Test Runners
 // ============================================================================
 
-/// Always runs on committed fixtures.
+macro_rules! test_icra {
+    ($name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident) => {
+        #[test]
+        fn $name() {
+            if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
+                let snapshot = provider.name().to_string();
+                RegressionHarness::new(snapshot)
+                    .with_preset(ConfigPreset::$preset)
+                    .run(provider);
+            }
+        }
+    };
+}
+
 #[test]
 fn regression_fixtures() {
     let provider = FixtureProvider::new();
-    evaluate_dataset(
-        "fixtures",
-        provider.iter(),
-        DetectorConfig::default(),
-        DetectOptions {
-            families: vec![TagFamily::AprilTag36h11],
-            ..Default::default()
-        },
-        true, // Fixtures currently match ICRA ordering format (from 0037.json)
-    );
+    RegressionHarness::new("fixtures")
+        .with_preset(ConfigPreset::PlainBoard)
+        .run(provider);
 }
 
-#[test]
-fn regression_icra_forward() {
-    let sample_rate = if env::var("FULL").is_ok() { 1 } else { 10 };
-
-    if let Some(provider) = IcraProvider::new("forward", sample_rate) {
-        let snapshot = format!("{}_sample{}", provider.name(), sample_rate);
-        evaluate_dataset(
-            &snapshot,
-            provider.iter(),
-            DetectorConfig::builder()
-                .refinement_mode(locus_core::config::CornerRefinementMode::Erf)
-                .build(),
-            DetectOptions {
-                families: vec![TagFamily::AprilTag36h11],
-                ..Default::default()
-            },
-            true, // ICRA uses TR, TL, BL, BR ordering
-        );
-    } else {
-        println!("SKIPPING: ICRA2020 'forward' dataset not found.");
-    }
-}
-
-#[test]
-fn regression_icra_rotation() {
-    let sample_rate = if env::var("FULL").is_ok() { 1 } else { 10 };
-
-    if let Some(provider) = IcraProvider::new("rotation", sample_rate) {
-        let snapshot = format!("{}_sample{}", provider.name(), sample_rate);
-        evaluate_dataset(
-            &snapshot,
-            provider.iter(),
-            DetectorConfig::default(),
-            DetectOptions {
-                families: vec![TagFamily::AprilTag36h11],
-                ..Default::default()
-            },
-            true,
-        );
-    }
-}
+test_icra!(
+    regression_icra_forward,
+    "forward",
+    Some("pure_tags_images"),
+    PlainBoard
+);
+test_icra!(
+    regression_icra_forward_checkerboard,
+    "forward",
+    Some("checkerboard_corners_images"),
+    Checkerboard
+);
+test_icra!(regression_icra_rotation, "rotation", None, PlainBoard);
