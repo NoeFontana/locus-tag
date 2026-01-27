@@ -5,20 +5,6 @@ expression: report
 summary:
   dataset_size: 1
   mean_recall: 1
-  mean_rmse: 0.2
-  mean_total_ms: 212.73624999999998
+  mean_rmse: 0.1515
+  mean_total_ms: 163.585834
   worst_offenders: []
-entries:
-  0037.png:
-    recall: 1
-    avg_rmse: 0.2
-    stats:
-      threshold_ms: "[latency]"
-      segmentation_ms: "[latency]"
-      quad_extraction_ms: "[latency]"
-      decoding_ms: "[latency]"
-      total_ms: "[latency]"
-      num_candidates: 845
-      num_detections: 154
-    missed_ids: []
-    extra_ids: []
