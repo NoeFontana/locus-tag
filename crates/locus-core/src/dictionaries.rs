@@ -116,6 +116,12 @@ impl TagDictionary {
         self.codes.get(id as usize).copied()
     }
 
+    /// Get all rotated versions of all codes.
+    #[must_use]
+    pub fn rotated_codes(&self) -> &[(u64, u16, u8)] {
+        &self.rotated_codes
+    }
+
     /// Decode bits, trying all 4 rotations.
     /// Returns (id, hamming_distance, rotation_count) if found within tolerance.
     /// rotation_count is 0-3, representing 90-degree CW increments.

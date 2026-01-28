@@ -160,6 +160,11 @@ impl RegressionHarness {
         self
     }
 
+    pub fn with_decode_mode(mut self, mode: locus_core::config::DecodeMode) -> Self {
+        self.config.decode_mode = mode;
+        self
+    }
+
     pub fn run(self, provider: impl DatasetProvider) {
         let mut detector = Detector::with_config(self.config);
         let mut results = BTreeMap::new();
@@ -480,6 +485,18 @@ macro_rules! test_icra {
             }
         }
     };
+    (SOFT $name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident) => {
+        #[test]
+        fn $name() {
+            if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
+                let snapshot = format!("{}_soft", provider.name());
+                RegressionHarness::new(snapshot)
+                    .with_preset(ConfigPreset::$preset)
+                    .with_decode_mode(locus_core::config::DecodeMode::Soft)
+                    .run(provider);
+            }
+        }
+    };
 }
 
 #[test]
@@ -492,6 +509,12 @@ fn regression_fixtures() {
 
 test_icra!(
     regression_icra_forward,
+    "forward",
+    Some("pure_tags_images"),
+    PlainBoard
+);
+test_icra!(
+    SOFT regression_icra_forward_soft,
     "forward",
     Some("pure_tags_images"),
     PlainBoard

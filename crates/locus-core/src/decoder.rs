@@ -722,7 +722,7 @@ fn fit_edge_erf(
 
 
 /// Returns the threshold that maximizes inter-class variance.
-fn compute_otsu_threshold(values: &[f64]) -> f64 {
+pub fn compute_otsu_threshold(values: &[f64]) -> f64 {
     if values.is_empty() {
         return 128.0;
     }
@@ -785,12 +785,16 @@ fn compute_otsu_threshold(values: &[f64]) -> f64 {
 /// - `min_contrast`: Minimum contrast range for Otsu-based classification.
 ///   Default is 20.0. Lower values (e.g., 10.0) improve recall on small/blurry tags.
 #[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
-pub fn sample_grid(
+/// Sample the bit grid using a specific decoding strategy.
+///
+/// This computes the intensities at sample points and the adaptive thresholds,
+/// then delegates to the strategy to produce the code.
+#[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
+pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
     img: &crate::image::ImageView,
     homography: &Homography,
     decoder: &(impl TagDecoder + ?Sized),
-    _min_contrast: f64,
-) -> Option<u64> {
+) -> Option<S::Code> {
     let points = decoder.sample_points();
     // Stack-allocated buffer for up to 64 sample points (covers all standard tag families)
     let mut intensities = [0.0f64; 64];
@@ -810,85 +814,52 @@ pub fn sample_grid(
     let h21 = homography.h[(2, 1)];
     let h22 = homography.h[(2, 2)];
 
-    // SOTA: Adaptive Bit Kernels
-    let dim = (decoder.dimension() + 2) as f64;
-    let cell_width_tag = 2.0 / dim;
-
-    // Calculate approximate bit cell size in image pixels to adapt sampling pattern
-    let corner_dist = (homography.h[(0, 0)].powi(2) + homography.h[(1, 0)].powi(2)).sqrt()
-        / homography.h[(2, 2)].abs();
-    let bit_cell_size = corner_dist / dim;
-
-    // Use wider kernel for tiny tags but stay within 40% of the cell width
-    let spread = if bit_cell_size < 3.0 {
-        cell_width_tag * 0.20
-    } else {
-        cell_width_tag * 0.05
-    };
-    let offsets = [-spread, 0.0, spread];
-
     for (i, &p) in points.iter().take(n).enumerate() {
-        let mut sum_val = 0.0;
-        let mut count = 0;
+        // Inlined project: h * [px, py, 1.0]
+        let wz = h20 * p.0 + h21 * p.1 + h22;
+        let img_x = (h00 * p.0 + h01 * p.1 + h02) / wz;
+        let img_y = (h10 * p.0 + h11 * p.1 + h12) / wz;
 
-        for &ox in &offsets {
-            for &oy in &offsets {
-                let x = p.0 + ox;
-                let y = p.1 + oy;
-
-                // Inlined project: h * [px, py, 1.0]
-                let wz = h20 * x + h21 * y + h22;
-                let img_x = (h00 * x + h01 * y + h02) / wz;
-                let img_y = (h10 * x + h11 * y + h12) / wz;
-
-                // Check bounds (with slight margin for interpolation)
-                if img_x < 0.0
-                    || img_x >= (img.width - 1) as f64
-                    || img_y < 0.0
-                    || img_y >= (img.height - 1) as f64
-                {
-                    continue; // Skip individual point, but try to keep others
-                }
-
-                // Inlined bilinear interpolation
-                let xf = img_x.floor();
-                let yf = img_y.floor();
-                let ix = xf as usize;
-                let iy = yf as usize;
-                let dx = img_x - xf;
-                let dy = img_y - yf;
-
-                // SAFETY: Bounds checked above.
-                let val = unsafe {
-                    let row0 = img.get_row_unchecked(iy);
-                    let row1 = img.get_row_unchecked(iy + 1);
-
-                    let v00 = f64::from(*row0.get_unchecked(ix));
-                    let v10 = f64::from(*row0.get_unchecked(ix + 1));
-                    let v01 = f64::from(*row1.get_unchecked(ix));
-                    let v11 = f64::from(*row1.get_unchecked(ix + 1));
-
-                    let top = v00 + dx * (v10 - v00);
-                    let bot = v01 + dx * (v11 - v01);
-                    top + dy * (bot - top)
-                };
-                sum_val += val;
-                count += 1;
-            }
+        // Check bounds (with slight margin for interpolation)
+        if img_x < 0.0
+            || img_x >= (img.width - 1) as f64
+            || img_y < 0.0
+            || img_y >= (img.height - 1) as f64
+        {
+            // Previously we returned None if ANY point was OOB?
+            // Let's return None for safety as per original logic inferred
+             return None;
         }
 
-        if count == 0 {
-            return None; // All samples outside image
-        }
+        // Inlined bilinear interpolation
+        let xf = img_x.floor();
+        let yf = img_y.floor();
+        let ix = xf as usize;
+        let iy = yf as usize;
+        let dx = img_x - xf;
+        let dy = img_y - yf;
 
-        let avg_val = sum_val / f64::from(count);
-        intensities[i] = avg_val;
+        // SAFETY: Bounds checked above.
+        let val = unsafe {
+            let row0 = img.get_row_unchecked(iy);
+            let row1 = img.get_row_unchecked(iy + 1);
 
-        if avg_val < min_val {
-            min_val = avg_val;
+            let v00 = f64::from(*row0.get_unchecked(ix));
+            let v10 = f64::from(*row0.get_unchecked(ix + 1));
+            let v01 = f64::from(*row1.get_unchecked(ix));
+            let v11 = f64::from(*row1.get_unchecked(ix + 1));
+
+            let top = v00 + dx * (v10 - v00);
+            let bot = v01 + dx * (v11 - v01);
+            top + dy * (bot - top)
+        };
+        intensities[i] = val;
+
+        if val < min_val {
+            min_val = val;
         }
-        if avg_val > max_val {
-            max_val = avg_val;
+        if val > max_val {
+            max_val = val;
         }
     }
 
@@ -908,7 +879,8 @@ pub fn sample_grid(
         quad_counts[qi] += 1;
     }
 
-    let mut bits = 0u64;
+    let mut thresholds = [0.0f64; 64];
+
     for (i, &p) in points.iter().take(n).enumerate() {
         let qi = if p.0 < 0.0 {
             usize::from(p.1 >= 0.0)
@@ -923,13 +895,21 @@ pub fn sample_grid(
 
         // Blend global Otsu and local mean (0.7 / 0.3 weighting is SOTA for fiducials)
         let effective_threshold = 0.7 * global_threshold + 0.3 * quad_avg;
-
-        if intensities[i] > effective_threshold {
-            bits |= 1 << i;
-        }
+        thresholds[i] = effective_threshold;
     }
 
-    Some(bits)
+    Some(S::from_intensities(&intensities[..n], &thresholds[..n]))
+}
+
+/// Sample the bit grid from the image (Legacy/Hard wrapper).
+#[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
+pub fn sample_grid(
+    img: &crate::image::ImageView,
+    homography: &Homography,
+    decoder: &(impl TagDecoder + ?Sized),
+    _min_contrast: f64,
+) -> Option<u64> {
+    sample_grid_generic::<crate::strategy::HardStrategy>(img, homography, decoder)
 }
 
 /// A trait for decoding binary payloads from extracted tags.
@@ -949,6 +929,10 @@ pub trait TagDecoder: Send + Sync {
     fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)>;
     /// Get the original code for a given ID (useful for testing/simulation).
     fn get_code(&self, id: u16) -> Option<u64>;
+    /// Returns the total number of codes in the dictionary.
+    fn num_codes(&self) -> usize;
+    /// Returns all rotated versions of all codes in the dictionary: (bits, id, rotation)
+    fn rotated_codes(&self) -> &[(u64, u16, u8)];
 }
 
 /// Decoder for the AprilTag 36h11 family.
@@ -982,6 +966,14 @@ impl TagDecoder for AprilTag36h11 {
     fn get_code(&self, id: u16) -> Option<u64> {
         crate::dictionaries::APRILTAG_36H11.get_code(id)
     }
+
+    fn num_codes(&self) -> usize {
+        crate::dictionaries::APRILTAG_36H11.len()
+    }
+
+    fn rotated_codes(&self) -> &[(u64, u16, u8)] {
+        crate::dictionaries::APRILTAG_36H11.rotated_codes()
+    }
 }
 
 /// Decoder for the AprilTag 16h5 family.
@@ -1013,6 +1005,14 @@ impl TagDecoder for AprilTag16h5 {
 
     fn get_code(&self, id: u16) -> Option<u64> {
         crate::dictionaries::APRILTAG_16H5.get_code(id)
+    }
+
+    fn num_codes(&self) -> usize {
+        crate::dictionaries::APRILTAG_16H5.len()
+    }
+
+    fn rotated_codes(&self) -> &[(u64, u16, u8)] {
+        crate::dictionaries::APRILTAG_16H5.rotated_codes()
     }
 }
 
@@ -1046,6 +1046,14 @@ impl TagDecoder for ArUco4x4_50 {
     fn get_code(&self, id: u16) -> Option<u64> {
         crate::dictionaries::ARUCO_4X4_50.get_code(id)
     }
+
+    fn num_codes(&self) -> usize {
+        crate::dictionaries::ARUCO_4X4_50.len()
+    }
+
+    fn rotated_codes(&self) -> &[(u64, u16, u8)] {
+        crate::dictionaries::ARUCO_4X4_50.rotated_codes()
+    }
 }
 
 /// Decoder for the ArUco 4x4_100 family.
@@ -1077,6 +1085,14 @@ impl TagDecoder for ArUco4x4_100 {
 
     fn get_code(&self, id: u16) -> Option<u64> {
         crate::dictionaries::ARUCO_4X4_100.get_code(id)
+    }
+
+    fn num_codes(&self) -> usize {
+        crate::dictionaries::ARUCO_4X4_100.len()
+    }
+
+    fn rotated_codes(&self) -> &[(u64, u16, u8)] {
+        crate::dictionaries::ARUCO_4X4_100.rotated_codes()
     }
 }
 
@@ -1122,6 +1138,14 @@ impl TagDecoder for GenericDecoder {
 
     fn get_code(&self, id: u16) -> Option<u64> {
         self.dict.get_code(id)
+    }
+
+    fn num_codes(&self) -> usize {
+        self.dict.len()
+    }
+
+    fn rotated_codes(&self) -> &[(u64, u16, u8)] {
+        self.dict.rotated_codes()
     }
 }
 

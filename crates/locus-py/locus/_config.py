@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from .locus import CornerRefinementMode, SegmentationConnectivity, TagFamily
+from .locus import CornerRefinementMode, DecodeMode, SegmentationConnectivity, TagFamily
 
 
 class DetectorConfig(BaseModel):
@@ -40,6 +40,7 @@ class DetectorConfig(BaseModel):
     upscale_factor: int = Field(default=1, ge=1)
     decoder_min_contrast: float = Field(default=20.0, ge=0.0)
     refinement_mode: CornerRefinementMode = Field(default_factory=lambda: CornerRefinementMode.Erf)
+    decode_mode: DecodeMode = Field(default_factory=lambda: DecodeMode.Hard)
 
 
 class DetectOptions(BaseModel):
