@@ -166,7 +166,7 @@ impl RegressionHarness {
     }
 
     pub fn run(self, provider: impl DatasetProvider) {
-        let mut detector = Detector::with_config(self.config);
+        let mut detector = Detector::<locus_core::strategy::CornerStrategy>::with_config(self.config);
         let mut results = BTreeMap::new();
 
         // Aggregators

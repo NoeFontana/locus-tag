@@ -111,7 +111,7 @@ fn bench_full_detect_640x480(bencher: divan::Bencher) {
     );
     let (data, _) = builder.build();
     let img = ImageView::new(&data, width, height, width).unwrap();
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
 
     bencher.bench_local(move || detector.detect(&img));
 }
@@ -137,7 +137,7 @@ fn bench_mixed_scene_multiple_tags(bencher: divan::Bencher) {
     let (data, _placements) = builder.build();
     let img = ImageView::new(&data, width, height, width).unwrap();
 
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
     let options = DetectOptions {
         families: vec![
             TagFamily::AprilTag36h11,
@@ -169,7 +169,7 @@ fn bench_dense_scene_20_tags(bencher: divan::Bencher) {
     let (data, _placements) = builder.build();
     let img = ImageView::new(&data, width, height, width).unwrap();
 
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
     let options = DetectOptions {
         families: vec![TagFamily::AprilTag36h11],
         ..Default::default()
@@ -192,7 +192,7 @@ fn bench_noisy_scene(bencher: divan::Bencher) {
     let (data, _placements) = builder.build();
     let img = ImageView::new(&data, width, height, width).unwrap();
 
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
     let options = DetectOptions {
         families: vec![TagFamily::ArUco4x4_50],
         ..Default::default()

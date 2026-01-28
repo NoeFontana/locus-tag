@@ -25,7 +25,7 @@ fn test_aruco_4x4_50_detection() {
     let img =
         locus_core::image::ImageView::new(&data, CANVAS_SIZE, CANVAS_SIZE, CANVAS_SIZE).unwrap();
 
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
     detector.set_families(&[FAMILY]);
     let results = detector.detect(&img);
 
@@ -39,7 +39,7 @@ fn test_aruco_multiple_ids() {
     const TAG_SIZE: usize = 96;
     const FAMILY: TagFamily = TagFamily::ArUco4x4_50;
 
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
     detector.set_families(&[FAMILY]);
 
     for tag_id in [0u16, 1, 5, 10, 25, 49] {

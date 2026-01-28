@@ -31,7 +31,7 @@ fn test_accuracy_synthetic() {
             .threshold_min_range(0) // Synthetic images have 0 noise
             .quad_min_fill_ratio(0.1) // Synthetic tags might yield thin borders -> low fill
             .build();
-        let mut detector = Detector::with_config(config);
+        let mut detector = Detector::<locus_core::strategy::CornerStrategy>::with_config(config);
         detector.set_families(&[family]);
         let detections = detector.detect(&img);
 
@@ -83,7 +83,7 @@ fn test_pose_accuracy() {
     let img =
         locus_core::image::ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
 
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
     detector.set_families(&[family]);
     let detections = detector.detect(&img);
 
@@ -144,7 +144,7 @@ mod extended {
             let (data, placements) = builder.build();
             let img = ImageView::new(&data, width, height, width).unwrap();
 
-            let mut detector = Detector::new();
+            let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
             let options = DetectOptions {
                 families: families.to_vec(),
                 ..Default::default()
@@ -183,7 +183,7 @@ mod extended {
         let (data, placements) = builder.build();
         let img = ImageView::new(&data, width, height, width).unwrap();
 
-        let mut detector = Detector::new();
+        let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
         let detections = detector.detect(&img);
 
         assert!(!detections.is_empty(), "Failed to detect rotated tag");
@@ -212,7 +212,7 @@ fn test_connectivity_modes() {
     let config_8 = DetectorConfig::builder()
         .segmentation_connectivity(SegmentationConnectivity::Eight)
         .build();
-    let mut detector_8 = Detector::with_config(config_8);
+    let mut detector_8 = Detector::<locus_core::strategy::CornerStrategy>::with_config(config_8);
     let dets_8 = detector_8.detect(&img);
     assert!(
         !dets_8.is_empty(),
@@ -223,7 +223,7 @@ fn test_connectivity_modes() {
     let config_4 = DetectorConfig::builder()
         .segmentation_connectivity(SegmentationConnectivity::Four)
         .build();
-    let mut detector_4 = Detector::with_config(config_4);
+    let mut detector_4 = Detector::<locus_core::strategy::CornerStrategy>::with_config(config_4);
     let dets_4 = detector_4.detect(&img);
     assert!(
         !dets_4.is_empty(),

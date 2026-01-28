@@ -63,7 +63,7 @@ fn test_strided_buffer_detection() {
         ImageView::new(&buffer, WIDTH, HEIGHT, STRIDE).expect("Failed to create strided ImageView");
 
     // Run detection
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
     let options = DetectOptions::with_families(&[TagFamily::AprilTag36h11]);
     let detections = detector.detect_with_options(&img, &options);
 
@@ -109,7 +109,7 @@ fn test_64_byte_aligned_stride() {
     }
 
     let img = ImageView::new(&buffer, WIDTH, HEIGHT, STRIDE).unwrap();
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
     let detections = detector.detect(&img);
 
     assert!(
@@ -125,7 +125,7 @@ fn test_minimum_image_size() {
     let data = vec![128u8; 16 * 16];
     let img = ImageView::new(&data, 16, 16, 16).unwrap();
 
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
     // Should not panic, even if no tags found
     let _detections = detector.detect(&img);
 }
@@ -169,7 +169,7 @@ fn test_tag_touching_top_left_edge() {
     }
 
     let img = ImageView::new(&data, SIZE, SIZE, SIZE).unwrap();
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
 
     // This should NOT panic - that's the main assertion
     let _detections = detector.detect(&img);
@@ -196,7 +196,7 @@ fn test_tag_touching_bottom_right_edge() {
     }
 
     let img = ImageView::new(&data, SIZE, SIZE, SIZE).unwrap();
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
 
     // Should NOT panic
     let _detections = detector.detect(&img);
@@ -234,7 +234,7 @@ fn test_real_tag_no_quiet_zone() {
     }
 
     let img = ImageView::new(&cropped, CROP_SIZE, CROP_SIZE, CROP_SIZE).unwrap();
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
     let options = DetectOptions::with_families(&[TagFamily::AprilTag36h11]);
 
     // Should NOT panic - crash check is the primary assertion
@@ -394,7 +394,7 @@ fn test_no_false_positives_in_white_noise() {
         rng.fill_bytes(&mut noise_data);
 
         let img = ImageView::new(&noise_data, WIDTH, HEIGHT, WIDTH).unwrap();
-        let mut detector = Detector::new();
+        let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
         let options = DetectOptions::with_families(&[TagFamily::AprilTag36h11]);
 
         let detections = detector.detect_with_options(&img, &options);
@@ -428,7 +428,7 @@ fn test_no_false_positives_in_gradient_noise() {
     }
 
     let img = ImageView::new(&gradient, WIDTH, HEIGHT, WIDTH).unwrap();
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
     let detections = detector.detect(&img);
 
     assert!(
@@ -535,7 +535,7 @@ fn test_adaptive_threshold_gradient_shadow() {
     }
 
     let img = ImageView::new(&data, WIDTH, HEIGHT, WIDTH).unwrap();
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
     let options = DetectOptions::with_families(&[TagFamily::AprilTag36h11]);
     let detections = detector.detect_with_options(&img, &options);
 

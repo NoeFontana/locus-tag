@@ -34,7 +34,7 @@ fn run_single_image_test(subfolder: &str, filename: &str, min_recall: f64, max_r
     )
     .expect("Failed to create ImageView");
 
-    let mut detector = Detector::new();
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::new();
     let options = DetectOptions {
         families: vec![TagFamily::AprilTag36h11],
         ..Default::default()

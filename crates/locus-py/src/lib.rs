@@ -314,7 +314,7 @@ impl DecodeMode {
 ///     )
 #[pyclass(unsendable)]
 pub struct Detector {
-    inner: locus_core::Detector,
+    inner: locus_core::Detector<locus_core::strategy::CornerStrategy>,
 }
 
 #[pymethods]
@@ -419,7 +419,7 @@ impl Detector {
             decode_mode: decode_mode.into(),
         };
         Self {
-            inner: locus_core::Detector::with_config(config),
+            inner: locus_core::Detector::<locus_core::strategy::CornerStrategy>::with_config(config),
         }
     }
 
@@ -648,7 +648,7 @@ fn dummy_detect() -> String {
 fn detect_tags(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
     let source = create_image_view(&img)?;
     let view = source.as_view()?;
-    let mut detector = locus_core::Detector::new();
+    let mut detector = locus_core::Detector::<locus_core::strategy::CornerStrategy>::new();
     let detections = detector.detect(&view);
     Ok(detections.into_iter().map(Detection::from).collect())
 }
@@ -659,7 +659,7 @@ fn detect_tags(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
 fn detect_tags_with_stats(img: PyReadonlyArray2<u8>) -> PyResult<(Vec<Detection>, PipelineStats)> {
     let source = create_image_view(&img)?;
     let view = source.as_view()?;
-    let mut detector = locus_core::Detector::new();
+    let mut detector = locus_core::Detector::<locus_core::strategy::CornerStrategy>::new();
     let (detections, stats) = detector.detect_with_stats(&view);
     Ok((
         detections.into_iter().map(Detection::from).collect(),

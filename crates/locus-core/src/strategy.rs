@@ -1,4 +1,6 @@
 use crate::decoder::TagDecoder;
+use crate::image::ImageView;
+use crate::pose::Pose;
 
 
 /// Trait abstracting the decoding strategy (Hard vs Soft).
@@ -24,6 +26,56 @@ pub trait DecodingStrategy: Send + Sync + 'static {
 
     /// Convert the code to a debug bitstream (u64).
     fn to_debug_bits(code: &Self::Code) -> u64;
+}
+
+/// Trait defining the strategy for refined pose estimation.
+///
+/// This follows a "Pay-for-what-you-use" model:
+/// - CornerStrategy: Zero overhead (uses existing sub-pixel corners).
+/// - PhotometricStrategy: High precision (re-analyzes image intensities).
+pub trait PoseRefinementStrategy: Send + Sync + 'static {
+    /// Associated type for holding frame-specific data (e.g., gradient maps).
+    type Data<'a>: Send + Sync;
+
+    /// Prepare frame-level data (e.g., precompute gradients) once per frame.
+    fn prepare<'a>(image: &'a ImageView) -> Self::Data<'a>;
+
+    /// Refine a 3D pose using the strategy-specific logic.
+    fn refine(pose: &mut Pose, data: &Self::Data<'_>, image: &ImageView);
+}
+
+/// Corner-based refinement strategy (Fast).
+///
+/// Performs no additional work beyond the initial PnP estimation.
+pub struct CornerStrategy;
+
+impl PoseRefinementStrategy for CornerStrategy {
+    type Data<'a> = ();
+
+    #[inline(always)]
+    fn prepare<'a>(_image: &'a ImageView) -> Self::Data<'a> {}
+
+    #[inline(always)]
+    fn refine(_pose: &mut Pose, _data: &Self::Data<'_>, _image: &ImageView) {
+        // No-op: Corner refinement is handled during quad extraction or as part of PnP.
+    }
+}
+
+/// Photometric refinement strategy (Precise).
+///
+/// placeholder implementation for future direct intensity-based pose optimization.
+pub struct PhotometricStrategy;
+
+impl PoseRefinementStrategy for PhotometricStrategy {
+    type Data<'a> = ();
+
+    #[inline(always)]
+    fn prepare<'a>(_image: &'a ImageView) -> Self::Data<'a> {}
+
+    #[inline(always)]
+    fn refine(_pose: &mut Pose, _data: &Self::Data<'_>, _image: &ImageView) {
+        // Placeholder for future photometric optimization
+    }
 }
 
 /// Hard-decision strategy (Hamming distance).
@@ -127,7 +179,7 @@ impl DecodingStrategy for SoftStrategy {
             return Some((id, hamming, rot));
         }
 
-        let codes_count = decoder.num_codes();
+        let _codes_count = decoder.num_codes();
         let soft_threshold = max_error.max(1) * 60;
 
         let mut best_id = None;

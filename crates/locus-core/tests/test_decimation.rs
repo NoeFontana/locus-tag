@@ -25,7 +25,7 @@ fn test_decimation_basic() {
         .enable_sharpening(false)
         .quad_min_fill_ratio(0.1)
         .build();
-    let mut detector = Detector::with_config(config);
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::with_config(config);
 
     // Test with decimation = 2
     let options = DetectOptions::builder().decimation(2).build();
@@ -70,7 +70,7 @@ fn test_decimation_vs_baseline() {
         .enable_sharpening(false)
         .quad_min_fill_ratio(0.1)
         .build();
-    let mut detector = Detector::with_config(config);
+    let mut detector = Detector::<locus_core::strategy::CornerStrategy>::with_config(config);
 
     // Baseline (decimation = 1)
     let (detections1, stats1) = detector.detect_with_stats(&img);

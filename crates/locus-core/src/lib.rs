@@ -46,7 +46,7 @@
 //!     .threshold_tile_size(16)
 //!     .quad_min_area(200)
 //!     .build();
-//! let mut detector = Detector::with_config(config);
+//! let mut detector = Detector::<locus_core::strategy::CornerStrategy>::with_config(config);
 //!
 //! // Create a dummy image for demonstration
 //! # let pixels = vec![128u8; 64 * 64];
@@ -88,8 +88,10 @@ pub use crate::config::{DetectOptions, DetectorConfig, TagFamily};
 use crate::decoder::TagDecoder;
 pub use crate::decoder::family_to_decoder;
 pub use crate::image::ImageView;
+use crate::strategy::{CornerStrategy, PoseRefinementStrategy};
 use bumpalo::Bump;
 use rayon::prelude::*;
+use std::marker::PhantomData;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Result of a tag detection.
@@ -153,14 +155,15 @@ pub struct FullDetectionResult {
 ///
 /// The detector holds reusable state (arena allocator, threshold engine)
 /// and can be configured at construction time via [`DetectorConfig`].
-pub struct Detector {
+pub struct Detector<S: PoseRefinementStrategy = CornerStrategy> {
     arena: Bump,
     config: DetectorConfig,
     decoders: Vec<Box<dyn TagDecoder + Send + Sync>>,
     upscale_buf: Vec<u8>,
+    _strategy: PhantomData<S>,
 }
 
-impl Detector {
+impl<S: PoseRefinementStrategy> Detector<S> {
     /// Create a new detector instance with default configuration.
     #[must_use]
     pub fn new() -> Self {
@@ -175,6 +178,7 @@ impl Detector {
             config,
             decoders: vec![Box::new(crate::decoder::AprilTag36h11)],
             upscale_buf: Vec::new(),
+            _strategy: PhantomData,
         }
     }
 
@@ -260,6 +264,7 @@ impl Detector {
         options: &DetectOptions,
         capture_debug: bool,
     ) -> FullDetectionResult {
+        let frame_data = S::prepare(img);
         let mut stats = PipelineStats::default();
         let start_total = std::time::Instant::now();
 
@@ -490,7 +495,11 @@ impl Detector {
             d.center[1] = (d.center[1] + 0.5) * inv_scale;
 
             if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size) {
-                d.pose = crate::pose::estimate_tag_pose(&intrinsics, &d.corners, tag_size);
+                let mut pose = crate::pose::estimate_tag_pose(&intrinsics, &d.corners, tag_size);
+                if let Some(p) = &mut pose {
+                    S::refine(p, &frame_data, &refinement_img);
+                }
+                d.pose = pose;
             }
         }
 
@@ -532,8 +541,8 @@ impl Detector {
     }
 }
 
-impl Detector {
-    fn decode_candidates<S: crate::strategy::DecodingStrategy>(
+impl<S: PoseRefinementStrategy> Detector<S> {
+    fn decode_candidates<D: crate::strategy::DecodingStrategy>(
         config: &crate::config::DetectorConfig,
         candidates: Vec<Detection>,
         refinement_img: &ImageView,
@@ -553,7 +562,7 @@ impl Detector {
                     None
                 };
                 let (det, failed_contrast, failed_hamming, best_h, bits) =
-                    Self::decode_single_candidate::<S>(config, cand, refinement_img, active_decoders, options);
+                    Self::decode_single_candidate::<D>(config, cand, refinement_img, active_decoders, options);
                 (
                     det,
                     failed_contrast,
@@ -594,7 +603,7 @@ impl Detector {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn decode_single_candidate<S: crate::strategy::DecodingStrategy>(
+    fn decode_single_candidate<D: crate::strategy::DecodingStrategy>(
         config: &crate::config::DetectorConfig,
         mut cand: Detection,
         refinement_img: &ImageView,
@@ -604,7 +613,7 @@ impl Detector {
         let scales = [1.0, 0.9, 1.1]; // Heuristic SOTA: only try most likely scales
 
         let mut best_overall_h = u32::MAX;
-        let mut best_overall_code: Option<S::Code> = None;
+        let mut best_overall_code: Option<D::Code> = None;
         let mut passed_contrast = false;
 
         for scale in scales {
@@ -624,13 +633,13 @@ impl Detector {
             let h = h.unwrap();
 
             for decoder in active_decoders {
-                if let Some(code) = crate::decoder::sample_grid_generic::<S>(
+                if let Some(code) = crate::decoder::sample_grid_generic::<D>(
                     refinement_img,
                     &h,
                     decoder.as_ref(),
                 ) {
                     passed_contrast = true;
-                    if let Some((id, hamming, rot)) = S::decode(&code, decoder.as_ref(), 255) {
+                    if let Some((id, hamming, rot)) = D::decode(&code, decoder.as_ref(), 255) {
                         if hamming < best_overall_h {
                             best_overall_h = hamming;
                             best_overall_code = Some(code.clone());
@@ -639,7 +648,7 @@ impl Detector {
                         if hamming <= if decoder.name() == "36h11" { 4 } else { 1 } {
                             cand.id = id;
                             cand.hamming = hamming;
-                            cand.bits = S::to_debug_bits(&code);
+                            cand.bits = D::to_debug_bits(&code);
 
                             // Correct rotation on ORIGINAL corners
                             let mut reordered = [[0.0; 2]; 4];
@@ -664,19 +673,19 @@ impl Detector {
                                 // Verify that refined corners still yield a valid decode
                                 if let Some(h_ref) =
                                     crate::decoder::Homography::square_to_quad(&refined_corners)
-                                    && let Some(code_ref) = crate::decoder::sample_grid_generic::<S>(
+                                    && let Some(code_ref) = crate::decoder::sample_grid_generic::<D>(
                                         refinement_img,
                                         &h_ref,
                                         decoder.as_ref(),
                                     )
                                         && let Some((id_ref, hamming_ref, _)) =
-                                            S::decode(&code_ref, decoder.as_ref(), 255)
+                                            D::decode(&code_ref, decoder.as_ref(), 255)
                                         {
                                             // Only keep if it's the same tag and hamming is not worse
                                             if id_ref == id && hamming_ref <= hamming {
                                                 cand.corners = refined_corners;
                                                 cand.hamming = hamming_ref;
-                                                cand.bits = S::to_debug_bits(&code_ref);
+                                                cand.bits = D::to_debug_bits(&code_ref);
                                             }
                                         }
                             }
@@ -690,7 +699,7 @@ impl Detector {
                                     tag_size,
                                 );
                             }
-                            return (Some(cand), false, false, hamming, S::to_debug_bits(&code));
+                            return (Some(cand), false, false, hamming, D::to_debug_bits(&code));
                         }
                     }
                 }
@@ -740,13 +749,13 @@ impl Detector {
                                     crate::decoder::Homography::square_to_quad(&test_corners)
                                 {
                                     for decoder in active_decoders {
-                                        if let Some(code) = crate::decoder::sample_grid_generic::<S>(
+                                        if let Some(code) = crate::decoder::sample_grid_generic::<D>(
                                             refinement_img,
                                             &h,
                                             decoder.as_ref(),
                                         )
                                             && let Some((id, hamming, rot)) =
-                                                S::decode(&code, decoder.as_ref(), 255)
+                                                D::decode(&code, decoder.as_ref(), 255)
                                                 && hamming < best_overall_h {
                                                     best_overall_h = hamming;
                                                     best_overall_code = Some(code.clone());
@@ -762,7 +771,7 @@ impl Detector {
                                                     {
                                                         cand.id = id;
                                                         cand.hamming = hamming;
-                                                        cand.bits = S::to_debug_bits(&code);
+                                                        cand.bits = D::to_debug_bits(&code);
                                                         cand.corners = current_corners;
 
                                                         // Fix rotation
@@ -780,7 +789,7 @@ impl Detector {
                                                             false,
                                                             false,
                                                             hamming,
-                                                            S::to_debug_bits(&code),
+                                                            D::to_debug_bits(&code),
                                                         );
                                                     }
                                                 }
@@ -798,7 +807,7 @@ impl Detector {
                     for decoder in active_decoders {
                         // Recover ID and rotation from the best bits to construct the ideal target
                         if let Some((id, hamming, rot)) =
-                            S::decode(&best_code, decoder.as_ref(), 255)
+                            D::decode(&best_code, decoder.as_ref(), 255)
                         {
                             // Only proceed if this decoder explains the bits as well as our best guess
                             if hamming == best_overall_h {
@@ -824,13 +833,13 @@ impl Detector {
                                     // Check if refined corners actually improve Hamming
                                     if let Some(h) =
                                         crate::decoder::Homography::square_to_quad(&refined)
-                                        && let Some(code) = crate::decoder::sample_grid_generic::<S>(
+                                        && let Some(code) = crate::decoder::sample_grid_generic::<D>(
                                             refinement_img,
                                             &h,
                                             decoder.as_ref(),
                                         )
                                             && let Some((id, hamming, rot)) =
-                                                S::decode(&code, decoder.as_ref(), 255)
+                                                D::decode(&code, decoder.as_ref(), 255)
                                                 && hamming < best_overall_h {
                                                     best_overall_h = hamming;
                                                     best_overall_code = Some(code.clone());
@@ -845,7 +854,7 @@ impl Detector {
                                                     {
                                                         cand.id = id;
                                                         cand.hamming = hamming;
-                                                        cand.bits = S::to_debug_bits(&code);
+                                                        cand.bits = D::to_debug_bits(&code);
                                                         cand.corners = current_corners;
 
                                                         // Fix rotation
@@ -864,7 +873,7 @@ impl Detector {
                                                             false,
                                                             false,
                                                             hamming,
-                                                            S::to_debug_bits(&code),
+                                                            D::to_debug_bits(&code),
                                                         );
                                                     }
                                                 }
@@ -889,13 +898,13 @@ impl Detector {
                                     crate::decoder::Homography::square_to_quad(&test_corners)
                                 {
                                     for decoder in active_decoders {
-                                        if let Some(code) = crate::decoder::sample_grid_generic::<S>(
+                                        if let Some(code) = crate::decoder::sample_grid_generic::<D>(
                                             refinement_img,
                                             &h,
                                             decoder.as_ref(),
                                         )
                                             && let Some((id, hamming, rot)) =
-                                                S::decode(&code, decoder.as_ref(), 255)
+                                                D::decode(&code, decoder.as_ref(), 255)
                                                 && hamming < best_overall_h {
                                                     best_overall_h = hamming;
                                                     best_overall_code = Some(code.clone());
@@ -911,7 +920,7 @@ impl Detector {
                                                     {
                                                         cand.id = id;
                                                         cand.hamming = hamming;
-                                                        cand.bits = S::to_debug_bits(&code);
+                                                        cand.bits = D::to_debug_bits(&code);
                                                         cand.corners = current_corners;
 
                                                         // Final ERF polish for maximum precision
@@ -927,12 +936,12 @@ impl Detector {
 
                                                         // Verify refined corners
                                                         if let Some(h_ref) = crate::decoder::Homography::square_to_quad(&refined)
-                                                            && let Some(code_ref) = crate::decoder::sample_grid_generic::<S>(refinement_img, &h_ref, decoder.as_ref())
-                                                                && let Some((id_ref, hamming_ref, _)) = S::decode(&code_ref, decoder.as_ref(), 255)
+                                                            && let Some(code_ref) = crate::decoder::sample_grid_generic::<D>(refinement_img, &h_ref, decoder.as_ref())
+                                                                && let Some((id_ref, hamming_ref, _)) = D::decode(&code_ref, decoder.as_ref(), 255)
                                                                     && id_ref == id && hamming_ref <= hamming {
                                                                         cand.corners = refined;
                                                                         cand.hamming = hamming_ref;
-                                                                        cand.bits = S::to_debug_bits(&code_ref);
+                                                                        cand.bits = D::to_debug_bits(&code_ref);
                                                                     }
 
                                                         let mut reordered = [[0.0; 2]; 4];
@@ -949,7 +958,7 @@ impl Detector {
                                                             false,
                                                             false,
                                                             hamming,
-                                                            S::to_debug_bits(&code),
+                                                            D::to_debug_bits(&code),
                                                         );
                                                     }
                                                 }
@@ -970,7 +979,7 @@ impl Detector {
             !passed_contrast,
             passed_contrast,
             best_overall_h,
-            best_overall_code.map(|c| S::to_debug_bits(&c)).unwrap_or(0),
+            best_overall_code.map(|c| D::to_debug_bits(&c)).unwrap_or(0),
         )
     }
 }
