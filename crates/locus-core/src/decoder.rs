@@ -15,10 +15,6 @@ impl Homography {
     /// Points are [x, y].
     #[must_use]
     pub fn from_pairs(src: &[[f64; 2]; 4], dst: &[[f64; 2]; 4]) -> Option<Self> {
-        // ... (Keep existing implementation if needed, or deprecate)
-        // For now, let's just keep it or replace it if usage allows.
-        // Actually, let's add square_to_quad separately.
-        // Below is the existing implementation preserved but we'll add the new one.
         let mut a = SMatrix::<f64, 8, 9>::zeros();
 
         for i in 0..4 {
@@ -358,13 +354,8 @@ pub fn refine_corners_gridfit(
                                 }
 
                         if valid {
-                            // If we improved, we keep the change and 'original_val' for next iteration is effectively updated
-                            // But wait, the loop continues to optimized other corners.
-                            // We need to make sure 'current_corners' reflects the best state.
-                            // Since we updated current_corners in place and verified it's better, we leave it.
-                            // If we didn't improve, we reverted.
-                            break; // Greedy: take first improvement in this axis direction? or search both?
-                            // Let's stick with the change if it improved.
+                            // Greedy update: accept improvement and continue.
+                            break;
                         }
                         // Revert if worse or invalid
                         current_corners[i][axis] = original_val;

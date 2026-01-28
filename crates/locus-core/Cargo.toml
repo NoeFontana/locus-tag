@@ -52,6 +52,10 @@ name = "comprehensive"
 harness = false
 required-features = ["extended-bench"]
 
+[[bench]]
+name = "pose_bench"
+harness = false
+
 [features]
 default = []
 viz = ["dep:rerun"]

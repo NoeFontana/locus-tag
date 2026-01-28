@@ -115,6 +115,23 @@ config = locus.DetectorConfig(
 detector = locus.Detector(config=config)
 ```
 
+### Pose Estimation (IPPE-Square)
+Locus implements **IPPE-Square** (Infinitesimal Plane-Based Pose Estimation) for SOTA pose accuracy. This solves the "perspective flip" ambiguity that plagues generic PnP solvers and refines the result using **Levenberg-Marquardt**.
+
+```python
+# To get pose, simply pass camera intrinsics and tag size
+options = locus.DetectOptions(
+    intrinsics=locus.CameraIntrinsics(fx=800.0, fy=800.0, cx=640.0, cy=360.0),
+    tag_size=0.16 # meters
+)
+tags = detector.detect_with_options(img, options)
+
+for t in tags:
+    if t.pose:
+        print(f"Translation: {t.pose.translation}")
+        print(f"Rotation: {t.pose.rotation}")
+```
+
 ## Development & Testing
 
 Locus includes a rigorous regression suite to ensure detection quality on standard datasets (ICRA 2020).
