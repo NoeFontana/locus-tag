@@ -62,8 +62,9 @@ sequenceDiagram
     Note over Det: 4. Decoding
     loop For each candidate
         Det->>Decode: Homography Sampling
-        Decode->>Decode: Bit Extraction (Bilinear)
-        Decode->>Decode: Error Correction (Hamming)
+        Note right of Decode: Strategy: Hard (Bit) vs Soft (LLR)
+        Decode->>Decode: Bit/LLR Extraction (Bilinear)
+        Decode->>Decode: Error Correction (Hamming/Soft-ML)
     end
     
     Det-->>App: Final Detections
@@ -94,6 +95,22 @@ classDiagram
         <<interface>>
         +decode(bits) Option~id, hamming~
         +sample_points()
+        +rotated_codes()
+    }
+
+    class DecodingStrategy {
+        <<interface>>
+        +Code from_intensities(intensities, thresholds)
+        +u32 distance(code, target)
+        +decode(code, decoder)
+    }
+
+    class HardStrategy {
+        +Code = u64
+    }
+
+    class SoftStrategy {
+        +Code = SoftCode (stack-allocated)
     }
     
     class AprilTag36h11 {
@@ -201,9 +218,26 @@ The pipeline is designed to meet a strict **1-10ms** latency budget on modern co
 | **Preprocessing** | $O(N)$ | ~2.5 ms | Bandwidth-bound. Uses SIMD for min/max. |
 | **Segmentation** | $O(N)$ | ~1.5 ms | Single-pass CCL with Union-Find. |
 | **Quad Extraction** | $O(K \cdot M)$ | ~1.0 ms | $K$ components, $M$ perimeter pixels. |
-| **Decoding** | $O(Q \cdot S^2)$ | ~0.5 ms | $Q$ candidates, small grid size $S$. |
+| **Decoding (Hard)** | $O(Q)$ | ~0.5 ms | $Q$ candidates, O(1) bit LUT. |
+| **Decoding (Soft)** | $O(Q \cdot D)$ | ~5.0 ms | $D$ dictionary entries, LLR search. |
 
-*Note: $N$ is total pixels. Latencies are approximate for a single core on a modern CPU (e.g., Ryzen 9 7950X).*
+*Note: $N$ is total pixels. Latencies are approximate for a single core on a modern CPU (e.g., Ryzen 9 7950X). Soft decoding latency scales with the number of quad candidates and the dictionary size.*
+
+## Decoding Strategies
+
+Locus decoupling bit extraction from the decision logic using the `DecodingStrategy` trait. This allows static dispatch between two primary modes:
+
+### 1. Hard-Decision Decoding (LLM-Optimized)
+The default mode. It threshold's pixel intensities into a 64-bit integer at the sampling point.
+*   **Performance**: Extremely fast ($O(1)$ loop per candidate).
+*   **Precision**: High, follows the original AprilTag/ArUco specifications.
+*   **Best For**: Low-latency production environments with decent SNR.
+
+### 2. Soft-Decision Decoding (Maximum Recall)
+In Soft mode, Locus extracts **Log-Likelihood Ratios (LLRs)** for each bit. Instead of a bitwise match, it performs a Maximum Likelihood (ML) search across the entire tag dictionary to minimize the accumulated penalty.
+*   **Optimization**: Fully stack-allocated (`zero heap-alloc`) with early-exit pruning.
+*   **Benefit**: Recovers tags with extremely low contrast or high noise that hard-binarization would miss.
+*   **Trade-off**: Increases decoding latency proportional to dictionary size.
 
 ## Extensibility
 

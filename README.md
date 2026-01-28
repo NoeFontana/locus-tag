@@ -8,7 +8,8 @@ This project is an experiment in LLM-assisted library development, targeting 1-1
 
 | Detector | Recall | RMSE | Latency |
 | :--- | :--- | :--- | :--- |
-| **Locus** | **82.42%** | 0.25 px | 123.4 ms |
+| **Locus (Soft)** | **95.42%** | 0.31 px | 116.7 ms |
+| **Locus (Hard)** | **83.91%** | 0.28 px | **95.8 ms** |
 | AprilTag (SOTA) | 62.34% | **0.22 px** | 100.0 ms |
 | OpenCV | 33.16% | 0.92 px | **95.6 ms** |
 
@@ -58,6 +59,26 @@ tags, stats = detector.detect_with_stats(img, decimation=2)
 
 print(f"Detected {len(tags)} tags in {stats.total_ms:.2f}ms")
 ```
+
+#### Soft-Decision Decoding (Maximum Recall)
+For challenging conditions (tiny, blurry, or noisy tags), Locus supports **Soft-Decision Decoding**. This uses Log-Likelihood Ratios (LLRs) instead of hard bit-binarization, providing a massive **+11.5% recall boost**.
+
+```python
+# Enable Soft-Decision mode for difficult tags
+config = locus.DetectorConfig(
+    decode_mode=locus.DecodeMode.Soft,
+    decoder_min_contrast=10.0 # Recommended for soft mode
+)
+detector = locus.Detector(config=config)
+
+# Soft mode is ~20% slower than Hard mode but detects significantly more tags
+tags = detector.detect(img)
+```
+
+| Mode | Use Case | Latency |
+| :--- | :--- | :--- |
+| `Hard` (Default) | **High Resolution / Clean Imagery**. Minimum latency and maximum precision. | ~95ms |
+| `Soft` | **Small / Blurry / Noisy Tags**. Use when missed detections are unacceptable. | ~117ms |
 
 #### Checkerboard & Dictionary Support
 Locus supports multiple dictionaries and specialized profiles for densely packed tags.

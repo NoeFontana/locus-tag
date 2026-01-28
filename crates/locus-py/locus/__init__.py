@@ -1,6 +1,7 @@
 from ._config import DetectOptions, DetectorConfig
 from .locus import (
     CornerRefinementMode,
+    DecodeMode,
     Detection,
     FullDetectionResult,
     PipelineStats,
@@ -72,6 +73,7 @@ class Detector:
             upscale_factor=config.upscale_factor,
             decoder_min_contrast=config.decoder_min_contrast,
             refinement_mode=config.refinement_mode,
+            decode_mode=config.decode_mode,
         )
 
     def detect(self, img, decimation: int = 1):
@@ -121,6 +123,7 @@ __all__ = [
     "TagFamily",
     "SegmentationConnectivity",
     "CornerRefinementMode",
+    "DecodeMode",
     "DetectorConfig",
     "DetectOptions",
     "detect_tags",

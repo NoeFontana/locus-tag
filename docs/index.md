@@ -27,7 +27,8 @@ image = cv2.imread("tag.png", cv2.IMREAD_GRAYSCALE)
 detector = locus.Detector(
     threshold_tile_size=32,  # Window size for adaptive thresholding
     quad_min_area=100,       # Minimum pixel area for a candidate quad
-    quad_min_edge_score=20.0 # Strictness of edge detection
+    quad_min_edge_score=20.0, # Strictness of edge detection
+    decode_mode=locus.DecodeMode.Hard # 'Hard' for performance, 'Soft' for recall
 )
 
 # Optional: Set families to decode (default is none)

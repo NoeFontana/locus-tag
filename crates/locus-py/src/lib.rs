@@ -263,6 +263,39 @@ impl CornerRefinementMode {
 }
 
 // ============================================================================
+// DecodeMode enum
+// ============================================================================
+
+/// Decoding strategy mode.
+#[pyclass(eq, eq_int)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DecodeMode {
+    /// Hard decision (Hamming distance) - Standard method.
+    Hard = 0,
+    /// Soft decision (LLR accumulation) - Better for low contrast/noise.
+    Soft = 1,
+}
+
+impl From<DecodeMode> for locus_core::config::DecodeMode {
+    fn from(m: DecodeMode) -> Self {
+        match m {
+            DecodeMode::Hard => locus_core::config::DecodeMode::Hard,
+            DecodeMode::Soft => locus_core::config::DecodeMode::Soft,
+        }
+    }
+}
+
+#[pymethods]
+impl DecodeMode {
+    fn __reduce__(&self) -> (PyObject, (u8,)) {
+        Python::with_gil(|py| {
+            let cls = py.get_type::<Self>();
+            (cls.into_any().unbind(), (*self as u8,))
+        })
+    }
+}
+
+// ============================================================================
 // Detector class with persistent state
 // ============================================================================
 
@@ -304,6 +337,7 @@ impl Detector {
     ///     quad_min_edge_length: Minimum edge length in pixels (default: 4.0)
     ///     quad_min_edge_score: Minimum edge gradient score (default: 0.4)
     ///     segmentation_connectivity: Connectivity mode (default: Eight)
+    ///     decode_mode: Decoding strategy (default: Hard)
     #[new]
     #[pyo3(signature = (
         threshold_tile_size = 8,
@@ -329,6 +363,7 @@ impl Detector {
         upscale_factor = 1,
         decoder_min_contrast = 20.0,
         refinement_mode = CornerRefinementMode::Erf,
+        decode_mode = DecodeMode::Hard,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -355,6 +390,7 @@ impl Detector {
         upscale_factor: usize,
         decoder_min_contrast: f64,
         refinement_mode: CornerRefinementMode,
+        decode_mode: DecodeMode,
     ) -> Self {
         let config = locus_core::DetectorConfig {
             threshold_tile_size,
@@ -380,6 +416,7 @@ impl Detector {
             upscale_factor,
             decoder_min_contrast,
             refinement_mode: refinement_mode.into(),
+            decode_mode: decode_mode.into(),
         };
         Self {
             inner: locus_core::Detector::with_config(config),
@@ -696,6 +733,7 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TagFamily>()?;
     m.add_class::<SegmentationConnectivity>()?;
     m.add_class::<CornerRefinementMode>()?;
+    m.add_class::<DecodeMode>()?;
     m.add_class::<Detector>()?;
 
     // Legacy functions (for backward compatibility)

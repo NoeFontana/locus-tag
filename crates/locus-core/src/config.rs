@@ -34,6 +34,16 @@ pub enum CornerRefinementMode {
     Erf,
 }
 
+/// Mode for decoding strategy.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum DecodeMode {
+    /// Hard-decision decoding using Hamming distance (fastest).
+    Hard,
+    /// Soft-decision decoding using Log-Likelihood Ratios (better for noise/blur).
+    Soft,
+}
+
 /// Pipeline-level configuration for the detector.
 ///
 /// These settings affect the fundamental behavior of the detection pipeline
@@ -114,6 +124,8 @@ pub struct DetectorConfig {
     pub decoder_min_contrast: f64,
     /// Strategy for refining corner positions (default: Edge).
     pub refinement_mode: CornerRefinementMode,
+    /// Decoding mode (Hard vs Soft).
+    pub decode_mode: DecodeMode,
 }
 
 impl Default for DetectorConfig {
@@ -142,6 +154,7 @@ impl Default for DetectorConfig {
             upscale_factor: 1,
             decoder_min_contrast: 20.0,
             refinement_mode: CornerRefinementMode::Erf,
+            decode_mode: DecodeMode::Hard,
         }
     }
 }
@@ -187,6 +200,8 @@ pub struct DetectorConfigBuilder {
     pub decoder_min_contrast: Option<f64>,
     /// Refinement mode.
     pub refinement_mode: Option<CornerRefinementMode>,
+    /// Decoding mode.
+    pub decode_mode: Option<DecodeMode>,
 }
 
 impl DetectorConfigBuilder {
@@ -353,6 +368,7 @@ impl DetectorConfigBuilder {
             upscale_factor: self.upscale_factor.unwrap_or(d.upscale_factor),
             decoder_min_contrast: self.decoder_min_contrast.unwrap_or(d.decoder_min_contrast),
             refinement_mode: self.refinement_mode.unwrap_or(d.refinement_mode),
+            decode_mode: self.decode_mode.unwrap_or(d.decode_mode),
         }
     }
 
@@ -389,6 +405,13 @@ impl DetectorConfigBuilder {
     #[must_use]
     pub fn refinement_mode(mut self, mode: CornerRefinementMode) -> Self {
         self.refinement_mode = Some(mode);
+        self
+    }
+
+    /// Set the decoding mode (Hard or Soft).
+    #[must_use]
+    pub fn decode_mode(mut self, mode: DecodeMode) -> Self {
+        self.decode_mode = Some(mode);
         self
     }
 }
