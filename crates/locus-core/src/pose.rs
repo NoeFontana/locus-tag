@@ -1,5 +1,28 @@
 #![allow(clippy::many_single_char_names, clippy::similar_names)]
 use nalgebra::{Matrix3, Matrix6, Vector3, Vector6};
+use crate::image::ImageView;
+use crate::strategy::RefinementError;
+use multiversion::multiversion;
+
+/// A 1D displacement constraint along an edge normal.
+#[derive(Debug, Clone, Copy)]
+pub struct EdgeConstraint {
+    /// 3D point on the tag edge (world coordinates).
+    pub p: Vector3<f64>,
+    /// Predicted 2D pixel position (u, v).
+    pub uv: [f64; 2],
+    /// Edge normal vector (nx, ny).
+    pub normal: [f64; 2],
+}
+
+/// Result of an edge displacement measurement.
+#[derive(Debug, Clone, Copy)]
+pub struct EdgeMeasurement {
+    /// Signed distance from predicted edge to observed peak.
+    pub residual: f64,
+    /// Weight of the measurement (based on gradient magnitude).
+    pub weight: f64,
+}
 
 /// Camera intrinsics parameters.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -429,6 +452,212 @@ fn refine_pose_lm(
 
     pose
 }
+
+/// Discretize tag edges into point-wise constraints for photometric refinement.
+pub fn collect_constraints<'a>(
+    arena: &'a bumpalo::Bump,
+    pose: &Pose,
+    intrinsics: &CameraIntrinsics,
+    tag_size: f64,
+) -> bumpalo::collections::Vec<'a, EdgeConstraint> {
+    let s = tag_size * 0.5;
+    // Object corners: LU, RU, RD, LD (standard tag order)
+    let corners_world = [
+        Vector3::new(-s, -s, 0.0),
+        Vector3::new(s, -s, 0.0),
+        Vector3::new(s, s, 0.0),
+        Vector3::new(-s, s, 0.0),
+    ];
+
+    let mut constraints = bumpalo::collections::Vec::new_in(arena);
+    
+    for i in 0..4 {
+        let p0_world = corners_world[i];
+        let p1_world = corners_world[(i + 1) % 4];
+        
+        let p0_px = pose.project(&p0_world, intrinsics);
+        let p1_px = pose.project(&p1_world, intrinsics);
+        
+        let dx = p1_px[0] - p0_px[0];
+        let dy = p1_px[1] - p0_px[1];
+        let len_px = (dx * dx + dy * dy).sqrt();
+        
+        if len_px < 2.0 { continue; }
+        
+        let nx = -dy / len_px;
+        let ny = dx / len_px;
+        
+        // Sampling density: one point every 2 pixels
+        let step_size = 2.0;
+        let num_steps = (len_px / step_size).floor() as usize;
+        let num_steps = num_steps.max(2);
+        
+        for j in 1..num_steps {
+            let t = j as f64 / num_steps as f64;
+            let p_world = p0_world * (1.0 - t) + p1_world * t;
+            let p_px = pose.project(&p_world, intrinsics);
+            
+            constraints.push(EdgeConstraint {
+                p: p_world,
+                uv: p_px,
+                normal: [nx, ny],
+            });
+        }
+    }
+    
+    constraints
+}
+
+/// Measure edge displacements using a 1D search along normals.
+#[multiversion(targets("x86_64+avx2", "x86_64+sse4.1", "aarch64+neon"))]
+pub fn measure_edge_displacement<'a>(
+    arena: &'a bumpalo::Bump,
+    image: &ImageView,
+    constraints: &[EdgeConstraint],
+) -> bumpalo::collections::Vec<'a, EdgeMeasurement> {
+    let mut measurements = bumpalo::collections::Vec::with_capacity_in(constraints.len(), arena);
+    
+    for c in constraints {
+        let mut best_peak = 0.0;
+        let mut best_val = -1.0;
+
+        for s in -4..=4 {
+            let u = c.uv[0] + s as f64 * c.normal[0];
+            let v = c.uv[1] + s as f64 * c.normal[1];
+            
+            let [gx, gy] = image.sample_gradient_bilinear(u, v);
+            // Gradient magnitude projected onto edge normal
+            let grad_val = (gx * c.normal[0] + gy * c.normal[1]).abs();
+            
+            if grad_val > best_val {
+                best_val = grad_val;
+                best_peak = s as f64;
+            }
+        }
+        
+        // Sub-pixel refinement of peak: Simple parabolic fit around best_peak
+        // Only if peak is not at boundaries
+        if best_peak.abs() < 3.9 && best_val > 5.0 {
+            let u_m1 = c.uv[0] + (best_peak - 1.0) * c.normal[0];
+            let v_m1 = c.uv[1] + (best_peak - 1.0) * c.normal[1];
+            let u_p1 = c.uv[0] + (best_peak + 1.0) * c.normal[0];
+            let v_p1 = c.uv[1] + (best_peak + 1.0) * c.normal[1];
+            
+            let [gx_m1, gy_m1] = image.sample_gradient_bilinear(u_m1, v_m1);
+            let [gx_p1, gy_p1] = image.sample_gradient_bilinear(u_p1, v_p1);
+            
+            let g_m1 = (gx_m1 * c.normal[0] + gy_m1 * c.normal[1]).abs();
+            let g_p1 = (gx_p1 * c.normal[0] + gy_p1 * c.normal[1]).abs();
+            
+            // Peak = s + (g1 - g-1) / (2 * (2*g0 - g1 - g-1))
+            let den = 2.0 * (2.0 * best_val - g_m1 - g_p1);
+            if den.abs() > 1e-6 {
+                best_peak += (g_p1 - g_m1) / den;
+            }
+        }
+
+        measurements.push(EdgeMeasurement {
+            residual: best_peak,
+            weight: best_val,
+        });
+    }
+    
+    measurements
+}
+
+/// Solve the linear system to update the pose based on edge measurements.
+pub fn solve_and_update(
+    pose: &mut Pose,
+    intrinsics: &CameraIntrinsics,
+    measurements: &[EdgeMeasurement],
+    constraints: &[EdgeConstraint],
+    tag_size: f64,
+) -> Result<f64, RefinementError> {
+    let mut jtj = Matrix6::<f64>::zeros();
+    let mut jtr = Vector6::<f64>::zeros();
+    let mut total_err = 0.0;
+    let mut count = 0;
+
+    for (m, c) in measurements.iter().zip(constraints.iter()) {
+        if m.weight < 5.0 { continue; }
+
+        let p_cam = pose.rotation * c.p + pose.translation;
+        let z_inv = 1.0 / p_cam.z;
+        let z_inv2 = z_inv * z_inv;
+
+        // Jacobian du/dp_cam (2x3)
+        let du_dp = Vector3::new(intrinsics.fx * z_inv, 0.0, -intrinsics.fx * p_cam.x * z_inv2);
+        let dv_dp = Vector3::new(0.0, intrinsics.fy * z_inv, -intrinsics.fy * p_cam.y * z_inv2);
+
+        // 1x6 Row for displacement along normal: row = [nx, ny] * J_proj
+        let mut row = Vector6::zeros();
+        
+        // Translation part
+        let d_trans = Vector3::new(
+            c.normal[0] * du_dp[0] + c.normal[1] * dv_dp[0],
+            c.normal[0] * du_dp[1] + c.normal[1] * dv_dp[1],
+            c.normal[0] * du_dp[2] + c.normal[1] * dv_dp[2],
+        );
+        row[0] = d_trans[0]; row[1] = d_trans[1]; row[2] = d_trans[2];
+
+        // Rotation part: Du_Dtheta = du_dp * Skew(P)
+        let dp_dtheta_x = Vector3::new(0.0, -p_cam.z, p_cam.y);
+        let dp_dtheta_y = Vector3::new(p_cam.z, 0.0, -p_cam.x);
+        let dp_dtheta_z = Vector3::new(-p_cam.y, p_cam.x, 0.0);
+
+        row[3] = c.normal[0] * du_dp.dot(&dp_dtheta_x) + c.normal[1] * dv_dp.dot(&dp_dtheta_x);
+        row[4] = c.normal[0] * du_dp.dot(&dp_dtheta_y) + c.normal[1] * dv_dp.dot(&dp_dtheta_y);
+        row[5] = c.normal[0] * du_dp.dot(&dp_dtheta_z) + c.normal[1] * dv_dp.dot(&dp_dtheta_z);
+
+        // Robust weight (Huber-like)
+        let mut w = m.weight;
+        let residual_abs = m.residual.abs();
+        if residual_abs > 1.0 {
+            w *= 1.0 / residual_abs;
+        }
+
+        jtj += row * row.transpose() * w;
+        jtr += row * m.residual * w;
+        total_err += m.residual * m.residual * w;
+        count += 1;
+    }
+
+    if count < 6 { return Err(RefinementError::SingularMatrix); }
+
+    // Damping to ensure stability (Levenberg-Marquardt style)
+    for i in 0..6 {
+        jtj[(i, i)] += 1e-2;
+    }
+
+    let chol = jtj.cholesky().ok_or(RefinementError::SingularMatrix)?;
+    let mut delta = chol.solve(&jtr);
+
+    // Limit step size to avoid divergence (Trust Region Lite)
+    let t_limit = tag_size * 0.1;
+    let t_step = delta.fixed_rows::<3>(0).norm();
+    if t_step > t_limit {
+        let mut t_part = delta.fixed_rows_mut::<3>(0);
+        t_part *= t_limit / t_step;
+    }
+
+    let r_limit = 0.05; // 0.05 rad per step
+    let r_step = delta.fixed_rows::<3>(3).norm();
+    if r_step > r_limit {
+        let mut r_part = delta.fixed_rows_mut::<3>(3);
+        r_part *= r_limit / r_step;
+    }
+
+    // Update Pose
+    let update_twist = Vector3::new(delta[3], delta[4], delta[5]);
+    let update_trans = Vector3::new(delta[0], delta[1], delta[2]);
+    let update_rot = nalgebra::Rotation3::new(update_twist).matrix().into_owned();
+
+    pose.rotation = update_rot * pose.rotation;
+    pose.translation = update_rot * pose.translation + update_trans;
+
+    Ok((total_err / count as f64).sqrt())
+}
+
 
 fn reprojection_error(
     intrinsics: &CameraIntrinsics,

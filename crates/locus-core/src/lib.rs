@@ -264,7 +264,6 @@ impl<S: PoseRefinementStrategy> Detector<S> {
         options: &DetectOptions,
         capture_debug: bool,
     ) -> FullDetectionResult {
-        let frame_data = S::prepare(img);
         let mut stats = PipelineStats::default();
         let start_total = std::time::Instant::now();
 
@@ -494,13 +493,13 @@ impl<S: PoseRefinementStrategy> Detector<S> {
             d.center[0] = (d.center[0] + 0.5) * inv_scale;
             d.center[1] = (d.center[1] + 0.5) * inv_scale;
 
-            if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size) {
-                let mut pose = crate::pose::estimate_tag_pose(&intrinsics, &d.corners, tag_size);
-                if let Some(p) = &mut pose {
-                    S::refine(p, &frame_data, &refinement_img);
+                if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size) {
+                    let mut pose = crate::pose::estimate_tag_pose(&intrinsics, &d.corners, tag_size);
+                    if let Some(p) = &mut pose {
+                        let _ = S::refine(&self.arena, p, &refinement_img, &intrinsics, tag_size);
+                    }
+                    d.pose = pose;
                 }
-                d.pose = pose;
-            }
         }
 
         if capture_debug {

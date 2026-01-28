@@ -865,3 +865,56 @@ mod tests {
         }
     }
 }
+/// Sample gradients along a line segment with JIT bilinear interpolation.
+///
+/// This function is primarily used by the photometric refinement strategy
+/// to measure edge displacements. It is multiversioned to allow the compiler
+/// to vectorize the interpolation logic for different CPU architectures.
+#[multiversion::multiversion(targets("x86_64+avx2", "x86_64+sse4.1", "aarch64+neon"))]
+pub fn sample_line_gradients(
+    image: &ImageView,
+    u0: f64,
+    v0: f64,
+    du: f64,
+    dv: f64,
+    count: usize,
+    out_gx: &mut [f64],
+    out_gy: &mut [f64],
+) {
+    for i in 0..count {
+        let u = u0 + i as f64 * du;
+        let v = v0 + i as f64 * dv;
+        
+        let [gx, gy] = image.sample_gradient_bilinear(u, v);
+        out_gx[i] = gx;
+        out_gy[i] = gy;
+    }
+}
+
+/// Optimized version of `sample_line_gradients` without image boundary checks.
+///
+/// # Safety
+/// Caller must ensure all sample points `(u0 + i*du, v0 + i*dv)` for `i in 0..count`
+/// fall within the range `[1.0, width-2.0)` and `[1.0, height-2.0)`.
+#[allow(unsafe_code)]
+#[multiversion::multiversion(targets("x86_64+avx2", "x86_64+sse4.1", "aarch64+neon"))]
+pub unsafe fn sample_line_gradients_unchecked(
+    image: &ImageView,
+    u0: f64,
+    v0: f64,
+    du: f64,
+    dv: f64,
+    count: usize,
+    out_gx: &mut [f64],
+    out_gy: &mut [f64],
+) {
+    for i in 0..count {
+        let u = u0 + i as f64 * du;
+        let v = v0 + i as f64 * dv;
+        
+        // SAFETY: Caller guarantees bounds
+        let [gx, gy] = unsafe { image.sample_gradient_bilinear_unchecked(u, v) };
+        out_gx[i] = gx;
+        out_gy[i] = gy;
+    }
+}

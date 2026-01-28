@@ -1,6 +1,6 @@
 use crate::decoder::TagDecoder;
 use crate::image::ImageView;
-use crate::pose::Pose;
+use crate::pose::{CameraIntrinsics, Pose};
 
 
 /// Trait abstracting the decoding strategy (Hard vs Soft).
@@ -28,20 +28,39 @@ pub trait DecodingStrategy: Send + Sync + 'static {
     fn to_debug_bits(code: &Self::Code) -> u64;
 }
 
+/// Custom error type for refinement failures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefinementError {
+    /// Optimization failed to converge.
+    Diverged,
+    /// Matrix was singular or ill-conditioned.
+    SingularMatrix,
+    /// Image bounds exceeded.
+    OutOfBounds,
+}
+
+impl std::fmt::Display for RefinementError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for RefinementError {}
+
 /// Trait defining the strategy for refined pose estimation.
 ///
 /// This follows a "Pay-for-what-you-use" model:
 /// - CornerStrategy: Zero overhead (uses existing sub-pixel corners).
 /// - PhotometricStrategy: High precision (re-analyzes image intensities).
 pub trait PoseRefinementStrategy: Send + Sync + 'static {
-    /// Associated type for holding frame-specific data (e.g., gradient maps).
-    type Data<'a>: Send + Sync;
-
-    /// Prepare frame-level data (e.g., precompute gradients) once per frame.
-    fn prepare<'a>(image: &'a ImageView) -> Self::Data<'a>;
-
     /// Refine a 3D pose using the strategy-specific logic.
-    fn refine(pose: &mut Pose, data: &Self::Data<'_>, image: &ImageView);
+    fn refine(
+        arena: &bumpalo::Bump,
+        pose: &mut Pose,
+        image: &ImageView,
+        intrinsics: &CameraIntrinsics,
+        tag_size: f64,
+    ) -> Result<(), RefinementError>;
 }
 
 /// Corner-based refinement strategy (Fast).
@@ -50,14 +69,16 @@ pub trait PoseRefinementStrategy: Send + Sync + 'static {
 pub struct CornerStrategy;
 
 impl PoseRefinementStrategy for CornerStrategy {
-    type Data<'a> = ();
-
     #[inline(always)]
-    fn prepare<'a>(_image: &'a ImageView) -> Self::Data<'a> {}
-
-    #[inline(always)]
-    fn refine(_pose: &mut Pose, _data: &Self::Data<'_>, _image: &ImageView) {
+    fn refine(
+        _arena: &bumpalo::Bump,
+        _pose: &mut Pose,
+        _image: &ImageView,
+        _intrinsics: &CameraIntrinsics,
+        _tag_size: f64,
+    ) -> Result<(), RefinementError> {
         // No-op: Corner refinement is handled during quad extraction or as part of PnP.
+        Ok(())
     }
 }
 
@@ -67,14 +88,26 @@ impl PoseRefinementStrategy for CornerStrategy {
 pub struct PhotometricStrategy;
 
 impl PoseRefinementStrategy for PhotometricStrategy {
-    type Data<'a> = ();
-
     #[inline(always)]
-    fn prepare<'a>(_image: &'a ImageView) -> Self::Data<'a> {}
-
-    #[inline(always)]
-    fn refine(_pose: &mut Pose, _data: &Self::Data<'_>, _image: &ImageView) {
-        // Placeholder for future photometric optimization
+    fn refine(
+        arena: &bumpalo::Bump,
+        pose: &mut Pose,
+        image: &ImageView,
+        intrinsics: &CameraIntrinsics,
+        tag_size: f64,
+    ) -> Result<(), RefinementError> {
+        for _ in 0..5 {
+            let constraints = crate::pose::collect_constraints(arena, pose, intrinsics, tag_size);
+            if constraints.is_empty() { 
+                return Ok(()); 
+            }
+            
+            let measurements = crate::pose::measure_edge_displacement(arena, image, &constraints);
+            if let Err(e) = crate::pose::solve_and_update(pose, intrinsics, &measurements, &constraints, tag_size) {
+                return Err(e);
+            }
+        }
+        Ok(())
     }
 }
 

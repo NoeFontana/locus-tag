@@ -151,62 +151,63 @@ impl<'a> ImageView<'a> {
     }
 
     /// Compute the gradient [gx, gy] at sub-pixel coordinates using bilinear interpolation.
+    #[inline(always)]
     #[must_use]
     pub fn sample_gradient_bilinear(&self, x: f64, y: f64) -> [f64; 2] {
-        // Optimization: Sample [gx, gy] directly using a 3x3 or 4x4 neighborhood
-        // instead of 4 separate bilinear samples.
-        // For a high-quality sub-pixel gradient, we sample the 4 nearest integer locations
-        // and interpolate their finite-difference gradients.
-
         if x < 1.0 || x >= (self.width - 2) as f64 || y < 1.0 || y >= (self.height - 2) as f64 {
             let gx = (self.sample_bilinear(x + 1.0, y) - self.sample_bilinear(x - 1.0, y)) * 0.5;
             let gy = (self.sample_bilinear(x, y + 1.0) - self.sample_bilinear(x, y - 1.0)) * 0.5;
             return [gx, gy];
         }
 
-        let x0 = x.floor() as usize;
-        let y0 = y.floor() as usize;
+        // SAFETY: Bounds check performed above
+        unsafe { self.sample_gradient_bilinear_unchecked(x, y) }
+    }
+
+    /// Optimized gradient sampling without bounds checking.
+    ///
+    /// # Safety
+    /// Caller must ensure 1.0 <= x < width-2 and 1.0 <= y < height-2.
+    #[inline(always)]
+    #[must_use]
+    pub unsafe fn sample_gradient_bilinear_unchecked(&self, x: f64, y: f64) -> [f64; 2] {
+        let x0 = x as usize;
+        let y0 = y as usize;
         let dx = x - x0 as f64;
         let dy = y - y0 as f64;
 
-        // Fetch 4x4 neighborhood to compute central differences at 4 grid points
-        // (x0, y0), (x0+1, y0), (x0, y0+1), (x0+1, y0+1)
-        // Indices needed: x0-1..x0+2, y0-1..y0+2
-        let mut g00 = [0.0, 0.0];
-        let mut g10 = [0.0, 0.0];
-        let mut g01 = [0.0, 0.0];
-        let mut g11 = [0.0, 0.0];
+        let stride = self.stride;
+        let ptr = self.data.as_ptr();
 
+        let offset = y0 * stride + x0;
+        
+        // SAFETY: Caller guarantees bounds. Pointer arithmetic is within buffer.
         unsafe {
-            for j in 0..2 {
-                for i in 0..2 {
-                    let cx = x0 + i;
-                    let cy = y0 + j;
+            let r_m1 = offset.wrapping_sub(stride);
+            let r_0 = offset;
+            let r_1 = offset + stride;
+            let r_2 = offset + 2 * stride;
 
-                    let gx = (f64::from(self.get_pixel_unchecked(cx + 1, cy))
-                        - f64::from(self.get_pixel_unchecked(cx - 1, cy)))
-                        * 0.5;
-                    let gy = (f64::from(self.get_pixel_unchecked(cx, cy + 1))
-                        - f64::from(self.get_pixel_unchecked(cx, cy - 1)))
-                        * 0.5;
+            // Central differences at 4 grid points
+            let g00_x = (f64::from(*ptr.add(r_0 + 1)) - f64::from(*ptr.add(r_0 - 1))) * 0.5;
+            let g00_y = (f64::from(*ptr.add(r_1)) - f64::from(*ptr.add(r_m1))) * 0.5;
 
-                    match (i, j) {
-                        (0, 0) => g00 = [gx, gy],
-                        (1, 0) => g10 = [gx, gy],
-                        (0, 1) => g01 = [gx, gy],
-                        (1, 1) => g11 = [gx, gy],
-                        _ => unreachable!(),
-                    }
-                }
-            }
+            let g10_x = (f64::from(*ptr.add(r_0 + 2)) - f64::from(*ptr.add(r_0))) * 0.5;
+            let g10_y = (f64::from(*ptr.add(r_1 + 1)) - f64::from(*ptr.add(r_m1 + 1))) * 0.5;
+
+            let g01_x = (f64::from(*ptr.add(r_1 + 1)) - f64::from(*ptr.add(r_1 - 1))) * 0.5;
+            let g01_y = (f64::from(*ptr.add(r_2)) - f64::from(*ptr.add(r_0))) * 0.5;
+
+            let g11_x = (f64::from(*ptr.add(r_1 + 2)) - f64::from(*ptr.add(r_1))) * 0.5;
+            let g11_y = (f64::from(*ptr.add(r_2 + 1)) - f64::from(*ptr.add(r_0 + 1))) * 0.5;
+
+            let gx = (g00_x * (1.0 - dx) + g10_x * dx) * (1.0 - dy)
+                + (g01_x * (1.0 - dx) + g11_x * dx) * dy;
+            let gy = (g00_y * (1.0 - dx) + g10_y * dx) * (1.0 - dy)
+                + (g01_y * (1.0 - dx) + g11_y * dx) * dy;
+
+            [gx, gy]
         }
-
-        let gx = (g00[0] * (1.0 - dx) + g10[0] * dx) * (1.0 - dy)
-            + (g01[0] * (1.0 - dx) + g11[0] * dx) * dy;
-        let gy = (g00[1] * (1.0 - dx) + g10[1] * dx) * (1.0 - dy)
-            + (g01[1] * (1.0 - dx) + g11[1] * dx) * dy;
-
-        [gx, gy]
     }
 
     /// Unsafe accessor for a specific row.
