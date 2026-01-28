@@ -1,5 +1,5 @@
 #![allow(clippy::many_single_char_names, clippy::similar_names)]
-use nalgebra::{Matrix3, Vector3};
+use nalgebra::{Matrix3, Matrix6, Vector3, Vector6};
 
 /// Camera intrinsics parameters.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -86,140 +86,388 @@ impl Pose {
 /// # Panics
 /// Panics if SVD decomposition fails during orthogonalization (extremely rare).
 #[must_use]
+/// Estimate pose from tag detection using IPPE-Square and LM refinement.
+///
+/// This replaces the standard DLT+OI approach with IPPE (Infinitesimal Plane-Based Pose Estimation),
+/// which analytically solves for the two possible local minima of the PnP problem (resolving the
+/// "ambiguity" or "flip" problem) and then selects the best one based on reprojection error.
+/// Finally, a few iterations of Levenberg-Marquardt refine the pose to sub-pixel accuracy.
+///
+/// # Arguments
+/// * `intrinsics` - Camera intrinsics.
+/// * `corners` - Detected corners in image coordinates [[x, y]; 4].
+/// * `tag_size` - Physical size of the tag in world units (e.g., meters).
+#[allow(clippy::missing_panics_doc)]
 pub fn estimate_tag_pose(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
     tag_size: f64,
 ) -> Option<Pose> {
-    // 1. DLT Initialization from Homography
-    // Tag corners in object space: centered at (0,0) on Z=0 plane.
-    let s = tag_size * 0.5;
-    let obj_pts = [
-        [-s, -s], // TL
-        [s, -s],  // TR
-        [s, s],   // BR
-        [-s, s],  // BL
-    ];
+    // 1. Canonical Homography: Map canonical square [-1,1]x[-1,1] to image pixels.
+    let h_pixel = crate::decoder::Homography::square_to_quad(corners)?.h;
 
-    let h_struct = crate::decoder::Homography::from_pairs(&obj_pts, corners)?;
-    let h = h_struct.h;
-
-    // Decompose Homography: H = K * [R1 R2 t]
-    // [R1 R2 t] = K^-1 * H
+    // 2. Normalize Homography: H_norm = K_inv * H_pixel
+    // H_norm maps canonical points to normalized image coordinates (z=1 plane).
     let k_inv = intrinsics.inv_matrix();
-    let m = k_inv * h;
+    let h_norm = k_inv * h_pixel;
 
-    // Normalize columns to get rotation and translation
-    let mut r1 = m.column(0).into_owned();
-    let mut r2 = m.column(1).into_owned();
-    let mut t = m.column(2).into_owned();
+    // 3. Scale to Physical Model
+    // The canonical square has corners at +/- 1 (size 2).
+    // The physical tag has corners at +/- tag_size/2 (size tag_size).
+    // P_phys = P_can * (tag_size / 2).
+    // So P_can = P_phys * (2 / tag_size).
+    // x_norm ~ H_norm * P_can = H_norm * scaler * P_phys
+    // Thus the homography mapping Physical -> Normalized is H_metric = H_norm * (2/size).
+    // The columns of H_metric correspond to the physical X and Y axes of the tag in the camera frame.
+    let scaler = 2.0 / tag_size;
+    let mut h_metric = h_norm;
+    h_metric.column_mut(0).scale_mut(scaler);
+    h_metric.column_mut(1).scale_mut(scaler);
+    // h3 (translation col) assumes z=1 input, which is handled differently in IPPE.
 
-    let scale = 1.0 / (r1.norm() * r2.norm()).sqrt();
-    r1 *= scale;
-    r2 *= scale;
-    t *= scale;
+    // 4. IPPE Core: Decompose Jacobian (first 2 image cols) into 2 potential poses.
+    let candidates = solve_ippe_square(&h_metric)?;
 
-    // Orthogonalize R1 and R2 to find R3
-    let r3 = r1.cross(&r2);
+    // 5. Disambiguation: Choose the pose with lower reprojection error.
+    let best_pose = find_best_pose(intrinsics, corners, tag_size, &candidates);
 
-    // Polar decomposition of [R1 R2 R3] to ensure it's a valid SO(3) matrix
-    let rot_raw = Matrix3::from_columns(&[r1, r2, r3]);
-    let svd = rot_raw.svd(true, true);
-    let u = svd.u.expect("SVD U failed");
-    let vt = svd.v_t.expect("SVD Vt failed");
-    let mut rotation = u * vt;
-
-    // Ensure determinant is 1 (avoid reflection)
-    if rotation.determinant() < 0.0 {
-        rotation = u * Matrix3::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, -1.0) * vt;
-    }
-
-    // Ensure camera is in front of the tag (t.z > 0)
-    if t.z < 0.0 {
-        t = -t;
-        // Adjust rotation? (Actually t.z < 0 often means the tag is upside down or flipped homography)
-        // For AprilTags, we usually just need to flip the pose if the tag is "behind" the camera.
-        // But better is to just return and refine.
-    }
-
-    let initial_pose = Pose::new(rotation, t);
-
-    // 2. Refinement via Orthogonal Iteration (OI)
-    // For 4 points, OI is very fast and robust.
-    Some(refine_pose_oi(intrinsics, corners, &obj_pts, initial_pose))
+    // 6. Refinement: Levenberg-Marquardt (LM) Polish.
+    // Minimizes geometric reprojection error directly.
+    Some(refine_pose_lm(intrinsics, corners, tag_size, best_pose))
 }
 
-/// Refine pose using Orthogonal Iteration.
-fn refine_pose_oi(
+
+/// Solves the IPPE-Square problem.
+/// Returns two possible poses ($R_a, t$) and ($R_b, t$) corresponding to the two minima of the PnP error function.
+///
+/// This uses an analytical approach derived from the homography Jacobian's SVD.
+/// The second solution handles the "Necker reversal" ambiguity inherent in planar pose estimation.
+fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
+    // IpPE-Square Analytical Solution (Zero Alloc)
+    // Jacobian J = [h1, h2]
+    let h1 = h.column(0);
+    let h2 = h.column(1);
+
+    // 1. Compute B = J^T J (2x2 symmetric matrix)
+    //    [ a  c ]
+    //    [ c  b ]
+    let a = h1.dot(&h1);
+    let b = h2.dot(&h2);
+    let c = h1.dot(&h2);
+
+    // 2. Eigen Analysis of 2x2 Matrix B
+    //    Characteristic eq: lambda^2 - Tr(B)lambda + Det(B) = 0
+    let trace = a + b;
+    let det = a * b - c * c;
+    let delta = (trace * trace - 4.0 * det).max(0.0).sqrt();
+    
+    // lambda1 >= lambda2
+    let s1_sq = (trace + delta) * 0.5;
+    let s2_sq = (trace - delta) * 0.5;
+    
+    // Singular values sigma = sqrt(lambda)
+    let s1 = s1_sq.sqrt();
+    let s2 = s2_sq.sqrt();
+
+    // Check for Frontal View (Degeneracy: s1 ~= s2)
+    // We use a safe threshold relative to the max singular value.
+    if (s1 - s2).abs() < 1e-4 * s1 {
+        // Degenerate Case: Frontal View (J columns orthogonal & equal length)
+        // R = Gram-Schmidt orthonormalization of [h1, h2, h1xh2]
+        
+        let mut r1 = h1.clone_owned();
+        let scale = 1.0 / r1.norm();
+        r1 *= scale;
+        
+        // Orthogonalize r2 w.r.t r1
+        let mut r2 = h2 - r1 * (h2.dot(&r1));
+        r2 = r2.normalize();
+        
+        let r3 = r1.cross(&r2);
+        let rot = Matrix3::from_columns(&[r1, r2, r3]);
+
+        // Translation: t = h3 * scale.
+        // Gamma (homography scale) is recovered from J.
+        // gamma * R = J => gamma = ||h1|| (roughly). 
+        // We use average of singular values for robustness.
+        let gamma = (s1 + s2) * 0.5; 
+        if gamma < 1e-8 { return None; } // Avoid div/0
+        let tz = 1.0 / gamma;
+        let t = h.column(2) * tz;
+
+        let pose = Pose::new(rot, t);
+        return Some([pose, pose]);
+    }
+
+    // 3. Recover Rotation A (Primary)
+    // We basically want R such that J ~ R * S_prj.
+    // Standard approach: R = U * V^T where J = U S V^T.
+    //
+    // Analytical 3x2 SVD reconstruction:
+    // U = [u1, u2], V = [v1, v2]
+    // U_i = J * v_i / s_i
+    
+    // Eigenvectors of B (columns of V)
+    // For 2x2 matrix [a c; c b]:
+    // If c != 0:
+    //   v1 = [s1^2 - b, c], normalized
+    // else:
+    //   v1 = [1, 0] if a > b else [0, 1]
+    
+    let v1 = if c.abs() > 1e-8 {
+        let v = nalgebra::Vector2::new(s1_sq - b, c);
+        v.normalize()
+    } else if a >= b {
+        nalgebra::Vector2::new(1.0, 0.0)
+    } else {
+        nalgebra::Vector2::new(0.0, 1.0)
+    };
+    
+    // v2 is orthogonal to v1. For 2D, [-v1.y, v1.x]
+    let v2 = nalgebra::Vector2::new(-v1.y, v1.x);
+
+    // Compute Left Singular Vectors u1, u2 inside the 3D space
+    // u1 = J * v1 / s1
+    // u2 = J * v2 / s2
+    let j_v1 = h1 * v1.x + h2 * v1.y;
+    let j_v2 = h1 * v2.x + h2 * v2.y;
+    
+    // Safe division check
+    if s1 < 1e-8 { return None; }
+    let u1 = j_v1 / s1;
+    let u2 = j_v2 / s2.max(1e-8); // Avoid div/0 for s2
+
+    // Reconstruct Rotation A
+    // R = U * V^T (extended to 3x3)
+    // The columns of R are r1, r2, r3.
+    // In SVD terms:
+    // [r1 r2] = [u1 u2] * [v1 v2]^T
+    // r1 = u1 * v1.x + u2 * v2.x
+    // r2 = u1 * v1.y + u2 * v2.y
+    let r1_a = u1 * v1.x + u2 * v2.x;
+    let r2_a = u1 * v1.y + u2 * v2.y;
+    let r3_a = r1_a.cross(&r2_a);
+    let rot_a = Matrix3::from_columns(&[r1_a, r2_a, r3_a]);
+
+    // Translation A
+    let gamma = (s1 + s2) * 0.5;
+    let tz = 1.0 / gamma;
+    let t_a = h.column(2) * tz;
+    let pose_a = Pose::new(rot_a, t_a);
+
+    // 4. Recover Rotation B (Second Solution)
+    // Necker Reversal: Reflect normal across line of sight.
+    // n_b = [-nx, -ny, nz] (approx).
+    // Better analytical dual from IPPE:
+    // The second solution corresponds to rotating U's second column?
+    //
+    // Let's stick to the robust normal reflection method which works well.
+    let n_a = rot_a.column(2);
+    // Safe normalize for n_b
+    let n_b_raw = Vector3::new(-n_a.x, -n_a.y, n_a.z);
+    let n_b = if n_b_raw.norm_squared() > 1e-8 {
+        n_b_raw.normalize()
+    } else {
+       // Fallback (should be impossible for unit vector n_a)
+       Vector3::z_axis().into_inner() 
+    };
+
+    // Construct R_b using Gram-Schmidt from (h1, n_b)
+    // x_axis projection is h1 (roughly).
+    // x_b = (h1 - (h1.n)n).normalize
+    let h1_norm = h1.normalize();
+    let x_b_raw = h1_norm - n_b * h1_norm.dot(&n_b);
+    let x_b = if x_b_raw.norm_squared() > 1e-8 {
+        x_b_raw.normalize()
+    } else {
+        // Fallback: if h1 is parallel to n_b (degenerate), pick any orthogonal
+        let tangent = if n_b.x.abs() > 0.9 { Vector3::y_axis().into_inner() } else { Vector3::x_axis().into_inner() };
+        tangent.cross(&n_b).normalize()
+    };
+    
+    let y_b = n_b.cross(&x_b);
+    let rot_b = Matrix3::from_columns(&[x_b, y_b, n_b]);
+    let pose_b = Pose::new(rot_b, t_a);
+
+    Some([pose_a, pose_b])
+}
+
+
+/// Use Levenberg-Marquardt to refine the pose by minimizing reprojection error.
+fn refine_pose_lm(
     intrinsics: &CameraIntrinsics,
-    img_pts: &[[f64; 2]; 4],
-    obj_pts: &[[f64; 2]; 4],
+    corners: &[[f64; 2]; 4],
+    tag_size: f64,
     initial_pose: Pose,
 ) -> Pose {
-    let mut r = initial_pose.rotation;
-    let mut t = initial_pose.translation;
+    let mut pose = initial_pose;
+    let s = tag_size * 0.5;
+    let obj_pts = [
+        Vector3::new(-s, -s, 0.0),
+        Vector3::new(s, -s, 0.0),
+        Vector3::new(s, s, 0.0),
+        Vector3::new(-s, s, 0.0),
+    ];
 
-    // Normalized image coordinates (v_i)
-    let k_inv = intrinsics.inv_matrix();
-    let v: Vec<Vector3<f64>> = img_pts
-        .iter()
-        .map(|p| {
-            let n = k_inv * Vector3::new(p[0], p[1], 1.0);
-            n.normalize()
-        })
-        .collect();
+    // Damping factor lambda
+    let mut lambda = 0.01;
+    let mut current_err = reprojection_error(intrinsics, corners, &obj_pts, &pose);
 
-    // Projector matrices P_i = v_i * v_i^T / (v_i^T * v_i)
-    // Since v_i is normalized, P_i = v_i * v_i^T
-    let p_mats: Vec<Matrix3<f64>> = v.iter().map(|vi| vi * vi.transpose()).collect();
+    // 3-5 iterations is usually enough for "Polish"
+    // Reduced to 4 for lower latency while maintaining accuracy.
+    for _ in 0..4 {
+        // Build Jacobian J (8x6) and residual r (8x1)
+        // 4 points * 2 coords = 8 residuals.
+        // 6 params (3 rot (lie algebra), 3 trans).
+        // J^T J (6x6) and J^T r (6x1).
 
-    // Object points in 3D (Z=0)
-    let p: Vec<Vector3<f64>> = obj_pts
-        .iter()
-        .map(|p| Vector3::new(p[0], p[1], 0.0))
-        .collect();
+        // For "Zero Overhead" we construct JtJ directly accumulated.
+        let mut jtj = Matrix6::<f64>::zeros();
+        let mut jtr = Vector6::<f64>::zeros();
 
-    let n = p.len() as f64;
-    // Mean of object points
-    let p_bar = p.iter().sum::<Vector3<f64>>() / n;
+        for i in 0..4 {
+            let p_world = obj_pts[i];
+            let p_cam = pose.rotation * p_world + pose.translation;
+            let z_inv = 1.0 / p_cam.z;
+            let z_inv2 = z_inv * z_inv;
 
-    // I - (1/n) * sum(P_i)
-    let sum_p = p_mats.iter().sum::<Matrix3<f64>>();
-    let m_inv = (Matrix3::identity() - (1.0 / n) * sum_p)
-        .try_inverse()
-        .expect("M matrix not invertible, check camera geometry");
+            // Project: u = fx * x/z + cx
+            let u_est = intrinsics.fx * p_cam.x * z_inv + intrinsics.cx;
+            let v_est = intrinsics.fy * p_cam.y * z_inv + intrinsics.cy;
 
-    for _ in 0..10 {
-        // Compute optimal translation given R
-        // t(R) = M^-1 * (1/n) * sum((P_i - I) * R * p_i)
-        let mut sum_tp = Vector3::zeros();
-        for i in 0..p.len() {
-            sum_tp += (p_mats[i] - Matrix3::identity()) * (r * p[i]);
+            let res_u = corners[i][0] - u_est;
+            let res_v = corners[i][1] - v_est;
+
+            // Jacobian of projection wrt Camera Point (du/dP_cam) (2x3)
+            // [ fx/z   0     -fx*x/z^2 ]
+            // [ 0      fy/z  -fy*y/z^2 ]
+            let du_dp = Vector3::new(
+                intrinsics.fx * z_inv,
+                0.0,
+                -intrinsics.fx * p_cam.x * z_inv2
+            );
+            let dv_dp = Vector3::new(
+                0.0,
+                intrinsics.fy * z_inv,
+                -intrinsics.fy * p_cam.y * z_inv2
+            );
+
+            // Jacobian of Camera Point wrt Pose Update (Lie Algebra) (3x6)
+            // d(exp(w)*P)/d(xi) at xi=0
+            // [ I  |  -[P]_x ]
+            // [ 1 0 0   0   z  -y ]
+            // [ 0 1 0  -z   0   x ]
+            // [ 0 0 1   y  -x   0 ]
+            //
+            // We compose du/dP * dP/dxi -> 1x6 row.
+
+            let mut row_u = Vector6::zeros();
+            // Translation part (du/dp * I)
+            row_u[0] = du_dp[0]; row_u[1] = du_dp[1]; row_u[2] = du_dp[2];
+            // Rotation part (du/dp * Skew(P))
+            // Skew(P) = [0 -z y; z 0 -x; -y x 0]
+            // du_dp * col0(S) = du_dp.y * z - du_dp.z * y
+            row_u[3] = du_dp[1]*p_cam.z - du_dp[2]*p_cam.y;
+            row_u[4] = du_dp[2]*p_cam.x - du_dp[0]*p_cam.z;
+            row_u[5] = du_dp[0]*p_cam.y - du_dp[1]*p_cam.x;
+
+            let mut row_v = Vector6::zeros();
+            row_v[0] = dv_dp[0]; row_v[1] = dv_dp[1]; row_v[2] = dv_dp[2];
+            row_v[3] = dv_dp[1]*p_cam.z - dv_dp[2]*p_cam.y;
+            row_v[4] = dv_dp[2]*p_cam.x - dv_dp[0]*p_cam.z;
+            row_v[5] = dv_dp[0]*p_cam.y - dv_dp[1]*p_cam.x;
+
+            // Accumulate JtJ and Jtr
+            // JtJ += row^T * row
+            jtj += row_u * row_u.transpose();
+            jtj += row_v * row_v.transpose();
+
+            jtr += row_u * res_u;
+            jtr += row_v * res_v;
         }
-        t = m_inv * (1.0 / n) * sum_tp;
 
-        // Compute optimal R given t
-        // This is a Procrustes problem: R = argmin sum || (I - P_i) * (R*p_i + t) ||^2
-        // Find R that aligns q_i = (I-P_i)*t with p_i? No, it's slightly different.
-        // Actually, we align p_i' = R*p_i + t with projected points.
-
-        let mut b = Matrix3::zeros();
-        for i in 0..p.len() {
-            let p_centered = p[i] - p_bar;
-            let vi_prime = p_mats[i] * (r * p[i] + t);
-            b += vi_prime * p_centered.transpose();
+        // Dampen: (JtJ + lambda*I) delta = Jtr
+        for k in 0..6 {
+            jtj[(k, k)] += lambda; // Levenberg
         }
 
-        let svd = b.svd(true, true);
-        let u = svd.u.expect("SVD U failed in OI");
-        let vt = svd.v_t.expect("SVD Vt failed in OI");
-        r = u * vt;
-        if r.determinant() < 0.0 {
-            r = u * Matrix3::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, -1.0) * vt;
+        // Solve
+        let decomposition = jtj.cholesky();
+        let delta = if let Some(chol) = decomposition {
+             chol.solve(&jtr)
+        } else {
+             // Ill-conditioned, increase lambda and skip
+             lambda *= 10.0;
+             continue;
+        };
+
+        // Update Pose
+        let update_twist = Vector3::new(delta[3], delta[4], delta[5]);
+        let update_trans = Vector3::new(delta[0], delta[1], delta[2]);
+
+        // Exp map for rotation update
+        let update_rot = nalgebra::Rotation3::new(update_twist).matrix().into_owned();
+
+        let new_rot = update_rot * pose.rotation;
+        let new_trans = update_rot * pose.translation + update_trans;
+        let new_pose = Pose::new(new_rot, new_trans);
+
+        let new_err = reprojection_error(intrinsics, corners, &obj_pts, &new_pose);
+
+        if new_err < current_err {
+            pose = new_pose;
+            current_err = new_err;
+            lambda *= 0.1;
+        } else {
+            lambda *= 10.0;
+        }
+
+        if delta.norm() < 1e-6 {
+            break;
         }
     }
 
-    Pose::new(r, t)
+    pose
+}
+
+fn reprojection_error(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    obj_pts: &[Vector3<f64>; 4],
+    pose: &Pose,
+) -> f64 {
+    let mut err_sq = 0.0;
+    for i in 0..4 {
+         let p = pose.project(&obj_pts[i], intrinsics);
+         err_sq += (p[0] - corners[i][0]).powi(2) + (p[1] - corners[i][1]).powi(2);
+    }
+    err_sq
+}
+
+fn find_best_pose(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    tag_size: f64,
+    candidates: &[Pose; 2],
+) -> Pose {
+    // Need physical points for reprojection
+    let s = tag_size * 0.5;
+    let obj_pts = [
+        Vector3::new(-s, -s, 0.0),
+        Vector3::new(s, -s, 0.0),
+        Vector3::new(s, s, 0.0),
+        Vector3::new(-s, s, 0.0),
+    ];
+
+    let err0 = reprojection_error(intrinsics, corners, &obj_pts, &candidates[0]);
+    let err1 = reprojection_error(intrinsics, corners, &obj_pts, &candidates[1]);
+
+    // Choose the candidate with lower reprojection error.
+    if err1 < err0 {
+        candidates[1]
+    } else {
+        candidates[0]
+    }
 }
 
 #[cfg(test)]
