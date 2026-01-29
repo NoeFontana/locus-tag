@@ -41,6 +41,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 # Python
 uv run ruff format . --check
 uv run ruff check . --fix
+
+# Python (Type Checking)
+uv run pyrefly check .
 ```
 
 ### 🧪 Testing
