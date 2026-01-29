@@ -2,6 +2,10 @@
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::uninlined_format_args)]
 #![allow(clippy::cast_sign_loss)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::return_self_not_must_use)]
+#![allow(clippy::panic)]
 
 use locus_core::Detector;
 use locus_core::test_utils::compute_corner_error;
@@ -163,10 +167,12 @@ mod extended {
                 let _det = detections
                     .iter()
                     .find(|d| d.id == placement.id)
-                    .expect(&format!(
-                        "Tag ID {} not found in detections in scene {}",
-                        placement.id, i
-                    ));
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Tag ID {} not found in detections in scene {}",
+                            placement.id, i
+                        )
+                    });
             }
         }
     }

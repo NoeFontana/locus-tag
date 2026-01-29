@@ -39,9 +39,10 @@ fn bench_decoding_200_candidates(bencher: divan::Bencher) {
         for corners in &candidates {
             if let Some(h) = Homography::square_to_quad(corners)
                 && let Some(bits) = locus_core::decoder::sample_grid(&img, &h, &decoder, 20.0)
-                    && let Some((id, _, _)) = decoder.decode(bits) {
-                        sum_ids += id;
-                    }
+                && let Some((id, _, _)) = decoder.decode(bits)
+            {
+                sum_ids += id;
+            }
         }
         divan::black_box(sum_ids);
     });

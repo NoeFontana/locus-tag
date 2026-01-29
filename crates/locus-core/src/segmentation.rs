@@ -514,7 +514,8 @@ mod tests {
         }
 
         // use statement moved to top of module or block
-        let img = crate::image::ImageView::new(&binary, width, height, width).expect("valid creation");
+        let img =
+            crate::image::ImageView::new(&binary, width, height, width).expect("valid creation");
 
         // Decimate by 2 -> 16x16
         let mut decimated_data = vec![0u8; 16 * 16];

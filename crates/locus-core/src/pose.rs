@@ -136,7 +136,6 @@ pub fn estimate_tag_pose(
     Some(refine_pose_lm(intrinsics, corners, tag_size, best_pose))
 }
 
-
 /// Solves the IPPE-Square problem.
 /// Returns two possible poses ($R_a, t$) and ($R_b, t$) corresponding to the two minima of the PnP error function.
 ///
@@ -160,11 +159,11 @@ fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
     let trace = a + b;
     let det = a * b - c * c;
     let delta = (trace * trace - 4.0 * det).max(0.0).sqrt();
-    
+
     // lambda1 >= lambda2
     let s1_sq = (trace + delta) * 0.5;
     let s2_sq = (trace - delta) * 0.5;
-    
+
     // Singular values sigma = sqrt(lambda)
     let s1 = s1_sq.sqrt();
     let s2 = s2_sq.sqrt();
@@ -174,24 +173,26 @@ fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
     if (s1 - s2).abs() < 1e-4 * s1 {
         // Degenerate Case: Frontal View (J columns orthogonal & equal length)
         // R = Gram-Schmidt orthonormalization of [h1, h2, h1xh2]
-        
+
         let mut r1 = h1.clone_owned();
         let scale = 1.0 / r1.norm();
         r1 *= scale;
-        
+
         // Orthogonalize r2 w.r.t r1
         let mut r2 = h2 - r1 * (h2.dot(&r1));
         r2 = r2.normalize();
-        
+
         let r3 = r1.cross(&r2);
         let rot = Matrix3::from_columns(&[r1, r2, r3]);
 
         // Translation: t = h3 * scale.
         // Gamma (homography scale) is recovered from J.
-        // gamma * R = J => gamma = ||h1|| (roughly). 
+        // gamma * R = J => gamma = ||h1|| (roughly).
         // We use average of singular values for robustness.
-        let gamma = (s1 + s2) * 0.5; 
-        if gamma < 1e-8 { return None; } // Avoid div/0
+        let gamma = (s1 + s2) * 0.5;
+        if gamma < 1e-8 {
+            return None;
+        } // Avoid div/0
         let tz = 1.0 / gamma;
         let t = h.column(2) * tz;
 
@@ -206,14 +207,14 @@ fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
     // Analytical 3x2 SVD reconstruction:
     // U = [u1, u2], V = [v1, v2]
     // U_i = J * v_i / s_i
-    
+
     // Eigenvectors of B (columns of V)
     // For 2x2 matrix [a c; c b]:
     // If c != 0:
     //   v1 = [s1^2 - b, c], normalized
     // else:
     //   v1 = [1, 0] if a > b else [0, 1]
-    
+
     let v1 = if c.abs() > 1e-8 {
         let v = nalgebra::Vector2::new(s1_sq - b, c);
         v.normalize()
@@ -222,7 +223,7 @@ fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
     } else {
         nalgebra::Vector2::new(0.0, 1.0)
     };
-    
+
     // v2 is orthogonal to v1. For 2D, [-v1.y, v1.x]
     let v2 = nalgebra::Vector2::new(-v1.y, v1.x);
 
@@ -231,9 +232,11 @@ fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
     // u2 = J * v2 / s2
     let j_v1 = h1 * v1.x + h2 * v1.y;
     let j_v2 = h1 * v2.x + h2 * v2.y;
-    
+
     // Safe division check
-    if s1 < 1e-8 { return None; }
+    if s1 < 1e-8 {
+        return None;
+    }
     let u1 = j_v1 / s1;
     let u2 = j_v2 / s2.max(1e-8); // Avoid div/0 for s2
 
@@ -268,8 +271,8 @@ fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
     let n_b = if n_b_raw.norm_squared() > 1e-8 {
         n_b_raw.normalize()
     } else {
-       // Fallback (should be impossible for unit vector n_a)
-       Vector3::z_axis().into_inner() 
+        // Fallback (should be impossible for unit vector n_a)
+        Vector3::z_axis().into_inner()
     };
 
     // Construct R_b using Gram-Schmidt from (h1, n_b)
@@ -281,17 +284,20 @@ fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
         x_b_raw.normalize()
     } else {
         // Fallback: if h1 is parallel to n_b (degenerate), pick any orthogonal
-        let tangent = if n_b.x.abs() > 0.9 { Vector3::y_axis().into_inner() } else { Vector3::x_axis().into_inner() };
+        let tangent = if n_b.x.abs() > 0.9 {
+            Vector3::y_axis().into_inner()
+        } else {
+            Vector3::x_axis().into_inner()
+        };
         tangent.cross(&n_b).normalize()
     };
-    
+
     let y_b = n_b.cross(&x_b);
     let rot_b = Matrix3::from_columns(&[x_b, y_b, n_b]);
     let pose_b = Pose::new(rot_b, t_a);
 
     Some([pose_a, pose_b])
 }
-
 
 /// Use Levenberg-Marquardt to refine the pose by minimizing reprojection error.
 fn refine_pose_lm(
@@ -344,12 +350,12 @@ fn refine_pose_lm(
             let du_dp = Vector3::new(
                 intrinsics.fx * z_inv,
                 0.0,
-                -intrinsics.fx * p_cam.x * z_inv2
+                -intrinsics.fx * p_cam.x * z_inv2,
             );
             let dv_dp = Vector3::new(
                 0.0,
                 intrinsics.fy * z_inv,
-                -intrinsics.fy * p_cam.y * z_inv2
+                -intrinsics.fy * p_cam.y * z_inv2,
             );
 
             // Jacobian of Camera Point wrt Pose Update (Lie Algebra) (3x6)
@@ -363,19 +369,23 @@ fn refine_pose_lm(
 
             let mut row_u = Vector6::zeros();
             // Translation part (du/dp * I)
-            row_u[0] = du_dp[0]; row_u[1] = du_dp[1]; row_u[2] = du_dp[2];
+            row_u[0] = du_dp[0];
+            row_u[1] = du_dp[1];
+            row_u[2] = du_dp[2];
             // Rotation part (du/dp * Skew(P))
             // Skew(P) = [0 -z y; z 0 -x; -y x 0]
             // du_dp * col0(S) = du_dp.y * z - du_dp.z * y
-            row_u[3] = du_dp[1]*p_cam.z - du_dp[2]*p_cam.y;
-            row_u[4] = du_dp[2]*p_cam.x - du_dp[0]*p_cam.z;
-            row_u[5] = du_dp[0]*p_cam.y - du_dp[1]*p_cam.x;
+            row_u[3] = du_dp[1] * p_cam.z - du_dp[2] * p_cam.y;
+            row_u[4] = du_dp[2] * p_cam.x - du_dp[0] * p_cam.z;
+            row_u[5] = du_dp[0] * p_cam.y - du_dp[1] * p_cam.x;
 
             let mut row_v = Vector6::zeros();
-            row_v[0] = dv_dp[0]; row_v[1] = dv_dp[1]; row_v[2] = dv_dp[2];
-            row_v[3] = dv_dp[1]*p_cam.z - dv_dp[2]*p_cam.y;
-            row_v[4] = dv_dp[2]*p_cam.x - dv_dp[0]*p_cam.z;
-            row_v[5] = dv_dp[0]*p_cam.y - dv_dp[1]*p_cam.x;
+            row_v[0] = dv_dp[0];
+            row_v[1] = dv_dp[1];
+            row_v[2] = dv_dp[2];
+            row_v[3] = dv_dp[1] * p_cam.z - dv_dp[2] * p_cam.y;
+            row_v[4] = dv_dp[2] * p_cam.x - dv_dp[0] * p_cam.z;
+            row_v[5] = dv_dp[0] * p_cam.y - dv_dp[1] * p_cam.x;
 
             // Accumulate JtJ and Jtr
             // JtJ += row^T * row
@@ -394,11 +404,11 @@ fn refine_pose_lm(
         // Solve
         let decomposition = jtj.cholesky();
         let delta = if let Some(chol) = decomposition {
-             chol.solve(&jtr)
+            chol.solve(&jtr)
         } else {
-             // Ill-conditioned, increase lambda and skip
-             lambda *= 10.0;
-             continue;
+            // Ill-conditioned, increase lambda and skip
+            lambda *= 10.0;
+            continue;
         };
 
         // Update Pose
@@ -438,8 +448,8 @@ fn reprojection_error(
 ) -> f64 {
     let mut err_sq = 0.0;
     for i in 0..4 {
-         let p = pose.project(&obj_pts[i], intrinsics);
-         err_sq += (p[0] - corners[i][0]).powi(2) + (p[1] - corners[i][1]).powi(2);
+        let p = pose.project(&obj_pts[i], intrinsics);
+        err_sq += (p[0] - corners[i][0]).powi(2) + (p[1] - corners[i][1]).powi(2);
     }
     err_sq
 }

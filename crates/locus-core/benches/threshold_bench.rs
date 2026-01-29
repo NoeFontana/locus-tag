@@ -1,5 +1,7 @@
 #![allow(missing_docs)]
 #![allow(clippy::unwrap_used)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::similar_names)]
 
 use divan::bench;
 use locus_core::image::ImageView;
@@ -19,7 +21,9 @@ fn bench_threshold_1080p_stats_checkered(bencher: divan::Bencher) {
     let engine = ThresholdEngine::new();
     let arena = bumpalo::Bump::new();
 
-    bencher.bench_local(move || engine.compute_tile_stats(&arena, &img));
+    bencher.bench_local(move || {
+        let _ = engine.compute_tile_stats(&arena, &img);
+    });
 }
 
 #[bench]
@@ -68,11 +72,13 @@ fn bench_threshold_1080p_apply_checkered(bencher: divan::Bencher) {
     let data = generate_checkered(width, height);
     let img = ImageView::new(&data, width, height, width).unwrap();
     let engine = ThresholdEngine::new();
-    let arena = bumpalo::Bump::new();
-    let stats = engine.compute_tile_stats(&arena, &img);
+    let arena_init = bumpalo::Bump::new();
+    let stats = engine.compute_tile_stats(&arena_init, &img).to_vec();
     let mut output = vec![0u8; width * height];
+    let mut arena = bumpalo::Bump::new();
 
     bencher.bench_local(move || {
+        arena.reset();
         engine.apply_threshold(&arena, &img, &stats, &mut output);
     });
 }

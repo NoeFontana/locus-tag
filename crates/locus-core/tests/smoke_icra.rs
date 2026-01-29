@@ -1,4 +1,8 @@
-#![allow(missing_docs, clippy::unnecessary_debug_formatting, clippy::similar_names)]
+#![allow(
+    missing_docs,
+    clippy::unnecessary_debug_formatting,
+    clippy::similar_names
+)]
 mod common;
 
 use locus_core::image::ImageView;

@@ -1,5 +1,10 @@
 //! Python bindings for the Locus Tag library.
-#![allow(unsafe_code, clippy::unused_self, missing_docs, clippy::trivially_copy_pass_by_ref)]
+#![allow(
+    unsafe_code,
+    clippy::unused_self,
+    missing_docs,
+    clippy::trivially_copy_pass_by_ref
+)]
 
 use locus_core::image::ImageView;
 use numpy::ndarray::Array2;

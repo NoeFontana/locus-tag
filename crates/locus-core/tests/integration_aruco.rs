@@ -3,7 +3,6 @@
 //! This test validates the complete detection pipeline using synthetic ArUco tags,
 //! matching the conditions used in Python benchmarks (`tests/test_config.py`).
 
-
 #![allow(clippy::unwrap_used)]
 use locus_core::Detector;
 use locus_core::config::TagFamily;

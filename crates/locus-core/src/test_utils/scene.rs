@@ -1,3 +1,11 @@
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_lossless)]
+#![allow(clippy::manual_range_contains)]
+#![allow(clippy::manual_midpoint)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::return_self_not_must_use)]
+
 use crate::config::TagFamily;
 use crate::dictionaries::{APRILTAG_16H5, APRILTAG_36H11, ARUCO_4X4_50, ARUCO_4X4_100};
 use rand::Rng;

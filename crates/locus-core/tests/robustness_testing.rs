@@ -221,7 +221,6 @@ fn test_real_tag_no_quiet_zone() {
 
     // Crop to remove most of the quiet zone (aggressive crop)
 
-
     let mut cropped = vec![255u8; CROP_SIZE * CROP_SIZE];
     for y in 0..CROP_SIZE {
         for x in 0..CROP_SIZE {

@@ -220,8 +220,14 @@ fn try_form_quad(
         return None;
     }
 
-    let g1 = [group1[0].unwrap(), group1[1].unwrap()];
-    let g2 = [group2[0].unwrap(), group2[1].unwrap()];
+    let g1 = [
+        group1[0].expect("g1[0] exists"),
+        group1[1].expect("g1[1] exists"),
+    ];
+    let g2 = [
+        group2[0].expect("g2[0] exists"),
+        group2[1].expect("g2[1] exists"),
+    ];
 
     // Ensure the two groups are roughly perpendicular
     let angle_between_groups = angle_diff(g1[0].angle, g2[0].angle);
@@ -319,6 +325,7 @@ struct QuadFitter<'a> {
 }
 
 impl<'a> QuadFitter<'a> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         arena: &'a Bump,
         img: &'a ImageView<'a>,
@@ -343,7 +350,11 @@ impl<'a> QuadFitter<'a> {
         }
     }
 
-    #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss, clippy::similar_names)]
+    #[allow(
+        clippy::cast_possible_wrap,
+        clippy::cast_sign_loss,
+        clippy::similar_names
+    )]
     #[allow(unsafe_code)]
     fn collect_boundary_points(&self) -> BumpVec<'a, (usize, usize, f32, f32)> {
         let width = self.img.width;
@@ -495,7 +506,7 @@ impl<'a> QuadFitter<'a> {
             }
 
             // Update
-             for (c, centroid) in centroids.iter_mut().enumerate() {
+            for (c, centroid) in centroids.iter_mut().enumerate() {
                 let mut sum_sin = 0.0f32;
                 let mut sum_cos = 0.0f32;
                 for (i, &(_x, _y, angle, mag)) in boundary_points.iter().enumerate() {
@@ -603,7 +614,6 @@ pub fn fit_quad_from_component(
 ) -> Option<[[f32; 2]; 4]> {
     QuadFitter::new(arena, img, labels, label, min_x, min_y, max_x, max_y).fit()
 }
-
 
 /// Core solver that clusters boundary points into 4 groups and computes the quad.
 ///

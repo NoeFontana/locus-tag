@@ -1,6 +1,5 @@
 use crate::decoder::TagDecoder;
 
-
 /// Trait abstracting the decoding strategy (Hard vs Soft).
 pub trait DecodingStrategy: Send + Sync + 'static {
     /// The type of code extracted from the image (e.g., u64 bits or Vec<i16> LLRs).
@@ -19,7 +18,7 @@ pub trait DecodingStrategy: Send + Sync + 'static {
     fn decode(
         code: &Self::Code,
         decoder: &(impl TagDecoder + ?Sized),
-        max_error: u32
+        max_error: u32,
     ) -> Option<(u32, u32, u8)>;
 
     /// Convert the code to a debug bitstream (u64).
@@ -49,7 +48,7 @@ impl DecodingStrategy for HardStrategy {
     fn decode(
         code: &Self::Code,
         decoder: &(impl TagDecoder + ?Sized),
-        max_error: u32
+        max_error: u32,
     ) -> Option<(u32, u32, u8)> {
         decoder.decode_full(*code, max_error)
     }
@@ -72,23 +71,23 @@ pub struct SoftCode {
 }
 
 impl SoftStrategy {
-    #[inline(always)]
+    #[inline]
     fn distance_with_limit(code: &SoftCode, target: u64, limit: u32) -> u32 {
         let mut penalty = 0u32;
         let n = code.len;
-        
+
         for i in 0..n {
             let target_bit = (target >> i) & 1;
             let llr = code.llrs[i];
-            
+
             if target_bit == 1 {
                 if llr < 0 {
-                    penalty += (-llr) as u32;
+                    penalty += u32::from(llr.unsigned_abs());
                 }
             } else if llr > 0 {
-                penalty += llr as u32;
+                penalty += u32::from(llr.unsigned_abs());
             }
-            
+
             if penalty >= limit {
                 return limit;
             }
@@ -106,10 +105,7 @@ impl DecodingStrategy for SoftStrategy {
         for i in 0..n {
             llrs[i] = (intensities[i] - thresholds[i]) as i16;
         }
-        SoftCode {
-            llrs,
-            len: n,
-        }
+        SoftCode { llrs, len: n }
     }
 
     fn distance(code: &Self::Code, target: u64) -> u32 {
@@ -119,7 +115,7 @@ impl DecodingStrategy for SoftStrategy {
     fn decode(
         code: &Self::Code,
         decoder: &(impl TagDecoder + ?Sized),
-        max_error: u32
+        max_error: u32,
     ) -> Option<(u32, u32, u8)> {
         // Fast Path: Try hard-decoding first
         let bits = Self::to_debug_bits(code);
@@ -127,32 +123,32 @@ impl DecodingStrategy for SoftStrategy {
             return Some((id, hamming, rot));
         }
 
-        let codes_count = decoder.num_codes();
+        let _codes_count = decoder.num_codes();
         let soft_threshold = max_error.max(1) * 60;
 
         let mut best_id = None;
-        let mut best_dist = soft_threshold; 
+        let mut best_dist = soft_threshold;
         let mut best_rot = 0;
 
         for &(target_code, id, rot) in decoder.rotated_codes() {
-             let dist = Self::distance_with_limit(code, target_code, best_dist);
-             if dist < best_dist {
-                 best_dist = dist;
-                 best_id = Some(id as u32);
-                 best_rot = rot;
-                 
-                 if best_dist == 0 {
-                     return Some((id as u32, 0, rot));
-                 }
-             }
+            let dist = Self::distance_with_limit(code, target_code, best_dist);
+            if dist < best_dist {
+                best_dist = dist;
+                best_id = Some(u32::from(id));
+                best_rot = rot;
+
+                if best_dist == 0 {
+                    return Some((u32::from(id), 0, rot));
+                }
+            }
         }
 
         if best_dist < soft_threshold {
-             if let Some(id) = best_id {
-                 let equiv_hamming = best_dist / 60;
-                 return Some((id, equiv_hamming, best_rot));
-             }
-         }
+            return best_id.map(|id| {
+                let equiv_hamming = best_dist / 60;
+                (id, equiv_hamming, best_rot)
+            });
+        }
 
         None
     }
@@ -198,12 +194,14 @@ mod tests {
         let code = SoftCode {
             llrs: {
                 let mut l = [0i16; 64];
-                l[0] = 20; l[1] = -10; l[2] = 50;
+                l[0] = 20;
+                l[1] = -10;
+                l[2] = 50;
                 l
             },
             len: 3,
         };
-        
+
         // Target 1: 1 0 1 (binary 5) -> 0b101
         // i=0 (20) -> target 1 -> Penalty 0 (match)
         // i=1 (-10) -> target 0 -> Penalty 0 (match)
@@ -223,7 +221,9 @@ mod tests {
         let code = SoftCode {
             llrs: {
                 let mut l = [0i16; 64];
-                l[0] = 20; l[1] = -10; l[2] = 50;
+                l[0] = 20;
+                l[1] = -10;
+                l[2] = 50;
                 l
             },
             len: 3,
@@ -233,4 +233,3 @@ mod tests {
         assert_eq!(SoftStrategy::to_debug_bits(&code), 5);
     }
 }
-
