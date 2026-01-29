@@ -14,6 +14,7 @@ Always ensure the Rust core is built and available to Python after changes.
 - **Rust Fast Test:** `cargo nextest run --all-features`
 - **Python Fast Test:** `pytest`
 - **Linting:** `cargo clippy --all-targets --all-features -- -D warnings` and `uv run ruff check .`
+- **Type Checking:** `uv run pyrefly check .`
 
 ### 2. Performance Evaluation
 Use the Forward dataset to evaluate recall and latency impact of changes.
@@ -39,6 +40,9 @@ Locus uses [Rerun](https://rerun.io/) for high-performance visualization.
 - `/eval`: Trigger the full performance evaluation suite on `tests/data`.
 - `/bench`: Run micro-benchmarks using `cargo bench` or `divan`.
 - `/simd-check`: Analyze the generated assembly for SIMD kernels using `cargo-show-asm` or `cargo-expand`.
+- `/lint`: Run all linting checks (Python & Rust).
+- `/format`: Format all code (Python & Rust).
+- `/type_check`: Run type checking (Python & Rust).
 
 ## 📐 Implementation Principles
 
