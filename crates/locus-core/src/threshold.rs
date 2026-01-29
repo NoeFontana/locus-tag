@@ -51,7 +51,11 @@ impl ThresholdEngine {
     /// Compute min/max statistics for each tile in the image.
     /// Optimized with SIMD-friendly memory access patterns and subsampling (stride 2).
     #[must_use]
-    pub fn compute_tile_stats<'a>(&self, arena: &'a Bump, img: &ImageView) -> BumpVec<'a, TileStats> {
+    pub fn compute_tile_stats<'a>(
+        &self,
+        arena: &'a Bump,
+        img: &ImageView,
+    ) -> BumpVec<'a, TileStats> {
         let ts = self.tile_size;
         let tiles_wide = img.width / ts;
         let tiles_high = img.height / ts;
@@ -502,7 +506,12 @@ fn threshold_row_simd(src: &[u8], dst: &mut [u8], thresholds: &[u8], valid_mask:
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::naive_bytecount, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::naive_bytecount,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 mod tests {
     use super::*;
     use proptest::prelude::*;

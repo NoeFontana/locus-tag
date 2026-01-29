@@ -31,7 +31,11 @@ use rayon::prelude::*;
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
-#[allow(clippy::items_after_statements, clippy::needless_range_loop, clippy::cast_possible_wrap)]
+#[allow(
+    clippy::items_after_statements,
+    clippy::needless_range_loop,
+    clippy::cast_possible_wrap
+)]
 pub fn bilateral_filter(
     arena: &Bump,
     img: &ImageView,

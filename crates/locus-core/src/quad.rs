@@ -1098,10 +1098,7 @@ mod tests {
         for tag_size in tag_sizes {
             let (detections, gt_corners) = run_quad_extraction(tag_size, canvas_size);
 
-            assert!(
-                !detections.is_empty(),
-                "Tag size {tag_size}: No detection"
-            );
+            assert!(!detections.is_empty(), "Tag size {tag_size}: No detection");
 
             let det_corners = detections[0].corners;
             let error = compute_corner_error(&det_corners, &gt_corners);

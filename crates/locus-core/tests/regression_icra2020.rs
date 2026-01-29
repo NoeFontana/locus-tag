@@ -13,7 +13,10 @@
     clippy::similar_names,
     clippy::trivially_copy_pass_by_ref,
     clippy::needless_pass_by_value,
-    clippy::items_after_statements
+    clippy::items_after_statements,
+    clippy::missing_panics_doc,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use
 )]
 
 use locus_core::image::ImageView;
@@ -420,11 +423,7 @@ impl IcraProvider {
         paths.sort();
 
         Some(Self {
-            name: format!(
-                "icra_{}_{}",
-                subfolder,
-                img_subfolder.unwrap_or("default")
-            ),
+            name: format!("icra_{}_{}", subfolder, img_subfolder.unwrap_or("default")),
             image_paths: paths,
             gt: gt_map,
         })

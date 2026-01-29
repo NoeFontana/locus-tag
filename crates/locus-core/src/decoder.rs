@@ -312,9 +312,10 @@ pub fn refine_corners_gridfit(
 
     // Compute initial contrast
     if let Some(h) = Homography::square_to_quad(&current_corners)
-        && let Some(contrast) = compute_grid_contrast(img, &h, decoder, bits) {
-            best_contrast = contrast;
-        }
+        && let Some(contrast) = compute_grid_contrast(img, &h, decoder, bits)
+    {
+        best_contrast = contrast;
+    }
 
     // We assume the initial decode was valid, so we should have a valid contrast.
     // If not, just return original corners.
@@ -346,12 +347,13 @@ pub fn refine_corners_gridfit(
                         let mut valid = false;
                         if let Some(h) = Homography::square_to_quad(&current_corners)
                             && let Some(contrast) = compute_grid_contrast(img, &h, decoder, bits)
-                                && contrast > best_contrast {
-                                    best_contrast = contrast;
-                                    best_corners = current_corners;
-                                    improved = true;
-                                    valid = true;
-                                }
+                            && contrast > best_contrast
+                        {
+                            best_contrast = contrast;
+                            best_corners = current_corners;
+                            improved = true;
+                            valid = true;
+                        }
 
                         if valid {
                             // Greedy update: accept improvement and continue.
@@ -679,7 +681,7 @@ impl<'a> EdgeFitter<'a> {
     fn get_scan_bounds(&self, window: f64) -> (usize, usize, usize, usize) {
         let p2_0 = self.p1[0] + self.dx;
         let p2_1 = self.p1[1] + self.dy;
-        
+
         // Clamp to valid image coordinates (padding of 1 pixel)
         let w_limit = (self.img.width - 2) as f64;
         let h_limit = (self.img.height - 2) as f64;
@@ -704,13 +706,11 @@ fn fit_edge_erf(
     fitter.scan_initial_d();
     let samples = fitter.collect_samples(arena);
     if samples.len() < 10 {
-         return None;
+        return None;
     }
     fitter.refine(&samples, sigma);
     Some((fitter.nx, fitter.ny, fitter.d))
 }
-
-
 
 /// Returns the threshold that maximizes inter-class variance.
 pub fn compute_otsu_threshold(values: &[f64]) -> f64 {
@@ -775,8 +775,6 @@ pub fn compute_otsu_threshold(values: &[f64]) -> f64 {
 /// # Parameters
 /// - `min_contrast`: Minimum contrast range for Otsu-based classification.
 ///   Default is 20.0. Lower values (e.g., 10.0) improve recall on small/blurry tags.
-#[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
-/// Sample the bit grid using a specific decoding strategy.
 ///
 /// This computes the intensities at sample points and the adaptive thresholds,
 /// then delegates to the strategy to produce the code.
@@ -819,7 +817,7 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
         {
             // Previously we returned None if ANY point was OOB?
             // Let's return None for safety as per original logic inferred
-             return None;
+            return None;
         }
 
         // Inlined bilinear interpolation
@@ -1383,9 +1381,10 @@ mod tests {
 
             if let Some(h) = Homography::square_to_quad(&dst)
                 && let Some(bits) = sample_grid(&img, &h, &decoder, 20.0)
-                    && let Some((id, hamming, _rot)) = decoder.decode(bits) {
-                        results.push((id, hamming));
-                    }
+                && let Some((id, hamming, _rot)) = decoder.decode(bits)
+            {
+                results.push((id, hamming));
+            }
         }
 
         results
@@ -1411,9 +1410,7 @@ mod tests {
                     .iter()
                     .find(|(id, _)| *id == u32::from(test_id))
                     .unwrap();
-                println!(
-                    "Tag size {tag_size:>3}px: ID {test_id} with hamming {hamming}"
-                );
+                println!("Tag size {tag_size:>3}px: ID {test_id} with hamming {hamming}");
             }
         }
     }

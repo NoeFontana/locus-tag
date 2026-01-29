@@ -1,3 +1,11 @@
+#![allow(missing_docs)]
+#![allow(clippy::unwrap_used)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::return_self_not_must_use)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::ptr_arg)]
+
 //! Comprehensive benchmarking suite for complex scenes and pipeline stages.
 
 use bumpalo::Bump;
@@ -5,7 +13,7 @@ use divan::bench;
 use locus_core::Detector;
 use locus_core::config::{DetectOptions, TagFamily};
 use locus_core::image::ImageView;
-use locus_core::test_utils::SceneBuilder;
+use locus_core::test_utils::{SceneBuilder, TagPlacement};
 
 fn main() {
     divan::main();
@@ -20,13 +28,14 @@ fn bench_thresholding_640x480(bencher: divan::Bencher) {
     let width = 640;
     let height = 480;
     let mut builder = SceneBuilder::new(width, height);
-    builder.add_tag(
-        TagFamily::AprilTag36h11,
-        0,
-        (width as f64 / 2.0, height as f64 / 2.0),
-        100.0,
-        0.0,
-    );
+    builder.add_tag(TagPlacement {
+        family: TagFamily::AprilTag36h11,
+        id: 0,
+        center_x: width as f64 / 2.0,
+        center_y: height as f64 / 2.0,
+        size: 100.0,
+        rotation_rad: 0.0,
+    });
     let (data, _) = builder.build();
     let img = ImageView::new(&data, width, height, width).unwrap();
     let engine = locus_core::threshold::ThresholdEngine::new();
@@ -44,13 +53,14 @@ fn bench_segmentation_640x480(bencher: divan::Bencher) {
     let width = 640;
     let height = 480;
     let mut builder = SceneBuilder::new(width, height);
-    builder.add_tag(
-        TagFamily::AprilTag36h11,
-        0,
-        (width as f64 / 2.0, height as f64 / 2.0),
-        100.0,
-        0.0,
-    );
+    builder.add_tag(TagPlacement {
+        family: TagFamily::AprilTag36h11,
+        id: 0,
+        center_x: width as f64 / 2.0,
+        center_y: height as f64 / 2.0,
+        size: 100.0,
+        rotation_rad: 0.0,
+    });
     let (data, _) = builder.build();
     let mut binarized = vec![0u8; width * height];
     let engine = locus_core::threshold::ThresholdEngine::new();
@@ -61,7 +71,7 @@ fn bench_segmentation_640x480(bencher: divan::Bencher) {
 
     bencher.bench_local(move || {
         let local_arena = Bump::new();
-        locus_core::segmentation::label_components(&local_arena, &binarized, width, height);
+        locus_core::segmentation::label_components(&local_arena, &binarized, width, height, true);
     });
 }
 
@@ -70,13 +80,14 @@ fn bench_quad_extraction_640x480(bencher: divan::Bencher) {
     let width = 640;
     let height = 480;
     let mut builder = SceneBuilder::new(width, height);
-    builder.add_tag(
-        TagFamily::AprilTag36h11,
-        0,
-        (width as f64 / 2.0, height as f64 / 2.0),
-        100.0,
-        0.0,
-    );
+    builder.add_tag(TagPlacement {
+        family: TagFamily::AprilTag36h11,
+        id: 0,
+        center_x: width as f64 / 2.0,
+        center_y: height as f64 / 2.0,
+        size: 100.0,
+        rotation_rad: 0.0,
+    });
     let (data, _) = builder.build();
     let arena = Bump::new();
     let mut binarized = vec![0u8; width * height];
@@ -85,11 +96,20 @@ fn bench_quad_extraction_640x480(bencher: divan::Bencher) {
     let stats = engine.compute_tile_stats(&arena, &img);
     engine.apply_threshold(&arena, &img, &stats, &mut binarized);
 
-    let labels = locus_core::segmentation::label_components(&arena, &binarized, width, height);
+    let labels = locus_core::segmentation::label_components_with_stats(
+        &arena, &binarized, width, height, true,
+    );
 
     bencher.bench_local(move || {
         let local_arena = Bump::new();
-        locus_core::quad::extract_quads(&local_arena, &img, labels);
+        locus_core::quad::extract_quads_with_config(
+            &local_arena,
+            &img,
+            &labels,
+            &locus_core::config::DetectorConfig::default(),
+            1,
+            &img,
+        );
     });
 }
 
@@ -102,13 +122,14 @@ fn bench_full_detect_640x480(bencher: divan::Bencher) {
     let width = 640;
     let height = 480;
     let mut builder = SceneBuilder::new(width, height);
-    builder.add_tag(
-        TagFamily::AprilTag36h11,
-        0,
-        (width as f64 / 2.0, height as f64 / 2.0),
-        100.0,
-        0.0,
-    );
+    builder.add_tag(TagPlacement {
+        family: TagFamily::AprilTag36h11,
+        id: 0,
+        center_x: width as f64 / 2.0,
+        center_y: height as f64 / 2.0,
+        size: 100.0,
+        rotation_rad: 0.0,
+    });
     let (data, _) = builder.build();
     let img = ImageView::new(&data, width, height, width).unwrap();
     let mut detector = Detector::new();

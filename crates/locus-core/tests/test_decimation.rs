@@ -44,10 +44,7 @@ fn test_decimation_basic() {
     println!("Stats: {stats:?}");
 
     // We expect high accuracy even with decimation because of high-res refinement
-    assert!(
-        error < 1.0,
-        "Error {error:.4}px too high for decimation=2"
-    );
+    assert!(error < 1.0, "Error {error:.4}px too high for decimation=2");
 }
 
 #[test]
