@@ -9,6 +9,7 @@ on:
 permissions:
   issues: write
   actions: read
+  contents: read
 
 jobs:
   summon-jules:
@@ -21,73 +22,53 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: ./logs
-          # We REMOVED the 'name:' input. 
-          # This tells the action to download ALL artifacts from the failed run.
+        continue-on-error: true
 
       - name: Prepare Log Summary
         id: log-summary
         run: |
-          LOG_SUMMARY=""
-          
-          # Loop through ALL .log files found in the artifacts
-          # (Handles multiple failures like Rust + Python Matrix)
-          while IFS= read -r log_file; do
-            filename=$(basename "$log_file")
+          # Create a temporary file for the issue body
+          BODY_FILE="issue_body.md"
+          touch $BODY_FILE
+
+          # Add Header
+          echo "@jules The CI workflow failed. Please analyze the failure." >> $BODY_FILE
+          echo "" >> $BODY_FILE
+          echo "**Failed Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}" >> $BODY_FILE
+          echo "" >> $BODY_FILE
+          echo "### Log Snippet" >> $BODY_FILE
+
+          # Check if we actually found logs
+          if [ -d "./logs" ] && [ "$(ls -A ./logs)" ]; then
+            echo "\`\`\`text" >> $BODY_FILE
             
-            # Header for this specific log
-            LOG_SUMMARY+=$'\n\n### 📄 Log: '"$filename"$'\n'
-            LOG_SUMMARY+=$'```text\n'
+            # Loop through log files
+            while IFS= read -r log_file; do
+              filename=$(basename "$log_file")
+              echo -e "\n\n### 📄 Log: $filename" >> $BODY_FILE
+              
+              if grep -iq "error" "$log_file"; then
+                echo "... (Smart Grep 'error') ..." >> $BODY_FILE
+                grep -C 5 -i "error" "$log_file" | tail -n 100 >> $BODY_FILE
+              else
+                tail -n 100 "$log_file" >> $BODY_FILE
+              fi
+            done < <(find ./logs -type f -name "*.log")
             
-            # SMART TAIL:
-            # 1. Try to grep for "error" context if it exists
-            # 2. Fallback to tail -n 100 (50 is too short for Rust)
-            if grep -iq "error" "$log_file"; then
-              # Get lines containing 'error' and 5 lines of context around them
-              # Limit to last 20 matches to keep it readable
-              SNIPPET=$(grep -C 5 -i "error" "$log_file" | tail -n 100)
-              LOG_SUMMARY+="... (Smart Grep 'error') ..."$'\n'
-              LOG_SUMMARY+="$SNIPPET"
-            else
-              # Fallback: Just the end
-              LOG_SUMMARY+="$(tail -n 100 "$log_file")"
-            fi
-            
-            LOG_SUMMARY+=$'\n```'
-            
-          done < <(find ./logs -type f -name "*.log")
-          
-          if [ -z "$LOG_SUMMARY" ]; then
-            LOG_SUMMARY="No log files found in artifacts."
+            echo "\`\`\`" >> $BODY_FILE
+          else
+            echo "_No log artifacts found (Pass/Fail jobs might not have uploaded logs, e.g., Typos check)._" >> $BODY_FILE
           fi
-          
-          # Generate random delimiter to prevent EOF collisions
-          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-          
-          {
-            echo "LOGS<<$EOF"
-            echo "$LOG_SUMMARY"
-            echo "$EOF"
-          } >> $GITHUB_ENV
 
       - name: Create Issue for Jules
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
           REPO: ${{ github.repository }}
-          LOGS: ${{ env.LOGS }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
-          RUN_URL="https://github.com/$REPO/actions/runs/$RUN_ID"
-          
+          # CHANGE 3: Use --body-file to prevent shell injection crashes
           gh issue create \
             --repo "$REPO" \
             --title "🚨 CI Failure: Run #$RUN_ID" \
-            --body "@jules The CI workflow failed. Please analyze the failure.
-            
-            **Failed Run:** $RUN_URL
-            
-            ### Log Snippet
-            \`\`\`text
-            $LOGS
-            \`\`\`
-            " \
+            --body-file issue_body.md \
             --label "jules-fix"
