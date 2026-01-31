@@ -33,18 +33,10 @@ uv run maturin develop            # Python (via uv)
 ```
 
 ### 🔍 Linting & Formatting (Zero Warnings)
-```bash
-# Rust
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-
-# Python
-uv run ruff format . --check
-uv run ruff check . --fix
-
-# Python (Type Checking)
-uv run pyrefly check .
-```
+Run the following workflows:
+* `/format` - Formats all code.
+* `/lint` - Runs all linters (Cliply, Ruff).
+* `/type_check` - Runs all type checkers (Pyrefly).
 
 ### 🧪 Testing
 ```bash
@@ -54,6 +46,7 @@ cargo nextest run --workspace
 # Python (Integration)
 uv run pytest
 ```
+
 * **Property Testing**: Mandatory for geometric logic (Homography, Quad Simplify) and bit-level decoding.
 
 ---
