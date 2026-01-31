@@ -16,6 +16,10 @@ class TagFamily(enum.Enum):
     ArUco4x4_50 = 2
     ArUco4x4_100 = 3
 
+class DecodeMode(enum.Enum):
+    Hard = 0
+    Soft = 1
+
 class Detection:
     id: int
     center: list[float]
@@ -73,6 +77,7 @@ class Detector:
         upscale_factor: int = ...,
         decoder_min_contrast: float = ...,
         refinement_mode: CornerRefinementMode = ...,
+        decode_mode: DecodeMode = ...,
     ) -> None: ...
     def detect(self, img: Any, decimation: int = ...) -> list[Detection]: ...
     def detect_with_options(self, img: Any, families: list[TagFamily]) -> list[Detection]: ...
