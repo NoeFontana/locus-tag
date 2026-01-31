@@ -9,12 +9,9 @@ use locus_core::image::ImageView;
 use locus_core::{DetectOptions, Detector, config::TagFamily};
 
 fn run_single_image_test(subfolder: &str, filename: &str, min_recall: f64, max_rmse: f64) {
-    let dataset_root = match common::resolve_dataset_root() {
-        Some(path) => path,
-        None => {
-            println!("Skipping test: ICRA 2020 dataset not found (LOCUS_DATASET_DIR unset)");
-            return;
-        }
+    let Some(dataset_root) = common::resolve_dataset_root() else {
+        println!("Skipping test: ICRA 2020 dataset not found (LOCUS_DATASET_DIR unset)");
+        return;
     };
 
     let img_path = dataset_root
