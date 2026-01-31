@@ -46,6 +46,7 @@ jobs:
 
       - name: Upload Logs on Failure
         if: failure()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: failure-logs-lint-rust
@@ -75,6 +76,7 @@ jobs:
 
       - name: Upload Logs on Failure
         if: failure()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: failure-logs-test-rust
@@ -102,6 +104,7 @@ jobs:
 
       - name: Upload Logs on Failure
         if: failure()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: failure-logs-lint-python
@@ -140,6 +143,7 @@ jobs:
 
       - name: Upload Logs on Failure
         if: failure()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: failure-logs-test-python-${{ matrix.python-version }}
