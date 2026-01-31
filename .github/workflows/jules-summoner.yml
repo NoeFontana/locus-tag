@@ -57,7 +57,7 @@ jobs:
             
             echo "\`\`\`" >> $BODY_FILE
           else
-            echo "_No log artifacts found (Pass/Fail jobs might not have uploaded logs, e.g., Typos check)._" >> $BODY_FILE
+            echo "_No log artifacts found (Pass/Fail jobs might not have uploaded logs)._" >> $BODY_FILE
           fi
 
       - name: Read Log Summary
