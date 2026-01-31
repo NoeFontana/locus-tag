@@ -121,16 +121,18 @@ jobs:
       - uses: astral-sh/setup-uv@v5
 
       - name: Install dependencies
-        run: uv pip install --system pytest maturin numpy
+        run: |
+          uv venv
+          uv pip install pytest maturin numpy
 
       - name: Build and install
-        run: maturin develop --release --manifest-path crates/locus-py/Cargo.toml
+        run: uv run maturin develop --release --manifest-path crates/locus-py/Cargo.toml
 
       - name: Run tests
         shell: bash
         run: |
           set -o pipefail
-          pytest 2>&1 | tee test-python-${{ matrix.python-version }}.log
+          uv run pytest 2>&1 | tee test-python-${{ matrix.python-version }}.log
 
       - name: Upload Logs on Failure
         if: failure()
