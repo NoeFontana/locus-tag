@@ -31,8 +31,11 @@ def test_zero_copy_ingestion():
     img_sliced = img[:, ::2]
     assert not img_sliced.flags["C_CONTIGUOUS"]
 
-    detections = locus.detect_tags(img_sliced)
-    assert isinstance(detections, list)
+    try:
+        locus.detect_tags(img_sliced)
+        pytest.fail("Non-contiguous slice should have raised ValueError")
+    except ValueError as e:
+         assert "contiguous" in str(e).lower()
 
     # 4. F-contiguous array (Should be rejected with ValueError)
     img_f = np.asfortranarray(img)
