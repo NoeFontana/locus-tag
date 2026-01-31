@@ -62,7 +62,7 @@ impl Homography {
             for i in 0..4 {
                 let p_proj = res.project(src[i]);
                 let err_sq = (p_proj[0] - dst[i][0]).powi(2) + (p_proj[1] - dst[i][1]).powi(2);
-                if err_sq > 1e-4 {
+                if !err_sq.is_finite() || err_sq > 1e-4 {
                     return None;
                 }
             }
