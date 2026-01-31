@@ -6,7 +6,7 @@ summary:
   dataset_size: 50
   mean_recall: 0.9541558441558442
   mean_rmse: 0.3141
-  mean_total_ms: 116.69581645999999
+  mean_total_ms: "[DURATION]"
   worst_offenders:
     - filename: 0013.png
       missed: 43
