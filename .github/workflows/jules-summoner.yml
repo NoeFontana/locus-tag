@@ -60,15 +60,20 @@ jobs:
             echo "_No log artifacts found (Pass/Fail jobs might not have uploaded logs, e.g., Typos check)._" >> $BODY_FILE
           fi
 
-      - name: Create Issue for Jules
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
+      - name: Read Log Summary
+        id: read-log
         run: |
-          # CHANGE 3: Use --body-file to prevent shell injection crashes
-          gh issue create \
-            --repo "$REPO" \
-            --title "🚨 CI Failure: Run #$RUN_ID" \
-            --body-file issue_body.md \
-            --label "jules-fix"
+          {
+            echo 'BODY<<EOF'
+            cat issue_body.md
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Invoke Jules
+        uses: google-labs-code/jules-invoke@v1
+        with:
+          jules_api_key: ${{ secrets.JULES_TOKEN }}
+          prompt: |
+            The CI workflow failed. Please analyze the failure log below and propose a fix.
+
+            ${{ steps.read-log.outputs.BODY }}
