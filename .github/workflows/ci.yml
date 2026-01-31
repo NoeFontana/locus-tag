@@ -118,10 +118,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
+      - uses: astral-sh/setup-uv@v5
+
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pytest maturin
+        run: uv pip install --system pytest maturin numpy
 
       - name: Build and install
         run: maturin develop --release --manifest-path crates/locus-py/Cargo.toml
