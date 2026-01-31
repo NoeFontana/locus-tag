@@ -6,5 +6,5 @@ summary:
   dataset_size: 1
   mean_recall: 1
   mean_rmse: 0.1515
-  mean_total_ms: 115.840384
+  mean_total_ms: "[DURATION]"
   worst_offenders: []

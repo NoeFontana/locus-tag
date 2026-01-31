@@ -301,8 +301,11 @@ impl RegressionHarness {
         println!("  Images: {count}");
         println!("  Recall: {:.2}%", report.summary.mean_recall * 100.0);
         println!("  RMSE:   {:.4} px", report.summary.mean_rmse);
+        println!("  Latency: {:.4} ms", report.summary.mean_total_ms);
 
-        insta::assert_yaml_snapshot!(self.snapshot_name, report);
+        insta::assert_yaml_snapshot!(self.snapshot_name, report, {
+            ".summary.mean_total_ms" => "[DURATION]"
+        });
     }
 }
 
