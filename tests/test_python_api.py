@@ -10,7 +10,6 @@ import pytest
 def test_zero_copy_ingestion():
     """Verify that the detector handles various numpy layouts correctly."""
     # 1. Standard C-contiguous array
-    bad_var: int = "bad"
     img = np.zeros((100, 100), dtype=np.uint8)
     # Draw a simple white box to ensure we don't crash on actual data
     img[20:80, 20:80] = 255
