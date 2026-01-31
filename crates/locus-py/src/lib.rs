@@ -584,10 +584,10 @@ fn create_image_view<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageVie
     } else {
         // Non-contiguous (e.g. sliced columns, generalized slicing)
         // We reject this to enforce zero-copy usage.
-        return Err(pyo3::exceptions::PyValueError::new_err(
+        Err(pyo3::exceptions::PyValueError::new_err(
             "Input array must be C-contiguous (row-major). Found non-contiguous stride. \
              Use numpy.ascontiguousarray() if needed.",
-        ));
+        ))
     }
 }
 
