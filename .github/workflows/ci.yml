@@ -87,13 +87,13 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          uv run ruff check . 2>&1 | tee ruff-check.log
+          uv run --extra dev ruff check . 2>&1 | tee ruff-check.log
       
       - name: Ruff Format
         shell: bash
         run: |
           set -o pipefail
-          uv run ruff format --check . 2>&1 | tee ruff-format.log
+          uv run --extra dev ruff format --check . 2>&1 | tee ruff-format.log
 
       - name: Upload Logs on Failure
         if: failure()
