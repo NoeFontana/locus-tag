@@ -130,7 +130,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv venv
-          uv pip install pytest maturin numpy
+          uv pip install pytest maturin -r pyproject.toml --extra validation --extra benchmark
 
       - name: Build and install
         run: uv run maturin develop --release --manifest-path crates/locus-py/Cargo.toml
