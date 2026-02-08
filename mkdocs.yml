@@ -51,4 +51,5 @@ nav:
   - Home: index.md
   - Architecture: architecture.md
   - Coordinate Systems: coordinates.md
+  - Benchmarking: benchmarking.md
   - API Reference: api.md

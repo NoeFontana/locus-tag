@@ -139,23 +139,35 @@ for t in tags:
 
 ### Running Benchmarks & Regression Tests
 
-Locus includes a rigorous suite to ensure detection quality and latency targets are met.
+Locus includes a rigorous suite to ensure detection quality and latency targets are met. All benchmarking and data preparation tools are unified in the `locus_bench.py` CLI.
 
-#### 1. End-to-End Comparison (Python)
-Evaluates `Locus` against `OpenCV` and `AprilTag` on the ICRA 2020 dataset.
+#### 1. Dataset Preparation
 ```bash
-# Compare Locus performance against other libraries
-uv run python -m scripts.bench.run real --compare
+uv run python scripts/locus_bench.py prepare
 ```
 
-#### 2. Precision Analysis
-Analyze RMSE on tags detected by both Locus and AprilTag to verify sub-pixel accuracy.
+#### 2. Python Benchmarking CLI
 ```bash
-uv run python -m scripts.bench.compare_rmse
+# Compare recall, RMSE, and latency against other libs
+uv run python scripts/locus_bench.py run real --compare
+
+# Synthetic stress testing
+uv run python scripts/locus_bench.py run synthetic --targets 1,10,50,100
 ```
 
-#### 3. Rust Regression Suite
-The unified harness validates that `Locus` strictly matches or exceeds ground truth for thousands of images.
+#### 3. Rust Regression Suite (Core Engine)
+The source of truth for core engine performance:
+```bash
+export LOCUS_DATASET_DIR=/path/to/icra2020
+cargo test --release --test regression_icra2020 -- --test-threads=1
+```
+
+#### 4. Debug Visualization (with Rerun)
+```bash
+uv run python scripts/debug/visualize.py --scenario forward --limit 10
+```
+
+For detailed documentation, see the [Benchmarking Guide](docs/benchmarking.md).
 
 1. **Set Environment Variable**: Point to the dataset root.
    ```bash
