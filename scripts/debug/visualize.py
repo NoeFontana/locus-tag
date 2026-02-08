@@ -23,19 +23,18 @@ def run_visualization(args):
     rr.script_setup(args, "locus_debug_pipeline")
 
     loader = DatasetLoader()
-    scenario = "forward"
-    if not loader.prepare_scenario(scenario):
+    scenario = args.scenario
+    if not loader.prepare_icra(scenario):
         print(f"Failed to prepare scenario {scenario}")
         return
 
     datasets = loader.find_datasets(scenario, ["tags"])
 
-    # Configure detector with reasonable defaults for debugging
     detector = locus.Detector(
-        threshold_tile_size=4,
-        quad_min_area=4,
-        enable_bilateral=False,
-        upscale_factor=4,
+        threshold_tile_size=args.tile_size,
+        quad_min_area=args.min_area,
+        enable_bilateral=args.bilateral,
+        upscale_factor=args.upscale,
     )
 
     for ds_name, img_dir, gt_map in datasets:
@@ -57,7 +56,6 @@ def run_visualization(args):
             rr.set_time(timeline="frame_idx", sequence=i)
 
             # --- Perform Full Detection (Single Pass) ---
-            # This captures all intermediate data in one go!
             res = detector.detect_full(img)
 
             # 1. Input & Ground Truth
@@ -77,38 +75,31 @@ def run_visualization(args):
                     rr.LineStrips2D(gt_strips, colors=[0, 255, 0], radii=2.0, labels=gt_labels),
                 )
 
-            # 2. Thresholding (Binarized Image)
+            # 2. Thresholding
             binarized = res.get_binarized()
             if binarized is not None:
                 rr.log("pipeline/1_threshold", rr.Image(binarized))
 
-            # 3. Segmentation (Labels)
+            # 3. Segmentation
             labels = res.get_labels()
             if labels is not None:
-                # Cast to int32 for Rerun segmentation image
                 rr.log("pipeline/2_segmentation", rr.SegmentationImage(labels.astype(np.int32)))
 
-            # 4. Candidates (All quads found)
+            # 4. Candidates
             if res.candidates:
                 cand_strips = []
+                cand_colors = []
                 for cand in res.candidates:
                     c = np.array(cand.corners)
                     c = np.vstack([c, c[0]])
                     cand_strips.append(c)
+                    # Color by rejection reason: Red if Hamming > 0, Blue otherwise
+                    color = [255, 100, 100] if cand.hamming > 0 else [100, 150, 255]
+                    cand_colors.append(color)
 
-                cand_labels = [f"H:{cand.hamming}" for cand in res.candidates]
-                # Log to dedicated view and overlay on input
                 rr.log(
                     "pipeline/3_candidates",
-                    rr.LineStrips2D(
-                        cand_strips, colors=[100, 150, 255], radii=0.5, labels=cand_labels
-                    ),
-                )
-                rr.log(
-                    "pipeline/0_input/candidates",
-                    rr.LineStrips2D(
-                        cand_strips, colors=[100, 150, 255], radii=0.5, labels=cand_labels
-                    ),
+                    rr.LineStrips2D(cand_strips, colors=cand_colors, radii=0.5),
                 )
 
             # 5. Final Detections
@@ -125,91 +116,63 @@ def run_visualization(args):
                     "pipeline/4_detections",
                     rr.LineStrips2D(det_strips, colors=[255, 50, 50], radii=1.2, labels=det_labels),
                 )
-                rr.log(
-                    "pipeline/0_input/detections",
-                    rr.LineStrips2D(det_strips, colors=[255, 50, 50], radii=1.2, labels=det_labels),
-                )
 
-            # 6. Performance Statistics
-            # Capture individual stage timings
-            rr.log("pipeline/stats/timings/threshold_ms", rr.Scalars(res.stats.threshold_ms))
-            rr.log("pipeline/stats/timings/segmentation_ms", rr.Scalars(res.stats.segmentation_ms))
-            rr.log(
-                "pipeline/stats/timings/quad_extraction_ms",
-                rr.Scalars(res.stats.quad_extraction_ms),
-            )
-            rr.log("pipeline/stats/timings/decoding_ms", rr.Scalars(res.stats.decoding_ms))
-            rr.log("pipeline/stats/timings/total_ms", rr.Scalars(res.stats.total_ms))
-
-            # Counts
-            rr.log("pipeline/stats/counts/candidates", rr.Scalars(float(res.stats.num_candidates)))
-            rr.log("pipeline/stats/counts/detections", rr.Scalars(float(res.stats.num_detections)))
-            rr.log(
-                "pipeline/stats/counts/rejected_contrast",
-                rr.Scalars(float(res.stats.num_rejected_by_contrast)),
-            )
-            rr.log(
-                "pipeline/stats/counts/rejected_hamming",
-                rr.Scalars(float(res.stats.num_rejected_by_hamming)),
-            )
-
-            print(
-                f"  Img: {img_name} -> Cand: {res.stats.num_candidates}, Det: {res.stats.num_detections}, "
-                f"Rej(Contrast): {res.stats.num_rejected_by_contrast}, Rej(Hamming): {res.stats.num_rejected_by_hamming}"
-            )
-
-            gt_tags = gt_map.get(img_name, [])
+            # 6. Failure Diagnostics (Replacing diagnose_missed.py)
             if gt_tags:
-                print("    GT Matches Analysis:")
+                det_ids = {d.id for d in res.detections}
                 for gt in gt_tags:
-                    # Find closest candidate by corner RMSE
-                    best_cand = None
-                    min_rmse = float("inf")
+                    if gt.tag_id not in det_ids:
+                        # Find closest candidate
+                        best_cand = None
+                        min_rmse = float("inf")
+                        for cand in res.candidates:
+                            cand_corners = np.array(cand.corners)
+                            for rot in range(4):
+                                shifted = np.roll(cand_corners, rot, axis=0)
+                                rmse = np.sqrt(np.mean((shifted - gt.corners) ** 2))
+                                if rmse < min_rmse:
+                                    min_rmse = rmse
+                                    best_cand = cand
 
-                    for cand in res.candidates:
-                        cand_corners = np.array(cand.corners)
-                        for rot in range(4):
-                            shifted_corners = np.roll(cand_corners, rot, axis=0)
-                            diff = shifted_corners - gt.corners
-                            rmse = np.sqrt(np.mean(diff**2))
-                            if rmse < min_rmse:
-                                min_rmse = rmse
-                                best_cand = cand
-
-                    if best_cand and min_rmse < 20.0:  # 20px threshold
-                        status = (
-                            "DETECTED"
-                            if any(d.id == gt.tag_id for d in res.detections)
-                            else "REJECTED"
-                        )
-                        print(
-                            f"      GT ID {gt.tag_id}: Match (RMSE={min_rmse:.1f}px) -> Cand ID {best_cand.id} (Hamming {best_cand.hamming}) [{status}]"
-                        )
-
-                        if status == "REJECTED":
-                            val = best_cand.bits
-                            grid_str = ""
+                        # Log diagnosis to Rerun
+                        diag_path = f"diagnosis/missed_tags/{gt.tag_id}"
+                        if best_cand and min_rmse < 20.0:
+                            # Reverted to rejected candidate
+                            rr.log(
+                                f"{diag_path}/reason",
+                                rr.TextLog(f"Rejected: Hamming {best_cand.hamming}"),
+                            )
+                            # Log the extracted bits as a 6x6 image for visual inspection
+                            bits = best_cand.bits
+                            grid = np.zeros((6, 6), dtype=np.uint8)
                             for r in range(6):
-                                row_str = "        "
                                 for c2 in range(6):
                                     idx = r * 6 + c2
-                                    bit = (val >> (35 - idx)) & 1
-                                    row_str += "1" if bit else "."
-                                grid_str += row_str + "\n"
-                            print(f"{grid_str}")
-                    else:
-                        print(f"      GT ID {gt.tag_id}: NO MATCH (Min RMSE={min_rmse:.1f}px)")
+                                    if (bits >> (35 - idx)) & 1:
+                                        grid[r, c2] = 255
+                            rr.log(f"{diag_path}/extracted_bits", rr.Image(grid))
+                        else:
+                            rr.log(f"{diag_path}/reason", rr.TextLog("No candidate found near GT"))
+
+            # 7. Timings
+            rr.log("performance/latency/total_ms", rr.Scalars(res.stats.total_ms))
+            rr.log("performance/latency/threshold_ms", rr.Scalars(res.stats.threshold_ms))
+            rr.log("performance/latency/segmentation_ms", rr.Scalars(res.stats.segmentation_ms))
+            rr.log("performance/latency/quad_ms", rr.Scalars(res.stats.quad_extraction_ms))
+            rr.log("performance/latency/decode_ms", rr.Scalars(res.stats.decoding_ms))
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Visualize Locus Pipeline Stages with Rerun (High-Quality Single Pass)"
-    )
-    parser.add_argument("--limit", type=int, default=10, help="Number of images to visualize")
+    parser = argparse.ArgumentParser(description="Locus Advanced Debug Visualization")
+    parser.add_argument("--limit", type=int, default=10)
+    parser.add_argument("--scenario", default="forward")
+    parser.add_argument("--tile-size", type=int, default=4)
+    parser.add_argument("--min-area", type=int, default=10)
+    parser.add_argument("--bilateral", action="store_true")
+    parser.add_argument("--upscale", type=int, default=1)
     rr.script_add_args(parser)
 
     args = parser.parse_args()
-
     run_visualization(args)
 
 

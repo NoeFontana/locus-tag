@@ -87,11 +87,29 @@ def test_config_object():
     assert cfg.quad_min_area == 500
 
     # Test Pydantic validation (if enabled in the wrapper)
-    # Test Pydantic validation (if enabled in the wrapper)
     with contextlib.suppress(Exception):
         val = cast(int, 0)
         DetectorConfig(upscale_factor=val)  # Should be >= 1
         # If no validation, this might pass depending on implementation
+
+
+def test_soft_decoding():
+    """Verify that Detector can be instantiated and run with DecodeMode.Soft."""
+    detector = locus.Detector(decode_mode=locus.DecodeMode.Soft)
+    assert detector is not None
+
+    # Create a dummy image
+    img = np.zeros((100, 100), dtype=np.uint8)
+    img[20:80, 20:80] = 200  # White
+    img[30:70, 30:70] = 50  # Grey/Black
+
+    # Run detection
+    dets = detector.detect(img)
+    assert isinstance(dets, list)
+
+    # Verify stats works
+    _, stats = detector.detect_with_stats(img)
+    assert stats.total_ms >= 0
 
 
 if __name__ == "__main__":

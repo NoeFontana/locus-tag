@@ -8,10 +8,12 @@ import cv2
 import locus
 import numpy as np
 from huggingface_hub import hf_hub_download
-from pupil_apriltags import Detector as AprilTagDetector  # type: ignore[import-untyped]
+from pupil_apriltags import Detector as AprilTagDetector
 
-REPO_ID = "NoeFontana/apriltag-validation-data"
-DEFAULT_CACHE_DIR = Path("tests/data/icra2020")
+ICRA_REPO_ID = "NoeFontana/apriltag-validation-data"
+ICRA_CACHE_DIR = Path("tests/data/icra2020")
+UMICH_DATA_URL = "https://april.eecs.umich.edu/media/apriltag/apriltag_test_images.tar.gz"
+UMICH_CACHE_DIR = Path("tests/data/umich")
 
 
 @dataclass
@@ -35,45 +37,66 @@ class EvalResult:
 
 
 class DatasetLoader:
-    def __init__(self, cache_dir: Path = DEFAULT_CACHE_DIR):
-        self.cache_dir = cache_dir
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, icra_dir: Path = ICRA_CACHE_DIR, umich_dir: Path = UMICH_CACHE_DIR):
+        self.icra_dir = icra_dir
+        self.umich_dir = umich_dir
 
-    def prepare_scenario(self, scenario: str) -> bool:
-        scenario_dir = self.cache_dir / scenario
+    def prepare_all(self):
+        """Prepare both ICRA and Umich datasets."""
+        self.prepare_icra("forward")
+        self.prepare_icra("circle")
+        self.prepare_umich()
+
+    def prepare_icra(self, scenario: str) -> bool:
+        self.icra_dir.mkdir(parents=True, exist_ok=True)
+        scenario_dir = self.icra_dir / scenario
         if scenario_dir.exists() and any(scenario_dir.iterdir()):
             return True
 
         filename = f"{scenario}.tar.xz"
         try:
-            from typing import Any, cast
-
-            download_func: Any = hf_hub_download
-            archive_path = cast(
-                str,
-                download_func(
-                    repo_id=REPO_ID,
+            archive_path = str(
+                hf_hub_download(
+                    repo_id=ICRA_REPO_ID,
                     filename=filename,
                     repo_type="dataset",
-                    local_dir=str(self.cache_dir),
-                    local_dir_use_symlinks=False,
-                ),
+                    local_dir=str(self.icra_dir),
+                )
             )
             archive_path_obj = Path(archive_path)
             with tarfile.open(archive_path_obj, "r:xz") as tar:
-                tar.extractall(path=self.cache_dir)
+                tar.extractall(path=self.icra_dir)
             archive_path_obj.unlink()
             return True
         except Exception as e:
-            print(f"Error preparing scenario {scenario}: {e}")
+            print(f"Error preparing ICRA scenario {scenario}: {e}")
+            return False
+
+    def prepare_umich(self) -> bool:
+        self.umich_dir.mkdir(parents=True, exist_ok=True)
+        if (self.umich_dir / "apriltag_test_images").exists():
+            return True
+
+        archive_path = self.umich_dir / "umich_images.tar.gz"
+        print(f"Downloading {UMICH_DATA_URL}...")
+        try:
+            import urllib.request
+
+            urllib.request.urlretrieve(UMICH_DATA_URL, archive_path)
+            with tarfile.open(archive_path, "r:gz") as tar:
+                tar.extractall(path=self.umich_dir)
+            archive_path.unlink()
+            return True
+        except Exception as e:
+            print(f"Error preparing Umich dataset: {e}")
             return False
 
     def find_datasets(
         self, scenario: str, filter_types: list[str]
     ) -> list[tuple[str, Path, dict[str, list[TagGroundTruth]]]]:
-        search_dir = self.cache_dir / scenario
+        search_dir = self.icra_dir / scenario
         if not search_dir.exists():
-            search_dir = self.cache_dir
+            search_dir = self.icra_dir
 
         csv_files = list(search_dir.rglob("tags.csv"))
         csv_files = [f for f in csv_files if scenario in str(f)]
