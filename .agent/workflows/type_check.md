@@ -10,6 +10,7 @@ This workflow verifies type safety for both Rust and Python.
 
 1. **Rust Check**
    Run cargo check (fast compilation check).
+   // turbo
    ```bash
    cargo check --workspace --all-targets --all-features
    ```

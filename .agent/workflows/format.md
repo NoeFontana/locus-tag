@@ -10,6 +10,7 @@ This workflow formats the codebase using standard tools.
 
 1. **Rust Format**
    Format Rust code.
+   // turbo
    ```bash
    cargo fmt --all
    ```

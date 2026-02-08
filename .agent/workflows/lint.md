@@ -10,6 +10,7 @@ This workflow runs all static analysis and linting tools to ensure code quality.
 
 1. **Rust Clippy**
    Run clippy on the workspace.
+   // turbo
    ```bash
    cargo clippy --workspace --all-targets --all-features -- -D warnings
    ```
