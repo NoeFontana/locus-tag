@@ -1,6 +1,7 @@
 #![allow(unsafe_code, clippy::cast_sign_loss)]
 use crate::config;
 use nalgebra::{SMatrix, SVector};
+use multiversion::multiversion;
 
 /// A 3x3 Homography matrix.
 pub struct Homography {
@@ -767,6 +768,66 @@ pub fn compute_otsu_threshold(values: &[f64]) -> f64 {
     best_threshold
 }
 
+/// Optimized grid sampling kernel.
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+fn sample_grid_values_simd(
+    img: &crate::image::ImageView,
+    h: &Homography,
+    points: &[(f64, f64)],
+    intensities: &mut [f64],
+    n: usize,
+) -> bool {
+    let h00 = h.h[(0, 0)];
+    let h01 = h.h[(0, 1)];
+    let h02 = h.h[(0, 2)];
+    let h10 = h.h[(1, 0)];
+    let h11 = h.h[(1, 1)];
+    let h12 = h.h[(1, 2)];
+    let h20 = h.h[(2, 0)];
+    let h21 = h.h[(2, 1)];
+    let h22 = h.h[(2, 2)];
+
+    let w_limit = (img.width - 1) as f64;
+    let h_limit = (img.height - 1) as f64;
+
+    for (i, &p) in points.iter().take(n).enumerate() {
+        let wz = h20 * p.0 + h21 * p.1 + h22;
+        let img_x = (h00 * p.0 + h01 * p.1 + h02) / wz;
+        let img_y = (h10 * p.0 + h11 * p.1 + h12) / wz;
+
+        if img_x < 0.0 || img_x >= w_limit || img_y < 0.0 || img_y >= h_limit {
+            return false;
+        }
+
+        let xf = img_x.floor();
+        let yf = img_y.floor();
+        let ix = xf as usize;
+        let iy = yf as usize;
+        let dx = img_x - xf;
+        let dy = img_y - yf;
+
+        // SAFETY: Bounds checked above.
+        let val = unsafe {
+            let row0 = img.get_row_unchecked(iy);
+            let row1 = img.get_row_unchecked(iy + 1);
+            let v00 = f64::from(*row0.get_unchecked(ix));
+            let v10 = f64::from(*row0.get_unchecked(ix + 1));
+            let v01 = f64::from(*row1.get_unchecked(ix));
+            let v11 = f64::from(*row1.get_unchecked(ix + 1));
+
+            let top = v00 + dx * (v10 - v00);
+            let bot = v01 + dx * (v11 - v01);
+            top + dy * (bot - top)
+        };
+        intensities[i] = val;
+    }
+    true
+}
+
 /// Sample the bit grid from the image using the homography and decoder points.
 ///
 /// Uses bilinear interpolation for sampling and a spatially adaptive threshold
@@ -789,67 +850,8 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
     let mut intensities = [0.0f64; 64];
     let n = points.len().min(64);
 
-    let mut min_val = f64::MAX;
-    let mut max_val = f64::MIN;
-
-    // Extract homography coefficients for faster access
-    let h00 = homography.h[(0, 0)];
-    let h01 = homography.h[(0, 1)];
-    let h02 = homography.h[(0, 2)];
-    let h10 = homography.h[(1, 0)];
-    let h11 = homography.h[(1, 1)];
-    let h12 = homography.h[(1, 2)];
-    let h20 = homography.h[(2, 0)];
-    let h21 = homography.h[(2, 1)];
-    let h22 = homography.h[(2, 2)];
-
-    for (i, &p) in points.iter().take(n).enumerate() {
-        // Inlined project: h * [px, py, 1.0]
-        let wz = h20 * p.0 + h21 * p.1 + h22;
-        let img_x = (h00 * p.0 + h01 * p.1 + h02) / wz;
-        let img_y = (h10 * p.0 + h11 * p.1 + h12) / wz;
-
-        // Check bounds (with slight margin for interpolation)
-        if img_x < 0.0
-            || img_x >= (img.width - 1) as f64
-            || img_y < 0.0
-            || img_y >= (img.height - 1) as f64
-        {
-            // Previously we returned None if ANY point was OOB?
-            // Let's return None for safety as per original logic inferred
-            return None;
-        }
-
-        // Inlined bilinear interpolation
-        let xf = img_x.floor();
-        let yf = img_y.floor();
-        let ix = xf as usize;
-        let iy = yf as usize;
-        let dx = img_x - xf;
-        let dy = img_y - yf;
-
-        // SAFETY: Bounds checked above.
-        let val = unsafe {
-            let row0 = img.get_row_unchecked(iy);
-            let row1 = img.get_row_unchecked(iy + 1);
-
-            let v00 = f64::from(*row0.get_unchecked(ix));
-            let v10 = f64::from(*row0.get_unchecked(ix + 1));
-            let v01 = f64::from(*row1.get_unchecked(ix));
-            let v11 = f64::from(*row1.get_unchecked(ix + 1));
-
-            let top = v00 + dx * (v10 - v00);
-            let bot = v01 + dx * (v11 - v01);
-            top + dy * (bot - top)
-        };
-        intensities[i] = val;
-
-        if val < min_val {
-            min_val = val;
-        }
-        if val > max_val {
-            max_val = val;
-        }
+    if !sample_grid_values_simd(img, homography, points, &mut intensities, n) {
+        return None;
     }
 
     // SOTA: Blended Quadrant-based Adaptive Thresholding

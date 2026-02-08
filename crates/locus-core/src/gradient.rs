@@ -19,9 +19,16 @@ pub struct Gradient {
     pub mag: u16,
 }
 
+use multiversion::multiversion;
+
 /// Compute Sobel gradients for the entire image.
 /// Returns a flat array of Gradient structs.
 #[must_use]
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
 pub fn compute_sobel(img: &ImageView) -> Vec<Gradient> {
     let w = img.width;
     let h = img.height;
