@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "locus-tag"
 version = "0.1.0"
-description = "A vibe coding experiment in generating a high-performance computer vision library for fiducial marker detection."
+description = "A high-performance fiducial marker detector for robotics."
 authors = [{name = "Noé Fontana"}]
 requires-python = ">=3.10"
 license = {text = "MIT OR Apache-2.0"}
