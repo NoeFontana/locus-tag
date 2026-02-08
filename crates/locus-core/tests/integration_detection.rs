@@ -96,7 +96,13 @@ fn test_pose_accuracy() {
 
     // Manually call pose estimation (or it could be done via detect_with_options)
     let intrinsics = locus_core::pose::CameraIntrinsics::new(fx, fy, cx, cy);
-    let pose = locus_core::pose::estimate_tag_pose(&intrinsics, &det.corners, tag_size_m);
+    let (pose, _) = locus_core::pose::estimate_tag_pose(
+        &intrinsics,
+        &det.corners,
+        tag_size_m,
+        Some(&img),
+        locus_core::config::PoseEstimationMode::Fast,
+    );
 
     assert!(pose.is_some(), "Pose should be estimated from corners");
     let pose = pose.unwrap();
@@ -111,6 +117,57 @@ fn test_pose_accuracy() {
     // Check that rotation is a valid SO(3) matrix
     let det_r = pose.rotation.determinant();
     assert!((det_r - 1.0).abs() < 1e-6);
+}
+
+#[test]
+fn test_pose_accuracy_accurate() {
+    let canvas_size = 640;
+    let tag_id = 0;
+    let tag_size_px = 150;
+    let tag_size_m = 0.16;
+    let family = locus_core::config::TagFamily::AprilTag36h11;
+
+    let fx = 800.0;
+    let fy = 800.0;
+    let cx = 320.0;
+    let cy = 240.0;
+
+    // Generate synthetic tag
+    let (data, _gt_corners) = locus_core::test_utils::generate_synthetic_test_image(
+        family,
+        tag_id,
+        tag_size_px,
+        canvas_size,
+        0.0,
+    );
+    let img =
+        locus_core::image::ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
+
+    let mut detector = Detector::new();
+    detector.set_families(&[family]);
+    let detections = detector.detect(&img);
+
+    assert!(!detections.is_empty());
+    let det = &detections[0];
+
+    // Estimate with Accurate mode
+    let intrinsics = locus_core::pose::CameraIntrinsics::new(fx, fy, cx, cy);
+    let (pose, covariance) = locus_core::pose::estimate_tag_pose(
+        &intrinsics,
+        &det.corners,
+        tag_size_m,
+        Some(&img),
+        locus_core::config::PoseEstimationMode::Accurate,
+    );
+
+    assert!(pose.is_some(), "Pose should be estimated");
+    assert!(covariance.is_some(), "Covariance should be computed in Accurate mode");
+
+    let cov = covariance.unwrap();
+    // Check main diagonal is positive (variance)
+    for i in 0..6 {
+        assert!(cov[i][i] > 0.0, "Variance should be positive");
+    }
 }
 
 #[cfg(feature = "extended-tests")]

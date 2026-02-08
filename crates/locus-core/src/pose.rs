@@ -1,5 +1,7 @@
 #![allow(clippy::many_single_char_names, clippy::similar_names)]
 use nalgebra::{Matrix3, Matrix6, Vector3, Vector6};
+use crate::image::ImageView;
+use crate::config::PoseEstimationMode;
 
 /// Camera intrinsics parameters.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -82,58 +84,70 @@ impl Pose {
 /// * `intrinsics` - Camera intrinsics.
 /// * `corners` - Detected corners in image coordinates [[x, y]; 4].
 /// * `tag_size` - Physical size of the tag in world units (e.g., meters).
+/// * `img` - Optional image view (required for Accurate mode).
+/// * `mode` - Pose estimation mode (Fast vs Accurate).
+///
+/// # Returns
+/// A tuple containing:
+/// * `Option<Pose>`: The estimated pose (if successful).
+/// * `Option<[[f64; 6]; 6]>`: The estimated covariance matrix (if Accurate mode enabled).
 ///
 /// # Panics
 /// Panics if SVD decomposition fails during orthogonalization (extremely rare).
 #[must_use]
-/// Estimate pose from tag detection using IPPE-Square and LM refinement.
-///
-/// This replaces the standard DLT+OI approach with IPPE (Infinitesimal Plane-Based Pose Estimation),
-/// which analytically solves for the two possible local minima of the PnP problem (resolving the
-/// "ambiguity" or "flip" problem) and then selects the best one based on reprojection error.
-/// Finally, a few iterations of Levenberg-Marquardt refine the pose to sub-pixel accuracy.
-///
-/// # Arguments
-/// * `intrinsics` - Camera intrinsics.
-/// * `corners` - Detected corners in image coordinates [[x, y]; 4].
-/// * `tag_size` - Physical size of the tag in world units (e.g., meters).
 #[allow(clippy::missing_panics_doc)]
 pub fn estimate_tag_pose(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
     tag_size: f64,
-) -> Option<Pose> {
+    img: Option<&ImageView>,
+    mode: PoseEstimationMode,
+) -> (Option<Pose>, Option<[[f64; 6]; 6]>) {
     // 1. Canonical Homography: Map canonical square [-1,1]x[-1,1] to image pixels.
-    let h_pixel = crate::decoder::Homography::square_to_quad(corners)?.h;
+    let h_poly = match crate::decoder::Homography::square_to_quad(corners) {
+        Some(h) => h,
+        None => return (None, None),
+    };
+    let h_pixel = h_poly.h;
 
     // 2. Normalize Homography: H_norm = K_inv * H_pixel
-    // H_norm maps canonical points to normalized image coordinates (z=1 plane).
     let k_inv = intrinsics.inv_matrix();
     let h_norm = k_inv * h_pixel;
 
     // 3. Scale to Physical Model
-    // The canonical square has corners at +/- 1 (size 2).
-    // The physical tag has corners at +/- tag_size/2 (size tag_size).
-    // P_phys = P_can * (tag_size / 2).
-    // So P_can = P_phys * (2 / tag_size).
-    // x_norm ~ H_norm * P_can = H_norm * scaler * P_phys
-    // Thus the homography mapping Physical -> Normalized is H_metric = H_norm * (2/size).
-    // The columns of H_metric correspond to the physical X and Y axes of the tag in the camera frame.
     let scaler = 2.0 / tag_size;
     let mut h_metric = h_norm;
     h_metric.column_mut(0).scale_mut(scaler);
     h_metric.column_mut(1).scale_mut(scaler);
-    // h3 (translation col) assumes z=1 input, which is handled differently in IPPE.
 
     // 4. IPPE Core: Decompose Jacobian (first 2 image cols) into 2 potential poses.
-    let candidates = solve_ippe_square(&h_metric)?;
+    let candidates = match solve_ippe_square(&h_metric) {
+        Some(c) => c,
+        None => return (None, None),
+    };
 
     // 5. Disambiguation: Choose the pose with lower reprojection error.
     let best_pose = find_best_pose(intrinsics, corners, tag_size, &candidates);
 
-    // 6. Refinement: Levenberg-Marquardt (LM) Polish.
-    // Minimizes geometric reprojection error directly.
-    Some(refine_pose_lm(intrinsics, corners, tag_size, best_pose))
+    // 6. Refinement: Levenberg-Marquardt (LM)
+    match (mode, img) {
+        (PoseEstimationMode::Accurate, Some(image)) => {
+            // Compute corner uncertainty from structure tensor
+            let uncertainty = crate::pose_weighted::compute_framework_uncertainty(image, corners, &h_poly);
+            let (refined_pose, covariance) = crate::pose_weighted::refine_pose_lm_weighted(
+                intrinsics,
+                corners,
+                tag_size,
+                best_pose,
+                &uncertainty,
+            );
+            (Some(refined_pose), Some(covariance))
+        }
+        _ => {
+            // Fast mode (Identity weights)
+            (Some(refine_pose_lm(intrinsics, corners, tag_size, best_pose)), None)
+        }
+    }
 }
 
 /// Solves the IPPE-Square problem.
@@ -522,8 +536,8 @@ mod tests {
             img_pts[i] = gt_pose.project(&obj_pts[i], &intrinsics);
         }
 
-        let est_pose =
-            estimate_tag_pose(&intrinsics, &img_pts, tag_size).expect("Pose estimation failed");
+        let (est_pose, _) = estimate_tag_pose(&intrinsics, &img_pts, tag_size, None, PoseEstimationMode::Fast);
+        let est_pose = est_pose.expect("Pose estimation failed");
 
         // Check translation
         assert!((est_pose.translation.x - gt_t.x).abs() < 1e-3);
@@ -590,7 +604,7 @@ mod tests {
                 img_pts[i] = [p[0] + noise, p[1] + noise];
             }
 
-            if let Some(est_pose) = estimate_tag_pose(&intrinsics, &img_pts, tag_size) {
+            if let (Some(est_pose), _) = estimate_tag_pose(&intrinsics, &img_pts, tag_size, None, PoseEstimationMode::Fast) {
                 // Check if recovered pose is reasonably close
                 // Note: noise decreases accuracy, so we use a loose threshold
                 let t_err = (est_pose.translation - translation).norm();

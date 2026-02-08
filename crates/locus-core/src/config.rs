@@ -44,6 +44,20 @@ pub enum DecodeMode {
     Soft,
 }
 
+/// Mode for 3D pose estimation quality.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum PoseEstimationMode {
+    /// Standard IPPE + Levenberg-Marquardt with identity weights (Fast).
+    Fast,
+    /// Structure Tensor + Weighted Levenberg-Marquardt (Accurate, Slower).
+    ///
+    /// This models corner uncertainty using image gradients and weights the
+    /// PnP optimization to prefer "sharp" directions, significantly improving
+    /// accuracy (RMSE) at the cost of ~0.5ms per tag.
+    Accurate,
+}
+
 /// Pipeline-level configuration for the detector.
 ///
 /// These settings affect the fundamental behavior of the detection pipeline
@@ -477,6 +491,8 @@ pub struct DetectOptions {
     /// Decimation factor for preprocessing (1 = no decimation).
     /// Preprocessing and segmentation operate on a downsampled image of size (W/D, H/D).
     pub decimation: usize,
+    /// Mode for 3D pose estimation (Fast vs Accurate).
+    pub pose_estimation_mode: PoseEstimationMode,
 }
 
 impl Default for DetectOptions {
@@ -486,6 +502,7 @@ impl Default for DetectOptions {
             intrinsics: None,
             tag_size: None,
             decimation: 1,
+            pose_estimation_mode: PoseEstimationMode::Fast,
         }
     }
 }
@@ -504,6 +521,7 @@ impl DetectOptions {
             intrinsics: None,
             tag_size: None,
             decimation: 1,
+            pose_estimation_mode: PoseEstimationMode::Fast,
         }
     }
 
@@ -515,6 +533,7 @@ impl DetectOptions {
             intrinsics: None,
             tag_size: None,
             decimation: 1,
+            pose_estimation_mode: PoseEstimationMode::Fast,
         }
     }
 }
@@ -525,6 +544,7 @@ pub struct DetectOptionsBuilder {
     intrinsics: Option<crate::pose::CameraIntrinsics>,
     tag_size: Option<f64>,
     decimation: usize,
+    pose_estimation_mode: PoseEstimationMode,
 }
 
 impl Default for DetectOptionsBuilder {
@@ -534,6 +554,7 @@ impl Default for DetectOptionsBuilder {
             intrinsics: None,
             tag_size: None,
             decimation: 1,
+            pose_estimation_mode: PoseEstimationMode::Fast,
         }
     }
 }
@@ -567,6 +588,13 @@ impl DetectOptionsBuilder {
         self
     }
 
+    /// Set the pose estimation mode.
+    #[must_use]
+    pub fn pose_estimation_mode(mut self, mode: PoseEstimationMode) -> Self {
+        self.pose_estimation_mode = mode;
+        self
+    }
+
     /// Build the options.
     #[must_use]
     pub fn build(self) -> DetectOptions {
@@ -575,6 +603,7 @@ impl DetectOptionsBuilder {
             intrinsics: self.intrinsics,
             tag_size: self.tag_size,
             decimation: self.decimation,
+            pose_estimation_mode: self.pose_estimation_mode,
         }
     }
 }

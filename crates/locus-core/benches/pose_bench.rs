@@ -7,6 +7,8 @@ use divan::bench;
 use locus_core::pose::{CameraIntrinsics, estimate_tag_pose};
 use nalgebra::{Matrix3, Vector3};
 
+use locus_core::config::PoseEstimationMode;
+
 fn main() {
     divan::main();
 }
@@ -43,6 +45,8 @@ fn bench_pose_estimation(bencher: divan::Bencher) {
             divan::black_box(&intrinsics),
             divan::black_box(&corners),
             divan::black_box(tag_size),
+            divan::black_box(None),
+            divan::black_box(PoseEstimationMode::Fast),
         ))
     });
 }

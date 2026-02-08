@@ -239,6 +239,7 @@ pub fn extract_quads_with_config(
                         decision_margin: f64::from(bbox_area),
                         bits: 0,
                         pose: None,
+                        pose_covariance: None,
                     });
                 }
             }
@@ -374,6 +375,7 @@ pub fn extract_quads_with_config(
                                         decision_margin: area * d * d, // Area in full-res
                                         bits: 0,
                                         pose: None,
+                                        pose_covariance: None,
                                     });
                                 }
                             }
@@ -454,6 +456,7 @@ pub fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detec
                                 decision_margin: area,
                                 bits: 0,
                                 pose: None,
+                                pose_covariance: None,
                             });
                         }
                     }

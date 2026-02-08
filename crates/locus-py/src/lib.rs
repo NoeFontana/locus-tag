@@ -38,6 +38,12 @@ pub struct Detection {
     /// Extracted bits from the tag.
     #[pyo3(get)]
     pub bits: u64,
+    /// 3D Pose (if computed).
+    #[pyo3(get)]
+    pub pose: Option<Pose>,
+    /// Pose covariance matrix (6x6).
+    #[pyo3(get)]
+    pub pose_covariance: Option<Vec<Vec<f64>>>,
 }
 
 /// Python-compatible pipeline statistics.
@@ -152,6 +158,12 @@ impl From<locus_core::Detection> for Detection {
             hamming: d.hamming,
             decision_margin: d.decision_margin,
             bits: d.bits,
+            pose: d.pose.map(Pose::from),
+            pose_covariance: d.pose_covariance.map(|cov| {
+                cov.iter()
+                    .map(|row| row.to_vec())
+                    .collect()
+            }),
         }
     }
 }
@@ -301,6 +313,68 @@ impl DecodeMode {
 }
 
 // ============================================================================
+// PoseEstimationMode enum
+// ============================================================================
+
+/// Mode for 3D pose estimation.
+#[pyclass(eq, eq_int)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PoseEstimationMode {
+    /// Fast mode (IPPE + Levenberg-Marquardt).
+    Fast = 0,
+    /// Accurate mode (Structure Tensor + Weighted LM).
+    Accurate = 1,
+}
+
+impl From<PoseEstimationMode> for locus_core::config::PoseEstimationMode {
+    fn from(m: PoseEstimationMode) -> Self {
+        match m {
+            PoseEstimationMode::Fast => locus_core::config::PoseEstimationMode::Fast,
+            PoseEstimationMode::Accurate => locus_core::config::PoseEstimationMode::Accurate,
+        }
+    }
+}
+
+#[pymethods]
+impl PoseEstimationMode {
+    fn __reduce__(&self) -> (PyObject, (u8,)) {
+        Python::with_gil(|py| {
+            let cls = py.get_type::<Self>();
+            (cls.into_any().unbind(), (*self as u8,))
+        })
+    }
+}
+
+// ============================================================================
+// Pose struct
+// ============================================================================
+
+/// 3D Pose (Rotation and Translation).
+#[pyclass]
+#[derive(Clone)]
+pub struct Pose {
+    /// 3x3 Rotation matrix (row-major).
+    #[pyo3(get)]
+    pub rotation: [[f64; 3]; 3],
+    /// 3x1 Translation vector.
+    #[pyo3(get)]
+    pub translation: [f64; 3],
+}
+
+impl From<locus_core::pose::Pose> for Pose {
+    fn from(p: locus_core::pose::Pose) -> Self {
+        Self {
+            rotation: [
+                [p.rotation[(0, 0)], p.rotation[(0, 1)], p.rotation[(0, 2)]],
+                [p.rotation[(1, 0)], p.rotation[(1, 1)], p.rotation[(1, 2)]],
+                [p.rotation[(2, 0)], p.rotation[(2, 1)], p.rotation[(2, 2)]],
+            ],
+            translation: [p.translation[0], p.translation[1], p.translation[2]],
+        }
+    }
+}
+
+// ============================================================================
 // Detector class with persistent state
 // ============================================================================
 
@@ -435,48 +509,109 @@ impl Detector {
     }
 
     /// Detect tags in the image using default decoders.
-    #[pyo3(signature = (img, decimation = 1))]
+    #[pyo3(signature = (
+        img,
+        decimation = 1,
+        intrinsics = None,
+        tag_size = None,
+        pose_estimation_mode = PoseEstimationMode::Fast,
+    ))]
     #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
-    fn detect(&mut self, img: PyReadonlyArray2<u8>, decimation: usize) -> PyResult<Vec<Detection>> {
+    fn detect(
+        &mut self,
+        img: PyReadonlyArray2<u8>,
+        decimation: usize,
+        intrinsics: Option<(f64, f64, f64, f64)>,
+        tag_size: Option<f64>,
+        pose_estimation_mode: PoseEstimationMode,
+    ) -> PyResult<Vec<Detection>> {
         let view = create_image_view(&img)?;
-        let options = locus_core::DetectOptions::builder()
-            .decimation(decimation)
-            .build();
+        let mut builder = locus_core::DetectOptions::builder();
+        builder = builder.decimation(decimation);
+
+        if let Some((fx, fy, cx, cy)) = intrinsics {
+            builder = builder.intrinsics(fx, fy, cx, cy);
+        }
+        if let Some(size) = tag_size {
+            builder = builder.tag_size(size);
+        }
+        builder = builder.pose_estimation_mode(pose_estimation_mode.into());
+
+        let options = builder.build();
         let detections = self.inner.detect_with_options(&view, &options);
         Ok(detections.into_iter().map(Detection::from).collect())
     }
 
     /// Detect tags using specific tag families (for performance).
-    ///
-    /// Args:
-    ///     img: Grayscale image as numpy array
-    ///     families: List of TagFamily to decode
+    #[pyo3(signature = (
+        img,
+        families,
+        decimation = 1,
+        intrinsics = None,
+        tag_size = None,
+        pose_estimation_mode = PoseEstimationMode::Fast,
+    ))]
     #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
     fn detect_with_options(
         &mut self,
         img: PyReadonlyArray2<u8>,
         families: Vec<TagFamily>,
+        decimation: usize,
+        intrinsics: Option<(f64, f64, f64, f64)>,
+        tag_size: Option<f64>,
+        pose_estimation_mode: PoseEstimationMode,
     ) -> PyResult<Vec<Detection>> {
         let view = create_image_view(&img)?;
         let core_families: Vec<locus_core::config::TagFamily> =
             families.into_iter().map(Into::into).collect();
-        let options = locus_core::DetectOptions::with_families(&core_families);
+        
+        let mut builder = locus_core::DetectOptions::builder();
+        builder = builder.families(&core_families);
+        builder = builder.decimation(decimation);
+
+        if let Some((fx, fy, cx, cy)) = intrinsics {
+            builder = builder.intrinsics(fx, fy, cx, cy);
+        }
+        if let Some(size) = tag_size {
+            builder = builder.tag_size(size);
+        }
+        builder = builder.pose_estimation_mode(pose_estimation_mode.into());
+
+        let options = builder.build();
         let detections = self.inner.detect_with_options(&view, &options);
         Ok(detections.into_iter().map(Detection::from).collect())
     }
 
     /// Detect tags with timing statistics.
-    #[pyo3(signature = (img, decimation = 1))]
+    #[pyo3(signature = (
+        img,
+        decimation = 1,
+        intrinsics = None,
+        tag_size = None,
+        pose_estimation_mode = PoseEstimationMode::Fast,
+    ))]
     #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
     fn detect_with_stats(
         &mut self,
         img: PyReadonlyArray2<u8>,
         decimation: usize,
+        intrinsics: Option<(f64, f64, f64, f64)>,
+        tag_size: Option<f64>,
+        pose_estimation_mode: PoseEstimationMode,
     ) -> PyResult<(Vec<Detection>, PipelineStats)> {
         let view = create_image_view(&img)?;
-        let options = locus_core::DetectOptions::builder()
-            .decimation(decimation)
-            .build();
+        let mut builder = locus_core::DetectOptions::builder();
+        builder = builder.decimation(decimation);
+
+        if let Some((fx, fy, cx, cy)) = intrinsics {
+            builder = builder.intrinsics(fx, fy, cx, cy);
+        }
+        if let Some(size) = tag_size {
+            builder = builder.tag_size(size);
+        }
+        builder = builder.pose_estimation_mode(pose_estimation_mode.into());
+
+        let options = builder.build();
         let (detections, stats) = self.inner.detect_with_stats_and_options(&view, &options);
         Ok((
             detections.into_iter().map(Detection::from).collect(),
@@ -507,17 +642,35 @@ impl Detector {
     }
 
     /// Perform full detection and return all intermediate debug data.
-    #[pyo3(signature = (img, decimation = 1))]
+    #[pyo3(signature = (
+        img,
+        decimation = 1,
+        intrinsics = None,
+        tag_size = None,
+        pose_estimation_mode = PoseEstimationMode::Fast,
+    ))]
     #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
     fn detect_full(
         &mut self,
         img: PyReadonlyArray2<u8>,
         decimation: usize,
+        intrinsics: Option<(f64, f64, f64, f64)>,
+        tag_size: Option<f64>,
+        pose_estimation_mode: PoseEstimationMode,
     ) -> PyResult<FullDetectionResult> {
         let view = create_image_view(&img)?;
-        let options = locus_core::DetectOptions::builder()
-            .decimation(decimation)
-            .build();
+        let mut builder = locus_core::DetectOptions::builder();
+        builder = builder.decimation(decimation);
+
+        if let Some((fx, fy, cx, cy)) = intrinsics {
+            builder = builder.intrinsics(fx, fy, cx, cy);
+        }
+        if let Some(size) = tag_size {
+            builder = builder.tag_size(size);
+        }
+        builder = builder.pose_estimation_mode(pose_estimation_mode.into());
+
+        let options = builder.build();
         let res = self.inner.detect_full(&view, &options);
         // If upscaling is enabled in config, the binarized/labeled images will be larger.
         let upscale = self.inner.get_config().upscale_factor;
@@ -690,6 +843,8 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<CornerRefinementMode>()?;
     m.add_class::<DecodeMode>()?;
     m.add_class::<Detector>()?;
+    m.add_class::<Pose>()?;
+    m.add_class::<PoseEstimationMode>()?;
 
     // Legacy functions (for backward compatibility)
     m.add_function(wrap_pyfunction!(dummy_detect, m)?)?;

@@ -83,6 +83,8 @@ pub mod strategy;
 pub mod test_utils;
 /// Adaptive thresholding implementation.
 pub mod threshold;
+/// Weighted pose estimation logic.
+pub mod pose_weighted;
 
 pub use crate::config::{DetectOptions, DetectorConfig, TagFamily};
 use crate::decoder::TagDecoder;
@@ -109,6 +111,9 @@ pub struct Detection {
     pub bits: u64,
     /// The 3D pose of the tag relative to the camera (if requested).
     pub pose: Option<crate::pose::Pose>,
+    /// The covariance of the estimated 3D pose (6x6 matrix), if computed.
+    /// Order: [tx, ty, tz, rx, ry, rz] (Lie Algebra se3).
+    pub pose_covariance: Option<[[f64; 6]; 6]>,
 }
 
 /// Statistics for the detection pipeline stages.
@@ -500,7 +505,15 @@ impl Detector {
             d.center[1] = (d.center[1] + 0.5) * inv_scale;
 
             if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size) {
-                d.pose = crate::pose::estimate_tag_pose(&intrinsics, &d.corners, tag_size);
+                let (pose, covariance) = crate::pose::estimate_tag_pose(
+                    &intrinsics,
+                    &d.corners,
+                    tag_size,
+                    Some(img),
+                    options.pose_estimation_mode,
+                );
+                d.pose = pose;
+                d.pose_covariance = covariance;
             }
         }
 
@@ -694,11 +707,15 @@ impl Detector {
                             if let (Some(intrinsics), Some(tag_size)) =
                                 (options.intrinsics, options.tag_size)
                             {
-                                cand.pose = crate::pose::estimate_tag_pose(
+                                let (pose, covariance) = crate::pose::estimate_tag_pose(
                                     &intrinsics,
                                     &cand.corners,
                                     tag_size,
+                                    Some(refinement_img),
+                                    options.pose_estimation_mode,
                                 );
+                                cand.pose = pose;
+                                cand.pose_covariance = covariance;
                             }
                             return (Some(cand), false, false, hamming, S::to_debug_bits(&code));
                         }
