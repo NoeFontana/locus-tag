@@ -14,5 +14,5 @@ Before marking a task as complete, you MUST pass all gates.
 
 ## 2. Performance Check
 If touching the hot path:
-* **Forward Eval**: `uv run python tests/evaluate_forward_performance.py`
+* **Forward Eval**: `uv run python -m scripts.bench.run real --compare`
 * **Regression**: `cargo test --release --test regression_icra2020 -- --test-threads=1`

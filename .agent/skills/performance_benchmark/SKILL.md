@@ -7,11 +7,11 @@ description: Instructions for running and analyzing performance benchmarks for L
 
 This skill guides you through the process of benchmarking the Locus library to ensure latency and throughput goals are met.
 
-## 1. Quick Forward Evaluation (Python)
+## 1. End-to-End Evaluation (Python)
 Use this for a quick check of recall and end-to-end latency on the standard dataset.
 
 ```bash
-uv run python tests/evaluate_forward_performance.py
+uv run python -m scripts.bench.run real --compare
 ```
 
 **Success Criteria:**

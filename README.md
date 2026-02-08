@@ -8,13 +8,13 @@ This project is an experiment in LLM-assisted library development, targeting 1-1
 
 | Detector | Recall | RMSE | Latency |
 | :--- | :--- | :--- | :--- |
-| **Locus (Soft)** | **95.42%** | 0.31 px | 116.7 ms |
-| **Locus (Hard)** | **83.91%** | 0.28 px | **95.8 ms** |
-| AprilTag (SOTA) | 62.34% | **0.22 px** | 100.0 ms |
-| OpenCV | 33.16% | 0.92 px | **95.6 ms** |
+| **Locus (Soft)** | **95.42%** | 0.31 px | 110.7 ms |
+| **Locus (Hard)** | **83.90%** | 0.25 px | **91.5 ms** |
+| AprilTag (SOTA) | 62.34% | **0.22 px** | 101.5 ms |
+| OpenCV | 33.16% | 0.92 px | 95.5 ms |
 
 Note the higher aggregate RMSE for Locus is mostly correlated with its significantly higher recall (detecting more challenging, blurry tags).
-Comparing the RMSE of the **same tags** detected by both detectors shows that Locus' precision matches AprilTag almost exactly (Delta: **+0.0029 px**).
+Comparing the RMSE of the **same tags** detected by both detectors shows that Locus' precision matches AprilTag almost exactly (Delta: **+0.0024 px**).
 
 ## Quick Start
 
@@ -132,24 +132,31 @@ for t in tags:
         print(f"Rotation: {t.pose.rotation}")
 ```
 
-## Development & Testing
+### Running Benchmarks & Regression Tests
 
-Locus includes a rigorous regression suite to ensure detection quality on standard datasets (ICRA 2020).
+Locus includes a rigorous suite to ensure detection quality and latency targets are met.
 
-### Running Regression Tests
+#### 1. End-to-End Comparison (Python)
+Evaluates `Locus` against `OpenCV` and `AprilTag` on the ICRA 2020 dataset.
+```bash
+# Compare Locus performance against other libraries
+uv run python -m scripts.bench.run real --compare
+```
 
-The regression suite validates that `Locus` strictly matches or exceeds the ground truth for thousands of images. It is skipped by default if the dataset is missing.
+#### 2. Precision Analysis
+Analyze RMSE on tags detected by both Locus and AprilTag to verify sub-pixel accuracy.
+```bash
+uv run python -m scripts.bench.compare_rmse
+```
 
-The refactored suite covers standard and checkerboard scenarios on full datasets:
-- **Standard**: `regression_fixtures`, `regression_icra_forward`, `regression_icra_rotation`
-- **Checkerboard**: `regression_icra_forward_checkerboard`
+#### 3. Rust Regression Suite
+The unified harness validates that `Locus` strictly matches or exceeds ground truth for thousands of images.
 
-1. **Download the Dataset**: Ensure you have the ICRA 2020 dataset (images and `tags.csv`).
-2. **Set Environment Variable**: Point to the dataset root.
+1. **Set Environment Variable**: Point to the dataset root.
    ```bash
    export LOCUS_DATASET_DIR=/path/to/icra2020
    ```
-3. **Run the Test**:
+2. **Run Tests**:
    ```bash
    # Quick check (fixtures + forward only, approx 10s)
    cargo test --release --test regression_icra2020
