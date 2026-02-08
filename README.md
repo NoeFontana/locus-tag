@@ -1,8 +1,17 @@
+# Locus (`locus-vision`)
 
-# Locus
+## The Project Goal
 
-A high-performance AprilTag and ArUco detector in Rust with Python bindings.
-This project is an experiment in LLM-assisted library development, targeting 1-10ms latencies for modern computer vision tasks.
+**Locus** is a high-performance fiducial marker detector (AprilTag & ArUco) written in Rust with zero-copy Python bindings. It targets a balance of low-latency, high F1 score and precise pose estimation.
+
+> [!WARNING]
+> **Experimental Status**: Locus is currently in an active research and development phase. The API is subject to breaking changes, and while performance and recall are competitive with SOTA on the current benchmarks, it is **not recommended for production systems**. An extended photo-realistic benchmark dataset is currently in development under the [render-tag](https://github.com/NoeFontana/render-tag) repository.
+
+Future development will focus on:
+- Integrating with [render-tag](https://github.com/NoeFontana/render-tag) to provide a photo-realistic benchmark dataset.
+- Benchmarking Locus against well-tuned SOTA detectors.
+- Integrating custom trained neural networks optimized for edge inference.
+- Adding support for more tag families and profiles.
 
 ## Performance (Full ICRA 2020 Dataset, 50 images)
 
@@ -10,11 +19,11 @@ This project is an experiment in LLM-assisted library development, targeting 1-1
 | :--- | :--- | :--- | :--- |
 | **Locus (Soft)** | **95.42%** | 0.31 px | 110.7 ms |
 | **Locus (Hard)** | **83.90%** | 0.25 px | **91.5 ms** |
-| AprilTag (SOTA) | 62.34% | **0.22 px** | 101.5 ms |
+| AprilTag | 62.34% | **0.22 px** | 101.5 ms |
 | OpenCV | 33.16% | 0.92 px | 95.5 ms |
 
 Note the higher aggregate RMSE for Locus is mostly correlated with its significantly higher recall (detecting more challenging, blurry tags).
-Comparing the RMSE of the **same tags** detected by both detectors shows that Locus' precision matches AprilTag almost exactly (Delta: **+0.0024 px**).
+Comparing the RMSE of the **same tags** detected by both Locus and AprilTag shows that Locus' precision is only slightly worse than AprilTag (Delta: **+0.0024 px**).
 
 ## Quick Start
 
