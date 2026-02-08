@@ -194,3 +194,16 @@ For detailed documentation, see the [Benchmarking Guide](docs/benchmarking.md).
    cargo test --release --test regression_icra2020 -- --test-threads=1
    ```
    *Note: `--release` is mandatory for performance benchmarking.*
+
+## License
+
+This project is licensed under either of:
+
+ * [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0)
+ * [MIT license](http://opensource.org/licenses/MIT)
+
+at your option.
+
+Any contribution intentionally submitted
+for inclusion in `locus-tag` by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.
