@@ -123,19 +123,18 @@ pub fn label_components_with_stats<'a>(
             let mut row_runs = Vec::new();
             let mut x = 0;
             while x < width {
+                // Find start of background run (0)
                 if let Some(pos) = row[x..].iter().position(|&p| p == 0) {
                     let start = x + pos;
-                    let mut end = start + 1;
-                    while end < width && row[end] == 0 {
-                        end += 1;
-                    }
+                    // Find end of run
+                    let len = row[start..].iter().take_while(|&&p| p == 0).count();
                     row_runs.push(Run {
                         y: y as u32,
                         x_start: start as u32,
-                        x_end: (end - 1) as u32,
-                        id: 0, // Assigned correctly during flattening
+                        x_end: (start + len - 1) as u32,
+                        id: 0,
                     });
-                    x = end;
+                    x = start + len;
                 } else {
                     break;
                 }
@@ -292,18 +291,15 @@ pub fn label_components_threshold_model<'a>(
             let row_gs = &grayscale[y * grayscale_stride..y * grayscale_stride + width];
             let row_th = &threshold_map[y * width..(y + 1) * width];
             let mut row_runs = Vec::new();
-
             let mut x = 0;
             while x < width {
-                // Find start of dark run: gs < threshold - margin
-                let deviation = i16::from(row_gs[x]) - i16::from(row_th[x]);
-                if deviation < -margin {
+                let gs = row_gs[x];
+                let th = row_th[x];
+                if i16::from(gs) - i16::from(th) < -margin {
                     let start = x;
                     x += 1;
-                    // Continue while consistently dark
                     while x < width {
-                        let dev = i16::from(row_gs[x]) - i16::from(row_th[x]);
-                        if dev >= -margin {
+                        if i16::from(row_gs[x]) - i16::from(row_th[x]) >= -margin {
                             break;
                         }
                         x += 1;
@@ -312,7 +308,7 @@ pub fn label_components_threshold_model<'a>(
                         y: y as u32,
                         x_start: start as u32,
                         x_end: (x - 1) as u32,
-                        id: 0, // Assigned correctly later
+                        id: 0,
                     });
                 } else {
                     x += 1;

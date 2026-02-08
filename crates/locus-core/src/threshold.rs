@@ -437,24 +437,17 @@ impl ThresholdEngine {
 fn compute_row_tile_stats_simd(src_row: &[u8], stats: &mut [TileStats], tile_size: usize) {
     let chunks = src_row.chunks_exact(tile_size);
     for (chunk, stat) in chunks.zip(stats.iter_mut()) {
-        let mut rmin = 255u8;
-        let mut rmax = 0u8;
-        // Process chunk with explicit unrolling or SIMD-ready loop
+        let mut rmin = stat.min;
+        let mut rmax = stat.max;
+
+        // Hint to compiler for vectorization
         for &p in chunk {
-            if p < rmin {
-                rmin = p;
-            }
-            if p > rmax {
-                rmax = p;
-            }
+            rmin = rmin.min(p);
+            rmax = rmax.max(p);
         }
 
-        if rmin < stat.min {
-            stat.min = rmin;
-        }
-        if rmax > stat.max {
-            stat.max = rmax;
-        }
+        stat.min = rmin;
+        stat.max = rmax;
     }
 }
 
@@ -480,14 +473,12 @@ fn threshold_row_simd(src: &[u8], dst: &mut [u8], thresholds: &[u8], valid_mask:
             let s = s_c[i];
             let t = t_c[i];
             let v = m_c[i];
-            // Branchless comparison and mask
-            // If v > 0 (valid tile), use comparison. If v == 0, result is 255 (white).
-            let res = if v > 0 {
+            // Nested if structure often helps compiler with CMV/Masks
+            d_c[i] = if v > 0 {
                 if s < t { 0 } else { 255 }
             } else {
                 255
             };
-            d_c[i] = res;
         }
     }
 
