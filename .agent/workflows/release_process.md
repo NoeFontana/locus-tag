@@ -34,3 +34,27 @@ This project uses **Unified Lockstep Versioning** with **0-based SemVer**. All c
 
 ## Verification
 After release, verify that `Cargo.toml` files and `pyproject.toml` all have the same version number.
+
+## CI/CD Integration
+
+The release process is integrated with GitHub Actions via `.github/workflows/release.yml`.
+
+- **Trigger**: Pushing a tag starting with `v*` (e.g., `v0.1.1`).
+- **Core Crate**: Published to crates.io automatically.
+- **Python Wheels**: Built for Linux, macOS, and Windows and uploaded to PyPI.
+- **Source Distribution**: Built and uploaded to PyPI.
+
+Ensure checking your repository secrets:
+- `CARGO_REGISTRY_TOKEN`: For publishing to Crates.io.
+- `PYPI_API_TOKEN`: For publishing to PyPI.
+
+### Universal Linux Build Strategy
+
+- **publish-linux**:
+    - **Data Center**: `x86_64-unknown-linux-gnu`
+    - **Edge / Robotics**: `aarch64-unknown-linux-gnu`
+    - Uses **QEMU** for ARM64 emulation.
+    - Enforces **manylinux_2_28** for compatibility.
+    - Binaries are **stripped** and **LTO**-optimized for size.
+
+
