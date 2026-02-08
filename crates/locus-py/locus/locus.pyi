@@ -3,8 +3,9 @@ from typing import Any
 
 class CornerRefinementMode(enum.Enum):
     None_ = 0
-    Subpixel = 1
-    Erf = 2
+    Edge = 1
+    GridFit = 2
+    Erf = 3
 
 class SegmentationConnectivity(enum.Enum):
     Four = 4

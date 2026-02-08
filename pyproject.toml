@@ -50,3 +50,8 @@ target-version = "py310"
 select = ["E", "F", "B", "UP", "SIM", "I"] # Pyflakes, pycodestyle, bugbear, pyupgrade, simplify, isort
 ignore = ["E501"] # Line length handled by formatter
 
+[dependency-groups]
+dev = [
+    "maturin>=1.11.5",
+]
+
