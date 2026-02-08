@@ -1,0 +1,23 @@
+# release.toml
+allow-branch = ["main"]
+sign-commit = false
+sign-tag = false
+push = false # Set to true when you are ready to push to GitHub automatically
+
+# 1. Update the Core Crate
+[[pre-release-replacements]]
+file = "crates/locus-core/Cargo.toml"
+search = "version = \"{{prev_version}}\""
+replace = "version = \"{{version}}\""
+
+# 2. Update the Python Crate
+[[pre-release-replacements]]
+file = "crates/locus-py/Cargo.toml"
+search = "version = \"{{prev_version}}\""
+replace = "version = \"{{version}}\""
+
+# 3. Update pyproject.toml (Critical for Python ecosystem)
+[[pre-release-replacements]]
+file = "pyproject.toml"
+search = "version = \"{{prev_version}}\""
+replace = "version = \"{{version}}\""
