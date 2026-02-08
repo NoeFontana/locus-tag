@@ -5,6 +5,7 @@
 ## Features
 - **High Performance**: Written in Rust with SIMD optimizations.
 - **Zero-Copy**: Efficient Python integration via NumPy.
+- **Precise Pose Estimation**: Structure Tensor-based 3D pose recovery with covariance.
 - **Easy to Use**: Pythonic API with type hints.
 - **Documented Architecture**: See the [System Architecture](architecture.md) for design details.
 

@@ -20,12 +20,31 @@ class DecodeMode(enum.Enum):
     Hard = 0
     Soft = 1
 
+class CameraIntrinsics:
+    fx: float
+    fy: float
+    cx: float
+    cy: float
+    def __init__(self, fx: float, fy: float, cx: float, cy: float) -> None: ...
+
+class PoseEstimationMode(enum.Enum):
+    Fast = 0
+    Accurate = 1
+
+class Pose:
+    rotation: list[list[float]]
+    translation: list[float]
+    def __init__(self) -> None: ...
+
 class Detection:
     id: int
     center: list[float]
     corners: list[list[float]]
     hamming: int
     decision_margin: float
+    bits: int
+    pose: Pose | None
+    pose_covariance: list[list[float]] | None
     def __init__(self) -> None: ...
 
 class PipelineStats:
@@ -79,14 +98,41 @@ class Detector:
         refinement_mode: CornerRefinementMode = ...,
         decode_mode: DecodeMode = ...,
     ) -> None: ...
-    def detect(self, img: Any, decimation: int = ...) -> list[Detection]: ...
-    def detect_with_options(self, img: Any, families: list[TagFamily]) -> list[Detection]: ...
+    def detect(
+        self,
+        img: Any,
+        decimation: int = ...,
+        intrinsics: tuple[float, float, float, float] | None = None,
+        tag_size: float | None = None,
+        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
+    ) -> list[Detection]: ...
+    def detect_with_options(
+        self,
+        img: Any,
+        families: list[TagFamily],
+        decimation: int = ...,
+        intrinsics: tuple[float, float, float, float] | None = None,
+        tag_size: float | None = None,
+        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
+    ) -> list[Detection]: ...
     def detect_with_stats(
-        self, img: Any, decimation: int = ...
+        self,
+        img: Any,
+        decimation: int = ...,
+        intrinsics: tuple[float, float, float, float] | None = None,
+        tag_size: float | None = None,
+        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
     ) -> tuple[list[Detection], PipelineStats]: ...
     def set_families(self, families: list[TagFamily]) -> None: ...
     def extract_candidates(self, img: Any, decimation: int = ...) -> list[Any]: ...
-    def detect_full(self, img: Any, decimation: int = ...) -> FullDetectionResult: ...
+    def detect_full(
+        self,
+        img: Any,
+        decimation: int = ...,
+        intrinsics: tuple[float, float, float, float] | None = None,
+        tag_size: float | None = None,
+        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
+    ) -> FullDetectionResult: ...
 
 def detect_tags(img: Any) -> list[Detection]: ...
 def detect_tags_with_stats(img: Any) -> tuple[list[Detection], PipelineStats]: ...

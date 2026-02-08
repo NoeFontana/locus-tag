@@ -67,6 +67,17 @@ sequenceDiagram
         Decode->>Decode: Error Correction (Hamming/Soft-ML)
     end
     
+    Note over Det: 5. Pose Estimation (Optional)
+    opt If Intrinsics Provided
+        Det->>Pose: estimate_tag_pose()
+        alt Mode = Fast
+            Pose->>Pose: IPPE + LM (Geometric Error)
+        else Mode = Accurate
+            Pose->>Pose: Structure Tensor (Corner Uncertainty)
+            Pose->>Pose: Weighted LM (Mahalanobis Distance)
+        end
+    end
+
     Det-->>App: Final Detections
     deactivate Det
 ```
@@ -239,6 +250,25 @@ In Soft mode, Locus extracts **Log-Likelihood Ratios (LLRs)** for each bit. Inst
 *   **Benefit**: Recovers tags with extremely low contrast or high noise that hard-binarization would miss.
 *   **Trade-off**: Increases decoding latency proportional to dictionary size.
 
+## Pose Estimation Strategies
+
+Locus supports two modes for recovering the 6-DOF pose of the tag relative to the camera. This is controlled via `PoseEstimationMode`.
+
+### 1. Fast Mode (IPPE + Geometric Error)
+The default mode. It uses the **Infinitesimal Plane-Based Pose Estimation (IPPE)** algorithm to solve the PnP problem from the 4 corner points.
+*   **Method**: Solves for the homography and decomposes it. Resolves the ambiguity using the IPPE criteria.
+*   **Refinement**: Standard Levenberg-Marquardt minimizing reprojection error (assuming Identity covariance).
+*   **Performance**: Very fast (~50µs per tag).
+*   **Best For**: High frame-rate tracking wheretags are close to the camera.
+
+### 2. Accurate Mode (Structure Tensor + Probabilistic)
+A high-precision mode for critical applications (e.g., ground-truth systems, long-range detection).
+*   **Method**: Computes the **Structure Tensor** ($J^T J$) for each corner's sub-pixel window to estimate the corner position uncertainty ($\Sigma_{corner}$).
+*   **Refinement**: **Anisotropic Weighted Levenberg-Marquardt**. It minimizes the **Mahalanobis distance**, weighting precise corners more heavily than blurry/noisy ones.
+*   **Output**: Provides a fully populated `pose_covariance` matrix ($6 \times 6$) representing the uncertainty of the final pose.
+*   **Performance**: Slower (~200µs per tag) due to gradient computation and tensor analysis.
+*   **Best For**: Precision landing, camera calibration, or long-range detection where pixel noise is significant.
+
 ## Extensibility
 
 Locus is designed to support new fiducial marker systems without modifying the core pipeline.
@@ -296,5 +326,7 @@ The `locus-core` crate is organized into logical modules mirroring the pipeline 
 | `quad` | Contour tracing and quad fitting. | `extract_quads` |
 | `decoder` | Bit extraction and hamming decoding. | `TagDecoder`, `Homography` |
 | `pose` | 3D pose estimation (PnP). | `Pose`, `CameraIntrinsics` |
+| `pose_weighted` | Structure Tensor & Weighted LM. | `refine_pose_lm_weighted` |
+| `gradient` | Image gradients & Sub-pixel windows. | `compute_structure_tensor` |
 | `filter` | Pre-processing filters (Bilateral, Sharpen). | `bilateral_filter` |
 

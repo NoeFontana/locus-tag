@@ -107,3 +107,18 @@ uv run pytest
 | `tests/` | Integration tests and evaluation scripts |
 | `benchmarks/` | Criterion-based performance benchmarks |
 | `docs/` | MkDocs documentation source |
+
+## 📚 Building Documentation
+
+To build and preview the documentation locally (using `uv`):
+
+```bash
+# 1. Install dependencies and project
+uv sync --extra docs
+
+# 2. Build the documentation
+uv run mkdocs build
+
+# 3. Serve documentation
+uv run mkdocs serve
+```

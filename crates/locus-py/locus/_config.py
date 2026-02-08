@@ -1,6 +1,13 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from .locus import CornerRefinementMode, DecodeMode, SegmentationConnectivity, TagFamily
+from .locus import (
+    CameraIntrinsics,
+    CornerRefinementMode,
+    DecodeMode,
+    PoseEstimationMode,
+    SegmentationConnectivity,
+    TagFamily,
+)
 
 
 class DetectorConfig(BaseModel):
@@ -53,6 +60,11 @@ class DetectOptions(BaseModel):
 
     families: list[TagFamily] = Field(default_factory=list)
     decimation: int = Field(default=1, ge=1)
+    intrinsics: tuple[float, float, float, float] | CameraIntrinsics | None = Field(default=None)
+    tag_size: float | None = Field(default=None, ge=0.0)
+    pose_estimation_mode: PoseEstimationMode = Field(
+        default_factory=lambda: PoseEstimationMode.Fast
+    )
 
     @classmethod
     def all(cls) -> "DetectOptions":

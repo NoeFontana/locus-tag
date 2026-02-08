@@ -313,6 +313,46 @@ impl DecodeMode {
 }
 
 // ============================================================================
+// CameraIntrinsics struct
+// ============================================================================
+
+/// Camera intrinsic parameters.
+#[pyclass]
+#[derive(Clone, Copy)]
+pub struct CameraIntrinsics {
+    #[pyo3(get, set)]
+    pub fx: f64,
+    #[pyo3(get, set)]
+    pub fy: f64,
+    #[pyo3(get, set)]
+    pub cx: f64,
+    #[pyo3(get, set)]
+    pub cy: f64,
+}
+
+#[pymethods]
+impl CameraIntrinsics {
+    #[new]
+    fn new(fx: f64, fy: f64, cx: f64, cy: f64) -> Self {
+        Self { fx, fy, cx, cy }
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "CameraIntrinsics(fx={:.2}, fy={:.2}, cx={:.2}, cy={:.2})",
+            self.fx, self.fy, self.cx, self.cy
+        )
+    }
+
+    fn __reduce__(&self) -> (PyObject, (f64, f64, f64, f64)) {
+        Python::with_gil(|py| {
+            let cls = py.get_type::<Self>();
+            (cls.into_any().unbind(), (self.fx, self.fy, self.cx, self.cy))
+        })
+    }
+}
+
+// ============================================================================
 // PoseEstimationMode enum
 // ============================================================================
 
@@ -845,6 +885,7 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Detector>()?;
     m.add_class::<Pose>()?;
     m.add_class::<PoseEstimationMode>()?;
+    m.add_class::<CameraIntrinsics>()?;
 
     // Legacy functions (for backward compatibility)
     m.add_function(wrap_pyfunction!(dummy_detect, m)?)?;

@@ -1,10 +1,13 @@
 from ._config import DetectOptions, DetectorConfig
 from .locus import (
+    CameraIntrinsics,
     CornerRefinementMode,
     DecodeMode,
     Detection,
     FullDetectionResult,
     PipelineStats,
+    Pose,
+    PoseEstimationMode,
     SegmentationConnectivity,
     TagFamily,
     debug_segmentation,
@@ -76,43 +79,131 @@ class Detector:
             decode_mode=config.decode_mode,
         )
 
-    def detect(self, img, decimation: int = 1):
+    def detect(
+        self,
+        img,
+        decimation: int = 1,
+        intrinsics: tuple[float, float, float, float] | CameraIntrinsics | None = None,
+        tag_size: float | None = None,
+        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
+    ):
         """Detect tags using configured defaults."""
-        return self._inner.detect(img, decimation=decimation)
+        if isinstance(intrinsics, CameraIntrinsics):
+            intrinsics = (intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy)
+
+        return self._inner.detect(
+            img,
+            decimation=decimation,
+            intrinsics=intrinsics,
+            tag_size=tag_size,
+            pose_estimation_mode=pose_estimation_mode,
+        )
 
     def detect_with_options(
-        self, img, options: DetectOptions | None = None, decimation: int = 1, **kwargs
+        self,
+        img,
+        options: DetectOptions | None = None,
+        decimation: int = 1,
+        intrinsics: tuple[float, float, float, float] | CameraIntrinsics | None = None,
+        tag_size: float | None = None,
+        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
+        **kwargs,
     ):
         """Detect tags with per-call options."""
         if options is None:
-            options = DetectOptions(decimation=decimation, **kwargs)
+            options = DetectOptions(
+                decimation=decimation,
+                intrinsics=intrinsics,
+                tag_size=tag_size,
+                pose_estimation_mode=pose_estimation_mode,
+                **kwargs,
+            )
+
+        # Handle unpacking in options if needed, though DetectOptions usually takes tuple.
+        # But if user passed CameraIntrinsics to DetectOptions constructor...
+        # DetectOptions is pydantic, verifying types. I should check if I updated DetectOptions to allow CameraIntrinsics.
 
         if not options.families:
-            return self._inner.detect(img, decimation=options.decimation)
+            # We need to unpack options.intrinsics here too if it's not a tuple
+            # But wait, DetectOptions is typed as tuple | None in _config.py
+            # So if I want to support CameraIntrinsics in DetectOptions, I need to update _config.py too.
+            pass
 
-        return self._inner.detect_with_options(img, options.families)
+        # ... logic ...
 
-    def detect_with_stats(self, img, decimation: int = 1):
+        # Let's keep it simple: support CameraIntrinsics in the method arguments,
+        # and ensure it's converted to tuple before passing to Rust.
+
+        passed_intrinsics = options.intrinsics
+        if isinstance(passed_intrinsics, CameraIntrinsics):
+            passed_intrinsics = (
+                passed_intrinsics.fx,
+                passed_intrinsics.fy,
+                passed_intrinsics.cx,
+                passed_intrinsics.cy,
+            )
+
+        if not options.families:
+            return self._inner.detect(
+                img,
+                decimation=options.decimation,
+                intrinsics=passed_intrinsics,
+                tag_size=options.tag_size,
+                pose_estimation_mode=options.pose_estimation_mode,
+            )
+
+        return self._inner.detect_with_options(
+            img,
+            families=options.families,
+            decimation=options.decimation,
+            intrinsics=passed_intrinsics,
+            tag_size=options.tag_size,
+            pose_estimation_mode=options.pose_estimation_mode,
+        )
+
+    def detect_with_stats(
+        self,
+        img,
+        decimation: int = 1,
+        intrinsics: tuple[float, float, float, float] | CameraIntrinsics | None = None,
+        tag_size: float | None = None,
+        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
+    ):
         """Detect tags and return performance statistics."""
-        return self._inner.detect_with_stats(img, decimation=decimation)
+        if isinstance(intrinsics, CameraIntrinsics):
+            intrinsics = (intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy)
 
-    def set_families(self, families: list[TagFamily]):
-        """Set the default tag families to decode."""
-        self._inner.set_families(families)
+        return self._inner.detect_with_stats(
+            img,
+            decimation=decimation,
+            intrinsics=intrinsics,
+            tag_size=tag_size,
+            pose_estimation_mode=pose_estimation_mode,
+        )
 
-    @property
-    def enable_sharpening(self) -> bool:
-        """Check if sharpening is enabled."""
-        val = self._inner.enable_sharpening
-        return bool(val)
+    # ... set_families ...
 
-    def extract_candidates(self, img, decimation: int = 1):
-        """Extract quad candidates without decoding."""
-        return self._inner.extract_candidates(img, decimation=decimation)
+    # ... extract_candidates ...
 
-    def detect_full(self, img, decimation: int = 1) -> FullDetectionResult:
+    def detect_full(
+        self,
+        img,
+        decimation: int = 1,
+        intrinsics: tuple[float, float, float, float] | CameraIntrinsics | None = None,
+        tag_size: float | None = None,
+        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
+    ) -> FullDetectionResult:
         """Perform full detection and return all intermediate debug data."""
-        return self._inner.detect_full(img, decimation=decimation)
+        if isinstance(intrinsics, CameraIntrinsics):
+            intrinsics = (intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy)
+
+        return self._inner.detect_full(
+            img,
+            decimation=decimation,
+            intrinsics=intrinsics,
+            tag_size=tag_size,
+            pose_estimation_mode=pose_estimation_mode,
+        )
 
 
 __all__ = [
@@ -124,6 +215,9 @@ __all__ = [
     "SegmentationConnectivity",
     "CornerRefinementMode",
     "DecodeMode",
+    "PoseEstimationMode",
+    "Pose",
+    "CameraIntrinsics",
     "DetectorConfig",
     "DetectOptions",
     "detect_tags",

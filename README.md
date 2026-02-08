@@ -119,12 +119,17 @@ detector = locus.Detector(config=config)
 Locus implements **IPPE-Square** (Infinitesimal Plane-Based Pose Estimation) for SOTA pose accuracy. This solves the "perspective flip" ambiguity that plagues generic PnP solvers and refines the result using **Levenberg-Marquardt**.
 
 ```python
-# To get pose, simply pass camera intrinsics and tag size
-options = locus.DetectOptions(
-    intrinsics=locus.CameraIntrinsics(fx=800.0, fy=800.0, cx=640.0, cy=360.0),
-    tag_size=0.16 # meters
+# To get pose, simply pass intrinsics and tag size
+# You can pass a tuple/list or use the helper class
+intrinsics = locus.CameraIntrinsics(fx=800.0, fy=800.0, cx=640.0, cy=360.0)
+
+# Standard detection with pose estimation
+tags = detector.detect(
+    img,
+    intrinsics=intrinsics,
+    tag_size=0.16, # meters
+    pose_estimation_mode=locus.PoseEstimationMode.Accurate # Optional: Use high-precision mode
 )
-tags = detector.detect_with_options(img, options)
 
 for t in tags:
     if t.pose:
