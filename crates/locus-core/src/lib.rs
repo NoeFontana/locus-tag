@@ -73,6 +73,8 @@ pub mod gradient;
 pub mod image;
 /// 3D Pose Estimation (PnP).
 pub mod pose;
+/// Weighted pose estimation logic.
+pub mod pose_weighted;
 /// Quad extraction and geometric primitives.
 pub mod quad;
 /// Connected components labeling using Union-Find.
@@ -83,8 +85,6 @@ pub mod strategy;
 pub mod test_utils;
 /// Adaptive thresholding implementation.
 pub mod threshold;
-/// Weighted pose estimation logic.
-pub mod pose_weighted;
 
 pub use crate::config::{DetectOptions, DetectorConfig, TagFamily};
 use crate::decoder::TagDecoder;

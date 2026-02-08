@@ -479,7 +479,10 @@ macro_rules! test_icra {
         #[test]
         fn $name() {
             if std::env::var("LOCUS_EXTENDED_REGRESSION").is_err() {
-                println!("Skipping heavy test {}. Set LOCUS_EXTENDED_REGRESSION=1 to run.", stringify!($name));
+                println!(
+                    "Skipping heavy test {}. Set LOCUS_EXTENDED_REGRESSION=1 to run.",
+                    stringify!($name)
+                );
                 return;
             }
             if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {

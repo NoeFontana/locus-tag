@@ -1,7 +1,7 @@
 #![allow(clippy::many_single_char_names, clippy::similar_names)]
-use nalgebra::{Matrix3, Matrix6, Vector3, Vector6};
-use crate::image::ImageView;
 use crate::config::PoseEstimationMode;
+use crate::image::ImageView;
+use nalgebra::{Matrix3, Matrix6, Vector3, Vector6};
 
 /// Camera intrinsics parameters.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -104,9 +104,8 @@ pub fn estimate_tag_pose(
     mode: PoseEstimationMode,
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>) {
     // 1. Canonical Homography: Map canonical square [-1,1]x[-1,1] to image pixels.
-    let h_poly = match crate::decoder::Homography::square_to_quad(corners) {
-        Some(h) => h,
-        None => return (None, None),
+    let Some(h_poly) = crate::decoder::Homography::square_to_quad(corners) else {
+        return (None, None);
     };
     let h_pixel = h_poly.h;
 
@@ -121,9 +120,8 @@ pub fn estimate_tag_pose(
     h_metric.column_mut(1).scale_mut(scaler);
 
     // 4. IPPE Core: Decompose Jacobian (first 2 image cols) into 2 potential poses.
-    let candidates = match solve_ippe_square(&h_metric) {
-        Some(c) => c,
-        None => return (None, None),
+    let Some(candidates) = solve_ippe_square(&h_metric) else {
+        return (None, None);
     };
 
     // 5. Disambiguation: Choose the pose with lower reprojection error.
@@ -133,7 +131,8 @@ pub fn estimate_tag_pose(
     match (mode, img) {
         (PoseEstimationMode::Accurate, Some(image)) => {
             // Compute corner uncertainty from structure tensor
-            let uncertainty = crate::pose_weighted::compute_framework_uncertainty(image, corners, &h_poly);
+            let uncertainty =
+                crate::pose_weighted::compute_framework_uncertainty(image, corners, &h_poly);
             let (refined_pose, covariance) = crate::pose_weighted::refine_pose_lm_weighted(
                 intrinsics,
                 corners,
@@ -142,11 +141,14 @@ pub fn estimate_tag_pose(
                 &uncertainty,
             );
             (Some(refined_pose), Some(covariance))
-        }
+        },
         _ => {
             // Fast mode (Identity weights)
-            (Some(refine_pose_lm(intrinsics, corners, tag_size, best_pose)), None)
-        }
+            (
+                Some(refine_pose_lm(intrinsics, corners, tag_size, best_pose)),
+                None,
+            )
+        },
     }
 }
 
@@ -536,7 +538,13 @@ mod tests {
             img_pts[i] = gt_pose.project(&obj_pts[i], &intrinsics);
         }
 
-        let (est_pose, _) = estimate_tag_pose(&intrinsics, &img_pts, tag_size, None, PoseEstimationMode::Fast);
+        let (est_pose, _) = estimate_tag_pose(
+            &intrinsics,
+            &img_pts,
+            tag_size,
+            None,
+            PoseEstimationMode::Fast,
+        );
         let est_pose = est_pose.expect("Pose estimation failed");
 
         // Check translation

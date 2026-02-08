@@ -159,11 +159,9 @@ impl From<locus_core::Detection> for Detection {
             decision_margin: d.decision_margin,
             bits: d.bits,
             pose: d.pose.map(Pose::from),
-            pose_covariance: d.pose_covariance.map(|cov| {
-                cov.iter()
-                    .map(|row| row.to_vec())
-                    .collect()
-            }),
+            pose_covariance: d
+                .pose_covariance
+                .map(|cov| cov.iter().map(|row| row.to_vec()).collect()),
         }
     }
 }
@@ -347,7 +345,10 @@ impl CameraIntrinsics {
     fn __reduce__(&self) -> (PyObject, (f64, f64, f64, f64)) {
         Python::with_gil(|py| {
             let cls = py.get_type::<Self>();
-            (cls.into_any().unbind(), (self.fx, self.fy, self.cx, self.cy))
+            (
+                cls.into_any().unbind(),
+                (self.fx, self.fy, self.cx, self.cy),
+            )
         })
     }
 }
@@ -604,7 +605,7 @@ impl Detector {
         let view = create_image_view(&img)?;
         let core_families: Vec<locus_core::config::TagFamily> =
             families.into_iter().map(Into::into).collect();
-        
+
         let mut builder = locus_core::DetectOptions::builder();
         builder = builder.families(&core_families);
         builder = builder.decimation(decimation);

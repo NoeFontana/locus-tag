@@ -161,12 +161,15 @@ fn test_pose_accuracy_accurate() {
     );
 
     assert!(pose.is_some(), "Pose should be estimated");
-    assert!(covariance.is_some(), "Covariance should be computed in Accurate mode");
+    assert!(
+        covariance.is_some(),
+        "Covariance should be computed in Accurate mode"
+    );
 
     let cov = covariance.unwrap();
     // Check main diagonal is positive (variance)
-    for i in 0..6 {
-        assert!(cov[i][i] > 0.0, "Variance should be positive");
+    for (i, row) in cov.iter().enumerate() {
+        assert!(row[i] > 0.0, "Variance should be positive");
     }
 }
 
