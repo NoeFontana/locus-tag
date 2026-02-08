@@ -15,8 +15,11 @@ The regression suite validates that `Locus` matches or exceeds ground truth for 
    ```
 2. **Run Benchmarks**:
    ```bash
-   # Comprehensive check (all datasets, approx 2 mins)
-   cargo test --release --test regression_icra2020 -- --ignored
+   # Core check (Forward dataset + Fixtures, approx 15s)
+   cargo test --release --test regression_icra2020
+
+   # Extended check (Circle, Random, Rotation, approx 1-2 mins)
+   LOCUS_EXTENDED_REGRESSION=1 cargo test --release --test regression_icra2020
 
    # Accurate latency measurement (sequential)
    cargo test --release --test regression_icra2020 -- --test-threads=1

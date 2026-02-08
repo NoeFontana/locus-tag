@@ -45,14 +45,15 @@ export LOCUS_DATASET_DIR=/path/to/icra2020
 ### Running Tests
 
 ```bash
-# Run all regression tests
-cargo nextest run --test regression_icra2020 --release
+# 1. Run core regression suite (Forward tests + Fixtures)
+# Must use --release for meaningful performance validation
+cargo test --release --test regression_icra2020
 
-# Run specific subset
-cargo nextest run --test regression_icra2020 test_regression_icra2020_forward --release
+# 2. Run extended regression suite (Circle, Random, Rotation - heavy)
+LOCUS_EXTENDED_REGRESSION=1 cargo test --release --test regression_icra2020
 
-# Run fixture-based smoke test (no dataset required)
-cargo nextest run test_fixture_forward_0037 --release
+# 3. Run fixture-based smoke test (no dataset required)
+cargo test --release regression_fixtures
 ```
 
 ## 📸 Golden Master Snapshots
@@ -89,7 +90,7 @@ cargo fmt --all
 cargo clippy --all-targets --all-features -- -D warnings
 
 # 2. Run tests
-cargo nextest run --all-features
+cargo test --all-features
 
 # 3. Verify doctests
 cargo test --doc -p locus-core

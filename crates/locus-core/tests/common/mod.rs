@@ -20,10 +20,6 @@ pub fn resolve_dataset_root() -> Option<PathBuf> {
         if path.is_dir() {
             return Some(path);
         }
-        eprintln!(
-            "Warning: LOCUS_DATASET_DIR is set to {} but it is not a directory.",
-            path.display()
-        );
     }
 
     // 2. Relative path fallback (Standard Repo Layout)

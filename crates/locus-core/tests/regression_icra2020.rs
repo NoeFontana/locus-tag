@@ -2,7 +2,7 @@
 //!
 //! Evaluates the detector against:
 //! 1. "Fixtures" (Committed representative images) - Runs in CI, guarantees baseline functionality.
-//! 2. "ICRA 2020" (External dataset) - Runs if present, supports sampling for speed.
+//! 2. "ICRA 2020" (External dataset) - Core subset runs by default, heavy datasets gated by LOCUS_EXTENDED_REGRESSION.
 
 #![allow(
     missing_docs,
@@ -477,8 +477,11 @@ macro_rules! test_icra {
     };
     (IGNORED $name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident) => {
         #[test]
-        #[ignore = "Lengthy regression test"]
         fn $name() {
+            if std::env::var("LOCUS_EXTENDED_REGRESSION").is_err() {
+                println!("Skipping heavy test {}. Set LOCUS_EXTENDED_REGRESSION=1 to run.", stringify!($name));
+                return;
+            }
             if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
                 let snapshot = provider.name().to_string();
                 RegressionHarness::new(snapshot)

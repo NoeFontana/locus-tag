@@ -1,5 +1,6 @@
 ---
 source: crates/locus-core/tests/regression_icra2020.rs
+assertion_line: 306
 expression: report
 ---
 summary:
