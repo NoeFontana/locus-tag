@@ -60,6 +60,7 @@ plugins:
 
 nav:
   - Home: index.md
+  - User Guide: guide.md
   - Architecture: architecture.md
   - Coordinate Systems: coordinates.md
   - Benchmarking: benchmarking.md
