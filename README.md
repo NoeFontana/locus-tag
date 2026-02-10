@@ -2,19 +2,19 @@
 
 ## The Project Goal
 
-**Locus** is a high-performance fiducial marker detector (AprilTag & ArUco) written in Rust with zero-copy Python bindings. It targets a balance of low latency (~10ms), high recall, and precise pose estimation.
+**Locus** is a high-performance fiducial marker detector (AprilTag & ArUco) written in Rust with zero-copy Python bindings. It targets a balance of low latency, high recall, and precise pose estimation.
 
 > [!WARNING]
 > **Experimental Status**: Locus is currently in an active research and development phase. The API is subject to breaking changes. While performance is high on current benchmarks, it is **not recommended for production systems** yet. Photo-realistic benchmarks are in development under [render-tag](https://github.com/NoeFontana/render-tag).
 
 ## Performance (ICRA 2020 Dataset)
 
-| Detector | Recall | RMSE | Total Latency (50 imgs) |
+| Detector | Recall | RMSE | Total (50 imgs) |
 | :--- | :--- | :--- | :--- |
-| **Locus (Soft)** | **95.42%** | 0.31 px | 110.7 ms |
-| **Locus (Hard)** | **83.90%** | 0.25 px | **91.5 ms** |
-| AprilTag 3 | 62.34% | **0.22 px** | 101.5 ms |
-| OpenCV | 33.16% | 0.92 px | 95.5 ms |
+| **Locus (Soft)** | **95.42%** | 0.31 px | 11.07 s |
+| **Locus (Hard)** | **83.90%** | 0.25 px | **9.15 s** |
+| AprilTag 3 | 62.34% | **0.22 px** | 10.15 s |
+| OpenCV | 33.16% | 0.92 px | 9.55 s |
 
 *Note: Locus' higher recall (detecting more challenging tags) correlates with its aggregate RMSE. On identical detections, Locus' precision is within **+0.0024 px** of AprilTag.*
 

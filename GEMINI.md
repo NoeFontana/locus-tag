@@ -3,7 +3,7 @@
 ## 1. Project Identity
 * **Name:** Locus (`locus-vision`)
 * **Type:** High-Performance Computer Vision Library (Rust + Python)
-* **Core Mission:** A research-oriented, memory-safe, high-performance fiducial marker detector (AprilTag/ArUco) targeting ~10ms latency.
+* **Core Mission:** A research-oriented, memory-safe, high-performance fiducial marker detector (AprilTag/ArUco) targeting low latency.
 * **Target Audience:** Robotics/AV Perception Engineers requiring safety certification guarantees and zero-copy Python integration.
 
 ## 2. Technical Stack (2026 Modern Standards)

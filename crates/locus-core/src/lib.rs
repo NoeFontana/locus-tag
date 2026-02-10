@@ -1,6 +1,6 @@
 //! High-performance AprilTag and ArUco detection engine.
 //!
-//! Locus is a research-oriented, memory-safe fiducial marker detector targeting ~10ms
+//! Locus is a research-oriented, memory-safe fiducial marker detector targeting low
 //! latency. It provides a performance-focused pipeline for robotics and computer vision,
 //! with strict zero-heap allocation in the detection hot-path.
 //!
