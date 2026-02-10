@@ -1,8 +1,15 @@
+//! Pluggable decoding strategies for different SNR conditions.
+//!
+//! This module abstracts the process of converting sampled pixel intensities
+//! into tag IDs. It provides:
+//! - **Hard-Decision**: Fastest mode using binary thresholds and Hamming distance.
+//! - **Soft-Decision**: High-recall mode using Log-Likelihood Ratios (LLRs).
+
 use crate::decoder::TagDecoder;
 
 /// Trait abstracting the decoding strategy (Hard vs Soft).
 pub trait DecodingStrategy: Send + Sync + 'static {
-    /// The type of code extracted from the image (e.g., u64 bits or Vec<i16> LLRs).
+    /// The type of code extracted from the image (e.g., u64 bits or `Vec<i16>` LLRs).
     type Code: Clone + std::fmt::Debug + Send + Sync;
 
     /// Convert intensities and thresholds into a code.

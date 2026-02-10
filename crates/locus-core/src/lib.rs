@@ -1,62 +1,44 @@
-//! Core detection logic for the Locus Tag library.
+//! High-performance AprilTag and ArUco detection engine.
 //!
-//! Locus is a high-performance AprilTag and ArUco detector implemented in Rust.
-//! This project serves as an experiment in LLM-assisted library development,
-//! targeting 1-10ms latencies.
+//! Locus is a production-grade, memory-safe fiducial marker detector targeting sub-millisecond
+//! latency. It provides a robust pipeline for robotics and computer vision applications,
+//! with strict zero-heap allocation in the detection hot-path.
 //!
-//! The pipeline includes adaptive thresholding, segmentation, quad extraction, and decoding.
+//! # Key Features
 //!
-//! # Architecture Overview
+//! - **Performance**: SIMD-accelerated adaptive thresholding and connected components.
+//! - **Accuracy**: SOTA sub-pixel refinement and probabilistic pose estimation.
+//! - **Flexibility**: Pluggable tag families (AprilTag 36h11, 16h5, ArUco).
+//! - **Memory Safety**: Arena-based memory management ([`bumpalo`]).
 //!
-//! The Locus pipeline follows a Data-Oriented Design approach optimized for strict latency budgets:
+//! # Architecture
 //!
-//! 1. **Preprocessing (Adaptive Thresholding)**:
-//!    - Integral image computation for constant-time local window stats.
-//!    - Multiversion SIMD kernels for min/max filtering.
-//!    - Optional bilateral filtering and sharpening.
-//!    - See the [Architecture Guide](../architecture/index.html) for memory layout details.
+//! The pipeline is designed around Data-Oriented Design (DOD) principles:
 //!
-//! 2. **Segmentation**:
-//!    - Threshold-model aware connected components labeling (CCL).
-//!    - Union-Find data structure with flat arrays for cache locality.
+//! 1. **Preprocessing**: [`threshold::ThresholdEngine`] computes local tile statistics and performs adaptive binarization.
+//! 2. **Segmentation**: [`segmentation::label_components_threshold_model`] identifies quad candidates using Union-Find.
+//! 3. **Extraction**: [`quad::extract_quads_with_config`] traces contours and fits initial polygon candidates.
+//! 4. **Decoding**: [`Detector`] samples bit grids and performs Hamming error correction via [`strategy::DecodingStrategy`].
+//! 5. **Pose Estimation**: [`pose::estimate_tag_pose`] recovers 6-DOF transforms using IPPE or weighted LM.
 //!
-//! 3. **Quad Extraction**:
-//!    - Contour tracing and polygon approximation (Douglas-Peucker).
-//!    - Sub-pixel corner refinement using intensity-based optimization.
-//!    - Geometric heuristics filtering (area, aspect ratio).
-//!
-//! 4. **Decoding**:
-//!    - Homography-based grid sampling.
-//!    - Plugin architecture for multiple tag families (Apriltag 36h11, ArUco).
-//!    - Hamming error correction.
-//!
-//! # Configuration
-//!
-//! The detector supports two levels of configuration:
-//! - [`config::DetectorConfig`]: Pipeline-level settings (immutable after construction)
-//! - [`config::DetectOptions`]: Per-call detection options
-//!
-//! # Example
+//! # Examples
 //!
 //! ```
-//! # use locus_core::{Detector, config::{DetectorConfig, DetectOptions, TagFamily}};
-//! # use locus_core::image::ImageView;
-//! // Create detector with custom config
-//! let config = DetectorConfig::builder()
-//!     .threshold_tile_size(16)
-//!     .quad_min_area(200)
-//!     .build();
-//! let mut detector = Detector::with_config(config);
+//! use locus_core::{Detector, DetectorConfig, DetectOptions, TagFamily, ImageView};
 //!
-//! // Create a dummy image for demonstration
-//! # let pixels = vec![128u8; 64 * 64];
-//! # let img = ImageView::new(&pixels, 64, 64, 64).unwrap();
+//! // Create a detector with default settings
+//! let mut detector = Detector::new();
 //!
-//! // Detect with custom options (e.g., specific tag family)
-//! let options = DetectOptions::builder()
-//!     .families(&[TagFamily::AprilTag36h11])
-//!     .build();
-//! let detections = detector.detect_with_options(&img, &options);
+//! // Create a view into your image data (zero-copy)
+//! let pixels = vec![0u8; 640 * 480];
+//! let img = ImageView::new(&pixels, 640, 480, 640).unwrap();
+//!
+//! // Detect tags (default family: AprilTag 36h11)
+//! let detections = detector.detect(&img);
+//!
+//! for detection in detections {
+//!     println!("Detected tag {} at {:?}", detection.id, detection.center);
+//! }
 //! ```
 
 /// Configuration types for the detector pipeline.

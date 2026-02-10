@@ -1,3 +1,12 @@
+//! Adaptive thresholding and image binarization.
+//!
+//! This module provides the first stage of the detection pipeline, converting grayscale
+//! input into binary images while adapting to local lighting conditions.
+//!
+//! It features two primary implementations:
+//! 1. **Tile-based Thresholding**: Blazing fast approach using local tile stats.
+//! 2. **Integral Image Thresholding**: SOTA per-pixel adaptive thresholding for small features.
+
 #![allow(unsafe_code, clippy::cast_sign_loss)]
 use crate::config::DetectorConfig;
 use crate::image::ImageView;

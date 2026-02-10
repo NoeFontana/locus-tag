@@ -1,3 +1,12 @@
+//! Connected components labeling (CCL) using Union-Find.
+//!
+//! This module implements the second stage of the pipeline, identifying and grouping
+//! dark pixels that could potentially form fiducial markers.
+//!
+//! It provides:
+//! - **Standard CCL**: Efficient binary component labeling.
+//! - **Threshold-Model CCL**: Advanced connectivity based on local adaptive thresholds.
+
 use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
 use rayon::prelude::*;

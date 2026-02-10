@@ -1,3 +1,10 @@
+//! 3D Pose Estimation (PnP) for fiducial markers.
+//!
+//! This module recovers the 6-DOF transformation between the camera and the tag.
+//! It supports:
+//! - **Fast Mode (IPPE)**: Infinitesimal Plane-Based Pose Estimation for low latency.
+//! - **Accurate Mode (Weighted LM)**: Iterative refinement weighted by sub-pixel uncertainty.
+
 #![allow(clippy::many_single_char_names, clippy::similar_names)]
 use crate::config::PoseEstimationMode;
 use crate::image::ImageView;

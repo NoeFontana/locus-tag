@@ -1,3 +1,11 @@
+//! Quad extraction and geometric primitive fitting.
+//!
+//! This module implements the middle stage of the detection pipeline:
+//! 1. **Contour Tracing**: Extracting the boundary of connected components.
+//! 2. **Simplification**: Using Douglas-Peucker to reduce complex contours to polygons.
+//! 3. **Quad Fitting**: Heuristics to reduce polygons to quadrilaterals and verify convexity.
+//! 4. **Sub-pixel Refinement**: Intensity-based edge localization for maximum precision.
+
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::similar_names)]

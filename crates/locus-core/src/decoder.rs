@@ -1,3 +1,10 @@
+//! Tag decoding, homography computation, and bit sampling.
+//!
+//! This module handles the final stage of the pipeline:
+//! 1. **Homography**: Computing the projection from canonical tag space to image pixels.
+//! 2. **Bit Sampling**: Bilinear interpolation of intensities at grid points.
+//! 3. **Error Correction**: Correcting bit flips using tag-family specific Hamming distances.
+
 #![allow(unsafe_code, clippy::cast_sign_loss)]
 use crate::config;
 use nalgebra::{SMatrix, SVector};
