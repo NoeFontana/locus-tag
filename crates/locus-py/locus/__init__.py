@@ -181,9 +181,13 @@ class Detector:
             pose_estimation_mode=pose_estimation_mode,
         )
 
-    # ... set_families ...
+    def set_families(self, families: list[TagFamily]):
+        """Set the tag families to be detected by default."""
+        self._inner.set_families(families)
 
-    # ... extract_candidates ...
+    def extract_candidates(self, img, decimation: int = 1):
+        """Extract candidate quads without decoding."""
+        return self._inner.extract_candidates(img, decimation=decimation)
 
     def detect_full(
         self,
