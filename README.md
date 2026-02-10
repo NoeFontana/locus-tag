@@ -2,10 +2,10 @@
 
 ## The Project Goal
 
-**Locus** is a high-performance fiducial marker detector (AprilTag & ArUco) written in Rust with zero-copy Python bindings. It targets a balance of sub-millisecond latency, high recall, and precise pose estimation.
+**Locus** is a high-performance fiducial marker detector (AprilTag & ArUco) written in Rust with zero-copy Python bindings. It targets a balance of low latency (~10ms), high recall, and precise pose estimation.
 
 > [!WARNING]
-> **Experimental Status**: Locus is currently in an active research and development phase. The API is subject to breaking changes. While performance is competitive with SOTA, it is **not recommended for production systems** yet. Photo-realistic benchmarks are in development under [render-tag](https://github.com/NoeFontana/render-tag).
+> **Experimental Status**: Locus is currently in an active research and development phase. The API is subject to breaking changes. While performance is high on current benchmarks, it is **not recommended for production systems** yet. Photo-realistic benchmarks are in development under [render-tag](https://github.com/NoeFontana/render-tag).
 
 ## Performance (ICRA 2020 Dataset)
 
@@ -49,7 +49,7 @@ For performance tuning, pose estimation, and specialized profiles, see the **[Us
 
 - **Decimation**: Speed up processing on high-res images.
 - **Soft-Decoding**: Maximum recall for blurry or small tags (+11.5% boost).
-- **Pose Estimation**: SOTA IPPE-Square and Probabilistic refinement.
+- **Pose Estimation**: Advanced IPPE-Square and Probabilistic refinement.
 - **Profiles**: Optimized settings for checkerboards and dense patterns.
 
 ## Development & Benchmarking

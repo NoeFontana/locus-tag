@@ -221,7 +221,7 @@ Locus includes built-in instrumentation for performance profiling and visual deb
 
 ## Performance Characteristics
 
-Targets a **1-10ms** latency budget for 1080p frames on modern CPUs.
+Targets a **~10ms** latency budget for 1080p frames on modern CPUs.
 
 | Stage | Complexity | Latency (1080p) | Notes |
 | :--- | :--- | :--- | :--- |

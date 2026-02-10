@@ -1,13 +1,13 @@
 //! High-performance AprilTag and ArUco detection engine.
 //!
-//! Locus is a production-grade, memory-safe fiducial marker detector targeting sub-millisecond
-//! latency. It provides a robust pipeline for robotics and computer vision applications,
+//! Locus is a research-oriented, memory-safe fiducial marker detector targeting ~10ms
+//! latency. It provides a performance-focused pipeline for robotics and computer vision,
 //! with strict zero-heap allocation in the detection hot-path.
 //!
 //! # Key Features
 //!
 //! - **Performance**: SIMD-accelerated adaptive thresholding and connected components.
-//! - **Accuracy**: SOTA sub-pixel refinement and probabilistic pose estimation.
+//! - **Accuracy**: Advanced sub-pixel refinement and probabilistic pose estimation.
 //! - **Flexibility**: Pluggable tag families (AprilTag 36h11, 16h5, ArUco).
 //! - **Memory Safety**: Arena-based memory management ([`bumpalo`]).
 //!
@@ -355,7 +355,7 @@ impl Detector {
         {
             let _span = tracing::info_span!("threshold_binarize").entered();
             if self.config.enable_adaptive_window {
-                // SOTA: Adaptive window is robust for tiny tags but slow (O(N) per pixel)
+                // Adaptive window is robust for tiny tags but slow (O(N) per pixel)
                 let stride = sharpened_img.width + 1;
                 let integral = self
                     .arena
@@ -379,7 +379,7 @@ impl Detector {
                 );
                 threshold_map.fill(128); // Not implemented for adaptive
             } else {
-                // SOTA: Tile-based thresholding is blazing fast (sub-2ms)
+                // Tile-based thresholding is fast (sub-2ms)
                 let engine = crate::threshold::ThresholdEngine::from_config(&self.config);
                 let stats = engine.compute_tile_stats(&self.arena, &sharpened_img);
                 engine.apply_threshold_with_map(
@@ -612,7 +612,7 @@ impl Detector {
         active_decoders: &[Box<dyn TagDecoder + Send + Sync>],
         options: &DetectOptions,
     ) -> (Option<Detection>, bool, bool, u32, u64) {
-        let scales = [1.0, 0.9, 1.1]; // Heuristic SOTA: only try most likely scales
+        let scales = [1.0, 0.9, 1.1]; // Try most likely scales
 
         let mut best_overall_h = u32::MAX;
         let mut best_overall_code: Option<S::Code> = None;
@@ -656,7 +656,7 @@ impl Detector {
                             }
                             cand.corners = reordered;
 
-                            // SOTA: Always perform ERF refinement for finalists if requested
+                            // Always perform ERF refinement for finalists if requested
                             if config.refinement_mode == crate::config::CornerRefinementMode::Erf {
                                 let decode_arena = bumpalo::Bump::new();
                                 let refined_corners = crate::decoder::refine_corners_erf(

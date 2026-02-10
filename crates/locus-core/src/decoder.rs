@@ -861,7 +861,7 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
         return None;
     }
 
-    // SOTA: Blended Quadrant-based Adaptive Thresholding
+    // Quadrant-based Adaptive Thresholding
     // Combines global Otsu (robust for bimodal) with local quadrant averages (robust for shadows)
     let global_threshold = compute_otsu_threshold(&intensities[..n]);
 
@@ -891,7 +891,7 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
             global_threshold
         };
 
-        // Blend global Otsu and local mean (0.7 / 0.3 weighting is SOTA for fiducials)
+        // Blend global Otsu and local mean (0.7 / 0.3 weighting is common for fiducials)
         let effective_threshold = 0.7 * global_threshold + 0.3 * quad_avg;
         thresholds[i] = effective_threshold;
     }

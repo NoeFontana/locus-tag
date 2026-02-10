@@ -33,7 +33,7 @@ name = "threshold_bench"
 harness = false
 
 [[bench]]
-name = "sota_threshold_bench"
+name = "integral_threshold_bench"
 harness = false
 
 

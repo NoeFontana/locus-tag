@@ -5,7 +5,7 @@
 //!
 //! It features two primary implementations:
 //! 1. **Tile-based Thresholding**: Blazing fast approach using local tile stats.
-//! 2. **Integral Image Thresholding**: SOTA per-pixel adaptive thresholding for small features.
+//! 2. **Integral Image Thresholding**: Per-pixel adaptive thresholding for small features.
 
 #![allow(unsafe_code, clippy::cast_sign_loss)]
 use crate::config::DetectorConfig;
@@ -836,7 +836,7 @@ fn compute_min_max_simd(data: &[u8]) -> (u8, u8) {
 }
 
 // =============================================================================
-// INTEGRAL IMAGE-BASED ADAPTIVE THRESHOLD (SOTA)
+// INTEGRAL IMAGE-BASED ADAPTIVE THRESHOLD
 // =============================================================================
 //
 // This implements OpenCV-style ADAPTIVE_THRESH_MEAN_C using integral images:
@@ -1031,7 +1031,7 @@ pub fn adaptive_threshold_integral(
 
 /// Fast adaptive threshold combining integral image approach with SIMD.
 ///
-/// This is the main entry point for SOTA adaptive thresholding:
+/// This is the main entry point for performance-oriented adaptive thresholding:
 /// - Computes integral image once
 /// - Applies per-pixel adaptive threshold with local mean
 /// - Uses default parameters tuned for AprilTag detection

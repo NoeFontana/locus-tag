@@ -1356,7 +1356,7 @@ mod tests {
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
-/// SOTA Boundary Tracing using robust border following.
+/// Boundary Tracing using robust border following.
 ///
 /// This implementation uses a state-machine based approach to follow the border
 /// of a connected component. Uses precomputed offsets for speed.

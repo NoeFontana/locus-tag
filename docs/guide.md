@@ -83,7 +83,7 @@ detector = locus.Detector(config=config)
 
 ## Pose Estimation
 
-Locus implements SOTA pose solvers to recover the 6-DOF transformation between the camera and the tag.
+Locus implements modern pose solvers to recover the 6-DOF transformation between the camera and the tag.
 
 ### IPPE-Square
 For standard detection, we use **IPPE-Square** (Infinitesimal Plane-Based Pose Estimation). It provides an analytical solution that resolves the Necker reversal (perspective flip) ambiguity.
