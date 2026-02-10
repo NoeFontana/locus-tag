@@ -7,8 +7,8 @@
 
 #![allow(unsafe_code, clippy::cast_sign_loss)]
 use crate::config;
-use nalgebra::{SMatrix, SVector};
 use multiversion::multiversion;
+use nalgebra::{SMatrix, SVector};
 
 /// A 3x3 Homography matrix.
 pub struct Homography {
