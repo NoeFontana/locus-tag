@@ -148,15 +148,15 @@ classDiagram
 
 ## Design Principles
 
-1.  **Zero-Copy Python Integration**: We use the Python Buffer Protocol to read NumPy arrays directly without copying pixel data.
-2.  **Arena Allocation**: Per-frame scratch memory (contours, points, intermediate structs) is allocated in a `bumpalo::Bump` arena, which is mostly a pointer bump. This avoids `malloc`/`free` overhead in the hot loop.
-3.  **Data Scalability**: The core algorithms (thresholding, component labeling) are designed to be cache-friendly, processing data in linear passes where possible.
-4.  **SIMD Optimization**: Critical paths like thresholding and filtering use `multiversion` to dispatch to AVX2/AVX-512/NEON implementations at runtime.
-5.  **Hybrid Parallelism**: The pipeline leverages `rayon` for data-parallel stages (Thresholding, Decoding) while keeping state-heavy stages (Segmentation, Quad Extraction) sequential and cache-coherent.
+1.  **Zero-Copy Integration**: Utilizes the Python Buffer Protocol to access NumPy arrays directly, avoiding pixel data duplication.
+2.  **Arena Memory**: Per-frame scratchpad (`bumpalo`) eliminates `malloc`/`free` overhead in the hot path.
+3.  **Cache Locality**: Algorithms (thresholding, CCL) process data in linear, cache-friendly passes.
+4.  **Runtime SIMD Dispatch**: Uses `multiversion` to target AVX2, AVX-512, or NEON based on host CPU capabilities.
+5.  **Hybrid Parallelism**: Scales via `rayon` for data-parallel tasks while maintaining sequential cache-coherence for state-heavy stages.
 
 ## Memory Architecture
 
-Locus optimizes latency by managing memory explicitly. The critical path avoids system allocator calls (`malloc`/`free`) almost entirely.
+Locus minimizes latency through explicit memory management, almost entirely avoiding the system allocator during detection.
 
 ```mermaid
 flowchart LR
@@ -190,9 +190,9 @@ flowchart LR
     QuadCandidates -->|Refine| Homographies
 ```
 
-### Arena Lifecycle (Per-Frame)
+### Arena Lifecycle
 
-The `Bump` arena is reset at the start of each frame, instantly freeing all ephemeral allocations in O(1) time. This pattern eliminates per-object deallocation overhead.
+The `Bump` arena is reset at the start of `detect()`, freeing all ephemeral data in $O(1)$ time.
 
 ```mermaid
 sequenceDiagram
@@ -210,64 +210,60 @@ sequenceDiagram
     
     Note over Frame: Pipeline runs...
     Frame->>Frame: Return Vec<Detection>
-    Note over Arena: Memory reused on next call
 ```
 
 ## Observability & Debugging
 
 Locus includes built-in instrumentation for performance profiling and visual debugging.
 
-1.  **Tracing**: The library uses the `tracing` crate to emit spans for every pipeline stage (`threshold`, `segmentation`, `decoding`). This allows integrating with tools like `tracy` or `perfetto` to visualize frame timelines.
-2.  **Visual Debugging (Rerun)**: When the `rerun` feature is enabled, Locus logs intermediate processing artifacts (threshold images, candidate quads, geometric fits) to the Rerun SDK, enabling real-time inspection of the algorithm's internal state.
+1.  **Tracing**: Uses the `tracing` crate to emit spans for every pipeline stage, allowing integration with `tracy` or `perfetto`.
+2.  **Visual Debugging (Rerun)**: When enabled, Locus logs intermediate processing artifacts (threshold images, candidate quads, geometric fits) to the Rerun SDK for real-time inspection.
 
 ## Performance Characteristics
 
-The pipeline is designed to meet a strict **1-10ms** latency budget on modern commodity CPUs.
+Targets a **1-10ms** latency budget for 1080p frames on modern CPUs.
 
-| Stage | Complexity | Typical Latency (1080p) | Notes |
+| Stage | Complexity | Latency (1080p) | Notes |
 | :--- | :--- | :--- | :--- |
-| **Preprocessing** | $O(N)$ | ~2.5 ms | Bandwidth-bound. Uses SIMD for min/max. |
-| **Segmentation** | $O(N)$ | ~1.5 ms | Single-pass CCL with Union-Find. |
+| **Preprocessing** | $O(N)$ | ~2.5 ms | Bandwidth-bound; SIMD-accelerated. |
+| **Segmentation** | $O(N)$ | ~1.5 ms | Single-pass Union-Find. |
 | **Quad Extraction** | $O(K \cdot M)$ | ~1.0 ms | $K$ components, $M$ perimeter pixels. |
-| **Decoding (Hard)** | $O(Q)$ | ~0.5 ms | $Q$ candidates, O(1) bit LUT. |
+| **Decoding (Hard)** | $O(Q)$ | ~0.5 ms | $Q$ candidates, bit-LUT based. |
 | **Decoding (Soft)** | $O(Q \cdot D)$ | ~5.0 ms | $D$ dictionary entries, LLR search. |
 
-*Note: $N$ is total pixels. Latencies are approximate for a single core on a modern CPU (e.g., Ryzen 9 7950X). Soft decoding latency scales with the number of quad candidates and the dictionary size.*
+*Note: Latencies are approximate for a single core on a modern CPU (e.g., Zen 4).*
 
 ## Decoding Strategies
 
-Locus decoupling bit extraction from the decision logic using the `DecodingStrategy` trait. This allows static dispatch between two primary modes:
+The `DecodingStrategy` trait enables static dispatch between throughput-optimized and recall-optimized paths.
 
-### 1. Hard-Decision Decoding (LLM-Optimized)
-The default mode. It threshold's pixel intensities into a 64-bit integer at the sampling point.
-*   **Performance**: Extremely fast ($O(1)$ loop per candidate).
-*   **Precision**: High, follows the original AprilTag/ArUco specifications.
-*   **Best For**: Low-latency production environments with decent SNR.
+| Mode | Mechanism | Strength | Cost |
+| :--- | :--- | :--- | :--- |
+| **Hard-Decision** | Direct intensity thresholding. | Highest throughput; $O(1)$ lookup. | Requires stable SNR/contrast. |
+| **Soft-Decision** | ML search using LLRs. | Recovers tags with blur or noise. | Latency scales with dictionary size. |
 
-### 2. Soft-Decision Decoding (Maximum Recall)
-In Soft mode, Locus extracts **Log-Likelihood Ratios (LLRs)** for each bit. Instead of a bitwise match, it performs a Maximum Likelihood (ML) search across the entire tag dictionary to minimize the accumulated penalty.
-*   **Optimization**: Fully stack-allocated (`zero heap-alloc`) with early-exit pruning.
-*   **Benefit**: Recovers tags with extremely low contrast or high noise that hard-binarization would miss.
-*   **Trade-off**: Increases decoding latency proportional to dictionary size.
+### Hard-Decision (High Throughput)
+The default mode. It samples pixel intensities at grid points and compares them against the local adaptive threshold. This path is extremely fast and ideal for industrial applications with consistent lighting.
+
+### Soft-Decision (Maximum Recall)
+Designed for challenging conditions. Instead of binarizing, it computes the **Log-Likelihood Ratio (LLR)** for each bit and performs a Maximum Likelihood search across the dictionary. The implementation is zero-allocation and uses early-exit pruning to minimize search overhead.
 
 ## Pose Estimation Strategies
 
-Locus supports two modes for recovering the 6-DOF pose of the tag relative to the camera. This is controlled via `PoseEstimationMode`.
+Locus provides two algorithms for 6-DOF recovery, allowing users to prioritize either geometric speed or probabilistic precision.
 
-### 1. Fast Mode (IPPE + Geometric Error)
-The default mode. It uses the **Infinitesimal Plane-Based Pose Estimation (IPPE)** algorithm to solve the PnP problem from the 4 corner points.
-*   **Method**: Solves for the homography and decomposes it. Resolves the ambiguity using the IPPE criteria.
-*   **Refinement**: Standard Levenberg-Marquardt minimizing reprojection error (assuming Identity covariance).
-*   **Performance**: Very fast (~50µs per tag).
-*   **Best For**: High frame-rate tracking wheretags are close to the camera.
+### Fast Mode: IPPE
+*   **Target**: High-speed tracking and mobile robotics.
+*   **Method**: Uses the **Infinitesimal Plane-Based Pose Estimation** algorithm for an analytic solution.
+*   **Refinement**: Levenberg-Marquardt (LM) on geometric reprojection error.
+*   **Latency**: ~50µs per tag.
 
-### 2. Accurate Mode (Structure Tensor + Probabilistic)
-A high-precision mode for critical applications (e.g., ground-truth systems, long-range detection).
-*   **Method**: Computes the **Structure Tensor** ($J^T J$) for each corner's sub-pixel window to estimate the corner position uncertainty ($\Sigma_{corner}$).
-*   **Refinement**: **Anisotropic Weighted Levenberg-Marquardt**. It minimizes the **Mahalanobis distance**, weighting precise corners more heavily than blurry/noisy ones.
-*   **Output**: Provides a fully populated `pose_covariance` matrix ($6 \times 6$) representing the uncertainty of the final pose.
-*   **Performance**: Slower (~200µs per tag) due to gradient computation and tensor analysis.
-*   **Best For**: Precision landing, camera calibration, or long-range detection where pixel noise is significant.
+### Accurate Mode: Probabilistic
+*   **Target**: Metrology, calibration, and long-range precision landing.
+*   **Method**: Estimates sub-pixel corner uncertainty via the **Structure Tensor** ($J^T J$).
+*   **Refinement**: **Anisotropic Weighted LM** minimizing the Mahalanobis distance.
+*   **Output**: Provides a full $6 \times 6$ `pose_covariance` matrix.
+*   **Latency**: ~200µs per tag.
 
 ## Extensibility
 
