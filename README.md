@@ -176,7 +176,7 @@ cargo test --release --test regression_icra2020 -- --test-threads=1
 uv run python scripts/debug/visualize.py --scenario forward --limit 10
 ```
 
-For detailed documentation, see the [Benchmarking Guide](docs/benchmarking.md).
+For detailed documentation, see the [Benchmarking Guide](benchmarking.md).
 
 1. **Set Environment Variable**: Point to the dataset root.
    ```bash

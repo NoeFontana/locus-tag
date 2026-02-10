@@ -34,6 +34,9 @@ markdown_extensions:
           format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.arithmatex:
       generic: true
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
 
 extra_javascript:
   - javascripts/mathjax.js
