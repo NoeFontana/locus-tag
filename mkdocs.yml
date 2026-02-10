@@ -51,6 +51,12 @@ plugins:
         python:
           options:
             docstring_style: google
+            show_root_heading: true
+            show_source: true
+            show_category_heading: true
+            separate_signature: true
+            group_by_category: true
+            show_signature_annotations: true
 
 nav:
   - Home: index.md

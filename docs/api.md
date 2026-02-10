@@ -1,26 +1,83 @@
 # API Reference
 
+This page provides detailed information about the Locus Python API.
+
+## Core Interface
+
+The primary entry point for using Locus is the `Detector` class or the high-level `detect_tags` convenience functions.
+
 ::: locus.Detector
     options:
-        members:
-            - detect
-            - detect_with_options
-            - detect_with_stats
-            - __init__
+        show_root_toc_entry: false
 
-::: locus.CameraIntrinsics
+::: locus.detect_tags
+
+::: locus.detect_tags_with_stats
+
+::: locus.dummy_detect
+
+## Configuration
+
+Locus uses Pydantic for robust configuration validation.
+
+::: locus.DetectorConfig
     options:
-        members:
-            - __init__
+        heading_level: 3
+
+::: locus.DetectOptions
+    options:
+        heading_level: 3
+
+## Data Models
+
+These classes represent the output and internal state of the detection pipeline.
+
+::: locus.Detection
+    options:
+        heading_level: 3
 
 ::: locus.Pose
     options:
-        members:
-            - rotation
-            - translation
+        heading_level: 3
+
+::: locus.PipelineStats
+    options:
+        heading_level: 3
+
+::: locus.FullDetectionResult
+    options:
+        heading_level: 3
+
+## Geometry
+
+::: locus.CameraIntrinsics
+    options:
+        heading_level: 3
+
+## Enumerations
+
+::: locus.TagFamily
+    options:
+        heading_level: 3
+
+::: locus.DecodeMode
+    options:
+        heading_level: 3
 
 ::: locus.PoseEstimationMode
     options:
-        members:
-            - Fast
-            - Accurate
+        heading_level: 3
+
+::: locus.CornerRefinementMode
+    options:
+        heading_level: 3
+
+::: locus.SegmentationConnectivity
+    options:
+        heading_level: 3
+
+## Debugging Utilities
+
+::: locus.debug_threshold
+
+::: locus.debug_segmentation
