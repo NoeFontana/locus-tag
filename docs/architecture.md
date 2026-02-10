@@ -225,11 +225,11 @@ Targets a **low latency** budget for 1080p frames on modern CPUs.
 
 | Stage | Complexity | Latency | Notes |
 | :--- | :--- | :--- | :--- |
-| **Preprocessing** | $O(N)$ | Low | Bandwidth-bound; SIMD-accelerated. |
-| **Segmentation** | $O(N)$ | Low | Single-pass Union-Find. |
-| **Quad Extraction** | $O(K \cdot M)$ | Low | $K$ components, $M$ perimeter pixels. |
-| **Decoding (Hard)** | $O(Q)$ | Very Low | $Q$ candidates, bit-LUT based. |
-| **Decoding (Soft)** | $O(Q \cdot D)$ | Moderate | $D$ dictionary entries, LLR search. |
+| **Preprocessing** | $O(N)$ | ~25 ms | Bandwidth-bound; SIMD-accelerated. |
+| **Segmentation** | $O(N)$ | ~15 ms | Single-pass Union-Find. |
+| **Quad Extraction** | $O(K \cdot M)$ | ~10 ms | $K$ components, $M$ perimeter pixels. |
+| **Decoding (Hard)** | $O(Q)$ | ~5 ms | $Q$ candidates, bit-LUT based. |
+| **Decoding (Soft)** | $O(Q \cdot D)$ | ~50 ms | $D$ dictionary entries, LLR search. |
 
 *Note: Latencies are approximate for a single core on a modern CPU (e.g., Zen 4).*
 
