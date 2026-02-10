@@ -8,17 +8,17 @@ Locus is built as a hybrid Rust/Python system. The core logic resides in a high-
 
 ```mermaid
 flowchart TD
-    User[User / Application] -->|Images| PyBindings[Python Bindings<br/>(locus-py)]
-    PyBindings -->|PyReadonlyArray2| RustCore[Rust Core<br/>(locus-core)]
+    User[User / Application] -->|Images| PyBindings["Python Bindings<br/>(locus-py)"]
+    PyBindings -->|PyReadonlyArray2| RustCore["Rust Core<br/>(locus-core)"]
     
     subgraph RustCore
-        Pipeline[Detection Pipeline]
-        Memory[Arena Memory<br/>(Bumpalo)]
-        SIMD[SIMD Kernels<br/>(Multiversion)]
+        Pipeline["Detection Pipeline"]
+        Memory["Arena Memory<br/>(Bumpalo)"]
+        SIMD["SIMD Kernels<br/>(Multiversion)"]
     end
     
     RustCore -->|Detections| PyBindings
-    PyBindings -->|List[Detection]| User
+    PyBindings -->|"List[Detection]"| User
 ```
 
 ## Detection Pipeline
@@ -160,22 +160,22 @@ Locus optimizes latency by managing memory explicitly. The critical path avoids 
 
 ```mermaid
 flowchart LR
-    subgraph Python [Python Heap]
-        PyArr[NumPy Array<br/>(u8 Pixels)]
+    subgraph Python ["Python Heap"]
+        PyArr["NumPy Array<br/>(u8 Pixels)"]
     end
     
-    subgraph Interface [FFI Boundary]
-        View[ImageView<br/>(Ptr + Stride)]
+    subgraph Interface ["FFI Boundary"]
+        View["ImageView<br/>(Ptr + Stride)"]
     end
     
-    subgraph Rust [Rust Internal Memory]
-        Arena[Bump Arena<br/>(Reset Per Frame)]
+    subgraph Rust ["Rust Internal Memory"]
+        Arena["Bump Arena<br/>(Reset Per Frame)"]
         
-        subgraph Static [Pooled Buffers]
-            Upscale[Upscale Buffer]
+        subgraph Static ["Pooled Buffers"]
+            Upscale["Upscale Buffer"]
         end
         
-        subgraph Ephemeral [Arena Allocated]
+        subgraph Ephemeral ["Arena Allocated"]
             Contours
             QuadCandidates
             Homographies
@@ -302,15 +302,15 @@ Locus uses `maturin` to bridge the Rust and Python worlds, creating a native Pyt
 
 ```mermaid
 flowchart LR
-    subgraph Build [Build Process]
-        RustSrc[Rust Source<br/>(locus-core)] -->|Cargo| CoreLib[Static Lib]
-        CoreLib -->|Maturin| PyMod[Python Module<br/>(locus.abi3.so)]
-        PyStub[Type Stubs<br/>(.pyi)] -->|Maturin| Wheel
+    subgraph Build ["Build Process"]
+        RustSrc["Rust Source<br/>(locus-core)"] -->|Cargo| CoreLib["Static Lib"]
+        CoreLib -->|Maturin| PyMod["Python Module<br/>(locus.abi3.so)"]
+        PyStub["Type Stubs<br/>(.pyi)"] -->|Maturin| Wheel
     end
     
-    subgraph Dist [Distribution]
-        PyMod --> Wheel[.whl File]
-        Wheel -->|pip install| Env[User Environment]
+    subgraph Dist ["Distribution"]
+        PyMod --> Wheel[".whl File"]
+        Wheel -->|pip install| Env["User Environment"]
     end
 ```
 

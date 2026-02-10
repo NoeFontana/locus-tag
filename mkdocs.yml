@@ -38,6 +38,8 @@ markdown_extensions:
 extra_javascript:
   - javascripts/mathjax.js
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+  - https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js
+  - javascripts/mermaid-init.js
 
 plugins:
   - search
