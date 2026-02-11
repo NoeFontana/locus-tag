@@ -1,7 +1,7 @@
 # release.toml
 allow-branch = ["main", "release"]
 sign-commit = false
-sign-tag = true
+sign-tag = false
 push = true
 publish = false
 
