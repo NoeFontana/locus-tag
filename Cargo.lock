@@ -3685,7 +3685,7 @@ dependencies = [
 
 [[package]]
 name = "locus-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "bumpalo",
  "csv",
@@ -3708,7 +3708,7 @@ dependencies = [
 
 [[package]]
 name = "locus-py"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "bumpalo",
  "locus-core",
