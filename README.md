@@ -5,7 +5,7 @@
 **Locus** is a high-performance fiducial marker detector (AprilTag & ArUco) written in Rust with zero-copy Python bindings. It targets a balance of low latency, high recall, and precise pose estimation.
 
 > [!WARNING]
-> **Experimental Status**: Locus is currently in an active research and development phase. The API is subject to breaking changes. While performance is high on current benchmarks, it is **not recommended for production systems** yet. Photo-realistic benchmarks are in development under [render-tag](https://github.com/NoeFontana/render-tag).
+> **Experimental Status**: Locus is an experiment on AI-assisted coding and the code is still actively iterated on. The API is subject to breaking changes. While performance is high on current benchmarks, it is **not recommended for production systems** yet. Photo-realistic benchmarks are in development under [render-tag](https://github.com/NoeFontana/render-tag).
 
 ## Performance (ICRA 2020 Dataset)
 
