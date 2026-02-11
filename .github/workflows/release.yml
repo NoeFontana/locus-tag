@@ -38,7 +38,7 @@ jobs:
         with:
           command: publish
           target: ${{ matrix.target }}-unknown-linux-gnu
-          args: --release --out dist
+          args: --out dist
           manylinux: 2_28
 
 
