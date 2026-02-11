@@ -1,5 +1,5 @@
 # release.toml
-allow-branch = ["main", "release"]
+allow-branch = ["main"]
 sign-commit = false
 sign-tag = false
 push = true
