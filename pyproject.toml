@@ -6,6 +6,7 @@ build-backend = "maturin"
 name = "locus-tag"
 version = "0.1.1"
 description = "A high-performance fiducial marker detector for robotics."
+readme = "README.md"
 authors = [{name = "Noé Fontana"}]
 requires-python = ">=3.10"
 license = {text = "MIT OR Apache-2.0"}
