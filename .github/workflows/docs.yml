@@ -36,13 +36,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install --system mkdocs-material mkdocstrings[python] maturin
+          uv venv
+          uv pip install maturin -e .[docs]
 
       - name: Build extension
-        run: maturin develop --manifest-path crates/locus-py/Cargo.toml
+        run: uv run maturin develop --manifest-path crates/locus-py/Cargo.toml
 
       - name: Build MkDocs
-        run: mkdocs build --strict
+        run: uv run mkdocs build --strict
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
