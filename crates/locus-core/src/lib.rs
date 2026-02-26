@@ -643,7 +643,11 @@ impl Detector {
                             best_overall_code = Some(code.clone());
                         }
 
-                        if hamming <= if decoder.name() == "36h11" { 4 } else { 1 } {
+                        if hamming <= match decoder.name() {
+                            "36h11" | "Aruco36h11" => 4,
+                            "16h5" | "Aruco16h5" => 1,
+                            _ => 1,
+                        } {
                             cand.id = id;
                             cand.hamming = hamming;
                             cand.bits = S::to_debug_bits(&code);
