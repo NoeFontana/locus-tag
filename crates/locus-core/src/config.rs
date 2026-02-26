@@ -442,6 +442,10 @@ pub enum TagFamily {
     AprilTag36h11,
     /// AprilTag 16h5 family (30 codes, 5-bit hamming distance).
     AprilTag16h5,
+    /// OpenCV ArUco AprilTag 36h11 dialect.
+    Aruco36h11,
+    /// OpenCV ArUco AprilTag 16h5 dialect.
+    Aruco16h5,
     /// ArUco 4x4_50 dictionary.
     ArUco4x4_50,
     /// ArUco 4x4_100 dictionary.
@@ -455,6 +459,8 @@ impl TagFamily {
         &[
             TagFamily::AprilTag36h11,
             TagFamily::AprilTag16h5,
+            TagFamily::Aruco36h11,
+            TagFamily::Aruco16h5,
             TagFamily::ArUco4x4_50,
             TagFamily::ArUco4x4_100,
         ]
