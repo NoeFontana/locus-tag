@@ -57,14 +57,18 @@ For performance tuning, pose estimation, and specialized profiles, see the **[Us
 Locus includes a rigorous suite to ensure detection quality and latency targets.
 
 ```bash
-# Prepare datasets
+# Prepare local datasets
 uv run python scripts/locus_bench.py prepare
+
+# Sync Hub datasets (optional, for large-scale regression)
+uv sync --extra benchmark
+PYTHONPATH=. uv run python scripts/bench/sync_hub.py --configs single_tag_locus_v1_std41h12
 
 # Run evaluation suite
 uv run python scripts/locus_bench.py run real --compare
 ```
 
-Detailed instructions for profiling and regression testing are available in the **[Benchmarking Guide](benchmarking.md)**.
+Detailed instructions for profiling, hub synchronization, and regression testing are available in the **[Benchmarking Guide](benchmarking.md)**.
 
 ## License
 

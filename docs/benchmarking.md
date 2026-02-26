@@ -27,6 +27,23 @@ The regression suite validates that `Locus` matches or exceeds ground truth for 
    > [!IMPORTANT]
    > `--release` is mandatory for performance benchmarking.
 
+### Hub Regression Suite (Hugging Face)
+Locus supports running regressions against large-scale datasets hosted on the Hugging Face Hub (e.g., `NoeFontana/locus-tag-bench`).
+
+1. **Synchronize Data**:
+   Download the datasets to a local cache. This requires the `benchmark` extras.
+   ```bash
+   uv sync --extra benchmark
+   PYTHONPATH=. uv run python scripts/bench/sync_hub.py --configs single_tag_locus_v1_std41h12
+   ```
+
+2. **Run Hub Tests**:
+   Point the test runner to the local cache directory:
+   ```bash
+   export LOCUS_HUB_DATASET_DIR=tests/data/hub_cache
+   cargo test --release --test regression_icra2020 -- regression_hub_datasets --nocapture
+   ```
+
 ### Logic-Specific Benchs
 For fine-grained benchmarking of specific components (e.g., thresholding, segmentation), use the built-in benches:
 ```bash
