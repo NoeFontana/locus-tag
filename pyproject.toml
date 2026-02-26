@@ -28,6 +28,7 @@ benchmark = [
     "tqdm",
     "huggingface-hub",
     "rerun-sdk",
+    "datasets[vision]",
 ]
 docs = [
     "mkdocs>=1.5.0",

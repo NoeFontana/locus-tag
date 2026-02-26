@@ -9,6 +9,7 @@ from tqdm import tqdm
 from scripts.bench.utils import (
     AprilTagWrapper,
     DatasetLoader,
+    HubBenchmarkLoader,
     LibraryWrapper,
     LocusWrapper,
     Metrics,
@@ -22,7 +23,73 @@ except ImportError:
     RERUN_AVAILABLE = False
 
 
+def run_hosted_benchmark(args):
+    """Evaluates the detector against datasets hosted on the Hugging Face Hub.
+
+    Args:
+        args: Parsed command-line arguments containing configs, limit, and skip.
+    """
+    loader = HubBenchmarkLoader()
+    configs = args.configs
+
+    wrappers: list[LibraryWrapper] = []
+    wrappers.append(LocusWrapper(decimation=args.decimation))
+    if args.compare:
+        wrappers.append(OpenCVWrapper())
+        wrappers.append(AprilTagWrapper(nthreads=8))
+
+    for config in configs:
+        print(f"\nEvaluating {config} (from Hugging Face Hub)...")
+
+        # Initialize stats for each wrapper
+        wrapper_stats = {
+            w.name: {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []} for w in wrappers
+        }
+
+        subset_stream = loader.stream_subset(config)
+        pbar = tqdm(desc="Processing Images")
+
+        for idx, (_name, img, gt_tags) in enumerate(subset_stream):
+            if args.skip and idx < args.skip:
+                continue
+            if args.limit and (idx - args.skip) >= args.limit:
+                break
+
+            for wrapper in wrappers:
+                start = time.perf_counter()
+                detections, _ = wrapper.detect(img)
+                latency = (time.perf_counter() - start) * 1000
+
+                correct, err_sum, _ = Metrics.match_detections(detections, gt_tags)
+
+                stats = wrapper_stats[wrapper.name]
+                stats["latency"].append(latency)
+                stats["gt"] += len(gt_tags)
+                stats["det"] += correct
+                stats["err_sum"] += err_sum
+
+            pbar.update(1)
+
+        pbar.close()
+
+        # Output results for all wrappers
+        for wrapper in wrappers:
+            stats = wrapper_stats[wrapper.name]
+            recall = (stats["det"] / stats["gt"] * 100) if stats["gt"] > 0 else 0
+            avg_err = (stats["err_sum"] / stats["det"]) if stats["det"] > 0 else 0
+            avg_lat = np.mean(stats["latency"])
+
+            print(
+                f"  {wrapper.name:<10} | Recall: {recall:>6.2f}% | RMSE: {avg_err:>6.4f} px | Latency: {avg_lat:>6.2f} ms"
+            )
+
+
 def run_real_benchmark(args):
+    """Evaluates the detector against local real-world datasets (ICRA).
+
+    Args:
+        args: Parsed command-line arguments containing scenarios, types, and limit.
+    """
     loader = DatasetLoader()
     scenarios = args.scenarios
     types = args.types
@@ -80,6 +147,11 @@ def run_real_benchmark(args):
 
 
 def run_synthetic_benchmark(args):
+    """Evaluates the detector against procedurally generated synthetic images.
+
+    Args:
+        args: Parsed command-line arguments containing targets and noise.
+    """
     wrappers: list[LibraryWrapper] = []
     wrappers.append(LocusWrapper(decimation=args.decimation))
     if args.compare:
@@ -115,6 +187,11 @@ def run_synthetic_benchmark(args):
 
 
 def analyze_tag_sizes(args):
+    """Analyzes the distribution of tag sizes within a dataset.
+
+    Args:
+        args: Parsed command-line arguments containing scenarios.
+    """
     loader = DatasetLoader()
     for scenario in args.scenarios:
         if not loader.prepare_icra(scenario):
@@ -142,6 +219,11 @@ def analyze_tag_sizes(args):
 
 
 def profile_bottlenecks(args):
+    """Profiles individual stages of the Locus pipeline to identify bottlenecks.
+
+    Args:
+        args: Parsed command-line arguments containing targets and iterations.
+    """
     wrapper = LocusWrapper()
     res = (1280, 720)
     img, _ = generate_synthetic_image(args.targets, res, noise_sigma=args.noise)
@@ -166,6 +248,11 @@ def profile_bottlenecks(args):
 
 
 def prepare_datasets(args):
+    """Downloads and prepares all required benchmarking datasets.
+
+    Args:
+        args: Parsed command-line arguments.
+    """
     loader = DatasetLoader()
     print("Preparing datasets...")
     loader.prepare_all()
@@ -173,6 +260,7 @@ def prepare_datasets(args):
 
 
 def main():
+    """Main entry point for the Locus Unified Benchmarking CLI."""
     parser = argparse.ArgumentParser(description="Locus Unified Benchmarking CLI")
     subparsers = parser.add_subparsers(dest="cmd", required=True)
 
@@ -195,6 +283,13 @@ def main():
     synth.add_argument("--compare", action="store_true")
     synth.add_argument("--decimation", type=int, default=1)
 
+    hosted = run_sub.add_parser("hosted", help="Run on hosted datasets (Hub)")
+    hosted.add_argument("--configs", nargs="+", required=True)
+    hosted.add_argument("--limit", type=int)
+    hosted.add_argument("--skip", type=int, default=0)
+    hosted.add_argument("--compare", action="store_true")
+    hosted.add_argument("--decimation", type=int, default=1)
+
     # Analyze Command
     analyze = subparsers.add_parser("analyze", help="Analyze datasets")
     analyze.add_argument("--scenarios", nargs="+", default=["forward", "circle"])
@@ -213,6 +308,8 @@ def main():
     if args.cmd == "run":
         if args.mode == "real":
             run_real_benchmark(args)
+        elif args.mode == "hosted":
+            run_hosted_benchmark(args)
         else:
             run_synthetic_benchmark(args)
     elif args.cmd == "analyze":
