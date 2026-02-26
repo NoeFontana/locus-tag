@@ -161,6 +161,50 @@ class DatasetLoader:
         return final_map
 
 
+class HubBenchmarkLoader:
+    def __init__(self, repo_id: str = "NoeFontana/locus-tag-bench"):
+        self.repo_id = repo_id
+
+    def stream_subset(self, subset_name: str) -> Any:
+        """Streams a dataset subset from the Hugging Face Hub.
+
+        Args:
+            subset_name: The name of the dataset configuration/subset to load.
+
+        Yields:
+            A tuple of (image_name, grayscale_image_np, list_of_ground_truth_tags).
+        """
+        import datasets
+        
+        # Stream the dataset from the hub
+        ds = datasets.load_dataset(self.repo_id, subset_name, split="train", streaming=True)
+        
+        for idx, item in enumerate(ds):
+            # PIL image to grayscale numpy array
+            pil_img = item["image"]
+            if pil_img.mode != "L":
+                pil_img = pil_img.convert("L")
+            img_np = np.array(pil_img, dtype=np.uint8)
+            
+            # Use native image_id if available, fallback to index
+            image_id = item.get("image_id", f"{subset_name}/{idx}")
+            
+            # Map tag ground truth
+            # Some datasets might have lists for tag_id and corners if multiple per image
+            tag_ids = item["tag_id"]
+            corners_list = item["corners"]
+            
+            if not isinstance(tag_ids, list):
+                tag_ids = [tag_ids]
+                corners_list = [corners_list]
+                
+            gt_tags = []
+            for tid, corners in zip(tag_ids, corners_list, strict=True):
+                gt_tags.append(TagGroundTruth(tag_id=int(tid), corners=np.array(corners, dtype=np.float32)))
+            
+            yield image_id, img_np, gt_tags
+
+
 class Metrics:
     @staticmethod
     def compute_corner_error(det_corners: np.ndarray, gt_corners: np.ndarray) -> float:
