@@ -1,5 +1,6 @@
 tests/data
 /site/
 *.rrd
-/conductor/
 *.pgm
+/conductor/archive/
+/conductor/tracks/
