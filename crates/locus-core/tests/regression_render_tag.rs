@@ -1,8 +1,8 @@
-//! Unified Regression Test Harness
+//! Render-Tag Hub Regression Suite
 //!
-//! Evaluates the detector against:
-//! 1. "Fixtures" (Committed representative images) - Runs in CI, guarantees baseline functionality.
-//! 2. "ICRA 2020" (External dataset) - Core subset runs by default, heavy datasets gated by LOCUS_EXTENDED_REGRESSION.
+//! Evaluates the detector against datasets synchronized from the Hugging Face Hub.
+//! These datasets are generated using the `render-tag` pipeline and provide
+//! high-fidelity synthetic benchmarks with ground truth.
 
 #![allow(
     missing_docs,
@@ -25,7 +25,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 
-mod common;
+// We need to re-implement or reference the evaluation engine components.
+// For simplicity and independence from icra2020.rs, we re-implement the necessary parts.
 
 // ============================================================================
 // Configuration Presets
@@ -35,19 +36,12 @@ mod common;
 pub enum ConfigPreset {
     /// Optimized for isolated tags on plain backgrounds.
     PlainBoard,
-    /// Optimized for touching tags in checkerboard patterns.
-    Checkerboard,
 }
 
 impl ConfigPreset {
     pub fn detector_config(self) -> DetectorConfig {
         match self {
             Self::PlainBoard => DetectorConfig::builder()
-                .refinement_mode(locus_core::config::CornerRefinementMode::Erf)
-                .build(),
-            Self::Checkerboard => DetectorConfig::builder()
-                .segmentation_connectivity(locus_core::config::SegmentationConnectivity::Four)
-                .decoder_min_contrast(10.0)
                 .refinement_mode(locus_core::config::CornerRefinementMode::Erf)
                 .build(),
         }
@@ -131,40 +125,39 @@ struct SummaryMetrics {
 // ============================================================================
 
 /// Ground Truth for a single image
+#[derive(Clone)]
 pub struct GroundTruth {
     pub tags: HashMap<u32, [[f64; 2]; 4]>,
 }
 
 type DatasetItem = (String, Vec<u8>, usize, usize, GroundTruth);
 
+pub trait DatasetProvider {
+    fn name(&self) -> &str;
+    fn iter(&self) -> Box<dyn Iterator<Item = DatasetItem> + '_>;
+}
+
 /// Unified harness for running regression tests.
 pub struct RegressionHarness {
     snapshot_name: String,
     config: DetectorConfig,
     options: DetectOptions,
-    icra_corner_ordering: bool,
 }
 
 impl RegressionHarness {
-    pub fn new(snapshot_name: impl Into<String>) -> Self {
+    pub fn new(snapshot_name: impl Into<String>, family: TagFamily) -> Self {
         Self {
             snapshot_name: snapshot_name.into(),
             config: DetectorConfig::default(),
             options: DetectOptions {
-                families: vec![TagFamily::Aruco36h11],
+                families: vec![family],
                 ..Default::default()
             },
-            icra_corner_ordering: true,
         }
     }
 
     pub fn with_preset(mut self, preset: ConfigPreset) -> Self {
         self.config = preset.detector_config();
-        self
-    }
-
-    pub fn with_decode_mode(mut self, mode: locus_core::config::DecodeMode) -> Self {
-        self.config.decode_mode = mode;
         self
     }
 
@@ -194,19 +187,8 @@ impl RegressionHarness {
                     let dist_sq = (det.center[0] - gt_cx).powi(2) + (det.center[1] - gt_cy).powi(2);
 
                     if dist_sq < 50.0 * 50.0 {
-                        let det_corners = if self.icra_corner_ordering {
-                            [
-                                det.corners[1],
-                                det.corners[0],
-                                det.corners[3],
-                                det.corners[2],
-                            ]
-                        } else {
-                            det.corners
-                        };
-
                         image_rmse_sum +=
-                            locus_core::test_utils::compute_rmse(&det_corners, gt_corners);
+                            locus_core::test_utils::compute_rmse(&det.corners, gt_corners);
                         match_count += 1;
                         found_ids.insert(det.id);
                     }
@@ -310,150 +292,83 @@ impl RegressionHarness {
 }
 
 // ============================================================================
-// Data Providers
+// Hub Data Provider
 // ============================================================================
 
-pub trait DatasetProvider {
-    fn name(&self) -> &str;
-    fn iter(&self) -> Box<dyn Iterator<Item = DatasetItem> + '_>;
-}
-
-/// Provides images from `tests/fixtures/icra2020`.
-/// This is the "Gold Standard" subset that MUST pass in CI.
-struct FixtureProvider {
-    fixtures_dir: PathBuf,
-}
-
-impl FixtureProvider {
-    fn new() -> Self {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/icra2020");
-        Self { fixtures_dir: root }
-    }
-}
-
-impl DatasetProvider for FixtureProvider {
-    fn name(&self) -> &'static str {
-        "fixtures"
-    }
-
-    fn iter(&self) -> Box<dyn Iterator<Item = DatasetItem> + '_> {
-        // Find pairs of .png and .json
-        let walker = walkdir::WalkDir::new(&self.fixtures_dir).sort_by_file_name();
-
-        let iter = walker
-            .into_iter()
-            .filter_map(std::result::Result::ok)
-            .filter_map(move |entry| {
-                let path = entry.path();
-                if path.extension()? != "png" {
-                    return None;
-                }
-
-                let json_path = path.with_extension("json");
-                if !json_path.exists() {
-                    return None;
-                }
-
-                let img = image::open(path).ok()?.into_luma8();
-                let (w, h) = img.dimensions();
-
-                // Load local JSON GT format
-                #[derive(Deserialize)]
-                struct FixtureJson {
-                    tags: Vec<FixtureTag>,
-                }
-                #[derive(Deserialize)]
-                struct FixtureTag {
-                    tag_id: u32,
-                    corners: [[f64; 2]; 4],
-                }
-
-                let json_str = std::fs::read_to_string(&json_path).ok()?;
-                let fixture_data: FixtureJson = serde_json::from_str(&json_str).ok()?;
-
-                let mut tags = HashMap::new();
-                for t in fixture_data.tags {
-                    tags.insert(t.tag_id, t.corners);
-                }
-
-                Some((
-                    path.file_name()?.to_string_lossy().to_string(),
-                    img.into_raw(),
-                    w as usize,
-                    h as usize,
-                    GroundTruth { tags },
-                ))
-            });
-
-        Box::new(iter)
-    }
-}
-
-/// Provides images from the external large ICRA dataset.
-/// Supports sampling (e.g., every Nth image) for faster local runs.
-struct IcraProvider {
+struct HubProvider {
     name: String,
-    image_paths: Vec<PathBuf>,
-    gt: HashMap<String, common::ImageGroundTruth>,
+    base_dir: PathBuf,
+    gt_map: HashMap<String, GroundTruth>,
+    image_names: Vec<String>,
 }
 
-impl IcraProvider {
-    fn new(subfolder: &str, img_subfolder: Option<&str>) -> Option<Self> {
-        let root = common::resolve_dataset_root()?;
+#[derive(Deserialize)]
+struct HubEntry {
+    image_filename: String,
+    tag_id: u32,
+    corners: [[f64; 2]; 4],
+}
 
-        // 1. Load Ground Truth (Context-aware loading)
-        let gt_map = common::load_ground_truth(&root, subfolder)?;
+impl HubProvider {
+    fn new(dataset_dir: &std::path::Path) -> Option<Self> {
+        let jsonl_path = dataset_dir.join("annotations.jsonl");
+        let images_dir = dataset_dir.join("images");
 
-        // 2. Locate Image Directory
-        // Handle both flat and nested "pure_tags_images" structures gracefully
-        let mut candidates = Vec::new();
-        if let Some(sub) = img_subfolder {
-            candidates.push(root.join(subfolder).join(sub));
+        if !jsonl_path.exists() || !images_dir.exists() {
+            return None;
         }
-        candidates.push(root.join(subfolder).join("pure_tags_images"));
-        candidates.push(root.join(subfolder));
 
-        let img_dir = candidates.iter().find(|p| p.is_dir())?;
+        let file = std::fs::File::open(&jsonl_path).ok()?;
+        let reader = std::io::BufReader::new(file);
 
-        let mut paths: Vec<_> = walkdir::WalkDir::new(img_dir)
-            .into_iter()
-            .filter_map(std::result::Result::ok)
-            .map(|e| e.path().to_path_buf())
-            .filter(|p| p.extension().is_some_and(|e| e == "png" || e == "jpg"))
-            .filter(|p| gt_map.contains_key(&p.file_name().unwrap().to_string_lossy().to_string()))
-            .collect();
+        let mut gt_map: HashMap<String, GroundTruth> = HashMap::new();
 
-        paths.sort();
+        use std::io::BufRead;
+        for line in reader.lines().map_while(Result::ok) {
+            let entry: HubEntry = serde_json::from_str(&line).ok()?;
+
+            gt_map
+                .entry(entry.image_filename)
+                .or_insert_with(|| GroundTruth {
+                    tags: HashMap::new(),
+                })
+                .tags
+                .insert(entry.tag_id, entry.corners);
+        }
+
+        let mut image_names: Vec<_> = gt_map.keys().cloned().collect();
+        image_names.sort();
 
         Some(Self {
-            name: format!("icra_{}_{}", subfolder, img_subfolder.unwrap_or("default")),
-            image_paths: paths,
-            gt: gt_map,
+            name: dataset_dir
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string(),
+            base_dir: dataset_dir.to_path_buf(),
+            gt_map,
+            image_names,
         })
     }
 }
 
-impl DatasetProvider for IcraProvider {
+impl DatasetProvider for HubProvider {
     fn name(&self) -> &str {
         &self.name
     }
 
     fn iter(&self) -> Box<dyn Iterator<Item = DatasetItem> + '_> {
-        let iter = self.image_paths.iter().map(move |path| {
-            let fname = path.file_name().unwrap().to_string_lossy().to_string();
-            // We use expect here because if the file existed during scan, it should load.
-            // Failure to load specific images in regression suite is a failure.
-            let img = image::open(path)
-                .expect("load regression image")
+        let base_dir = self.base_dir.clone();
+        let iter = self.image_names.iter().map(move |fname| {
+            let img_path = base_dir.join("images").join(fname);
+            let img = image::open(&img_path)
+                .expect("load hub image")
                 .into_luma8();
             let (w, h) = img.dimensions();
 
-            let icra_gt = self.gt.get(&fname).unwrap();
-            let gt = GroundTruth {
-                tags: icra_gt.corners.clone(),
-            };
+            let gt = self.gt_map.get(fname).unwrap().clone();
 
-            (fname, img.into_raw(), w as usize, h as usize, gt)
+            (fname.clone(), img.into_raw(), w as usize, h as usize, gt)
         });
         Box::new(iter)
     }
@@ -463,105 +378,33 @@ impl DatasetProvider for IcraProvider {
 // Test Runners
 // ============================================================================
 
-macro_rules! test_icra {
-    ($name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident) => {
-        #[test]
-        fn $name() {
-            if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
-                let snapshot = provider.name().to_string();
-                RegressionHarness::new(snapshot)
-                    .with_preset(ConfigPreset::$preset)
-                    .run(provider);
-            }
+fn run_hub_test(config_name: &str, family: TagFamily) {
+    if let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") {
+        let root = PathBuf::from(hub_dir);
+        let dataset_path = root.join(config_name);
+        
+        if !dataset_path.exists() {
+            println!("Dataset not found in cache: {config_name}. Skipping.");
+            return;
         }
-    };
-    (IGNORED $name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident) => {
-        #[test]
-        fn $name() {
-            if std::env::var("LOCUS_EXTENDED_REGRESSION").is_err() {
-                println!(
-                    "Skipping heavy test {}. Set LOCUS_EXTENDED_REGRESSION=1 to run.",
-                    stringify!($name)
-                );
-                return;
-            }
-            if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
-                let snapshot = provider.name().to_string();
-                RegressionHarness::new(snapshot)
-                    .with_preset(ConfigPreset::$preset)
-                    .run(provider);
-            }
+
+        if let Some(provider) = HubProvider::new(&dataset_path) {
+            let snapshot = format!("hub_{}", provider.name());
+            RegressionHarness::new(snapshot, family)
+                .with_preset(ConfigPreset::PlainBoard)
+                .run(provider);
         }
-    };
-    (SOFT $name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident) => {
-        #[test]
-        fn $name() {
-            if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
-                let snapshot = format!("{}_soft", provider.name());
-                RegressionHarness::new(snapshot)
-                    .with_preset(ConfigPreset::$preset)
-                    .with_decode_mode(locus_core::config::DecodeMode::Soft)
-                    .run(provider);
-            }
-        }
-    };
+    } else {
+        println!("Skipping hub tests. Set LOCUS_HUB_DATASET_DIR to run.");
+    }
 }
 
 #[test]
-fn regression_fixtures() {
-    let provider = FixtureProvider::new();
-    RegressionHarness::new("fixtures")
-        .with_preset(ConfigPreset::PlainBoard)
-        .run(provider);
+fn regression_hub_tag16h5() {
+    run_hub_test("single_tag_locus_v1_tag16h5", TagFamily::Aruco16h5);
 }
 
-test_icra!(
-    regression_icra_forward,
-    "forward",
-    Some("pure_tags_images"),
-    PlainBoard
-);
-test_icra!(
-    SOFT regression_icra_forward_soft,
-    "forward",
-    Some("pure_tags_images"),
-    PlainBoard
-);
-test_icra!(
-    regression_icra_forward_checkerboard,
-    "forward",
-    Some("checkerboard_corners_images"),
-    Checkerboard
-);
-
-// Lengthy tests (Ignored by default)
-test_icra!(
-    IGNORED regression_icra_circle,
-    "circle",
-    Some("pure_tags_images"),
-    PlainBoard
-);
-test_icra!(
-    IGNORED regression_icra_circle_checkerboard,
-    "circle",
-    Some("checkerboard_corners_images"),
-    Checkerboard
-);
-test_icra!(
-    IGNORED regression_icra_random,
-    "random",
-    Some("pure_tags_images"),
-    PlainBoard
-);
-test_icra!(
-    IGNORED regression_icra_random_checkerboard,
-    "random",
-    Some("checkerboard_corners_images"),
-    Checkerboard
-);
-test_icra!(
-    IGNORED regression_icra_rotation,
-    "rotation",
-    Some("pure_tags_images"),
-    PlainBoard
-);
+#[test]
+fn regression_hub_tag36h11() {
+    run_hub_test("single_tag_locus_v1_tag36h11", TagFamily::Aruco36h11);
+}
