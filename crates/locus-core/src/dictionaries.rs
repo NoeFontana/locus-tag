@@ -515,6 +515,8 @@ pub static ARUCO_36H11_CODES: [u64; 587] = [
     0x0007_f23e_022e, 0x0002_4590_68fb, 0x000e_83be_4b73,
 ];
 
+
+
 /// ArUco 36h11 dictionary singleton.
 pub static ARUCO_36H11: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {
     TagDictionary::new("Aruco36h11", 6, 11, &ARUCO_36H11_CODES, &APRILTAG_36H11_POINTS)
@@ -568,6 +570,8 @@ pub static ARUCO_16H5_CODES: [u64; 30] = [
     0x0000_0000_e9dc, 0x0000_0000_73ad, 0x0000_0000_ad5f, 0x0000_0000_d530,
     0x0000_0000_07ca, 0x0000_0000_af2e,
 ];
+
+
 
 /// ArUco 16h5 dictionary singleton.
 pub static ARUCO_16H5: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {
@@ -680,6 +684,9 @@ pub static APRILTAG_41H12_POINTS: [(f64, f64); 41] = [
     (-0.222222, 0.222222), (-0.222222, 0.0),
     (0.0, 0.0),
 ];
+
+/// AprilTag 41h12 code table.
+
 pub static APRILTAG_41H12_CODES: [u64; 2115] = [
     0x01bd_8a64_ad10, 0x01bd_c4f3_b2d5, 0x01bd_ff82_b89a, 0x01be_3a11_be5f,
     0x01be_74a0_c424, 0x01be_af2f_c9e9, 0x01be_e9be_cfae, 0x01bf_244d_d573,
@@ -1211,6 +1218,8 @@ pub static APRILTAG_41H12_CODES: [u64; 2115] = [
     0x01a8_052d_b35e, 0x00e8_274a_d0db, 0x000f_1a93_7c8a, 0x0094_b5e4_8ed7,
     0x0035_2cb6_ab16, 0x015c_ff6a_6f12, 0x01ee_4015_5a64,
 ];
+
+
 
 /// AprilTag 41h12 dictionary singleton.
 pub static APRILTAG_41H12: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {

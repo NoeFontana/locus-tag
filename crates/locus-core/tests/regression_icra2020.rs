@@ -151,7 +151,7 @@ impl RegressionHarness {
             snapshot_name: snapshot_name.into(),
             config: DetectorConfig::default(),
             options: DetectOptions {
-                families: vec![TagFamily::Aruco36h11],
+                families: vec![TagFamily::AprilTag36h11],
                 ..Default::default()
             },
             icra_corner_ordering: true,
