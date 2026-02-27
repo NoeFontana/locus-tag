@@ -49,6 +49,9 @@ module-name = "locus"
 python-source = "crates/locus-py"
 manifest-path = "crates/locus-py/Cargo.toml"
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
