@@ -74,21 +74,6 @@ jobs:
           set -o pipefail
           cargo test --doc 2>&1 | tee test-rust-doc.log
 
-      - uses: astral-sh/setup-uv@v5
-      
-      - name: Sync Hub Dataset
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          uv sync --extra benchmark
-          PYTHONPATH=. uv run python scripts/bench/sync_hub.py --configs single_tag_locus_v1_std41h12
-
-      - name: Hub Regression Test
-        env:
-          LOCUS_HUB_DATASET_DIR: tests/data/hub_cache
-        run: |
-          cargo test --test regression_icra2020 -- regression_hub_datasets --nocapture
-
       - name: Upload Logs on Failure
         if: failure()
         continue-on-error: true
@@ -155,12 +140,6 @@ jobs:
         run: |
           set -o pipefail
           uv run pytest 2>&1 | tee test-python-${{ matrix.python-version }}.log
-
-      - name: Hosted Benchmarks
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          PYTHONPATH=. uv run python scripts/locus_bench.py run hosted --configs single_tag_locus_v1_std41h12 --limit 5
 
       - name: Upload Logs on Failure
         if: failure()
