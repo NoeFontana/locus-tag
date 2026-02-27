@@ -1014,6 +1014,46 @@ impl TagDecoder for AprilTag16h5 {
     }
 }
 
+/// Decoder for the AprilTag 41h12 family.
+pub struct AprilTag41h12;
+
+impl TagDecoder for AprilTag41h12 {
+    fn name(&self) -> &'static str {
+        "41h12"
+    }
+    fn dimension(&self) -> usize {
+        9
+    }
+
+    fn sample_points(&self) -> &[(f64, f64)] {
+        &crate::dictionaries::APRILTAG_41H12.sample_points
+    }
+
+    fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
+        crate::dictionaries::APRILTAG_41H12
+            .decode(bits, 4)
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
+    }
+
+    fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)> {
+        crate::dictionaries::APRILTAG_41H12
+            .decode(bits, max_hamming)
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
+    }
+
+    fn get_code(&self, id: u16) -> Option<u64> {
+        crate::dictionaries::APRILTAG_41H12.get_code(id)
+    }
+
+    fn num_codes(&self) -> usize {
+        crate::dictionaries::APRILTAG_41H12.len()
+    }
+
+    fn rotated_codes(&self) -> &[(u64, u16, u8)] {
+        crate::dictionaries::APRILTAG_41H12.rotated_codes()
+    }
+}
+
 /// Decoder for the ArUco 36h11 family (OpenCV Dialect).
 pub struct Aruco36h11;
 
@@ -1233,6 +1273,7 @@ pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send
     match family {
         config::TagFamily::AprilTag36h11 => Box::new(AprilTag36h11),
         config::TagFamily::AprilTag16h5 => Box::new(AprilTag16h5),
+        config::TagFamily::AprilTag41h12 => Box::new(AprilTag41h12),
         config::TagFamily::Aruco36h11 => Box::new(Aruco36h11),
         config::TagFamily::Aruco16h5 => Box::new(Aruco16h5),
         config::TagFamily::ArUco4x4_50 => Box::new(ArUco4x4_50),

@@ -442,6 +442,8 @@ pub enum TagFamily {
     AprilTag36h11,
     /// AprilTag 16h5 family (30 codes, 5-bit hamming distance).
     AprilTag16h5,
+    /// AprilTag 41h12 family (2115 codes, 12-bit hamming distance).
+    AprilTag41h12,
     /// OpenCV ArUco AprilTag 36h11 dialect.
     Aruco36h11,
     /// OpenCV ArUco AprilTag 16h5 dialect.
@@ -459,6 +461,7 @@ impl TagFamily {
         &[
             TagFamily::AprilTag36h11,
             TagFamily::AprilTag16h5,
+            TagFamily::AprilTag41h12,
             TagFamily::Aruco36h11,
             TagFamily::Aruco16h5,
             TagFamily::ArUco4x4_50,
@@ -653,6 +656,6 @@ mod tests {
     #[test]
     fn test_all_families() {
         let opt = DetectOptions::all_families();
-        assert_eq!(opt.families.len(), 4);
+        assert_eq!(opt.families.len(), 7);
     }
 }

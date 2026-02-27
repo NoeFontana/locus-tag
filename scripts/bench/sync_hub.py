@@ -22,8 +22,9 @@ logger = logging.getLogger(__name__)
 # Resolve project-level defaults
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CACHE_DIR = Path(os.getenv("LOCUS_HUB_DATASET_DIR", PROJECT_ROOT / "tests/data/hub_cache"))
+DEFAULT_REPO_ID = "NoeFontana/locus-tag-bench"
 
-def sync_subset(subset: str, target_dir: Path, repo_id: str) -> None:
+def sync_subset_to_local(subset: str, target_dir: Path, repo_id: str = DEFAULT_REPO_ID) -> None:
     """Synchronizes a single dataset subset (images + metadata) to local disk."""
     subset_dir = target_dir / subset
     images_dir = subset_dir / "images"
@@ -68,7 +69,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Sync HF datasets to local cache.")
     parser.add_argument("--configs", nargs="*", default=["all"], help="Subsets to sync (default: all)")
     parser.add_argument("--target-dir", type=Path, default=DEFAULT_CACHE_DIR, help="Target directory (default: $LOCUS_HUB_DATASET_DIR or project tests/data/hub_cache)")
-    parser.add_argument("--repo-id", type=str, default="NoeFontana/locus-tag-bench")
+    parser.add_argument("--repo-id", type=str, default=DEFAULT_REPO_ID)
     args = parser.parse_args()
 
     # Discover configurations
@@ -85,7 +86,7 @@ def main() -> None:
     # Execute sync
     for config in configs:
         try:
-            sync_subset(config, args.target_dir, args.repo_id)
+            sync_subset_to_local(config, args.target_dir, args.repo_id)
         except Exception as e:
             logger.error(f"Failed to sync {config}: {e}")
 
