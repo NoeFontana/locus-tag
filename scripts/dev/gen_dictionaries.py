@@ -11,6 +11,7 @@ Usage:
 
 import sys
 from pathlib import Path
+
 import cv2
 import numpy as np
 
@@ -912,7 +913,7 @@ def get_aruco_bits(aruco_dict, tag_id):
     for r in range(dim):
         for c in range(dim):
             if bits[r, c]:
-                res |= (1 << (r * dim + c))
+                res |= 1 << (r * dim + c)
     return int(res)
 
 
