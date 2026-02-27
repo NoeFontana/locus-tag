@@ -361,9 +361,7 @@ impl DatasetProvider for HubProvider {
         let base_dir = self.base_dir.clone();
         let iter = self.image_names.iter().map(move |fname| {
             let img_path = base_dir.join("images").join(fname);
-            let img = image::open(&img_path)
-                .expect("load hub image")
-                .into_luma8();
+            let img = image::open(&img_path).expect("load hub image").into_luma8();
             let (w, h) = img.dimensions();
 
             let gt = self.gt_map.get(fname).unwrap().clone();
@@ -382,7 +380,7 @@ fn run_hub_test(config_name: &str, family: TagFamily) {
     if let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") {
         let root = PathBuf::from(hub_dir);
         let dataset_path = root.join(config_name);
-        
+
         if !dataset_path.exists() {
             println!("Dataset not found in cache: {config_name}. Skipping.");
             return;
