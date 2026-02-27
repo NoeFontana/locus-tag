@@ -12,5 +12,5 @@ def test_datasets_vision_extras():
     from datasets import Features, Image
 
     # Check if Image feature exists
-    features = Features({"image": Image()})
+    features = Features(image=Image())
     assert "image" in features
