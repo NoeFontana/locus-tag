@@ -405,8 +405,10 @@ fn test_no_false_positives_in_white_noise() {
             total_false_positives += detections.len();
             false_positive_images.push(image_idx);
             for d in &detections {
-                println!("False positive in image {}: id={}, hamming={}, margin={}, corners={:?}", 
-                    image_idx, d.id, d.hamming, d.decision_margin, d.corners);
+                println!(
+                    "False positive in image {}: id={}, hamming={}, margin={}, corners={:?}",
+                    image_idx, d.id, d.hamming, d.decision_margin, d.corners
+                );
             }
         }
     }

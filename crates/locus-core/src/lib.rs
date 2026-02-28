@@ -717,8 +717,7 @@ impl Detector {
         } else {
             4
         };
-        if best_overall_h
-            > config.max_hamming_error
+        if best_overall_h > config.max_hamming_error
             && best_overall_h <= max_h_for_refine
             && best_overall_code.is_some()
         {
@@ -761,9 +760,7 @@ impl Detector {
                                             current_corners = test_corners;
                                             pass_improved = true;
                                             // Success check
-                                            if hamming
-                                                <= config.max_hamming_error
-                                            {
+                                            if hamming <= config.max_hamming_error {
                                                 cand.id = id;
                                                 cand.hamming = hamming;
                                                 cand.bits = S::to_debug_bits(&code);
@@ -838,8 +835,7 @@ impl Detector {
                                         best_overall_code = Some(code.clone());
                                         current_corners = refined;
                                         // Success check
-                                        if hamming <= config.max_hamming_error
-                                        {
+                                        if hamming <= config.max_hamming_error {
                                             cand.id = id;
                                             cand.hamming = hamming;
                                             cand.bits = S::to_debug_bits(&code);
@@ -896,9 +892,7 @@ impl Detector {
                                             current_corners = test_corners;
                                             pass_improved = true;
 
-                                            if hamming
-                                                <= config.max_hamming_error
-                                            {
+                                            if hamming <= config.max_hamming_error {
                                                 cand.id = id;
                                                 cand.hamming = hamming;
                                                 cand.bits = S::to_debug_bits(&code);
