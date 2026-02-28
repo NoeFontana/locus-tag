@@ -163,8 +163,8 @@ impl Default for DetectorConfig {
             quad_max_aspect_ratio: 10.0,
             quad_min_fill_ratio: 0.10,
             quad_max_fill_ratio: 0.98,
-            quad_min_edge_length: 6.0,
-            quad_min_edge_score: 2.0,
+            quad_min_edge_length: 4.0,
+            quad_min_edge_score: 4.0,
             subpixel_refinement_sigma: 0.6,
             segmentation_margin: 1,
             segmentation_connectivity: SegmentationConnectivity::Eight,
@@ -636,6 +636,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_detector_config_builder() {
         let config = DetectorConfig::builder()
             .threshold_tile_size(16)
@@ -650,6 +651,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_detector_config_defaults() {
         let config = DetectorConfig::default();
         assert_eq!(config.threshold_tile_size, 8);

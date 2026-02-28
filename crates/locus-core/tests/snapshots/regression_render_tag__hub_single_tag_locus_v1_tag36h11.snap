@@ -8,6 +8,10 @@ summary:
   mean_rmse: 106.7554
   mean_total_ms: "[DURATION]"
   worst_offenders:
+    - filename: scene_0030_cam_0000.png
+      missed: 0
+      extra: 1
+      rmse: 40.7334
     - filename: scene_0043_cam_0000.png
       missed: 0
       extra: 0
@@ -24,7 +28,3 @@ summary:
       missed: 0
       extra: 0
       rmse: 180.5222
-    - filename: scene_0036_cam_0000.png
-      missed: 0
-      extra: 0
-      rmse: 180.4191
