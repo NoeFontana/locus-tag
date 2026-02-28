@@ -208,7 +208,10 @@ mod extended {
             let (data, placements) = builder.build();
             let img = ImageView::new(&data, width, height, width).unwrap();
 
-            let mut detector = Detector::new();
+            let config = locus_core::config::DetectorConfig::builder()
+                .max_hamming_error(0) // Prevent family collisions on ideal scenes
+                .build();
+            let mut detector = Detector::with_config(config);
             let options = DetectOptions {
                 families: families.to_vec(),
                 ..Default::default()
