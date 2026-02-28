@@ -645,7 +645,10 @@ impl Detector {
                             best_overall_code = Some(code.clone());
                         }
 
-                        if hamming <= config.max_hamming_error && (best_match_in_scale.is_none() || hamming < best_match_in_scale.as_ref().unwrap().1) {
+                        if hamming <= config.max_hamming_error
+                            && (best_match_in_scale.is_none()
+                                || hamming < best_match_in_scale.as_ref().unwrap().1)
+                        {
                             best_match_in_scale = Some((id, hamming, rot, code, decoder_idx));
                         }
                     }
@@ -684,8 +687,7 @@ impl Detector {
                             &h_ref,
                             decoder,
                         )
-                        && let Some((id_ref, hamming_ref, _)) =
-                            S::decode(&code_ref, decoder, 255)
+                        && let Some((id_ref, hamming_ref, _)) = S::decode(&code_ref, decoder, 255)
                     {
                         // Only keep if it's the same tag and hamming is not worse
                         if id_ref == id && hamming_ref <= hamming {
@@ -696,9 +698,7 @@ impl Detector {
                     }
                 }
 
-                if let (Some(intrinsics), Some(tag_size)) =
-                    (options.intrinsics, options.tag_size)
-                {
+                if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size) {
                     let (pose, covariance) = crate::pose::estimate_tag_pose(
                         &intrinsics,
                         &cand.corners,
