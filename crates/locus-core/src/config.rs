@@ -163,8 +163,8 @@ impl Default for DetectorConfig {
             quad_max_aspect_ratio: 10.0,
             quad_min_fill_ratio: 0.10,
             quad_max_fill_ratio: 0.98,
-            quad_min_edge_length: 6.0,
-            quad_min_edge_score: 2.0,
+            quad_min_edge_length: 4.0,
+            quad_min_edge_score: 4.0,
             subpixel_refinement_sigma: 0.6,
             segmentation_margin: 1,
             segmentation_connectivity: SegmentationConnectivity::Eight,
@@ -646,7 +646,7 @@ mod tests {
         assert_eq!(config.quad_min_area, 1000);
         // Check defaults
         assert_eq!(config.threshold_min_range, 10);
-        assert_eq!(config.quad_min_edge_score, 2.0);
+        assert_eq!(config.quad_min_edge_score, 4.0);
         assert_eq!(config.max_hamming_error, 2);
     }
 
@@ -656,7 +656,7 @@ mod tests {
         let config = DetectorConfig::default();
         assert_eq!(config.threshold_tile_size, 8);
         assert_eq!(config.quad_min_area, 16);
-        assert_eq!(config.quad_min_edge_length, 6.0);
+        assert_eq!(config.quad_min_edge_length, 4.0);
         assert_eq!(config.max_hamming_error, 2);
     }
 
