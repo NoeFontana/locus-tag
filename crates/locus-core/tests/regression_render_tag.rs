@@ -145,19 +145,21 @@ pub struct RegressionHarness {
 }
 
 impl RegressionHarness {
-    pub fn new(snapshot_name: impl Into<String>, family: TagFamily) -> Self {
+    pub fn new(snapshot_name: impl Into<String>) -> Self {
         Self {
             snapshot_name: snapshot_name.into(),
             config: DetectorConfig::default(),
-            options: DetectOptions {
-                families: vec![family],
-                ..Default::default()
-            },
+            options: DetectOptions::default(),
         }
     }
 
     pub fn with_preset(mut self, preset: ConfigPreset) -> Self {
         self.config = preset.detector_config();
+        self
+    }
+
+    pub fn with_families(mut self, families: Vec<TagFamily>) -> Self {
+        self.options.families = families;
         self
     }
 
@@ -388,8 +390,9 @@ fn run_hub_test(config_name: &str, family: TagFamily) {
 
         if let Some(provider) = HubProvider::new(&dataset_path) {
             let snapshot = format!("hub_{}", provider.name());
-            RegressionHarness::new(snapshot, family)
+            RegressionHarness::new(snapshot)
                 .with_preset(ConfigPreset::PlainBoard)
+                .with_families(vec![family])
                 .run(provider);
         }
     } else {
