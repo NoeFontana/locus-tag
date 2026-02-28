@@ -646,8 +646,7 @@ impl Detector {
                         }
 
                         if hamming <= config.max_hamming_error
-                            && (best_match_in_scale.is_none()
-                                || hamming < best_match_in_scale.as_ref().unwrap().1)
+                            && best_match_in_scale.as_ref().is_none_or(|m| hamming < m.1)
                         {
                             best_match_in_scale = Some((id, hamming, rot, code, decoder_idx));
                         }
