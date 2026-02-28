@@ -150,10 +150,7 @@ impl RegressionHarness {
         Self {
             snapshot_name: snapshot_name.into(),
             config: DetectorConfig::default(),
-            options: DetectOptions {
-                families: vec![TagFamily::AprilTag36h11],
-                ..Default::default()
-            },
+            options: DetectOptions::default(),
             icra_corner_ordering: true,
         }
     }
@@ -165,6 +162,11 @@ impl RegressionHarness {
 
     pub fn with_decode_mode(mut self, mode: locus_core::config::DecodeMode) -> Self {
         self.config.decode_mode = mode;
+        self
+    }
+
+    pub fn with_families(mut self, families: Vec<TagFamily>) -> Self {
+        self.options.families = families;
         self
     }
 
@@ -464,18 +466,19 @@ impl DatasetProvider for IcraProvider {
 // ============================================================================
 
 macro_rules! test_icra {
-    ($name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident) => {
+    ($name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident, $family:expr) => {
         #[test]
         fn $name() {
             if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
                 let snapshot = provider.name().to_string();
                 RegressionHarness::new(snapshot)
                     .with_preset(ConfigPreset::$preset)
+                    .with_families(vec![$family])
                     .run(provider);
             }
         }
     };
-    (IGNORED $name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident) => {
+    (IGNORED $name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident, $family:expr) => {
         #[test]
         fn $name() {
             if std::env::var("LOCUS_EXTENDED_REGRESSION").is_err() {
@@ -489,17 +492,19 @@ macro_rules! test_icra {
                 let snapshot = provider.name().to_string();
                 RegressionHarness::new(snapshot)
                     .with_preset(ConfigPreset::$preset)
+                    .with_families(vec![$family])
                     .run(provider);
             }
         }
     };
-    (SOFT $name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident) => {
+    (SOFT $name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident, $family:expr) => {
         #[test]
         fn $name() {
             if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
                 let snapshot = format!("{}_soft", provider.name());
                 RegressionHarness::new(snapshot)
                     .with_preset(ConfigPreset::$preset)
+                    .with_families(vec![$family])
                     .with_decode_mode(locus_core::config::DecodeMode::Soft)
                     .run(provider);
             }
@@ -512,6 +517,7 @@ fn regression_fixtures() {
     let provider = FixtureProvider::new();
     RegressionHarness::new("fixtures")
         .with_preset(ConfigPreset::PlainBoard)
+        .with_families(vec![TagFamily::AprilTag36h11])
         .run(provider);
 }
 
@@ -519,19 +525,22 @@ test_icra!(
     regression_icra_forward,
     "forward",
     Some("pure_tags_images"),
-    PlainBoard
+    PlainBoard,
+    TagFamily::AprilTag36h11
 );
 test_icra!(
     SOFT regression_icra_forward_soft,
     "forward",
     Some("pure_tags_images"),
-    PlainBoard
+    PlainBoard,
+    TagFamily::AprilTag36h11
 );
 test_icra!(
     regression_icra_forward_checkerboard,
     "forward",
     Some("checkerboard_corners_images"),
-    Checkerboard
+    Checkerboard,
+    TagFamily::AprilTag36h11
 );
 
 // Lengthy tests (Ignored by default)
@@ -539,29 +548,34 @@ test_icra!(
     IGNORED regression_icra_circle,
     "circle",
     Some("pure_tags_images"),
-    PlainBoard
+    PlainBoard,
+    TagFamily::AprilTag36h11
 );
 test_icra!(
     IGNORED regression_icra_circle_checkerboard,
     "circle",
     Some("checkerboard_corners_images"),
-    Checkerboard
+    Checkerboard,
+    TagFamily::AprilTag36h11
 );
 test_icra!(
     IGNORED regression_icra_random,
     "random",
     Some("pure_tags_images"),
-    PlainBoard
+    PlainBoard,
+    TagFamily::AprilTag36h11
 );
 test_icra!(
     IGNORED regression_icra_random_checkerboard,
     "random",
     Some("checkerboard_corners_images"),
-    Checkerboard
+    Checkerboard,
+    TagFamily::AprilTag36h11
 );
 test_icra!(
     IGNORED regression_icra_rotation,
     "rotation",
     Some("pure_tags_images"),
-    PlainBoard
+    PlainBoard,
+    TagFamily::AprilTag36h11
 );
