@@ -28,7 +28,11 @@ uv run python -m scripts.bench.run real --compare
 Use this for strict regression testing before merging PRs. It isolates the detector and runs on a controlled set of images.
 
 ```bash
+# ICRA 2020 suite
 cargo test --release --test regression_icra2020 -- --test-threads=1
+
+# Render-Tag suite (Synthetic Hub Data)
+LOCUS_HUB_DATASET_DIR=../../tests/data/hub_cache cargo test --release --test regression_render_tag -- --test-threads=1
 ```
 
 **Note:** Always run with `--test-threads=1` to avoid CPU contention affecting timing results.
