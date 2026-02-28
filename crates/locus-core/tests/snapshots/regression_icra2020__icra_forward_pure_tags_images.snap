@@ -4,27 +4,27 @@ expression: report
 ---
 summary:
   dataset_size: 50
-  mean_recall: 0.8390909090909091
-  mean_rmse: 0.2763
+  mean_recall: 0.7437662337662339
+  mean_rmse: 0.2586
   mean_total_ms: "[DURATION]"
   worst_offenders:
-    - filename: 0003.png
-      missed: 129
-      extra: 0
-      rmse: 0.3072
-    - filename: 0000.png
-      missed: 124
-      extra: 1
-      rmse: 0.2366
-    - filename: 0001.png
-      missed: 122
-      extra: 1
-      rmse: 1.055
     - filename: 0004.png
-      missed: 120
+      missed: 150
       extra: 0
-      rmse: 0.3256
-    - filename: 0002.png
-      missed: 110
-      extra: 2
-      rmse: 0.2787
+      rmse: 0.3336
+    - filename: 0003.png
+      missed: 148
+      extra: 0
+      rmse: 0.3352
+    - filename: 0001.png
+      missed: 148
+      extra: 0
+      rmse: 0.2394
+    - filename: 0000.png
+      missed: 147
+      extra: 0
+      rmse: 0.184
+    - filename: 0005.png
+      missed: 141
+      extra: 0
+      rmse: 0.4024
