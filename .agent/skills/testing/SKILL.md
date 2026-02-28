@@ -32,7 +32,11 @@ cargo test --release --test regression_icra2020 -- --test-threads=1
 **Updating Snapshots:**
 If intentional changes have been made that alter the metrics, you must update the snapshots. **Always use the release profile** when updating snapshots to avoid extreme execution times:
 ```bash
+# ICRA 2020 suite
 INSTA_UPDATE=always cargo test --release --test regression_icra2020 -- --test-threads=1
+
+# Render-Tag suite
+LOCUS_HUB_DATASET_DIR=../../tests/data/hub_cache INSTA_UPDATE=always cargo test --release --test regression_render_tag -- --test-threads=1
 ```
 
 **Success Criteria:**
