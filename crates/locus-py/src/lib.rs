@@ -484,6 +484,7 @@ impl Detector {
         decoder_min_contrast = 20.0,
         refinement_mode = CornerRefinementMode::Erf,
         decode_mode = DecodeMode::Hard,
+        max_hamming_error = 2,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -511,6 +512,7 @@ impl Detector {
         decoder_min_contrast: f64,
         refinement_mode: CornerRefinementMode,
         decode_mode: DecodeMode,
+        max_hamming_error: u32,
     ) -> Self {
         let config = locus_core::DetectorConfig {
             threshold_tile_size,
@@ -537,6 +539,7 @@ impl Detector {
             decoder_min_contrast,
             refinement_mode: refinement_mode.into(),
             decode_mode: decode_mode.into(),
+            max_hamming_error,
         };
         Self {
             inner: locus_core::Detector::with_config(config),

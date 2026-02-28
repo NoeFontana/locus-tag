@@ -140,6 +140,9 @@ pub struct DetectorConfig {
     pub refinement_mode: CornerRefinementMode,
     /// Decoding mode (Hard vs Soft).
     pub decode_mode: DecodeMode,
+    /// Maximum number of Hamming errors allowed for tag decoding (default: 2).
+    /// Higher values increase recall but also increase false positive rate in noise.
+    pub max_hamming_error: u32,
 }
 
 impl Default for DetectorConfig {
@@ -160,8 +163,8 @@ impl Default for DetectorConfig {
             quad_max_aspect_ratio: 10.0,
             quad_min_fill_ratio: 0.10,
             quad_max_fill_ratio: 0.98,
-            quad_min_edge_length: 2.0,
-            quad_min_edge_score: 0.1,
+            quad_min_edge_length: 6.0,
+            quad_min_edge_score: 2.0,
             subpixel_refinement_sigma: 0.6,
             segmentation_margin: 1,
             segmentation_connectivity: SegmentationConnectivity::Eight,
@@ -169,6 +172,7 @@ impl Default for DetectorConfig {
             decoder_min_contrast: 20.0,
             refinement_mode: CornerRefinementMode::Erf,
             decode_mode: DecodeMode::Hard,
+            max_hamming_error: 2,
         }
     }
 }
@@ -216,6 +220,8 @@ pub struct DetectorConfigBuilder {
     pub refinement_mode: Option<CornerRefinementMode>,
     /// Decoding mode.
     pub decode_mode: Option<DecodeMode>,
+    /// Maximum Hamming errors.
+    pub max_hamming_error: Option<u32>,
 }
 
 impl DetectorConfigBuilder {
@@ -383,6 +389,7 @@ impl DetectorConfigBuilder {
             decoder_min_contrast: self.decoder_min_contrast.unwrap_or(d.decoder_min_contrast),
             refinement_mode: self.refinement_mode.unwrap_or(d.refinement_mode),
             decode_mode: self.decode_mode.unwrap_or(d.decode_mode),
+            max_hamming_error: self.max_hamming_error.unwrap_or(d.max_hamming_error),
         }
     }
 
@@ -426,6 +433,13 @@ impl DetectorConfigBuilder {
     #[must_use]
     pub fn decode_mode(mut self, mode: DecodeMode) -> Self {
         self.decode_mode = Some(mode);
+        self
+    }
+
+    /// Set the maximum number of Hamming errors allowed.
+    #[must_use]
+    pub fn max_hamming_error(mut self, errors: u32) -> Self {
+        self.max_hamming_error = Some(errors);
         self
     }
 }
@@ -631,6 +645,8 @@ mod tests {
         assert_eq!(config.quad_min_area, 1000);
         // Check defaults
         assert_eq!(config.threshold_min_range, 10);
+        assert_eq!(config.quad_min_edge_score, 4.0);
+        assert_eq!(config.max_hamming_error, 2);
     }
 
     #[test]
@@ -638,6 +654,8 @@ mod tests {
         let config = DetectorConfig::default();
         assert_eq!(config.threshold_tile_size, 8);
         assert_eq!(config.quad_min_area, 16);
+        assert_eq!(config.quad_min_edge_length, 4.0);
+        assert_eq!(config.max_hamming_error, 2);
     }
 
     #[test]
