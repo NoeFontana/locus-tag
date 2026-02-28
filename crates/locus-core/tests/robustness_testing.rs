@@ -21,6 +21,7 @@ use locus_core::{
 use proptest::prelude::*;
 use rand::RngCore;
 use rand::prelude::*;
+use rand_chacha::ChaCha8Rng;
 
 /// Test that the detection pipeline correctly handles strided buffers.
 ///
@@ -381,9 +382,10 @@ fn test_no_false_positives_in_white_noise() {
 
     const WIDTH: usize = 320;
     const HEIGHT: usize = 240;
-    const NUM_IMAGES: usize = 100;
+    const NUM_IMAGES: usize = 500;
 
-    let mut rng = thread_rng();
+    // Use a fixed seed for deterministic noise generation to prevent flakiness
+    let mut rng = ChaCha8Rng::seed_from_u64(0xdeadbeef);
     let mut total_false_positives = 0;
     let mut false_positive_images: Vec<usize> = Vec::new();
 
@@ -394,6 +396,7 @@ fn test_no_false_positives_in_white_noise() {
 
         let img = ImageView::new(&noise_data, WIDTH, HEIGHT, WIDTH).unwrap();
         let mut detector = Detector::new();
+
         let options = DetectOptions::with_families(&[TagFamily::AprilTag36h11]);
 
         let detections = detector.detect_with_options(&img, &options);
@@ -401,6 +404,10 @@ fn test_no_false_positives_in_white_noise() {
         if !detections.is_empty() {
             total_false_positives += detections.len();
             false_positive_images.push(image_idx);
+            for d in &detections {
+                println!("False positive in image {}: id={}, hamming={}, margin={}, corners={:?}", 
+                    image_idx, d.id, d.hamming, d.decision_margin, d.corners);
+            }
         }
     }
 

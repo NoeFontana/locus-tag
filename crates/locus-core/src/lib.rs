@@ -643,12 +643,7 @@ impl Detector {
                             best_overall_code = Some(code.clone());
                         }
 
-                        if hamming
-                            <= match decoder.name() {
-                                "36h11" | "Aruco36h11" => 4,
-                                _ => 1,
-                            }
-                        {
+                        if hamming <= config.max_hamming_error {
                             cand.id = id;
                             cand.hamming = hamming;
                             cand.bits = S::to_debug_bits(&code);
@@ -723,11 +718,7 @@ impl Detector {
             4
         };
         if best_overall_h
-            > if active_decoders.iter().any(|d| d.name() == "36h11") {
-                4
-            } else {
-                1
-            }
+            > config.max_hamming_error
             && best_overall_h <= max_h_for_refine
             && best_overall_code.is_some()
         {
@@ -771,7 +762,7 @@ impl Detector {
                                             pass_improved = true;
                                             // Success check
                                             if hamming
-                                                <= if decoder.name() == "36h11" { 4 } else { 1 }
+                                                <= config.max_hamming_error
                                             {
                                                 cand.id = id;
                                                 cand.hamming = hamming;
@@ -847,7 +838,7 @@ impl Detector {
                                         best_overall_code = Some(code.clone());
                                         current_corners = refined;
                                         // Success check
-                                        if hamming <= if decoder.name() == "36h11" { 4 } else { 1 }
+                                        if hamming <= config.max_hamming_error
                                         {
                                             cand.id = id;
                                             cand.hamming = hamming;
@@ -906,7 +897,7 @@ impl Detector {
                                             pass_improved = true;
 
                                             if hamming
-                                                <= if decoder.name() == "36h11" { 4 } else { 1 }
+                                                <= config.max_hamming_error
                                             {
                                                 cand.id = id;
                                                 cand.hamming = hamming;

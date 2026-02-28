@@ -8,23 +8,23 @@ summary:
   mean_rmse: 79.7599
   mean_total_ms: "[DURATION]"
   worst_offenders:
-    - filename: scene_0052_cam_0000.png
-      missed: 0
-      extra: 22
-      rmse: 101.2268
-    - filename: scene_0088_cam_0000.png
-      missed: 0
-      extra: 20
-      rmse: 121.2518
     - filename: scene_0051_cam_0000.png
       missed: 0
-      extra: 19
+      extra: 29
       rmse: 121.4443
-    - filename: scene_0080_cam_0000.png
+    - filename: scene_0052_cam_0000.png
       missed: 0
-      extra: 18
-      rmse: 110.6053
-    - filename: scene_0095_cam_0000.png
+      extra: 29
+      rmse: 101.2268
+    - filename: scene_0027_cam_0000.png
       missed: 0
-      extra: 18
-      rmse: 51.5379
+      extra: 28
+      rmse: 108.7939
+    - filename: scene_0011_cam_0000.png
+      missed: 0
+      extra: 28
+      rmse: 69.1164
+    - filename: scene_0012_cam_0000.png
+      missed: 0
+      extra: 28
+      rmse: 56.0643

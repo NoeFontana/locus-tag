@@ -1,6 +1,5 @@
 ---
 source: crates/locus-core/tests/regression_icra2020.rs
-assertion_line: 306
 expression: report
 ---
 summary:
@@ -15,11 +14,11 @@ summary:
       rmse: 0.4031
     - filename: 0000.png
       missed: 126
-      extra: 2
+      extra: 0
       rmse: 0.2425
     - filename: 0001.png
       missed: 124
-      extra: 1
+      extra: 0
       rmse: 0.2643
     - filename: 0004.png
       missed: 116

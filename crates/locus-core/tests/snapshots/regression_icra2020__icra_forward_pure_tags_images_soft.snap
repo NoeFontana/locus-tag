@@ -5,26 +5,26 @@ expression: report
 summary:
   dataset_size: 50
   mean_recall: 0.9541558441558442
-  mean_rmse: 0.3141
+  mean_rmse: 0.2976
   mean_total_ms: "[DURATION]"
   worst_offenders:
     - filename: 0013.png
       missed: 43
-      extra: 156
+      extra: 56
       rmse: 0.3683
     - filename: 0003.png
       missed: 38
-      extra: 163
+      extra: 71
       rmse: 0.3452
     - filename: 0000.png
       missed: 37
-      extra: 174
+      extra: 68
       rmse: 0.3224
     - filename: 0002.png
       missed: 36
-      extra: 173
-      rmse: 0.8847
+      extra: 68
+      rmse: 0.5152
     - filename: 0001.png
       missed: 35
-      extra: 160
+      extra: 67
       rmse: 0.5533
