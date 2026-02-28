@@ -24,8 +24,15 @@ uv run pytest
 ## 3. Regression & Performance Validation
 Strict evaluation against standard datasets (ICRA 2020) to ensure no regressions in accuracy or latency.
 
+To run the suite:
 ```bash
 cargo test --release --test regression_icra2020 -- --test-threads=1
+```
+
+**Updating Snapshots:**
+If intentional changes have been made that alter the metrics, you must update the snapshots. **Always use the release profile** when updating snapshots to avoid extreme execution times:
+```bash
+INSTA_UPDATE=always cargo test --release --test regression_icra2020 -- --test-threads=1
 ```
 
 **Success Criteria:**
