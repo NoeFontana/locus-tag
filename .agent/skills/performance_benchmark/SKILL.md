@@ -10,13 +10,12 @@ This skill guides you through the process of benchmarking the Locus library to e
 ## 1. End-to-End Evaluation (Python)
 Use this for a quick check of recall and end-to-end latency on the standard dataset.
 
-First, ensure the Rust backend is compiled with release optimizations:
+First, compile the core library with release optimizations:
 ```bash
 uv run maturin develop --release
 ```
 
-Then run the benchmark:
-
+Then, run the benchmark suite:
 ```bash
 uv run python -m scripts.bench.run real --compare
 ```
