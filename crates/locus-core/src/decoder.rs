@@ -933,6 +933,14 @@ pub trait TagDecoder: Send + Sync {
     fn num_codes(&self) -> usize;
     /// Returns all rotated versions of all codes in the dictionary: (bits, id, rotation)
     fn rotated_codes(&self) -> &[(u64, u16, u8)];
+    /// Executes a callback for each candidate in the dictionary within a given Hamming distance.
+    /// This uses Multi-Index Hashing if available for efficiency.
+    fn for_each_candidate_within_hamming(
+        &self,
+        bits: u64,
+        max_hamming: u32,
+        callback: &mut dyn FnMut(u64, u16, u8),
+    );
 }
 
 /// Decoder for the AprilTag 36h11 family.
@@ -977,6 +985,18 @@ impl TagDecoder for AprilTag36h11 {
     fn rotated_codes(&self) -> &[(u64, u16, u8)] {
         crate::dictionaries::APRILTAG_36H11.rotated_codes()
     }
+    fn for_each_candidate_within_hamming(
+        &self,
+        bits: u64,
+        max_hamming: u32,
+        callback: &mut dyn FnMut(u64, u16, u8),
+    ) {
+        crate::dictionaries::APRILTAG_36H11.for_each_candidate_within_hamming(
+            bits,
+            max_hamming,
+            callback,
+        );
+    }
 }
 
 /// Decoder for the AprilTag 16h5 family.
@@ -1019,6 +1039,18 @@ impl TagDecoder for AprilTag16h5 {
 
     fn rotated_codes(&self) -> &[(u64, u16, u8)] {
         crate::dictionaries::APRILTAG_16H5.rotated_codes()
+    }
+    fn for_each_candidate_within_hamming(
+        &self,
+        bits: u64,
+        max_hamming: u32,
+        callback: &mut dyn FnMut(u64, u16, u8),
+    ) {
+        crate::dictionaries::APRILTAG_16H5.for_each_candidate_within_hamming(
+            bits,
+            max_hamming,
+            callback,
+        );
     }
 }
 
@@ -1063,6 +1095,18 @@ impl TagDecoder for AprilTag41h12 {
     fn rotated_codes(&self) -> &[(u64, u16, u8)] {
         crate::dictionaries::APRILTAG_41H12.rotated_codes()
     }
+    fn for_each_candidate_within_hamming(
+        &self,
+        bits: u64,
+        max_hamming: u32,
+        callback: &mut dyn FnMut(u64, u16, u8),
+    ) {
+        crate::dictionaries::APRILTAG_41H12.for_each_candidate_within_hamming(
+            bits,
+            max_hamming,
+            callback,
+        );
+    }
 }
 
 /// Decoder for the ArUco 36h11 family (OpenCV Dialect).
@@ -1105,6 +1149,18 @@ impl TagDecoder for Aruco36h11 {
 
     fn rotated_codes(&self) -> &[(u64, u16, u8)] {
         crate::dictionaries::ARUCO_36H11.rotated_codes()
+    }
+    fn for_each_candidate_within_hamming(
+        &self,
+        bits: u64,
+        max_hamming: u32,
+        callback: &mut dyn FnMut(u64, u16, u8),
+    ) {
+        crate::dictionaries::ARUCO_36H11.for_each_candidate_within_hamming(
+            bits,
+            max_hamming,
+            callback,
+        );
     }
 }
 
@@ -1149,6 +1205,18 @@ impl TagDecoder for Aruco16h5 {
     fn rotated_codes(&self) -> &[(u64, u16, u8)] {
         crate::dictionaries::ARUCO_16H5.rotated_codes()
     }
+    fn for_each_candidate_within_hamming(
+        &self,
+        bits: u64,
+        max_hamming: u32,
+        callback: &mut dyn FnMut(u64, u16, u8),
+    ) {
+        crate::dictionaries::ARUCO_16H5.for_each_candidate_within_hamming(
+            bits,
+            max_hamming,
+            callback,
+        );
+    }
 }
 
 /// Decoder for the ArUco 4x4_50 family.
@@ -1192,6 +1260,18 @@ impl TagDecoder for ArUco4x4_50 {
     fn rotated_codes(&self) -> &[(u64, u16, u8)] {
         crate::dictionaries::ARUCO_4X4_50.rotated_codes()
     }
+    fn for_each_candidate_within_hamming(
+        &self,
+        bits: u64,
+        max_hamming: u32,
+        callback: &mut dyn FnMut(u64, u16, u8),
+    ) {
+        crate::dictionaries::ARUCO_4X4_50.for_each_candidate_within_hamming(
+            bits,
+            max_hamming,
+            callback,
+        );
+    }
 }
 
 /// Decoder for the ArUco 4x4_100 family.
@@ -1234,6 +1314,18 @@ impl TagDecoder for ArUco4x4_100 {
 
     fn rotated_codes(&self) -> &[(u64, u16, u8)] {
         crate::dictionaries::ARUCO_4X4_100.rotated_codes()
+    }
+    fn for_each_candidate_within_hamming(
+        &self,
+        bits: u64,
+        max_hamming: u32,
+        callback: &mut dyn FnMut(u64, u16, u8),
+    ) {
+        crate::dictionaries::ARUCO_4X4_100.for_each_candidate_within_hamming(
+            bits,
+            max_hamming,
+            callback,
+        );
     }
 }
 
@@ -1291,6 +1383,16 @@ impl TagDecoder for GenericDecoder {
 
     fn rotated_codes(&self) -> &[(u64, u16, u8)] {
         self.dict.rotated_codes()
+    }
+
+    fn for_each_candidate_within_hamming(
+        &self,
+        bits: u64,
+        max_hamming: u32,
+        callback: &mut dyn FnMut(u64, u16, u8),
+    ) {
+        self.dict
+            .for_each_candidate_within_hamming(bits, max_hamming, callback);
     }
 }
 

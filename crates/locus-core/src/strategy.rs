@@ -160,33 +160,23 @@ impl DecodingStrategy for SoftStrategy {
         let _codes_count = decoder.num_codes();
         let soft_threshold = max_error.max(1) * 60;
 
+        let coarse_rejection_threshold = max_error * 2;
         let mut best_id = None;
         let mut best_dist = soft_threshold;
         let mut best_rot = 0;
 
-        let coarse_rejection_threshold = max_error * 2;
-
-        for &(target_code, id, rot) in decoder.rotated_codes() {
-            // 1. FAST PATH: Hardware POPCNT (1 CPU cycle)
-            let bit_errors = (bits ^ target_code).count_ones();
-
-            // If the bit error is massive, don't even bother with the LLR array
-            if bit_errors > coarse_rejection_threshold {
-                continue;
-            }
-
-            // 2. SLOW PATH: LLR Penalty calculation
-            let dist = Self::distance_with_limit(code, target_code, best_dist);
-            if dist < best_dist {
-                best_dist = dist;
-                best_id = Some(u32::from(id));
-                best_rot = rot;
-
-                if best_dist == 0 {
-                    return Some((u32::from(id), 0, rot));
+        decoder.for_each_candidate_within_hamming(
+            bits,
+            coarse_rejection_threshold,
+            &mut |target_code, id, rot| {
+                let dist = Self::distance_with_limit(code, target_code, best_dist);
+                if dist < best_dist {
+                    best_dist = dist;
+                    best_id = Some(u32::from(id));
+                    best_rot = rot;
                 }
-            }
-        }
+            },
+        );
 
         if best_dist < soft_threshold {
             return best_id.map(|id| {
