@@ -229,7 +229,7 @@ Targets a **low latency** budget for 1080p frames on modern CPUs.
 | **Segmentation** | $O(N)$ | ~2.7 ms | Single-pass Union-Find. |
 | **Quad Extraction** | $O(K \cdot M)$ | ~1.5 ms | $K$ components, $M$ perimeter pixels. |
 | **Decoding (Hard)** | $O(Q)$ | ~0.5 ms | $Q$ candidates, bit-LUT based. |
-| **Decoding (Soft)** | $O(Q \cdot D)$ | ~50 ms | $D$ dictionary entries, LLR search. |
+| **Decoding (Soft)** | $O(Q \cdot \log D)$ | ~0.2 ms | $Q$ candidates, MIH sub-linear search. |
 
 *Note: Latencies are approximate for a single core on a modern CPU (e.g., Zen 4).*
 
@@ -240,13 +240,13 @@ The `DecodingStrategy` trait enables static dispatch between throughput-optimize
 | Mode | Mechanism | Strength | Cost |
 | :--- | :--- | :--- | :--- |
 | **Hard-Decision** | Direct intensity thresholding. | Highest throughput; $O(1)$ lookup. | Requires stable SNR/contrast. |
-| **Soft-Decision** | ML search using LLRs. | Recovers tags with blur or noise. | Latency scales with dictionary size. |
+| **Soft-Decision** | MIH-indexed ML search using LLRs. | Recovers tags with blur or noise. | Sub-linear search via Multi-Index Hashing. |
 
 ### Hard-Decision (High Throughput)
 The default mode. It samples pixel intensities at grid points and compares them against the local adaptive threshold. This path is extremely fast and ideal for industrial applications with consistent lighting.
 
 ### Soft-Decision (Maximum Recall)
-Designed for challenging conditions. Instead of binarizing, it computes the **Log-Likelihood Ratio (LLR)** for each bit and performs a Maximum Likelihood search across the dictionary. The implementation is zero-allocation and uses early-exit pruning to minimize search overhead.
+Designed for challenging conditions. Instead of binarizing, it computes the **Log-Likelihood Ratio (LLR)** for each bit and performs a Maximum Likelihood search across the dictionary. For efficiency, it utilizes **Multi-Index Hashing (MIH)** to achieve sub-linear search performance, making it viable for real-time applications even with large tag families (e.g., 41h12). The implementation is zero-allocation and uses early-exit pruning to minimize search overhead.
 
 ## Pose Estimation Strategies
 
