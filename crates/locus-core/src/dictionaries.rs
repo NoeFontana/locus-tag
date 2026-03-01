@@ -26,7 +26,6 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 use std::borrow::Cow;
 use std::collections::HashMap;
 
@@ -158,7 +157,11 @@ impl TagDictionary {
     /// Returns (id, hamming_distance, rotation) if found within tolerance.
     #[must_use]
     pub fn decode(&self, bits: u64, max_hamming: u32) -> Option<(u16, u32, u8)> {
-        let mask = if self.bit_count < 64 { (1u64 << self.bit_count) - 1 } else { u64::MAX };
+        let mask = if self.bit_count < 64 {
+            (1u64 << self.bit_count) - 1
+        } else {
+            u64::MAX
+        };
         let bits = bits & mask;
 
         // Try exact match first
@@ -186,8 +189,12 @@ impl TagDictionary {
                     } else {
                         best = Some((id, hamming, rot));
                     }
-                    if hamming == 0 { return best; } 
-                    if hamming == 1 { break; }
+                    if hamming == 0 {
+                        return best;
+                    }
+                    if hamming == 1 {
+                        break;
+                    }
                 }
             }
             return best;
@@ -216,7 +223,9 @@ impl TagDictionary {
                         } else {
                             best = Some((id, hamming, rot));
                         }
-                        if hamming == 0 { return best; }
+                        if hamming == 0 {
+                            return best;
+                        }
                     }
                 }
             }
@@ -946,7 +955,14 @@ pub static APRILTAG_36H11_CODES: [u64; 2348] = [
 
 /// AprilTag 36h11 dictionary singleton.
 pub static APRILTAG_36H11: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {
-    TagDictionary::new("36h11", 6, 36, 11, &APRILTAG_36H11_CODES, &APRILTAG_36H11_POINTS)
+    TagDictionary::new(
+        "36h11",
+        6,
+        36,
+        11,
+        &APRILTAG_36H11_CODES,
+        &APRILTAG_36H11_POINTS,
+    )
 });
 
 // ============================================================================
@@ -1004,7 +1020,14 @@ pub static APRILTAG_16H5_CODES: [u64; 120] = [
 
 /// AprilTag 16h5 dictionary singleton.
 pub static APRILTAG_16H5: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {
-    TagDictionary::new("16h5", 4, 16, 5, &APRILTAG_16H5_CODES, &APRILTAG_16H5_POINTS)
+    TagDictionary::new(
+        "16h5",
+        4,
+        16,
+        5,
+        &APRILTAG_16H5_CODES,
+        &APRILTAG_16H5_POINTS,
+    )
 });
 
 // ============================================================================
@@ -1605,7 +1628,14 @@ pub static ARUCO_36H11_CODES: [u64; 2348] = [
 
 /// ArUco 36h11 dictionary singleton.
 pub static ARUCO_36H11: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {
-    TagDictionary::new("Aruco36h11", 6, 36, 11, &ARUCO_36H11_CODES, &APRILTAG_36H11_POINTS)
+    TagDictionary::new(
+        "Aruco36h11",
+        6,
+        36,
+        11,
+        &ARUCO_36H11_CODES,
+        &APRILTAG_36H11_POINTS,
+    )
 });
 
 // ============================================================================
@@ -1649,7 +1679,14 @@ pub static ARUCO_16H5_CODES: [u64; 120] = [
 
 /// ArUco 16h5 dictionary singleton.
 pub static ARUCO_16H5: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {
-    TagDictionary::new("Aruco16h5", 4, 16, 5, &ARUCO_16H5_CODES, &APRILTAG_16H5_POINTS)
+    TagDictionary::new(
+        "Aruco16h5",
+        4,
+        16,
+        5,
+        &ARUCO_16H5_CODES,
+        &APRILTAG_16H5_POINTS,
+    )
 });
 
 // ============================================================================
@@ -3997,5 +4034,12 @@ pub static APRILTAG_41H12_CODES: [u64; 8460] = [
 
 /// AprilTag 41h12 dictionary singleton.
 pub static APRILTAG_41H12: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {
-    TagDictionary::new("41h12", 9, 41, 12, &APRILTAG_41H12_CODES, &APRILTAG_41H12_POINTS)
+    TagDictionary::new(
+        "41h12",
+        9,
+        41,
+        12,
+        &APRILTAG_41H12_CODES,
+        &APRILTAG_41H12_POINTS,
+    )
 });
