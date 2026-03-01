@@ -13,17 +13,16 @@ import sys
 from pathlib import Path
 
 import cv2
-import numpy as np
 
 # Add project root to path to import scripts
 sys.path.append(str(Path(__file__).parents[2]))
+
+from typing import Any
 
 try:
     from scripts.data import apriltag_41h12 as apriltag_41h12_data
 except ImportError:
     print("Warning: scripts.data.apriltag_41h12 not found. 41h12 will be skipped.")
-    from typing import Any
-
     apriltag_41h12_data: Any = None
 
 
@@ -903,20 +902,6 @@ ARUCO_4X4_100_CODES = [
 ]
 
 
-def get_aruco_bits(aruco_dict, tag_id):
-    """Extract canonical row-major bits for a tag from an ArUco dictionary."""
-    dim = aruco_dict.markerSize
-    img = cv2.aruco.generateImageMarker(aruco_dict, tag_id, dim + 2)
-    inner = img[1:-1, 1:-1]
-    bits = (inner > 127).astype(np.uint64)
-    res = 0
-    for r in range(dim):
-        for c in range(dim):
-            if bits[r, c]:
-                res |= 1 << (r * dim + c)
-    return int(res)
-
-
 def spiral_to_rowmajor(code: int, dim: int, bit_order: list) -> int:
     """Convert from UMich spiral bit ordering to row-major ordering.
 
@@ -1018,6 +1003,18 @@ def generate_sparse_points(bit_order: list, total_width: int) -> list:
     return points
 
 
+def get_aruco_bits(dictionary: Any, id: int) -> int:
+    """Generate bits for an ArUco/AprilTag ID using OpenCV."""
+    marker_size = dictionary.markerSize
+    img = cv2.aruco.generateImageMarker(dictionary, id, marker_size + 2)
+    bits = 0
+    for r in range(1, marker_size + 1):
+        for c in range(1, marker_size + 1):
+            if img[r, c] > 128:  # White is 1
+                bits |= 1 << ((r - 1) * marker_size + (c - 1))
+    return bits
+
+
 def generate_point_array(name: str, points: list) -> str:
     """Generate Rust array for sample points."""
     lines = [f"/// Sample points for {name} (canonical coordinates)."]
@@ -1034,21 +1031,75 @@ def generate_point_array(name: str, points: list) -> str:
     return "\n".join(lines)
 
 
-def generate_rust_array(name: str, codes: list, dim: int, bit_order: list) -> str:
-    """Generate Rust array declaration for a dictionary."""
-    # Convert all codes to row-major ordering
-    converted = [spiral_to_rowmajor(c, dim, bit_order) for c in codes]
+def rotate_points_90cw(points: list) -> list:
+    """Rotate points 90 degrees CW. (x,y) -> (-y, x)."""
+    # Assuming origin is centered.
+    return [(-p[1], p[0]) for p in points]
 
-    lines = [f"pub static {name}: [u64; {len(converted)}] = ["]
 
-    # Format 4 codes per line
-    for i in range(0, len(converted), 4):
-        chunk = converted[i : i + 4]
-        # Format as 0x1234_5678_9abc
+def compute_rotation_mapping(points: list) -> list:
+    """Compute how bit indices map when rotated 90 deg CW by matching points."""
+    rot_points = rotate_points_90cw(points)
+    mapping = []
+
+    for p in points:
+        # find the index in rot_points that matches p
+        # meaning, which point in the original tag rotated to this physical position
+        best_match = 0
+        best_dist = float("inf")
+        for j, rp in enumerate(rot_points):
+            dist = (p[0] - rp[0]) ** 2 + (p[1] - rp[1]) ** 2
+            if dist < best_dist:
+                best_dist = dist
+                best_match = j
+
+        mapping.append(best_match)
+
+    return mapping
+
+
+def generate_rust_array(name: str, codes: list, dim: int, bit_order: list, get_points_fn) -> str:
+    """Generate Rust array where EACH ID has 4 rotated variants packed sequentially."""
+    points = get_points_fn()
+    rot_mapping = compute_rotation_mapping(points)
+
+    num_bits = len(bit_order)
+    lines = [f"pub static {name}: [u64; {len(codes) * 4}] = ["]
+
+    for c in codes:
+        base_bits = 0
+        if "41H12" in name:
+            for i in range(num_bits):
+                if c & (1 << (num_bits - 1 - i)):
+                    base_bits |= 1 << i
+        else:
+            for spiral_bit_idx, (x, y) in enumerate(bit_order):
+                if c & (1 << (num_bits - 1 - spiral_bit_idx)):
+                    row = dim - y
+                    col = dim - x
+                    rowmajor_idx = row * dim + col
+                    base_bits |= 1 << rowmajor_idx
+
+        # Step 2: Generate all 4 rotations
+        vars = []
+        curr_bits = base_bits
+        for _ in range(4):
+            vars.append(curr_bits)
+
+            # apply rotation mapping to get next rot
+            nxt = 0
+            for i in range(num_bits):
+                # if the original unrotated bit at 'mapped_from' was 1
+                mapped_from = rot_mapping[i]
+                if curr_bits & (1 << mapped_from):
+                    nxt |= 1 << i
+            curr_bits = nxt
+
+        # Format 4 codes per line
         hex_strs = []
-        for c in chunk:
-            s = f"{c:012x}"
-            hex_strs.append(f"0x{s[:4]}_{s[4:8]}_{s[8:]}")
+        for v in vars:
+            s = f"{v:016x}"
+            hex_strs.append(f"0x{s[:4]}_{s[4:8]}_{s[8:12]}_{s[12:]}")
 
         lines.append(f"    {', '.join(hex_strs)},")
 
@@ -1056,17 +1107,34 @@ def generate_rust_array(name: str, codes: list, dim: int, bit_order: list) -> st
     return "\n".join(lines)
 
 
-def generate_rust_array_raw(name: str, codes: list) -> str:
-    """Generate Rust array declaration for codes already in row-major order (no conversion)."""
-    lines = [f"pub static {name}: [u64; {len(codes)}] = ["]
+def generate_rust_array_raw(name: str, codes: list, get_points_fn) -> str:
+    """Generate Rust array for codes already in row-major order. Generate 4 rotations."""
+    points = get_points_fn()
+    rot_mapping = compute_rotation_mapping(points)
+    num_bits = len(points)
 
-    # Format 4 codes per line
-    for i in range(0, len(codes), 4):
-        chunk = codes[i : i + 4]
+    lines = [f"pub static {name}: [u64; {len(codes) * 4}] = ["]
+
+    for c in codes:
+        base_bits = c
+
+        # Generate all 4 rotations
+        variants = []
+        curr_bits = base_bits
+        for _ in range(4):
+            variants.append(curr_bits)
+            nxt = 0
+            for i in range(num_bits):
+                mapped_from = rot_mapping[i]
+                if curr_bits & (1 << mapped_from):
+                    nxt |= 1 << i
+            curr_bits = nxt
+
         hex_strs = []
-        for c in chunk:
-            s = f"{c:012x}"
-            hex_strs.append(f"0x{s[:4]}_{s[4:8]}_{s[8:]}")
+        for v in variants:
+            s = f"{v:016x}"
+            hex_strs.append(f"0x{s[:4]}_{s[4:8]}_{s[8:12]}_{s[12:]}")
+
         lines.append(f"    {', '.join(hex_strs)},")
 
     lines.append("];")
@@ -1079,12 +1147,18 @@ def generate_dictionaries_rs() -> str:
     points_16h5 = generate_grid_points(4, 6)
     points_aruco = generate_grid_points(4, 6)
 
-    # Extract ArUco dialects
+    # Extract ArUco dialects from OpenCV
     dict_36h11 = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
     aruco_36h11_codes = [get_aruco_bits(dict_36h11, i) for i in range(587)]
 
     dict_16h5 = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_16h5)
     aruco_16h5_codes = [get_aruco_bits(dict_16h5, i) for i in range(30)]
+
+    aruco_4x4_50_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    aruco_4x4_50_codes = [get_aruco_bits(aruco_4x4_50_dict, i) for i in range(50)]
+
+    aruco_4x4_100_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_100)
+    aruco_4x4_100_codes = [get_aruco_bits(aruco_4x4_100_dict, i) for i in range(100)]
 
     parts = [
         "//! Tag family dictionaries.",
@@ -1104,16 +1178,18 @@ def generate_dictionaries_rs() -> str:
         "    pub name: Cow<'static, str>,",
         "    /// Grid dimension (e.g., 6 for 36h11).",
         "    pub dimension: usize,",
+        "    /// Maximum number of bits (e.g., 36 for 36h11, 41 for 41h12).",
+        "    pub bit_count: usize,",
         "    /// Minimum hamming distance of the family.",
         "    pub hamming_distance: usize,",
         "    /// Pre-computed sample points in canonical tag coordinates [-1, 1].",
         "    pub sample_points: Cow<'static, [(f64, f64)]>,",
-        "    /// Raw code table.",
+        "    /// Raw code table (N * 4 rotations).",
         "    pub codes: Cow<'static, [u64]>,",
+        "    /// Pre-computed list of (bits, id, rotation) for soft-decoding and iteration.",
+        "    rotated_codes: Vec<(u64, u16, u8)>,",
         "    /// Lookup table for O(1) exact matching. Maps bits to (ID, rotation_count).",
         "    code_to_id: HashMap<u64, (u16, u8)>,",
-        "    /// All 4 rotated versions of all codes (for Hamming search). Stores (bits, ID, rotation_count).",
-        "    rotated_codes: Vec<(u64, u16, u8)>,",
         "}",
         "",
         "impl TagDictionary {",
@@ -1122,30 +1198,28 @@ def generate_dictionaries_rs() -> str:
         "    pub fn new(",
         "        name: &'static str,",
         "        dimension: usize,",
+        "        bit_count: usize,",
         "        hamming_distance: usize,",
         "        codes: &'static [u64],",
         "        sample_points: &'static [(f64, f64)],",
         "    ) -> Self {",
-        "        let mut code_to_id = HashMap::with_capacity(codes.len() * 4);",
-        "        let mut rotated_codes = Vec::with_capacity(codes.len() * 4);",
-        "        let mask = if dimension * dimension < 64 { (1u64 << (dimension * dimension)) - 1 } else { u64::MAX };",
-        "        for (id, &code) in codes.iter().enumerate() {",
-        "            let mut r = code;",
-        "            for rot in 0u8..4 {",
-        "                let masked_r = r & mask;",
-        "                code_to_id.entry(masked_r).or_insert((id as u16, rot));",
-        "                rotated_codes.push((masked_r, id as u16, rot));",
-        "                r = rotate90(masked_r, dimension);",
-        "            }",
+        "        let mut code_to_id = HashMap::with_capacity(codes.len());",
+        "        let mut rotated_codes = Vec::with_capacity(codes.len());",
+        "        for (idx, &code) in codes.iter().enumerate() {",
+        "            let id = (idx / 4) as u16;",
+        "            let rot = (idx % 4) as u8;",
+        "            code_to_id.entry(code).or_insert((id, rot));",
+        "            rotated_codes.push((code, id, rot));",
         "        }",
         "        Self {",
         "            name: Cow::Borrowed(name),",
         "            dimension,",
+        "            bit_count,",
         "            hamming_distance,",
         "            sample_points: Cow::Borrowed(sample_points),",
         "            codes: Cow::Borrowed(codes),",
-        "            code_to_id,",
         "            rotated_codes,",
+        "            code_to_id,",
         "        }",
         "    }",
         "",
@@ -1154,37 +1228,35 @@ def generate_dictionaries_rs() -> str:
         "    pub fn new_custom(",
         "        name: String,",
         "        dimension: usize,",
+        "        bit_count: usize,",
         "        hamming_distance: usize,",
         "        codes: Vec<u64>,",
         "        sample_points: Vec<(f64, f64)>,",
         "    ) -> Self {",
-        "        let mut code_to_id = HashMap::with_capacity(codes.len() * 4);",
-        "        let mut rotated_codes = Vec::with_capacity(codes.len() * 4);",
-        "        let mask = if dimension * dimension < 64 { (1u64 << (dimension * dimension)) - 1 } else { u64::MAX };",
-        "        for (id, &code) in codes.iter().enumerate() {",
-        "            let mut r = code;",
-        "            for rot in 0u8..4 {",
-        "                let masked_r = r & mask;",
-        "                code_to_id.entry(masked_r).or_insert((id as u16, rot));",
-        "                rotated_codes.push((masked_r, id as u16, rot));",
-        "                r = rotate90(masked_r, dimension);",
-        "            }",
+        "        let mut code_to_id = HashMap::with_capacity(codes.len());",
+        "        let mut rotated_codes = Vec::with_capacity(codes.len());",
+        "        for (idx, &code) in codes.iter().enumerate() {",
+        "            let id = (idx / 4) as u16;",
+        "            let rot = (idx % 4) as u8;",
+        "            code_to_id.entry(code).or_insert((id, rot));",
+        "            rotated_codes.push((code, id, rot));",
         "        }",
         "        Self {",
         "            name: Cow::Owned(name),",
         "            dimension,",
+        "            bit_count,",
         "            hamming_distance,",
         "            sample_points: Cow::Owned(sample_points),",
         "            codes: Cow::Owned(codes),",
-        "            code_to_id,",
         "            rotated_codes,",
+        "            code_to_id,",
         "        }",
         "    }",
         "",
-        "    /// Get number of codes in dictionary.",
+        "    /// Get number of unique codes in dictionary.",
         "    #[must_use]",
         "    pub fn len(&self) -> usize {",
-        "        self.codes.len()",
+        "        self.codes.len() / 4",
         "    }",
         "",
         "    /// Check if dictionary is empty.",
@@ -1193,10 +1265,10 @@ def generate_dictionaries_rs() -> str:
         "        self.codes.is_empty()",
         "    }",
         "",
-        "    /// Get the raw code for a given ID.",
+        "    /// Get the raw base code (rotation 0) for a given ID.",
         "    #[must_use]",
         "    pub fn get_code(&self, id: u16) -> Option<u64> {",
-        "        self.codes.get(id as usize).copied()",
+        "        self.codes.get(id as usize * 4).copied()",
         "    }",
         "",
         "    /// Returns all rotated versions of all codes: (bits, id, rotation)",
@@ -1209,6 +1281,9 @@ def generate_dictionaries_rs() -> str:
         "    /// Returns (id, hamming_distance, rotation) if found within tolerance.",
         "    #[must_use]",
         "    pub fn decode(&self, bits: u64, max_hamming: u32) -> Option<(u16, u32, u8)> {",
+        "        let mask = if self.bit_count < 64 { (1u64 << self.bit_count) - 1 } else { u64::MAX };",
+        "        let bits = bits & mask;",
+        "",
         "        // Try exact match first",
         "        if let Some(&(id, rot)) = self.code_to_id.get(&bits) {",
         "            return Some((id, 0, rot));",
@@ -1216,9 +1291,11 @@ def generate_dictionaries_rs() -> str:
         "",
         "        if max_hamming > 0 {",
         "            let mut best: Option<(u16, u32, u8)> = None;",
-        "            for &(code, id, rot) in &self.rotated_codes {",
+        "            for (idx, &code) in self.codes.iter().enumerate() {",
         "                let hamming = (bits ^ code).count_ones();",
         "                if hamming <= max_hamming {",
+        "                    let id = (idx / 4) as u16;",
+        "                    let rot = (idx % 4) as u8;",
         "                    if let Some((_, b_h, _)) = best {",
         "                        if hamming < b_h {",
         "                            best = Some((id, hamming, rot));",
@@ -1226,9 +1303,8 @@ def generate_dictionaries_rs() -> str:
         "                    } else {",
         "                        best = Some((id, hamming, rot));",
         "                    }",
-        "                    if hamming == 1 {",
-        "                        break;",
-        "                    }",
+        "                    if hamming == 0 { return best; } ",
+        "                    if hamming == 1 { break; }",
         "                }",
         "            }",
         "            return best;",
@@ -1260,13 +1336,15 @@ def generate_dictionaries_rs() -> str:
         "",
         "/// AprilTag 36h11 code table (587 entries, row-major bit ordering).",
         "#[rustfmt::skip]",
-        generate_rust_array(
-            "APRILTAG_36H11_CODES", APRILTAG_36H11_CODES_SPIRAL, 6, UMICH_36H11_BIT_ORDER
+        generate_rust_array_raw(
+            "APRILTAG_36H11_CODES",
+            aruco_36h11_codes,
+            lambda: generate_grid_points(6, 8),
         ),
         "",
         "/// AprilTag 36h11 dictionary singleton.",
         "pub static APRILTAG_36H11: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {",
-        '    TagDictionary::new("36h11", 6, 11, &APRILTAG_36H11_CODES, &APRILTAG_36H11_POINTS)',
+        '    TagDictionary::new("36h11", 6, 36, 11, &APRILTAG_36H11_CODES, &APRILTAG_36H11_POINTS)',
         "});",
         "",
         "// ============================================================================",
@@ -1277,13 +1355,15 @@ def generate_dictionaries_rs() -> str:
         "",
         "/// AprilTag 16h5 code table (30 entries, row-major bit ordering).",
         "#[rustfmt::skip]",
-        generate_rust_array(
-            "APRILTAG_16H5_CODES", APRILTAG_16H5_CODES_SPIRAL, 4, UMICH_16H5_BIT_ORDER
+        generate_rust_array_raw(
+            "APRILTAG_16H5_CODES",
+            aruco_16h5_codes,
+            lambda: generate_grid_points(4, 6),
         ),
         "",
         "/// AprilTag 16h5 dictionary singleton.",
         "pub static APRILTAG_16H5: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {",
-        '    TagDictionary::new("16h5", 4, 5, &APRILTAG_16H5_CODES, &APRILTAG_16H5_POINTS)',
+        '    TagDictionary::new("16h5", 4, 16, 5, &APRILTAG_16H5_CODES, &APRILTAG_16H5_POINTS)',
         "});",
         "",
         "// ============================================================================",
@@ -1292,11 +1372,13 @@ def generate_dictionaries_rs() -> str:
         "",
         "/// ArUco 36h11 code table (587 entries, row-major bit ordering).",
         "#[rustfmt::skip]",
-        generate_rust_array_raw("ARUCO_36H11_CODES", aruco_36h11_codes),
+        generate_rust_array_raw(
+            "ARUCO_36H11_CODES", aruco_36h11_codes, lambda: generate_grid_points(6, 8)
+        ),
         "",
         "/// ArUco 36h11 dictionary singleton.",
         "pub static ARUCO_36H11: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {",
-        '    TagDictionary::new("Aruco36h11", 6, 11, &ARUCO_36H11_CODES, &APRILTAG_36H11_POINTS)',
+        '    TagDictionary::new("Aruco36h11", 6, 36, 11, &ARUCO_36H11_CODES, &APRILTAG_36H11_POINTS)',
         "});",
         "",
         "// ============================================================================",
@@ -1305,11 +1387,13 @@ def generate_dictionaries_rs() -> str:
         "",
         "/// ArUco 16h5 code table (30 entries, row-major bit ordering).",
         "#[rustfmt::skip]",
-        generate_rust_array_raw("ARUCO_16H5_CODES", aruco_16h5_codes),
+        generate_rust_array_raw(
+            "ARUCO_16H5_CODES", aruco_16h5_codes, lambda: generate_grid_points(4, 6)
+        ),
         "",
         "/// ArUco 16h5 dictionary singleton.",
         "pub static ARUCO_16H5: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {",
-        '    TagDictionary::new("Aruco16h5", 4, 5, &ARUCO_16H5_CODES, &APRILTAG_16H5_POINTS)',
+        '    TagDictionary::new("Aruco16h5", 4, 16, 5, &ARUCO_16H5_CODES, &APRILTAG_16H5_POINTS)',
         "});",
         "",
         "// ============================================================================",
@@ -1320,11 +1404,13 @@ def generate_dictionaries_rs() -> str:
         "",
         "/// ArUco 4x4_50 code table (50 entries, row-major bit ordering).",
         "#[rustfmt::skip]",
-        generate_rust_array_raw("ARUCO_4X4_50_CODES", ARUCO_4X4_50_CODES),
+        generate_rust_array_raw(
+            "ARUCO_4X4_50_CODES", aruco_4x4_50_codes, lambda: generate_grid_points(4, 6)
+        ),
         "",
         "/// ArUco 4x4_50 dictionary singleton.",
         "pub static ARUCO_4X4_50: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {",
-        '    TagDictionary::new("4X4_50", 4, 1, &ARUCO_4X4_50_CODES, &ARUCO_4X4_POINTS)',
+        '    TagDictionary::new("4X4_50", 4, 16, 1, &ARUCO_4X4_50_CODES, &ARUCO_4X4_POINTS)',
         "});",
         "",
         "// ============================================================================",
@@ -1333,11 +1419,13 @@ def generate_dictionaries_rs() -> str:
         "",
         "/// ArUco 4x4_100 code table (100 entries, row-major bit ordering).",
         "#[rustfmt::skip]",
-        generate_rust_array_raw("ARUCO_4X4_100_CODES", ARUCO_4X4_100_CODES),
+        generate_rust_array_raw(
+            "ARUCO_4X4_100_CODES", aruco_4x4_100_codes, lambda: generate_grid_points(4, 6)
+        ),
         "",
         "/// ArUco 4x4_100 dictionary singleton.",
         "pub static ARUCO_4X4_100: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {",
-        '    TagDictionary::new("4X4_100", 4, 1, &ARUCO_4X4_100_CODES, &ARUCO_4X4_POINTS)',
+        '    TagDictionary::new("4X4_100", 4, 16, 1, &ARUCO_4X4_100_CODES, &ARUCO_4X4_POINTS)',
         "});",
     ]
 
@@ -1355,12 +1443,14 @@ def generate_dictionaries_rs() -> str:
                 "/// AprilTag 41h12 code table.",
                 "#[rustfmt::skip]",
                 generate_rust_array_raw(
-                    "APRILTAG_41H12_CODES", apriltag_41h12_data.APRILTAG_41H12_CODES_SPIRAL
+                    "APRILTAG_41H12_CODES",
+                    apriltag_41h12_data.APRILTAG_41H12_CODES_SPIRAL,
+                    lambda: points_41h12,
                 ),
                 "",
                 "/// AprilTag 41h12 dictionary singleton.",
                 "pub static APRILTAG_41H12: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {",
-                '    TagDictionary::new("41h12", 9, 12, &APRILTAG_41H12_CODES, &APRILTAG_41H12_POINTS)',
+                '    TagDictionary::new("41h12", 9, 41, 12, &APRILTAG_41H12_CODES, &APRILTAG_41H12_POINTS)',
                 "});",
             ]
         )

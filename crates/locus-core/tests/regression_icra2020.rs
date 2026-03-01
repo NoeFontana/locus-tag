@@ -266,6 +266,10 @@ impl RegressionHarness {
             .iter()
             .filter_map(|(fname, m)| {
                 if !m.missed_ids.is_empty() || !m.extra_ids.is_empty() || m.avg_rmse > 1.0 {
+                    println!(
+                        "FILE {fname} missed: {:?}, extra: {:?}",
+                        m.missed_ids, m.extra_ids
+                    );
                     Some(Offender {
                         filename: fname.clone(),
                         missed: m.missed_ids.len(),
