@@ -916,6 +916,8 @@ pub trait TagDecoder: Send + Sync {
     fn name(&self) -> &str;
     /// Returns the dimension of the tag grid (e.g., 6 for 36h11).
     fn dimension(&self) -> usize;
+    /// Returns the active number of bits in the tag (e.g., 41 for 41h12).
+    fn bit_count(&self) -> usize;
     /// Returns the ideal sample points in canonical coordinates [-1, 1].
     fn sample_points(&self) -> &[(f64, f64)];
     /// Decodes the extracted bits into a tag ID, hamming distance, and rotation count.
@@ -943,13 +945,16 @@ impl TagDecoder for AprilTag36h11 {
     fn dimension(&self) -> usize {
         6
     } // 6x6 grid of bits (excluding border)
+    fn bit_count(&self) -> usize {
+        36
+    }
 
     fn sample_points(&self) -> &[(f64, f64)] {
         &crate::dictionaries::APRILTAG_36H11.sample_points
     }
 
     fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
-        // Use the full 587-code dictionary with O(1) exact match + hamming search
+        // Use the pre-calculated dictionary with O(1) exact match + cached rotations.
         crate::dictionaries::APRILTAG_36H11
             .decode(bits, 4) // Allow up to 4 bit errors for maximum recall
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
@@ -984,6 +989,9 @@ impl TagDecoder for AprilTag16h5 {
     fn dimension(&self) -> usize {
         4
     } // 4x4 grid of bits (excluding border)
+    fn bit_count(&self) -> usize {
+        16
+    }
 
     fn sample_points(&self) -> &[(f64, f64)] {
         &crate::dictionaries::APRILTAG_16H5.sample_points
@@ -991,7 +999,7 @@ impl TagDecoder for AprilTag16h5 {
 
     fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
         crate::dictionaries::APRILTAG_16H5
-            .decode(bits, 1) // Allow up to 1 bit error (16h5 has lower hamming distance)
+            .decode(bits, 2) // Allow up to 2 bit errors
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 
@@ -1023,6 +1031,9 @@ impl TagDecoder for AprilTag41h12 {
     }
     fn dimension(&self) -> usize {
         9
+    }
+    fn bit_count(&self) -> usize {
+        41
     }
 
     fn sample_points(&self) -> &[(f64, f64)] {
@@ -1064,6 +1075,9 @@ impl TagDecoder for Aruco36h11 {
     fn dimension(&self) -> usize {
         6
     }
+    fn bit_count(&self) -> usize {
+        36
+    }
 
     fn sample_points(&self) -> &[(f64, f64)] {
         &crate::dictionaries::APRILTAG_36H11.sample_points
@@ -1103,6 +1117,9 @@ impl TagDecoder for Aruco16h5 {
     }
     fn dimension(&self) -> usize {
         4
+    }
+    fn bit_count(&self) -> usize {
+        16
     }
 
     fn sample_points(&self) -> &[(f64, f64)] {
@@ -1144,6 +1161,9 @@ impl TagDecoder for ArUco4x4_50 {
     fn dimension(&self) -> usize {
         4
     }
+    fn bit_count(&self) -> usize {
+        16
+    }
 
     fn sample_points(&self) -> &[(f64, f64)] {
         &crate::dictionaries::ARUCO_4X4_50.sample_points
@@ -1151,7 +1171,7 @@ impl TagDecoder for ArUco4x4_50 {
 
     fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
         crate::dictionaries::ARUCO_4X4_50
-            .decode(bits, 1)
+            .decode(bits, 2)
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 
@@ -1184,6 +1204,9 @@ impl TagDecoder for ArUco4x4_100 {
     fn dimension(&self) -> usize {
         4
     }
+    fn bit_count(&self) -> usize {
+        16
+    }
 
     fn sample_points(&self) -> &[(f64, f64)] {
         &crate::dictionaries::ARUCO_4X4_100.sample_points
@@ -1191,7 +1214,7 @@ impl TagDecoder for ArUco4x4_100 {
 
     fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
         crate::dictionaries::ARUCO_4X4_100
-            .decode(bits, 1)
+            .decode(bits, 2)
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 
@@ -1236,6 +1259,10 @@ impl TagDecoder for GenericDecoder {
 
     fn dimension(&self) -> usize {
         self.dict.dimension
+    }
+
+    fn bit_count(&self) -> usize {
+        self.dict.bit_count
     }
 
     fn sample_points(&self) -> &[(f64, f64)] {
