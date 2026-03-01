@@ -810,7 +810,7 @@ impl Detector {
                                 if let Some(mut target_bits) = decoder.get_code(id as u16) {
                                     // Rotate to match observed orientation
                                     for _ in 0..rot {
-                                        target_bits = crate::dictionaries::rotate90(
+                                        target_bits = crate::decoder::rotate90(
                                             target_bits,
                                             decoder.dimension(),
                                         );
