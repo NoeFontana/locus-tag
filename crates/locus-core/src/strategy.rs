@@ -6,6 +6,7 @@
 //! - **Soft-Decision**: High-recall mode using Log-Likelihood Ratios (LLRs).
 
 use crate::decoder::TagDecoder;
+use multiversion::multiversion;
 
 /// Trait abstracting the decoding strategy (Hard vs Soft).
 pub trait DecodingStrategy: Send + Sync + 'static {
@@ -78,12 +79,38 @@ pub struct SoftCode {
 }
 
 impl SoftStrategy {
-    #[inline]
+    #[multiversion(targets(
+        "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+        "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+        "aarch64+neon"
+    ))]
     fn distance_with_limit(code: &SoftCode, target: u64, limit: u32) -> u32 {
         let mut penalty = 0u32;
         let n = code.len;
 
-        for i in 0..n {
+        // SIMD branch: Process 16 LLRs at a time if possible
+        let chunks = code.llrs[..n].chunks_exact(16);
+        let processed = chunks.len() * 16;
+
+        for (chunk_idx, llr_chunk) in chunks.enumerate() {
+            let target_chunk = (target >> (chunk_idx * 16)) as u16;
+            for (i, &llr) in llr_chunk.iter().enumerate() {
+                let target_bit = (target_chunk >> i) & 1;
+                if target_bit == 1 {
+                    if llr < 0 {
+                        penalty += u32::from(llr.unsigned_abs());
+                    }
+                } else if llr > 0 {
+                    penalty += u32::from(llr.unsigned_abs());
+                }
+            }
+            if penalty >= limit {
+                return limit;
+            }
+        }
+
+        // Tail processing
+        for i in processed..n {
             let target_bit = (target >> i) & 1;
             let llr = code.llrs[i];
 
@@ -137,7 +164,18 @@ impl DecodingStrategy for SoftStrategy {
         let mut best_dist = soft_threshold;
         let mut best_rot = 0;
 
+        let coarse_rejection_threshold = max_error * 2;
+
         for &(target_code, id, rot) in decoder.rotated_codes() {
+            // 1. FAST PATH: Hardware POPCNT (1 CPU cycle)
+            let bit_errors = (bits ^ target_code).count_ones();
+
+            // If the bit error is massive, don't even bother with the LLR array
+            if bit_errors > coarse_rejection_threshold {
+                continue;
+            }
+
+            // 2. SLOW PATH: LLR Penalty calculation
             let dist = Self::distance_with_limit(code, target_code, best_dist);
             if dist < best_dist {
                 best_dist = dist;

@@ -46,6 +46,10 @@ name = "decoding_bench"
 harness = false
 
 [[bench]]
+name = "soft_decoding_bench"
+harness = false
+
+[[bench]]
 name = "segmentation_bench"
 harness = false
 
