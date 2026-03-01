@@ -4,5 +4,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Port Multi-Index Hashing to Dictionary Generator**
+- [x] **Track: Port Multi-Index Hashing to Dictionary Generator**
 *Link: [./tracks/port_mih_20260301/](./tracks/port_mih_20260301/)*
