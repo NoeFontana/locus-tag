@@ -26,8 +26,13 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+
 use std::borrow::Cow;
 use std::collections::HashMap;
+
+/// Multi-Index Hashing configuration for sub-linear Hamming search.
+const MIH_CHUNKS: usize = 5;
+const MIH_BUCKETS: usize = 1 << 13; // 8192 buckets
 
 /// A tag family dictionary.
 #[derive(Clone, Debug)]
@@ -44,20 +49,17 @@ pub struct TagDictionary {
     pub sample_points: Cow<'static, [(f64, f64)]>,
     /// Raw code table (N * 4 rotations).
     pub codes: Cow<'static, [u64]>,
+    /// Multi-Index Hashing data: N * k entries, flat array.
+    mih_data: Vec<u32>,
+    /// Multi-Index Hashing offsets: (k * MIH_BUCKETS + 1) entries.
+    mih_offsets: Vec<u32>,
+    /// Multi-Index Hashing counts: k * MIH_BUCKETS entries.
+    mih_counts: Vec<u16>,
     /// Pre-computed list of (bits, id, rotation) for soft-decoding and iteration.
     rotated_codes: Vec<(u64, u16, u8)>,
     /// Lookup table for O(1) exact matching. Maps bits to (ID, rotation_count).
     code_to_id: HashMap<u64, (u16, u8)>,
-    /// Multi-Index Hashing: Packed (ID << 2 | rotation) for each chunk value.
-    mih_data: Vec<u32>,
-    /// Multi-Index Hashing: Starting index for each bucket in mih_data (5 tables * 8192 buckets).
-    mih_offsets: Vec<u32>,
-    /// Multi-Index Hashing: Number of entries in each bucket.
-    mih_counts: Vec<u16>,
 }
-
-const MIH_CHUNKS: usize = 5;
-const MIH_BUCKETS: usize = 8192; // 13 bits per chunk
 
 impl TagDictionary {
     /// Create a new dictionary from static code table.
@@ -78,9 +80,7 @@ impl TagDictionary {
             code_to_id.entry(code).or_insert((id, rot));
             rotated_codes.push((code, id, rot));
         }
-
         let (mih_data, mih_offsets, mih_counts) = Self::build_mih_index(&rotated_codes, bit_count);
-
         Self {
             name: Cow::Borrowed(name),
             dimension,
@@ -88,11 +88,11 @@ impl TagDictionary {
             hamming_distance,
             sample_points: Cow::Borrowed(sample_points),
             codes: Cow::Borrowed(codes),
-            rotated_codes,
-            code_to_id,
             mih_data,
             mih_offsets,
             mih_counts,
+            rotated_codes,
+            code_to_id,
         }
     }
 
@@ -114,9 +114,7 @@ impl TagDictionary {
             code_to_id.entry(code).or_insert((id, rot));
             rotated_codes.push((code, id, rot));
         }
-
         let (mih_data, mih_offsets, mih_counts) = Self::build_mih_index(&rotated_codes, bit_count);
-
         Self {
             name: Cow::Owned(name),
             dimension,
@@ -124,11 +122,11 @@ impl TagDictionary {
             hamming_distance,
             sample_points: Cow::Owned(sample_points),
             codes: Cow::Owned(codes),
-            rotated_codes,
-            code_to_id,
             mih_data,
             mih_offsets,
             mih_counts,
+            rotated_codes,
+            code_to_id,
         }
     }
 
@@ -160,11 +158,7 @@ impl TagDictionary {
     /// Returns (id, hamming_distance, rotation) if found within tolerance.
     #[must_use]
     pub fn decode(&self, bits: u64, max_hamming: u32) -> Option<(u16, u32, u8)> {
-        let mask = if self.bit_count < 64 {
-            (1u64 << self.bit_count) - 1
-        } else {
-            u64::MAX
-        };
+        let mask = if self.bit_count < 64 { (1u64 << self.bit_count) - 1 } else { u64::MAX };
         let bits = bits & mask;
 
         // Try exact match first
@@ -192,12 +186,8 @@ impl TagDictionary {
                     } else {
                         best = Some((id, hamming, rot));
                     }
-                    if hamming == 0 {
-                        return best;
-                    }
-                    if hamming == 1 {
-                        break;
-                    }
+                    if hamming == 0 { return best; } 
+                    if hamming == 1 { break; }
                 }
             }
             return best;
@@ -205,15 +195,42 @@ impl TagDictionary {
         None
     }
 
+    fn decode_indexed(&self, bits: u64, max_hamming: u32) -> Option<(u16, u32, u8)> {
+        let mut best: Option<(u16, u32, u8)> = None;
+        for c in 0..MIH_CHUNKS {
+            let chunk = Self::extract_mih_chunk(bits, c, self.bit_count) as usize;
+            let bucket_idx = c * MIH_BUCKETS + chunk;
+            let offset = self.mih_offsets[bucket_idx] as usize;
+            let count = self.mih_counts[bucket_idx] as usize;
+            for i in 0..count {
+                let packed = self.mih_data[offset + i];
+                if let Some(&target_code) = self.codes.get(packed as usize) {
+                    let hamming = (bits ^ target_code).count_ones();
+                    if hamming <= max_hamming {
+                        let id = (packed >> 2) as u16;
+                        let rot = (packed & 0x3) as u8;
+                        if let Some((_, b_h, _)) = best {
+                            if hamming < b_h {
+                                best = Some((id, hamming, rot));
+                            }
+                        } else {
+                            best = Some((id, hamming, rot));
+                        }
+                        if hamming == 0 { return best; }
+                    }
+                }
+            }
+        }
+        best
+    }
+
     /// Internal method to extract a specific chunk for Multi-Index Hashing.
     fn extract_mih_chunk(bits: u64, chunk_idx: usize, bit_count: usize) -> u16 {
         let k = MIH_CHUNKS;
         let chunk_size = bit_count / k;
         let remainder = bit_count % k;
-
         let start = chunk_idx * chunk_size + chunk_idx.min(remainder);
         let len = chunk_size + usize::from(chunk_idx < remainder);
-
         ((bits >> start) & ((1u64 << len) - 1)) as u16
     }
 
@@ -225,16 +242,12 @@ impl TagDictionary {
         let mut mih_counts = vec![0u16; MIH_CHUNKS * MIH_BUCKETS];
         let mut mih_offsets = vec![0u32; MIH_CHUNKS * MIH_BUCKETS];
         let mut mih_data = vec![0u32; MIH_CHUNKS * n];
-
-        // 1. Pass: Count frequencies
         for &(code, _, _) in rotated_codes {
             for c in 0..MIH_CHUNKS {
                 let chunk = Self::extract_mih_chunk(code, c, bit_count) as usize;
                 mih_counts[c * MIH_BUCKETS + chunk] += 1;
             }
         }
-
-        // 2. Pass: Compute offsets
         let mut current_offset = 0u32;
         for c in 0..MIH_CHUNKS {
             for b in 0..MIH_BUCKETS {
@@ -242,8 +255,6 @@ impl TagDictionary {
                 current_offset += u32::from(mih_counts[c * MIH_BUCKETS + b]);
             }
         }
-
-        // 3. Pass: Fill data (using counts as temporary cursors)
         let mut cursors = vec![0u32; MIH_CHUNKS * MIH_BUCKETS];
         for &(code, id, rot) in rotated_codes {
             let packed = (u32::from(id) << 2) | u32::from(rot);
@@ -255,110 +266,50 @@ impl TagDictionary {
                 cursors[bucket_idx] += 1;
             }
         }
-
         (mih_data, mih_offsets, mih_counts)
     }
 
-    fn decode_indexed(&self, bits: u64, max_hamming: u32) -> Option<(u16, u32, u8)> {
-        let mut best: Option<(u16, u32, u8)> = None;
+    /// Executes a callback for each candidate in the dictionary within a given Hamming distance.
+    pub fn for_each_candidate_within_hamming<F>(&self, bits: u64, max_hamming: u32, mut f: F)
+    where
+        F: FnMut(u64, u16, u8),
+    {
+        if max_hamming > 4 {
+            for (idx, &code) in self.codes.iter().enumerate() {
+                let hamming = (bits ^ code).count_ones();
+                if hamming <= max_hamming {
+                    f(code, (idx / 4) as u16, (idx % 4) as u8);
+                }
+            }
+            return;
+        }
 
-        // Pigeonhole Principle: If distance <= 4, at least one of the 5 chunks must match.
-        // For each chunk, look up the bucket and check candidates.
+        let mut visited = [0u64; 160];
         for c in 0..MIH_CHUNKS {
             let chunk = Self::extract_mih_chunk(bits, c, self.bit_count) as usize;
             let bucket_idx = c * MIH_BUCKETS + chunk;
             let offset = self.mih_offsets[bucket_idx] as usize;
             let count = self.mih_counts[bucket_idx] as usize;
-
             for i in 0..count {
                 let packed = self.mih_data[offset + i];
-                // Check Hamming distance
-                if let Some(&target_code) = self.codes.get(packed as usize)
-                    && (bits ^ target_code).count_ones() <= max_hamming
-                {
-                    let hamming = (bits ^ target_code).count_ones();
-                    let id = (packed >> 2) as u16;
-                    let rot = (packed & 0x3) as u8;
-                    if let Some((_, b_h, _)) = best {
-                        if hamming < b_h {
-                            best = Some((id, hamming, rot));
-                        }
-                    } else {
-                        best = Some((id, hamming, rot));
-                    }
-                    if hamming == 0 {
-                        return best;
-                    }
-                }
-            }
-        }
-
-        best
-    }
-
-    /// Executes a callback for each candidate in the dictionary within a given Hamming distance.
-    /// This uses Multi-Index Hashing for efficiency if max_hamming <= 4.
-    pub fn for_each_candidate_within_hamming(
-        &self,
-        bits: u64,
-        max_hamming: u32,
-        callback: &mut dyn FnMut(u64, u16, u8),
-    ) {
-        let mask = if self.bit_count < 64 {
-            (1u64 << self.bit_count) - 1
-        } else {
-            u64::MAX
-        };
-        let bits = bits & mask;
-
-        // Try exact match first (O(1))
-        if let Some(&(id, rot)) = self.code_to_id.get(&bits)
-            && let Some(&code) = self.codes.get(id as usize * 4 + rot as usize)
-        {
-            callback(code, id, rot);
-            return;
-        }
-
-        if max_hamming <= 4 {
-            // Using Multi-Index Hashing for sub-linear search
-            let mut visited = [0u64; 160]; // Bitset for visited packed IDs (up to 10240 codes)
-
-            for c in 0..MIH_CHUNKS {
-                let chunk = Self::extract_mih_chunk(bits, c, self.bit_count) as usize;
-                let bucket_idx = c * MIH_BUCKETS + chunk;
-                let offset = self.mih_offsets[bucket_idx] as usize;
-                let count = self.mih_counts[bucket_idx] as usize;
-
-                for i in 0..count {
-                    let packed = self.mih_data[offset + i];
-                    // Check bitset to avoid duplicates across chunks
-                    let word = packed as usize / 64;
-                    let bit = 1u64 << (packed as usize % 64);
-                    if (visited[word] & bit) == 0 {
-                        visited[word] |= bit;
-                        if let Some(&target_code) = self.codes.get(packed as usize)
-                            && (bits ^ target_code).count_ones() <= max_hamming
-                        {
-                            let id = (packed >> 2) as u16;
-                            let rot = (packed & 0x3) as u8;
-                            callback(target_code, id, rot);
+                let v_idx = packed as usize / 64;
+                let v_bit = 1u64 << (packed % 64);
+                if visited[v_idx] & v_bit == 0 {
+                    visited[v_idx] |= v_bit;
+                    if let Some(&target_code) = self.codes.get(packed as usize) {
+                        let hamming = (bits ^ target_code).count_ones();
+                        if hamming <= max_hamming {
+                            f(target_code, (packed >> 2) as u16, (packed & 0x3) as u8);
                         }
                     }
-                }
-            }
-        } else {
-            // Fallback to linear scan for large tolerances
-            for (idx, &target_code) in self.codes.iter().enumerate() {
-                if (bits ^ target_code).count_ones() <= max_hamming {
-                    callback(target_code, (idx / 4) as u16, (idx % 4) as u8);
                 }
             }
         }
     }
 }
 
+/// Rotate bits 90 degrees CW.
 #[must_use]
-/// Rotates the given bit pattern 90 degrees clockwise for the specified dimension.
 pub fn rotate90(bits: u64, dim: usize) -> u64 {
     let mut res = 0u64;
     for y in 0..dim {
@@ -995,14 +946,7 @@ pub static APRILTAG_36H11_CODES: [u64; 2348] = [
 
 /// AprilTag 36h11 dictionary singleton.
 pub static APRILTAG_36H11: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {
-    TagDictionary::new(
-        "36h11",
-        6,
-        36,
-        11,
-        &APRILTAG_36H11_CODES,
-        &APRILTAG_36H11_POINTS,
-    )
+    TagDictionary::new("36h11", 6, 36, 11, &APRILTAG_36H11_CODES, &APRILTAG_36H11_POINTS)
 });
 
 // ============================================================================
@@ -1060,14 +1004,7 @@ pub static APRILTAG_16H5_CODES: [u64; 120] = [
 
 /// AprilTag 16h5 dictionary singleton.
 pub static APRILTAG_16H5: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {
-    TagDictionary::new(
-        "16h5",
-        4,
-        16,
-        5,
-        &APRILTAG_16H5_CODES,
-        &APRILTAG_16H5_POINTS,
-    )
+    TagDictionary::new("16h5", 4, 16, 5, &APRILTAG_16H5_CODES, &APRILTAG_16H5_POINTS)
 });
 
 // ============================================================================
@@ -1668,14 +1605,7 @@ pub static ARUCO_36H11_CODES: [u64; 2348] = [
 
 /// ArUco 36h11 dictionary singleton.
 pub static ARUCO_36H11: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {
-    TagDictionary::new(
-        "Aruco36h11",
-        6,
-        36,
-        11,
-        &ARUCO_36H11_CODES,
-        &APRILTAG_36H11_POINTS,
-    )
+    TagDictionary::new("Aruco36h11", 6, 36, 11, &ARUCO_36H11_CODES, &APRILTAG_36H11_POINTS)
 });
 
 // ============================================================================
@@ -1719,14 +1649,7 @@ pub static ARUCO_16H5_CODES: [u64; 120] = [
 
 /// ArUco 16h5 dictionary singleton.
 pub static ARUCO_16H5: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {
-    TagDictionary::new(
-        "Aruco16h5",
-        4,
-        16,
-        5,
-        &ARUCO_16H5_CODES,
-        &APRILTAG_16H5_POINTS,
-    )
+    TagDictionary::new("Aruco16h5", 4, 16, 5, &ARUCO_16H5_CODES, &APRILTAG_16H5_POINTS)
 });
 
 // ============================================================================
@@ -4074,12 +3997,5 @@ pub static APRILTAG_41H12_CODES: [u64; 8460] = [
 
 /// AprilTag 41h12 dictionary singleton.
 pub static APRILTAG_41H12: std::sync::LazyLock<TagDictionary> = std::sync::LazyLock::new(|| {
-    TagDictionary::new(
-        "41h12",
-        9,
-        41,
-        12,
-        &APRILTAG_41H12_CODES,
-        &APRILTAG_41H12_POINTS,
-    )
+    TagDictionary::new("41h12", 9, 41, 12, &APRILTAG_41H12_CODES, &APRILTAG_41H12_POINTS)
 });
