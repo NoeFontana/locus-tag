@@ -741,57 +741,8 @@ impl Detector {
     /// Get the identification code (bits) for a specific tag ID and family.
     fn get_tag_code(&self, family: TagFamily, id: u32) -> Option<u64> {
         let core_family: locus_core::config::TagFamily = family.into();
-        match core_family {
-            locus_core::config::TagFamily::AprilTag36h11 => {
-                if (id as usize) < locus_core::dictionaries::APRILTAG_36H11.len() {
-                    Some(locus_core::dictionaries::APRILTAG_36H11_CODES[id as usize * 4])
-                } else {
-                    None
-                }
-            },
-            locus_core::config::TagFamily::AprilTag16h5 => {
-                if (id as usize) < locus_core::dictionaries::APRILTAG_16H5.len() {
-                    Some(locus_core::dictionaries::ARUCO_16H5_CODES[id as usize * 4])
-                } else {
-                    None
-                }
-            },
-            locus_core::config::TagFamily::AprilTag41h12 => {
-                if (id as usize) < locus_core::dictionaries::APRILTAG_41H12.len() {
-                    Some(locus_core::dictionaries::APRILTAG_41H12_CODES[id as usize * 4])
-                } else {
-                    None
-                }
-            },
-            locus_core::config::TagFamily::Aruco36h11 => {
-                if (id as usize) < locus_core::dictionaries::ARUCO_36H11.len() {
-                    Some(locus_core::dictionaries::ARUCO_36H11_CODES[id as usize * 4])
-                } else {
-                    None
-                }
-            },
-            locus_core::config::TagFamily::Aruco16h5 => {
-                if (id as usize) < locus_core::dictionaries::ARUCO_16H5.len() {
-                    Some(locus_core::dictionaries::ARUCO_16H5_CODES[id as usize * 4])
-                } else {
-                    None
-                }
-            },
-            locus_core::config::TagFamily::ArUco4x4_50 => {
-                if (id as usize) < locus_core::dictionaries::ARUCO_4X4_50.len() {
-                    Some(locus_core::dictionaries::ARUCO_4X4_50_CODES[id as usize * 4])
-                } else {
-                    None
-                }
-            },
-            locus_core::config::TagFamily::ArUco4x4_100 => {
-                if (id as usize) < locus_core::dictionaries::ARUCO_4X4_100.len() {
-                    Some(locus_core::dictionaries::ARUCO_4X4_100_CODES[id as usize * 4])
-                } else {
-                    None
-                }
-            },
-        }
+        let dict = locus_core::dictionaries::get_dictionary(core_family);
+        dict.get_code(id as u16)
     }
 }
 
