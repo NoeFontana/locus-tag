@@ -25,9 +25,9 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
 
 ## Phase 3: Documentation & Final Alignment
-- [ ] Task: Update Contribution Guidelines.
-    - [ ] Update `CONTRIBUTING.md` with `uv` instructions.
-    - [ ] Document new dependency group structure.
-- [ ] Task: Audit and Update Task Runners.
+- [x] Task: Update Contribution Guidelines. 95331d6
+    - [x] Update `CONTRIBUTING.md` with `uv` instructions.
+    - [x] Document new dependency group structure.
+- [~] Task: Audit and Update Task Runners.
     - [ ] Check for Makefiles or scripts that rely on old optional-dependencies and update them.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md)
