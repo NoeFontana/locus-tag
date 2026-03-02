@@ -58,6 +58,24 @@ fn bench_adaptive_gradient_1080p(bencher: divan::Bencher) {
 }
 
 #[bench]
+fn bench_tile_threshold_1080p(bencher: divan::Bencher) {
+    let width = 1920;
+    let height = 1080;
+    let data = generate_checkered(width, height);
+    let img = ImageView::new(&data, width, height, width).unwrap();
+    let config = locus_core::config::DetectorConfig::builder()
+        .refinement_mode(locus_core::config::CornerRefinementMode::Erf)
+        .build();
+    let engine = locus_core::threshold::ThresholdEngine::from_config(&config);
+    let mut arena = Bump::new();
+
+    bencher.bench_local(move || {
+        arena.reset();
+        let _stats = engine.compute_tile_stats(&arena, &img);
+    });
+}
+
+#[bench]
 fn bench_bilateral_r3_1080p(bencher: divan::Bencher) {
     let width = 1920;
     let height = 1080;

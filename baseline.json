@@ -1,0 +1,26 @@
+{
+  "forward/pure_tags_images": {
+    "Locus (Soft)": {
+      "recall": 59.09090909090909,
+      "rmse": 0.3455096992657943,
+      "latency": 355.98938160110265,
+      "stages": {
+        "threshold": 10.3821218,
+        "segmentation": 49.3048838,
+        "quad": 56.90039320000001,
+        "decoding": 221.6332484
+      }
+    },
+    "Locus (Hard)": {
+      "recall": 4.025974025974026,
+      "rmse": 0.297837402321444,
+      "latency": 189.42462399718352,
+      "stages": {
+        "threshold": 10.9425286,
+        "segmentation": 41.7985872,
+        "quad": 50.5247974,
+        "decoding": 71.0830674
+      }
+    }
+  }
+}
