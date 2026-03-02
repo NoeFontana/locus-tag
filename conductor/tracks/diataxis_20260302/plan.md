@@ -1,12 +1,12 @@
 # Implementation Plan: Adopt the Diátaxis Framework for Documentation
 
-## Phase 1: Subdirectory Creation & File Migration
-- [ ] Task: Create Diátaxis subdirectories (`docs/tutorials/`, `docs/how-to/`, `docs/explanation/`, `docs/reference/`).
-- [ ] Task: Move `docs/guide.md` to `docs/tutorials/`.
-- [ ] Task: Create an initial `docs/how-to/add_dictionary.md` placeholder document.
-- [ ] Task: Move `docs/architecture.md` and `docs/coordinates.md` to `docs/explanation/`.
-- [ ] Task: Move `docs/api.md` to `docs/reference/`.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md)
+## Phase 1: Subdirectory Creation & File Migration [checkpoint: a43fd26]
+- [x] Task: Create Diátaxis subdirectories (`docs/tutorials/`, `docs/how-to/`, `docs/explanation/`, `docs/reference/`).
+- [x] Task: Move `docs/guide.md` to `docs/tutorials/`.
+- [x] Task: Create an initial `docs/how-to/add_dictionary.md` placeholder document.
+- [x] Task: Move `docs/architecture.md` and `docs/coordinates.md` to `docs/explanation/`.
+- [x] Task: Move `docs/api.md` to `docs/reference/`.
+- [x] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md)
 
 ## Phase 2: Navigation & Link Updates
 - [ ] Task: Update `mkdocs.yml` navigation to use the new quadrant structure.
