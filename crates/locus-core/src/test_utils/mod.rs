@@ -64,7 +64,16 @@ pub fn generate_synthetic_test_image(
 
         let bit = (code >> i) & 1;
         let val = if bit != 0 { 255 } else { 0 };
-        draw_cell(&mut data, canvas_size, start_x, start_y, gx, gy, cell_size, val);
+        draw_cell(
+            &mut data,
+            canvas_size,
+            start_x,
+            start_y,
+            gx,
+            gy,
+            cell_size,
+            val,
+        );
     }
 
     if noise_sigma > 0.0 {

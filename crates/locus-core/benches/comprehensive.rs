@@ -153,7 +153,6 @@ fn bench_mixed_scene_multiple_tags(bencher: divan::Bencher) {
     builder.add_random_tag(&mut rng, TagFamily::AprilTag36h11, (80.0, 120.0));
     builder.add_random_tag(&mut rng, TagFamily::ArUco4x4_50, (60.0, 90.0));
     builder.add_random_tag(&mut rng, TagFamily::ArUco4x4_100, (70.0, 110.0));
-    builder.add_random_tag(&mut rng, TagFamily::AprilTag16h5, (40.0, 70.0));
 
     let (data, _placements) = builder.build();
     let img = ImageView::new(&data, width, height, width).unwrap();
@@ -164,7 +163,6 @@ fn bench_mixed_scene_multiple_tags(bencher: divan::Bencher) {
             TagFamily::AprilTag36h11,
             TagFamily::ArUco4x4_50,
             TagFamily::ArUco4x4_100,
-            TagFamily::AprilTag16h5,
         ],
         ..Default::default()
     };

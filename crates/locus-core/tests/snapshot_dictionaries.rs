@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 use insta::assert_debug_snapshot;
 use locus_core::config::TagFamily;
 use locus_core::dictionaries::get_dictionary;
@@ -11,7 +12,7 @@ fn fvn1a_hash_usize(slice: &[usize]) -> String {
             hash = hash.wrapping_mul(0x100_0000_01b3);
         }
     }
-    format!("{:016x}", hash)
+    format!("{hash:016x}")
 }
 
 fn fvn1a_hash_u32_data(slice: &[u32]) -> String {
@@ -22,7 +23,7 @@ fn fvn1a_hash_u32_data(slice: &[u32]) -> String {
             hash = hash.wrapping_mul(0x100_0000_01b3);
         }
     }
-    format!("{:016x}", hash)
+    format!("{hash:016x}")
 }
 
 fn snapshot_dict(family: TagFamily) -> (usize, String, usize, String) {
@@ -39,8 +40,6 @@ fn snapshot_dict(family: TagFamily) -> (usize, String, usize, String) {
 fn test_dictionary_snapshots_tag36h11() {
     assert_debug_snapshot!("tag36h11_parity", snapshot_dict(TagFamily::AprilTag36h11));
 }
-
-
 
 #[test]
 fn test_dictionary_snapshots_tag41h12() {

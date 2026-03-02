@@ -244,6 +244,7 @@ pub fn extract_quads_with_config(
                             [corners[3].x, corners[3].y],
                         ],
                         hamming: 0,
+                        rotation: 0,
                         decision_margin: f64::from(bbox_area),
                         bits: 0,
                         pose: None,
@@ -380,6 +381,7 @@ pub fn extract_quads_with_config(
                                             [corners[3].x, corners[3].y],
                                         ],
                                         hamming: 0,
+                                        rotation: 0,
                                         decision_margin: area * d * d, // Area in full-res
                                         bits: 0,
                                         pose: None,
@@ -461,6 +463,7 @@ pub fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detec
                                     [simplified[3].x, simplified[3].y],
                                 ],
                                 hamming: 0,
+                                rotation: 0,
                                 decision_margin: area,
                                 bits: 0,
                                 pose: None,

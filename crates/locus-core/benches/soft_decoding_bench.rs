@@ -10,10 +10,9 @@ fn main() {
 #[bench]
 fn bench_soft_decoding_200_candidates(bencher: divan::Bencher) {
     let decoder = AprilTag36h11;
+    let dict = locus_core::dictionaries::get_dictionary(locus_core::config::TagFamily::AprilTag36h11);
     // Create a SoftCode from a known match (ID 42)
-    let orig_code = locus_core::dictionaries::APRILTAG_36H11
-        .get_code(42)
-        .unwrap();
+    let orig_code = dict.get_code(42).unwrap();
 
     // Simulate LLRs: matching bits have +50/-50, mismatching bit has -50/+50
     let mut intensities = [100.0f64; 64];
@@ -53,10 +52,9 @@ fn bench_soft_decoding_200_candidates(bencher: divan::Bencher) {
 fn bench_soft_decoding_41h12_200_candidates(bencher: divan::Bencher) {
     use locus_core::decoder::AprilTag41h12;
     let decoder = AprilTag41h12;
+    let dict = locus_core::dictionaries::get_dictionary(locus_core::config::TagFamily::AprilTag41h12);
     // id=100 is a valid ID for 41h12
-    let orig_code = locus_core::dictionaries::APRILTAG_41H12
-        .get_code(100)
-        .unwrap();
+    let orig_code = dict.get_code(100).unwrap();
 
     let mut intensities = [100.0f64; 64];
     let thresholds = [150.0f64; 64];

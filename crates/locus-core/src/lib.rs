@@ -87,6 +87,8 @@ pub struct Detection {
     pub corners: [[f64; 2]; 4],
     /// The number of hamming errors corrected during decoding.
     pub hamming: u32,
+    /// The rotation of the tag relative to its canonical orientation (0-3).
+    pub rotation: u8,
     /// The decision margin of the decoding (higher is more confident).
     pub decision_margin: f64,
     /// The extracted bits from the tag (for debugging).
@@ -658,6 +660,7 @@ impl Detector {
                 let decoder = active_decoders[decoder_idx].as_ref();
                 cand.id = id;
                 cand.hamming = hamming;
+                cand.rotation = rot;
                 cand.bits = S::to_debug_bits(&code);
 
                 // Correct rotation on ORIGINAL corners
@@ -769,6 +772,7 @@ impl Detector {
                                             if hamming <= config.max_hamming_error {
                                                 cand.id = id;
                                                 cand.hamming = hamming;
+                                                cand.rotation = rot;
                                                 cand.bits = S::to_debug_bits(&code);
                                                 cand.corners = current_corners;
 
@@ -844,6 +848,7 @@ impl Detector {
                                         if hamming <= config.max_hamming_error {
                                             cand.id = id;
                                             cand.hamming = hamming;
+                                            cand.rotation = rot;
                                             cand.bits = S::to_debug_bits(&code);
                                             cand.corners = current_corners;
 
@@ -901,6 +906,7 @@ impl Detector {
                                             if hamming <= config.max_hamming_error {
                                                 cand.id = id;
                                                 cand.hamming = hamming;
+                                                cand.rotation = rot;
                                                 cand.bits = S::to_debug_bits(&code);
                                                 cand.corners = current_corners;
 
