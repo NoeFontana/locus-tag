@@ -136,7 +136,7 @@ jobs:
           enable-cache: true
       
       - name: Set up environment
-        run: uv sync --frozen --all-extras --dev
+        run: uv sync --frozen --only-group lint
         
       - name: Ruff Check
         shell: bash
@@ -182,7 +182,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Setup dynamic environment
-        run: uv sync --frozen --all-extras --dev
+        run: uv sync --frozen --group dev --group bench
 
       - name: Build bridge (maturin develop)
         run: uv run maturin develop --release --manifest-path crates/locus-py/Cargo.toml

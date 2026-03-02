@@ -10,6 +10,8 @@
 ## 2. Python Integration
 - **Bindings:** `pyo3` combined with `numpy` (Strict Zero-Copy via the Buffer Protocol).
 - **Python Build System:** `maturin` (v1.0+) for PyPI distribution, creating the extension module, and seamless cross-compilation.
+- **Environment & Orchestration:** `uv` for lightning-fast virtual environment management and script execution.
+- **Dependency Management:** PEP 735 standard `[dependency-groups]` in `pyproject.toml` (e.g., `dev`, `bench`, `docs`) replacing legacy optional-dependencies.
 
 ## 3. Observability & Debugging
 - **Profiling:** `tracing` and `tracing-tracy` for low-overhead, span-based profiling.

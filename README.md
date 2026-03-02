@@ -109,11 +109,8 @@ for t in tags:
 Locus provides a powerful visualization tool to inspect every stage of the pipeline (thresholding, segmentation, quad candidates, bit grids).
 
 ```bash
-# Install rerun-sdk
-pip install rerun-sdk
-
-# Run the visualizer on a dataset
-uv run python scripts/debug/visualize.py --scenario forward --limit 5
+# Run the visualizer on a dataset using the bench dependency group
+uv run --group bench python scripts/debug/visualize.py --scenario forward --limit 5
 ```
 
 ## Development & Benchmarking
@@ -122,10 +119,10 @@ Locus includes a rigorous suite to ensure detection quality and latency targets.
 
 ```bash
 # Prepare local datasets
-uv run python scripts/locus_bench.py prepare
+uv run --group bench python scripts/locus_bench.py prepare
 
 # Run full evaluation suite and compare with competitors
-uv run python scripts/locus_bench.py run real --compare
+uv run --group bench python scripts/locus_bench.py run real --compare
 ```
 
 Detailed documentation for profiling, architecture, and coordinate systems is available in the **[Docs Site](https://noefontana.github.io/locus-tag/)**.

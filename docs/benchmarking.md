@@ -31,10 +31,10 @@ The regression suite validates that `Locus` matches or exceeds ground truth for 
 Locus supports running regressions against large-scale datasets hosted on the Hugging Face Hub (e.g., `NoeFontana/locus-tag-bench`).
 
 1. **Synchronize Data**:
-   Download the datasets to a local cache. This requires the `benchmark` extras.
+   Download the datasets to a local cache. This requires the `bench` and `etl` dependency groups.
    ```bash
-   uv sync --extra benchmark
-   PYTHONPATH=. uv run python scripts/bench/sync_hub.py --configs single_tag_locus_v1_std41h12
+   uv sync --group bench --group etl
+   PYTHONPATH=. uv run --group bench --group etl python scripts/bench/sync_hub.py --configs single_tag_locus_v1_std41h12
    ```
 
 2. **Run Hub Tests**:

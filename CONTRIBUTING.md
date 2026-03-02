@@ -111,15 +111,31 @@ uv run pytest
 
 ## 📚 Building Documentation
 
-To build and preview the documentation locally (using `uv`):
+To build and preview the documentation locally:
 
 ```bash
-# 1. Install dependencies and project
-uv sync --extra docs
+# 1. Install dependencies
+uv sync --group docs --group dev
 
 # 2. Build the documentation
 uv run mkdocs build
 
 # 3. Serve documentation
 uv run mkdocs serve
+```
+
+## 📦 Dependency Groups (PEP 735)
+
+We use `uv` and PEP 735 dependency groups to isolate development tools. When running scripts, use the appropriate group:
+
+- `dev`: Core development tools (`maturin`, `pytest`, `pytest-cov`)
+- `lint`: Code formatting and analysis (`ruff`)
+- `types`: Type stubs (`mypy`, `pandas-stubs`, `types-tqdm`)
+- `bench`: Benchmarking and visualization (`opencv-python-headless`, `rerun-sdk`, `datasets[vision]`, `pupil-apriltags`)
+- `docs`: Documentation generation (`mkdocs`, `mkdocstrings`)
+- `etl`: Data tools (`huggingface-hub`, `tqdm`)
+
+**Example:** Running the benchmark script
+```bash
+uv run --group bench python scripts/locus_bench.py
 ```
