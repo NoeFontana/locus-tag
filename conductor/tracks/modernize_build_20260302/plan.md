@@ -24,10 +24,10 @@
     - [x] Ensure wheel building uses the new `uv`-based environment.
 - [x] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
 
-## Phase 3: Documentation & Final Alignment
+## Phase 3: Documentation & Final Alignment [checkpoint: a0b5ff3]
 - [x] Task: Update Contribution Guidelines. 95331d6
     - [x] Update `CONTRIBUTING.md` with `uv` instructions.
     - [x] Document new dependency group structure.
 - [x] Task: Audit and Update Task Runners. 0cb586e
     - [x] Check for Makefiles or scripts that rely on old optional-dependencies and update them.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md)
