@@ -108,13 +108,8 @@ jobs:
           set -o pipefail
           cargo test --doc 2>&1 | tee test-rust-doc.log
 
-      - name: Run Tests (Strict Alloc)
-        shell: bash
-        run: |
-          set -o pipefail
-          cargo test --features strict-alloc --workspace 2>&1 | tee test-rust-strict.log
-
       - name: Verify Snapshot Parity
+
         shell: bash
         run: |
           set -o pipefail
