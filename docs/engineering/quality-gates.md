@@ -42,9 +42,9 @@ Ensure the documentation builds correctly and is complete.
 
 ```bash
 # 1. Sync dependencies for documentation
-uv sync --extra docs
+uv sync --group docs
 
 # 2. Build the MkDocs static site
-uv run mkdocs build
+uv run --group docs mkdocs build
 ```
 ```
