@@ -1014,58 +1014,6 @@ impl TagDecoder for AprilTag36h11 {
     }
 }
 
-/// Decoder for the AprilTag 16h5 family.
-pub struct AprilTag16h5;
-
-impl TagDecoder for AprilTag16h5 {
-    fn name(&self) -> &'static str {
-        "16h5"
-    }
-    fn dimension(&self) -> usize {
-        4
-    } // 4x4 grid of bits (excluding border)
-    fn bit_count(&self) -> usize {
-        16
-    }
-
-    fn sample_points(&self) -> &[(f64, f64)] {
-        &crate::dictionaries::APRILTAG_16H5_POINTS
-    }
-
-    fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag16h5)
-            .decode(bits, 2) // Allow up to 2 bit errors
-            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
-    }
-
-    fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag16h5)
-            .decode(bits, max_hamming)
-            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
-    }
-
-    fn get_code(&self, id: u16) -> Option<u64> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag16h5).get_code(id)
-    }
-
-    fn num_codes(&self) -> usize {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag16h5).len()
-    }
-
-    fn rotated_codes(&self) -> &[(u64, u16, u8)] {
-        &[]
-    }
-    fn for_each_candidate_within_hamming(
-        &self,
-        bits: u64,
-        max_hamming: u32,
-        callback: &mut dyn FnMut(u64, u16, u8),
-    ) {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag16h5)
-            .for_each_candidate_within_hamming(bits, max_hamming, callback);
-    }
-}
-
 /// Decoder for the AprilTag 41h12 family.
 pub struct AprilTag41h12;
 
@@ -1114,110 +1062,6 @@ impl TagDecoder for AprilTag41h12 {
         callback: &mut dyn FnMut(u64, u16, u8),
     ) {
         crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag41h12)
-            .for_each_candidate_within_hamming(bits, max_hamming, callback);
-    }
-}
-
-/// Decoder for the ArUco 36h11 family (OpenCV Dialect).
-pub struct Aruco36h11;
-
-impl TagDecoder for Aruco36h11 {
-    fn name(&self) -> &'static str {
-        "Aruco36h11"
-    }
-    fn dimension(&self) -> usize {
-        6
-    }
-    fn bit_count(&self) -> usize {
-        36
-    }
-
-    fn sample_points(&self) -> &[(f64, f64)] {
-        &crate::dictionaries::ARUCO36H11_POINTS
-    }
-
-    fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::Aruco36h11)
-            .decode(bits, 4)
-            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
-    }
-
-    fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::Aruco36h11)
-            .decode(bits, max_hamming)
-            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
-    }
-
-    fn get_code(&self, id: u16) -> Option<u64> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::Aruco36h11).get_code(id)
-    }
-
-    fn num_codes(&self) -> usize {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::Aruco36h11).len()
-    }
-
-    fn rotated_codes(&self) -> &[(u64, u16, u8)] {
-        &[]
-    }
-    fn for_each_candidate_within_hamming(
-        &self,
-        bits: u64,
-        max_hamming: u32,
-        callback: &mut dyn FnMut(u64, u16, u8),
-    ) {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::Aruco36h11)
-            .for_each_candidate_within_hamming(bits, max_hamming, callback);
-    }
-}
-
-/// Decoder for the ArUco 16h5 family (OpenCV Dialect).
-pub struct Aruco16h5;
-
-impl TagDecoder for Aruco16h5 {
-    fn name(&self) -> &'static str {
-        "Aruco16h5"
-    }
-    fn dimension(&self) -> usize {
-        4
-    }
-    fn bit_count(&self) -> usize {
-        16
-    }
-
-    fn sample_points(&self) -> &[(f64, f64)] {
-        &crate::dictionaries::ARUCO16H5_POINTS
-    }
-
-    fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::Aruco16h5)
-            .decode(bits, 1)
-            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
-    }
-
-    fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::Aruco16h5)
-            .decode(bits, max_hamming)
-            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
-    }
-
-    fn get_code(&self, id: u16) -> Option<u64> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::Aruco16h5).get_code(id)
-    }
-
-    fn num_codes(&self) -> usize {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::Aruco16h5).len()
-    }
-
-    fn rotated_codes(&self) -> &[(u64, u16, u8)] {
-        &[]
-    }
-    fn for_each_candidate_within_hamming(
-        &self,
-        bits: u64,
-        max_hamming: u32,
-        callback: &mut dyn FnMut(u64, u16, u8),
-    ) {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::Aruco16h5)
             .for_each_candidate_within_hamming(bits, max_hamming, callback);
     }
 }
@@ -1398,10 +1242,7 @@ impl TagDecoder for GenericDecoder {
 pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send + Sync> {
     match family {
         config::TagFamily::AprilTag36h11 => Box::new(AprilTag36h11),
-        config::TagFamily::AprilTag16h5 => Box::new(AprilTag16h5),
         config::TagFamily::AprilTag41h12 => Box::new(AprilTag41h12),
-        config::TagFamily::Aruco36h11 => Box::new(Aruco36h11),
-        config::TagFamily::Aruco16h5 => Box::new(Aruco16h5),
         config::TagFamily::ArUco4x4_50 => Box::new(ArUco4x4_50),
         config::TagFamily::ArUco4x4_100 => Box::new(ArUco4x4_100),
     }

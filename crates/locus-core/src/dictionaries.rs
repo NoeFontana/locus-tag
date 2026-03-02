@@ -197,10 +197,7 @@ include!(concat!(env!("OUT_DIR"), "/dictionaries.rs"));
 pub fn get_dictionary(family: crate::config::TagFamily) -> &'static TagDictionary {
     match family {
         crate::config::TagFamily::AprilTag36h11 => &DICT_APRILTAG36H11,
-        crate::config::TagFamily::AprilTag16h5 => &DICT_APRILTAG16H5,
         crate::config::TagFamily::AprilTag41h12 => &DICT_APRILTAG41H12,
-        crate::config::TagFamily::Aruco36h11 => &DICT_ARUCO36H11,
-        crate::config::TagFamily::Aruco16h5 => &DICT_ARUCO16H5,
         crate::config::TagFamily::ArUco4x4_50 => &DICT_ARUCO4X4_50,
         crate::config::TagFamily::ArUco4x4_100 => &DICT_ARUCO4X4_100,
     }
@@ -212,13 +209,11 @@ pub fn get_dictionary(family: crate::config::TagFamily) -> &'static TagDictionar
 
 // 6x6 (36h11)
 pub(crate) const APRILTAG_36H11_POINTS: [(f64, f64); 36] = compute_points::<6, 36>();
-pub(crate) const ARUCO36H11_POINTS: [(f64, f64); 36] = APRILTAG_36H11_POINTS;
 
-// 4x4 (16h5, Aruco 4x4)
-pub(crate) const APRILTAG_16H5_POINTS: [(f64, f64); 16] = compute_points::<4, 16>();
-pub(crate) const ARUCO16H5_POINTS: [(f64, f64); 16] = APRILTAG_16H5_POINTS;
-pub(crate) const ARUCO4X4_50_POINTS: [(f64, f64); 16] = APRILTAG_16H5_POINTS;
-pub(crate) const ARUCO4X4_100_POINTS: [(f64, f64); 16] = APRILTAG_16H5_POINTS;
+// 4x4 (Aruco 4x4)
+pub(crate) const ARUCO_4X4_POINTS: [(f64, f64); 16] = compute_points::<4, 16>();
+pub(crate) const ARUCO4X4_50_POINTS: [(f64, f64); 16] = ARUCO_4X4_POINTS;
+pub(crate) const ARUCO4X4_100_POINTS: [(f64, f64); 16] = ARUCO_4X4_POINTS;
 
 // 9x9 (41h12) Note: 41h12 has 41 bits, not 81. The generator script computes points
 // taking into account empty spaces. For simplicity, we can fetch them from the `decoder.rs`

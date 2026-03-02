@@ -40,10 +40,7 @@ fn test_dictionary_snapshots_tag36h11() {
     assert_debug_snapshot!("tag36h11_parity", snapshot_dict(TagFamily::AprilTag36h11));
 }
 
-#[test]
-fn test_dictionary_snapshots_tag16h5() {
-    assert_debug_snapshot!("tag16h5_parity", snapshot_dict(TagFamily::AprilTag16h5));
-}
+
 
 #[test]
 fn test_dictionary_snapshots_tag41h12() {
