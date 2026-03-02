@@ -1,0 +1,10 @@
+---
+source: crates/locus-core/tests/snapshot_dictionaries.rs
+expression: "snapshot_dict(TagFamily::AprilTag36h11)"
+---
+(
+    385,
+    "80adcf946320311c",
+    14088,
+    "de3030da620e9781",
+)

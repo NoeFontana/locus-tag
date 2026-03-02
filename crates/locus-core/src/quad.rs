@@ -97,11 +97,6 @@ pub fn extract_quads_with_config(
             if bbox_area < config.quad_min_area
                 || bbox_area > (img.width * img.height * 9 / 10) as u32
             {
-                /*
-                if bbox_area >= 4 && bbox_area < 8 {
-                    eprintln!("Rejected small component: area={}, pixels={}", bbox_area, stat.pixel_count);
-                }
-                */
                 return None;
             }
 
@@ -121,109 +116,118 @@ pub fn extract_quads_with_config(
             let sx = stat.first_pixel_x as usize;
             let sy = stat.first_pixel_y as usize;
 
-            // For small components, try the 9-pixel foundation (gradient-based fitting)
-            if bbox_area < 1200
-                && let Some(grad_corners_dec) = crate::gradient::fit_quad_from_component(
-                    &arena,
-                    img,
-                    labels,
-                    label,
-                    stat.min_x as usize,
-                    stat.min_y as usize,
-                    stat.max_x as usize,
-                    stat.max_y as usize,
-                )
-            {
-                // Scale initial guess to full resolution
-                let grad_corners = [
-                    [
-                        f64::from(grad_corners_dec[0][0]) * d,
-                        f64::from(grad_corners_dec[0][1]) * d,
-                    ],
-                    [
-                        f64::from(grad_corners_dec[1][0]) * d,
-                        f64::from(grad_corners_dec[1][1]) * d,
-                    ],
-                    [
-                        f64::from(grad_corners_dec[2][0]) * d,
-                        f64::from(grad_corners_dec[2][1]) * d,
-                    ],
-                    [
-                        f64::from(grad_corners_dec[3][0]) * d,
-                        f64::from(grad_corners_dec[3][1]) * d,
-                    ],
-                ];
+            let contour = trace_boundary(&arena, labels, img.width, img.height, sx, sy, label);
 
+            if contour.len() < 12 {
+                return None;
+            }
+
+            let simple_contour = chain_approximation(&arena, &contour);
+            let perimeter = contour.len() as f64;
+            let epsilon = (perimeter * 0.02).max(1.0);
+            let simplified = douglas_peucker(&arena, &simple_contour, epsilon);
+
+            if simplified.len() < 4 || simplified.len() > 11 {
+                return None;
+            }
+
+            let simpl_len = simplified.len();
+            let reduced = if simpl_len == 5 {
+                simplified
+            } else if simpl_len == 4 {
+                let mut closed = BumpVec::new_in(&arena);
+                for p in &simplified {
+                    closed.push(*p);
+                }
+                closed.push(simplified[0]);
+                closed
+            } else {
+                reduce_to_quad(&arena, &simplified)
+            };
+
+            if reduced.len() != 5 {
+                return None;
+            }
+
+            let area = polygon_area(&reduced);
+            let compactness = (12.566 * area.abs()) / (perimeter * perimeter);
+
+            if area.abs() <= f64::from(config.quad_min_area) || compactness <= 0.1 {
+                return None;
+            }
+
+            // Standardize to CW for consistency
+            let quad_pts_dec = if area > 0.0 {
+                [reduced[0], reduced[1], reduced[2], reduced[3]]
+            } else {
+                [reduced[0], reduced[3], reduced[2], reduced[1]]
+            };
+
+            // Scale to full resolution using center-aware mapping
+            let quad_pts = [
+                Point {
+                    x: (quad_pts_dec[0].x - 0.5) * d + 0.5,
+                    y: (quad_pts_dec[0].y - 0.5) * d + 0.5,
+                },
+                Point {
+                    x: (quad_pts_dec[1].x - 0.5) * d + 0.5,
+                    y: (quad_pts_dec[1].y - 0.5) * d + 0.5,
+                },
+                Point {
+                    x: (quad_pts_dec[2].x - 0.5) * d + 0.5,
+                    y: (quad_pts_dec[2].y - 0.5) * d + 0.5,
+                },
+                Point {
+                    x: (quad_pts_dec[3].x - 0.5) * d + 0.5,
+                    y: (quad_pts_dec[3].y - 0.5) * d + 0.5,
+                },
+            ];
+
+            let mut ok = true;
+            for i in 0..4 {
+                let d2 = (quad_pts[i].x - quad_pts[(i + 1) % 4].x).powi(2)
+                    + (quad_pts[i].y - quad_pts[(i + 1) % 4].y).powi(2);
+                if d2 < min_edge_len_sq {
+                    ok = false;
+                    break;
+                }
+            }
+
+            if ok {
                 let corners = [
                     refine_corner(
                         &arena,
                         refinement_img,
-                        Point {
-                            x: grad_corners[0][0],
-                            y: grad_corners[0][1],
-                        },
-                        Point {
-                            x: grad_corners[3][0],
-                            y: grad_corners[3][1],
-                        },
-                        Point {
-                            x: grad_corners[1][0],
-                            y: grad_corners[1][1],
-                        },
+                        quad_pts[0],
+                        quad_pts[3],
+                        quad_pts[1],
                         config.subpixel_refinement_sigma,
                         decimation,
                     ),
                     refine_corner(
                         &arena,
                         refinement_img,
-                        Point {
-                            x: grad_corners[1][0],
-                            y: grad_corners[1][1],
-                        },
-                        Point {
-                            x: grad_corners[0][0],
-                            y: grad_corners[0][1],
-                        },
-                        Point {
-                            x: grad_corners[2][0],
-                            y: grad_corners[2][1],
-                        },
+                        quad_pts[1],
+                        quad_pts[0],
+                        quad_pts[2],
                         config.subpixel_refinement_sigma,
                         decimation,
                     ),
                     refine_corner(
                         &arena,
                         refinement_img,
-                        Point {
-                            x: grad_corners[2][0],
-                            y: grad_corners[2][1],
-                        },
-                        Point {
-                            x: grad_corners[1][0],
-                            y: grad_corners[1][1],
-                        },
-                        Point {
-                            x: grad_corners[3][0],
-                            y: grad_corners[3][1],
-                        },
+                        quad_pts[2],
+                        quad_pts[1],
+                        quad_pts[3],
                         config.subpixel_refinement_sigma,
                         decimation,
                     ),
                     refine_corner(
                         &arena,
                         refinement_img,
-                        Point {
-                            x: grad_corners[3][0],
-                            y: grad_corners[3][1],
-                        },
-                        Point {
-                            x: grad_corners[2][0],
-                            y: grad_corners[2][1],
-                        },
-                        Point {
-                            x: grad_corners[0][0],
-                            y: grad_corners[0][1],
-                        },
+                        quad_pts[3],
+                        quad_pts[2],
+                        quad_pts[0],
                         config.subpixel_refinement_sigma,
                         decimation,
                     ),
@@ -234,8 +238,16 @@ pub fn extract_quads_with_config(
                     return Some(Detection {
                         id: label,
                         center: [
-                            f64::midpoint(grad_corners[0][0], grad_corners[2][0]),
-                            f64::midpoint(grad_corners[0][1], grad_corners[2][1]),
+                            (corners[0].x
+                                + corners[1].x
+                                + corners[2].x
+                                + corners[3].x)
+                                / 4.0,
+                            (corners[0].y
+                                + corners[1].y
+                                + corners[2].y
+                                + corners[3].y)
+                                / 4.0,
                         ],
                         corners: [
                             [corners[0].x, corners[0].y],
@@ -245,152 +257,11 @@ pub fn extract_quads_with_config(
                         ],
                         hamming: 0,
                         rotation: 0,
-                        decision_margin: f64::from(bbox_area),
+                        decision_margin: area * d * d, // Area in full-res
                         bits: 0,
                         pose: None,
                         pose_covariance: None,
                     });
-                }
-            }
-
-            let contour = trace_boundary(&arena, labels, img.width, img.height, sx, sy, label);
-
-            if contour.len() >= 12 {
-                let simple_contour = chain_approximation(&arena, &contour);
-                let perimeter = contour.len() as f64;
-                let epsilon = (perimeter * 0.02).max(1.0);
-                let simplified = douglas_peucker(&arena, &simple_contour, epsilon);
-
-                if simplified.len() >= 4 && simplified.len() <= 11 {
-                    let simpl_len = simplified.len();
-                    let reduced = if simpl_len == 5 {
-                        simplified
-                    } else if simpl_len == 4 {
-                        let mut closed = BumpVec::new_in(&arena);
-                        for p in &simplified {
-                            closed.push(*p);
-                        }
-                        closed.push(simplified[0]);
-                        closed
-                    } else {
-                        reduce_to_quad(&arena, &simplified)
-                    };
-
-                    if reduced.len() == 5 {
-                        let area = polygon_area(&reduced);
-                        let compactness = (12.566 * area.abs()) / (perimeter * perimeter);
-
-                        if area.abs() > f64::from(config.quad_min_area) && compactness > 0.1 {
-                            // Standardize to CW for consistency
-                            let quad_pts_dec = if area > 0.0 {
-                                [reduced[0], reduced[1], reduced[2], reduced[3]]
-                            } else {
-                                [reduced[0], reduced[3], reduced[2], reduced[1]]
-                            };
-
-                            // Scale to full resolution using center-aware mapping
-                            let quad_pts = [
-                                Point {
-                                    x: (quad_pts_dec[0].x - 0.5) * d + 0.5,
-                                    y: (quad_pts_dec[0].y - 0.5) * d + 0.5,
-                                },
-                                Point {
-                                    x: (quad_pts_dec[1].x - 0.5) * d + 0.5,
-                                    y: (quad_pts_dec[1].y - 0.5) * d + 0.5,
-                                },
-                                Point {
-                                    x: (quad_pts_dec[2].x - 0.5) * d + 0.5,
-                                    y: (quad_pts_dec[2].y - 0.5) * d + 0.5,
-                                },
-                                Point {
-                                    x: (quad_pts_dec[3].x - 0.5) * d + 0.5,
-                                    y: (quad_pts_dec[3].y - 0.5) * d + 0.5,
-                                },
-                            ];
-
-                            let mut ok = true;
-                            for i in 0..4 {
-                                let d2 = (quad_pts[i].x - quad_pts[(i + 1) % 4].x).powi(2)
-                                    + (quad_pts[i].y - quad_pts[(i + 1) % 4].y).powi(2);
-                                if d2 < min_edge_len_sq {
-                                    ok = false;
-                                    break;
-                                }
-                            }
-
-                            if ok {
-                                let corners = [
-                                    refine_corner(
-                                        &arena,
-                                        refinement_img,
-                                        quad_pts[0],
-                                        quad_pts[3],
-                                        quad_pts[1],
-                                        config.subpixel_refinement_sigma,
-                                        decimation,
-                                    ),
-                                    refine_corner(
-                                        &arena,
-                                        refinement_img,
-                                        quad_pts[1],
-                                        quad_pts[0],
-                                        quad_pts[2],
-                                        config.subpixel_refinement_sigma,
-                                        decimation,
-                                    ),
-                                    refine_corner(
-                                        &arena,
-                                        refinement_img,
-                                        quad_pts[2],
-                                        quad_pts[1],
-                                        quad_pts[3],
-                                        config.subpixel_refinement_sigma,
-                                        decimation,
-                                    ),
-                                    refine_corner(
-                                        &arena,
-                                        refinement_img,
-                                        quad_pts[3],
-                                        quad_pts[2],
-                                        quad_pts[0],
-                                        config.subpixel_refinement_sigma,
-                                        decimation,
-                                    ),
-                                ];
-
-                                let edge_score = calculate_edge_score(refinement_img, corners);
-                                if edge_score > config.quad_min_edge_score {
-                                    return Some(Detection {
-                                        id: label,
-                                        center: [
-                                            (corners[0].x
-                                                + corners[1].x
-                                                + corners[2].x
-                                                + corners[3].x)
-                                                / 4.0,
-                                            (corners[0].y
-                                                + corners[1].y
-                                                + corners[2].y
-                                                + corners[3].y)
-                                                / 4.0,
-                                        ],
-                                        corners: [
-                                            [corners[0].x, corners[0].y],
-                                            [corners[1].x, corners[1].y],
-                                            [corners[2].x, corners[2].y],
-                                            [corners[3].x, corners[3].y],
-                                        ],
-                                        hamming: 0,
-                                        rotation: 0,
-                                        decision_margin: area * d * d, // Area in full-res
-                                        bits: 0,
-                                        pose: None,
-                                        pose_covariance: None,
-                                    });
-                                }
-                            }
-                        }
-                    }
                 }
             }
             None

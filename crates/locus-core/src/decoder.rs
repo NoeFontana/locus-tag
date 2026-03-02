@@ -1350,6 +1350,21 @@ mod tests {
     }
 
     #[test]
+    fn test_all_codes_decode_41h12() {
+        let decoder = AprilTag41h12;
+        let dict = crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag41h12);
+        for id in 0..dict.len() as u16 {
+            let code = dict.get_code(id).expect("valid ID");
+            let result = decoder.decode(code);
+            assert!(result.is_some(), "Failed to decode 41h12 ID {}", id);
+            let (id_out, hamming_out, rot_out) = result.unwrap();
+            assert_eq!(id_out, u32::from(id));
+            assert_eq!(hamming_out, 0);
+            assert_eq!(rot_out, 0);
+        }
+    }
+
+    #[test]
     fn test_grid_sampling() {
         let width = 64;
         let height = 64;
