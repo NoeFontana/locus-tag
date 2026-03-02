@@ -1,6 +1,6 @@
 # Implementation Plan: Build System Modernization
 
-## Phase 1: pyproject.toml Restructuring & Metadata
+## Phase 1: pyproject.toml Restructuring & Metadata [checkpoint: c6bcb9f]
 - [x] Task: Prune legacy manifest entries. d4f3d8e
     - [x] Remove `[project.scripts]` table from `pyproject.toml`.
     - [x] Remove `[project.optional-dependencies]` table.
@@ -9,10 +9,10 @@
     - [x] Define `[dependency-groups]` in `pyproject.toml`.
     - [x] Migrate `dev`, `lint`, `types`, `bench`, `docs`, and `etl` requirements.
     - [x] Pin core runtime dependencies in `[project.dependencies]`.
-- [~] Task: Align Maturin and PyPI Metadata.
-    - [ ] Configure `tool.maturin.compatibility = "abi3"`.
-    - [ ] Update PyPI classifiers (Rust, Typing Stubs).
-- [ ] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md)
+- [x] Task: Align Maturin and PyPI Metadata. 058a365
+    - [x] Configure `tool.maturin.compatibility = "abi3"`.
+    - [x] Update PyPI classifiers (Rust, Typing Stubs).
+- [x] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md)
 
 ## Phase 2: CI/CD Pipeline Migration
 - [ ] Task: Migrate Main CI Workflow (`ci.yml`).
