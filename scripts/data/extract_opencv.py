@@ -100,8 +100,6 @@ def generate_all():
         return
 
     families = [
-        ("DICT_APRILTAG_36h11", 6, 36, 11),
-        ("DICT_APRILTAG_16h5", 4, 16, 5),
         ("DICT_4X4_50", 4, 16, 3),
         ("DICT_4X4_100", 4, 16, 2),
     ]

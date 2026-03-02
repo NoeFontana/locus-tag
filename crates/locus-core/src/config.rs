@@ -454,14 +454,8 @@ impl DetectorConfigBuilder {
 pub enum TagFamily {
     /// AprilTag 36h11 family (587 codes, 11-bit hamming distance).
     AprilTag36h11,
-    /// AprilTag 16h5 family (30 codes, 5-bit hamming distance).
-    AprilTag16h5,
     /// AprilTag 41h12 family (2115 codes, 12-bit hamming distance).
     AprilTag41h12,
-    /// OpenCV ArUco AprilTag 36h11 dialect.
-    Aruco36h11,
-    /// OpenCV ArUco AprilTag 16h5 dialect.
-    Aruco16h5,
     /// ArUco 4x4_50 dictionary.
     ArUco4x4_50,
     /// ArUco 4x4_100 dictionary.
@@ -474,10 +468,7 @@ impl TagFamily {
     pub const fn all() -> &'static [TagFamily] {
         &[
             TagFamily::AprilTag36h11,
-            TagFamily::AprilTag16h5,
             TagFamily::AprilTag41h12,
-            TagFamily::Aruco36h11,
-            TagFamily::Aruco16h5,
             TagFamily::ArUco4x4_50,
             TagFamily::ArUco4x4_100,
         ]
@@ -676,6 +667,6 @@ mod tests {
     #[test]
     fn test_all_families() {
         let opt = DetectOptions::all_families();
-        assert_eq!(opt.families.len(), 7);
+        assert_eq!(opt.families.len(), 4);
     }
 }

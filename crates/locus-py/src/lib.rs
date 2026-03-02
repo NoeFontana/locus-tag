@@ -171,22 +171,16 @@ impl From<locus_core::Detection> for Detection {
 // ============================================================================
 
 #[pyclass(eq, eq_int)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TagFamily {
     /// AprilTag 36h11 family (587 codes).
     AprilTag36h11 = 0,
-    /// AprilTag 16h5 family (30 codes).
-    AprilTag16h5 = 1,
     /// AprilTag 41h12 family (2115 codes).
-    AprilTag41h12 = 2,
-    /// ArUco 36h11 dictionary.
-    Aruco36h11 = 3,
-    /// ArUco 16h5 dictionary.
-    Aruco16h5 = 4,
+    AprilTag41h12 = 1,
     /// ArUco 4x4_50 dictionary.
-    ArUco4x4_50 = 5,
+    ArUco4x4_50 = 2,
     /// ArUco 4x4_100 dictionary.
-    ArUco4x4_100 = 6,
+    ArUco4x4_100 = 3,
 }
 
 #[pymethods]
@@ -203,10 +197,7 @@ impl From<TagFamily> for locus_core::config::TagFamily {
     fn from(f: TagFamily) -> Self {
         match f {
             TagFamily::AprilTag36h11 => locus_core::config::TagFamily::AprilTag36h11,
-            TagFamily::AprilTag16h5 => locus_core::config::TagFamily::AprilTag16h5,
             TagFamily::AprilTag41h12 => locus_core::config::TagFamily::AprilTag41h12,
-            TagFamily::Aruco36h11 => locus_core::config::TagFamily::Aruco36h11,
-            TagFamily::Aruco16h5 => locus_core::config::TagFamily::Aruco16h5,
             TagFamily::ArUco4x4_50 => locus_core::config::TagFamily::ArUco4x4_50,
             TagFamily::ArUco4x4_100 => locus_core::config::TagFamily::ArUco4x4_100,
         }

@@ -195,9 +195,9 @@ mod extended {
 
             let families = [
                 TagFamily::AprilTag36h11,
+                TagFamily::AprilTag41h12,
                 TagFamily::ArUco4x4_50,
                 TagFamily::ArUco4x4_100,
-                TagFamily::AprilTag16h5,
             ];
 
             for &family in &families {
