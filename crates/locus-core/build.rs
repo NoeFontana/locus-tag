@@ -9,11 +9,11 @@ use std::fs;
 use std::path::PathBuf;
 
 /// Maps a codebase enum family string to the literal JSON file prefix
-const FAMILY_MAPPING: &[(&str, &str)] = &[
-    ("AprilTag36h11", "tag36h11"),
-    ("AprilTag41h12", "tag41h12"),
-    ("ArUco4x4_50", "dict_4x4_50"),
-    ("ArUco4x4_100", "dict_4x4_100"),
+const FAMILY_MAPPING: &[(&str, &str, usize)] = &[
+    ("AprilTag36h11", "tag36h11", 6),
+    ("AprilTag41h12", "tag41h12", 9),
+    ("ArUco4x4_50", "dict_4x4_50", 4),
+    ("ArUco4x4_100", "dict_4x4_100", 4),
 ];
 
 #[derive(Deserialize, Debug)]
@@ -38,6 +38,7 @@ struct ComputedDictionary {
     mih_offsets: Vec<usize>,
     mih_data: Vec<u64>,
     codes: Vec<u64>,
+    canonical_sampling_points: Vec<[f64; 2]>,
 }
 
 #[derive(Template)]
@@ -84,12 +85,10 @@ fn compute_rotations(base_code: u64, _payload_length: u32, points: &[[f64; 2]]) 
     for r in 0..3 {
         let mut rotated_code = 0;
         let map = &rot_maps[r];
-        for (i, &src_idx) in map.iter().enumerate() {
-            // src_idx in the 0-degree code provides the bit for the i-th position
-            // bits are conceptually stored such that bit 0 is point 0.
-            // A bit shift right by src_idx gives us the bit.
-            if (base_code & (1 << src_idx)) != 0 {
-                rotated_code |= 1 << i;
+        for (i, &dst_idx) in map.iter().enumerate() {
+            // Bit i from the original code moves to position dst_idx in the rotated version.
+            if (base_code & (1 << i)) != 0 {
+                rotated_code |= 1 << dst_idx;
             }
         }
         result[r + 1] = rotated_code;
@@ -196,7 +195,7 @@ fn main() {
     let dict_dir = PathBuf::from("../../data/dictionaries");
     let mut computed_dicts = Vec::new();
 
-    for &(enum_name, file_prefix) in FAMILY_MAPPING {
+    for &(enum_name, file_prefix, dim) in FAMILY_MAPPING {
         let json_path = dict_dir.join(format!("{file_prefix}.json"));
         assert!(
             json_path.exists(),
@@ -205,11 +204,33 @@ fn main() {
         );
 
         let content = fs::read_to_string(&json_path).expect("failed to read json");
-        let ir: DictionaryIR = serde_json::from_str(&content).expect("failed to parse json");
+        let mut ir: DictionaryIR = serde_json::from_str(&content).expect("failed to parse json");
+
+        // Rescale points: Locus quad-centric coordinates [-1, 1] cover the WHOLE tag (including border).
+        // JSON points are usually interior-centric (data bits only in [-1, 1]).
+        // Dimension `dim` covers `dim` bits. Total tag width is `dim + 2` bits.
+        let scale = dim as f64 / (dim as f64 + 2.0);
+        for p in &mut ir.canonical_sampling_points {
+            p[0] *= scale;
+            p[1] *= scale;
+        }
 
         let mut all_codes = Vec::with_capacity(ir.base_codes.len() * 4);
         for hex_str in &ir.base_codes {
-            let base_code = u64::from_str_radix(hex_str, 16).expect("invalid hex base code");
+            let mut base_code = u64::from_str_radix(hex_str, 16).expect("invalid hex base code");
+            
+            // Umich AprilTags (36h11, 41h12) are MSB-first relative to their spiral points.
+            // Locus samples LSB-first. So we must bit-reverse the codes.
+            if enum_name.starts_with("AprilTag") {
+                let mut reversed = 0u64;
+                for i in 0..ir.payload_length {
+                    if (base_code & (1 << (ir.payload_length - 1 - i))) != 0 {
+                        reversed |= 1 << i;
+                    }
+                }
+                base_code = reversed;
+            }
+
             let rots =
                 compute_rotations(base_code, ir.payload_length, &ir.canonical_sampling_points);
             all_codes.extend_from_slice(&rots);
@@ -236,6 +257,7 @@ fn main() {
             mih_offsets,
             mih_data,
             codes: all_codes,
+            canonical_sampling_points: ir.canonical_sampling_points,
         });
     }
 

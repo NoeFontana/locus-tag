@@ -17,6 +17,7 @@ fn test_accuracy_synthetic() {
     let test_cases = [
         (locus_core::config::TagFamily::AprilTag36h11, 0, 150),
         (locus_core::config::TagFamily::AprilTag36h11, 1, 193), // Use 193 to avoid exact tile alignment
+        (locus_core::config::TagFamily::AprilTag41h12, 10, 150),
         (locus_core::config::TagFamily::ArUco4x4_50, 5, 121),
     ];
 
