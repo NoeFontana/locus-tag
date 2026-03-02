@@ -8,11 +8,11 @@
 - [x] Task: Move `docs/api.md` to `docs/reference/`.
 - [x] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md)
 
-## Phase 2: Navigation & Link Updates
-- [ ] Task: Update `mkdocs.yml` navigation to use the new quadrant structure.
-- [ ] Task: Fix relative links in the moved markdown files to prevent 404s.
-- [ ] Task: Ensure `docs/index.md` appropriately acts as a landing page or pointer.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
+## Phase 2: Navigation & Link Updates [checkpoint: 9067d1c]
+- [x] Task: Update `mkdocs.yml` navigation to use the new quadrant structure.
+- [x] Task: Fix relative links in the moved markdown files to prevent 404s.
+- [x] Task: Ensure `docs/index.md` appropriately acts as a landing page or pointer.
+- [x] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
 
 ## Phase 3: Build & Verification
 - [ ] Task: Run `uv run mkdocs build --strict` to verify site integrity and that no broken links exist.
