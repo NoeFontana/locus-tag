@@ -12,14 +12,14 @@
     - [x] `quality-gates.md` -> `docs/engineering/quality-gates.md`.
 - [x] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md)
 
-## Phase 2: The Antigravity Bridge (Symlinking)
-- [ ] Task: Delete duplicate markdown files in `.agent/rules/`.
-- [ ] Task: Create Git-tracked relative symlinks in `.agent/rules/`.
-    - [ ] Symlink `architecture.md` -> `../../docs/architecture.md` (or `../../docs/engineering/architecture.md`).
-    - [ ] Symlink `constraints.md` -> `../../docs/engineering/constraints.md`.
-    - [ ] Symlink `core.md` -> `../../docs/engineering/core.md`.
-    - [ ] Symlink `quality-gates.md` -> `../../docs/engineering/quality-gates.md`.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
+## Phase 2: The Antigravity Bridge (Symlinking) [checkpoint: c0ea5cc]
+- [x] Task: Delete duplicate markdown files in `.agent/rules/`.
+- [x] Task: Create Git-tracked relative symlinks in `.agent/rules/`.
+    - [x] Symlink `architecture.md` -> `../../docs/architecture.md` (or `../../docs/engineering/architecture.md`).
+    - [x] Symlink `constraints.md` -> `../../docs/engineering/constraints.md`.
+    - [x] Symlink `core.md` -> `../../docs/engineering/core.md`.
+    - [x] Symlink `quality-gates.md` -> `../../docs/engineering/quality-gates.md`.
+- [x] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
 
 ## Phase 3: The Conductor Pointer Pattern
 - [ ] Task: Delete `conductor/code_styleguides/` directory.
