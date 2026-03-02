@@ -1,6 +1,6 @@
 {
   "payload_length": 16,
-  "minimum_hamming_distance": 3,
+  "minimum_hamming_distance": 4,
   "dictionary_size": 50,
   "canonical_sampling_points": [
     [
@@ -122,9 +122,8 @@
   ],
   "_provenance": {
     "source_uri": "cv2.aruco.DICT_4X4_50",
-    "commit_hash": "N/A",
     "cv2_version": "4.13.0",
-    "timestamp": "2026-03-01T23:02:24.676587Z",
-    "script_version": "1.0.0"
+    "timestamp": "2026-03-02T01:36:12.225991Z",
+    "script_version": "2.0.1"
   }
 }
