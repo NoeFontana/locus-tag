@@ -14,6 +14,6 @@
 - [x] Task: Ensure `docs/index.md` appropriately acts as a landing page or pointer.
 - [x] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
 
-## Phase 3: Build & Verification
-- [ ] Task: Run `uv run mkdocs build --strict` to verify site integrity and that no broken links exist.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md)
+## Phase 3: Build & Verification [checkpoint: 231dec2]
+- [x] Task: Run `uv run mkdocs build --strict` to verify site integrity and that no broken links exist.
+- [x] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md)
