@@ -21,6 +21,19 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  validate-data:
+    name: Validate Dictionary Schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install jsonschema
+      - name: Run validation
+        run: python scripts/validate_dict_schemas.py --schema crates/locus-core/tests/schemas/dictionary.schema.json data/dictionaries/*.json
+
   lint-rust:
     name: Lint Rust
     runs-on: ubuntu-latest
@@ -73,6 +86,20 @@ jobs:
         run: |
           set -o pipefail
           cargo test --doc 2>&1 | tee test-rust-doc.log
+
+      - name: Run Tests (Strict Alloc)
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --features strict-alloc --workspace 2>&1 | tee test-rust-strict.log
+
+      - name: Verify Snapshot Parity
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --workspace
+          cargo install cargo-insta
+          cargo insta test --check 2>&1 | tee test-rust-insta.log
 
       - name: Upload Logs on Failure
         if: failure()

@@ -1,0 +1,43 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "required": [
+        "payload_length",
+        "minimum_hamming_distance",
+        "dictionary_size",
+        "canonical_sampling_points",
+        "base_codes"
+    ],
+    "properties": {
+        "payload_length": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "minimum_hamming_distance": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "dictionary_size": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "canonical_sampling_points": {
+            "type": "array",
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "number"
+                },
+                "minItems": 2,
+                "maxItems": 2
+            }
+        },
+        "base_codes": {
+            "type": "array",
+            "items": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]+$"
+            }
+        }
+    }
+}
