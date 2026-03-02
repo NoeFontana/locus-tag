@@ -14,7 +14,7 @@
     - [x] Update PyPI classifiers (Rust, Typing Stubs).
 - [x] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md)
 
-## Phase 2: CI/CD Pipeline Migration
+## Phase 2: CI/CD Pipeline Migration [checkpoint: 10b2847]
 - [x] Task: Migrate Main CI Workflow (`ci.yml`). 32b6192
     - [x] Update setup steps to use `uv sync --group dev --group lint --group types`.
     - [x] Replace `pip install .[dev]` with `uv sync`.
@@ -22,7 +22,7 @@
     - [x] Update to use `uv sync --group docs`.
 - [x] Task: Migrate Release Workflow (`release.yml`). 69d432e
     - [x] Ensure wheel building uses the new `uv`-based environment.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
 
 ## Phase 3: Documentation & Final Alignment
 - [ ] Task: Update Contribution Guidelines.
