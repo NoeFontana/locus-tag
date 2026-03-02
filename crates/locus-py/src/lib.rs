@@ -415,6 +415,66 @@ impl From<locus_core::pose::Pose> for Pose {
 }
 
 // ============================================================================
+// Helper functions
+// ============================================================================
+
+/// Container for image data that handles both zero-copy and fallback copies.
+pub enum ImageInput<'a> {
+    Borrowed(ImageView<'a>),
+    Owned(Vec<u8>, usize, usize),
+}
+
+impl<'a> ImageInput<'a> {
+    /// Get an ImageView into the data.
+    pub fn view(&self) -> ImageView<'_> {
+        match self {
+            Self::Borrowed(v) => *v,
+            Self::Owned(data, w, h) => ImageView::new(data, *w, *h, *w).expect("Valid owned view"),
+        }
+    }
+}
+
+/// Create an ImageInput from a PyReadonlyArray2, handling non-contiguous arrays with a copy.
+#[allow(clippy::cast_sign_loss)]
+fn prepare_image_input<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageInput<'a>> {
+    let shape = img.shape();
+    let height = shape[0];
+    let width = shape[1];
+    let strides = img.strides();
+    let stride_y = strides[0] as usize;
+    let stride_x = strides[1];
+
+    // Case 1: C-contiguous or row-major with padding (stride_x == 1)
+    if stride_x == 1 {
+        let required_size = if height > 0 && width > 0 {
+            (height - 1) * stride_y + width
+        } else {
+            0
+        };
+
+        // SAFETY: img.data() is valid for the lifetime 'a. We verified stride_x == 1,
+        // ensuring that the memory within required_size is valid for read access.
+        let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
+        let view = ImageView::new(data, width, height, stride_y)
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+        Ok(ImageInput::Borrowed(view))
+    } else {
+        // Case 2: Non-contiguous (e.g. sliced columns, F-contiguous)
+        // We perform a copy to maintain functionality as per spec.
+        eprintln!(
+            "WARNING: Input array is not C-contiguous. Performing auto-conversion (copy). \
+             Use numpy.ascontiguousarray() for maximum performance."
+        );
+
+        let owned = img.to_owned_array();
+        let width = owned.shape()[1];
+        let height = owned.shape()[0];
+        let data = owned.into_raw_vec();
+        Ok(ImageInput::Owned(data, width, height))
+    }
+}
+
+// ============================================================================
 // Detector class with persistent state
 // ============================================================================
 
@@ -562,13 +622,16 @@ impl Detector {
     #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
     fn detect(
         &mut self,
+        py: Python<'_>,
         img: PyReadonlyArray2<u8>,
         decimation: usize,
         intrinsics: Option<(f64, f64, f64, f64)>,
         tag_size: Option<f64>,
         pose_estimation_mode: PoseEstimationMode,
     ) -> PyResult<Vec<Detection>> {
-        let view = create_image_view(&img)?;
+        let input = prepare_image_input(&img)?;
+        let view = input.view();
+
         let mut builder = locus_core::DetectOptions::builder();
         builder = builder.decimation(decimation);
 
@@ -581,7 +644,7 @@ impl Detector {
         builder = builder.pose_estimation_mode(pose_estimation_mode.into());
 
         let options = builder.build();
-        let detections = self.inner.detect_with_options(&view, &options);
+        let detections = py.allow_threads(|| self.inner.detect_with_options(&view, &options));
         Ok(detections.into_iter().map(Detection::from).collect())
     }
 
@@ -597,6 +660,7 @@ impl Detector {
     #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
     fn detect_with_options(
         &mut self,
+        py: Python<'_>,
         img: PyReadonlyArray2<u8>,
         families: Vec<TagFamily>,
         decimation: usize,
@@ -604,7 +668,9 @@ impl Detector {
         tag_size: Option<f64>,
         pose_estimation_mode: PoseEstimationMode,
     ) -> PyResult<Vec<Detection>> {
-        let view = create_image_view(&img)?;
+        let input = prepare_image_input(&img)?;
+        let view = input.view();
+
         let core_families: Vec<locus_core::config::TagFamily> =
             families.into_iter().map(Into::into).collect();
 
@@ -621,7 +687,7 @@ impl Detector {
         builder = builder.pose_estimation_mode(pose_estimation_mode.into());
 
         let options = builder.build();
-        let detections = self.inner.detect_with_options(&view, &options);
+        let detections = py.allow_threads(|| self.inner.detect_with_options(&view, &options));
         Ok(detections.into_iter().map(Detection::from).collect())
     }
 
@@ -636,13 +702,16 @@ impl Detector {
     #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
     fn detect_with_stats(
         &mut self,
+        py: Python<'_>,
         img: PyReadonlyArray2<u8>,
         decimation: usize,
         intrinsics: Option<(f64, f64, f64, f64)>,
         tag_size: Option<f64>,
         pose_estimation_mode: PoseEstimationMode,
     ) -> PyResult<(Vec<Detection>, PipelineStats)> {
-        let view = create_image_view(&img)?;
+        let input = prepare_image_input(&img)?;
+        let view = input.view();
+
         let mut builder = locus_core::DetectOptions::builder();
         builder = builder.decimation(decimation);
 
@@ -655,7 +724,8 @@ impl Detector {
         builder = builder.pose_estimation_mode(pose_estimation_mode.into());
 
         let options = builder.build();
-        let (detections, stats) = self.inner.detect_with_stats_and_options(&view, &options);
+        let (detections, stats) =
+            py.allow_threads(|| self.inner.detect_with_stats_and_options(&view, &options));
         Ok((
             detections.into_iter().map(Detection::from).collect(),
             PipelineStats::from(stats),
@@ -670,14 +740,17 @@ impl Detector {
     #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
     fn extract_candidates(
         &mut self,
+        py: Python<'_>,
         img: PyReadonlyArray2<u8>,
         decimation: usize,
     ) -> PyResult<(Vec<Detection>, PipelineStats)> {
-        let view = create_image_view(&img)?;
+        let input = prepare_image_input(&img)?;
+        let view = input.view();
+
         let options = locus_core::DetectOptions::builder()
             .decimation(decimation)
             .build();
-        let (candidates, stats) = self.inner.extract_candidates(&view, &options);
+        let (candidates, stats) = py.allow_threads(|| self.inner.extract_candidates(&view, &options));
         Ok((
             candidates.into_iter().map(Detection::from).collect(),
             PipelineStats::from(stats),
@@ -695,13 +768,16 @@ impl Detector {
     #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
     fn detect_full(
         &mut self,
+        py: Python<'_>,
         img: PyReadonlyArray2<u8>,
         decimation: usize,
         intrinsics: Option<(f64, f64, f64, f64)>,
         tag_size: Option<f64>,
         pose_estimation_mode: PoseEstimationMode,
     ) -> PyResult<FullDetectionResult> {
-        let view = create_image_view(&img)?;
+        let input = prepare_image_input(&img)?;
+        let view = input.view();
+
         let mut builder = locus_core::DetectOptions::builder();
         builder = builder.decimation(decimation);
 
@@ -714,7 +790,7 @@ impl Detector {
         builder = builder.pose_estimation_mode(pose_estimation_mode.into());
 
         let options = builder.build();
-        let res = self.inner.detect_full(&view, &options);
+        let res = py.allow_threads(|| self.inner.detect_full(&view, &options));
         // If upscaling is enabled in config, the binarized/labeled images will be larger.
         let upscale = self.inner.get_config().upscale_factor;
         let width = view.width * upscale;
@@ -738,48 +814,6 @@ impl Detector {
 }
 
 // ============================================================================
-// Helper functions
-// ============================================================================
-
-/// Create an ImageView from a PyReadonlyArray2, enforcing C-contiguous layout.
-#[allow(clippy::cast_sign_loss)]
-fn create_image_view<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageView<'a>> {
-    let shape = img.shape();
-    let height = shape[0];
-    let width = shape[1];
-    let strides = img.strides();
-    let stride_y = strides[0] as usize;
-    let stride_x = strides[1];
-
-    // Check for C-contiguous behavior (inner stride == 1)
-    if stride_x == 1 {
-        let required_size = if height > 0 && width > 0 {
-            (height - 1) * stride_y + width
-        } else {
-            0
-        };
-
-        // If the slice is safe, we borrow directly
-        // Note: PyReadonlyArray2::data() returns a raw pointer. We must ensure it's valid.
-        // If it's contiguous with inner stride 1, we can treat it as a slice (with gaps if stride_y > width).
-        // locus_core::ImageView handles stride > width correctly.
-
-        let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
-        let view = ImageView::new(data, width, height, stride_y)
-            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
-
-        Ok(view)
-    } else {
-        // Non-contiguous (e.g. sliced columns, generalized slicing)
-        // We reject this to enforce zero-copy usage.
-        Err(pyo3::exceptions::PyValueError::new_err(
-            "Input array must be C-contiguous (row-major). Found non-contiguous stride. \
-             Use numpy.ascontiguousarray() if needed.",
-        ))
-    }
-}
-
-// ============================================================================
 // Legacy function-based API (for backward compatibility)
 // ============================================================================
 
@@ -792,20 +826,27 @@ fn dummy_detect() -> String {
 /// Detect tags in an image. Zero-copy ingestion of NumPy arrays.
 #[pyfunction]
 #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
-fn detect_tags(img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
-    let view = create_image_view(&img)?;
+fn detect_tags(py: Python<'_>, img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
+    let input = prepare_image_input(&img)?;
+    let view = input.view();
+
     let mut detector = locus_core::Detector::new();
-    let detections = detector.detect(&view);
+    let detections = py.allow_threads(|| detector.detect(&view));
     Ok(detections.into_iter().map(Detection::from).collect())
 }
 
 /// Detect tags and return timing stats.
 #[pyfunction]
 #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
-fn detect_tags_with_stats(img: PyReadonlyArray2<u8>) -> PyResult<(Vec<Detection>, PipelineStats)> {
-    let view = create_image_view(&img)?;
+fn detect_tags_with_stats(
+    py: Python<'_>,
+    img: PyReadonlyArray2<u8>,
+) -> PyResult<(Vec<Detection>, PipelineStats)> {
+    let input = prepare_image_input(&img)?;
+    let view = input.view();
+
     let mut detector = locus_core::Detector::new();
-    let (detections, stats) = detector.detect_with_stats(&view);
+    let (detections, stats) = py.allow_threads(|| detector.detect_with_stats(&view));
     Ok((
         detections.into_iter().map(Detection::from).collect(),
         PipelineStats::from(stats),
@@ -815,51 +856,68 @@ fn detect_tags_with_stats(img: PyReadonlyArray2<u8>) -> PyResult<(Vec<Detection>
 /// For debugging: Apply thresholding and return the binarized image.
 #[pyfunction]
 #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
-fn debug_threshold(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
-    let view = create_image_view(&img)?;
+fn debug_threshold(py: Python<'_>, img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
+    let input = prepare_image_input(&img)?;
+    let view = input.view();
     let width = view.width;
     let height = view.height;
 
     let mut output = vec![0u8; width * height];
-    let arena = bumpalo::Bump::new();
-    let engine = locus_core::threshold::ThresholdEngine::new();
-    let stats = engine.compute_tile_stats(&arena, &view);
-    engine.apply_threshold(&arena, &view, &stats, &mut output);
+    py.allow_threads(|| {
+        let arena = bumpalo::Bump::new();
+        let engine = locus_core::threshold::ThresholdEngine::new();
+        let stats = engine.compute_tile_stats(&arena, &view);
+        engine.apply_threshold(&arena, &view, &stats, &mut output);
+    });
 
-    Python::with_gil(|py| {
-        let array = numpy::PyArray1::from_vec(py, output);
-        let array2d = array.reshape([height, width]).map_err(|_| {
-            pyo3::exceptions::PyRuntimeError::new_err("Failed to reshape NumPy array")
-        })?;
-        Ok(array2d.into_any().unbind())
-    })
+    let array = numpy::PyArray1::from_vec(py, output);
+    let array2d = array.reshape([height, width]).map_err(|_| {
+        pyo3::exceptions::PyRuntimeError::new_err("Failed to reshape NumPy array")
+    })?;
+    Ok(array2d.into_any().unbind())
 }
 
 /// For debugging: Return the labeled connected components.
 #[pyfunction]
 #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
-fn debug_segmentation(img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
-    let view = create_image_view(&img)?;
+fn debug_segmentation(py: Python<'_>, img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
+    let input = prepare_image_input(&img)?;
+    let view = input.view();
     let width = view.width;
     let height = view.height;
 
-    let arena = bumpalo::Bump::new();
-    let engine = locus_core::threshold::ThresholdEngine::new();
-    let stats = engine.compute_tile_stats(&arena, &view);
     let mut binarized = vec![0u8; width * height];
-    engine.apply_threshold(&arena, &view, &stats, &mut binarized);
+    let labels_vec = py.allow_threads(|| {
+        let arena = bumpalo::Bump::new();
+        let engine = locus_core::threshold::ThresholdEngine::new();
+        let stats = engine.compute_tile_stats(&arena, &view);
+        engine.apply_threshold(&arena, &view, &stats, &mut binarized);
 
-    let labels =
-        locus_core::segmentation::label_components(&arena, &binarized, width, height, false);
-    let labels_vec = labels.to_vec();
+        let labels =
+            locus_core::segmentation::label_components(&arena, &binarized, width, height, false);
+        labels.to_vec()
+    });
 
-    Python::with_gil(|py| {
-        let array = numpy::PyArray1::from_vec(py, labels_vec);
-        let array2d = array.reshape([height, width]).map_err(|_| {
-            pyo3::exceptions::PyRuntimeError::new_err("Failed to reshape NumPy array")
-        })?;
-        Ok(array2d.into_any().unbind())
-    })
+    let array = numpy::PyArray1::from_vec(py, labels_vec);
+    let array2d = array.reshape([height, width]).map_err(|_| {
+        pyo3::exceptions::PyRuntimeError::new_err("Failed to reshape NumPy array")
+    })?;
+    Ok(array2d.into_any().unbind())
+}
+
+// ============================================================================
+// Profiling
+// ============================================================================
+
+/// Initialize the Tracy profiling subscriber.
+#[pyfunction]
+fn init_tracy() {
+    #[cfg(feature = "tracy")]
+    {
+        use tracing_subscriber::layer::SubscriberExt;
+        let subscriber = tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default());
+        tracing::subscriber::set_global_default(subscriber).ok();
+    }
 }
 
 // ============================================================================
@@ -881,6 +939,9 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Pose>()?;
     m.add_class::<PoseEstimationMode>()?;
     m.add_class::<CameraIntrinsics>()?;
+
+    // Profiling
+    m.add_function(wrap_pyfunction!(init_tracy, m)?)?;
 
     // Legacy functions (for backward compatibility)
     m.add_function(wrap_pyfunction!(dummy_detect, m)?)?;
