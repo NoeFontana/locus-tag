@@ -1,21 +1,24 @@
 # Strict Constraints
 
-These constraints are mandatory. Code violating them should not pass review.
+These constraints represent the non-negotiable laws of the Locus codebase. Violations will result in immediate PR rejection.
 
-## 1. Memory Safety
-* **Hot Loop Allocations:**
-    * ❌ `Vec::new()`, `Box::new()`, `HashMap::new()` in `detect()`.
-    * ✅ `bumpalo::Bump` for all temporary frame data.
-    * ✅ `SmallVec` or `[T; N]` for fixed-size lists.
+## 1. Memory Safety & Allocations
+Locus achieves its latency targets by strictly avoiding the system allocator (`malloc`/`free`) in the hot loop.
+* **Hot Loop (`detect()`):**
+  * ❌ **Forbidden:** `Vec::new()`, `Box::new()`, `HashMap::new()`, or any implicit heap allocations.
+  * ✅ **Required:** Use the `bumpalo::Bump` arena for all ephemeral per-frame data.
+  * ✅ **Allowed:** Stack-allocated structures like `SmallVec`, `arrayvec`, or fixed-size arrays `[T; N]`.
 
-## 2. FFI Safety
-* **Python Bindings:**
-    * ❌ Copying pixel data to `Vec<u8>`.
-    * ✅ `PyReadonlyArray2<u8>` (Zero-Copy).
-* **Unsafe usage:**
-    * ❌ Naked `unsafe` blocks.
-    * ✅ `// SAFETY: ...` describing the invariant (e.g. "Strides checked").
+## 2. FFI & Zero-Copy Boundaries
+The Rust-Python boundary must be invisible to performance.
+* **Image Data:**
+  * ❌ **Forbidden:** Copying or cloning NumPy arrays into Rust `Vec<u8>`.
+  * ✅ **Required:** Use `PyReadonlyArray2<u8>` to leverage the Python Buffer Protocol. Validate strides early and once.
 
-## 3. Error Handling
-* ❌ `unwrap()`, `expect()` in library code.
-* ✅ `Result<T, E>` using `thiserror`.
+## 3. Unsafe Rust
+* ❌ **Forbidden:** Naked `unsafe` blocks.
+* ✅ **Required:** Every `unsafe` block must be immediately preceded by a `// SAFETY: ` comment that rigorously justifies why the invariant holds (e.g., "Strides were checked at the FFI boundary").
+
+## 4. Error Handling
+* ❌ **Forbidden:** `unwrap()` or `expect()` in library code. (Enforced via `#![deny(clippy::unwrap_used)]`).
+* ✅ **Required:** Propagate errors gracefully using `Result<T, E>` and `thiserror` for structured error definitions.
