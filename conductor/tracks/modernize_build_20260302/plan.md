@@ -1,10 +1,10 @@
 # Implementation Plan: Build System Modernization
 
 ## Phase 1: pyproject.toml Restructuring & Metadata
-- [ ] Task: Prune legacy manifest entries.
-    - [ ] Remove `[project.scripts]` table from `pyproject.toml`.
-    - [ ] Remove `[project.optional-dependencies]` table.
-    - [ ] Clean up `uv.lock` if necessary.
+- [x] Task: Prune legacy manifest entries. d4f3d8e
+    - [x] Remove `[project.scripts]` table from `pyproject.toml`.
+    - [x] Remove `[project.optional-dependencies]` table.
+    - [x] Clean up `uv.lock` if necessary.
 - [ ] Task: Implement PEP 735 Dependency Groups.
     - [ ] Define `[dependency-groups]` in `pyproject.toml`.
     - [ ] Migrate `dev`, `lint`, `types`, `bench`, `docs`, and `etl` requirements.
