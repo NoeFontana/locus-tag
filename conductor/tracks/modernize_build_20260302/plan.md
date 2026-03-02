@@ -18,9 +18,9 @@
 - [x] Task: Migrate Main CI Workflow (`ci.yml`). 32b6192
     - [x] Update setup steps to use `uv sync --group dev --group lint --group types`.
     - [x] Replace `pip install .[dev]` with `uv sync`.
-- [~] Task: Migrate Documentation Workflow (`docs.yml`).
-    - [ ] Update to use `uv sync --group docs`.
-- [ ] Task: Migrate Release Workflow (`release.yml`).
+- [x] Task: Migrate Documentation Workflow (`docs.yml`). d062327
+    - [x] Update to use `uv sync --group docs`.
+- [~] Task: Migrate Release Workflow (`release.yml`).
     - [ ] Ensure wheel building uses the new `uv`-based environment.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
 
