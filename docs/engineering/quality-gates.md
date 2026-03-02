@@ -21,6 +21,9 @@ uv run mypy .
 # 4. Unit Testing
 # Always use --release for Rust tests as debug performance is non-representative.
 cargo nextest run --release --all-features
+
+# Build the Python extension in release mode before running Python tests.
+uv run maturin develop --release --manifest-path crates/locus-py/Cargo.toml
 uv run pytest
 ```
 
@@ -28,6 +31,18 @@ uv run pytest
 
 If you are modifying the detection pipeline, math kernels, or SIMD dispatch, you must empirically validate that latency and recall remain within acceptable bounds.
 
+### Micro-Optimization Protocol
+Before performing any micro-performance optimization (e.g., SIMD kernels, hot-loop refactoring):
+1. **Setup Benchmark:** Create or update a realistic, isolated benchmark in `crates/locus-core/benches/` using the `divan` framework.
+2. **Establish Baseline:** Run the benchmark on the `main` branch or current stable state to establish a statistically significant baseline.
+3. **Verify Gain:** Demonstrate a measurable improvement in the targeted metric without regressing other pipeline stages.
+
+```bash
+# Example: Running a specific micro-benchmark
+cargo bench --bench comprehensive -- "bench_thresholding"
+```
+
+### System-Level Verification
 ```bash
 # 1. Forward Evaluation (Accuracy & Yield)
 uv run --group bench python scripts/locus_bench.py run real --compare
