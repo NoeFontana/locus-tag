@@ -1,31 +1,52 @@
 #!/usr/bin/env python3
 """
-Extracts UMich AprilTag dictionaries directly from the official C source code.
-Translates spiral bit ordering to the canonical continuous space [-1.0, 1.0].
+Locus: AprilTag (UMich) Dictionary Extractor
+------------------------------------------
+Extracts official AprilTag (UMich) dictionaries directly from the C source code.
+Translates spiral bit ordering to the canonical Locus continuous space [-1.0, 1.0].
+
+Usage:
+    uv run scripts/data/extract_umich.py --all
+    uv run scripts/data/extract_umich.py --family tag36h11
 """
 
+import argparse
 import json
-import os
+import logging
 import re
 import sys
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
-sys.path.insert(0, os.path.dirname(__file__))
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("locus.umich_extractor")
 
+# Configuration for upstream repository
+UPSTREAM_REPO = "https://raw.githubusercontent.com/AprilRobotics/apriltag"
+DEFAULT_COMMIT = "master"
+SCRIPT_VERSION = "2.0.1"
+
+# Import local fallbacks for high-latency/offline environments
+SCRIPT_DIR = Path(__file__).parent
 try:
+    sys.path.insert(0, str(SCRIPT_DIR))
     from apriltag_41h12 import APRILTAG_41H12_CODES_SPIRAL, UMICH_41H12_BIT_ORDER
 except ImportError:
+    logger.warning("Local fallback for tag41h12 not found. Online fetching required.")
     APRILTAG_41H12_CODES_SPIRAL = []
     UMICH_41H12_BIT_ORDER = []
 
-SCRIPT_VERSION = "1.0.1"
-UPSTREAM_REPO = "https://raw.githubusercontent.com/AprilRobotics/apriltag"
-COMMIT_HASH = "master"
-
-FAMILIES = {
+# Registry of supported AprilTag families
+FAMILIES: dict[str, Any] = {
     "tag36h11": {
-        "url": f"{UPSTREAM_REPO}/{COMMIT_HASH}/tag36h11.c",
+        "url_suffix": "tag36h11.c",
         "payload_length": 36,
         "minimum_hamming_distance": 11,
         "dictionary_size": 587,
@@ -68,75 +89,147 @@ FAMILIES = {
             (3, 4),
         ],
     },
-    "tag41h12": {
-        "url": f"{UPSTREAM_REPO}/{COMMIT_HASH}/tagStandard41h12.c",
+    "tagStandard41h12": {
+        "url_suffix": "tagStandard41h12.c",
         "payload_length": 41,
         "minimum_hamming_distance": 12,
         "dictionary_size": 2115,
         "spiral_order": UMICH_41H12_BIT_ORDER,
-        "local_fallback_codes": [hex(c)[2:].upper().zfill(16) for c in APRILTAG_41H12_CODES_SPIRAL],
+        "local_fallback": [hex(c)[2:].upper() for c in APRILTAG_41H12_CODES_SPIRAL],
     },
 }
 
 
-def umich_coords_to_canonical(coords):
-    canonical_points = []
-    min_x = min(x for x, y in coords)
-    max_x = max(x for x, y in coords)
-    grid_size = max_x - min_x + 1
+class AprilTagExtractor:
+    def __init__(self, output_dir: Path, commit: str = DEFAULT_COMMIT):
+        self.output_dir = output_dir
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.commit = commit
 
-    for x, y in coords:
-        cx = -1.0 + (2.0 * (x - min_x) + 1.0) / grid_size
-        cy = -1.0 + (2.0 * (y - min_x) + 1.0) / grid_size  # assuming square
-        canonical_points.append([float(f"{cx:.4f}"), float(f"{cy:.4f}")])
-    return canonical_points
+    def umich_coords_to_canonical(self, coords: list[tuple[int, int]]) -> list[list[float]]:
+        """
+        Maps UMich discrete spiral coordinates to Locus canonical space [-1.0, 1.0].
+        """
+        if not coords:
+            return []
+
+        xs = [c[0] for c in coords]
+        ys = [c[1] for c in coords]
+
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+
+        # AprilTags are square, so we use max dimension for grid scale
+        grid_size = max(max_x - min_x, max_y - min_y) + 1
+
+        canonical_points = []
+        for x, y in coords:
+            # Map discrete coordinates to centers in [-1.0, 1.0]
+            cx = -1.0 + (2.0 * (x - min_x) + 1.0) / grid_size
+            cy = -1.0 + (2.0 * (y - min_y) + 1.0) / grid_size
+            canonical_points.append([round(float(cx), 4), round(float(cy), 4)])
+
+        return canonical_points
+
+    def fetch_codes(self, url: str) -> list[str]:
+        """Fetches C source and extracts hex codes using regex."""
+        logger.info(f"Fetching source from {url}...")
+        try:
+            with urllib.request.urlopen(url, timeout=15) as response:
+                content = response.read().decode("utf-8")
+                # Match hex patterns like 0x123456789ABCDEFLL or 0x1234
+                matches = re.findall(r"0x([0-9a-fA-F]+)", content)
+                # Clean and normalize
+                return [m.upper().rstrip("L") for m in matches]
+        except Exception as e:
+            logger.error(f"Network error: {e}")
+            return []
+
+    def extract(self, family_name: str) -> Path | None:
+        if family_name not in FAMILIES:
+            logger.error(f"Unknown family: {family_name}")
+            return None
+
+        cfg = FAMILIES[family_name]
+        url = f"{UPSTREAM_REPO}/{self.commit}/{cfg['url_suffix']}"
+
+        raw_codes = self.fetch_codes(url)
+
+        if not raw_codes:
+            if "local_fallback" in cfg and cfg["local_fallback"]:
+                logger.warning(f"Using local fallback for {family_name}.")
+                raw_codes = cfg["local_fallback"]
+            else:
+                logger.error(f"No codes available for {family_name}. Skipping.")
+                return None
+
+        # Standard UMich files often contain metadata or bit-orders at the start
+        # We slice based on the expected dictionary size from the registry
+        if len(raw_codes) > cfg["dictionary_size"]:
+            # Logic: UMich files usually have codes at the end or in a specific array.
+            # For tag36h11, they are the first few hundred.
+            # We filter out very small values that might be bit-orders.
+            codes = [c for c in raw_codes if len(c) > 4]
+            codes = codes[: cfg["dictionary_size"]]
+        else:
+            codes = raw_codes
+
+        # Clean codes: remove leading zeros to match IR convention, but keep '0' if value is 0
+        final_codes = [c.lstrip("0") or "0" for c in codes]
+
+        if not cfg["spiral_order"]:
+            logger.error(
+                f"Spiral order metadata missing for {family_name}. Cannot map to canonical space."
+            )
+            return None
+
+        dictionary_ir = {
+            "payload_length": cfg["payload_length"],
+            "minimum_hamming_distance": cfg["minimum_hamming_distance"],
+            "dictionary_size": len(final_codes),
+            "canonical_sampling_points": self.umich_coords_to_canonical(cfg["spiral_order"]),
+            "base_codes": final_codes,
+            "_provenance": {
+                "source_uri": url,
+                "commit_hash": self.commit,
+                "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "script_version": SCRIPT_VERSION,
+            },
+        }
+
+        out_path = self.output_dir / f"{family_name.lower()}.json"
+        with open(out_path, "w") as f:
+            json.dump(dictionary_ir, f, indent=2)
+
+        logger.info(f"Successfully wrote {out_path} ({len(final_codes)} codes)")
+        return out_path
 
 
-def extract_umich(family_name, config):
-    url = config["url"]
-    print(f"Fetching {family_name} from {url}...")
-    base_codes = []
-    try:
-        req = urllib.request.urlopen(url)
-        c_code = req.read().decode("utf-8")
-        matches = re.findall(r"0x[0-9a-fA-F]+", c_code)
-        for m in matches:
-            base_codes.append(m[2:].upper().zfill(16))
-    except Exception as e:
-        print(f"Failed to download {url}: {e}")
-        if "local_fallback_codes" in config:
-            print("Using local fallback codes.")
-            base_codes = config["local_fallback_codes"]
+def main():
+    parser = argparse.ArgumentParser(description="Extract UMich AprilTag dictionaries.")
+    parser.add_argument("--all", action="store_true", help="Extract all standard families.")
+    parser.add_argument("--family", type=str, help="Specific family (e.g., tag36h11).")
+    parser.add_argument(
+        "--commit", type=str, default=DEFAULT_COMMIT, help="Target git commit/branch."
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path(__file__).parents[2] / "data" / "dictionaries",
+        help="Output directory.",
+    )
 
-    canonical_sampling_points = umich_coords_to_canonical(config["spiral_order"])
+    args = parser.parse_args()
+    extractor = AprilTagExtractor(args.output, commit=args.commit)
 
-    base_codes = [c.lstrip("0") or "0" for c in base_codes]
-    if len(base_codes) > config["dictionary_size"]:
-        base_codes = base_codes[: config["dictionary_size"]]
-
-    dictionary_ir = {
-        "payload_length": config["payload_length"],
-        "minimum_hamming_distance": config["minimum_hamming_distance"],
-        "dictionary_size": len(base_codes),
-        "canonical_sampling_points": canonical_sampling_points,
-        "base_codes": base_codes,
-        "_provenance": {
-            "source_uri": url,
-            "commit_hash": COMMIT_HASH,
-            "cv2_version": "N/A",
-            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "script_version": SCRIPT_VERSION,
-        },
-    }
-
-    out_dir = os.path.join(os.path.dirname(__file__), "..", "..", "data", "dictionaries")
-    os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, f"{family_name}.json")
-    with open(out_path, "w") as f:
-        json.dump(dictionary_ir, f, indent=2)
-    print(f"Wrote {out_path}")
+    if args.all:
+        for family in FAMILIES:
+            extractor.extract(family)
+    elif args.family:
+        extractor.extract(args.family)
+    else:
+        parser.print_help()
 
 
 if __name__ == "__main__":
-    for family, config in FAMILIES.items():
-        extract_umich(family, config)
+    main()

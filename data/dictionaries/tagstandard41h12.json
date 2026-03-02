@@ -2288,8 +2288,7 @@
   "_provenance": {
     "source_uri": "https://raw.githubusercontent.com/AprilRobotics/apriltag/master/tagStandard41h12.c",
     "commit_hash": "master",
-    "cv2_version": "N/A",
-    "timestamp": "2026-03-01T23:02:24.386497Z",
-    "script_version": "1.0.1"
+    "timestamp": "2026-03-02T01:36:12.567779Z",
+    "script_version": "2.0.1"
   }
 }
