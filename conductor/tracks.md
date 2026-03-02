@@ -4,5 +4,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Modernize pyproject.toml build system**
+- [x] **Track: Modernize pyproject.toml build system**
 *Link: [./tracks/modernize_build_20260302/](./tracks/modernize_build_20260302/)*
