@@ -7,10 +7,7 @@
 #![allow(clippy::return_self_not_must_use)]
 
 use crate::config::TagFamily;
-use crate::dictionaries::{
-    APRILTAG_16H5, APRILTAG_36H11, APRILTAG_41H12, ARUCO_4X4_50, ARUCO_4X4_100, ARUCO_16H5,
-    ARUCO_36H11,
-};
+use crate::dictionaries::get_dictionary;
 use rand::Rng;
 
 /// A placement of a tag in a scene.
@@ -109,15 +106,7 @@ impl SceneBuilder {
             let center_y = rng.gen_range(half_s + margin..self.height as f64 - half_s - margin);
             let rotation_rad = rng.gen_range(0.0..2.0 * std::f64::consts::PI);
 
-            let dict = match family {
-                TagFamily::AprilTag36h11 => &*APRILTAG_36H11,
-                TagFamily::AprilTag16h5 => &*APRILTAG_16H5,
-                TagFamily::AprilTag41h12 => &*APRILTAG_41H12,
-                TagFamily::Aruco36h11 => &*ARUCO_36H11,
-                TagFamily::Aruco16h5 => &*ARUCO_16H5,
-                TagFamily::ArUco4x4_50 => &*ARUCO_4X4_50,
-                TagFamily::ArUco4x4_100 => &*ARUCO_4X4_100,
-            };
+            let dict = get_dictionary(family);
 
             let id = rng.gen_range(0..dict.len() as u32);
 
@@ -161,15 +150,7 @@ impl SceneBuilder {
     }
 
     fn draw_tag(&self, data: &mut [u8], tag: &TagPlacement) {
-        let dict = match tag.family {
-            TagFamily::AprilTag36h11 => &*APRILTAG_36H11,
-            TagFamily::AprilTag16h5 => &*APRILTAG_16H5,
-            TagFamily::AprilTag41h12 => &*APRILTAG_41H12,
-            TagFamily::Aruco36h11 => &*ARUCO_36H11,
-            TagFamily::Aruco16h5 => &*ARUCO_16H5,
-            TagFamily::ArUco4x4_50 => &*ARUCO_4X4_50,
-            TagFamily::ArUco4x4_100 => &*ARUCO_4X4_100,
-        };
+        let dict = get_dictionary(tag.family);
 
         let dim = dict.dimension;
         let bits = dict.get_code(tag.id as u16).unwrap_or(0);

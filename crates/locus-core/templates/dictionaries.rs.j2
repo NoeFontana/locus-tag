@@ -23,6 +23,7 @@ pub(crate) const POINTS_{{ dict.enum_name|upper }}: &[(f64, f64)] = &[
 
 pub(crate) const DICT_{{ dict.enum_name|upper }}: TagDictionary = TagDictionary {
     payload_length: {{ dict.payload_length }},
+    dimension: {{ dict.dimension }},
     min_hamming: {{ dict.minimum_hamming_distance }},
     num_codes_per_rotation: {{ dict.dictionary_size }},
     codes: CODES_{{ dict.enum_name|upper }},

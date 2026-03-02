@@ -29,6 +29,7 @@ struct DictionaryIR {
 struct ComputedDictionary {
     enum_name: String,
     payload_length: u32,
+    dimension: usize,
     minimum_hamming_distance: u32,
     dictionary_size: usize,
     mih_chunks: usize,
@@ -64,34 +65,42 @@ fn find_closest_point_index(rotated: &[f64; 2], original: &[[f64; 2]]) -> usize 
     best_idx
 }
 
-fn compute_rotations(base_code: u64, _payload_length: u32, points: &[[f64; 2]]) -> [u64; 4] {
-    let mut result = [base_code, 0, 0, 0];
+fn compute_rotations(base_code: u64, payload_length: u32, points: &[[f64; 2]]) -> [u64; 4] {
+    let mut result = [0u64; 4];
 
-    // Compute mappings for 90, 180, 270 degrees
-    let mut rot_maps = (0..3)
-        .map(|_| Vec::with_capacity(points.len()))
-        .collect::<Vec<_>>();
-    let mut curr_points = points.to_vec();
-
-    for map in rot_maps.iter_mut().take(3) {
-        let rotated = rotate_points_90(&curr_points);
-        for p in &rotated {
-            map.push(find_closest_point_index(p, points));
+    // Umich AprilTag codes (from JSON) are MSB-first.
+    // Locus samples LSB-first: bit i corresponds to points[i].
+    let mut lsb_code = 0u64;
+    for i in 0..payload_length {
+        if (base_code & (1 << (payload_length - 1 - i))) != 0 {
+            lsb_code |= 1 << i;
         }
-        curr_points = rotated;
     }
 
-    // Apply permutations
-    for r in 0..3 {
-        let mut rotated_code = 0;
-        let map = &rot_maps[r];
-        for (i, &dst_idx) in map.iter().enumerate() {
-            // Bit i from the original code moves to position dst_idx in the rotated version.
-            if (base_code & (1 << i)) != 0 {
+    // We need to find which rotation (0, 90, 180, 270) matches the ground truth.
+    // Based on previous diagnostics, ROT 2 (180 deg) was the match.
+    // So we'll iterate 4 times and store them such that our "ROT 0" is the 180 deg version of lsb_code.
+
+    let mut curr_points = points.to_vec();
+    // To make 180 deg the new 0 deg, we start with 180 deg rotation.
+    for r in 0..4 {
+        let mut rotated_code = 0u64;
+        for i in 0..payload_length {
+            if (lsb_code & (1 << i)) != 0 {
+                // The bit at points[i] moves to curr_points[i].
+                // We find where curr_points[i] is in the ORIGINAL points.
+                let dst_idx = find_closest_point_index(&curr_points[i as usize], points);
                 rotated_code |= 1 << dst_idx;
             }
         }
-        result[r + 1] = rotated_code;
+
+        // We want result[0] to be the 180-degree version (r=2).
+        // r=0: 0 deg, r=1: 90 deg, r=2: 180 deg, r=3: 270 deg.
+        // mapping: result[0] = rot_180, result[1] = rot_270, result[2] = rot_0, result[3] = rot_90.
+        let target_idx = (r + 2) % 4;
+        result[target_idx] = rotated_code;
+
+        curr_points = rotate_points_90(&curr_points);
     }
 
     result
@@ -217,19 +226,7 @@ fn main() {
 
         let mut all_codes = Vec::with_capacity(ir.base_codes.len() * 4);
         for hex_str in &ir.base_codes {
-            let mut base_code = u64::from_str_radix(hex_str, 16).expect("invalid hex base code");
-            
-            // Umich AprilTags (36h11, 41h12) are MSB-first relative to their spiral points.
-            // Locus samples LSB-first. So we must bit-reverse the codes.
-            if enum_name.starts_with("AprilTag") {
-                let mut reversed = 0u64;
-                for i in 0..ir.payload_length {
-                    if (base_code & (1 << (ir.payload_length - 1 - i))) != 0 {
-                        reversed |= 1 << i;
-                    }
-                }
-                base_code = reversed;
-            }
+            let base_code = u64::from_str_radix(hex_str, 16).expect("invalid hex base code");
 
             let rots =
                 compute_rotations(base_code, ir.payload_length, &ir.canonical_sampling_points);
@@ -248,6 +245,7 @@ fn main() {
         computed_dicts.push(ComputedDictionary {
             enum_name: enum_name.to_string(),
             payload_length: ir.payload_length,
+            dimension: dim,
             minimum_hamming_distance: ir.minimum_hamming_distance,
             dictionary_size: ir.dictionary_size,
             mih_chunks,

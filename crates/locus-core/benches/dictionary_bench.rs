@@ -4,7 +4,8 @@
 //! Run with `cargo bench --bench dictionary_bench`.
 
 use divan::Bencher;
-use locus_core::dictionaries::{APRILTAG_36H11, ARUCO_4X4_50};
+use locus_core::config::TagFamily;
+use locus_core::dictionaries::get_dictionary;
 
 fn main() {
     divan::main();
@@ -12,78 +13,84 @@ fn main() {
 
 #[divan::bench]
 fn bench_36h11_exact(bencher: Bencher) {
+    let dict = get_dictionary(TagFamily::AprilTag36h11);
     // Pick a code from the middle of the dictionary
-    let code_idx = 300;
-    let code = APRILTAG_36H11.get_code(code_idx).unwrap();
+    let code_idx = 300usize;
+    let code = dict.get_code(code_idx as u16).unwrap();
 
     bencher.bench_local(move || {
         // Exact match (max_hamming = 0) should hit the HashMap
-        divan::black_box(APRILTAG_36H11.decode(code, 0))
+        divan::black_box(dict.decode(code, 0))
     });
 }
 
 #[divan::bench]
 fn bench_36h11_exact_rotated(bencher: Bencher) {
-    let code_idx = 300;
-    let code = APRILTAG_36H11.get_code(code_idx).unwrap();
-    // Rotate it once
-    let code = locus_core::dictionaries::rotate90(code, 6);
+    let dict = get_dictionary(TagFamily::AprilTag36h11);
+    let code_idx = 300usize;
+    // Get the 90-degree rotated code directly from the dictionary
+    let code = dict.codes[code_idx * 4 + 1];
 
     bencher.bench_local(move || {
         // Rotated match means it will miss the first HashMap lookup but hit subsequent ones
         // TagDictionary tries 4 rotations for exact match
-        divan::black_box(APRILTAG_36H11.decode(code, 0))
+        divan::black_box(dict.decode(code, 0))
     });
 }
 
 #[divan::bench]
 fn bench_36h11_hamming_1(bencher: Bencher) {
-    let code_idx = 300;
-    let code = APRILTAG_36H11.get_code(code_idx).unwrap();
+    let dict = get_dictionary(TagFamily::AprilTag36h11);
+    let code_idx = 300usize;
+    let code = dict.get_code(code_idx as u16).unwrap();
     // Flip 1 bit (at pos 0)
     let noisy = code ^ 1;
 
     bencher.bench_local(move || {
         // Hamming 1 means linear scan of all 587 codes * 4 rotations
-        divan::black_box(APRILTAG_36H11.decode(noisy, 1))
+        divan::black_box(dict.decode(noisy, 1))
     });
 }
 
 #[divan::bench]
 fn bench_36h11_hamming_2(bencher: Bencher) {
-    let code_idx = 300;
-    let code = APRILTAG_36H11.get_code(code_idx).unwrap();
+    let dict = get_dictionary(TagFamily::AprilTag36h11);
+    let code_idx = 300usize;
+    let code = dict.get_code(code_idx as u16).unwrap();
     // Flip 2 bits
     let noisy = code ^ 3;
 
-    bencher.bench_local(move || divan::black_box(APRILTAG_36H11.decode(noisy, 2)));
+    bencher.bench_local(move || divan::black_box(dict.decode(noisy, 2)));
 }
 
 #[divan::bench]
 fn bench_aruco_exact(bencher: Bencher) {
-    let code_idx = 25;
-    let code = ARUCO_4X4_50.get_code(code_idx).unwrap();
+    let dict = get_dictionary(TagFamily::ArUco4x4_50);
+    let code_idx = 25usize;
+    let code = dict.get_code(code_idx as u16).unwrap();
 
-    bencher.bench_local(move || divan::black_box(ARUCO_4X4_50.decode(code, 0)));
+    bencher.bench_local(move || divan::black_box(dict.decode(code, 0)));
 }
 
 #[divan::bench]
 fn bench_aruco_hamming_1(bencher: Bencher) {
-    let code_idx = 25;
-    let code = ARUCO_4X4_50.get_code(code_idx).unwrap();
+    let dict = get_dictionary(TagFamily::ArUco4x4_50);
+    let code_idx = 25usize;
+    let code = dict.get_code(code_idx as u16).unwrap();
     // Flip 1 bit
     let noisy = code ^ 1;
 
     bencher.bench_local(move || {
         // Smaller dictionary (50 codes) -> faster linear scan
-        divan::black_box(ARUCO_4X4_50.decode(noisy, 1))
+        divan::black_box(dict.decode(noisy, 1))
     });
 }
 
 #[divan::bench]
 fn bench_rejection(bencher: Bencher) {
+    let dict = get_dictionary(TagFamily::AprilTag36h11);
     // Random bits unlikely to be a valid tag
     let noise = 0xAAAA_AAAA_AAAA_AAAA;
 
-    bencher.bench_local(move || divan::black_box(APRILTAG_36H11.decode(noise, 1)));
+    bencher.bench_local(move || divan::black_box(dict.decode(noise, 1)));
 }

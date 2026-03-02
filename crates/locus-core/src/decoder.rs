@@ -1280,7 +1280,7 @@ mod tests {
             let dict = crate::dictionaries::get_dictionary(config::TagFamily::AprilTag36h11);
 
             // Get the correctly geometrically rotated code directly from our generated dictionaries
-            let mut test_bits = dict.codes[(id_idx as usize * 4) + rotation];
+            let mut test_bits = dict.codes[(id_idx * 4) + rotation];
 
             // Flip bits
             test_bits ^= 1 << flip1;

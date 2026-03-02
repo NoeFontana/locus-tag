@@ -10,6 +10,8 @@
 pub struct TagDictionary {
     /// Maximum number of bits (e.g., 36 for 36h11, 41 for 41h12).
     pub payload_length: u32,
+    /// Grid dimension (e.g., 6 for 6x6).
+    pub dimension: usize,
     /// Minimum hamming distance of the family.
     pub min_hamming: u32,
     /// Number of distinct rotation invariant codes
@@ -202,5 +204,3 @@ pub fn get_dictionary(family: crate::config::TagFamily) -> &'static TagDictionar
         crate::config::TagFamily::ArUco4x4_100 => &DICT_ARUCO4X4_100,
     }
 }
-
-
