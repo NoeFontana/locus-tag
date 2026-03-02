@@ -15,6 +15,7 @@ from .locus import (
     detect_tags,
     detect_tags_with_stats,
     dummy_detect,
+    init_tracy,
 )
 from .locus import Detector as _RustDetector
 
@@ -229,4 +230,5 @@ __all__ = [
     "dummy_detect",
     "debug_threshold",
     "debug_segmentation",
+    "init_tracy",
 ]

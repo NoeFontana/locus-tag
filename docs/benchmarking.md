@@ -44,44 +44,69 @@ Locus supports running regressions against large-scale datasets hosted on the Hu
    cargo test --release --test regression_icra2020 -- regression_hub_datasets --nocapture
    ```
 
-### Logic-Specific Benchs
-For fine-grained benchmarking of specific components (e.g., thresholding, segmentation), use the built-in benches:
+### Logic-Specific Benchs (Micro-benchmarking)
+For fine-grained benchmarking of specific components, we use **Divan**. These are located in `crates/locus-core/benches`.
+
 ```bash
+# Run all micro-benchmarks
 cargo bench
+
+# Run specific micro-benchmark (e.g., real-world data)
+cargo bench --bench real_data_bench
 ```
 
 ---
 
 ## Python Benchmarking CLI
 
-The `scripts/locus_bench.py` tool is the central entry point for all performance evaluations.
+The `scripts/locus_bench.py` tool is the central entry point for high-level evaluations.
 
 ### Data Preparation
 Before running benchmarks, download all required datasets (AprilTag Mosaic and ICRA 2020):
 ```bash
-uv run python scripts/locus_bench.py prepare
+PYTHONPATH=. uv run --group bench python scripts/locus_bench.py prepare
 ```
 
 ### Real-World Evaluation
 Evaluate performance on the ICRA 2020 dataset scenarios (`forward`, `circle`):
 ```bash
 # Basic run on Locus
-uv run python scripts/locus_bench.py run real --scenarios forward
+PYTHONPATH=. uv run --group bench python scripts/locus_bench.py run real --scenarios forward
 
 # Compare against OpenCV and AprilTag 3
-uv run python scripts/locus_bench.py run real --scenarios forward --compare
+PYTHONPATH=. uv run --group bench python scripts/locus_bench.py run real --scenarios forward --compare
 ```
 
-### Synthetic Benchmarking
-Test how the detector scales with the number of tags in the image:
+### Regression Tracking (Baselines)
+You can save a "Golden Baseline" and compare current performance against it:
+
 ```bash
-uv run python scripts/locus_bench.py run synthetic --targets 1,10,50,100 --iterations 50
+# Save a baseline
+PYTHONPATH=. uv run --group bench python scripts/locus_bench.py run --save-baseline my_baseline.json real --scenarios forward
+
+# Compare current run against baseline
+PYTHONPATH=. uv run --group bench python scripts/locus_bench.py run --baseline my_baseline.json real --scenarios forward
 ```
 
-### Bottleneck Profiling
-Identify which pipeline stage (Threshold, Segmentation, Quad Extraction, Decoding) is the bottleneck for a given workload:
+### Deep Profiling (Tracy)
+Locus supports high-fidelity profiling using the [Tracy Profiler](https://github.com/wolfpld/tracy).
+
+1. **Rebuild with Tracy support**:
+   ```bash
+   uv run maturin develop -r -F tracy
+   ```
+2. **Start the Tracy GUI client**.
+3. **Run benchmark with profiling flag**:
+   ```bash
+   # Add --profile to any 'run' command
+   PYTHONPATH=. uv run --group bench python scripts/locus_bench.py run --profile real --limit 5
+   ```
+   *Note: On some Linux systems, you may need `TRACY_NO_INVARIANT_CHECK=1` if your CPU doesn't support invariant TSC.*
+
+### Bottleneck Analysis
+Identify which pipeline stage (Threshold, Segmentation, Quad Extraction, Decoding) is the bottleneck:
 ```bash
-uv run python scripts/locus_bench.py profile --targets 100
+PYTHONPATH=. uv run --group bench python scripts/locus_bench.py profile --targets 100
 ```
 
 ---
