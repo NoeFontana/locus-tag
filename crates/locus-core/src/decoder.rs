@@ -1436,13 +1436,10 @@ mod tests {
         ) {
             let decoder = AprilTag36h11;
             let orig_id = id_idx as u16;
-            let orig_code = decoder.get_code(orig_id).expect("valid ID");
+            let dict = crate::dictionaries::get_dictionary(config::TagFamily::AprilTag36h11);
 
-            // Apply rotation
-            let mut test_bits = orig_code;
-            for _ in 0..rotation {
-                test_bits = rotate90(test_bits, 6);
-            }
+            // Get the correctly geometrically rotated code directly from our generated dictionaries
+            let mut test_bits = dict.codes[(id_idx as usize * 4) + rotation];
 
             // Flip bits
             test_bits ^= 1 << flip1;
