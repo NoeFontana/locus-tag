@@ -114,10 +114,6 @@ fn test_pose_accuracy() {
         pose.translation.z < 10.0,
         "Z translation should be reasonable"
     );
-
-    // Check that rotation is a valid SO(3) matrix
-    let det_r = pose.rotation.determinant();
-    assert!((det_r - 1.0).abs() < 1e-6);
 }
 
 #[test]

@@ -94,7 +94,7 @@ impl SceneBuilder {
         for _ in 0..100 {
             let (min_s, max_s) = size_range;
             let size = rng.gen_range(min_s..max_s);
-            let half_s = size / 2.0;
+            let half_diag = size * 0.7071 + 2.0; // Half diagonal + small margin
             // Ensure some margin from edges
             let margin = 10.0;
             if self.width as f64 <= size + margin * 2.0 || self.height as f64 <= size + margin * 2.0
@@ -102,8 +102,8 @@ impl SceneBuilder {
                 continue;
             }
 
-            let center_x = rng.gen_range(half_s + margin..self.width as f64 - half_s - margin);
-            let center_y = rng.gen_range(half_s + margin..self.height as f64 - half_s - margin);
+            let center_x = rng.gen_range(half_diag + margin..self.width as f64 - half_diag - margin);
+            let center_y = rng.gen_range(half_diag + margin..self.height as f64 - half_diag - margin);
             let rotation_rad = rng.gen_range(0.0..2.0 * std::f64::consts::PI);
 
             let dict = get_dictionary(family);
@@ -168,8 +168,8 @@ impl SceneBuilder {
         let min_y = (tag.center_y - qz_size).max(0.0) as usize;
         let max_y = (tag.center_y + qz_size).min(self.height as f64 - 1.0) as usize;
 
-        // Use samples = 1 for perfectly sharp corners in benchmarks/tests
-        let samples = 1;
+        // Use samples = 2 for better anti-aliasing in benchmarks/tests
+        let samples = 2;
 
         for y in min_y..=max_y {
             for x in min_x..=max_x {
@@ -204,12 +204,24 @@ impl SceneBuilder {
                                     || igy == 0
                                     || igy == (total_dim as i32 - 1)
                                 {
-                                    0
+                                    0u32
                                 } else {
-                                    let ix = igx - 1;
-                                    let iy = igy - 1;
-                                    let bit_idx = iy as usize * dim + ix as usize;
-                                    if (bits >> bit_idx) & 1 != 0 { 255 } else { 0 }
+                                    // Map (igx, igy) to bit index using decoder's points
+                                    let decoder = crate::decoder::family_to_decoder(tag.family);
+                                    let points = decoder.sample_points();
+                                    let mut bit_val = 0u8;
+                                    let d_f = total_dim as f64;
+                                    for (i, p) in points.iter().enumerate() {
+                                        let b_gx = ((p.0 + 1.0) * d_f / 2.0 - 0.5).round() as i32;
+                                        let b_gy = ((p.1 + 1.0) * d_f / 2.0 - 0.5).round() as i32;
+                                        if b_gx == igx && b_gy == igy {
+                                            if (bits >> i) & 1 != 0 {
+                                                bit_val = 255;
+                                            }
+                                            break;
+                                        }
+                                    }
+                                    bit_val as u32
                                 };
                                 total_intensity += color;
                             } else {
