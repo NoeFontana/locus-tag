@@ -5,11 +5,11 @@
     - [x] Remove `[project.scripts]` table from `pyproject.toml`.
     - [x] Remove `[project.optional-dependencies]` table.
     - [x] Clean up `uv.lock` if necessary.
-- [ ] Task: Implement PEP 735 Dependency Groups.
-    - [ ] Define `[dependency-groups]` in `pyproject.toml`.
-    - [ ] Migrate `dev`, `lint`, `types`, `bench`, `docs`, and `etl` requirements.
-    - [ ] Pin core runtime dependencies in `[project.dependencies]`.
-- [ ] Task: Align Maturin and PyPI Metadata.
+- [x] Task: Implement PEP 735 Dependency Groups. 91dd0d2
+    - [x] Define `[dependency-groups]` in `pyproject.toml`.
+    - [x] Migrate `dev`, `lint`, `types`, `bench`, `docs`, and `etl` requirements.
+    - [x] Pin core runtime dependencies in `[project.dependencies]`.
+- [~] Task: Align Maturin and PyPI Metadata.
     - [ ] Configure `tool.maturin.compatibility = "abi3"`.
     - [ ] Update PyPI classifiers (Rust, Typing Stubs).
 - [ ] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md)
