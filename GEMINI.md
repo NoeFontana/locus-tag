@@ -24,6 +24,6 @@ Before finalyzing any task, commit, or pull request:
 * **Testing Standards:** Follow the `Testing Requirements` in `conductor/workflow.md`.
 
 ## 3. Project Identity
-* **Name:** Locus (`locus-vision`)
+* **Name:** Locus (`locus-tag`)
 * **Mission:** Production-grade, memory-safe, high-performance fiducial marker detector.
 * **Core Goal:** Minimize latency for robotics and autonomous systems.
