@@ -3,7 +3,7 @@
 When modifying the `locus-core` crate, prioritize mechanical sympathy, safety, and strict alignment with the project's data-oriented architecture.
 
 ## 1. Core Principles
-* **Data-Oriented Architecture:** Respect the cache-locality rules defined in [Architecture](../architecture.md). Design data structures as flat arrays rather than nested pointers.
+* **Data-Oriented Architecture:** Respect the cache-locality rules defined in [Architecture](../explanation/architecture.md). Design data structures as flat arrays rather than nested pointers.
 * **Allocation Policy:** Adhere strictly to the zero-allocation hot-loop rule. Utilize `bumpalo` for all ephemeral frame data (see [Constraints](constraints.md)).
 * **Geometric Math:** Use `nalgebra::SMatrix` for small, stack-allocated matrices and vectors. Avoid dynamic `DMatrix` unless absolutely necessary outside the hot path.
 * **Zero Panics:** Ensure no code path can panic. Rely on `Result` types and `#![deny(clippy::unwrap_used)]`.

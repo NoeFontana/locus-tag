@@ -60,8 +60,20 @@ plugins:
 
 nav:
   - Home: index.md
-  - User Guide: guide.md
-  - Architecture: architecture.md
-  - Coordinate Systems: coordinates.md
-  - Benchmarking: benchmarking.md
-  - API Reference: api.md
+  - Tutorials:
+      - tutorials/guide.md
+  - How-To Guides:
+      - how-to/add_dictionary.md
+  - Explanation:
+      - explanation/architecture.md
+      - explanation/coordinates.md
+      - benchmarking.md
+  - Reference:
+      - reference/api.md
+  - Engineering (Internal):
+      - engineering/core.md
+      - engineering/constraints.md
+      - engineering/quality-gates.md
+      - engineering/rust-style.md
+      - engineering/python-style.md
+      - engineering/general-style.md
