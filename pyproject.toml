@@ -13,6 +13,8 @@ license = {text = "MIT OR Apache-2.0"}
 classifiers = [
     "License :: OSI Approved :: MIT License",
     "License :: OSI Approved :: Apache Software License",
+    "Typing :: Typed",
+    "Programming Language :: Rust",
 ]
 dependencies = ["numpy>=1.24"]
  
@@ -21,6 +23,7 @@ features = ["pyo3/extension-module"]
 module-name = "locus"
 python-source = "crates/locus-py"
 manifest-path = "crates/locus-py/Cargo.toml"
+compatibility = "abi3"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
