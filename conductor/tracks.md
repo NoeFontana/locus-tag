@@ -10,5 +10,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Adopt the Diátaxis Framework for documentation**
+- [x] **Track: Adopt the Diátaxis Framework for documentation**
 *Link: [./tracks/diataxis_20260302/](./tracks/diataxis_20260302/)*
