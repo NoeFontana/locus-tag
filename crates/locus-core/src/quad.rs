@@ -238,16 +238,8 @@ pub fn extract_quads_with_config(
                     return Some(Detection {
                         id: label,
                         center: [
-                            (corners[0].x
-                                + corners[1].x
-                                + corners[2].x
-                                + corners[3].x)
-                                / 4.0,
-                            (corners[0].y
-                                + corners[1].y
-                                + corners[2].y
-                                + corners[3].y)
-                                / 4.0,
+                            (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4.0,
+                            (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4.0,
                         ],
                         corners: [
                             [corners[0].x, corners[0].y],

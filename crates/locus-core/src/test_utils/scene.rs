@@ -94,7 +94,7 @@ impl SceneBuilder {
         for _ in 0..100 {
             let (min_s, max_s) = size_range;
             let size = rng.gen_range(min_s..max_s);
-            let half_diag = size * 0.7071 + 2.0; // Half diagonal + small margin
+            let half_diag = size * std::f64::consts::FRAC_1_SQRT_2 + 2.0; // Half diagonal + small margin
             // Ensure some margin from edges
             let margin = 10.0;
             if self.width as f64 <= size + margin * 2.0 || self.height as f64 <= size + margin * 2.0
@@ -102,8 +102,10 @@ impl SceneBuilder {
                 continue;
             }
 
-            let center_x = rng.gen_range(half_diag + margin..self.width as f64 - half_diag - margin);
-            let center_y = rng.gen_range(half_diag + margin..self.height as f64 - half_diag - margin);
+            let center_x =
+                rng.gen_range(half_diag + margin..self.width as f64 - half_diag - margin);
+            let center_y =
+                rng.gen_range(half_diag + margin..self.height as f64 - half_diag - margin);
             let rotation_rad = rng.gen_range(0.0..2.0 * std::f64::consts::PI);
 
             let dict = get_dictionary(family);
@@ -212,9 +214,9 @@ impl SceneBuilder {
                                     let mut bit_val = 0u8;
                                     let d_f = total_dim as f64;
                                     for (i, p) in points.iter().enumerate() {
-                                        let b_gx = ((p.0 + 1.0) * d_f / 2.0 - 0.5).round() as i32;
-                                        let b_gy = ((p.1 + 1.0) * d_f / 2.0 - 0.5).round() as i32;
-                                        if b_gx == igx && b_gy == igy {
+                                        let grid_x = ((p.0 + 1.0) * d_f / 2.0 - 0.5).round() as i32;
+                                        let grid_y = ((p.1 + 1.0) * d_f / 2.0 - 0.5).round() as i32;
+                                        if grid_x == igx && grid_y == igy {
                                             if (bits >> i) & 1 != 0 {
                                                 bit_val = 255;
                                             }
