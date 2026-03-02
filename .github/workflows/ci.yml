@@ -19,29 +19,44 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  UV_SYSTEM_PYTHON: 0 # Ensure uv uses its own managed Python
 
 jobs:
-  validate-data:
-    name: Validate Dictionary Schema
+  validate-project:
+    name: Validate Project (Data & Lock)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
+          enable-cache: true
           python-version: '3.11'
-      - name: Run validation
-        run: uv run --with jsonschema python scripts/validate_dict_schemas.py --schema crates/locus-core/tests/schemas/dictionary.schema.json data/dictionaries/*.json
+          
+      - name: Check uv.lock
+        run: uv lock --check
+        
+      - name: Run dictionary validation
+        run: |
+          uv run --frozen --with jsonschema python scripts/validate_dict_schemas.py \
+            --schema crates/locus-core/tests/schemas/dictionary.schema.json \
+            data/dictionaries/*.json
 
   lint-rust:
     name: Lint Rust
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.92.0"
+          toolchain: "1.92.0" # Matches project target or latest stable
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+          
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
       
       - name: Check Formatting
         shell: bash
@@ -69,9 +84,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@nextest
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        
+      - name: Install Tools (Nextest, Insta)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nextest,cargo-insta
 
       - name: Run Tests
         shell: bash
@@ -95,8 +118,6 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo test --workspace
-          cargo install cargo-insta
           cargo insta test --check 2>&1 | tee test-rust-insta.log
 
       - name: Upload Logs on Failure
@@ -113,19 +134,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
       
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      
+      - name: Set up environment
+        run: uv sync --frozen --group dev
+        
       - name: Ruff Check
         shell: bash
         run: |
           set -o pipefail
-          uv run --extra dev ruff check . 2>&1 | tee ruff-check.log
+          uv run ruff check . 2>&1 | tee ruff-check.log
       
       - name: Ruff Format
         shell: bash
         run: |
           set -o pipefail
-          uv run --extra dev ruff format --check . 2>&1 | tee ruff-format.log
+          uv run ruff format --check . 2>&1 | tee ruff-format.log
 
       - name: Upload Logs on Failure
         if: failure()
@@ -137,24 +165,31 @@ jobs:
           retention-days: 1
 
   test-python:
-    name: Test Python
+    name: Test Python (${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ${{ github.event_name == 'pull_request' && fromJSON('["3.11"]') || fromJSON('["3.10", "3.11", "3.12"]') }}
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
+          enable-cache: true
           python-version: ${{ matrix.python-version }}
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+          
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Rust + Python Cache
+        uses: Swatinem/rust-cache@v2
 
-      - name: Install dependencies
-        run: |
-          uv sync --extra validation --extra benchmark
+      - name: Setup dynamic environment
+        run: uv sync --frozen --all-extras --dev
 
-      - name: Build and install
+      - name: Build bridge (maturin develop)
         run: uv run maturin develop --release --manifest-path crates/locus-py/Cargo.toml
 
       - name: Run tests
