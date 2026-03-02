@@ -19,7 +19,8 @@ uv run ruff format .
 uv run mypy .
 
 # 4. Unit Testing
-cargo nextest run --all-features
+# Always use --release for Rust tests as debug performance is non-representative.
+cargo nextest run --release --all-features
 uv run pytest
 ```
 
