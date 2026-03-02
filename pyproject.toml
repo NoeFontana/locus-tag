@@ -16,33 +16,6 @@ classifiers = [
 ]
 dependencies = ["numpy"]
  
-[project.scripts]
-locus-bench = "scripts.bench.run:main"
-locus-viz = "scripts.debug.visualize:main"
-
-[project.optional-dependencies]
-validation = ["pydantic>=2.0"]
-benchmark = [
-    "opencv-python-headless",
-    "pupil-apriltags",
-    "tqdm",
-    "huggingface-hub",
-    "rerun-sdk",
-    "datasets[vision]",
-]
-docs = [
-    "mkdocs>=1.5.0",
-    "mkdocs-material>=9.5.0",
-    "mkdocstrings[python]>=0.24.0",
-]
-dev = [
-    "ruff>=0.14.14",
-    "pyrefly>=0.50.1",
-    "types-tqdm",
-    "pandas-stubs",
-    "pytest>=7.0.0",
-]
-
 [tool.maturin]
 features = ["pyo3/extension-module"]
 module-name = "locus"
