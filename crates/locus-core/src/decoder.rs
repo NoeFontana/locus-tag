@@ -1356,7 +1356,7 @@ mod tests {
         for id in 0..dict.len() as u16 {
             let code = dict.get_code(id).expect("valid ID");
             let result = decoder.decode(code);
-            assert!(result.is_some(), "Failed to decode 41h12 ID {}", id);
+            assert!(result.is_some(), "Failed to decode 41h12 ID {id}");
             let (id_out, hamming_out, rot_out) = result.unwrap();
             assert_eq!(id_out, u32::from(id));
             assert_eq!(hamming_out, 0);
