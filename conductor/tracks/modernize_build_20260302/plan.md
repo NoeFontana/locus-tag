@@ -20,8 +20,8 @@
     - [x] Replace `pip install .[dev]` with `uv sync`.
 - [x] Task: Migrate Documentation Workflow (`docs.yml`). d062327
     - [x] Update to use `uv sync --group docs`.
-- [~] Task: Migrate Release Workflow (`release.yml`).
-    - [ ] Ensure wheel building uses the new `uv`-based environment.
+- [x] Task: Migrate Release Workflow (`release.yml`). 69d432e
+    - [x] Ensure wheel building uses the new `uv`-based environment.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
 
 ## Phase 3: Documentation & Final Alignment
