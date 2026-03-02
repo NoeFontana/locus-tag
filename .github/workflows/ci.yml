@@ -141,7 +141,7 @@ jobs:
           enable-cache: true
       
       - name: Set up environment
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --all-extras --dev
         
       - name: Ruff Check
         shell: bash
