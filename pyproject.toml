@@ -16,14 +16,13 @@ classifiers = [
     "Typing :: Typed",
     "Programming Language :: Rust",
 ]
-dependencies = ["numpy>=1.24"]
+dependencies = ["numpy>=1.24", "pydantic>=2.0"]
  
 [tool.maturin]
 features = ["pyo3/extension-module"]
 module-name = "locus"
 python-source = "crates/locus-py"
 manifest-path = "crates/locus-py/Cargo.toml"
-compatibility = "abi3"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
@@ -54,6 +53,8 @@ bench = [
     "opencv-python-headless>=4.0.0",
     "rerun-sdk>=0.9.0",
     "matplotlib>=3.0.0",
+    "datasets[vision]",
+    "pupil-apriltags",
 ]
 docs = [
     "mkdocs>=1.5.0",
