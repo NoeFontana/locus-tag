@@ -15,10 +15,10 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md)
 
 ## Phase 2: CI/CD Pipeline Migration
-- [ ] Task: Migrate Main CI Workflow (`ci.yml`).
-    - [ ] Update setup steps to use `uv sync --group dev --group lint --group types`.
-    - [ ] Replace `pip install .[dev]` with `uv sync`.
-- [ ] Task: Migrate Documentation Workflow (`docs.yml`).
+- [x] Task: Migrate Main CI Workflow (`ci.yml`). 32b6192
+    - [x] Update setup steps to use `uv sync --group dev --group lint --group types`.
+    - [x] Replace `pip install .[dev]` with `uv sync`.
+- [~] Task: Migrate Documentation Workflow (`docs.yml`).
     - [ ] Update to use `uv sync --group docs`.
 - [ ] Task: Migrate Release Workflow (`release.yml`).
     - [ ] Ensure wheel building uses the new `uv`-based environment.
