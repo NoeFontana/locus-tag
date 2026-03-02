@@ -9,10 +9,10 @@ Run these commands locally to ensure your code is ready for CI:
 ```bash
 # 1. Rust Formatting & Linting
 cargo fmt --all
-cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 # 2. Python Formatting & Linting
-uv run ruff check .
+uv run ruff check . --fix
 uv run ruff format .
 
 # 3. Static Type Checking (Python)
@@ -36,4 +36,15 @@ cargo test --release --test regression_icra2020 -- --test-threads=1
 
 # 3. Snapshot Verification (if output changes are intentional)
 cargo insta test --review
+
+# 4. Documentation Quality
+Ensure the documentation builds correctly and is complete.
+
+```bash
+# 1. Sync dependencies for documentation
+uv sync --extra docs
+
+# 2. Build the MkDocs static site
+uv run mkdocs build
+```
 ```
