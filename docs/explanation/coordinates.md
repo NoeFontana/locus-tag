@@ -11,7 +11,7 @@ Locus follows the standard image coordinate system used by OpenCV and the `UMich
 - **Y-axis**: Increases from top to bottom.
 
 ### Pixel Center Convention
-Locus uses the **pixel-center at 0.5** convention. 
+Locus uses the **pixel-center at 0.5** convention.
 - The center of the top-left pixel is $(0.5, 0.5)$.
 - The top-left corner of the image (the boundary of the first pixel) is $(0.0, 0.0)$.
 

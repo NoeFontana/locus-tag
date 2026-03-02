@@ -63,4 +63,3 @@ uv sync --group docs
 # 2. Build the MkDocs static site
 uv run --group docs mkdocs build
 ```
-```

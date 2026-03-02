@@ -10,13 +10,13 @@ Locus is built as a hybrid Rust/Python system. The core logic resides in a high-
 flowchart TD
     User[User / Application] -->|Images| PyBindings["Python Bindings<br/>(locus-py)"]
     PyBindings -->|PyReadonlyArray2| RustCore["Rust Core<br/>(locus-core)"]
-    
+
     subgraph RustCore
         Pipeline["Detection Pipeline"]
         Memory["Arena Memory<br/>(Bumpalo)"]
         SIMD["SIMD Kernels<br/>(Multiversion)"]
     end
-    
+
     RustCore -->|Detections| PyBindings
     PyBindings -->|"List[Detection]"| User
 ```
@@ -36,20 +36,20 @@ sequenceDiagram
 
     App->>Det: detect(image)
     activate Det
-    
+
     Note over Det: 0. Pre-allocation & Upscaling
     Det->>Det: Arena Reset
-    
+
     Note over Det: 1. Preprocessing
     Det->>Thresh: compute_integral_image()
     Det->>Thresh: adaptive_threshold()
     Thresh-->>Det: Binarized Image
-    
+
     Note over Det: 2. Segmentation
     Det->>Seg: label_components()
     Note right of Seg: Union-Find (Flat Array)
     Seg-->>Det: Component Labels
-    
+
     Note over Det: 3. Quad Extraction
     loop For each component
         Det->>Quad: extract_quad()
@@ -58,7 +58,7 @@ sequenceDiagram
         Quad->>Quad: Sub-pixel Refinement (Gradient)
     end
     Quad-->>Det: Quad Candidates
-    
+
     Note over Det: 4. Decoding
     loop For each candidate
         Det->>Decode: Homography Sampling
@@ -66,7 +66,7 @@ sequenceDiagram
         Decode->>Decode: Bit/LLR Extraction (Bilinear)
         Decode->>Decode: Error Correction (Hamming/Soft-ML)
     end
-    
+
     Note over Det: 5. Pose Estimation (Optional)
     opt If Intrinsics Provided
         Det->>Pose: estimate_tag_pose()
@@ -94,14 +94,14 @@ classDiagram
         -Vec~Box~TagDecoder~~ decoders
         +detect(image) Vec~Detection~
     }
-    
+
     class DetectorConfig {
         +usize threshold_tile_size
         +bool enable_bilateral
         +f64 quad_min_edge_score
         +...
     }
-    
+
     class TagDecoder {
         <<interface>>
         +decode(bits) Option~id, hamming~
@@ -123,15 +123,15 @@ classDiagram
     class SoftStrategy {
         +Code = SoftCode (stack-allocated)
     }
-    
+
     class AprilTag36h11 {
         +decode()
     }
-    
+
     class ArUco4x4 {
         +decode()
     }
-    
+
     class Detection {
         +u32 id
         +Point center
@@ -163,18 +163,18 @@ flowchart LR
     subgraph Python ["Python Heap"]
         PyArr["NumPy Array<br/>(u8 Pixels)"]
     end
-    
+
     subgraph Interface ["FFI Boundary"]
         View["ImageView<br/>(Ptr + Stride)"]
     end
-    
+
     subgraph Rust ["Rust Internal Memory"]
         Arena["Bump Arena<br/>(Reset Per Frame)"]
-        
+
         subgraph Static ["Pooled Buffers"]
             Upscale["Upscale Buffer"]
         end
-        
+
         subgraph Ephemeral ["Arena Allocated"]
             Contours
             QuadCandidates
@@ -202,12 +202,12 @@ sequenceDiagram
 
     Frame->>Arena: arena.reset()
     Note over Arena: All prior allocations freed (O(1))
-    
+
     Frame->>Arena: alloc(binarized_image)
     Frame->>Arena: alloc(integral_image)
     Frame->>Arena: alloc(contours)
     Arena->>Allocs: Pointer bumps only
-    
+
     Note over Frame: Pipeline runs...
     Frame->>Frame: Return Vec<Detection>
 ```
@@ -283,7 +283,7 @@ struct MyCustomDecoder;
 impl TagDecoder for MyCustomDecoder {
     fn name(&self) -> &str { "CustomTags" }
     fn dimension(&self) -> usize { 4 } // 4x4 grid
-    
+
     // ... implementation ...
 }
 
@@ -303,7 +303,7 @@ flowchart LR
         CoreLib -->|Maturin| PyMod["Python Module<br/>(locus.abi3.so)"]
         PyStub["Type Stubs<br/>(.pyi)"] -->|Maturin| Wheel
     end
-    
+
     subgraph Dist ["Distribution"]
         PyMod --> Wheel[".whl File"]
         Wheel -->|pip install| Env["User Environment"]
