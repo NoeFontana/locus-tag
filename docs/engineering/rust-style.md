@@ -17,5 +17,5 @@ When modifying the `locus-core` crate, prioritize mechanical sympathy, safety, a
 * **Docstrings:** All public interfaces must be documented. We compile with `#![warn(missing_docs)]`. Provide code examples in docstrings where applicable.
 
 ## 4. Verification Workflow
-* Always build and test in `--release` mode when evaluating algorithmic changes, as debug performance is not representative of SIMD paths.
+* **Always use `--release`:** Build and test exclusively in `--release` mode for all verification and algorithmic changes. Debug performance is not representative of SIMD paths and can lead to false regressions.
 * Run `cargo clippy` frequently and resolve all warnings before committing.

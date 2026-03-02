@@ -1,7 +1,7 @@
 # Core Identity & Engineering Principles
 
 ## 1. Project Identity
-* **Name:** Locus (`locus-vision`)
+* **Name:** Locus (`locus-tag`)
 * **Mission:** Deliver a production-grade, memory-safe, state-of-the-art fiducial marker detector.
 * **Target Audience:** Robotics, Autonomous Vehicles (AV), and Perception Engineers who require bounded latency and high reliability.
 
