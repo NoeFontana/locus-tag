@@ -16,6 +16,11 @@ pub(crate) const MIH_DATA_{{ dict.enum_name|upper }}: &[u32] = &[
     {% endfor %}
 ];
 
+pub(crate) const POINTS_{{ dict.enum_name|upper }}: &[(f64, f64)] = &[
+    {% for p in dict.canonical_sampling_points %}({{ "{:.6}"|format(p[0]) }}, {{ "{:.6}"|format(p[1]) }}),
+    {% endfor %}
+];
+
 pub(crate) const DICT_{{ dict.enum_name|upper }}: TagDictionary = TagDictionary {
     payload_length: {{ dict.payload_length }},
     min_hamming: {{ dict.minimum_hamming_distance }},

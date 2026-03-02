@@ -976,7 +976,7 @@ impl TagDecoder for AprilTag36h11 {
     }
 
     fn sample_points(&self) -> &[(f64, f64)] {
-        &crate::dictionaries::APRILTAG_36H11_POINTS
+        crate::dictionaries::POINTS_APRILTAG36H11
     }
 
     fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
@@ -1029,7 +1029,7 @@ impl TagDecoder for AprilTag41h12 {
     }
 
     fn sample_points(&self) -> &[(f64, f64)] {
-        &crate::dictionaries::APRILTAG_41H12_POINTS
+        crate::dictionaries::POINTS_APRILTAG41H12
     }
 
     fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
@@ -1081,7 +1081,7 @@ impl TagDecoder for ArUco4x4_50 {
     }
 
     fn sample_points(&self) -> &[(f64, f64)] {
-        &crate::dictionaries::ARUCO4X4_50_POINTS
+        crate::dictionaries::POINTS_ARUCO4X4_50
     }
 
     fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
@@ -1133,7 +1133,7 @@ impl TagDecoder for ArUco4x4_100 {
     }
 
     fn sample_points(&self) -> &[(f64, f64)] {
-        &crate::dictionaries::ARUCO4X4_100_POINTS
+        crate::dictionaries::POINTS_ARUCO4X4_100
     }
 
     fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {

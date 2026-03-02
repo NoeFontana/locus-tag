@@ -49,23 +49,22 @@ pub fn generate_synthetic_test_image(
         for x in 0..(dim + 2) {
             if x == 0 || x == dim + 1 || y == 0 || y == dim + 1 {
                 draw_cell(&mut data, canvas_size, start_x, start_y, x, y, cell_size, 0);
-            } else {
-                let row = y - 1;
-                let col = x - 1;
-                let bit = (code >> (row * dim + col)) & 1;
-                let val = if bit != 0 { 255 } else { 0 };
-                draw_cell(
-                    &mut data,
-                    canvas_size,
-                    start_x,
-                    start_y,
-                    x,
-                    y,
-                    cell_size,
-                    val,
-                );
             }
         }
+    }
+
+    // Draw data bits using decoder's canonical sampling points
+    let points = decoder.sample_points();
+    let d_f = (dim + 2) as f64;
+    for (i, p) in points.iter().enumerate() {
+        // Map canonical [-1, 1] back to grid coordinates [0, dim+2]
+        // p.x = (gx + 0.5) * 2 / d - 1  => gx = (p.x + 1) * d / 2 - 0.5
+        let gx = ((p.0 + 1.0) * d_f / 2.0 - 0.5).round() as usize;
+        let gy = ((p.1 + 1.0) * d_f / 2.0 - 0.5).round() as usize;
+
+        let bit = (code >> i) & 1;
+        let val = if bit != 0 { 255 } else { 0 };
+        draw_cell(&mut data, canvas_size, start_x, start_y, gx, gy, cell_size, val);
     }
 
     if noise_sigma > 0.0 {
