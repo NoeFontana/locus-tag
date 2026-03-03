@@ -148,7 +148,7 @@ classDiagram
 
 ## Design Principles
 
-1.  **Zero-Copy Integration**: Utilizes the Python Buffer Protocol to access NumPy arrays directly, avoiding pixel data duplication. If the input array is non-contiguous, Locus performs a transparent auto-conversion (copy) with a performance warning to maintain compatibility.
+1.  **Zero-Copy Integration**: Utilizes the Python Buffer Protocol to access NumPy arrays directly, avoiding pixel data duplication. Locus strictly enforces a zero-copy boundary for high-performance methods; if an input array is non-contiguous (e.g., sliced columns or Fortran-layout), the system throws a `ValueError` rather than performing a hidden, performance-killing copy. Users are directed to use `.ascontiguousarray()` to resolve contiguity explicitly.
 2.  **Thread Concurrency (GIL-Free)**: Releases the Python Global Interpreter Lock (GIL) during the heavy perception pipeline, allowing true multi-threaded execution and preventing blocking in concurrent Python applications.
 3.  **Arena Memory**: Per-frame scratchpad (`bumpalo`) eliminates `malloc`/`free` overhead in the hot path.
 4.  **Cache Locality**: Algorithms (thresholding, CCL) process data in linear, cache-friendly passes.

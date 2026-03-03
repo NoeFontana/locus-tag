@@ -12,8 +12,10 @@ Locus achieves its latency targets by strictly avoiding the system allocator (`m
 ## 2. FFI & Zero-Copy Boundaries
 The Rust-Python boundary must be invisible to performance.
 * **Image Data:**
-  * ❌ **Forbidden:** Copying or cloning NumPy arrays into Rust `Vec<u8>`.
+  * ❌ **Forbidden:** Copying or cloning NumPy arrays into Rust `Vec<u8>`. 
+  * ❌ **Forbidden:** Passing non-contiguous views (stride_x != 1) to high-performance detection methods.
   * ✅ **Required:** Use `PyReadonlyArray2<u8>` to leverage the Python Buffer Protocol. Validate strides early and once.
+  * ✅ **Required:** Throw a `ValueError` for non-contiguous arrays to force users to use `.ascontiguousarray()`.
 
 ## 3. Unsafe Rust
 * ❌ **Forbidden:** Naked `unsafe` blocks.
