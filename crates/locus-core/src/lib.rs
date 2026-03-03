@@ -79,14 +79,7 @@ pub use crate::decoder::family_to_decoder;
 pub use crate::image::ImageView;
 use bumpalo::Bump;
 use rayon::prelude::*;
-use std::cell::RefCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
-
-thread_local! {
-    // Use a small initial capacity (e.g., 4KB) to avoid system allocation overhead for small workloads.
-    // The arena will still grow if needed.
-    static DECODE_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(4096));
-}
 
 /// Result of a tag detection.
 #[derive(Clone, Debug, Default)]
@@ -600,7 +593,7 @@ impl Detector {
         let results: Vec<_> = candidates
             .into_par_iter()
             .map(|cand| {
-                DECODE_ARENA.with_borrow_mut(|arena| {
+                crate::decoder::DECODE_ARENA.with_borrow_mut(|arena| {
                     arena.reset();
                     let (det, failed_contrast, failed_hamming, best_h, bits) =
                         Self::decode_single_candidate::<S>(

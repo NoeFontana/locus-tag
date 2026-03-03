@@ -13,6 +13,13 @@ use crate::simd::roi::RoiCache;
 use bumpalo::Bump;
 use multiversion::multiversion;
 use nalgebra::{SMatrix, SVector};
+use std::cell::RefCell;
+
+thread_local! {
+    // Use a small initial capacity (e.g., 4KB) to avoid system allocation overhead for small workloads.
+    // The arena will still grow if needed.
+    pub(crate) static DECODE_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(4096));
+}
 
 /// A 3x3 Homography matrix.
 pub struct Homography {
@@ -1132,13 +1139,71 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
         return None;
     }
 
-    // Quadrant-based Adaptive Thresholding
-    // Combines global Otsu (robust for bimodal) with local quadrant averages (robust for shadows)
-    let global_threshold = compute_otsu_threshold(&intensities[..n]);
+    Some(S::from_intensities(
+        &intensities[..n],
+        &compute_adaptive_thresholds(&intensities[..n], points),
+    ))
+}
+
+/// Sample the bit grid using Structure of Arrays (SoA) data.
+pub fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
+    img: &crate::image::ImageView,
+    arena: &Bump,
+    corners: &[Point2f],
+    homography: &Matrix3x3,
+    decoder: &(impl TagDecoder + ?Sized),
+) -> Option<S::Code> {
+    // Compute AABB for RoiCache
+    let mut min_x = f32::MAX;
+    let mut min_y = f32::MAX;
+    let mut max_x = f32::MIN;
+    let mut max_y = f32::MIN;
+    for p in corners {
+        min_x = min_x.min(p.x);
+        min_y = min_y.min(p.y);
+        max_x = max_x.max(p.x);
+        max_y = max_y.max(p.y);
+    }
+
+    let roi = RoiCache::new(
+        img,
+        arena,
+        (min_x.floor() as i32).max(0) as usize,
+        (min_y.floor() as i32).max(0) as usize,
+        (max_x.ceil() as i32).max(0) as usize,
+        (max_y.ceil() as i32).max(0) as usize,
+    );
+
+    // Convert Matrix3x3 to Homography (internal use).
+    // Nalgebra stores in column-major order, which matches our data layout.
+    let mut h_mat = SMatrix::<f64, 3, 3>::identity();
+    for (i, val) in homography.data.iter().enumerate() {
+        h_mat.as_mut_slice()[i] = f64::from(*val);
+    }
+    let homography_obj = Homography { h: h_mat };
+
+    let points = decoder.sample_points();
+    let mut intensities = [0.0f64; 64];
+    let n = points.len().min(64);
+
+    if !sample_grid_values_optimized(img, &homography_obj, &roi, points, &mut intensities, n) {
+        return None;
+    }
+
+    Some(S::from_intensities(
+        &intensities[..n],
+        &compute_adaptive_thresholds(&intensities[..n], points),
+    ))
+}
+
+/// Internal helper to compute adaptive thresholds for a grid of intensities.
+fn compute_adaptive_thresholds(intensities: &[f64], points: &[(f64, f64)]) -> [f64; 64] {
+    let n = intensities.len();
+    let global_threshold = compute_otsu_threshold(intensities);
 
     let mut quad_sums = [0.0; 4];
     let mut quad_counts = [0; 4];
-    for (i, &p) in points.iter().take(n).enumerate() {
+    for (i, p) in points.iter().take(n).enumerate() {
         let qi = if p.0 < 0.0 {
             usize::from(p.1 >= 0.0)
         } else {
@@ -1149,8 +1214,7 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
     }
 
     let mut thresholds = [0.0f64; 64];
-
-    for (i, &p) in points.iter().take(n).enumerate() {
+    for (i, p) in points.iter().take(n).enumerate() {
         let qi = if p.0 < 0.0 {
             usize::from(p.1 >= 0.0)
         } else {
@@ -1163,11 +1227,9 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
         };
 
         // Blend global Otsu and local mean (0.7 / 0.3 weighting is common for fiducials)
-        let effective_threshold = 0.7 * global_threshold + 0.3 * quad_avg;
-        thresholds[i] = effective_threshold;
+        thresholds[i] = 0.7 * global_threshold + 0.3 * quad_avg;
     }
-
-    Some(S::from_intensities(&intensities[..n], &thresholds[..n]))
+    thresholds
 }
 
 /// Sample the bit grid from the image (Legacy/Hard wrapper).
@@ -1198,6 +1260,89 @@ pub fn rotate90(bits: u64, dim: usize) -> u64 {
         }
     }
     res
+}
+
+/// Decode all active candidates in the batch using the Structure of Arrays (SoA) layout.
+///
+/// This phase executes SIMD bilinear interpolation and Hamming error correction.
+/// If a candidate fails decoding, its `status_mask` is flipped to `FailedDecode`.
+pub fn decode_batch_soa(
+    batch: &mut crate::batch::DetectionBatch,
+    n: usize,
+    img: &crate::image::ImageView,
+    decoders: &[Box<dyn TagDecoder + Send + Sync>],
+    config: &crate::config::DetectorConfig,
+) {
+    match config.decode_mode {
+        crate::config::DecodeMode::Hard => {
+            decode_batch_soa_generic::<crate::strategy::HardStrategy>(
+                batch, n, img, decoders, config,
+            );
+        }
+        crate::config::DecodeMode::Soft => {
+            decode_batch_soa_generic::<crate::strategy::SoftStrategy>(
+                batch, n, img, decoders, config,
+            );
+        }
+    }
+}
+
+fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
+    batch: &mut crate::batch::DetectionBatch,
+    n: usize,
+    img: &crate::image::ImageView,
+    decoders: &[Box<dyn TagDecoder + Send + Sync>],
+    config: &crate::config::DetectorConfig,
+) {
+    use crate::batch::CandidateState;
+    use rayon::prelude::*;
+
+    // We collect results into a temporary Vec to avoid unsafe parallel writes to the batch.
+    let results: Vec<_> = (0..n)
+        .into_par_iter()
+        .map(|i| {
+            DECODE_ARENA.with_borrow_mut(|arena| {
+                arena.reset();
+
+                let corners = &batch.corners[i * 4..i * 4 + 4];
+                let homography = &batch.homographies[i];
+
+                let mut best_h = u32::MAX;
+                let mut best_code = None;
+
+                for decoder in decoders {
+                    if let Some(code) =
+                        sample_grid_soa::<S>(img, arena, corners, homography, decoder.as_ref())
+                    {
+                        if let Some((_id, hamming, _rot)) =
+                            S::decode(&code, decoder.as_ref(), config.max_hamming_error)
+                        {
+                            if hamming < best_h {
+                                best_h = hamming;
+                                best_code = Some(code);
+                            }
+                        }
+                    }
+                }
+
+                if let Some(code) = best_code {
+                    (
+                        CandidateState::Valid,
+                        S::to_debug_bits(&code),
+                        best_h as f32,
+                    )
+                } else {
+                    (CandidateState::FailedDecode, 0, 0.0)
+                }
+            })
+        })
+        .collect();
+
+    for (i, (state, payload, error_rate)) in results.into_iter().enumerate() {
+        batch.status_mask[i] = state;
+        batch.payloads[i] = payload;
+        batch.error_rates[i] = error_rate;
+    }
 }
 
 /// A trait for decoding binary payloads from extracted tags.
