@@ -7,6 +7,7 @@ Locus achieves its latency targets by strictly avoiding the system allocator (`m
 * **Hot Loop (`detect()`):**
   * ❌ **Forbidden:** `Vec::new()`, `Box::new()`, `HashMap::new()`, or any implicit heap allocations.
   * ✅ **Required:** Use the `bumpalo::Bump` arena for all ephemeral per-frame data.
+  * ✅ **Required:** Adhere to the [DetectionBatch (SoA) Contract](./detection-batch-contract.md) to ensure zero-allocation performance and cache efficiency.
   * ✅ **Allowed:** Stack-allocated structures like `SmallVec`, `arrayvec`, or fixed-size arrays `[T; N]`.
 
 ## 2. FFI & Zero-Copy Boundaries

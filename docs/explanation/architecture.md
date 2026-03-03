@@ -159,7 +159,7 @@ classDiagram
 
 ## Memory Architecture
 
-Locus minimizes latency through explicit memory management, almost entirely avoiding the system allocator during detection.
+Locus minimizes latency through explicit memory management, almost entirely avoiding the system allocator during detection. The system follows the [DetectionBatch (SoA) Contract](../engineering/detection-batch-contract.md) to ensure zero-allocation performance and cache efficiency.
 
 ```mermaid
 flowchart LR
