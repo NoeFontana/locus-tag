@@ -4,6 +4,7 @@ from typing import cast
 import cv2
 import locus
 import numpy as np
+import pytest
 
 
 def test_zero_copy_ingestion():
@@ -30,14 +31,14 @@ def test_zero_copy_ingestion():
     img_sliced = img[:, ::2]
     assert not img_sliced.flags["C_CONTIGUOUS"]
 
-    # Now handles non-contiguous arrays with auto-conversion
-    detections = locus.detect_tags(img_sliced)
-    assert isinstance(detections, list)
+    # Now handles non-contiguous arrays by raising ValueError (Zero-Copy Enforcement)
+    with pytest.raises(ValueError, match="Array must be C-contiguous"):
+        locus.detect_tags(img_sliced)
 
-    # 4. F-contiguous array (Now handles auto-conversion)
+    # 4. F-contiguous array (Strict enforcement)
     img_f = np.asfortranarray(img)
-    detections = locus.detect_tags(img_f)
-    assert isinstance(detections, list)
+    with pytest.raises(ValueError, match="Array must be C-contiguous"):
+        locus.detect_tags(img_f)
 
 
 def test_detector_api():
