@@ -567,11 +567,11 @@ pub fn refine_poses_soa(
 
     for (i, pose_data) in poses.into_iter().enumerate() {
         if let Some(data) = pose_data {
-            batch.poses[i] = Pose6D { data, _pad: 0.0 };
+            batch.poses[i] = Pose6D { data, padding: 0.0 };
         } else {
             batch.poses[i] = Pose6D {
                 data: [0.0; 7],
-                _pad: 0.0,
+                padding: 0.0,
             };
         }
     }

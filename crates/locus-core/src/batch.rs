@@ -18,7 +18,7 @@ pub struct Matrix3x3 {
     /// The matrix elements in row-major or column-major format (internal use).
     pub data: [f32; 9],
     /// Padding to ensure 64-byte size (cache line) and alignment for SIMD.
-    pub _pad: [f32; 7],
+    pub padding: [f32; 7],
 }
 
 /// A 6D pose representing translation and rotation (unit quaternion).
@@ -28,7 +28,7 @@ pub struct Pose6D {
     /// Translation (x, y, z) and Rotation as a unit quaternion (x, y, z, w).
     pub data: [f32; 7],
     /// Padding to 32-byte alignment.
-    pub _pad: f32,
+    pub padding: f32,
 }
 
 /// The lifecycle state of a candidate in the detection pipeline.
@@ -69,24 +69,24 @@ pub struct DetectionBatch {
 impl DetectionBatch {
     /// Creates a new DetectionBatch with all fields initialized to zero (Empty state).
     #[must_use]
+    #[allow(clippy::large_stack_arrays)]
     pub fn new() -> Self {
-        Self {
+        *Box::new(Self {
             corners: [Point2f { x: 0.0, y: 0.0 }; MAX_CANDIDATES * 4],
             homographies: [Matrix3x3 {
                 data: [0.0; 9],
-                _pad: [0.0; 7],
+                padding: [0.0; 7],
             }; MAX_CANDIDATES],
             ids: [0; MAX_CANDIDATES],
             payloads: [0; MAX_CANDIDATES],
             error_rates: [0.0; MAX_CANDIDATES],
             poses: [Pose6D {
                 data: [0.0; 7],
-                _pad: 0.0,
+                padding: 0.0,
             }; MAX_CANDIDATES],
             status_mask: [CandidateState::Empty; MAX_CANDIDATES],
-        }
+        })
     }
-
     /// Returns the maximum capacity of the batch.
     #[must_use]
     pub fn capacity(&self) -> usize {

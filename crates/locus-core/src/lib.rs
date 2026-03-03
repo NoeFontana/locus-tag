@@ -214,8 +214,10 @@ impl DetectionBatch {
                 id: self.ids[i],
                 center,
                 corners,
+                #[allow(clippy::cast_sign_loss)]
                 hamming: self.error_rates[i] as u32,
-                rotation: 0,          // Rotation not currently tracked separately in SoA
+                rotation: 0,         // Rotation not currently tracked separately in SoA
+
                 decision_margin: 0.0, // Decision margin not currently tracked in SoA
                 bits: self.payloads[i],
                 pose,

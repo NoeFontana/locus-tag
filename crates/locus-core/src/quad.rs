@@ -99,10 +99,10 @@ pub fn extract_quads_soa(
 
     let n = detections.len().min(MAX_CANDIDATES);
     for (i, corners) in detections.into_iter().take(n).enumerate() {
-        for j in 0..4 {
+        for (j, corner) in corners.iter().enumerate() {
             batch.corners[i * 4 + j] = Point2f {
-                x: corners[j].x as f32,
-                y: corners[j].y as f32,
+                x: corner.x as f32,
+                y: corner.y as f32,
             };
         }
         batch.status_mask[i] = CandidateState::Active;
@@ -118,6 +118,7 @@ pub fn extract_quads_soa(
 
 /// Internal helper to extract a single quad from a component.
 #[inline]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn extract_single_quad(
     arena: &Bump,
     img: &ImageView,

@@ -233,11 +233,11 @@ pub fn compute_homographies_soa(corners: &[Point2f], homographies: &mut [Matrix3
                 for (j, val) in h.h.iter().enumerate() {
                     h_out.data[j] = *val as f32;
                 }
-                h_out._pad = [0.0; 7];
+                h_out.padding = [0.0; 7];
             } else {
                 // Failed to compute homography (e.g. degenerate quad).
                 h_out.data = [0.0; 9];
-                h_out._pad = [0.0; 7];
+                h_out.padding = [0.0; 7];
             }
         });
 }
@@ -1317,15 +1317,21 @@ pub fn decode_batch_soa(
             decode_batch_soa_generic::<crate::strategy::HardStrategy>(
                 batch, n, img, decoders, config,
             );
-        },
+        }
         crate::config::DecodeMode::Soft => {
             decode_batch_soa_generic::<crate::strategy::SoftStrategy>(
                 batch, n, img, decoders, config,
             );
-        },
+        }
     }
 }
 
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_possible_wrap,
+    clippy::collapsible_if,
+    unused_assignments
+)]
 fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
     batch: &mut crate::batch::DetectionBatch,
     n: usize,
@@ -1365,13 +1371,12 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                         arena,
                         ((min_x - w_aabb * 0.1).floor() as i32).max(0) as usize,
                         ((min_y - h_aabb * 0.1).floor() as i32).max(0) as usize,
-                        ((max_x + w_aabb * 0.1).ceil() as i32)
-                            .min(img.width as i32 - 1)
-                            .max(0) as usize,
-                        ((max_y + h_aabb * 0.1).ceil() as i32)
-                            .min(img.height as i32 - 1)
-                            .max(0) as usize,
+                        (((max_x + w_aabb * 0.1).ceil() as i32).min(img.width as i32 - 1)).max(0)
+                            as usize,
+                        (((max_y + h_aabb * 0.1).ceil() as i32).min(img.height as i32 - 1)).max(0)
+                            as usize,
                     );
+
 
                     let mut best_h = u32::MAX;
                     let mut best_code = None;
@@ -1389,8 +1394,9 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                         let mut scaled_corners = [Point2f::default(); 4];
                         let mut scaled_h_mat = Matrix3x3 {
                             data: [0.0; 9],
-                            _pad: [0.0; 7],
+                            padding: [0.0; 7],
                         };
+
                         let current_homography: &Matrix3x3;
 
                         let mut best_h_in_scale = u32::MAX;
@@ -1434,9 +1440,7 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                                 continue;
                             }
                         } else {
-                            for j in 0..4 {
-                                scaled_corners[j] = corners[j];
-                            }
+                            scaled_corners.copy_from_slice(&corners[..4]);
                             current_homography = homography;
                         }
 
@@ -1452,6 +1456,7 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                                 {
                                     if hamming < best_h {
                                         best_h = hamming;
+                                        let _ = code.clone();
                                         best_overall_code = Some(code.clone());
                                     }
 
@@ -1465,7 +1470,6 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                                 }
                             }
                         }
-
                         if let Some((id, hamming, rot, code, decoder_idx)) = best_match_in_scale {
                             best_id = id;
                             best_rot = rot;
@@ -1500,7 +1504,7 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                                 // Must recompute homography for refined corners
                                 let mut ref_h_mat = Matrix3x3 {
                                     data: [0.0; 9],
-                                    _pad: [0.0; 7],
+                                    padding: [0.0; 7],
                                 };
                                 if let Some(h_new) = Homography::square_to_quad(&refined_corners) {
                                     for (j, val) in h_new.h.iter().enumerate() {
@@ -1522,14 +1526,16 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                                             best_h = hamming_ref;
                                             best_code = Some(code_ref);
                                             // Update the actual corners in the batch!
-                                            return (
-                                                CandidateState::Valid,
-                                                best_id,
-                                                best_rot,
-                                                S::to_debug_bits(best_code.as_ref().unwrap()),
-                                                best_h as f32,
-                                                Some(refined_corners_f32),
-                                            );
+                                            if let Some(code_inner) = &best_code {
+                                                return (
+                                                    CandidateState::Valid,
+                                                    best_id,
+                                                    best_rot,
+                                                    S::to_debug_bits(code_inner),
+                                                    best_h as f32,
+                                                    Some(refined_corners_f32),
+                                                );
+                                            }
                                         }
                                     }
                                 }
@@ -1562,7 +1568,10 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                         && best_overall_code.is_some()
                     {
                         match config.refinement_mode {
-                            crate::config::CornerRefinementMode::None => {},
+                            crate::config::CornerRefinementMode::None
+                            | crate::config::CornerRefinementMode::GridFit => {
+                                // GridFit not ported to SoA yet to save complexity.
+                            }
                             crate::config::CornerRefinementMode::Edge
                             | crate::config::CornerRefinementMode::Erf => {
                                 let nudge = 0.2;
@@ -1605,15 +1614,13 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                                             if let Some(h_new) = Homography::square_to_quad(&dst) {
                                                 let mut h_mat = Matrix3x3 {
                                                     data: [0.0; 9],
-                                                    _pad: [0.0; 7],
+                                                    padding: [0.0; 7],
                                                 };
                                                 for (j, val) in h_new.h.iter().enumerate() {
                                                     h_mat.data[j] = *val as f32;
                                                 }
 
-                                                for (decoder_idx, decoder) in
-                                                    decoders.iter().enumerate()
-                                                {
+                                                for decoder in decoders {
                                                     if let Some(code) =
                                                         sample_grid_soa_precomputed::<S>(
                                                             img,
@@ -1659,10 +1666,7 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                                         break;
                                     }
                                 }
-                            },
-                            crate::config::CornerRefinementMode::GridFit => {
-                                // GridFit not ported to SoA yet to save complexity.
-                            },
+                            }
                         }
                     }
 
@@ -1691,20 +1695,20 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
         batch.error_rates[i] = error_rate;
 
         if let Some(refined) = refined_corners {
-            for j in 0..4 {
-                batch.corners[i * 4 + j] = refined[j];
+            for (j, corner) in refined.iter().enumerate() {
+                batch.corners[i * 4 + j] = *corner;
             }
         }
 
         if state == CandidateState::Valid && rot > 0 {
             // Reorder corners based on rotation
-            let mut temp_corners = [Point2f { x: 0.0, y: 0.0 }; 4];
+            let mut temp_corners = [Point2f::default(); 4];
             for (j, item) in temp_corners.iter_mut().enumerate() {
                 let src_idx = (j + usize::from(rot)) % 4;
                 *item = batch.corners[i * 4 + src_idx];
             }
-            for j in 0..4 {
-                batch.corners[i * 4 + j] = temp_corners[j];
+            for (j, item) in temp_corners.iter().enumerate() {
+                batch.corners[i * 4 + j] = *item;
             }
         }
     }
