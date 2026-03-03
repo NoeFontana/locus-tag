@@ -69,7 +69,10 @@ pub mod strategy;
 pub mod test_utils;
 /// Adaptive thresholding implementation.
 pub mod threshold;
+/// Batched state container for Structure of Arrays (SoA) layout.
+pub mod batch;
 
+pub use crate::batch::{CandidateState, DetectionBatch, Matrix3x3, Point2f, Pose6D, MAX_CANDIDATES};
 pub use crate::config::{DetectOptions, DetectorConfig, TagFamily};
 use crate::decoder::TagDecoder;
 pub use crate::decoder::family_to_decoder;
