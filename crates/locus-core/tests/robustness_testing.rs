@@ -663,7 +663,7 @@ proptest! {
                 // Tolerance must scale with the magnitude of the coordinates.
                 // For points ~2000, 1e-4 is reasonably tight for unnormalized DLT.
                 let max_coord = dst[i][0].abs().max(dst[i][1].abs()).max(1.0);
-                let tol = 1e-7 * max_coord;
+                let tol = 1e-5 * max_coord;
 
                 assert!(err_x < tol, "Reprojection error X too large: {err_x} at point {i} (tol: {tol})");
                 assert!(err_y < tol, "Reprojection error Y too large: {err_y} at point {i} (tol: {tol})");

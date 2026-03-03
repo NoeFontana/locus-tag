@@ -12,7 +12,7 @@
 #![allow(unsafe_code)]
 
 use crate::Detection;
-use crate::batch::{CandidateState, DetectionBatch, Point2f, MAX_CANDIDATES};
+use crate::batch::{CandidateState, DetectionBatch, MAX_CANDIDATES, Point2f};
 use crate::config::DetectorConfig;
 use crate::image::ImageView;
 use crate::segmentation::LabelResult;

@@ -41,6 +41,8 @@
 //! }
 //! ```
 
+/// Batched state container for Structure of Arrays (SoA) layout.
+pub mod batch;
 /// Configuration types for the detector pipeline.
 pub mod config;
 /// Tag decoding traits and implementations.
@@ -69,10 +71,10 @@ pub mod strategy;
 pub mod test_utils;
 /// Adaptive thresholding implementation.
 pub mod threshold;
-/// Batched state container for Structure of Arrays (SoA) layout.
-pub mod batch;
 
-pub use crate::batch::{CandidateState, DetectionBatch, Matrix3x3, Point2f, Pose6D, MAX_CANDIDATES};
+pub use crate::batch::{
+    CandidateState, DetectionBatch, MAX_CANDIDATES, Matrix3x3, Point2f, Pose6D,
+};
 pub use crate::config::{DetectOptions, DetectorConfig, TagFamily};
 use crate::decoder::TagDecoder;
 pub use crate::decoder::family_to_decoder;
@@ -160,6 +162,7 @@ impl DetectionBatch {
     ///
     /// This is typically called at the FFI boundary or for backward compatibility.
     /// It only processes the first `v` candidates, which should be the valid ones.
+    #[must_use] 
     pub fn reassemble(&self, v: usize) -> Vec<Detection> {
         let mut detections = Vec::with_capacity(v);
         for i in 0..v {
@@ -212,7 +215,7 @@ impl DetectionBatch {
                 center,
                 corners,
                 hamming: self.error_rates[i] as u32,
-                rotation: 0,         // Rotation not currently tracked separately in SoA
+                rotation: 0,          // Rotation not currently tracked separately in SoA
                 decision_margin: 0.0, // Decision margin not currently tracked in SoA
                 bits: self.payloads[i],
                 pose,
