@@ -565,22 +565,9 @@ impl<'a> EdgeFitter<'a> {
 
         for k in -6..=6 {
             let offset = f64::from(k) * 0.4;
-            let mut sum_g = 0.0;
-            let mut count = 0;
             let scan_d = self.d + offset;
 
-            for py in y0..=y1 {
-                for px in x0..=x1 {
-                    let x = px as f64;
-                    let y = py as f64;
-                    let dist = self.nx * x + self.ny * y + scan_d;
-                    if dist.abs() < 1.0 {
-                        let g = self.img.sample_gradient_bilinear(x, y);
-                        sum_g += (g[0] * self.nx + g[1] * self.ny).abs();
-                        count += 1;
-                    }
-                }
-            }
+            let (sum_g, count) = project_gradients_optimized(self.img, self.nx, self.ny, x0, x1, y0, y1, scan_d);
 
             if count > 0 && sum_g > best_grad {
                 best_grad = sum_g;
@@ -597,28 +584,22 @@ impl<'a> EdgeFitter<'a> {
         let window = 2.5;
         let (x0, x1, y0, y1) = self.get_scan_bounds(window);
 
-        let mut samples = bumpalo::collections::Vec::with_capacity_in(128, arena);
-
-        for py in y0..=y1 {
-            for px in x0..=x1 {
-                let x = px as f64;
-                let y = py as f64;
-
-                let dist = self.nx * x + self.ny * y + self.d;
-                if dist.abs() > window {
-                    continue;
-                }
-
-                let t = ((x - self.p1[0]) * self.dx + (y - self.p1[1]) * self.dy)
-                    / (self.len * self.len);
-
-                if (-0.1..=1.1).contains(&t) {
-                    let val = f64::from(self.img.get_pixel(px, py));
-                    samples.push((x, y, val));
-                }
-            }
-        }
-        samples
+        collect_samples_optimized(
+            self.img,
+            self.nx,
+            self.ny,
+            self.d,
+            self.p1,
+            self.dx,
+            self.dy,
+            self.len,
+            x0,
+            x1,
+            y0,
+            y1,
+            window,
+            arena,
+        )
     }
 
     fn refine(&mut self, samples: &[(f64, f64, f64)], sigma: f64) {
@@ -659,23 +640,7 @@ impl<'a> EdgeFitter<'a> {
                 break;
             }
 
-            let mut sum_jtj = 0.0;
-            let mut sum_jt_res = 0.0;
-            let k = (b - a) / (sqrt_pi * sigma);
-
-            for &(x, y, _) in samples {
-                let dist = self.nx * x + self.ny * y + self.d;
-                let s = dist * inv_sigma;
-                if s.abs() > 3.0 {
-                    continue;
-                }
-                let val = self.img.sample_bilinear(x, y);
-                let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::quad::erf_approx(s);
-                let residual = val - model;
-                let jac = k * (-s * s).exp();
-                sum_jtj += jac * jac;
-                sum_jt_res += jac * residual;
-            }
+            let (sum_jtj, sum_jt_res) = refine_accumulate_optimized(samples, self.img, self.nx, self.ny, self.d, a, b, sigma, inv_sigma);
 
             if sum_jtj < 1e-6 {
                 break;
@@ -703,6 +668,284 @@ impl<'a> EdgeFitter<'a> {
         let y1 = (self.p1[1].max(p2_1) + window + 0.5).clamp(1.0, h_limit) as usize;
         (x0, x1, y0, y1)
     }
+}
+
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+fn project_gradients_optimized(
+    img: &crate::image::ImageView,
+    nx: f64,
+    ny: f64,
+    x0: usize,
+    x1: usize,
+    y0: usize,
+    y1: usize,
+    scan_d: f64,
+) -> (f64, usize) {
+    let mut sum_g = 0.0;
+    let mut count = 0;
+
+    for py in y0..=y1 {
+        let mut px = x0;
+        let y = py as f64;
+
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
+            unsafe {
+                use std::arch::x86_64::*;
+                let v_nx = _mm256_set1_pd(nx);
+                let v_ny = _mm256_set1_pd(ny);
+                let v_scan_d = _mm256_set1_pd(scan_d);
+                let v_y = _mm256_set1_pd(y);
+                let v_abs_mask = _mm256_set1_pd(-0.0);
+
+                while px + 4 <= x1 {
+                    let v_x = _mm256_set_pd(
+                        (px + 3) as f64,
+                        (px + 2) as f64,
+                        (px + 1) as f64,
+                        px as f64,
+                    );
+
+                    let v_dist = _mm256_add_pd(
+                        _mm256_add_pd(_mm256_mul_pd(v_nx, v_x), _mm256_mul_pd(v_ny, v_y)),
+                        v_scan_d,
+                    );
+
+                    let v_abs_dist = _mm256_andnot_pd(v_abs_mask, v_dist);
+                    let v_cmp = _mm256_cmp_pd(v_abs_dist, _mm256_set1_pd(1.0), _CMP_LT_OQ);
+                    let mask = _mm256_movemask_pd(v_cmp);
+
+                    if mask != 0 {
+                        for j in 0..4 {
+                            if (mask >> j) & 1 != 0 {
+                                let g = img.sample_gradient_bilinear((px + j) as f64, y);
+                                sum_g += (g[0] * nx + g[1] * ny).abs();
+                                count += 1;
+                            }
+                        }
+                    }
+                    px += 4;
+                }
+            }
+        }
+
+        while px <= x1 {
+            let x = px as f64;
+            let dist = nx * x + ny * y + scan_d;
+            if dist.abs() < 1.0 {
+                let g = img.sample_gradient_bilinear(x, y);
+                sum_g += (g[0] * nx + g[1] * ny).abs();
+                count += 1;
+            }
+            px += 1;
+        }
+    }
+    (sum_g, count)
+}
+
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+fn collect_samples_optimized<'a>(
+    img: &crate::image::ImageView,
+    nx: f64,
+    ny: f64,
+    d: f64,
+    p1: [f64; 2],
+    dx: f64,
+    dy: f64,
+    len: f64,
+    x0: usize,
+    x1: usize,
+    y0: usize,
+    y1: usize,
+    window: f64,
+    arena: &'a bumpalo::Bump,
+) -> bumpalo::collections::Vec<'a, (f64, f64, f64)> {
+    let mut samples = bumpalo::collections::Vec::with_capacity_in(128, arena);
+
+    for py in y0..=y1 {
+        let mut px = x0;
+        let y = py as f64;
+
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
+            unsafe {
+                use std::arch::x86_64::*;
+                let v_nx = _mm256_set1_pd(nx);
+                let v_ny = _mm256_set1_pd(ny);
+                let v_d = _mm256_set1_pd(d);
+                let v_y = _mm256_set1_pd(y);
+                let v_p1x = _mm256_set1_pd(p1[0]);
+                let v_p1y = _mm256_set1_pd(p1[1]);
+                let v_dx = _mm256_set1_pd(dx);
+                let v_dy = _mm256_set1_pd(dy);
+                let v_inv_len_sq = _mm256_set1_pd(1.0 / (len * len));
+                let v_abs_mask = _mm256_set1_pd(-0.0);
+
+                while px + 4 <= x1 {
+                    let v_x = _mm256_set_pd(
+                        (px + 3) as f64,
+                        (px + 2) as f64,
+                        (px + 1) as f64,
+                        px as f64,
+                    );
+
+                    let v_dist = _mm256_add_pd(
+                        _mm256_add_pd(_mm256_mul_pd(v_nx, v_x), _mm256_mul_pd(v_ny, v_y)),
+                        v_d,
+                    );
+                    let v_abs_dist = _mm256_andnot_pd(v_abs_mask, v_dist);
+                    let v_dist_mask = _mm256_cmp_pd(v_abs_dist, _mm256_set1_pd(window), _CMP_LE_OQ);
+
+                    let v_t = _mm256_mul_pd(
+                        _mm256_add_pd(
+                            _mm256_mul_pd(_mm256_sub_pd(v_x, v_p1x), v_dx),
+                            _mm256_mul_pd(_mm256_sub_pd(v_y, v_p1y), v_dy),
+                        ),
+                        v_inv_len_sq,
+                    );
+
+                    let v_t_mask_low = _mm256_cmp_pd(v_t, _mm256_set1_pd(-0.1), _CMP_GE_OQ);
+                    let v_t_mask_high = _mm256_cmp_pd(v_t, _mm256_set1_pd(1.1), _CMP_LE_OQ);
+
+                    let final_mask = _mm256_movemask_pd(_mm256_and_pd(
+                        v_dist_mask,
+                        _mm256_and_pd(v_t_mask_low, v_t_mask_high),
+                    ));
+
+                    if final_mask != 0 {
+                        for j in 0..4 {
+                            if (final_mask >> j) & 1 != 0 {
+                                let val = f64::from(img.get_pixel(px + j, py));
+                                samples.push(((px + j) as f64, y, val));
+                            }
+                        }
+                    }
+                    px += 4;
+                }
+            }
+        }
+
+        while px <= x1 {
+            let x = px as f64;
+            let dist = nx * x + ny * y + d;
+            if dist.abs() <= window {
+                let t = ((x - p1[0]) * dx + (y - p1[1]) * dy) / (len * len);
+                if (-0.1..=1.1).contains(&t) {
+                    let val = f64::from(img.get_pixel(px, py));
+                    samples.push((x, y, val));
+                }
+            }
+            px += 1;
+        }
+    }
+    samples
+}
+
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+fn refine_accumulate_optimized(
+    samples: &[(f64, f64, f64)],
+    img: &crate::image::ImageView,
+    nx: f64,
+    ny: f64,
+    d: f64,
+    a: f64,
+    b: f64,
+    sigma: f64,
+    inv_sigma: f64,
+) -> (f64, f64) {
+    let mut sum_jtj = 0.0;
+    let mut sum_jt_res = 0.0;
+    let sqrt_pi = std::f64::consts::PI.sqrt();
+    let k = (b - a) / (sqrt_pi * sigma);
+
+    let mut i = 0;
+
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
+        unsafe {
+            use std::arch::x86_64::*;
+            let v_nx = _mm256_set1_pd(nx);
+            let v_ny = _mm256_set1_pd(ny);
+            let v_d = _mm256_set1_pd(d);
+            let v_a = _mm256_set1_pd(a);
+            let v_b = _mm256_set1_pd(b);
+            let v_inv_sigma = _mm256_set1_pd(inv_sigma);
+            let v_k = _mm256_set1_pd(k);
+            let v_half = _mm256_set1_pd(0.5);
+            let v_one = _mm256_set1_pd(1.0);
+            let v_abs_mask = _mm256_set1_pd(-0.0);
+
+            let mut v_sum_jtj = _mm256_setzero_pd();
+            let mut v_sum_jt_res = _mm256_setzero_pd();
+
+            while i + 4 <= samples.len() {
+                let s0 = samples[i];
+                let s1 = samples[i+1];
+                let s2 = samples[i+2];
+                let s3 = samples[i+3];
+
+                let v_x = _mm256_set_pd(s3.0, s2.0, s1.0, s0.0);
+                let v_y = _mm256_set_pd(s3.1, s2.1, s1.1, s0.1);
+                let v_img_val = _mm256_set_pd(s3.2, s2.2, s1.2, s0.2);
+
+                let v_dist = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(v_nx, v_x), _mm256_mul_pd(v_ny, v_y)), v_d);
+                let v_s = _mm256_mul_pd(v_dist, v_inv_sigma);
+                
+                let v_abs_s = _mm256_andnot_pd(v_abs_mask, v_s);
+                let v_range_mask = _mm256_cmp_pd(v_abs_s, _mm256_set1_pd(3.0), _CMP_LE_OQ);
+
+                if _mm256_movemask_pd(v_range_mask) != 0 {
+                    // Simple ERF approx: erf(x) ~= sign(x) * sqrt(1 - exp(-x^2 * 4/pi))
+                    // For now, just use scalar fallback for the math inside to keep it sound,
+                    // but we could use a SIMD exp/erf here.
+                    let ss: [f64; 4] = std::mem::transmute(v_s);
+                    let iv: [f64; 4] = std::mem::transmute(v_img_val);
+                    let mm: [f64; 4] = std::mem::transmute(v_range_mask);
+
+                    for j in 0..4 {
+                        if mm[j] != 0.0 {
+                            let s_val = ss[j];
+                            let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::quad::erf_approx(s_val);
+                            let residual = iv[j] - model;
+                            let jac = k * (-s_val * s_val).exp();
+                            sum_jtj += jac * jac;
+                            sum_jt_res += jac * residual;
+                        }
+                    }
+                }
+                i += 4;
+            }
+        }
+    }
+
+    // Scalar tail
+    while i < samples.len() {
+        let (x, y, img_val) = samples[i];
+        let dist = nx * x + ny * y + d;
+        let s = dist * inv_sigma;
+        if s.abs() <= 3.0 {
+            let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::quad::erf_approx(s);
+            let residual = img_val - model;
+            let jac = k * (-s * s).exp();
+            sum_jtj += jac * jac;
+            sum_jt_res += jac * residual;
+        }
+        i += 1;
+    }
+
+    (sum_jtj, sum_jt_res)
 }
 
 /// Fit a line (nx*x + ny*y + d = 0) to an edge using the ERF intensity model.
