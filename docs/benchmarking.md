@@ -82,10 +82,10 @@ You can save a "Golden Baseline" and compare current performance against it:
 
 ```bash
 # Save a baseline
-PYTHONPATH=. uv run --group bench python scripts/locus_bench.py run --save-baseline my_baseline.json real --scenarios forward
+PYTHONPATH=. uv run --group bench python scripts/locus_bench.py run --save-baseline docs/benchmarking/baseline.json real --scenarios forward
 
 # Compare current run against baseline
-PYTHONPATH=. uv run --group bench python scripts/locus_bench.py run --baseline my_baseline.json real --scenarios forward
+PYTHONPATH=. uv run --group bench python scripts/locus_bench.py run --baseline docs/benchmarking/baseline.json real --scenarios forward
 ```
 
 ### Deep Profiling (Tracy)
