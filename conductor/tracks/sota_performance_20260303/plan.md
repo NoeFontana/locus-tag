@@ -6,7 +6,7 @@
     - [x] Document baseline latency for Hard and Soft decoding strategies.
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Research & Benchmarking (Baseline)' (Protocol in workflow.md)
 
-**Phase 2: SIMD Fast-Math & Fixed-Point Kernels**
+**Phase 2: SIMD Fast-Math & Fixed-Point Kernels [checkpoint: 750c6d2]**
 - [x] Task: Implement SIMD reciprocal estimation with Newton-Raphson. (9c01a2d)
     - [x] Create new SIMD module (e.g., `src/simd/math.rs`).
     - [x] Implement `rcp_nr` for AVX2, AVX-512, and NEON using `multiversion`.
@@ -14,13 +14,13 @@
 - [x] Task: Implement Fixed-Point (16.16) bilinear interpolation. (9c01a2d)
     - [x] Implement fixed-point weights and accumulation in SIMD.
     - [x] Add unit tests for interpolation accuracy.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: SIMD Fast-Math & Fixed-Point Kernels' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: SIMD Fast-Math & Fixed-Point Kernels' (Protocol in workflow.md)
 
 **Phase 3: Hybrid ROI Caching**
-- [ ] Task: Implement AABB extraction and ROI copying.
-    - [ ] Update `Quad` struct to compute AABB.
-    - [ ] Implement hybrid buffer allocation (Stack vs. Arena).
-    - [ ] Implement contiguous ROI copy into cached buffer.
+- [x] Task: Implement AABB extraction and ROI copying. (635cc17)
+    - [x] Update `Quad` struct to compute AABB. (Added to `Detection` instead)
+    - [x] Implement hybrid buffer allocation (Stack vs. Arena).
+    - [x] Implement contiguous ROI copy into cached buffer.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Hybrid ROI Caching' (Protocol in workflow.md)
 
 **Phase 4: Integration & Optimization**
