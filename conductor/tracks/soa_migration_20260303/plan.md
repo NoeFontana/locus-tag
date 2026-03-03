@@ -35,18 +35,18 @@
 - [x] **Task: Phase Completion Verification and Checkpointing** 90f1b0a
     - [ ] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md)
 
-## Phase 4: Pose Refinement & FFI Boundary
+## Phase 4: Pose Refinement & FFI Boundary [checkpoint: 39cfd3b]
 ### Task: Pose Refinement Partitioning
-- [ ] **Task: Write Failing Tests: Pose Refinement Partitioning**
+- [x] **Task: Write Failing Tests: Pose Refinement Partitioning** 60977d3
     - [ ] Ensure valid candidates are partitioned to the front `[0..V]` before pose computation.
-- [ ] **Task: Implement Partitioned Pose Solver**
+- [x] **Task: Implement Partitioned Pose Solver** 60977d3
     - [ ] Refactor LM solver to iterate over valid indices in the batch.
 ### Task: FFI Late Reassembly
-- [ ] **Task: Write Failing Tests: Detection Object Compatibility**
+- [x] **Task: Write Failing Tests: Detection Object Compatibility** 60977d3
     - [ ] Verify the PyO3 wrapper returns `List[Detection]` from the SoA batch.
-- [ ] **Task: Implement Python Object Reassembly Loop**
+- [x] **Task: Implement Python Object Reassembly Loop** 60977d3
     - [ ] Add the late reassembly loop in the `pyo3` binding logic.
-- [ ] **Task: Phase Completion Verification and Checkpointing**
+- [x] **Task: Phase Completion Verification and Checkpointing** 39cfd3b
     - [ ] Task: Conductor - User Manual Verification 'Phase 4' (Protocol in workflow.md)
 
 ## Phase 5: Final Performance Validation
