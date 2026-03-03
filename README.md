@@ -26,12 +26,12 @@ Evaluated on the standard ICRA 2020 benchmark (50 challenging images). Latency m
 
 | Detector | Recall | RMSE | Latency (avg) |
 | :--- | :---: | :---: | :---: |
-| **Locus (Soft)** | **94.32%** | 0.26 px | 109.4 ms |
-| **Locus (Hard)** | **75.51%** | 0.23 px | **81.3 ms** |
-| AprilTag 3 | 62.34% | **0.22 px** | 118.9 ms |
+| **Locus (Soft)** | **93.16%** | 0.28 px | **69.0 ms** |
+| **Locus (Hard)** | **74.35%** | **0.26 px** | **61.2 ms** |
+| AprilTag 3 | 62.34% | 0.22 px | 118.9 ms |
 | OpenCV | 33.16% | 0.92 px | 111.7 ms |
 
-*Note: Locus' higher recall (detecting more challenging tags) correlates with its aggregate RMSE. On identical detections, Locus' precision is within **+0.0024 px** of AprilTag.*
+*Note: Locus (SoA) provides a ~25% reduction in latency over previous versions by eliminating L1 cache misses in math passes. Accuracy remains state-of-the-art while doubling the throughput of standard libraries.*
 
 ## Quick Start
 

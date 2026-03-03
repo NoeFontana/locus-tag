@@ -78,7 +78,11 @@ PYTHONPATH=. uv run --group bench python scripts/locus_bench.py run real --scena
 ```
 
 ### Regression Tracking (Baselines)
-You can save a "Golden Baseline" and compare current performance against it:
+You can save a "Golden Baseline" and compare current performance against it.
+
+Historical Performance Profiles:
+- [SoA Migration Profile (2026-03-03)](./benchmarking/soa_migration_20260303.md)
+- [Initial Baseline (2026-03-02)](./benchmarking/baseline_20260302.md)
 
 ```bash
 # Save a baseline
