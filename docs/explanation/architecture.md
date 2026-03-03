@@ -228,7 +228,7 @@ Targets a **low latency** budget for 1080p frames on modern CPUs.
 | :--- | :--- | :--- | :--- |
 | **Preprocessing** | $O(N)$ | ~8.3 ms | Adaptive thresholding; 1080p. |
 | **Segmentation** | $O(N)$ | ~3.7 ms | Single-pass Union-Find; 1080p. |
-| **Quad Extraction** | $O(K \cdot M)$ | ~22.4 ms | Contour tracing & refinement; Real image. |
+| **Quad Extraction** | $O(K \cdot M)$ | ~22.4 ms | ICRA 2020 image; many candidates + Erf refinement. |
 | **Decoding (Hard)** | $O(Q)$ | ~0.8 ms | 200 candidates; Bit-LUT based. |
 | **Decoding (Soft)** | $O(Q \cdot \log D)$ | ~0.2 ms | 200 candidates; MIH sub-linear search. |
 
