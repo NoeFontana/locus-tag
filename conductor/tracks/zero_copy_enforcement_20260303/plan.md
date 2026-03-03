@@ -1,10 +1,10 @@
 # Implementation Plan: Zero-Copy Pointer Enforcement (Project 1)
 
-## Phase 1: Performance Baseline & Test Environment
+## Phase 1: Performance Baseline & Test Environment [checkpoint: d2f22fd]
 - [x] Task: Establish performance baseline for contiguous vs. non-contiguous arrays. 4feee69
     - [x] Run `python tests/test_ffi_overhead.py` to confirm the baseline for contiguous arrays.
     - [x] Create a benchmark script `scripts/bench_ingestion_penalty.py` to measure the overhead for non-contiguous arrays (the 110ms bottleneck).
-- [ ] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md) d2f22fd
 
 ## Phase 2: Red Phase - Implement Failing Tests
 - [ ] Task: Modify `tests/test_non_contiguous.py` to expect `ValueError` for non-contiguous arrays.
