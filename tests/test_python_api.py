@@ -4,7 +4,6 @@ from typing import cast
 import cv2
 import locus
 import numpy as np
-import pytest
 
 
 def test_zero_copy_ingestion():

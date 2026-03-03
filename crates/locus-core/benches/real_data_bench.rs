@@ -11,7 +11,9 @@ fn main() {
 
 fn load_icra_image() -> (Vec<u8>, usize, usize) {
     let path = Path::new("../../tests/data/icra2020/forward/pure_tags_images/0000.png");
-    let img = image::open(path).expect("Failed to open ICRA image").to_luma8();
+    let img = image::open(path)
+        .expect("Failed to open ICRA image")
+        .to_luma8();
     let (width, height) = img.dimensions();
     (img.into_raw(), width as usize, height as usize)
 }

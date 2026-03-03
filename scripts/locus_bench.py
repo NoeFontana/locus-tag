@@ -128,7 +128,9 @@ def run_real_benchmark(args):
         enable_sharpening=True,
         upscale_factor=1,
     )
-    wrappers.append(LocusWrapper(name="Locus (Soft)", config=soft_config, decimation=args.decimation))
+    wrappers.append(
+        LocusWrapper(name="Locus (Soft)", config=soft_config, decimation=args.decimation)
+    )
 
     # Hard mode (Default - Fast)
     hard_config = locus.DetectorConfig(
@@ -136,7 +138,9 @@ def run_real_benchmark(args):
         enable_sharpening=True,
         upscale_factor=1,
     )
-    wrappers.append(LocusWrapper(name="Locus (Hard)", config=hard_config, decimation=args.decimation))
+    wrappers.append(
+        LocusWrapper(name="Locus (Hard)", config=hard_config, decimation=args.decimation)
+    )
 
     if args.compare:
         wrappers.append(OpenCVWrapper())
@@ -217,9 +221,7 @@ def run_real_benchmark(args):
                     "latency": avg_lat,
                 }
                 if stage_stats["threshold"]:
-                    res["stages"] = {
-                        k: float(np.mean(v)) for k, v in stage_stats.items()
-                    }
+                    res["stages"] = {k: float(np.mean(v)) for k, v in stage_stats.items()}
                 current_results[ds_name][wrapper.name] = res
 
                 print(
@@ -232,7 +234,7 @@ def run_real_benchmark(args):
                     lat_diff = avg_lat - base["latency"]
                     recall_diff = recall - base["recall"]
                     print(
-                        f"    [Baseline] Latency: {lat_diff:+.2f}ms ({lat_diff/base['latency']*100:+.1f}%) | "
+                        f"    [Baseline] Latency: {lat_diff:+.2f}ms ({lat_diff / base['latency'] * 100:+.1f}%) | "
                         f"Recall: {recall_diff:+.2f}%"
                     )
 

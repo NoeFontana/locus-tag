@@ -750,7 +750,8 @@ impl Detector {
         let options = locus_core::DetectOptions::builder()
             .decimation(decimation)
             .build();
-        let (candidates, stats) = py.allow_threads(|| self.inner.extract_candidates(&view, &options));
+        let (candidates, stats) =
+            py.allow_threads(|| self.inner.extract_candidates(&view, &options));
         Ok((
             candidates.into_iter().map(Detection::from).collect(),
             PipelineStats::from(stats),
@@ -871,9 +872,9 @@ fn debug_threshold(py: Python<'_>, img: PyReadonlyArray2<u8>) -> PyResult<PyObje
     });
 
     let array = numpy::PyArray1::from_vec(py, output);
-    let array2d = array.reshape([height, width]).map_err(|_| {
-        pyo3::exceptions::PyRuntimeError::new_err("Failed to reshape NumPy array")
-    })?;
+    let array2d = array
+        .reshape([height, width])
+        .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("Failed to reshape NumPy array"))?;
     Ok(array2d.into_any().unbind())
 }
 
@@ -899,9 +900,9 @@ fn debug_segmentation(py: Python<'_>, img: PyReadonlyArray2<u8>) -> PyResult<PyO
     });
 
     let array = numpy::PyArray1::from_vec(py, labels_vec);
-    let array2d = array.reshape([height, width]).map_err(|_| {
-        pyo3::exceptions::PyRuntimeError::new_err("Failed to reshape NumPy array")
-    })?;
+    let array2d = array
+        .reshape([height, width])
+        .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("Failed to reshape NumPy array"))?;
     Ok(array2d.into_any().unbind())
 }
 

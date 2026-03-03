@@ -434,16 +434,17 @@ impl Detector {
         let (mut final_detections, mut processed_candidates, rejected_contrast, rejected_hamming) = {
             let _span = tracing::info_span!("decoding").entered();
             let temp_decoders: Vec<Box<dyn TagDecoder + Send + Sync>>;
-            let active_decoders: &[Box<dyn TagDecoder + Send + Sync>] = if options.families.is_empty() {
-                &self.decoders
-            } else {
-                temp_decoders = options
-                    .families
-                    .iter()
-                    .map(|f| family_to_decoder(*f))
-                    .collect();
-                &temp_decoders
-            };
+            let active_decoders: &[Box<dyn TagDecoder + Send + Sync>] =
+                if options.families.is_empty() {
+                    &self.decoders
+                } else {
+                    temp_decoders = options
+                        .families
+                        .iter()
+                        .map(|f| family_to_decoder(*f))
+                        .collect();
+                    &temp_decoders
+                };
 
             match self.config.decode_mode {
                 config::DecodeMode::Hard => {

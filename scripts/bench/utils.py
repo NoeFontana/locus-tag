@@ -270,7 +270,9 @@ class LibraryWrapper:
 
 
 class LocusWrapper(LibraryWrapper):
-    def __init__(self, name: str = "Locus", config: locus.DetectorConfig | None = None, decimation: int = 1):
+    def __init__(
+        self, name: str = "Locus", config: locus.DetectorConfig | None = None, decimation: int = 1
+    ):
         super().__init__(name)
         self.detector = locus.Detector(config) if config else locus.Detector()
         self.decimation = decimation
