@@ -26,5 +26,5 @@ summary:
       rmse: 0.3078
     - filename: 0013.png
       missed: 47
-      extra: 41
+      extra: 39
       rmse: 0.3575

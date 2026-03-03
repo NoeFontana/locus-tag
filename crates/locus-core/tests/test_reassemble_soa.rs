@@ -18,6 +18,7 @@ fn test_reassemble_soa() {
     // Mock pose: tx=1, ty=2, tz=3, qx=0, qy=0, qz=0, qw=1 (identity rotation)
     batch.poses[0] = Pose6D {
         data: [1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0],
+        _pad: 0.0,
     };
 
     let detections = batch.reassemble(1);
