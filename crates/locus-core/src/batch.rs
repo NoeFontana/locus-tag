@@ -50,6 +50,8 @@ pub struct DetectionBatch {
     pub corners: [Point2f; MAX_CANDIDATES * 4],
     /// The 3x3 projection matrices.
     pub homographies: [Matrix3x3; MAX_CANDIDATES],
+    /// The decoded IDs of the tags.
+    pub ids: [u32; MAX_CANDIDATES],
     /// The extracted bitstrings.
     pub payloads: [u64; MAX_CANDIDATES],
     /// The MSE or Log-Likelihood Ratio confidence scores.
@@ -66,6 +68,7 @@ impl DetectionBatch {
         Self {
             corners: [Point2f { x: 0.0, y: 0.0 }; MAX_CANDIDATES * 4],
             homographies: [Matrix3x3 { data: [0.0; 9] }; MAX_CANDIDATES],
+            ids: [0; MAX_CANDIDATES],
             payloads: [0; MAX_CANDIDATES],
             error_rates: [0.0; MAX_CANDIDATES],
             poses: [Pose6D { data: [0.0; 7] }; MAX_CANDIDATES],
@@ -77,6 +80,36 @@ impl DetectionBatch {
     pub fn capacity(&self) -> usize {
         MAX_CANDIDATES
     }
+
+    /// Partitions the batch so that all `Valid` candidates are at the front `[0..V]`.
+    /// Returns the number of valid candidates `V`.
+    pub fn partition(&mut self, n: usize) -> usize {
+        let mut v = 0;
+        let n_clamped = n.min(MAX_CANDIDATES);
+        for i in 0..n_clamped {
+            if self.status_mask[i] == CandidateState::Valid {
+                if i != v {
+                    // Swap index i with index v across all parallel arrays.
+                    for j in 0..4 {
+                        self.corners.swap(i * 4 + j, v * 4 + j);
+                    }
+                    self.homographies.swap(i, v);
+                    self.ids.swap(i, v);
+                    self.payloads.swap(i, v);
+                    self.error_rates.swap(i, v);
+                    self.poses.swap(i, v);
+                    self.status_mask.swap(i, v);
+                }
+                v += 1;
+            }
+        }
+        v
+    }
+}
+
+/// Helper function to partition a batch, moving all valid candidates to the front.
+pub fn partition_batch_soa(batch: &mut DetectionBatch, n: usize) -> usize {
+    batch.partition(n)
 }
 
 impl Default for DetectionBatch {

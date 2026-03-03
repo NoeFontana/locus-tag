@@ -6,9 +6,10 @@
 //! - **Accurate Mode (Weighted LM)**: Iterative refinement weighted by sub-pixel uncertainty.
 
 #![allow(clippy::many_single_char_names, clippy::similar_names)]
+use crate::batch::{DetectionBatch, Pose6D};
 use crate::config::PoseEstimationMode;
 use crate::image::ImageView;
-use nalgebra::{Matrix3, Matrix6, Vector3, Vector6};
+use nalgebra::{Matrix3, Matrix6, UnitQuaternion, Vector3, Vector6};
 
 /// Camera intrinsics parameters.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -500,6 +501,76 @@ fn find_best_pose(
         candidates[1]
     } else {
         candidates[0]
+    }
+}
+
+/// Refine poses for all valid candidates in the batch using the Structure of Arrays (SoA) layout.
+///
+/// This function operates only on the first `v` candidates in the batch, which must have been
+/// partitioned such that all valid candidates are in the range `[0..v]`.
+pub fn refine_poses_soa(
+    batch: &mut DetectionBatch,
+    v: usize,
+    intrinsics: &CameraIntrinsics,
+    tag_size: f64,
+    img: Option<&ImageView>,
+    mode: PoseEstimationMode,
+) {
+    use rayon::prelude::*;
+
+    // Process valid candidates in parallel.
+    // We collect into a temporary Vec to avoid unsafe parallel writes to the batch.
+    let poses: Vec<_> = (0..v)
+        .into_par_iter()
+        .map(|i| {
+            let offset = i * 4;
+            let corners = [
+                [
+                    f64::from(batch.corners[offset].x),
+                    f64::from(batch.corners[offset].y),
+                ],
+                [
+                    f64::from(batch.corners[offset + 1].x),
+                    f64::from(batch.corners[offset + 1].y),
+                ],
+                [
+                    f64::from(batch.corners[offset + 2].x),
+                    f64::from(batch.corners[offset + 2].y),
+                ],
+                [
+                    f64::from(batch.corners[offset + 3].x),
+                    f64::from(batch.corners[offset + 3].y),
+                ],
+            ];
+
+            let (pose_opt, _) = estimate_tag_pose(intrinsics, &corners, tag_size, img, mode);
+
+            if let Some(pose) = pose_opt {
+                let q = UnitQuaternion::from_matrix(&pose.rotation);
+                let t = pose.translation;
+
+                // Data layout: [tx, ty, tz, qx, qy, qz, qw]
+                let mut data = [0.0f32; 7];
+                data[0] = t.x as f32;
+                data[1] = t.y as f32;
+                data[2] = t.z as f32;
+                data[3] = q.coords.x as f32;
+                data[4] = q.coords.y as f32;
+                data[5] = q.coords.z as f32;
+                data[6] = q.coords.w as f32;
+                Some(data)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    for (i, pose_data) in poses.into_iter().enumerate() {
+        if let Some(data) = pose_data {
+            batch.poses[i] = Pose6D { data };
+        } else {
+            batch.poses[i] = Pose6D { data: [0.0; 7] };
+        }
     }
 }
 
