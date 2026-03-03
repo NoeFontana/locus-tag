@@ -4,7 +4,7 @@ This document provides a high-level overview of the Locus system architecture, d
 
 ## High-Level Overview
 
-Locus is built as a hybrid Rust/Python system. The core logic resides in a high-performance Rust crate (`locus-core`), which is exposed to Python via `pyo3` bindings (`locus-py`).
+Locus is built as a hybrid Rust/Python system. The core logic resides in a high-performance Rust crate (`locus-core`), which is exposed to Python via `pyo3` bindings (`locus-py`). All operations are conducted through the `Detector` class, which manages persistent state and enforces strict zero-copy, GIL-free execution.
 
 ```mermaid
 flowchart TD
