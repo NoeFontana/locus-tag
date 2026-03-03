@@ -461,7 +461,7 @@ fn prepare_image_input<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageI
         // Case 2: Non-contiguous (e.g. sliced columns, F-contiguous)
         // Strictly block copies to enforce hardware-sympathetic performance.
         Err(pyo3::exceptions::PyValueError::new_err(
-            "Array must be C-contiguous. Use .ascontiguousarray() to avoid performance-killing copies."
+            "Array must be C-contiguous. Use .ascontiguousarray() to avoid performance-killing copies.",
         ))
     }
 }

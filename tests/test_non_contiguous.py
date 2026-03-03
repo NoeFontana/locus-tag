@@ -2,6 +2,7 @@ import locus
 import numpy as np
 import pytest
 
+
 def test_non_contiguous_ingestion():
     """Verify that the detector raises ValueError for non-contiguous arrays (Zero-Copy Enforcement)."""
     # 1. Standard C-contiguous array (should work)
@@ -29,16 +30,18 @@ def test_non_contiguous_ingestion():
     with pytest.raises(ValueError, match="Array must be C-contiguous"):
         detector.detect(img_f)
 
+
 def test_legacy_detect_non_contiguous():
     """Verify legacy functions also raise ValueError."""
     img = np.zeros((100, 100), dtype=np.uint8)
     img_nc = img[:, ::2]
-    
+
     with pytest.raises(ValueError, match="Array must be C-contiguous"):
         locus.detect_tags(img_nc)
 
     with pytest.raises(ValueError, match="Array must be C-contiguous"):
         locus.detect_tags_with_stats(img_nc)
+
 
 if __name__ == "__main__":
     # If run as a script, use pytest to run itself

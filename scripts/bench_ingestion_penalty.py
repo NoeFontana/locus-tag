@@ -1,18 +1,19 @@
 import time
+
 import locus
 import numpy as np
-import pytest
+
 
 def bench_ingestion_penalty():
     """Verify that non-contiguous ingestion is strictly blocked and measure baseline."""
     height, width = 1080, 1920
-    
+
     # 1. Contiguous array
     img_c = np.zeros((height, width), dtype=np.uint8)
-    
+
     # 2. Non-contiguous array (stride_x != 1)
     img_large = np.zeros((height, width * 2), dtype=np.uint8)
-    img_nc = img_large[:, ::2] 
+    img_nc = img_large[:, ::2]
 
     detector = locus.Detector()
 
@@ -29,7 +30,7 @@ def bench_ingestion_penalty():
         end = time.perf_counter()
         python_times.append((end - start) * 1000.0)
         rust_times.append(stats.total_ms)
-    
+
     avg_python = sum(python_times) / iterations
     avg_rust = sum(rust_times) / iterations
     overhead = avg_python - avg_rust
@@ -45,6 +46,7 @@ def bench_ingestion_penalty():
         exit(1)
     except ValueError as e:
         print(f"SUCCESS: Caught expected ValueError: {e}")
+
 
 if __name__ == "__main__":
     bench_ingestion_penalty()
