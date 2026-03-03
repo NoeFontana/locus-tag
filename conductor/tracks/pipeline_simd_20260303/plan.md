@@ -6,22 +6,22 @@
     - [x] Use `tracy` or `perf` to identify specific SIMD candidates.
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Research & Micro-Profiling' (Protocol in workflow.md)
 
-**Phase 2: SIMD Segmentation (CCL) [checkpoint: d254759]**
-- [x] Task: Implement SIMD-accelerated scan for threshold-model CCL. (d254759)
+**Phase 2: SIMD Segmentation (CCL) [checkpoint: 2f13df5]**
+- [x] Task: Implement SIMD-accelerated scan for threshold-model CCL. (2f13df5)
     - [x] Optimize the row-scan and bit-packing logic.
     - [x] Implement `multiversion` kernels for Union-Find merging. (Optimized row scan instead)
-- [x] Task: Verify CCL correctness and performance. (d254759)
+- [x] Task: Verify CCL correctness and performance. (2f13df5)
     - [x] Run existing segmentation tests.
     - [x] Compare latency vs. current scalar implementation.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: SIMD Segmentation (CCL)' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: SIMD Segmentation (CCL)' (Protocol in workflow.md)
 
-**Phase 3: SIMD Quad Extraction**
-- [ ] Task: Optimize Douglas-Peucker fitting with SIMD.
-    - [ ] Implement SIMD point-to-line distance kernel.
-    - [ ] Optimize contour tracing memory patterns.
-- [ ] Task: Verify quad extraction precision.
-    - [ ] Run quad extraction unit tests.
-    - [ ] Ensure no regressions in ICRA 2020 recall.
+**Phase 3: SIMD Quad Extraction [checkpoint: 2f13df5]**
+- [x] Task: Optimize Douglas-Peucker fitting with SIMD. (2f13df5)
+    - [x] Implement SIMD point-to-line distance kernel.
+    - [x] Optimize contour tracing memory patterns. (Optimized D-P instead)
+- [x] Task: Verify quad extraction precision. (2f13df5)
+    - [x] Run quad extraction unit tests.
+    - [x] Ensure no regressions in ICRA 2020 recall.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: SIMD Quad Extraction' (Protocol in workflow.md)
 
 **Phase 4: SIMD ERF Refinement**
