@@ -11,14 +11,14 @@
 - [x] **Task: Phase Completion Verification and Checkpointing** 5760461
     - [ ] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md)
 
-## Phase 2: Refactor Quad Extraction
+## Phase 2: Refactor Quad Extraction [checkpoint: 5cd2b27]
 ### Task: Quad Extraction SoA Refactor
-- [ ] **Task: Write Failing Tests: Quad Extraction Slices**
+- [x] **Task: Write Failing Tests: Quad Extraction Slices** bb5654d
     - [ ] Define tests that provide empty arrays and expect `N` quads to be written correctly.
-- [ ] **Task: Implement Sequential Write-Only Quad Extractor**
+- [x] **Task: Implement Sequential Write-Only Quad Extractor** bb5654d
     - [ ] Refactor `extract_quads` to take mutable slices and populate `corners` and `status_mask`.
     - [ ] Return count `N`.
-- [ ] **Task: Phase Completion Verification and Checkpointing**
+- [x] **Task: Phase Completion Verification and Checkpointing** 5cd2b27
     - [ ] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
 
 ## Phase 3: Isolated Math Passes (Homography & Decoding)
