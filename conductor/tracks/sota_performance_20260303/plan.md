@@ -1,19 +1,19 @@
 # Implementation Plan: SOTA Performance Optimization
 
-**Phase 1: Research & Benchmarking (Baseline)**
+**Phase 1: Research & Benchmarking (Baseline) [checkpoint: 110e952]**
 - [x] Task: Establish performance baseline for current decoder sampling. (cbe7132)
-    - [ ] Run existing benchmarks in `crates/locus-core/benches/`.
-    - [ ] Document baseline latency for Hard and Soft decoding strategies.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Research & Benchmarking (Baseline)' (Protocol in workflow.md)
+    - [x] Run existing benchmarks in `crates/locus-core/benches/`.
+    - [x] Document baseline latency for Hard and Soft decoding strategies.
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Research & Benchmarking (Baseline)' (Protocol in workflow.md)
 
 **Phase 2: SIMD Fast-Math & Fixed-Point Kernels**
-- [ ] Task: Implement SIMD reciprocal estimation with Newton-Raphson.
-    - [ ] Create new SIMD module (e.g., `src/simd/math.rs`).
-    - [ ] Implement `rcp_nr` for AVX2, AVX-512, and NEON using `multiversion`.
-    - [ ] Add unit tests for mathematical precision (vs. `1.0/x`).
-- [ ] Task: Implement Fixed-Point (16.16) bilinear interpolation.
-    - [ ] Implement fixed-point weights and accumulation in SIMD.
-    - [ ] Add unit tests for interpolation accuracy.
+- [x] Task: Implement SIMD reciprocal estimation with Newton-Raphson. (9c01a2d)
+    - [x] Create new SIMD module (e.g., `src/simd/math.rs`).
+    - [x] Implement `rcp_nr` for AVX2, AVX-512, and NEON using `multiversion`.
+    - [x] Add unit tests for mathematical precision (vs. `1.0/x`).
+- [x] Task: Implement Fixed-Point (16.16) bilinear interpolation. (9c01a2d)
+    - [x] Implement fixed-point weights and accumulation in SIMD.
+    - [x] Add unit tests for interpolation accuracy.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: SIMD Fast-Math & Fixed-Point Kernels' (Protocol in workflow.md)
 
 **Phase 3: Hybrid ROI Caching**
