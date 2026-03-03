@@ -102,6 +102,32 @@ pub struct Detection {
     pub pose_covariance: Option<[[f64; 6]; 6]>,
 }
 
+impl Detection {
+    /// Compute the axis-aligned bounding box (AABB) of the detection.
+    ///
+    /// Returns (min_x, min_y, max_x, max_y) in integer pixel coordinates.
+    pub fn aabb(&self) -> (usize, usize, usize, usize) {
+        let mut min_x = f64::INFINITY;
+        let mut min_y = f64::INFINITY;
+        let mut max_x = f64::NEG_INFINITY;
+        let mut max_y = f64::NEG_INFINITY;
+
+        for p in &self.corners {
+            min_x = min_x.min(p[0]);
+            min_y = min_y.min(p[1]);
+            max_x = max_x.max(p[0]);
+            max_y = max_y.max(p[1]);
+        }
+
+        (
+            min_x.floor().max(0.0) as usize,
+            min_y.floor().max(0.0) as usize,
+            max_x.ceil().max(0.0) as usize,
+            max_y.ceil().max(0.0) as usize,
+        )
+    }
+}
+
 /// Statistics for the detection pipeline stages.
 /// Pipeline-wide statistics for a single detection call.
 #[derive(Clone, Copy, Debug, Default)]
