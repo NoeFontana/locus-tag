@@ -22,18 +22,18 @@
 - [x] Task: Verify quad extraction precision. (2f13df5)
     - [x] Run quad extraction unit tests.
     - [x] Ensure no regressions in ICRA 2020 recall.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: SIMD Quad Extraction' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: SIMD Quad Extraction' (Protocol in workflow.md)
 
-**Phase 4: SIMD ERF Refinement**
-- [ ] Task: Implement SIMD gradient accumulation in `refine_corners_erf`.
-    - [ ] Rewrite the gradient descent hot loop using SIMD Fast-Math.
-    - [ ] Use `rcp_nr` for weight normalization where applicable.
-- [ ] Task: Verify refinement precision.
-    - [ ] Add precision comparison tests (SIMD vs. Scalar).
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: SIMD ERF Refinement' (Protocol in workflow.md)
+**Phase 4: SIMD ERF Refinement [checkpoint: 001cc07]**
+- [x] Task: Implement SIMD gradient accumulation in `refine_corners_erf`. (001cc07)
+    - [x] Rewrite the gradient descent hot loop using SIMD Fast-Math.
+    - [x] Use `rcp_nr` for weight normalization where applicable.
+- [x] Task: Verify refinement precision. (001cc07)
+    - [x] Add precision comparison tests (SIMD vs. Scalar).
+- [x] Task: Conductor - User Manual Verification 'Phase 4: SIMD ERF Refinement' (Protocol in workflow.md)
 
-**Phase 5: Final Validation & Integration**
-- [ ] Task: Run full E2E evaluation.
-    - [ ] Execute ICRA 2020 regression suite and accept new snapshots.
-    - [ ] Run final Python benchmarks and update README.md.
-- [ ] Task: Conductor - User Manual Verification 'Phase 5: Final Validation & Integration' (Protocol in workflow.md)
+**Phase 5: Final Validation & Integration [checkpoint: 8927ab6]**
+- [x] Task: Run full E2E evaluation. (8927ab6)
+    - [x] Execute ICRA 2020 regression suite and accept new snapshots.
+    - [x] Run final Python benchmarks and update README.md.
+- [x] Task: Conductor - User Manual Verification 'Phase 5: Final Validation & Integration' (Protocol in workflow.md)
