@@ -4,7 +4,7 @@ This page provides detailed information about the Locus Python API.
 
 ## Core Interface
 
-The primary entry point for using Locus is the `Detector` class or the high-level convenience functions.
+The primary entry point for using Locus is the `Detector` class.
 
 ::: locus.Detector
     options:
@@ -16,10 +16,6 @@ The primary entry point for using Locus is the `Detector` class or the high-leve
             - detect_with_options
             - detect_with_stats
             - set_families
-
-::: locus.detect_tags
-
-::: locus.detect_tags_with_stats
 
 ## Configuration
 
@@ -88,9 +84,3 @@ These tools are provided for performance profiling and algorithm inspection. The
 ::: locus.Detector.detect_full
 
 ::: locus.Detector.extract_candidates
-
-::: locus.dummy_detect
-
-::: locus.debug_threshold
-
-::: locus.debug_segmentation

@@ -418,28 +418,22 @@ impl From<locus_core::pose::Pose> for Pose {
 // Helper functions
 // ============================================================================
 
-/// Container for image data that handles both zero-copy and fallback copies.
+/// Container for image data that handles zero-copy ingestion.
 pub enum ImageInput<'a> {
     Borrowed(ImageView<'a>),
-    Owned(Vec<u8>, usize, usize),
 }
 
 impl ImageInput<'_> {
     /// Get an ImageView into the data.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the internal dimensions are inconsistent (should be impossible for owned data).
     #[must_use]
     pub fn view(&self) -> ImageView<'_> {
         match self {
             Self::Borrowed(v) => *v,
-            Self::Owned(data, w, h) => ImageView::new(data, *w, *h, *w).expect("Valid owned view"),
         }
     }
 }
 
-/// Create an ImageInput from a PyReadonlyArray2, handling non-contiguous arrays with a copy.
+/// Create an ImageInput from a PyReadonlyArray2, strictly enforcing C-contiguity for zero-copy.
 #[allow(clippy::cast_sign_loss)]
 fn prepare_image_input<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageInput<'a>> {
     let shape = img.shape();
@@ -465,17 +459,10 @@ fn prepare_image_input<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageI
         Ok(ImageInput::Borrowed(view))
     } else {
         // Case 2: Non-contiguous (e.g. sliced columns, F-contiguous)
-        // We perform a copy to maintain functionality as per spec.
-        eprintln!(
-            "WARNING: Input array is not C-contiguous. Performing auto-conversion (copy). \
-             Use numpy.ascontiguousarray() for maximum performance."
-        );
-
-        let owned = img.to_owned_array();
-        let width = owned.shape()[1];
-        let height = owned.shape()[0];
-        let (data, _) = owned.into_raw_vec_and_offset();
-        Ok(ImageInput::Owned(data, width, height))
+        // Strictly block copies to enforce hardware-sympathetic performance.
+        Err(pyo3::exceptions::PyValueError::new_err(
+            "Array must be C-contiguous. Use .ascontiguousarray() to avoid performance-killing copies.",
+        ))
     }
 }
 
@@ -824,98 +811,6 @@ impl Detector {
 }
 
 // ============================================================================
-// Legacy function-based API (for backward compatibility)
-// ============================================================================
-
-/// A dummy detection function for Phase 0 verification.
-#[pyfunction]
-fn dummy_detect() -> String {
-    format!("{} - Python Bindings Active", locus_core::core_info())
-}
-
-/// Detect tags in an image. Zero-copy ingestion of NumPy arrays.
-#[pyfunction]
-#[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
-fn detect_tags(py: Python<'_>, img: PyReadonlyArray2<u8>) -> PyResult<Vec<Detection>> {
-    let input = prepare_image_input(&img)?;
-    let view = input.view();
-
-    let mut detector = locus_core::Detector::new();
-    let detections = py.allow_threads(|| detector.detect(&view));
-    Ok(detections.into_iter().map(Detection::from).collect())
-}
-
-/// Detect tags and return timing stats.
-#[pyfunction]
-#[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
-fn detect_tags_with_stats(
-    py: Python<'_>,
-    img: PyReadonlyArray2<u8>,
-) -> PyResult<(Vec<Detection>, PipelineStats)> {
-    let input = prepare_image_input(&img)?;
-    let view = input.view();
-
-    let mut detector = locus_core::Detector::new();
-    let (detections, stats) = py.allow_threads(|| detector.detect_with_stats(&view));
-    Ok((
-        detections.into_iter().map(Detection::from).collect(),
-        PipelineStats::from(stats),
-    ))
-}
-
-/// For debugging: Apply thresholding and return the binarized image.
-#[pyfunction]
-#[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
-fn debug_threshold(py: Python<'_>, img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
-    let input = prepare_image_input(&img)?;
-    let view = input.view();
-    let width = view.width;
-    let height = view.height;
-
-    let mut output = vec![0u8; width * height];
-    py.allow_threads(|| {
-        let arena = bumpalo::Bump::new();
-        let engine = locus_core::threshold::ThresholdEngine::new();
-        let stats = engine.compute_tile_stats(&arena, &view);
-        engine.apply_threshold(&arena, &view, &stats, &mut output);
-    });
-
-    let array = numpy::PyArray1::from_vec(py, output);
-    let array2d = array
-        .reshape([height, width])
-        .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("Failed to reshape NumPy array"))?;
-    Ok(array2d.into_any().unbind())
-}
-
-/// For debugging: Return the labeled connected components.
-#[pyfunction]
-#[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
-fn debug_segmentation(py: Python<'_>, img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
-    let input = prepare_image_input(&img)?;
-    let view = input.view();
-    let width = view.width;
-    let height = view.height;
-
-    let mut binarized = vec![0u8; width * height];
-    let labels_vec = py.allow_threads(|| {
-        let arena = bumpalo::Bump::new();
-        let engine = locus_core::threshold::ThresholdEngine::new();
-        let stats = engine.compute_tile_stats(&arena, &view);
-        engine.apply_threshold(&arena, &view, &stats, &mut binarized);
-
-        let labels =
-            locus_core::segmentation::label_components(&arena, &binarized, width, height, false);
-        labels.to_vec()
-    });
-
-    let array = numpy::PyArray1::from_vec(py, labels_vec);
-    let array2d = array
-        .reshape([height, width])
-        .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("Failed to reshape NumPy array"))?;
-    Ok(array2d.into_any().unbind())
-}
-
-// ============================================================================
 // Profiling
 // ============================================================================
 
@@ -953,11 +848,5 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Profiling
     m.add_function(wrap_pyfunction!(init_tracy, m)?)?;
 
-    // Legacy functions (for backward compatibility)
-    m.add_function(wrap_pyfunction!(dummy_detect, m)?)?;
-    m.add_function(wrap_pyfunction!(detect_tags, m)?)?;
-    m.add_function(wrap_pyfunction!(detect_tags_with_stats, m)?)?;
-    m.add_function(wrap_pyfunction!(debug_threshold, m)?)?;
-    m.add_function(wrap_pyfunction!(debug_segmentation, m)?)?;
     Ok(())
 }

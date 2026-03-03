@@ -10,11 +10,6 @@ from .locus import (
     PoseEstimationMode,
     SegmentationConnectivity,
     TagFamily,
-    debug_segmentation,
-    debug_threshold,
-    detect_tags,
-    detect_tags_with_stats,
-    dummy_detect,
     init_tracy,
 )
 from .locus import Detector as _RustDetector
@@ -225,10 +220,5 @@ __all__ = [
     "CameraIntrinsics",
     "DetectorConfig",
     "DetectOptions",
-    "detect_tags",
-    "detect_tags_with_stats",
-    "dummy_detect",
-    "debug_threshold",
-    "debug_segmentation",
     "init_tracy",
 ]

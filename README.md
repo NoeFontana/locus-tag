@@ -60,8 +60,9 @@ import locus
 # Load image in grayscale
 img = cv2.imread("image.jpg", cv2.IMREAD_GRAYSCALE)
 
-# Detect tags (defaults to AprilTag 36h11)
-tags = locus.detect_tags(img)
+# Create detector and detect tags (defaults to AprilTag 36h11)
+detector = locus.Detector()
+tags = detector.detect(img)
 
 for t in tags:
     print(f"ID: {t.id}, Center: {t.center}, Hamming: {t.hamming}")
