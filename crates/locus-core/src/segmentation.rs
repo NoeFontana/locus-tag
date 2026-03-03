@@ -309,16 +309,26 @@ unsafe fn extract_runs_row_avx2(
     let m_vec = _mm256_set1_epi16(-margin);
     let mut x = 0;
     while x + 16 <= width {
-        let gs_ptr = row_gs.as_ptr().add(x);
-        let th_ptr = row_th.as_ptr().add(x);
-        let gs_low = _mm_loadu_si128(gs_ptr as *const __m128i);
-        let th_low = _mm_loadu_si128(th_ptr as *const __m128i);
-        let gs_16 = _mm256_cvtepu8_epi16(gs_low);
-        let th_16 = _mm256_cvtepu8_epi16(th_low);
-        let diff = _mm256_sub_epi16(gs_16, th_16);
-        let cmp = _mm256_cmpgt_epi16(m_vec, diff);
-        let mask_low = _mm_movemask_epi8(_mm256_castsi256_si128(cmp));
-        let mask_high = _mm_movemask_epi8(_mm256_extracti128_si256(cmp, 1));
+        let (gs_low, th_low) = unsafe {
+            let gs_ptr = row_gs.as_ptr().add(x);
+            let th_ptr = row_th.as_ptr().add(x);
+            (
+                _mm_loadu_si128(gs_ptr as *const __m128i),
+                _mm_loadu_si128(th_ptr as *const __m128i),
+            )
+        };
+        let (mask_low, mask_high) = {
+            let gs_16 = unsafe { _mm256_cvtepu8_epi16(gs_low) };
+            let th_16 = unsafe { _mm256_cvtepu8_epi16(th_low) };
+            let diff = unsafe { _mm256_sub_epi16(gs_16, th_16) };
+            let cmp = unsafe { _mm256_cmpgt_epi16(m_vec, diff) };
+            unsafe {
+                (
+                    _mm_movemask_epi8(_mm256_castsi256_si128(cmp)),
+                    _mm_movemask_epi8(_mm256_extracti128_si256(cmp, 1)),
+                )
+            }
+        };
         let mut final_mask = 0u32;
         for i in 0..8 {
             if (mask_low >> (i * 2)) & 1 != 0 {
@@ -350,16 +360,19 @@ unsafe fn extract_runs_row_neon(
     let m_vec = vdupq_n_s16(-margin);
     let mut x = 0;
     while x + 8 <= width {
-        let gs_ptr = row_gs.as_ptr().add(x);
-        let th_ptr = row_th.as_ptr().add(x);
-        let gs_8 = vld1_u8(gs_ptr);
-        let th_8 = vld1_u8(th_ptr);
-        let gs_16 = vreinterpretq_s16_u16(vmovl_u8(gs_8));
-        let th_16 = vreinterpretq_s16_u16(vmovl_u8(th_8));
-        let diff = vsubq_s16(gs_16, th_16);
-        let mask_res = vcltq_s16(diff, m_vec);
+        let (gs_8, th_8) = unsafe {
+            let gs_ptr = row_gs.as_ptr().add(x);
+            let th_ptr = row_th.as_ptr().add(x);
+            (vld1_u8(gs_ptr), vld1_u8(th_ptr))
+        };
+        let mask_res = unsafe {
+            let gs_16 = vreinterpretq_s16_u16(vmovl_u8(gs_8));
+            let th_16 = vreinterpretq_s16_u16(vmovl_u8(th_8));
+            let diff = vsubq_s16(gs_16, th_16);
+            vcltq_s16(diff, m_vec)
+        };
         let mut final_mask = 0u32;
-        let res_u16: [u16; 8] = std::mem::transmute(mask_res);
+        let res_u16: [u16; 8] = unsafe { std::mem::transmute(mask_res) };
         for (i, &val) in res_u16.iter().enumerate() {
             if val != 0 {
                 final_mask |= 1 << i;
