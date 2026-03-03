@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 use divan::bench;
 
 fn main() {

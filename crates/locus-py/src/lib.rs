@@ -424,8 +424,13 @@ pub enum ImageInput<'a> {
     Owned(Vec<u8>, usize, usize),
 }
 
-impl<'a> ImageInput<'a> {
+impl ImageInput<'_> {
     /// Get an ImageView into the data.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal dimensions are inconsistent (should be impossible for owned data).
+    #[must_use]
     pub fn view(&self) -> ImageView<'_> {
         match self {
             Self::Borrowed(v) => *v,
@@ -469,7 +474,7 @@ fn prepare_image_input<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageI
         let owned = img.to_owned_array();
         let width = owned.shape()[1];
         let height = owned.shape()[0];
-        let data = owned.into_raw_vec();
+        let (data, _) = owned.into_raw_vec_and_offset();
         Ok(ImageInput::Owned(data, width, height))
     }
 }
@@ -657,7 +662,11 @@ impl Detector {
         tag_size = None,
         pose_estimation_mode = PoseEstimationMode::Fast,
     ))]
-    #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
+    #[allow(
+        clippy::cast_sign_loss,
+        clippy::needless_pass_by_value,
+        clippy::too_many_arguments
+    )]
     fn detect_with_options(
         &mut self,
         py: Python<'_>,
