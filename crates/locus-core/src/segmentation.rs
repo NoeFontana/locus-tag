@@ -305,9 +305,8 @@ unsafe fn extract_runs_row_avx2(
     row_runs: &mut Vec<Run>,
 ) -> usize {
     use std::arch::x86_64::{
-        __m128i, _mm256_castsi256_si128, _mm256_cmpgt_epi16, _mm256_cvtepu8_epi16,
-        _mm256_extracti128_si256, _mm256_set1_epi16, _mm256_sub_epi16, _mm_loadu_si128,
-        _mm_movemask_epi8,
+        __m128i, _mm_loadu_si128, _mm_movemask_epi8, _mm256_castsi256_si128, _mm256_cmpgt_epi16,
+        _mm256_cvtepu8_epi16, _mm256_extracti128_si256, _mm256_set1_epi16, _mm256_sub_epi16,
     };
     let m_vec = _mm256_set1_epi16(-margin);
     let mut x = 0;
