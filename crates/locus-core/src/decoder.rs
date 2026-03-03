@@ -1337,11 +1337,10 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
     use rayon::prelude::*;
 
     // We collect results into a temporary Vec to avoid unsafe parallel writes to the batch.
-    let results: Vec<_> =
-        (0..n)
-            .into_par_iter()
-            .map(|i| {
-                DECODE_ARENA.with_borrow_mut(|arena| {
+    let results: Vec<_> = (0..n)
+        .into_par_iter()
+        .map(|i| {
+            DECODE_ARENA.with_borrow_mut(|arena| {
                     arena.reset();
 
                     let corners = &batch.corners[i * 4..i * 4 + 4];
@@ -1680,8 +1679,8 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                         (CandidateState::FailedDecode, 0, 0, 0, 0.0, None)
                     }
                 })
-            })
-            .collect();
+        })
+        .collect();
 
     for (i, (state, id, rot, payload, error_rate, refined_corners)) in
         results.into_iter().enumerate()
