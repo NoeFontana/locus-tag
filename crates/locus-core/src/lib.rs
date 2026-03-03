@@ -431,19 +431,21 @@ impl Detector {
 
         // 4. Decoding
         let start_decode = std::time::Instant::now();
-        let temp_decoders: Vec<Box<dyn TagDecoder + Send + Sync>>;
-        let active_decoders: &[Box<dyn TagDecoder + Send + Sync>] = if options.families.is_empty() {
-            &self.decoders
-        } else {
-            temp_decoders = options
-                .families
-                .iter()
-                .map(|f| family_to_decoder(*f))
-                .collect();
-            &temp_decoders
-        };
+        let (mut final_detections, mut processed_candidates, rejected_contrast, rejected_hamming) = {
+            let _span = tracing::info_span!("decoding").entered();
+            let temp_decoders: Vec<Box<dyn TagDecoder + Send + Sync>>;
+            let active_decoders: &[Box<dyn TagDecoder + Send + Sync>] =
+                if options.families.is_empty() {
+                    &self.decoders
+                } else {
+                    temp_decoders = options
+                        .families
+                        .iter()
+                        .map(|f| family_to_decoder(*f))
+                        .collect();
+                    &temp_decoders
+                };
 
-        let (mut final_detections, mut processed_candidates, rejected_contrast, rejected_hamming) =
             match self.config.decode_mode {
                 config::DecodeMode::Hard => {
                     Self::decode_candidates::<crate::strategy::HardStrategy>(
@@ -465,7 +467,8 @@ impl Detector {
                         options,
                     )
                 },
-            };
+            }
+        };
 
         stats.num_rejected_by_contrast = rejected_contrast;
         stats.num_rejected_by_hamming = rejected_hamming;
@@ -480,24 +483,27 @@ impl Detector {
             1.0
         };
 
-        for d in &mut final_detections {
-            for corner in &mut d.corners {
-                corner[0] = (corner[0] + 0.5) * inv_scale;
-                corner[1] = (corner[1] + 0.5) * inv_scale;
-            }
-            d.center[0] = (d.center[0] + 0.5) * inv_scale;
-            d.center[1] = (d.center[1] + 0.5) * inv_scale;
+        {
+            let _span = tracing::info_span!("pose_estimation_loop").entered();
+            for d in &mut final_detections {
+                for corner in &mut d.corners {
+                    corner[0] = (corner[0] + 0.5) * inv_scale;
+                    corner[1] = (corner[1] + 0.5) * inv_scale;
+                }
+                d.center[0] = (d.center[0] + 0.5) * inv_scale;
+                d.center[1] = (d.center[1] + 0.5) * inv_scale;
 
-            if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size) {
-                let (pose, covariance) = crate::pose::estimate_tag_pose(
-                    &intrinsics,
-                    &d.corners,
-                    tag_size,
-                    Some(img),
-                    options.pose_estimation_mode,
-                );
-                d.pose = pose;
-                d.pose_covariance = covariance;
+                if let (Some(intrinsics), Some(tag_size)) = (options.intrinsics, options.tag_size) {
+                    let (pose, covariance) = crate::pose::estimate_tag_pose(
+                        &intrinsics,
+                        &d.corners,
+                        tag_size,
+                        Some(img),
+                        options.pose_estimation_mode,
+                    );
+                    d.pose = pose;
+                    d.pose_covariance = covariance;
+                }
             }
         }
 

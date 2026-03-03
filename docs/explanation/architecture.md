@@ -148,11 +148,12 @@ classDiagram
 
 ## Design Principles
 
-1.  **Zero-Copy Integration**: Utilizes the Python Buffer Protocol to access NumPy arrays directly, avoiding pixel data duplication.
-2.  **Arena Memory**: Per-frame scratchpad (`bumpalo`) eliminates `malloc`/`free` overhead in the hot path.
-3.  **Cache Locality**: Algorithms (thresholding, CCL) process data in linear, cache-friendly passes.
-4.  **Runtime SIMD Dispatch**: Uses `multiversion` to target AVX2, AVX-512, or NEON based on host CPU capabilities.
-5.  **Hybrid Parallelism**: Scales via `rayon` for data-parallel tasks while maintaining sequential cache-coherence for state-heavy stages.
+1.  **Zero-Copy Integration**: Utilizes the Python Buffer Protocol to access NumPy arrays directly, avoiding pixel data duplication. If the input array is non-contiguous, Locus performs a transparent auto-conversion (copy) with a performance warning to maintain compatibility.
+2.  **Thread Concurrency (GIL-Free)**: Releases the Python Global Interpreter Lock (GIL) during the heavy perception pipeline, allowing true multi-threaded execution and preventing blocking in concurrent Python applications.
+3.  **Arena Memory**: Per-frame scratchpad (`bumpalo`) eliminates `malloc`/`free` overhead in the hot path.
+4.  **Cache Locality**: Algorithms (thresholding, CCL) process data in linear, cache-friendly passes.
+5.  **Runtime SIMD Dispatch**: Uses `multiversion` to target AVX2, AVX-512, or NEON based on host CPU capabilities.
+6.  **Hybrid Parallelism**: Scales via `rayon` for data-parallel tasks while maintaining sequential cache-coherence for state-heavy stages.
 
 ## Memory Architecture
 
@@ -225,11 +226,11 @@ Targets a **low latency** budget for 1080p frames on modern CPUs.
 
 | Stage | Complexity | Latency | Notes |
 | :--- | :--- | :--- | :--- |
-| **Preprocessing** | $O(N)$ | ~7.5 ms | Bandwidth-bound; SIMD-accelerated. |
-| **Segmentation** | $O(N)$ | ~2.7 ms | Single-pass Union-Find. |
-| **Quad Extraction** | $O(K \cdot M)$ | ~1.5 ms | $K$ components, $M$ perimeter pixels. |
-| **Decoding (Hard)** | $O(Q)$ | ~0.5 ms | $Q$ candidates, bit-LUT based. |
-| **Decoding (Soft)** | $O(Q \cdot \log D)$ | ~0.2 ms | $Q$ candidates, MIH sub-linear search. |
+| **Preprocessing** | $O(N)$ | ~8.3 ms | Adaptive thresholding; 1080p. |
+| **Segmentation** | $O(N)$ | ~3.7 ms | Single-pass Union-Find; 1080p. |
+| **Quad Extraction** | $O(K \cdot M)$ | ~22.4 ms | ICRA 2020 image; many candidates + Erf refinement. |
+| **Decoding (Hard)** | $O(Q)$ | ~0.8 ms | 200 candidates; Bit-LUT based. |
+| **Decoding (Soft)** | $O(Q \cdot \log D)$ | ~0.2 ms | 200 candidates; MIH sub-linear search. |
 
 *Note: Latencies are approximate for a single core on a modern CPU (e.g., Zen 4).*
 

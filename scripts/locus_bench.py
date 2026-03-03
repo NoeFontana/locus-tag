@@ -3,6 +3,7 @@ import time
 from typing import Any
 
 import cv2
+import locus
 import numpy as np
 from tqdm import tqdm
 
@@ -43,7 +44,19 @@ def run_hosted_benchmark(args):
 
         # Initialize stats for each wrapper
         wrapper_stats = {
-            w.name: {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []} for w in wrappers
+            w.name: {
+                "gt": 0,
+                "det": 0,
+                "err_sum": 0.0,
+                "latency": [],
+                "stages": {
+                    "threshold": [],
+                    "segmentation": [],
+                    "quad": [],
+                    "decoding": [],
+                },
+            }
+            for w in wrappers
         }
 
         subset_stream = loader.stream_subset(config)
@@ -57,7 +70,7 @@ def run_hosted_benchmark(args):
 
             for wrapper in wrappers:
                 start = time.perf_counter()
-                detections, _ = wrapper.detect(img)
+                detections, lib_stats = wrapper.detect(img)
                 latency = (time.perf_counter() - start) * 1000
 
                 correct, err_sum, _ = Metrics.match_detections(detections, gt_tags)
@@ -67,6 +80,12 @@ def run_hosted_benchmark(args):
                 stats["gt"] += len(gt_tags)
                 stats["det"] += correct
                 stats["err_sum"] += err_sum
+
+                if lib_stats:
+                    stats["stages"]["threshold"].append(lib_stats.threshold_ms)
+                    stats["stages"]["segmentation"].append(lib_stats.segmentation_ms)
+                    stats["stages"]["quad"].append(lib_stats.quad_extraction_ms)
+                    stats["stages"]["decoding"].append(lib_stats.decoding_ms)
 
             pbar.update(1)
 
@@ -82,6 +101,13 @@ def run_hosted_benchmark(args):
             print(
                 f"  {wrapper.name:<10} | Recall: {recall:>6.2f}% | RMSE: {avg_err:>6.4f} px | Latency: {avg_lat:>6.2f} ms"
             )
+            if stats["stages"]["threshold"]:
+                print(
+                    f"    [Stages] Thresh: {np.mean(stats['stages']['threshold']):.2f}ms | "
+                    f"Seg: {np.mean(stats['stages']['segmentation']):.2f}ms | "
+                    f"Quad: {np.mean(stats['stages']['quad']):.2f}ms | "
+                    f"Decode: {np.mean(stats['stages']['decoding']):.2f}ms"
+                )
 
 
 def run_real_benchmark(args):
@@ -95,10 +121,43 @@ def run_real_benchmark(args):
     types = args.types
 
     wrappers: list[LibraryWrapper] = []
-    wrappers.append(LocusWrapper(decimation=args.decimation))
+
+    # Soft mode (High Recall)
+    soft_config = locus.DetectorConfig(
+        decode_mode=locus.DecodeMode.Soft,
+        enable_sharpening=True,
+        upscale_factor=1,
+    )
+    wrappers.append(
+        LocusWrapper(name="Locus (Soft)", config=soft_config, decimation=args.decimation)
+    )
+
+    # Hard mode (Default - Fast)
+    hard_config = locus.DetectorConfig(
+        decode_mode=locus.DecodeMode.Hard,
+        enable_sharpening=True,
+        upscale_factor=1,
+    )
+    wrappers.append(
+        LocusWrapper(name="Locus (Hard)", config=hard_config, decimation=args.decimation)
+    )
+
     if args.compare:
         wrappers.append(OpenCVWrapper())
         wrappers.append(AprilTagWrapper(nthreads=8))
+
+    baseline_data = {}
+    if args.baseline:
+        import json
+        from pathlib import Path
+
+        baseline_path = Path(args.baseline)
+        if baseline_path.exists():
+            with open(baseline_path) as f:
+                baseline_data = json.load(f)
+            print(f"Loaded baseline from {baseline_path}")
+
+    current_results = {}
 
     for scenario in scenarios:
         if not loader.prepare_icra(scenario):
@@ -107,6 +166,7 @@ def run_real_benchmark(args):
         datasets = loader.find_datasets(scenario, types)
         for ds_name, img_dir, gt_map in datasets:
             print(f"\nEvaluating {ds_name}...")
+            current_results[ds_name] = {}
 
             img_names = sorted(gt_map.keys())
             if args.skip:
@@ -115,6 +175,13 @@ def run_real_benchmark(args):
                 img_names = img_names[: args.limit]
 
             for wrapper in wrappers:
+                # Initialize detailed stats for Locus wrappers
+                stage_stats: dict[str, list[float]] = {
+                    "threshold": [],
+                    "segmentation": [],
+                    "quad": [],
+                    "decoding": [],
+                }
                 stats: dict[str, Any] = {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []}
 
                 for img_name in tqdm(img_names, desc=f"{wrapper.name:<10}"):
@@ -129,8 +196,15 @@ def run_real_benchmark(args):
                     gt_tags = gt_map[img_name]
 
                     start = time.perf_counter()
-                    detections, _ = wrapper.detect(img)
+                    detections, lib_stats = wrapper.detect(img)
                     stats["latency"].append((time.perf_counter() - start) * 1000)
+
+                    # Collect stage stats if available (Locus)
+                    if lib_stats:
+                        stage_stats["threshold"].append(lib_stats.threshold_ms)
+                        stage_stats["segmentation"].append(lib_stats.segmentation_ms)
+                        stage_stats["quad"].append(lib_stats.quad_extraction_ms)
+                        stage_stats["decoding"].append(lib_stats.decoding_ms)
 
                     correct, err_sum, _ = Metrics.match_detections(detections, gt_tags)
                     stats["gt"] += len(gt_tags)
@@ -141,9 +215,43 @@ def run_real_benchmark(args):
                 avg_err = (stats["err_sum"] / stats["det"]) if stats["det"] > 0 else 0
                 avg_lat = np.mean(stats["latency"])
 
+                res = {
+                    "recall": recall,
+                    "rmse": avg_err,
+                    "latency": avg_lat,
+                }
+                if stage_stats["threshold"]:
+                    res["stages"] = {k: float(np.mean(v)) for k, v in stage_stats.items()}
+                current_results[ds_name][wrapper.name] = res
+
                 print(
                     f"  {wrapper.name:<10} | Recall: {recall:>6.2f}% | RMSE: {avg_err:>6.4f} px | Latency: {avg_lat:>6.2f} ms"
                 )
+
+                # Compare against baseline
+                if baseline_data.get(ds_name, {}).get(wrapper.name):
+                    base = baseline_data[ds_name][wrapper.name]
+                    lat_diff = avg_lat - base["latency"]
+                    recall_diff = recall - base["recall"]
+                    print(
+                        f"    [Baseline] Latency: {lat_diff:+.2f}ms ({lat_diff / base['latency'] * 100:+.1f}%) | "
+                        f"Recall: {recall_diff:+.2f}%"
+                    )
+
+                if stage_stats["threshold"]:
+                    print(
+                        f"    [Stages] Thresh: {np.mean(stage_stats['threshold']):.2f}ms | "
+                        f"Seg: {np.mean(stage_stats['segmentation']):.2f}ms | "
+                        f"Quad: {np.mean(stage_stats['quad']):.2f}ms | "
+                        f"Decode: {np.mean(stage_stats['decoding']):.2f}ms"
+                    )
+
+    if args.save_baseline:
+        import json
+
+        with open(args.save_baseline, "w") as f:
+            json.dump(current_results, f, indent=2)
+        print(f"\nSaved baseline to {args.save_baseline}")
 
 
 def run_synthetic_benchmark(args):
@@ -266,6 +374,9 @@ def main():
 
     # Run Command
     run = subparsers.add_parser("run", help="Run benchmarks")
+    run.add_argument("--profile", action="store_true", help="Enable Tracy profiling")
+    run.add_argument("--save-baseline", type=str, help="Save results to a baseline JSON file")
+    run.add_argument("--baseline", type=str, help="Compare results against a baseline JSON file")
     run_sub = run.add_subparsers(dest="mode", required=True)
 
     real = run_sub.add_parser("real", help="Run on real datasets")
@@ -304,6 +415,9 @@ def main():
     subparsers.add_parser("prepare", help="Download and prepare all datasets")
 
     args = parser.parse_args()
+
+    if getattr(args, "profile", False):
+        locus.init_tracy()
 
     if args.cmd == "run":
         if args.mode == "real":

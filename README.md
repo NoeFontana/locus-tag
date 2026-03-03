@@ -14,6 +14,7 @@
 - **High-Performance Core**: Written in Rust (2024 Edition) with a focus on Data-Oriented Design.
 - **Runtime SIMD Dispatch**: Automatically utilizes AVX2, AVX-512, or NEON based on host CPU capabilities.
 - **Zero-Copy Python API**: Direct ingestion of NumPy arrays via `pyo3` and `numpy` bindings.
+- **GIL-Free Execution**: Releases the Python Global Interpreter Lock (GIL) during detection to enable true multi-threaded applications.
 - **Memory Efficient**: Uses `bumpalo` arena allocation to achieve zero heap allocations in the detection hot-path.
 - **Soft-Decoding**: Optional Log-Likelihood Ratio (LLR) decoding for maximum recall on blurry or noisy tags (+11.5% boost).
 - **Advanced Pose Estimation**: High-precision 6-DOF recovery using IPPE-Square or weighted Levenberg-Marquardt with corner uncertainty modeling.
@@ -25,10 +26,10 @@ Evaluated on the standard ICRA 2020 benchmark (50 challenging images). Latency m
 
 | Detector | Recall | RMSE | Latency (avg) |
 | :--- | :---: | :---: | :---: |
-| **Locus (Soft)** | **95.42%** | 0.26 px | 129.1 ms |
-| **Locus (Hard)** | **83.90%** | 0.25 px | **97.9 ms** |
-| AprilTag 3 | 62.34% | **0.22 px** | 121.0 ms |
-| OpenCV | 33.16% | 0.92 px | 113.0 ms |
+| **Locus (Soft)** | **94.35%** | 0.26 px | 113.2 ms |
+| **Locus (Hard)** | **75.55%** | 0.23 px | **89.2 ms** |
+| AprilTag 3 | 62.34% | **0.22 px** | 112.3 ms |
+| OpenCV | 33.16% | 0.92 px | 108.9 ms |
 
 *Note: Locus' higher recall (detecting more challenging tags) correlates with its aggregate RMSE. On identical detections, Locus' precision is within **+0.0024 px** of AprilTag.*
 
