@@ -61,6 +61,8 @@ pub mod pose_weighted;
 pub mod quad;
 /// Connected components labeling using Union-Find.
 pub mod segmentation;
+/// SIMD optimized mathematical kernels.
+pub mod simd;
 /// Decoding strategies (Hard vs Soft).
 pub mod strategy;
 /// Utilities for testing and synthetic data generation.
