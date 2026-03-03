@@ -1317,12 +1317,12 @@ pub fn decode_batch_soa(
             decode_batch_soa_generic::<crate::strategy::HardStrategy>(
                 batch, n, img, decoders, config,
             );
-        }
+        },
         crate::config::DecodeMode::Soft => {
             decode_batch_soa_generic::<crate::strategy::SoftStrategy>(
                 batch, n, img, decoders, config,
             );
-        }
+        },
     }
 }
 
