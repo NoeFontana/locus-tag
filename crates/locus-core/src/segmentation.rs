@@ -7,8 +7,11 @@
 //! - **Standard CCL**: Efficient binary component labeling.
 //! - **Threshold-Model CCL**: Advanced connectivity based on local adaptive thresholds.
 
+#![allow(unsafe_code)]
+
 use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
+use multiversion::multiversion;
 use rayon::prelude::*;
 
 /// A disjoint-set forest (Union-Find) with path compression and rank optimization.
@@ -256,22 +259,121 @@ pub fn label_components_with_stats<'a>(
     }
 }
 
+#[inline(always)]
+fn parse_mask_into_runs(mut mask: u32, bits: usize, x_offset: usize, y: u32, row_runs: &mut Vec<Run>) {
+    while mask != 0 {
+        let start = mask.trailing_zeros() as usize;
+        if start >= bits { break; }
+        
+        // Find end of run: first 0 after the 1s
+        let inverted_mask = !mask >> start;
+        let run_len = inverted_mask.trailing_zeros() as usize;
+        let end = (start + run_len - 1).min(bits - 1);
+        
+        if let Some(last) = row_runs.last_mut() 
+            && last.x_end == (x_offset + start) as u32 - 1 
+        {
+            last.x_end = (x_offset + end) as u32;
+        } else {
+            row_runs.push(Run {
+                y,
+                x_start: (x_offset + start) as u32,
+                x_end: (x_offset + end) as u32,
+                id: 0,
+            });
+        }
+        
+        // Clear the processed bits
+        if start + run_len >= 32 {
+            mask = 0;
+        } else {
+            mask &= !((1 << (start + run_len)) - 1);
+        }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn extract_runs_row_avx2(
+    row_gs: &[u8],
+    row_th: &[u8],
+    width: usize,
+    y: u32,
+    margin: i16,
+    row_runs: &mut Vec<Run>,
+) -> usize {
+    use std::arch::x86_64::*;
+    let m_vec = unsafe { _mm256_set1_epi16(-margin) };
+    let mut x = 0;
+    while x + 16 <= width {
+        unsafe {
+            let gs_ptr = row_gs.as_ptr().add(x);
+            let th_ptr = row_th.as_ptr().add(x);
+            let gs_low = _mm_loadu_si128(gs_ptr as *const __m128i);
+            let th_low = _mm_loadu_si128(th_ptr as *const __m128i);
+            let gs_16 = _mm256_cvtepu8_epi16(gs_low);
+            let th_16 = _mm256_cvtepu8_epi16(th_low);
+            let diff = _mm256_sub_epi16(gs_16, th_16);
+            let cmp = _mm256_cmpgt_epi16(m_vec, diff);
+            let mask_low = _mm_movemask_epi8(_mm256_castsi256_si128(cmp));
+            let mask_high = _mm_movemask_epi8(_mm256_extracti128_si256(cmp, 1));
+            let mut final_mask = 0u32;
+            for i in 0..8 {
+                if (mask_low >> (i * 2)) & 1 != 0 { final_mask |= 1 << i; }
+                if (mask_high >> (i * 2)) & 1 != 0 { final_mask |= 1 << (i + 8); }
+            }
+            if final_mask != 0 {
+                parse_mask_into_runs(final_mask, 16, x, y, row_runs);
+            }
+        }
+        x += 16;
+    }
+    x
+}
+
+#[cfg(target_arch = "aarch64")]
+#[target_feature(enable = "neon")]
+unsafe fn extract_runs_row_neon(
+    row_gs: &[u8],
+    row_th: &[u8],
+    width: usize,
+    y: u32,
+    margin: i16,
+    row_runs: &mut Vec<Run>,
+) -> usize {
+    use std::arch::aarch64::*;
+    let m_vec = unsafe { vdupq_n_s16(-margin) };
+    let mut x = 0;
+    while x + 8 <= width {
+        unsafe {
+            let gs_ptr = row_gs.as_ptr().add(x);
+            let th_ptr = row_th.as_ptr().add(x);
+            let gs_8 = vld1_u8(gs_ptr);
+            let th_8 = vld1_u8(th_ptr);
+            let gs_16 = vreinterpretq_s16_u16(vmovl_u8(gs_8));
+            let th_16 = vreinterpretq_s16_u16(vmovl_u8(th_8));
+            let diff = vsubq_s16(gs_16, th_16);
+            let mask_res = vcltq_s16(diff, m_vec);
+            let mut final_mask = 0u32;
+            let res_u16: [u16; 8] = std::mem::transmute(mask_res);
+            for (i, &val) in res_u16.iter().enumerate() {
+                if val != 0 { final_mask |= 1 << i; }
+            }
+            if final_mask != 0 {
+                parse_mask_into_runs(final_mask, 8, x, y, row_runs);
+            }
+        }
+        x += 8;
+    }
+    x
+}
+
 /// Threshold-model-aware connected component labeling.
-///
-/// Instead of connecting pixels based on binary value (0 = black), this function
-/// connects pixels based on their *signed deviation* from the local threshold.
-/// This preserves the shape of small tag corners where pure binary would see noise.
-///
-/// # Arguments
-/// * `arena` - Bump allocator for temporary storage
-/// * `grayscale` - Original grayscale image
-/// * `threshold_map` - Per-pixel threshold values (from adaptive thresholding)
-/// * `width` - Image width
-/// * `height` - Image height
-///
-/// # Returns
-/// Same `LabelResult` as `label_components_with_stats`, but with improved connectivity
-/// for small features.
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::cast_sign_loss)]
 #[allow(clippy::cast_possible_wrap, clippy::too_many_arguments)]
@@ -286,14 +388,7 @@ pub fn label_components_threshold_model<'a>(
     min_area: u32,
     margin: i16,
 ) -> LabelResult<'a> {
-    // Compute signed deviation: negative = dark (below threshold), positive = light
-    // We only care about dark regions (tag interior) for now
-    let mut runs = BumpVec::new_in(arena);
-
     // Pass 1: Extract runs of "consistently dark" pixels
-    // A pixel is "dark" if (grayscale - threshold) < -margin
-    // This is more robust than binary == 0 because it considers the local model
-
     let all_runs: Vec<Vec<Run>> = (0..height)
         .into_par_iter()
         .map(|y| {
@@ -301,16 +396,26 @@ pub fn label_components_threshold_model<'a>(
             let row_th = &threshold_map[y * width..(y + 1) * width];
             let mut row_runs = Vec::new();
             let mut x = 0;
+            
+            #[cfg(target_arch = "x86_64")]
+            if std::is_x86_feature_detected!("avx2") {
+                x = unsafe { extract_runs_row_avx2(row_gs, row_th, width, y as u32, margin, &mut row_runs) };
+            }
+
+            #[cfg(target_arch = "aarch64")]
+            {
+                // NEON is always available on aarch64
+                x = unsafe { extract_runs_row_neon(row_gs, row_th, width, y as u32, margin, &mut row_runs) };
+            }
+
+            // Scalar tail
             while x < width {
                 let gs = row_gs[x];
                 let th = row_th[x];
                 if i16::from(gs) - i16::from(th) < -margin {
                     let start = x;
                     x += 1;
-                    while x < width {
-                        if i16::from(row_gs[x]) - i16::from(row_th[x]) >= -margin {
-                            break;
-                        }
+                    while x < width && i16::from(row_gs[x]) - i16::from(row_th[x]) < -margin {
                         x += 1;
                     }
                     row_runs.push(Run {
@@ -327,6 +432,7 @@ pub fn label_components_threshold_model<'a>(
         })
         .collect();
 
+    let mut runs = BumpVec::new_in(arena);
     for (id, mut run) in all_runs.into_iter().flatten().enumerate() {
         run.id = id as u32;
         runs.push(run);
