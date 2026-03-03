@@ -9,13 +9,15 @@ import pytest
 
 def test_zero_copy_ingestion():
     """Verify that the detector handles various numpy layouts correctly."""
+    detector = locus.Detector()
+
     # 1. Standard C-contiguous array
     img = np.zeros((100, 100), dtype=np.uint8)
     # Draw a simple white box to ensure we don't crash on actual data
     img[20:80, 20:80] = 255
     img[30:70, 30:70] = 0
 
-    detections = locus.detect_tags(img)
+    detections = detector.detect(img)
     assert isinstance(detections, list)
 
     # 2. Strided array (padding)
@@ -24,7 +26,7 @@ def test_zero_copy_ingestion():
     assert img_strided.strides[0] == 120
     assert img_strided.strides[1] == 1
 
-    detections = locus.detect_tags(img_strided)
+    detections = detector.detect(img_strided)
     assert isinstance(detections, list)
 
     # 3. Non-contiguous slice (step > 1)
@@ -33,12 +35,12 @@ def test_zero_copy_ingestion():
 
     # Now handles non-contiguous arrays by raising ValueError (Zero-Copy Enforcement)
     with pytest.raises(ValueError, match="Array must be C-contiguous"):
-        locus.detect_tags(img_sliced)
+        detector.detect(img_sliced)
 
     # 4. F-contiguous array (Strict enforcement)
     img_f = np.asfortranarray(img)
     with pytest.raises(ValueError, match="Array must be C-contiguous"):
-        locus.detect_tags(img_f)
+        detector.detect(img_f)
 
 
 def test_detector_api():

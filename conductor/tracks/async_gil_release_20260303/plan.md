@@ -1,10 +1,10 @@
 # Implementation Plan: Asynchronous GIL Release (Track: async_gil_release)
 
 ## Phase 1: Legacy API Removal & Cleanup
-- [ ] Task: Remove legacy functions (`detect_tags`, `detect_tags_with_stats`, `dummy_detect`, `debug_threshold`, `debug_segmentation`) from `crates/locus-py/src/lib.rs`.
-- [ ] Task: Update existing Python tests (`tests/test_python_api.py`, `tests/test_non_contiguous.py`, etc.) to remove all references to legacy functions.
-- [ ] Task: Rebuild and verify that `locus` only exports the `Detector` and supporting classes.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md)
+- [x] Task: Remove legacy functions (`detect_tags`, `detect_tags_with_stats`, `dummy_detect`, `debug_threshold`, `debug_segmentation`) from `crates/locus-py/src/lib.rs`.
+- [x] Task: Update existing Python tests (`tests/test_python_api.py`, `tests/test_non_contiguous.py`, etc.) to remove all references to legacy functions.
+- [x] Task: Rebuild and verify that `locus` only exports the `Detector` and supporting classes.
+- [x] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md)
 
 ## Phase 2: Core Purity Audit & Metadata Snapshotting
 - [ ] Task: Perform a purity audit on `locus-core` to ensure no `PyO3` types or Python objects are held in the hot path.

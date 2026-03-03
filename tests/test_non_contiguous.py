@@ -31,18 +31,6 @@ def test_non_contiguous_ingestion():
         detector.detect(img_f)
 
 
-def test_legacy_detect_non_contiguous():
-    """Verify legacy functions also raise ValueError."""
-    img = np.zeros((100, 100), dtype=np.uint8)
-    img_nc = img[:, ::2]
-
-    with pytest.raises(ValueError, match="Array must be C-contiguous"):
-        locus.detect_tags(img_nc)
-
-    with pytest.raises(ValueError, match="Array must be C-contiguous"):
-        locus.detect_tags_with_stats(img_nc)
-
-
 if __name__ == "__main__":
     # If run as a script, use pytest to run itself
     pytest.main([__file__])
