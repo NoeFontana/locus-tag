@@ -12,15 +12,15 @@
     - [x] Verify that these tests fail when run against the current "auto-copy" implementation.
 - [x] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md) 3296980
 
-## Phase 3: Green Phase - Implement Strict Zero-Copy Enforcement
-- [ ] Task: Refactor `crates/locus-py/src/lib.rs` to enforce zero-copy.
-    - [ ] Remove the `ImageInput::Owned` variant from the `ImageInput` enum.
-    - [ ] Update `prepare_image_input` to throw a `ValueError` with the specified message if `stride_x != 1`.
-    - [ ] Update high-performance `Detector` methods and legacy `detect_tags` functions to handle the change.
-- [ ] Task: Verify the implementation with tests.
-    - [ ] Run `pytest tests/test_non_contiguous.py` and confirm all tests pass.
-    - [ ] Run `python tests/test_ffi_overhead.py` and confirm the overhead for contiguous arrays remains < 0.1ms.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md)
+## Phase 3: Green Phase - Implement Strict Zero-Copy Enforcement [checkpoint: 42f3a5a]
+- [x] Task: Refactor `crates/locus-py/src/lib.rs` to enforce zero-copy. 174a8af
+    - [x] Remove the `ImageInput::Owned` variant from the `ImageInput` enum.
+    - [x] Update `prepare_image_input` to throw a `ValueError` with the specified message if `stride_x != 1`.
+    - [x] Update high-performance `Detector` methods and legacy `detect_tags` functions to handle the change.
+- [x] Task: Verify the implementation with tests. 174a8af
+    - [x] Run `pytest tests/test_non_contiguous.py` and confirm all tests pass.
+    - [x] Run `python tests/test_ffi_overhead.py` and confirm the overhead for contiguous arrays remains < 0.1ms.
+- [x] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md) 42f3a5a
 
 ## Phase 4: Final Verification & Checkpointing
 - [ ] Task: Perform final performance audit and code cleanup.
