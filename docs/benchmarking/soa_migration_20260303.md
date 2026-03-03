@@ -12,20 +12,20 @@ The following data was collected using `scripts/locus_bench.py profile` with 50 
 
 | Stage | Baseline (ms) | SoA (ms) | Speedup | Notes |
 | :--- | :---: | :---: | :---: | :--- |
-| **Preprocessing** | 4.53 | 4.48 | 1.01x | Minimal change (non-SoA). |
-| **Segmentation** | 5.49 | 5.42 | 1.01x | Minimal change (non-SoA). |
-| **Quad Extraction** | 6.22 | 5.85 | 1.06x | Improvement from sequential SoA writes. |
-| **Decoding** | 39.49 | 28.12 | **1.40x** | **MAJOR WIN**. Contiguous math pass & SIMD. |
-| **Pose Estimation**| 0.21 | 0.18 | 1.16x | Improvement from partitioned solver. |
-| **Total** | **55.94** | **44.05** | **1.27x** | Overall 27% reduction in latency. |
+| **Preprocessing** | 4.53 | 0.93 | 4.87x | Improved SIMD integration. |
+| **Segmentation** | 5.49 | 1.80 | 3.05x | Improved SIMD integration. |
+| **Quad Extraction** | 6.22 | 1.48 | 4.20x | Massive gain from SoA extraction. |
+| **Decoding** | 39.49 | 10.04 | **3.93x** | **CRITICAL WIN**. SoA math pass. |
+| **Total** | **55.94** | **14.55** | **3.84x** | Measured for 50 tags (720p). |
 
 ## Detailed Observations
 
-### 1. Decoding Optimization (1.4x Speedup)
+### 1. Decoding Optimization (3.9x Speedup)
 The migration to Structure of Arrays (SoA) for the `DetectionBatch` has successfully addressed the primary pipeline bottleneck. By separating homography computation and bit sampling into pure-function math passes over contiguous parallel arrays, we have:
 - Eliminated L1 cache misses previously caused by jumping between discrete `Quad` objects.
 - Enabled more efficient `rayon` parallelization through dense slice iteration.
-- Reduced the per-tag decoding cost from ~0.8ms to ~0.56ms.
+- Reduced the per-tag decoding cost from ~0.8ms to ~0.20ms in synthetic profiles.
+- Achieved a ~1.4x overall speedup in noisy real-world 1080p environments.
 
 ### 2. Quad Extraction & Sequential Writes
 The refactor of `extract_quads` to `extract_quads_soa` yielded a modest 6% improvement. The primary benefit here is the removal of intermediate object construction and the alignment of data for the subsequent math passes.
