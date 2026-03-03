@@ -6,11 +6,11 @@
     - [x] Create a benchmark script `scripts/bench_ingestion_penalty.py` to measure the overhead for non-contiguous arrays (the 110ms bottleneck).
 - [x] Task: Conductor - User Manual Verification 'Phase 1' (Protocol in workflow.md) d2f22fd
 
-## Phase 2: Red Phase - Implement Failing Tests
+## Phase 2: Red Phase - Implement Failing Tests [checkpoint: 3296980]
 - [x] Task: Modify `tests/test_non_contiguous.py` to expect `ValueError` for non-contiguous arrays. 3202274
     - [x] Change `test_non_contiguous_ingestion` to use `pytest.raises(ValueError)`.
     - [x] Verify that these tests fail when run against the current "auto-copy" implementation.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md) 3296980
 
 ## Phase 3: Green Phase - Implement Strict Zero-Copy Enforcement
 - [ ] Task: Refactor `crates/locus-py/src/lib.rs` to enforce zero-copy.
