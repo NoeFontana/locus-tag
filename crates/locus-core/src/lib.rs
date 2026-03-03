@@ -76,7 +76,14 @@ pub use crate::decoder::family_to_decoder;
 pub use crate::image::ImageView;
 use bumpalo::Bump;
 use rayon::prelude::*;
+use std::cell::RefCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+thread_local! {
+    // Use a small initial capacity (e.g., 4KB) to avoid system allocation overhead for small workloads.
+    // The arena will still grow if needed.
+    static DECODE_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(4096));
+}
 
 /// Result of a tag detection.
 #[derive(Clone, Debug, Default)]
@@ -129,7 +136,6 @@ impl Detection {
         )
     }
 }
-
 
 /// Statistics for the detection pipeline stages.
 /// Pipeline-wide statistics for a single detection call.
@@ -591,36 +597,33 @@ impl Detector {
         let results: Vec<_> = candidates
             .into_par_iter()
             .map(|cand| {
-                let arena = bumpalo::Bump::new();
-                let cand_copy = if capture_debug {
-                    Some(cand.clone())
-                } else {
-                    None
-                };
-                let (det, failed_contrast, failed_hamming, best_h, bits) =
-                    Self::decode_single_candidate::<S>(
-                        &arena,
-                        config,
-                        cand,
-                        refinement_img,
-                        active_decoders,
-                        options,
-                    );
-                (
-                    det,
-                    failed_contrast,
-                    failed_hamming,
-                    best_h,
-                    bits,
-                    cand_copy.unwrap_or(Detection::default()),
-                )
+                DECODE_ARENA.with_borrow_mut(|arena| {
+                    arena.reset();
+                    let (det, failed_contrast, failed_hamming, best_h, bits) =
+                        Self::decode_single_candidate::<S>(
+                            arena,
+                            config,
+                            cand.clone(),
+                            refinement_img,
+                            active_decoders,
+                            options,
+                        );
+                    (
+                        det,
+                        failed_contrast,
+                        failed_hamming,
+                        best_h,
+                        bits,
+                        if capture_debug { Some(cand) } else { None },
+                    )
+                })
             })
             .collect();
 
         let mut final_detections = Vec::new();
         let mut processed_candidates = Vec::new();
 
-        for (det, failed_contrast, failed_hamming, best_h, bits, mut cand) in results {
+        for (det, failed_contrast, failed_hamming, best_h, bits, cand_opt) in results {
             if failed_contrast {
                 rejected_contrast.fetch_add(1, Ordering::Relaxed);
             }
@@ -631,9 +634,11 @@ impl Detector {
                 final_detections.push(d);
             }
             if capture_debug {
-                cand.hamming = best_h;
-                cand.bits = bits;
-                processed_candidates.push(cand);
+                if let Some(mut cand) = cand_opt {
+                    cand.hamming = best_h;
+                    cand.bits = bits;
+                    processed_candidates.push(cand);
+                }
             }
         }
 
@@ -715,9 +720,8 @@ impl Detector {
 
                 // Always perform ERF refinement for finalists if requested
                 if config.refinement_mode == crate::config::CornerRefinementMode::Erf {
-                    let decode_arena = bumpalo::Bump::new();
                     let refined_corners = crate::decoder::refine_corners_erf(
-                        &decode_arena,
+                        arena,
                         refinement_img,
                         &cand.corners,
                         config.subpixel_refinement_sigma,
@@ -729,7 +733,7 @@ impl Detector {
 
                     if let Some(code_ref) = crate::decoder::sample_grid_generic::<S>(
                         refinement_img,
-                        &decode_arena,
+                        arena,
                         &temp_cand,
                         decoder,
                     ) && let Some((id_ref, hamming_ref, _)) = S::decode(&code_ref, decoder, 255)
@@ -956,9 +960,8 @@ impl Detector {
                                             cand.corners = current_corners;
 
                                             // Final ERF polish for maximum precision
-                                            let decode_arena = bumpalo::Bump::new();
                                             let refined = crate::decoder::refine_corners_erf(
-                                                &decode_arena,
+                                                arena,
                                                 refinement_img,
                                                 &cand.corners,
                                                 config.subpixel_refinement_sigma,
@@ -971,7 +974,7 @@ impl Detector {
                                             if let Some(code_ref) =
                                                 crate::decoder::sample_grid_generic::<S>(
                                                     refinement_img,
-                                                    &decode_arena,
+                                                    arena,
                                                     &temp_cand,
                                                     decoder.as_ref(),
                                                 )

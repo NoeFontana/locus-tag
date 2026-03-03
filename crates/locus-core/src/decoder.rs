@@ -567,7 +567,8 @@ impl<'a> EdgeFitter<'a> {
             let offset = f64::from(k) * 0.4;
             let scan_d = self.d + offset;
 
-            let (sum_g, count) = project_gradients_optimized(self.img, self.nx, self.ny, x0, x1, y0, y1, scan_d);
+            let (sum_g, count) =
+                project_gradients_optimized(self.img, self.nx, self.ny, x0, x1, y0, y1, scan_d);
 
             if count > 0 && sum_g > best_grad {
                 best_grad = sum_g;
@@ -585,20 +586,8 @@ impl<'a> EdgeFitter<'a> {
         let (x0, x1, y0, y1) = self.get_scan_bounds(window);
 
         collect_samples_optimized(
-            self.img,
-            self.nx,
-            self.ny,
-            self.d,
-            self.p1,
-            self.dx,
-            self.dy,
-            self.len,
-            x0,
-            x1,
-            y0,
-            y1,
-            window,
-            arena,
+            self.img, self.nx, self.ny, self.d, self.p1, self.dx, self.dy, self.len, x0, x1, y0,
+            y1, window, arena,
         )
     }
 
@@ -609,7 +598,7 @@ impl<'a> EdgeFitter<'a> {
         let mut a = 128.0;
         let mut b = 128.0;
         let inv_sigma = 1.0 / sigma;
-        let sqrt_pi = std::f64::consts::PI.sqrt();
+        let _sqrt_pi = std::f64::consts::PI.sqrt();
 
         for _ in 0..15 {
             let mut dark_sum = 0.0;
@@ -640,7 +629,9 @@ impl<'a> EdgeFitter<'a> {
                 break;
             }
 
-            let (sum_jtj, sum_jt_res) = refine_accumulate_optimized(samples, self.img, self.nx, self.ny, self.d, a, b, sigma, inv_sigma);
+            let (sum_jtj, sum_jt_res) = refine_accumulate_optimized(
+                samples, self.img, self.nx, self.ny, self.d, a, b, sigma, inv_sigma,
+            );
 
             if sum_jtj < 1e-6 {
                 break;
@@ -703,12 +694,8 @@ fn project_gradients_optimized(
                 let v_abs_mask = _mm256_set1_pd(-0.0);
 
                 while px + 4 <= x1 {
-                    let v_x = _mm256_set_pd(
-                        (px + 3) as f64,
-                        (px + 2) as f64,
-                        (px + 1) as f64,
-                        px as f64,
-                    );
+                    let v_x =
+                        _mm256_set_pd((px + 3) as f64, (px + 2) as f64, (px + 1) as f64, px as f64);
 
                     let v_dist = _mm256_add_pd(
                         _mm256_add_pd(_mm256_mul_pd(v_nx, v_x), _mm256_mul_pd(v_ny, v_y)),
@@ -790,12 +777,8 @@ fn collect_samples_optimized<'a>(
                 let v_abs_mask = _mm256_set1_pd(-0.0);
 
                 while px + 4 <= x1 {
-                    let v_x = _mm256_set_pd(
-                        (px + 3) as f64,
-                        (px + 2) as f64,
-                        (px + 1) as f64,
-                        px as f64,
-                    );
+                    let v_x =
+                        _mm256_set_pd((px + 3) as f64, (px + 2) as f64, (px + 1) as f64, px as f64);
 
                     let v_dist = _mm256_add_pd(
                         _mm256_add_pd(_mm256_mul_pd(v_nx, v_x), _mm256_mul_pd(v_ny, v_y)),
@@ -856,7 +839,7 @@ fn collect_samples_optimized<'a>(
 ))]
 fn refine_accumulate_optimized(
     samples: &[(f64, f64, f64)],
-    img: &crate::image::ImageView,
+    _img: &crate::image::ImageView,
     nx: f64,
     ny: f64,
     d: f64,
@@ -867,8 +850,8 @@ fn refine_accumulate_optimized(
 ) -> (f64, f64) {
     let mut sum_jtj = 0.0;
     let mut sum_jt_res = 0.0;
-    let sqrt_pi = std::f64::consts::PI.sqrt();
-    let k = (b - a) / (sqrt_pi * sigma);
+    let _sqrt_pi = std::f64::consts::PI.sqrt();
+    let k = (b - a) / (_sqrt_pi * sigma);
 
     let mut i = 0;
 
@@ -892,17 +875,20 @@ fn refine_accumulate_optimized(
 
             while i + 4 <= samples.len() {
                 let s0 = samples[i];
-                let s1 = samples[i+1];
-                let s2 = samples[i+2];
-                let s3 = samples[i+3];
+                let s1 = samples[i + 1];
+                let s2 = samples[i + 2];
+                let s3 = samples[i + 3];
 
                 let v_x = _mm256_set_pd(s3.0, s2.0, s1.0, s0.0);
                 let v_y = _mm256_set_pd(s3.1, s2.1, s1.1, s0.1);
                 let v_img_val = _mm256_set_pd(s3.2, s2.2, s1.2, s0.2);
 
-                let v_dist = _mm256_add_pd(_mm256_add_pd(_mm256_mul_pd(v_nx, v_x), _mm256_mul_pd(v_ny, v_y)), v_d);
+                let v_dist = _mm256_add_pd(
+                    _mm256_add_pd(_mm256_mul_pd(v_nx, v_x), _mm256_mul_pd(v_ny, v_y)),
+                    v_d,
+                );
                 let v_s = _mm256_mul_pd(v_dist, v_inv_sigma);
-                
+
                 let v_abs_s = _mm256_andnot_pd(v_abs_mask, v_s);
                 let v_range_mask = _mm256_cmp_pd(v_abs_s, _mm256_set1_pd(3.0), _CMP_LE_OQ);
 
@@ -917,7 +903,8 @@ fn refine_accumulate_optimized(
                     for j in 0..4 {
                         if mm[j] != 0.0 {
                             let s_val = ss[j];
-                            let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::quad::erf_approx(s_val);
+                            let model =
+                                (a + b) * 0.5 + (b - a) * 0.5 * crate::quad::erf_approx(s_val);
                             let residual = iv[j] - model;
                             let jac = k * (-s_val * s_val).exp();
                             sum_jtj += jac * jac;

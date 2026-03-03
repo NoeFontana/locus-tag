@@ -264,15 +264,17 @@ fn parse_mask_into_runs(mask: u32, bits: usize, x_offset: usize, y: u32, row_run
     let mut mask = mask;
     while mask != 0 {
         let start = mask.trailing_zeros() as usize;
-        if start >= bits { break; }
-        
+        if start >= bits {
+            break;
+        }
+
         // Find end of run: first 0 after the 1s
         let inverted_mask = !mask >> start;
         let run_len = inverted_mask.trailing_zeros() as usize;
         let end = (start + run_len - 1).min(bits - 1);
-        
-        if let Some(last) = row_runs.last_mut() 
-            && last.x_end == (x_offset + start) as u32 - 1 
+
+        if let Some(last) = row_runs.last_mut()
+            && last.x_end == (x_offset + start) as u32 - 1
         {
             last.x_end = (x_offset + end) as u32;
         } else {
@@ -283,7 +285,7 @@ fn parse_mask_into_runs(mask: u32, bits: usize, x_offset: usize, y: u32, row_run
                 id: 0,
             });
         }
-        
+
         // Clear the processed bits
         if start + run_len >= 32 {
             mask = 0;
@@ -319,8 +321,12 @@ unsafe fn extract_runs_row_avx2(
         let mask_high = _mm_movemask_epi8(_mm256_extracti128_si256(cmp, 1));
         let mut final_mask = 0u32;
         for i in 0..8 {
-            if (mask_low >> (i * 2)) & 1 != 0 { final_mask |= 1 << i; }
-            if (mask_high >> (i * 2)) & 1 != 0 { final_mask |= 1 << (i + 8); }
+            if (mask_low >> (i * 2)) & 1 != 0 {
+                final_mask |= 1 << i;
+            }
+            if (mask_high >> (i * 2)) & 1 != 0 {
+                final_mask |= 1 << (i + 8);
+            }
         }
         if final_mask != 0 {
             parse_mask_into_runs(final_mask, 16, x, y, row_runs);
@@ -355,7 +361,9 @@ unsafe fn extract_runs_row_neon(
         let mut final_mask = 0u32;
         let res_u16: [u16; 8] = std::mem::transmute(mask_res);
         for (i, &val) in res_u16.iter().enumerate() {
-            if val != 0 { final_mask |= 1 << i; }
+            if val != 0 {
+                final_mask |= 1 << i;
+            }
         }
         if final_mask != 0 {
             parse_mask_into_runs(final_mask, 8, x, y, row_runs);
@@ -393,16 +401,20 @@ pub fn label_components_threshold_model<'a>(
             let row_th = &threshold_map[y * width..(y + 1) * width];
             let mut row_runs = Vec::new();
             let mut x = 0;
-            
+
             #[cfg(target_arch = "x86_64")]
             if std::is_x86_feature_detected!("avx2") {
-                x = unsafe { extract_runs_row_avx2(row_gs, row_th, width, y as u32, margin, &mut row_runs) };
+                x = unsafe {
+                    extract_runs_row_avx2(row_gs, row_th, width, y as u32, margin, &mut row_runs)
+                };
             }
 
             #[cfg(target_arch = "aarch64")]
             {
                 // NEON is always available on aarch64
-                x = unsafe { extract_runs_row_neon(row_gs, row_th, width, y as u32, margin, &mut row_runs) };
+                x = unsafe {
+                    extract_runs_row_neon(row_gs, row_th, width, y as u32, margin, &mut row_runs)
+                };
             }
 
             // Scalar tail
@@ -696,8 +708,8 @@ mod tests {
 
     use crate::config::TagFamily;
     use crate::image::ImageView;
-    use crate::test_utils::{TestImageParams, generate_test_image_with_params};
     use crate::test_utils::compute_corner_error;
+    use crate::test_utils::{TestImageParams, generate_test_image_with_params};
     use crate::threshold::ThresholdEngine;
 
     /// Helper: Generate a binarized tag image at the given size.

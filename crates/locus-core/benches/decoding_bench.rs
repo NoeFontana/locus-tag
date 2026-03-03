@@ -43,8 +43,8 @@ fn bench_decoding_200_candidates(bencher: divan::Bencher) {
                 corners: *corners,
                 ..Default::default()
             };
-            if let Some(bits) = locus_core::decoder::sample_grid(&img, &arena, &cand, &decoder, 20.0)
-
+            if let Some(bits) =
+                locus_core::decoder::sample_grid(&img, &arena, &cand, &decoder, 20.0)
                 && let Some((id, _, _)) = decoder.decode(bits)
             {
                 sum_ids += id;

@@ -352,7 +352,7 @@ fn find_max_distance_optimized(points: &[Point], start: usize, end: usize) -> (f
     let dx = b.x - a.x;
     let dy = b.y - a.y;
     let mag_sq = dx * dx + dy * dy;
-    
+
     if mag_sq < 1e-18 {
         let mut dmax = 0.0;
         let mut index = start;
@@ -366,7 +366,6 @@ fn find_max_distance_optimized(points: &[Point], start: usize, end: usize) -> (f
         return (dmax, index);
     }
 
-    let inv_mag = 1.0 / mag_sq.sqrt();
     let mut dmax = 0.0;
     let mut index = start;
 
@@ -382,7 +381,7 @@ fn find_max_distance_optimized(points: &[Point], start: usize, end: usize) -> (f
             let v_ay = _mm256_set1_pd(a.y);
             let v_bx = _mm256_set1_pd(b.x);
             let v_by = _mm256_set1_pd(b.y);
-            
+
             let mut v_dmax = _mm256_setzero_pd();
             let mut v_indices = _mm256_setzero_pd(); // We'll store indices as doubles for simplicity
 
@@ -390,35 +389,45 @@ fn find_max_distance_optimized(points: &[Point], start: usize, end: usize) -> (f
                 // Load 4 points (8 doubles: x0, y0, x1, y1, x2, y2, x3, y3)
                 // Point is struct { x: f64, y: f64 } which is memory-compatible with [f64; 2]
                 let p_ptr = points.as_ptr().add(i) as *const f64;
-                
+
                 // Unpack into xxxx and yyyy
                 // [x0, y0, x1, y1]
                 let raw0 = _mm256_loadu_pd(p_ptr);
                 // [x2, y2, x3, y3]
                 let raw1 = _mm256_loadu_pd(p_ptr.add(4));
-                
+
                 // permute to get [x0, x1, y0, y1]
                 let x01y01 = _mm256_shuffle_pd(raw0, raw0, 0b0000); // Wait, shuffle_pd is tricky
                 // Better: use unpack
-                let x0x1 = _mm256_set_pd(points[i+3].x, points[i+2].x, points[i+1].x, points[i].x);
-                let y0y1 = _mm256_set_pd(points[i+3].y, points[i+2].y, points[i+1].y, points[i].y);
+                let x0x1 = _mm256_set_pd(
+                    points[i + 3].x,
+                    points[i + 2].x,
+                    points[i + 1].x,
+                    points[i].x,
+                );
+                let y0y1 = _mm256_set_pd(
+                    points[i + 3].y,
+                    points[i + 2].y,
+                    points[i + 1].y,
+                    points[i].y,
+                );
 
                 // formula: |dy*px - dx*py + bx*ay - by*ax| * inv_mag
                 let term1 = _mm256_mul_pd(v_dy, x0x1);
                 let term2 = _mm256_mul_pd(v_dx, y0y1);
                 let term3 = _mm256_set1_pd(b.x * a.y - b.y * a.x);
-                
+
                 let dist_v = _mm256_sub_pd(term1, term2);
                 let dist_v = _mm256_add_pd(dist_v, term3);
-                
+
                 // Absolute value
                 let mask = _mm256_set1_pd(-0.0);
                 let dist_v = _mm256_andnot_pd(mask, dist_v);
-                
+
                 // Check if any dist > v_dmax
                 let cmp = _mm256_cmp_pd(dist_v, v_dmax, _CMP_GT_OQ);
                 if _mm256_movemask_pd(cmp) != 0 {
-                    // Update dmax and indices - this is a bit slow in SIMD, 
+                    // Update dmax and indices - this is a bit slow in SIMD,
                     // but we only do it when we find a new max.
                     let dists: [f64; 4] = std::mem::transmute(dist_v);
                     for (j, &d) in dists.iter().enumerate() {
