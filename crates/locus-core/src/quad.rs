@@ -12,6 +12,7 @@
 #![allow(unsafe_code)]
 
 use crate::Detection;
+use crate::batch::{CandidateState, DetectionBatch, MAX_CANDIDATES, Point2f};
 use crate::config::DetectorConfig;
 use crate::image::ImageView;
 use crate::segmentation::LabelResult;
@@ -58,6 +59,230 @@ pub fn extract_quads_fast(
     extract_quads_with_config(arena, img, label_result, &DetectorConfig::default(), 1, img)
 }
 
+/// Quad extraction with Structure of Arrays (SoA) output.
+///
+/// This function populates the `corners` and `status_mask` fields of the provided `DetectionBatch`.
+/// It returns the total number of candidates found ($N$).
+#[allow(clippy::too_many_lines)]
+pub fn extract_quads_soa(
+    batch: &mut DetectionBatch,
+    img: &ImageView,
+    label_result: &LabelResult,
+    config: &DetectorConfig,
+    decimation: usize,
+    refinement_img: &ImageView,
+) -> usize {
+    use rayon::prelude::*;
+
+    let stats = &label_result.component_stats;
+
+    // Collect into a temporary Vec to handle the MAX_CANDIDATES limit and sequential writing.
+    // In a future optimization, we could use an atomic counter to write directly into the batch.
+    let detections: Vec<[Point; 4]> = stats
+        .par_iter()
+        .enumerate()
+        .filter_map(|(label_idx, stat)| {
+            let arena = Bump::new();
+            let label = (label_idx + 1) as u32;
+            extract_single_quad(
+                &arena,
+                img,
+                label_result.labels,
+                label,
+                stat,
+                config,
+                decimation,
+                refinement_img,
+            )
+        })
+        .collect();
+
+    let n = detections.len().min(MAX_CANDIDATES);
+    for (i, corners) in detections.into_iter().take(n).enumerate() {
+        for (j, corner) in corners.iter().enumerate() {
+            batch.corners[i * 4 + j] = Point2f {
+                x: corner.x as f32,
+                y: corner.y as f32,
+            };
+        }
+        batch.status_mask[i] = CandidateState::Active;
+    }
+
+    // Ensure the rest of the batch is marked as Empty
+    for i in n..MAX_CANDIDATES {
+        batch.status_mask[i] = CandidateState::Empty;
+    }
+
+    n
+}
+
+/// Internal helper to extract a single quad from a component.
+#[inline]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+fn extract_single_quad(
+    arena: &Bump,
+    img: &ImageView,
+    labels: &[u32],
+    label: u32,
+    stat: &crate::segmentation::ComponentStats,
+    config: &DetectorConfig,
+    decimation: usize,
+    refinement_img: &ImageView,
+) -> Option<[Point; 4]> {
+    let min_edge_len_sq = config.quad_min_edge_length * config.quad_min_edge_length;
+    let d = decimation as f64;
+
+    // Fast geometric filtering using bounding box
+    let bbox_w = u32::from(stat.max_x - stat.min_x) + 1;
+    let bbox_h = u32::from(stat.max_y - stat.min_y) + 1;
+    let bbox_area = bbox_w * bbox_h;
+
+    // Filter: too small or too large
+    if bbox_area < config.quad_min_area || bbox_area > (img.width * img.height * 9 / 10) as u32 {
+        return None;
+    }
+
+    // Filter: not roughly square (aspect ratio)
+    let aspect = bbox_w.max(bbox_h) as f32 / bbox_w.min(bbox_h).max(1) as f32;
+    if aspect > config.quad_max_aspect_ratio {
+        return None;
+    }
+
+    // Filter: fill ratio (should be ~50-80% for a tag with inner pattern)
+    let fill = stat.pixel_count as f32 / bbox_area as f32;
+    if fill < config.quad_min_fill_ratio || fill > config.quad_max_fill_ratio {
+        return None;
+    }
+
+    // Passed filters - trace boundary and fit quad
+    let sx = stat.first_pixel_x as usize;
+    let sy = stat.first_pixel_y as usize;
+
+    let contour = trace_boundary(arena, labels, img.width, img.height, sx, sy, label);
+
+    if contour.len() < 12 {
+        return None;
+    }
+
+    let simple_contour = chain_approximation(arena, &contour);
+    let perimeter = contour.len() as f64;
+    let epsilon = (perimeter * 0.02).max(1.0);
+    let simplified = douglas_peucker(arena, &simple_contour, epsilon);
+
+    if simplified.len() < 4 || simplified.len() > 11 {
+        return None;
+    }
+
+    let simpl_len = simplified.len();
+    let reduced = if simpl_len == 5 {
+        simplified
+    } else if simpl_len == 4 {
+        let mut closed = BumpVec::new_in(arena);
+        for p in &simplified {
+            closed.push(*p);
+        }
+        closed.push(simplified[0]);
+        closed
+    } else {
+        reduce_to_quad(arena, &simplified)
+    };
+
+    if reduced.len() != 5 {
+        return None;
+    }
+
+    let area = polygon_area(&reduced);
+    let compactness = (12.566 * area.abs()) / (perimeter * perimeter);
+
+    if area.abs() <= f64::from(config.quad_min_area) || compactness <= 0.1 {
+        return None;
+    }
+
+    // Standardize to CW for consistency
+    let quad_pts_dec = if area > 0.0 {
+        [reduced[0], reduced[1], reduced[2], reduced[3]]
+    } else {
+        [reduced[0], reduced[3], reduced[2], reduced[1]]
+    };
+
+    // Scale to full resolution using center-aware mapping
+    let quad_pts = [
+        Point {
+            x: (quad_pts_dec[0].x - 0.5) * d + 0.5,
+            y: (quad_pts_dec[0].y - 0.5) * d + 0.5,
+        },
+        Point {
+            x: (quad_pts_dec[1].x - 0.5) * d + 0.5,
+            y: (quad_pts_dec[1].y - 0.5) * d + 0.5,
+        },
+        Point {
+            x: (quad_pts_dec[2].x - 0.5) * d + 0.5,
+            y: (quad_pts_dec[2].y - 0.5) * d + 0.5,
+        },
+        Point {
+            x: (quad_pts_dec[3].x - 0.5) * d + 0.5,
+            y: (quad_pts_dec[3].y - 0.5) * d + 0.5,
+        },
+    ];
+
+    let mut ok = true;
+    for i in 0..4 {
+        let d2 = (quad_pts[i].x - quad_pts[(i + 1) % 4].x).powi(2)
+            + (quad_pts[i].y - quad_pts[(i + 1) % 4].y).powi(2);
+        if d2 < min_edge_len_sq {
+            ok = false;
+            break;
+        }
+    }
+
+    if ok {
+        let corners = [
+            refine_corner(
+                arena,
+                refinement_img,
+                quad_pts[0],
+                quad_pts[3],
+                quad_pts[1],
+                config.subpixel_refinement_sigma,
+                decimation,
+            ),
+            refine_corner(
+                arena,
+                refinement_img,
+                quad_pts[1],
+                quad_pts[0],
+                quad_pts[2],
+                config.subpixel_refinement_sigma,
+                decimation,
+            ),
+            refine_corner(
+                arena,
+                refinement_img,
+                quad_pts[2],
+                quad_pts[1],
+                quad_pts[3],
+                config.subpixel_refinement_sigma,
+                decimation,
+            ),
+            refine_corner(
+                arena,
+                refinement_img,
+                quad_pts[3],
+                quad_pts[2],
+                quad_pts[0],
+                config.subpixel_refinement_sigma,
+                decimation,
+            ),
+        ];
+
+        let edge_score = calculate_edge_score(refinement_img, corners);
+        if edge_score > config.quad_min_edge_score {
+            return Some(corners);
+        }
+    }
+    None
+}
+
 /// Quad extraction with custom configuration.
 ///
 /// This is the main entry point for quad detection with custom parameters.
@@ -73,9 +298,7 @@ pub fn extract_quads_with_config(
 ) -> Vec<Detection> {
     use rayon::prelude::*;
 
-    let labels = label_result.labels;
     let stats = &label_result.component_stats;
-    let min_edge_len_sq = config.quad_min_edge_length * config.quad_min_edge_length;
     let d = decimation as f64;
 
     // Process components in parallel, each with its own thread-local arena
@@ -85,176 +308,41 @@ pub fn extract_quads_with_config(
         .filter_map(|(label_idx, stat)| {
             // Thread-local arena for this component
             let arena = Bump::new();
-
             let label = (label_idx + 1) as u32;
 
-            // Fast geometric filtering using bounding box
-            let bbox_w = u32::from(stat.max_x - stat.min_x) + 1;
-            let bbox_h = u32::from(stat.max_y - stat.min_y) + 1;
-            let bbox_area = bbox_w * bbox_h;
+            if let Some(corners) = extract_single_quad(
+                &arena,
+                img,
+                label_result.labels,
+                label,
+                stat,
+                config,
+                decimation,
+                refinement_img,
+            ) {
+                // To keep backward compatibility, we still need to calculate some fields
+                // that aren't yet in the SoA (or are derived from it).
+                let area = polygon_area(&corners);
 
-            // Filter: too small or too large
-            if bbox_area < config.quad_min_area
-                || bbox_area > (img.width * img.height * 9 / 10) as u32
-            {
-                return None;
-            }
-
-            // Filter: not roughly square (aspect ratio)
-            let aspect = bbox_w.max(bbox_h) as f32 / bbox_w.min(bbox_h).max(1) as f32;
-            if aspect > config.quad_max_aspect_ratio {
-                return None;
-            }
-
-            // Filter: fill ratio (should be ~50-80% for a tag with inner pattern)
-            let fill = stat.pixel_count as f32 / bbox_area as f32;
-            if fill < config.quad_min_fill_ratio || fill > config.quad_max_fill_ratio {
-                return None;
-            }
-
-            // Passed filters - trace boundary and fit quad
-            let sx = stat.first_pixel_x as usize;
-            let sy = stat.first_pixel_y as usize;
-
-            let contour = trace_boundary(&arena, labels, img.width, img.height, sx, sy, label);
-
-            if contour.len() < 12 {
-                return None;
-            }
-
-            let simple_contour = chain_approximation(&arena, &contour);
-            let perimeter = contour.len() as f64;
-            let epsilon = (perimeter * 0.02).max(1.0);
-            let simplified = douglas_peucker(&arena, &simple_contour, epsilon);
-
-            if simplified.len() < 4 || simplified.len() > 11 {
-                return None;
-            }
-
-            let simpl_len = simplified.len();
-            let reduced = if simpl_len == 5 {
-                simplified
-            } else if simpl_len == 4 {
-                let mut closed = BumpVec::new_in(&arena);
-                for p in &simplified {
-                    closed.push(*p);
-                }
-                closed.push(simplified[0]);
-                closed
-            } else {
-                reduce_to_quad(&arena, &simplified)
-            };
-
-            if reduced.len() != 5 {
-                return None;
-            }
-
-            let area = polygon_area(&reduced);
-            let compactness = (12.566 * area.abs()) / (perimeter * perimeter);
-
-            if area.abs() <= f64::from(config.quad_min_area) || compactness <= 0.1 {
-                return None;
-            }
-
-            // Standardize to CW for consistency
-            let quad_pts_dec = if area > 0.0 {
-                [reduced[0], reduced[1], reduced[2], reduced[3]]
-            } else {
-                [reduced[0], reduced[3], reduced[2], reduced[1]]
-            };
-
-            // Scale to full resolution using center-aware mapping
-            let quad_pts = [
-                Point {
-                    x: (quad_pts_dec[0].x - 0.5) * d + 0.5,
-                    y: (quad_pts_dec[0].y - 0.5) * d + 0.5,
-                },
-                Point {
-                    x: (quad_pts_dec[1].x - 0.5) * d + 0.5,
-                    y: (quad_pts_dec[1].y - 0.5) * d + 0.5,
-                },
-                Point {
-                    x: (quad_pts_dec[2].x - 0.5) * d + 0.5,
-                    y: (quad_pts_dec[2].y - 0.5) * d + 0.5,
-                },
-                Point {
-                    x: (quad_pts_dec[3].x - 0.5) * d + 0.5,
-                    y: (quad_pts_dec[3].y - 0.5) * d + 0.5,
-                },
-            ];
-
-            let mut ok = true;
-            for i in 0..4 {
-                let d2 = (quad_pts[i].x - quad_pts[(i + 1) % 4].x).powi(2)
-                    + (quad_pts[i].y - quad_pts[(i + 1) % 4].y).powi(2);
-                if d2 < min_edge_len_sq {
-                    ok = false;
-                    break;
-                }
-            }
-
-            if ok {
-                let corners = [
-                    refine_corner(
-                        &arena,
-                        refinement_img,
-                        quad_pts[0],
-                        quad_pts[3],
-                        quad_pts[1],
-                        config.subpixel_refinement_sigma,
-                        decimation,
-                    ),
-                    refine_corner(
-                        &arena,
-                        refinement_img,
-                        quad_pts[1],
-                        quad_pts[0],
-                        quad_pts[2],
-                        config.subpixel_refinement_sigma,
-                        decimation,
-                    ),
-                    refine_corner(
-                        &arena,
-                        refinement_img,
-                        quad_pts[2],
-                        quad_pts[1],
-                        quad_pts[3],
-                        config.subpixel_refinement_sigma,
-                        decimation,
-                    ),
-                    refine_corner(
-                        &arena,
-                        refinement_img,
-                        quad_pts[3],
-                        quad_pts[2],
-                        quad_pts[0],
-                        config.subpixel_refinement_sigma,
-                        decimation,
-                    ),
-                ];
-
-                let edge_score = calculate_edge_score(refinement_img, corners);
-                if edge_score > config.quad_min_edge_score {
-                    return Some(Detection {
-                        id: label,
-                        center: [
-                            (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4.0,
-                            (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4.0,
-                        ],
-                        corners: [
-                            [corners[0].x, corners[0].y],
-                            [corners[1].x, corners[1].y],
-                            [corners[2].x, corners[2].y],
-                            [corners[3].x, corners[3].y],
-                        ],
-                        hamming: 0,
-                        rotation: 0,
-                        decision_margin: area * d * d, // Area in full-res
-                        bits: 0,
-                        pose: None,
-                        pose_covariance: None,
-                    });
-                }
+                return Some(Detection {
+                    id: label,
+                    center: [
+                        (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4.0,
+                        (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4.0,
+                    ],
+                    corners: [
+                        [corners[0].x, corners[0].y],
+                        [corners[1].x, corners[1].y],
+                        [corners[2].x, corners[2].y],
+                        [corners[3].x, corners[3].y],
+                    ],
+                    hamming: 0,
+                    rotation: 0,
+                    decision_margin: area * d * d, // Area in full-res
+                    bits: 0,
+                    pose: None,
+                    pose_covariance: None,
+                });
             }
             None
         })

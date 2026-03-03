@@ -9,6 +9,10 @@
 - [Workflow](./workflow.md)
 - [Code Style Guides](./code_styleguides/)
 
+## Contracts
+- [DetectionBatch (SoA)](../docs/engineering/detection-batch-contract.md)
+
+
 ## Management
 - [Tracks Registry](./tracks.md)
 - [Tracks Directory](./tracks/)
