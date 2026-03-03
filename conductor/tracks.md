@@ -9,5 +9,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Detection Pipeline SoA Migration**
-*Link: [./tracks/soa_migration_20260303/](./tracks/soa_migration_20260303/)*
+- [x] **Track: Detection Pipeline SoA Migration**
+*Link: [./tracks/soa_migration_20260303/](./soa_migration_20260303/)*
