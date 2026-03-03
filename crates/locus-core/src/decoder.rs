@@ -6,6 +6,7 @@
 //! 3. **Error Correction**: Correcting bit flips using tag-family specific Hamming distances.
 
 #![allow(unsafe_code, clippy::cast_sign_loss)]
+use crate::batch::{Matrix3x3, Point2f};
 use crate::config;
 use crate::simd::math::{bilinear_interpolate_fixed, rcp_nr};
 use crate::simd::roi::RoiCache;
@@ -189,6 +190,38 @@ impl Homography {
         let w = res[2];
         [res[0] / w, res[1] / w]
     }
+}
+
+/// Compute homographies for all quads in the batch using a pure-function SoA approach.
+///
+/// This uses `rayon` for data-parallel computation of the square-to-quad homographies.
+/// Quads are defined by 4 corners in `corners` for each candidate index.
+pub fn compute_homographies_soa(corners: &[Point2f], homographies: &mut [Matrix3x3]) {
+    use rayon::prelude::*;
+
+    // Each homography maps from canonical square [(-1,-1), (1,-1), (1,1), (-1,1)] to image quads.
+    homographies
+        .par_iter_mut()
+        .enumerate()
+        .for_each(|(i, h_out)| {
+            let offset = i * 4;
+            let dst = [
+                [corners[offset].x as f64, corners[offset].y as f64],
+                [corners[offset + 1].x as f64, corners[offset + 1].y as f64],
+                [corners[offset + 2].x as f64, corners[offset + 2].y as f64],
+                [corners[offset + 3].x as f64, corners[offset + 3].y as f64],
+            ];
+
+            if let Some(h) = Homography::square_to_quad(&dst) {
+                // Copy data to f32 batch. Nalgebra stores in column-major order.
+                for (j, val) in h.h.iter().enumerate() {
+                    h_out.data[j] = *val as f32;
+                }
+            } else {
+                // Failed to compute homography (e.g. degenerate quad).
+                h_out.data = [0.0; 9];
+            }
+        });
 }
 
 /// Refine corner positions using edge-based optimization with the homography.
