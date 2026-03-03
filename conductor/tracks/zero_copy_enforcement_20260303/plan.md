@@ -22,8 +22,8 @@
     - [x] Run `python tests/test_ffi_overhead.py` and confirm the overhead for contiguous arrays remains < 0.1ms.
 - [x] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md) 42f3a5a
 
-## Phase 4: Final Verification & Checkpointing
-- [ ] Task: Perform final performance audit and code cleanup.
-    - [ ] Run the new `scripts/bench_ingestion_penalty.py` and confirm that non-contiguous arrays are blocked.
-    - [ ] Review `crates/locus-py/src/lib.rs` for any remaining implicit copies.
-- [ ] Task: Conductor - User Manual Verification 'Phase 4' (Protocol in workflow.md)
+## Phase 4: Final Verification & Checkpointing [checkpoint: 00da2fd]
+- [x] Task: Perform final performance audit and code cleanup. 174a8af
+    - [x] Run the new `scripts/bench_ingestion_penalty.py` and confirm that non-contiguous arrays are blocked.
+    - [x] Review `crates/locus-py/src/lib.rs` for any remaining implicit copies.
+- [x] Task: Conductor - User Manual Verification 'Phase 4' (Protocol in workflow.md) 00da2fd
