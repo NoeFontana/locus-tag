@@ -111,14 +111,12 @@ impl Detection {
         let mut min_y = f64::INFINITY;
         let mut max_x = f64::NEG_INFINITY;
         let mut max_y = f64::NEG_INFINITY;
-
         for p in &self.corners {
             min_x = min_x.min(p[0]);
             min_y = min_y.min(p[1]);
             max_x = max_x.max(p[0]);
             max_y = max_y.max(p[1]);
         }
-
         (
             min_x.floor().max(0.0) as usize,
             min_y.floor().max(0.0) as usize,
@@ -127,6 +125,7 @@ impl Detection {
         )
     }
 }
+
 
 /// Statistics for the detection pipeline stages.
 /// Pipeline-wide statistics for a single detection call.
@@ -588,6 +587,7 @@ impl Detector {
         let results: Vec<_> = candidates
             .into_par_iter()
             .map(|cand| {
+                let arena = bumpalo::Bump::new();
                 let cand_copy = if capture_debug {
                     Some(cand.clone())
                 } else {
@@ -595,6 +595,7 @@ impl Detector {
                 };
                 let (det, failed_contrast, failed_hamming, best_h, bits) =
                     Self::decode_single_candidate::<S>(
+                        &arena,
                         config,
                         cand,
                         refinement_img,
@@ -642,6 +643,7 @@ impl Detector {
 
     #[allow(clippy::too_many_lines)]
     fn decode_single_candidate<S: crate::strategy::DecodingStrategy>(
+        arena: &bumpalo::Bump,
         config: &crate::config::DetectorConfig,
         mut cand: Detection,
         refinement_img: &ImageView,
@@ -664,15 +666,14 @@ impl Detector {
                 }
             }
 
-            let Some(h) = crate::decoder::Homography::square_to_quad(&scaled_corners) else {
-                continue;
-            };
+            let mut temp_cand = cand.clone();
+            temp_cand.corners = scaled_corners;
 
             let mut best_match_in_scale: Option<(u32, u32, u8, S::Code, usize)> = None;
 
             for (decoder_idx, decoder) in active_decoders.iter().enumerate() {
                 if let Some(code) =
-                    crate::decoder::sample_grid_generic::<S>(refinement_img, &h, decoder.as_ref())
+                    crate::decoder::sample_grid_generic::<S>(refinement_img, arena, &temp_cand, decoder.as_ref())
                 {
                     passed_contrast = true;
                     if let Some((id, hamming, rot)) = S::decode(&code, decoder.as_ref(), 255) {
@@ -716,11 +717,13 @@ impl Detector {
                     );
 
                     // Verify that refined corners still yield a valid decode
-                    if let Some(h_ref) =
-                        crate::decoder::Homography::square_to_quad(&refined_corners)
-                        && let Some(code_ref) = crate::decoder::sample_grid_generic::<S>(
+                    let mut temp_cand = cand.clone();
+                    temp_cand.corners = refined_corners;
+
+                    if let Some(code_ref) = crate::decoder::sample_grid_generic::<S>(
                             refinement_img,
-                            &h_ref,
+                            &decode_arena,
+                            &temp_cand,
                             decoder,
                         )
                         && let Some((id_ref, hamming_ref, _)) = S::decode(&code_ref, decoder, 255)
@@ -786,15 +789,16 @@ impl Detector {
                                 test_corners[c_idx][0] += dx;
                                 test_corners[c_idx][1] += dy;
 
-                                if let Some(h) =
-                                    crate::decoder::Homography::square_to_quad(&test_corners)
-                                {
-                                    for decoder in active_decoders {
-                                        if let Some(code) = crate::decoder::sample_grid_generic::<S>(
-                                            refinement_img,
-                                            &h,
-                                            decoder.as_ref(),
-                                        ) && let Some((id, hamming, rot)) =
+                                let mut temp_cand = cand.clone();
+                                temp_cand.corners = test_corners;
+
+                                for decoder in active_decoders {
+                                    if let Some(code) = crate::decoder::sample_grid_generic::<S>(
+                                        refinement_img,
+                                        arena,
+                                        &temp_cand,
+                                        decoder.as_ref(),
+                                    ) && let Some((id, hamming, rot)) =
                                             S::decode(&code, decoder.as_ref(), 255)
                                             && hamming < best_overall_h
                                         {
@@ -827,7 +831,6 @@ impl Detector {
                                             }
                                         }
                                     }
-                                }
                             }
                         }
                         if !pass_improved {
@@ -864,11 +867,13 @@ impl Detector {
                                     );
 
                                     // Check if refined corners actually improve Hamming
-                                    if let Some(h) =
-                                        crate::decoder::Homography::square_to_quad(&refined)
-                                        && let Some(code) = crate::decoder::sample_grid_generic::<S>(
+                                    let mut temp_cand = cand.clone();
+                                    temp_cand.corners = refined;
+
+                                    if let Some(code) = crate::decoder::sample_grid_generic::<S>(
                                             refinement_img,
-                                            &h,
+                                            arena,
+                                            &temp_cand,
                                             decoder.as_ref(),
                                         )
                                         && let Some((id, hamming, rot)) =
@@ -920,15 +925,16 @@ impl Detector {
                                 test_corners[c_idx][0] += dx;
                                 test_corners[c_idx][1] += dy;
 
-                                if let Some(h) =
-                                    crate::decoder::Homography::square_to_quad(&test_corners)
-                                {
-                                    for decoder in active_decoders {
-                                        if let Some(code) = crate::decoder::sample_grid_generic::<S>(
-                                            refinement_img,
-                                            &h,
-                                            decoder.as_ref(),
-                                        ) && let Some((id, hamming, rot)) =
+                                let mut temp_cand = cand.clone();
+                                temp_cand.corners = test_corners;
+
+                                for decoder in active_decoders {
+                                    if let Some(code) = crate::decoder::sample_grid_generic::<S>(
+                                        refinement_img,
+                                        arena,
+                                        &temp_cand,
+                                        decoder.as_ref(),
+                                    ) && let Some((id, hamming, rot)) =
                                             S::decode(&code, decoder.as_ref(), 255)
                                             && hamming < best_overall_h
                                         {
@@ -954,14 +960,14 @@ impl Detector {
                                                 );
 
                                                 // Verify refined corners
-                                                if let Some(h_ref) =
-                                                    crate::decoder::Homography::square_to_quad(
-                                                        &refined,
-                                                    )
-                                                    && let Some(code_ref) =
+                                                let mut temp_cand = cand.clone();
+                                                temp_cand.corners = refined;
+
+                                                if let Some(code_ref) =
                                                         crate::decoder::sample_grid_generic::<S>(
                                                             refinement_img,
-                                                            &h_ref,
+                                                            &decode_arena,
+                                                            &temp_cand,
                                                             decoder.as_ref(),
                                                         )
                                                     && let Some((id_ref, hamming_ref, _)) =
@@ -990,7 +996,6 @@ impl Detector {
                                             }
                                         }
                                     }
-                                }
                             }
                         }
                         if !pass_improved {

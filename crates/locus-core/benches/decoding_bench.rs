@@ -35,10 +35,13 @@ fn bench_decoding_200_candidates(bencher: divan::Bencher) {
     }
 
     bencher.bench_local(move || {
+        let mut arena = bumpalo::Bump::new();
         let mut sum_ids = 0u32;
         for corners in &candidates {
-            if let Some(h) = Homography::square_to_quad(corners)
-                && let Some(bits) = locus_core::decoder::sample_grid(&img, &h, &decoder, 20.0)
+            arena.reset();
+            let mut cand = locus_core::Detection::default();
+            cand.corners = *corners;
+            if let Some(bits) = locus_core::decoder::sample_grid(&img, &arena, &cand, &decoder, 20.0)
                 && let Some((id, _, _)) = decoder.decode(bits)
             {
                 sum_ids += id;

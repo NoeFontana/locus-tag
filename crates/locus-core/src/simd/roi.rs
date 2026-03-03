@@ -73,14 +73,14 @@ impl<'a> RoiCache<'a> {
     #[inline(always)]
     pub fn get(&self, x: usize, y: usize) -> u8 {
         match self {
-            RoiCache::Stack { data, min_x, min_y, width, .. } => {
-                let lx = x - min_x;
-                let ly = y - min_y;
+            RoiCache::Stack { data, min_x, min_y, width, height, .. } => {
+                let lx = x.saturating_sub(*min_x).min(width.saturating_sub(1));
+                let ly = y.saturating_sub(*min_y).min(height.saturating_sub(1));
                 data[ly * width + lx]
             }
-            RoiCache::Arena { data, min_x, min_y, width, .. } => {
-                let lx = x - min_x;
-                let ly = y - min_y;
+            RoiCache::Arena { data, min_x, min_y, width, height, .. } => {
+                let lx = x.saturating_sub(*min_x).min(width.saturating_sub(1));
+                let ly = y.saturating_sub(*min_y).min(height.saturating_sub(1));
                 data[ly * width + lx]
             }
         }
@@ -117,5 +117,17 @@ mod tests {
         let cache = RoiCache::new(&img, &arena, 0, 0, 32, 32);
         assert!(matches!(cache, RoiCache::Arena { .. }));
         assert_eq!(cache.get(20, 20), 255);
+    }
+
+    #[test]
+    fn test_roi_cache_clamping() {
+        let data: Vec<u8> = (0..100).map(|i| i as u8).collect();
+        let img = ImageView::new(&data, 10, 10, 10).unwrap();
+        let arena = Bump::new();
+        let cache = RoiCache::new(&img, &arena, 2, 2, 4, 4);
+        
+        // Should clamp to edges instead of panic
+        assert_eq!(cache.get(1, 1), 22); // Clamps to (2,2)
+        assert_eq!(cache.get(10, 10), 44); // Clamps to (4,4)
     }
 }

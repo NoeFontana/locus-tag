@@ -7,6 +7,9 @@
 
 #![allow(unsafe_code, clippy::cast_sign_loss)]
 use crate::config;
+use crate::simd::math::{bilinear_interpolate_fixed, rcp_nr};
+use crate::simd::roi::RoiCache;
+use bumpalo::Bump;
 use multiversion::multiversion;
 use nalgebra::{SMatrix, SVector};
 
@@ -775,62 +778,58 @@ pub fn compute_otsu_threshold(values: &[f64]) -> f64 {
     best_threshold
 }
 
-/// Optimized grid sampling kernel.
+/// Sample values from the image using SIMD-optimized Fast-Math and ROI caching.
 #[multiversion(targets(
     "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
-fn sample_grid_values_simd(
+fn sample_grid_values_optimized(
     img: &crate::image::ImageView,
     h: &Homography,
+    roi: &RoiCache,
     points: &[(f64, f64)],
     intensities: &mut [f64],
     n: usize,
 ) -> bool {
-    let h00 = h.h[(0, 0)];
-    let h01 = h.h[(0, 1)];
-    let h02 = h.h[(0, 2)];
-    let h10 = h.h[(1, 0)];
-    let h11 = h.h[(1, 1)];
-    let h12 = h.h[(1, 2)];
-    let h20 = h.h[(2, 0)];
-    let h21 = h.h[(2, 1)];
-    let h22 = h.h[(2, 2)];
+    let h00 = h.h[(0, 0)] as f32;
+    let h01 = h.h[(0, 1)] as f32;
+    let h02 = h.h[(0, 2)] as f32;
+    let h10 = h.h[(1, 0)] as f32;
+    let h11 = h.h[(1, 1)] as f32;
+    let h12 = h.h[(1, 2)] as f32;
+    let h20 = h.h[(2, 0)] as f32;
+    let h21 = h.h[(2, 1)] as f32;
+    let h22 = h.h[(2, 2)] as f32;
 
-    let w_limit = (img.width - 1) as f64;
-    let h_limit = (img.height - 1) as f64;
+    let w_limit = (img.width - 1) as f32;
+    let h_limit = (img.height - 1) as f32;
 
     for (i, &p) in points.iter().take(n).enumerate() {
-        let wz = h20 * p.0 + h21 * p.1 + h22;
-        let img_x = (h00 * p.0 + h01 * p.1 + h02) / wz;
-        let img_y = (h10 * p.0 + h11 * p.1 + h12) / wz;
+        let px = p.0 as f32;
+        let py = p.1 as f32;
+        
+        // Fast-Math Reciprocal
+        let wz = h20 * px + h21 * py + h22;
+        let winv = rcp_nr(wz);
+        
+        let img_x = (h00 * px + h01 * py + h02) * winv;
+        let img_y = (h10 * px + h11 * py + h12) * winv;
 
         if img_x < 0.0 || img_x >= w_limit || img_y < 0.0 || img_y >= h_limit {
             return false;
         }
 
-        let xf = img_x.floor();
-        let yf = img_y.floor();
-        let ix = xf as usize;
-        let iy = yf as usize;
-        let dx = img_x - xf;
-        let dy = img_y - yf;
+        let ix = img_x.floor() as usize;
+        let iy = img_y.floor() as usize;
 
-        // SAFETY: Bounds checked above.
-        let val = unsafe {
-            let row0 = img.get_row_unchecked(iy);
-            let row1 = img.get_row_unchecked(iy + 1);
-            let v00 = f64::from(*row0.get_unchecked(ix));
-            let v10 = f64::from(*row0.get_unchecked(ix + 1));
-            let v01 = f64::from(*row1.get_unchecked(ix));
-            let v11 = f64::from(*row1.get_unchecked(ix + 1));
+        // Sample from ROI cache using fixed-point bilinear
+        let v00 = roi.get(ix, iy);
+        let v10 = roi.get(ix + 1, iy);
+        let v01 = roi.get(ix, iy + 1);
+        let v11 = roi.get(ix + 1, iy + 1);
 
-            let top = v00 + dx * (v10 - v00);
-            let bot = v01 + dx * (v11 - v01);
-            top + dy * (bot - top)
-        };
-        intensities[i] = val;
+        intensities[i] = f64::from(bilinear_interpolate_fixed(img_x, img_y, v00, v10, v01, v11));
     }
     true
 }
@@ -849,15 +848,21 @@ fn sample_grid_values_simd(
 #[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
 pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
     img: &crate::image::ImageView,
-    homography: &Homography,
+    arena: &Bump,
+    detection: &crate::Detection,
     decoder: &(impl TagDecoder + ?Sized),
 ) -> Option<S::Code> {
+    let (min_x, min_y, max_x, max_y) = detection.aabb();
+    let roi = RoiCache::new(img, arena, min_x, min_y, max_x, max_y);
+    
+    let homography = Homography::square_to_quad(&detection.corners)?;
+    
     let points = decoder.sample_points();
     // Stack-allocated buffer for up to 64 sample points (covers all standard tag families)
     let mut intensities = [0.0f64; 64];
     let n = points.len().min(64);
 
-    if !sample_grid_values_simd(img, homography, points, &mut intensities, n) {
+    if !sample_grid_values_optimized(img, &homography, &roi, points, &mut intensities, n) {
         return None;
     }
 
@@ -903,11 +908,12 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
 #[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
 pub fn sample_grid(
     img: &crate::image::ImageView,
-    homography: &Homography,
+    arena: &Bump,
+    detection: &crate::Detection,
     decoder: &(impl TagDecoder + ?Sized),
     _min_contrast: f64,
 ) -> Option<u64> {
-    sample_grid_generic::<crate::strategy::HardStrategy>(img, homography, decoder)
+    sample_grid_generic::<crate::strategy::HardStrategy>(img, arena, detection, decoder)
 }
 
 /// A trait for decoding binary payloads from extracted tags.
@@ -1421,8 +1427,16 @@ mod tests {
         let homography = Homography { h };
 
         let decoder = AprilTag36h11;
+        let arena = Bump::new();
+        let mut cand = crate::Detection::default();
+        cand.corners = [
+            [32.0, 32.0],
+            [32.0 + 18.0, 32.0],
+            [32.0 + 18.0, 32.0 + 18.0],
+            [32.0, 32.0 + 18.0],
+        ];
         let bits =
-            sample_grid(&img, &homography, &decoder, 20.0).expect("Should sample successfully");
+            sample_grid(&img, &arena, &cand, &decoder, 20.0).expect("Should sample successfully");
 
         // bit 0 should be 1 (high intensity)
         assert_eq!(bits & 1, 1, "Bit 0 should be 1");
@@ -1481,15 +1495,7 @@ mod tests {
         let mut results = Vec::new();
 
         for quad in &detections {
-            let dst = [
-                [quad.corners[0][0], quad.corners[0][1]],
-                [quad.corners[1][0], quad.corners[1][1]],
-                [quad.corners[2][0], quad.corners[2][1]],
-                [quad.corners[3][0], quad.corners[3][1]],
-            ];
-
-            if let Some(h) = Homography::square_to_quad(&dst)
-                && let Some(bits) = sample_grid(&img, &h, &decoder, 20.0)
+            if let Some(bits) = sample_grid(&img, &arena, quad, &decoder, 20.0)
                 && let Some((id, hamming, _rot)) = decoder.decode(bits)
             {
                 results.push((id, hamming));
