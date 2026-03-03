@@ -3,21 +3,22 @@
 ## 1. The Core Invariant (The Identity Rule)
 The concept of a discrete Candidate or Quad object is officially deprecated in the Rust hot-path.
 The identity of a fiducial marker is now strictly defined by its Index (i).
-If a quad exists at index 7, then corners[7], homographies[7], and poses[7] are guaranteed to belong to that exact same physical marker.
+If a quad exists at index 7, then corners[7], homographies[7], ids[7], and poses[7] are guaranteed to belong to that exact same physical marker.
 
 ## 2. Memory & Capacity Constraints
 To guarantee zero allocations and prevent L1 cache fragmentation, the batch arena must obey the following physical constraints:
-*   **Fixed Pre-Allocation**: The DetectionBatch must be initialized with a rigid maximum capacity (e.g., `MAX_CANDIDATES = 256`).
+*   **Fixed Pre-Allocation**: The DetectionBatch must be initialized with a rigid maximum capacity (e.g., `MAX_CANDIDATES = 1024`).
 *   **SIMD Alignment**: The underlying arrays (especially homographies and corners) must be explicitly aligned in memory to 32-byte boundaries to support unaligned-penalty-free AVX2 vector loads.
 *   **Zero-Heap Hot Loop**: Once the DetectionBatch is instantiated during the detector's setup phase, calling `detect()` may not trigger a single call to the OS allocator. The arena is strictly reset (cursor moved to 0) at the start of each frame.
 
 ## 3. The Data Layout (The Columns)
 The DetectionBatch struct encapsulates the following parallel arrays (slices):
 *   `corners`: `[Point2f; MAX_CANDIDATES * 4]` (Flattened array of sub-pixel quad vertices).
-*   `homographies`: `[Matrix3x3; MAX_CANDIDATES]` (The $3	imes3$ projection matrices).
+*   `homographies`: `[Matrix3x3; MAX_CANDIDATES]` (The $3\times3$ projection matrices, padded to 64 bytes for cache line alignment).
+*   `ids`: `[u32; MAX_CANDIDATES]` (The decoded tag IDs).
 *   `payloads`: `[u64; MAX_CANDIDATES]` (The extracted bitstrings).
-*   `error_rates`: `[f32; MAX_CANDIDATES]` (The MSE or Log-Likelihood Ratio confidence scores).
-*   `poses`: `[Pose6D; MAX_CANDIDATES]` (Translation vectors and unit quaternions).
+*   `error_rates`: `[f32; MAX_CANDIDATES]` (The Hamming distance or confidence scores).
+*   `poses`: `[Pose6D; MAX_CANDIDATES]` (Translation vectors and unit quaternions, padded to 32 bytes).
 *   `status_mask`: `[CandidateState; MAX_CANDIDATES]` (A dense byte-array tracking the lifecycle. e.g., Empty, Active, FailedDecode, Valid).
 
 ## 4. Phase-Isolated Execution Privileges
@@ -32,7 +33,7 @@ To prevent data contention and enable lock-free parallelization (Rayon), enginee
 *   **Contract**: A purely mathematical loop. It calculates the perspective warps. Because it has no side effects, it can be trivially parallelized using `corners[0..N].par_iter()`.
 
 ### Phase C: Batched Sampling & Decoding
-*   **Privileges**: Read-Only on the Image Tensor and `homographies[0..N]`. Write-Only to `payloads[0..N]`, `error_rates[0..N]`, and `status_mask[0..N]`.
+*   **Privileges**: Read-Only on the Image Tensor and `homographies[0..N]`. Write-Only to `ids[0..N]`, `payloads[0..N]`, `error_rates[0..N]`, and `status_mask[0..N]`.
 *   **Contract**: This phase executes the SIMD bilinear interpolation. If a candidate fails the Hamming distance check, its `status_mask` at index i is flipped to `FailedDecode`.
 
 ### Phase D: Pose Refinement
