@@ -23,11 +23,14 @@
     - [x] Implement contiguous ROI copy into cached buffer.
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Hybrid ROI Caching' (Protocol in workflow.md)
 
-**Phase 4: Integration & Optimization**
+**Phase 4: Integration & Optimization [checkpoint: f723cbe]**
 - [x] Task: Integrate new kernels into `decoder.rs`. (3de4227)
     - [x] Refactor `sample_grid` to use the ROI cache and SIMD kernels.
     - [x] Ensure parity for both `HardStrategy` and `SoftStrategy`.
 - [x] Task: Verify performance and correctness. (3de4227)
     - [x] Run full test suite to ensure no regressions.
     - [x] Re-run benchmarks and confirm sub-millisecond target.
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: Integration & Optimization' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 4: Integration & Optimization' (Protocol in workflow.md)
+
+## Phase: Review Fixes
+- [x] Task: Apply review suggestions (a083a3d)
