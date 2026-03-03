@@ -259,7 +259,6 @@ pub fn label_components_with_stats<'a>(
     }
 }
 
-#[inline(always)]
 fn parse_mask_into_runs(mask: u32, bits: usize, x_offset: usize, y: u32, row_runs: &mut Vec<Run>) {
     let mut mask = mask;
     while mask != 0 {
@@ -305,29 +304,32 @@ unsafe fn extract_runs_row_avx2(
     margin: i16,
     row_runs: &mut Vec<Run>,
 ) -> usize {
-    use std::arch::x86_64::*;
+    use std::arch::x86_64::{
+        __m128i, _mm256_castsi256_si128, _mm256_cmpgt_epi16, _mm256_cvtepu8_epi16,
+        _mm256_extracti128_si256, _mm256_set1_epi16, _mm256_sub_epi16, _mm_loadu_si128,
+        _mm_movemask_epi8,
+    };
     let m_vec = _mm256_set1_epi16(-margin);
     let mut x = 0;
     while x + 16 <= width {
         let (gs_low, th_low) = unsafe {
             let gs_ptr = row_gs.as_ptr().add(x);
             let th_ptr = row_th.as_ptr().add(x);
+            #[allow(clippy::cast_ptr_alignment)]
             (
-                _mm_loadu_si128(gs_ptr as *const __m128i),
-                _mm_loadu_si128(th_ptr as *const __m128i),
+                _mm_loadu_si128(gs_ptr.cast::<__m128i>()),
+                _mm_loadu_si128(th_ptr.cast::<__m128i>()),
             )
         };
         let (mask_low, mask_high) = {
-            let gs_16 = unsafe { _mm256_cvtepu8_epi16(gs_low) };
-            let th_16 = unsafe { _mm256_cvtepu8_epi16(th_low) };
-            let diff = unsafe { _mm256_sub_epi16(gs_16, th_16) };
-            let cmp = unsafe { _mm256_cmpgt_epi16(m_vec, diff) };
-            unsafe {
-                (
-                    _mm_movemask_epi8(_mm256_castsi256_si128(cmp)),
-                    _mm_movemask_epi8(_mm256_extracti128_si256(cmp, 1)),
-                )
-            }
+            let gs_16 = _mm256_cvtepu8_epi16(gs_low);
+            let th_16 = _mm256_cvtepu8_epi16(th_low);
+            let diff = _mm256_sub_epi16(gs_16, th_16);
+            let cmp = _mm256_cmpgt_epi16(m_vec, diff);
+            (
+                _mm_movemask_epi8(_mm256_castsi256_si128(cmp)),
+                _mm_movemask_epi8(_mm256_extracti128_si256(cmp, 1)),
+            )
         };
         let mut final_mask = 0u32;
         for i in 0..8 {
@@ -721,7 +723,6 @@ mod tests {
 
     use crate::config::TagFamily;
     use crate::image::ImageView;
-    use crate::test_utils::compute_corner_error;
     use crate::test_utils::{TestImageParams, generate_test_image_with_params};
     use crate::threshold::ThresholdEngine;
 

@@ -666,6 +666,7 @@ impl<'a> EdgeFitter<'a> {
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
+#[allow(clippy::too_many_arguments)]
 fn project_gradients_optimized(
     img: &crate::image::ImageView,
     nx: f64,
@@ -739,6 +740,7 @@ fn project_gradients_optimized(
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
+#[allow(clippy::too_many_arguments)]
 fn collect_samples_optimized<'a>(
     img: &crate::image::ImageView,
     nx: f64,
@@ -837,9 +839,10 @@ fn collect_samples_optimized<'a>(
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
+#[allow(clippy::too_many_arguments)]
 fn refine_accumulate_optimized(
     samples: &[(f64, f64, f64)],
-    _img: &crate::image::ImageView,
+    #[allow(unused_variables)] img: &crate::image::ImageView,
     nx: f64,
     ny: f64,
     d: f64,
@@ -850,8 +853,8 @@ fn refine_accumulate_optimized(
 ) -> (f64, f64) {
     let mut sum_jtj = 0.0;
     let mut sum_jt_res = 0.0;
-    let _sqrt_pi = std::f64::consts::PI.sqrt();
-    let k = (b - a) / (_sqrt_pi * sigma);
+    let sqrt_pi = std::f64::consts::PI.sqrt();
+    let k = (b - a) / (sqrt_pi * sigma);
 
     let mut i = 0;
 

@@ -633,12 +633,10 @@ impl Detector {
             if let Some(d) = det {
                 final_detections.push(d);
             }
-            if capture_debug {
-                if let Some(mut cand) = cand_opt {
-                    cand.hamming = best_h;
-                    cand.bits = bits;
-                    processed_candidates.push(cand);
-                }
+            if capture_debug && let Some(mut cand) = cand_opt {
+                cand.hamming = best_h;
+                cand.bits = bits;
+                processed_candidates.push(cand);
             }
         }
 

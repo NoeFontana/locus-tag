@@ -356,8 +356,8 @@ fn find_max_distance_optimized(points: &[Point], start: usize, end: usize) -> (f
     if mag_sq < 1e-18 {
         let mut dmax = 0.0;
         let mut index = start;
-        for i in start + 1..end {
-            let d = ((points[i].x - a.x).powi(2) + (points[i].y - a.y).powi(2)).sqrt();
+        for (i, p) in points.iter().enumerate().take(end).skip(start + 1) {
+            let d = ((p.x - a.x).powi(2) + (p.y - a.y).powi(2)).sqrt();
             if d > dmax {
                 dmax = d;
                 index = i;
