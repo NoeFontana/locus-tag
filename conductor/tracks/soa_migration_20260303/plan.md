@@ -55,3 +55,6 @@
     - [ ] Run `locus_bench` and compare against the baseline to verify improvements.
 - [x] **Task: Final Phase Completion Verification and Checkpointing** ea4fbf0
     - [ ] Task: Conductor - User Manual Verification 'Phase 5' (Protocol in workflow.md)
+
+## Phase: Review Fixes
+- [x] Task: Apply review suggestions aad383a
