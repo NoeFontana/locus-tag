@@ -341,6 +341,112 @@ pub fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detec
     detections
 }
 
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+fn find_max_distance_optimized(points: &[Point], start: usize, end: usize) -> (f64, usize) {
+    let a = points[start];
+    let b = points[end];
+    let dx = b.x - a.x;
+    let dy = b.y - a.y;
+    let mag_sq = dx * dx + dy * dy;
+    
+    if mag_sq < 1e-18 {
+        let mut dmax = 0.0;
+        let mut index = start;
+        for i in start + 1..end {
+            let d = ((points[i].x - a.x).powi(2) + (points[i].y - a.y).powi(2)).sqrt();
+            if d > dmax {
+                dmax = d;
+                index = i;
+            }
+        }
+        return (dmax, index);
+    }
+
+    let inv_mag = 1.0 / mag_sq.sqrt();
+    let mut dmax = 0.0;
+    let mut index = start;
+
+    let mut i = start + 1;
+
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
+        unsafe {
+            use std::arch::x86_64::*;
+            let v_dx = _mm256_set1_pd(dx);
+            let v_dy = _mm256_set1_pd(dy);
+            let v_ax = _mm256_set1_pd(a.x);
+            let v_ay = _mm256_set1_pd(a.y);
+            let v_bx = _mm256_set1_pd(b.x);
+            let v_by = _mm256_set1_pd(b.y);
+            
+            let mut v_dmax = _mm256_setzero_pd();
+            let mut v_indices = _mm256_setzero_pd(); // We'll store indices as doubles for simplicity
+
+            while i + 4 <= end {
+                // Load 4 points (8 doubles: x0, y0, x1, y1, x2, y2, x3, y3)
+                // Point is struct { x: f64, y: f64 } which is memory-compatible with [f64; 2]
+                let p_ptr = points.as_ptr().add(i) as *const f64;
+                
+                // Unpack into xxxx and yyyy
+                // [x0, y0, x1, y1]
+                let raw0 = _mm256_loadu_pd(p_ptr);
+                // [x2, y2, x3, y3]
+                let raw1 = _mm256_loadu_pd(p_ptr.add(4));
+                
+                // permute to get [x0, x1, y0, y1]
+                let x01y01 = _mm256_shuffle_pd(raw0, raw0, 0b0000); // Wait, shuffle_pd is tricky
+                // Better: use unpack
+                let x0x1 = _mm256_set_pd(points[i+3].x, points[i+2].x, points[i+1].x, points[i].x);
+                let y0y1 = _mm256_set_pd(points[i+3].y, points[i+2].y, points[i+1].y, points[i].y);
+
+                // formula: |dy*px - dx*py + bx*ay - by*ax| * inv_mag
+                let term1 = _mm256_mul_pd(v_dy, x0x1);
+                let term2 = _mm256_mul_pd(v_dx, y0y1);
+                let term3 = _mm256_set1_pd(b.x * a.y - b.y * a.x);
+                
+                let dist_v = _mm256_sub_pd(term1, term2);
+                let dist_v = _mm256_add_pd(dist_v, term3);
+                
+                // Absolute value
+                let mask = _mm256_set1_pd(-0.0);
+                let dist_v = _mm256_andnot_pd(mask, dist_v);
+                
+                // Check if any dist > v_dmax
+                let cmp = _mm256_cmp_pd(dist_v, v_dmax, _CMP_GT_OQ);
+                if _mm256_movemask_pd(cmp) != 0 {
+                    // Update dmax and indices - this is a bit slow in SIMD, 
+                    // but we only do it when we find a new max.
+                    let dists: [f64; 4] = std::mem::transmute(dist_v);
+                    for (j, &d) in dists.iter().enumerate() {
+                        if d > dmax {
+                            dmax = d;
+                            index = i + j;
+                        }
+                    }
+                    v_dmax = _mm256_set1_pd(dmax);
+                }
+                i += 4;
+            }
+        }
+    }
+
+    // Scalar tail
+    while i < end {
+        let d = perpendicular_distance(points[i], a, b);
+        if d > dmax {
+            dmax = d;
+            index = i;
+        }
+        i += 1;
+    }
+
+    (dmax, index)
+}
+
 /// Simplify a contour using the Douglas-Peucker algorithm.
 ///
 /// Leverages an iterative implementation with a manual stack to avoid
@@ -365,16 +471,7 @@ pub fn douglas_peucker<'a>(arena: &'a Bump, points: &[Point], epsilon: f64) -> B
             continue;
         }
 
-        let mut dmax = 0.0;
-        let mut index = start;
-
-        for i in start + 1..end {
-            let d = perpendicular_distance(points[i], points[start], points[end]);
-            if d > dmax {
-                index = i;
-                dmax = d;
-            }
-        }
+        let (dmax, index) = find_max_distance_optimized(points, start, end);
 
         if dmax > epsilon {
             keep[index] = true;

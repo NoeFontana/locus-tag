@@ -260,7 +260,8 @@ pub fn label_components_with_stats<'a>(
 }
 
 #[inline(always)]
-fn parse_mask_into_runs(mut mask: u32, bits: usize, x_offset: usize, y: u32, row_runs: &mut Vec<Run>) {
+fn parse_mask_into_runs(mask: u32, bits: usize, x_offset: usize, y: u32, row_runs: &mut Vec<Run>) {
+    let mut mask = mask;
     while mask != 0 {
         let start = mask.trailing_zeros() as usize;
         if start >= bits { break; }
@@ -303,28 +304,26 @@ unsafe fn extract_runs_row_avx2(
     row_runs: &mut Vec<Run>,
 ) -> usize {
     use std::arch::x86_64::*;
-    let m_vec = unsafe { _mm256_set1_epi16(-margin) };
+    let m_vec = _mm256_set1_epi16(-margin);
     let mut x = 0;
     while x + 16 <= width {
-        unsafe {
-            let gs_ptr = row_gs.as_ptr().add(x);
-            let th_ptr = row_th.as_ptr().add(x);
-            let gs_low = _mm_loadu_si128(gs_ptr as *const __m128i);
-            let th_low = _mm_loadu_si128(th_ptr as *const __m128i);
-            let gs_16 = _mm256_cvtepu8_epi16(gs_low);
-            let th_16 = _mm256_cvtepu8_epi16(th_low);
-            let diff = _mm256_sub_epi16(gs_16, th_16);
-            let cmp = _mm256_cmpgt_epi16(m_vec, diff);
-            let mask_low = _mm_movemask_epi8(_mm256_castsi256_si128(cmp));
-            let mask_high = _mm_movemask_epi8(_mm256_extracti128_si256(cmp, 1));
-            let mut final_mask = 0u32;
-            for i in 0..8 {
-                if (mask_low >> (i * 2)) & 1 != 0 { final_mask |= 1 << i; }
-                if (mask_high >> (i * 2)) & 1 != 0 { final_mask |= 1 << (i + 8); }
-            }
-            if final_mask != 0 {
-                parse_mask_into_runs(final_mask, 16, x, y, row_runs);
-            }
+        let gs_ptr = row_gs.as_ptr().add(x);
+        let th_ptr = row_th.as_ptr().add(x);
+        let gs_low = _mm_loadu_si128(gs_ptr as *const __m128i);
+        let th_low = _mm_loadu_si128(th_ptr as *const __m128i);
+        let gs_16 = _mm256_cvtepu8_epi16(gs_low);
+        let th_16 = _mm256_cvtepu8_epi16(th_low);
+        let diff = _mm256_sub_epi16(gs_16, th_16);
+        let cmp = _mm256_cmpgt_epi16(m_vec, diff);
+        let mask_low = _mm_movemask_epi8(_mm256_castsi256_si128(cmp));
+        let mask_high = _mm_movemask_epi8(_mm256_extracti128_si256(cmp, 1));
+        let mut final_mask = 0u32;
+        for i in 0..8 {
+            if (mask_low >> (i * 2)) & 1 != 0 { final_mask |= 1 << i; }
+            if (mask_high >> (i * 2)) & 1 != 0 { final_mask |= 1 << (i + 8); }
+        }
+        if final_mask != 0 {
+            parse_mask_into_runs(final_mask, 16, x, y, row_runs);
         }
         x += 16;
     }
@@ -342,26 +341,24 @@ unsafe fn extract_runs_row_neon(
     row_runs: &mut Vec<Run>,
 ) -> usize {
     use std::arch::aarch64::*;
-    let m_vec = unsafe { vdupq_n_s16(-margin) };
+    let m_vec = vdupq_n_s16(-margin);
     let mut x = 0;
     while x + 8 <= width {
-        unsafe {
-            let gs_ptr = row_gs.as_ptr().add(x);
-            let th_ptr = row_th.as_ptr().add(x);
-            let gs_8 = vld1_u8(gs_ptr);
-            let th_8 = vld1_u8(th_ptr);
-            let gs_16 = vreinterpretq_s16_u16(vmovl_u8(gs_8));
-            let th_16 = vreinterpretq_s16_u16(vmovl_u8(th_8));
-            let diff = vsubq_s16(gs_16, th_16);
-            let mask_res = vcltq_s16(diff, m_vec);
-            let mut final_mask = 0u32;
-            let res_u16: [u16; 8] = std::mem::transmute(mask_res);
-            for (i, &val) in res_u16.iter().enumerate() {
-                if val != 0 { final_mask |= 1 << i; }
-            }
-            if final_mask != 0 {
-                parse_mask_into_runs(final_mask, 8, x, y, row_runs);
-            }
+        let gs_ptr = row_gs.as_ptr().add(x);
+        let th_ptr = row_th.as_ptr().add(x);
+        let gs_8 = vld1_u8(gs_ptr);
+        let th_8 = vld1_u8(th_ptr);
+        let gs_16 = vreinterpretq_s16_u16(vmovl_u8(gs_8));
+        let th_16 = vreinterpretq_s16_u16(vmovl_u8(th_8));
+        let diff = vsubq_s16(gs_16, th_16);
+        let mask_res = vcltq_s16(diff, m_vec);
+        let mut final_mask = 0u32;
+        let res_u16: [u16; 8] = std::mem::transmute(mask_res);
+        for (i, &val) in res_u16.iter().enumerate() {
+            if val != 0 { final_mask |= 1 << i; }
+        }
+        if final_mask != 0 {
+            parse_mask_into_runs(final_mask, 8, x, y, row_runs);
         }
         x += 8;
     }
@@ -700,6 +697,7 @@ mod tests {
     use crate::config::TagFamily;
     use crate::image::ImageView;
     use crate::test_utils::{TestImageParams, generate_test_image_with_params};
+    use crate::test_utils::compute_corner_error;
     use crate::threshold::ThresholdEngine;
 
     /// Helper: Generate a binarized tag image at the given size.
