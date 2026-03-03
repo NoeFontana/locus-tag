@@ -162,7 +162,7 @@ impl DetectionBatch {
     ///
     /// This is typically called at the FFI boundary or for backward compatibility.
     /// It only processes the first `v` candidates, which should be the valid ones.
-    #[must_use] 
+    #[must_use]
     pub fn reassemble(&self, v: usize) -> Vec<Detection> {
         let mut detections = Vec::with_capacity(v);
         for i in 0..v {

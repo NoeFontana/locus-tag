@@ -68,7 +68,7 @@ pub struct DetectionBatch {
 
 impl DetectionBatch {
     /// Creates a new DetectionBatch with all fields initialized to zero (Empty state).
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             corners: [Point2f { x: 0.0, y: 0.0 }; MAX_CANDIDATES * 4],
@@ -88,7 +88,7 @@ impl DetectionBatch {
     }
 
     /// Returns the maximum capacity of the batch.
-    #[must_use] 
+    #[must_use]
     pub fn capacity(&self) -> usize {
         MAX_CANDIDATES
     }
