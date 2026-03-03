@@ -9,7 +9,7 @@ use locus_core::{
 fn test_decode_batch_soa_interface() {
     let mut batch = DetectionBatch::new();
     let pixels = vec![0u8; 100 * 100];
-    let img = ImageView::new(&pixels, 100, 100, 100).unwrap();
+    let img = ImageView::new(&pixels, 100, 100, 100).expect("Failed to create ImageView");
     let config = DetectorConfig::default();
 
     // Setup one active candidate
