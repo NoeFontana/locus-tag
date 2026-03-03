@@ -418,28 +418,22 @@ impl From<locus_core::pose::Pose> for Pose {
 // Helper functions
 // ============================================================================
 
-/// Container for image data that handles both zero-copy and fallback copies.
+/// Container for image data that handles zero-copy ingestion.
 pub enum ImageInput<'a> {
     Borrowed(ImageView<'a>),
-    Owned(Vec<u8>, usize, usize),
 }
 
 impl ImageInput<'_> {
     /// Get an ImageView into the data.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the internal dimensions are inconsistent (should be impossible for owned data).
     #[must_use]
     pub fn view(&self) -> ImageView<'_> {
         match self {
             Self::Borrowed(v) => *v,
-            Self::Owned(data, w, h) => ImageView::new(data, *w, *h, *w).expect("Valid owned view"),
         }
     }
 }
 
-/// Create an ImageInput from a PyReadonlyArray2, handling non-contiguous arrays with a copy.
+/// Create an ImageInput from a PyReadonlyArray2, strictly enforcing C-contiguity for zero-copy.
 #[allow(clippy::cast_sign_loss)]
 fn prepare_image_input<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageInput<'a>> {
     let shape = img.shape();
@@ -465,17 +459,10 @@ fn prepare_image_input<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageI
         Ok(ImageInput::Borrowed(view))
     } else {
         // Case 2: Non-contiguous (e.g. sliced columns, F-contiguous)
-        // We perform a copy to maintain functionality as per spec.
-        eprintln!(
-            "WARNING: Input array is not C-contiguous. Performing auto-conversion (copy). \
-             Use numpy.ascontiguousarray() for maximum performance."
-        );
-
-        let owned = img.to_owned_array();
-        let width = owned.shape()[1];
-        let height = owned.shape()[0];
-        let (data, _) = owned.into_raw_vec_and_offset();
-        Ok(ImageInput::Owned(data, width, height))
+        // Strictly block copies to enforce hardware-sympathetic performance.
+        Err(pyo3::exceptions::PyValueError::new_err(
+            "Array must be C-contiguous. Use .ascontiguousarray() to avoid performance-killing copies."
+        ))
     }
 }
 
