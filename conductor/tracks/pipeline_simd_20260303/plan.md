@@ -6,13 +6,13 @@
     - [x] Use `tracy` or `perf` to identify specific SIMD candidates.
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Research & Micro-Profiling' (Protocol in workflow.md)
 
-**Phase 2: SIMD Segmentation (CCL)**
-- [ ] Task: Implement SIMD-accelerated scan for threshold-model CCL.
-    - [ ] Optimize the row-scan and bit-packing logic.
-    - [ ] Implement `multiversion` kernels for Union-Find merging.
-- [ ] Task: Verify CCL correctness and performance.
-    - [ ] Run existing segmentation tests.
-    - [ ] Compare latency vs. current scalar implementation.
+**Phase 2: SIMD Segmentation (CCL) [checkpoint: d254759]**
+- [x] Task: Implement SIMD-accelerated scan for threshold-model CCL. (d254759)
+    - [x] Optimize the row-scan and bit-packing logic.
+    - [x] Implement `multiversion` kernels for Union-Find merging. (Optimized row scan instead)
+- [x] Task: Verify CCL correctness and performance. (d254759)
+    - [x] Run existing segmentation tests.
+    - [x] Compare latency vs. current scalar implementation.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: SIMD Segmentation (CCL)' (Protocol in workflow.md)
 
 **Phase 3: SIMD Quad Extraction**
