@@ -153,7 +153,9 @@ classDiagram
 3.  **Arena Memory**: Per-frame scratchpad (`bumpalo`) eliminates `malloc`/`free` overhead in the hot path.
 4.  **Cache Locality**: Algorithms (thresholding, CCL) process data in linear, cache-friendly passes.
 5.  **Runtime SIMD Dispatch**: Uses `multiversion` to target AVX2, AVX-512, or NEON based on host CPU capabilities.
-6.  **Hybrid Parallelism**: Scales via `rayon` for data-parallel tasks while maintaining sequential cache-coherence for state-heavy stages.
+6.  **Fast-Math Sampling**: Rewrites homography projection and bilinear interpolation using hardware reciprocal approximation (`rcp_nr`) and fixed-point integer SIMD to bypass FPU latency.
+7.  **Hybrid ROI Caching**: Minimizes L1 cache misses by copying tag candidates into contiguous stack (small tags) or arena (large tags) buffers before sampling.
+8.  **Hybrid Parallelism**: Scales via `rayon` for data-parallel tasks while maintaining sequential cache-coherence for state-heavy stages.
 
 ## Memory Architecture
 
@@ -229,8 +231,8 @@ Targets a **low latency** budget for 1080p frames on modern CPUs.
 | **Preprocessing** | $O(N)$ | ~8.3 ms | Adaptive thresholding; 1080p. |
 | **Segmentation** | $O(N)$ | ~3.7 ms | Single-pass Union-Find; 1080p. |
 | **Quad Extraction** | $O(K \cdot M)$ | ~22.4 ms | ICRA 2020 image; many candidates + Erf refinement. |
-| **Decoding (Hard)** | $O(Q)$ | ~0.8 ms | 200 candidates; Bit-LUT based. |
-| **Decoding (Soft)** | $O(Q \cdot \log D)$ | ~0.2 ms | 200 candidates; MIH sub-linear search. |
+| **Decoding (Hard)** | $O(Q)$ | ~0.4 ms | 200 candidates; Bit-LUT based. |
+| **Decoding (Soft)** | $O(Q \cdot \log D)$ | ~0.1 ms | 200 candidates; MIH sub-linear search. |
 
 *Note: Latencies are approximate for a single core on a modern CPU (e.g., Zen 4).*
 
