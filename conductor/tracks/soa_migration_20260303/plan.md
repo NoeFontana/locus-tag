@@ -21,18 +21,18 @@
 - [x] **Task: Phase Completion Verification and Checkpointing** 5cd2b27
     - [ ] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
 
-## Phase 3: Isolated Math Passes (Homography & Decoding)
+## Phase 3: Isolated Math Passes (Homography & Decoding) [checkpoint: 90f1b0a]
 ### Task: Homography Pass Refactor
-- [ ] **Task: Write Failing Tests: Homography Computation**
+- [x] **Task: Write Failing Tests: Homography Computation** 6fce68a
     - [ ] Verify that homographies are correctly computed from corners in a pure-function loop.
-- [ ] **Task: Implement Parallel Homography Pass**
+- [x] **Task: Implement Parallel Homography Pass** 6fce68a
     - [ ] Use `rayon` to parallelize homography computation across `[0..N]`.
 ### Task: SIMD Decoding Pass Refactor
-- [ ] **Task: Write Failing Tests: SIMD Decoding**
+- [x] **Task: Write Failing Tests: SIMD Decoding** 6998cda
     - [ ] Verify bit extraction into `payloads` and `error_rates`.
-- [ ] **Task: Implement SIMD-Accelerated Decoding Pass**
+- [x] **Task: Implement SIMD-Accelerated Decoding Pass** 6998cda
     - [ ] Refactor decoder to use `DetectionBatch` slices and SIMD-optimized sampling.
-- [ ] **Task: Phase Completion Verification and Checkpointing**
+- [x] **Task: Phase Completion Verification and Checkpointing** 90f1b0a
     - [ ] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md)
 
 ## Phase 4: Pose Refinement & FFI Boundary
