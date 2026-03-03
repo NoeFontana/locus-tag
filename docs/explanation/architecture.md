@@ -153,9 +153,10 @@ classDiagram
 3.  **Arena Memory**: Per-frame scratchpad (`bumpalo`) eliminates `malloc`/`free` overhead in the hot path.
 4.  **Cache Locality**: Algorithms (thresholding, CCL) process data in linear, cache-friendly passes.
 5.  **Runtime SIMD Dispatch**: Uses `multiversion` to target AVX2, AVX-512, or NEON based on host CPU capabilities.
-6.  **Fast-Math Sampling**: Rewrites homography projection and bilinear interpolation using hardware reciprocal approximation (`rcp_nr`) and fixed-point integer SIMD to bypass FPU latency.
-7.  **Hybrid ROI Caching**: Minimizes L1 cache misses by copying tag candidates into contiguous stack (small tags) or arena (large tags) buffers before sampling.
-8.  **Hybrid Parallelism**: Scales via `rayon` for data-parallel tasks while maintaining sequential cache-coherence for state-heavy stages.
+6.  **Structure of Arrays (SoA) Layout**: The detection pipeline is built around the `DetectionBatch`, which stores candidate data in parallel contiguous arrays. This eliminates L1 cache misses during math-heavy passes (homography, decoding) and ensures SIMD-alignment for all mathematical operations.
+7.  **Fast-Math Sampling**: Rewrites homography projection and bilinear interpolation using hardware reciprocal approximation (`rcp_nr`) and fixed-point integer SIMD to bypass FPU latency.
+8.  **Hybrid ROI Caching**: Minimizes L1 cache misses by copying tag candidates into contiguous stack (small tags) or arena (large tags) buffers before sampling.
+9.  **Hybrid Parallelism**: Scales via `rayon` for data-parallel tasks while maintaining sequential cache-coherence for state-heavy stages.
 
 ## Memory Architecture
 
@@ -178,19 +179,21 @@ flowchart LR
             Upscale["Upscale Buffer"]
         end
 
-        subgraph Ephemeral ["Arena Allocated"]
-            Contours
-            QuadCandidates
+        subgraph SoA ["DetectionBatch (SoA Arena)"]
+            Corners
             Homographies
+            Payloads
+            Poses
         end
     end
 
     PyArr -.->|Zero-Copy Read| View
     View -->|Process| Upscale
     Upscale -->|Write| Arena
-    Arena -->|Store| Contours
-    Arena -->|Store| QuadCandidates
-    QuadCandidates -->|Refine| Homographies
+    Arena -->|Store| Corners
+    Corners -->|Math Pass| Homographies
+    Homographies -->|SIMD Sampling| Payloads
+    Payloads -->|Partition & Solve| Poses
 ```
 
 ### Arena Lifecycle
@@ -226,13 +229,13 @@ Locus includes built-in instrumentation for performance profiling and visual deb
 
 Targets a **low latency** budget for 1080p frames on modern CPUs.
 
-| Stage | Complexity | Latency | Notes |
+| Stage | Complexity | Latency (50 Tags) | Notes |
 | :--- | :--- | :--- | :--- |
-| **Preprocessing** | $O(N)$ | ~8.3 ms | Adaptive thresholding; 1080p. |
-| **Segmentation** | $O(N)$ | ~3.7 ms | Single-pass Union-Find; 1080p. |
-| **Quad Extraction** | $O(K \cdot M)$ | ~22.4 ms | ICRA 2020 image; many candidates + Erf refinement. |
-| **Decoding (Hard)** | $O(Q)$ | ~0.4 ms | 200 candidates; Bit-LUT based. |
-| **Decoding (Soft)** | $O(Q \cdot \log D)$ | ~0.1 ms | 200 candidates; MIH sub-linear search. |
+| **Preprocessing** | $O(N)$ | ~4.5 ms | Adaptive thresholding; 1080p. |
+| **Segmentation** | $O(N)$ | ~5.4 ms | Single-pass Union-Find; 1080p. |
+| **Quad Extraction** | $O(K \cdot M)$ | ~5.9 ms | Contour tracing + Polygon approx. |
+| **Decoding (Hard)** | $O(Q)$ | ~28.1 ms | SoA-optimized; include homography & sampling. |
+| **Pose Refinement** | $O(V)$ | ~0.2 ms | Partitioned solver (mathematically verified tags only). |
 
 *Note: Latencies are approximate for a single core on a modern CPU (e.g., Zen 4).*
 
