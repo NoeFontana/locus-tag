@@ -26,4 +26,6 @@
 - [x] Task: Perform final performance audit and code cleanup. 174a8af
     - [x] Run the new `scripts/bench_ingestion_penalty.py` and confirm that non-contiguous arrays are blocked.
     - [x] Review `crates/locus-py/src/lib.rs` for any remaining implicit copies.
-- [x] Task: Conductor - User Manual Verification 'Phase 4' (Protocol in workflow.md) 00da2fd
+
+## Phase: Review Fixes
+- [x] Task: Apply review suggestions 118d615
