@@ -106,17 +106,21 @@ impl Detection {
     /// Compute the axis-aligned bounding box (AABB) of the detection.
     ///
     /// Returns (min_x, min_y, max_x, max_y) in integer pixel coordinates.
+    #[must_use]
+    #[allow(clippy::cast_sign_loss)]
     pub fn aabb(&self) -> (usize, usize, usize, usize) {
         let mut min_x = f64::INFINITY;
         let mut min_y = f64::INFINITY;
         let mut max_x = f64::NEG_INFINITY;
         let mut max_y = f64::NEG_INFINITY;
+
         for p in &self.corners {
             min_x = min_x.min(p[0]);
             min_y = min_y.min(p[1]);
             max_x = max_x.max(p[0]);
             max_y = max_y.max(p[1]);
         }
+
         (
             min_x.floor().max(0.0) as usize,
             min_y.floor().max(0.0) as usize,
@@ -672,9 +676,12 @@ impl Detector {
             let mut best_match_in_scale: Option<(u32, u32, u8, S::Code, usize)> = None;
 
             for (decoder_idx, decoder) in active_decoders.iter().enumerate() {
-                if let Some(code) =
-                    crate::decoder::sample_grid_generic::<S>(refinement_img, arena, &temp_cand, decoder.as_ref())
-                {
+                if let Some(code) = crate::decoder::sample_grid_generic::<S>(
+                    refinement_img,
+                    arena,
+                    &temp_cand,
+                    decoder.as_ref(),
+                ) {
                     passed_contrast = true;
                     if let Some((id, hamming, rot)) = S::decode(&code, decoder.as_ref(), 255) {
                         if hamming < best_overall_h {
@@ -721,12 +728,11 @@ impl Detector {
                     temp_cand.corners = refined_corners;
 
                     if let Some(code_ref) = crate::decoder::sample_grid_generic::<S>(
-                            refinement_img,
-                            &decode_arena,
-                            &temp_cand,
-                            decoder,
-                        )
-                        && let Some((id_ref, hamming_ref, _)) = S::decode(&code_ref, decoder, 255)
+                        refinement_img,
+                        &decode_arena,
+                        &temp_cand,
+                        decoder,
+                    ) && let Some((id_ref, hamming_ref, _)) = S::decode(&code_ref, decoder, 255)
                     {
                         // Only keep if it's the same tag and hamming is not worse
                         if id_ref == id && hamming_ref <= hamming {
@@ -799,38 +805,38 @@ impl Detector {
                                         &temp_cand,
                                         decoder.as_ref(),
                                     ) && let Some((id, hamming, rot)) =
-                                            S::decode(&code, decoder.as_ref(), 255)
-                                            && hamming < best_overall_h
-                                        {
-                                            best_overall_h = hamming;
-                                            best_overall_code = Some(code.clone());
-                                            current_corners = test_corners;
-                                            pass_improved = true;
-                                            // Success check
-                                            if hamming <= config.max_hamming_error {
-                                                cand.id = id;
-                                                cand.hamming = hamming;
-                                                cand.rotation = rot;
-                                                cand.bits = S::to_debug_bits(&code);
-                                                cand.corners = current_corners;
+                                        S::decode(&code, decoder.as_ref(), 255)
+                                        && hamming < best_overall_h
+                                    {
+                                        best_overall_h = hamming;
+                                        best_overall_code = Some(code.clone());
+                                        current_corners = test_corners;
+                                        pass_improved = true;
+                                        // Success check
+                                        if hamming <= config.max_hamming_error {
+                                            cand.id = id;
+                                            cand.hamming = hamming;
+                                            cand.rotation = rot;
+                                            cand.bits = S::to_debug_bits(&code);
+                                            cand.corners = current_corners;
 
-                                                // Fix rotation
-                                                let mut reordered = [[0.0; 2]; 4];
-                                                for (i, item) in reordered.iter_mut().enumerate() {
-                                                    let src_idx = (i + usize::from(rot)) % 4;
-                                                    *item = cand.corners[src_idx];
-                                                }
-                                                cand.corners = reordered;
-                                                return (
-                                                    Some(cand),
-                                                    false,
-                                                    false,
-                                                    hamming,
-                                                    S::to_debug_bits(&code),
-                                                );
+                                            // Fix rotation
+                                            let mut reordered = [[0.0; 2]; 4];
+                                            for (i, item) in reordered.iter_mut().enumerate() {
+                                                let src_idx = (i + usize::from(rot)) % 4;
+                                                *item = cand.corners[src_idx];
                                             }
+                                            cand.corners = reordered;
+                                            return (
+                                                Some(cand),
+                                                false,
+                                                false,
+                                                hamming,
+                                                S::to_debug_bits(&code),
+                                            );
                                         }
                                     }
+                                }
                             }
                         }
                         if !pass_improved {
@@ -871,13 +877,12 @@ impl Detector {
                                     temp_cand.corners = refined;
 
                                     if let Some(code) = crate::decoder::sample_grid_generic::<S>(
-                                            refinement_img,
-                                            arena,
-                                            &temp_cand,
-                                            decoder.as_ref(),
-                                        )
-                                        && let Some((id, hamming, rot)) =
-                                            S::decode(&code, decoder.as_ref(), 255)
+                                        refinement_img,
+                                        arena,
+                                        &temp_cand,
+                                        decoder.as_ref(),
+                                    ) && let Some((id, hamming, rot)) =
+                                        S::decode(&code, decoder.as_ref(), 255)
                                         && hamming < best_overall_h
                                     {
                                         best_overall_h = hamming;
@@ -935,67 +940,67 @@ impl Detector {
                                         &temp_cand,
                                         decoder.as_ref(),
                                     ) && let Some((id, hamming, rot)) =
-                                            S::decode(&code, decoder.as_ref(), 255)
-                                            && hamming < best_overall_h
-                                        {
-                                            best_overall_h = hamming;
-                                            best_overall_code = Some(code.clone());
-                                            current_corners = test_corners;
-                                            pass_improved = true;
+                                        S::decode(&code, decoder.as_ref(), 255)
+                                        && hamming < best_overall_h
+                                    {
+                                        best_overall_h = hamming;
+                                        best_overall_code = Some(code.clone());
+                                        current_corners = test_corners;
+                                        pass_improved = true;
 
-                                            if hamming <= config.max_hamming_error {
-                                                cand.id = id;
-                                                cand.hamming = hamming;
-                                                cand.rotation = rot;
-                                                cand.bits = S::to_debug_bits(&code);
-                                                cand.corners = current_corners;
+                                        if hamming <= config.max_hamming_error {
+                                            cand.id = id;
+                                            cand.hamming = hamming;
+                                            cand.rotation = rot;
+                                            cand.bits = S::to_debug_bits(&code);
+                                            cand.corners = current_corners;
 
-                                                // Final ERF polish for maximum precision
-                                                let decode_arena = bumpalo::Bump::new();
-                                                let refined = crate::decoder::refine_corners_erf(
-                                                    &decode_arena,
+                                            // Final ERF polish for maximum precision
+                                            let decode_arena = bumpalo::Bump::new();
+                                            let refined = crate::decoder::refine_corners_erf(
+                                                &decode_arena,
+                                                refinement_img,
+                                                &cand.corners,
+                                                config.subpixel_refinement_sigma,
+                                            );
+
+                                            // Verify refined corners
+                                            let mut temp_cand = cand.clone();
+                                            temp_cand.corners = refined;
+
+                                            if let Some(code_ref) =
+                                                crate::decoder::sample_grid_generic::<S>(
                                                     refinement_img,
-                                                    &cand.corners,
-                                                    config.subpixel_refinement_sigma,
-                                                );
-
-                                                // Verify refined corners
-                                                let mut temp_cand = cand.clone();
-                                                temp_cand.corners = refined;
-
-                                                if let Some(code_ref) =
-                                                        crate::decoder::sample_grid_generic::<S>(
-                                                            refinement_img,
-                                                            &decode_arena,
-                                                            &temp_cand,
-                                                            decoder.as_ref(),
-                                                        )
-                                                    && let Some((id_ref, hamming_ref, _)) =
-                                                        S::decode(&code_ref, decoder.as_ref(), 255)
-                                                    && id_ref == id
-                                                    && hamming_ref <= hamming
-                                                {
-                                                    cand.corners = refined;
-                                                    cand.hamming = hamming_ref;
-                                                    cand.bits = S::to_debug_bits(&code_ref);
-                                                }
-
-                                                let mut reordered = [[0.0; 2]; 4];
-                                                for (i, item) in reordered.iter_mut().enumerate() {
-                                                    let src_idx = (i + usize::from(rot)) % 4;
-                                                    *item = cand.corners[src_idx];
-                                                }
-                                                cand.corners = reordered;
-                                                return (
-                                                    Some(cand),
-                                                    false,
-                                                    false,
-                                                    hamming,
-                                                    S::to_debug_bits(&code),
-                                                );
+                                                    &decode_arena,
+                                                    &temp_cand,
+                                                    decoder.as_ref(),
+                                                )
+                                                && let Some((id_ref, hamming_ref, _)) =
+                                                    S::decode(&code_ref, decoder.as_ref(), 255)
+                                                && id_ref == id
+                                                && hamming_ref <= hamming
+                                            {
+                                                cand.corners = refined;
+                                                cand.hamming = hamming_ref;
+                                                cand.bits = S::to_debug_bits(&code_ref);
                                             }
+
+                                            let mut reordered = [[0.0; 2]; 4];
+                                            for (i, item) in reordered.iter_mut().enumerate() {
+                                                let src_idx = (i + usize::from(rot)) % 4;
+                                                *item = cand.corners[src_idx];
+                                            }
+                                            cand.corners = reordered;
+                                            return (
+                                                Some(cand),
+                                                false,
+                                                false,
+                                                hamming,
+                                                S::to_debug_bits(&code),
+                                            );
                                         }
                                     }
+                                }
                             }
                         }
                         if !pass_improved {

@@ -11,6 +11,7 @@ use multiversion::multiversion;
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
+#[must_use]
 pub fn rcp_nr(w: f32) -> f32 {
     #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     unsafe {
@@ -47,20 +48,21 @@ pub fn rcp_nr(w: f32) -> f32 {
 /// This is faster than floating-point bilinear interpolation on most CPUs.
 /// Coordinates (x, y) should be sub-pixel floats.
 /// Pixels (p00, p10, p01, p11) are the 4 surrounding pixels.
-#[inline(always)]
+#[must_use]
+#[allow(clippy::cast_sign_loss)]
 pub fn bilinear_interpolate_fixed(x: f32, y: f32, p00: u8, p10: u8, p01: u8, p11: u8) -> u8 {
     // Convert to 16.16 fixed point (using only fractional part for weights)
     let fx = ((x.fract() * 65536.0) as u32) & 0xFFFF;
     let fy = ((y.fract() * 65536.0) as u32) & 0xFFFF;
     
-    let inv_fx = 0x10000 - fx;
-    let inv_fy = 0x10000 - fy;
+    let inv_x = 0x10000 - fx;
+    let inv_y = 0x10000 - fy;
     
     // Weights: w00 = (1-fx)(1-fy), w10 = fx(1-fy), w01 = (1-fx)fy, w11 = fxfy
     // Use u64 for intermediate product to avoid overflow (u32 * u32 can be up to 2^32)
-    let w00 = (u64::from(inv_fx) * u64::from(inv_fy)) >> 16;
-    let w10 = (u64::from(fx) * u64::from(inv_fy)) >> 16;
-    let w01 = (u64::from(inv_fx) * u64::from(fy)) >> 16;
+    let w00 = (u64::from(inv_x) * u64::from(inv_y)) >> 16;
+    let w10 = (u64::from(fx) * u64::from(inv_y)) >> 16;
+    let w01 = (u64::from(inv_x) * u64::from(fy)) >> 16;
     let w11 = (u64::from(fx) * u64::from(fy)) >> 16;
     
     let res = (u64::from(p00) * w00 + u64::from(p10) * w10 + u64::from(p01) * w01 + u64::from(p11) * w11) >> 16;
@@ -79,7 +81,10 @@ mod tests {
             let actual = rcp_nr(w);
             let diff = (expected - actual).abs();
             // Newton-Raphson iteration should get us very close to 1.0/w
-            assert!(diff < 1e-4, "rcp_nr({}) failed: expected {}, got {}, diff {}", w, expected, actual, diff);
+            assert!(
+                diff < 1e-4,
+                "rcp_nr({w}) failed: expected {expected}, got {actual}, diff {diff}"
+            );
         }
     }
 

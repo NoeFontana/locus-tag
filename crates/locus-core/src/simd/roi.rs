@@ -4,6 +4,7 @@ use bumpalo::Bump;
 use crate::image::ImageView;
 
 /// A cache for a small region of the image to improve L1 cache hits during sampling.
+#[allow(clippy::large_enum_variant)]
 pub enum RoiCache<'a> {
     /// Small ROI stored on the stack.
     Stack {
@@ -38,6 +39,7 @@ impl<'a> RoiCache<'a> {
     /// 
     /// If the region fits in 1024 bytes, it is stored on the stack.
     /// Otherwise, it is allocated from the provided arena.
+    #[must_use]
     pub fn new(
         img: &ImageView,
         arena: &'a Bump,
@@ -70,7 +72,7 @@ impl<'a> RoiCache<'a> {
     }
 
     /// Get a pixel from the cache using global coordinates.
-    #[inline(always)]
+    #[must_use]
     pub fn get(&self, x: usize, y: usize) -> u8 {
         match self {
             RoiCache::Stack { data, min_x, min_y, width, height, .. } => {
@@ -94,9 +96,10 @@ mod tests {
     use bumpalo::Bump;
 
     #[test]
+    #[allow(clippy::cast_sign_loss)]
     fn test_roi_cache_stack() {
         let data: Vec<u8> = (0..100).map(|i| i as u8).collect();
-        let img = ImageView::new(&data, 10, 10, 10).unwrap();
+        let img = ImageView::new(&data, 10, 10, 10).expect("valid view");
         let arena = Bump::new();
         
         // 3x3 = 9 bytes, should be Stack
@@ -110,7 +113,7 @@ mod tests {
     fn test_roi_cache_arena() {
         let mut data = vec![0u8; 40 * 40];
         data[20 * 40 + 20] = 255;
-        let img = ImageView::new(&data, 40, 40, 40).unwrap();
+        let img = ImageView::new(&data, 40, 40, 40).expect("valid view");
         let arena = Bump::new();
         
         // 33x33 = 1089 bytes, should be Arena
@@ -120,9 +123,10 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_sign_loss)]
     fn test_roi_cache_clamping() {
         let data: Vec<u8> = (0..100).map(|i| i as u8).collect();
-        let img = ImageView::new(&data, 10, 10, 10).unwrap();
+        let img = ImageView::new(&data, 10, 10, 10).expect("valid view");
         let arena = Bump::new();
         let cache = RoiCache::new(&img, &arena, 2, 2, 4, 4);
         

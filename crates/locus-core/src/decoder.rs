@@ -808,11 +808,11 @@ fn sample_grid_values_optimized(
     for (i, &p) in points.iter().take(n).enumerate() {
         let px = p.0 as f32;
         let py = p.1 as f32;
-        
+
         // Fast-Math Reciprocal
         let wz = h20 * px + h21 * py + h22;
         let winv = rcp_nr(wz);
-        
+
         let img_x = (h00 * px + h01 * py + h02) * winv;
         let img_y = (h10 * px + h11 * py + h12) * winv;
 
@@ -854,9 +854,9 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
 ) -> Option<S::Code> {
     let (min_x, min_y, max_x, max_y) = detection.aabb();
     let roi = RoiCache::new(img, arena, min_x, min_y, max_x, max_y);
-    
+
     let homography = Homography::square_to_quad(&detection.corners)?;
-    
+
     let points = decoder.sample_points();
     // Stack-allocated buffer for up to 64 sample points (covers all standard tag families)
     let mut intensities = [0.0f64; 64];
@@ -1424,17 +1424,18 @@ mod tests {
         h[(0, 2)] = 32.0;
         h[(1, 1)] = 18.0;
         h[(1, 2)] = 32.0;
-        let homography = Homography { h };
 
         let decoder = AprilTag36h11;
         let arena = Bump::new();
-        let mut cand = crate::Detection::default();
-        cand.corners = [
-            [32.0, 32.0],
-            [32.0 + 18.0, 32.0],
-            [32.0 + 18.0, 32.0 + 18.0],
-            [32.0, 32.0 + 18.0],
-        ];
+        let cand = crate::Detection {
+            corners: [
+                [32.0, 32.0],
+                [32.0 + 18.0, 32.0],
+                [32.0 + 18.0, 32.0 + 18.0],
+                [32.0, 32.0 + 18.0],
+            ],
+            ..Default::default()
+        };
         let bits =
             sample_grid(&img, &arena, &cand, &decoder, 20.0).expect("Should sample successfully");
 

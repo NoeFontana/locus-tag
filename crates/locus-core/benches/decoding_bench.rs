@@ -39,9 +39,12 @@ fn bench_decoding_200_candidates(bencher: divan::Bencher) {
         let mut sum_ids = 0u32;
         for corners in &candidates {
             arena.reset();
-            let mut cand = locus_core::Detection::default();
-            cand.corners = *corners;
+            let cand = locus_core::Detection {
+                corners: *corners,
+                ..Default::default()
+            };
             if let Some(bits) = locus_core::decoder::sample_grid(&img, &arena, &cand, &decoder, 20.0)
+
                 && let Some((id, _, _)) = decoder.decode(bits)
             {
                 sum_ids += id;
