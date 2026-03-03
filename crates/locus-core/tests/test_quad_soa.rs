@@ -7,7 +7,7 @@ use locus_core::{DetectionBatch, DetectorConfig, ImageView};
 #[test]
 fn test_extract_quads_soa_interface() {
     let pixels = vec![0u8; 100 * 100];
-    let img = ImageView::new(&pixels, 100, 100, 100).unwrap();
+    let img = ImageView::new(&pixels, 100, 100, 100).expect("Failed to create ImageView");
     let labels = vec![0u32; 100 * 100];
     let label_result = LabelResult {
         labels: &labels,
