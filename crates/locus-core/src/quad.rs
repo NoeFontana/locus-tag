@@ -127,7 +127,7 @@ pub fn extract_quads_soa(
 /// Internal helper to extract a single quad from a component.
 #[inline]
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
-fn extract_single_quad(
+pub fn extract_single_quad(
     arena: &Bump,
     img: &ImageView,
     labels: &[u32],
@@ -217,37 +217,39 @@ fn extract_single_quad(
         [reduced[0], reduced[3], reduced[2], reduced[1]]
     };
 
-    // Scale to full resolution using center-aware mapping
-    let quad_pts = [
-        Point {
-            x: (quad_pts_dec[0].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[0].y - 0.5) * d + 0.5,
-        },
-        Point {
-            x: (quad_pts_dec[1].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[1].y - 0.5) * d + 0.5,
-        },
-        Point {
-            x: (quad_pts_dec[2].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[2].y - 0.5) * d + 0.5,
-        },
-        Point {
-            x: (quad_pts_dec[3].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[3].y - 0.5) * d + 0.5,
-        },
-    ];
-
+    // Pre-scale pruning: check edge lengths on decimated unscaled coordinates first
+    // to fail fast before doing the center-aware full-resolution mapping.
+    let min_edge_dec_sq = min_edge_len_sq / (d * d);
     let mut ok = true;
     for i in 0..4 {
-        let d2 = (quad_pts[i].x - quad_pts[(i + 1) % 4].x).powi(2)
-            + (quad_pts[i].y - quad_pts[(i + 1) % 4].y).powi(2);
-        if d2 < min_edge_len_sq {
+        let dx = quad_pts_dec[i].x - quad_pts_dec[(i + 1) % 4].x;
+        let dy = quad_pts_dec[i].y - quad_pts_dec[(i + 1) % 4].y;
+        if (dx * dx + dy * dy) < min_edge_dec_sq {
             ok = false;
             break;
         }
     }
 
     if ok {
+        // Scale to full resolution using center-aware mapping
+        let quad_pts = [
+            Point {
+                x: (quad_pts_dec[0].x - 0.5) * d + 0.5,
+                y: (quad_pts_dec[0].y - 0.5) * d + 0.5,
+            },
+            Point {
+                x: (quad_pts_dec[1].x - 0.5) * d + 0.5,
+                y: (quad_pts_dec[1].y - 0.5) * d + 0.5,
+            },
+            Point {
+                x: (quad_pts_dec[2].x - 0.5) * d + 0.5,
+                y: (quad_pts_dec[2].y - 0.5) * d + 0.5,
+            },
+            Point {
+                x: (quad_pts_dec[3].x - 0.5) * d + 0.5,
+                y: (quad_pts_dec[3].y - 0.5) * d + 0.5,
+            },
+        ];
         let corners = [
             refine_corner(
                 arena,

@@ -67,6 +67,11 @@ harness = false
 required-features = ["extended-bench"]
 
 [[bench]]
+name = "quad_bench"
+harness = false
+required-features = ["extended-bench"]
+
+[[bench]]
 name = "pose_bench"
 harness = false
 
