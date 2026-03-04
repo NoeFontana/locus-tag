@@ -151,14 +151,18 @@ fn extract_single_quad(
     }
 
     // Filter: not roughly square (aspect ratio)
-    let aspect = bbox_w.max(bbox_h) as f32 / bbox_w.min(bbox_h).max(1) as f32;
-    if aspect > config.quad_max_aspect_ratio {
+    let min_dim = bbox_w.min(bbox_h).max(1) as f32;
+    let max_dim = bbox_w.max(bbox_h) as f32;
+    if max_dim > min_dim * config.quad_max_aspect_ratio {
         return None;
     }
 
     // Filter: fill ratio (should be ~50-80% for a tag with inner pattern)
-    let fill = stat.pixel_count as f32 / bbox_area as f32;
-    if fill < config.quad_min_fill_ratio || fill > config.quad_max_fill_ratio {
+    let pixel_count = stat.pixel_count as f32;
+    let area_f32 = bbox_area as f32;
+    if pixel_count < config.quad_min_fill_ratio * area_f32
+        || pixel_count > config.quad_max_fill_ratio * area_f32
+    {
         return None;
     }
 
