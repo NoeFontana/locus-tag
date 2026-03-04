@@ -19,6 +19,13 @@ use crate::segmentation::LabelResult;
 use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
 use multiversion::multiversion;
+use rayon::prelude::*;
+use std::cell::RefCell;
+
+thread_local! {
+    /// Thread-local arena for quad extraction tasks to avoid global heap contention.
+    pub(crate) static THREAD_QUAD_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(16384));
+}
 
 /// Approximate error function (erf) using the Abramowitz and Stegun approximation.
 pub(crate) fn erf_approx(x: f64) -> f64 {
@@ -76,24 +83,25 @@ pub fn extract_quads_soa(
 
     let stats = &label_result.component_stats;
 
-    // Collect into a temporary Vec to handle the MAX_CANDIDATES limit and sequential writing.
-    // In a future optimization, we could use an atomic counter to write directly into the batch.
     let detections: Vec<[Point; 4]> = stats
         .par_iter()
+        .with_min_len(2)
         .enumerate()
         .filter_map(|(label_idx, stat)| {
-            let arena = Bump::new();
-            let label = (label_idx + 1) as u32;
-            extract_single_quad(
-                &arena,
-                img,
-                label_result.labels,
-                label,
-                stat,
-                config,
-                decimation,
-                refinement_img,
-            )
+            THREAD_QUAD_ARENA.with_borrow_mut(|arena| {
+                arena.reset();
+                let label = (label_idx + 1) as u32;
+                extract_single_quad(
+                    arena,
+                    img,
+                    label_result.labels,
+                    label,
+                    stat,
+                    config,
+                    decimation,
+                    refinement_img,
+                )
+            })
         })
         .collect();
 
@@ -301,50 +309,53 @@ pub fn extract_quads_with_config(
     let stats = &label_result.component_stats;
     let d = decimation as f64;
 
-    // Process components in parallel, each with its own thread-local arena
+    // Process components sequentially if the workload is tiny to avoid thread-pool overhead.
+    // Otherwise, parallelize with minimal overhead.
     stats
         .par_iter()
+        .with_min_len(2)
         .enumerate()
         .filter_map(|(label_idx, stat)| {
-            // Thread-local arena for this component
-            let arena = Bump::new();
-            let label = (label_idx + 1) as u32;
+            THREAD_QUAD_ARENA.with_borrow_mut(|arena| {
+                arena.reset();
+                let label = (label_idx + 1) as u32;
 
-            if let Some(corners) = extract_single_quad(
-                &arena,
-                img,
-                label_result.labels,
-                label,
-                stat,
-                config,
-                decimation,
-                refinement_img,
-            ) {
-                // To keep backward compatibility, we still need to calculate some fields
-                // that aren't yet in the SoA (or are derived from it).
-                let area = polygon_area(&corners);
+                if let Some(corners) = extract_single_quad(
+                    arena,
+                    img,
+                    label_result.labels,
+                    label,
+                    stat,
+                    config,
+                    decimation,
+                    refinement_img,
+                ) {
+                    // To keep backward compatibility, we still need to calculate some fields
+                    // that aren't yet in the SoA (or are derived from it).
+                    let area = polygon_area(&corners);
 
-                return Some(Detection {
-                    id: label,
-                    center: [
-                        (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4.0,
-                        (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4.0,
-                    ],
-                    corners: [
-                        [corners[0].x, corners[0].y],
-                        [corners[1].x, corners[1].y],
-                        [corners[2].x, corners[2].y],
-                        [corners[3].x, corners[3].y],
-                    ],
-                    hamming: 0,
-                    rotation: 0,
-                    decision_margin: area * d * d, // Area in full-res
-                    bits: 0,
-                    pose: None,
-                    pose_covariance: None,
-                });
-            }
-            None
+                    return Some(Detection {
+                        id: label,
+                        center: [
+                            (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4.0,
+                            (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4.0,
+                        ],
+                        corners: [
+                            [corners[0].x, corners[0].y],
+                            [corners[1].x, corners[1].y],
+                            [corners[2].x, corners[2].y],
+                            [corners[3].x, corners[3].y],
+                        ],
+                        hamming: 0,
+                        rotation: 0,
+                        decision_margin: area * d * d, // Area in full-res
+                        bits: 0,
+                        pose: None,
+                        pose_covariance: None,
+                    });
+                }
+                None
+            })
         })
         .collect()
 }

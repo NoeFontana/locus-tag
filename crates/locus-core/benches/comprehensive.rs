@@ -133,8 +133,12 @@ fn bench_full_detect_640x480(bencher: divan::Bencher) {
     let (data, _) = builder.build();
     let img = ImageView::new(&data, width, height, width).unwrap();
     let mut detector = Detector::new();
+    let options = DetectOptions::default();
 
-    bencher.bench_local(move || detector.detect(&img));
+    bencher.bench_local(move || {
+        let (detections, stats) = detector.detect_with_stats_and_options(&img, &options);
+        (detections, stats)
+    });
 }
 
 /// Benchmark detection in a complex scene with multiple families and tags.
@@ -196,6 +200,86 @@ fn bench_dense_scene_20_tags(bencher: divan::Bencher) {
 
     bencher.bench_local(move || detector.detect_with_options(&img, &options));
 }
+
+/// Benchmark detection with a single tag (stress test thread overhead).
+#[bench]
+fn bench_sparse_scene_1_tag(bencher: divan::Bencher) {
+    let width = 1280;
+    let height = 720;
+
+    let mut builder = SceneBuilder::new(width, height)
+        .with_background(100)
+        .with_noise(1.0);
+
+    let mut rng = rand::thread_rng();
+    builder.add_random_tag(&mut rng, TagFamily::AprilTag36h11, (100.0, 150.0));
+
+    let (data, _placements) = builder.build();
+    let img = ImageView::new(&data, width, height, width).unwrap();
+
+    let mut detector = Detector::new();
+    let options = DetectOptions {
+        families: vec![TagFamily::AprilTag36h11],
+        ..Default::default()
+    };
+
+    bencher.bench_local(move || detector.detect_with_options(&img, &options));
+}
+
+/// Benchmark detection with 5 tags (typical sparse usage).
+#[bench]
+fn bench_sparse_scene_5_tags(bencher: divan::Bencher) {
+    let width = 1280;
+    let height = 720;
+
+    let mut builder = SceneBuilder::new(width, height)
+        .with_background(100)
+        .with_noise(1.0);
+
+    let mut rng = rand::thread_rng();
+    for _ in 0..5 {
+        builder.add_random_tag(&mut rng, TagFamily::AprilTag36h11, (40.0, 80.0));
+    }
+
+    let (data, _placements) = builder.build();
+    let img = ImageView::new(&data, width, height, width).unwrap();
+
+    let mut detector = Detector::new();
+    let options = DetectOptions {
+        families: vec![TagFamily::AprilTag36h11],
+        ..Default::default()
+    };
+
+    bencher.bench_local(move || detector.detect_with_options(&img, &options));
+}
+
+/// Benchmark detection with very high tag density (50 tags).
+#[bench]
+fn bench_dense_scene_50_tags(bencher: divan::Bencher) {
+    let width = 1280;
+    let height = 720;
+
+    let mut builder = SceneBuilder::new(width, height)
+        .with_background(100)
+        .with_noise(1.0);
+
+    let mut rng = rand::thread_rng();
+    for _ in 0..50 {
+        builder.add_random_tag(&mut rng, TagFamily::AprilTag36h11, (20.0, 40.0));
+    }
+
+    let (data, _placements) = builder.build();
+    let img = ImageView::new(&data, width, height, width).unwrap();
+
+    let mut detector = Detector::new();
+    let options = DetectOptions {
+        families: vec![TagFamily::AprilTag36h11],
+        ..Default::default()
+    };
+
+    bencher.bench_local(move || detector.detect_with_options(&img, &options));
+}
+
 
 /// Benchmark detection robustness under high noise.
 #[bench]
