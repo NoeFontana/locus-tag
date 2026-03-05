@@ -10,14 +10,15 @@ Strictly segregate core runtime dependencies from developer tools.
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Dependency Refactoring' (Protocol in workflow.md) 207f4bf
 
 
-## Phase 2: CLI Scaffolding & Command Integration
+## Phase 2: CLI Scaffolding & Command Integration [checkpoint: ea760fd]
 Create the unified entry point and migrate existing scripts.
 
-- - - [x] Task: Create `tools/` directory and `tools/cli.py` using `Typer`.
-- -  - [x] Task: Migrate `scripts/validate_dict_schemas.py` logic to `tools/cli.py` as `validate-dicts` command.
-- -  - [x] Task: Migrate `scripts/locus_bench.py` logic to `tools/cli.py` as `bench` command.
-- -  - [x] Task: Migrate `scripts/debug/visualize.py` logic to `tools/cli.py` as `visualize` command.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: CLI Scaffolding & Command Integration' (Protocol in workflow.md)
+- [x] Task: Create `tools/` directory and `tools/cli.py` using `Typer`. 3aa18c5
+- [x] Task: Migrate `scripts/validate_dict_schemas.py` logic to `tools/cli.py` as `validate-dicts` command. 962eb3e
+- [x] Task: Migrate `scripts/locus_bench.py` logic to `tools/cli.py` as `bench` command. 7328284
+- [x] Task: Migrate `scripts/debug/visualize.py` logic to `tools/cli.py` as `visualize` command. 82aa6a3
+- [x] Task: Conductor - User Manual Verification 'Phase 2: CLI Scaffolding & Command Integration' (Protocol in workflow.md) ea760fd
+
 
 ## Phase 3: Validation & Cleanup
 Finalize the isolation and remove redundant files.
