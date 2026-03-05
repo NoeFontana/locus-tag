@@ -9,7 +9,7 @@ use crate::decoder::TagDecoder;
 use multiversion::multiversion;
 
 /// Trait abstracting the decoding strategy (Hard vs Soft).
-pub trait DecodingStrategy: Send + Sync + 'static {
+pub(crate) trait DecodingStrategy: Send + Sync + 'static {
     /// The type of code extracted from the image (e.g., u64 bits or `Vec<i16>` LLRs).
     type Code: Clone + std::fmt::Debug + Send + Sync;
 
@@ -34,7 +34,7 @@ pub trait DecodingStrategy: Send + Sync + 'static {
 }
 
 /// Hard-decision strategy (Hamming distance).
-pub struct HardStrategy;
+pub(crate) struct HardStrategy;
 
 impl DecodingStrategy for HardStrategy {
     type Code = u64;
@@ -67,11 +67,11 @@ impl DecodingStrategy for HardStrategy {
 }
 
 /// Soft-decision strategy (Log-Likelihood Ratios).
-pub struct SoftStrategy;
+pub(crate) struct SoftStrategy;
 
 /// A stack-allocated buffer for Log-Likelihood Ratios (LLRs).
 #[derive(Clone, Debug)]
-pub struct SoftCode {
+pub(crate) struct SoftCode {
     /// The LLR values for each sample point.
     pub llrs: [i16; 64],
     /// The number of valid LLRs (usually dimension^2).

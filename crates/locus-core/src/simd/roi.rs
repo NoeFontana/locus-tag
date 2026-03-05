@@ -5,7 +5,7 @@ use bumpalo::Bump;
 
 /// A cache for a small region of the image to improve L1 cache hits during sampling.
 #[allow(clippy::large_enum_variant)]
-pub enum RoiCache<'a> {
+pub(crate) enum RoiCache<'a> {
     /// Small ROI stored on the stack.
     Stack {
         /// The cached pixel data.

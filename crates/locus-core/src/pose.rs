@@ -14,7 +14,7 @@ use nalgebra::{Matrix3, Matrix6, UnitQuaternion, Vector3, Vector6};
 /// Camera intrinsics parameters.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct CameraIntrinsics {
+pub(crate) struct CameraIntrinsics {
     /// Focal length in x (pixels).
     pub fx: f64,
     /// Focal length in y (pixels).
@@ -508,7 +508,7 @@ fn find_best_pose(
 ///
 /// This function operates only on the first `v` candidates in the batch, which must have been
 /// partitioned such that all valid candidates are in the range `[0..v]`.
-pub fn refine_poses_soa(
+pub(crate) fn refine_poses_soa(
     batch: &mut DetectionBatch,
     v: usize,
     intrinsics: &CameraIntrinsics,

@@ -11,7 +11,7 @@
 /// Segmentation connectivity mode.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum SegmentationConnectivity {
+pub(crate) enum SegmentationConnectivity {
     /// 4-connectivity: Pixels connect horizontally and vertically only.
     /// Required for separating checkerboard corners.
     Four,
@@ -23,7 +23,7 @@ pub enum SegmentationConnectivity {
 /// Mode for subpixel corner refinement.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum CornerRefinementMode {
+pub(crate) enum CornerRefinementMode {
     /// No subpixel refinement (integer pixel precision).
     None,
     /// Edge-based refinement using gradient maxima (Default).
@@ -37,7 +37,7 @@ pub enum CornerRefinementMode {
 /// Mode for decoding strategy.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum DecodeMode {
+pub(crate) enum DecodeMode {
     /// Hard-decision decoding using Hamming distance (fastest).
     Hard,
     /// Soft-decision decoding using Log-Likelihood Ratios (better for noise/blur).
@@ -63,92 +63,82 @@ pub enum PoseEstimationMode {
 /// These settings affect the fundamental behavior of the detection pipeline
 /// and are immutable after the `Detector` is constructed. Use the builder
 /// pattern for ergonomic construction.
-///
-/// # Example
-/// ```
-/// use locus_core::config::DetectorConfig;
-///
-/// let config = DetectorConfig::builder()
-///     .threshold_tile_size(16)
-///     .quad_min_area(200)
-///     .build();
-/// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DetectorConfig {
     // Threshold parameters
     /// Tile size for adaptive thresholding (default: 4).
     /// Larger tiles are faster but less adaptive to local contrast.
-    pub threshold_tile_size: usize,
+    pub(crate) threshold_tile_size: usize,
     /// Minimum intensity range in a tile to be considered valid (default: 10).
     /// Tiles with lower range are treated as uniform (no edges).
-    pub threshold_min_range: u8,
+    pub(crate) threshold_min_range: u8,
 
     // Adaptive filtering parameters
     /// Enable bilateral pre-filtering for edge-preserving noise reduction (default: true).
-    pub enable_bilateral: bool,
+    pub(crate) enable_bilateral: bool,
     /// Bilateral spatial sigma for spatial smoothing (default: 3.0).
-    pub bilateral_sigma_space: f32,
+    pub(crate) bilateral_sigma_space: f32,
     /// Bilateral color sigma for edge preservation (default: 30.0).
     /// Higher values = more smoothing across edges.
-    pub bilateral_sigma_color: f32,
+    pub(crate) bilateral_sigma_color: f32,
 
     /// Enable Laplacian sharpening to enhance edges for small tags (default: true).
-    pub enable_sharpening: bool,
+    pub(crate) enable_sharpening: bool,
 
     /// Enable adaptive threshold window sizing based on gradient (default: true).
-    pub enable_adaptive_window: bool,
+    pub(crate) enable_adaptive_window: bool,
     /// Minimum threshold window radius for high-gradient regions (default: 2 = 5x5).
-    pub threshold_min_radius: usize,
+    pub(crate) threshold_min_radius: usize,
     /// Maximum threshold window radius for low-gradient regions (default: 7 = 15x15).
-    pub threshold_max_radius: usize,
+    pub(crate) threshold_max_radius: usize,
     /// Constant subtracted from local mean in adaptive thresholding (default: 3).
-    pub adaptive_threshold_constant: i16,
+    pub(crate) adaptive_threshold_constant: i16,
     /// Gradient magnitude threshold above which the minimum window radius is used (default: 40).
-    pub adaptive_threshold_gradient_threshold: u8,
+    pub(crate) adaptive_threshold_gradient_threshold: u8,
 
     // Quad filtering parameters
     /// Minimum quad area in pixels (default: 16).
-    pub quad_min_area: u32,
+    pub(crate) quad_min_area: u32,
     /// Maximum aspect ratio of bounding box (default: 3.0).
-    pub quad_max_aspect_ratio: f32,
+    pub(crate) quad_max_aspect_ratio: f32,
     /// Minimum fill ratio (pixel count / bbox area) (default: 0.3).
-    pub quad_min_fill_ratio: f32,
+    pub(crate) quad_min_fill_ratio: f32,
     /// Maximum fill ratio (default: 0.95).
-    pub quad_max_fill_ratio: f32,
+    pub(crate) quad_max_fill_ratio: f32,
     /// Minimum edge length in pixels (default: 4.0).
-    pub quad_min_edge_length: f64,
+    pub(crate) quad_min_edge_length: f64,
     /// Minimum edge alignment score (0.0 to 1.0)
-    pub quad_min_edge_score: f64,
+    pub(crate) quad_min_edge_score: f64,
     /// PSF blur factor for subpixel refinement (e.g., 0.6)
-    pub subpixel_refinement_sigma: f64,
+    pub(crate) subpixel_refinement_sigma: f64,
     /// Minimum deviation from threshold for a pixel to be connected in threshold-model CCL (default: 2).
-    pub segmentation_margin: i16,
+    pub(crate) segmentation_margin: i16,
     /// Segmentation connectivity (4-way or 8-way).
-    pub segmentation_connectivity: SegmentationConnectivity,
+    pub(crate) segmentation_connectivity: SegmentationConnectivity,
     /// Factor to upscale the image before detection (1 = no upscaling).
     /// Increasing this to 2 allows detecting smaller tags (e.g., < 15px)
     /// at the cost of processing speed (O(N^2)). Nearest-neighbor interpolation is used.
-    pub upscale_factor: usize,
+    pub(crate) upscale_factor: usize,
 
     /// Decimation factor for preprocessing (1 = no decimation).
-    pub decimation: usize,
+    pub(crate) decimation: usize,
 
     /// Number of threads for parallel processing (0 = auto).
-    pub nthreads: usize,
+    pub(crate) nthreads: usize,
 
     // Decoder parameters
     /// Minimum contrast range for Otsu-based bit classification (default: 20.0).
     /// For checkerboard patterns with densely packed tags, lower values (e.g., 10.0)
     /// can improve recall on small/blurry tags.
-    pub decoder_min_contrast: f64,
+    pub(crate) decoder_min_contrast: f64,
     /// Strategy for refining corner positions (default: Edge).
-    pub refinement_mode: CornerRefinementMode,
+    pub(crate) refinement_mode: CornerRefinementMode,
     /// Decoding mode (Hard vs Soft).
-    pub decode_mode: DecodeMode,
+    pub(crate) decode_mode: DecodeMode,
     /// Maximum number of Hamming errors allowed for tag decoding (default: 2).
     /// Higher values increase recall but also increase false positive rate in noise.
-    pub max_hamming_error: u32,
+    pub(crate) max_hamming_error: u32,
 }
 
 impl Default for DetectorConfig {
@@ -188,14 +178,14 @@ impl Default for DetectorConfig {
 impl DetectorConfig {
     /// Create a new builder for `DetectorConfig`.
     #[must_use]
-    pub fn builder() -> DetectorConfigBuilder {
+    pub(crate) fn builder() -> DetectorConfigBuilder {
         DetectorConfigBuilder::default()
     }
 }
 
 /// Builder for [`DetectorConfig`].
 #[derive(Default)]
-pub struct DetectorConfigBuilder {
+pub(crate) struct DetectorConfigBuilder {
     threshold_tile_size: Option<usize>,
     threshold_min_range: Option<u8>,
     enable_bilateral: Option<bool>,
@@ -489,32 +479,18 @@ impl TagFamily {
 ///
 /// These allow customizing which tag families to decode for a specific call,
 /// enabling performance optimization when you know which tags to expect.
-///
-/// # Example
-/// ```
-/// use locus_core::config::{DetectOptions, TagFamily};
-///
-/// // Only search for AprilTag 36h11 tags (fastest)
-/// let options = DetectOptions::with_families(&[TagFamily::AprilTag36h11]);
-///
-/// // Search for multiple families
-/// let multi = DetectOptions::with_families(&[
-///     TagFamily::AprilTag36h11,
-///     TagFamily::ArUco4x4_50,
-/// ]);
-/// ```
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DetectOptions {
     /// Tag families to attempt decoding. Empty means use detector defaults.
     pub families: Vec<TagFamily>,
     /// Camera intrinsics for 3D pose estimation. If None, pose is not computed.
-    pub intrinsics: Option<crate::pose::CameraIntrinsics>,
+    pub(crate) intrinsics: Option<crate::pose::CameraIntrinsics>,
     /// Physical size of the tag in world units (e.g. meters) for 3D pose estimation.
     pub tag_size: Option<f64>,
     /// Decimation factor for preprocessing (1 = no decimation).
     /// Preprocessing and segmentation operate on a downsampled image of size (W/D, H/D).
-    pub decimation: usize,
+    pub(crate) decimation: usize,
     /// Mode for 3D pose estimation (Fast vs Accurate).
     pub pose_estimation_mode: PoseEstimationMode,
 }
@@ -534,7 +510,7 @@ impl Default for DetectOptions {
 impl DetectOptions {
     /// Create a new builder for `DetectOptions`.
     #[must_use]
-    pub fn builder() -> DetectOptionsBuilder {
+    pub(crate) fn builder() -> DetectOptionsBuilder {
         DetectOptionsBuilder::default()
     }
     /// Create options that decode only the specified tag families.
@@ -563,7 +539,7 @@ impl DetectOptions {
 }
 
 /// Builder for [`DetectOptions`].
-pub struct DetectOptionsBuilder {
+pub(crate) struct DetectOptionsBuilder {
     families: Vec<TagFamily>,
     intrinsics: Option<crate::pose::CameraIntrinsics>,
     tag_size: Option<f64>,

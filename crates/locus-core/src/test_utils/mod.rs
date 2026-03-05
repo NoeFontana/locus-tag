@@ -12,7 +12,7 @@ use rand_distr::{Distribution, Normal};
     clippy::cast_sign_loss,
     clippy::missing_panics_doc
 )]
-pub fn generate_synthetic_test_image(
+pub(crate) fn generate_synthetic_test_image(
     family: crate::config::TagFamily,
     id: u16,
     tag_size: usize,
@@ -123,7 +123,7 @@ fn draw_cell(
 /// Compute mean Euclidean distance between detected and ground truth corners.
 /// Handles 4 rotations to find the minimum error.
 #[must_use]
-pub fn compute_corner_error(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 4]) -> f64 {
+pub(crate) fn compute_corner_error(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 4]) -> f64 {
     let mut min_error = f64::MAX;
 
     // Try all 4 rotations
@@ -153,7 +153,7 @@ pub fn compute_corner_error(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 
 ///
 /// Formula: sqrt( (sum of squared distances for all 4 corners) / 4 )
 #[must_use]
-pub fn compute_rmse(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 4]) -> f64 {
+pub(crate) fn compute_rmse(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 4]) -> f64 {
     let mut sum_sq = 0.0;
     for i in 0..4 {
         let dx = detected[i][0] - ground_truth[i][0];
@@ -169,7 +169,7 @@ pub fn compute_rmse(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 4]) -> f
 
 /// Parameters for generating test images with photometric variations.
 #[derive(Clone, Debug)]
-pub struct TestImageParams {
+pub(crate) struct TestImageParams {
     /// Tag family to generate.
     pub family: crate::config::TagFamily,
     /// Tag ID to generate.
@@ -204,7 +204,7 @@ impl Default for TestImageParams {
 /// Includes tag generation, placement, and photometric adjustments.
 #[must_use]
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-pub fn generate_test_image_with_params(params: &TestImageParams) -> (Vec<u8>, [[f64; 2]; 4]) {
+pub(crate) fn generate_test_image_with_params(params: &TestImageParams) -> (Vec<u8>, [[f64; 2]; 4]) {
     // First generate base image
     let (mut data, corners) = generate_synthetic_test_image(
         params.family,
@@ -230,7 +230,7 @@ pub fn generate_test_image_with_params(params: &TestImageParams) -> (Vec<u8>, [[
 /// `brightness`: -255 to +255
 /// `contrast`: 0.0 to 127.0 (1.0 = no change)
 #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-pub fn apply_brightness_contrast(image: &mut [u8], brightness: i32, contrast: f32) {
+pub(crate) fn apply_brightness_contrast(image: &mut [u8], brightness: i32, contrast: f32) {
     for pixel in image.iter_mut() {
         let b = f32::from(*pixel);
         let with_contrast = (b - 128.0) * contrast + 128.0;
@@ -242,7 +242,7 @@ pub fn apply_brightness_contrast(image: &mut [u8], brightness: i32, contrast: f3
 /// Count black pixels in binary data.
 #[must_use]
 #[allow(clippy::naive_bytecount)]
-pub fn count_black_pixels(data: &[u8]) -> usize {
+pub(crate) fn count_black_pixels(data: &[u8]) -> usize {
     data.iter().filter(|&&p| p == 0).count()
 }
 
@@ -250,7 +250,7 @@ pub fn count_black_pixels(data: &[u8]) -> usize {
 /// Returns the ratio of correctly black pixels in the 1-cell-wide border (0.0 to 1.0).
 #[must_use]
 #[allow(clippy::cast_sign_loss)]
-pub fn measure_border_integrity(binary: &[u8], width: usize, corners: &[[f64; 2]; 4]) -> f64 {
+pub(crate) fn measure_border_integrity(binary: &[u8], width: usize, corners: &[[f64; 2]; 4]) -> f64 {
     let min_x = corners
         .iter()
         .map(|c| c[0])
@@ -355,7 +355,7 @@ pub fn measure_border_integrity(binary: &[u8], width: usize, corners: &[[f64; 2]
 
 /// Generates a checkered pattern image for benchmarking.
 #[must_use]
-pub fn generate_checkered(width: usize, height: usize) -> Vec<u8> {
+pub(crate) fn generate_checkered(width: usize, height: usize) -> Vec<u8> {
     let mut data = vec![200u8; width * height];
     for y in (0..height).step_by(16) {
         for x in (0..width).step_by(16) {

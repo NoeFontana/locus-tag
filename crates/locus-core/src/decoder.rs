@@ -22,7 +22,7 @@ thread_local! {
 }
 
 /// A 3x3 Homography matrix.
-pub struct Homography {
+pub(crate) struct Homography {
     /// The 3x3 homography matrix.
     pub h: SMatrix<f64, 3, 3>,
 }
@@ -203,7 +203,7 @@ impl Homography {
 ///
 /// This uses `rayon` for data-parallel computation of the square-to-quad homographies.
 /// Quads are defined by 4 corners in `corners` for each candidate index.
-pub fn compute_homographies_soa(corners: &[Point2f], homographies: &mut [Matrix3x3]) {
+pub(crate) fn compute_homographies_soa(corners: &[Point2f], homographies: &mut [Matrix3x3]) {
     use rayon::prelude::*;
 
     // Each homography maps from canonical square [(-1,-1), (1,-1), (1,1), (-1,1)] to image quads.
@@ -248,7 +248,7 @@ pub fn compute_homographies_soa(corners: &[Point2f], homographies: &mut [Matrix3
 /// least squares, then compute corners as line intersections. This provides
 /// more accurate corner localization than the initial detection.
 #[must_use]
-pub fn refine_corners_with_homography(
+pub(crate) fn refine_corners_with_homography(
     img: &crate::image::ImageView,
     corners: &[[f64; 2]; 4],
     _homography: &Homography,
@@ -358,7 +358,7 @@ pub fn refine_corners_with_homography(
 /// This method optimizes the homography by adjusting corners to maximize the
 /// contrast between expected black and white cells in the decoded grid.
 /// This minimizes photometric error in the tag's coordinate system.
-pub fn refine_corners_gridfit(
+pub(crate) fn refine_corners_gridfit(
     img: &crate::image::ImageView,
     corners: &[[f64; 2]; 4],
     decoder: &(impl TagDecoder + ?Sized),
@@ -524,7 +524,7 @@ fn compute_grid_contrast(
 ///
 /// This assumes the edge intensity profile is an Error Function (convolution of step edge with Gaussian PSF).
 /// We minimize the photometric error between the image and the ERF model using Gauss-Newton.
-pub fn refine_corners_erf(
+pub(crate) fn refine_corners_erf(
     arena: &bumpalo::Bump,
     img: &crate::image::ImageView,
     corners: &[[f64; 2]; 4],
@@ -1008,7 +1008,7 @@ fn fit_edge_erf(
 }
 
 /// Returns the threshold that maximizes inter-class variance.
-pub fn compute_otsu_threshold(values: &[f64]) -> f64 {
+pub(crate) fn compute_otsu_threshold(values: &[f64]) -> f64 {
     if values.is_empty() {
         return 128.0;
     }
@@ -1130,7 +1130,7 @@ fn sample_grid_values_optimized(
 /// This computes the intensities at sample points and the adaptive thresholds,
 /// then delegates to the strategy to produce the code.
 #[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
-pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
+pub(crate) fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
     img: &crate::image::ImageView,
     arena: &Bump,
     detection: &crate::Detection,
@@ -1157,7 +1157,7 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
 }
 
 /// Sample the bit grid using Structure of Arrays (SoA) data.
-pub fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
+pub(crate) fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
     img: &crate::image::ImageView,
     arena: &Bump,
     corners: &[Point2f],
@@ -1208,7 +1208,7 @@ pub fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
 }
 
 /// Sample the bit grid using Structure of Arrays (SoA) data and a precomputed ROI cache.
-pub fn sample_grid_soa_precomputed<S: crate::strategy::DecodingStrategy>(
+pub(crate) fn sample_grid_soa_precomputed<S: crate::strategy::DecodingStrategy>(
     img: &crate::image::ImageView,
     roi: &RoiCache,
     homography: &Matrix3x3,
@@ -1273,7 +1273,7 @@ fn compute_adaptive_thresholds(intensities: &[f64], points: &[(f64, f64)]) -> [f
 
 /// Sample the bit grid from the image (Legacy/Hard wrapper).
 #[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
-pub fn sample_grid(
+pub(crate) fn sample_grid(
     img: &crate::image::ImageView,
     arena: &Bump,
     detection: &crate::Detection,
@@ -1287,7 +1287,7 @@ pub fn sample_grid(
 /// Rotate a square bit grid 90 degrees clockwise.
 /// This is an O(1) bitwise operation but conceptually represents rotating the N x N pixel grid.
 #[must_use]
-pub fn rotate90(bits: u64, dim: usize) -> u64 {
+pub(crate) fn rotate90(bits: u64, dim: usize) -> u64 {
     let mut res = 0u64;
     for y in 0..dim {
         for x in 0..dim {
@@ -1305,7 +1305,7 @@ pub fn rotate90(bits: u64, dim: usize) -> u64 {
 ///
 /// This phase executes SIMD bilinear interpolation and Hamming error correction.
 /// If a candidate fails decoding, its `status_mask` is flipped to `FailedDecode`.
-pub fn decode_batch_soa(
+pub(crate) fn decode_batch_soa(
     batch: &mut crate::batch::DetectionBatch,
     n: usize,
     img: &crate::image::ImageView,
@@ -1715,7 +1715,7 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
 }
 
 /// A trait for decoding binary payloads from extracted tags.
-pub trait TagDecoder: Send + Sync {
+pub(crate) trait TagDecoder: Send + Sync {
     /// Returns the name of the decoder family (e.g., "AprilTag36h11").
     fn name(&self) -> &str;
     /// Returns the dimension of the tag grid (e.g., 6 for 36h11).
@@ -1748,7 +1748,7 @@ pub trait TagDecoder: Send + Sync {
 }
 
 /// Decoder for the AprilTag 36h11 family.
-pub struct AprilTag36h11;
+pub(crate) struct AprilTag36h11;
 
 impl TagDecoder for AprilTag36h11 {
     fn name(&self) -> &'static str {
@@ -1801,7 +1801,7 @@ impl TagDecoder for AprilTag36h11 {
 }
 
 /// Decoder for the AprilTag 41h12 family.
-pub struct AprilTag41h12;
+pub(crate) struct AprilTag41h12;
 
 impl TagDecoder for AprilTag41h12 {
     fn name(&self) -> &'static str {
@@ -1853,7 +1853,7 @@ impl TagDecoder for AprilTag41h12 {
 }
 
 /// Decoder for the ArUco 4x4_50 family.
-pub struct ArUco4x4_50;
+pub(crate) struct ArUco4x4_50;
 
 impl TagDecoder for ArUco4x4_50 {
     fn name(&self) -> &'static str {
@@ -1905,7 +1905,7 @@ impl TagDecoder for ArUco4x4_50 {
 }
 
 /// Decoder for the ArUco 4x4_100 family.
-pub struct ArUco4x4_100;
+pub(crate) struct ArUco4x4_100;
 
 impl TagDecoder for ArUco4x4_100 {
     fn name(&self) -> &'static str {
@@ -1957,7 +1957,7 @@ impl TagDecoder for ArUco4x4_100 {
 }
 
 /// Generic decoder for any TagDictionary (static or custom).
-pub struct GenericDecoder {
+pub(crate) struct GenericDecoder {
     dict: std::sync::Arc<crate::dictionaries::TagDictionary>,
 }
 
@@ -2025,7 +2025,7 @@ impl TagDecoder for GenericDecoder {
 
 /// Convert a TagFamily enum to a boxed decoder instance.
 #[must_use]
-pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send + Sync> {
+pub(crate) fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send + Sync> {
     match family {
         config::TagFamily::AprilTag36h11 => Box::new(AprilTag36h11),
         config::TagFamily::AprilTag41h12 => Box::new(AprilTag41h12),

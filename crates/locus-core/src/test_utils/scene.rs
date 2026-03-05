@@ -12,7 +12,7 @@ use rand::Rng;
 
 /// A placement of a tag in a scene.
 #[derive(Debug, Clone)]
-pub struct TagPlacement {
+pub(crate) struct TagPlacement {
     /// The tag family.
     pub family: TagFamily,
     /// The specific tag ID.
@@ -28,7 +28,7 @@ pub struct TagPlacement {
 }
 
 /// A builder for complex multi-tag scenes.
-pub struct SceneBuilder {
+pub(crate) struct SceneBuilder {
     width: usize,
     height: usize,
     tags: Vec<TagPlacement>,

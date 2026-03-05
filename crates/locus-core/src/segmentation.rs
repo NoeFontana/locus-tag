@@ -15,7 +15,7 @@ use multiversion::multiversion;
 use rayon::prelude::*;
 
 /// A disjoint-set forest (Union-Find) with path compression and rank optimization.
-pub struct UnionFind<'a> {
+pub(crate) struct UnionFind<'a> {
     parent: &'a mut [u32],
     rank: &'a mut [u8],
 }
@@ -59,7 +59,7 @@ impl<'a> UnionFind<'a> {
 
 /// Bounding box and statistics for a connected component.
 #[derive(Clone, Copy, Debug)]
-pub struct ComponentStats {
+pub(crate) struct ComponentStats {
     /// Minimum x coordinate.
     pub min_x: u16,
     /// Maximum x coordinate.
@@ -91,7 +91,7 @@ impl Default for ComponentStats {
 }
 
 /// Result of connected component labeling.
-pub struct LabelResult<'a> {
+pub(crate) struct LabelResult<'a> {
     /// Flat array of pixel labels (row-major).
     pub labels: &'a [u32],
     /// Statistics for each component (indexed by label - 1).
@@ -120,7 +120,7 @@ pub fn label_components<'a>(
 
 /// Label components and compute bounding box stats for each.
 #[allow(clippy::too_many_lines)]
-pub fn label_components_with_stats<'a>(
+pub(crate) fn label_components_with_stats<'a>(
     arena: &'a Bump,
     binary: &[u8],
     width: usize,
@@ -396,7 +396,7 @@ unsafe fn extract_runs_row_neon(
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::cast_sign_loss)]
 #[allow(clippy::cast_possible_wrap, clippy::too_many_arguments)]
-pub fn label_components_threshold_model<'a>(
+pub(crate) fn label_components_threshold_model<'a>(
     arena: &'a Bump,
     grayscale: &[u8],
     grayscale_stride: usize,

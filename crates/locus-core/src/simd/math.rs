@@ -12,7 +12,7 @@ use multiversion::multiversion;
     "aarch64+neon"
 ))]
 #[must_use]
-pub fn rcp_nr(w: f32) -> f32 {
+pub(crate) fn rcp_nr(w: f32) -> f32 {
     #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     unsafe {
         use std::arch::x86_64::*;
@@ -50,7 +50,7 @@ pub fn rcp_nr(w: f32) -> f32 {
 /// Pixels (p00, p10, p01, p11) are the 4 surrounding pixels.
 #[must_use]
 #[allow(clippy::cast_sign_loss)]
-pub fn bilinear_interpolate_fixed(x: f32, y: f32, p00: u8, p10: u8, p01: u8, p11: u8) -> u8 {
+pub(crate) fn bilinear_interpolate_fixed(x: f32, y: f32, p00: u8, p10: u8, p01: u8, p11: u8) -> u8 {
     // Convert to 16.16 fixed point (using only fractional part for weights)
     let fx = ((x.fract() * 65536.0) as u32) & 0xFFFF;
     let fy = ((y.fract() * 65536.0) as u32) & 0xFFFF;

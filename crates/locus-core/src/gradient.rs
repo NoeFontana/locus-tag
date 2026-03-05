@@ -10,7 +10,7 @@ use bumpalo::collections::Vec as BumpVec;
 
 /// Gradient data for a single pixel.
 #[derive(Clone, Copy, Default)]
-pub struct Gradient {
+pub(crate) struct Gradient {
     /// Gradient in x-direction.
     pub gx: i16,
     /// Gradient in y-direction.
@@ -29,7 +29,7 @@ use multiversion::multiversion;
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
-pub fn compute_sobel(img: &ImageView) -> Vec<Gradient> {
+pub(crate) fn compute_sobel(img: &ImageView) -> Vec<Gradient> {
     let w = img.width;
     let h = img.height;
     let mut grads = vec![Gradient::default(); w * h];
@@ -63,7 +63,7 @@ pub fn compute_sobel(img: &ImageView) -> Vec<Gradient> {
 
 /// A detected line segment.
 #[derive(Clone, Copy, Debug)]
-pub struct LineSegment {
+pub(crate) struct LineSegment {
     /// Start x coordinate.
     pub x0: f32,
     /// Start y coordinate.
@@ -79,7 +79,7 @@ pub struct LineSegment {
 /// Extract line segments from gradient image using a simplified LSD approach.
 /// This is a greedy region-growing algorithm on gradient direction.
 #[must_use]
-pub fn extract_line_segments(
+pub(crate) fn extract_line_segments(
     grads: &[Gradient],
     width: usize,
     height: usize,
@@ -164,7 +164,7 @@ pub fn extract_line_segments(
 
 /// Find quads by grouping 4 line segments that form a closed quadrilateral.
 #[must_use]
-pub fn find_first_quad_from_segments(segments: &[LineSegment]) -> Option<[[f32; 2]; 4]> {
+pub(crate) fn find_first_quad_from_segments(segments: &[LineSegment]) -> Option<[[f32; 2]; 4]> {
     if segments.len() < 4 {
         return None;
     }
@@ -609,7 +609,7 @@ impl<'a> QuadFitter<'a> {
 /// Fit a quad from a small component using on-demand gradient computation.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn fit_quad_from_component(
+pub(crate) fn fit_quad_from_component(
     arena: &Bump,
     img: &ImageView,
     labels: &[u32],
@@ -756,7 +756,7 @@ fn solve_quad_from_boundary_points(
 #[allow(clippy::cast_sign_loss)]
 #[allow(clippy::similar_names)]
 #[must_use]
-pub fn fit_quad_from_gradients(
+pub(crate) fn fit_quad_from_gradients(
     grads: &[Gradient],
     labels: &[u32],
     label: u32,

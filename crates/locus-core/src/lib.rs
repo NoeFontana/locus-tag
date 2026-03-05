@@ -5,37 +5,37 @@
 //! with strict zero-heap allocation in the detection hot-path.
 
 /// Batched state container for Structure of Arrays (SoA) layout.
-pub mod batch;
+pub(crate) mod batch;
 /// Configuration types for the detector pipeline.
-pub mod config;
+pub(crate) mod config;
 /// Tag decoding traits and implementations.
-pub mod decoder;
+pub(crate) mod decoder;
 /// The primary public API for the detector.
 pub mod detector;
 /// Tag family dictionaries (AprilTag, ArUco).
-pub mod dictionaries;
+pub(crate) mod dictionaries;
 /// Edge-preserving filtering for small tag detection.
-pub mod filter;
+pub(crate) mod filter;
 /// Gradient computation for edge refinement.
-pub mod gradient;
+pub(crate) mod gradient;
 /// Image buffer abstractions.
-pub mod image;
+pub(crate) mod image;
 /// 3D Pose Estimation (PnP).
-pub mod pose;
+pub(crate) mod pose;
 /// Weighted pose estimation logic.
-pub mod pose_weighted;
+pub(crate) mod pose_weighted;
 /// Quad extraction and geometric primitives.
-pub mod quad;
+pub(crate) mod quad;
 /// Connected components labeling using Union-Find.
-pub mod segmentation;
+pub(crate) mod segmentation;
 /// SIMD optimized mathematical kernels.
-pub mod simd;
+pub(crate) mod simd;
 /// Decoding strategies (Hard vs Soft).
-pub mod strategy;
+pub(crate) mod strategy;
 /// Utilities for testing and synthetic data generation.
-pub mod test_utils;
+pub(crate) mod test_utils;
 /// Adaptive thresholding implementation.
-pub mod threshold;
+pub(crate) mod threshold;
 
 // Re-exports for the public API
 pub use crate::config::{DetectOptions, DetectorConfig, TagFamily};

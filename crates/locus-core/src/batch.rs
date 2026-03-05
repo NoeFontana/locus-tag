@@ -1,10 +1,10 @@
 /// The maximum number of candidates in a single batch.
-pub const MAX_CANDIDATES: usize = 1024;
+pub(crate) const MAX_CANDIDATES: usize = 1024;
 
 /// A 2D point with subpixel precision (f32).
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C)]
-pub struct Point2f {
+pub(crate) struct Point2f {
     /// X coordinate.
     pub x: f32,
     /// Y coordinate.
@@ -14,7 +14,7 @@ pub struct Point2f {
 /// A 3x3 homography matrix (f32).
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C, align(32))]
-pub struct Matrix3x3 {
+pub(crate) struct Matrix3x3 {
     /// The matrix elements in row-major or column-major format (internal use).
     pub data: [f32; 9],
     /// Padding to ensure 64-byte size (cache line) and alignment for SIMD.
@@ -24,7 +24,7 @@ pub struct Matrix3x3 {
 /// A 6D pose representing translation and rotation (unit quaternion).
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C, align(32))]
-pub struct Pose6D {
+pub(crate) struct Pose6D {
     /// Translation (x, y, z) and Rotation as a unit quaternion (x, y, z, w).
     pub data: [f32; 7],
     /// Padding to 32-byte alignment.
@@ -34,7 +34,7 @@ pub struct Pose6D {
 /// The lifecycle state of a candidate in the detection pipeline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(u8)]
-pub enum CandidateState {
+pub(crate) enum CandidateState {
     /// No candidate at this index.
     #[default]
     Empty = 0,
@@ -51,26 +51,26 @@ pub enum CandidateState {
 #[repr(C, align(32))]
 pub struct DetectionBatch {
     /// Flattened array of sub-pixel quad vertices (4 corners per candidate).
-    pub corners: [Point2f; MAX_CANDIDATES * 4],
+    pub(crate) corners: [Point2f; MAX_CANDIDATES * 4],
     /// The 3x3 projection matrices.
-    pub homographies: [Matrix3x3; MAX_CANDIDATES],
+    pub(crate) homographies: [Matrix3x3; MAX_CANDIDATES],
     /// The decoded IDs of the tags.
-    pub ids: [u32; MAX_CANDIDATES],
+    pub(crate) ids: [u32; MAX_CANDIDATES],
     /// The extracted bitstrings.
-    pub payloads: [u64; MAX_CANDIDATES],
+    pub(crate) payloads: [u64; MAX_CANDIDATES],
     /// The MSE or Log-Likelihood Ratio confidence scores.
-    pub error_rates: [f32; MAX_CANDIDATES],
+    pub(crate) error_rates: [f32; MAX_CANDIDATES],
     /// Translation vectors and unit quaternions.
-    pub poses: [Pose6D; MAX_CANDIDATES],
+    pub(crate) poses: [Pose6D; MAX_CANDIDATES],
     /// A dense byte-array tracking the lifecycle of each candidate.
-    pub status_mask: [CandidateState; MAX_CANDIDATES],
+    pub(crate) status_mask: [CandidateState; MAX_CANDIDATES],
 }
 
 impl DetectionBatch {
     /// Creates a new DetectionBatch with all fields initialized to zero (Empty state).
     #[must_use]
     #[allow(clippy::large_stack_arrays)]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         *Box::new(Self {
             corners: [Point2f { x: 0.0, y: 0.0 }; MAX_CANDIDATES * 4],
             homographies: [Matrix3x3 {
@@ -89,13 +89,13 @@ impl DetectionBatch {
     }
     /// Returns the maximum capacity of the batch.
     #[must_use]
-    pub fn capacity(&self) -> usize {
+    pub(crate) fn capacity(&self) -> usize {
         MAX_CANDIDATES
     }
 
     /// Partitions the batch so that all `Valid` candidates are at the front `[0..V]`.
     /// Returns the number of valid candidates `V`.
-    pub fn partition(&mut self, n: usize) -> usize {
+    pub(crate) fn partition(&mut self, n: usize) -> usize {
         let mut v = 0;
         let n_clamped = n.min(MAX_CANDIDATES);
         for i in 0..n_clamped {
@@ -120,7 +120,7 @@ impl DetectionBatch {
 
     /// Reassemble the batched SoA data into a list of discrete `Detection` objects.
     #[must_use]
-    pub fn reassemble(&self, v: usize) -> Vec<crate::Detection> {
+    pub(crate) fn reassemble(&self, v: usize) -> Vec<crate::Detection> {
         let mut detections = Vec::with_capacity(v);
         for i in 0..v {
             let offset = i * 4;
@@ -184,7 +184,7 @@ impl DetectionBatch {
 }
 
 /// Helper function to partition a batch, moving all valid candidates to the front.
-pub fn partition_batch_soa(batch: &mut DetectionBatch, n: usize) -> usize {
+pub(crate) fn partition_batch_soa(batch: &mut DetectionBatch, n: usize) -> usize {
     batch.partition(n)
 }
 

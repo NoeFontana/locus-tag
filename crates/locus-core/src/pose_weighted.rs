@@ -77,7 +77,7 @@ fn compute_corner_covariance(img: &ImageView, center: [f64; 2]) -> Matrix2<f64> 
 ///
 /// This serves as a batch wrapper around `compute_corner_covariance`.
 #[must_use]
-pub fn compute_framework_uncertainty(
+pub(crate) fn compute_framework_uncertainty(
     img: &ImageView,
     corners: &[[f64; 2]; 4],
     _h_poly: &crate::decoder::Homography,
@@ -91,7 +91,7 @@ pub fn compute_framework_uncertainty(
 
 /// Use Levenberg-Marquardt to refine the pose by minimizing Mahalanobis distance.
 #[must_use]
-pub fn refine_pose_lm_weighted(
+pub(crate) fn refine_pose_lm_weighted(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
     tag_size: f64,

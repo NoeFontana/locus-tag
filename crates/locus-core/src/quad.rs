@@ -41,7 +41,7 @@ pub(crate) fn erf_approx(x: f64) -> f64 {
 
 /// A 2D point with subpixel precision.
 #[derive(Clone, Copy, Debug)]
-pub struct Point {
+pub(crate) struct Point {
     /// X coordinate.
     pub x: f64,
     /// Y coordinate.
@@ -51,7 +51,7 @@ pub struct Point {
 /// Fast quad extraction using bounding box stats from CCL.
 /// Only traces contours for components that pass geometric filters.
 /// Uses default configuration.
-pub fn extract_quads_fast(
+pub(crate) fn extract_quads_fast(
     arena: &Bump,
     img: &ImageView,
     label_result: &LabelResult,
@@ -64,7 +64,7 @@ pub fn extract_quads_fast(
 /// This function populates the `corners` and `status_mask` fields of the provided `DetectionBatch`.
 /// It returns the total number of candidates found ($N$).
 #[allow(clippy::too_many_lines)]
-pub fn extract_quads_soa(
+pub(crate) fn extract_quads_soa(
     batch: &mut DetectionBatch,
     img: &ImageView,
     label_result: &LabelResult,
@@ -288,7 +288,7 @@ fn extract_single_quad(
 /// This is the main entry point for quad detection with custom parameters.
 /// Components are processed in parallel for maximum throughput.
 #[allow(clippy::too_many_lines)]
-pub fn extract_quads_with_config(
+pub(crate) fn extract_quads_with_config(
     _arena: &Bump,
     img: &ImageView,
     label_result: &LabelResult,
@@ -350,7 +350,7 @@ pub fn extract_quads_with_config(
 }
 
 /// Legacy extract_quads for backward compatibility.
-pub fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detection> {
+pub(crate) fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detection> {
     // Create a fake LabelResult with stats computed on-the-fly
     let mut detections = Vec::new();
     let num_labels = (labels.len() / 32) + 1;
@@ -548,7 +548,7 @@ fn find_max_distance_optimized(points: &[Point], start: usize, end: usize) -> (f
 ///
 /// Leverages an iterative implementation with a manual stack to avoid
 /// the overhead of recursive function calls and multiple temporary allocations.
-pub fn douglas_peucker<'a>(arena: &'a Bump, points: &[Point], epsilon: f64) -> BumpVec<'a, Point> {
+pub(crate) fn douglas_peucker<'a>(arena: &'a Bump, points: &[Point], epsilon: f64) -> BumpVec<'a, Point> {
     if points.len() < 3 {
         let mut v = BumpVec::new_in(arena);
         v.extend_from_slice(points);
@@ -621,7 +621,7 @@ fn polygon_center(points: &[Point]) -> [f64; 2] {
 /// model and Gauss-Newton optimization, then computes their intersection.
 /// Achieves ~0.02px accuracy vs ~0.2px for gradient-peak methods.
 #[must_use]
-pub fn refine_corner(
+pub(crate) fn refine_corner(
     arena: &Bump,
     img: &ImageView,
     p: Point,
@@ -1492,7 +1492,7 @@ fn trace_boundary<'a>(
 
 /// Simplified version of CHAIN_APPROX_SIMPLE:
 /// Removes all redundant points on straight lines.
-pub fn chain_approximation<'a>(arena: &'a Bump, points: &[Point]) -> BumpVec<'a, Point> {
+pub(crate) fn chain_approximation<'a>(arena: &'a Bump, points: &[Point]) -> BumpVec<'a, Point> {
     if points.len() < 3 {
         let mut v = BumpVec::new_in(arena);
         v.extend_from_slice(points);

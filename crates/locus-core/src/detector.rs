@@ -53,6 +53,28 @@ impl Detector {
         DetectorBuilder::new()
     }
 
+    /// Create a detector with custom pipeline configuration.
+    pub fn with_config(config: DetectorConfig) -> Self {
+        Self {
+            config,
+            state: DetectorState::new(),
+            decoders: vec![crate::decoder::family_to_decoder(crate::config::TagFamily::AprilTag36h11)],
+        }
+    }
+
+    /// Add a decoder to the pipeline.
+    pub fn add_decoder(&mut self, decoder: Box<dyn TagDecoder + Send + Sync>) {
+        self.decoders.push(decoder);
+    }
+
+    /// Clear all decoders and set new ones based on tag families.
+    pub fn set_families(&mut self, families: &[crate::config::TagFamily]) {
+        self.decoders.clear();
+        for &family in families {
+            self.decoders.push(crate::decoder::family_to_decoder(family));
+        }
+    }
+
     /// Detect tags in the provided image.
     ///
     /// This method is the main execution pipeline. It performs:
