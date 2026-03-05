@@ -10,3 +10,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
+- [ ] **Track: Performance Regression Investigation and API Alignment**
+*Link: [./tracks/perf_alignment_20260305/](./tracks/perf_alignment_20260305/)*
