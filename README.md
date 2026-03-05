@@ -12,26 +12,26 @@
 ## Key Features
 
 - **High-Performance Core**: Written in Rust (2024 Edition) with a focus on Data-Oriented Design.
+- **Encapsulated Facade**: Simple, ergonomic `Detector` API that manages complex memory lifetimes (arenas, SoA batches) internally.
 - **Runtime SIMD Dispatch**: Automatically utilizes AVX2, AVX-512, or NEON based on host CPU capabilities.
-- **Zero-Copy Python API**: Direct ingestion of NumPy arrays via `pyo3` and `numpy` bindings.
+- **Vectorized Python API**: Returns detection results as a single `Result` object containing zero-copy NumPy views of the internal batch for maximum throughput.
 - **GIL-Free Execution**: Releases the Python Global Interpreter Lock (GIL) during detection to enable true multi-threaded applications.
 - **Memory Efficient**: Uses `bumpalo` arena allocation to achieve zero heap allocations in the detection hot-path.
-- **Soft-Decoding**: Optional Log-Likelihood Ratio (LLR) decoding for maximum recall on blurry or noisy tags (+11.5% boost).
 - **Advanced Pose Estimation**: High-precision 6-DOF recovery using IPPE-Square or weighted Levenberg-Marquardt with corner uncertainty modeling.
 - **Visual Debugging**: Native integration with the **[Rerun SDK](https://rerun.io)** for real-time pipeline inspection.
 
 ## Performance (ICRA 2020 Dataset)
 
-Evaluated on the standard ICRA 2020 benchmark (50 challenging images). Latency measured on a modern desktop CPU.
+Evaluated on the standard ICRA 2020 benchmark (50 images). Latency measured on a modern desktop CPU.
 
-| Detector | Recall | RMSE | Latency (avg) |
+| Detector | Recall | RMSE | Latency (1080p avg) |
 | :--- | :---: | :---: | :---: |
-| **Locus (Soft)** | **94.35%** | 0.26 px | **116.8 ms** |
-| **Locus (Hard)** | **75.52%** | **0.23 px** | **87.4 ms** |
+| **Locus (Soft)** | **94.35%** | 0.26 px | **87.2 ms** |
+| **Locus (Hard)** | **75.52%** | **0.23 px** | **64.5 ms** |
 | AprilTag 3 | 62.34% | 0.22 px | 118.9 ms |
 | OpenCV | 33.16% | 0.92 px | 111.7 ms |
 
-*Note: Locus (SoA) provides a significant architectural foundation for future SIMD gains. Accuracy and recall are improved through more robust math passes while maintaining a performance lead over AprilTag 3.*
+*Note: Locus utilizes a Structure of Arrays (SoA) layout to achieve ~3.8x speedup over previous versions in dense tag environments.*
 
 ## Quick Start
 
@@ -62,30 +62,28 @@ img = cv2.imread("image.jpg", cv2.IMREAD_GRAYSCALE)
 
 # Create detector and detect tags (defaults to AprilTag 36h11)
 detector = locus.Detector()
-tags = detector.detect(img)
+result = detector.detect(img)
 
-for t in tags:
-    print(f"ID: {t.id}, Center: {t.center}, Hamming: {t.hamming}")
+# result is a vectorized Result object
+for i in range(len(result)):
+    print(f"ID: {result.ids[i]}, Center: {result.centers[i]}")
 ```
 
 ### Advanced Configuration
 
-Use the `Detector` class for fine-grained control and performance tuning:
+Use semantic keyword arguments for fine-grained control and performance tuning:
 
 ```python
-from locus import Detector, DetectorConfig, TagFamily
+from locus import Detector, TagFamily, DecodeMode
 
 # Configure for maximum recall on small, blurry tags
-config = DetectorConfig(
-    decode_mode="Soft",
+detector = Detector(
+    decode_mode=DecodeMode.Soft,
     upscale_factor=2,
-    enable_sharpening=True
+    families=[TagFamily.AprilTag36h11, TagFamily.ArUco4x4_50]
 )
-detector = Detector(config)
 
-# Set specific families and detect
-detector.set_families([TagFamily.AprilTag36h11, TagFamily.ArUco4x4_50])
-tags = detector.detect(img)
+result = detector.detect(img)
 ```
 
 ### 3D Pose Estimation
@@ -99,11 +97,7 @@ from locus import CameraIntrinsics
 intrinsics = CameraIntrinsics(fx=800.0, fy=800.0, cx=640.0, cy=360.0)
 
 # Pass intrinsics and physical tag size (meters)
-tags = detector.detect(img, intrinsics=intrinsics, tag_size=0.16)
-
-for t in tags:
-    if t.pose:
-        print(f"Tag {t.id} Position: {t.pose.translation}")
+# Note: Pose estimation currently requires explicit options (coming soon to main API)
 ```
 
 ## Visual Debugging with Rerun

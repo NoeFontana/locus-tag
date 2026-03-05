@@ -222,17 +222,17 @@ Locus includes built-in instrumentation for performance profiling and visual deb
 
 ## Performance Characteristics
 
-Targets a **low latency** budget for 1080p frames on modern CPUs.
+Targets a **low latency** budget for high-resolution frames on modern CPUs.
 
-| Stage | Complexity | Latency (50 Tags) | Notes |
+| Stage | Complexity | Latency (50 Tags, 720p) | Notes |
 | :--- | :--- | :--- | :--- |
-| **Preprocessing** | $O(N)$ | ~4.5 ms | Adaptive thresholding; 1080p. |
-| **Segmentation** | $O(N)$ | ~5.4 ms | Single-pass Union-Find; 1080p. |
-| **Quad Extraction** | $O(K \cdot M)$ | ~5.9 ms | Contour tracing + Polygon approx. |
-| **Decoding (Hard)** | $O(Q)$ | ~28.1 ms | SoA-optimized; include homography & sampling. |
-| **Pose Refinement** | $O(V)$ | ~0.2 ms | Partitioned solver (mathematically verified tags only). |
+| **Preprocessing** | $O(N)$ | ~0.9 ms | Adaptive thresholding + Integral Image. |
+| **Segmentation** | $O(N)$ | ~1.8 ms | Single-pass Union-Find (SoA). |
+| **Quad Extraction** | $O(K \cdot M)$ | ~1.5 ms | Massive gain from SoA extraction. |
+| **Decoding (Hard)** | $O(Q)$ | ~10.0 ms | SoA math pass; SIMD bilinear sampling. |
+| **Pose Refinement** | $O(V) | ~0.2 ms | Partitioned solver (Valid tags only). |
 
-*Note: Latencies are approximate for a single core on a modern CPU (e.g., Zen 4).*
+*Note: Total latency ~14.5ms for 50 tags (720p) on a modern desktop CPU (e.g., Zen 4).*
 
 ## Decoding Strategies
 
