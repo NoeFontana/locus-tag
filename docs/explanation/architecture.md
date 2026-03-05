@@ -18,7 +18,7 @@ flowchart TD
     end
 
     RustCore -->|Detections| PyBindings
-    PyBindings -->|"Result (Vectorized)"| User
+    PyBindings -->|"DetectionBatch (Vectorized)"| User
 ```
 
 ## Detection Pipeline
@@ -92,7 +92,7 @@ classDiagram
         -DetectorConfig config
         -DetectorState state
         -Vec~Box~TagDecoder~~ decoders
-        +detect(image) &[Detection]
+        +detect(image) DetectionBatch
     }
 
     class DetectorConfig {
@@ -149,7 +149,7 @@ classDiagram
 ## Design Principles
 
 1.  **Encapsulated Facade**: The `Detector` struct provides a single, robust entry point that owns all complex memory lifetimes (arenas, SoA batches), removing the cognitive burden of resource management from the user.
-2.  **Zero-Copy Integration**: Utilizes the Python Buffer Protocol to access NumPy arrays directly. Python results are returned as a vectorized `Result` object containing zero-copy NumPy views of the internal `DetectionBatch`, maximizing throughput for downstream consumers.
+2.  **Zero-Copy Integration**: Utilizes the Python Buffer Protocol to access NumPy arrays directly. Python results are returned as a vectorized `DetectionBatch` dataclass containing zero-copy NumPy views of the internal SoA layout, maximizing throughput for downstream consumers.
 3.  **Thread Concurrency (GIL-Free)**: Releases the Python Global Interpreter Lock (GIL) during the heavy perception pipeline, allowing true multi-threaded execution and preventing blocking in concurrent Python applications.
 4.  **Arena Memory**: Internal per-frame scratchpad (`bumpalo`) eliminates `malloc`/`free` overhead in the hot path.
 5.  **Cache Locality**: Algorithms (thresholding, CCL) process data in linear, cache-friendly passes.
