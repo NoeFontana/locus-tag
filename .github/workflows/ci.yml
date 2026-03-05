@@ -39,7 +39,7 @@ jobs:
         
       - name: Run dictionary validation
         run: |
-          uv run --frozen python tools/cli.py validate-dicts \
+          uv run --frozen --with jsonschema --with pydantic python tools/cli.py validate-dicts \
             --schema crates/locus-core/tests/schemas/dictionary.schema.json \
             data/dictionaries/*.json
 

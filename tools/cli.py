@@ -3,9 +3,7 @@ import time
 from pathlib import Path
 
 import jsonschema
-import numpy as np
 import typer
-from tqdm import tqdm
 
 try:
     import rerun as rr
@@ -85,7 +83,8 @@ def visualize(
     """
     import cv2
     import locus
-
+    import numpy as np
+    from tqdm import tqdm
     from scripts.bench.utils import DatasetLoader
 
     if not RERUN_AVAILABLE:
@@ -199,7 +198,8 @@ def bench_real(
     """Run benchmarks on real-world datasets (ICRA)."""
     import cv2
     import locus
-
+    import numpy as np
+    from tqdm import tqdm
     from scripts.bench.utils import (
         AprilTagWrapper,
         DatasetLoader,
@@ -365,7 +365,7 @@ def bench_synthetic(
 ):
     """Run benchmarks on procedurally generated synthetic images."""
     import locus
-
+    import numpy as np
     from scripts.bench.utils import (
         AprilTagWrapper,
         LibraryWrapper,
@@ -439,7 +439,8 @@ def bench_hosted(
 ):
     """Evaluate against datasets hosted on Hugging Face Hub."""
     import locus
-
+    import numpy as np
+    from tqdm import tqdm
     from scripts.bench.utils import (
         AprilTagWrapper,
         HubBenchmarkLoader,
@@ -519,6 +520,7 @@ def bench_analyze(
     scenarios: list[str] = typer.Option(["forward", "circle"], help="Scenarios to analyze"),
 ):
     """Analyze tag size distribution in datasets."""
+    import numpy as np
     from scripts.bench.utils import DatasetLoader
 
     loader = DatasetLoader()
@@ -555,7 +557,7 @@ def bench_profile(
 ):
     """Profile pipeline bottlenecks using synthetic images."""
     import locus
-
+    import numpy as np
     from scripts.bench.utils import LocusWrapper, generate_synthetic_image
 
     # Map string to locus.TagFamily
@@ -602,3 +604,4 @@ def bench_prepare():
 
 if __name__ == "__main__":
     app()
+
