@@ -3,8 +3,8 @@
 ## Phase 1: Research and Audit
 Identify discrepancies in configuration and verify coordinate mapping.
 
-- [ ] Task: Compare `DetectorConfig::default()` in `crates/locus-core/src/config.rs` with historical main branch values.
-- [ ] Task: Audit `crates/locus-core/src/detector.rs` detect loop for any missing `+ 0.5` offsets or incorrect scaling in the decimation path.
+- - [x] Task: Compare `DetectorConfig::default()` in `crates/locus-core/src/config.rs` with historical main branch values.
+- - [x] Task: Audit `crates/locus-core/src/detector.rs` detect loop for any missing `+ 0.5` offsets or incorrect scaling in the decimation path.
 - [ ] Task: Run current benchmark with manual parameter overrides to isolate the regression cause.
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Research and Audit' (Protocol in workflow.md)
 
