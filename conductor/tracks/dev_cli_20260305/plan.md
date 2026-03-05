@@ -26,5 +26,5 @@ Finalize the isolation and remove redundant files.
 - -  - [x] Task: Verify that `uv run tools/cli.py --help` and all subcommands work correctly.
 - -  - [x] Task: Build a wheel and inspect metadata to ensure developer dependencies are NOT listed.
 - -  - [x] Task: Remove old script files in `scripts/` that have been migrated.
-- - [~] Task: Update `README.md` or developer docs to point to the new CLI usage.
+- -  - [x] Task: Update `README.md` or developer docs to point to the new CLI usage.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Validation & Cleanup' (Protocol in workflow.md)

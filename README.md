@@ -105,8 +105,8 @@ intrinsics = CameraIntrinsics(fx=800.0, fy=800.0, cx=640.0, cy=360.0)
 Locus provides a powerful visualization tool to inspect every stage of the pipeline (thresholding, segmentation, quad candidates, bit grids).
 
 ```bash
-# Run the visualizer on a dataset using the bench dependency group
-uv run --group bench python scripts/debug/visualize.py --scenario forward --limit 5
+# Run the visualizer on a dataset using the dev/bench dependency groups
+uv run --group dev --group bench tools/cli.py visualize --scenario forward --limit 5
 ```
 
 ## Development & Benchmarking
@@ -115,10 +115,10 @@ Locus includes a rigorous suite to ensure detection quality and latency targets.
 
 ```bash
 # Prepare local datasets
-uv run --group bench python scripts/locus_bench.py prepare
+uv run --group dev --group bench tools/cli.py bench prepare
 
 # Run full evaluation suite and compare with competitors
-uv run --group bench python scripts/locus_bench.py run real --compare
+uv run --group dev --group bench tools/cli.py bench real --compare
 ```
 
 Detailed documentation for profiling, architecture, and coordinate systems is available in the **[Docs Site](https://noefontana.github.io/locus-tag/)**.

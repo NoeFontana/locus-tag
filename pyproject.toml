@@ -23,6 +23,7 @@ features = ["pyo3/extension-module"]
 module-name = "locus"
 python-source = "crates/locus-py"
 manifest-path = "crates/locus-py/Cargo.toml"
+include = ["data/**/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
