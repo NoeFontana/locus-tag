@@ -27,3 +27,6 @@
 - [x] Task: Verify zero-cost erasure by inspecting assembly or comparing benchmark results. 9596b28
 - [x] Task: Confirm Tracy visual profiling works as expected with `--features tracy`. 9596b28
 - [x] Task: Conductor - User Manual Verification 'Hot-Path Optimization & Validation' (Protocol in workflow.md)
+
+## Phase: Review Fixes
+- [x] Task: Apply review suggestions 243e318
