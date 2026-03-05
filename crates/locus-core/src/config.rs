@@ -63,16 +63,6 @@ pub enum PoseEstimationMode {
 /// These settings affect the fundamental behavior of the detection pipeline
 /// and are immutable after the `Detector` is constructed. Use the builder
 /// pattern for ergonomic construction.
-///
-/// # Example
-/// ```
-/// use locus_core::config::DetectorConfig;
-///
-/// let config = DetectorConfig::builder()
-///     .threshold_tile_size(16)
-///     .quad_min_area(200)
-///     .build();
-/// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DetectorConfig {
@@ -131,6 +121,12 @@ pub struct DetectorConfig {
     /// at the cost of processing speed (O(N^2)). Nearest-neighbor interpolation is used.
     pub upscale_factor: usize,
 
+    /// Decimation factor for preprocessing (1 = no decimation).
+    pub decimation: usize,
+
+    /// Number of threads for parallel processing (0 = auto).
+    pub nthreads: usize,
+
     // Decoder parameters
     /// Minimum contrast range for Otsu-based bit classification (default: 20.0).
     /// For checkerboard patterns with densely packed tags, lower values (e.g., 10.0)
@@ -157,7 +153,7 @@ impl Default for DetectorConfig {
             enable_adaptive_window: false,
             threshold_min_radius: 2,
             threshold_max_radius: 15,
-            adaptive_threshold_constant: 0, // Most sensitive
+            adaptive_threshold_constant: 0,
             adaptive_threshold_gradient_threshold: 10,
             quad_min_area: 16,
             quad_max_aspect_ratio: 10.0,
@@ -166,9 +162,12 @@ impl Default for DetectorConfig {
             quad_min_edge_length: 4.0,
             quad_min_edge_score: 4.0,
             subpixel_refinement_sigma: 0.6,
+
             segmentation_margin: 1,
             segmentation_connectivity: SegmentationConnectivity::Eight,
             upscale_factor: 1,
+            decimation: 1,
+            nthreads: 0,
             decoder_min_contrast: 20.0,
             refinement_mode: CornerRefinementMode::Erf,
             decode_mode: DecodeMode::Hard,
@@ -386,6 +385,8 @@ impl DetectorConfigBuilder {
                 .segmentation_connectivity
                 .unwrap_or(d.segmentation_connectivity),
             upscale_factor: self.upscale_factor.unwrap_or(d.upscale_factor),
+            decimation: 1, // Default to 1, as it's typically set via builder
+            nthreads: 0,   // Default to 0
             decoder_min_contrast: self.decoder_min_contrast.unwrap_or(d.decoder_min_contrast),
             refinement_mode: self.refinement_mode.unwrap_or(d.refinement_mode),
             decode_mode: self.decode_mode.unwrap_or(d.decode_mode),
@@ -479,20 +480,6 @@ impl TagFamily {
 ///
 /// These allow customizing which tag families to decode for a specific call,
 /// enabling performance optimization when you know which tags to expect.
-///
-/// # Example
-/// ```
-/// use locus_core::config::{DetectOptions, TagFamily};
-///
-/// // Only search for AprilTag 36h11 tags (fastest)
-/// let options = DetectOptions::with_families(&[TagFamily::AprilTag36h11]);
-///
-/// // Search for multiple families
-/// let multi = DetectOptions::with_families(&[
-///     TagFamily::AprilTag36h11,
-///     TagFamily::ArUco4x4_50,
-/// ]);
-/// ```
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DetectOptions {

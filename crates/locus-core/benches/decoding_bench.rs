@@ -1,7 +1,18 @@
-#![allow(missing_docs, clippy::unwrap_used)]
+#![allow(
+    missing_docs,
+    dead_code,
+    clippy::unwrap_used,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use
+)]
 use divan::bench;
-use locus_core::decoder::{AprilTag36h11, Homography, TagDecoder};
-use locus_core::image::ImageView;
+use locus_core::ImageView;
+use locus_core::bench_api::{AprilTag36h11, Homography, TagDecoder};
 
 fn main() {
     divan::main();
@@ -11,8 +22,8 @@ fn main() {
 fn bench_decoding_200_candidates(bencher: divan::Bencher) {
     let canvas_size = 1000usize;
     let tag_size = 100usize;
-    let family = locus_core::config::TagFamily::AprilTag36h11;
-    let (data, corners) = locus_core::test_utils::generate_synthetic_test_image(
+    let family = locus_core::TagFamily::AprilTag36h11;
+    let (data, corners) = locus_core::bench_api::generate_synthetic_test_image(
         family,
         0, // id
         tag_size,
@@ -44,7 +55,7 @@ fn bench_decoding_200_candidates(bencher: divan::Bencher) {
                 ..Default::default()
             };
             if let Some(bits) =
-                locus_core::decoder::sample_grid(&img, &arena, &cand, &decoder, 20.0)
+                locus_core::bench_api::sample_grid(&img, &arena, &cand, &decoder, 20.0)
                 && let Some((id, _, _)) = decoder.decode(bits)
             {
                 sum_ids += id;

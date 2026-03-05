@@ -107,12 +107,6 @@ Locus supports high-fidelity profiling using the [Tracy Profiler](https://github
    ```
    *Note: On some Linux systems, you may need `TRACY_NO_INVARIANT_CHECK=1` if your CPU doesn't support invariant TSC.*
 
-### Bottleneck Analysis
-Identify which pipeline stage (Threshold, Segmentation, Quad Extraction, Decoding) is the bottleneck:
-```bash
-PYTHONPATH=. uv run --group bench python scripts/locus_bench.py profile --targets 100
-```
-
 ---
 
 ## Visual Debugging with Rerun
@@ -129,4 +123,3 @@ uv run python scripts/debug/visualize.py --scenario forward --limit 5
 - **Failure Diagnosis**: The tool automatically identifies tags in the ground truth that were missed and logs:
     - The reason for rejection (e.g., Hamming distance too high).
     - The 6x6 extracted bit grid for visual inspection of the bit-sampling quality.
-- **Performance timelines**: Directly log per-frame latency stats to Rerun for time-series analysis.

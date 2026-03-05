@@ -1,224 +1,143 @@
+import enum
+from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
+
 from ._config import DetectOptions, DetectorConfig
 from .locus import (
     CameraIntrinsics,
     CornerRefinementMode,
     DecodeMode,
-    Detection,
-    FullDetectionResult,
-    PipelineStats,
-    Pose,
     PoseEstimationMode,
     SegmentationConnectivity,
     TagFamily,
     init_tracy,
 )
-from .locus import Detector as _RustDetector
+from .locus import (
+    PyPose as Pose,
+)
+from .locus import (
+    create_detector as _create_detector,
+)
+
+
+@dataclass(frozen=True)
+class DetectionBatch:
+    """
+    Vectorized detection results.
+
+    This dataclass contains parallel NumPy arrays representing a batch of detections.
+    """
+
+    ids: np.ndarray  # Shape: (N,), Dtype: int32
+    corners: np.ndarray  # Shape: (N, 4, 2), Dtype: float32
+    error_rates: np.ndarray  # Shape: (N,), Dtype: float32
+    poses: np.ndarray | None = None  # Shape: (N, 7), Dtype: float32. [tx, ty, tz, qx, qy, qz, qw]
+
+    @property
+    def centers(self) -> np.ndarray:
+        """Compute centers from corners: (N, 2)"""
+        return np.mean(self.corners, axis=1)
+
+    def __len__(self) -> int:
+        return len(self.ids)
 
 
 class Detector:
-    """
-    High-performance tag detector.
+    def __init__(
+        self,
+        decimation: int = 1,
+        threads: int = 0,
+        families: list[TagFamily] | None = None,
+        threshold_tile_size: int = 8,
+        threshold_min_range: int = 10,
+        adaptive_threshold_constant: int = 0,
+        quad_min_area: int = 16,
+        quad_min_fill_ratio: float = 0.10,
+        quad_min_edge_score: float = 4.0,
+        decoder_min_contrast: float = 20.0,
+        max_hamming_error: int = 2,
+        **kwargs: Any,
+    ):
+        # Map enum to int values for Rust. Rust expects a Vec<i32>.
+        if families is None:
+            families = [TagFamily.AprilTag36h11]
 
-    This class wraps the Rust implementation to provide a Pydantic-validated
-    configuration interface.
-    """
+        family_values = [int(f) for f in families]
 
-    @classmethod
-    def checkerboard(cls, **kwargs) -> "Detector":
-        """
-        Create a detector optimized for checkerboard patterns.
-
-        This profile enables sharpening, uses 4-way connectivity, and
-        disables bilateral filtering to maximize edge recall for small tags.
-        """
-        config = {
-            "enable_sharpening": True,
-            "enable_bilateral": False,
-            "segmentation_connectivity": SegmentationConnectivity.Four,
-            "decoder_min_contrast": 10.0,
-            "quad_min_area": 8,
-            "quad_min_edge_length": 2.0,
+        # Merge explicit args into kwargs for create_detector
+        rust_kwargs: dict[str, Any] = {
+            "threshold_tile_size": threshold_tile_size,
+            "threshold_min_range": threshold_min_range,
+            "adaptive_threshold_constant": adaptive_threshold_constant,
+            "quad_min_area": quad_min_area,
+            "quad_min_fill_ratio": quad_min_fill_ratio,
+            "quad_min_edge_score": quad_min_edge_score,
+            "decoder_min_contrast": decoder_min_contrast,
+            "max_hamming_error": max_hamming_error,
         }
-        config.update(kwargs)
-        return cls(config=DetectorConfig(**config))
+        rust_kwargs.update(kwargs)
 
-    def __init__(self, config: DetectorConfig | None = None, **kwargs):
-        if config is None:
-            # Allow passing individual parameters as kwargs
-            config = DetectorConfig(**kwargs)
+        # Prepare kwargs for Rust by converting enums to ints
+        final_rust_kwargs: dict[str, Any] = {}
+        for k, v in rust_kwargs.items():
+            # PyO3 enums might not inherit from enum.Enum but are int-convertible
+            if hasattr(v, "__int__"):
+                final_rust_kwargs[k] = int(v)
+            elif isinstance(v, enum.Enum):
+                final_rust_kwargs[k] = v.value
+            else:
+                final_rust_kwargs[k] = v
 
-        # Initialize the underlying Rust detector
-        self._inner = _RustDetector(
-            threshold_tile_size=config.threshold_tile_size,
-            threshold_min_range=config.threshold_min_range,
-            enable_bilateral=config.enable_bilateral,
-            bilateral_sigma_space=config.bilateral_sigma_space,
-            bilateral_sigma_color=config.bilateral_sigma_color,
-            enable_sharpening=config.enable_sharpening,
-            enable_adaptive_window=config.enable_adaptive_window,
-            threshold_min_radius=config.threshold_min_radius,
-            threshold_max_radius=config.threshold_max_radius,
-            adaptive_threshold_constant=config.adaptive_threshold_constant,
-            adaptive_threshold_gradient_threshold=config.adaptive_threshold_gradient_threshold,
-            quad_min_area=config.quad_min_area,
-            quad_max_aspect_ratio=config.quad_max_aspect_ratio,
-            quad_min_fill_ratio=config.quad_min_fill_ratio,
-            quad_max_fill_ratio=config.quad_max_fill_ratio,
-            quad_min_edge_length=config.quad_min_edge_length,
-            quad_min_edge_score=config.quad_min_edge_score,
-            subpixel_refinement_sigma=config.subpixel_refinement_sigma,
-            segmentation_margin=config.segmentation_margin,
-            segmentation_connectivity=config.segmentation_connectivity,
-            upscale_factor=config.upscale_factor,
-            decoder_min_contrast=config.decoder_min_contrast,
-            refinement_mode=config.refinement_mode,
-            decode_mode=config.decode_mode,
+        self._inner = _create_detector(
+            decimation=decimation, threads=threads, families=family_values, **final_rust_kwargs
         )
 
     def detect(
         self,
-        img,
-        decimation: int = 1,
-        intrinsics: tuple[float, float, float, float] | CameraIntrinsics | None = None,
-        tag_size: float | None = None,
-        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
-    ):
-        """Detect tags using configured defaults."""
-        if isinstance(intrinsics, CameraIntrinsics):
-            intrinsics = (intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy)
-
-        return self._inner.detect(
-            img,
-            decimation=decimation,
-            intrinsics=intrinsics,
-            tag_size=tag_size,
-            pose_estimation_mode=pose_estimation_mode,
-        )
-
-    def detect_with_options(
-        self,
-        img,
-        options: DetectOptions | None = None,
-        decimation: int = 1,
-        intrinsics: tuple[float, float, float, float] | CameraIntrinsics | None = None,
+        img: np.ndarray,
+        intrinsics: CameraIntrinsics | None = None,
         tag_size: float | None = None,
         pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
         **kwargs,
-    ):
-        """Detect tags with per-call options."""
-        if options is None:
-            options = DetectOptions(
-                decimation=decimation,
-                intrinsics=intrinsics,
-                tag_size=tag_size,
-                pose_estimation_mode=pose_estimation_mode,
-                **kwargs,
-            )
+    ) -> DetectionBatch:
+        """
+        Detect tags in the image.
 
-        # Handle unpacking in options if needed, though DetectOptions usually takes tuple.
-        # But if user passed CameraIntrinsics to DetectOptions constructor...
-        # DetectOptions is pydantic, verifying types. I should check if I updated DetectOptions to allow CameraIntrinsics.
+        Args:
+            img: Input grayscale image (np.uint8).
+            intrinsics: Optional CameraIntrinsics for 3D pose estimation.
+            tag_size: Optional physical tag size (meters).
+            pose_estimation_mode: Fast or Accurate.
 
-        if not options.families:
-            # We need to unpack options.intrinsics here too if it's not a tuple
-            # But wait, DetectOptions is typed as tuple | None in _config.py
-            # So if I want to support CameraIntrinsics in DetectOptions, I need to update _config.py too.
-            pass
+        Returns:
+            A vectorized DetectionBatch object.
+        """
+        if img.dtype != np.uint8:
+            raise ValueError(f"Input image must be uint8, got {img.dtype}")
 
-        # ... logic ...
-
-        # Let's keep it simple: support CameraIntrinsics in the method arguments,
-        # and ensure it's converted to tuple before passing to Rust.
-
-        passed_intrinsics = options.intrinsics
-        if isinstance(passed_intrinsics, CameraIntrinsics):
-            passed_intrinsics = (
-                passed_intrinsics.fx,
-                passed_intrinsics.fy,
-                passed_intrinsics.cx,
-                passed_intrinsics.cy,
-            )
-
-        if not options.families:
-            return self._inner.detect(
-                img,
-                decimation=options.decimation,
-                intrinsics=passed_intrinsics,
-                tag_size=options.tag_size,
-                pose_estimation_mode=options.pose_estimation_mode,
-            )
-
-        return self._inner.detect_with_options(
+        res_dict = self._inner.detect(
             img,
-            families=options.families,
-            decimation=options.decimation,
-            intrinsics=passed_intrinsics,
-            tag_size=options.tag_size,
-            pose_estimation_mode=options.pose_estimation_mode,
-        )
-
-    def detect_with_stats(
-        self,
-        img,
-        decimation: int = 1,
-        intrinsics: tuple[float, float, float, float] | CameraIntrinsics | None = None,
-        tag_size: float | None = None,
-        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
-    ):
-        """Detect tags and return performance statistics."""
-        if isinstance(intrinsics, CameraIntrinsics):
-            intrinsics = (intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy)
-
-        return self._inner.detect_with_stats(
-            img,
-            decimation=decimation,
             intrinsics=intrinsics,
             tag_size=tag_size,
             pose_estimation_mode=pose_estimation_mode,
+            **kwargs,
         )
-
-    def set_families(self, families: list[TagFamily]):
-        """Set the tag families to be detected by default."""
-        self._inner.set_families(families)
-
-    def extract_candidates(self, img, decimation: int = 1):
-        """Extract candidate quads without decoding."""
-        return self._inner.extract_candidates(img, decimation=decimation)
-
-    def detect_full(
-        self,
-        img,
-        decimation: int = 1,
-        intrinsics: tuple[float, float, float, float] | CameraIntrinsics | None = None,
-        tag_size: float | None = None,
-        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
-    ) -> FullDetectionResult:
-        """Perform full detection and return all intermediate debug data."""
-        if isinstance(intrinsics, CameraIntrinsics):
-            intrinsics = (intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy)
-
-        return self._inner.detect_full(
-            img,
-            decimation=decimation,
-            intrinsics=intrinsics,
-            tag_size=tag_size,
-            pose_estimation_mode=pose_estimation_mode,
-        )
+        return DetectionBatch(**res_dict)
 
 
 __all__ = [
-    "Detection",
     "Detector",
-    "FullDetectionResult",
-    "PipelineStats",
     "TagFamily",
     "SegmentationConnectivity",
     "CornerRefinementMode",
     "DecodeMode",
     "PoseEstimationMode",
-    "Pose",
     "CameraIntrinsics",
+    "Pose",
     "DetectorConfig",
     "DetectOptions",
+    "DetectionBatch",
     "init_tracy",
 ]

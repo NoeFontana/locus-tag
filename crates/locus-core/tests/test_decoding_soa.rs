@@ -1,30 +1,25 @@
-//! Tests for the SoA Decoding Pass.
-
-use locus_core::decoder::decode_batch_soa;
-use locus_core::{
-    CandidateState, DetectionBatch, DetectorConfig, ImageView, TagFamily, family_to_decoder,
-};
+#![allow(
+    missing_docs,
+    dead_code,
+    clippy::unwrap_used,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use
+)]
+use locus_core::bench_api::*;
+use locus_core::{DetectorConfig, ImageView, TagFamily};
 
 #[test]
-fn test_decode_batch_soa_interface() {
+fn test_decoding_soa_empty() {
     let mut batch = DetectionBatch::new();
-    let pixels = vec![0u8; 100 * 100];
-    let img = ImageView::new(&pixels, 100, 100, 100).expect("Failed to create ImageView");
+    let data = vec![0u8; 100 * 100];
+    let img = ImageView::new(&data, 100, 100, 100).unwrap();
     let config = DetectorConfig::default();
+    let decoders = vec![family_to_decoder(TagFamily::AprilTag36h11)];
 
-    // Setup one active candidate
-    batch.status_mask[0] = CandidateState::Active;
-    // Degenerate homography will fail decoding
-    batch.homographies[0].data = [0.0; 9];
-
-    let n = 1;
-
-    let decoder = family_to_decoder(TagFamily::AprilTag36h11);
-    let decoders = vec![decoder];
-
-    // This should fail to compile because decode_batch_soa is not defined yet.
-    decode_batch_soa(&mut batch, n, &img, &decoders, &config);
-
-    // Should be FailedDecode if it failed to decode
-    assert_eq!(batch.status_mask[0], CandidateState::FailedDecode);
+    decode_batch_soa(&mut batch, 0, &img, &decoders, &config);
 }

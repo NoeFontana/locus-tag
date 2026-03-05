@@ -41,7 +41,7 @@ pub(crate) fn erf_approx(x: f64) -> f64 {
 
 /// A 2D point with subpixel precision.
 #[derive(Clone, Copy, Debug)]
-pub struct Point {
+pub(crate) struct Point {
     /// X coordinate.
     pub x: f64,
     /// Y coordinate.
@@ -51,7 +51,8 @@ pub struct Point {
 /// Fast quad extraction using bounding box stats from CCL.
 /// Only traces contours for components that pass geometric filters.
 /// Uses default configuration.
-pub fn extract_quads_fast(
+#[allow(dead_code)]
+pub(crate) fn extract_quads_fast(
     arena: &Bump,
     img: &ImageView,
     label_result: &LabelResult,
@@ -236,6 +237,7 @@ fn extract_single_quad(
     }
 
     if ok {
+        let use_erf = config.refinement_mode == crate::config::CornerRefinementMode::Erf;
         let corners = [
             refine_corner(
                 arena,
@@ -245,6 +247,7 @@ fn extract_single_quad(
                 quad_pts[1],
                 config.subpixel_refinement_sigma,
                 decimation,
+                use_erf,
             ),
             refine_corner(
                 arena,
@@ -254,6 +257,7 @@ fn extract_single_quad(
                 quad_pts[2],
                 config.subpixel_refinement_sigma,
                 decimation,
+                use_erf,
             ),
             refine_corner(
                 arena,
@@ -263,6 +267,7 @@ fn extract_single_quad(
                 quad_pts[3],
                 config.subpixel_refinement_sigma,
                 decimation,
+                use_erf,
             ),
             refine_corner(
                 arena,
@@ -272,6 +277,7 @@ fn extract_single_quad(
                 quad_pts[0],
                 config.subpixel_refinement_sigma,
                 decimation,
+                use_erf,
             ),
         ];
 
@@ -350,7 +356,8 @@ pub fn extract_quads_with_config(
 }
 
 /// Legacy extract_quads for backward compatibility.
-pub fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detection> {
+#[allow(dead_code)]
+pub(crate) fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detection> {
     // Create a fake LabelResult with stats computed on-the-fly
     let mut detections = Vec::new();
     let num_labels = (labels.len() / 32) + 1;
@@ -548,7 +555,11 @@ fn find_max_distance_optimized(points: &[Point], start: usize, end: usize) -> (f
 ///
 /// Leverages an iterative implementation with a manual stack to avoid
 /// the overhead of recursive function calls and multiple temporary allocations.
-pub fn douglas_peucker<'a>(arena: &'a Bump, points: &[Point], epsilon: f64) -> BumpVec<'a, Point> {
+pub(crate) fn douglas_peucker<'a>(
+    arena: &'a Bump,
+    points: &[Point],
+    epsilon: f64,
+) -> BumpVec<'a, Point> {
     if points.len() < 3 {
         let mut v = BumpVec::new_in(arena);
         v.extend_from_slice(points);
@@ -604,6 +615,7 @@ fn polygon_area(points: &[Point]) -> f64 {
     area * 0.5
 }
 
+#[allow(dead_code)]
 fn polygon_center(points: &[Point]) -> [f64; 2] {
     let mut cx = 0.0;
     let mut cy = 0.0;
@@ -621,7 +633,8 @@ fn polygon_center(points: &[Point]) -> [f64; 2] {
 /// model and Gauss-Newton optimization, then computes their intersection.
 /// Achieves ~0.02px accuracy vs ~0.2px for gradient-peak methods.
 #[must_use]
-pub fn refine_corner(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn refine_corner(
     arena: &Bump,
     img: &ImageView,
     p: Point,
@@ -629,12 +642,22 @@ pub fn refine_corner(
     p_next: Point,
     sigma: f64,
     decimation: usize,
+    use_erf: bool,
 ) -> Point {
-    // Try intensity-based refinement first (higher accuracy)
-    let line1 = refine_edge_intensity(arena, img, p_prev, p, sigma, decimation)
-        .or_else(|| fit_edge_line(img, p_prev, p, decimation));
-    let line2 = refine_edge_intensity(arena, img, p, p_next, sigma, decimation)
-        .or_else(|| fit_edge_line(img, p, p_next, decimation));
+    // Intensity-based refinement (ERF fit) is much more accurate but slower.
+    let line1 = if use_erf {
+        refine_edge_intensity(arena, img, p_prev, p, sigma, decimation)
+            .or_else(|| fit_edge_line(img, p_prev, p, decimation))
+    } else {
+        fit_edge_line(img, p_prev, p, decimation)
+    };
+
+    let line2 = if use_erf {
+        refine_edge_intensity(arena, img, p, p_next, sigma, decimation)
+            .or_else(|| fit_edge_line(img, p, p_next, decimation))
+    } else {
+        fit_edge_line(img, p, p_next, decimation)
+    };
 
     if let (Some(l1), Some(l2)) = (line1, line2) {
         // Intersect lines: a1*x + b1*y + c1 = 0 and a2*x + b2*y + c2 = 0
@@ -1214,6 +1237,69 @@ mod tests {
         );
     }
 
+    /// Test quad extraction with decimation > 1 to verify center-aware mapping.
+    #[test]
+    fn test_quad_extraction_with_decimation() {
+        let canvas_size = 640;
+        let tag_size = 160;
+        let decimation = 2;
+
+        let params = TestImageParams {
+            family: TagFamily::AprilTag36h11,
+            id: 0,
+            tag_size,
+            canvas_size,
+            ..Default::default()
+        };
+
+        let (data, gt_corners) = generate_test_image_with_params(&params);
+        let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
+
+        // Manual decimation to match the pipeline
+        let new_w = canvas_size / decimation;
+        let new_h = canvas_size / decimation;
+        let mut decimated_data = vec![0u8; new_w * new_h];
+        let decimated_img = img
+            .decimate_to(decimation, &mut decimated_data)
+            .expect("decimation failed");
+
+        let arena = Bump::new();
+        let engine = ThresholdEngine::new();
+        let stats = engine.compute_tile_stats(&arena, &decimated_img);
+        let mut binary = vec![0u8; new_w * new_h];
+        engine.apply_threshold(&arena, &decimated_img, &stats, &mut binary);
+
+        let label_result = label_components_with_stats(&arena, &binary, new_w, new_h, true);
+
+        // Run extraction with decimation=2
+        // Refinement image is the full resolution image
+        let config = DetectorConfig {
+            decimation,
+            ..Default::default()
+        };
+        let detections = extract_quads_with_config(
+            &arena,
+            &decimated_img,
+            &label_result,
+            &config,
+            decimation,
+            &img,
+        );
+
+        assert!(!detections.is_empty(), "No quad detected with decimation");
+
+        let det_corners = detections[0].corners;
+        let error = compute_corner_error(&det_corners, &gt_corners);
+
+        // Sub-pixel refinement on full-res should keep error very low despite decimation
+        assert!(
+            error < 2.0,
+            "Corner error with decimation: {error:.2}px exceeds 2px"
+        );
+
+        println!("Decimated (d={decimation}) corner error: {error:.4}px");
+    }
+
     // ========================================================================
     // SUB-PIXEL CORNER REFINEMENT ACCURACY TESTS
     // ========================================================================
@@ -1343,7 +1429,7 @@ mod tests {
                 y: true_y.round(),
             };
 
-            let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1);
+            let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1, true);
 
             let error_x = (refined.x - true_x).abs();
             let error_y = (refined.y - true_y).abs();
@@ -1392,7 +1478,7 @@ mod tests {
             y: corner_y,
         };
 
-        let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1);
+        let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1, true);
 
         // The x-coordinate should be refined to near the true edge position
         // y-coordinate depends on the horizontal edge (which doesn't exist in this test)
@@ -1492,7 +1578,7 @@ fn trace_boundary<'a>(
 
 /// Simplified version of CHAIN_APPROX_SIMPLE:
 /// Removes all redundant points on straight lines.
-pub fn chain_approximation<'a>(arena: &'a Bump, points: &[Point]) -> BumpVec<'a, Point> {
+pub(crate) fn chain_approximation<'a>(arena: &'a Bump, points: &[Point]) -> BumpVec<'a, Point> {
     if points.len() < 3 {
         let mut v = BumpVec::new_in(arena);
         v.extend_from_slice(points);

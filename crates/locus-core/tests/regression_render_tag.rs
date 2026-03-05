@@ -1,26 +1,23 @@
-//! Render-Tag Hub Regression Suite
-//!
-//! Evaluates the detector against datasets synchronized from the Hugging Face Hub.
-//! These datasets are generated using the `render-tag` pipeline and provide
-//! high-fidelity synthetic benchmarks with ground truth.
-
 #![allow(
     missing_docs,
+    dead_code,
     clippy::unwrap_used,
-    clippy::type_complexity,
-    clippy::too_many_lines,
-    clippy::unnecessary_debug_formatting,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
     clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use,
+    clippy::type_complexity,
+    clippy::unnecessary_debug_formatting,
     clippy::trivially_copy_pass_by_ref,
     clippy::needless_pass_by_value,
-    clippy::items_after_statements,
-    clippy::missing_panics_doc,
-    clippy::must_use_candidate,
-    clippy::return_self_not_must_use
+    clippy::missing_panics_doc
 )]
 
 use locus_core::image::ImageView;
-use locus_core::{DetectOptions, Detector, DetectorConfig, PipelineStats, config::TagFamily};
+use locus_core::{DetectOptions, Detector, DetectorConfig, config::TagFamily};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
@@ -54,27 +51,8 @@ impl ConfigPreset {
 
 #[derive(Serialize, Default, Clone)]
 struct PipelineMetrics {
-    threshold_ms: f64,
-    segmentation_ms: f64,
-    quad_extraction_ms: f64,
-    decoding_ms: f64,
     total_ms: f64,
-    num_candidates: usize,
     num_detections: usize,
-}
-
-impl From<PipelineStats> for PipelineMetrics {
-    fn from(stats: PipelineStats) -> Self {
-        Self {
-            threshold_ms: stats.threshold_ms,
-            segmentation_ms: stats.segmentation_ms,
-            quad_extraction_ms: stats.quad_extraction_ms,
-            decoding_ms: stats.decoding_ms,
-            total_ms: stats.total_ms,
-            num_candidates: stats.num_candidates,
-            num_detections: stats.num_detections,
-        }
-    }
 }
 
 fn serialize_rmse<S>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
@@ -175,7 +153,15 @@ impl RegressionHarness {
 
         for (filename, data, width, height, gt) in provider.iter() {
             let img = ImageView::new(&data, width, height, width).expect("valid image");
-            let (detections, stats) = detector.detect_with_stats_and_options(&img, &self.options);
+
+            let start = std::time::Instant::now();
+            let detections = detector.detect(
+                &img,
+                self.options.intrinsics.as_ref(),
+                self.options.tag_size,
+                self.options.pose_estimation_mode,
+            );
+            let total_ms = start.elapsed().as_secs_f64() * 1000.0;
 
             // --- Metrics Calculation ---
             let mut image_rmse_sum = 0.0;
@@ -184,9 +170,9 @@ impl RegressionHarness {
 
             for det in &detections {
                 if let Some(gt_corners) = gt.tags.get(&det.id) {
-                    let gt_cx: f64 = gt_corners.iter().map(|p| p[0]).sum::<f64>() / 4.0;
-                    let gt_cy: f64 = gt_corners.iter().map(|p| p[1]).sum::<f64>() / 4.0;
-                    let dist_sq = (det.center[0] - gt_cx).powi(2) + (det.center[1] - gt_cy).powi(2);
+                    let g_cx: f64 = gt_corners.iter().map(|p| p[0]).sum::<f64>() / 4.0;
+                    let g_cy: f64 = gt_corners.iter().map(|p| p[1]).sum::<f64>() / 4.0;
+                    let dist_sq = (det.center[0] - g_cx).powi(2) + (det.center[1] - g_cy).powi(2);
 
                     if dist_sq < 50.0 * 50.0 {
                         image_rmse_sum +=
@@ -210,7 +196,7 @@ impl RegressionHarness {
 
             total_recall += recall;
             total_rmse += avg_rmse;
-            total_time += stats.total_ms;
+            total_time += total_ms;
             count += 1;
 
             let mut missed_ids = BTreeSet::new();
@@ -232,7 +218,10 @@ impl RegressionHarness {
                 ImageMetrics {
                     recall,
                     avg_rmse,
-                    stats: PipelineMetrics::from(stats),
+                    stats: PipelineMetrics {
+                        total_ms,
+                        num_detections: detections.len(),
+                    },
                     missed_ids,
                     extra_ids,
                 },

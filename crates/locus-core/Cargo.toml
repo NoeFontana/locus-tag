@@ -39,40 +39,47 @@ tracing-subscriber = "0.3"
 [[bench]]
 name = "threshold_bench"
 harness = false
+required-features = ["bench-internals"]
 
 [[bench]]
 name = "integral_threshold_bench"
 harness = false
-
+required-features = ["bench-internals"]
 
 [[bench]]
 name = "dictionary_bench"
 harness = false
+required-features = ["bench-internals"]
 
 [[bench]]
 name = "decoding_bench"
 harness = false
+required-features = ["bench-internals"]
 
 [[bench]]
 name = "soft_decoding_bench"
 harness = false
+required-features = ["bench-internals"]
 
 [[bench]]
 name = "segmentation_bench"
 harness = false
+required-features = ["bench-internals"]
 
 [[bench]]
 name = "comprehensive"
 harness = false
-required-features = ["extended-bench"]
+required-features = ["extended-bench", "bench-internals"]
 
 [[bench]]
 name = "pose_bench"
 harness = false
+required-features = ["bench-internals"]
 
 [[bench]]
 name = "real_data_bench"
 harness = false
+required-features = ["bench-internals"]
 
 [features]
 default = []
@@ -81,6 +88,7 @@ viz = ["dep:rerun"]
 serde = ["dep:serde", "nalgebra/serde-serialize"]
 extended-tests = []
 extended-bench = []
+bench-internals = []
 
 [lints]
 workspace = true

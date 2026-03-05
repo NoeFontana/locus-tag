@@ -1,13 +1,20 @@
-#![allow(missing_docs)]
-#![allow(clippy::missing_panics_doc)]
-#![allow(clippy::must_use_candidate)]
-#![allow(clippy::similar_names)]
-
+#![allow(
+    missing_docs,
+    dead_code,
+    clippy::unwrap_used,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use
+)]
 use divan::bench;
-use locus_core::pose::{CameraIntrinsics, estimate_tag_pose};
+use locus_core::bench_api::{CameraIntrinsics, estimate_tag_pose};
 use nalgebra::{Matrix3, Vector3};
 
-use locus_core::config::PoseEstimationMode;
+use locus_core::PoseEstimationMode;
 
 fn main() {
     divan::main();

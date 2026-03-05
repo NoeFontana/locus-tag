@@ -12,26 +12,26 @@
 ## Key Features
 
 - **High-Performance Core**: Written in Rust (2024 Edition) with a focus on Data-Oriented Design.
+- **Encapsulated Facade**: Simple, ergonomic `Detector` API that manages complex memory lifetimes (arenas, SoA batches) internally.
 - **Runtime SIMD Dispatch**: Automatically utilizes AVX2, AVX-512, or NEON based on host CPU capabilities.
-- **Zero-Copy Python API**: Direct ingestion of NumPy arrays via `pyo3` and `numpy` bindings.
+- **Vectorized Python API**: Returns detection results as a single `DetectionBatch` object containing parallel NumPy arrays for maximum throughput.
 - **GIL-Free Execution**: Releases the Python Global Interpreter Lock (GIL) during detection to enable true multi-threaded applications.
 - **Memory Efficient**: Uses `bumpalo` arena allocation to achieve zero heap allocations in the detection hot-path.
-- **Soft-Decoding**: Optional Log-Likelihood Ratio (LLR) decoding for maximum recall on blurry or noisy tags (+11.5% boost).
 - **Advanced Pose Estimation**: High-precision 6-DOF recovery using IPPE-Square or weighted Levenberg-Marquardt with corner uncertainty modeling.
 - **Visual Debugging**: Native integration with the **[Rerun SDK](https://rerun.io)** for real-time pipeline inspection.
 
 ## Performance (ICRA 2020 Dataset)
 
-Evaluated on the standard ICRA 2020 benchmark (50 challenging images). Latency measured on a modern desktop CPU.
+Evaluated on the standard ICRA 2020 benchmark (50 images). Latency measured on a modern desktop CPU.
 
-| Detector | Recall | RMSE | Latency (avg) |
+| Detector | Recall | RMSE | Latency (1080p avg) |
 | :--- | :---: | :---: | :---: |
-| **Locus (Soft)** | **94.35%** | 0.26 px | **116.8 ms** |
-| **Locus (Hard)** | **75.52%** | **0.23 px** | **87.4 ms** |
-| AprilTag 3 | 62.34% | 0.22 px | 118.9 ms |
-| OpenCV | 33.16% | 0.92 px | 111.7 ms |
+| **Locus (Soft)** | **93.16%** | 0.26 px | 81.4 ms |
+| **Locus (Hard)** | 74.35% | 0.24 px | **63.5 ms** |
+| AprilTag 3 | 62.34% | **0.22 px** | 115.7 ms |
+| OpenCV | 33.16% | 0.92 px | 113.6 ms |
 
-*Note: Locus (SoA) provides a significant architectural foundation for future SIMD gains. Accuracy and recall are improved through more robust math passes while maintaining a performance lead over AprilTag 3.*
+*Note: Locus utilizes a Structure of Arrays (SoA) layout to achieve ~3.8x speedup over previous versions in dense tag environments.*
 
 ## Quick Start
 
@@ -62,30 +62,28 @@ img = cv2.imread("image.jpg", cv2.IMREAD_GRAYSCALE)
 
 # Create detector and detect tags (defaults to AprilTag 36h11)
 detector = locus.Detector()
-tags = detector.detect(img)
+batch = detector.detect(img)
 
-for t in tags:
-    print(f"ID: {t.id}, Center: {t.center}, Hamming: {t.hamming}")
+# batch is a vectorized DetectionBatch object
+for i in range(len(batch)):
+    print(f"ID: {batch.ids[i]}, Center: {batch.centers[i]}")
 ```
 
 ### Advanced Configuration
 
-Use the `Detector` class for fine-grained control and performance tuning:
+Use semantic keyword arguments for fine-grained control and performance tuning:
 
 ```python
-from locus import Detector, DetectorConfig, TagFamily
+from locus import Detector, TagFamily, DecodeMode
 
 # Configure for maximum recall on small, blurry tags
-config = DetectorConfig(
-    decode_mode="Soft",
+detector = Detector(
+    decode_mode=DecodeMode.Soft,
     upscale_factor=2,
-    enable_sharpening=True
+    families=[TagFamily.AprilTag36h11, TagFamily.ArUco4x4_50]
 )
-detector = Detector(config)
 
-# Set specific families and detect
-detector.set_families([TagFamily.AprilTag36h11, TagFamily.ArUco4x4_50])
-tags = detector.detect(img)
+batch = detector.detect(img)
 ```
 
 ### 3D Pose Estimation
@@ -93,17 +91,23 @@ tags = detector.detect(img)
 Recover the 6-DOF transformation between the camera and the tag:
 
 ```python
-from locus import CameraIntrinsics
+from locus import CameraIntrinsics, PoseEstimationMode
 
 # Camera parameters (fx, fy, cx, cy)
 intrinsics = CameraIntrinsics(fx=800.0, fy=800.0, cx=640.0, cy=360.0)
 
 # Pass intrinsics and physical tag size (meters)
-tags = detector.detect(img, intrinsics=intrinsics, tag_size=0.16)
+batch = detector.detect(
+    img, 
+    intrinsics=intrinsics, 
+    tag_size=0.10,
+    pose_estimation_mode=PoseEstimationMode.Accurate
+)
 
-for t in tags:
-    if t.pose:
-        print(f"Tag {t.id} Position: {t.pose.translation}")
+if batch.poses is not None:
+    # batch.poses is (N, 7) array: [tx, ty, tz, qx, qy, qz, qw]
+    print(f"First tag translation: {batch.poses[0, :3]}")
+    print(f"First tag quaternion: {batch.poses[0, 3:]}")
 ```
 
 ## Visual Debugging with Rerun
@@ -111,8 +115,8 @@ for t in tags:
 Locus provides a powerful visualization tool to inspect every stage of the pipeline (thresholding, segmentation, quad candidates, bit grids).
 
 ```bash
-# Run the visualizer on a dataset using the bench dependency group
-uv run --group bench python scripts/debug/visualize.py --scenario forward --limit 5
+# Run the visualizer on a dataset using the dev/bench dependency groups
+uv run --group dev --group bench tools/cli.py visualize --scenario forward --limit 5
 ```
 
 ## Development & Benchmarking
@@ -121,10 +125,10 @@ Locus includes a rigorous suite to ensure detection quality and latency targets.
 
 ```bash
 # Prepare local datasets
-uv run --group bench python scripts/locus_bench.py prepare
+uv run --group dev --group bench tools/cli.py bench prepare
 
 # Run full evaluation suite and compare with competitors
-uv run --group bench python scripts/locus_bench.py run real --compare
+uv run --group dev --group bench tools/cli.py bench real --compare
 ```
 
 Detailed documentation for profiling, architecture, and coordinate systems is available in the **[Docs Site](https://noefontana.github.io/locus-tag/)**.

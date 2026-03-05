@@ -3792,6 +3792,7 @@ version = "0.1.3"
 dependencies = [
  "bumpalo",
  "locus-core",
+ "nalgebra",
  "numpy",
  "pyo3",
  "tracing",

@@ -1,8 +1,20 @@
-#![allow(missing_docs, clippy::unwrap_used)]
+#![allow(
+    missing_docs,
+    dead_code,
+    clippy::unwrap_used,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use
+)]
 use bumpalo::Bump;
 use divan::bench;
+use locus_core::ImageView;
+use locus_core::PoseEstimationMode;
 use locus_core::config::CornerRefinementMode;
-use locus_core::image::ImageView;
 use std::path::Path;
 
 fn main() {
@@ -22,7 +34,7 @@ fn load_icra_image() -> (Vec<u8>, usize, usize) {
 fn bench_preprocessing_real(bencher: divan::Bencher) {
     let (data, width, height) = load_icra_image();
     let img = ImageView::new(&data, width, height, width).unwrap();
-    let config = locus_core::config::DetectorConfig::builder()
+    let config = locus_core::DetectorConfig::builder()
         .refinement_mode(CornerRefinementMode::Erf)
         .build();
     let engine = locus_core::threshold::ThresholdEngine::from_config(&config);
@@ -38,7 +50,7 @@ fn bench_segmentation_real(bencher: divan::Bencher) {
     let (data, width, height) = load_icra_image();
     let img = ImageView::new(&data, width, height, width).unwrap();
     let setup_arena = Bump::new();
-    let config = locus_core::config::DetectorConfig::builder()
+    let config = locus_core::DetectorConfig::builder()
         .refinement_mode(CornerRefinementMode::Erf)
         .build();
     let engine = locus_core::threshold::ThresholdEngine::from_config(&config);
@@ -56,7 +68,7 @@ fn bench_segmentation_real(bencher: divan::Bencher) {
 
     bencher.bench_local(move || {
         let arena = Bump::new();
-        let _label_result = locus_core::segmentation::label_components_threshold_model(
+        let _label_result = locus_core::bench_api::label_components_threshold_model(
             &arena,
             &data,
             width,
@@ -75,7 +87,7 @@ fn bench_quad_extraction_real(bencher: divan::Bencher) {
     let (data, width, height) = load_icra_image();
     let img = ImageView::new(&data, width, height, width).unwrap();
     let setup_arena = Bump::new();
-    let config = locus_core::config::DetectorConfig::builder()
+    let config = locus_core::DetectorConfig::builder()
         .refinement_mode(CornerRefinementMode::Erf)
         .build();
     let engine = locus_core::threshold::ThresholdEngine::from_config(&config);
@@ -90,7 +102,7 @@ fn bench_quad_extraction_real(bencher: divan::Bencher) {
         &mut binarized,
         &mut threshold_map,
     );
-    let label_result = locus_core::segmentation::label_components_threshold_model(
+    let label_result = locus_core::bench_api::label_components_threshold_model(
         &setup_arena,
         &data,
         width,
@@ -104,7 +116,7 @@ fn bench_quad_extraction_real(bencher: divan::Bencher) {
 
     bencher.bench_local(move || {
         let arena = Bump::new();
-        let _quads = locus_core::quad::extract_quads_with_config(
+        let _quads = locus_core::bench_api::extract_quads_with_config(
             &arena,
             &img,
             &label_result,
@@ -119,12 +131,12 @@ fn bench_quad_extraction_real(bencher: divan::Bencher) {
 fn bench_full_pipeline_real(bencher: divan::Bencher) {
     let (data, width, height) = load_icra_image();
     let img = ImageView::new(&data, width, height, width).unwrap();
-    let config = locus_core::config::DetectorConfig::builder()
+    let config = locus_core::DetectorConfig::builder()
         .refinement_mode(CornerRefinementMode::Erf)
         .build();
     let mut detector = locus_core::Detector::with_config(config);
 
     bencher.bench_local(move || {
-        let _detections = detector.detect(&img);
+        let _detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
     });
 }

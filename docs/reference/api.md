@@ -11,11 +11,7 @@ The primary entry point for using Locus is the `Detector` class.
         show_root_toc_entry: false
         members:
             - __init__
-            - checkerboard
             - detect
-            - detect_with_options
-            - detect_with_stats
-            - set_families
 
 ## Configuration
 
@@ -33,15 +29,11 @@ Locus uses Pydantic for robust configuration validation.
 
 These classes represent the output and internal state of the detection pipeline.
 
-::: locus.Detection
+::: locus.DetectionBatch
     options:
         heading_level: 3
 
 ::: locus.Pose
-    options:
-        heading_level: 3
-
-::: locus.PipelineStats
     options:
         heading_level: 3
 
@@ -72,15 +64,3 @@ These classes represent the output and internal state of the detection pipeline.
 ::: locus.SegmentationConnectivity
     options:
         heading_level: 3
-
-## Debugging Utilities
-
-These tools are provided for performance profiling and algorithm inspection. They are not intended for use in production pipelines.
-
-::: locus.FullDetectionResult
-    options:
-        heading_level: 3
-
-::: locus.Detector.detect_full
-
-::: locus.Detector.extract_candidates

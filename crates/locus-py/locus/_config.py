@@ -37,8 +37,8 @@ class DetectorConfig(BaseModel):
     quad_max_aspect_ratio: float = Field(default=10.0, ge=1.0)
     quad_min_fill_ratio: float = Field(default=0.10, ge=0.0, le=1.0)
     quad_max_fill_ratio: float = Field(default=0.98, ge=0.0, le=1.0)
-    quad_min_edge_length: float = Field(default=2.0, ge=0.0)
-    quad_min_edge_score: float = Field(default=0.1, ge=0.0)
+    quad_min_edge_length: float = Field(default=4.0, ge=0.0)
+    quad_min_edge_score: float = Field(default=4.0, ge=0.0)
     subpixel_refinement_sigma: float = Field(default=0.6, ge=0.0)
     segmentation_margin: int = Field(default=1)
     segmentation_connectivity: SegmentationConnectivity = Field(
@@ -48,6 +48,7 @@ class DetectorConfig(BaseModel):
     decoder_min_contrast: float = Field(default=20.0, ge=0.0)
     refinement_mode: CornerRefinementMode = Field(default_factory=lambda: CornerRefinementMode.Erf)
     decode_mode: DecodeMode = Field(default_factory=lambda: DecodeMode.Hard)
+    max_hamming_error: int = Field(default=2, ge=0)
 
 
 class DetectOptions(BaseModel):
@@ -71,7 +72,6 @@ class DetectOptions(BaseModel):
         return cls(
             families=[
                 TagFamily.AprilTag36h11,
-                TagFamily.AprilTag16h5,
                 TagFamily.ArUco4x4_50,
                 TagFamily.ArUco4x4_100,
             ]

@@ -1,5 +1,5 @@
 /// The maximum number of candidates in a single batch.
-pub const MAX_CANDIDATES: usize = 1024;
+pub(crate) const MAX_CANDIDATES: usize = 1024;
 
 /// A 2D point with subpixel precision (f32).
 #[derive(Debug, Clone, Copy, Default)]
@@ -116,6 +116,71 @@ impl DetectionBatch {
             }
         }
         v
+    }
+
+    /// Reassemble the batched SoA data into a list of discrete `Detection` objects.
+    #[must_use]
+    #[allow(clippy::cast_sign_loss)]
+    pub fn reassemble(&self, v: usize) -> Vec<crate::Detection> {
+        let mut detections = Vec::with_capacity(v);
+        for i in 0..v {
+            let offset = i * 4;
+            let corners = [
+                [
+                    f64::from(self.corners[offset].x),
+                    f64::from(self.corners[offset].y),
+                ],
+                [
+                    f64::from(self.corners[offset + 1].x),
+                    f64::from(self.corners[offset + 1].y),
+                ],
+                [
+                    f64::from(self.corners[offset + 2].x),
+                    f64::from(self.corners[offset + 2].y),
+                ],
+                [
+                    f64::from(self.corners[offset + 3].x),
+                    f64::from(self.corners[offset + 3].y),
+                ],
+            ];
+
+            let center = [
+                (corners[0][0] + corners[1][0] + corners[2][0] + corners[3][0]) / 4.0,
+                (corners[0][1] + corners[1][1] + corners[2][1] + corners[3][1]) / 4.0,
+            ];
+
+            // Reconstruct Pose if available (Z translation > 0)
+            let pose = if self.poses[i].data[2] > 0.0 {
+                let d = self.poses[i].data;
+                // layout: [tx, ty, tz, qx, qy, qz, qw]
+                let t = nalgebra::Vector3::new(f64::from(d[0]), f64::from(d[1]), f64::from(d[2]));
+                let q = nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
+                    f64::from(d[6]), // w
+                    f64::from(d[3]), // x
+                    f64::from(d[4]), // y
+                    f64::from(d[5]), // z
+                ));
+                Some(crate::pose::Pose {
+                    rotation: q.to_rotation_matrix().into_inner(),
+                    translation: t,
+                })
+            } else {
+                None
+            };
+
+            detections.push(crate::Detection {
+                id: self.ids[i],
+                center,
+                corners,
+                hamming: self.error_rates[i] as u32,
+                rotation: 0,
+                decision_margin: 0.0,
+                bits: self.payloads[i],
+                pose,
+                pose_covariance: None,
+            });
+        }
+        detections
     }
 }
 

@@ -248,7 +248,8 @@ pub fn compute_homographies_soa(corners: &[Point2f], homographies: &mut [Matrix3
 /// least squares, then compute corners as line intersections. This provides
 /// more accurate corner localization than the initial detection.
 #[must_use]
-pub fn refine_corners_with_homography(
+#[allow(dead_code)]
+pub(crate) fn refine_corners_with_homography(
     img: &crate::image::ImageView,
     corners: &[[f64; 2]; 4],
     _homography: &Homography,
@@ -358,7 +359,8 @@ pub fn refine_corners_with_homography(
 /// This method optimizes the homography by adjusting corners to maximize the
 /// contrast between expected black and white cells in the decoded grid.
 /// This minimizes photometric error in the tag's coordinate system.
-pub fn refine_corners_gridfit(
+#[allow(dead_code)]
+pub(crate) fn refine_corners_gridfit(
     img: &crate::image::ImageView,
     corners: &[[f64; 2]; 4],
     decoder: &(impl TagDecoder + ?Sized),
@@ -437,6 +439,7 @@ pub fn refine_corners_gridfit(
 
 /// Compute the contrast of the grid given a homography and the expected bit pattern.
 /// Returns (mean_white - mean_black).
+#[allow(dead_code)]
 fn compute_grid_contrast(
     img: &crate::image::ImageView,
     h: &Homography,
@@ -524,7 +527,7 @@ fn compute_grid_contrast(
 ///
 /// This assumes the edge intensity profile is an Error Function (convolution of step edge with Gaussian PSF).
 /// We minimize the photometric error between the image and the ERF model using Gauss-Newton.
-pub fn refine_corners_erf(
+pub(crate) fn refine_corners_erf(
     arena: &bumpalo::Bump,
     img: &crate::image::ImageView,
     corners: &[[f64; 2]; 4],
@@ -1008,7 +1011,7 @@ fn fit_edge_erf(
 }
 
 /// Returns the threshold that maximizes inter-class variance.
-pub fn compute_otsu_threshold(values: &[f64]) -> f64 {
+pub(crate) fn compute_otsu_threshold(values: &[f64]) -> f64 {
     if values.is_empty() {
         return 128.0;
     }
@@ -1287,7 +1290,8 @@ pub fn sample_grid(
 /// Rotate a square bit grid 90 degrees clockwise.
 /// This is an O(1) bitwise operation but conceptually represents rotating the N x N pixel grid.
 #[must_use]
-pub fn rotate90(bits: u64, dim: usize) -> u64 {
+#[allow(dead_code)]
+pub(crate) fn rotate90(bits: u64, dim: usize) -> u64 {
     let mut res = 0u64;
     for y in 0..dim {
         for x in 0..dim {
@@ -1957,13 +1961,15 @@ impl TagDecoder for ArUco4x4_100 {
 }
 
 /// Generic decoder for any TagDictionary (static or custom).
-pub struct GenericDecoder {
+#[allow(dead_code)]
+pub(crate) struct GenericDecoder {
     dict: std::sync::Arc<crate::dictionaries::TagDictionary>,
 }
 
 impl GenericDecoder {
-    /// Create a new generic decoder from a dictionary.
+    /// Create a new generic decoder for the given dictionary.
     #[must_use]
+    #[allow(dead_code)]
     pub fn new(dict: crate::dictionaries::TagDictionary) -> Self {
         Self {
             dict: std::sync::Arc::new(dict),

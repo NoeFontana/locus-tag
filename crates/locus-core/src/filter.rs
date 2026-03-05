@@ -318,7 +318,7 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
     "aarch64+neon"
 ))]
 #[allow(clippy::needless_range_loop, clippy::cast_sign_loss)]
-pub fn laplacian_sharpen(img: &ImageView, output: &mut [u8]) {
+pub(crate) fn laplacian_sharpen(img: &ImageView, output: &mut [u8]) {
     let w = img.width;
     let h = img.height;
 

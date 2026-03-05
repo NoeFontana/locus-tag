@@ -8,12 +8,53 @@ import cv2
 import locus
 import numpy as np
 from huggingface_hub import hf_hub_download
-from pupil_apriltags import Detector as AprilTagDetector
+from pupil_apriltags import Detector as AprilTagDetector  # type: ignore
 
 ICRA_REPO_ID = "NoeFontana/apriltag-validation-data"
 ICRA_CACHE_DIR = Path("tests/data/icra2020")
 UMICH_DATA_URL = "https://april.eecs.umich.edu/media/apriltag/apriltag_test_images.tar.gz"
 UMICH_CACHE_DIR = Path("tests/data/umich")
+
+
+class FamilyMapper:
+    """Centralized mapping for tag families across different libraries."""
+
+    @staticmethod
+    def to_locus(family: int | None) -> list[locus.TagFamily] | None:
+        if family is None:
+            return None
+        mapping = {
+            int(locus.TagFamily.AprilTag36h11): locus.TagFamily.AprilTag36h11,
+            int(locus.TagFamily.AprilTag41h12): locus.TagFamily.AprilTag41h12,
+            int(locus.TagFamily.ArUco4x4_50): locus.TagFamily.ArUco4x4_50,
+            int(locus.TagFamily.ArUco4x4_100): locus.TagFamily.ArUco4x4_100,
+        }
+        f = mapping.get(family)
+        return [f] if f else None
+
+    @staticmethod
+    def to_opencv(family: int | None) -> int | None:
+        if family is None:
+            return None
+        mapping = {
+            int(locus.TagFamily.AprilTag36h11): cv2.aruco.DICT_APRILTAG_36h11,
+            int(locus.TagFamily.AprilTag41h12): None,
+            int(locus.TagFamily.ArUco4x4_50): cv2.aruco.DICT_4X4_50,
+            int(locus.TagFamily.ArUco4x4_100): cv2.aruco.DICT_4X4_100,
+        }
+        return mapping.get(family)
+
+    @staticmethod
+    def to_apriltag(family: int | None) -> str | None:
+        if family is None:
+            return None
+        mapping = {
+            int(locus.TagFamily.AprilTag36h11): "tag36h11",
+            int(locus.TagFamily.AprilTag41h12): "tagStandard41h12",
+            int(locus.TagFamily.ArUco4x4_50): None,
+            int(locus.TagFamily.ArUco4x4_100): None,
+        }
+        return mapping.get(family)
 
 
 @dataclass
@@ -126,36 +167,38 @@ class DatasetLoader:
         return results
 
     def _parse_csv(self, csv_file: Path) -> dict[str, list[TagGroundTruth]]:
-        gt_map: dict[str, dict[int, dict[str, Any]]] = {}
+        """Parses ICRA 2020 ground truth CSV files."""
+        # Use primitive types for interim accumulation for performance
+        gt_data: dict[str, dict[int, dict[str, Any]]] = {}
         with open(csv_file) as f:
             reader = csv.DictReader(f)
             for row in reader:
                 img = row["image"]
                 tid = int(row["tag_id"])
+
+                img_entry = gt_data.setdefault(img, {})
+                tag_entry = img_entry.setdefault(tid, {"corners": [None] * 4, "visible": True})
+
                 corner_idx = int(row["corner"])
-                x = float(row["ground_truth_x"])
-                y = float(row["ground_truth_y"])
-                visible = int(row.get("tag_fully_visible", 1)) == 1
-
-                if img not in gt_map:
-                    gt_map[img] = {}
-                if tid not in gt_map[img]:
-                    gt_map[img][tid] = {"corners": [None] * 4, "visible": True}
-
                 if 0 <= corner_idx < 4:
-                    gt_map[img][tid]["corners"][corner_idx] = [x, y]
-                if not visible:
-                    gt_map[img][tid]["visible"] = False
+                    tag_entry["corners"][corner_idx] = [
+                        float(row["ground_truth_x"]),
+                        float(row["ground_truth_y"]),
+                    ]
+
+                if int(row.get("tag_fully_visible", 1)) == 0:
+                    tag_entry["visible"] = False
 
         final_map = {}
-        for img, tags in gt_map.items():
+        for img, tags in gt_data.items():
             valid = []
             for tid, data in tags.items():
-                if any(c is None for c in data["corners"]) or not data["visible"]:
-                    continue
-                valid.append(
-                    TagGroundTruth(tag_id=tid, corners=np.array(data["corners"], dtype=np.float32))
-                )
+                if data["visible"] and all(c is not None for c in data["corners"]):
+                    valid.append(
+                        TagGroundTruth(
+                            tag_id=tid, corners=np.array(data["corners"], dtype=np.float32)
+                        )
+                    )
             if valid:
                 final_map[img] = valid
         return final_map
@@ -174,7 +217,7 @@ class HubBenchmarkLoader:
         Yields:
             A tuple of (image_name, grayscale_image_np, list_of_ground_truth_tags).
         """
-        import datasets
+        import datasets  # type: ignore
 
         # Stream the dataset from the hub
         ds = datasets.load_dataset(self.repo_id, subset_name, split="train", streaming=True)
@@ -271,44 +314,77 @@ class LibraryWrapper:
 
 class LocusWrapper(LibraryWrapper):
     def __init__(
-        self, name: str = "Locus", config: locus.DetectorConfig | None = None, decimation: int = 1
+        self,
+        name: str = "Locus",
+        config: locus.DetectorConfig | None = None,
+        decimation: int = 1,
+        family: int | None = None,
     ):
         super().__init__(name)
-        self.detector = locus.Detector(config) if config else locus.Detector()
-        self.decimation = decimation
+        families = FamilyMapper.to_locus(family)
+
+        if config:
+            self.detector = locus.Detector(
+                decimation=decimation,
+                families=families,
+                decode_mode=config.decode_mode,
+                enable_sharpening=config.enable_sharpening,
+                upscale_factor=config.upscale_factor,
+                refinement_mode=config.refinement_mode,
+                threshold_tile_size=config.threshold_tile_size,
+                threshold_min_range=config.threshold_min_range,
+                adaptive_threshold_constant=config.adaptive_threshold_constant,
+                quad_min_area=config.quad_min_area,
+                quad_min_fill_ratio=config.quad_min_fill_ratio,
+                quad_min_edge_score=config.quad_min_edge_score,
+                decoder_min_contrast=config.decoder_min_contrast,
+                max_hamming_error=config.max_hamming_error,
+            )
+        else:
+            self.detector = locus.Detector(decimation=decimation, families=families)
 
     def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
-        raw_dets, stats = self.detector.detect_with_stats(img, decimation=self.decimation)
+        batch = self.detector.detect(img)
 
         serializable = []
-        for d in raw_dets:
+        for i in range(len(batch)):
+            corners = batch.corners[i]
+            center = np.mean(corners, axis=0).tolist()
             serializable.append(
                 {
-                    "id": d.id,
-                    "center": d.center,
-                    "corners": list(d.corners),
-                    "hamming": d.hamming,
-                    "margin": d.decision_margin,
+                    "id": int(batch.ids[i]),
+                    "center": center,
+                    "corners": corners.tolist(),
+                    "hamming": int(batch.error_rates[i]),
+                    "margin": 0.0,  # Not currently exposed
                 }
             )
-        return serializable, stats
+        return serializable, None
 
 
 class OpenCVWrapper(LibraryWrapper):
-    def __init__(self):
+    def __init__(self, family: int | None = None):
         super().__init__("OpenCV")
-        dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
-        parameters = cv2.aruco.DetectorParameters()
-        parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
-        parameters.minMarkerPerimeterRate = 0.005
-        parameters.adaptiveThreshConstant = 3
-        parameters.adaptiveThreshWinSizeStep = 5
-        parameters.minMarkerDistanceRate = 0.01
-        parameters.minDistanceToBorder = 1
-        parameters.polygonalApproxAccuracyRate = 0.01
-        self.detector = cv2.aruco.ArucoDetector(dictionary, parameters)
+        cv_family = FamilyMapper.to_opencv(family)
+
+        if cv_family is not None:
+            dictionary = cv2.aruco.getPredefinedDictionary(cv_family)
+            parameters = cv2.aruco.DetectorParameters()
+            parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+            parameters.minMarkerPerimeterRate = 0.005
+            parameters.adaptiveThreshConstant = 3
+            parameters.adaptiveThreshWinSizeStep = 5
+            parameters.minMarkerDistanceRate = 0.01
+            parameters.minDistanceToBorder = 1
+            parameters.polygonalApproxAccuracyRate = 0.01
+            self.detector = cv2.aruco.ArucoDetector(dictionary, parameters)
+
+        else:
+            self.detector = None
 
     def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
+        if self.detector is None:
+            return [], None
         corners, ids, _ = self.detector.detectMarkers(img)
         detections = []
         if ids is not None:
@@ -327,18 +403,25 @@ class OpenCVWrapper(LibraryWrapper):
 
 
 class AprilTagWrapper(LibraryWrapper):
-    def __init__(self, nthreads: int = 8, quad_decimate: float = 1.0):
+    def __init__(self, nthreads: int = 8, quad_decimate: float = 1.0, family: int | None = None):
         super().__init__("AprilTag")
-        self.detector = AprilTagDetector(
-            families="tag36h11",
-            nthreads=nthreads,
-            quad_decimate=quad_decimate,
-            quad_sigma=0.0,
-            decode_sharpening=0.25,
-            refine_edges=True,
-        )
+        at_family = FamilyMapper.to_apriltag(family)
+
+        if at_family is not None:
+            self.detector = AprilTagDetector(
+                families=at_family,
+                nthreads=nthreads,
+                quad_decimate=quad_decimate,
+                quad_sigma=0.0,
+                decode_sharpening=0.25,
+                refine_edges=True,
+            )
+        else:
+            self.detector = None
 
     def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
+        if self.detector is None:
+            return [], None
         raw_dets = self.detector.detect(img)
         detections = []
         for d in raw_dets:  # type: ignore[attr-defined]
@@ -355,7 +438,7 @@ class AprilTagWrapper(LibraryWrapper):
 
 
 def generate_synthetic_image(
-    num_tags: int, res: tuple[int, int], noise_sigma: float = 0.0
+    num_tags: int, res: tuple[int, int], noise_sigma: float = 0.0, family: int | None = None
 ) -> tuple[np.ndarray, list[TagGroundTruth]]:
     img = np.zeros((res[1], res[0]), dtype=np.uint8) + 128
     cols = int(np.ceil(np.sqrt(num_tags)))
@@ -363,7 +446,12 @@ def generate_synthetic_image(
     cell_w, cell_h = res[0] // cols, res[1] // rows
     tag_size = int(min(cell_w, cell_h) * 0.6)
 
-    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
+    cv_family = FamilyMapper.to_opencv(family)
+    if cv_family is None:
+        cv_family = cv2.aruco.DICT_APRILTAG_36h11
+
+    dictionary = cv2.aruco.getPredefinedDictionary(cv_family)
+
     gt_data = []
 
     for i in range(num_tags):
