@@ -7,3 +7,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [x] **Track: Unified Workspace Cleanup**
 *Link: [./tracks/unified_workspace_20260302/](./tracks/unified_workspace_20260302/)*
 
+
+---
+
+- [ ] **Track: Transform the locus-py interface into a vectorized, ML-ready Python API**
+*Link: [./tracks/vectorized_python_api_20260305/](./tracks/vectorized_python_api_20260305/)*
