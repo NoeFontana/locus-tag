@@ -168,17 +168,30 @@ impl RegressionHarness {
             let mut match_count = 0;
             let mut found_ids = BTreeSet::new();
 
-            for det in &detections {
-                if let Some(gt_corners) = gt.tags.get(&det.id) {
+            for i in 0..detections.len() {
+                let det_id = detections.ids[i];
+                let det_corners_f32 = detections.corners[i];
+                let det_corners_f64 = [
+                    [f64::from(det_corners_f32[0].x), f64::from(det_corners_f32[0].y)],
+                    [f64::from(det_corners_f32[1].x), f64::from(det_corners_f32[1].y)],
+                    [f64::from(det_corners_f32[2].x), f64::from(det_corners_f32[2].y)],
+                    [f64::from(det_corners_f32[3].x), f64::from(det_corners_f32[3].y)],
+                ];
+                let det_center = [
+                    (det_corners_f64[0][0] + det_corners_f64[1][0] + det_corners_f64[2][0] + det_corners_f64[3][0]) / 4.0,
+                    (det_corners_f64[0][1] + det_corners_f64[1][1] + det_corners_f64[2][1] + det_corners_f64[3][1]) / 4.0,
+                ];
+
+                if let Some(gt_corners) = gt.tags.get(&det_id) {
                     let g_cx: f64 = gt_corners.iter().map(|p| p[0]).sum::<f64>() / 4.0;
                     let g_cy: f64 = gt_corners.iter().map(|p| p[1]).sum::<f64>() / 4.0;
-                    let dist_sq = (det.center[0] - g_cx).powi(2) + (det.center[1] - g_cy).powi(2);
+                    let dist_sq = (det_center[0] - g_cx).powi(2) + (det_center[1] - g_cy).powi(2);
 
                     if dist_sq < 50.0 * 50.0 {
                         image_rmse_sum +=
-                            locus_core::test_utils::compute_rmse(&det.corners, gt_corners);
+                            locus_core::test_utils::compute_rmse(&det_corners_f64, gt_corners);
                         match_count += 1;
-                        found_ids.insert(det.id);
+                        found_ids.insert(det_id);
                     }
                 }
             }
@@ -207,9 +220,10 @@ impl RegressionHarness {
             }
 
             let mut extra_ids = BTreeSet::new();
-            for det in &detections {
-                if !found_ids.contains(&det.id) {
-                    extra_ids.insert(det.id);
+            for i in 0..detections.len() {
+                let det_id = detections.ids[i];
+                if !found_ids.contains(&det_id) {
+                    extra_ids.insert(det_id);
                 }
             }
 

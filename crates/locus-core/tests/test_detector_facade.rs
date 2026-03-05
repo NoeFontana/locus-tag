@@ -55,7 +55,7 @@ fn test_detector_multiple_families() {
         let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
         let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
         assert_eq!(detections.len(), 1);
-        assert_eq!(detections[0].id, 0);
+        assert_eq!(detections.ids[0], 0);
 
         // Generate ArUco
         let (data2, _) =
@@ -63,7 +63,7 @@ fn test_detector_multiple_families() {
         let img2 = ImageView::new(&data2, canvas_size, canvas_size, canvas_size).unwrap();
         let detections2 = detector.detect(&img2, None, None, PoseEstimationMode::Fast);
         assert_eq!(detections2.len(), 1);
-        assert_eq!(detections2[0].id, 5);
+        assert_eq!(detections2.ids[0], 5);
     }
 }
 
@@ -84,5 +84,6 @@ fn test_detector_decimation() {
         let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
         let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
         assert_eq!(detections.len(), 1);
+        assert_eq!(detections.ids[0], 0);
     }
 }

@@ -51,7 +51,7 @@ pub enum CandidateState {
 #[repr(C, align(32))]
 pub struct DetectionBatch {
     /// Flattened array of sub-pixel quad vertices (4 corners per candidate).
-    pub corners: [Point2f; MAX_CANDIDATES * 4],
+    pub corners: [[Point2f; 4]; MAX_CANDIDATES],
     /// The 3x3 projection matrices.
     pub homographies: [Matrix3x3; MAX_CANDIDATES],
     /// The decoded IDs of the tags.
@@ -72,7 +72,7 @@ impl DetectionBatch {
     #[allow(clippy::large_stack_arrays)]
     pub fn new() -> Self {
         *Box::new(Self {
-            corners: [Point2f { x: 0.0, y: 0.0 }; MAX_CANDIDATES * 4],
+            corners: [[Point2f { x: 0.0, y: 0.0 }; 4]; MAX_CANDIDATES],
             homographies: [Matrix3x3 {
                 data: [0.0; 9],
                 padding: [0.0; 7],
@@ -102,9 +102,7 @@ impl DetectionBatch {
             if self.status_mask[i] == CandidateState::Valid {
                 if i != v {
                     // Swap index i with index v across all parallel arrays.
-                    for j in 0..4 {
-                        self.corners.swap(i * 4 + j, v * 4 + j);
-                    }
+                    self.corners.swap(i, v);
                     self.homographies.swap(i, v);
                     self.ids.swap(i, v);
                     self.payloads.swap(i, v);
@@ -124,23 +122,22 @@ impl DetectionBatch {
     pub fn reassemble(&self, v: usize) -> Vec<crate::Detection> {
         let mut detections = Vec::with_capacity(v);
         for i in 0..v {
-            let offset = i * 4;
             let corners = [
                 [
-                    f64::from(self.corners[offset].x),
-                    f64::from(self.corners[offset].y),
+                    f64::from(self.corners[i][0].x),
+                    f64::from(self.corners[i][0].y),
                 ],
                 [
-                    f64::from(self.corners[offset + 1].x),
-                    f64::from(self.corners[offset + 1].y),
+                    f64::from(self.corners[i][1].x),
+                    f64::from(self.corners[i][1].y),
                 ],
                 [
-                    f64::from(self.corners[offset + 2].x),
-                    f64::from(self.corners[offset + 2].y),
+                    f64::from(self.corners[i][2].x),
+                    f64::from(self.corners[i][2].y),
                 ],
                 [
-                    f64::from(self.corners[offset + 3].x),
-                    f64::from(self.corners[offset + 3].y),
+                    f64::from(self.corners[i][3].x),
+                    f64::from(self.corners[i][3].y),
                 ],
             ];
 
@@ -187,6 +184,56 @@ impl DetectionBatch {
 /// Helper function to partition a batch, moving all valid candidates to the front.
 pub fn partition_batch_soa(batch: &mut DetectionBatch, n: usize) -> usize {
     batch.partition(n)
+}
+
+/// A lightweight, borrowed view of the detection results.
+///
+/// This struct holds slices to the active elements in a [`DetectionBatch`].
+/// It avoids heap allocations and provides efficient access to detection data.
+#[derive(Debug, Clone, Copy)]
+pub struct DetectionBatchView<'a> {
+    /// Decoded IDs of the markers.
+    pub ids: &'a [u32],
+    /// Refined corners in image coordinates.
+    pub corners: &'a [[Point2f; 4]],
+    /// Computed homography matrices.
+    pub homographies: &'a [Matrix3x3],
+    /// Decoded bitstrings (paylods).
+    pub payloads: &'a [u64],
+    /// Confidence scores or error rates.
+    pub error_rates: &'a [f32],
+    /// 3D poses (rotation + translation).
+    pub poses: &'a [Pose6D],
+}
+
+impl DetectionBatchView<'_> {
+    /// Returns the number of detections in the view.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.ids.len()
+    }
+
+    /// Returns true if the view contains no detections.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.ids.is_empty()
+    }
+}
+
+impl DetectionBatch {
+    /// Returns a borrowed view of the first `v` candidates in the batch.
+    #[must_use]
+    pub fn view(&self, v: usize) -> DetectionBatchView<'_> {
+        let n = v.min(MAX_CANDIDATES);
+        DetectionBatchView {
+            ids: &self.ids[..n],
+            corners: &self.corners[..n],
+            homographies: &self.homographies[..n],
+            payloads: &self.payloads[..n],
+            error_rates: &self.error_rates[..n],
+            poses: &self.poses[..n],
+        }
+    }
 }
 
 impl Default for DetectionBatch {

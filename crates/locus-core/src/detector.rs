@@ -1,5 +1,4 @@
-use crate::Detection;
-use crate::batch::DetectionBatch;
+use crate::batch::{DetectionBatch, DetectionBatchView};
 use crate::config::DetectorConfig;
 use crate::decoder::{TagDecoder, family_to_decoder};
 use crate::image::ImageView;
@@ -16,8 +15,6 @@ pub struct DetectorState {
     pub batch: DetectionBatch,
     /// Reusable buffer for upscaling.
     pub upscale_buf: Vec<u8>,
-    /// Final detection results.
-    pub results: Vec<Detection>,
 }
 
 impl DetectorState {
@@ -28,14 +25,12 @@ impl DetectorState {
             arena: Bump::new(),
             batch: DetectionBatch::new(),
             upscale_buf: Vec::new(),
-            results: Vec::new(),
         }
     }
 
     /// Reset the state for a new frame.
     pub fn reset(&mut self) {
         self.arena.reset();
-        self.results.clear();
     }
 }
 
@@ -109,7 +104,7 @@ impl Detector {
         intrinsics: Option<&crate::pose::CameraIntrinsics>,
         tag_size: Option<f64>,
         pose_mode: crate::config::PoseEstimationMode,
-    ) -> Vec<Detection> {
+    ) -> DetectionBatchView<'_> {
         self.state.reset();
         let state = &mut self.state;
 
@@ -221,7 +216,7 @@ impl Detector {
 
         // 4. Homography Pass (SoA)
         crate::decoder::compute_homographies_soa(
-            &state.batch.corners[0..n * 4],
+            &state.batch.corners[0..n],
             &mut state.batch.homographies[0..n],
         );
 
@@ -248,19 +243,17 @@ impl Detector {
                 pose_mode,
             );
         }
-        state.results = state.batch.reassemble(v);
 
-        // Final coordinate adjustment to align with pixel center convention (UMICH/OpenCV)
-        for d in &mut state.results {
-            for corner in &mut d.corners {
-                corner[0] += 0.5;
-                corner[1] += 0.5;
+        // Final coordinate adjustment (+0.5) to align with pixel center convention (UMICH/OpenCV)
+        // This is applied in-place to the batch corners.
+        for i in 0..v {
+            for corner in &mut self.state.batch.corners[i] {
+                corner.x += 0.5;
+                corner.y += 0.5;
             }
-            d.center[0] += 0.5;
-            d.center[1] += 0.5;
         }
 
-        state.results.clone()
+        self.state.batch.view(v)
     }
 
     /// Get the current detector configuration.
