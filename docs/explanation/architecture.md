@@ -215,9 +215,16 @@ sequenceDiagram
 
 ## Observability & Debugging
 
-Locus includes built-in instrumentation for performance profiling and visual debugging.
+Locus includes built-in instrumentation for performance profiling and visual debugging, designed for high-resolution visibility without runtime overhead.
 
-1.  **Tracing**: Uses the `tracing` crate to emit spans for every pipeline stage, allowing integration with `tracy` or `perfetto`.
+1.  **Zero-Cost Tracing**: Uses the `tracing` crate to emit static spans for the 6 major pipeline stages:
+    - `thresholding`
+    - `segmentation`
+    - `quad_extraction`
+    - `homography_pass`
+    - `decoding_pass`
+    - `pose_refinement`
+    Production builds utilize **compile-time erasure** (`release_max_level_info`) to physically remove tracing instructions from the binary, ensuring zero runtime cost when deployed. High-resolution profiling is enabled via the `tracy` feature for deep pipeline analysis.
 2.  **Visual Debugging (Rerun)**: When enabled, Locus logs intermediate processing artifacts (threshold images, candidate quads, geometric fits) to the Rerun SDK for real-time inspection.
 3.  **Developer CLI**: Provides a unified `tools/cli.py` (executed via `uv run`) for benchmarking, visualization, and dictionary validation, ensuring developer tools remain isolated from the core package.
 
