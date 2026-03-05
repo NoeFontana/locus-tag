@@ -152,7 +152,7 @@ pub struct PyPose {
 
 #[pyclass(unsendable)]
 pub struct Detector {
-    inner: locus_core::Detector,
+    inner: Box<locus_core::Detector>,
 }
 
 #[pymethods]
@@ -198,17 +198,17 @@ impl Detector {
                 .as_slice_mut()
                 .expect("failed to get mutable slice for error_rates");
 
-            for (i, det) in detections.iter().enumerate() {
-                #[allow(clippy::cast_possible_wrap)]
-                {
-                    ids_slice[i] = det.id as i32;
-                }
-                for j in 0..4 {
-                    corners_slice[i * 8 + j * 2] = det.corners[j][0] as f32;
-                    corners_slice[i * 8 + j * 2 + 1] = det.corners[j][1] as f32;
-                }
-                err_slice[i] = det.hamming as f32;
-            }
+            // Direct memory block transfer (Zero-copy layout alignment)
+            // LLVM will vectorize these into SIMD load/store instructions.
+            ids_slice.copy_from_slice(std::slice::from_raw_parts(
+                detections.ids.as_ptr() as *const i32,
+                n,
+            ));
+            corners_slice.copy_from_slice(std::slice::from_raw_parts(
+                detections.corners.as_ptr() as *const f32,
+                n * 8,
+            ));
+            err_slice.copy_from_slice(detections.error_rates);
         }
 
         let dict = PyDict::new(py);
@@ -223,20 +223,9 @@ impl Detector {
                 let poses_slice = poses_arr
                     .as_slice_mut()
                     .expect("failed to get mutable slice for poses");
-                for (i, det) in detections.iter().enumerate() {
-                    if let Some(pose) = &det.pose {
-                        let q = nalgebra::UnitQuaternion::from_matrix(&pose.rotation);
-                        let t = pose.translation;
 
-                        let offset = i * 7;
-                        poses_slice[offset] = t.x as f32;
-                        poses_slice[offset + 1] = t.y as f32;
-                        poses_slice[offset + 2] = t.z as f32;
-                        poses_slice[offset + 3] = q.coords.x as f32;
-                        poses_slice[offset + 4] = q.coords.y as f32;
-                        poses_slice[offset + 5] = q.coords.z as f32;
-                        poses_slice[offset + 6] = q.coords.w as f32;
-                    }
+                for (i, pose) in detections.poses.iter().enumerate() {
+                    poses_slice[i * 7..(i + 1) * 7].copy_from_slice(&pose.data);
                 }
             }
             dict.set_item("poses", poses_arr)?;
@@ -335,7 +324,7 @@ fn create_detector(
     }
 
     Ok(Detector {
-        inner: builder.build(),
+        inner: Box::new(builder.build()),
     })
 }
 
