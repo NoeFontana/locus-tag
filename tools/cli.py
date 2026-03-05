@@ -38,6 +38,12 @@ except ImportError:
         generate_synthetic_image,
     )
 
+try:
+    import rerun as rr
+    RERUN_AVAILABLE = True
+except ImportError:
+    RERUN_AVAILABLE = False
+
 app = typer.Typer(help="Locus Developer CLI")
 bench_app = typer.Typer(help="Locus Unified Benchmarking")
 app.add_typer(bench_app, name="bench")
@@ -91,6 +97,100 @@ def validate_dicts(
         raise typer.Exit(code=1)
     else:
         typer.echo("All dictionaries passed validation.")
+
+@app.command()
+def visualize(
+    ctx: typer.Context,
+    limit: Optional[int] = typer.Option(10, help="Limit number of images"),
+    scenario: str = typer.Option("forward", help="Scenario to visualize"),
+    tile_size: int = typer.Option(8, help="Threshold tile size"),
+    min_area: int = typer.Option(16, help="Min quad area"),
+    bilateral: bool = typer.Option(False, help="Enable bilateral filter"),
+    upscale: int = typer.Option(1, help="Upscale factor"),
+):
+    """
+    Launch the Rerun-based visualizer for the detection pipeline.
+    """
+    if not RERUN_AVAILABLE:
+        typer.echo("Error: Rerun SDK not installed. Run 'uv add rerun-sdk' or install with [bench] group.", err=True)
+        raise typer.Exit(code=1)
+
+    # Initialize Rerun with extra arguments from context if any
+    # Note: Typer doesn't automatically handle unknown args like argparse, 
+    # but we can pass common ones or just initialize.
+    rr.init("locus_debug_pipeline", spawn=True)
+
+    loader = DatasetLoader()
+    if not loader.prepare_icra(scenario):
+        typer.echo(f"Failed to prepare scenario {scenario}", err=True)
+        raise typer.Exit(code=1)
+
+    datasets = loader.find_datasets(scenario, ["tags"])
+
+    # Initialize Detector using new keyword arguments
+    detector = locus.Detector(
+        threshold_tile_size=tile_size,
+        quad_min_area=min_area,
+        enable_bilateral=bilateral,
+        upscale_factor=upscale,
+    )
+
+    for ds_name, img_dir, gt_map in datasets:
+        typer.echo(f"\nVisualizing {ds_name}...")
+
+        img_names = sorted(gt_map.keys())
+        if limit:
+            img_names = img_names[:limit]
+
+        for i, img_name in enumerate(tqdm(img_names)):
+            img_path = img_dir / img_name
+            if not img_path.exists():
+                continue
+
+            img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+            if img is None:
+                continue
+
+            rr.set_time_sequence("frame_idx", i)
+
+            # Perform Detection (Vectorized API)
+            batch = detector.detect(img)
+
+            # 1. Input & Ground Truth
+            rr.log("pipeline/0_input", rr.Image(img))
+
+            gt_tags = gt_map.get(img_name, [])
+            if gt_tags:
+                gt_strips = []
+                gt_labels = []
+                for gt in gt_tags:
+                    c = np.vstack([gt.corners, gt.corners[0]])
+                    gt_strips.append(c)
+                    gt_labels.append(f"GT:{gt.tag_id}")
+
+                rr.log(
+                    "pipeline/0_input/ground_truth",
+                    rr.LineStrips2D(gt_strips, colors=[0, 255, 0], radii=2.0, labels=gt_labels),
+                )
+
+            # Note: Internal pipeline artifacts (binarized, labels, candidates) 
+            # are NOT currently exposed in the vectorized high-level API.
+            # They will be re-added if/when the Rust side exposes them via DetectorState.
+
+            # 5. Final Detections
+            if len(batch) > 0:
+                det_strips = []
+                det_labels = []
+                for j in range(len(batch)):
+                    c = batch.corners[j]
+                    c = np.vstack([c, c[0]])
+                    det_strips.append(c)
+                    det_labels.append(f"ID:{batch.ids[j]}")
+
+                rr.log(
+                    "pipeline/4_detections",
+                    rr.LineStrips2D(det_strips, colors=[255, 50, 50], radii=1.2, labels=det_labels),
+                )
 
 # --- Benchmarking Commands ---
 

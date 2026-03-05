@@ -16,7 +16,7 @@ Create the unified entry point and migrate existing scripts.
 - - - [x] Task: Create `tools/` directory and `tools/cli.py` using `Typer`.
 - -  - [x] Task: Migrate `scripts/validate_dict_schemas.py` logic to `tools/cli.py` as `validate-dicts` command.
 - -  - [x] Task: Migrate `scripts/locus_bench.py` logic to `tools/cli.py` as `bench` command.
-- - [~] Task: Migrate `scripts/debug/visualize.py` logic to `tools/cli.py` as `visualize` command.
+- -  - [x] Task: Migrate `scripts/debug/visualize.py` logic to `tools/cli.py` as `visualize` command.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: CLI Scaffolding & Command Integration' (Protocol in workflow.md)
 
 ## Phase 3: Validation & Cleanup
