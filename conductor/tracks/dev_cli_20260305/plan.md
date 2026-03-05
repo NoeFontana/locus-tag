@@ -29,3 +29,6 @@ Finalize the isolation and remove redundant files.
 - [x] Task: Update `README.md` or developer docs to point to the new CLI usage. ca90fb3
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Validation & Cleanup' (Protocol in workflow.md) 7a6f204
 
+## Phase: Review Fixes
+- [x] Task: Apply review suggestions 2ebafcf
+
