@@ -2,23 +2,10 @@ import json
 import time
 from pathlib import Path
 
-import cv2
 import jsonschema
-import locus
 import numpy as np
 import typer
 from tqdm import tqdm
-
-from scripts.bench.utils import (
-    AprilTagWrapper,
-    DatasetLoader,
-    HubBenchmarkLoader,
-    LibraryWrapper,
-    LocusWrapper,
-    Metrics,
-    OpenCVWrapper,
-    generate_synthetic_image,
-)
 
 try:
     import rerun as rr
@@ -96,6 +83,10 @@ def visualize(
     """
     Launch the Rerun-based visualizer for the detection pipeline.
     """
+    import cv2
+    import locus
+    from scripts.bench.utils import DatasetLoader
+
     if not RERUN_AVAILABLE:
         typer.echo(
             "Error: Rerun SDK not installed. Run 'uv add rerun-sdk' or install with [bench] group.",
@@ -205,6 +196,17 @@ def bench_real(
     min_edge_score: float = typer.Option(4.0, help="Min edge alignment score"),
 ):
     """Run benchmarks on real-world datasets (ICRA)."""
+    import cv2
+    import locus
+    from scripts.bench.utils import (
+        AprilTagWrapper,
+        DatasetLoader,
+        LibraryWrapper,
+        LocusWrapper,
+        Metrics,
+        OpenCVWrapper,
+    )
+
     if profile:
         locus.init_tracy()
 
@@ -360,6 +362,16 @@ def bench_synthetic(
     family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
 ):
     """Run benchmarks on procedurally generated synthetic images."""
+    import locus
+    from scripts.bench.utils import (
+        AprilTagWrapper,
+        LibraryWrapper,
+        LocusWrapper,
+        Metrics,
+        OpenCVWrapper,
+        generate_synthetic_image,
+    )
+
     # Map string to locus.TagFamily
     family_mapping = {
         "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
@@ -423,6 +435,16 @@ def bench_hosted(
     family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
 ):
     """Evaluate against datasets hosted on Hugging Face Hub."""
+    import locus
+    from scripts.bench.utils import (
+        AprilTagWrapper,
+        HubBenchmarkLoader,
+        LibraryWrapper,
+        LocusWrapper,
+        Metrics,
+        OpenCVWrapper,
+    )
+
     # Map string to locus.TagFamily
     family_mapping = {
         "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
@@ -493,6 +515,8 @@ def bench_analyze(
     scenarios: list[str] = typer.Option(["forward", "circle"], help="Scenarios to analyze"),
 ):
     """Analyze tag size distribution in datasets."""
+    from scripts.bench.utils import DatasetLoader
+
     loader = DatasetLoader()
     for scenario in scenarios:
         if not loader.prepare_icra(scenario):
@@ -526,6 +550,9 @@ def bench_profile(
     family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
 ):
     """Profile pipeline bottlenecks using synthetic images."""
+    import locus
+    from scripts.bench.utils import LocusWrapper, generate_synthetic_image
+
     # Map string to locus.TagFamily
     family_mapping = {
         "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
@@ -560,6 +587,8 @@ def bench_profile(
 @bench_app.command("prepare")
 def bench_prepare():
     """Download and prepare all benchmarking datasets."""
+    from scripts.bench.utils import DatasetLoader
+
     loader = DatasetLoader()
     typer.echo("Preparing datasets...")
     loader.prepare_all()

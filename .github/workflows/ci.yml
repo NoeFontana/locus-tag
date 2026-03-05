@@ -39,7 +39,7 @@ jobs:
         
       - name: Run dictionary validation
         run: |
-          uv run --frozen --with jsonschema python scripts/validate_dict_schemas.py \
+          uv run --frozen python tools/cli.py validate-dicts \
             --schema crates/locus-core/tests/schemas/dictionary.schema.json \
             data/dictionaries/*.json
 
@@ -109,11 +109,10 @@ jobs:
           cargo test --doc 2>&1 | tee test-rust-doc.log
 
       - name: Verify Snapshot Parity
-
         shell: bash
         run: |
           set -o pipefail
-          cargo insta test --check 2>&1 | tee test-rust-insta.log
+          cargo insta test --all-features --check 2>&1 | tee test-rust-insta.log
 
       - name: Upload Logs on Failure
         if: failure()
