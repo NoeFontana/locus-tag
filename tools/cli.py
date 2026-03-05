@@ -85,6 +85,7 @@ def visualize(
     """
     import cv2
     import locus
+
     from scripts.bench.utils import DatasetLoader
 
     if not RERUN_AVAILABLE:
@@ -198,6 +199,7 @@ def bench_real(
     """Run benchmarks on real-world datasets (ICRA)."""
     import cv2
     import locus
+
     from scripts.bench.utils import (
         AprilTagWrapper,
         DatasetLoader,
@@ -363,6 +365,7 @@ def bench_synthetic(
 ):
     """Run benchmarks on procedurally generated synthetic images."""
     import locus
+
     from scripts.bench.utils import (
         AprilTagWrapper,
         LibraryWrapper,
@@ -436,6 +439,7 @@ def bench_hosted(
 ):
     """Evaluate against datasets hosted on Hugging Face Hub."""
     import locus
+
     from scripts.bench.utils import (
         AprilTagWrapper,
         HubBenchmarkLoader,
@@ -551,6 +555,7 @@ def bench_profile(
 ):
     """Profile pipeline bottlenecks using synthetic images."""
     import locus
+
     from scripts.bench.utils import LocusWrapper, generate_synthetic_image
 
     # Map string to locus.TagFamily
