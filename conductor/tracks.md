@@ -10,5 +10,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Build a powerful developer CLI that avoids contaminating the distributed Python wheel, leveraging uv.**
+- [x] **Track: Build a powerful developer CLI that avoids contaminating the distributed Python wheel, leveraging uv.**
 *Link: [./tracks/dev_cli_20260305/](./tracks/dev_cli_20260305/)*
