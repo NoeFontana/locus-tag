@@ -203,7 +203,7 @@ impl Homography {
 ///
 /// This uses `rayon` for data-parallel computation of the square-to-quad homographies.
 /// Quads are defined by 4 corners in `corners` for each candidate index.
-pub fn compute_homographies_soa(corners: &[Point2f], homographies: &mut [Matrix3x3]) {
+pub fn compute_homographies_soa(corners: &[[Point2f; 4]], homographies: &mut [Matrix3x3]) {
     use rayon::prelude::*;
 
     // Each homography maps from canonical square [(-1,-1), (1,-1), (1,1), (-1,1)] to image quads.
@@ -211,21 +211,11 @@ pub fn compute_homographies_soa(corners: &[Point2f], homographies: &mut [Matrix3
         .par_iter_mut()
         .enumerate()
         .for_each(|(i, h_out)| {
-            let offset = i * 4;
             let dst = [
-                [f64::from(corners[offset].x), f64::from(corners[offset].y)],
-                [
-                    f64::from(corners[offset + 1].x),
-                    f64::from(corners[offset + 1].y),
-                ],
-                [
-                    f64::from(corners[offset + 2].x),
-                    f64::from(corners[offset + 2].y),
-                ],
-                [
-                    f64::from(corners[offset + 3].x),
-                    f64::from(corners[offset + 3].y),
-                ],
+                [f64::from(corners[i][0].x), f64::from(corners[i][0].y)],
+                [f64::from(corners[i][1].x), f64::from(corners[i][1].y)],
+                [f64::from(corners[i][2].x), f64::from(corners[i][2].y)],
+                [f64::from(corners[i][3].x), f64::from(corners[i][3].y)],
             ];
 
             if let Some(h) = Homography::square_to_quad(&dst) {
@@ -1353,7 +1343,7 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
             DECODE_ARENA.with_borrow_mut(|arena| {
                     arena.reset();
 
-                    let corners = &batch.corners[i * 4..i * 4 + 4];
+                    let corners = &batch.corners[i];
                     let homography = &batch.homographies[i];
 
                     // Compute AABB for RoiCache ONCE per candidate.
@@ -1700,7 +1690,7 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
 
         if let Some(refined) = refined_corners {
             for (j, corner) in refined.iter().enumerate() {
-                batch.corners[i * 4 + j] = *corner;
+                batch.corners[i][j] = *corner;
             }
         }
 
@@ -1709,10 +1699,10 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
             let mut temp_corners = [Point2f::default(); 4];
             for (j, item) in temp_corners.iter_mut().enumerate() {
                 let src_idx = (j + usize::from(rot)) % 4;
-                *item = batch.corners[i * 4 + src_idx];
+                *item = batch.corners[i][src_idx];
             }
             for (j, item) in temp_corners.iter().enumerate() {
-                batch.corners[i * 4 + j] = *item;
+                batch.corners[i][j] = *item;
             }
         }
     }

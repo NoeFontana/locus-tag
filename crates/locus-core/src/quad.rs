@@ -101,7 +101,7 @@ pub fn extract_quads_soa(
     let n = detections.len().min(MAX_CANDIDATES);
     for (i, corners) in detections.into_iter().take(n).enumerate() {
         for (j, corner) in corners.iter().enumerate() {
-            batch.corners[i * 4 + j] = Point2f {
+            batch.corners[i][j] = Point2f {
                 x: corner.x as f32,
                 y: corner.y as f32,
             };

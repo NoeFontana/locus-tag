@@ -35,7 +35,25 @@ fn test_decimation_accuracy() {
 
         let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
         assert!(!detections.is_empty());
-        let err1 = compute_corner_error(&detections[0].corners, &gt_corners);
+        let corners1 = [
+            [
+                f64::from(detections.corners[0][0].x),
+                f64::from(detections.corners[0][0].y),
+            ],
+            [
+                f64::from(detections.corners[0][1].x),
+                f64::from(detections.corners[0][1].y),
+            ],
+            [
+                f64::from(detections.corners[0][2].x),
+                f64::from(detections.corners[0][2].y),
+            ],
+            [
+                f64::from(detections.corners[0][3].x),
+                f64::from(detections.corners[0][3].y),
+            ],
+        ];
+        let err1 = compute_corner_error(&corners1, &gt_corners);
 
         // 2. Detect with decimation 2
         let mut detector2 = DetectorBuilder::new()
@@ -45,7 +63,25 @@ fn test_decimation_accuracy() {
 
         let detections2 = detector2.detect(&img, None, None, PoseEstimationMode::Fast);
         assert!(!detections2.is_empty());
-        let err2 = compute_corner_error(&detections2[0].corners, &gt_corners);
+        let corners2 = [
+            [
+                f64::from(detections2.corners[0][0].x),
+                f64::from(detections2.corners[0][0].y),
+            ],
+            [
+                f64::from(detections2.corners[0][1].x),
+                f64::from(detections2.corners[0][1].y),
+            ],
+            [
+                f64::from(detections2.corners[0][2].x),
+                f64::from(detections2.corners[0][2].y),
+            ],
+            [
+                f64::from(detections2.corners[0][3].x),
+                f64::from(detections2.corners[0][3].y),
+            ],
+        ];
+        let err2 = compute_corner_error(&corners2, &gt_corners);
 
         println!("Error D1: {err1}, Error D2: {err2}");
         // Decimation should maintain reasonable sub-pixel accuracy

@@ -41,7 +41,11 @@ fn test_aruco_4x4_50_detection() {
     let results = detector.detect(&img, None, None, PoseEstimationMode::Fast);
 
     assert_eq!(results.len(), 1, "Should detect exactly 1 ArUco tag");
-    assert_eq!(results[0].id, u32::from(TAG_ID), "Detected ID should match");
+    assert_eq!(
+        results.ids[0],
+        u32::from(TAG_ID),
+        "Detected ID should match"
+    );
 }
 
 #[test]
@@ -67,12 +71,12 @@ fn test_aruco_multiple_ids() {
 
         assert_eq!(results.len(), 1, "Should detect tag ID {tag_id}");
         assert_eq!(
-            results[0].id,
+            results.ids[0],
             u32::from(tag_id),
             "ID mismatch for tag {tag_id}"
         );
         assert_eq!(
-            results[0].hamming, 0,
+            results.error_rates[0] as u32, 0,
             "Hamming distance should be 0 for noiseless tag"
         );
     }

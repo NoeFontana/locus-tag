@@ -523,23 +523,22 @@ pub fn refine_poses_soa(
     let poses: Vec<_> = (0..v)
         .into_par_iter()
         .map(|i| {
-            let offset = i * 4;
             let corners = [
                 [
-                    f64::from(batch.corners[offset].x),
-                    f64::from(batch.corners[offset].y),
+                    f64::from(batch.corners[i][0].x),
+                    f64::from(batch.corners[i][0].y),
                 ],
                 [
-                    f64::from(batch.corners[offset + 1].x),
-                    f64::from(batch.corners[offset + 1].y),
+                    f64::from(batch.corners[i][1].x),
+                    f64::from(batch.corners[i][1].y),
                 ],
                 [
-                    f64::from(batch.corners[offset + 2].x),
-                    f64::from(batch.corners[offset + 2].y),
+                    f64::from(batch.corners[i][2].x),
+                    f64::from(batch.corners[i][2].y),
                 ],
                 [
-                    f64::from(batch.corners[offset + 3].x),
-                    f64::from(batch.corners[offset + 3].y),
+                    f64::from(batch.corners[i][3].x),
+                    f64::from(batch.corners[i][3].y),
                 ],
             ];
 

@@ -18,10 +18,12 @@ fn test_reassemble_single() {
     let mut batch = DetectionBatch::new();
     batch.status_mask[0] = CandidateState::Valid;
     batch.ids[0] = 42;
-    batch.corners[0] = Point2f { x: 1.0, y: 2.0 };
-    batch.corners[1] = Point2f { x: 3.0, y: 4.0 };
-    batch.corners[2] = Point2f { x: 5.0, y: 6.0 };
-    batch.corners[3] = Point2f { x: 7.0, y: 8.0 };
+    batch.corners[0] = [
+        Point2f { x: 1.0, y: 2.0 },
+        Point2f { x: 3.0, y: 4.0 },
+        Point2f { x: 5.0, y: 6.0 },
+        Point2f { x: 7.0, y: 8.0 },
+    ];
     batch.payloads[0] = 0x1234_5678;
     batch.error_rates[0] = 1.0;
 
@@ -32,8 +34,7 @@ fn test_reassemble_single() {
 
     let detections = batch.reassemble(1);
     assert_eq!(detections.len(), 1);
-    let d = &detections[0];
-    assert_eq!(d.id, 42);
-    assert_eq!(d.corners[0], [1.0, 2.0]);
-    assert!(d.pose.is_some());
+    assert_eq!(detections[0].id, 42);
+    assert_eq!(detections[0].corners[0], [1.0, 2.0]);
+    assert!(detections[0].pose.is_some());
 }
