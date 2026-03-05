@@ -442,16 +442,16 @@ def bench_profile(
     res = (1280, 720)
     img, _ = generate_synthetic_image(targets, res, noise_sigma=noise)
     typer.echo(f"\nProfiling {targets} tags (noise={noise})...")
-    stats_list = []
-    for _ in range(iterations):
-        _, stats = wrapper.detect(img)
-        stats_list.append(stats)
     
-    typer.echo(f"  Thresholding: {np.mean([s.threshold_ms for s in stats_list]):.2f} ms")
-    typer.echo(f"  Segmentation: {np.mean([s.segmentation_ms for s in stats_list]):.2f} ms")
-    typer.echo(f"  Quad Extraction: {np.mean([s.quad_extraction_ms for s in stats_list]):.2f} ms")
-    typer.echo(f"  Decoding: {np.mean([s.decoding_ms for s in stats_list]):.2f} ms")
-    typer.echo(f"  Total: {np.mean([s.total_ms for s in stats_list]):.2f} ms")
+    # In the new API, we don't have per-stage stats exposed yet in the high-level API
+    # We just measure total time for now.
+    latencies = []
+    for _ in range(iterations):
+        start = time.perf_counter()
+        wrapper.detect(img)
+        latencies.append((time.perf_counter() - start) * 1000)
+    
+    typer.echo(f"  Total (avg): {np.mean(latencies):.2f} ms")
 
 @bench_app.command("prepare")
 def bench_prepare():

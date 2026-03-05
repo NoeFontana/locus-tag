@@ -274,24 +274,37 @@ class LocusWrapper(LibraryWrapper):
         self, name: str = "Locus", config: locus.DetectorConfig | None = None, decimation: int = 1
     ):
         super().__init__(name)
-        self.detector = locus.Detector(config) if config else locus.Detector()
-        self.decimation = decimation
+        # Handle cases where config might be passed but needs to be mapped to kwargs
+        # Or just use the Detector directly with parameters.
+        if config:
+            # Simple mapping for common fields used in benchmarks
+            self.detector = locus.Detector(
+                decimation=decimation,
+                decode_mode=config.decode_mode,
+                enable_sharpening=config.enable_sharpening,
+                upscale_factor=config.upscale_factor
+            )
+        else:
+            self.detector = locus.Detector(decimation=decimation)
 
     def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
-        raw_dets, stats = self.detector.detect_with_stats(img, decimation=self.decimation)
+        batch = self.detector.detect(img)
 
         serializable = []
-        for d in raw_dets:
+        for i in range(len(batch)):
+            corners = batch.corners[i]
+            center = np.mean(corners, axis=0).tolist()
             serializable.append(
                 {
-                    "id": d.id,
-                    "center": d.center,
-                    "corners": list(d.corners),
-                    "hamming": d.hamming,
-                    "margin": d.decision_margin,
+                    "id": int(batch.ids[i]),
+                    "center": center,
+                    "corners": corners.tolist(),
+                    "hamming": int(batch.error_rates[i]),
+                    "margin": 0.0, # Not currently exposed
                 }
             )
-        return serializable, stats
+        # stats are not currently exposed in the same way, return None or dummy
+        return serializable, None
 
 
 class OpenCVWrapper(LibraryWrapper):
