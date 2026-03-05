@@ -1,9 +1,11 @@
-//! Integration test for ArUco 4x4_50 tag detection.
-//!
-//! This test validates the complete detection pipeline using synthetic ArUco tags,
-//! matching the conditions used in Python benchmarks (`tests/test_config.py`).
+use locus_core::bench_api::*;
+#[cfg(feature = "bench-internals")]
+// Integration test for ArUco 4x4_50 tag detection.
+//
+// This test validates the complete detection pipeline using synthetic ArUco tags,
+// matching the conditions used in Python benchmarks (`tests/test_config.py`).
 
-#![allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used)]
 use locus_core::Detector;
 use locus_core::config::TagFamily;
 

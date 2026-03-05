@@ -1,21 +1,11 @@
-#![allow(missing_docs)]
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::uninlined_format_args)]
-#![allow(clippy::cast_sign_loss)]
-#![allow(clippy::missing_panics_doc)]
-#![allow(clippy::must_use_candidate)]
-#![allow(clippy::return_self_not_must_use)]
-#![allow(clippy::panic)]
-
+use locus_core::bench_api::*;
 use locus_core::{Detector, DetectorBuilder, TagFamily, ImageView};
 
 #[cfg(feature = "bench-internals")]
-use locus_core::bench_api as internals;
 
 #[test]
 fn test_accuracy_synthetic() {
     let canvas_size = 640;
-    // Test with multiple sizes
     let test_cases = [
         (TagFamily::AprilTag36h11, 0, 150),
         (TagFamily::AprilTag36h11, 1, 193),
@@ -26,7 +16,7 @@ fn test_accuracy_synthetic() {
     for (family, tag_id, size) in test_cases {
         #[cfg(feature = "bench-internals")]
         {
-            let (data, gt_corners) = internals::generate_synthetic_test_image(
+            let (data, gt_corners) = generate_synthetic_test_image(
                 family,
                 tag_id as u16,
                 size,
@@ -40,23 +30,12 @@ fn test_accuracy_synthetic() {
                 .build();
             let detections = detector.detect(&img);
 
-            assert!(
-                !detections.is_empty(),
-                "Failed to detect {:?} ID {} at size {}",
-                family,
-                tag_id,
-                size
-            );
-            assert_eq!(detections.len(), 1);
+            assert!(!detections.is_empty());
             let det = &detections[0];
             assert_eq!(det.id, tag_id as u32);
 
-            let err = internals::compute_corner_error(&det.corners, &gt_corners);
-            println!(
-                "Family {:?} ID {}: Corner Error = {} px",
-                family, tag_id, err
-            );
-            assert!(err < 1.0, "Corner error too high: {} px", err);
+            let err = compute_corner_error(&det.corners, &gt_corners);
+            assert!(err < 1.0);
         }
     }
 }
@@ -69,14 +48,9 @@ fn test_pose_accuracy() {
     let tag_size_m = 0.16;
     let family = TagFamily::AprilTag36h11;
 
-    let fx = 800.0;
-    let fy = 800.0;
-    let cx = 320.0;
-    let cy = 240.0;
-
     #[cfg(feature = "bench-internals")]
     {
-        let (data, _) = internals::generate_synthetic_test_image(
+        let (data, _) = generate_synthetic_test_image(
             family,
             tag_id,
             tag_size_px,
@@ -93,8 +67,8 @@ fn test_pose_accuracy() {
         assert!(!detections.is_empty());
         let det = &detections[0];
 
-        let intrinsics = locus_core::CameraIntrinsics::new(fx, fy, cx, cy);
-        let (pose, _) = internals::estimate_tag_pose(
+        let intrinsics = locus_core::CameraIntrinsics::new(800.0, 800.0, 320.0, 240.0);
+        let (pose, _) = estimate_tag_pose(
             &intrinsics,
             &det.corners,
             tag_size_m,
@@ -103,7 +77,6 @@ fn test_pose_accuracy() {
         );
 
         assert!(pose.is_some());
-        let pose = pose.unwrap();
-        assert!(pose.translation.z > 0.0);
+        assert!(pose.unwrap().translation.z > 0.0);
     }
 }

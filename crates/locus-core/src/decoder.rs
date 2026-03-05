@@ -2025,7 +2025,7 @@ impl TagDecoder for GenericDecoder {
 
 /// Convert a TagFamily enum to a boxed decoder instance.
 #[must_use]
-pub(crate) fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send + Sync> {
+pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send + Sync> {
     match family {
         config::TagFamily::AprilTag36h11 => Box::new(AprilTag36h11),
         config::TagFamily::AprilTag41h12 => Box::new(AprilTag41h12),

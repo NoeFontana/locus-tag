@@ -1,10 +1,12 @@
-//! Unified Regression Test Harness
-//!
-//! Evaluates the detector against:
-//! 1. "Fixtures" (Committed representative images) - Runs in CI, guarantees baseline functionality.
-//! 2. "ICRA 2020" (External dataset) - Core subset runs by default, heavy datasets gated by LOCUS_EXTENDED_REGRESSION.
+use locus_core::bench_api::*;
+#[cfg(feature = "bench-internals")]
+// Unified Regression Test Harness
+//
+// Evaluates the detector against:
+// 1. "Fixtures" (Committed representative images) - Runs in CI, guarantees baseline functionality.
+// 2. "ICRA 2020" (External dataset) - Core subset runs by default, heavy datasets gated by LOCUS_EXTENDED_REGRESSION.
 
-#![allow(
+#[allow(
     missing_docs,
     clippy::unwrap_used,
     clippy::type_complexity,
@@ -72,16 +74,17 @@ struct PipelineMetrics {
 impl From<PipelineStats> for PipelineMetrics {
     fn from(stats: PipelineStats) -> Self {
         Self {
-            threshold_ms: stats.threshold_ms,
-            segmentation_ms: stats.segmentation_ms,
-            quad_extraction_ms: stats.quad_extraction_ms,
-            decoding_ms: stats.decoding_ms,
+            threshold_ms: 0.0,
+            segmentation_ms: 0.0,
+            quad_extraction_ms: 0.0,
+            decoding_ms: 0.0,
             total_ms: stats.total_ms,
-            num_candidates: stats.num_candidates,
+            num_candidates: 0,
             num_detections: stats.num_detections,
         }
     }
 }
+
 
 fn serialize_rmse<S>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -182,14 +185,14 @@ impl RegressionHarness {
 
         for (filename, data, width, height, gt) in provider.iter() {
             let img = ImageView::new(&data, width, height, width).expect("valid image");
-            let (detections, stats) = detector.detect_with_stats_and_options(&img, &self.options);
+            let res = detector.detect_with_stats_and_options(&img, &self.options);
 
             // --- Metrics Calculation ---
             let mut image_rmse_sum = 0.0;
             let mut match_count = 0;
             let mut found_ids = BTreeSet::new();
 
-            for det in &detections {
+            for det in &res.detections {
                 if let Some(gt_corners) = gt.tags.get(&det.id) {
                     let gt_cx: f64 = gt_corners.iter().map(|p| p[0]).sum::<f64>() / 4.0;
                     let gt_cy: f64 = gt_corners.iter().map(|p| p[1]).sum::<f64>() / 4.0;
@@ -228,7 +231,7 @@ impl RegressionHarness {
 
             total_recall += recall;
             total_rmse += avg_rmse;
-            total_time += stats.total_ms;
+            total_time += res.stats.total_ms;
             count += 1;
 
             let mut missed_ids = BTreeSet::new();
@@ -239,7 +242,7 @@ impl RegressionHarness {
             }
 
             let mut extra_ids = BTreeSet::new();
-            for det in &detections {
+            for det in &res.detections {
                 if !found_ids.contains(&det.id) {
                     extra_ids.insert(det.id);
                 }
@@ -250,7 +253,7 @@ impl RegressionHarness {
                 ImageMetrics {
                     recall,
                     avg_rmse,
-                    stats: PipelineMetrics::from(stats),
+                    stats: PipelineMetrics::from(res.stats),
                     missed_ids,
                     extra_ids,
                 },

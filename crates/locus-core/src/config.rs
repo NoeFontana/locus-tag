@@ -178,14 +178,14 @@ impl Default for DetectorConfig {
 impl DetectorConfig {
     /// Create a new builder for `DetectorConfig`.
     #[must_use]
-    pub(crate) fn builder() -> DetectorConfigBuilder {
+    pub fn builder() -> DetectorConfigBuilder {
         DetectorConfigBuilder::default()
     }
 }
 
 /// Builder for [`DetectorConfig`].
 #[derive(Default)]
-pub(crate) struct DetectorConfigBuilder {
+pub struct DetectorConfigBuilder {
     threshold_tile_size: Option<usize>,
     threshold_min_range: Option<u8>,
     enable_bilateral: Option<bool>,
@@ -510,7 +510,7 @@ impl Default for DetectOptions {
 impl DetectOptions {
     /// Create a new builder for `DetectOptions`.
     #[must_use]
-    pub(crate) fn builder() -> DetectOptionsBuilder {
+    pub fn builder() -> DetectOptionsBuilder {
         DetectOptionsBuilder::default()
     }
     /// Create options that decode only the specified tag families.
@@ -539,7 +539,7 @@ impl DetectOptions {
 }
 
 /// Builder for [`DetectOptions`].
-pub(crate) struct DetectOptionsBuilder {
+pub struct DetectOptionsBuilder {
     families: Vec<TagFamily>,
     intrinsics: Option<crate::pose::CameraIntrinsics>,
     tag_size: Option<f64>,

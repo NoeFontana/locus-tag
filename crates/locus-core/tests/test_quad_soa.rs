@@ -1,23 +1,29 @@
-//! Tests for the SoA Quad Extraction.
-
-use locus_core::quad::extract_quads_soa;
+use locus_core::bench_api::*;
+use locus_core::bench_api::DetectionBatch;
 use locus_core::segmentation::LabelResult;
-use locus_core::{DetectionBatch, DetectorConfig, ImageView};
+use locus_core::{DetectorConfig, ImageView};
 
 #[test]
-fn test_extract_quads_soa_interface() {
-    let pixels = vec![0u8; 100 * 100];
-    let img = ImageView::new(&pixels, 100, 100, 100).expect("Failed to create ImageView");
+fn test_quad_extraction_soa_empty() {
+    let mut batch = DetectionBatch::new();
+    let data = vec![0u8; 100 * 100];
+    let img = ImageView::new(&data, 100, 100, 100).unwrap();
+    let config = DetectorConfig::default();
+    
     let labels = vec![0u32; 100 * 100];
     let label_result = LabelResult {
         labels: &labels,
         component_stats: Vec::new(),
     };
-    let config = DetectorConfig::default();
-    let mut batch = DetectionBatch::new();
 
-    // This should fail to compile because extract_quads_soa is not defined yet.
-    let n = extract_quads_soa(&mut batch, &img, &label_result, &config, 1, &img);
+    let n = locus_core::bench_api::extract_quads_soa(
+        &mut batch,
+        &img,
+        &label_result,
+        &config,
+        1,
+        &img
+    );
 
     assert_eq!(n, 0);
 }

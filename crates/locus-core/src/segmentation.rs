@@ -15,7 +15,7 @@ use multiversion::multiversion;
 use rayon::prelude::*;
 
 /// A disjoint-set forest (Union-Find) with path compression and rank optimization.
-pub(crate) struct UnionFind<'a> {
+pub struct UnionFind<'a> {
     parent: &'a mut [u32],
     rank: &'a mut [u8],
 }
@@ -59,7 +59,7 @@ impl<'a> UnionFind<'a> {
 
 /// Bounding box and statistics for a connected component.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct ComponentStats {
+pub struct ComponentStats {
     /// Minimum x coordinate.
     pub min_x: u16,
     /// Maximum x coordinate.
@@ -91,7 +91,7 @@ impl Default for ComponentStats {
 }
 
 /// Result of connected component labeling.
-pub(crate) struct LabelResult<'a> {
+pub struct LabelResult<'a> {
     /// Flat array of pixel labels (row-major).
     pub labels: &'a [u32],
     /// Statistics for each component (indexed by label - 1).
