@@ -1,0 +1,28 @@
+# Implementation Plan: Isolated Developer CLI
+
+## Phase 1: Dependency Refactoring
+Strictly segregate core runtime dependencies from developer tools.
+
+- [ ] Task: Audit `locus` Python package source to confirm core dependencies (ensure only `numpy` is strictly required at runtime).
+- [ ] Task: Update `pyproject.toml` to move `pydantic` and other non-core deps from `project.dependencies` to `[dependency-groups]`.
+- [ ] Task: Add `typer` to the `dev` or `tools` dependency group.
+- [ ] Task: Execute `uv lock` and verify the environment.
+- [ ] Task: Conductor - User Manual Verification 'Phase 1: Dependency Refactoring' (Protocol in workflow.md)
+
+## Phase 2: CLI Scaffolding & Command Integration
+Create the unified entry point and migrate existing scripts.
+
+- [ ] Task: Create `tools/` directory and `tools/cli.py` using `Typer`.
+- [ ] Task: Migrate `scripts/validate_dict_schemas.py` logic to `tools/cli.py` as `validate-dicts` command.
+- [ ] Task: Migrate `scripts/locus_bench.py` logic to `tools/cli.py` as `bench` command.
+- [ ] Task: Migrate `scripts/debug/visualize.py` logic to `tools/cli.py` as `visualize` command.
+- [ ] Task: Conductor - User Manual Verification 'Phase 2: CLI Scaffolding & Command Integration' (Protocol in workflow.md)
+
+## Phase 3: Validation & Cleanup
+Finalize the isolation and remove redundant files.
+
+- [ ] Task: Verify that `uv run tools/cli.py --help` and all subcommands work correctly.
+- [ ] Task: Build a wheel and inspect metadata to ensure developer dependencies are NOT listed.
+- [ ] Task: Remove old script files in `scripts/` that have been migrated.
+- [ ] Task: Update `README.md` or developer docs to point to the new CLI usage.
+- [ ] Task: Conductor - User Manual Verification 'Phase 3: Validation & Cleanup' (Protocol in workflow.md)
