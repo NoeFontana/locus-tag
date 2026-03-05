@@ -2270,7 +2270,7 @@ mod tests {
         engine.apply_threshold(&arena, &img, &stats, &mut binary);
         let label_result =
             label_components_with_stats(&arena, &binary, canvas_size, canvas_size, true);
-        let detections = extract_quads_fast(&arena, &img, &label_result);
+        let detections = extract_quads_fast(&img, &label_result);
 
         let decoder = AprilTag36h11;
         let mut results = Vec::new();

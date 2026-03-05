@@ -16,14 +16,53 @@ use crate::batch::{CandidateState, DetectionBatch, MAX_CANDIDATES, Point2f};
 use crate::config::DetectorConfig;
 use crate::image::ImageView;
 use crate::segmentation::LabelResult;
-use bumpalo::Bump;
-use bumpalo::collections::Vec as BumpVec;
 use multiversion::multiversion;
 use std::cell::RefCell;
 
+/// Thread-local workspace containing pre-allocated vectors to avoid allocation overhead
+/// and ensure L1 cache locality for quad extraction algorithms.
+pub struct QuadWorkspace {
+    /// Buffer for storing the traced contour of a connected component.
+    pub contour: Vec<Point>,
+    /// Buffer for storing the contour after simple collinearity reduction.
+    pub simple_contour: Vec<Point>,
+    /// Buffer used as a manual stack for the Douglas-Peucker simplification algorithm.
+    pub dp_stack: Vec<(usize, usize)>,
+    /// Buffer used to track retained points in the Douglas-Peucker algorithm.
+    pub dp_keep: Vec<bool>,
+    /// Buffer for storing the result of Douglas-Peucker simplification.
+    pub simplified: Vec<Point>,
+    /// Buffer for storing the final reduced quadrilateral polygon.
+    pub reduced: Vec<Point>,
+    /// Buffer used for collecting pixel samples during sub-pixel edge refinement.
+    pub samples: Vec<(f64, f64, f64, f64)>,
+}
+
+impl QuadWorkspace {
+    /// Creates a new `QuadWorkspace` with pre-allocated capacities to avoid runtime allocations.
+    pub fn new() -> Self {
+        Self {
+            contour: Vec::with_capacity(512),
+            simple_contour: Vec::with_capacity(512),
+            dp_stack: Vec::with_capacity(512),
+            dp_keep: Vec::with_capacity(512),
+            simplified: Vec::with_capacity(512),
+            reduced: Vec::with_capacity(512),
+            samples: Vec::with_capacity(128),
+        }
+    }
+}
+
+impl Default for QuadWorkspace {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 thread_local! {
-    /// Thread-local arena for quad extraction tasks to avoid global heap contention.
-    pub(crate) static THREAD_QUAD_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(16384));
+    /// Thread-local workspace for quad extraction tasks to avoid global heap contention
+    /// and maintain L1 cache locality.
+    pub(crate) static THREAD_WORKSPACE: RefCell<QuadWorkspace> = RefCell::new(QuadWorkspace::new());
 }
 
 /// Approximate error function (erf) using the Abramowitz and Stegun approximation.
@@ -58,11 +97,10 @@ pub struct Point {
 /// Only traces contours for components that pass geometric filters.
 /// Uses default configuration.
 pub fn extract_quads_fast(
-    arena: &Bump,
     img: &ImageView,
     label_result: &LabelResult,
 ) -> Vec<Detection> {
-    extract_quads_with_config(arena, img, label_result, &DetectorConfig::default(), 1, img)
+    extract_quads_with_config(img, label_result, &DetectorConfig::default(), 1, img)
 }
 
 /// Quad extraction with Structure of Arrays (SoA) output.
@@ -123,11 +161,10 @@ pub fn extract_quads_soa(
         .with_min_len(2)
         .enumerate()
         .for_each(|(label_idx, stat)| {
-            THREAD_QUAD_ARENA.with_borrow_mut(|arena| {
-                arena.reset();
+            THREAD_WORKSPACE.with_borrow_mut(|workspace| {
                 let label = (label_idx + 1) as u32;
                 if let Some(corners) = extract_single_quad(
-                    arena,
+                    workspace,
                     img,
                     label_result.labels,
                     label,
@@ -173,7 +210,7 @@ pub fn extract_quads_soa(
 #[inline]
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 pub fn extract_single_quad(
-    arena: &Bump,
+    workspace: &mut QuadWorkspace,
     img: &ImageView,
     labels: &[u32],
     label: u32,
@@ -215,40 +252,38 @@ pub fn extract_single_quad(
     let sx = stat.first_pixel_x as usize;
     let sy = stat.first_pixel_y as usize;
 
-    let contour = trace_boundary(arena, labels, img.width, img.height, sx, sy, label);
+    trace_boundary(&mut workspace.contour, labels, img.width, img.height, sx, sy, label);
 
-    if contour.len() < 12 {
+    if workspace.contour.len() < 12 {
         return None;
     }
 
-    let simple_contour = chain_approximation(arena, &contour);
-    let perimeter = contour.len() as f64;
+    chain_approximation(&mut workspace.simple_contour, &workspace.contour);
+    let perimeter = workspace.contour.len() as f64;
     let epsilon = (perimeter * 0.02).max(1.0);
-    let simplified = douglas_peucker(arena, &simple_contour, epsilon);
+    douglas_peucker(&mut workspace.simplified, &mut workspace.dp_stack, &mut workspace.dp_keep, &workspace.simple_contour, epsilon);
 
-    if simplified.len() < 4 || simplified.len() > 11 {
+    if workspace.simplified.len() < 4 || workspace.simplified.len() > 11 {
         return None;
     }
 
-    let simpl_len = simplified.len();
-    let reduced = if simpl_len == 5 {
-        simplified
+    let simpl_len = workspace.simplified.len();
+    if simpl_len == 5 {
+        workspace.reduced.clear();
+        workspace.reduced.extend_from_slice(&workspace.simplified);
     } else if simpl_len == 4 {
-        let mut closed = BumpVec::new_in(arena);
-        for p in &simplified {
-            closed.push(*p);
-        }
-        closed.push(simplified[0]);
-        closed
+        workspace.reduced.clear();
+        workspace.reduced.extend_from_slice(&workspace.simplified);
+        workspace.reduced.push(workspace.simplified[0]);
     } else {
-        reduce_to_quad(arena, &simplified)
-    };
+        reduce_to_quad(&mut workspace.reduced, &workspace.simplified);
+    }
 
-    if reduced.len() != 5 {
+    if workspace.reduced.len() != 5 {
         return None;
     }
 
-    let area = polygon_area(&reduced);
+    let area = polygon_area(&workspace.reduced);
     let compactness = (12.566 * area.abs()) / (perimeter * perimeter);
 
     if area.abs() <= f64::from(config.quad_min_area) || compactness <= 0.1 {
@@ -257,9 +292,9 @@ pub fn extract_single_quad(
 
     // Standardize to CW for consistency
     let quad_pts_dec = if area > 0.0 {
-        [reduced[0], reduced[1], reduced[2], reduced[3]]
+        [workspace.reduced[0], workspace.reduced[1], workspace.reduced[2], workspace.reduced[3]]
     } else {
-        [reduced[0], reduced[3], reduced[2], reduced[1]]
+        [workspace.reduced[0], workspace.reduced[3], workspace.reduced[2], workspace.reduced[1]]
     };
 
     // Pre-scale pruning: check edge lengths on decimated unscaled coordinates first
@@ -297,7 +332,7 @@ pub fn extract_single_quad(
         ];
         let corners = [
             refine_corner(
-                arena,
+                &mut workspace.samples,
                 refinement_img,
                 quad_pts[0],
                 quad_pts[3],
@@ -306,7 +341,7 @@ pub fn extract_single_quad(
                 decimation,
             ),
             refine_corner(
-                arena,
+                &mut workspace.samples,
                 refinement_img,
                 quad_pts[1],
                 quad_pts[0],
@@ -315,7 +350,7 @@ pub fn extract_single_quad(
                 decimation,
             ),
             refine_corner(
-                arena,
+                &mut workspace.samples,
                 refinement_img,
                 quad_pts[2],
                 quad_pts[1],
@@ -324,7 +359,7 @@ pub fn extract_single_quad(
                 decimation,
             ),
             refine_corner(
-                arena,
+                &mut workspace.samples,
                 refinement_img,
                 quad_pts[3],
                 quad_pts[2],
@@ -348,7 +383,6 @@ pub fn extract_single_quad(
 /// Components are processed in parallel for maximum throughput.
 #[allow(clippy::too_many_lines)]
 pub fn extract_quads_with_config(
-    _arena: &Bump,
     img: &ImageView,
     label_result: &LabelResult,
     config: &DetectorConfig,
@@ -367,12 +401,11 @@ pub fn extract_quads_with_config(
         .with_min_len(2)
         .enumerate()
         .filter_map(|(label_idx, stat)| {
-            THREAD_QUAD_ARENA.with_borrow_mut(|arena| {
-                arena.reset();
+            THREAD_WORKSPACE.with_borrow_mut(|workspace| {
                 let label = (label_idx + 1) as u32;
 
                 if let Some(corners) = extract_single_quad(
-                    arena,
+                    workspace,
                     img,
                     label_result.labels,
                     label,
@@ -412,11 +445,12 @@ pub fn extract_quads_with_config(
 }
 
 /// Legacy extract_quads for backward compatibility.
-pub fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detection> {
+pub fn extract_quads(img: &ImageView, labels: &[u32]) -> Vec<Detection> {
     // Create a fake LabelResult with stats computed on-the-fly
     let mut detections = Vec::new();
     let num_labels = (labels.len() / 32) + 1;
-    let processed_labels = arena.alloc_slice_fill_copy(num_labels, 0u32);
+    let mut processed_labels = vec![0u32; num_labels];
+    let mut workspace = QuadWorkspace::new();
 
     let width = img.width;
     let height = img.height;
@@ -444,14 +478,15 @@ pub fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detec
             }
 
             processed_labels[bit_idx] |= bit_mask;
-            let contour = trace_boundary(arena, labels, width, height, x, y, label);
+            trace_boundary(&mut workspace.contour, labels, width, height, x, y, label);
 
-            if contour.len() >= 12 {
+            if workspace.contour.len() >= 12 {
                 // Lowered from 30 to support 8px+ tags
-                let simplified = douglas_peucker(arena, &contour, 4.0);
+                douglas_peucker(&mut workspace.simplified, &mut workspace.dp_stack, &mut workspace.dp_keep, &workspace.contour, 4.0);
+                let simplified = &workspace.simplified;
                 if simplified.len() == 5 {
                     let area = polygon_area(&simplified);
-                    let perimeter = contour.len() as f64;
+                    let perimeter = workspace.contour.len() as f64;
                     let compactness = (12.566 * area) / (perimeter * perimeter);
 
                     if area > 400.0 && compactness > 0.5 {
@@ -610,19 +645,26 @@ fn find_max_distance_optimized(points: &[Point], start: usize, end: usize) -> (f
 ///
 /// Leverages an iterative implementation with a manual stack to avoid
 /// the overhead of recursive function calls and multiple temporary allocations.
-pub fn douglas_peucker<'a>(arena: &'a Bump, points: &[Point], epsilon: f64) -> BumpVec<'a, Point> {
+pub fn douglas_peucker(
+    simplified: &mut Vec<Point>,
+    stack: &mut Vec<(usize, usize)>,
+    keep: &mut Vec<bool>,
+    points: &[Point],
+    epsilon: f64,
+) {
+    simplified.clear();
     if points.len() < 3 {
-        let mut v = BumpVec::new_in(arena);
-        v.extend_from_slice(points);
-        return v;
+        simplified.extend_from_slice(points);
+        return;
     }
 
     let n = points.len();
-    let mut keep = BumpVec::from_iter_in((0..n).map(|_| false), arena);
+    keep.clear();
+    keep.resize(n, false);
     keep[0] = true;
     keep[n - 1] = true;
 
-    let mut stack = BumpVec::new_in(arena);
+    stack.clear();
     stack.push((0, n - 1));
 
     while let Some((start, end)) = stack.pop() {
@@ -639,13 +681,11 @@ pub fn douglas_peucker<'a>(arena: &'a Bump, points: &[Point], epsilon: f64) -> B
         }
     }
 
-    let mut simplified = BumpVec::new_in(arena);
     for (i, &k) in keep.iter().enumerate() {
         if k {
             simplified.push(points[i]);
         }
     }
-    simplified
 }
 
 fn perpendicular_distance(p: Point, a: Point, b: Point) -> f64 {
@@ -684,7 +724,7 @@ fn polygon_center(points: &[Point]) -> [f64; 2] {
 /// Achieves ~0.02px accuracy vs ~0.2px for gradient-peak methods.
 #[must_use]
 pub fn refine_corner(
-    arena: &Bump,
+    samples: &mut Vec<(f64, f64, f64, f64)>,
     img: &ImageView,
     p: Point,
     p_prev: Point,
@@ -693,9 +733,9 @@ pub fn refine_corner(
     decimation: usize,
 ) -> Point {
     // Try intensity-based refinement first (higher accuracy)
-    let line1 = refine_edge_intensity(arena, img, p_prev, p, sigma, decimation)
+    let line1 = refine_edge_intensity(samples, img, p_prev, p, sigma, decimation)
         .or_else(|| fit_edge_line(img, p_prev, p, decimation));
-    let line2 = refine_edge_intensity(arena, img, p, p_next, sigma, decimation)
+    let line2 = refine_edge_intensity(samples, img, p, p_next, sigma, decimation)
         .or_else(|| fit_edge_line(img, p, p_next, decimation));
 
     if let (Some(l1), Some(l2)) = (line1, line2) {
@@ -817,7 +857,7 @@ fn fit_edge_line(
 #[allow(clippy::similar_names)]
 // Collected in the quad extraction process
 fn refine_edge_intensity(
-    arena: &Bump,
+    samples: &mut Vec<(f64, f64, f64, f64)>,
     img: &ImageView,
     p1: Point,
     p2: Point,
@@ -850,9 +890,9 @@ fn refine_edge_intensity(
     let y0 = (p1.y.min(p2.y) - window - 0.5).max(1.0) as usize;
     let y1 = (p1.y.max(p2.y) + window + 0.5).min((img.height - 2) as f64) as usize;
 
-    // Use arena for samples to avoid heap allocation in hot loop
+    // Use workspace samples to avoid heap allocation in hot loop
     // (x, y, intensity, projection)
-    let mut samples = BumpVec::new_in(arena);
+    samples.clear();
 
     // For large edges, use subsampling to reduce compute while maintaining accuracy
     // Stride of 2 for very large edges (>100px), else 1
@@ -895,7 +935,7 @@ fn refine_edge_intensity(
     let mut light_sum = 0.0;
     let mut light_weight = 0.0;
 
-    for &(_x, _y, intensity, projection) in &samples {
+    for &(_x, _y, intensity, projection) in samples.iter() {
         let signed_dist = projection + d;
         if signed_dist < -1.0 {
             let w = (-signed_dist - 1.0).min(2.0); // Weight pixels further from edge more
@@ -922,8 +962,8 @@ fn refine_edge_intensity(
         let mut jtj = 0.0;
         let mut jtr = 0.0;
 
-        for &(_x, _y, intensity, projection) in &samples {
-            let signed_dist = (projection + d) * inv_sigma;
+        for &(_x, _y, intensity, projection) in samples.iter() {
+            let signed_dist: f64 = (projection + d) * inv_sigma;
             if signed_dist.abs() > 3.0 {
                 continue;
             } // Only use samples near the edge
@@ -955,13 +995,14 @@ fn refine_edge_intensity(
 /// Reducing a polygon to a quad (4 vertices + 1 closing) by iteratively removing
 /// the vertex that forms the smallest area triangle with its neighbors.
 /// This is robust for noisy/jagged shapes that are approximately quadrilateral.
-fn reduce_to_quad<'a>(arena: &'a Bump, poly: &[Point]) -> BumpVec<'a, Point> {
-    if poly.len() <= 5 {
-        return BumpVec::from_iter_in(poly.iter().copied(), arena);
+fn reduce_to_quad(current: &mut Vec<Point>, poly: &[Point]) {
+    current.clear();
+    current.extend_from_slice(poly);
+
+    if current.len() <= 5 {
+        return;
     }
 
-    // Work on a mutable copy
-    let mut current = BumpVec::from_iter_in(poly.iter().copied(), arena);
     // Remove closing point for processing
     current.pop();
 
@@ -997,8 +1038,6 @@ fn reduce_to_quad<'a>(arena: &'a Bump, poly: &[Point]) -> BumpVec<'a, Point> {
         let first = current[0];
         current.push(first);
     }
-
-    current
 }
 
 /// Calculate the minimum average gradient magnitude along the 4 edges of the quad.
@@ -1113,9 +1152,11 @@ mod tests {
             points in prop::collection::vec((0.0..1000.0, 0.0..1000.0), 3..100),
             epsilon in 0.1..10.0f64
         ) {
-            let arena = Bump::new();
             let contour: Vec<Point> = points.iter().map(|&(x, y)| Point { x, y }).collect();
-            let simplified = douglas_peucker(&arena, &contour, epsilon);
+            let mut simplified = Vec::new();
+            let mut dp_stack = Vec::new();
+            let mut dp_keep = Vec::new();
+            douglas_peucker(&mut simplified, &mut dp_stack, &mut dp_keep, &contour, epsilon);
 
             // 1. Simplified points are a subset of original points (by coordinates)
             for p in &simplified {
@@ -1189,7 +1230,7 @@ mod tests {
         engine.apply_threshold(&arena, &img, &stats, &mut binary);
         let label_result =
             label_components_with_stats(&arena, &binary, canvas_size, canvas_size, true);
-        let detections = extract_quads_fast(&arena, &img, &label_result);
+        let detections = extract_quads_fast(&img, &label_result);
 
         (detections, corners)
     }
@@ -1368,7 +1409,6 @@ mod tests {
     /// and verifies that refine_corner recovers the position within 0.05 pixels.
     #[test]
     fn test_refine_corner_subpixel_accuracy() {
-        let arena = Bump::new();
         let width = 60;
         let height = 60;
         let sigma = 0.6; // Default PSF sigma
@@ -1405,7 +1445,8 @@ mod tests {
                 y: true_y.round(),
             };
 
-            let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1);
+            let mut samples = Vec::new();
+            let refined = refine_corner(&mut samples, &img, init_p, p_prev, p_next, sigma, 1);
 
             let error_x = (refined.x - true_x).abs();
             let error_y = (refined.y - true_y).abs();
@@ -1428,7 +1469,6 @@ mod tests {
     /// Test refine_corner on a simple vertical edge to verify edge localization.
     #[test]
     fn test_refine_corner_vertical_edge() {
-        let arena = Bump::new();
         let width = 40;
         let height = 40;
         let sigma = 0.6;
@@ -1454,7 +1494,8 @@ mod tests {
             y: corner_y,
         };
 
-        let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1);
+        let mut samples = Vec::new();
+        let refined = refine_corner(&mut samples, &img, init_p, p_prev, p_next, sigma, 1);
 
         // The x-coordinate should be refined to near the true edge position
         // y-coordinate depends on the horizontal edge (which doesn't exist in this test)
@@ -1482,16 +1523,16 @@ mod tests {
 ///
 /// This implementation uses a state-machine based approach to follow the border
 /// of a connected component. Uses precomputed offsets for speed.
-fn trace_boundary<'a>(
-    arena: &'a Bump,
+fn trace_boundary(
+    points: &mut Vec<Point>,
     labels: &[u32],
     width: usize,
     height: usize,
     start_x: usize,
     start_y: usize,
     target_label: u32,
-) -> BumpVec<'a, Point> {
-    let mut points = BumpVec::new_in(arena);
+) {
+    points.clear();
 
     // Precompute offsets for Moore neighborhood (CW order starting from Top)
     // This avoids repeated multiplication in the hot loop
@@ -1548,20 +1589,16 @@ fn trace_boundary<'a>(
             break;
         }
     }
-
-    points
 }
 
 /// Simplified version of CHAIN_APPROX_SIMPLE:
 /// Removes all redundant points on straight lines.
-pub fn chain_approximation<'a>(arena: &'a Bump, points: &[Point]) -> BumpVec<'a, Point> {
+pub fn chain_approximation(result: &mut Vec<Point>, points: &[Point]) {
+    result.clear();
     if points.len() < 3 {
-        let mut v = BumpVec::new_in(arena);
-        v.extend_from_slice(points);
-        return v;
+        result.extend_from_slice(points);
+        return;
     }
-
-    let mut result = BumpVec::new_in(arena);
     result.push(points[0]);
 
     for i in 1..points.len() - 1 {
@@ -1582,5 +1619,4 @@ pub fn chain_approximation<'a>(arena: &'a Bump, points: &[Point]) -> BumpVec<'a,
     }
 
     result.push(*points.last().unwrap_or(&points[0]));
-    result
 }
