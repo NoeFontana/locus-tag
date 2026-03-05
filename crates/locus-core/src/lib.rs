@@ -38,7 +38,7 @@ pub mod test_utils;
 pub mod threshold;
 
 // Re-exports for the public API
-pub use crate::config::{DetectOptions, DetectorConfig, TagFamily};
+pub use crate::config::{DetectOptions, DetectorConfig, PoseEstimationMode, TagFamily};
 pub use crate::detector::{Detector, DetectorBuilder};
 pub use crate::image::ImageView;
 pub use crate::pose::CameraIntrinsics;

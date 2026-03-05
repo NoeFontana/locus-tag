@@ -1,4 +1,4 @@
-use locus_core::{Detector, DetectorBuilder, TagFamily, ImageView};
+use locus_core::{PoseEstimationMode, Detector, DetectorBuilder, TagFamily, ImageView};
 
 #[cfg(feature = "bench-internals")]
 use locus_core::bench_api::*;
@@ -23,7 +23,7 @@ fn test_detector_new_default() {
     // Test detection on empty image
     let data = vec![0u8; 100 * 100];
     let img = ImageView::new(&data, 100, 100, 100).unwrap();
-    let detections = detector.detect(&img);
+    let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
     assert!(detections.is_empty());
 }
 
@@ -46,7 +46,7 @@ fn test_detector_multiple_families() {
             0.0,
         );
         let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
-        let detections = detector.detect(&img);
+        let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
         assert_eq!(detections.len(), 1);
         assert_eq!(detections[0].id, 0);
 
@@ -59,7 +59,7 @@ fn test_detector_multiple_families() {
             0.0,
         );
         let img2 = ImageView::new(&data2, canvas_size, canvas_size, canvas_size).unwrap();
-        let detections2 = detector.detect(&img2);
+        let detections2 = detector.detect(&img2, None, None, PoseEstimationMode::Fast);
         assert_eq!(detections2.len(), 1);
         assert_eq!(detections2[0].id, 5);
     }
@@ -82,7 +82,7 @@ fn test_detector_decimation() {
             0.0,
         );
         let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
-        let detections = detector.detect(&img);
+        let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
         assert_eq!(detections.len(), 1);
     }
 }

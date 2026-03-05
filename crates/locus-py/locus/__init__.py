@@ -51,6 +51,11 @@ class DetectionBatch:
     error_rates: np.ndarray  # Shape: (N,), Dtype: float32
     poses: Optional[np.ndarray] = None  # Shape: (N, 7), Dtype: float32. [tx, ty, tz, qx, qy, qz, qw]
 
+    @property
+    def centers(self) -> np.ndarray:
+        """Compute centers from corners: (N, 2)"""
+        return np.mean(self.corners, axis=1)
+
     def __len__(self) -> int:
         return len(self.ids)
 

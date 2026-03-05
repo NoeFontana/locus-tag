@@ -22,7 +22,7 @@ use locus_core::bench_api::*;
 )]
 
 use locus_core::image::ImageView;
-use locus_core::{DetectOptions, Detector, DetectorConfig, PipelineStats, config::TagFamily};
+use locus_core::{PoseEstimationMode, DetectOptions, Detector, DetectorConfig, PipelineStats, config::TagFamily};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;

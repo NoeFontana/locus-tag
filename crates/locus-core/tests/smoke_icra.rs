@@ -1,5 +1,5 @@
 use locus_core::bench_api::*;
-use locus_core::{Detector, DetectOptions, TagFamily, ImageView};
+use locus_core::{PoseEstimationMode, Detector, DetectOptions, TagFamily, ImageView};
 
 #[cfg(feature = "bench-internals")]
 

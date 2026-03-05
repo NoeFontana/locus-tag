@@ -1,5 +1,5 @@
 use locus_core::bench_api::*;
-use locus_core::{DetectorConfig, ImageView, TagFamily};
+use locus_core::{PoseEstimationMode, DetectorConfig, ImageView, TagFamily};
 
 #[test]
 fn test_decoding_soa_empty() {

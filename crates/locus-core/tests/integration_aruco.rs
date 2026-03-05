@@ -1,3 +1,4 @@
+use locus_core::PoseEstimationMode;
 use locus_core::bench_api::*;
 #[cfg(feature = "bench-internals")]
 // Integration test for ArUco 4x4_50 tag detection.
@@ -28,7 +29,7 @@ fn test_aruco_4x4_50_detection() {
 
     let mut detector = Detector::new();
     detector.set_families(&[FAMILY]);
-    let results = detector.detect(&img);
+    let results = detector.detect(&img, None, None, PoseEstimationMode::Fast);
 
     assert_eq!(results.len(), 1, "Should detect exactly 1 ArUco tag");
     assert_eq!(results[0].id, u32::from(TAG_ID), "Detected ID should match");
@@ -53,7 +54,7 @@ fn test_aruco_multiple_ids() {
         );
         let img = locus_core::image::ImageView::new(&data, CANVAS_SIZE, CANVAS_SIZE, CANVAS_SIZE)
             .unwrap();
-        let results = detector.detect(&img);
+        let results = detector.detect(&img, None, None, PoseEstimationMode::Fast);
 
         assert_eq!(results.len(), 1, "Should detect tag ID {tag_id}");
         assert_eq!(

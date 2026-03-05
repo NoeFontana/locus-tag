@@ -1,5 +1,5 @@
 use locus_core::bench_api::*;
-use locus_core::{Detector, DetectorBuilder, TagFamily, ImageView};
+use locus_core::{PoseEstimationMode, Detector, DetectorBuilder, TagFamily, ImageView};
 
 #[cfg(feature = "bench-internals")]
 
@@ -28,7 +28,7 @@ fn test_accuracy_synthetic() {
             let mut detector = DetectorBuilder::new()
                 .with_family(family)
                 .build();
-            let detections = detector.detect(&img);
+            let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
 
             assert!(!detections.is_empty());
             let det = &detections[0];
@@ -62,7 +62,7 @@ fn test_pose_accuracy() {
         let mut detector = DetectorBuilder::new()
             .with_family(family)
             .build();
-        let detections = detector.detect(&img);
+        let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
 
         assert!(!detections.is_empty());
         let det = &detections[0];

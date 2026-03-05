@@ -1,7 +1,7 @@
 use locus_core::bench_api::*;
 use locus_core::bench_api::DetectionBatch;
 use locus_core::segmentation::LabelResult;
-use locus_core::{DetectorConfig, ImageView};
+use locus_core::{PoseEstimationMode, DetectorConfig, ImageView};
 
 #[test]
 fn test_quad_extraction_soa_empty() {
