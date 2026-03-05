@@ -396,6 +396,7 @@ unsafe fn extract_runs_row_neon(
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::cast_sign_loss)]
 #[allow(clippy::cast_possible_wrap, clippy::too_many_arguments)]
+#[tracing::instrument(skip_all, name = "pipeline::segmentation")]
 pub fn label_components_threshold_model<'a>(
     arena: &'a Bump,
     grayscale: &[u8],

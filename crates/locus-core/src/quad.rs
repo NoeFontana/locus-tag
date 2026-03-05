@@ -65,6 +65,7 @@ pub(crate) fn extract_quads_fast(
 /// This function populates the `corners` and `status_mask` fields of the provided `DetectionBatch`.
 /// It returns the total number of candidates found ($N$).
 #[allow(clippy::too_many_lines)]
+#[tracing::instrument(skip_all, name = "pipeline::quad_extraction")]
 pub fn extract_quads_soa(
     batch: &mut DetectionBatch,
     img: &ImageView,
