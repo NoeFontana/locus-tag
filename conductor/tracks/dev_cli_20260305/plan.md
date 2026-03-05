@@ -13,7 +13,7 @@ Strictly segregate core runtime dependencies from developer tools.
 ## Phase 2: CLI Scaffolding & Command Integration
 Create the unified entry point and migrate existing scripts.
 
-- [ ] Task: Create `tools/` directory and `tools/cli.py` using `Typer`.
+- - [~] Task: Create `tools/` directory and `tools/cli.py` using `Typer`.
 - [ ] Task: Migrate `scripts/validate_dict_schemas.py` logic to `tools/cli.py` as `validate-dicts` command.
 - [ ] Task: Migrate `scripts/locus_bench.py` logic to `tools/cli.py` as `bench` command.
 - [ ] Task: Migrate `scripts/debug/visualize.py` logic to `tools/cli.py` as `visualize` command.
