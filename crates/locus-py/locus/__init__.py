@@ -1,3 +1,8 @@
+from dataclasses import dataclass
+from typing import Optional, List
+import enum
+import numpy as np
+
 from ._config import DetectOptions, DetectorConfig
 from .locus import (
     SegmentationConnectivity as _SegmentationConnectivity,
@@ -9,8 +14,6 @@ from .locus import (
     create_detector as _create_detector,
     init_tracy,
 )
-import enum
-import numpy as np
 
 class TagFamily(enum.IntEnum):
     AprilTag36h11 = 0
@@ -36,52 +39,20 @@ class PoseEstimationMode(enum.IntEnum):
     Fast = 0
     Accurate = 1
 
-class Result:
+@dataclass(frozen=True)
+class DetectionBatch:
     """
     Vectorized detection results.
+    
+    This dataclass contains parallel NumPy arrays representing a batch of detections.
     """
-    def __init__(self, data: dict):
-        self._data = data
+    ids: np.ndarray  # Shape: (N,), Dtype: int32
+    corners: np.ndarray  # Shape: (N, 4, 2), Dtype: float32
+    error_rates: np.ndarray  # Shape: (N,), Dtype: float32
+    poses: Optional[np.ndarray] = None  # Shape: (N, 4, 4), Dtype: float32
 
-    @property
-    def ids(self) -> np.ndarray:
-        return self._data["ids"]
-
-    @property
-    def centers(self) -> np.ndarray:
-        return self._data["centers"]
-
-    @property
-    def corners(self) -> np.ndarray:
-        return self._data["corners"]
-
-    @property
-    def hamming(self) -> np.ndarray:
-        return self._data["hamming"]
-
-    @property
-    def decision_margin(self) -> np.ndarray:
-        return self._data["decision_margin"]
-
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.ids)
-
-    def to_dict(self) -> dict:
-        return self._data
-
-    def to_list(self) -> list:
-        n = len(self)
-        res = []
-        for i in range(n):
-            d = {
-                "id": self.ids[i],
-                "center": self.centers[i],
-                "corners": self.corners[i],
-                "hamming": self.hamming[i],
-                "decision_margin": self.decision_margin[i],
-            }
-            res.append(d)
-        return res
 
 class Detector:
     def __init__(self, decimation: int = 1, threads: int = 0, families: list[TagFamily] = None, **kwargs):
@@ -103,9 +74,11 @@ class Detector:
             **rust_kwargs
         )
 
-    def detect(self, img: np.ndarray) -> Result:
+    def detect(self, img: np.ndarray) -> DetectionBatch:
         res_dict = self._inner.detect(img)
-        return Result(res_dict)
+        # This will currently fail to construct DetectionBatch correctly 
+        # until the Rust side is updated to return the expected dictionary keys.
+        return DetectionBatch(**res_dict)
 
 __all__ = [
     "Detector",
@@ -118,6 +91,6 @@ __all__ = [
     "Pose",
     "DetectorConfig",
     "DetectOptions",
-    "Result",
+    "DetectionBatch",
     "init_tracy",
 ]
