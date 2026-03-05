@@ -219,6 +219,7 @@ Locus includes built-in instrumentation for performance profiling and visual deb
 
 1.  **Tracing**: Uses the `tracing` crate to emit spans for every pipeline stage, allowing integration with `tracy` or `perfetto`.
 2.  **Visual Debugging (Rerun)**: When enabled, Locus logs intermediate processing artifacts (threshold images, candidate quads, geometric fits) to the Rerun SDK for real-time inspection.
+3.  **Developer CLI**: Provides a unified `tools/cli.py` (executed via `uv run`) for benchmarking, visualization, and dictionary validation, ensuring developer tools remain isolated from the core package.
 
 ## Performance Characteristics
 
