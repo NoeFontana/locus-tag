@@ -21,9 +21,9 @@
     - Use `#[tracing::instrument(skip_all, name = "pipeline::pose_refinement")]`.
 - [x] Task: Conductor - User Manual Verification 'Core Pipeline Instrumentation' (Protocol in workflow.md)
 
-## Phase 3: Hot-Path Optimization & Validation
-- [~] Task: Audit and convert/remove dynamic logs (`info!`, `debug!`) in instrumented stages.
+## Phase 3: Hot-Path Optimization & Validation [checkpoint: b9d6fad]
+- [x] Task: Audit and convert/remove dynamic logs (`info!`, `debug!`) in instrumented stages. 9596b28
     - Ensure no `format!` or string manipulation remains in the hot loop.
-- [ ] Task: Verify zero-cost erasure by inspecting assembly or comparing benchmark results.
-- [ ] Task: Confirm Tracy visual profiling works as expected with `--features tracy`.
-- [ ] Task: Conductor - User Manual Verification 'Hot-Path Optimization & Validation' (Protocol in workflow.md)
+- [x] Task: Verify zero-cost erasure by inspecting assembly or comparing benchmark results. 9596b28
+- [x] Task: Confirm Tracy visual profiling works as expected with `--features tracy`. 9596b28
+- [x] Task: Conductor - User Manual Verification 'Hot-Path Optimization & Validation' (Protocol in workflow.md)
