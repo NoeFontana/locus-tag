@@ -206,6 +206,10 @@ def bench_real(
     save_baseline: Optional[Path] = typer.Option(None, help="Path to save results as baseline"),
     profile: bool = typer.Option(False, help="Enable Tracy profiling"),
     family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
+    refinement: str = typer.Option("Edge", help="Refinement mode (None, Edge, GridFit, Erf)"),
+    tile_size: int = typer.Option(4, help="Threshold tile size"),
+    constant: int = typer.Option(3, help="Adaptive threshold constant"),
+    min_fill: float = typer.Option(0.30, help="Min quad fill ratio"),
 ):
     """Run benchmarks on real-world datasets (ICRA)."""
     if profile:
@@ -227,6 +231,14 @@ def bench_real(
         typer.echo(f"Error: Unknown tag family '{family}'", err=True)
         raise typer.Exit(code=1)
 
+    refinement_mapping = {
+        "None": getattr(locus.CornerRefinementMode, "None"),
+        "Edge": locus.CornerRefinementMode.Edge,
+        "GridFit": locus.CornerRefinementMode.GridFit,
+        "Erf": locus.CornerRefinementMode.Erf,
+    }
+    refinement_mode = refinement_mapping.get(refinement, locus.CornerRefinementMode.Edge)
+
     loader = DatasetLoader()
     wrappers: List[LibraryWrapper] = []
 
@@ -235,6 +247,10 @@ def bench_real(
         decode_mode=locus.DecodeMode.Soft,
         enable_sharpening=True,
         upscale_factor=1,
+        refinement_mode=refinement_mode,
+        threshold_tile_size=tile_size,
+        adaptive_threshold_constant=constant,
+        quad_min_fill_ratio=min_fill,
     )
     wrappers.append(LocusWrapper(name="Locus (Soft)", config=soft_config, decimation=decimation, family=tag_family_int))
 
@@ -243,6 +259,10 @@ def bench_real(
         decode_mode=locus.DecodeMode.Hard,
         enable_sharpening=True,
         upscale_factor=1,
+        refinement_mode=refinement_mode,
+        threshold_tile_size=tile_size,
+        adaptive_threshold_constant=constant,
+        quad_min_fill_ratio=min_fill,
     )
     wrappers.append(LocusWrapper(name="Locus (Hard)", config=hard_config, decimation=decimation, family=tag_family_int))
 

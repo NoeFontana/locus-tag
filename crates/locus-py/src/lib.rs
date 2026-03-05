@@ -148,7 +148,7 @@ pub struct PyPose {
 // Detector class
 // ============================================================================
 
-#[pyclass]
+#[pyclass(unsendable)]
 pub struct Detector {
     inner: locus_core::Detector,
 }
@@ -264,6 +264,30 @@ fn create_detector(
     if let Some(args) = kwargs {
         if let Some(val) = args.get_item("upscale_factor")? {
             builder = builder.with_upscale_factor(val.extract()?);
+        }
+        if let Some(val) = args.get_item("threshold_tile_size")? {
+            builder = builder.with_threshold_tile_size(val.extract()?);
+        }
+        if let Some(val) = args.get_item("threshold_min_range")? {
+            builder = builder.with_threshold_min_range(val.extract()?);
+        }
+        if let Some(val) = args.get_item("adaptive_threshold_constant")? {
+            builder = builder.with_adaptive_threshold_constant(val.extract()?);
+        }
+        if let Some(val) = args.get_item("quad_min_area")? {
+            builder = builder.with_quad_min_area(val.extract()?);
+        }
+        if let Some(val) = args.get_item("quad_min_fill_ratio")? {
+            builder = builder.with_quad_min_fill_ratio(val.extract()?);
+        }
+        if let Some(val) = args.get_item("quad_min_edge_score")? {
+            builder = builder.with_quad_min_edge_score(val.extract()?);
+        }
+        if let Some(val) = args.get_item("decoder_min_contrast")? {
+            builder = builder.with_decoder_min_contrast(val.extract()?);
+        }
+        if let Some(val) = args.get_item("max_hamming_error")? {
+            builder = builder.with_max_hamming_error(val.extract()?);
         }
         if let Some(val) = args.get_item("refinement_mode")? {
             let i: i32 = val.extract()?;

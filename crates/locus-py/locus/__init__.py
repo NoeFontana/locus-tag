@@ -37,29 +37,56 @@ class DetectionBatch:
         return len(self.ids)
 
 class Detector:
-    def __init__(self, decimation: int = 1, threads: int = 0, families: list[TagFamily] = None, **kwargs):
+    def __init__(
+        self,
+        decimation: int = 1,
+        threads: int = 0,
+        families: list[TagFamily] = None,
+        threshold_tile_size: int = 4,
+        threshold_min_range: int = 10,
+        adaptive_threshold_constant: int = 3,
+        quad_min_area: int = 16,
+        quad_min_fill_ratio: float = 0.30,
+        quad_min_edge_score: float = 0.0,
+        decoder_min_contrast: float = 20.0,
+        max_hamming_error: int = 2,
+        **kwargs
+    ):
         # Map enum to int values for Rust. Rust expects a Vec<i32>.
         if families is None:
             families = [TagFamily.AprilTag36h11]
         
         family_values = [int(f) for f in families]
         
+        # Merge explicit args into kwargs for create_detector
+        rust_kwargs = {
+            "threshold_tile_size": threshold_tile_size,
+            "threshold_min_range": threshold_min_range,
+            "adaptive_threshold_constant": adaptive_threshold_constant,
+            "quad_min_area": quad_min_area,
+            "quad_min_fill_ratio": quad_min_fill_ratio,
+            "quad_min_edge_score": quad_min_edge_score,
+            "decoder_min_contrast": decoder_min_contrast,
+            "max_hamming_error": max_hamming_error,
+        }
+        rust_kwargs.update(kwargs)
+
         # Prepare kwargs for Rust by converting enums to ints
-        rust_kwargs = {}
-        for k, v in kwargs.items():
+        final_rust_kwargs = {}
+        for k, v in rust_kwargs.items():
             # PyO3 enums might not inherit from enum.Enum but are int-convertible
             if hasattr(v, "__int__"):
-                rust_kwargs[k] = int(v)
+                final_rust_kwargs[k] = int(v)
             elif isinstance(v, enum.Enum):
-                rust_kwargs[k] = v.value
+                final_rust_kwargs[k] = v.value
             else:
-                rust_kwargs[k] = v
+                final_rust_kwargs[k] = v
 
         self._inner = _create_detector(
             decimation=decimation,
             threads=threads,
             families=family_values,
-            **rust_kwargs
+            **final_rust_kwargs
         )
 
     def detect(self, img: np.ndarray, **kwargs) -> DetectionBatch:

@@ -205,23 +205,23 @@ fn extract_single_quad(
         [reduced[0], reduced[3], reduced[2], reduced[1]]
     };
 
-    // Scale to full resolution using center-aware mapping
+    // Scale to full resolution using simple linear mapping
     let quad_pts = [
         Point {
-            x: (quad_pts_dec[0].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[0].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[0].x * d,
+            y: quad_pts_dec[0].y * d,
         },
         Point {
-            x: (quad_pts_dec[1].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[1].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[1].x * d,
+            y: quad_pts_dec[1].y * d,
         },
         Point {
-            x: (quad_pts_dec[2].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[2].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[2].x * d,
+            y: quad_pts_dec[2].y * d,
         },
         Point {
-            x: (quad_pts_dec[3].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[3].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[3].x * d,
+            y: quad_pts_dec[3].y * d,
         },
     ];
 

@@ -32,15 +32,19 @@ impl DetectorState {
     }
 }
 
+impl Default for DetectorState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// The primary entry point for the Locus perception library.
 ///
 /// `Detector` encapsulates the entire detection pipeline.
 pub struct Detector {
     config: DetectorConfig,
     decoders: Vec<Box<dyn TagDecoder + Send + Sync>>,
-    // We use a ThreadLocal or just local allocation if we want to be Sync.
-    // For Python integration, being Sync is often more important than 
-    // absolute zero-allocation across frames if we want multi-threading.
+    state: DetectorState,
 }
 
 impl Detector {
@@ -56,10 +60,12 @@ impl Detector {
 
     /// Create a detector with custom pipeline configuration.
     pub fn with_config(config: DetectorConfig) -> Self {
-        Self {
-            config,
-            decoders: vec![crate::decoder::family_to_decoder(crate::config::TagFamily::AprilTag36h11)],
-        }
+        Self::builder().with_config(config).build()
+    }
+
+    /// Access the internal state (for advanced inspection or FFI).
+    pub fn state(&self) -> &DetectorState {
+        &self.state
     }
 
     /// Clear all decoders and set new ones based on tag families.
@@ -80,9 +86,10 @@ impl Detector {
         tag_size: Option<f64>,
         pose_mode: crate::config::PoseEstimationMode,
     ) -> Vec<Detection> {
-        let mut state = DetectorState::new();
+        self.state.reset();
+        let state = &mut self.state;
         
-        let (detection_img, effective_scale, refinement_img) = if self.config.decimation > 1 {
+        let (detection_img, _effective_scale, refinement_img) = if self.config.decimation > 1 {
             let new_w = img.width / self.config.decimation;
             let new_h = img.height / self.config.decimation;
             let decimated_data = state.arena.alloc_slice_fill_copy(new_w * new_h, 0u8);
@@ -205,23 +212,21 @@ impl Detector {
                 pose_mode,
             );
         }
-
         state.results = state.batch.reassemble(v);
 
-        // Final coordinate adjustment and scaling
-        let inv_scale = 1.0 / effective_scale;
-
+        // Final coordinate adjustment to align with pixel center convention (UMICH/OpenCV)
         for d in &mut state.results {
             for corner in &mut d.corners {
-                corner[0] = (corner[0] + 0.5) * inv_scale;
-                corner[1] = (corner[1] + 0.5) * inv_scale;
+                corner[0] += 0.5;
+                corner[1] += 0.5;
             }
-            d.center[0] = (d.center[0] + 0.5) * inv_scale;
-            d.center[1] = (d.center[1] + 0.5) * inv_scale;
+            d.center[0] += 0.5;
+            d.center[1] += 0.5;
         }
 
-        state.results
+        state.results.clone()
     }
+
 
     /// Detect tags with specific options.
     pub fn detect_with_options(
@@ -302,6 +307,12 @@ impl DetectorBuilder {
         }
     }
 
+    /// Use an existing configuration.
+    pub fn with_config(mut self, config: DetectorConfig) -> Self {
+        self.config = config;
+        self
+    }
+
     /// Set the decimation factor for the input image.
     pub fn with_decimation(mut self, decimation: usize) -> Self {
         self.config.decimation = decimation;
@@ -346,6 +357,54 @@ impl DetectorBuilder {
         self
     }
 
+    /// Set the tile size for adaptive thresholding.
+    pub fn with_threshold_tile_size(mut self, size: usize) -> Self {
+        self.config.threshold_tile_size = size;
+        self
+    }
+
+    /// Set the minimum intensity range for valid tiles.
+    pub fn with_threshold_min_range(mut self, range: u8) -> Self {
+        self.config.threshold_min_range = range;
+        self
+    }
+
+    /// Set the constant subtracted from local mean in adaptive thresholding.
+    pub fn with_adaptive_threshold_constant(mut self, c: i16) -> Self {
+        self.config.adaptive_threshold_constant = c;
+        self
+    }
+
+    /// Set the minimum quad area.
+    pub fn with_quad_min_area(mut self, area: u32) -> Self {
+        self.config.quad_min_area = area;
+        self
+    }
+
+    /// Set the minimum fill ratio.
+    pub fn with_quad_min_fill_ratio(mut self, ratio: f32) -> Self {
+        self.config.quad_min_fill_ratio = ratio;
+        self
+    }
+
+    /// Set the minimum edge alignment score.
+    pub fn with_quad_min_edge_score(mut self, score: f64) -> Self {
+        self.config.quad_min_edge_score = score;
+        self
+    }
+
+    /// Set the maximum number of Hamming errors allowed.
+    pub fn with_max_hamming_error(mut self, errors: u32) -> Self {
+        self.config.max_hamming_error = errors;
+        self
+    }
+
+    /// Set the minimum contrast for decoder bit classification.
+    pub fn with_decoder_min_contrast(mut self, contrast: f64) -> Self {
+        self.config.decoder_min_contrast = contrast;
+        self
+    }
+
     /// Build the [`Detector`] instance.
     pub fn build(self) -> Detector {
         let mut decoders = Vec::new();
@@ -361,6 +420,7 @@ impl DetectorBuilder {
         Detector {
             config: self.config,
             decoders,
+            state: DetectorState::new(),
         }
     }
 }

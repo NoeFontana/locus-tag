@@ -11,9 +11,9 @@ Identify discrepancies in configuration and verify coordinate mapping.
 ## Phase 2: Python API Expansion
 Expose all relevant pipeline parameters through the Python bridge.
 
-- - [~] Task: Update `locus-py/src/lib.rs` to accept additional keyword arguments in `Detector::new`.
-- [ ] Task: Update `locus-py/locus/__init__.py` to pass these arguments from the Python constructor.
-- [ ] Task: Verify that parameters like `threshold_tile_size` and `quad_min_fill_ratio` are correctly propagated to the Rust core.
+- -  - [x] Task: Update `locus-py/src/lib.rs` to accept additional keyword arguments in `Detector::new`.
+-  - [x] Task: Update `locus-py/locus/__init__.py` to pass these arguments from the Python constructor.
+-  - [x] Task: Verify that parameters like `threshold_tile_size` and `quad_min_fill_ratio` are correctly propagated to the Rust core.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Python API Expansion' (Protocol in workflow.md)
 
 ## Phase 3: Final Verification and Tuning

@@ -144,7 +144,7 @@ pub struct DetectorConfig {
 impl Default for DetectorConfig {
     fn default() -> Self {
         Self {
-            threshold_tile_size: 8,
+            threshold_tile_size: 4,
             threshold_min_range: 10,
             enable_bilateral: false,
             bilateral_sigma_space: 0.8,
@@ -160,20 +160,23 @@ impl Default for DetectorConfig {
             quad_min_fill_ratio: 0.10,
             quad_max_fill_ratio: 0.98,
             quad_min_edge_length: 4.0,
-            quad_min_edge_score: 0.1,
+            quad_min_edge_score: 0.0,
             subpixel_refinement_sigma: 0.6,
+
+
             segmentation_margin: 1,
             segmentation_connectivity: SegmentationConnectivity::Eight,
             upscale_factor: 1,
             decimation: 1,
             nthreads: 0,
             decoder_min_contrast: 20.0,
-            refinement_mode: CornerRefinementMode::Erf,
+            refinement_mode: CornerRefinementMode::Edge,
             decode_mode: DecodeMode::Hard,
             max_hamming_error: 2,
         }
     }
 }
+
 
 impl DetectorConfig {
     /// Create a new builder for `DetectorConfig`.
@@ -623,7 +626,7 @@ mod tests {
         assert_eq!(config.quad_min_area, 1000);
         // Check defaults
         assert_eq!(config.threshold_min_range, 10);
-        assert_eq!(config.quad_min_edge_score, 0.1);
+        assert_eq!(config.quad_min_edge_score, 0.0);
         assert_eq!(config.max_hamming_error, 2);
     }
 
@@ -631,7 +634,7 @@ mod tests {
     #[allow(clippy::float_cmp)]
     fn test_detector_config_defaults() {
         let config = DetectorConfig::default();
-        assert_eq!(config.threshold_tile_size, 8);
+        assert_eq!(config.threshold_tile_size, 4);
         assert_eq!(config.quad_min_area, 16);
         assert_eq!(config.quad_min_edge_length, 4.0);
         assert_eq!(config.max_hamming_error, 2);
