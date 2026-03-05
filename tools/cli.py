@@ -85,6 +85,7 @@ def visualize(
     import locus
     import numpy as np
     from tqdm import tqdm
+
     from scripts.bench.utils import DatasetLoader
 
     if not RERUN_AVAILABLE:
@@ -200,6 +201,7 @@ def bench_real(
     import locus
     import numpy as np
     from tqdm import tqdm
+
     from scripts.bench.utils import (
         AprilTagWrapper,
         DatasetLoader,
@@ -366,6 +368,7 @@ def bench_synthetic(
     """Run benchmarks on procedurally generated synthetic images."""
     import locus
     import numpy as np
+
     from scripts.bench.utils import (
         AprilTagWrapper,
         LibraryWrapper,
@@ -441,6 +444,7 @@ def bench_hosted(
     import locus
     import numpy as np
     from tqdm import tqdm
+
     from scripts.bench.utils import (
         AprilTagWrapper,
         HubBenchmarkLoader,
@@ -521,6 +525,7 @@ def bench_analyze(
 ):
     """Analyze tag size distribution in datasets."""
     import numpy as np
+
     from scripts.bench.utils import DatasetLoader
 
     loader = DatasetLoader()
@@ -558,6 +563,7 @@ def bench_profile(
     """Profile pipeline bottlenecks using synthetic images."""
     import locus
     import numpy as np
+
     from scripts.bench.utils import LocusWrapper, generate_synthetic_image
 
     # Map string to locus.TagFamily
@@ -604,4 +610,3 @@ def bench_prepare():
 
 if __name__ == "__main__":
     app()
-
