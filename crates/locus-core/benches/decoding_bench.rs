@@ -15,7 +15,12 @@ use locus_core::ImageView;
 use locus_core::bench_api::{AprilTag36h11, Homography, TagDecoder};
 
 fn main() {
-    divan::main();
+    // Force rayon to a single thread for microbenchmarks to avoid cache thrashing.
+    let _ = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build_global();
+
+    divan::Divan::from_args().threads([1]).run_benches();
 }
 
 #[bench]

@@ -18,7 +18,12 @@ use locus_core::config::CornerRefinementMode;
 use std::path::Path;
 
 fn main() {
-    divan::main();
+    // Force rayon to a single thread for microbenchmarks to avoid cache thrashing.
+    let _ = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build_global();
+
+    divan::Divan::from_args().threads([1]).run_benches();
 }
 
 fn load_icra_image() -> (Vec<u8>, usize, usize) {
