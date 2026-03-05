@@ -60,6 +60,7 @@ impl ThresholdEngine {
     /// Compute min/max statistics for each tile in the image.
     /// Optimized with SIMD-friendly memory access patterns and subsampling (stride 2).
     #[must_use]
+    #[tracing::instrument(skip_all, name = "pipeline::thresholding")]
     pub fn compute_tile_stats<'a>(
         &self,
         arena: &'a Bump,
@@ -275,6 +276,7 @@ impl ThresholdEngine {
     /// This is needed for threshold-model-aware segmentation, which uses the
     /// per-pixel threshold values to connect pixels by their deviation sign.
     #[allow(clippy::needless_range_loop)]
+    #[tracing::instrument(skip_all, name = "pipeline::thresholding")]
     pub fn apply_threshold_with_map(
         &self,
         arena: &Bump,

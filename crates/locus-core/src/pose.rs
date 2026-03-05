@@ -508,6 +508,7 @@ fn find_best_pose(
 ///
 /// This function operates only on the first `v` candidates in the batch, which must have been
 /// partitioned such that all valid candidates are in the range `[0..v]`.
+#[tracing::instrument(skip_all, name = "pipeline::pose_refinement")]
 pub fn refine_poses_soa(
     batch: &mut DetectionBatch,
     v: usize,

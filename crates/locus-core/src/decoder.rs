@@ -203,6 +203,7 @@ impl Homography {
 ///
 /// This uses `rayon` for data-parallel computation of the square-to-quad homographies.
 /// Quads are defined by 4 corners in `corners` for each candidate index.
+#[tracing::instrument(skip_all, name = "pipeline::homography_pass")]
 pub fn compute_homographies_soa(corners: &[[Point2f; 4]], homographies: &mut [Matrix3x3]) {
     use rayon::prelude::*;
 
@@ -1299,6 +1300,7 @@ pub(crate) fn rotate90(bits: u64, dim: usize) -> u64 {
 ///
 /// This phase executes SIMD bilinear interpolation and Hamming error correction.
 /// If a candidate fails decoding, its `status_mask` is flipped to `FailedDecode`.
+#[tracing::instrument(skip_all, name = "pipeline::decoding_pass")]
 pub fn decode_batch_soa(
     batch: &mut crate::batch::DetectionBatch,
     n: usize,

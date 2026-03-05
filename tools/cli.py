@@ -86,7 +86,7 @@ def visualize(
     import numpy as np
     from tqdm import tqdm
 
-    from scripts.bench.utils import DatasetLoader
+    from tools.bench.utils import DatasetLoader
 
     if not RERUN_AVAILABLE:
         typer.echo(
@@ -202,7 +202,7 @@ def bench_real(
     import numpy as np
     from tqdm import tqdm
 
-    from scripts.bench.utils import (
+    from tools.bench.utils import (
         AprilTagWrapper,
         DatasetLoader,
         LibraryWrapper,
@@ -369,7 +369,7 @@ def bench_synthetic(
     import locus
     import numpy as np
 
-    from scripts.bench.utils import (
+    from tools.bench.utils import (
         AprilTagWrapper,
         LibraryWrapper,
         LocusWrapper,
@@ -445,7 +445,7 @@ def bench_hosted(
     import numpy as np
     from tqdm import tqdm
 
-    from scripts.bench.utils import (
+    from tools.bench.utils import (
         AprilTagWrapper,
         HubBenchmarkLoader,
         LibraryWrapper,
@@ -526,7 +526,7 @@ def bench_analyze(
     """Analyze tag size distribution in datasets."""
     import numpy as np
 
-    from scripts.bench.utils import DatasetLoader
+    from tools.bench.utils import DatasetLoader
 
     loader = DatasetLoader()
     for scenario in scenarios:
@@ -564,7 +564,7 @@ def bench_profile(
     import locus
     import numpy as np
 
-    from scripts.bench.utils import LocusWrapper, generate_synthetic_image
+    from tools.bench.utils import LocusWrapper, generate_synthetic_image
 
     # Map string to locus.TagFamily
     family_mapping = {
@@ -597,10 +597,65 @@ def bench_profile(
     typer.echo(f"  Total (avg): {np.mean(latencies):.2f} ms")
 
 
+@app.command()
+def extract_bits(
+    tag_id: int = typer.Argument(..., help="Tag ID to extract bits from"),
+    family: str = typer.Option("AprilTag36h11", help="Tag family (OpenCV constant name)"),
+):
+    """
+    Extract bits from an AprilTag or ArUco marker using OpenCV.
+    Useful for verifying low-level encoding.
+    """
+    import cv2
+
+    family_map = {
+        "AprilTag16h5": cv2.aruco.DICT_APRILTAG_16h5,
+        "AprilTag25h9": cv2.aruco.DICT_APRILTAG_25h9,
+        "AprilTag36h10": cv2.aruco.DICT_APRILTAG_36h10,
+        "AprilTag36h11": cv2.aruco.DICT_APRILTAG_36h11,
+        "ArUco4x4_50": cv2.aruco.DICT_4X4_50,
+        "ArUco4x4_100": cv2.aruco.DICT_4X4_100,
+        "ArUco4x4_250": cv2.aruco.DICT_4X4_250,
+        "ArUco4x4_1000": cv2.aruco.DICT_4X4_1000,
+    }
+
+    cv_family = family_map.get(family)
+    if cv_family is None:
+        typer.echo(f"Error: Unsupported family '{family}'", err=True)
+        raise typer.Exit(code=1)
+
+    dictionary = cv2.aruco.getPredefinedDictionary(cv_family)
+    # Generate a large enough image to see bits clearly
+    tag_img = cv2.aruco.generateImageMarker(dictionary, tag_id, 200)
+
+    # For AprilTag 36h11, it is 8x8 (6x6 data + 1 cell border)
+    # For ArUco 4x4, it's 6x6 (4x4 data + 1 cell border)
+    # We can infer grid size from the dictionary
+    grid_size = dictionary.markerSize + 2
+    cell_size = 200 // grid_size
+    bits = 0
+    data_size = dictionary.markerSize
+
+    # Sample the inner grid
+    for row in range(data_size):
+        for col in range(data_size):
+            # Inner grid starts at index 1,1
+            cy = (row + 1) * cell_size + cell_size // 2
+            cx = (col + 1) * cell_size + cell_size // 2
+            val = tag_img[cy, cx]
+            if val > 128:
+                bit_idx = row * data_size + col
+                bits |= 1 << bit_idx
+
+    typer.echo(f"ID {tag_id} ({family})")
+    typer.echo(f"Bits (hex): {hex(bits)}")
+    typer.echo(f"Bits (bin): {bin(bits)}")
+
+
 @bench_app.command("prepare")
 def bench_prepare():
     """Download and prepare all benchmarking datasets."""
-    from scripts.bench.utils import DatasetLoader
+    from tools.bench.utils import DatasetLoader
 
     loader = DatasetLoader()
     typer.echo("Preparing datasets...")

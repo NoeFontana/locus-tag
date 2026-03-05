@@ -143,7 +143,9 @@ fn bench_full_detect_640x480(bencher: divan::Bencher) {
     let img = ImageView::new(&data, width, height, width).unwrap();
     let mut detector = Detector::new();
 
-    bencher.bench_local(move || detector.detect(&img, None, None, PoseEstimationMode::Fast));
+    bencher.bench_local(move || {
+        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast);
+    });
 }
 
 /// Benchmark detection in a complex scene with multiple families and tags.
@@ -173,7 +175,9 @@ fn bench_mixed_scene_multiple_tags(bencher: divan::Bencher) {
         TagFamily::ArUco4x4_100,
     ]);
 
-    bencher.bench_local(move || detector.detect(&img, None, None, PoseEstimationMode::Fast));
+    bencher.bench_local(move || {
+        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast);
+    });
 }
 
 /// Benchmark detection with high tag density (stress test quad extraction).
@@ -197,7 +201,9 @@ fn bench_dense_scene_20_tags(bencher: divan::Bencher) {
     let mut detector = Detector::new();
     detector.set_families(&[TagFamily::AprilTag36h11]);
 
-    bencher.bench_local(move || detector.detect(&img, None, None, PoseEstimationMode::Fast));
+    bencher.bench_local(move || {
+        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast);
+    });
 }
 
 /// Benchmark detection robustness under high noise.
@@ -217,5 +223,7 @@ fn bench_noisy_scene(bencher: divan::Bencher) {
     let mut detector = Detector::new();
     detector.set_families(&[TagFamily::ArUco4x4_50]);
 
-    bencher.bench_local(move || detector.detect(&img, None, None, PoseEstimationMode::Fast));
+    bencher.bench_local(move || {
+        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast);
+    });
 }

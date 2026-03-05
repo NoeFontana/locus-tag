@@ -8,9 +8,9 @@ from tools.cli import bench_hosted as run_hosted_benchmark
 
 
 class TestCLIHosted(unittest.TestCase):
-    @patch("scripts.bench.utils.HubBenchmarkLoader")
-    @patch("scripts.bench.utils.LocusWrapper")
-    @patch("scripts.bench.utils.Metrics.match_detections")
+    @patch("tools.bench.utils.HubBenchmarkLoader")
+    @patch("tools.bench.utils.LocusWrapper")
+    @patch("tools.bench.utils.Metrics.match_detections")
     def test_run_hosted_benchmark_flow(self, mock_match, mock_locus, mock_loader_cls):
         # Setup mocks
         mock_loader = mock_loader_cls.return_value

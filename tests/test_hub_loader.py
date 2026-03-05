@@ -4,7 +4,7 @@ from unittest.mock import patch
 import numpy as np
 from PIL import Image
 
-from scripts.bench.utils import HubBenchmarkLoader, TagGroundTruth
+from tools.bench.utils import HubBenchmarkLoader, TagGroundTruth
 
 
 class TestHubBenchmarkLoader(unittest.TestCase):
