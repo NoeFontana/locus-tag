@@ -289,13 +289,22 @@ class LocusWrapper(LibraryWrapper):
         }
         families = [family_obj_map[family]] if family is not None else None
         if config:
-            # Simple mapping for common fields used in benchmarks
+            # Comprehensive mapping from config object to Detector parameters
             self.detector = locus.Detector(
                 decimation=decimation,
                 families=families,
                 decode_mode=config.decode_mode,
                 enable_sharpening=config.enable_sharpening,
                 upscale_factor=config.upscale_factor,
+                refinement_mode=config.refinement_mode,
+                threshold_tile_size=config.threshold_tile_size,
+                threshold_min_range=config.threshold_min_range,
+                adaptive_threshold_constant=config.adaptive_threshold_constant,
+                quad_min_area=config.quad_min_area,
+                quad_min_fill_ratio=config.quad_min_fill_ratio,
+                quad_min_edge_score=config.quad_min_edge_score,
+                decoder_min_contrast=config.decoder_min_contrast,
+                max_hamming_error=config.max_hamming_error,
             )
         else:
             self.detector = locus.Detector(decimation=decimation, families=families)
@@ -316,7 +325,6 @@ class LocusWrapper(LibraryWrapper):
                     "margin": 0.0, # Not currently exposed
                 }
             )
-        # stats are not currently exposed in the same way, return None or dummy
         return serializable, None
 
 

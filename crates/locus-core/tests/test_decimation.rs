@@ -27,9 +27,9 @@ fn test_decimation_accuracy() {
             .with_decimation(1)
             .build();
         
-        let res = detector.detect_with_stats(&img);
-        assert!(!res.detections.is_empty());
-        let err1 = compute_corner_error(&res.detections[0].corners, &gt_corners);
+        let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
+        assert!(!detections.is_empty());
+        let err1 = compute_corner_error(&detections[0].corners, &gt_corners);
 
         // 2. Detect with decimation 2
         let mut detector2 = DetectorBuilder::new()
@@ -37,9 +37,9 @@ fn test_decimation_accuracy() {
             .with_decimation(2)
             .build();
         
-        let res2 = detector2.detect_with_stats(&img);
-        assert!(!res2.detections.is_empty());
-        let err2 = compute_corner_error(&res2.detections[0].corners, &gt_corners);
+        let detections2 = detector2.detect(&img, None, None, PoseEstimationMode::Fast);
+        assert!(!detections2.is_empty());
+        let err2 = compute_corner_error(&detections2[0].corners, &gt_corners);
 
         println!("Error D1: {}, Error D2: {}", err1, err2);
         // Decimation should maintain reasonable sub-pixel accuracy

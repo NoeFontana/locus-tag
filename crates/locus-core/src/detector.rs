@@ -228,65 +228,6 @@ impl Detector {
     }
 
 
-    /// Detect tags with specific options.
-    pub fn detect_with_options(
-        &mut self,
-        img: &ImageView,
-        options: &crate::config::DetectOptions,
-    ) -> Vec<crate::Detection> {
-        self.detect_with_stats_and_options(img, options).detections
-    }
-
-    /// Detect tags and return comprehensive results with statistics.
-    pub fn detect_with_stats(&mut self, img: &ImageView) -> crate::FullDetectionResult {
-        self.detect_with_stats_and_options(img, &crate::config::DetectOptions::default())
-    }
-
-    /// Detect tags and return comprehensive results with statistics.
-    pub fn detect_with_stats_and_options(
-        &mut self,
-        img: &ImageView,
-        options: &crate::config::DetectOptions,
-    ) -> crate::FullDetectionResult {
-        let start = std::time::Instant::now();
-        
-        // Temporarily override families if options are provided
-        let old_decoders = if !options.families.is_empty() {
-            let mut new_decoders = Vec::new();
-            for &family in &options.families {
-                new_decoders.push(crate::decoder::family_to_decoder(family));
-            }
-            Some(std::mem::replace(&mut self.decoders, new_decoders))
-        } else {
-            None
-        };
-
-        let detections = self.detect(
-            img,
-            options.intrinsics.as_ref(),
-            options.tag_size,
-            options.pose_estimation_mode,
-        );
-        let result = crate::FullDetectionResult {
-            detections: detections.clone(),
-            stats: crate::PipelineStats {
-                total_ms: start.elapsed().as_secs_f64() * 1000.0,
-                threshold_ms: 0.0,
-                segmentation_ms: 0.0,
-                quad_extraction_ms: 0.0,
-                decoding_ms: 0.0,
-                num_candidates: 0,
-                num_detections: detections.len(),
-            },
-        };
-
-        if let Some(old) = old_decoders {
-            self.decoders = old;
-        }
-
-        result
-    }
-
     /// Get the current detector configuration.
     pub fn config(&self) -> &DetectorConfig {
         &self.config

@@ -11,9 +11,7 @@ fn test_smoke_icra_dataset() {
     let img_data = vec![0u8; 640 * 480];
     let input_view = ImageView::new(&img_data, 640, 480, 640).unwrap();
     
-    let options = DetectOptions::all_families();
-    let res = detector.detect_with_stats_and_options(&input_view, &options);
+    let _res = detector.detect(&input_view, None, None, PoseEstimationMode::Fast);
     
     // Smoke test: should not crash
-    assert!(res.stats.total_ms >= 0.0);
 }

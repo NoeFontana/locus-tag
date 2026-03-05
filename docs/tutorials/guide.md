@@ -16,9 +16,9 @@ detector = locus.Detector(
 
 # Use decimation=2 to process at half resolution (4x speed boost)
 # Note: Use decimation=1 if tags are small (< 20 pixels)
-tags, stats = detector.detect_with_stats(img, decimation=2)
+tags = detector.detect(img, decimation=2)
 
-print(f"Detected {len(tags)} tags in {stats.total_ms:.2f}ms")
+print(f"Detected {len(tags)} tags")
 ```
 
 | Parameter | Impact | Recommendation |

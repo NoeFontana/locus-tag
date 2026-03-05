@@ -207,11 +207,12 @@ def bench_real(
     profile: bool = typer.Option(False, help="Enable Tracy profiling"),
     family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
     refinement: str = typer.Option("Erf", help="Refinement mode (None, Edge, GridFit, Erf)"),
-    tile_size: int = typer.Option(4, help="Threshold tile size"),
+    tile_size: int = typer.Option(8, help="Threshold tile size"),
     constant: int = typer.Option(0, help="Adaptive threshold constant"),
     min_fill: float = typer.Option(0.10, help="Min quad fill ratio"),
     min_range: int = typer.Option(10, help="Threshold min range"),
-    max_hamming: int = typer.Option(3, help="Max hamming error"),
+    max_hamming: int = typer.Option(2, help="Max hamming error"),
+    min_edge_score: float = typer.Option(4.0, help="Min edge alignment score"),
 ):
     """Run benchmarks on real-world datasets (ICRA)."""
     if profile:
@@ -255,6 +256,7 @@ def bench_real(
         quad_min_fill_ratio=min_fill,
         threshold_min_range=min_range,
         max_hamming_error=max_hamming,
+        quad_min_edge_score=min_edge_score,
     )
     wrappers.append(LocusWrapper(name="Locus (Soft)", config=soft_config, decimation=decimation, family=tag_family_int))
 
@@ -269,6 +271,7 @@ def bench_real(
         quad_min_fill_ratio=min_fill,
         threshold_min_range=min_range,
         max_hamming_error=max_hamming,
+        quad_min_edge_score=min_edge_score,
     )
     wrappers.append(LocusWrapper(name="Locus (Hard)", config=hard_config, decimation=decimation, family=tag_family_int))
 
@@ -302,12 +305,6 @@ def bench_real(
                 img_names = img_names[:limit]
 
             for wrapper in wrappers:
-                stage_stats = {
-                    "threshold": [],
-                    "segmentation": [],
-                    "quad": [],
-                    "decoding": [],
-                }
                 stats = {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []}
 
                 for img_name in tqdm(img_names, desc=f"{wrapper.name:<10}"):
@@ -321,14 +318,8 @@ def bench_real(
 
                     gt_tags = gt_map[img_name]
                     start = time.perf_counter()
-                    detections, lib_stats = wrapper.detect(img)
+                    detections, _ = wrapper.detect(img)
                     stats["latency"].append((time.perf_counter() - start) * 1000)
-
-                    if lib_stats:
-                        stage_stats["threshold"].append(lib_stats.threshold_ms)
-                        stage_stats["segmentation"].append(lib_stats.segmentation_ms)
-                        stage_stats["quad"].append(lib_stats.quad_extraction_ms)
-                        stage_stats["decoding"].append(lib_stats.decoding_ms)
 
                     correct, err_sum, _ = Metrics.match_detections(detections, gt_tags)
                     stats["gt"] += len(gt_tags)
@@ -340,8 +331,6 @@ def bench_real(
                 avg_lat = np.mean(stats["latency"])
 
                 res = {"recall": recall, "rmse": avg_err, "latency": avg_lat}
-                if stage_stats["threshold"]:
-                    res["stages"] = {k: float(np.mean(v)) for k, v in stage_stats.items()}
                 current_results[ds_name][wrapper.name] = res
 
                 typer.echo(
@@ -457,7 +446,6 @@ def bench_hosted(
         wrapper_stats = {
             w.name: {
                 "gt": 0, "det": 0, "err_sum": 0.0, "latency": [],
-                "stages": {"threshold": [], "segmentation": [], "quad": [], "decoding": []},
             } for w in wrappers
         }
 
@@ -468,7 +456,7 @@ def bench_hosted(
 
             for wrapper in wrappers:
                 start = time.perf_counter()
-                detections, lib_stats = wrapper.detect(img)
+                detections, _ = wrapper.detect(img)
                 latency = (time.perf_counter() - start) * 1000
 
                 correct, err_sum, _ = Metrics.match_detections(detections, gt_tags)
@@ -477,12 +465,6 @@ def bench_hosted(
                 stats["gt"] += len(gt_tags)
                 stats["det"] += correct
                 stats["err_sum"] += err_sum
-
-                if lib_stats:
-                    stats["stages"]["threshold"].append(lib_stats.threshold_ms)
-                    stats["stages"]["segmentation"].append(lib_stats.segmentation_ms)
-                    stats["stages"]["quad"].append(lib_stats.quad_extraction_ms)
-                    stats["stages"]["decoding"].append(lib_stats.decoding_ms)
 
         for wrapper in wrappers:
             stats = wrapper_stats[wrapper.name]
@@ -543,8 +525,7 @@ def bench_profile(
     img, _ = generate_synthetic_image(targets, res, noise_sigma=noise, family=tag_family_int)
     typer.echo(f"\nProfiling {targets} tags (noise={noise}, family={family})...")
     
-    # In the new API, we don't have per-stage stats exposed yet in the high-level API
-    # We just measure total time for now.
+    # In the new API, we just measure total time.
     latencies = []
     for _ in range(iterations):
         start = time.perf_counter()

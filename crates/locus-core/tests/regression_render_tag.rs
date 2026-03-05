@@ -22,7 +22,7 @@ use locus_core::bench_api::*;
 )]
 
 use locus_core::image::ImageView;
-use locus_core::{PoseEstimationMode, DetectOptions, Detector, DetectorConfig, PipelineStats, config::TagFamily};
+use locus_core::{PoseEstimationMode, DetectOptions, Detector, DetectorConfig, config::TagFamily};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
@@ -56,27 +56,8 @@ impl ConfigPreset {
 
 #[derive(Serialize, Default, Clone)]
 struct PipelineMetrics {
-    threshold_ms: f64,
-    segmentation_ms: f64,
-    quad_extraction_ms: f64,
-    decoding_ms: f64,
     total_ms: f64,
-    num_candidates: usize,
     num_detections: usize,
-}
-
-impl From<PipelineStats> for PipelineMetrics {
-    fn from(stats: PipelineStats) -> Self {
-        Self {
-            threshold_ms: 0.0,
-            segmentation_ms: 0.0,
-            quad_extraction_ms: 0.0,
-            decoding_ms: 0.0,
-            total_ms: stats.total_ms,
-            num_candidates: 0,
-            num_detections: stats.num_detections,
-        }
-    }
 }
 
 
@@ -178,14 +159,22 @@ impl RegressionHarness {
 
         for (filename, data, width, height, gt) in provider.iter() {
             let img = ImageView::new(&data, width, height, width).expect("valid image");
-            let res = detector.detect_with_stats_and_options(&img, &self.options);
+            
+            let start = std::time::Instant::now();
+            let detections = detector.detect(
+                &img,
+                self.options.intrinsics.as_ref(),
+                self.options.tag_size,
+                self.options.pose_estimation_mode,
+            );
+            let total_ms = start.elapsed().as_secs_f64() * 1000.0;
 
             // --- Metrics Calculation ---
             let mut image_rmse_sum = 0.0;
             let mut match_count = 0;
             let mut found_ids = BTreeSet::new();
 
-            for det in &res.detections {
+            for det in &detections {
                 if let Some(gt_corners) = gt.tags.get(&det.id) {
                     let gt_cx: f64 = gt_corners.iter().map(|p| p[0]).sum::<f64>() / 4.0;
                     let gt_cy: f64 = gt_corners.iter().map(|p| p[1]).sum::<f64>() / 4.0;
@@ -213,7 +202,7 @@ impl RegressionHarness {
 
             total_recall += recall;
             total_rmse += avg_rmse;
-            total_time += res.stats.total_ms;
+            total_time += total_ms;
             count += 1;
 
             let mut missed_ids = BTreeSet::new();
@@ -224,7 +213,7 @@ impl RegressionHarness {
             }
 
             let mut extra_ids = BTreeSet::new();
-            for det in &res.detections {
+            for det in &detections {
                 if !found_ids.contains(&det.id) {
                     extra_ids.insert(det.id);
                 }
@@ -235,7 +224,10 @@ impl RegressionHarness {
                 ImageMetrics {
                     recall,
                     avg_rmse,
-                    stats: PipelineMetrics::from(res.stats),
+                    stats: PipelineMetrics {
+                        total_ms,
+                        num_detections: detections.len(),
+                    },
                     missed_ids,
                     extra_ids,
                 },

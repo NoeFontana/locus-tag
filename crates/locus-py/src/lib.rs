@@ -354,6 +354,9 @@ fn prepare_image_view<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageVi
 fn init_tracy() {
     #[cfg(feature = "tracy")]
     {
+        unsafe {
+            std::env::set_var("TRACY_NO_INVARIANT_CHECK", "1");
+        }
         use tracing_subscriber::layer::SubscriberExt;
         let subscriber = tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default());
         tracing::subscriber::set_global_default(subscriber).ok();

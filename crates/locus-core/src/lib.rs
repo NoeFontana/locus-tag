@@ -120,32 +120,3 @@ pub use crate::pose::Pose;
 pub fn core_info() -> String {
     "Locus Core v0.1.0 Engine (Encapsulated)".to_string()
 }
-
-/// Statistics for a single detection pipeline execution.
-#[derive(Clone, Debug, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PipelineStats {
-    /// Total time taken for detection in milliseconds.
-    pub total_ms: f64,
-    /// Time taken for thresholding (legacy).
-    pub threshold_ms: f64,
-    /// Time taken for segmentation (legacy).
-    pub segmentation_ms: f64,
-    /// Time taken for quad extraction (legacy).
-    pub quad_extraction_ms: f64,
-    /// Time taken for decoding (legacy).
-    pub decoding_ms: f64,
-    /// Number of candidates found (legacy).
-    pub num_candidates: usize,
-    /// Number of detections found (legacy).
-    pub num_detections: usize,
-}
-
-/// A comprehensive result of the detection pipeline, including detections and statistics.
-#[derive(Clone, Debug, Default)]
-pub struct FullDetectionResult {
-    /// The list of detected tags.
-    pub detections: Vec<Detection>,
-    /// Performance statistics for this execution.
-    pub stats: PipelineStats,
-}
