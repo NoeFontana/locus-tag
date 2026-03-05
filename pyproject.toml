@@ -34,7 +34,7 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "B", "UP", "SIM", "I"] # Pyflakes, pycodestyle, bugbear, pyupgrade, simplify, isort
-ignore = ["E501"] # Line length handled by formatter
+ignore = ["E501", "B006", "B008"] # Line length handled by formatter
 
 [dependency-groups]
 dev = [
