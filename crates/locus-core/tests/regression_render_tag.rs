@@ -172,14 +172,34 @@ impl RegressionHarness {
                 let det_id = detections.ids[i];
                 let det_corners_f32 = detections.corners[i];
                 let det_corners_f64 = [
-                    [f64::from(det_corners_f32[0].x), f64::from(det_corners_f32[0].y)],
-                    [f64::from(det_corners_f32[1].x), f64::from(det_corners_f32[1].y)],
-                    [f64::from(det_corners_f32[2].x), f64::from(det_corners_f32[2].y)],
-                    [f64::from(det_corners_f32[3].x), f64::from(det_corners_f32[3].y)],
+                    [
+                        f64::from(det_corners_f32[0].x),
+                        f64::from(det_corners_f32[0].y),
+                    ],
+                    [
+                        f64::from(det_corners_f32[1].x),
+                        f64::from(det_corners_f32[1].y),
+                    ],
+                    [
+                        f64::from(det_corners_f32[2].x),
+                        f64::from(det_corners_f32[2].y),
+                    ],
+                    [
+                        f64::from(det_corners_f32[3].x),
+                        f64::from(det_corners_f32[3].y),
+                    ],
                 ];
                 let det_center = [
-                    (det_corners_f64[0][0] + det_corners_f64[1][0] + det_corners_f64[2][0] + det_corners_f64[3][0]) / 4.0,
-                    (det_corners_f64[0][1] + det_corners_f64[1][1] + det_corners_f64[2][1] + det_corners_f64[3][1]) / 4.0,
+                    (det_corners_f64[0][0]
+                        + det_corners_f64[1][0]
+                        + det_corners_f64[2][0]
+                        + det_corners_f64[3][0])
+                        / 4.0,
+                    (det_corners_f64[0][1]
+                        + det_corners_f64[1][1]
+                        + det_corners_f64[2][1]
+                        + det_corners_f64[3][1])
+                        / 4.0,
                 ];
 
                 if let Some(gt_corners) = gt.tags.get(&det_id) {

@@ -41,7 +41,11 @@ fn test_aruco_4x4_50_detection() {
     let results = detector.detect(&img, None, None, PoseEstimationMode::Fast);
 
     assert_eq!(results.len(), 1, "Should detect exactly 1 ArUco tag");
-    assert_eq!(results.ids[0], u32::from(TAG_ID), "Detected ID should match");
+    assert_eq!(
+        results.ids[0],
+        u32::from(TAG_ID),
+        "Detected ID should match"
+    );
 }
 
 #[test]

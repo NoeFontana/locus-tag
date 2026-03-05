@@ -201,11 +201,11 @@ impl Detector {
             // Direct memory block transfer (Zero-copy layout alignment)
             // LLVM will vectorize these into SIMD load/store instructions.
             ids_slice.copy_from_slice(std::slice::from_raw_parts(
-                detections.ids.as_ptr() as *const i32,
+                detections.ids.as_ptr().cast::<i32>(),
                 n,
             ));
             corners_slice.copy_from_slice(std::slice::from_raw_parts(
-                detections.corners.as_ptr() as *const f32,
+                detections.corners.as_ptr().cast::<f32>(),
                 n * 8,
             ));
             err_slice.copy_from_slice(detections.error_rates);

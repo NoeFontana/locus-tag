@@ -38,10 +38,22 @@ fn test_accuracy_synthetic() {
             assert_eq!(detections.ids[0], tag_id as u32);
 
             let corners = [
-                [f64::from(detections.corners[0][0].x), f64::from(detections.corners[0][0].y)],
-                [f64::from(detections.corners[0][1].x), f64::from(detections.corners[0][1].y)],
-                [f64::from(detections.corners[0][2].x), f64::from(detections.corners[0][2].y)],
-                [f64::from(detections.corners[0][3].x), f64::from(detections.corners[0][3].y)],
+                [
+                    f64::from(detections.corners[0][0].x),
+                    f64::from(detections.corners[0][0].y),
+                ],
+                [
+                    f64::from(detections.corners[0][1].x),
+                    f64::from(detections.corners[0][1].y),
+                ],
+                [
+                    f64::from(detections.corners[0][2].x),
+                    f64::from(detections.corners[0][2].y),
+                ],
+                [
+                    f64::from(detections.corners[0][3].x),
+                    f64::from(detections.corners[0][3].y),
+                ],
             ];
             let err = compute_corner_error(&corners, &gt_corners);
             assert!(err < 1.0);
@@ -69,10 +81,22 @@ fn test_pose_accuracy() {
         assert!(!detections.is_empty());
 
         let corners = [
-            [f64::from(detections.corners[0][0].x), f64::from(detections.corners[0][0].y)],
-            [f64::from(detections.corners[0][1].x), f64::from(detections.corners[0][1].y)],
-            [f64::from(detections.corners[0][2].x), f64::from(detections.corners[0][2].y)],
-            [f64::from(detections.corners[0][3].x), f64::from(detections.corners[0][3].y)],
+            [
+                f64::from(detections.corners[0][0].x),
+                f64::from(detections.corners[0][0].y),
+            ],
+            [
+                f64::from(detections.corners[0][1].x),
+                f64::from(detections.corners[0][1].y),
+            ],
+            [
+                f64::from(detections.corners[0][2].x),
+                f64::from(detections.corners[0][2].y),
+            ],
+            [
+                f64::from(detections.corners[0][3].x),
+                f64::from(detections.corners[0][3].y),
+            ],
         ];
 
         let intrinsics = locus_core::CameraIntrinsics::new(800.0, 800.0, 320.0, 240.0);
