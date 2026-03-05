@@ -1,3 +1,4 @@
+import cv2
 import locus
 import numpy as np
 import pytest
@@ -10,27 +11,19 @@ def test_non_contiguous_ingestion():
     img[20:80, 20:80] = 255
 
     detector = locus.Detector()
-    detections = detector.detect(img)
-    assert isinstance(detections, list)
+    batch = detector.detect(img)
+    assert isinstance(batch, locus.DetectionBatch)
 
-    # 2. Non-contiguous slice (step > 1) - Should raise ValueError
-    img_sliced = img[:, ::2]
-    assert not img_sliced.flags["C_CONTIGUOUS"]
+    # 2. Sliced array (non-contiguous)
+    img_non_contiguous = img[:, ::2]
+    assert not img_non_contiguous.flags["C_CONTIGUOUS"]
 
-    print("\nTesting non-contiguous slice (should raise ValueError):")
-    with pytest.raises(ValueError, match="Array must be C-contiguous"):
-        detector.detect(img_sliced)
+    with pytest.raises(ValueError, match="C-contiguous"):
+        detector.detect(img_non_contiguous)
 
-    # 3. F-contiguous array - Should raise ValueError
-    img_f = np.asfortranarray(img)
-    assert img_f.flags["F_CONTIGUOUS"]
-    assert not img_f.flags["C_CONTIGUOUS"]
+    # 3. Fortran-layout array (non-contiguous)
+    img_fortran = np.asfortranarray(img)
+    assert not img_fortran.flags["C_CONTIGUOUS"]
 
-    print("\nTesting F-contiguous array (should raise ValueError):")
-    with pytest.raises(ValueError, match="Array must be C-contiguous"):
-        detector.detect(img_f)
-
-
-if __name__ == "__main__":
-    # If run as a script, use pytest to run itself
-    pytest.main([__file__])
+    with pytest.raises(ValueError, match="C-contiguous"):
+        detector.detect(img_fortran)

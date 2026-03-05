@@ -1,27 +1,66 @@
 import enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
+from dataclasses import dataclass
 
-class TagFamily(enum.Enum):
+class TagFamily(enum.IntEnum):
     AprilTag36h11 = 0
     AprilTag41h12 = 1
     ArUco4x4_50 = 2
     ArUco4x4_100 = 3
 
-class Pose:
-    rotation: List[List[float]]
-    translation: List[float]
-    def __init__(self) -> None: ...
+class SegmentationConnectivity(enum.IntEnum):
+    Four = 0
+    Eight = 1
+
+class CornerRefinementMode(enum.IntEnum):
+    None_ = 0
+    Edge = 1
+    GridFit = 2
+    Erf = 3
+
+class DecodeMode(enum.IntEnum):
+    Hard = 0
+    Soft = 1
+
+class PoseEstimationMode(enum.IntEnum):
+    Fast = 0
+    Accurate = 1
+
+class CameraIntrinsics:
+    fx: float
+    fy: float
+    cx: float
+    cy: float
+    def __init__(self, fx: float, fy: float, cx: float, cy: float) -> None: ...
+
+@dataclass(frozen=True)
+class DetectionBatch:
+    ids: np.ndarray  # Shape: (N,), Dtype: int32
+    corners: np.ndarray  # Shape: (N, 4, 2), Dtype: float32
+    error_rates: np.ndarray  # Shape: (N,), Dtype: float32
+    poses: Optional[np.ndarray] = None  # Shape: (N, 7), Dtype: float32. [tx, ty, tz, qx, qy, qz, qw]
+    def __len__(self) -> int: ...
 
 class Detector:
     def __init__(
         self,
-        decimation: int = ...,
-        threads: int = ...,
-        families: List[TagFamily] = ...,
+        decimation: int = 1,
+        threads: int = 0,
+        families: Optional[List[TagFamily]] = None,
+        upscale_factor: Optional[int] = None,
+        refinement_mode: Optional[Union[CornerRefinementMode, int]] = None,
+        decode_mode: Optional[Union[DecodeMode, int]] = None,
+        segmentation_connectivity: Optional[Union[SegmentationConnectivity, int]] = None,
         **kwargs: Any
     ) -> None: ...
     
-    def detect(self, img: np.ndarray) -> Dict[str, np.ndarray]: ...
+    def detect(
+        self, 
+        img: np.ndarray, 
+        intrinsics: Optional[CameraIntrinsics] = None,
+        tag_size: Optional[float] = None,
+        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast
+    ) -> DetectionBatch: ...
 
 def init_tracy() -> None: ...
