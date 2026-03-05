@@ -1240,6 +1240,7 @@ dev = [
     { name = "maturin" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "typer" },
 ]
 docs = [
     { name = "mkdocs" },
@@ -1278,6 +1279,7 @@ dev = [
     { name = "maturin", specifier = ">=1.0" },
     { name = "pytest", specifier = ">=7.0.0" },
     { name = "pytest-cov", specifier = ">=4.0.0" },
+    { name = "typer", specifier = ">=0.12.0" },
 ]
 docs = [
     { name = "mkdocs", specifier = ">=1.5.0" },
