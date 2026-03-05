@@ -20,11 +20,12 @@ Create the unified entry point and migrate existing scripts.
 - [x] Task: Conductor - User Manual Verification 'Phase 2: CLI Scaffolding & Command Integration' (Protocol in workflow.md) ea760fd
 
 
-## Phase 3: Validation & Cleanup
+## Phase 3: Validation & Cleanup [checkpoint: 7a6f204]
 Finalize the isolation and remove redundant files.
 
-- -  - [x] Task: Verify that `uv run tools/cli.py --help` and all subcommands work correctly.
-- -  - [x] Task: Build a wheel and inspect metadata to ensure developer dependencies are NOT listed.
-- -  - [x] Task: Remove old script files in `scripts/` that have been migrated.
-- -  - [x] Task: Update `README.md` or developer docs to point to the new CLI usage.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Validation & Cleanup' (Protocol in workflow.md)
+- [x] Task: Verify that `uv run tools/cli.py --help` and all subcommands work correctly. a0a34dc
+- [x] Task: Build a wheel and inspect metadata to ensure developer dependencies are NOT listed. d3a0ba5
+- [x] Task: Remove old script files in `scripts/` that have been migrated. ab7f69b
+- [x] Task: Update `README.md` or developer docs to point to the new CLI usage. ca90fb3
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Validation & Cleanup' (Protocol in workflow.md) 7a6f204
+
