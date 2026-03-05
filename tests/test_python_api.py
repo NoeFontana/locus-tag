@@ -80,6 +80,7 @@ def test_soft_decoding():
     batch = detector.detect(img)
     assert isinstance(batch, locus.DetectionBatch)
 
+
 def test_vectorized_poses():
     """Verify that 3D poses are returned in the compact (N, 7) format."""
     # Create an ArUco tag
@@ -89,7 +90,7 @@ def test_vectorized_poses():
     canvas[150:250, 150:250] = tag_img
 
     detector = locus.Detector(families=[locus.TagFamily.ArUco4x4_50])
-    
+
     # Request pose estimation
     intrinsics = locus.CameraIntrinsics(fx=800.0, fy=800.0, cx=200.0, cy=200.0)
     batch = detector.detect(canvas, intrinsics=intrinsics, tag_size=0.10)
@@ -98,8 +99,8 @@ def test_vectorized_poses():
     assert batch.poses is not None
     assert batch.poses.shape == (1, 7)
     assert batch.poses.dtype == np.float32
-    
+
     # [tx, ty, tz, qx, qy, qz, qw]
     assert abs(batch.poses[0, 0]) < 0.1
     assert abs(batch.poses[0, 1]) < 0.1
-    assert batch.poses[0, 2] > 0 # Positive Z
+    assert batch.poses[0, 2] > 0  # Positive Z

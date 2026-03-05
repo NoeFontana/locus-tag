@@ -8,12 +8,53 @@ import cv2
 import locus
 import numpy as np
 from huggingface_hub import hf_hub_download
-from pupil_apriltags import Detector as AprilTagDetector
+from pupil_apriltags import Detector as AprilTagDetector  # type: ignore
 
 ICRA_REPO_ID = "NoeFontana/apriltag-validation-data"
 ICRA_CACHE_DIR = Path("tests/data/icra2020")
 UMICH_DATA_URL = "https://april.eecs.umich.edu/media/apriltag/apriltag_test_images.tar.gz"
 UMICH_CACHE_DIR = Path("tests/data/umich")
+
+
+class FamilyMapper:
+    """Centralized mapping for tag families across different libraries."""
+
+    @staticmethod
+    def to_locus(family: int | None) -> list[locus.TagFamily] | None:
+        if family is None:
+            return None
+        mapping = {
+            int(locus.TagFamily.AprilTag36h11): locus.TagFamily.AprilTag36h11,
+            int(locus.TagFamily.AprilTag41h12): locus.TagFamily.AprilTag41h12,
+            int(locus.TagFamily.ArUco4x4_50): locus.TagFamily.ArUco4x4_50,
+            int(locus.TagFamily.ArUco4x4_100): locus.TagFamily.ArUco4x4_100,
+        }
+        f = mapping.get(family)
+        return [f] if f else None
+
+    @staticmethod
+    def to_opencv(family: int | None) -> int | None:
+        if family is None:
+            return None
+        mapping = {
+            int(locus.TagFamily.AprilTag36h11): cv2.aruco.DICT_APRILTAG_36h11,
+            int(locus.TagFamily.AprilTag41h12): None,
+            int(locus.TagFamily.ArUco4x4_50): cv2.aruco.DICT_4X4_50,
+            int(locus.TagFamily.ArUco4x4_100): cv2.aruco.DICT_4X4_100,
+        }
+        return mapping.get(family)
+
+    @staticmethod
+    def to_apriltag(family: int | None) -> str | None:
+        if family is None:
+            return None
+        mapping = {
+            int(locus.TagFamily.AprilTag36h11): "tag36h11",
+            int(locus.TagFamily.AprilTag41h12): "tagStandard41h12",
+            int(locus.TagFamily.ArUco4x4_50): None,
+            int(locus.TagFamily.ArUco4x4_100): None,
+        }
+        return mapping.get(family)
 
 
 @dataclass
@@ -126,36 +167,38 @@ class DatasetLoader:
         return results
 
     def _parse_csv(self, csv_file: Path) -> dict[str, list[TagGroundTruth]]:
-        gt_map: dict[str, dict[int, dict[str, Any]]] = {}
+        """Parses ICRA 2020 ground truth CSV files."""
+        # Use primitive types for interim accumulation for performance
+        gt_data: dict[str, dict[int, dict[str, Any]]] = {}
         with open(csv_file) as f:
             reader = csv.DictReader(f)
             for row in reader:
                 img = row["image"]
                 tid = int(row["tag_id"])
+
+                img_entry = gt_data.setdefault(img, {})
+                tag_entry = img_entry.setdefault(tid, {"corners": [None] * 4, "visible": True})
+
                 corner_idx = int(row["corner"])
-                x = float(row["ground_truth_x"])
-                y = float(row["ground_truth_y"])
-                visible = int(row.get("tag_fully_visible", 1)) == 1
-
-                if img not in gt_map:
-                    gt_map[img] = {}
-                if tid not in gt_map[img]:
-                    gt_map[img][tid] = {"corners": [None] * 4, "visible": True}
-
                 if 0 <= corner_idx < 4:
-                    gt_map[img][tid]["corners"][corner_idx] = [x, y]
-                if not visible:
-                    gt_map[img][tid]["visible"] = False
+                    tag_entry["corners"][corner_idx] = [
+                        float(row["ground_truth_x"]),
+                        float(row["ground_truth_y"]),
+                    ]
+
+                if int(row.get("tag_fully_visible", 1)) == 0:
+                    tag_entry["visible"] = False
 
         final_map = {}
-        for img, tags in gt_map.items():
+        for img, tags in gt_data.items():
             valid = []
             for tid, data in tags.items():
-                if any(c is None for c in data["corners"]) or not data["visible"]:
-                    continue
-                valid.append(
-                    TagGroundTruth(tag_id=tid, corners=np.array(data["corners"], dtype=np.float32))
-                )
+                if data["visible"] and all(c is not None for c in data["corners"]):
+                    valid.append(
+                        TagGroundTruth(
+                            tag_id=tid, corners=np.array(data["corners"], dtype=np.float32)
+                        )
+                    )
             if valid:
                 final_map[img] = valid
         return final_map
@@ -174,7 +217,7 @@ class HubBenchmarkLoader:
         Yields:
             A tuple of (image_name, grayscale_image_np, list_of_ground_truth_tags).
         """
-        import datasets
+        import datasets  # type: ignore
 
         # Stream the dataset from the hub
         ds = datasets.load_dataset(self.repo_id, subset_name, split="train", streaming=True)
@@ -278,18 +321,9 @@ class LocusWrapper(LibraryWrapper):
         family: int | None = None,
     ):
         super().__init__(name)
-        # Handle cases where config might be passed but needs to be mapped to kwargs
-        # Or just use the Detector directly with parameters.
-        # Map int to TagFamily constant
-        family_obj_map = {
-            int(locus.TagFamily.AprilTag36h11): locus.TagFamily.AprilTag36h11,
-            int(locus.TagFamily.AprilTag41h12): locus.TagFamily.AprilTag41h12,
-            int(locus.TagFamily.ArUco4x4_50): locus.TagFamily.ArUco4x4_50,
-            int(locus.TagFamily.ArUco4x4_100): locus.TagFamily.ArUco4x4_100,
-        }
-        families = [family_obj_map[family]] if family is not None else None
+        families = FamilyMapper.to_locus(family)
+
         if config:
-            # Comprehensive mapping from config object to Detector parameters
             self.detector = locus.Detector(
                 decimation=decimation,
                 families=families,
@@ -322,7 +356,7 @@ class LocusWrapper(LibraryWrapper):
                     "center": center,
                     "corners": corners.tolist(),
                     "hamming": int(batch.error_rates[i]),
-                    "margin": 0.0, # Not currently exposed
+                    "margin": 0.0,  # Not currently exposed
                 }
             )
         return serializable, None
@@ -331,14 +365,8 @@ class LocusWrapper(LibraryWrapper):
 class OpenCVWrapper(LibraryWrapper):
     def __init__(self, family: int | None = None):
         super().__init__("OpenCV")
-        # Map int value to OpenCV constants
-        family_map = {
-            int(locus.TagFamily.AprilTag36h11): cv2.aruco.DICT_APRILTAG_36h11,
-            int(locus.TagFamily.AprilTag41h12): None,
-            int(locus.TagFamily.ArUco4x4_50): cv2.aruco.DICT_4X4_50,
-            int(locus.TagFamily.ArUco4x4_100): cv2.aruco.DICT_4X4_100,
-        }
-        cv_family = family_map.get(family) if family is not None else None
+        cv_family = FamilyMapper.to_opencv(family)
+
         if cv_family is not None:
             dictionary = cv2.aruco.getPredefinedDictionary(cv_family)
             parameters = cv2.aruco.DetectorParameters()
@@ -350,6 +378,7 @@ class OpenCVWrapper(LibraryWrapper):
             parameters.minDistanceToBorder = 1
             parameters.polygonalApproxAccuracyRate = 0.01
             self.detector = cv2.aruco.ArucoDetector(dictionary, parameters)
+
         else:
             self.detector = None
 
@@ -374,18 +403,10 @@ class OpenCVWrapper(LibraryWrapper):
 
 
 class AprilTagWrapper(LibraryWrapper):
-    def __init__(
-        self, nthreads: int = 8, quad_decimate: float = 1.0, family: int | None = None
-    ):
+    def __init__(self, nthreads: int = 8, quad_decimate: float = 1.0, family: int | None = None):
         super().__init__("AprilTag")
-        # Map int to AprilTag library names
-        family_map = {
-            int(locus.TagFamily.AprilTag36h11): "tag36h11",
-            int(locus.TagFamily.AprilTag41h12): "tagStandard41h12",
-            int(locus.TagFamily.ArUco4x4_50): None,
-            int(locus.TagFamily.ArUco4x4_100): None,
-        }
-        at_family = family_map.get(family) if family is not None else None
+        at_family = FamilyMapper.to_apriltag(family)
+
         if at_family is not None:
             self.detector = AprilTagDetector(
                 families=at_family,
@@ -425,17 +446,12 @@ def generate_synthetic_image(
     cell_w, cell_h = res[0] // cols, res[1] // rows
     tag_size = int(min(cell_w, cell_h) * 0.6)
 
-    # Map int value to OpenCV constants
-    if family == 2:
-        cv_family = cv2.aruco.DICT_4X4_50
-    elif family == 3:
-        cv_family = cv2.aruco.DICT_4X4_100
-    elif family == 1:
-        cv_family = cv2.aruco.DICT_APRILTAG_36H11 # Closest
-    else:
+    cv_family = FamilyMapper.to_opencv(family)
+    if cv_family is None:
         cv_family = cv2.aruco.DICT_APRILTAG_36h11
 
     dictionary = cv2.aruco.getPredefinedDictionary(cv_family)
+
     gt_data = []
 
     for i in range(num_tags):

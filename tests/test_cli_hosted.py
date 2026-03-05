@@ -1,6 +1,5 @@
 import io
 import unittest
-from argparse import Namespace
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -33,7 +32,7 @@ class TestCLIHosted(unittest.TestCase):
                 decimation=1,
                 limit=None,
                 skip=0,
-                family="AprilTag36h11"
+                family="AprilTag36h11",
             )
             output = fake_out.getvalue()
 

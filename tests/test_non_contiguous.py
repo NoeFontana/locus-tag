@@ -1,4 +1,3 @@
-import cv2
 import locus
 import numpy as np
 import pytest
