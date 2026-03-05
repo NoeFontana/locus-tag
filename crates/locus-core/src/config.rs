@@ -176,7 +176,6 @@ impl Default for DetectorConfig {
     }
 }
 
-
 impl DetectorConfig {
     /// Create a new builder for `DetectorConfig`.
     #[must_use]

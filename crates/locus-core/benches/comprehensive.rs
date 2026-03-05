@@ -1,19 +1,29 @@
-#![allow(missing_docs)]
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::missing_panics_doc)]
-#![allow(clippy::must_use_candidate)]
-#![allow(clippy::return_self_not_must_use)]
-#![allow(clippy::cast_precision_loss)]
-#![allow(clippy::ptr_arg)]
+#![allow(
+    missing_docs,
+    dead_code,
+    clippy::unwrap_used,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use,
+    clippy::missing_panics_doc,
+    clippy::cast_precision_loss,
+    clippy::ptr_arg
+)]
 
 //! Comprehensive benchmarking suite for complex scenes and pipeline stages.
 
 use bumpalo::Bump;
 use divan::bench;
 use locus_core::Detector;
-use locus_core::{DetectOptions, TagFamily};
 use locus_core::ImageView;
+use locus_core::PoseEstimationMode;
+use locus_core::TagFamily;
 use locus_core::bench_api::{SceneBuilder, TagPlacement};
+use locus_core::threshold::ThresholdEngine;
 
 fn main() {
     divan::main();
@@ -38,7 +48,7 @@ fn bench_thresholding_640x480(bencher: divan::Bencher) {
     });
     let (data, _) = builder.build();
     let img = ImageView::new(&data, width, height, width).unwrap();
-    let engine = locus_core::bench_api::ThresholdEngine::new();
+    let engine = ThresholdEngine::new();
     let mut output = vec![0u8; width * height];
 
     let arena = Bump::new();
@@ -63,7 +73,7 @@ fn bench_segmentation_640x480(bencher: divan::Bencher) {
     });
     let (data, _) = builder.build();
     let mut binarized = vec![0u8; width * height];
-    let engine = locus_core::bench_api::ThresholdEngine::new();
+    let engine = ThresholdEngine::new();
     let img = ImageView::new(&data, width, height, width).unwrap();
     let arena = Bump::new();
     let stats = engine.compute_tile_stats(&arena, &img);
@@ -91,14 +101,13 @@ fn bench_quad_extraction_640x480(bencher: divan::Bencher) {
     let (data, _) = builder.build();
     let arena = Bump::new();
     let mut binarized = vec![0u8; width * height];
-    let engine = locus_core::bench_api::ThresholdEngine::new();
+    let engine = ThresholdEngine::new();
     let img = ImageView::new(&data, width, height, width).unwrap();
     let stats = engine.compute_tile_stats(&arena, &img);
     engine.apply_threshold(&arena, &img, &stats, &mut binarized);
 
-    let labels = locus_core::bench_api::label_components_with_stats(
-        &arena, &binarized, width, height, true,
-    );
+    let labels =
+        locus_core::bench_api::label_components_with_stats(&arena, &binarized, width, height, true);
 
     bencher.bench_local(move || {
         let local_arena = Bump::new();
@@ -134,7 +143,7 @@ fn bench_full_detect_640x480(bencher: divan::Bencher) {
     let img = ImageView::new(&data, width, height, width).unwrap();
     let mut detector = Detector::new();
 
-    bencher.bench_local(move || detector.detect(&img));
+    bencher.bench_local(move || detector.detect(&img, None, None, PoseEstimationMode::Fast));
 }
 
 /// Benchmark detection in a complex scene with multiple families and tags.
@@ -158,16 +167,13 @@ fn bench_mixed_scene_multiple_tags(bencher: divan::Bencher) {
     let img = ImageView::new(&data, width, height, width).unwrap();
 
     let mut detector = Detector::new();
-    let options = DetectOptions {
-        families: vec![
-            TagFamily::AprilTag36h11,
-            TagFamily::ArUco4x4_50,
-            TagFamily::ArUco4x4_100,
-        ],
-        ..Default::default()
-    };
+    detector.set_families(&[
+        TagFamily::AprilTag36h11,
+        TagFamily::ArUco4x4_50,
+        TagFamily::ArUco4x4_100,
+    ]);
 
-    bencher.bench_local(move || detector.detect_with_options(&img, &options));
+    bencher.bench_local(move || detector.detect(&img, None, None, PoseEstimationMode::Fast));
 }
 
 /// Benchmark detection with high tag density (stress test quad extraction).
@@ -189,12 +195,9 @@ fn bench_dense_scene_20_tags(bencher: divan::Bencher) {
     let img = ImageView::new(&data, width, height, width).unwrap();
 
     let mut detector = Detector::new();
-    let options = DetectOptions {
-        families: vec![TagFamily::AprilTag36h11],
-        ..Default::default()
-    };
+    detector.set_families(&[TagFamily::AprilTag36h11]);
 
-    bencher.bench_local(move || detector.detect_with_options(&img, &options));
+    bencher.bench_local(move || detector.detect(&img, None, None, PoseEstimationMode::Fast));
 }
 
 /// Benchmark detection robustness under high noise.
@@ -212,10 +215,7 @@ fn bench_noisy_scene(bencher: divan::Bencher) {
     let img = ImageView::new(&data, width, height, width).unwrap();
 
     let mut detector = Detector::new();
-    let options = DetectOptions {
-        families: vec![TagFamily::ArUco4x4_50],
-        ..Default::default()
-    };
+    detector.set_families(&[TagFamily::ArUco4x4_50]);
 
-    bencher.bench_local(move || detector.detect_with_options(&img, &options));
+    bencher.bench_local(move || detector.detect(&img, None, None, PoseEstimationMode::Fast));
 }

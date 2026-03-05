@@ -1,12 +1,20 @@
-#![allow(missing_docs)]
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::must_use_candidate)]
-#![allow(clippy::similar_names)]
+#![allow(
+    missing_docs,
+    dead_code,
+    clippy::unwrap_used,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use
+)]
 
 use divan::bench;
 use locus_core::ImageView;
-use locus_core::bench_api::generate_checkered;
-use locus_core::bench_api::ThresholdEngine;
+use locus_core::test_utils::generate_checkered;
+use locus_core::threshold::ThresholdEngine;
 
 fn main() {
     divan::main();

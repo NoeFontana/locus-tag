@@ -248,6 +248,7 @@ pub fn compute_homographies_soa(corners: &[Point2f], homographies: &mut [Matrix3
 /// least squares, then compute corners as line intersections. This provides
 /// more accurate corner localization than the initial detection.
 #[must_use]
+#[allow(dead_code)]
 pub(crate) fn refine_corners_with_homography(
     img: &crate::image::ImageView,
     corners: &[[f64; 2]; 4],
@@ -358,6 +359,7 @@ pub(crate) fn refine_corners_with_homography(
 /// This method optimizes the homography by adjusting corners to maximize the
 /// contrast between expected black and white cells in the decoded grid.
 /// This minimizes photometric error in the tag's coordinate system.
+#[allow(dead_code)]
 pub(crate) fn refine_corners_gridfit(
     img: &crate::image::ImageView,
     corners: &[[f64; 2]; 4],
@@ -437,6 +439,7 @@ pub(crate) fn refine_corners_gridfit(
 
 /// Compute the contrast of the grid given a homography and the expected bit pattern.
 /// Returns (mean_white - mean_black).
+#[allow(dead_code)]
 fn compute_grid_contrast(
     img: &crate::image::ImageView,
     h: &Homography,
@@ -1287,6 +1290,7 @@ pub fn sample_grid(
 /// Rotate a square bit grid 90 degrees clockwise.
 /// This is an O(1) bitwise operation but conceptually represents rotating the N x N pixel grid.
 #[must_use]
+#[allow(dead_code)]
 pub(crate) fn rotate90(bits: u64, dim: usize) -> u64 {
     let mut res = 0u64;
     for y in 0..dim {
@@ -1957,13 +1961,15 @@ impl TagDecoder for ArUco4x4_100 {
 }
 
 /// Generic decoder for any TagDictionary (static or custom).
+#[allow(dead_code)]
 pub(crate) struct GenericDecoder {
     dict: std::sync::Arc<crate::dictionaries::TagDictionary>,
 }
 
 impl GenericDecoder {
-    /// Create a new generic decoder from a dictionary.
+    /// Create a new generic decoder for the given dictionary.
     #[must_use]
+    #[allow(dead_code)]
     pub fn new(dict: crate::dictionaries::TagDictionary) -> Self {
         Self {
             dict: std::sync::Arc::new(dict),

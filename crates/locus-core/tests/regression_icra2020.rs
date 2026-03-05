@@ -1,28 +1,28 @@
-use locus_core::bench_api::*;
+#![allow(
+    missing_docs,
+    dead_code,
+    clippy::unwrap_used,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use,
+    clippy::type_complexity,
+    clippy::unnecessary_debug_formatting,
+    clippy::trivially_copy_pass_by_ref,
+    clippy::needless_pass_by_value,
+    clippy::missing_panics_doc
+)]
 #[cfg(feature = "bench-internals")]
 // Unified Regression Test Harness
 //
 // Evaluates the detector against:
 // 1. "Fixtures" (Committed representative images) - Runs in CI, guarantees baseline functionality.
 // 2. "ICRA 2020" (External dataset) - Core subset runs by default, heavy datasets gated by LOCUS_EXTENDED_REGRESSION.
-
-#[allow(
-    missing_docs,
-    clippy::unwrap_used,
-    clippy::type_complexity,
-    clippy::too_many_lines,
-    clippy::unnecessary_debug_formatting,
-    clippy::similar_names,
-    clippy::trivially_copy_pass_by_ref,
-    clippy::needless_pass_by_value,
-    clippy::items_after_statements,
-    clippy::missing_panics_doc,
-    clippy::must_use_candidate,
-    clippy::return_self_not_must_use
-)]
-
 use locus_core::image::ImageView;
-use locus_core::{PoseEstimationMode, DetectOptions, Detector, DetectorConfig, config::TagFamily};
+use locus_core::{DetectOptions, Detector, DetectorConfig, config::TagFamily};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
@@ -65,7 +65,6 @@ struct PipelineMetrics {
     total_ms: f64,
     num_detections: usize,
 }
-
 
 fn serialize_rmse<S>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -166,7 +165,7 @@ impl RegressionHarness {
 
         for (filename, data, width, height, gt) in provider.iter() {
             let img = ImageView::new(&data, width, height, width).expect("valid image");
-            
+
             let start = std::time::Instant::now();
             let detections = detector.detect(
                 &img,
@@ -245,7 +244,6 @@ impl RegressionHarness {
                     stats: PipelineMetrics {
                         total_ms,
                         num_detections: detections.len(),
-                        ..Default::default()
                     },
                     missed_ids,
                     extra_ids,

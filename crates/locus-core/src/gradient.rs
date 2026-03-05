@@ -10,6 +10,7 @@ use bumpalo::collections::Vec as BumpVec;
 
 /// Gradient data for a single pixel.
 #[derive(Clone, Copy, Default)]
+#[allow(dead_code)]
 pub(crate) struct Gradient {
     /// Gradient in x-direction.
     pub gx: i16,
@@ -63,6 +64,7 @@ pub(crate) fn compute_sobel(img: &ImageView) -> Vec<Gradient> {
 
 /// A detected line segment.
 #[derive(Clone, Copy, Debug)]
+#[allow(dead_code)]
 pub(crate) struct LineSegment {
     /// Start x coordinate.
     pub x0: f32,
@@ -79,6 +81,7 @@ pub(crate) struct LineSegment {
 /// Extract line segments from gradient image using a simplified LSD approach.
 /// This is a greedy region-growing algorithm on gradient direction.
 #[must_use]
+#[allow(dead_code)]
 pub(crate) fn extract_line_segments(
     grads: &[Gradient],
     width: usize,
@@ -164,6 +167,7 @@ pub(crate) fn extract_line_segments(
 
 /// Find quads by grouping 4 line segments that form a closed quadrilateral.
 #[must_use]
+#[allow(dead_code)]
 pub(crate) fn find_first_quad_from_segments(segments: &[LineSegment]) -> Option<[[f32; 2]; 4]> {
     if segments.len() < 4 {
         return None;
@@ -188,6 +192,7 @@ pub(crate) fn find_first_quad_from_segments(segments: &[LineSegment]) -> Option<
     None
 }
 
+#[allow(dead_code)]
 fn try_form_quad(
     s0: &LineSegment,
     s1: &LineSegment,
@@ -264,6 +269,7 @@ fn try_form_quad(
     }
 }
 
+#[allow(dead_code)]
 fn line_intersection(s1: &LineSegment, s2: &LineSegment) -> Option<[f32; 2]> {
     let dx1 = s1.x1 - s1.x0;
     let dy1 = s1.y1 - s1.y0;
@@ -288,6 +294,7 @@ fn line_intersection(s1: &LineSegment, s2: &LineSegment) -> Option<[f32; 2]> {
     Some(p)
 }
 
+#[allow(dead_code)]
 fn quad_area(corners: &[[f32; 2]; 4]) -> f32 {
     let mut area = 0.0;
     for i in 0..4 {
@@ -316,6 +323,7 @@ fn quad_area(corners: &[[f32; 2]; 4]) -> f32 {
 #[allow(clippy::similar_names)]
 #[allow(clippy::too_many_arguments)]
 #[must_use]
+#[allow(dead_code)]
 struct ComponentBounds {
     min_x: usize,
     min_y: usize,
@@ -323,6 +331,7 @@ struct ComponentBounds {
     max_y: usize,
 }
 
+#[allow(dead_code)]
 struct QuadFitter<'a> {
     arena: &'a Bump,
     img: &'a ImageView<'a>,
@@ -609,6 +618,7 @@ impl<'a> QuadFitter<'a> {
 /// Fit a quad from a small component using on-demand gradient computation.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
+#[allow(dead_code)]
 pub(crate) fn fit_quad_from_component(
     arena: &Bump,
     img: &ImageView,
@@ -628,6 +638,7 @@ pub(crate) fn fit_quad_from_component(
 /// 2. Line fitting for each cluster
 /// 3. Intersection of lines to form CW quad [TL, TR, BR, BL]
 #[allow(clippy::needless_range_loop)]
+#[allow(dead_code)]
 fn solve_quad_from_boundary_points(
     boundary_points: &[(f32, f32, f32)], // x, y, angle
     _img_width: usize, // Unused for now but kept for context if needed for boundary checks
@@ -756,6 +767,7 @@ fn solve_quad_from_boundary_points(
 #[allow(clippy::cast_sign_loss)]
 #[allow(clippy::similar_names)]
 #[must_use]
+#[allow(dead_code)]
 pub(crate) fn fit_quad_from_gradients(
     grads: &[Gradient],
     labels: &[u32],
@@ -795,6 +807,7 @@ pub(crate) fn fit_quad_from_gradients(
 }
 
 /// Compute angle difference in range [0, π/2] (perpendicular equivalence)
+#[allow(dead_code)]
 fn angle_diff(a: f32, b: f32) -> f32 {
     let diff = (a - b).abs();
     let diff = diff % std::f32::consts::PI;

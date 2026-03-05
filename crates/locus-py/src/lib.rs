@@ -7,7 +7,9 @@
 )]
 
 use locus_core::ImageView;
-use numpy::{PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
+use numpy::{
+    PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods,
+};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -157,27 +159,24 @@ pub struct Detector {
 impl Detector {
     /// Detect tags and return a dictionary of NumPy arrays (SoA layout).
     #[pyo3(signature = (img, intrinsics=None, tag_size=None, pose_estimation_mode=PoseEstimationMode::Fast))]
+    #[allow(clippy::needless_pass_by_value)]
     fn detect(
         &mut self,
         py: Python<'_>,
-        img: PyReadonlyArray2<u8>,
+        img: PyReadonlyArray2<'_, u8>,
         intrinsics: Option<CameraIntrinsics>,
         tag_size: Option<f64>,
         pose_estimation_mode: PoseEstimationMode,
     ) -> PyResult<PyObject> {
         let view = prepare_image_view(&img)?;
-        
+
         let core_intrinsics = intrinsics.map(locus_core::CameraIntrinsics::from);
         let core_pose_mode = locus_core::config::PoseEstimationMode::from(pose_estimation_mode);
 
         // 1. Run core pipeline
         let detections = py.allow_threads(|| {
-            self.inner.detect(
-                &view,
-                core_intrinsics.as_ref(),
-                tag_size,
-                core_pose_mode,
-            )
+            self.inner
+                .detect(&view, core_intrinsics.as_ref(), tag_size, core_pose_mode)
         });
 
         let n = detections.len();
@@ -189,12 +188,21 @@ impl Detector {
 
         // Perform memory mapping
         unsafe {
-            let ids_slice = ids_arr.as_slice_mut().unwrap();
-            let corners_slice = corners_arr.as_slice_mut().unwrap();
-            let err_slice = error_rates_arr.as_slice_mut().unwrap();
+            let ids_slice = ids_arr
+                .as_slice_mut()
+                .expect("failed to get mutable slice for ids");
+            let corners_slice = corners_arr
+                .as_slice_mut()
+                .expect("failed to get mutable slice for corners");
+            let err_slice = error_rates_arr
+                .as_slice_mut()
+                .expect("failed to get mutable slice for error_rates");
 
             for (i, det) in detections.iter().enumerate() {
-                ids_slice[i] = det.id as i32;
+                #[allow(clippy::cast_possible_wrap)]
+                {
+                    ids_slice[i] = det.id as i32;
+                }
                 for j in 0..4 {
                     corners_slice[i * 8 + j * 2] = det.corners[j][0] as f32;
                     corners_slice[i * 8 + j * 2 + 1] = det.corners[j][1] as f32;
@@ -212,12 +220,14 @@ impl Detector {
         if intrinsics.is_some() && tag_size.is_some() {
             let poses_arr = PyArray2::<f32>::zeros(py, [n, 7], false);
             unsafe {
-                let poses_slice = poses_arr.as_slice_mut().unwrap();
+                let poses_slice = poses_arr
+                    .as_slice_mut()
+                    .expect("failed to get mutable slice for poses");
                 for (i, det) in detections.iter().enumerate() {
                     if let Some(pose) = &det.pose {
                         let q = nalgebra::UnitQuaternion::from_matrix(&pose.rotation);
                         let t = pose.translation;
-                        
+
                         let offset = i * 7;
                         poses_slice[offset] = t.x as f32;
                         poses_slice[offset + 1] = t.y as f32;
@@ -256,7 +266,11 @@ fn create_detector(
             1 => locus_core::TagFamily::AprilTag41h12,
             2 => locus_core::TagFamily::ArUco4x4_50,
             3 => locus_core::TagFamily::ArUco4x4_100,
-            _ => return Err(PyValueError::new_err(format!("Invalid TagFamily value: {}", f))),
+            _ => {
+                return Err(PyValueError::new_err(format!(
+                    "Invalid TagFamily value: {f}"
+                )));
+            },
         };
         builder = builder.with_family(family);
     }
@@ -325,12 +339,12 @@ fn create_detector(
     })
 }
 
-fn prepare_image_view<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageView<'a>> {
+fn prepare_image_view<'a>(img: &PyReadonlyArray2<'_, u8>) -> PyResult<ImageView<'a>> {
     let shape = img.shape();
     let height = shape[0];
     let width = shape[1];
     let strides = img.strides();
-    let stride_y = strides[0] as usize;
+    let stride_y = strides[0].cast_unsigned();
     let stride_x = strides[1];
 
     if stride_x == 1 {
@@ -340,9 +354,12 @@ fn prepare_image_view<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageVi
             0
         };
         let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
-        ImageView::new(data, width, height, stride_y).map_err(|e| PyRuntimeError::new_err(e.to_string()))
+        ImageView::new(data, width, height, stride_y)
+            .map_err(|e| PyRuntimeError::new_err(e.clone()))
     } else {
-        Err(PyValueError::new_err("Array must be C-contiguous. Call np.ascontiguousarray(image) first."))
+        Err(PyValueError::new_err(
+            "Array must be C-contiguous. Call np.ascontiguousarray(image) first.",
+        ))
     }
 }
 
@@ -354,10 +371,10 @@ fn prepare_image_view<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageVi
 fn init_tracy() {
     #[cfg(feature = "tracy")]
     {
+        use tracing_subscriber::layer::SubscriberExt;
         unsafe {
             std::env::set_var("TRACY_NO_INVARIANT_CHECK", "1");
         }
-        use tracing_subscriber::layer::SubscriberExt;
         let subscriber = tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default());
         tracing::subscriber::set_global_default(subscriber).ok();
     }

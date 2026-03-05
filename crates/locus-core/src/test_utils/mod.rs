@@ -169,6 +169,7 @@ pub fn compute_rmse(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 4]) -> f
 
 /// Parameters for generating test images with photometric variations.
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub(crate) struct TestImageParams {
     /// Tag family to generate.
     pub family: crate::config::TagFamily,
@@ -204,7 +205,10 @@ impl Default for TestImageParams {
 /// Includes tag generation, placement, and photometric adjustments.
 #[must_use]
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-pub(crate) fn generate_test_image_with_params(params: &TestImageParams) -> (Vec<u8>, [[f64; 2]; 4]) {
+#[allow(dead_code)]
+pub(crate) fn generate_test_image_with_params(
+    params: &TestImageParams,
+) -> (Vec<u8>, [[f64; 2]; 4]) {
     // First generate base image
     let (mut data, corners) = generate_synthetic_test_image(
         params.family,
@@ -230,6 +234,7 @@ pub(crate) fn generate_test_image_with_params(params: &TestImageParams) -> (Vec<
 /// `brightness`: -255 to +255
 /// `contrast`: 0.0 to 127.0 (1.0 = no change)
 #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+#[allow(dead_code)]
 pub(crate) fn apply_brightness_contrast(image: &mut [u8], brightness: i32, contrast: f32) {
     for pixel in image.iter_mut() {
         let b = f32::from(*pixel);
@@ -242,6 +247,7 @@ pub(crate) fn apply_brightness_contrast(image: &mut [u8], brightness: i32, contr
 /// Count black pixels in binary data.
 #[must_use]
 #[allow(clippy::naive_bytecount)]
+#[allow(dead_code)]
 pub(crate) fn count_black_pixels(data: &[u8]) -> usize {
     data.iter().filter(|&&p| p == 0).count()
 }
@@ -250,7 +256,12 @@ pub(crate) fn count_black_pixels(data: &[u8]) -> usize {
 /// Returns the ratio of correctly black pixels in the 1-cell-wide border (0.0 to 1.0).
 #[must_use]
 #[allow(clippy::cast_sign_loss)]
-pub(crate) fn measure_border_integrity(binary: &[u8], width: usize, corners: &[[f64; 2]; 4]) -> f64 {
+#[allow(dead_code)]
+pub(crate) fn measure_border_integrity(
+    binary: &[u8],
+    width: usize,
+    corners: &[[f64; 2]; 4],
+) -> f64 {
     let min_x = corners
         .iter()
         .map(|c| c[0])
@@ -355,7 +366,7 @@ pub(crate) fn measure_border_integrity(binary: &[u8], width: usize, corners: &[[
 
 /// Generates a checkered pattern image for benchmarking.
 #[must_use]
-pub(crate) fn generate_checkered(width: usize, height: usize) -> Vec<u8> {
+pub fn generate_checkered(width: usize, height: usize) -> Vec<u8> {
     let mut data = vec![200u8; width * height];
     for y in (0..height).step_by(16) {
         for x in (0..width).step_by(16) {

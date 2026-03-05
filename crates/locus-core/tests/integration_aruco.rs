@@ -1,13 +1,22 @@
-use locus_core::PoseEstimationMode;
-use locus_core::bench_api::*;
+#![allow(
+    missing_docs,
+    dead_code,
+    clippy::unwrap_used,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use
+)]
 #[cfg(feature = "bench-internals")]
 // Integration test for ArUco 4x4_50 tag detection.
 //
 // This test validates the complete detection pipeline using synthetic ArUco tags,
 // matching the conditions used in Python benchmarks (`tests/test_config.py`).
-
-#[allow(clippy::unwrap_used)]
 use locus_core::Detector;
+use locus_core::PoseEstimationMode;
 use locus_core::config::TagFamily;
 
 #[test]

@@ -1,8 +1,19 @@
+#![allow(
+    missing_docs,
+    dead_code,
+    clippy::unwrap_used,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use
+)]
 use locus_core::bench_api::*;
-use locus_core::{PoseEstimationMode, Detector, DetectorBuilder, TagFamily, ImageView};
+use locus_core::{DetectorBuilder, ImageView, PoseEstimationMode, TagFamily};
 
 #[cfg(feature = "bench-internals")]
-
 #[test]
 fn test_accuracy_synthetic() {
     let canvas_size = 640;
@@ -16,18 +27,11 @@ fn test_accuracy_synthetic() {
     for (family, tag_id, size) in test_cases {
         #[cfg(feature = "bench-internals")]
         {
-            let (data, gt_corners) = generate_synthetic_test_image(
-                family,
-                tag_id as u16,
-                size,
-                canvas_size,
-                0.0,
-            );
+            let (data, gt_corners) =
+                generate_synthetic_test_image(family, tag_id as u16, size, canvas_size, 0.0);
             let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
 
-            let mut detector = DetectorBuilder::new()
-                .with_family(family)
-                .build();
+            let mut detector = DetectorBuilder::new().with_family(family).build();
             let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
 
             assert!(!detections.is_empty());
@@ -50,18 +54,11 @@ fn test_pose_accuracy() {
 
     #[cfg(feature = "bench-internals")]
     {
-        let (data, _) = generate_synthetic_test_image(
-            family,
-            tag_id,
-            tag_size_px,
-            canvas_size,
-            0.0,
-        );
+        let (data, _) =
+            generate_synthetic_test_image(family, tag_id, tag_size_px, canvas_size, 0.0);
         let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
 
-        let mut detector = DetectorBuilder::new()
-            .with_family(family)
-            .build();
+        let mut detector = DetectorBuilder::new().with_family(family).build();
         let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
 
         assert!(!detections.is_empty());

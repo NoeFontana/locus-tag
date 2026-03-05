@@ -120,7 +120,7 @@ pub fn label_components<'a>(
 
 /// Label components and compute bounding box stats for each.
 #[allow(clippy::too_many_lines)]
-pub(crate) fn label_components_with_stats<'a>(
+pub fn label_components_with_stats<'a>(
     arena: &'a Bump,
     binary: &[u8],
     width: usize,
@@ -396,7 +396,7 @@ unsafe fn extract_runs_row_neon(
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::cast_sign_loss)]
 #[allow(clippy::cast_possible_wrap, clippy::too_many_arguments)]
-pub(crate) fn label_components_threshold_model<'a>(
+pub fn label_components_threshold_model<'a>(
     arena: &'a Bump,
     grayscale: &[u8],
     grayscale_stride: usize,

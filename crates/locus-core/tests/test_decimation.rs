@@ -1,8 +1,19 @@
+#![allow(
+    missing_docs,
+    dead_code,
+    clippy::unwrap_used,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use
+)]
 use locus_core::bench_api::*;
-use locus_core::{PoseEstimationMode, Detector, DetectorBuilder, TagFamily, ImageView};
+use locus_core::{DetectorBuilder, ImageView, PoseEstimationMode, TagFamily};
 
 #[cfg(feature = "bench-internals")]
-
 #[test]
 fn test_decimation_accuracy() {
     let canvas_size = 640;
@@ -12,13 +23,8 @@ fn test_decimation_accuracy() {
 
     #[cfg(feature = "bench-internals")]
     {
-        let (data, gt_corners) = generate_synthetic_test_image(
-            family,
-            tag_id,
-            tag_size_px,
-            canvas_size,
-            0.0,
-        );
+        let (data, gt_corners) =
+            generate_synthetic_test_image(family, tag_id, tag_size_px, canvas_size, 0.0);
         let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
 
         // 1. Detect with decimation 1
@@ -26,7 +32,7 @@ fn test_decimation_accuracy() {
             .with_family(family)
             .with_decimation(1)
             .build();
-        
+
         let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
         assert!(!detections.is_empty());
         let err1 = compute_corner_error(&detections[0].corners, &gt_corners);
@@ -36,12 +42,12 @@ fn test_decimation_accuracy() {
             .with_family(family)
             .with_decimation(2)
             .build();
-        
+
         let detections2 = detector2.detect(&img, None, None, PoseEstimationMode::Fast);
         assert!(!detections2.is_empty());
         let err2 = compute_corner_error(&detections2[0].corners, &gt_corners);
 
-        println!("Error D1: {}, Error D2: {}", err1, err2);
+        println!("Error D1: {err1}, Error D2: {err2}");
         // Decimation should maintain reasonable sub-pixel accuracy
         assert!(err2 < 1.5);
     }

@@ -15,9 +15,9 @@ use bumpalo::collections::Vec as BumpVec;
 use multiversion::multiversion;
 use rayon::prelude::*;
 
-/// Statistics for a single tile.
+/// Statistics for a single threshold tile.
 #[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct TileStats {
+pub struct TileStats {
     /// Minimum pixel value in the tile.
     pub min: u8,
     /// Maximum pixel value in the tile.
@@ -25,7 +25,7 @@ pub(crate) struct TileStats {
 }
 
 /// Adaptive thresholding engine using tile-based stats.
-pub(crate) struct ThresholdEngine {
+pub struct ThresholdEngine {
     /// Size of the tiles used for local thresholding statistics.
     pub tile_size: usize,
     /// Minimum intensity range for a tile to be considered valid.
@@ -50,7 +50,7 @@ impl ThresholdEngine {
 
     /// Create a ThresholdEngine from detector configuration.
     #[must_use]
-    pub(crate) fn from_config(config: &DetectorConfig) -> Self {
+    pub fn from_config(config: &DetectorConfig) -> Self {
         Self {
             tile_size: config.threshold_tile_size,
             min_range: config.threshold_min_range,
@@ -91,6 +91,7 @@ impl ThresholdEngine {
     /// Apply adaptive thresholding to the image.
     /// Optimized with pre-expanded threshold maps and vectorized row processing.
     #[allow(clippy::too_many_lines, clippy::needless_range_loop)]
+    #[allow(dead_code)]
     pub fn apply_threshold(
         &self,
         arena: &Bump,
@@ -851,7 +852,8 @@ fn compute_min_max_simd(data: &[u8]) -> (u8, u8) {
 /// Uses a 2-pass parallel implementation for maximum throughput on modern multicore CPUs.
 /// The `integral` buffer must have size `(img.width + 1) * (img.height + 1)`.
 #[allow(clippy::needless_range_loop, clippy::items_after_statements)]
-pub(crate) fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
+#[allow(dead_code)]
+pub fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
     let w = img.width;
     let h = img.height;
     let stride = w + 1;
@@ -922,7 +924,7 @@ pub(crate) fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
-pub(crate) fn adaptive_threshold_integral(
+pub fn adaptive_threshold_integral(
     img: &ImageView,
     integral: &[u64],
     output: &mut [u8],
@@ -1035,12 +1037,14 @@ pub(crate) fn adaptive_threshold_integral(
 /// - Computes integral image once
 /// - Applies per-pixel adaptive threshold with local mean
 /// - Uses default parameters tuned for AprilTag detection
+#[allow(dead_code)]
 pub(crate) fn apply_adaptive_threshold_fast(img: &ImageView, output: &mut [u8]) {
     // OpenCV uses blockSize=13 (radius=6) and C=3 as good defaults
     apply_adaptive_threshold_with_params(img, output, 6, 3);
 }
 
 /// Adaptive threshold with custom parameters.
+#[allow(dead_code)]
 pub(crate) fn apply_adaptive_threshold_with_params(
     img: &ImageView,
     output: &mut [u8],
@@ -1061,7 +1065,7 @@ pub(crate) fn apply_adaptive_threshold_with_params(
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
-pub(crate) fn adaptive_threshold_gradient_window(
+pub fn adaptive_threshold_gradient_window(
     img: &ImageView,
     gradient_map: &[u8],
     integral: &[u64],

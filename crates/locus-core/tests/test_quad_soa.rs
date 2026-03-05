@@ -1,7 +1,18 @@
-use locus_core::bench_api::*;
+#![allow(
+    missing_docs,
+    dead_code,
+    clippy::unwrap_used,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use
+)]
 use locus_core::bench_api::DetectionBatch;
 use locus_core::segmentation::LabelResult;
-use locus_core::{PoseEstimationMode, DetectorConfig, ImageView};
+use locus_core::{DetectorConfig, ImageView};
 
 #[test]
 fn test_quad_extraction_soa_empty() {
@@ -9,21 +20,15 @@ fn test_quad_extraction_soa_empty() {
     let data = vec![0u8; 100 * 100];
     let img = ImageView::new(&data, 100, 100, 100).unwrap();
     let config = DetectorConfig::default();
-    
+
     let labels = vec![0u32; 100 * 100];
     let label_result = LabelResult {
         labels: &labels,
         component_stats: Vec::new(),
     };
 
-    let n = locus_core::bench_api::extract_quads_soa(
-        &mut batch,
-        &img,
-        &label_result,
-        &config,
-        1,
-        &img
-    );
+    let n =
+        locus_core::bench_api::extract_quads_soa(&mut batch, &img, &label_result, &config, 1, &img);
 
     assert_eq!(n, 0);
 }

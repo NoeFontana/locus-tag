@@ -1,28 +1,23 @@
-use locus_core::bench_api::*;
-#[cfg(feature = "bench-internals")]
-// Render-Tag Hub Regression Suite
-//
-// Evaluates the detector against datasets synchronized from the Hugging Face Hub.
-// These datasets are generated using the `render-tag` pipeline and provide
-// high-fidelity synthetic benchmarks with ground truth.
-
-#[allow(
+#![allow(
     missing_docs,
+    dead_code,
     clippy::unwrap_used,
-    clippy::type_complexity,
-    clippy::too_many_lines,
-    clippy::unnecessary_debug_formatting,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
     clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use,
+    clippy::type_complexity,
+    clippy::unnecessary_debug_formatting,
     clippy::trivially_copy_pass_by_ref,
     clippy::needless_pass_by_value,
-    clippy::items_after_statements,
-    clippy::missing_panics_doc,
-    clippy::must_use_candidate,
-    clippy::return_self_not_must_use
+    clippy::missing_panics_doc
 )]
 
 use locus_core::image::ImageView;
-use locus_core::{PoseEstimationMode, DetectOptions, Detector, DetectorConfig, config::TagFamily};
+use locus_core::{DetectOptions, Detector, DetectorConfig, config::TagFamily};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
@@ -59,7 +54,6 @@ struct PipelineMetrics {
     total_ms: f64,
     num_detections: usize,
 }
-
 
 fn serialize_rmse<S>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -159,7 +153,7 @@ impl RegressionHarness {
 
         for (filename, data, width, height, gt) in provider.iter() {
             let img = ImageView::new(&data, width, height, width).expect("valid image");
-            
+
             let start = std::time::Instant::now();
             let detections = detector.detect(
                 &img,
@@ -176,9 +170,9 @@ impl RegressionHarness {
 
             for det in &detections {
                 if let Some(gt_corners) = gt.tags.get(&det.id) {
-                    let gt_cx: f64 = gt_corners.iter().map(|p| p[0]).sum::<f64>() / 4.0;
-                    let gt_cy: f64 = gt_corners.iter().map(|p| p[1]).sum::<f64>() / 4.0;
-                    let dist_sq = (det.center[0] - gt_cx).powi(2) + (det.center[1] - gt_cy).powi(2);
+                    let g_cx: f64 = gt_corners.iter().map(|p| p[0]).sum::<f64>() / 4.0;
+                    let g_cy: f64 = gt_corners.iter().map(|p| p[1]).sum::<f64>() / 4.0;
+                    let dist_sq = (det.center[0] - g_cx).powi(2) + (det.center[1] - g_cy).powi(2);
 
                     if dist_sq < 50.0 * 50.0 {
                         image_rmse_sum +=

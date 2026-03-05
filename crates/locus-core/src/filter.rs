@@ -36,7 +36,7 @@ use rayon::prelude::*;
     clippy::needless_range_loop,
     clippy::cast_possible_wrap
 )]
-pub(crate) fn bilateral_filter(
+pub fn bilateral_filter(
     arena: &Bump,
     img: &ImageView,
     output: &mut [u8],
@@ -143,7 +143,7 @@ pub(crate) fn bilateral_filter(
     "aarch64+neon"
 ))]
 #[allow(clippy::cast_sign_loss)]
-pub(crate) fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
+pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
     let w = img.width;
     let h = img.height;
 

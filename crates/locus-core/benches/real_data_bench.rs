@@ -1,8 +1,20 @@
-#![allow(missing_docs, clippy::unwrap_used)]
+#![allow(
+    missing_docs,
+    dead_code,
+    clippy::unwrap_used,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use
+)]
 use bumpalo::Bump;
 use divan::bench;
-use locus_core::CornerRefinementMode;
 use locus_core::ImageView;
+use locus_core::PoseEstimationMode;
+use locus_core::config::CornerRefinementMode;
 use std::path::Path;
 
 fn main() {
@@ -25,7 +37,7 @@ fn bench_preprocessing_real(bencher: divan::Bencher) {
     let config = locus_core::DetectorConfig::builder()
         .refinement_mode(CornerRefinementMode::Erf)
         .build();
-    let engine = locus_core::bench_api::ThresholdEngine::from_config(&config);
+    let engine = locus_core::threshold::ThresholdEngine::from_config(&config);
 
     bencher.bench_local(move || {
         let arena = Bump::new();
@@ -41,7 +53,7 @@ fn bench_segmentation_real(bencher: divan::Bencher) {
     let config = locus_core::DetectorConfig::builder()
         .refinement_mode(CornerRefinementMode::Erf)
         .build();
-    let engine = locus_core::bench_api::ThresholdEngine::from_config(&config);
+    let engine = locus_core::threshold::ThresholdEngine::from_config(&config);
 
     let tile_stats = engine.compute_tile_stats(&setup_arena, &img);
     let mut binarized = vec![0u8; width * height];
@@ -78,7 +90,7 @@ fn bench_quad_extraction_real(bencher: divan::Bencher) {
     let config = locus_core::DetectorConfig::builder()
         .refinement_mode(CornerRefinementMode::Erf)
         .build();
-    let engine = locus_core::bench_api::ThresholdEngine::from_config(&config);
+    let engine = locus_core::threshold::ThresholdEngine::from_config(&config);
 
     let tile_stats = engine.compute_tile_stats(&setup_arena, &img);
     let mut binarized = vec![0u8; width * height];
@@ -125,6 +137,6 @@ fn bench_full_pipeline_real(bencher: divan::Bencher) {
     let mut detector = locus_core::Detector::with_config(config);
 
     bencher.bench_local(move || {
-        let _detections = detector.detect(&img);
+        let _detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
     });
 }

@@ -120,6 +120,7 @@ impl DetectionBatch {
 
     /// Reassemble the batched SoA data into a list of discrete `Detection` objects.
     #[must_use]
+    #[allow(clippy::cast_sign_loss)]
     pub fn reassemble(&self, v: usize) -> Vec<crate::Detection> {
         let mut detections = Vec::with_capacity(v);
         for i in 0..v {

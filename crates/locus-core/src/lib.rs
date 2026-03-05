@@ -38,7 +38,9 @@ pub mod test_utils;
 pub mod threshold;
 
 // Re-exports for the public API
-pub use crate::config::{DetectOptions, DetectorConfig, PoseEstimationMode, TagFamily};
+pub use crate::config::{
+    CornerRefinementMode, DecodeMode, DetectOptions, DetectorConfig, PoseEstimationMode, TagFamily,
+};
 pub use crate::detector::{Detector, DetectorBuilder};
 pub use crate::image::ImageView;
 pub use crate::pose::CameraIntrinsics;
@@ -49,10 +51,12 @@ pub mod bench_api {
     pub use crate::batch::*;
     pub use crate::decoder::*;
     pub use crate::dictionaries::*;
+    pub use crate::filter::*;
     pub use crate::pose::*;
     pub use crate::quad::*;
     pub use crate::segmentation::*;
     pub use crate::test_utils::*;
+    pub use crate::threshold::*;
 }
 
 /// A single tag detection result.
@@ -87,8 +91,14 @@ impl Detection {
     pub fn aabb(&self) -> (usize, usize, usize, usize) {
         let mut min_x = f64::INFINITY;
         let mut min_y = f64::INFINITY;
-        let max_x = self.corners.iter().fold(f64::NEG_INFINITY, |acc, p| acc.max(p[0]));
-        let max_y = self.corners.iter().fold(f64::NEG_INFINITY, |acc, p| acc.max(p[1]));
+        let max_x = self
+            .corners
+            .iter()
+            .fold(f64::NEG_INFINITY, |acc, p| acc.max(p[0]));
+        let max_y = self
+            .corners
+            .iter()
+            .fold(f64::NEG_INFINITY, |acc, p| acc.max(p[1]));
         for p in &self.corners {
             min_x = min_x.min(p[0]);
             min_y = min_y.min(p[1]);

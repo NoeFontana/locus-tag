@@ -51,6 +51,7 @@ pub(crate) struct Point {
 /// Fast quad extraction using bounding box stats from CCL.
 /// Only traces contours for components that pass geometric filters.
 /// Uses default configuration.
+#[allow(dead_code)]
 pub(crate) fn extract_quads_fast(
     arena: &Bump,
     img: &ImageView,
@@ -293,7 +294,7 @@ fn extract_single_quad(
 /// This is the main entry point for quad detection with custom parameters.
 /// Components are processed in parallel for maximum throughput.
 #[allow(clippy::too_many_lines)]
-pub(crate) fn extract_quads_with_config(
+pub fn extract_quads_with_config(
     _arena: &Bump,
     img: &ImageView,
     label_result: &LabelResult,
@@ -355,6 +356,7 @@ pub(crate) fn extract_quads_with_config(
 }
 
 /// Legacy extract_quads for backward compatibility.
+#[allow(dead_code)]
 pub(crate) fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detection> {
     // Create a fake LabelResult with stats computed on-the-fly
     let mut detections = Vec::new();
@@ -553,7 +555,11 @@ fn find_max_distance_optimized(points: &[Point], start: usize, end: usize) -> (f
 ///
 /// Leverages an iterative implementation with a manual stack to avoid
 /// the overhead of recursive function calls and multiple temporary allocations.
-pub(crate) fn douglas_peucker<'a>(arena: &'a Bump, points: &[Point], epsilon: f64) -> BumpVec<'a, Point> {
+pub(crate) fn douglas_peucker<'a>(
+    arena: &'a Bump,
+    points: &[Point],
+    epsilon: f64,
+) -> BumpVec<'a, Point> {
     if points.len() < 3 {
         let mut v = BumpVec::new_in(arena);
         v.extend_from_slice(points);
@@ -609,6 +615,7 @@ fn polygon_area(points: &[Point]) -> f64 {
     area * 0.5
 }
 
+#[allow(dead_code)]
 fn polygon_center(points: &[Point]) -> [f64; 2] {
     let mut cx = 0.0;
     let mut cy = 0.0;
@@ -626,6 +633,7 @@ fn polygon_center(points: &[Point]) -> [f64; 2] {
 /// model and Gauss-Newton optimization, then computes their intersection.
 /// Achieves ~0.02px accuracy vs ~0.2px for gradient-peak methods.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn refine_corner(
     arena: &Bump,
     img: &ImageView,
