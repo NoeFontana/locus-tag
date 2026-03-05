@@ -206,23 +206,23 @@ fn extract_single_quad(
         [reduced[0], reduced[3], reduced[2], reduced[1]]
     };
 
-    // Scale to full resolution using simple linear mapping
+    // Scale to full resolution using center-aware mapping
     let quad_pts = [
         Point {
-            x: quad_pts_dec[0].x * d,
-            y: quad_pts_dec[0].y * d,
+            x: (quad_pts_dec[0].x - 0.5) * d + 0.5,
+            y: (quad_pts_dec[0].y - 0.5) * d + 0.5,
         },
         Point {
-            x: quad_pts_dec[1].x * d,
-            y: quad_pts_dec[1].y * d,
+            x: (quad_pts_dec[1].x - 0.5) * d + 0.5,
+            y: (quad_pts_dec[1].y - 0.5) * d + 0.5,
         },
         Point {
-            x: quad_pts_dec[2].x * d,
-            y: quad_pts_dec[2].y * d,
+            x: (quad_pts_dec[2].x - 0.5) * d + 0.5,
+            y: (quad_pts_dec[2].y - 0.5) * d + 0.5,
         },
         Point {
-            x: quad_pts_dec[3].x * d,
-            y: quad_pts_dec[3].y * d,
+            x: (quad_pts_dec[3].x - 0.5) * d + 0.5,
+            y: (quad_pts_dec[3].y - 0.5) * d + 0.5,
         },
     ];
 
@@ -1235,6 +1235,70 @@ mod tests {
             "Quad center: detected=[{:.1},{:.1}], expected=[{:.1},{:.1}], error={:.2}px",
             det_center[0], det_center[1], expected_cx, expected_cy, center_error
         );
+    }
+
+    /// Test quad extraction with decimation > 1 to verify center-aware mapping.
+    #[test]
+    fn test_quad_extraction_with_decimation() {
+        let canvas_size = 640;
+        let tag_size = 160;
+        let decimation = 2;
+
+        let params = TestImageParams {
+            family: TagFamily::AprilTag36h11,
+            id: 0,
+            tag_size,
+            canvas_size,
+            ..Default::default()
+        };
+
+        let (data, gt_corners) = generate_test_image_with_params(&params);
+        let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
+
+        // Manual decimation to match the pipeline
+        let new_w = canvas_size / decimation;
+        let new_h = canvas_size / decimation;
+        let mut decimated_data = vec![0u8; new_w * new_h];
+        let decimated_img = img
+            .decimate_to(decimation, &mut decimated_data)
+            .expect("decimation failed");
+
+        let arena = Bump::new();
+        let engine = ThresholdEngine::new();
+        let stats = engine.compute_tile_stats(&arena, &decimated_img);
+        let mut binary = vec![0u8; new_w * new_h];
+        engine.apply_threshold(&arena, &decimated_img, &stats, &mut binary);
+
+        let label_result =
+            label_components_with_stats(&arena, &binary, new_w, new_h, true);
+
+        // Run extraction with decimation=2
+        // Refinement image is the full resolution image
+        let config = DetectorConfig {
+            decimation,
+            ..Default::default()
+        };
+        let detections = extract_quads_with_config(
+            &arena,
+            &decimated_img,
+            &label_result,
+            &config,
+            decimation,
+            &img,
+        );
+
+        assert!(!detections.is_empty(), "No quad detected with decimation");
+
+        let det_corners = detections[0].corners;
+        let error = compute_corner_error(&det_corners, &gt_corners);
+
+        // Sub-pixel refinement on full-res should keep error very low despite decimation
+        assert!(
+            error < 2.0,
+            "Corner error with decimation: {error:.2}px exceeds 2px"
+        );
+
+        println!("Decimated (d={decimation}) corner error: {error:.4}px");
     }
 
     // ========================================================================
