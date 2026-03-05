@@ -5,14 +5,42 @@ use crate::image::ImageView;
 use crate::Detection;
 use bumpalo::Bump;
 
+/// Internal state container for the detector.
+/// 
+/// Owns the memory pools and reusable buffers to ensure zero-allocation 
+/// in the detection hot-path.
+pub struct DetectorState {
+    pub arena: Bump,
+    pub batch: DetectionBatch,
+    pub upscale_buf: Vec<u8>,
+    pub results: Vec<Detection>,
+}
+
+impl DetectorState {
+    pub fn new() -> Self {
+        Self {
+            arena: Bump::new(),
+            batch: DetectionBatch::new(),
+            upscale_buf: Vec::new(),
+            results: Vec::new(),
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.arena.reset();
+        self.results.clear();
+    }
+}
+
 /// The primary entry point for the Locus perception library.
 ///
-/// `Detector` encapsulates the entire detection pipeline, managing its own
-/// internal state and memory pools to provide a safe, high-performance API.
+/// `Detector` encapsulates the entire detection pipeline.
 pub struct Detector {
     config: DetectorConfig,
     decoders: Vec<Box<dyn TagDecoder + Send + Sync>>,
-    results: Vec<Detection>,
+    // We use a ThreadLocal or just local allocation if we want to be Sync.
+    // For Python integration, being Sync is often more important than 
+    // absolute zero-allocation across frames if we want multi-threading.
 }
 
 impl Detector {
@@ -31,7 +59,6 @@ impl Detector {
         Self {
             config,
             decoders: vec![crate::decoder::family_to_decoder(crate::config::TagFamily::AprilTag36h11)],
-            results: Vec::new(),
         }
     }
 
@@ -46,15 +73,19 @@ impl Detector {
     /// Detect tags in the provided image.
     ///
     /// This method is the main execution pipeline.
-    pub fn detect(&mut self, img: &ImageView) -> &[Detection] {
-        let arena = Bump::new();
-        let mut batch = DetectionBatch::new();
-        let mut upscale_buf = Vec::new();
-
+    pub fn detect(
+        &mut self,
+        img: &ImageView,
+        intrinsics: Option<&crate::pose::CameraIntrinsics>,
+        tag_size: Option<f64>,
+        pose_mode: crate::config::PoseEstimationMode,
+    ) -> Vec<Detection> {
+        let mut state = DetectorState::new();
+        
         let (detection_img, effective_scale, refinement_img) = if self.config.decimation > 1 {
             let new_w = img.width / self.config.decimation;
             let new_h = img.height / self.config.decimation;
-            let decimated_data = arena.alloc_slice_fill_copy(new_w * new_h, 0u8);
+            let decimated_data = state.arena.alloc_slice_fill_copy(new_w * new_h, 0u8);
             let decimated_img = img
                 .decimate_to(self.config.decimation, decimated_data)
                 .expect("decimation failed");
@@ -62,10 +93,10 @@ impl Detector {
         } else if self.config.upscale_factor > 1 {
             let new_w = img.width * self.config.upscale_factor;
             let new_h = img.height * self.config.upscale_factor;
-            upscale_buf.resize(new_w * new_h, 0);
+            state.upscale_buf.resize(new_w * new_h, 0);
 
             let upscaled_img = img
-                .upscale_to(self.config.upscale_factor, &mut upscale_buf)
+                .upscale_to(self.config.upscale_factor, &mut state.upscale_buf)
                 .expect("valid upscaled view");
             (upscaled_img, self.config.upscale_factor as f64, upscaled_img)
         } else {
@@ -76,9 +107,9 @@ impl Detector {
 
         // 1a. Optional bilateral pre-filtering
         let filtered_img = if self.config.enable_bilateral {
-            let filtered = arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
+            let filtered = state.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
             crate::filter::bilateral_filter(
-                &arena,
+                &state.arena,
                 img,
                 filtered,
                 3, // spatial radius
@@ -92,7 +123,7 @@ impl Detector {
 
         // 1b. Optional Laplacian sharpening
         let sharpened_img = if self.config.enable_sharpening {
-            let sharpened = arena.alloc_slice_fill_copy(filtered_img.width * filtered_img.height, 0u8);
+            let sharpened = state.arena.alloc_slice_fill_copy(filtered_img.width * filtered_img.height, 0u8);
             crate::filter::laplacian_sharpen(&filtered_img, sharpened);
 
             ImageView::new(
@@ -106,15 +137,15 @@ impl Detector {
             filtered_img
         };
 
-        let binarized = arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
-        let threshold_map = arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
+        let binarized = state.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
+        let threshold_map = state.arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
 
         // 1. Thresholding
         {
             let engine = crate::threshold::ThresholdEngine::from_config(&self.config);
-            let stats = engine.compute_tile_stats(&arena, &sharpened_img);
+            let stats = engine.compute_tile_stats(&state.arena, &sharpened_img);
             engine.apply_threshold_with_map(
-                &arena,
+                &state.arena,
                 &sharpened_img,
                 &stats,
                 binarized,
@@ -124,7 +155,7 @@ impl Detector {
 
         // 2. Segmentation
         let label_result = crate::segmentation::label_components_threshold_model(
-            &arena,
+            &state.arena,
             sharpened_img.data,
             sharpened_img.stride,
             threshold_map,
@@ -137,7 +168,7 @@ impl Detector {
 
         // 3. Quad Extraction (SoA)
         let n = crate::quad::extract_quads_soa(
-            &mut batch,
+            &mut state.batch,
             &sharpened_img,
             &label_result,
             &self.config,
@@ -147,13 +178,13 @@ impl Detector {
 
         // 4. Homography Pass (SoA)
         crate::decoder::compute_homographies_soa(
-            &batch.corners[0..n * 4],
-            &mut batch.homographies[0..n],
+            &state.batch.corners[0..n * 4],
+            &mut state.batch.homographies[0..n],
         );
 
         // 5. Decoding Pass (SoA)
         crate::decoder::decode_batch_soa(
-            &mut batch,
+            &mut state.batch,
             n,
             &refinement_img,
             &self.decoders,
@@ -161,9 +192,21 @@ impl Detector {
         );
 
         // Partition valid candidates to the front [0..v]
-        let v = batch.partition(n);
+        let v = state.batch.partition(n);
 
-        self.results = batch.reassemble(v);
+        // 6. Pose Refinement (SoA)
+        if let (Some(intr), Some(size)) = (intrinsics, tag_size) {
+            crate::pose::refine_poses_soa(
+                &mut state.batch,
+                v,
+                intr,
+                size,
+                Some(&refinement_img),
+                pose_mode,
+            );
+        }
+
+        state.results = state.batch.reassemble(v);
 
         // Final coordinate adjustment and scaling
         let upscale_factor = self.config.upscale_factor.max(1);
@@ -173,7 +216,7 @@ impl Detector {
             1.0
         };
 
-        for d in &mut self.results {
+        for d in &mut state.results {
             for corner in &mut d.corners {
                 corner[0] = (corner[0] + 0.5) * inv_scale;
                 corner[1] = (corner[1] + 0.5) * inv_scale;
@@ -182,7 +225,7 @@ impl Detector {
             d.center[1] = (d.center[1] + 0.5) * inv_scale;
         }
 
-        &self.results
+        state.results
     }
 
     /// Detect tags with specific options.
@@ -218,9 +261,14 @@ impl Detector {
             None
         };
 
-        let detections = self.detect(img);
+        let detections = self.detect(
+            img,
+            options.intrinsics.as_ref(),
+            options.tag_size,
+            options.pose_estimation_mode,
+        );
         let result = crate::FullDetectionResult {
-            detections: detections.to_vec(),
+            detections: detections.clone(),
             stats: crate::PipelineStats {
                 total_ms: start.elapsed().as_secs_f64() * 1000.0,
                 threshold_ms: 0.0,
@@ -318,7 +366,6 @@ impl DetectorBuilder {
         Detector {
             config: self.config,
             decoders,
-            results: Vec::new(),
         }
     }
 }

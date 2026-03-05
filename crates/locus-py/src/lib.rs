@@ -7,8 +7,7 @@
 )]
 
 use locus_core::ImageView;
-use numpy::ndarray::{Array2, Array3};
-use numpy::{IntoPyArray, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
+use numpy::{PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -44,6 +43,15 @@ pub enum SegmentationConnectivity {
     Eight = 1,
 }
 
+impl From<SegmentationConnectivity> for locus_core::config::SegmentationConnectivity {
+    fn from(c: SegmentationConnectivity) -> Self {
+        match c {
+            SegmentationConnectivity::Four => locus_core::config::SegmentationConnectivity::Four,
+            SegmentationConnectivity::Eight => locus_core::config::SegmentationConnectivity::Eight,
+        }
+    }
+}
+
 #[pyclass(eq, eq_int)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CornerRefinementMode {
@@ -53,6 +61,17 @@ pub enum CornerRefinementMode {
     Erf = 3,
 }
 
+impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
+    fn from(m: CornerRefinementMode) -> Self {
+        match m {
+            CornerRefinementMode::None => locus_core::config::CornerRefinementMode::None,
+            CornerRefinementMode::Edge => locus_core::config::CornerRefinementMode::Edge,
+            CornerRefinementMode::GridFit => locus_core::config::CornerRefinementMode::GridFit,
+            CornerRefinementMode::Erf => locus_core::config::CornerRefinementMode::Erf,
+        }
+    }
+}
+
 #[pyclass(eq, eq_int)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DecodeMode {
@@ -60,11 +79,29 @@ pub enum DecodeMode {
     Soft = 1,
 }
 
+impl From<DecodeMode> for locus_core::config::DecodeMode {
+    fn from(m: DecodeMode) -> Self {
+        match m {
+            DecodeMode::Hard => locus_core::config::DecodeMode::Hard,
+            DecodeMode::Soft => locus_core::config::DecodeMode::Soft,
+        }
+    }
+}
+
 #[pyclass(eq, eq_int)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PoseEstimationMode {
     Fast = 0,
     Accurate = 1,
+}
+
+impl From<PoseEstimationMode> for locus_core::config::PoseEstimationMode {
+    fn from(m: PoseEstimationMode) -> Self {
+        match m {
+            PoseEstimationMode::Fast => locus_core::config::PoseEstimationMode::Fast,
+            PoseEstimationMode::Accurate => locus_core::config::PoseEstimationMode::Accurate,
+        }
+    }
 }
 
 // ============================================================================
@@ -92,11 +129,17 @@ impl CameraIntrinsics {
     }
 }
 
+impl From<CameraIntrinsics> for locus_core::CameraIntrinsics {
+    fn from(c: CameraIntrinsics) -> Self {
+        Self::new(c.fx, c.fy, c.cx, c.cy)
+    }
+}
+
 #[pyclass]
 #[derive(Clone)]
 pub struct PyPose {
     #[pyo3(get)]
-    pub rotation: [[f64; 3]; 3],
+    pub quaternion: [f64; 4], // x, y, z, w
     #[pyo3(get)]
     pub translation: [f64; 3],
 }
@@ -105,7 +148,7 @@ pub struct PyPose {
 // Detector class
 // ============================================================================
 
-#[pyclass(unsendable)]
+#[pyclass]
 pub struct Detector {
     inner: locus_core::Detector,
 }
@@ -113,42 +156,83 @@ pub struct Detector {
 #[pymethods]
 impl Detector {
     /// Detect tags and return a dictionary of NumPy arrays (SoA layout).
-    fn detect(&mut self, py: Python<'_>, img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
+    #[pyo3(signature = (img, intrinsics=None, tag_size=None, pose_estimation_mode=PoseEstimationMode::Fast))]
+    fn detect(
+        &mut self,
+        py: Python<'_>,
+        img: PyReadonlyArray2<u8>,
+        intrinsics: Option<CameraIntrinsics>,
+        tag_size: Option<f64>,
+        pose_estimation_mode: PoseEstimationMode,
+    ) -> PyResult<PyObject> {
         let view = prepare_image_view(&img)?;
-        let detections = self.inner.detect(&view);
+        
+        let core_intrinsics = intrinsics.map(locus_core::CameraIntrinsics::from);
+        let core_pose_mode = locus_core::config::PoseEstimationMode::from(pose_estimation_mode);
+
+        // 1. Run core pipeline
+        let detections = py.allow_threads(|| {
+            self.inner.detect(
+                &view,
+                core_intrinsics.as_ref(),
+                tag_size,
+                core_pose_mode,
+            )
+        });
 
         let n = detections.len();
-        let mut ids = Vec::with_capacity(n);
-        let mut centers = Vec::with_capacity(n * 2);
-        let mut corners = Vec::with_capacity(n * 8);
-        let mut hamming = Vec::with_capacity(n);
-        let mut decision_margin = Vec::with_capacity(n);
 
-        for det in detections {
-            ids.push(det.id);
-            centers.push(det.center[0]);
-            centers.push(det.center[1]);
-            for c in &det.corners {
-                corners.push(c[0]);
-                corners.push(c[1]);
+        // Allocate NumPy arrays
+        let ids_arr = PyArray1::<i32>::zeros(py, [n], false);
+        let corners_arr = PyArray3::<f32>::zeros(py, [n, 4, 2], false);
+        let error_rates_arr = PyArray1::<f32>::zeros(py, [n], false);
+
+        // Perform memory mapping
+        unsafe {
+            let ids_slice = ids_arr.as_slice_mut().unwrap();
+            let corners_slice = corners_arr.as_slice_mut().unwrap();
+            let err_slice = error_rates_arr.as_slice_mut().unwrap();
+
+            for (i, det) in detections.iter().enumerate() {
+                ids_slice[i] = det.id as i32;
+                for j in 0..4 {
+                    corners_slice[i * 8 + j * 2] = det.corners[j][0] as f32;
+                    corners_slice[i * 8 + j * 2 + 1] = det.corners[j][1] as f32;
+                }
+                err_slice[i] = det.hamming as f32;
             }
-            hamming.push(det.hamming);
-            decision_margin.push(det.decision_margin);
         }
 
         let dict = PyDict::new(py);
-        dict.set_item("ids", ids.into_pyarray(py))?;
-        
-        let centers_arr = Array2::from_shape_vec((n, 2), centers)
-            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-        dict.set_item("centers", centers_arr.into_pyarray(py))?;
+        dict.set_item("ids", ids_arr)?;
+        dict.set_item("corners", corners_arr)?;
+        dict.set_item("error_rates", error_rates_arr)?;
 
-        let corners_arr = Array3::from_shape_vec((n, 4, 2), corners)
-            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-        dict.set_item("corners", corners_arr.into_pyarray(py))?;
-
-        dict.set_item("hamming", hamming.into_pyarray(py))?;
-        dict.set_item("decision_margin", decision_margin.into_pyarray(py))?;
+        // Poses: Vectorized (N, 7) layout: [tx, ty, tz, qx, qy, qz, qw]
+        if intrinsics.is_some() && tag_size.is_some() {
+            let poses_arr = PyArray2::<f32>::zeros(py, [n, 7], false);
+            unsafe {
+                let poses_slice = poses_arr.as_slice_mut().unwrap();
+                for (i, det) in detections.iter().enumerate() {
+                    if let Some(pose) = &det.pose {
+                        let q = nalgebra::UnitQuaternion::from_matrix(&pose.rotation);
+                        let t = pose.translation;
+                        
+                        let offset = i * 7;
+                        poses_slice[offset] = t.x as f32;
+                        poses_slice[offset + 1] = t.y as f32;
+                        poses_slice[offset + 2] = t.z as f32;
+                        poses_slice[offset + 3] = q.coords.x as f32;
+                        poses_slice[offset + 4] = q.coords.y as f32;
+                        poses_slice[offset + 5] = q.coords.z as f32;
+                        poses_slice[offset + 6] = q.coords.w as f32;
+                    }
+                }
+            }
+            dict.set_item("poses", poses_arr)?;
+        } else {
+            dict.set_item("poses", py.None())?;
+        }
 
         Ok(dict.into())
     }
@@ -234,7 +318,7 @@ fn prepare_image_view<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageVi
         let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
         ImageView::new(data, width, height, stride_y).map_err(|e| PyRuntimeError::new_err(e.to_string()))
     } else {
-        Err(PyValueError::new_err("Array must be C-contiguous"))
+        Err(PyValueError::new_err("Array must be C-contiguous. Call np.ascontiguousarray(image) first."))
     }
 }
 

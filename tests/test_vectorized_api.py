@@ -32,13 +32,32 @@ def test_array_shapes():
     assert batch.error_rates.shape == (1,)
     assert batch.error_rates.dtype == np.float32
 
-def test_optional_poses():
-    """Verify that poses are None when not requested."""
-    detector = locus.Detector()
-    img = np.zeros((100, 100), dtype=np.uint8)
-    batch = detector.detect(img)
+def test_vectorized_poses():
+    """Verify that 3D poses are returned in the compact (N, 7) format."""
+    # Create an ArUco tag
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    tag_img = cv2.aruco.generateImageMarker(dictionary, 0, 100)
+    canvas = np.ones((400, 400), dtype=np.uint8) * 128
+    canvas[150:250, 150:250] = tag_img
+
+    detector = locus.Detector(families=[locus.TagFamily.ArUco4x4_50])
     
-    assert batch.poses is None
+    # Request pose estimation
+    intrinsics = locus.CameraIntrinsics(fx=800.0, fy=800.0, cx=200.0, cy=200.0)
+    batch = detector.detect(canvas, intrinsics=intrinsics, tag_size=0.10)
+
+    assert len(batch) == 1
+    assert batch.poses is not None
+    assert batch.poses.shape == (1, 7)
+    assert batch.poses.dtype == np.float32
+    
+    # [tx, ty, tz, qx, qy, qz, qw]
+    # Translation should be centered roughly at (0, 0, Z) since we didn't specify offset
+    # but the principal point is 200,200 and the tag is at 200,200 (center of 400x400)
+    # So tx, ty should be near 0.
+    assert abs(batch.poses[0, 0]) < 0.1
+    assert abs(batch.poses[0, 1]) < 0.1
+    assert batch.poses[0, 2] > 0 # Positive Z
 
 def test_invalid_input_contiguity():
     """Check that non-C-contiguous arrays raise ValueError."""
