@@ -271,21 +271,34 @@ class LibraryWrapper:
 
 class LocusWrapper(LibraryWrapper):
     def __init__(
-        self, name: str = "Locus", config: locus.DetectorConfig | None = None, decimation: int = 1
+        self,
+        name: str = "Locus",
+        config: locus.DetectorConfig | None = None,
+        decimation: int = 1,
+        family: int | None = None,
     ):
         super().__init__(name)
         # Handle cases where config might be passed but needs to be mapped to kwargs
         # Or just use the Detector directly with parameters.
+        # Map int to TagFamily constant
+        family_obj_map = {
+            int(locus.TagFamily.AprilTag36h11): locus.TagFamily.AprilTag36h11,
+            int(locus.TagFamily.AprilTag41h12): locus.TagFamily.AprilTag41h12,
+            int(locus.TagFamily.ArUco4x4_50): locus.TagFamily.ArUco4x4_50,
+            int(locus.TagFamily.ArUco4x4_100): locus.TagFamily.ArUco4x4_100,
+        }
+        families = [family_obj_map[family]] if family is not None else None
         if config:
             # Simple mapping for common fields used in benchmarks
             self.detector = locus.Detector(
                 decimation=decimation,
+                families=families,
                 decode_mode=config.decode_mode,
                 enable_sharpening=config.enable_sharpening,
-                upscale_factor=config.upscale_factor
+                upscale_factor=config.upscale_factor,
             )
         else:
-            self.detector = locus.Detector(decimation=decimation)
+            self.detector = locus.Detector(decimation=decimation, families=families)
 
     def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
         batch = self.detector.detect(img)
@@ -308,20 +321,33 @@ class LocusWrapper(LibraryWrapper):
 
 
 class OpenCVWrapper(LibraryWrapper):
-    def __init__(self):
+    def __init__(self, family: int | None = None):
         super().__init__("OpenCV")
-        dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
-        parameters = cv2.aruco.DetectorParameters()
-        parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
-        parameters.minMarkerPerimeterRate = 0.005
-        parameters.adaptiveThreshConstant = 3
-        parameters.adaptiveThreshWinSizeStep = 5
-        parameters.minMarkerDistanceRate = 0.01
-        parameters.minDistanceToBorder = 1
-        parameters.polygonalApproxAccuracyRate = 0.01
-        self.detector = cv2.aruco.ArucoDetector(dictionary, parameters)
+        # Map int value to OpenCV constants
+        family_map = {
+            int(locus.TagFamily.AprilTag36h11): cv2.aruco.DICT_APRILTAG_36h11,
+            int(locus.TagFamily.AprilTag41h12): None,
+            int(locus.TagFamily.ArUco4x4_50): cv2.aruco.DICT_4X4_50,
+            int(locus.TagFamily.ArUco4x4_100): cv2.aruco.DICT_4X4_100,
+        }
+        cv_family = family_map.get(family) if family is not None else None
+        if cv_family is not None:
+            dictionary = cv2.aruco.getPredefinedDictionary(cv_family)
+            parameters = cv2.aruco.DetectorParameters()
+            parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+            parameters.minMarkerPerimeterRate = 0.005
+            parameters.adaptiveThreshConstant = 3
+            parameters.adaptiveThreshWinSizeStep = 5
+            parameters.minMarkerDistanceRate = 0.01
+            parameters.minDistanceToBorder = 1
+            parameters.polygonalApproxAccuracyRate = 0.01
+            self.detector = cv2.aruco.ArucoDetector(dictionary, parameters)
+        else:
+            self.detector = None
 
     def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
+        if self.detector is None:
+            return [], None
         corners, ids, _ = self.detector.detectMarkers(img)
         detections = []
         if ids is not None:
@@ -340,18 +366,33 @@ class OpenCVWrapper(LibraryWrapper):
 
 
 class AprilTagWrapper(LibraryWrapper):
-    def __init__(self, nthreads: int = 8, quad_decimate: float = 1.0):
+    def __init__(
+        self, nthreads: int = 8, quad_decimate: float = 1.0, family: int | None = None
+    ):
         super().__init__("AprilTag")
-        self.detector = AprilTagDetector(
-            families="tag36h11",
-            nthreads=nthreads,
-            quad_decimate=quad_decimate,
-            quad_sigma=0.0,
-            decode_sharpening=0.25,
-            refine_edges=True,
-        )
+        # Map int to AprilTag library names
+        family_map = {
+            int(locus.TagFamily.AprilTag36h11): "tag36h11",
+            int(locus.TagFamily.AprilTag41h12): "tagStandard41h12",
+            int(locus.TagFamily.ArUco4x4_50): None,
+            int(locus.TagFamily.ArUco4x4_100): None,
+        }
+        at_family = family_map.get(family) if family is not None else None
+        if at_family is not None:
+            self.detector = AprilTagDetector(
+                families=at_family,
+                nthreads=nthreads,
+                quad_decimate=quad_decimate,
+                quad_sigma=0.0,
+                decode_sharpening=0.25,
+                refine_edges=True,
+            )
+        else:
+            self.detector = None
 
     def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
+        if self.detector is None:
+            return [], None
         raw_dets = self.detector.detect(img)
         detections = []
         for d in raw_dets:  # type: ignore[attr-defined]
@@ -368,7 +409,7 @@ class AprilTagWrapper(LibraryWrapper):
 
 
 def generate_synthetic_image(
-    num_tags: int, res: tuple[int, int], noise_sigma: float = 0.0
+    num_tags: int, res: tuple[int, int], noise_sigma: float = 0.0, family: int | None = None
 ) -> tuple[np.ndarray, list[TagGroundTruth]]:
     img = np.zeros((res[1], res[0]), dtype=np.uint8) + 128
     cols = int(np.ceil(np.sqrt(num_tags)))
@@ -376,7 +417,17 @@ def generate_synthetic_image(
     cell_w, cell_h = res[0] // cols, res[1] // rows
     tag_size = int(min(cell_w, cell_h) * 0.6)
 
-    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
+    # Map int value to OpenCV constants
+    if family == 2:
+        cv_family = cv2.aruco.DICT_4X4_50
+    elif family == 3:
+        cv_family = cv2.aruco.DICT_4X4_100
+    elif family == 1:
+        cv_family = cv2.aruco.DICT_APRILTAG_36H11 # Closest
+    else:
+        cv_family = cv2.aruco.DICT_APRILTAG_36h11
+
+    dictionary = cv2.aruco.getPredefinedDictionary(cv_family)
     gt_data = []
 
     for i in range(num_tags):

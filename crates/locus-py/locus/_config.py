@@ -71,7 +71,6 @@ class DetectOptions(BaseModel):
         return cls(
             families=[
                 TagFamily.AprilTag36h11,
-                TagFamily.AprilTag16h5,
                 TagFamily.ArUco4x4_50,
                 TagFamily.ArUco4x4_100,
             ]

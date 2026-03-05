@@ -5,39 +5,16 @@ import numpy as np
 
 from ._config import DetectOptions, DetectorConfig
 from .locus import (
-    SegmentationConnectivity as _SegmentationConnectivity,
-    CornerRefinementMode as _CornerRefinementMode,
-    DecodeMode as _DecodeMode,
-    PoseEstimationMode as _PoseEstimationMode,
+    SegmentationConnectivity,
+    CornerRefinementMode,
+    DecodeMode,
+    PoseEstimationMode,
+    TagFamily,
     CameraIntrinsics,
     PyPose as Pose,
     create_detector as _create_detector,
     init_tracy,
 )
-
-class TagFamily(enum.IntEnum):
-    AprilTag36h11 = 0
-    AprilTag41h12 = 1
-    ArUco4x4_50 = 2
-    ArUco4x4_100 = 3
-
-class SegmentationConnectivity(enum.IntEnum):
-    Four = 0
-    Eight = 1
-
-class CornerRefinementMode(enum.IntEnum):
-    None_ = 0
-    Edge = 1
-    GridFit = 2
-    Erf = 3
-
-class DecodeMode(enum.IntEnum):
-    Hard = 0
-    Soft = 1
-
-class PoseEstimationMode(enum.IntEnum):
-    Fast = 0
-    Accurate = 1
 
 @dataclass(frozen=True)
 class DetectionBatch:
@@ -70,8 +47,11 @@ class Detector:
         # Prepare kwargs for Rust by converting enums to ints
         rust_kwargs = {}
         for k, v in kwargs.items():
-            if isinstance(v, enum.Enum):
+            # PyO3 enums might not inherit from enum.Enum but are int-convertible
+            if hasattr(v, "__int__"):
                 rust_kwargs[k] = int(v)
+            elif isinstance(v, enum.Enum):
+                rust_kwargs[k] = v.value
             else:
                 rust_kwargs[k] = v
 

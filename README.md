@@ -14,7 +14,7 @@
 - **High-Performance Core**: Written in Rust (2024 Edition) with a focus on Data-Oriented Design.
 - **Encapsulated Facade**: Simple, ergonomic `Detector` API that manages complex memory lifetimes (arenas, SoA batches) internally.
 - **Runtime SIMD Dispatch**: Automatically utilizes AVX2, AVX-512, or NEON based on host CPU capabilities.
-- **Vectorized Python API**: Returns detection results as a single `Result` object containing zero-copy NumPy views of the internal batch for maximum throughput.
+- **Vectorized Python API**: Returns detection results as a single `DetectionBatch` object containing parallel NumPy arrays for maximum throughput.
 - **GIL-Free Execution**: Releases the Python Global Interpreter Lock (GIL) during detection to enable true multi-threaded applications.
 - **Memory Efficient**: Uses `bumpalo` arena allocation to achieve zero heap allocations in the detection hot-path.
 - **Advanced Pose Estimation**: High-precision 6-DOF recovery using IPPE-Square or weighted Levenberg-Marquardt with corner uncertainty modeling.
@@ -26,10 +26,10 @@ Evaluated on the standard ICRA 2020 benchmark (50 images). Latency measured on a
 
 | Detector | Recall | RMSE | Latency (1080p avg) |
 | :--- | :---: | :---: | :---: |
-| **Locus (Soft)** | **94.35%** | 0.26 px | **87.2 ms** |
-| **Locus (Hard)** | **75.52%** | **0.23 px** | **64.5 ms** |
-| AprilTag 3 | 62.34% | 0.22 px | 118.9 ms |
-| OpenCV | 33.16% | 0.92 px | 111.7 ms |
+| **Locus (Soft)** | **93.16%** | 0.26 px | **74.5 ms** |
+| **Locus (Hard)** | **74.35%** | **0.24 px** | **63.5 ms** |
+| AprilTag 3 | 62.34% | 0.22 px | 119.7 ms |
+| OpenCV | 33.16% | 0.92 px | 106.9 ms |
 
 *Note: Locus utilizes a Structure of Arrays (SoA) layout to achieve ~3.8x speedup over previous versions in dense tag environments.*
 
@@ -62,11 +62,11 @@ img = cv2.imread("image.jpg", cv2.IMREAD_GRAYSCALE)
 
 # Create detector and detect tags (defaults to AprilTag 36h11)
 detector = locus.Detector()
-result = detector.detect(img)
+batch = detector.detect(img)
 
-# result is a vectorized Result object
-for i in range(len(result)):
-    print(f"ID: {result.ids[i]}, Center: {result.centers[i]}")
+# batch is a vectorized DetectionBatch object
+for i in range(len(batch)):
+    print(f"ID: {batch.ids[i]}, Center: {batch.centers[i]}")
 ```
 
 ### Advanced Configuration
@@ -83,7 +83,7 @@ detector = Detector(
     families=[TagFamily.AprilTag36h11, TagFamily.ArUco4x4_50]
 )
 
-result = detector.detect(img)
+batch = detector.detect(img)
 ```
 
 ### 3D Pose Estimation
@@ -91,13 +91,23 @@ result = detector.detect(img)
 Recover the 6-DOF transformation between the camera and the tag:
 
 ```python
-from locus import CameraIntrinsics
+from locus import CameraIntrinsics, PoseEstimationMode
 
 # Camera parameters (fx, fy, cx, cy)
 intrinsics = CameraIntrinsics(fx=800.0, fy=800.0, cx=640.0, cy=360.0)
 
 # Pass intrinsics and physical tag size (meters)
-# Note: Pose estimation currently requires explicit options (coming soon to main API)
+batch = detector.detect(
+    img, 
+    intrinsics=intrinsics, 
+    tag_size=0.10,
+    pose_estimation_mode=PoseEstimationMode.Accurate
+)
+
+if batch.poses is not None:
+    # batch.poses is (N, 7) array: [tx, ty, tz, qx, qy, qz, qw]
+    print(f"First tag translation: {batch.poses[0, :3]}")
+    print(f"First tag quaternion: {batch.poses[0, 3:]}")
 ```
 
 ## Visual Debugging with Rerun

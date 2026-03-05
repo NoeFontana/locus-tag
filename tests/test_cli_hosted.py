@@ -32,7 +32,8 @@ class TestCLIHosted(unittest.TestCase):
                 compare=False,
                 decimation=1,
                 limit=None,
-                skip=0
+                skip=0,
+                family="AprilTag36h11"
             )
             output = fake_out.getvalue()
 

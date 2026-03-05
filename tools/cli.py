@@ -205,10 +205,27 @@ def bench_real(
     baseline: Optional[Path] = typer.Option(None, help="Path to baseline JSON"),
     save_baseline: Optional[Path] = typer.Option(None, help="Path to save results as baseline"),
     profile: bool = typer.Option(False, help="Enable Tracy profiling"),
+    family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
 ):
     """Run benchmarks on real-world datasets (ICRA)."""
     if profile:
         locus.init_tracy()
+
+    # Map string to locus.TagFamily
+    family_mapping = {
+        "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
+        "AprilTag41h12": int(locus.TagFamily.AprilTag41h12),
+        "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
+        "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "36h11": int(locus.TagFamily.AprilTag36h11),
+        "41h12": int(locus.TagFamily.AprilTag41h12),
+        "4x4_50": int(locus.TagFamily.ArUco4x4_50),
+        "4x4_100": int(locus.TagFamily.ArUco4x4_100),
+    }
+    tag_family_int = family_mapping.get(family)
+    if tag_family_int is None:
+        typer.echo(f"Error: Unknown tag family '{family}'", err=True)
+        raise typer.Exit(code=1)
 
     loader = DatasetLoader()
     wrappers: List[LibraryWrapper] = []
@@ -219,7 +236,7 @@ def bench_real(
         enable_sharpening=True,
         upscale_factor=1,
     )
-    wrappers.append(LocusWrapper(name="Locus (Soft)", config=soft_config, decimation=decimation))
+    wrappers.append(LocusWrapper(name="Locus (Soft)", config=soft_config, decimation=decimation, family=tag_family_int))
 
     # Hard mode
     hard_config = locus.DetectorConfig(
@@ -227,11 +244,13 @@ def bench_real(
         enable_sharpening=True,
         upscale_factor=1,
     )
-    wrappers.append(LocusWrapper(name="Locus (Hard)", config=hard_config, decimation=decimation))
+    wrappers.append(LocusWrapper(name="Locus (Hard)", config=hard_config, decimation=decimation, family=tag_family_int))
 
     if compare:
-        wrappers.append(OpenCVWrapper())
-        wrappers.append(AprilTagWrapper(nthreads=8))
+        # Map locus.TagFamily to library specific names
+        # ICRA 2020 dataset is AprilTag 36h11
+        wrappers.append(OpenCVWrapper(family=tag_family_int))
+        wrappers.append(AprilTagWrapper(nthreads=8, family=tag_family_int))
 
     baseline_data = {}
     if baseline and baseline.exists():
@@ -324,13 +343,31 @@ def bench_synthetic(
     iterations: int = typer.Option(10, help="Number of iterations per count"),
     compare: bool = typer.Option(False, help="Compare against other libraries"),
     decimation: int = typer.Option(1, help="Image decimation factor"),
+    family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
 ):
     """Run benchmarks on procedurally generated synthetic images."""
+    # Map string to locus.TagFamily
+    family_mapping = {
+        "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
+        "AprilTag41h12": int(locus.TagFamily.AprilTag41h12),
+        "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
+        "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "36h11": int(locus.TagFamily.AprilTag36h11),
+        "41h12": int(locus.TagFamily.AprilTag41h12),
+        "4x4_50": int(locus.TagFamily.ArUco4x4_50),
+        "4x4_100": int(locus.TagFamily.ArUco4x4_100),
+    }
+    tag_family_int = family_mapping.get(family)
+    if tag_family_int is None:
+        typer.echo(f"Error: Unknown tag family '{family}'", err=True)
+        raise typer.Exit(code=1)
+
     wrappers: List[LibraryWrapper] = []
-    wrappers.append(LocusWrapper(decimation=decimation))
+    wrappers.append(LocusWrapper(decimation=decimation, family=tag_family_int))
+
     if compare:
-        wrappers.append(OpenCVWrapper())
-        wrappers.append(AprilTagWrapper())
+        wrappers.append(OpenCVWrapper(family=tag_family_int))
+        wrappers.append(AprilTagWrapper(family=tag_family_int))
 
     counts = [int(x) for x in targets.split(",")]
     res = (1280, 720)
@@ -339,9 +376,11 @@ def bench_synthetic(
     typer.echo("-" * 60)
 
     for count in counts:
-        img, gt_tags = generate_synthetic_image(count, res, noise_sigma=noise)
+        img, gt_tags = generate_synthetic_image(count, res, noise_sigma=noise, family=tag_family_int)
+
         for wrapper in wrappers:
             latencies = []
+            detections = []
             for _ in range(iterations):
                 start = time.perf_counter()
                 detections, _ = wrapper.detect(img)
@@ -360,14 +399,32 @@ def bench_hosted(
     skip: int = typer.Option(0, help="Skip first N images"),
     compare: bool = typer.Option(False, help="Compare against other libraries"),
     decimation: int = typer.Option(1, help="Image decimation factor"),
+    family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
 ):
     """Evaluate against datasets hosted on Hugging Face Hub."""
+    # Map string to locus.TagFamily
+    family_mapping = {
+        "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
+        "AprilTag41h12": int(locus.TagFamily.AprilTag41h12),
+        "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
+        "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "36h11": int(locus.TagFamily.AprilTag36h11),
+        "41h12": int(locus.TagFamily.AprilTag41h12),
+        "4x4_50": int(locus.TagFamily.ArUco4x4_50),
+        "4x4_100": int(locus.TagFamily.ArUco4x4_100),
+    }
+    tag_family_int = family_mapping.get(family)
+    if tag_family_int is None:
+        typer.echo(f"Error: Unknown tag family '{family}'", err=True)
+        raise typer.Exit(code=1)
+
     loader = HubBenchmarkLoader()
     wrappers: List[LibraryWrapper] = []
-    wrappers.append(LocusWrapper(decimation=decimation))
+    wrappers.append(LocusWrapper(decimation=decimation, family=tag_family_int))
+
     if compare:
-        wrappers.append(OpenCVWrapper())
-        wrappers.append(AprilTagWrapper(nthreads=8))
+        wrappers.append(OpenCVWrapper(family=tag_family_int))
+        wrappers.append(AprilTagWrapper(nthreads=8, family=tag_family_int))
 
     for config in configs:
         typer.echo(f"\nEvaluating {config} (from Hugging Face Hub)...")
@@ -436,12 +493,29 @@ def bench_profile(
     targets: int = typer.Option(50, help="Number of tags to generate"),
     noise: float = typer.Option(0.0, help="Noise sigma"),
     iterations: int = typer.Option(50, help="Number of iterations"),
+    family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
 ):
     """Profile pipeline bottlenecks using synthetic images."""
-    wrapper = LocusWrapper()
+    # Map string to locus.TagFamily
+    family_mapping = {
+        "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
+        "AprilTag41h12": int(locus.TagFamily.AprilTag41h12),
+        "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
+        "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "36h11": int(locus.TagFamily.AprilTag36h11),
+        "41h12": int(locus.TagFamily.AprilTag41h12),
+        "4x4_50": int(locus.TagFamily.ArUco4x4_50),
+        "4x4_100": int(locus.TagFamily.ArUco4x4_100),
+    }
+    tag_family_int = family_mapping.get(family)
+    if tag_family_int is None:
+        typer.echo(f"Error: Unknown tag family '{family}'", err=True)
+        raise typer.Exit(code=1)
+
+    wrapper = LocusWrapper(family=tag_family_int)
     res = (1280, 720)
-    img, _ = generate_synthetic_image(targets, res, noise_sigma=noise)
-    typer.echo(f"\nProfiling {targets} tags (noise={noise})...")
+    img, _ = generate_synthetic_image(targets, res, noise_sigma=noise, family=tag_family_int)
+    typer.echo(f"\nProfiling {targets} tags (noise={noise}, family={family})...")
     
     # In the new API, we don't have per-stage stats exposed yet in the high-level API
     # We just measure total time for now.
