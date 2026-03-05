@@ -131,6 +131,12 @@ pub struct DetectorConfig {
     /// at the cost of processing speed (O(N^2)). Nearest-neighbor interpolation is used.
     pub upscale_factor: usize,
 
+    /// Decimation factor for preprocessing (1 = no decimation).
+    pub decimation: usize,
+
+    /// Number of threads for parallel processing (0 = auto).
+    pub nthreads: usize,
+
     // Decoder parameters
     /// Minimum contrast range for Otsu-based bit classification (default: 20.0).
     /// For checkerboard patterns with densely packed tags, lower values (e.g., 10.0)
@@ -169,6 +175,8 @@ impl Default for DetectorConfig {
             segmentation_margin: 1,
             segmentation_connectivity: SegmentationConnectivity::Eight,
             upscale_factor: 1,
+            decimation: 1,
+            nthreads: 0,
             decoder_min_contrast: 20.0,
             refinement_mode: CornerRefinementMode::Erf,
             decode_mode: DecodeMode::Hard,
@@ -386,6 +394,8 @@ impl DetectorConfigBuilder {
                 .segmentation_connectivity
                 .unwrap_or(d.segmentation_connectivity),
             upscale_factor: self.upscale_factor.unwrap_or(d.upscale_factor),
+            decimation: 1, // Default to 1, as it's typically set via builder
+            nthreads: 0,   // Default to 0
             decoder_min_contrast: self.decoder_min_contrast.unwrap_or(d.decoder_min_contrast),
             refinement_mode: self.refinement_mode.unwrap_or(d.refinement_mode),
             decode_mode: self.decode_mode.unwrap_or(d.decode_mode),
