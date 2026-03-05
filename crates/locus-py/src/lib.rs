@@ -254,7 +254,7 @@ fn create_detector(
     decimation: usize,
     threads: usize,
     families: Vec<i32>,
-    kwargs: Option<&Bound<'_, PyDict>>,
+    kwargs: Option<Bound<'_, PyDict>>,
 ) -> PyResult<Detector> {
     let mut builder = locus_core::DetectorBuilder::new()
         .with_decimation(decimation)
