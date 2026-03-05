@@ -1269,8 +1269,7 @@ mod tests {
         let mut binary = vec![0u8; new_w * new_h];
         engine.apply_threshold(&arena, &decimated_img, &stats, &mut binary);
 
-        let label_result =
-            label_components_with_stats(&arena, &binary, new_w, new_h, true);
+        let label_result = label_components_with_stats(&arena, &binary, new_w, new_h, true);
 
         // Run extraction with decimation=2
         // Refinement image is the full resolution image

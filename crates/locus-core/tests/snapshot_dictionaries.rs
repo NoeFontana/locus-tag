@@ -52,5 +52,8 @@ fn test_dictionary_snapshots() {
     assert_debug_snapshot!("tag36h11_parity", snapshot_dict(TagFamily::AprilTag36h11));
     assert_debug_snapshot!("tag41h12_parity", snapshot_dict(TagFamily::AprilTag41h12));
     assert_debug_snapshot!("aruco4x4_50_parity", snapshot_dict(TagFamily::ArUco4x4_50));
-    assert_debug_snapshot!("aruco4x4_100_parity", snapshot_dict(TagFamily::ArUco4x4_100));
+    assert_debug_snapshot!(
+        "aruco4x4_100_parity",
+        snapshot_dict(TagFamily::ArUco4x4_100)
+    );
 }
