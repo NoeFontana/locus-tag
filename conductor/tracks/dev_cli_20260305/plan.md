@@ -1,13 +1,14 @@
 # Implementation Plan: Isolated Developer CLI
 
-## Phase 1: Dependency Refactoring
+## Phase 1: Dependency Refactoring [checkpoint: 207f4bf]
 Strictly segregate core runtime dependencies from developer tools.
 
-- - [x] Task: Audit `locus` Python package source to confirm core dependencies (ensure only `numpy` is strictly required at runtime).
-- -  - [x] Task: Update `pyproject.toml` to move `pydantic` and other non-core deps from `project.dependencies` to `[dependency-groups]`.
-- - [x] Task: Add `typer` to the `dev` or `tools` dependency group.
-- - [x] Task: Execute `uv lock` and verify the environment.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Dependency Refactoring' (Protocol in workflow.md)
+- [x] Task: Audit `locus` Python package source to confirm core dependencies (ensure only `numpy` is strictly required at runtime). 3d6d67c
+- [x] Task: Update `pyproject.toml` to move `pydantic` and other non-core deps from `project.dependencies` to `[dependency-groups]`. 1302f70
+- [x] Task: Add `typer` to the `dev` or `tools` dependency group. 1302f70
+- [x] Task: Execute `uv lock` and verify the environment. 3d6d67c
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Dependency Refactoring' (Protocol in workflow.md) 207f4bf
+
 
 ## Phase 2: CLI Scaffolding & Command Integration
 Create the unified entry point and migrate existing scripts.
