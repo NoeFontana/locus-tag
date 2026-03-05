@@ -1,5 +1,6 @@
 import enum
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -32,9 +33,7 @@ class DetectionBatch:
     ids: np.ndarray  # Shape: (N,), Dtype: int32
     corners: np.ndarray  # Shape: (N, 4, 2), Dtype: float32
     error_rates: np.ndarray  # Shape: (N,), Dtype: float32
-    poses: np.ndarray | None = (
-        None  # Shape: (N, 7), Dtype: float32. [tx, ty, tz, qx, qy, qz, qw]
-    )
+    poses: np.ndarray | None = None  # Shape: (N, 7), Dtype: float32. [tx, ty, tz, qx, qy, qz, qw]
 
     @property
     def centers(self) -> np.ndarray:
