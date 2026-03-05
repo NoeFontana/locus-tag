@@ -11,10 +11,7 @@ The primary entry point for using Locus is the `Detector` class.
         show_root_toc_entry: false
         members:
             - __init__
-            - checkerboard
             - detect
-            - detect_with_options
-            - set_families
 
 ## Configuration
 
@@ -32,7 +29,7 @@ Locus uses Pydantic for robust configuration validation.
 
 These classes represent the output and internal state of the detection pipeline.
 
-::: locus.Detection
+::: locus.DetectionBatch
     options:
         heading_level: 3
 

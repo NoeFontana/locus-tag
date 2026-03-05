@@ -67,11 +67,15 @@ nav:
   - Explanation:
       - explanation/architecture.md
       - explanation/coordinates.md
-      - benchmarking.md
+      - Benchmarking:
+          - benchmarking.md
+          - benchmarking/baseline_20260302.md
+          - benchmarking/soa_migration_20260303.md
   - Reference:
       - reference/api.md
   - Engineering (Internal):
       - engineering/core.md
+      - engineering/detection-batch-contract.md
       - engineering/constraints.md
       - engineering/quality-gates.md
       - engineering/rust-style.md

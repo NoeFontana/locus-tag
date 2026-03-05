@@ -94,7 +94,14 @@ class Detector:
             decimation=decimation, threads=threads, families=family_values, **final_rust_kwargs
         )
 
-    def detect(self, img: np.ndarray, **kwargs) -> DetectionBatch:
+    def detect(
+        self,
+        img: np.ndarray,
+        intrinsics: CameraIntrinsics | None = None,
+        tag_size: float | None = None,
+        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
+        **kwargs,
+    ) -> DetectionBatch:
         """
         Detect tags in the image.
 
@@ -110,7 +117,13 @@ class Detector:
         if img.dtype != np.uint8:
             raise ValueError(f"Input image must be uint8, got {img.dtype}")
 
-        res_dict = self._inner.detect(img, **kwargs)
+        res_dict = self._inner.detect(
+            img,
+            intrinsics=intrinsics,
+            tag_size=tag_size,
+            pose_estimation_mode=pose_estimation_mode,
+            **kwargs,
+        )
         return DetectionBatch(**res_dict)
 
 
