@@ -5,13 +5,13 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from scripts.locus_bench import run_hosted_benchmark
+from tools.cli import bench_hosted as run_hosted_benchmark
 
 
 class TestCLIHosted(unittest.TestCase):
-    @patch("scripts.locus_bench.HubBenchmarkLoader")
-    @patch("scripts.locus_bench.LocusWrapper")
-    @patch("scripts.locus_bench.Metrics.match_detections")
+    @patch("tools.cli.HubBenchmarkLoader")
+    @patch("tools.cli.LocusWrapper")
+    @patch("tools.cli.Metrics.match_detections")
     def test_run_hosted_benchmark_flow(self, mock_match, mock_locus, mock_loader_cls):
         # Setup mocks
         mock_loader = mock_loader_cls.return_value
@@ -25,11 +25,15 @@ class TestCLIHosted(unittest.TestCase):
 
         mock_match.return_value = (0, 0.0, 1)  # correct, err_sum, matched_gt
 
-        args = Namespace(configs=["subset1"], compare=False, decimation=1, limit=None, skip=0)
-
         # Capture stdout to avoid noise and verify output if needed
         with patch("sys.stdout", new=io.StringIO()) as fake_out:
-            run_hosted_benchmark(args)
+            run_hosted_benchmark(
+                configs=["subset1"],
+                compare=False,
+                decimation=1,
+                limit=None,
+                skip=0
+            )
             output = fake_out.getvalue()
 
         # Verify calls
