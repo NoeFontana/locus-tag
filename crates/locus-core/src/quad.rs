@@ -40,6 +40,7 @@ pub struct QuadWorkspace {
 
 impl QuadWorkspace {
     /// Creates a new `QuadWorkspace` with pre-allocated capacities to avoid runtime allocations.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             contour: Vec::with_capacity(512),
@@ -96,6 +97,7 @@ pub struct Point {
 /// Fast quad extraction using bounding box stats from CCL.
 /// Only traces contours for components that pass geometric filters.
 /// Uses default configuration.
+#[must_use]
 pub fn extract_quads_fast(
     img: &ImageView,
     label_result: &LabelResult,
@@ -381,6 +383,7 @@ pub fn extract_single_quad(
 ///
 /// This is the main entry point for quad detection with custom parameters.
 /// Components are processed in parallel for maximum throughput.
+#[must_use]
 #[allow(clippy::too_many_lines)]
 pub fn extract_quads_with_config(
     img: &ImageView,
@@ -445,6 +448,7 @@ pub fn extract_quads_with_config(
 }
 
 /// Legacy extract_quads for backward compatibility.
+#[must_use]
 pub fn extract_quads(img: &ImageView, labels: &[u32]) -> Vec<Detection> {
     // Create a fake LabelResult with stats computed on-the-fly
     let mut detections = Vec::new();
@@ -485,7 +489,7 @@ pub fn extract_quads(img: &ImageView, labels: &[u32]) -> Vec<Detection> {
                 douglas_peucker(&mut workspace.simplified, &mut workspace.dp_stack, &mut workspace.dp_keep, &workspace.contour, 4.0);
                 let simplified = &workspace.simplified;
                 if simplified.len() == 5 {
-                    let area = polygon_area(&simplified);
+                    let area = polygon_area(simplified);
                     let perimeter = workspace.contour.len() as f64;
                     let compactness = (12.566 * area) / (perimeter * perimeter);
 
@@ -503,7 +507,7 @@ pub fn extract_quads(img: &ImageView, labels: &[u32]) -> Vec<Detection> {
                         if ok {
                             detections.push(Detection {
                                 id: label,
-                                center: polygon_center(&simplified),
+                                center: polygon_center(simplified),
                                 corners: [
                                     [simplified[0].x, simplified[0].y],
                                     [simplified[1].x, simplified[1].y],
@@ -698,6 +702,7 @@ fn perpendicular_distance(p: Point, a: Point, b: Point) -> f64 {
     ((dy * p.x - dx * p.y + b.x * a.y - b.y * a.x).abs()) / mag
 }
 
+#[must_use]
 fn polygon_area(points: &[Point]) -> f64 {
     let mut area = 0.0;
     for i in 0..points.len() - 1 {
@@ -706,6 +711,7 @@ fn polygon_area(points: &[Point]) -> f64 {
     area * 0.5
 }
 
+#[must_use]
 fn polygon_center(points: &[Point]) -> [f64; 2] {
     let mut cx = 0.0;
     let mut cy = 0.0;
@@ -1044,6 +1050,7 @@ fn reduce_to_quad(current: &mut Vec<Point>, poly: &[Point]) {
 ///
 /// Returns the lowest score among the 4 edges. If any edge is very weak,
 /// the return value will be low, indicating a likely false positive.
+#[must_use]
 fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
     let mut min_score = f64::MAX;
 
