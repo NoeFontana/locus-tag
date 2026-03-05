@@ -1,13 +1,13 @@
 # Implementation Plan: Zero-Cost Tracing
 
-## Phase 1: Infrastructure & Configuration
-- [ ] Task: Configure `tracing` compile-time erasure in `crates/locus-core/Cargo.toml`.
+## Phase 1: Infrastructure & Configuration [checkpoint: f9daba8]
+- [x] Task: Configure `tracing` compile-time erasure in `crates/locus-core/Cargo.toml`. 460270c
     - Add `features = ["max_level_error"]` (or `off`) to the `tracing` dependency for production.
-- [ ] Task: Verify `tracy` feature correctly gates `tracing-tracy` and its subscriber initialization.
-- [ ] Task: Conductor - User Manual Verification 'Infrastructure & Configuration' (Protocol in workflow.md)
+- [x] Task: Verify `tracy` feature correctly gates `tracing-tracy` and its subscriber initialization.
+- [x] Task: Conductor - User Manual Verification 'Infrastructure & Configuration' (Protocol in workflow.md)
 
 ## Phase 2: Core Pipeline Instrumentation
-- [ ] Task: Instrument `thresholding` stage in `crates/locus-core/src/threshold.rs`.
+- [~] Task: Instrument `thresholding` stage in `crates/locus-core/src/threshold.rs`.
     - Use `#[tracing::instrument(skip_all, name = "pipeline::thresholding")]`.
 - [ ] Task: Instrument `segmentation` stage in `crates/locus-core/src/segmentation.rs`.
     - Use `#[tracing::instrument(skip_all, name = "pipeline::segmentation")]`.
