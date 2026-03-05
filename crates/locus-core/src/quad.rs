@@ -19,7 +19,6 @@ use crate::segmentation::LabelResult;
 use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
 use multiversion::multiversion;
-use rayon::prelude::*;
 use std::cell::RefCell;
 
 thread_local! {
@@ -71,6 +70,37 @@ pub fn extract_quads_fast(
 /// This function populates the `corners` and `status_mask` fields of the provided `DetectionBatch`.
 /// It returns the total number of candidates found ($N$).
 #[allow(clippy::too_many_lines)]
+// Concurrency wrapper for disjoint writes to the SoA batch
+struct UnsafeSlice<'a, T> {
+    ptr: *mut T,
+    len: usize,
+    _marker: std::marker::PhantomData<&'a mut [T]>,
+}
+// SAFETY: We only write to disjoint indices during parallel iteration.
+unsafe impl<T: Send + Sync> Send for UnsafeSlice<'_, T> {}
+unsafe impl<T: Send + Sync> Sync for UnsafeSlice<'_, T> {}
+
+impl<'a, T> UnsafeSlice<'a, T> {
+    fn new(slice: &'a mut [T]) -> Self {
+        Self {
+            ptr: slice.as_mut_ptr(),
+            len: slice.len(),
+            _marker: std::marker::PhantomData,
+        }
+    }
+    unsafe fn write(&self, i: usize, value: T) {
+        debug_assert!(i < self.len);
+        unsafe {
+            self.ptr.add(i).write(value);
+        }
+    }
+}
+
+/// Quad extraction with Structure of Arrays (SoA) output.
+///
+/// This function populates the `corners` and `status_mask` fields of the provided `DetectionBatch`.
+/// It returns the total number of candidates found ($N$).
+#[allow(clippy::too_many_lines)]
 pub fn extract_quads_soa(
     batch: &mut DetectionBatch,
     img: &ImageView,
@@ -80,18 +110,23 @@ pub fn extract_quads_soa(
     refinement_img: &ImageView,
 ) -> usize {
     use rayon::prelude::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     let stats = &label_result.component_stats;
 
-    let detections: Vec<[Point; 4]> = stats
+    let n_candidates = AtomicUsize::new(0);
+    let corners_slice = UnsafeSlice::new(&mut batch.corners);
+    let status_mask_slice = UnsafeSlice::new(&mut batch.status_mask);
+
+    stats
         .par_iter()
         .with_min_len(2)
         .enumerate()
-        .filter_map(|(label_idx, stat)| {
+        .for_each(|(label_idx, stat)| {
             THREAD_QUAD_ARENA.with_borrow_mut(|arena| {
                 arena.reset();
                 let label = (label_idx + 1) as u32;
-                extract_single_quad(
+                if let Some(corners) = extract_single_quad(
                     arena,
                     img,
                     label_result.labels,
@@ -100,23 +135,33 @@ pub fn extract_quads_soa(
                     config,
                     decimation,
                     refinement_img,
-                )
-            })
-        })
-        .collect();
-
-    let n = detections.len().min(MAX_CANDIDATES);
-    for (i, corners) in detections.into_iter().take(n).enumerate() {
-        for (j, corner) in corners.iter().enumerate() {
-            batch.corners[i * 4 + j] = Point2f {
-                x: corner.x as f32,
-                y: corner.y as f32,
-            };
-        }
-        batch.status_mask[i] = CandidateState::Active;
-    }
+                ) {
+                    let idx = n_candidates.fetch_add(1, Ordering::Relaxed);
+                    if idx < MAX_CANDIDATES {
+                        // SAFETY: Each thread gets a unique `idx` via fetch_add,
+                        // ensuring disjoint parallel writes.
+                        unsafe {
+                            // Write the 4 corners directly
+                            for (j, corner) in corners.iter().enumerate() {
+                                corners_slice.write(
+                                    idx * 4 + j,
+                                    Point2f {
+                                        x: corner.x as f32,
+                                        y: corner.y as f32,
+                                    },
+                                );
+                            }
+                            // Mark as active
+                            status_mask_slice.write(idx, CandidateState::Active);
+                        }
+                    }
+                }
+            });
+        });
 
     // Ensure the rest of the batch is marked as Empty
+    // Use `into_inner()` since we have unique access now
+    let n = n_candidates.into_inner().min(MAX_CANDIDATES);
     for i in n..MAX_CANDIDATES {
         batch.status_mask[i] = CandidateState::Empty;
     }

@@ -120,6 +120,9 @@ uv run --group bench python scripts/debug/visualize.py --scenario forward --limi
 Locus includes a rigorous suite to ensure detection quality and latency targets.
 
 ```bash
+# Build and install in editable mode
+uv run maturin develop -r
+
 # Prepare local datasets
 uv run --group bench python scripts/locus_bench.py prepare
 
