@@ -1,6 +1,7 @@
-from typing import Any, Dict, List, Optional, Tuple, Union
-import numpy as np
 import enum
+from typing import Any
+
+import numpy as np
 
 class TagFamily(enum.IntEnum):
     AprilTag36h11 = 0
@@ -39,24 +40,23 @@ class CameraIntrinsics:
 
 class PyPose:
     @property
-    def rotation(self) -> np.ndarray: ... # 3x3
+    def rotation(self) -> np.ndarray: ...  # 3x3
     @property
-    def translation(self) -> np.ndarray: ... # 3x1
+    def translation(self) -> np.ndarray: ...  # 3x1
 
 class Detector:
     def detect(
         self,
         img: np.ndarray,
-        intrinsics: Optional[CameraIntrinsics] = None,
-        tag_size: Optional[float] = None,
+        intrinsics: CameraIntrinsics | None = None,
+        tag_size: float | None = None,
         pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
-    ) -> Dict[str, Any]: ...
+    ) -> dict[str, Any]: ...
 
 def create_detector(
     decimation: int = 1,
     threads: int = 0,
-    families: List[int] = [],
+    families: list[int] = [],
     **kwargs: Any,
 ) -> Detector: ...
-
 def init_tracy() -> None: ...
