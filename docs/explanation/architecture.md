@@ -18,7 +18,7 @@ flowchart TD
     end
 
     RustCore -->|Detections| PyBindings
-    PyBindings -->|"List[Detection]"| User
+    PyBindings -->|"Result (Vectorized)"| User
 ```
 
 ## Detection Pipeline
@@ -90,9 +90,9 @@ The system is structured around the `Detector` struct, which manages configurati
 classDiagram
     class Detector {
         -DetectorConfig config
-        -Bump arena
+        -DetectorState state
         -Vec~Box~TagDecoder~~ decoders
-        +detect(image) Vec~Detection~
+        +detect(image) &[Detection]
     }
 
     class DetectorConfig {
@@ -148,15 +148,17 @@ classDiagram
 
 ## Design Principles
 
-1.  **Zero-Copy Integration**: Utilizes the Python Buffer Protocol to access NumPy arrays directly, avoiding pixel data duplication. Locus strictly enforces a zero-copy boundary for high-performance methods; if an input array is non-contiguous (e.g., sliced columns or Fortran-layout), the system throws a `ValueError` rather than performing a hidden, performance-killing copy. Users are directed to use `.ascontiguousarray()` to resolve contiguity explicitly.
-2.  **Thread Concurrency (GIL-Free)**: Releases the Python Global Interpreter Lock (GIL) during the heavy perception pipeline, allowing true multi-threaded execution and preventing blocking in concurrent Python applications.
-3.  **Arena Memory**: Per-frame scratchpad (`bumpalo`) eliminates `malloc`/`free` overhead in the hot path.
-4.  **Cache Locality**: Algorithms (thresholding, CCL) process data in linear, cache-friendly passes.
-5.  **Runtime SIMD Dispatch**: Uses `multiversion` to target AVX2, AVX-512, or NEON based on host CPU capabilities.
-6.  **Structure of Arrays (SoA) Layout**: The detection pipeline is built around the `DetectionBatch`, which stores candidate data in parallel contiguous arrays. This eliminates L1 cache misses during math-heavy passes (homography, decoding) and ensures SIMD-alignment for all mathematical operations.
-7.  **Fast-Math Sampling**: Rewrites homography projection and bilinear interpolation using hardware reciprocal approximation (`rcp_nr`) and fixed-point integer SIMD to bypass FPU latency.
-8.  **Hybrid ROI Caching**: Minimizes L1 cache misses by copying tag candidates into contiguous stack (small tags) or arena (large tags) buffers before sampling.
-9.  **Hybrid Parallelism**: Scales via `rayon` for data-parallel tasks while maintaining sequential cache-coherence for state-heavy stages.
+1.  **Encapsulated Facade**: The `Detector` struct provides a single, robust entry point that owns all complex memory lifetimes (arenas, SoA batches), removing the cognitive burden of resource management from the user.
+2.  **Zero-Copy Integration**: Utilizes the Python Buffer Protocol to access NumPy arrays directly. Python results are returned as a vectorized `Result` object containing zero-copy NumPy views of the internal `DetectionBatch`, maximizing throughput for downstream consumers.
+3.  **Thread Concurrency (GIL-Free)**: Releases the Python Global Interpreter Lock (GIL) during the heavy perception pipeline, allowing true multi-threaded execution and preventing blocking in concurrent Python applications.
+4.  **Arena Memory**: Internal per-frame scratchpad (`bumpalo`) eliminates `malloc`/`free` overhead in the hot path.
+5.  **Cache Locality**: Algorithms (thresholding, CCL) process data in linear, cache-friendly passes.
+6.  **Runtime SIMD Dispatch**: Uses `multiversion` to target AVX2, AVX-512, or NEON based on host CPU capabilities.
+7.  **Structure of Arrays (SoA) Layout**: Built around the `DetectionBatch`, which eliminates L1 cache misses during math-heavy passes and ensures SIMD-alignment for all mathematical operations.
+8.  **Semantic Configuration**: Employs a `DetectorBuilder` to provide a human-friendly API for pipeline tuning, abstracting 20+ fine-grained parameters into high-level semantic methods.
+9.  **Fast-Math Sampling**: Rewrites homography projection and bilinear interpolation using hardware reciprocal approximation (`rcp_nr`) and fixed-point integer SIMD to bypass FPU latency.
+10. **Hybrid ROI Caching**: Minimizes L1 cache misses by copying tag candidates into contiguous stack (small tags) or arena (large tags) buffers before sampling.
+11. **Hybrid Parallelism**: Scales via `rayon` for data-parallel tasks while maintaining sequential cache-coherence for state-heavy stages.
 
 ## Memory Architecture
 
@@ -173,27 +175,20 @@ flowchart LR
     end
 
     subgraph Rust ["Rust Internal Memory"]
-        Arena["Bump Arena<br/>(Reset Per Frame)"]
+        subgraph State ["DetectorState"]
+            Arena["Bump Arena<br/>(Reset Per Frame)"]
+            Batch["DetectionBatch"]
+        end
 
         subgraph Static ["Pooled Buffers"]
             Upscale["Upscale Buffer"]
-        end
-
-        subgraph SoA ["DetectionBatch (SoA Arena)"]
-            Corners
-            Homographies
-            Payloads
-            Poses
         end
     end
 
     PyArr -.->|Zero-Copy Read| View
     View -->|Process| Upscale
     Upscale -->|Write| Arena
-    Arena -->|Store| Corners
-    Corners -->|Math Pass| Homographies
-    Homographies -->|SIMD Sampling| Payloads
-    Payloads -->|Partition & Solve| Poses
+    Arena -->|Store| Batch
 ```
 
 ### Arena Lifecycle
@@ -215,7 +210,7 @@ sequenceDiagram
     Arena->>Allocs: Pointer bumps only
 
     Note over Frame: Pipeline runs...
-    Frame->>Frame: Return Vec<Detection>
+    Frame->>Frame: Return &[Detection]
 ```
 
 ## Observability & Debugging
@@ -281,7 +276,7 @@ The `TagDecoder` trait serves as the extension point. To add a new family (e.g.,
 
 1.  **Implement `TagDecoder`**: Define the grid dimension and bit extraction logic.
 2.  **Define `TagDictionary`**: Provide the hamming distance lookup table.
-3.  **Register**: Pass the new decoder to `Detector::add_decoder`.
+3.  **Register**: Pass the new decoder to the detector (typically via `DetectorBuilder`).
 
 ```rust
 struct MyCustomDecoder;
@@ -294,8 +289,9 @@ impl TagDecoder for MyCustomDecoder {
 }
 
 // Usage
-let mut detector = Detector::new();
-detector.add_decoder(Box::new(MyCustomDecoder));
+let mut detector = DetectorBuilder::new()
+    .with_family(TagFamily::AprilTag36h11)
+    .build();
 ```
 
 ## Packaging & Distribution
@@ -331,4 +327,3 @@ The `locus-core` crate is organized into logical modules mirroring the pipeline 
 | `pose_weighted` | Structure Tensor & Weighted LM. | `refine_pose_lm_weighted` |
 | `gradient` | Image gradients & Sub-pixel windows. | `compute_structure_tensor` |
 | `filter` | Pre-processing filters (Bilateral, Sharpen). | `bilateral_filter` |
-
