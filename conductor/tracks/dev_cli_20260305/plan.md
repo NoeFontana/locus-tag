@@ -6,7 +6,7 @@ Strictly segregate core runtime dependencies from developer tools.
 - - [x] Task: Audit `locus` Python package source to confirm core dependencies (ensure only `numpy` is strictly required at runtime).
 - -  - [x] Task: Update `pyproject.toml` to move `pydantic` and other non-core deps from `project.dependencies` to `[dependency-groups]`.
 - - [x] Task: Add `typer` to the `dev` or `tools` dependency group.
-- [ ] Task: Execute `uv lock` and verify the environment.
+- - [x] Task: Execute `uv lock` and verify the environment.
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Dependency Refactoring' (Protocol in workflow.md)
 
 ## Phase 2: CLI Scaffolding & Command Integration
