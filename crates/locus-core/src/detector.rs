@@ -209,12 +209,7 @@ impl Detector {
         state.results = state.batch.reassemble(v);
 
         // Final coordinate adjustment and scaling
-        let upscale_factor = self.config.upscale_factor.max(1);
-        let inv_scale = if upscale_factor > 1 {
-            1.0 / effective_scale
-        } else {
-            1.0
-        };
+        let inv_scale = 1.0 / effective_scale;
 
         for d in &mut state.results {
             for corner in &mut d.corners {
