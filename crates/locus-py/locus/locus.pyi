@@ -40,6 +40,10 @@ class DetectionBatch:
     corners: np.ndarray  # Shape: (N, 4, 2), Dtype: float32
     error_rates: np.ndarray  # Shape: (N,), Dtype: float32
     poses: Optional[np.ndarray] = None  # Shape: (N, 7), Dtype: float32. [tx, ty, tz, qx, qy, qz, qw]
+    
+    @property
+    def centers(self) -> np.ndarray: ...
+    
     def __len__(self) -> int: ...
 
 class Detector:
@@ -48,6 +52,14 @@ class Detector:
         decimation: int = 1,
         threads: int = 0,
         families: Optional[List[TagFamily]] = None,
+        threshold_tile_size: int = 4,
+        threshold_min_range: int = 10,
+        adaptive_threshold_constant: int = 3,
+        quad_min_area: int = 16,
+        quad_min_fill_ratio: float = 0.30,
+        quad_min_edge_score: float = 0.0,
+        decoder_min_contrast: float = 20.0,
+        max_hamming_error: int = 2,
         upscale_factor: Optional[int] = None,
         refinement_mode: Optional[Union[CornerRefinementMode, int]] = None,
         decode_mode: Optional[Union[DecodeMode, int]] = None,

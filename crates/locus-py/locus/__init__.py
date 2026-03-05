@@ -44,12 +44,12 @@ class Detector:
         families: list[TagFamily] = None,
         threshold_tile_size: int = 4,
         threshold_min_range: int = 10,
-        adaptive_threshold_constant: int = 3,
+        adaptive_threshold_constant: int = 0,
         quad_min_area: int = 16,
-        quad_min_fill_ratio: float = 0.30,
+        quad_min_fill_ratio: float = 0.10,
         quad_min_edge_score: float = 0.0,
         decoder_min_contrast: float = 20.0,
-        max_hamming_error: int = 2,
+        max_hamming_error: int = 3,
         **kwargs
     ):
         # Map enum to int values for Rust. Rust expects a Vec<i32>.

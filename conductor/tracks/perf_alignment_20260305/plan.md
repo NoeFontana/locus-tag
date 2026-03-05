@@ -19,7 +19,7 @@ Expose all relevant pipeline parameters through the Python bridge.
 ## Phase 3: Final Verification and Tuning
 Restore baseline performance and update documentation.
 
-- [ ] Task: Set optimal defaults in `DetectorConfig` to match pre-refactor performance.
-- [ ] Task: Run full ICRA benchmark suite using the unified CLI and verify metrics.
-- [ ] Task: Update `README.md` performance table with the latest verified results.
+- - [x] Task: Set optimal defaults in `DetectorConfig` to match pre-refactor performance.
+- - [x] Task: Run full ICRA benchmark suite using the unified CLI and verify metrics.
+- - [x] Task: Update `README.md` performance table with the latest verified results.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Final Verification and Tuning' (Protocol in workflow.md)

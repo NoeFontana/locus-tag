@@ -206,10 +206,12 @@ def bench_real(
     save_baseline: Optional[Path] = typer.Option(None, help="Path to save results as baseline"),
     profile: bool = typer.Option(False, help="Enable Tracy profiling"),
     family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
-    refinement: str = typer.Option("Edge", help="Refinement mode (None, Edge, GridFit, Erf)"),
+    refinement: str = typer.Option("Erf", help="Refinement mode (None, Edge, GridFit, Erf)"),
     tile_size: int = typer.Option(4, help="Threshold tile size"),
-    constant: int = typer.Option(3, help="Adaptive threshold constant"),
-    min_fill: float = typer.Option(0.30, help="Min quad fill ratio"),
+    constant: int = typer.Option(0, help="Adaptive threshold constant"),
+    min_fill: float = typer.Option(0.10, help="Min quad fill ratio"),
+    min_range: int = typer.Option(10, help="Threshold min range"),
+    max_hamming: int = typer.Option(3, help="Max hamming error"),
 ):
     """Run benchmarks on real-world datasets (ICRA)."""
     if profile:
@@ -251,6 +253,8 @@ def bench_real(
         threshold_tile_size=tile_size,
         adaptive_threshold_constant=constant,
         quad_min_fill_ratio=min_fill,
+        threshold_min_range=min_range,
+        max_hamming_error=max_hamming,
     )
     wrappers.append(LocusWrapper(name="Locus (Soft)", config=soft_config, decimation=decimation, family=tag_family_int))
 
@@ -263,6 +267,8 @@ def bench_real(
         threshold_tile_size=tile_size,
         adaptive_threshold_constant=constant,
         quad_min_fill_ratio=min_fill,
+        threshold_min_range=min_range,
+        max_hamming_error=max_hamming,
     )
     wrappers.append(LocusWrapper(name="Locus (Hard)", config=hard_config, decimation=decimation, family=tag_family_int))
 

@@ -163,16 +163,15 @@ impl Default for DetectorConfig {
             quad_min_edge_score: 0.0,
             subpixel_refinement_sigma: 0.6,
 
-
             segmentation_margin: 1,
             segmentation_connectivity: SegmentationConnectivity::Eight,
             upscale_factor: 1,
             decimation: 1,
             nthreads: 0,
             decoder_min_contrast: 20.0,
-            refinement_mode: CornerRefinementMode::Edge,
+            refinement_mode: CornerRefinementMode::Erf,
             decode_mode: DecodeMode::Hard,
-            max_hamming_error: 2,
+            max_hamming_error: 3,
         }
     }
 }
@@ -627,7 +626,7 @@ mod tests {
         // Check defaults
         assert_eq!(config.threshold_min_range, 10);
         assert_eq!(config.quad_min_edge_score, 0.0);
-        assert_eq!(config.max_hamming_error, 2);
+        assert_eq!(config.max_hamming_error, 3);
     }
 
     #[test]

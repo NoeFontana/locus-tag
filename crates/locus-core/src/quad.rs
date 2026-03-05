@@ -236,6 +236,7 @@ fn extract_single_quad(
     }
 
     if ok {
+        let use_erf = config.refinement_mode == crate::config::CornerRefinementMode::Erf;
         let corners = [
             refine_corner(
                 arena,
@@ -245,6 +246,7 @@ fn extract_single_quad(
                 quad_pts[1],
                 config.subpixel_refinement_sigma,
                 decimation,
+                use_erf,
             ),
             refine_corner(
                 arena,
@@ -254,6 +256,7 @@ fn extract_single_quad(
                 quad_pts[2],
                 config.subpixel_refinement_sigma,
                 decimation,
+                use_erf,
             ),
             refine_corner(
                 arena,
@@ -263,6 +266,7 @@ fn extract_single_quad(
                 quad_pts[3],
                 config.subpixel_refinement_sigma,
                 decimation,
+                use_erf,
             ),
             refine_corner(
                 arena,
@@ -272,6 +276,7 @@ fn extract_single_quad(
                 quad_pts[0],
                 config.subpixel_refinement_sigma,
                 decimation,
+                use_erf,
             ),
         ];
 
@@ -629,12 +634,22 @@ pub(crate) fn refine_corner(
     p_next: Point,
     sigma: f64,
     decimation: usize,
+    use_erf: bool,
 ) -> Point {
-    // Try intensity-based refinement first (higher accuracy)
-    let line1 = refine_edge_intensity(arena, img, p_prev, p, sigma, decimation)
-        .or_else(|| fit_edge_line(img, p_prev, p, decimation));
-    let line2 = refine_edge_intensity(arena, img, p, p_next, sigma, decimation)
-        .or_else(|| fit_edge_line(img, p, p_next, decimation));
+    // Intensity-based refinement (ERF fit) is much more accurate but slower.
+    let line1 = if use_erf {
+        refine_edge_intensity(arena, img, p_prev, p, sigma, decimation)
+            .or_else(|| fit_edge_line(img, p_prev, p, decimation))
+    } else {
+        fit_edge_line(img, p_prev, p, decimation)
+    };
+
+    let line2 = if use_erf {
+        refine_edge_intensity(arena, img, p, p_next, sigma, decimation)
+            .or_else(|| fit_edge_line(img, p, p_next, decimation))
+    } else {
+        fit_edge_line(img, p, p_next, decimation)
+    };
 
     if let (Some(l1), Some(l2)) = (line1, line2) {
         // Intersect lines: a1*x + b1*y + c1 = 0 and a2*x + b2*y + c2 = 0
@@ -1343,7 +1358,7 @@ mod tests {
                 y: true_y.round(),
             };
 
-            let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1);
+            let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1, true);
 
             let error_x = (refined.x - true_x).abs();
             let error_y = (refined.y - true_y).abs();
@@ -1392,7 +1407,7 @@ mod tests {
             y: corner_y,
         };
 
-        let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1);
+        let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1, true);
 
         // The x-coordinate should be refined to near the true edge position
         // y-coordinate depends on the horizontal edge (which doesn't exist in this test)
