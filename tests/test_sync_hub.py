@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from scripts.bench.sync_hub import sync_subset_to_local
+from tools.bench.sync_hub import sync_subset_to_local
 
 
 class TestSyncHub(unittest.TestCase):
