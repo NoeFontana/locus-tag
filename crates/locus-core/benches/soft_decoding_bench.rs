@@ -1,6 +1,6 @@
 #![allow(missing_docs, clippy::unwrap_used)]
 use divan::bench;
-use locus_core::decoder::AprilTag36h11;
+use locus_core::bench_api::AprilTag36h11;
 use locus_core::strategy::{DecodingStrategy, SoftStrategy};
 
 fn main() {
@@ -11,7 +11,7 @@ fn main() {
 fn bench_soft_decoding_200_candidates(bencher: divan::Bencher) {
     let decoder = AprilTag36h11;
     let dict =
-        locus_core::dictionaries::get_dictionary(locus_core::config::TagFamily::AprilTag36h11);
+        locus_core::dictionaries::get_dictionary(locus_core::TagFamily::AprilTag36h11);
     // Create a SoftCode from a known match (ID 42)
     let orig_code = dict.get_code(42).unwrap();
 
@@ -51,10 +51,10 @@ fn bench_soft_decoding_200_candidates(bencher: divan::Bencher) {
 }
 #[bench]
 fn bench_soft_decoding_41h12_200_candidates(bencher: divan::Bencher) {
-    use locus_core::decoder::AprilTag41h12;
+    use locus_core::bench_api::AprilTag41h12;
     let decoder = AprilTag41h12;
     let dict =
-        locus_core::dictionaries::get_dictionary(locus_core::config::TagFamily::AprilTag41h12);
+        locus_core::dictionaries::get_dictionary(locus_core::TagFamily::AprilTag41h12);
     // id=100 is a valid ID for 41h12
     let orig_code = dict.get_code(100).unwrap();
 

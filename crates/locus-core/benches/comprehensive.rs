@@ -11,9 +11,9 @@
 use bumpalo::Bump;
 use divan::bench;
 use locus_core::Detector;
-use locus_core::config::{DetectOptions, TagFamily};
-use locus_core::image::ImageView;
-use locus_core::test_utils::{SceneBuilder, TagPlacement};
+use locus_core::{DetectOptions, TagFamily};
+use locus_core::ImageView;
+use locus_core::bench_api::{SceneBuilder, TagPlacement};
 
 fn main() {
     divan::main();
@@ -38,7 +38,7 @@ fn bench_thresholding_640x480(bencher: divan::Bencher) {
     });
     let (data, _) = builder.build();
     let img = ImageView::new(&data, width, height, width).unwrap();
-    let engine = locus_core::threshold::ThresholdEngine::new();
+    let engine = locus_core::bench_api::ThresholdEngine::new();
     let mut output = vec![0u8; width * height];
 
     let arena = Bump::new();
@@ -63,7 +63,7 @@ fn bench_segmentation_640x480(bencher: divan::Bencher) {
     });
     let (data, _) = builder.build();
     let mut binarized = vec![0u8; width * height];
-    let engine = locus_core::threshold::ThresholdEngine::new();
+    let engine = locus_core::bench_api::ThresholdEngine::new();
     let img = ImageView::new(&data, width, height, width).unwrap();
     let arena = Bump::new();
     let stats = engine.compute_tile_stats(&arena, &img);
@@ -71,7 +71,7 @@ fn bench_segmentation_640x480(bencher: divan::Bencher) {
 
     bencher.bench_local(move || {
         let local_arena = Bump::new();
-        locus_core::segmentation::label_components(&local_arena, &binarized, width, height, true);
+        locus_core::bench_api::label_components(&local_arena, &binarized, width, height, true);
     });
 }
 
@@ -91,22 +91,22 @@ fn bench_quad_extraction_640x480(bencher: divan::Bencher) {
     let (data, _) = builder.build();
     let arena = Bump::new();
     let mut binarized = vec![0u8; width * height];
-    let engine = locus_core::threshold::ThresholdEngine::new();
+    let engine = locus_core::bench_api::ThresholdEngine::new();
     let img = ImageView::new(&data, width, height, width).unwrap();
     let stats = engine.compute_tile_stats(&arena, &img);
     engine.apply_threshold(&arena, &img, &stats, &mut binarized);
 
-    let labels = locus_core::segmentation::label_components_with_stats(
+    let labels = locus_core::bench_api::label_components_with_stats(
         &arena, &binarized, width, height, true,
     );
 
     bencher.bench_local(move || {
         let local_arena = Bump::new();
-        locus_core::quad::extract_quads_with_config(
+        locus_core::bench_api::extract_quads_with_config(
             &local_arena,
             &img,
             &labels,
-            &locus_core::config::DetectorConfig::default(),
+            &locus_core::DetectorConfig::default(),
             1,
             &img,
         );

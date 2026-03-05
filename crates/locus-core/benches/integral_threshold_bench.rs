@@ -2,9 +2,9 @@
 use bumpalo::Bump;
 use divan::bench;
 use locus_core::filter::{bilateral_filter, compute_gradient_map};
-use locus_core::image::ImageView;
-use locus_core::test_utils::generate_checkered;
-use locus_core::threshold::{
+use locus_core::ImageView;
+use locus_core::bench_api::generate_checkered;
+use locus_core::bench_api::{
     adaptive_threshold_gradient_window, adaptive_threshold_integral, compute_integral_image,
 };
 
@@ -63,10 +63,10 @@ fn bench_tile_threshold_1080p(bencher: divan::Bencher) {
     let height = 1080;
     let data = generate_checkered(width, height);
     let img = ImageView::new(&data, width, height, width).unwrap();
-    let config = locus_core::config::DetectorConfig::builder()
-        .refinement_mode(locus_core::config::CornerRefinementMode::Erf)
+    let config = locus_core::DetectorConfig::builder()
+        .refinement_mode(locus_core::CornerRefinementMode::Erf)
         .build();
-    let engine = locus_core::threshold::ThresholdEngine::from_config(&config);
+    let engine = locus_core::bench_api::ThresholdEngine::from_config(&config);
     let mut arena = Bump::new();
 
     bencher.bench_local(move || {

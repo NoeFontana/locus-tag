@@ -4,9 +4,9 @@
 #![allow(clippy::similar_names)]
 
 use divan::bench;
-use locus_core::image::ImageView;
-use locus_core::test_utils::generate_checkered;
-use locus_core::threshold::ThresholdEngine;
+use locus_core::ImageView;
+use locus_core::bench_api::generate_checkered;
+use locus_core::bench_api::ThresholdEngine;
 
 fn main() {
     divan::main();
@@ -38,7 +38,7 @@ fn bench_threshold_1080p_stats_checkered_subsampled(bencher: divan::Bencher) {
         let tiles_wide = width / ts;
         let tiles_high = height / ts;
         let mut stats =
-            vec![locus_core::threshold::TileStats { min: 255, max: 0 }; tiles_wide * tiles_high];
+            vec![locus_core::bench_api::TileStats { min: 255, max: 0 }; tiles_wide * tiles_high];
 
         for ty in 0..tiles_high {
             let stats_row = &mut stats[ty * tiles_wide..(ty + 1) * tiles_wide];

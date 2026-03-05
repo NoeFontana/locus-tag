@@ -4,10 +4,10 @@
 #![allow(clippy::similar_names)]
 
 use divan::bench;
-use locus_core::pose::{CameraIntrinsics, estimate_tag_pose};
+use locus_core::bench_api::{CameraIntrinsics, estimate_tag_pose};
 use nalgebra::{Matrix3, Vector3};
 
-use locus_core::config::PoseEstimationMode;
+use locus_core::PoseEstimationMode;
 
 fn main() {
     divan::main();

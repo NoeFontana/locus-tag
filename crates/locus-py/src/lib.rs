@@ -6,314 +6,71 @@
     clippy::trivially_copy_pass_by_ref
 )]
 
-use locus_core::image::ImageView;
-use numpy::ndarray::Array2;
+use locus_core::ImageView;
+use numpy::ndarray::{Array2, Array3};
 use numpy::{IntoPyArray, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
-use pyo3::exceptions::PyRuntimeError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 
 // ============================================================================
-// Detection and Stats (Python-compatible wrappers)
-// ============================================================================
-
-/// Python-compatible detection result.
-#[pyclass]
-#[derive(Clone)]
-pub struct Detection {
-    /// Tag ID.
-    #[pyo3(get)]
-    pub id: u32,
-    /// Center coordinates (x, y).
-    #[pyo3(get)]
-    pub center: [f64; 2],
-    /// Corner coordinates (4x2).
-    #[pyo3(get)]
-    pub corners: [[f64; 2]; 4],
-    /// Hamming distance.
-    #[pyo3(get)]
-    pub hamming: u32,
-    /// Decision margin.
-    #[pyo3(get)]
-    pub decision_margin: f64,
-    /// Extracted bits from the tag.
-    #[pyo3(get)]
-    pub bits: u64,
-    /// 3D Pose (if computed).
-    #[pyo3(get)]
-    pub pose: Option<Pose>,
-    /// Pose covariance matrix (6x6).
-    #[pyo3(get)]
-    pub pose_covariance: Option<Vec<Vec<f64>>>,
-}
-
-/// Python-compatible pipeline statistics.
-#[pyclass]
-#[derive(Clone, Default)]
-pub struct PipelineStats {
-    /// Adaptive thresholding time (ms).
-    #[pyo3(get)]
-    pub threshold_ms: f64,
-    /// Segmentation time (ms).
-    #[pyo3(get)]
-    pub segmentation_ms: f64,
-    /// Quad extraction time (ms).
-    #[pyo3(get)]
-    pub quad_extraction_ms: f64,
-    /// Decoding time (ms).
-    #[pyo3(get)]
-    pub decoding_ms: f64,
-    /// Total time (ms).
-    #[pyo3(get)]
-    pub total_ms: f64,
-    #[pyo3(get)]
-    pub num_candidates: usize,
-    /// Number of final detections.
-    #[pyo3(get)]
-    pub num_detections: usize,
-    /// Number of candidates rejected due to low contrast.
-    #[pyo3(get)]
-    pub num_rejected_by_contrast: usize,
-    /// Number of candidates that failed decoding.
-    #[pyo3(get)]
-    pub num_rejected_by_hamming: usize,
-}
-
-#[pyclass]
-#[derive(Clone)]
-pub struct FullDetectionResult {
-    #[pyo3(get)]
-    pub detections: Vec<Detection>,
-    #[pyo3(get)]
-    pub candidates: Vec<Detection>,
-    pub binarized: Option<Vec<u8>>,
-    pub labels: Option<Vec<u32>>,
-    #[pyo3(get)]
-    pub stats: PipelineStats,
-    pub width: usize,
-    pub height: usize,
-}
-
-#[pymethods]
-impl FullDetectionResult {
-    /// Get the binarized image as a numpy array.
-    fn get_binarized(&self, py: Python<'_>) -> PyResult<Option<PyObject>> {
-        if let Some(data) = &self.binarized {
-            let array = Array2::from_shape_vec((self.height, self.width), data.clone())
-                .map_err(|e| PyRuntimeError::new_err(format!("Shape error: {e}")))?;
-            Ok(Some(array.into_pyarray(py).into_any().unbind()))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Get the labels image as a numpy array.
-    fn get_labels(&self, py: Python<'_>) -> PyResult<Option<PyObject>> {
-        if let Some(data) = &self.labels {
-            let array = Array2::from_shape_vec((self.height, self.width), data.clone())
-                .map_err(|e| PyRuntimeError::new_err(format!("Shape error: {e}")))?;
-            Ok(Some(array.into_pyarray(py).into_any().unbind()))
-        } else {
-            Ok(None)
-        }
-    }
-}
-
-impl From<(locus_core::FullDetectionResult, usize, usize)> for FullDetectionResult {
-    fn from(tuple: (locus_core::FullDetectionResult, usize, usize)) -> Self {
-        let (res, width, height) = tuple;
-        Self {
-            detections: res.detections.into_iter().map(Detection::from).collect(),
-            candidates: res.candidates.into_iter().map(Detection::from).collect(),
-            binarized: res.binarized,
-            labels: res.labels,
-            stats: PipelineStats::from(res.stats),
-            width,
-            height,
-        }
-    }
-}
-
-impl From<locus_core::PipelineStats> for PipelineStats {
-    fn from(s: locus_core::PipelineStats) -> Self {
-        Self {
-            threshold_ms: s.threshold_ms,
-            segmentation_ms: s.segmentation_ms,
-            quad_extraction_ms: s.quad_extraction_ms,
-            decoding_ms: s.decoding_ms,
-            total_ms: s.total_ms,
-            num_candidates: s.num_candidates,
-            num_detections: s.num_detections,
-            num_rejected_by_contrast: s.num_rejected_by_contrast,
-            num_rejected_by_hamming: s.num_rejected_by_hamming,
-        }
-    }
-}
-
-impl From<locus_core::Detection> for Detection {
-    fn from(d: locus_core::Detection) -> Self {
-        Self {
-            id: d.id,
-            center: d.center,
-            corners: d.corners,
-            hamming: d.hamming,
-            decision_margin: d.decision_margin,
-            bits: d.bits,
-            pose: d.pose.map(Pose::from),
-            pose_covariance: d
-                .pose_covariance
-                .map(|cov| cov.iter().map(|row| row.to_vec()).collect()),
-        }
-    }
-}
-
-// ============================================================================
-// TagFamily enum for per-call decoder selection
+// Enums
 // ============================================================================
 
 #[pyclass(eq, eq_int)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TagFamily {
-    /// AprilTag 36h11 family (587 codes).
     AprilTag36h11 = 0,
-    /// AprilTag 41h12 family (2115 codes).
     AprilTag41h12 = 1,
-    /// ArUco 4x4_50 dictionary.
     ArUco4x4_50 = 2,
-    /// ArUco 4x4_100 dictionary.
     ArUco4x4_100 = 3,
 }
 
-#[pymethods]
-impl TagFamily {
-    fn __reduce__(&self) -> (PyObject, (u8,)) {
-        Python::with_gil(|py| {
-            let cls = py.get_type::<Self>();
-            (cls.into_any().unbind(), (*self as u8,))
-        })
-    }
-}
-
-impl From<TagFamily> for locus_core::config::TagFamily {
+impl From<TagFamily> for locus_core::TagFamily {
     fn from(f: TagFamily) -> Self {
         match f {
-            TagFamily::AprilTag36h11 => locus_core::config::TagFamily::AprilTag36h11,
-            TagFamily::AprilTag41h12 => locus_core::config::TagFamily::AprilTag41h12,
-            TagFamily::ArUco4x4_50 => locus_core::config::TagFamily::ArUco4x4_50,
-            TagFamily::ArUco4x4_100 => locus_core::config::TagFamily::ArUco4x4_100,
+            TagFamily::AprilTag36h11 => locus_core::TagFamily::AprilTag36h11,
+            TagFamily::AprilTag41h12 => locus_core::TagFamily::AprilTag41h12,
+            TagFamily::ArUco4x4_50 => locus_core::TagFamily::ArUco4x4_50,
+            TagFamily::ArUco4x4_100 => locus_core::TagFamily::ArUco4x4_100,
         }
     }
 }
 
-// ============================================================================
-// SegmentationConnectivity enum
-// ============================================================================
-
-/// Segmentation connectivity mode.
-#[pyclass(eq, eq_int, module = "locus")]
+#[pyclass(eq, eq_int)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SegmentationConnectivity {
-    /// 4-connectivity: Pixels connect horizontally and vertically only.
     Four = 0,
-    /// 8-connectivity: Pixels connect horizontally, vertically, and diagonally.
     Eight = 1,
 }
 
-impl From<SegmentationConnectivity> for locus_core::config::SegmentationConnectivity {
-    fn from(c: SegmentationConnectivity) -> Self {
-        match c {
-            SegmentationConnectivity::Four => locus_core::config::SegmentationConnectivity::Four,
-            SegmentationConnectivity::Eight => locus_core::config::SegmentationConnectivity::Eight,
-        }
-    }
-}
-
-#[pymethods]
-impl SegmentationConnectivity {
-    fn __reduce__(&self) -> (PyObject, (u8,)) {
-        Python::with_gil(|py| {
-            let cls = py.get_type::<Self>();
-            (cls.into_any().unbind(), (*self as u8,))
-        })
-    }
-}
-
-// ============================================================================
-// CornerRefinementMode enum
-// ============================================================================
-
-/// Mode for subpixel corner refinement.
-#[pyclass(eq, eq_int, module = "locus")]
+#[pyclass(eq, eq_int)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CornerRefinementMode {
-    /// No subpixel refinement (integer pixel precision).
     None = 0,
-    /// Edge-based refinement using gradient maxima (Default).
     Edge = 1,
-    /// GridFit: Optimizes corners by maximizing code contrast.
     GridFit = 2,
-    /// Erf: Fits a Gaussian to the gradient profile for sub-pixel edge alignment.
     Erf = 3,
 }
 
-impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
-    fn from(m: CornerRefinementMode) -> Self {
-        match m {
-            CornerRefinementMode::None => locus_core::config::CornerRefinementMode::None,
-            CornerRefinementMode::Edge => locus_core::config::CornerRefinementMode::Edge,
-            CornerRefinementMode::GridFit => locus_core::config::CornerRefinementMode::GridFit,
-            CornerRefinementMode::Erf => locus_core::config::CornerRefinementMode::Erf,
-        }
-    }
-}
-
-#[pymethods]
-impl CornerRefinementMode {
-    fn __reduce__(&self) -> (PyObject, (u8,)) {
-        Python::with_gil(|py| {
-            let cls = py.get_type::<Self>();
-            (cls.into_any().unbind(), (*self as u8,))
-        })
-    }
-}
-
-// ============================================================================
-// DecodeMode enum
-// ============================================================================
-
-/// Decoding strategy mode.
 #[pyclass(eq, eq_int)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DecodeMode {
-    /// Hard decision (Hamming distance) - Standard method.
     Hard = 0,
-    /// Soft decision (LLR accumulation) - Better for low contrast/noise.
     Soft = 1,
 }
 
-impl From<DecodeMode> for locus_core::config::DecodeMode {
-    fn from(m: DecodeMode) -> Self {
-        match m {
-            DecodeMode::Hard => locus_core::config::DecodeMode::Hard,
-            DecodeMode::Soft => locus_core::config::DecodeMode::Soft,
-        }
-    }
-}
-
-#[pymethods]
-impl DecodeMode {
-    fn __reduce__(&self) -> (PyObject, (u8,)) {
-        Python::with_gil(|py| {
-            let cls = py.get_type::<Self>();
-            (cls.into_any().unbind(), (*self as u8,))
-        })
-    }
+#[pyclass(eq, eq_int)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PoseEstimationMode {
+    Fast = 0,
+    Accurate = 1,
 }
 
 // ============================================================================
-// CameraIntrinsics struct
+// Structs
 // ============================================================================
 
-/// Camera intrinsic parameters.
 #[pyclass]
 #[derive(Clone, Copy)]
 pub struct CameraIntrinsics {
@@ -333,156 +90,21 @@ impl CameraIntrinsics {
     fn new(fx: f64, fy: f64, cx: f64, cy: f64) -> Self {
         Self { fx, fy, cx, cy }
     }
-
-    fn __repr__(&self) -> String {
-        format!(
-            "CameraIntrinsics(fx={:.2}, fy={:.2}, cx={:.2}, cy={:.2})",
-            self.fx, self.fy, self.cx, self.cy
-        )
-    }
-
-    fn __reduce__(&self) -> (PyObject, (f64, f64, f64, f64)) {
-        Python::with_gil(|py| {
-            let cls = py.get_type::<Self>();
-            (
-                cls.into_any().unbind(),
-                (self.fx, self.fy, self.cx, self.cy),
-            )
-        })
-    }
 }
 
-// ============================================================================
-// PoseEstimationMode enum
-// ============================================================================
-
-/// Mode for 3D pose estimation.
-#[pyclass(eq, eq_int)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PoseEstimationMode {
-    /// Fast mode (IPPE + Levenberg-Marquardt).
-    Fast = 0,
-    /// Accurate mode (Structure Tensor + Weighted LM).
-    Accurate = 1,
-}
-
-impl From<PoseEstimationMode> for locus_core::config::PoseEstimationMode {
-    fn from(m: PoseEstimationMode) -> Self {
-        match m {
-            PoseEstimationMode::Fast => locus_core::config::PoseEstimationMode::Fast,
-            PoseEstimationMode::Accurate => locus_core::config::PoseEstimationMode::Accurate,
-        }
-    }
-}
-
-#[pymethods]
-impl PoseEstimationMode {
-    fn __reduce__(&self) -> (PyObject, (u8,)) {
-        Python::with_gil(|py| {
-            let cls = py.get_type::<Self>();
-            (cls.into_any().unbind(), (*self as u8,))
-        })
-    }
-}
-
-// ============================================================================
-// Pose struct
-// ============================================================================
-
-/// 3D Pose (Rotation and Translation).
 #[pyclass]
 #[derive(Clone)]
-pub struct Pose {
-    /// 3x3 Rotation matrix (row-major).
+pub struct PyPose {
     #[pyo3(get)]
     pub rotation: [[f64; 3]; 3],
-    /// 3x1 Translation vector.
     #[pyo3(get)]
     pub translation: [f64; 3],
 }
 
-impl From<locus_core::pose::Pose> for Pose {
-    fn from(p: locus_core::pose::Pose) -> Self {
-        Self {
-            rotation: [
-                [p.rotation[(0, 0)], p.rotation[(0, 1)], p.rotation[(0, 2)]],
-                [p.rotation[(1, 0)], p.rotation[(1, 1)], p.rotation[(1, 2)]],
-                [p.rotation[(2, 0)], p.rotation[(2, 1)], p.rotation[(2, 2)]],
-            ],
-            translation: [p.translation[0], p.translation[1], p.translation[2]],
-        }
-    }
-}
-
 // ============================================================================
-// Helper functions
+// Detector class
 // ============================================================================
 
-/// Container for image data that handles zero-copy ingestion.
-pub enum ImageInput<'a> {
-    Borrowed(ImageView<'a>),
-}
-
-impl ImageInput<'_> {
-    /// Get an ImageView into the data.
-    #[must_use]
-    pub fn view(&self) -> ImageView<'_> {
-        match self {
-            Self::Borrowed(v) => *v,
-        }
-    }
-}
-
-/// Create an ImageInput from a PyReadonlyArray2, strictly enforcing C-contiguity for zero-copy.
-#[allow(clippy::cast_sign_loss)]
-fn prepare_image_input<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageInput<'a>> {
-    let shape = img.shape();
-    let height = shape[0];
-    let width = shape[1];
-    let strides = img.strides();
-    let stride_y = strides[0] as usize;
-    let stride_x = strides[1];
-
-    // Case 1: C-contiguous or row-major with padding (stride_x == 1)
-    if stride_x == 1 {
-        let required_size = if height > 0 && width > 0 {
-            (height - 1) * stride_y + width
-        } else {
-            0
-        };
-
-        // SAFETY: img.data() is valid for the lifetime 'a. We verified stride_x == 1,
-        // ensuring that the memory within required_size is valid for read access.
-        let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
-        let view = ImageView::new(data, width, height, stride_y)
-            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
-        Ok(ImageInput::Borrowed(view))
-    } else {
-        // Case 2: Non-contiguous (e.g. sliced columns, F-contiguous)
-        // Strictly block copies to enforce hardware-sympathetic performance.
-        Err(pyo3::exceptions::PyValueError::new_err(
-            "Array must be C-contiguous. Use .ascontiguousarray() to avoid performance-killing copies.",
-        ))
-    }
-}
-
-// ============================================================================
-// Detector class with persistent state
-// ============================================================================
-
-/// The main detector class. Holds reusable detector state.
-///
-/// Use this for efficient repeated detection on multiple images.
-///
-/// Example:
-///     detector = locus.Detector()
-///     detections = detector.detect(image)
-///
-///     # With custom config
-///     detector = locus.Detector(
-///         threshold_tile_size=16,
-///         quad_min_area=200,
-///     )
 #[pyclass(unsendable)]
 pub struct Detector {
     inner: locus_core::Detector,
@@ -490,323 +112,129 @@ pub struct Detector {
 
 #[pymethods]
 impl Detector {
-    /// Create a new detector with optional configuration.
-    ///
-    /// Args:
-    ///     threshold_tile_size: Tile size for adaptive thresholding (default: 4)
-    ///     threshold_min_range: Min intensity range for valid tiles (default: 5)
-    ///     enable_bilateral: Enable bilateral pre-filtering (default: false)
-    ///     bilateral_sigma_space: Bilateral spatial sigma (default: 3.0)
-    ///     bilateral_sigma_color: Bilateral color sigma (default: 30.0)
-    ///     enable_adaptive_window: Enable adaptive window sizing (default: false)
-    ///     threshold_min_radius: Min threshold window radius (default: 2)
-    ///     threshold_max_radius: Max threshold window radius (default: 7)
-    ///     quad_min_area: Minimum quad area in pixels (default: 64)
-    ///     quad_max_aspect_ratio: Maximum bounding box aspect ratio (default: 3.0)
-    ///     quad_min_fill_ratio: Minimum pixel fill ratio (default: 0.3)
-    ///     quad_max_fill_ratio: Maximum pixel fill ratio (default: 0.95)
-    ///     quad_min_edge_length: Minimum edge length in pixels (default: 4.0)
-    ///     quad_min_edge_score: Minimum edge gradient score (default: 0.4)
-    ///     segmentation_connectivity: Connectivity mode (default: Eight)
-    ///     decode_mode: Decoding strategy (default: Hard)
-    #[new]
-    #[pyo3(signature = (
-        threshold_tile_size = 8,
-        threshold_min_range = 10,
-        enable_bilateral = false,
-        bilateral_sigma_space = 0.8,
-        bilateral_sigma_color = 30.0,
-        enable_sharpening = false,
-        enable_adaptive_window = false,
-        threshold_min_radius = 2,
-        threshold_max_radius = 15,
-        adaptive_threshold_constant = 0,
-        adaptive_threshold_gradient_threshold = 10,
-        quad_min_area = 16,
-        quad_max_aspect_ratio = 10.0,
-        quad_min_fill_ratio = 0.10,
-        quad_max_fill_ratio = 0.98,
-        quad_min_edge_length = 2.0,
-        quad_min_edge_score = 0.1,
-        subpixel_refinement_sigma = 0.6,
-        segmentation_margin = 1,
-        segmentation_connectivity = SegmentationConnectivity::Eight,
-        upscale_factor = 1,
-        decoder_min_contrast = 20.0,
-        refinement_mode = CornerRefinementMode::Erf,
-        decode_mode = DecodeMode::Hard,
-        max_hamming_error = 2,
-    ))]
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        threshold_tile_size: usize,
-        threshold_min_range: u8,
-        enable_bilateral: bool,
-        bilateral_sigma_space: f32,
-        bilateral_sigma_color: f32,
-        enable_sharpening: bool,
-        enable_adaptive_window: bool,
-        threshold_min_radius: usize,
-        threshold_max_radius: usize,
-        adaptive_threshold_constant: i16,
-        adaptive_threshold_gradient_threshold: u8,
-        quad_min_area: u32,
-        quad_max_aspect_ratio: f32,
-        quad_min_fill_ratio: f32,
-        quad_max_fill_ratio: f32,
-        quad_min_edge_length: f64,
-        quad_min_edge_score: f64,
-        subpixel_refinement_sigma: f64,
-        segmentation_margin: i16,
-        segmentation_connectivity: SegmentationConnectivity,
-        upscale_factor: usize,
-        decoder_min_contrast: f64,
-        refinement_mode: CornerRefinementMode,
-        decode_mode: DecodeMode,
-        max_hamming_error: u32,
-    ) -> Self {
-        let config = locus_core::DetectorConfig {
-            threshold_tile_size,
-            threshold_min_range,
-            enable_bilateral,
-            bilateral_sigma_space,
-            bilateral_sigma_color,
-            enable_sharpening,
-            enable_adaptive_window,
-            threshold_min_radius,
-            threshold_max_radius,
-            adaptive_threshold_constant,
-            adaptive_threshold_gradient_threshold,
-            quad_min_area,
-            quad_max_aspect_ratio,
-            quad_min_fill_ratio,
-            quad_max_fill_ratio,
-            quad_min_edge_length,
-            quad_min_edge_score,
-            subpixel_refinement_sigma,
-            segmentation_margin,
-            segmentation_connectivity: segmentation_connectivity.into(),
-            upscale_factor,
-            decoder_min_contrast,
-            refinement_mode: refinement_mode.into(),
-            decode_mode: decode_mode.into(),
-            max_hamming_error,
+    /// Detect tags and return a dictionary of NumPy arrays (SoA layout).
+    fn detect(&mut self, py: Python<'_>, img: PyReadonlyArray2<u8>) -> PyResult<PyObject> {
+        let view = prepare_image_view(&img)?;
+        let detections = self.inner.detect(&view);
+
+        let n = detections.len();
+        let mut ids = Vec::with_capacity(n);
+        let mut centers = Vec::with_capacity(n * 2);
+        let mut corners = Vec::with_capacity(n * 8);
+        let mut hamming = Vec::with_capacity(n);
+        let mut decision_margin = Vec::with_capacity(n);
+
+        for det in detections {
+            ids.push(det.id);
+            centers.push(det.center[0]);
+            centers.push(det.center[1]);
+            for c in &det.corners {
+                corners.push(c[0]);
+                corners.push(c[1]);
+            }
+            hamming.push(det.hamming);
+            decision_margin.push(det.decision_margin);
+        }
+
+        let dict = PyDict::new(py);
+        dict.set_item("ids", ids.into_pyarray(py))?;
+        
+        let centers_arr = Array2::from_shape_vec((n, 2), centers)
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        dict.set_item("centers", centers_arr.into_pyarray(py))?;
+
+        let corners_arr = Array3::from_shape_vec((n, 4, 2), corners)
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        dict.set_item("corners", corners_arr.into_pyarray(py))?;
+
+        dict.set_item("hamming", hamming.into_pyarray(py))?;
+        dict.set_item("decision_margin", decision_margin.into_pyarray(py))?;
+
+        Ok(dict.into())
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (decimation=1, threads=0, families=vec![], **kwargs))]
+fn create_detector(
+    decimation: usize,
+    threads: usize,
+    families: Vec<i32>,
+    kwargs: Option<&Bound<'_, PyDict>>,
+) -> PyResult<Detector> {
+    let mut builder = locus_core::DetectorBuilder::new()
+        .with_decimation(decimation)
+        .with_threads(threads);
+
+    for f in families {
+        let family = match f {
+            0 => locus_core::TagFamily::AprilTag36h11,
+            1 => locus_core::TagFamily::AprilTag41h12,
+            2 => locus_core::TagFamily::ArUco4x4_50,
+            3 => locus_core::TagFamily::ArUco4x4_100,
+            _ => return Err(PyValueError::new_err(format!("Invalid TagFamily value: {}", f))),
         };
-        Self {
-            inner: locus_core::Detector::with_config(config),
+        builder = builder.with_family(family);
+    }
+
+    if let Some(args) = kwargs {
+        if let Some(val) = args.get_item("upscale_factor")? {
+            builder = builder.with_upscale_factor(val.extract()?);
+        }
+        if let Some(val) = args.get_item("refinement_mode")? {
+            let i: i32 = val.extract()?;
+            let mode = match i {
+                0 => locus_core::config::CornerRefinementMode::None,
+                1 => locus_core::config::CornerRefinementMode::Edge,
+                2 => locus_core::config::CornerRefinementMode::GridFit,
+                3 => locus_core::config::CornerRefinementMode::Erf,
+                _ => return Err(PyValueError::new_err("Invalid refinement_mode")),
+            };
+            builder = builder.with_corner_refinement(mode);
+        }
+        if let Some(val) = args.get_item("decode_mode")? {
+            let i: i32 = val.extract()?;
+            let mode = match i {
+                0 => locus_core::config::DecodeMode::Hard,
+                1 => locus_core::config::DecodeMode::Soft,
+                _ => return Err(PyValueError::new_err("Invalid decode_mode")),
+            };
+            builder = builder.with_decode_mode(mode);
+        }
+        if let Some(val) = args.get_item("segmentation_connectivity")? {
+            let i: i32 = val.extract()?;
+            let conn = match i {
+                0 => locus_core::config::SegmentationConnectivity::Four,
+                1 => locus_core::config::SegmentationConnectivity::Eight,
+                _ => return Err(PyValueError::new_err("Invalid connectivity")),
+            };
+            builder = builder.with_connectivity(conn);
         }
     }
 
-    /// DEBUG: Get the current sharpening status.
-    #[getter]
-    fn enable_sharpening(&self) -> bool {
-        self.inner.get_config().enable_sharpening
-    }
+    Ok(Detector {
+        inner: builder.build(),
+    })
+}
 
-    /// Detect tags in the image using default decoders.
-    #[pyo3(signature = (
-        img,
-        decimation = 1,
-        intrinsics = None,
-        tag_size = None,
-        pose_estimation_mode = PoseEstimationMode::Fast,
-    ))]
-    #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
-    fn detect(
-        &mut self,
-        py: Python<'_>,
-        img: PyReadonlyArray2<u8>,
-        decimation: usize,
-        intrinsics: Option<(f64, f64, f64, f64)>,
-        tag_size: Option<f64>,
-        pose_estimation_mode: PoseEstimationMode,
-    ) -> PyResult<Vec<Detection>> {
-        let input = prepare_image_input(&img)?;
-        let view = input.view();
+fn prepare_image_view<'a>(img: &'a PyReadonlyArray2<'a, u8>) -> PyResult<ImageView<'a>> {
+    let shape = img.shape();
+    let height = shape[0];
+    let width = shape[1];
+    let strides = img.strides();
+    let stride_y = strides[0] as usize;
+    let stride_x = strides[1];
 
-        let mut builder = locus_core::DetectOptions::builder();
-        builder = builder.decimation(decimation);
-
-        if let Some((fx, fy, cx, cy)) = intrinsics {
-            builder = builder.intrinsics(fx, fy, cx, cy);
-        }
-        if let Some(size) = tag_size {
-            builder = builder.tag_size(size);
-        }
-        builder = builder.pose_estimation_mode(pose_estimation_mode.into());
-
-        let options = builder.build();
-        let detections = py.allow_threads(|| self.inner.detect_with_options(&view, &options));
-        Ok(detections.into_iter().map(Detection::from).collect())
-    }
-
-    /// Detect tags using specific tag families (for performance).
-    #[pyo3(signature = (
-        img,
-        families,
-        decimation = 1,
-        intrinsics = None,
-        tag_size = None,
-        pose_estimation_mode = PoseEstimationMode::Fast,
-    ))]
-    #[allow(
-        clippy::cast_sign_loss,
-        clippy::needless_pass_by_value,
-        clippy::too_many_arguments
-    )]
-    fn detect_with_options(
-        &mut self,
-        py: Python<'_>,
-        img: PyReadonlyArray2<u8>,
-        families: Vec<TagFamily>,
-        decimation: usize,
-        intrinsics: Option<(f64, f64, f64, f64)>,
-        tag_size: Option<f64>,
-        pose_estimation_mode: PoseEstimationMode,
-    ) -> PyResult<Vec<Detection>> {
-        let input = prepare_image_input(&img)?;
-        let view = input.view();
-
-        let core_families: Vec<locus_core::config::TagFamily> =
-            families.into_iter().map(Into::into).collect();
-
-        let mut builder = locus_core::DetectOptions::builder();
-        builder = builder.families(&core_families);
-        builder = builder.decimation(decimation);
-
-        if let Some((fx, fy, cx, cy)) = intrinsics {
-            builder = builder.intrinsics(fx, fy, cx, cy);
-        }
-        if let Some(size) = tag_size {
-            builder = builder.tag_size(size);
-        }
-        builder = builder.pose_estimation_mode(pose_estimation_mode.into());
-
-        let options = builder.build();
-        let detections = py.allow_threads(|| self.inner.detect_with_options(&view, &options));
-        Ok(detections.into_iter().map(Detection::from).collect())
-    }
-
-    /// Detect tags with timing statistics.
-    #[pyo3(signature = (
-        img,
-        decimation = 1,
-        intrinsics = None,
-        tag_size = None,
-        pose_estimation_mode = PoseEstimationMode::Fast,
-    ))]
-    #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
-    fn detect_with_stats(
-        &mut self,
-        py: Python<'_>,
-        img: PyReadonlyArray2<u8>,
-        decimation: usize,
-        intrinsics: Option<(f64, f64, f64, f64)>,
-        tag_size: Option<f64>,
-        pose_estimation_mode: PoseEstimationMode,
-    ) -> PyResult<(Vec<Detection>, PipelineStats)> {
-        let input = prepare_image_input(&img)?;
-        let view = input.view();
-
-        let mut builder = locus_core::DetectOptions::builder();
-        builder = builder.decimation(decimation);
-
-        if let Some((fx, fy, cx, cy)) = intrinsics {
-            builder = builder.intrinsics(fx, fy, cx, cy);
-        }
-        if let Some(size) = tag_size {
-            builder = builder.tag_size(size);
-        }
-        builder = builder.pose_estimation_mode(pose_estimation_mode.into());
-
-        let options = builder.build();
-        let (detections, stats) =
-            py.allow_threads(|| self.inner.detect_with_stats_and_options(&view, &options));
-        Ok((
-            detections.into_iter().map(Detection::from).collect(),
-            PipelineStats::from(stats),
-        ))
-    }
-
-    /// Debugging: Extract quad candidates without decoding.
-    ///
-    /// Returns a list of all quad candidates found in the image, even those that
-    /// fail decoding. Useful for debugging segmentation and quad fitting.
-    #[pyo3(signature = (img, decimation = 1))]
-    #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
-    fn extract_candidates(
-        &mut self,
-        py: Python<'_>,
-        img: PyReadonlyArray2<u8>,
-        decimation: usize,
-    ) -> PyResult<(Vec<Detection>, PipelineStats)> {
-        let input = prepare_image_input(&img)?;
-        let view = input.view();
-
-        let options = locus_core::DetectOptions::builder()
-            .decimation(decimation)
-            .build();
-        let (candidates, stats) =
-            py.allow_threads(|| self.inner.extract_candidates(&view, &options));
-        Ok((
-            candidates.into_iter().map(Detection::from).collect(),
-            PipelineStats::from(stats),
-        ))
-    }
-
-    /// Perform full detection and return all intermediate debug data.
-    #[pyo3(signature = (
-        img,
-        decimation = 1,
-        intrinsics = None,
-        tag_size = None,
-        pose_estimation_mode = PoseEstimationMode::Fast,
-    ))]
-    #[allow(clippy::cast_sign_loss, clippy::needless_pass_by_value)]
-    fn detect_full(
-        &mut self,
-        py: Python<'_>,
-        img: PyReadonlyArray2<u8>,
-        decimation: usize,
-        intrinsics: Option<(f64, f64, f64, f64)>,
-        tag_size: Option<f64>,
-        pose_estimation_mode: PoseEstimationMode,
-    ) -> PyResult<FullDetectionResult> {
-        let input = prepare_image_input(&img)?;
-        let view = input.view();
-
-        let mut builder = locus_core::DetectOptions::builder();
-        builder = builder.decimation(decimation);
-
-        if let Some((fx, fy, cx, cy)) = intrinsics {
-            builder = builder.intrinsics(fx, fy, cx, cy);
-        }
-        if let Some(size) = tag_size {
-            builder = builder.tag_size(size);
-        }
-        builder = builder.pose_estimation_mode(pose_estimation_mode.into());
-
-        let options = builder.build();
-        let res = py.allow_threads(|| self.inner.detect_full(&view, &options));
-        // If upscaling is enabled in config, the binarized/labeled images will be larger.
-        let upscale = self.inner.get_config().upscale_factor;
-        let width = view.width * upscale;
-        let height = view.height * upscale;
-        Ok(FullDetectionResult::from((res, width, height)))
-    }
-
-    /// Set the tag families to decode by default.
-    fn set_families(&mut self, families: Vec<TagFamily>) {
-        let core_families: Vec<locus_core::config::TagFamily> =
-            families.into_iter().map(Into::into).collect();
-        self.inner.set_families(&core_families);
-    }
-
-    /// Get the identification code (bits) for a specific tag ID and family.
-    fn get_tag_code(&self, family: TagFamily, id: u32) -> Option<u64> {
-        let core_family: locus_core::config::TagFamily = family.into();
-        let dict = locus_core::dictionaries::get_dictionary(core_family);
-        dict.get_code(id as u16)
+    if stride_x == 1 {
+        let required_size = if height > 0 && width > 0 {
+            (height - 1) * stride_y + width
+        } else {
+            0
+        };
+        let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
+        ImageView::new(data, width, height, stride_y).map_err(|e| PyRuntimeError::new_err(e.to_string()))
+    } else {
+        Err(PyValueError::new_err("Array must be C-contiguous"))
     }
 }
 
@@ -814,7 +242,6 @@ impl Detector {
 // Profiling
 // ============================================================================
 
-/// Initialize the Tracy profiling subscriber.
 #[pyfunction]
 fn init_tracy() {
     #[cfg(feature = "tracy")]
@@ -825,28 +252,18 @@ fn init_tracy() {
     }
 }
 
-// ============================================================================
-// Module registration
-// ============================================================================
-
-/// The locus Python module.
 #[pymodule]
 fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    // Classes
-    m.add_class::<Detection>()?;
-    m.add_class::<FullDetectionResult>()?;
-    m.add_class::<PipelineStats>()?;
+    m.add_class::<Detector>()?;
     m.add_class::<TagFamily>()?;
     m.add_class::<SegmentationConnectivity>()?;
     m.add_class::<CornerRefinementMode>()?;
     m.add_class::<DecodeMode>()?;
-    m.add_class::<Detector>()?;
-    m.add_class::<Pose>()?;
     m.add_class::<PoseEstimationMode>()?;
     m.add_class::<CameraIntrinsics>()?;
+    m.add_class::<PyPose>()?;
 
-    // Profiling
+    m.add_function(wrap_pyfunction!(create_detector, m)?)?;
     m.add_function(wrap_pyfunction!(init_tracy, m)?)?;
-
     Ok(())
 }

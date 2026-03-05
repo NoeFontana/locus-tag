@@ -4,7 +4,7 @@
 //! Run with `cargo bench --bench dictionary_bench`.
 
 use divan::Bencher;
-use locus_core::config::TagFamily;
+use locus_core::TagFamily;
 use locus_core::dictionaries::get_dictionary;
 
 fn main() {

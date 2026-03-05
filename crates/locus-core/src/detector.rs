@@ -5,41 +5,14 @@ use crate::image::ImageView;
 use crate::Detection;
 use bumpalo::Bump;
 
-/// Internal state container for the detector.
-/// 
-/// Owns the memory pools and reusable buffers to ensure zero-allocation 
-/// in the detection hot-path.
-pub(crate) struct DetectorState {
-    pub(crate) arena: Bump,
-    pub(crate) batch: DetectionBatch,
-    pub(crate) upscale_buf: Vec<u8>,
-    pub(crate) results: Vec<Detection>,
-}
-
-impl DetectorState {
-    pub fn new() -> Self {
-        Self {
-            arena: Bump::new(),
-            batch: DetectionBatch::new(),
-            upscale_buf: Vec::new(),
-            results: Vec::new(),
-        }
-    }
-
-    pub fn reset(&mut self) {
-        self.arena.reset();
-        self.results.clear();
-    }
-}
-
 /// The primary entry point for the Locus perception library.
 ///
 /// `Detector` encapsulates the entire detection pipeline, managing its own
 /// internal state and memory pools to provide a safe, high-performance API.
 pub struct Detector {
     config: DetectorConfig,
-    state: DetectorState,
     decoders: Vec<Box<dyn TagDecoder + Send + Sync>>,
+    results: Vec<Detection>,
 }
 
 impl Detector {
@@ -57,41 +30,23 @@ impl Detector {
     pub fn with_config(config: DetectorConfig) -> Self {
         Self {
             config,
-            state: DetectorState::new(),
             decoders: vec![crate::decoder::family_to_decoder(crate::config::TagFamily::AprilTag36h11)],
-        }
-    }
-
-    /// Add a decoder to the pipeline.
-    pub fn add_decoder(&mut self, decoder: Box<dyn TagDecoder + Send + Sync>) {
-        self.decoders.push(decoder);
-    }
-
-    /// Clear all decoders and set new ones based on tag families.
-    pub fn set_families(&mut self, families: &[crate::config::TagFamily]) {
-        self.decoders.clear();
-        for &family in families {
-            self.decoders.push(crate::decoder::family_to_decoder(family));
+            results: Vec::new(),
         }
     }
 
     /// Detect tags in the provided image.
     ///
-    /// This method is the main execution pipeline. It performs:
-    /// 1. Adaptive thresholding
-    /// 2. Connected components labeling
-    /// 3. Quad extraction
-    /// 4. Tag decoding
-    /// 5. (Optional) Pose estimation
-    ///
-    /// The returned slice is valid until the next call to `detect`.
+    /// This method is the main execution pipeline.
     pub fn detect(&mut self, img: &ImageView) -> &[Detection] {
-        self.state.reset();
+        let arena = Bump::new();
+        let mut batch = DetectionBatch::new();
+        let mut upscale_buf = Vec::new();
 
         let (detection_img, effective_scale, refinement_img) = if self.config.decimation > 1 {
             let new_w = img.width / self.config.decimation;
             let new_h = img.height / self.config.decimation;
-            let decimated_data = self.state.arena.alloc_slice_fill_copy(new_w * new_h, 0u8);
+            let decimated_data = arena.alloc_slice_fill_copy(new_w * new_h, 0u8);
             let decimated_img = img
                 .decimate_to(self.config.decimation, decimated_data)
                 .expect("decimation failed");
@@ -99,10 +54,10 @@ impl Detector {
         } else if self.config.upscale_factor > 1 {
             let new_w = img.width * self.config.upscale_factor;
             let new_h = img.height * self.config.upscale_factor;
-            self.state.upscale_buf.resize(new_w * new_h, 0);
+            upscale_buf.resize(new_w * new_h, 0);
 
             let upscaled_img = img
-                .upscale_to(self.config.upscale_factor, &mut self.state.upscale_buf)
+                .upscale_to(self.config.upscale_factor, &mut upscale_buf)
                 .expect("valid upscaled view");
             (upscaled_img, self.config.upscale_factor as f64, upscaled_img)
         } else {
@@ -113,12 +68,9 @@ impl Detector {
 
         // 1a. Optional bilateral pre-filtering
         let filtered_img = if self.config.enable_bilateral {
-            let filtered = self
-                .state
-                .arena
-                .alloc_slice_fill_copy(img.width * img.height, 0u8);
+            let filtered = arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
             crate::filter::bilateral_filter(
-                &self.state.arena,
+                &arena,
                 img,
                 filtered,
                 3, // spatial radius
@@ -132,10 +84,7 @@ impl Detector {
 
         // 1b. Optional Laplacian sharpening
         let sharpened_img = if self.config.enable_sharpening {
-            let sharpened = self
-                .state
-                .arena
-                .alloc_slice_fill_copy(filtered_img.width * filtered_img.height, 0u8);
+            let sharpened = arena.alloc_slice_fill_copy(filtered_img.width * filtered_img.height, 0u8);
             crate::filter::laplacian_sharpen(&filtered_img, sharpened);
 
             ImageView::new(
@@ -149,21 +98,15 @@ impl Detector {
             filtered_img
         };
 
-        let binarized = self
-            .state
-            .arena
-            .alloc_slice_fill_copy(img.width * img.height, 0u8);
-        let threshold_map = self
-            .state
-            .arena
-            .alloc_slice_fill_copy(img.width * img.height, 0u8);
+        let binarized = arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
+        let threshold_map = arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
 
         // 1. Thresholding
         {
             let engine = crate::threshold::ThresholdEngine::from_config(&self.config);
-            let stats = engine.compute_tile_stats(&self.state.arena, &sharpened_img);
+            let stats = engine.compute_tile_stats(&arena, &sharpened_img);
             engine.apply_threshold_with_map(
-                &self.state.arena,
+                &arena,
                 &sharpened_img,
                 &stats,
                 binarized,
@@ -173,7 +116,7 @@ impl Detector {
 
         // 2. Segmentation
         let label_result = crate::segmentation::label_components_threshold_model(
-            &self.state.arena,
+            &arena,
             sharpened_img.data,
             sharpened_img.stride,
             threshold_map,
@@ -186,7 +129,7 @@ impl Detector {
 
         // 3. Quad Extraction (SoA)
         let n = crate::quad::extract_quads_soa(
-            &mut self.state.batch,
+            &mut batch,
             &sharpened_img,
             &label_result,
             &self.config,
@@ -196,13 +139,13 @@ impl Detector {
 
         // 4. Homography Pass (SoA)
         crate::decoder::compute_homographies_soa(
-            &self.state.batch.corners[0..n * 4],
-            &mut self.state.batch.homographies[0..n],
+            &batch.corners[0..n * 4],
+            &mut batch.homographies[0..n],
         );
 
         // 5. Decoding Pass (SoA)
         crate::decoder::decode_batch_soa(
-            &mut self.state.batch,
+            &mut batch,
             n,
             &refinement_img,
             &self.decoders,
@@ -210,13 +153,9 @@ impl Detector {
         );
 
         // Partition valid candidates to the front [0..v]
-        let v = self.state.batch.partition(n);
+        let v = batch.partition(n);
 
-        // 6. Pose Refinement (SoA)
-        // Note: For now, we don't expose intrinsics/tag_size in semantic builder yet,
-        // but we can add it later. Using default options from lib.rs.
-        
-        self.state.results = self.state.batch.reassemble(v);
+        self.results = batch.reassemble(v);
 
         // Final coordinate adjustment and scaling
         let upscale_factor = self.config.upscale_factor.max(1);
@@ -226,7 +165,7 @@ impl Detector {
             1.0
         };
 
-        for d in &mut self.state.results {
+        for d in &mut self.results {
             for corner in &mut d.corners {
                 corner[0] = (corner[0] + 0.5) * inv_scale;
                 corner[1] = (corner[1] + 0.5) * inv_scale;
@@ -235,7 +174,7 @@ impl Detector {
             d.center[1] = (d.center[1] + 0.5) * inv_scale;
         }
 
-        &self.state.results
+        &self.results
     }
 
     /// Get the current detector configuration.
@@ -254,7 +193,7 @@ impl DetectorBuilder {
     pub fn new() -> Self {
         Self {
             config: DetectorConfig::default(),
-            families: vec![crate::config::TagFamily::AprilTag36h11],
+            families: Vec::new(),
         }
     }
 
@@ -278,17 +217,46 @@ impl DetectorBuilder {
         self
     }
 
+    /// Set the upscale factor for detecting small tags.
+    pub fn with_upscale_factor(mut self, factor: usize) -> Self {
+        self.config.upscale_factor = factor;
+        self
+    }
+
+    /// Set the corner refinement mode.
+    pub fn with_corner_refinement(mut self, mode: crate::config::CornerRefinementMode) -> Self {
+        self.config.refinement_mode = mode;
+        self
+    }
+
+    /// Set the decoding mode (Hard vs Soft).
+    pub fn with_decode_mode(mut self, mode: crate::config::DecodeMode) -> Self {
+        self.config.decode_mode = mode;
+        self
+    }
+
+    /// Set the segmentation connectivity (4-way or 8-way).
+    pub fn with_connectivity(mut self, connectivity: crate::config::SegmentationConnectivity) -> Self {
+        self.config.segmentation_connectivity = connectivity;
+        self
+    }
+
     /// Build the [`Detector`] instance.
     pub fn build(self) -> Detector {
         let mut decoders = Vec::new();
-        for family in self.families {
+        let families = if self.families.is_empty() {
+            vec![crate::config::TagFamily::AprilTag36h11]
+        } else {
+            self.families
+        };
+        for family in families {
             decoders.push(family_to_decoder(family));
         }
 
         Detector {
             config: self.config,
-            state: DetectorState::new(),
             decoders,
+            results: Vec::new(),
         }
     }
 }

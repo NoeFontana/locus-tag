@@ -7,7 +7,7 @@
 
 /// A tag family dictionary.
 #[derive(Clone, Debug)]
-pub(crate) struct TagDictionary {
+pub struct TagDictionary {
     /// Maximum number of bits (e.g., 36 for 36h11, 41 for 41h12).
     pub payload_length: u32,
     /// Grid dimension (e.g., 6 for 6x6).
@@ -196,7 +196,7 @@ include!(concat!(env!("OUT_DIR"), "/dictionaries.rs"));
 
 /// Return dictionary instance given family config tag.
 #[must_use]
-pub(crate) fn get_dictionary(family: crate::config::TagFamily) -> &'static TagDictionary {
+pub fn get_dictionary(family: crate::config::TagFamily) -> &'static TagDictionary {
     match family {
         crate::config::TagFamily::AprilTag36h11 => &DICT_APRILTAG36H11,
         crate::config::TagFamily::AprilTag41h12 => &DICT_APRILTAG41H12,

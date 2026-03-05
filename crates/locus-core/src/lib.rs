@@ -5,42 +5,59 @@
 //! with strict zero-heap allocation in the detection hot-path.
 
 /// Batched state container for Structure of Arrays (SoA) layout.
-pub(crate) mod batch;
+pub mod batch;
 /// Configuration types for the detector pipeline.
-pub(crate) mod config;
+pub mod config;
 /// Tag decoding traits and implementations.
-pub(crate) mod decoder;
+pub mod decoder;
 /// The primary public API for the detector.
 pub mod detector;
 /// Tag family dictionaries (AprilTag, ArUco).
-pub(crate) mod dictionaries;
+pub mod dictionaries;
 /// Edge-preserving filtering for small tag detection.
-pub(crate) mod filter;
+pub mod filter;
 /// Gradient computation for edge refinement.
-pub(crate) mod gradient;
+pub mod gradient;
 /// Image buffer abstractions.
-pub(crate) mod image;
+pub mod image;
 /// 3D Pose Estimation (PnP).
-pub(crate) mod pose;
+pub mod pose;
 /// Weighted pose estimation logic.
-pub(crate) mod pose_weighted;
+pub mod pose_weighted;
 /// Quad extraction and geometric primitives.
-pub(crate) mod quad;
+pub mod quad;
 /// Connected components labeling using Union-Find.
-pub(crate) mod segmentation;
+pub mod segmentation;
 /// SIMD optimized mathematical kernels.
-pub(crate) mod simd;
+pub mod simd;
 /// Decoding strategies (Hard vs Soft).
-pub(crate) mod strategy;
+pub mod strategy;
 /// Utilities for testing and synthetic data generation.
-pub(crate) mod test_utils;
+pub mod test_utils;
 /// Adaptive thresholding implementation.
-pub(crate) mod threshold;
+pub mod threshold;
 
 // Re-exports for the public API
 pub use crate::config::{DetectOptions, DetectorConfig, TagFamily};
 pub use crate::detector::{Detector, DetectorBuilder};
 pub use crate::image::ImageView;
+pub use crate::pose::CameraIntrinsics;
+
+#[cfg(feature = "bench-internals")]
+pub mod bench_api {
+    //! Internal API exposed exclusively for benchmarking and integration testing.
+    pub use crate::batch::*;
+    pub use crate::decoder::*;
+    pub use crate::dictionaries::*;
+    pub use crate::filter::*;
+    pub use crate::gradient::*;
+    pub use crate::pose::*;
+    pub use crate::pose_weighted::*;
+    pub use crate::quad::*;
+    pub use crate::segmentation::*;
+    pub use crate::threshold::*;
+    pub use crate::test_utils::*;
+}
 
 /// A single tag detection result.
 #[derive(Clone, Debug, Default)]

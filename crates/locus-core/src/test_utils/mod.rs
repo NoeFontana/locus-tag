@@ -12,7 +12,7 @@ use rand_distr::{Distribution, Normal};
     clippy::cast_sign_loss,
     clippy::missing_panics_doc
 )]
-pub(crate) fn generate_synthetic_test_image(
+pub fn generate_synthetic_test_image(
     family: crate::config::TagFamily,
     id: u16,
     tag_size: usize,
@@ -123,7 +123,7 @@ fn draw_cell(
 /// Compute mean Euclidean distance between detected and ground truth corners.
 /// Handles 4 rotations to find the minimum error.
 #[must_use]
-pub(crate) fn compute_corner_error(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 4]) -> f64 {
+pub fn compute_corner_error(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 4]) -> f64 {
     let mut min_error = f64::MAX;
 
     // Try all 4 rotations
@@ -153,7 +153,7 @@ pub(crate) fn compute_corner_error(detected: &[[f64; 2]; 4], ground_truth: &[[f6
 ///
 /// Formula: sqrt( (sum of squared distances for all 4 corners) / 4 )
 #[must_use]
-pub(crate) fn compute_rmse(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 4]) -> f64 {
+pub fn compute_rmse(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 4]) -> f64 {
     let mut sum_sq = 0.0;
     for i in 0..4 {
         let dx = detected[i][0] - ground_truth[i][0];

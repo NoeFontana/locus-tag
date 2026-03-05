@@ -22,7 +22,7 @@ thread_local! {
 }
 
 /// A 3x3 Homography matrix.
-pub(crate) struct Homography {
+pub struct Homography {
     /// The 3x3 homography matrix.
     pub h: SMatrix<f64, 3, 3>,
 }
@@ -203,7 +203,7 @@ impl Homography {
 ///
 /// This uses `rayon` for data-parallel computation of the square-to-quad homographies.
 /// Quads are defined by 4 corners in `corners` for each candidate index.
-pub(crate) fn compute_homographies_soa(corners: &[Point2f], homographies: &mut [Matrix3x3]) {
+pub fn compute_homographies_soa(corners: &[Point2f], homographies: &mut [Matrix3x3]) {
     use rayon::prelude::*;
 
     // Each homography maps from canonical square [(-1,-1), (1,-1), (1,1), (-1,1)] to image quads.
@@ -1130,7 +1130,7 @@ fn sample_grid_values_optimized(
 /// This computes the intensities at sample points and the adaptive thresholds,
 /// then delegates to the strategy to produce the code.
 #[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
-pub(crate) fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
+pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
     img: &crate::image::ImageView,
     arena: &Bump,
     detection: &crate::Detection,
@@ -1157,7 +1157,7 @@ pub(crate) fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
 }
 
 /// Sample the bit grid using Structure of Arrays (SoA) data.
-pub(crate) fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
+pub fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
     img: &crate::image::ImageView,
     arena: &Bump,
     corners: &[Point2f],
@@ -1208,7 +1208,7 @@ pub(crate) fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
 }
 
 /// Sample the bit grid using Structure of Arrays (SoA) data and a precomputed ROI cache.
-pub(crate) fn sample_grid_soa_precomputed<S: crate::strategy::DecodingStrategy>(
+pub fn sample_grid_soa_precomputed<S: crate::strategy::DecodingStrategy>(
     img: &crate::image::ImageView,
     roi: &RoiCache,
     homography: &Matrix3x3,
@@ -1273,7 +1273,7 @@ fn compute_adaptive_thresholds(intensities: &[f64], points: &[(f64, f64)]) -> [f
 
 /// Sample the bit grid from the image (Legacy/Hard wrapper).
 #[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
-pub(crate) fn sample_grid(
+pub fn sample_grid(
     img: &crate::image::ImageView,
     arena: &Bump,
     detection: &crate::Detection,
@@ -1305,7 +1305,7 @@ pub(crate) fn rotate90(bits: u64, dim: usize) -> u64 {
 ///
 /// This phase executes SIMD bilinear interpolation and Hamming error correction.
 /// If a candidate fails decoding, its `status_mask` is flipped to `FailedDecode`.
-pub(crate) fn decode_batch_soa(
+pub fn decode_batch_soa(
     batch: &mut crate::batch::DetectionBatch,
     n: usize,
     img: &crate::image::ImageView,
@@ -1715,7 +1715,7 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
 }
 
 /// A trait for decoding binary payloads from extracted tags.
-pub(crate) trait TagDecoder: Send + Sync {
+pub trait TagDecoder: Send + Sync {
     /// Returns the name of the decoder family (e.g., "AprilTag36h11").
     fn name(&self) -> &str;
     /// Returns the dimension of the tag grid (e.g., 6 for 36h11).
@@ -1748,7 +1748,7 @@ pub(crate) trait TagDecoder: Send + Sync {
 }
 
 /// Decoder for the AprilTag 36h11 family.
-pub(crate) struct AprilTag36h11;
+pub struct AprilTag36h11;
 
 impl TagDecoder for AprilTag36h11 {
     fn name(&self) -> &'static str {
@@ -1801,7 +1801,7 @@ impl TagDecoder for AprilTag36h11 {
 }
 
 /// Decoder for the AprilTag 41h12 family.
-pub(crate) struct AprilTag41h12;
+pub struct AprilTag41h12;
 
 impl TagDecoder for AprilTag41h12 {
     fn name(&self) -> &'static str {
@@ -1853,7 +1853,7 @@ impl TagDecoder for AprilTag41h12 {
 }
 
 /// Decoder for the ArUco 4x4_50 family.
-pub(crate) struct ArUco4x4_50;
+pub struct ArUco4x4_50;
 
 impl TagDecoder for ArUco4x4_50 {
     fn name(&self) -> &'static str {
@@ -1905,7 +1905,7 @@ impl TagDecoder for ArUco4x4_50 {
 }
 
 /// Decoder for the ArUco 4x4_100 family.
-pub(crate) struct ArUco4x4_100;
+pub struct ArUco4x4_100;
 
 impl TagDecoder for ArUco4x4_100 {
     fn name(&self) -> &'static str {
