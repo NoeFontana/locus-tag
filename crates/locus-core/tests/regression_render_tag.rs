@@ -22,6 +22,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 
+mod common;
+
 // We need to re-implement or reference the evaluation engine components.
 // For simplicity and independence from icra2020.rs, we re-implement the necessary parts.
 
