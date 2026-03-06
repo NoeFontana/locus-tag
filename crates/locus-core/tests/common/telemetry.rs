@@ -36,6 +36,7 @@ pub fn init(test_id: &str) -> TelemetryGuard {
             let default_guard = tracing::subscriber::set_default(subscriber);
             return TelemetryGuard { _worker: None, _default_guard: Some(default_guard) };
         }
+        #[cfg(not(feature = "tracy"))]
         TelemetryGuard { _worker: None, _default_guard: None }
     } else {
         TelemetryGuard { _worker: None, _default_guard: None }

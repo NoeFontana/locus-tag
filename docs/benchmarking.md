@@ -64,13 +64,13 @@ To resolve this, we decouple the profilers at the CI level using `TELEMETRY_MODE
 Captures pristine binary traces for GUI analysis.
 ```bash
 # Tracy client is assumed to be running or capturing headlessly
-TELEMETRY_MODE=tracy cargo test --release --test regression_icra2020 --features tracy
+TRACY_NO_INVARIANT_CHECK=1 TELEMETRY_MODE=tracy cargo test --release --test regression_icra2020 --features tracy,bench-internals -- --test-threads=1
 ```
 
 #### Agent/CI Mode (JSON)
 Dumps structured pipeline timings to `target/profiling/*_events.json` for AI analysis and automated regression tracking.
 ```bash
-TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features locus-core/bench-internals
+TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features bench-internals -- --test-threads=1
 ```
 
 #### CI Implementation (GitHub Actions)
@@ -85,10 +85,10 @@ jobs:
       - run: |
           if [ "${{ matrix.mode }}" == "tracy" ]; then
             tracy-capture -o out.tracy &
-            TELEMETRY_MODE=tracy cargo test --release --test regression_icra2020 --features tracy
+            TRACY_NO_INVARIANT_CHECK=1 TELEMETRY_MODE=tracy cargo test --release --test regression_icra2020 --features tracy,bench-internals -- --test-threads=1
             # Upload out.tracy as artifact
           else
-            TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features locus-core/bench-internals
+            TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features bench-internals -- --test-threads=1
             # Upload target/profiling/*.json as artifact
           fi
 ```

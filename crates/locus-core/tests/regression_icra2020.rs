@@ -15,14 +15,7 @@
     clippy::needless_pass_by_value,
     clippy::missing_panics_doc
 )]
-#[cfg(feature = "bench-internals")]
-// Unified Regression Test Harness
-//
-// Evaluates the detector against:
-// 1. "Fixtures" (Committed representative images) - Runs in CI, guarantees baseline functionality.
-// 2. "ICRA 2020" (External dataset) - Core subset runs by default, heavy datasets gated by LOCUS_EXTENDED_REGRESSION.
-use locus_core::image::ImageView;
-use locus_core::{DetectOptions, Detector, DetectorConfig, config::TagFamily};
+use locus_core::{DetectOptions, Detector, DetectorConfig, ImageView, TagFamily};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
