@@ -149,7 +149,7 @@ fn bench_full_detect_640x480(bencher: divan::Bencher) {
     let mut detector = Detector::new();
 
     bencher.bench_local(move || {
-        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast);
+        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast, false);
     });
 }
 
@@ -181,7 +181,7 @@ fn bench_mixed_scene_multiple_tags(bencher: divan::Bencher) {
     ]);
 
     bencher.bench_local(move || {
-        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast);
+        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast, false);
     });
 }
 
@@ -207,7 +207,7 @@ fn bench_dense_scene_20_tags(bencher: divan::Bencher) {
     detector.set_families(&[TagFamily::AprilTag36h11]);
 
     bencher.bench_local(move || {
-        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast);
+        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast, false);
     });
 }
 
@@ -229,6 +229,6 @@ fn bench_noisy_scene(bencher: divan::Bencher) {
     detector.set_families(&[TagFamily::ArUco4x4_50]);
 
     bencher.bench_local(move || {
-        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast);
+        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast, false);
     });
 }

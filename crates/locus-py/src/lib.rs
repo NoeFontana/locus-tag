@@ -7,9 +7,7 @@
 )]
 
 use locus_core::ImageView;
-use numpy::{
-    PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods,
-};
+use numpy::{PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -158,8 +156,9 @@ pub struct Detector {
 #[pymethods]
 impl Detector {
     /// Detect tags and return a dictionary of NumPy arrays (SoA layout).
-    #[pyo3(signature = (img, intrinsics=None, tag_size=None, pose_estimation_mode=PoseEstimationMode::Fast))]
+    #[pyo3(signature = (img, intrinsics=None, tag_size=None, pose_estimation_mode=PoseEstimationMode::Fast, debug_telemetry=false))]
     #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::too_many_lines)]
     fn detect(
         &mut self,
         py: Python<'_>,
@@ -167,6 +166,7 @@ impl Detector {
         intrinsics: Option<CameraIntrinsics>,
         tag_size: Option<f64>,
         pose_estimation_mode: PoseEstimationMode,
+        debug_telemetry: bool,
     ) -> PyResult<PyObject> {
         let view = prepare_image_view(&img)?;
 
@@ -175,8 +175,13 @@ impl Detector {
 
         // 1. Run core pipeline
         let detections = py.allow_threads(|| {
-            self.inner
-                .detect(&view, core_intrinsics.as_ref(), tag_size, core_pose_mode)
+            self.inner.detect(
+                &view,
+                core_intrinsics.as_ref(),
+                tag_size,
+                core_pose_mode,
+                debug_telemetry,
+            )
         });
 
         let n = detections.len();
@@ -231,6 +236,74 @@ impl Detector {
             dict.set_item("poses", poses_arr)?;
         } else {
             dict.set_item("poses", py.None())?;
+        }
+
+        // 3. Telemetry (Zero-copy intermediate images)
+        if let Some(telemetry) = detections.telemetry {
+            let tel_dict = PyDict::new(py);
+            unsafe {
+                let binarized_arr =
+                    PyArray2::<u8>::new(py, [telemetry.height, telemetry.width], false);
+                let dest_slice = binarized_arr.as_slice_mut().expect("Failed to get PyArray slice");
+                let src_slice = std::slice::from_raw_parts(
+                    telemetry.binarized_ptr,
+                    telemetry.height * telemetry.stride,
+                );
+
+                if telemetry.stride == telemetry.width {
+                    // Contiguous memory layout
+                    std::ptr::copy_nonoverlapping(
+                        src_slice.as_ptr(),
+                        dest_slice.as_mut_ptr(),
+                        dest_slice.len(),
+                    );
+                } else {
+                    // Strided memory layout
+                    for y in 0..telemetry.height {
+                        let src_offset = y * telemetry.stride;
+                        let dest_offset = y * telemetry.width;
+                        std::ptr::copy_nonoverlapping(
+                            src_slice.as_ptr().add(src_offset),
+                            dest_slice.as_mut_ptr().add(dest_offset),
+                            telemetry.width,
+                        );
+                    }
+                }
+
+                let threshold_arr =
+                    PyArray2::<u8>::new(py, [telemetry.height, telemetry.width], false);
+                let dest_slice = threshold_arr.as_slice_mut().expect("Failed to get PyArray slice");
+                let src_slice = std::slice::from_raw_parts(
+                    telemetry.threshold_map_ptr,
+                    telemetry.height * telemetry.stride,
+                );
+
+                if telemetry.stride == telemetry.width {
+                    // Contiguous memory layout
+                    std::ptr::copy_nonoverlapping(
+                        src_slice.as_ptr(),
+                        dest_slice.as_mut_ptr(),
+                        dest_slice.len(),
+                    );
+                } else {
+                    // Strided memory layout
+                    for y in 0..telemetry.height {
+                        let src_offset = y * telemetry.stride;
+                        let dest_offset = y * telemetry.width;
+                        std::ptr::copy_nonoverlapping(
+                            src_slice.as_ptr().add(src_offset),
+                            dest_slice.as_mut_ptr().add(dest_offset),
+                            telemetry.width,
+                        );
+                    }
+                }
+
+                tel_dict.set_item("binarized", &binarized_arr)?;
+                tel_dict.set_item("threshold_map", &threshold_arr)?;
+            }
+            dict.set_item("telemetry", tel_dict)?;
+        } else {
+            dict.set_item("telemetry", py.None())?;
         }
 
         Ok(dict.into())

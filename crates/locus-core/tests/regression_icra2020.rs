@@ -179,6 +179,7 @@ impl RegressionHarness {
                     self.options.intrinsics.as_ref(),
                     self.options.tag_size,
                     self.options.pose_estimation_mode,
+                    false,
                 );
                 let total_ms = start.elapsed().as_secs_f64() * 1000.0;
 

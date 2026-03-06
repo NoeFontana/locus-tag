@@ -34,6 +34,7 @@ class DetectionBatch:
     corners: np.ndarray  # Shape: (N, 4, 2), Dtype: float32
     error_rates: np.ndarray  # Shape: (N,), Dtype: float32
     poses: np.ndarray | None = None  # Shape: (N, 7), Dtype: float32. [tx, ty, tz, qx, qy, qz, qw]
+    telemetry: "PipelineTelemetry | None" = None
 
     @property
     def centers(self) -> np.ndarray:
@@ -42,6 +43,20 @@ class DetectionBatch:
 
     def __len__(self) -> int:
         return len(self.ids)
+
+
+@dataclass(frozen=True)
+class PipelineTelemetry:
+    """
+    Zero-copy intermediate artifacts from the detection pipeline.
+
+    WARNING: These arrays are ephemeral. They point directly into the Rust
+    arena memory and become invalid the moment another frame is processed
+    by the same Detector instance.
+    """
+
+    binarized: np.ndarray  # Shape: (H, W), Dtype: uint8
+    threshold_map: np.ndarray  # Shape: (H, W), Dtype: uint8
 
 
 class Detector:
@@ -100,6 +115,7 @@ class Detector:
         intrinsics: CameraIntrinsics | None = None,
         tag_size: float | None = None,
         pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
+        debug_telemetry: bool = False,
         **kwargs,
     ) -> DetectionBatch:
         """
@@ -122,9 +138,16 @@ class Detector:
             intrinsics=intrinsics,
             tag_size=tag_size,
             pose_estimation_mode=pose_estimation_mode,
+            debug_telemetry=debug_telemetry,
             **kwargs,
         )
-        return DetectionBatch(**res_dict)
+
+        tel_res = res_dict.pop("telemetry", None)
+        telemetry = None
+        if tel_res is not None:
+            telemetry = PipelineTelemetry(**tel_res)
+
+        return DetectionBatch(**res_dict, telemetry=telemetry)
 
 
 __all__ = [

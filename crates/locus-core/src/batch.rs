@@ -186,6 +186,29 @@ pub fn partition_batch_soa(batch: &mut DetectionBatch, n: usize) -> usize {
     batch.partition(n)
 }
 
+/// Metadata for zero-copy telemetry extraction.
+#[derive(Debug, Clone, Copy)]
+pub struct TelemetryPayload {
+    /// Pointer to the binarized image buffer.
+    pub binarized_ptr: *const u8,
+    /// Pointer to the threshold map buffer.
+    pub threshold_map_ptr: *const u8,
+    /// Width of the buffers.
+    pub width: usize,
+    /// Height of the buffers.
+    pub height: usize,
+    /// Stride of the buffers.
+    pub stride: usize,
+}
+
+// SAFETY: TelemetryPayload contains raw pointers to the detector's arena.
+// These pointers are stable for the duration of the frame processing and
+// are only accessed from the Python thread while the arena is still alive.
+#[allow(unsafe_code)]
+unsafe impl Send for TelemetryPayload {}
+#[allow(unsafe_code)]
+unsafe impl Sync for TelemetryPayload {}
+
 /// A lightweight, borrowed view of the detection results.
 ///
 /// This struct holds slices to the active elements in a [`DetectionBatch`].
@@ -204,6 +227,8 @@ pub struct DetectionBatchView<'a> {
     pub error_rates: &'a [f32],
     /// 3D poses (rotation + translation).
     pub poses: &'a [Pose6D],
+    /// Optional telemetry data for intermediate images.
+    pub telemetry: Option<TelemetryPayload>,
 }
 
 impl DetectionBatchView<'_> {
@@ -232,7 +257,20 @@ impl DetectionBatch {
             payloads: &self.payloads[..n],
             error_rates: &self.error_rates[..n],
             poses: &self.poses[..n],
+            telemetry: None,
         }
+    }
+
+    /// Returns a borrowed view with telemetry data.
+    #[must_use]
+    pub fn view_with_telemetry(
+        &self,
+        v: usize,
+        telemetry: Option<TelemetryPayload>,
+    ) -> DetectionBatchView<'_> {
+        let mut view = self.view(v);
+        view.telemetry = telemetry;
+        view
     }
 }
 
