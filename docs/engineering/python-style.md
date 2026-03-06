@@ -12,7 +12,7 @@ When modifying Python code in `crates/locus-py` or `scripts/`, the focus must be
 
 ## 3. Environment & Orchestration
 * **`uv` Everywhere:** Never use global `pip`. All dependency management, locking, and tool execution must be routed through `uv`.
-* **PEP 735 Dependency Groups:** Utilize specific groups (`dev`, `lint`, `types`, `bench`, `docs`, `etl`) when running tasks. For example: `uv run --group bench python scripts/locus_bench.py`.
+* **PEP 735 Dependency Groups:** Utilize specific groups (`dev`, `lint`, `types`, `bench`, `docs`, `etl`) when running tasks. For example: `uv run --group bench tools/cli.py bench`.
 
 ## 4. Quality Gates
 * **Linting:** `uv run ruff check .`
