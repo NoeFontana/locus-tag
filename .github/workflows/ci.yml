@@ -20,7 +20,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   UV_SYSTEM_PYTHON: 0 # Ensure uv uses its own managed Python
-  TRACY_NO_INVARIANT_CHECK: 1 # Avoid Tracy initialization failure in CI
+  TRACY_NO_INVARIANT_CHECK: "1" # Avoid Tracy initialization failure in CI
 
 jobs:
   validate-project:
@@ -101,8 +101,8 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          # Exclude heavy regression tests from standard debug CI
-          cargo nextest run --all-features -E 'not(test(regression_icra2020))' 2>&1 | tee test-rust.log
+          # Heavy regression tests are excluded by default via .config/nextest.toml
+          cargo nextest run --profile ci --all-features 2>&1 | tee test-rust.log
 
       - name: Run Doc Tests
         shell: bash
