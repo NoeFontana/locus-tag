@@ -19,6 +19,8 @@ uv run ruff format .
 uv run mypy .
 
 # 4. Unit Testing
+# We use cargo-nextest for fast, concurrent test execution.
+# By default, heavy regression tests are excluded (see .config/nextest.toml).
 # Always use --release for Rust tests as debug performance is non-representative.
 cargo nextest run --release --all-features
 
