@@ -25,7 +25,7 @@
     - [x] Run `cargo check` and `cargo test` to ensure macros compile correctly without errors.
 - [x] Task: Conductor - User Manual Verification 'Instrument Core Pipeline' (Protocol in workflow.md) c04ae4f
 
-## Phase 4: Wire Regression Tests
+## Phase 4: Wire Regression Tests [checkpoint: 4b1ec2d]
 - [x] Task: Integrate Telemetry into Integration Tests 4203564
     - [x] Wire `common::telemetry::init()` at the start of tests in `tests/regression_icra2020.rs`.
     - [x] Ensure the asynchronous writer `_guard` is held until the end of each test scope.
@@ -34,7 +34,7 @@
     - [x] Ensure the asynchronous writer `_guard` is held until the end of each test scope.
 - [x] Task: Execute Test Suite and Validate Output 4203564
     - [x] Run `cargo test --test regression_icra2020` and verify `target/profiling/regression_events.json` is populated with tracing spans.
-- [ ] Task: Conductor - User Manual Verification 'Wire Regression Tests' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Wire Regression Tests' (Protocol in workflow.md) 4b1ec2d
 
 ## Phase 5: Automated Workflow Support
 - [ ] Task: Verify Dual-Emission Output
