@@ -16,13 +16,13 @@
 - [x] Task: Conductor - User Manual Verification 'Architect Dual-Layer Test Harness' (Protocol in workflow.md) 723b979
 
 ## Phase 3: Instrument Core Pipeline
-- [ ] Task: Add Zero-Cost Instrumentation to Pipeline Stages
-    - [ ] Instrument Thresholding functions (`adaptive_threshold_with_map` and related) in `crates/locus-core/src/`.
-    - [ ] Instrument Segmentation functions (`extract_quads_soa` and related).
-    - [ ] Instrument Decoding functions (`decode_batch_soa` and related).
-    - [ ] Instrument Pose Estimation functions.
-- [ ] Task: Verify Zero-Cost Compilation
-    - [ ] Run `cargo check` and `cargo test` to ensure macros compile correctly without errors.
+- [x] Task: Add Zero-Cost Instrumentation to Pipeline Stages 3a56943
+    - [x] Instrument Thresholding functions (`adaptive_threshold_with_map` and related) in `crates/locus-core/src/`.
+    - [x] Instrument Segmentation functions (`extract_quads_soa` and related).
+    - [x] Instrument Decoding functions (`decode_batch_soa` and related).
+    - [x] Instrument Pose Estimation functions.
+- [x] Task: Verify Zero-Cost Compilation 3a56943
+    - [x] Run `cargo check` and `cargo test` to ensure macros compile correctly without errors.
 - [ ] Task: Conductor - User Manual Verification 'Instrument Core Pipeline' (Protocol in workflow.md)
 
 ## Phase 4: Wire Regression Tests
