@@ -425,5 +425,6 @@ fn run_hub_test(config_name: &str, family: TagFamily) {
 
 #[test]
 fn regression_hub_tag36h11() {
+    let _guard = common::telemetry::init();
     run_hub_test("single_tag_locus_v1_tag36h11", TagFamily::AprilTag36h11);
 }

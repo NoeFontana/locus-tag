@@ -15,6 +15,7 @@ pub fn init() -> tracing_appender::non_blocking::WorkerGuard {
     
     let json_layer = tracing_subscriber::fmt::layer()
         .json()
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
         .with_writer(non_blocking);
         
     let subscriber = Registry::default().with(json_layer);
