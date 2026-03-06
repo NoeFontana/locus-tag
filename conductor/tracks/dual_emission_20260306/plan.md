@@ -1,10 +1,10 @@
 # Implementation Plan: Dual-Emission Observability
 
-## Phase 1: Setup Telemetry Dependencies
+## Phase 1: Setup Telemetry Dependencies [checkpoint: 06e7850]
 - [x] Task: Update `dev-dependencies` in `crates/locus-core/Cargo.toml` 6a4d838
     - [x] Add `tracing-appender` crate.
     - [x] Update `tracing-subscriber` to include `json` and `env-filter` features.
-- [ ] Task: Conductor - User Manual Verification 'Setup Telemetry Dependencies' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Setup Telemetry Dependencies' (Protocol in workflow.md) 06e7850
 
 ## Phase 2: Architect Dual-Layer Test Harness
 - [ ] Task: Create Test Harness `tests/common/telemetry.rs`
