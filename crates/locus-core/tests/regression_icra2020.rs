@@ -154,6 +154,10 @@ impl RegressionHarness {
     }
 
     pub fn run(self, provider: impl DatasetProvider) {
+        if cfg!(debug_assertions) {
+            panic!("regression_icra2020 test should always be ran in release mode. Please use `cargo test --release`.");
+        }
+
         let mut detector = Detector::with_config(self.config);
         let mut results = BTreeMap::new();
 
