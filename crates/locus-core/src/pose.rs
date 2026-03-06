@@ -104,6 +104,7 @@ impl Pose {
 /// Panics if SVD decomposition fails during orthogonalization (extremely rare).
 #[must_use]
 #[allow(clippy::missing_panics_doc)]
+#[tracing::instrument(skip_all, name = "pipeline::estimate_tag_pose")]
 pub fn estimate_tag_pose(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],

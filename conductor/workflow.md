@@ -150,36 +150,57 @@ Before marking any task complete, verify:
 
 ## Development Commands
 
-**AI AGENT INSTRUCTION: This section should be adapted to the project's specific language, framework, and build tools.**
-
 ### Setup
 ```bash
-# Example: Commands to set up the development environment (e.g., install dependencies, configure database)
-# e.g., for a Node.js project: npm install
-# e.g., for a Go project: go mod tidy
+# Install uv and set up the python environment
+uv sync --all-groups
+
+# Build the Rust Python extension in development mode
+uv run maturin develop --manifest-path crates/locus-py/Cargo.toml
 ```
 
 ### Daily Development
 ```bash
-# Example: Commands for common daily tasks (e.g., start dev server, run tests, lint, format)
-# e.g., for a Node.js project: npm run dev, npm test, npm run lint
-# e.g., for a Go project: go run main.go, go test ./..., go fmt ./...
+# Run Rust unit tests (fast, skips heavy regressions via .config/nextest.toml)
+cargo nextest run --all-features
+
+# Run Python unit tests
+uv run pytest
+
+# Format & Lint Rust
+cargo fmt --all
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+# Format & Lint Python
+uv run ruff check . --fix
+uv run ruff format .
 ```
 
 ### Before Committing
 ```bash
-# Example: Commands to run all pre-commit checks (e.g., format, lint, type check, run tests)
-# e.g., for a Node.js project: npm run check
-# e.g., for a Go project: make check (if a Makefile exists)
+# Verify all pre-commit checks locally before pushing to CI
+cargo nextest run --all-features
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo insta test --release --all-features --features bench-internals --check
+
+uv run ruff check .
+uv run ruff format --check .
+uv run pytest
 ```
 
 ## Testing Requirements
 
-### Unit Testing
-- Every module must have corresponding tests.
-- Use appropriate test setup/teardown mechanisms (e.g., fixtures, beforeEach/afterEach).
-- Mock external dependencies.
-- Test both success and failure cases.
+### Unit Testing (Rust)
+- We use `cargo-nextest` as the primary test runner for speed and concurrent execution.
+- Fast unit tests are run by default via `cargo nextest run`.
+- **Heavy Regression Tests:** Tests that parse large datasets (e.g., ICRA 2020) or require significant computational time are automatically excluded from the default run via `.config/nextest.toml`.
+- To run heavy tests explicitly, use the standard cargo test runner in release mode: `cargo test --release --test regression_icra2020`.
+- All logic changes to the hot loop require regression and snapshot validation using `cargo insta`.
+
+### Unit Testing (Python)
+- Use `pytest` for the Python API bindings and CLI tools.
+- Ensure the Rust extension is built (`uv run maturin develop`) before testing Python code.
 
 ### Integration Testing
 - Test complete user flows

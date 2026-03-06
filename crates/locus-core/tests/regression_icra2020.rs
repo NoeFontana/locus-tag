@@ -1,3 +1,4 @@
+//! ICRA 2020 Dataset Regression Tests.
 #![allow(
     missing_docs,
     dead_code,
@@ -13,16 +14,11 @@
     clippy::unnecessary_debug_formatting,
     clippy::trivially_copy_pass_by_ref,
     clippy::needless_pass_by_value,
-    clippy::missing_panics_doc
+    clippy::missing_panics_doc,
+    clippy::panic,
+    unused_imports
 )]
-#[cfg(feature = "bench-internals")]
-// Unified Regression Test Harness
-//
-// Evaluates the detector against:
-// 1. "Fixtures" (Committed representative images) - Runs in CI, guarantees baseline functionality.
-// 2. "ICRA 2020" (External dataset) - Core subset runs by default, heavy datasets gated by LOCUS_EXTENDED_REGRESSION.
-use locus_core::image::ImageView;
-use locus_core::{DetectOptions, Detector, DetectorConfig, config::TagFamily};
+use locus_core::{DetectOptions, DetectorConfig, TagFamily};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
@@ -154,192 +150,205 @@ impl RegressionHarness {
     }
 
     pub fn run(self, provider: impl DatasetProvider) {
-        let mut detector = Detector::with_config(self.config);
-        let mut results = BTreeMap::new();
-
-        // Aggregators
-        let mut total_recall = 0.0;
-        let mut total_rmse = 0.0;
-        let mut total_time = 0.0;
-        let mut count = 0;
-
-        for (filename, data, width, height, gt) in provider.iter() {
-            let img = ImageView::new(&data, width, height, width).expect("valid image");
-
-            let start = std::time::Instant::now();
-            let detections = detector.detect(
-                &img,
-                self.options.intrinsics.as_ref(),
-                self.options.tag_size,
-                self.options.pose_estimation_mode,
+        #[cfg(debug_assertions)]
+        {
+            let _ = (self, provider);
+            panic!(
+                "regression_icra2020 test should always be ran in release mode. Please use `cargo test --release`."
             );
-            let total_ms = start.elapsed().as_secs_f64() * 1000.0;
+        }
 
-            // --- Metrics Calculation ---
-            let mut image_rmse_sum = 0.0;
-            let mut match_count = 0;
-            let mut found_ids = BTreeSet::new();
+        #[cfg(not(debug_assertions))]
+        {
+            use locus_core::{Detector, ImageView};
+            let mut detector = Detector::with_config(self.config);
+            let mut results = BTreeMap::new();
 
-            for i in 0..detections.len() {
-                let det_id = detections.ids[i];
-                let det_corners_f32 = detections.corners[i];
-                let det_corners_f64 = [
-                    [
-                        f64::from(det_corners_f32[0].x),
-                        f64::from(det_corners_f32[0].y),
-                    ],
-                    [
-                        f64::from(det_corners_f32[1].x),
-                        f64::from(det_corners_f32[1].y),
-                    ],
-                    [
-                        f64::from(det_corners_f32[2].x),
-                        f64::from(det_corners_f32[2].y),
-                    ],
-                    [
-                        f64::from(det_corners_f32[3].x),
-                        f64::from(det_corners_f32[3].y),
-                    ],
-                ];
-                let det_center = [
-                    (det_corners_f64[0][0]
-                        + det_corners_f64[1][0]
-                        + det_corners_f64[2][0]
-                        + det_corners_f64[3][0])
-                        / 4.0,
-                    (det_corners_f64[0][1]
-                        + det_corners_f64[1][1]
-                        + det_corners_f64[2][1]
-                        + det_corners_f64[3][1])
-                        / 4.0,
-                ];
+            // Aggregators
+            let mut total_recall = 0.0;
+            let mut total_rmse = 0.0;
+            let mut total_time = 0.0;
+            let mut count = 0;
 
-                if let Some(gt_corners) = gt.tags.get(&det_id) {
-                    let gt_cx: f64 = gt_corners.iter().map(|p| p[0]).sum::<f64>() / 4.0;
-                    let gt_cy: f64 = gt_corners.iter().map(|p| p[1]).sum::<f64>() / 4.0;
-                    let dist_sq = (det_center[0] - gt_cx).powi(2) + (det_center[1] - gt_cy).powi(2);
+            for (filename, data, width, height, gt) in provider.iter() {
+                let img = ImageView::new(&data, width, height, width).expect("valid image");
 
-                    if dist_sq < 50.0 * 50.0 {
-                        let det_corners = if self.icra_corner_ordering {
-                            [
-                                det_corners_f64[1],
-                                det_corners_f64[0],
-                                det_corners_f64[3],
-                                det_corners_f64[2],
-                            ]
-                        } else {
-                            det_corners_f64
-                        };
+                let start = std::time::Instant::now();
+                let detections = detector.detect(
+                    &img,
+                    self.options.intrinsics.as_ref(),
+                    self.options.tag_size,
+                    self.options.pose_estimation_mode,
+                );
+                let total_ms = start.elapsed().as_secs_f64() * 1000.0;
 
-                        image_rmse_sum +=
-                            locus_core::test_utils::compute_rmse(&det_corners, gt_corners);
-                        match_count += 1;
-                        found_ids.insert(det_id);
+                // --- Metrics Calculation ---
+                let mut image_rmse_sum = 0.0;
+                let mut match_count = 0;
+                let mut found_ids = BTreeSet::new();
+
+                for i in 0..detections.len() {
+                    let det_id = detections.ids[i];
+                    let det_corners_f32 = detections.corners[i];
+                    let det_corners_f64 = [
+                        [
+                            f64::from(det_corners_f32[0].x),
+                            f64::from(det_corners_f32[0].y),
+                        ],
+                        [
+                            f64::from(det_corners_f32[1].x),
+                            f64::from(det_corners_f32[1].y),
+                        ],
+                        [
+                            f64::from(det_corners_f32[2].x),
+                            f64::from(det_corners_f32[2].y),
+                        ],
+                        [
+                            f64::from(det_corners_f32[3].x),
+                            f64::from(det_corners_f32[3].y),
+                        ],
+                    ];
+                    let det_center = [
+                        (det_corners_f64[0][0]
+                            + det_corners_f64[1][0]
+                            + det_corners_f64[2][0]
+                            + det_corners_f64[3][0])
+                            / 4.0,
+                        (det_corners_f64[0][1]
+                            + det_corners_f64[1][1]
+                            + det_corners_f64[2][1]
+                            + det_corners_f64[3][1])
+                            / 4.0,
+                    ];
+
+                    if let Some(gt_corners) = gt.tags.get(&det_id) {
+                        let gt_cx: f64 = gt_corners.iter().map(|p| p[0]).sum::<f64>() / 4.0;
+                        let gt_cy: f64 = gt_corners.iter().map(|p| p[1]).sum::<f64>() / 4.0;
+                        let dist_sq =
+                            (det_center[0] - gt_cx).powi(2) + (det_center[1] - gt_cy).powi(2);
+
+                        if dist_sq < 50.0 * 50.0 {
+                            let det_corners = if self.icra_corner_ordering {
+                                [
+                                    det_corners_f64[1],
+                                    det_corners_f64[0],
+                                    det_corners_f64[3],
+                                    det_corners_f64[2],
+                                ]
+                            } else {
+                                det_corners_f64
+                            };
+
+                            image_rmse_sum +=
+                                locus_core::test_utils::compute_rmse(&det_corners, gt_corners);
+                            match_count += 1;
+                            found_ids.insert(det_id);
+                        }
                     }
                 }
-            }
 
-            let recall = if gt.tags.is_empty() {
-                1.0
-            } else {
-                found_ids.len() as f64 / gt.tags.len() as f64
-            };
-            let avg_rmse = if match_count > 0 {
-                image_rmse_sum / f64::from(match_count)
-            } else {
-                0.0
-            };
-
-            total_recall += recall;
-            total_rmse += avg_rmse;
-            total_time += total_ms;
-            count += 1;
-
-            let mut missed_ids = BTreeSet::new();
-            for &id in gt.tags.keys() {
-                if !found_ids.contains(&id) {
-                    missed_ids.insert(id);
-                }
-            }
-
-            let mut extra_ids = BTreeSet::new();
-            for i in 0..detections.len() {
-                let det_id = detections.ids[i];
-                if !found_ids.contains(&det_id) {
-                    extra_ids.insert(det_id);
-                }
-            }
-
-            results.insert(
-                filename.clone(),
-                ImageMetrics {
-                    recall,
-                    avg_rmse,
-                    stats: PipelineMetrics {
-                        total_ms,
-                        num_detections: detections.len(),
-                    },
-                    missed_ids,
-                    extra_ids,
-                },
-            );
-        }
-
-        if count == 0 {
-            println!("WARNING: Dataset {} yielded no images.", self.snapshot_name);
-            return;
-        }
-
-        let mut offenders: Vec<Offender> = results
-            .iter()
-            .filter_map(|(fname, m)| {
-                if !m.missed_ids.is_empty() || !m.extra_ids.is_empty() || m.avg_rmse > 1.0 {
-                    println!(
-                        "FILE {fname} missed: {:?}, extra: {:?}",
-                        m.missed_ids, m.extra_ids
-                    );
-                    Some(Offender {
-                        filename: fname.clone(),
-                        missed: m.missed_ids.len(),
-                        extra: m.extra_ids.len(),
-                        rmse: m.avg_rmse,
-                    })
+                let recall = if gt.tags.is_empty() {
+                    1.0
                 } else {
-                    None
+                    found_ids.len() as f64 / gt.tags.len() as f64
+                };
+                let avg_rmse = if match_count > 0 {
+                    image_rmse_sum / f64::from(match_count)
+                } else {
+                    0.0
+                };
+
+                total_recall += recall;
+                total_rmse += avg_rmse;
+                total_time += total_ms;
+                count += 1;
+
+                let mut missed_ids = BTreeSet::new();
+                for &id in gt.tags.keys() {
+                    if !found_ids.contains(&id) {
+                        missed_ids.insert(id);
+                    }
                 }
-            })
-            .collect();
 
-        offenders.sort_by(|a, b| {
-            b.missed
-                .cmp(&a.missed)
-                .then_with(|| b.extra.cmp(&a.extra))
-                .then_with(|| {
-                    b.rmse
-                        .partial_cmp(&a.rmse)
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                let mut extra_ids = BTreeSet::new();
+                for i in 0..detections.len() {
+                    let det_id = detections.ids[i];
+                    if !found_ids.contains(&det_id) {
+                        extra_ids.insert(det_id);
+                    }
+                }
+
+                results.insert(
+                    filename.clone(),
+                    ImageMetrics {
+                        recall,
+                        avg_rmse,
+                        stats: PipelineMetrics {
+                            total_ms,
+                            num_detections: detections.len(),
+                        },
+                        missed_ids,
+                        extra_ids,
+                    },
+                );
+            }
+
+            if count == 0 {
+                println!("WARNING: Dataset {} yielded no images.", self.snapshot_name);
+                return;
+            }
+
+            let mut offenders: Vec<Offender> = results
+                .iter()
+                .filter_map(|(fname, m)| {
+                    if !m.missed_ids.is_empty() || !m.extra_ids.is_empty() || m.avg_rmse > 1.0 {
+                        println!(
+                            "FILE {fname} missed: {:?}, extra: {:?}",
+                            m.missed_ids, m.extra_ids
+                        );
+                        Some(Offender {
+                            filename: fname.clone(),
+                            missed: m.missed_ids.len(),
+                            extra: m.extra_ids.len(),
+                            rmse: m.avg_rmse,
+                        })
+                    } else {
+                        None
+                    }
                 })
-        });
+                .collect();
 
-        let report = RegressionReport {
-            summary: SummaryMetrics {
-                dataset_size: count,
-                mean_recall: total_recall / count as f64,
-                mean_rmse: total_rmse / count as f64,
-                mean_total_ms: total_time / count as f64,
-                worst_offenders: offenders.into_iter().take(5).collect(),
-            },
-        };
+            offenders.sort_by(|a, b| {
+                b.missed
+                    .cmp(&a.missed)
+                    .then_with(|| b.extra.cmp(&a.extra))
+                    .then_with(|| {
+                        b.rmse
+                            .partial_cmp(&a.rmse)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
+            });
 
-        println!("=== {} Results ===", self.snapshot_name);
-        println!("  Images: {count}");
-        println!("  Recall: {:.2}%", report.summary.mean_recall * 100.0);
-        println!("  RMSE:   {:.4} px", report.summary.mean_rmse);
-        println!("  Latency: {:.4} ms", report.summary.mean_total_ms);
+            let report = RegressionReport {
+                summary: SummaryMetrics {
+                    dataset_size: count,
+                    mean_recall: total_recall / count as f64,
+                    mean_rmse: total_rmse / count as f64,
+                    mean_total_ms: total_time / count as f64,
+                    worst_offenders: offenders.into_iter().take(5).collect(),
+                },
+            };
 
-        insta::assert_yaml_snapshot!(self.snapshot_name, report, {
-            ".summary.mean_total_ms" => "[DURATION]"
-        });
+            println!("=== {} Results ===", self.snapshot_name);
+            println!("  Images: {count}");
+            println!("  Recall: {:.2}%", report.summary.mean_recall * 100.0);
+            println!("  RMSE:   {:.4} px", report.summary.mean_rmse);
+            println!("  Latency: {:.4} ms", report.summary.mean_total_ms);
+
+            insta::assert_yaml_snapshot!(self.snapshot_name, report, {
+                ".summary.mean_total_ms" => "[DURATION]"
+            });
+        }
     }
 }
 
@@ -501,6 +510,7 @@ macro_rules! test_icra {
     ($name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident, $family:expr) => {
         #[test]
         fn $name() {
+            let _guard = common::telemetry::init(stringify!($name));
             if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
                 let snapshot = provider.name().to_string();
                 RegressionHarness::new(snapshot)
@@ -513,6 +523,7 @@ macro_rules! test_icra {
     (IGNORED $name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident, $family:expr) => {
         #[test]
         fn $name() {
+            let _guard = common::telemetry::init(stringify!($name));
             if std::env::var("LOCUS_EXTENDED_REGRESSION").is_err() {
                 println!(
                     "Skipping heavy test {}. Set LOCUS_EXTENDED_REGRESSION=1 to run.",
@@ -532,6 +543,7 @@ macro_rules! test_icra {
     (SOFT $name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident, $family:expr) => {
         #[test]
         fn $name() {
+            let _guard = common::telemetry::init(stringify!($name));
             if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
                 let snapshot = format!("{}_soft", provider.name());
                 RegressionHarness::new(snapshot)
@@ -546,6 +558,7 @@ macro_rules! test_icra {
 
 #[test]
 fn regression_fixtures() {
+    let _guard = common::telemetry::init("regression_fixtures");
     let provider = FixtureProvider::new();
     RegressionHarness::new("fixtures")
         .with_preset(ConfigPreset::PlainBoard)

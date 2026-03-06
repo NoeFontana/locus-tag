@@ -60,7 +60,7 @@ impl ThresholdEngine {
     /// Compute min/max statistics for each tile in the image.
     /// Optimized with SIMD-friendly memory access patterns and subsampling (stride 2).
     #[must_use]
-    #[tracing::instrument(skip_all, name = "pipeline::thresholding")]
+    #[tracing::instrument(skip_all, name = "pipeline::threshold_compute_stats")]
     pub fn compute_tile_stats<'a>(
         &self,
         arena: &'a Bump,
@@ -276,7 +276,7 @@ impl ThresholdEngine {
     /// This is needed for threshold-model-aware segmentation, which uses the
     /// per-pixel threshold values to connect pixels by their deviation sign.
     #[allow(clippy::needless_range_loop)]
-    #[tracing::instrument(skip_all, name = "pipeline::thresholding")]
+    #[tracing::instrument(skip_all, name = "pipeline::threshold_apply_map")]
     pub fn apply_threshold_with_map(
         &self,
         arena: &Bump,
@@ -926,6 +926,7 @@ pub fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
+#[tracing::instrument(skip_all, name = "pipeline::threshold_integral")]
 pub fn adaptive_threshold_integral(
     img: &ImageView,
     integral: &[u64],
@@ -1067,6 +1068,7 @@ pub(crate) fn apply_adaptive_threshold_with_params(
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
+#[tracing::instrument(skip_all, name = "pipeline::threshold_gradient_window")]
 pub fn adaptive_threshold_gradient_window(
     img: &ImageView,
     gradient_map: &[u8],
