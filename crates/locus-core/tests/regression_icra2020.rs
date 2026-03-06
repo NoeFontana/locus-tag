@@ -505,7 +505,7 @@ macro_rules! test_icra {
     ($name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident, $family:expr) => {
         #[test]
         fn $name() {
-            let _guard = common::telemetry::init();
+            let _guard = common::telemetry::init(stringify!($name));
             if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
                 let snapshot = provider.name().to_string();
                 RegressionHarness::new(snapshot)
@@ -518,7 +518,7 @@ macro_rules! test_icra {
     (IGNORED $name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident, $family:expr) => {
         #[test]
         fn $name() {
-            let _guard = common::telemetry::init();
+            let _guard = common::telemetry::init(stringify!($name));
             if std::env::var("LOCUS_EXTENDED_REGRESSION").is_err() {
                 println!(
                     "Skipping heavy test {}. Set LOCUS_EXTENDED_REGRESSION=1 to run.",
@@ -538,7 +538,7 @@ macro_rules! test_icra {
     (SOFT $name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident, $family:expr) => {
         #[test]
         fn $name() {
-            let _guard = common::telemetry::init();
+            let _guard = common::telemetry::init(stringify!($name));
             if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
                 let snapshot = format!("{}_soft", provider.name());
                 RegressionHarness::new(snapshot)
@@ -553,7 +553,7 @@ macro_rules! test_icra {
 
 #[test]
 fn regression_fixtures() {
-    let _guard = common::telemetry::init();
+    let _guard = common::telemetry::init("regression_fixtures");
     let provider = FixtureProvider::new();
     RegressionHarness::new("fixtures")
         .with_preset(ConfigPreset::PlainBoard)

@@ -2,28 +2,40 @@ use std::fs::File;
 use std::path::PathBuf;
 use tracing_subscriber::{layer::SubscriberExt, Registry};
 
-pub fn init() -> tracing_appender::non_blocking::WorkerGuard {
-    let log_path = PathBuf::from("../../target/profiling/regression_events.json");
-    if let Some(parent) = log_path.parent() {
-        std::fs::create_dir_all(parent).expect("Failed to create log directory");
-    }
-    
-    let file = File::create(&log_path)
-        .expect("Failed to create log file");
-    
-    let (non_blocking, guard) = tracing_appender::non_blocking(file);
-    
-    let json_layer = tracing_subscriber::fmt::layer()
-        .json()
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
-        .with_writer(non_blocking);
+/// Represents the active guard. If None, telemetry is not writing to file.
+pub struct TelemetryGuard {
+    _worker: Option<tracing_appender::non_blocking::WorkerGuard>,
+}
+
+pub fn init(test_id: &str) -> TelemetryGuard {
+    let mode = std::env::var("TELEMETRY_MODE").unwrap_or_default();
+
+    if mode == "json" {
+        let log_path = PathBuf::from(format!("../../target/profiling/{}_events.json", test_id));
+        if let Some(parent) = log_path.parent() {
+            std::fs::create_dir_all(parent).expect("Failed to create log directory");
+        }
         
-    let subscriber = Registry::default().with(json_layer);
+        let file = File::create(&log_path).expect("Failed to create log file");
+        let (non_blocking, guard) = tracing_appender::non_blocking(file);
+        
+        let json_layer = tracing_subscriber::fmt::layer()
+            .json()
+            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+            .with_writer(non_blocking);
+            
+        let subscriber = Registry::default().with(json_layer);
+        let _ = tracing::subscriber::set_global_default(subscriber);
 
-    #[cfg(feature = "tracy")]
-    let subscriber = subscriber.with(tracing_tracy::TracyLayer::default());
-
-    let _ = tracing::subscriber::set_global_default(subscriber);
-
-    guard
+        TelemetryGuard { _worker: Some(guard) }
+    } else if mode == "tracy" {
+        #[cfg(feature = "tracy")]
+        {
+            let subscriber = Registry::default().with(tracing_tracy::TracyLayer::default());
+            let _ = tracing::subscriber::set_global_default(subscriber);
+        }
+        TelemetryGuard { _worker: None }
+    } else {
+        TelemetryGuard { _worker: None }
+    }
 }

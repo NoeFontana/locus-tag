@@ -2,12 +2,12 @@ mod common;
 
 #[test]
 fn test_telemetry_initialization_creates_log_file() {
-    let log_path = "../../target/profiling/regression_events.json";
+    let log_path = "../../target/profiling/test_telemetry_events.json";
     // Ensure the file is deleted before the test
     let _ = std::fs::remove_file(log_path);
 
     // This should initialize the telemetry and return a guard
-    let _guard = common::telemetry::init();
+    let _guard = common::telemetry::init("test_telemetry");
 
     // Log an event
     tracing::info!("Telemetry test event");
