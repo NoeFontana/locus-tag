@@ -26,14 +26,14 @@
 - [x] Task: Conductor - User Manual Verification 'Instrument Core Pipeline' (Protocol in workflow.md) c04ae4f
 
 ## Phase 4: Wire Regression Tests
-- [ ] Task: Integrate Telemetry into Integration Tests
-    - [ ] Wire `common::telemetry::init()` at the start of tests in `tests/regression_icra2020.rs`.
-    - [ ] Ensure the asynchronous writer `_guard` is held until the end of each test scope.
-- [ ] Task: Integrate Telemetry into Render Tag Tests
-    - [ ] Wire `common::telemetry::init()` at the start of tests in `tests/regression_render_tag.rs`.
-    - [ ] Ensure the asynchronous writer `_guard` is held until the end of each test scope.
-- [ ] Task: Execute Test Suite and Validate Output
-    - [ ] Run `cargo test --test regression_icra2020` and verify `target/profiling/regression_events.json` is populated with tracing spans.
+- [x] Task: Integrate Telemetry into Integration Tests 4203564
+    - [x] Wire `common::telemetry::init()` at the start of tests in `tests/regression_icra2020.rs`.
+    - [x] Ensure the asynchronous writer `_guard` is held until the end of each test scope.
+- [x] Task: Integrate Telemetry into Render Tag Tests 4203564
+    - [x] Wire `common::telemetry::init()` at the start of tests in `tests/regression_render_tag.rs`.
+    - [x] Ensure the asynchronous writer `_guard` is held until the end of each test scope.
+- [x] Task: Execute Test Suite and Validate Output 4203564
+    - [x] Run `cargo test --test regression_icra2020` and verify `target/profiling/regression_events.json` is populated with tracing spans.
 - [ ] Task: Conductor - User Manual Verification 'Wire Regression Tests' (Protocol in workflow.md)
 
 ## Phase 5: Automated Workflow Support
