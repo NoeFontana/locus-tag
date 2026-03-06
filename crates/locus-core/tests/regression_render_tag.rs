@@ -1,3 +1,4 @@
+//! Regression tests for rendered tags from the hub.
 #![allow(
     missing_docs,
     dead_code,
@@ -16,8 +17,7 @@
     clippy::missing_panics_doc
 )]
 
-use locus_core::image::ImageView;
-use locus_core::{DetectOptions, Detector, DetectorConfig, config::TagFamily};
+use locus_core::{DetectOptions, Detector, DetectorConfig, ImageView, TagFamily};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
