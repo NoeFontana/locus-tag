@@ -7,12 +7,12 @@
 - [x] Task: Conductor - User Manual Verification 'Setup Telemetry Dependencies' (Protocol in workflow.md) 06e7850
 
 ## Phase 2: Architect Dual-Layer Test Harness
-- [ ] Task: Create Test Harness `tests/common/telemetry.rs`
-    - [ ] Write failing test `tests/test_telemetry.rs` to verify log file creation on trace.
-    - [ ] Implement `init()` function configuring a non-blocking JSON writer to `target/profiling/regression_events.json` (overwrite mode).
-    - [ ] Build a `tracing_subscriber::Registry` with Layer 1 (JSON) and Layer 2 (TracyLayer via `#[cfg(feature = "tracy")]`).
-    - [ ] Register as global default subscriber.
-    - [ ] Ensure failing test passes.
+- [x] Task: Create Test Harness `tests/common/telemetry.rs` 4ceda98
+    - [x] Write failing test `tests/test_telemetry.rs` to verify log file creation on trace.
+    - [x] Implement `init()` function configuring a non-blocking JSON writer to `target/profiling/regression_events.json` (overwrite mode).
+    - [x] Build a `tracing_subscriber::Registry` with Layer 1 (JSON) and Layer 2 (TracyLayer via `#[cfg(feature = "tracy")]`).
+    - [x] Register as global default subscriber.
+    - [x] Ensure failing test passes.
 - [ ] Task: Conductor - User Manual Verification 'Architect Dual-Layer Test Harness' (Protocol in workflow.md)
 
 ## Phase 3: Instrument Core Pipeline
