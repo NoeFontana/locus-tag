@@ -104,6 +104,7 @@ impl Detector {
         intrinsics: Option<&crate::pose::CameraIntrinsics>,
         tag_size: Option<f64>,
         pose_mode: crate::config::PoseEstimationMode,
+        debug_telemetry: bool,
     ) -> DetectionBatchView<'_> {
         self.state.reset();
         let state = &mut self.state;
@@ -247,13 +248,25 @@ impl Detector {
         // Final coordinate adjustment (+0.5) to align with pixel center convention (UMICH/OpenCV)
         // This is applied in-place to the batch corners.
         for i in 0..v {
-            for corner in &mut self.state.batch.corners[i] {
+            for corner in &mut state.batch.corners[i] {
                 corner.x += 0.5;
                 corner.y += 0.5;
             }
         }
 
-        self.state.batch.view(v)
+        let telemetry = if debug_telemetry {
+            Some(crate::batch::TelemetryPayload {
+                binarized_ptr: binarized.as_ptr(),
+                threshold_map_ptr: threshold_map.as_ptr(),
+                width: img.width,
+                height: img.height,
+                stride: img.width,
+            })
+        } else {
+            None
+        };
+
+        self.state.batch.view_with_telemetry(v, telemetry)
     }
 
     /// Get the current detector configuration.

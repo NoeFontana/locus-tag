@@ -32,7 +32,7 @@ fn test_accuracy_synthetic() {
             let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
 
             let mut detector = DetectorBuilder::new().with_family(family).build();
-            let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
+            let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast, false);
 
             assert!(!detections.is_empty());
             assert_eq!(detections.ids[0], tag_id as u32);
@@ -76,7 +76,7 @@ fn test_pose_accuracy() {
         let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
 
         let mut detector = DetectorBuilder::new().with_family(family).build();
-        let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast);
+        let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast, false);
 
         assert!(!detections.is_empty());
 

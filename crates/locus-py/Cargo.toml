@@ -10,14 +10,15 @@ name = "locus"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.23", features = ["extension-module", "abi3-py310"] }
-numpy = "0.23"
+pyo3 = { version = "0.28", features = ["extension-module", "abi3-py310"] }
+numpy = "0.28"
 locus-core = { path = "../locus-core" }
-bumpalo = "3.16"
+bumpalo = "3.20"
 tracing = "0.1.44"
 tracing-tracy = { version = "0.11", optional = true }
 tracing-subscriber = { version = "0.3", features = ["registry", "env-filter"], optional = true }
-nalgebra = "0.33"
+nalgebra = "0.34"
+ndarray = "0.17"
 
 [features]
 default = []

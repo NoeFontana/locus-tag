@@ -582,7 +582,8 @@ pub fn label_components_threshold_model<'a>(
 mod tests {
     use super::*;
     use bumpalo::Bump;
-    use proptest::prelude::*;
+    use proptest::prelude::prop;
+    use proptest::proptest;
 
     #[test]
     fn test_union_find() {
@@ -834,15 +835,12 @@ mod tests {
     /// Test segmentation with noisy binary boundaries.
     #[test]
     fn test_segmentation_noisy_boundaries() {
-        use rand::prelude::*;
-
         let canvas_size = 320;
         let tag_size = 120;
 
         let arena = Bump::new();
         let (mut binary, _corners) = generate_binarized_tag(tag_size, canvas_size);
 
-        let mut rng = rand::thread_rng();
         let noise_rate = 0.05;
 
         for y in 1..(canvas_size - 1) {
@@ -856,7 +854,7 @@ mod tests {
 
                 let is_edge =
                     current != left || current != right || current != up || current != down;
-                if is_edge && rng.gen_range(0.0..1.0_f32) < noise_rate {
+                if is_edge && rand::random_range(0.0..1.0_f32) < noise_rate {
                     binary[idx] = if current == 0 { 255 } else { 0 };
                 }
             }

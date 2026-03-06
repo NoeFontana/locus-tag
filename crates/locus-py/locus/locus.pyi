@@ -51,6 +51,7 @@ class Detector:
         intrinsics: CameraIntrinsics | None = None,
         tag_size: float | None = None,
         pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
+        debug_telemetry: bool = False,
     ) -> dict[str, Any]: ...
 
 def create_detector(

@@ -149,7 +149,7 @@ fn bench_full_detect_640x480(bencher: divan::Bencher) {
     let mut detector = Detector::new();
 
     bencher.bench_local(move || {
-        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast);
+        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast, false);
     });
 }
 
@@ -163,7 +163,7 @@ fn bench_mixed_scene_multiple_tags(bencher: divan::Bencher) {
         .with_noise(2.0)
         .with_blur(0.5);
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     builder.add_random_tag(&mut rng, TagFamily::AprilTag36h11, (50.0, 100.0));
     builder.add_random_tag(&mut rng, TagFamily::AprilTag36h11, (80.0, 120.0));
@@ -181,7 +181,7 @@ fn bench_mixed_scene_multiple_tags(bencher: divan::Bencher) {
     ]);
 
     bencher.bench_local(move || {
-        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast);
+        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast, false);
     });
 }
 
@@ -195,7 +195,7 @@ fn bench_dense_scene_20_tags(bencher: divan::Bencher) {
         .with_background(100)
         .with_noise(1.0);
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     for _ in 0..20 {
         builder.add_random_tag(&mut rng, TagFamily::AprilTag36h11, (40.0, 60.0));
     }
@@ -207,7 +207,7 @@ fn bench_dense_scene_20_tags(bencher: divan::Bencher) {
     detector.set_families(&[TagFamily::AprilTag36h11]);
 
     bencher.bench_local(move || {
-        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast);
+        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast, false);
     });
 }
 
@@ -219,7 +219,7 @@ fn bench_noisy_scene(bencher: divan::Bencher) {
 
     let mut builder = SceneBuilder::new(width, height).with_noise(10.0);
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     builder.add_random_tag(&mut rng, TagFamily::ArUco4x4_50, (100.0, 150.0));
 
     let (data, _placements) = builder.build();
@@ -229,6 +229,6 @@ fn bench_noisy_scene(bencher: divan::Bencher) {
     detector.set_families(&[TagFamily::ArUco4x4_50]);
 
     bencher.bench_local(move || {
-        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast);
+        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast, false);
     });
 }

@@ -1,4 +1,3 @@
-use rand::prelude::*;
 use rand_distr::{Distribution, Normal};
 
 /// Generate a synthetic image containing a single AprilTag or ArUco tag.
@@ -77,7 +76,7 @@ pub fn generate_synthetic_test_image(
     }
 
     if noise_sigma > 0.0 {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let normal = Normal::new(0.0, f64::from(noise_sigma)).expect("Invalid noise params");
 
         for pixel in &mut data {
