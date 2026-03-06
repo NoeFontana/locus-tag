@@ -85,6 +85,11 @@ impl SceneBuilder {
     }
 
     /// Add a random tag from a family within a size range, with overlap prevention.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the size range is invalid (min_s >= max_s) or if the scene is too small
+    /// for the specified size and margin.
     pub fn add_random_tag<R: rand::Rng + ?Sized>(
         &mut self,
         rng: &mut R,
@@ -93,7 +98,9 @@ impl SceneBuilder {
     ) -> bool {
         for _ in 0..100 {
             let (min_s, max_s) = size_range;
-            let size = Uniform::new(min_s, max_s).unwrap().sample(rng);
+            let size = Uniform::new(min_s, max_s)
+                .expect("Invalid size range")
+                .sample(rng);
             let half_diag = size * std::f64::consts::FRAC_1_SQRT_2 + 2.0; // Half diagonal + small margin
             // Ensure some margin from edges
             let margin = 10.0;
@@ -103,19 +110,21 @@ impl SceneBuilder {
             }
 
             let center_x = Uniform::new(half_diag + margin, self.width as f64 - half_diag - margin)
-                .unwrap()
+                .expect("Scene too small for tag and margin")
                 .sample(rng);
             let center_y =
                 Uniform::new(half_diag + margin, self.height as f64 - half_diag - margin)
-                    .unwrap()
+                    .expect("Scene too small for tag and margin")
                     .sample(rng);
             let rotation_rad = Uniform::new(0.0, 2.0 * std::f64::consts::PI)
-                .unwrap()
+                .expect("Invalid rotation range")
                 .sample(rng);
 
             let dict = get_dictionary(family);
 
-            let id = Uniform::new(0, dict.len() as u32).unwrap().sample(rng);
+            let id = Uniform::new(0, dict.len() as u32)
+                .expect("Invalid ID range")
+                .sample(rng);
 
             let placement = TagPlacement {
                 family,
