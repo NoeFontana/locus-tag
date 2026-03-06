@@ -119,29 +119,11 @@ fn draw_cell(
     }
 }
 
-/// Compute mean Euclidean distance between detected and ground truth corners.
-/// Handles 4 rotations to find the minimum error.
+/// Compute RMSE between detected and ground truth corners.
+/// Use this when comparing against ground truth datasets with known corner ordering conventions.
 #[must_use]
 pub fn compute_corner_error(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 4]) -> f64 {
-    let mut min_error = f64::MAX;
-
-    // Try all 4 rotations
-    for rot in 0..4 {
-        let mut sum_dist = 0.0;
-        for i in 0..4 {
-            let d = &detected[(i + rot) % 4];
-            let g = &ground_truth[i];
-            let dx = d[0] - g[0];
-            let dy = d[1] - g[1];
-            sum_dist += (dx * dx + dy * dy).sqrt();
-        }
-        let avg_dist = sum_dist / 4.0;
-        if avg_dist < min_error {
-            min_error = avg_dist;
-        }
-    }
-
-    min_error
+    compute_rmse(detected, ground_truth)
 }
 
 /// Compute RMSE corner error between detected and ground truth corners.

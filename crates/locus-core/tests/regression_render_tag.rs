@@ -42,6 +42,7 @@ impl ConfigPreset {
         match self {
             Self::PlainBoard => DetectorConfig::builder()
                 .refinement_mode(locus_core::config::CornerRefinementMode::Erf)
+                .decoder_min_contrast(15.0)
                 .build(),
         }
     }
@@ -212,7 +213,7 @@ impl RegressionHarness {
 
                     if dist_sq < 50.0 * 50.0 {
                         image_rmse_sum +=
-                            locus_core::test_utils::compute_rmse(&det_corners_f64, gt_corners);
+                            locus_core::test_utils::compute_corner_error(&det_corners_f64, gt_corners);
                         match_count += 1;
                         found_ids.insert(det_id);
                     }
