@@ -24,7 +24,7 @@
     - [x] Update `tests/regression_render_tag.rs` calls to `init()` with an appropriate `test_id`.
 - [x] Task: Conductor - User Manual Verification 'Wire Regression Suites' (Protocol in workflow.md) cdd8832
 
-## Phase 4: Document CI Matrix Strategy
-- [ ] Task: Documentation Update
-    - [ ] Update `docs/benchmarking.md` to include the Parallel Matrix Workflow instructions using `TELEMETRY_MODE`.
-- [ ] Task: Conductor - User Manual Verification 'Document CI Matrix Strategy' (Protocol in workflow.md)
+## Phase 4: Document CI Matrix Strategy [checkpoint: c704371]
+- [x] Task: Documentation Update c704371
+    - [x] Update `docs/benchmarking.md` to include the Parallel Matrix Workflow instructions using `TELEMETRY_MODE`.
+- [x] Task: Conductor - User Manual Verification 'Document CI Matrix Strategy' (Protocol in workflow.md) c704371
