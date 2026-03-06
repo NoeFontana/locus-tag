@@ -20,6 +20,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   UV_SYSTEM_PYTHON: 0 # Ensure uv uses its own managed Python
+  TRACY_NO_INVARIANT_CHECK: 1 # Avoid Tracy initialization failure in CI
 
 jobs:
   validate-project:
@@ -100,19 +101,23 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo nextest run --all-features 2>&1 | tee test-rust.log
+          # Exclude heavy regression tests from standard debug CI
+          cargo nextest run --all-features -E 'not(test(regression_icra2020))' 2>&1 | tee test-rust.log
 
       - name: Run Doc Tests
         shell: bash
         run: |
           set -o pipefail
-          cargo test --doc 2>&1 | tee test-rust-doc.log
+          cargo test --doc --all-features 2>&1 | tee test-rust-doc.log
 
       - name: Verify Snapshot Parity
         shell: bash
         run: |
           set -o pipefail
-          cargo insta test --all-features --check 2>&1 | tee test-rust-insta.log
+          # Verify ALL snapshots in release mode.
+          # Regression tests that require external data will be skipped automatically if data is missing,
+          # while regression_fixtures (which uses committed data) will be verified.
+          cargo insta test --release --all-features --features bench-internals --check 2>&1 | tee test-rust-insta.log
 
       - name: Upload Logs on Failure
         if: failure()

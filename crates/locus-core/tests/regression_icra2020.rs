@@ -18,7 +18,7 @@
     clippy::panic,
     unused_imports
 )]
-use locus_core::{DetectOptions, Detector, DetectorConfig, ImageView, TagFamily};
+use locus_core::{DetectOptions, DetectorConfig, TagFamily};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
@@ -160,6 +160,7 @@ impl RegressionHarness {
 
         #[cfg(not(debug_assertions))]
         {
+            use locus_core::{Detector, ImageView};
             let mut detector = Detector::with_config(self.config);
             let mut results = BTreeMap::new();
 
