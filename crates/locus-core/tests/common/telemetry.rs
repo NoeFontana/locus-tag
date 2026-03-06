@@ -5,6 +5,7 @@ use tracing_subscriber::{layer::SubscriberExt, Registry};
 /// Represents the active guard. If None, telemetry is not writing to file.
 pub struct TelemetryGuard {
     _worker: Option<tracing_appender::non_blocking::WorkerGuard>,
+    _default_guard: Option<tracing::subscriber::DefaultGuard>,
 }
 
 pub fn init(test_id: &str) -> TelemetryGuard {
@@ -25,17 +26,18 @@ pub fn init(test_id: &str) -> TelemetryGuard {
             .with_writer(non_blocking);
             
         let subscriber = Registry::default().with(json_layer);
-        let _ = tracing::subscriber::set_global_default(subscriber);
+        let default_guard = tracing::subscriber::set_default(subscriber);
 
-        TelemetryGuard { _worker: Some(guard) }
+        TelemetryGuard { _worker: Some(guard), _default_guard: Some(default_guard) }
     } else if mode == "tracy" {
         #[cfg(feature = "tracy")]
         {
             let subscriber = Registry::default().with(tracing_tracy::TracyLayer::default());
-            let _ = tracing::subscriber::set_global_default(subscriber);
+            let default_guard = tracing::subscriber::set_default(subscriber);
+            return TelemetryGuard { _worker: None, _default_guard: Some(default_guard) };
         }
-        TelemetryGuard { _worker: None }
+        TelemetryGuard { _worker: None, _default_guard: None }
     } else {
-        TelemetryGuard { _worker: None }
+        TelemetryGuard { _worker: None, _default_guard: None }
     }
 }
