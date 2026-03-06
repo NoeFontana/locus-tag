@@ -55,6 +55,44 @@ cargo bench
 cargo bench --bench real_data_bench
 ```
 
+### Mutually Exclusive Telemetry Matrix
+Locus implements a zero-cost, mutually exclusive telemetry architecture for its regression tests to avoid the "Observer Effect". You cannot simultaneously emit structured JSON logs and capture high-fidelity Tracy profiles without the JSON serialization skewing the nanosecond timings. 
+
+To resolve this, we decouple the profilers at the CI level using `TELEMETRY_MODE`.
+
+#### Human Mode (Tracy)
+Captures pristine binary traces for GUI analysis.
+```bash
+# Tracy client is assumed to be running or capturing headlessly
+TELEMETRY_MODE=tracy cargo test --release --test regression_icra2020 --features tracy
+```
+
+#### Agent/CI Mode (JSON)
+Dumps structured pipeline timings to `target/profiling/*_events.json` for AI analysis and automated regression tracking.
+```bash
+TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features locus-core/bench-internals
+```
+
+#### CI Implementation (GitHub Actions)
+In GitHub Actions, utilize a build matrix to run these jobs in parallel, entirely isolated environments:
+```yaml
+jobs:
+  telemetry:
+    strategy:
+      matrix:
+        mode: [tracy, json]
+    steps:
+      - run: |
+          if [ "${{ matrix.mode }}" == "tracy" ]; then
+            tracy-capture -o out.tracy &
+            TELEMETRY_MODE=tracy cargo test --release --test regression_icra2020 --features tracy
+            # Upload out.tracy as artifact
+          else
+            TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features locus-core/bench-internals
+            # Upload target/profiling/*.json as artifact
+          fi
+```
+
 ---
 
 ## Python Benchmarking CLI
