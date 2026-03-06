@@ -8,7 +8,7 @@
 
 use crate::config::TagFamily;
 use crate::dictionaries::get_dictionary;
-use rand::Rng;
+use rand::distr::{Distribution, Uniform};
 
 /// A placement of a tag in a scene.
 #[derive(Debug, Clone)]
@@ -85,7 +85,7 @@ impl SceneBuilder {
     }
 
     /// Add a random tag from a family within a size range, with overlap prevention.
-    pub fn add_random_tag<R: Rng>(
+    pub fn add_random_tag<R: rand::Rng + ?Sized>(
         &mut self,
         rng: &mut R,
         family: TagFamily,
@@ -93,7 +93,7 @@ impl SceneBuilder {
     ) -> bool {
         for _ in 0..100 {
             let (min_s, max_s) = size_range;
-            let size = rng.gen_range(min_s..max_s);
+            let size = Uniform::new(min_s, max_s).unwrap().sample(rng);
             let half_diag = size * std::f64::consts::FRAC_1_SQRT_2 + 2.0; // Half diagonal + small margin
             // Ensure some margin from edges
             let margin = 10.0;
@@ -102,15 +102,20 @@ impl SceneBuilder {
                 continue;
             }
 
-            let center_x =
-                rng.gen_range(half_diag + margin..self.width as f64 - half_diag - margin);
+            let center_x = Uniform::new(half_diag + margin, self.width as f64 - half_diag - margin)
+                .unwrap()
+                .sample(rng);
             let center_y =
-                rng.gen_range(half_diag + margin..self.height as f64 - half_diag - margin);
-            let rotation_rad = rng.gen_range(0.0..2.0 * std::f64::consts::PI);
+                Uniform::new(half_diag + margin, self.height as f64 - half_diag - margin)
+                    .unwrap()
+                    .sample(rng);
+            let rotation_rad = Uniform::new(0.0, 2.0 * std::f64::consts::PI)
+                .unwrap()
+                .sample(rng);
 
             let dict = get_dictionary(family);
 
-            let id = rng.gen_range(0..dict.len() as u32);
+            let id = Uniform::new(0, dict.len() as u32).unwrap().sample(rng);
 
             let placement = TagPlacement {
                 family,
@@ -137,9 +142,8 @@ impl SceneBuilder {
         }
 
         if self.noise_sigma > 0.0 {
-            let mut rng = rand::thread_rng();
             for p in &mut data {
-                let noise = rng.gen_range(-self.noise_sigma..self.noise_sigma);
+                let noise = rand::random_range(-self.noise_sigma..self.noise_sigma);
                 *p = (*p as f64 + noise).clamp(0.0, 255.0) as u8;
             }
         }

@@ -7,7 +7,9 @@
 )]
 
 use locus_core::ImageView;
-use numpy::{PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
+use numpy::{
+    PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods,
+};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -16,7 +18,7 @@ use pyo3::types::PyDict;
 // Enums
 // ============================================================================
 
-#[pyclass(eq, eq_int)]
+#[pyclass(eq, eq_int, skip_from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TagFamily {
     AprilTag36h11 = 0,
@@ -36,7 +38,7 @@ impl From<TagFamily> for locus_core::TagFamily {
     }
 }
 
-#[pyclass(eq, eq_int)]
+#[pyclass(eq, eq_int, skip_from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SegmentationConnectivity {
     Four = 0,
@@ -52,7 +54,7 @@ impl From<SegmentationConnectivity> for locus_core::config::SegmentationConnecti
     }
 }
 
-#[pyclass(eq, eq_int)]
+#[pyclass(eq, eq_int, skip_from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CornerRefinementMode {
     None = 0,
@@ -72,7 +74,7 @@ impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
     }
 }
 
-#[pyclass(eq, eq_int)]
+#[pyclass(eq, eq_int, skip_from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DecodeMode {
     Hard = 0,
@@ -88,7 +90,7 @@ impl From<DecodeMode> for locus_core::config::DecodeMode {
     }
 }
 
-#[pyclass(eq, eq_int)]
+#[pyclass(eq, eq_int, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PoseEstimationMode {
     Fast = 0,
@@ -108,7 +110,7 @@ impl From<PoseEstimationMode> for locus_core::config::PoseEstimationMode {
 // Structs
 // ============================================================================
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Copy)]
 pub struct CameraIntrinsics {
     #[pyo3(get, set)]
@@ -135,7 +137,7 @@ impl From<CameraIntrinsics> for locus_core::CameraIntrinsics {
     }
 }
 
-#[pyclass]
+#[pyclass(skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyPose {
     #[pyo3(get)]
@@ -159,22 +161,22 @@ impl Detector {
     #[pyo3(signature = (img, intrinsics=None, tag_size=None, pose_estimation_mode=PoseEstimationMode::Fast, debug_telemetry=false))]
     #[allow(clippy::needless_pass_by_value)]
     #[allow(clippy::too_many_lines)]
-    fn detect(
+    fn detect<'py>(
         &mut self,
-        py: Python<'_>,
+        py: Python<'py>,
         img: PyReadonlyArray2<'_, u8>,
         intrinsics: Option<CameraIntrinsics>,
         tag_size: Option<f64>,
         pose_estimation_mode: PoseEstimationMode,
         debug_telemetry: bool,
-    ) -> PyResult<PyObject> {
+    ) -> Result<Bound<'py, PyDict>, PyErr> {
         let view = prepare_image_view(&img)?;
 
         let core_intrinsics = intrinsics.map(locus_core::CameraIntrinsics::from);
         let core_pose_mode = locus_core::config::PoseEstimationMode::from(pose_estimation_mode);
 
         // 1. Run core pipeline
-        let detections = py.allow_threads(|| {
+        let detections = py.detach(|| {
             self.inner.detect(
                 &view,
                 core_intrinsics.as_ref(),
@@ -186,10 +188,10 @@ impl Detector {
 
         let n = detections.len();
 
-        // Allocate NumPy arrays
-        let ids_arr = PyArray1::<i32>::zeros(py, [n], false);
-        let corners_arr = PyArray3::<f32>::zeros(py, [n, 4, 2], false);
-        let error_rates_arr = PyArray1::<f32>::zeros(py, [n], false);
+        // Allocate NumPy arrays (Unsafe because memory is uninitialized)
+        let ids_arr = unsafe { PyArray1::<i32>::new(py, [n], false) };
+        let corners_arr = unsafe { PyArray3::<f32>::new(py, [n, 4, 2], false) };
+        let error_rates_arr = unsafe { PyArray1::<f32>::new(py, [n], false) };
 
         // Perform memory mapping
         unsafe {
@@ -199,7 +201,7 @@ impl Detector {
             let corners_slice = corners_arr
                 .as_slice_mut()
                 .expect("failed to get mutable slice for corners");
-            let err_slice = error_rates_arr
+            let error_rates_slice = error_rates_arr
                 .as_slice_mut()
                 .expect("failed to get mutable slice for error_rates");
 
@@ -213,7 +215,10 @@ impl Detector {
                 detections.corners.as_ptr().cast::<f32>(),
                 n * 8,
             ));
-            err_slice.copy_from_slice(detections.error_rates);
+            error_rates_slice.copy_from_slice(std::slice::from_raw_parts(
+                detections.error_rates.as_ptr(),
+                n,
+            ));
         }
 
         let dict = PyDict::new(py);
@@ -223,12 +228,13 @@ impl Detector {
 
         // Poses: Vectorized (N, 7) layout: [tx, ty, tz, qx, qy, qz, qw]
         if intrinsics.is_some() && tag_size.is_some() {
-            let poses_arr = PyArray2::<f32>::zeros(py, [n, 7], false);
+            let poses_arr = unsafe { PyArray2::<f32>::new(py, [n, 7], false) };
             unsafe {
                 let poses_slice = poses_arr
                     .as_slice_mut()
-                    .expect("failed to get mutable slice for poses");
+                    .expect("failed to get poses slice");
 
+                // Optmized block copy for Pose6D (ignoring f32 padding)
                 for (i, pose) in detections.poses.iter().enumerate() {
                     poses_slice[i * 7..(i + 1) * 7].copy_from_slice(&pose.data);
                 }
@@ -244,7 +250,9 @@ impl Detector {
             unsafe {
                 let binarized_arr =
                     PyArray2::<u8>::new(py, [telemetry.height, telemetry.width], false);
-                let dest_slice = binarized_arr.as_slice_mut().expect("Failed to get PyArray slice");
+                let dest_slice = binarized_arr
+                    .as_slice_mut()
+                    .expect("Failed to get PyArray slice");
                 let src_slice = std::slice::from_raw_parts(
                     telemetry.binarized_ptr,
                     telemetry.height * telemetry.stride,
@@ -272,7 +280,9 @@ impl Detector {
 
                 let threshold_arr =
                     PyArray2::<u8>::new(py, [telemetry.height, telemetry.width], false);
-                let dest_slice = threshold_arr.as_slice_mut().expect("Failed to get PyArray slice");
+                let dest_slice = threshold_arr
+                    .as_slice_mut()
+                    .expect("Failed to get PyArray slice");
                 let src_slice = std::slice::from_raw_parts(
                     telemetry.threshold_map_ptr,
                     telemetry.height * telemetry.stride,
@@ -306,7 +316,7 @@ impl Detector {
             dict.set_item("telemetry", py.None())?;
         }
 
-        Ok(dict.into())
+        Ok(dict)
     }
 }
 
