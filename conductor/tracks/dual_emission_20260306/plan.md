@@ -36,7 +36,7 @@
     - [x] Run `cargo test --test regression_icra2020` and verify `target/profiling/regression_events.json` is populated with tracing spans.
 - [x] Task: Conductor - User Manual Verification 'Wire Regression Tests' (Protocol in workflow.md) 4b1ec2d
 
-## Phase 5: Automated Workflow Support
+## Phase 5: Automated Workflow Support [checkpoint: 2dec806]
 - [x] Task: Verify Dual-Emission Output
     - [x] Run a test with `cargo integration-test --features tracy` (or equivalent) while `tracy-capture` is running, to ensure both `regression.tracy` and JSON are correctly generated.
-- [ ] Task: Conductor - User Manual Verification 'Automated Workflow Support' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Automated Workflow Support' (Protocol in workflow.md) 2dec806
