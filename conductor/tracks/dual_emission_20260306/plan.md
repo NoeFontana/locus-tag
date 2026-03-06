@@ -15,7 +15,7 @@
     - [x] Ensure failing test passes.
 - [x] Task: Conductor - User Manual Verification 'Architect Dual-Layer Test Harness' (Protocol in workflow.md) 723b979
 
-## Phase 3: Instrument Core Pipeline
+## Phase 3: Instrument Core Pipeline [checkpoint: c04ae4f]
 - [x] Task: Add Zero-Cost Instrumentation to Pipeline Stages 3a56943
     - [x] Instrument Thresholding functions (`adaptive_threshold_with_map` and related) in `crates/locus-core/src/`.
     - [x] Instrument Segmentation functions (`extract_quads_soa` and related).
@@ -23,7 +23,7 @@
     - [x] Instrument Pose Estimation functions.
 - [x] Task: Verify Zero-Cost Compilation 3a56943
     - [x] Run `cargo check` and `cargo test` to ensure macros compile correctly without errors.
-- [ ] Task: Conductor - User Manual Verification 'Instrument Core Pipeline' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Instrument Core Pipeline' (Protocol in workflow.md) c04ae4f
 
 ## Phase 4: Wire Regression Tests
 - [ ] Task: Integrate Telemetry into Integration Tests
