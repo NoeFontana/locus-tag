@@ -12,7 +12,7 @@ fn test_telemetry_initialization_creates_log_file() {
     // but without TELEMETRY_MODE=json, it defaults to silent mode and fails.
     #[allow(unsafe_code)]
     unsafe {
-        env::set_var("TELEMETRY_MODE", "json")
+        env::set_var("TELEMETRY_MODE", "json");
     };
 
     // This should initialize the telemetry and return a guard
