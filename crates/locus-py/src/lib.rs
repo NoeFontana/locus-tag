@@ -230,9 +230,7 @@ impl Detector {
         if intrinsics.is_some() && tag_size.is_some() {
             let poses_arr = unsafe { PyArray2::<f32>::new(py, [n, 7], false) };
             unsafe {
-                let poses_slice = poses_arr
-                    .as_slice_mut()
-                    .expect("failed to get poses slice");
+                let poses_slice = poses_arr.as_slice_mut().expect("failed to get poses slice");
 
                 // Optmized block copy for Pose6D (ignoring f32 padding)
                 for (i, pose) in detections.poses.iter().enumerate() {
