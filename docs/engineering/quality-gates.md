@@ -47,7 +47,7 @@ cargo bench --bench comprehensive -- "bench_thresholding"
 ### System-Level Verification
 ```bash
 # 1. Forward Evaluation (Accuracy & Yield)
-uv run --group bench python scripts/locus_bench.py run real --compare
+uv run --group bench tools/cli.py bench real --compare
 
 # 2. Regression Testing (Sequential for accurate latency)
 cargo test --release --test regression_icra2020 -- --test-threads=1

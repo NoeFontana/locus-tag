@@ -8,7 +8,7 @@
 
 ## Pipeline Latency Breakdown (SoA)
 
-The following data was collected using `scripts/locus_bench.py profile` with 50 tags and 50 iterations, compared against the [2026-03-02 Baseline](./baseline_20260302.md).
+The following data was collected using `tools/cli.py bench profile` with 50 tags and 50 iterations, compared against the [2026-03-02 Baseline](./baseline_20260302.md).
 
 | Stage | Baseline (ms) | SoA (ms) | Speedup | Notes |
 | :--- | :---: | :---: | :---: | :--- |

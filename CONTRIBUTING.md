@@ -137,5 +137,5 @@ We use `uv` and PEP 735 dependency groups to isolate development tools. When run
 
 **Example:** Running the benchmark script
 ```bash
-uv run --group bench python scripts/locus_bench.py
+uv run --group bench tools/cli.py bench
 ```
