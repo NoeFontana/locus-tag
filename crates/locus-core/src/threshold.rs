@@ -926,6 +926,7 @@ pub fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
+#[tracing::instrument(skip_all, name = "pipeline::threshold_integral")]
 pub fn adaptive_threshold_integral(
     img: &ImageView,
     integral: &[u64],
@@ -1067,6 +1068,7 @@ pub(crate) fn apply_adaptive_threshold_with_params(
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
+#[tracing::instrument(skip_all, name = "pipeline::threshold_gradient_window")]
 pub fn adaptive_threshold_gradient_window(
     img: &ImageView,
     gradient_map: &[u8],
