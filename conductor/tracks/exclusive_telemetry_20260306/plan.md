@@ -17,12 +17,12 @@
     - [x] Update `tests/test_exclusive_telemetry.rs` to verify unique file names based on `test_id`.
 - [x] Task: Conductor - User Manual Verification 'Implement Context-Aware Output Paths' (Protocol in workflow.md) ab517c8
 
-## Phase 3: Wire Regression Suites
+## Phase 3: Wire Regression Suites [checkpoint: cdd8832]
 - [x] Task: Update ICRA 2020 Regression Suite 89d9b52
     - [x] Update `tests/regression_icra2020.rs` calls to `init()` with an appropriate `test_id` (e.g., "regression_icra2020").
 - [x] Task: Update Render Tag Regression Suite 89d9b52
     - [x] Update `tests/regression_render_tag.rs` calls to `init()` with an appropriate `test_id`.
-- [ ] Task: Conductor - User Manual Verification 'Wire Regression Suites' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Wire Regression Suites' (Protocol in workflow.md) cdd8832
 
 ## Phase 4: Document CI Matrix Strategy
 - [ ] Task: Documentation Update
