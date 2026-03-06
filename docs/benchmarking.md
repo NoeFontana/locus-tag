@@ -25,7 +25,7 @@ The regression suite validates that `Locus` matches or exceeds ground truth for 
    cargo test --release --test regression_icra2020 -- --test-threads=1
    ```
    > [!IMPORTANT]
-   > `--release` is mandatory for performance benchmarking.
+   > `--release` is mandatory for running `regression_icra2020` tests. Running in debug mode is blocked and will panic.
 
 ### Hub Regression Suite (Hugging Face)
 Locus supports running regressions against large-scale datasets hosted on the Hugging Face Hub (e.g., `NoeFontana/locus-tag-bench`).
