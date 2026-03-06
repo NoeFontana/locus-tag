@@ -1,0 +1,8 @@
+{
+  "track_id": "exclusive_telemetry_20260306",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-03-06T12:00:00Z",
+  "updated_at": "2026-03-06T12:00:00Z",
+  "description": "Implement mutually exclusive telemetry modes (JSON vs Tracy) to ensure performance profiling accuracy and support parallel CI matrix execution."
+}
