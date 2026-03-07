@@ -8,11 +8,11 @@
 - [x] Task: Conductor - User Manual Verification 'Setup and Architecture' (Protocol in workflow.md) 1cc875c
 
 ## Phase 2: Domain-Specific Modules (Frontend Zone)
-- [ ] Task: Implement `pipeline.rs` tests
+- [x] Task: Implement `pipeline.rs` tests 505ae48
     - [ ] Write failing unit tests for end-to-end fuzzing (feeding pure noise).
     - [ ] Map property testing regressions to `proptest-regressions/pipeline.txt`.
     - [ ] Implement robust handling to make tests pass.
-- [ ] Task: Implement `threshold.rs` tests
+- [~] Task: Implement `threshold.rs` tests
     - [ ] Write failing unit tests for SoA memory bounds and adaptive threshold limits.
     - [ ] Map property testing regressions to `proptest-regressions/threshold.txt`.
     - [ ] Implement robust handling to make tests pass.
