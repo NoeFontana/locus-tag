@@ -1,7 +1,7 @@
 # Implementation Plan: Decentralized Robustness Testing Architecture
 
 ## Phase 1: Setup and Architecture
-- [ ] Task: Establish directories and remove monolith
+- [x] Task: Establish directories and remove monolith 190daa0
     - [ ] Remove `crates/locus-core/tests/robustness_testing.rs` stub.
     - [ ] Create `crates/locus-core/tests/robustness/` directory.
     - [ ] Archive old regression seeds in `crates/locus-core/proptest-regressions/`.
