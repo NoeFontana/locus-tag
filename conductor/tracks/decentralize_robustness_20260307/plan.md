@@ -30,11 +30,11 @@
 - [x] Task: Conductor - User Manual Verification 'Domain-Specific Modules (Backend Zone)' (Protocol in workflow.md) 8ddeea3
 
 ## Phase 4: Additional Blast Zones
-- [~] Task: Implement `concurrency.rs` tests
+- [x] Task: Implement `concurrency.rs` tests 5367998
     - [ ] Write failing unit tests for thread safety and race conditions.
     - [ ] Map property testing regressions to `proptest-regressions/concurrency.txt`.
     - [ ] Implement robust handling to make tests pass.
-- [ ] Task: Implement `memory.rs` tests
+- [~] Task: Implement `memory.rs` tests
     - [ ] Write failing unit tests for memory bounds and OOM handling.
     - [ ] Map property testing regressions to `proptest-regressions/memory.txt`.
     - [ ] Implement robust handling to make tests pass.
