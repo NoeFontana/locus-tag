@@ -7,19 +7,19 @@
     - [ ] Archive old regression seeds in `crates/locus-core/proptest-regressions/`.
 - [x] Task: Conductor - User Manual Verification 'Setup and Architecture' (Protocol in workflow.md) 1cc875c
 
-## Phase 2: Domain-Specific Modules (Frontend Zone)
+## Phase 2: Domain-Specific Modules (Frontend Zone) [checkpoint: 60e6ed0]
 - [x] Task: Implement `pipeline.rs` tests 505ae48
     - [ ] Write failing unit tests for end-to-end fuzzing (feeding pure noise).
     - [ ] Map property testing regressions to `proptest-regressions/pipeline.txt`.
     - [ ] Implement robust handling to make tests pass.
-- [~] Task: Implement `threshold.rs` tests
+- [x] Task: Implement `threshold.rs` tests 66942c5
     - [ ] Write failing unit tests for SoA memory bounds and adaptive threshold limits.
     - [ ] Map property testing regressions to `proptest-regressions/threshold.txt`.
     - [ ] Implement robust handling to make tests pass.
-- [ ] Task: Conductor - User Manual Verification 'Domain-Specific Modules (Frontend Zone)' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Domain-Specific Modules (Frontend Zone)' (Protocol in workflow.md) 60e6ed0
 
 ## Phase 3: Domain-Specific Modules (Backend Zone)
-- [ ] Task: Implement `geometry.rs` tests
+- [~] Task: Implement `geometry.rs` tests
     - [ ] Write failing unit tests for Homography and PnP solvers (degenerate quads).
     - [ ] Map property testing regressions to `proptest-regressions/geometry.txt`.
     - [ ] Implement robust handling to make tests pass.
