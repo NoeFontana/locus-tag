@@ -1,5 +1,4 @@
-use std::path::{Path, PathBuf};
-use image::GenericImageView;
+use std::path::PathBuf;
 use locus_core::batch::{DetectionBatch, CandidateState, Point2f};
 
 pub struct BenchDataset {
@@ -44,6 +43,38 @@ impl BenchDataset {
     /// Convenience loader for the first 'forward' frame.
     pub fn icra_forward_0() -> Self {
         Self::load_icra_frame("forward", 0)
+    }
+
+    /// Loads, resizes, and returns an ICRA frame for multi-resolution benchmarking.
+    /// Uses Bicubic (CatmullRom) interpolation for high-fidelity frequency content.
+    pub fn load_and_resize_icra_frame(subset: &str, frame_idx: usize, width: usize, height: usize) -> Self {
+        let filename = format!("{:04}.png", frame_idx);
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("../../tests/data/icra2020");
+        path.push(subset);
+        path.push("pure_tags_images");
+        path.push(&filename);
+
+        if !path.exists() {
+            panic!(
+                "Benchmark dataset frame not found at {:?}. \
+                 Ensure the ICRA 2020 dataset is available in tests/data/.",
+                path
+            );
+        }
+
+        let img = image::open(&path)
+            .expect("Failed to open ICRA image")
+            .to_luma8();
+        
+        // Use CatmullRom (Bicubic) for high-quality resizing
+        let resized = image::imageops::resize(&img, width as u32, height as u32, image::imageops::FilterType::CatmullRom);
+
+        Self {
+            raw_data: resized.into_raw(),
+            width,
+            height,
+        }
     }
 
     /// Generates a realistic DetectionBatch for late-stage benchmarking.

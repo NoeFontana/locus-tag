@@ -134,6 +134,66 @@ fn bench_quad_extraction_640x480(bencher: divan::Bencher) {
 mod utils;
 use utils::BenchDataset;
 
+const RESOLUTIONS: &[(usize, usize)] = &[
+    (640, 480),   // VGA
+    (1280, 720),  // 720p
+    (1920, 1080), // 1080p
+    (3840, 2160), // 4K
+];
+
+#[bench(args = RESOLUTIONS)]
+fn bench_icra_thresholding_resolutions(bencher: divan::Bencher, &(width, height): &(usize, usize)) {
+    // SETUP PHASE (Not timed)
+    let dataset = BenchDataset::load_and_resize_icra_frame("forward", 0, width, height);
+    let img = ImageView::new(&dataset.raw_data, width, height, width).unwrap();
+    let engine = ThresholdEngine::new();
+    let mut output = vec![0u8; width * height];
+    let mut arena = Bump::new();
+
+    // MEASUREMENT PHASE (Timed)
+    bencher.bench_local(move || {
+        arena.reset();
+        let stats = engine.compute_tile_stats(&arena, &img);
+        engine.apply_threshold(&arena, &img, &stats, &mut output);
+    });
+}
+
+#[bench(args = RESOLUTIONS)]
+fn bench_icra_segmentation_resolutions(bencher: divan::Bencher, &(width, height): &(usize, usize)) {
+    // SETUP PHASE (Not timed)
+    let dataset = BenchDataset::load_and_resize_icra_frame("forward", 0, width, height);
+    let img = ImageView::new(&dataset.raw_data, width, height, width).unwrap();
+    let engine = ThresholdEngine::new();
+    let mut binarized = vec![0u8; width * height];
+    let mut threshold_map = vec![0u8; width * height];
+    let setup_arena = Bump::new();
+
+    let stats = engine.compute_tile_stats(&setup_arena, &img);
+    engine.apply_threshold_with_map(
+        &setup_arena,
+        &img,
+        &stats,
+        &mut binarized,
+        &mut threshold_map,
+    );
+
+    // MEASUREMENT PHASE (Timed)
+    bencher.bench_local(move || {
+        let arena = Bump::new();
+        let _label_result = locus_core::bench_api::label_components_threshold_model(
+            &arena,
+            &dataset.raw_data,
+            width,
+            &threshold_map,
+            width,
+            height,
+            true,
+            16,
+            1,
+        );
+    });
+}
+
 #[bench]
 fn bench_icra_full_pipeline(bencher: divan::Bencher) {
     let dataset = BenchDataset::icra_forward_0();
@@ -143,20 +203,6 @@ fn bench_icra_full_pipeline(bencher: divan::Bencher) {
 
     bencher.bench_local(move || {
         let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast, false);
-    });
-}
-
-#[bench]
-fn bench_icra_thresholding(bencher: divan::Bencher) {
-    let dataset = BenchDataset::icra_forward_0();
-    let img = ImageView::new(&dataset.raw_data, dataset.width, dataset.height, dataset.width).unwrap();
-    let engine = ThresholdEngine::new();
-    let mut output = vec![0u8; dataset.width * dataset.height];
-    let arena = Bump::new();
-
-    bencher.bench_local(move || {
-        let stats = engine.compute_tile_stats(&arena, &img);
-        engine.apply_threshold(&arena, &img, &stats, &mut output);
     });
 }
 
