@@ -18,19 +18,19 @@
     - [ ] Implement robust handling to make tests pass.
 - [x] Task: Conductor - User Manual Verification 'Domain-Specific Modules (Frontend Zone)' (Protocol in workflow.md) 60e6ed0
 
-## Phase 3: Domain-Specific Modules (Backend Zone)
+## Phase 3: Domain-Specific Modules (Backend Zone) [checkpoint: 8ddeea3]
 - [x] Task: Implement `geometry.rs` tests acdff88
     - [ ] Write failing unit tests for Homography and PnP solvers (degenerate quads).
     - [ ] Map property testing regressions to `proptest-regressions/geometry.txt`.
     - [ ] Implement robust handling to make tests pass.
-- [~] Task: Implement `decoder.rs` tests
+- [x] Task: Implement `decoder.rs` tests c204928
     - [ ] Write failing unit tests for tag family decoders and bit error correction.
     - [ ] Map property testing regressions to `proptest-regressions/decoder.txt`.
     - [ ] Implement robust handling to make tests pass.
-- [ ] Task: Conductor - User Manual Verification 'Domain-Specific Modules (Backend Zone)' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Domain-Specific Modules (Backend Zone)' (Protocol in workflow.md) 8ddeea3
 
 ## Phase 4: Additional Blast Zones
-- [ ] Task: Implement `concurrency.rs` tests
+- [~] Task: Implement `concurrency.rs` tests
     - [ ] Write failing unit tests for thread safety and race conditions.
     - [ ] Map property testing regressions to `proptest-regressions/concurrency.txt`.
     - [ ] Implement robust handling to make tests pass.
