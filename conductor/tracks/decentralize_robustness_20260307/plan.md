@@ -1,11 +1,11 @@
 # Implementation Plan: Decentralized Robustness Testing Architecture
 
-## Phase 1: Setup and Architecture
+## Phase 1: Setup and Architecture [checkpoint: 1cc875c]
 - [x] Task: Establish directories and remove monolith 190daa0
     - [ ] Remove `crates/locus-core/tests/robustness_testing.rs` stub.
     - [ ] Create `crates/locus-core/tests/robustness/` directory.
     - [ ] Archive old regression seeds in `crates/locus-core/proptest-regressions/`.
-- [ ] Task: Conductor - User Manual Verification 'Setup and Architecture' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Setup and Architecture' (Protocol in workflow.md) 1cc875c
 
 ## Phase 2: Domain-Specific Modules (Frontend Zone)
 - [ ] Task: Implement `pipeline.rs` tests
