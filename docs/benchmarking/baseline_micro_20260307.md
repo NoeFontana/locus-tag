@@ -3,7 +3,7 @@
 Initial baseline for core pipeline stages across multiple resolutions using ICRA 2020 frame gradients.
 
 **Environment:**
-- CPU: [User to fill]
+- CPU: AMD EPYC-Milan Processor
 - OS: Linux
 - Build: `--release` (Profile: bench)
 - Mode: Single-threaded (`--threads 1`)
