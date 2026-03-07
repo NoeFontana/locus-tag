@@ -48,6 +48,6 @@
 - [x] Task: Configure `.config/nextest.toml` 89d2437
     - [ ] Write test to verify nextest behavior (if applicable).
     - [ ] Exclude `tests/robustness/` directory from default execution.
-- [~] Task: Update `.github/workflows/ci.yml`
+- [x] Task: Update `.github/workflows/ci.yml` 85ec956
     - [ ] Implement non-blocking warning check for robustness suite in CI pipeline.
-- [ ] Task: Conductor - User Manual Verification 'CI/CD Quality Gates' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'CI/CD Quality Gates' (Protocol in workflow.md) 85ec956
