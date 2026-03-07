@@ -34,11 +34,11 @@
     - [ ] Write failing unit tests for thread safety and race conditions.
     - [ ] Map property testing regressions to `proptest-regressions/concurrency.txt`.
     - [ ] Implement robust handling to make tests pass.
-- [~] Task: Implement `memory.rs` tests
+- [x] Task: Implement `memory.rs` tests 81d40c9
     - [ ] Write failing unit tests for memory bounds and OOM handling.
     - [ ] Map property testing regressions to `proptest-regressions/memory.txt`.
     - [ ] Implement robust handling to make tests pass.
-- [ ] Task: Implement `api.rs` tests
+- [~] Task: Implement `api.rs` tests
     - [ ] Write failing unit tests for API fuzzing.
     - [ ] Map property testing regressions to `proptest-regressions/api.txt`.
     - [ ] Implement robust handling to make tests pass.
