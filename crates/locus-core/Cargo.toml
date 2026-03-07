@@ -87,6 +87,34 @@ name = "regression_icra2020"
 harness = true
 required-features = ["bench-internals"]
 
+[[test]]
+name = "robustness_pipeline"
+path = "tests/robustness/pipeline.rs"
+
+[[test]]
+name = "robustness_threshold"
+path = "tests/robustness/threshold.rs"
+
+[[test]]
+name = "robustness_geometry"
+path = "tests/robustness/geometry.rs"
+
+[[test]]
+name = "robustness_decoder"
+path = "tests/robustness/decoder.rs"
+
+[[test]]
+name = "robustness_concurrency"
+path = "tests/robustness/concurrency.rs"
+
+[[test]]
+name = "robustness_memory"
+path = "tests/robustness/memory.rs"
+
+[[test]]
+name = "robustness_api"
+path = "tests/robustness/api.rs"
+
 [features]
 default = []
 tracy = ["dep:tracing-tracy"]
