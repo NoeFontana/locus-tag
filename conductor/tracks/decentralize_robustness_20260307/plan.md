@@ -45,9 +45,9 @@
 - [x] Task: Conductor - User Manual Verification 'Additional Blast Zones' (Protocol in workflow.md) 5a04961
 
 ## Phase 5: CI/CD Quality Gates
-- [~] Task: Configure `.config/nextest.toml`
+- [x] Task: Configure `.config/nextest.toml` 89d2437
     - [ ] Write test to verify nextest behavior (if applicable).
     - [ ] Exclude `tests/robustness/` directory from default execution.
-- [ ] Task: Update `.github/workflows/ci.yml`
+- [~] Task: Update `.github/workflows/ci.yml`
     - [ ] Implement non-blocking warning check for robustness suite in CI pipeline.
 - [ ] Task: Conductor - User Manual Verification 'CI/CD Quality Gates' (Protocol in workflow.md)
