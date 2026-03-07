@@ -29,7 +29,7 @@
     - [ ] Implement robust handling to make tests pass.
 - [x] Task: Conductor - User Manual Verification 'Domain-Specific Modules (Backend Zone)' (Protocol in workflow.md) 8ddeea3
 
-## Phase 4: Additional Blast Zones
+## Phase 4: Additional Blast Zones [checkpoint: 5a04961]
 - [x] Task: Implement `concurrency.rs` tests 5367998
     - [ ] Write failing unit tests for thread safety and race conditions.
     - [ ] Map property testing regressions to `proptest-regressions/concurrency.txt`.
@@ -38,14 +38,14 @@
     - [ ] Write failing unit tests for memory bounds and OOM handling.
     - [ ] Map property testing regressions to `proptest-regressions/memory.txt`.
     - [ ] Implement robust handling to make tests pass.
-- [~] Task: Implement `api.rs` tests
+- [x] Task: Implement `api.rs` tests b809d74
     - [ ] Write failing unit tests for API fuzzing.
     - [ ] Map property testing regressions to `proptest-regressions/api.txt`.
     - [ ] Implement robust handling to make tests pass.
-- [ ] Task: Conductor - User Manual Verification 'Additional Blast Zones' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Additional Blast Zones' (Protocol in workflow.md) 5a04961
 
 ## Phase 5: CI/CD Quality Gates
-- [ ] Task: Configure `.config/nextest.toml`
+- [~] Task: Configure `.config/nextest.toml`
     - [ ] Write test to verify nextest behavior (if applicable).
     - [ ] Exclude `tests/robustness/` directory from default execution.
 - [ ] Task: Update `.github/workflows/ci.yml`
