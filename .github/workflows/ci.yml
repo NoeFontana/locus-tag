@@ -228,9 +228,15 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          # Execute only the robustness binaries.
-          # These are excluded from default runs via nextest.toml.
-          cargo nextest run -E 'binary(~robustness)' --profile ci --all-features 2>&1 | tee test-robustness.log
+          # Execute the robustness targets explicitly.
+          # Subdirectory integration tests can be tricky for automated discovery in some environments.
+          cargo test --test robustness_pipeline --all-features
+          cargo test --test robustness_threshold --all-features
+          cargo test --test robustness_geometry --all-features
+          cargo test --test robustness_decoder --all-features
+          cargo test --test robustness_concurrency --all-features
+          cargo test --test robustness_memory --all-features
+          cargo test --test robustness_api --all-features
 
       - name: Upload Logs on Failure
         if: failure()
