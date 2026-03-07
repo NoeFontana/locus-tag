@@ -31,14 +31,20 @@ fn main() {
 #[bench]
 fn bench_segmentation_real_icra_threshold_model(bencher: divan::Bencher) {
     let dataset = BenchDataset::icra_forward_0();
-    let img = ImageView::new(&dataset.raw_data, dataset.width, dataset.height, dataset.width).unwrap();
+    let img = ImageView::new(
+        &dataset.raw_data,
+        dataset.width,
+        dataset.height,
+        dataset.width,
+    )
+    .unwrap();
     let setup_arena = Bump::new();
     let engine = ThresholdEngine::new();
 
     let tile_stats = engine.compute_tile_stats(&setup_arena, &img);
     let mut threshold_map = vec![0u8; dataset.width * dataset.height];
     let mut binarized = vec![0u8; dataset.width * dataset.height];
-    
+
     engine.apply_threshold_with_map(
         &setup_arena,
         &img,

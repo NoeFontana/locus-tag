@@ -38,8 +38,8 @@ impl From<TagFamily> for locus_core::TagFamily {
     }
 }
 
-#[pyclass(eq, eq_int, skip_from_py_object)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[pyclass(eq, eq_int, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum SegmentationConnectivity {
     Four = 0,
     Eight = 1,
@@ -54,8 +54,8 @@ impl From<SegmentationConnectivity> for locus_core::config::SegmentationConnecti
     }
 }
 
-#[pyclass(eq, eq_int, skip_from_py_object)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[pyclass(eq, eq_int, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum CornerRefinementMode {
     None = 0,
     Edge = 1,
@@ -74,8 +74,8 @@ impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
     }
 }
 
-#[pyclass(eq, eq_int, skip_from_py_object)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[pyclass(eq, eq_int, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum DecodeMode {
     Hard = 0,
     Soft = 1,
@@ -147,6 +147,83 @@ pub struct PyPose {
 }
 
 // ============================================================================
+#[pyclass(get_all, set_all, from_py_object)]
+#[derive(Clone, Copy)]
+pub struct PyDetectorConfig {
+    pub threshold_tile_size: usize,
+    pub threshold_min_range: u8,
+    pub enable_bilateral: bool,
+    pub bilateral_sigma_space: f32,
+    pub bilateral_sigma_color: f32,
+    pub enable_sharpening: bool,
+    pub enable_adaptive_window: bool,
+    pub threshold_min_radius: usize,
+    pub threshold_max_radius: usize,
+    pub adaptive_threshold_constant: i16,
+    pub adaptive_threshold_gradient_threshold: u8,
+    pub quad_min_area: u32,
+    pub quad_max_aspect_ratio: f32,
+    pub quad_min_fill_ratio: f32,
+    pub quad_max_fill_ratio: f32,
+    pub quad_min_edge_length: f64,
+    pub quad_min_edge_score: f64,
+    pub subpixel_refinement_sigma: f64,
+    pub segmentation_margin: i16,
+    pub segmentation_connectivity: SegmentationConnectivity,
+    pub upscale_factor: usize,
+    pub decoder_min_contrast: f64,
+    pub refinement_mode: CornerRefinementMode,
+    pub decode_mode: DecodeMode,
+    pub max_hamming_error: u32,
+}
+
+impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
+    fn from(c: locus_core::config::DetectorConfig) -> Self {
+        Self {
+            threshold_tile_size: c.threshold_tile_size,
+            threshold_min_range: c.threshold_min_range,
+            enable_bilateral: c.enable_bilateral,
+            bilateral_sigma_space: c.bilateral_sigma_space,
+            bilateral_sigma_color: c.bilateral_sigma_color,
+            enable_sharpening: c.enable_sharpening,
+            enable_adaptive_window: c.enable_adaptive_window,
+            threshold_min_radius: c.threshold_min_radius,
+            threshold_max_radius: c.threshold_max_radius,
+            adaptive_threshold_constant: c.adaptive_threshold_constant,
+            adaptive_threshold_gradient_threshold: c.adaptive_threshold_gradient_threshold,
+            quad_min_area: c.quad_min_area,
+            quad_max_aspect_ratio: c.quad_max_aspect_ratio,
+            quad_min_fill_ratio: c.quad_min_fill_ratio,
+            quad_max_fill_ratio: c.quad_max_fill_ratio,
+            quad_min_edge_length: c.quad_min_edge_length,
+            quad_min_edge_score: c.quad_min_edge_score,
+            subpixel_refinement_sigma: c.subpixel_refinement_sigma,
+            segmentation_margin: c.segmentation_margin,
+            segmentation_connectivity: match c.segmentation_connectivity {
+                locus_core::config::SegmentationConnectivity::Four => {
+                    SegmentationConnectivity::Four
+                },
+                locus_core::config::SegmentationConnectivity::Eight => {
+                    SegmentationConnectivity::Eight
+                },
+            },
+            upscale_factor: c.upscale_factor,
+            decoder_min_contrast: c.decoder_min_contrast,
+            refinement_mode: match c.refinement_mode {
+                locus_core::config::CornerRefinementMode::None => CornerRefinementMode::None,
+                locus_core::config::CornerRefinementMode::Edge => CornerRefinementMode::Edge,
+                locus_core::config::CornerRefinementMode::GridFit => CornerRefinementMode::GridFit,
+                locus_core::config::CornerRefinementMode::Erf => CornerRefinementMode::Erf,
+            },
+            decode_mode: match c.decode_mode {
+                locus_core::config::DecodeMode::Hard => DecodeMode::Hard,
+                locus_core::config::DecodeMode::Soft => DecodeMode::Soft,
+            },
+            max_hamming_error: c.max_hamming_error,
+        }
+    }
+}
+
 // Detector class
 // ============================================================================
 
@@ -316,6 +393,32 @@ impl Detector {
 
         Ok(dict)
     }
+
+    /// Returns the current detector configuration.
+    fn config(&self) -> PyDetectorConfig {
+        PyDetectorConfig::from(*self.inner.config())
+    }
+
+    /// Update the tag families to be detected.
+    fn set_families(&mut self, families: Vec<i32>) -> PyResult<()> {
+        let mut core_families = Vec::new();
+        for f in families {
+            let family = match f {
+                0 => locus_core::TagFamily::AprilTag36h11,
+                1 => locus_core::TagFamily::AprilTag41h12,
+                2 => locus_core::TagFamily::ArUco4x4_50,
+                3 => locus_core::TagFamily::ArUco4x4_100,
+                _ => {
+                    return Err(PyValueError::new_err(format!(
+                        "Invalid TagFamily value: {f}"
+                    )));
+                },
+            };
+            core_families.push(family);
+        }
+        self.inner.set_families(&core_families);
+        Ok(())
+    }
 }
 
 #[pyfunction]
@@ -346,6 +449,9 @@ fn create_detector(
     }
 
     if let Some(args) = kwargs {
+        if let Some(val) = args.get_item("enable_sharpening")? {
+            builder = builder.with_sharpening(val.extract()?);
+        }
         if let Some(val) = args.get_item("upscale_factor")? {
             builder = builder.with_upscale_factor(val.extract()?);
         }
@@ -450,9 +556,28 @@ fn init_tracy() {
     }
 }
 
+#[pyfunction]
+fn production_config() -> Detector {
+    Detector {
+        inner: Box::new(locus_core::Detector::with_config(
+            locus_core::DetectorConfig::production_default(),
+        )),
+    }
+}
+
+#[pyfunction]
+fn fast_config() -> Detector {
+    Detector {
+        inner: Box::new(locus_core::Detector::with_config(
+            locus_core::DetectorConfig::fast_default(),
+        )),
+    }
+}
+
 #[pymodule]
 fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Detector>()?;
+    m.add_class::<PyDetectorConfig>()?;
     m.add_class::<TagFamily>()?;
     m.add_class::<SegmentationConnectivity>()?;
     m.add_class::<CornerRefinementMode>()?;
@@ -462,6 +587,8 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyPose>()?;
 
     m.add_function(wrap_pyfunction!(create_detector, m)?)?;
+    m.add_function(wrap_pyfunction!(production_config, m)?)?;
+    m.add_function(wrap_pyfunction!(fast_config, m)?)?;
     m.add_function(wrap_pyfunction!(init_tracy, m)?)?;
     Ok(())
 }

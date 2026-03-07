@@ -15,7 +15,7 @@ mod utils;
 
 use divan::bench;
 use locus_core::ImageView;
-use locus_core::bench_api::{family_to_decoder, decode_batch_soa};
+use locus_core::bench_api::{decode_batch_soa, family_to_decoder};
 use utils::BenchDataset;
 
 fn main() {
@@ -30,22 +30,22 @@ fn main() {
 #[bench]
 fn bench_decoding_soa_realistic(bencher: divan::Bencher) {
     let dataset = BenchDataset::icra_forward_0();
-    let img = ImageView::new(&dataset.raw_data, dataset.width, dataset.height, dataset.width).unwrap();
-    
+    let img = ImageView::new(
+        &dataset.raw_data,
+        dataset.width,
+        dataset.height,
+        dataset.width,
+    )
+    .unwrap();
+
     // 50 valid tags, 200 false positives
     let mut batch = BenchDataset::generate_bench_batch(50, 200);
     let n = 250;
-    
+
     let config = locus_core::DetectorConfig::default();
     let decoders = vec![family_to_decoder(locus_core::TagFamily::AprilTag36h11)];
 
     bencher.bench_local(move || {
-        decode_batch_soa(
-            &mut batch,
-            n,
-            &img,
-            &decoders,
-            &config,
-        );
+        decode_batch_soa(&mut batch, n, &img, &decoders, &config);
     });
 }

@@ -241,38 +241,38 @@ def bench_real(
     loader = DatasetLoader()
     wrappers: list[LibraryWrapper] = []
 
-    # Soft mode
-    soft_config = locus.DetectorConfig(
-        decode_mode=locus.DecodeMode.Soft,
-        enable_sharpening=True,
-        upscale_factor=1,
-        refinement_mode=refinement_mode,
-        threshold_tile_size=tile_size,
-        adaptive_threshold_constant=constant,
-        quad_min_fill_ratio=min_fill,
-        threshold_min_range=min_range,
-        max_hamming_error=max_hamming,
-        quad_min_edge_score=min_edge_score,
-    )
+    # Soft mode (Production Default + Soft Override + CLI Overrides)
+    soft_detector = locus.Detector.production_config()
+    soft_detector.set_families([tag_family_int])
+    soft_config = soft_detector.config()
+    soft_config.decode_mode = locus.DecodeMode.Soft
+    soft_config.refinement_mode = refinement_mode
+    soft_config.threshold_tile_size = tile_size
+    soft_config.adaptive_threshold_constant = constant
+    soft_config.quad_min_fill_ratio = min_fill
+    soft_config.threshold_min_range = min_range
+    soft_config.max_hamming_error = max_hamming
+    soft_config.quad_min_edge_score = min_edge_score
+
     wrappers.append(
         LocusWrapper(
             name="Locus (Soft)", config=soft_config, decimation=decimation, family=tag_family_int
         )
     )
 
-    # Hard mode
-    hard_config = locus.DetectorConfig(
-        decode_mode=locus.DecodeMode.Hard,
-        enable_sharpening=True,
-        upscale_factor=1,
-        refinement_mode=refinement_mode,
-        threshold_tile_size=tile_size,
-        adaptive_threshold_constant=constant,
-        quad_min_fill_ratio=min_fill,
-        threshold_min_range=min_range,
-        max_hamming_error=max_hamming,
-        quad_min_edge_score=min_edge_score,
-    )
+    # Hard mode (Production Default + Hard Override + CLI Overrides)
+    hard_detector = locus.Detector.production_config()
+    hard_detector.set_families([tag_family_int])
+    hard_config = hard_detector.config()
+    hard_config.decode_mode = locus.DecodeMode.Hard
+    hard_config.refinement_mode = refinement_mode
+    hard_config.threshold_tile_size = tile_size
+    hard_config.adaptive_threshold_constant = constant
+    hard_config.quad_min_fill_ratio = min_fill
+    hard_config.threshold_min_range = min_range
+    hard_config.max_hamming_error = max_hamming
+    hard_config.quad_min_edge_score = min_edge_score
+
     wrappers.append(
         LocusWrapper(
             name="Locus (Hard)", config=hard_config, decimation=decimation, family=tag_family_int

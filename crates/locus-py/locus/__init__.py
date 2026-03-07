@@ -20,6 +20,12 @@ from .locus import (
 from .locus import (
     create_detector as _create_detector,
 )
+from .locus import (
+    fast_config as _fast_config,
+)
+from .locus import (
+    production_config as _production_config,
+)
 
 
 @dataclass(frozen=True)
@@ -97,8 +103,11 @@ class Detector:
         # Prepare kwargs for Rust by converting enums to ints
         final_rust_kwargs: dict[str, Any] = {}
         for k, v in rust_kwargs.items():
+            # Boolean types must be preserved
+            if isinstance(v, bool):
+                final_rust_kwargs[k] = v
             # PyO3 enums might not inherit from enum.Enum but are int-convertible
-            if hasattr(v, "__int__"):
+            elif hasattr(v, "__int__"):
                 final_rust_kwargs[k] = int(v)
             elif isinstance(v, enum.Enum):
                 final_rust_kwargs[k] = v.value
@@ -108,6 +117,30 @@ class Detector:
         self._inner = _create_detector(
             decimation=decimation, threads=threads, families=family_values, **final_rust_kwargs
         )
+
+    @staticmethod
+    def production_config() -> "Detector":
+        """Create a detector with high-fidelity production defaults."""
+        d = Detector.__new__(Detector)
+        d._inner = _production_config()
+        return d
+
+    @staticmethod
+    def fast_config() -> "Detector":
+        """Create a detector with low-latency defaults."""
+        d = Detector.__new__(Detector)
+        d._inner = _fast_config()
+        return d
+
+    def config(self) -> DetectorConfig:
+        """Returns the current detector configuration."""
+        # The inner Rust object returns a DetectorConfig struct
+        return self._inner.config()
+
+    def set_families(self, families: list[TagFamily]):
+        """Update the tag families to be detected."""
+        family_values = [int(f) for f in families]
+        self._inner.set_families(family_values)
 
     def detect(
         self,

@@ -182,6 +182,33 @@ impl DetectorConfig {
     pub fn builder() -> DetectorConfigBuilder {
         DetectorConfigBuilder::default()
     }
+
+    /// High-fidelity configuration used for production accuracy evaluations.
+    ///
+    /// This matches the default settings used in the Python CLI and Regression suite:
+    /// - Corner Refinement: `Erf`
+    /// - Pre-processing: `Sharpening Enabled`
+    /// - Tile Size: `8`
+    #[must_use]
+    pub fn production_default() -> Self {
+        Self::builder()
+            .refinement_mode(CornerRefinementMode::Erf)
+            .enable_sharpening(true)
+            .threshold_tile_size(8)
+            .build()
+    }
+
+    /// Low-latency configuration for high-speed tracking.
+    ///
+    /// Disables heavy pre-processing and uses lighter corner refinement.
+    #[must_use]
+    pub fn fast_default() -> Self {
+        Self::builder()
+            .refinement_mode(CornerRefinementMode::Edge)
+            .enable_sharpening(false)
+            .threshold_tile_size(8)
+            .build()
+    }
 }
 
 /// Builder for [`DetectorConfig`].

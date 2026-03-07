@@ -119,8 +119,13 @@ fn bench_quad_extraction(bencher: divan::Bencher, &(width, height): &(usize, usi
         &mut threshold_map,
     );
 
-    let labels =
-        locus_core::bench_api::label_components_with_stats(&setup_arena, &binarized, width, height, true);
+    let labels = locus_core::bench_api::label_components_with_stats(
+        &setup_arena,
+        &binarized,
+        width,
+        height,
+        true,
+    );
 
     // MEASUREMENT PHASE (Timed)
     bencher.bench_local(move || {
@@ -139,8 +144,15 @@ fn bench_quad_extraction(bencher: divan::Bencher, &(width, height): &(usize, usi
 #[bench]
 fn bench_icra_full_pipeline(bencher: divan::Bencher) {
     let dataset = BenchDataset::icra_forward_0();
-    let img = ImageView::new(&dataset.raw_data, dataset.width, dataset.height, dataset.width).unwrap();
-    let mut detector = Detector::new();
+    let img = ImageView::new(
+        &dataset.raw_data,
+        dataset.width,
+        dataset.height,
+        dataset.width,
+    )
+    .unwrap();
+    let config = locus_core::DetectorConfig::production_default();
+    let mut detector = Detector::with_config(config);
     detector.set_families(&[TagFamily::AprilTag36h11]);
 
     bencher.bench_local(move || {
@@ -151,11 +163,19 @@ fn bench_icra_full_pipeline(bencher: divan::Bencher) {
 #[bench]
 fn bench_icra_decoding_soa(bencher: divan::Bencher) {
     let dataset = BenchDataset::icra_forward_0();
-    let img = ImageView::new(&dataset.raw_data, dataset.width, dataset.height, dataset.width).unwrap();
+    let img = ImageView::new(
+        &dataset.raw_data,
+        dataset.width,
+        dataset.height,
+        dataset.width,
+    )
+    .unwrap();
     let mut batch = BenchDataset::generate_bench_batch(50, 200);
     let n = 250;
-    let config = locus_core::DetectorConfig::default();
-    let decoders = vec![locus_core::bench_api::family_to_decoder(TagFamily::AprilTag36h11)];
+    let config = locus_core::DetectorConfig::production_default();
+    let decoders = vec![locus_core::bench_api::family_to_decoder(
+        TagFamily::AprilTag36h11,
+    )];
 
     bencher.bench_local(move || {
         locus_core::bench_api::decode_batch_soa(&mut batch, n, &img, &decoders, &config);
@@ -169,7 +189,7 @@ fn bench_icra_decoding_soa(bencher: divan::Bencher) {
 /// Benchmark detection in a complex scene with multiple families and tags.
 #[bench]
 fn bench_mixed_scene_multiple_tags(bencher: divan::Bencher) {
-    use locus_core::bench_api::{SceneBuilder};
+    use locus_core::bench_api::SceneBuilder;
     let width = 1280;
     let height = 720;
 
@@ -202,7 +222,7 @@ fn bench_mixed_scene_multiple_tags(bencher: divan::Bencher) {
 /// Benchmark detection with high tag density (stress test quad extraction).
 #[bench]
 fn bench_dense_scene_20_tags(bencher: divan::Bencher) {
-    use locus_core::bench_api::{SceneBuilder};
+    use locus_core::bench_api::SceneBuilder;
     let width = 1280;
     let height = 720;
 
@@ -229,7 +249,7 @@ fn bench_dense_scene_20_tags(bencher: divan::Bencher) {
 /// Benchmark detection robustness under high noise.
 #[bench]
 fn bench_noisy_scene(bencher: divan::Bencher) {
-    use locus_core::bench_api::{SceneBuilder};
+    use locus_core::bench_api::SceneBuilder;
     let width = 640;
     let height = 480;
 

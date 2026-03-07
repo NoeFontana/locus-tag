@@ -30,7 +30,13 @@ fn main() {
 #[bench]
 fn bench_threshold_real_icra_stats(bencher: divan::Bencher) {
     let dataset = BenchDataset::icra_forward_0();
-    let img = ImageView::new(&dataset.raw_data, dataset.width, dataset.height, dataset.width).unwrap();
+    let img = ImageView::new(
+        &dataset.raw_data,
+        dataset.width,
+        dataset.height,
+        dataset.width,
+    )
+    .unwrap();
     let engine = ThresholdEngine::new();
     let arena = bumpalo::Bump::new();
 
@@ -42,7 +48,13 @@ fn bench_threshold_real_icra_stats(bencher: divan::Bencher) {
 #[bench]
 fn bench_threshold_real_icra_apply(bencher: divan::Bencher) {
     let dataset = BenchDataset::icra_forward_0();
-    let img = ImageView::new(&dataset.raw_data, dataset.width, dataset.height, dataset.width).unwrap();
+    let img = ImageView::new(
+        &dataset.raw_data,
+        dataset.width,
+        dataset.height,
+        dataset.width,
+    )
+    .unwrap();
     let engine = ThresholdEngine::new();
     let arena_init = bumpalo::Bump::new();
     let stats = engine.compute_tile_stats(&arena_init, &img).to_vec();

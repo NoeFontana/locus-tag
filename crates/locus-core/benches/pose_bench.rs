@@ -14,8 +14,8 @@
 mod utils;
 
 use divan::bench;
-use locus_core::bench_api::{CameraIntrinsics, refine_poses_soa};
 use locus_core::PoseEstimationMode;
+use locus_core::bench_api::{CameraIntrinsics, refine_poses_soa};
 use utils::BenchDataset;
 
 fn main() {
@@ -31,7 +31,7 @@ fn main() {
 fn bench_pose_estimation_soa_realistic(bencher: divan::Bencher) {
     let intrinsics = CameraIntrinsics::new(800.0, 800.0, 400.0, 300.0);
     let tag_size = 0.16;
-    
+
     // 50 valid tags to refine
     let mut batch = BenchDataset::generate_bench_batch(50, 0);
     let v = 50;
