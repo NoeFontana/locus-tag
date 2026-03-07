@@ -128,6 +128,53 @@ fn bench_quad_extraction_640x480(bencher: divan::Bencher) {
 }
 
 // =============================================================================
+// REAL WORLD DATASET (ICRA 2020)
+// =============================================================================
+
+mod utils;
+use utils::BenchDataset;
+
+#[bench]
+fn bench_icra_full_pipeline(bencher: divan::Bencher) {
+    let dataset = BenchDataset::icra_forward_0();
+    let img = ImageView::new(&dataset.raw_data, dataset.width, dataset.height, dataset.width).unwrap();
+    let mut detector = Detector::new();
+    detector.set_families(&[TagFamily::AprilTag36h11]);
+
+    bencher.bench_local(move || {
+        let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast, false);
+    });
+}
+
+#[bench]
+fn bench_icra_thresholding(bencher: divan::Bencher) {
+    let dataset = BenchDataset::icra_forward_0();
+    let img = ImageView::new(&dataset.raw_data, dataset.width, dataset.height, dataset.width).unwrap();
+    let engine = ThresholdEngine::new();
+    let mut output = vec![0u8; dataset.width * dataset.height];
+    let arena = Bump::new();
+
+    bencher.bench_local(move || {
+        let stats = engine.compute_tile_stats(&arena, &img);
+        engine.apply_threshold(&arena, &img, &stats, &mut output);
+    });
+}
+
+#[bench]
+fn bench_icra_decoding_soa(bencher: divan::Bencher) {
+    let dataset = BenchDataset::icra_forward_0();
+    let img = ImageView::new(&dataset.raw_data, dataset.width, dataset.height, dataset.width).unwrap();
+    let mut batch = BenchDataset::generate_bench_batch(50, 200);
+    let n = 250;
+    let config = locus_core::DetectorConfig::default();
+    let decoders = vec![locus_core::bench_api::family_to_decoder(TagFamily::AprilTag36h11)];
+
+    bencher.bench_local(move || {
+        locus_core::bench_api::decode_batch_soa(&mut batch, n, &img, &decoders, &config);
+    });
+}
+
+// =============================================================================
 // FULL PIPELINE (E2E Benchmarks)
 // =============================================================================
 

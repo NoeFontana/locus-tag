@@ -10,9 +10,14 @@
     clippy::must_use_candidate,
     clippy::return_self_not_must_use
 )]
+
+mod utils;
+
 use bumpalo::Bump;
 use divan::bench;
-use locus_core::bench_api::label_components_with_stats;
+use locus_core::ImageView;
+use locus_core::threshold::ThresholdEngine;
+use utils::BenchDataset;
 
 fn main() {
     // Force rayon to a single thread for microbenchmarks to avoid cache thrashing.
@@ -24,94 +29,36 @@ fn main() {
 }
 
 #[bench]
-fn bench_segmentation_1080p_empty(bencher: divan::Bencher) {
-    let width = 1920;
-    let height = 1080;
-    let binary = vec![255u8; width * height];
-    let mut arena = Bump::new();
+fn bench_segmentation_real_icra_threshold_model(bencher: divan::Bencher) {
+    let dataset = BenchDataset::icra_forward_0();
+    let img = ImageView::new(&dataset.raw_data, dataset.width, dataset.height, dataset.width).unwrap();
+    let setup_arena = Bump::new();
+    let engine = ThresholdEngine::new();
 
-    bencher.bench_local(|| {
-        arena.reset();
-        label_components_with_stats(&arena, &binary, width, height, true);
-    });
-}
+    let tile_stats = engine.compute_tile_stats(&setup_arena, &img);
+    let mut threshold_map = vec![0u8; dataset.width * dataset.height];
+    let mut binarized = vec![0u8; dataset.width * dataset.height];
+    
+    engine.apply_threshold_with_map(
+        &setup_arena,
+        &img,
+        &tile_stats,
+        &mut binarized,
+        &mut threshold_map,
+    );
 
-#[bench]
-fn bench_segmentation_threshold_model_1080p(bencher: divan::Bencher) {
-    let width = 1920;
-    let height = 1080;
-    let data = vec![128u8; width * height];
-    let threshold_map = vec![128u8; width * height];
-    let mut arena = Bump::new();
-
-    bencher.bench_local(|| {
-        arena.reset();
-        locus_core::bench_api::label_components_threshold_model(
+    bencher.bench_local(move || {
+        let arena = Bump::new();
+        let _label_result = locus_core::bench_api::label_components_threshold_model(
             &arena,
-            &data,
-            width,
+            &dataset.raw_data,
+            dataset.width,
             &threshold_map,
-            width,
-            height,
+            dataset.width,
+            dataset.height,
             true,
             16,
             1,
         );
-    });
-}
-
-#[bench]
-fn bench_segmentation_checkerboard_1080p(bencher: divan::Bencher) {
-    let width = 1920;
-    let height = 1080;
-    let data = vec![128u8; width * height];
-    let threshold_map = vec![128u8; width * height];
-    let mut arena = Bump::new();
-
-    bencher.bench_local(|| {
-        arena.reset();
-        locus_core::bench_api::label_components_threshold_model(
-            &arena,
-            &data,
-            width,
-            &threshold_map,
-            width,
-            height,
-            false, // 4-way connectivity for Checkerboard
-            16,
-            1,
-        );
-    });
-}
-
-#[bench]
-fn bench_segmentation_1080p_checkered(bencher: divan::Bencher) {
-    let width = 1920;
-    let height = 1080;
-    let mut binary = vec![255u8; width * height];
-
-    // Create a 4x4 checkerboard to generate many runs
-    for y in (0..height).step_by(8) {
-        for x in (0..width).step_by(8) {
-            if ((x / 8) + (y / 8)) % 2 == 0 {
-                for dy in 0..4 {
-                    if y + dy < height {
-                        let row_off = (y + dy) * width;
-                        for dx in 0..4 {
-                            if x + dx < width {
-                                binary[row_off + x + dx] = 0;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    let mut arena = Bump::new();
-
-    bencher.bench_local(|| {
-        arena.reset();
-        label_components_with_stats(&arena, &binary, width, height, true);
     });
 }

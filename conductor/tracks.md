@@ -4,6 +4,6 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Establish a realistic, high-fidelity micro-benchmarking infrastructure using Divan and real image data.**
+- [x] **Track: Establish a realistic, high-fidelity micro-benchmarking infrastructure using Divan and real image data.**
 *Link: [./tracks/micro_benchmarking_20260307/](./tracks/micro_benchmarking_20260307/)*
 
