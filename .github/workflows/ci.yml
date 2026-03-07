@@ -205,3 +205,38 @@ jobs:
           name: failure-logs-test-python-${{ matrix.python-version }}
           path: "*.log"
           retention-days: 1
+
+  robustness-testing:
+    name: Robustness Testing (Proptest)
+    runs-on: ubuntu-latest
+    continue-on-error: true # Non-blocking during initial rollout phase
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        
+      - name: Install Tools (Nextest)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
+
+      - name: Run Robustness Suite
+        shell: bash
+        run: |
+          set -o pipefail
+          # Execute only the robustness binaries.
+          # These are excluded from default runs via nextest.toml.
+          cargo nextest run -E 'binary(~robustness)' --profile ci --all-features 2>&1 | tee test-robustness.log
+
+      - name: Upload Logs on Failure
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-logs-robustness
+          path: "*.log"
+          retention-days: 1
