@@ -2,10 +2,10 @@
 # It defines execution profiles and which tests to run by default.
 
 [profile.default]
-# By default, we exclude all "regression" test binaries because they take a long
+# By default, we exclude all "regression" and "robustness" test binaries because they take a long
 # time, require specific test data to be downloaded, or demand release builds.
-# To run them explicitly, use `cargo nextest run -E 'binary(~regression)' --release`
-default-filter = "not binary(~regression)"
+# To run them explicitly, use `cargo nextest run -E 'binary(~regression) or binary(~robustness)' --release`
+default-filter = "not (binary(~regression) or binary(~robustness))"
 
 # Display tests that take longer than 15 seconds
 slow-timeout = { period = "15s", terminate-after = 2 }
