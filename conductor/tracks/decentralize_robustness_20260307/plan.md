@@ -19,11 +19,11 @@
 - [x] Task: Conductor - User Manual Verification 'Domain-Specific Modules (Frontend Zone)' (Protocol in workflow.md) 60e6ed0
 
 ## Phase 3: Domain-Specific Modules (Backend Zone)
-- [~] Task: Implement `geometry.rs` tests
+- [x] Task: Implement `geometry.rs` tests acdff88
     - [ ] Write failing unit tests for Homography and PnP solvers (degenerate quads).
     - [ ] Map property testing regressions to `proptest-regressions/geometry.txt`.
     - [ ] Implement robust handling to make tests pass.
-- [ ] Task: Implement `decoder.rs` tests
+- [~] Task: Implement `decoder.rs` tests
     - [ ] Write failing unit tests for tag family decoders and bit error correction.
     - [ ] Map property testing regressions to `proptest-regressions/decoder.txt`.
     - [ ] Implement robust handling to make tests pass.
