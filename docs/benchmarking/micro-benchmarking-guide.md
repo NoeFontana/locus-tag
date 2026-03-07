@@ -20,7 +20,11 @@ A micro-optimization in Locus is only considered successful if it survives the t
 **Execution:**
 ```bash
 # Run a specific benchmark suite
-cargo bench --bench comprehensive -- "bench_icra"
+cargo bench --bench comprehensive --features "extended-bench bench-internals" -- "bench_thresholding" --threads 1
+
+# Run full resolution sweep and update baselines
+cargo bench --bench comprehensive --features "extended-bench bench-internals" -- "bench_thresholding" "bench_segmentation" "bench_quad_extraction" --threads 1 > target/profiling/divan_output.txt
+PYTHONPATH=. python3 tools/bench/update_micro_baselines.py target/profiling/divan_output.txt
 ```
 
 ---
