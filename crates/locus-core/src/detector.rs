@@ -409,6 +409,13 @@ impl DetectorBuilder {
         self
     }
 
+    /// Enable or disable Laplacian sharpening.
+    #[must_use]
+    pub fn with_sharpening(mut self, enable: bool) -> Self {
+        self.config.enable_sharpening = enable;
+        self
+    }
+
     /// Build the [`Detector`] instance.
     #[must_use]
     pub fn build(self) -> Detector {

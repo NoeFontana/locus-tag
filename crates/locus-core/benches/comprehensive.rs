@@ -22,7 +22,6 @@ use locus_core::Detector;
 use locus_core::ImageView;
 use locus_core::PoseEstimationMode;
 use locus_core::TagFamily;
-use locus_core::bench_api::{SceneBuilder, TagPlacement};
 use locus_core::threshold::ThresholdEngine;
 
 fn main() {
@@ -35,85 +34,100 @@ fn main() {
 }
 
 // =============================================================================
-// PIPELINE STAGES (Granular Benchmarks)
+// REAL WORLD DATASET (ICRA 2020) - Multi-Resolution
 // =============================================================================
 
-#[bench]
-fn bench_thresholding_640x480(bencher: divan::Bencher) {
-    let width = 640;
-    let height = 480;
-    let mut builder = SceneBuilder::new(width, height);
-    builder.add_tag(TagPlacement {
-        family: TagFamily::AprilTag36h11,
-        id: 0,
-        center_x: width as f64 / 2.0,
-        center_y: height as f64 / 2.0,
-        size: 100.0,
-        rotation_rad: 0.0,
-    });
-    let (data, _) = builder.build();
-    let img = ImageView::new(&data, width, height, width).unwrap();
+mod utils;
+use utils::BenchDataset;
+
+const RESOLUTIONS: &[(usize, usize)] = &[
+    (640, 480),   // VGA
+    (1280, 720),  // 720p
+    (1920, 1080), // 1080p
+    (3840, 2160), // 4K
+];
+
+#[bench(args = RESOLUTIONS)]
+fn bench_thresholding(bencher: divan::Bencher, &(width, height): &(usize, usize)) {
+    // SETUP PHASE (Not timed)
+    let dataset = BenchDataset::load_and_resize_icra_frame("forward", 0, width, height);
+    let img = ImageView::new(&dataset.raw_data, width, height, width).unwrap();
     let engine = ThresholdEngine::new();
     let mut output = vec![0u8; width * height];
+    let mut arena = Bump::new();
 
-    let arena = Bump::new();
+    // MEASUREMENT PHASE (Timed)
     bencher.bench_local(move || {
+        arena.reset();
         let stats = engine.compute_tile_stats(&arena, &img);
         engine.apply_threshold(&arena, &img, &stats, &mut output);
     });
 }
 
-#[bench]
-fn bench_segmentation_640x480(bencher: divan::Bencher) {
-    let width = 640;
-    let height = 480;
-    let mut builder = SceneBuilder::new(width, height);
-    builder.add_tag(TagPlacement {
-        family: TagFamily::AprilTag36h11,
-        id: 0,
-        center_x: width as f64 / 2.0,
-        center_y: height as f64 / 2.0,
-        size: 100.0,
-        rotation_rad: 0.0,
-    });
-    let (data, _) = builder.build();
-    let mut binarized = vec![0u8; width * height];
+#[bench(args = RESOLUTIONS)]
+fn bench_segmentation(bencher: divan::Bencher, &(width, height): &(usize, usize)) {
+    // SETUP PHASE (Not timed)
+    let dataset = BenchDataset::load_and_resize_icra_frame("forward", 0, width, height);
+    let img = ImageView::new(&dataset.raw_data, width, height, width).unwrap();
     let engine = ThresholdEngine::new();
-    let img = ImageView::new(&data, width, height, width).unwrap();
-    let arena = Bump::new();
-    let stats = engine.compute_tile_stats(&arena, &img);
-    engine.apply_threshold(&arena, &img, &stats, &mut binarized);
+    let mut binarized = vec![0u8; width * height];
+    let mut threshold_map = vec![0u8; width * height];
+    let setup_arena = Bump::new();
 
+    let stats = engine.compute_tile_stats(&setup_arena, &img);
+    engine.apply_threshold_with_map(
+        &setup_arena,
+        &img,
+        &stats,
+        &mut binarized,
+        &mut threshold_map,
+    );
+
+    // MEASUREMENT PHASE (Timed)
     bencher.bench_local(move || {
-        let local_arena = Bump::new();
-        locus_core::bench_api::label_components(&local_arena, &binarized, width, height, true);
+        let arena = Bump::new();
+        let _label_result = locus_core::bench_api::label_components_threshold_model(
+            &arena,
+            &dataset.raw_data,
+            width,
+            &threshold_map,
+            width,
+            height,
+            true,
+            16,
+            1,
+        );
     });
 }
 
-#[bench]
-fn bench_quad_extraction_640x480(bencher: divan::Bencher) {
-    let width = 640;
-    let height = 480;
-    let mut builder = SceneBuilder::new(width, height);
-    builder.add_tag(TagPlacement {
-        family: TagFamily::AprilTag36h11,
-        id: 0,
-        center_x: width as f64 / 2.0,
-        center_y: height as f64 / 2.0,
-        size: 100.0,
-        rotation_rad: 0.0,
-    });
-    let (data, _) = builder.build();
-    let arena = Bump::new();
-    let mut binarized = vec![0u8; width * height];
+#[bench(args = RESOLUTIONS)]
+fn bench_quad_extraction(bencher: divan::Bencher, &(width, height): &(usize, usize)) {
+    // SETUP PHASE (Not timed)
+    let dataset = BenchDataset::load_and_resize_icra_frame("forward", 0, width, height);
+    let img = ImageView::new(&dataset.raw_data, width, height, width).unwrap();
     let engine = ThresholdEngine::new();
-    let img = ImageView::new(&data, width, height, width).unwrap();
-    let stats = engine.compute_tile_stats(&arena, &img);
-    engine.apply_threshold(&arena, &img, &stats, &mut binarized);
+    let mut binarized = vec![0u8; width * height];
+    let mut threshold_map = vec![0u8; width * height];
+    let setup_arena = Bump::new();
 
-    let labels =
-        locus_core::bench_api::label_components_with_stats(&arena, &binarized, width, height, true);
+    let stats = engine.compute_tile_stats(&setup_arena, &img);
+    engine.apply_threshold_with_map(
+        &setup_arena,
+        &img,
+        &stats,
+        &mut binarized,
+        &mut threshold_map,
+    );
 
+    let labels = locus_core::bench_api::label_components_with_stats(
+        &setup_arena,
+        &binarized,
+        width,
+        height,
+        true,
+    );
+
+    // MEASUREMENT PHASE (Timed)
     bencher.bench_local(move || {
         let local_arena = Bump::new();
         locus_core::bench_api::extract_quads_with_config(
@@ -127,35 +141,55 @@ fn bench_quad_extraction_640x480(bencher: divan::Bencher) {
     });
 }
 
-// =============================================================================
-// FULL PIPELINE (E2E Benchmarks)
-// =============================================================================
-
 #[bench]
-fn bench_full_detect_640x480(bencher: divan::Bencher) {
-    let width = 640;
-    let height = 480;
-    let mut builder = SceneBuilder::new(width, height);
-    builder.add_tag(TagPlacement {
-        family: TagFamily::AprilTag36h11,
-        id: 0,
-        center_x: width as f64 / 2.0,
-        center_y: height as f64 / 2.0,
-        size: 100.0,
-        rotation_rad: 0.0,
-    });
-    let (data, _) = builder.build();
-    let img = ImageView::new(&data, width, height, width).unwrap();
-    let mut detector = Detector::new();
+fn bench_icra_full_pipeline(bencher: divan::Bencher) {
+    let dataset = BenchDataset::icra_forward_0();
+    let img = ImageView::new(
+        &dataset.raw_data,
+        dataset.width,
+        dataset.height,
+        dataset.width,
+    )
+    .unwrap();
+    let config = locus_core::DetectorConfig::production_default();
+    let mut detector = Detector::with_config(config);
+    detector.set_families(&[TagFamily::AprilTag36h11]);
 
     bencher.bench_local(move || {
         let _ = detector.detect(&img, None, None, PoseEstimationMode::Fast, false);
     });
 }
 
+#[bench]
+fn bench_icra_decoding_soa(bencher: divan::Bencher) {
+    let dataset = BenchDataset::icra_forward_0();
+    let img = ImageView::new(
+        &dataset.raw_data,
+        dataset.width,
+        dataset.height,
+        dataset.width,
+    )
+    .unwrap();
+    let mut batch = BenchDataset::generate_bench_batch(50, 200);
+    let n = 250;
+    let config = locus_core::DetectorConfig::production_default();
+    let decoders = vec![locus_core::bench_api::family_to_decoder(
+        TagFamily::AprilTag36h11,
+    )];
+
+    bencher.bench_local(move || {
+        locus_core::bench_api::decode_batch_soa(&mut batch, n, &img, &decoders, &config);
+    });
+}
+
+// =============================================================================
+// SYNTHETIC SCENES
+// =============================================================================
+
 /// Benchmark detection in a complex scene with multiple families and tags.
 #[bench]
 fn bench_mixed_scene_multiple_tags(bencher: divan::Bencher) {
+    use locus_core::bench_api::SceneBuilder;
     let width = 1280;
     let height = 720;
 
@@ -188,6 +222,7 @@ fn bench_mixed_scene_multiple_tags(bencher: divan::Bencher) {
 /// Benchmark detection with high tag density (stress test quad extraction).
 #[bench]
 fn bench_dense_scene_20_tags(bencher: divan::Bencher) {
+    use locus_core::bench_api::SceneBuilder;
     let width = 1280;
     let height = 720;
 
@@ -214,6 +249,7 @@ fn bench_dense_scene_20_tags(bencher: divan::Bencher) {
 /// Benchmark detection robustness under high noise.
 #[bench]
 fn bench_noisy_scene(bencher: divan::Bencher) {
+    use locus_core::bench_api::SceneBuilder;
     let width = 640;
     let height = 480;
 

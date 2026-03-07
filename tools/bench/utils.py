@@ -319,8 +319,14 @@ class LocusWrapper(LibraryWrapper):
         config: locus.DetectorConfig | None = None,
         decimation: int = 1,
         family: int | None = None,
+        detector: locus.Detector | None = None,
     ):
         super().__init__(name)
+
+        if detector:
+            self.detector = detector
+            return
+
         families = FamilyMapper.to_locus(family)
 
         if config:
