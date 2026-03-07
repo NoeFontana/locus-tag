@@ -4,6 +4,6 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [x] **Track: Establish a realistic, high-fidelity micro-benchmarking infrastructure using Divan and real image data.**
-*Link: [./tracks/micro_benchmarking_20260307/](./tracks/micro_benchmarking_20260307/)*
+- [ ] **Track: Establish realistic and scalable micro-benchmarks across different resolutions using divan's args attribute.**
+*Link: [./tracks/parametrized_resolution_micro_benchmarks_20260307/](./tracks/parametrized_resolution_micro_benchmarks_20260307/)*
 
