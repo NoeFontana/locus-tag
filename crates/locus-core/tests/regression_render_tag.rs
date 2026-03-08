@@ -113,13 +113,30 @@ struct SummaryMetrics {
     #[serde(serialize_with = "serialize_rmse")]
     mean_reprojection_rmse: f64,
     #[serde(serialize_with = "serialize_rmse")]
-    mean_translation_error: f64,
+    p50_translation_error: f64,
     #[serde(serialize_with = "serialize_rmse")]
-    mean_rotation_error: f64,
+    p90_translation_error: f64,
+    #[serde(serialize_with = "serialize_rmse")]
+    p99_translation_error: f64,
+    #[serde(serialize_with = "serialize_rmse")]
+    p50_rotation_error: f64,
+    #[serde(serialize_with = "serialize_rmse")]
+    p90_rotation_error: f64,
+    #[serde(serialize_with = "serialize_rmse")]
+    p99_rotation_error: f64,
     #[serde(serialize_with = "serialize_rmse")]
     mean_hamming: f64,
     mean_total_ms: f64,
     worst_offenders: Vec<Offender>,
+}
+
+fn calculate_percentile(values: &mut [f64], percentile: f64) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let idx = (percentile * (values.len() - 1) as f64).round() as usize;
+    values[idx]
 }
 
 // ============================================================================
@@ -179,11 +196,16 @@ impl RegressionHarness {
 
         // Aggregators
         let mut total_recall = 0.0;
+        let mut total_precision = 0.0;
         let mut total_rmse = 0.0;
-        let mut total_translation_error = 0.0;
-        let mut total_rotation_error = 0.0;
+        let mut total_repro_rmse = 0.0;
+        let mut total_hamming = 0.0;
         let mut total_time = 0.0;
         let mut count = 0;
+
+        // Individual errors for percentiles
+        let mut translation_errors = Vec::new();
+        let mut rotation_errors = Vec::new();
 
         println!("INTRINSICS: {:?}", self.options.intrinsics);
 
@@ -205,8 +227,10 @@ impl RegressionHarness {
 
             // --- Metrics Calculation ---
             let mut image_rmse_sum = 0.0;
+            let mut image_repro_rmse_sum = 0.0;
             let mut image_translation_error_sum = 0.0;
             let mut image_rotation_error_sum = 0.0;
+            let mut image_hamming_sum = 0.0;
             let mut match_count = 0;
             let mut pose_match_count = 0;
             let mut found_ids = BTreeSet::new();
@@ -256,6 +280,7 @@ impl RegressionHarness {
                             &det_corners_f64,
                             gt_corners,
                         );
+                        image_hamming_sum += f64::from(detections.error_rates[i]);
                         match_count += 1;
                         found_ids.insert(det_id);
 
@@ -274,7 +299,7 @@ impl RegressionHarness {
                                 f64::from(det_pose_data[5]), // z
                             ));
 
-                            if let Some(gt_pose) = gt.poses.get(&det_id) {
+                            if let (Some(gt_pose), Some(intr), Some(size)) = (gt.poses.get(&det_id), intrinsics, tag_size) {
                                 let t_err = (det_t - gt_pose.translation).norm();
 
                                 // Align ground truth rotation with detector convention (180 deg flip about X)
@@ -287,6 +312,7 @@ impl RegressionHarness {
 
                                 // Detectors often have 90-degree ambiguities. We check all 4 rotations about Z.
                                 let mut min_r_err = det_q.angle_to(&q_gt_aligned);
+                                let mut best_rot_idx = 0;
                                 for k in 1..4 {
                                     let q_rot = UnitQuaternion::from_axis_angle(
                                         &Vector3::z_axis(),
@@ -295,12 +321,45 @@ impl RegressionHarness {
                                     let r_err = det_q.angle_to(&(q_gt_aligned * q_rot));
                                     if r_err < min_r_err {
                                         min_r_err = r_err;
+                                        best_rot_idx = k;
                                     }
                                 }
 
                                 image_translation_error_sum += t_err;
                                 image_rotation_error_sum += min_r_err;
                                 pose_match_count += 1;
+
+                                translation_errors.push(t_err);
+                                rotation_errors.push(min_r_err.to_degrees());
+
+                                // --- Reprojection Error (vs Ground Truth Corners) ---
+                                let s = size * 0.5;
+                                // 3D model corners in the tag frame (centered)
+                                // Standard ordering: TL, TR, BR, BL
+                                let model_corners = [
+                                    Vector3::new(-s, -s, 0.0),
+                                    Vector3::new(s, -s, 0.0),
+                                    Vector3::new(s, s, 0.0),
+                                    Vector3::new(-s, s, 0.0),
+                                ];
+                                
+                                // Estimated pose in detector frame
+                                let est_pose = Pose::new(det_q.to_rotation_matrix().into_inner(), det_t);
+                                
+                                // To reproject accurately, we need to handle the 90-degree rotation ambiguity
+                                // by rotating the model corners to match the detected corner ordering.
+                                let mut reprojected_corners = [[0.0, 0.0]; 4];
+                                for k in 0..4 {
+                                    // Apply the inverse of the ambiguity rotation to the model points
+                                    let q_rot_inv = UnitQuaternion::from_axis_angle(
+                                        &Vector3::z_axis(),
+                                        -f64::from(best_rot_idx) * std::f64::consts::FRAC_PI_2,
+                                    );
+                                    let p_rotated = q_rot_inv * model_corners[k];
+                                    reprojected_corners[k] = est_pose.project(&p_rotated, &intr);
+                                }
+                                
+                                image_repro_rmse_sum += locus_core::test_utils::compute_corner_error(&reprojected_corners, gt_corners);
                             }
                         }
                     }
@@ -312,8 +371,18 @@ impl RegressionHarness {
             } else {
                 found_ids.len() as f64 / gt.tags.len() as f64
             };
+            let precision = if detections.is_empty() {
+                1.0
+            } else {
+                match_count as f64 / detections.len() as f64
+            };
             let avg_rmse = if match_count > 0 {
                 image_rmse_sum / f64::from(match_count)
+            } else {
+                0.0
+            };
+            let avg_repro_rmse = if pose_match_count > 0 {
+                image_repro_rmse_sum / f64::from(pose_match_count)
             } else {
                 0.0
             };
@@ -327,11 +396,17 @@ impl RegressionHarness {
             } else {
                 0.0
             };
+            let avg_hamming = if match_count > 0 {
+                image_hamming_sum / f64::from(match_count)
+            } else {
+                0.0
+            };
 
             total_recall += recall;
+            total_precision += precision;
             total_rmse += avg_rmse;
-            total_translation_error += avg_translation_error;
-            total_rotation_error += avg_rotation_error;
+            total_repro_rmse += avg_repro_rmse;
+            total_hamming += avg_hamming;
             total_time += total_ms;
             count += 1;
 
@@ -354,9 +429,12 @@ impl RegressionHarness {
                 filename.clone(),
                 ImageMetrics {
                     recall,
+                    precision,
                     avg_rmse,
+                    reprojection_rmse: avg_repro_rmse,
                     translation_error: avg_translation_error,
                     rotation_error: avg_rotation_error,
+                    mean_hamming: avg_hamming,
                     stats: PipelineMetrics {
                         total_ms,
                         num_detections: detections.len(),
@@ -403,9 +481,16 @@ impl RegressionHarness {
             summary: SummaryMetrics {
                 dataset_size: count,
                 mean_recall: total_recall / count as f64,
+                mean_precision: total_precision / count as f64,
                 mean_rmse: total_rmse / count as f64,
-                mean_translation_error: total_translation_error / count as f64,
-                mean_rotation_error: total_rotation_error / count as f64,
+                mean_reprojection_rmse: total_repro_rmse / count as f64,
+                p50_translation_error: calculate_percentile(&mut translation_errors, 0.5),
+                p90_translation_error: calculate_percentile(&mut translation_errors, 0.9),
+                p99_translation_error: calculate_percentile(&mut translation_errors, 0.99),
+                p50_rotation_error: calculate_percentile(&mut rotation_errors, 0.5),
+                p90_rotation_error: calculate_percentile(&mut rotation_errors, 0.9),
+                p99_rotation_error: calculate_percentile(&mut rotation_errors, 0.99),
+                mean_hamming: total_hamming / count as f64,
                 mean_total_ms: total_time / count as f64,
                 worst_offenders: offenders.into_iter().take(5).collect(),
             },
@@ -414,7 +499,11 @@ impl RegressionHarness {
         println!("=== {} Results ===", self.snapshot_name);
         println!("  Images: {count}");
         println!("  Recall: {:.2}%", report.summary.mean_recall * 100.0);
+        println!("  Precision: {:.2}%", report.summary.mean_precision * 100.0);
         println!("  RMSE:   {:.4} px", report.summary.mean_rmse);
+        println!("  Repro RMSE: {:.4} px", report.summary.mean_reprojection_rmse);
+        println!("  Trans P50: {:.4} m", report.summary.p50_translation_error);
+        println!("  Rot P50: {:.4} deg", report.summary.p50_rotation_error);
         println!("  Latency: {:.4} ms", report.summary.mean_total_ms);
 
         insta::assert_yaml_snapshot!(self.snapshot_name, report, {
