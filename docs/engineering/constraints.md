@@ -25,3 +25,9 @@ The Rust-Python boundary must be invisible to performance.
 ## 4. Error Handling
 * ❌ **Forbidden:** `unwrap()` or `expect()` in library code. (Enforced via `#![deny(clippy::unwrap_used)]`).
 * ✅ **Required:** Propagate errors gracefully using `Result<T, E>` and `thiserror` for structured error definitions.
+
+## 5. Performance Reporting & Benchmarking
+To ensure reproducibility and scientific integrity, all benchmark reports must be grounded in verified system state.
+* ❌ **Forbidden:** Placeholder or assumed hardware specifications (e.g., "Intel CPU" without verification).
+* ✅ **Required:** Every performance or accuracy report MUST include verified hardware metadata obtained via system tools (e.g., `lscpu`, `/proc/cpuinfo`) during the same session the benchmark was executed.
+* ✅ **Required:** State the build profile (`--release`), thread count, and environment variables (e.g., `RAYON_NUM_THREADS`) used during the run.
