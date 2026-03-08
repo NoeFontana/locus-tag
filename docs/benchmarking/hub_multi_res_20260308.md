@@ -32,4 +32,4 @@ This report compares the detection accuracy of Locus across standard resolutions
 ## Methodology
 - **Data Source:** Hugging Face `NoeFontana/locus-tag-bench` (`std41h12` subsets).
 - **Harness:** `locus-core` regression suite with per-image metadata (intrinsics/tag size).
-- **Environment:** Linux, Intel Xeon Platinum @ 2.90GHz (Release Profile).
+- **Environment:** Linux, AMD EPYC-Milan Processor (Release Profile).
