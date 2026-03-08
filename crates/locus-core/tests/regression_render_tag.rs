@@ -73,12 +73,17 @@ where
 #[derive(Serialize)]
 struct ImageMetrics {
     recall: f64,
+    precision: f64,
     #[serde(serialize_with = "serialize_rmse")]
     avg_rmse: f64,
+    #[serde(serialize_with = "serialize_rmse")]
+    reprojection_rmse: f64,
     #[serde(serialize_with = "serialize_rmse")]
     translation_error: f64,
     #[serde(serialize_with = "serialize_rmse")]
     rotation_error: f64,
+    #[serde(serialize_with = "serialize_rmse")]
+    mean_hamming: f64,
     stats: PipelineMetrics,
     missed_ids: BTreeSet<u32>,
     extra_ids: BTreeSet<u32>,
@@ -102,12 +107,17 @@ struct Offender {
 struct SummaryMetrics {
     dataset_size: usize,
     mean_recall: f64,
+    mean_precision: f64,
     #[serde(serialize_with = "serialize_rmse")]
     mean_rmse: f64,
+    #[serde(serialize_with = "serialize_rmse")]
+    mean_reprojection_rmse: f64,
     #[serde(serialize_with = "serialize_rmse")]
     mean_translation_error: f64,
     #[serde(serialize_with = "serialize_rmse")]
     mean_rotation_error: f64,
+    #[serde(serialize_with = "serialize_rmse")]
+    mean_hamming: f64,
     mean_total_ms: f64,
     worst_offenders: Vec<Offender>,
 }
