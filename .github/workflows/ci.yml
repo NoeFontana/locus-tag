@@ -19,21 +19,21 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  UV_SYSTEM_PYTHON: 0 # Ensure uv uses its own managed Python
-  TRACY_NO_INVARIANT_CHECK: "1" # Avoid Tracy initialization failure in CI
+  UV_SYSTEM_PYTHON: 0
+  TRACY_NO_INVARIANT_CHECK: "1"
 
 jobs:
   validate-project:
-    name: Validate Project (Data & Lock)
+    name: Validate Project & Lint Python
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - name: Setup Toolchains
+        uses: ./.github/actions/setup-toolchain
         with:
-          enable-cache: true
           python-version: '3.11'
+          enable-rust-cache: 'false'
           
       - name: Check uv.lock
         run: uv lock --check
@@ -44,64 +44,55 @@ jobs:
             --schema crates/locus-core/tests/schemas/dictionary.schema.json \
             data/dictionaries/*.json
 
-  lint-rust:
-    name: Lint Rust
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.92.0" # Matches project target or latest stable
-          components: rustfmt, clippy
-          
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
-      
-      - name: Check Formatting
+      - name: Ruff Check & Format
         shell: bash
         run: |
           set -o pipefail
-          cargo fmt --all -- --check 2>&1 | tee rust-fmt.log
-      
-      - name: Clippy
-        shell: bash
-        run: |
-          set -o pipefail
-          cargo clippy --all-targets --all-features -- -D warnings 2>&1 | tee rust-clippy.log
+          uv sync --frozen --only-group lint
+          uv run ruff check . 2>&1 | tee ruff-check.log
+          uv run ruff format --check . 2>&1 | tee ruff-format.log
 
       - name: Upload Logs on Failure
         if: failure()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: failure-logs-lint-rust
+          name: failure-logs-validate
           path: "*.log"
           retention-days: 1
 
-  test-rust:
-    name: Test Rust
+  rust-checks:
+    name: Rust Lint & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
-        
+      - name: Setup Toolchains
+        uses: ./.github/actions/setup-toolchain
+        with:
+          rust-components: rustfmt, clippy
+          
       - name: Install Tools (Nextest, Insta)
         uses: taiki-e/install-action@v2
         with:
           tool: nextest,cargo-insta
 
-      - name: Run Tests
+      - name: Check Formatting
         shell: bash
         run: |
           set -o pipefail
-          # Heavy regression tests are excluded by default via .config/nextest.toml
+          cargo fmt --all -- --check 2>&1 | tee rust-fmt.log
+        
+      - name: Clippy
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy --all-targets --all-features -- -D warnings 2>&1 | tee rust-clippy.log
+
+      - name: Run Tests (Nextest)
+        shell: bash
+        run: |
+          set -o pipefail
           cargo nextest run --profile ci --all-features 2>&1 | tee test-rust.log
 
       - name: Run Doc Tests
@@ -114,9 +105,6 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          # Verify ALL snapshots in release mode.
-          # Regression tests that require external data will be skipped automatically if data is missing,
-          # while regression_fixtures (which uses committed data) will be verified.
           cargo insta test --release --all-features --features bench-internals --check 2>&1 | tee test-rust-insta.log
 
       - name: Upload Logs on Failure
@@ -124,47 +112,13 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: failure-logs-test-rust
-          path: "*.log"
-          retention-days: 1
-
-  lint-python:
-    name: Lint Python
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-      
-      - name: Set up environment
-        run: uv sync --frozen --only-group lint
-        
-      - name: Ruff Check
-        shell: bash
-        run: |
-          set -o pipefail
-          uv run ruff check . 2>&1 | tee ruff-check.log
-      
-      - name: Ruff Format
-        shell: bash
-        run: |
-          set -o pipefail
-          uv run ruff format --check . 2>&1 | tee ruff-format.log
-
-      - name: Upload Logs on Failure
-        if: failure()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: failure-logs-lint-python
+          name: failure-logs-rust-checks
           path: "*.log"
           retention-days: 1
 
   test-python:
     name: Test Python (${{ matrix.python-version }})
+    needs: [validate-project, rust-checks]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -173,17 +127,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - name: Setup Toolchains
+        uses: ./.github/actions/setup-toolchain
         with:
-          enable-cache: true
           python-version: ${{ matrix.python-version }}
-          
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        
-      - name: Rust + Python Cache
-        uses: Swatinem/rust-cache@v2
 
       - name: Setup dynamic environment
         run: uv sync --frozen --group dev --group bench
@@ -208,28 +155,19 @@ jobs:
 
   robustness-testing:
     name: Robustness Testing (Proptest)
+    needs: rust-checks
     runs-on: ubuntu-latest
-    continue-on-error: true # Non-blocking during initial rollout phase
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Toolchains
+        uses: ./.github/actions/setup-toolchain
         
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
-        
-      - name: Install Tools (Nextest)
-        uses: taiki-e/install-action@v2
-        with:
-          tool: nextest
-
       - name: Run Robustness Suite
         shell: bash
         run: |
           set -o pipefail
-          # Execute the robustness targets explicitly.
-          # Subdirectory integration tests can be tricky for automated discovery in some environments.
           cargo test --test robustness_pipeline --all-features
           cargo test --test robustness_threshold --all-features
           cargo test --test robustness_geometry --all-features
