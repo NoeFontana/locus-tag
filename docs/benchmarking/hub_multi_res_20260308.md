@@ -1,6 +1,6 @@
 # Hub Multi-Resolution Benchmark (2026-03-08)
 
-This report compares the detection accuracy and pipeline performance of Locus across standard resolutions using the `std41h12` dataset.
+This report compares the detection accuracy of Locus across standard resolutions using the `std41h12` dataset.
 
 ## Comparative Metrics
 
@@ -17,10 +17,6 @@ This report compares the detection accuracy and pipeline performance of Locus ac
 | **Rotation** | P50 Error (deg) | 6.2725 | 5.1824 | 3.9013 |
 | | P90 Error (deg) | 15.8761 | 17.8689 | 21.8403 |
 | | P99 Error (deg) | 31.3435 | 28.8244 | 31.7762 |
-| **Performance** | Total Latency* | **4.61 ms** | **13.11 ms** | **26.83 ms** |
-| | FPS (1-thread) | ~216 | ~76 | ~37 |
-
-*\* Latency measured in `--release` mode on a single thread.*
 
 ## Analysis & Insights
 
@@ -32,10 +28,6 @@ This report compares the detection accuracy and pipeline performance of Locus ac
 ### 2. Pose Robustness
 - **Translation:** The median (P50) translation error is excellent (~1cm) across all resolutions. However, the **P99 error** grows significantly at higher resolutions (up to ~30cm at 1080p). This suggests that while most poses are stable, the "tail" of difficult cases (e.g., steep angles or small tags) becomes more volatile as resolution increases.
 - **Rotation:** Rotation P50 actually improves at higher resolutions (6.2° -> 3.9°), likely due to the higher angular resolution provided by more pixels on the tag edges.
-
-### 3. Scaling Efficiency
-- Latency scales roughly linearly with pixel count (~6x pixels from 480p to 1080p results in ~5.8x latency).
-- Locus maintains real-time performance (>30 FPS) even at 1080p on a single core, providing significant headroom for multi-threaded applications or lower-power embedded systems.
 
 ## Methodology
 - **Data Source:** Hugging Face `NoeFontana/locus-tag-bench` (`std41h12` subsets).
