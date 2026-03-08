@@ -381,7 +381,7 @@ impl RegressionHarness {
             let precision = if detections.is_empty() {
                 1.0
             } else {
-                match_count as f64 / detections.len() as f64
+                f64::from(match_count) / detections.len() as f64
             };
             let avg_rmse = if match_count > 0 {
                 image_rmse_sum / f64::from(match_count)
