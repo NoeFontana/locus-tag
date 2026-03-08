@@ -1,4 +1,5 @@
-use locus_core::{DetectorBuilder, ImageView, DetectorConfig};
+//! Robustness tests for the public API boundaries.
+use locus_core::{DetectorBuilder, DetectorConfig, ImageView};
 use proptest::prelude::*;
 
 proptest! {
@@ -10,10 +11,10 @@ proptest! {
     #[test]
     fn prop_api_survives_invalid_buffer_strides(
         (width, height, stride, data_len) in (
-            16..640usize, 
+            16..640usize,
             16..480usize,
-            0..1000usize, 
-            0..1000000usize
+            0..1000usize,
+            0..1_000_000_usize
         ).prop_flat_map(|(w, h, s, dl)| {
             (Just(w), Just(h), Just(s), Just(dl))
         })
@@ -21,11 +22,11 @@ proptest! {
         // Red phase verified, intentional panic removed.
 
         let data = vec![0u8; data_len];
-        
+
         // This simulates a user passing an invalid buffer/stride combination from Python/C
         // It MUST return an Err and MUST NOT panic.
         let result = ImageView::new(&data, width, height, stride);
-        
+
         if let Ok(image) = result {
             // If by some chance the random combination IS valid, processing it shouldn't panic
             let config = DetectorConfig::default();

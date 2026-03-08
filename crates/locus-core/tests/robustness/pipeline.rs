@@ -1,3 +1,4 @@
+//! Robustness tests for the end-to-end perception pipeline.
 use locus_core::{DetectorBuilder, ImageView, PoseEstimationMode};
 use proptest::prelude::*;
 
@@ -18,7 +19,7 @@ proptest! {
         // Feed pure noise into the detector.
         // It shouldn't panic, but should return 0 detections or gracefully handle it.
         // To make the test fail initially, we can add an intentional assert that will fail on some noise.
-        let image = ImageView::new(&data, width, height, width).unwrap();
+        let image = ImageView::new(&data, width, height, width).expect("ImageView creation should succeed with generated data");
         let detections = detector.detect(&image, None, None, PoseEstimationMode::Fast, false);
 
         // The pipeline should survive and return zero valid detections from pure noise.

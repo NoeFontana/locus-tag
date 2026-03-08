@@ -1,3 +1,5 @@
+//! Robustness tests for concurrency and thread safety.
+
 use locus_core::{DetectorBuilder, ImageView};
 use proptest::prelude::*;
 use std::sync::Arc;
@@ -23,10 +25,11 @@ proptest! {
 
         for _ in 0..num_threads {
             let data_clone = Arc::clone(&image_data);
-            
+
             handles.push(thread::spawn(move || {
                 let mut detector = DetectorBuilder::new().build();
-                let image = ImageView::new(&data_clone, width, height, width).unwrap();
+                let image = ImageView::new(&data_clone, width, height, width)
+                    .expect("Generated proptest data should always be valid for ImageView");
                 // We don't care about the result, just that it doesn't panic or deadlock
                 // when multiple threads process the exact same underlying byte slice simultaneously.
                 detector.detect(&image, None, None, locus_core::PoseEstimationMode::Fast, false);
@@ -34,9 +37,9 @@ proptest! {
         }
 
         for handle in handles {
-            handle.join().unwrap();
+            handle.join().expect("Threads should exit cleanly");
         }
-        
+
         // Assert survival
         prop_assert!(true);
     }

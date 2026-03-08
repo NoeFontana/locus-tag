@@ -1,7 +1,6 @@
+//! Robustness tests for geometry solvers and pose estimation.
 use locus_core::{
-    decoder::Homography,
-    pose::estimate_tag_pose,
-    CameraIntrinsics, PoseEstimationMode,
+    CameraIntrinsics, PoseEstimationMode, decoder::Homography, pose::estimate_tag_pose,
 };
 use proptest::prelude::*;
 
@@ -52,7 +51,7 @@ proptest! {
 
         // The estimation can return None, but it shouldn't panic on collinear/degenerate points.
         let _pose = estimate_tag_pose(&intrinsics, &corners, tag_size, None, mode);
-        
+
         // Assert survival
         prop_assert!(true);
     }

@@ -1,4 +1,6 @@
-use locus_core::{decoder::family_to_decoder, TagFamily};
+//! Robustness tests for tag decoding logic.
+
+use locus_core::{TagFamily, decoder::family_to_decoder};
 use proptest::prelude::*;
 
 proptest! {
@@ -22,7 +24,7 @@ proptest! {
 
         // decoder should survive and not panic on any payload
         let _ = decoder.decode_full(payload, max_hamming);
-        
+
         // Assert survival
         prop_assert!(true);
     }

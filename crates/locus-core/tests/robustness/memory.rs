@@ -1,4 +1,5 @@
-use locus_core::{DetectorBuilder, ImageView, DetectorConfig};
+//! Robustness tests for memory bounds and allocation limits.
+use locus_core::{DetectorBuilder, DetectorConfig, ImageView};
 use proptest::prelude::*;
 
 proptest! {
@@ -17,17 +18,17 @@ proptest! {
         // We don't allocate a full image of this size (it would OOM the test runner).
         // We just ensure the ImageView constructor or detector initialization doesn't panic
         // inappropriately. We give it a dummy slice.
-        let data = vec![0u8; 16]; 
-        
+        let data = vec![0u8; 16];
+
         // If ImageView creation fails due to bounds/size mismatch, that's fine (it returns Result).
         // The point is it shouldn't panic.
         if let Ok(image) = ImageView::new(&data, width, height, width) {
-            let mut config = DetectorConfig::default();
-            // Try to force extreme memory allocations in the chunked threshold
-            config.threshold_tile_size = 5; 
-            
-            let mut detector = DetectorBuilder::new().with_config(config).build();
-            // It might fail gracefully or return empty, but shouldn't panic.
+            let config = DetectorConfig {
+                threshold_tile_size: 5,
+                ..DetectorConfig::default()
+            };
+
+            let mut detector = DetectorBuilder::new().with_config(config).build();            // It might fail gracefully or return empty, but shouldn't panic.
             let _ = detector.detect(&image, None, None, locus_core::PoseEstimationMode::Fast, false);
         }
 
