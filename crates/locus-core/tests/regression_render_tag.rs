@@ -299,7 +299,9 @@ impl RegressionHarness {
                                 f64::from(det_pose_data[5]), // z
                             ));
 
-                            if let (Some(gt_pose), Some(intr), Some(size)) = (gt.poses.get(&det_id), intrinsics, tag_size) {
+                            if let (Some(gt_pose), Some(intr), Some(size)) =
+                                (gt.poses.get(&det_id), intrinsics, tag_size)
+                            {
                                 let t_err = (det_t - gt_pose.translation).norm();
 
                                 // Align ground truth rotation with detector convention (180 deg flip about X)
@@ -342,10 +344,11 @@ impl RegressionHarness {
                                     Vector3::new(s, s, 0.0),
                                     Vector3::new(-s, s, 0.0),
                                 ];
-                                
+
                                 // Estimated pose in detector frame
-                                let est_pose = Pose::new(det_q.to_rotation_matrix().into_inner(), det_t);
-                                
+                                let est_pose =
+                                    Pose::new(det_q.to_rotation_matrix().into_inner(), det_t);
+
                                 // To reproject accurately, we need to handle the 90-degree rotation ambiguity
                                 // by rotating the model corners to match the detected corner ordering.
                                 let mut reprojected_corners = [[0.0, 0.0]; 4];
@@ -358,8 +361,12 @@ impl RegressionHarness {
                                     let p_rotated = q_rot_inv * model_corners[k];
                                     reprojected_corners[k] = est_pose.project(&p_rotated, &intr);
                                 }
-                                
-                                image_repro_rmse_sum += locus_core::test_utils::compute_corner_error(&reprojected_corners, gt_corners);
+
+                                image_repro_rmse_sum +=
+                                    locus_core::test_utils::compute_corner_error(
+                                        &reprojected_corners,
+                                        gt_corners,
+                                    );
                             }
                         }
                     }
@@ -501,7 +508,10 @@ impl RegressionHarness {
         println!("  Recall: {:.2}%", report.summary.mean_recall * 100.0);
         println!("  Precision: {:.2}%", report.summary.mean_precision * 100.0);
         println!("  RMSE:   {:.4} px", report.summary.mean_rmse);
-        println!("  Repro RMSE: {:.4} px", report.summary.mean_reprojection_rmse);
+        println!(
+            "  Repro RMSE: {:.4} px",
+            report.summary.mean_reprojection_rmse
+        );
         println!("  Trans P50: {:.4} m", report.summary.p50_translation_error);
         println!("  Rot P50: {:.4} deg", report.summary.p50_rotation_error);
         println!("  Latency: {:.4} ms", report.summary.mean_total_ms);
