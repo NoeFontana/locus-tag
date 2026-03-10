@@ -26,17 +26,17 @@ Strict evaluation against standard datasets (ICRA 2020) to ensure no regressions
 
 To run the suite:
 ```bash
-cargo test --release --test regression_icra2020 -- --test-threads=1
+TRACY_NO_INVARIANT_CHECK=1 cargo test --release --test regression_icra2020 -- --test-threads=1
 ```
 
 **Updating Snapshots:**
 If intentional changes have been made that alter the metrics, you must update the snapshots. **Always use the release profile** when updating snapshots to avoid extreme execution times:
 ```bash
 # ICRA 2020 suite
-INSTA_UPDATE=always cargo test --release --test regression_icra2020 -- --test-threads=1
+TRACY_NO_INVARIANT_CHECK=1 INSTA_UPDATE=always cargo test --release --test regression_icra2020 -- --test-threads=1
 
-# Render-Tag suite
-LOCUS_HUB_DATASET_DIR=../../tests/data/hub_cache INSTA_UPDATE=always cargo test --release --test regression_render_tag -- --test-threads=1
+# Render-Tag suite (if applicable)
+TRACY_NO_INVARIANT_CHECK=1 LOCUS_HUB_DATASET_DIR=../../tests/data/hub_cache INSTA_UPDATE=always cargo test --release --test regression_render_tag -- --test-threads=1
 ```
 
 **Success Criteria:**

@@ -50,12 +50,13 @@ cargo bench --bench comprehensive -- "bench_thresholding"
 uv run --group bench tools/cli.py bench real --compare
 
 # 2. Regression Testing (Sequential for accurate latency)
-cargo test --release --test regression_icra2020 -- --test-threads=1
+TRACY_NO_INVARIANT_CHECK=1 cargo test --release --test regression_icra2020 -- --test-threads=1
 
 # 3. Snapshot Verification (if output changes are intentional)
-cargo insta test --review
+TRACY_NO_INVARIANT_CHECK=1 cargo insta test --release --all-features --features bench-internals --review
+```
 
-# 4. Documentation Quality
+## 3. Documentation Quality
 Ensure the documentation builds correctly and is complete.
 
 ```bash

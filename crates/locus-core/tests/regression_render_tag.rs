@@ -736,7 +736,6 @@ fn run_hub_test(config_name: &str, family: TagFamily) {
 }
 
 #[test]
-#[ignore = "Metadata gaps in HF dataset"]
 fn regression_hub_tag36h11() {
     let _guard = common::telemetry::init("regression_hub_tag36h11");
     run_hub_test(
@@ -744,29 +743,3 @@ fn regression_hub_tag36h11() {
         TagFamily::AprilTag36h11,
     );
 }
-
-/*
-#[test]
-fn regression_hub_std41h12() {
-    run_hub_test(
-        "single_tag_locus_v1_std41h12_640x480",
-        TagFamily::AprilTag41h12,
-    );
-}
-
-#[test]
-fn regression_hub_std41h12_720p() {
-    run_hub_test(
-        "single_tag_locus_v1_std41h12_1280x720",
-        TagFamily::AprilTag41h12,
-    );
-}
-
-#[test]
-fn regression_hub_std41h12_1080p() {
-    run_hub_test(
-        "single_tag_locus_v1_std41h12_1920x1080",
-        TagFamily::AprilTag41h12,
-    );
-}
-*/
