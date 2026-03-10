@@ -146,7 +146,7 @@ macro_rules! hub_benchmarks {
                 let (data, width, height) = load_image($dataset, "scene_0000_cam_0000.png");
                 let img = ImageView::new(&data, width, height, width).unwrap();
                 let mut detector = locus_core::Detector::new();
-                detector.set_families(&[locus_core::TagFamily::AprilTag41h12]);
+                detector.set_families(&[locus_core::TagFamily::AprilTag36h11]);
 
                 bencher.bench_local(move || {
                     let _detections = detector.detect(
@@ -162,6 +162,6 @@ macro_rules! hub_benchmarks {
     };
 }
 
-hub_benchmarks!(res_480p, "single_tag_locus_v1_std41h12_640x480");
-hub_benchmarks!(res_720p, "single_tag_locus_v1_std41h12_1280x720");
-hub_benchmarks!(res_1080p, "single_tag_locus_v1_std41h12_1920x1080");
+hub_benchmarks!(res_480p, "single_tag_locus_v1_tag36h11_640x480");
+hub_benchmarks!(res_720p, "single_tag_locus_v1_tag36h11_1280x720");
+hub_benchmarks!(res_1080p, "single_tag_locus_v1_tag36h11_1920x1080");

@@ -10,8 +10,10 @@ use std::path::PathBuf;
 
 /// Maps a codebase enum family string to the literal JSON file prefix
 const FAMILY_MAPPING: &[(&str, &str, usize)] = &[
-    ("AprilTag36h11", "tag36h11", 6),
-    ("AprilTag41h12", "tagstandard41h12", 9),
+    ("AprilTag16h5", "dict_apriltag_16h5", 4),
+    ("AprilTag25h9", "dict_apriltag_25h9", 5),
+    ("AprilTag36h10", "dict_apriltag_36h10", 6),
+    ("AprilTag36h11", "dict_apriltag_36h11", 6),
     ("ArUco4x4_50", "dict_4x4_50", 4),
     ("ArUco4x4_100", "dict_4x4_100", 4),
 ];
@@ -68,39 +70,31 @@ fn find_closest_point_index(rotated: &[f64; 2], original: &[[f64; 2]]) -> usize 
 fn compute_rotations(base_code: u64, payload_length: u32, points: &[[f64; 2]]) -> [u64; 4] {
     let mut result = [0u64; 4];
 
-    // Umich AprilTag codes (from JSON) are MSB-first.
-    // Locus samples LSB-first: bit i corresponds to points[i].
-    let mut lsb_code = 0u64;
-    for i in 0..payload_length {
-        if (base_code & (1 << (payload_length - 1 - i))) != 0 {
-            lsb_code |= 1 << i;
-        }
-    }
+    // OpenCV ArUco dictionaries in our JSON are already in row-major order.
+    // Bit i corresponds to points[i].
+    // Base code is rotation 0.
+    result[0] = base_code;
 
-    // We need to find which rotation (0, 90, 180, 270) matches the ground truth.
-    // Based on previous diagnostics, ROT 2 (180 deg) was the match.
-    // So we'll iterate 4 times and store them such that our "ROT 0" is the 180 deg version of lsb_code.
+    // We compute 3 more rotations (90, 180, 270 degrees clockwise).
+    // In OpenCV, rotate(90 deg CW) means:
+    // point (x, y) moves to (-y, x).
+    // So bit i at points[i] moves to dst_idx = find_closest_point_index(rotate(points[i])).
 
-    let mut curr_points = points.to_vec();
-    // To make 180 deg the new 0 deg, we start with 180 deg rotation.
-    for r in 0..4 {
+    for (r, item) in result.iter_mut().enumerate().skip(1) {
         let mut rotated_code = 0u64;
+        let mut curr_points = points.to_vec();
+        // Rotate the bit pattern r times 90 degrees CW.
+        for _ in 0..r {
+            curr_points = rotate_points_90(&curr_points);
+        }
+
         for i in 0..payload_length {
-            if (lsb_code & (1 << i)) != 0 {
-                // The bit at points[i] moves to curr_points[i].
-                // We find where curr_points[i] is in the ORIGINAL points.
+            if (base_code & (1 << i)) != 0 {
                 let dst_idx = find_closest_point_index(&curr_points[i as usize], points);
                 rotated_code |= 1 << dst_idx;
             }
         }
-
-        // We want result[0] to be the 180-degree version (r=2).
-        // r=0: 0 deg, r=1: 90 deg, r=2: 180 deg, r=3: 270 deg.
-        // mapping: result[0] = rot_180, result[1] = rot_270, result[2] = rot_0, result[3] = rot_90.
-        let target_idx = (r + 2) % 4;
-        result[target_idx] = rotated_code;
-
-        curr_points = rotate_points_90(&curr_points);
+        *item = rotated_code;
     }
 
     result
@@ -213,16 +207,7 @@ fn main() {
         );
 
         let content = fs::read_to_string(&json_path).expect("failed to read json");
-        let mut ir: DictionaryIR = serde_json::from_str(&content).expect("failed to parse json");
-
-        // Rescale points: Locus quad-centric coordinates [-1, 1] cover the WHOLE tag (including border).
-        // JSON points are usually interior-centric (data bits only in [-1, 1]).
-        // Dimension `dim` covers `dim` bits. Total tag width is `dim + 2` bits.
-        let scale = dim as f64 / (dim as f64 + 2.0);
-        for p in &mut ir.canonical_sampling_points {
-            p[0] *= scale;
-            p[1] *= scale;
-        }
+        let ir: DictionaryIR = serde_json::from_str(&content).expect("failed to parse json");
 
         let mut all_codes = Vec::with_capacity(ir.base_codes.len() * 4);
         for hex_str in &ir.base_codes {

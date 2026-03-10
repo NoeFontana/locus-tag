@@ -20,7 +20,7 @@ fn test_accuracy_synthetic() {
     let test_cases = [
         (TagFamily::AprilTag36h11, 0, 150),
         (TagFamily::AprilTag36h11, 1, 193),
-        (TagFamily::AprilTag41h12, 10, 150),
+        (TagFamily::AprilTag36h10, 10, 150),
         (TagFamily::ArUco4x4_50, 5, 121),
     ];
 

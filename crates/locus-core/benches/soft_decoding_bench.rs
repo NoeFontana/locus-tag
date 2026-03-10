@@ -65,12 +65,12 @@ fn bench_soft_decoding_200_candidates(bencher: divan::Bencher) {
     });
 }
 #[bench]
-fn bench_soft_decoding_41h12_200_candidates(bencher: divan::Bencher) {
-    use locus_core::bench_api::AprilTag41h12;
-    let decoder = AprilTag41h12;
-    let dict = locus_core::dictionaries::get_dictionary(locus_core::TagFamily::AprilTag41h12);
-    // id=100 is a valid ID for 41h12
-    let orig_code = dict.get_code(100).unwrap();
+fn bench_soft_decoding_36h10_200_candidates(bencher: divan::Bencher) {
+    use locus_core::bench_api::AprilTag36h10;
+    let decoder = AprilTag36h10;
+    let dict = locus_core::dictionaries::get_dictionary(locus_core::TagFamily::AprilTag36h10);
+    // id=100 is a valid ID for 36h10
+    let code_val = dict.get_code(100).unwrap();
 
     let mut intensities = [100.0f64; 64];
     let thresholds = [150.0f64; 64];
@@ -78,9 +78,9 @@ fn bench_soft_decoding_41h12_200_candidates(bencher: divan::Bencher) {
         .iter_mut()
         .zip(thresholds.iter())
         .enumerate()
-        .take(41)
+        .take(36)
     {
-        if (orig_code >> i) & 1 == 1 {
+        if (code_val >> i) & 1 == 1 {
             *intensity = 200.0;
         } else {
             *intensity = 100.0;
@@ -88,9 +88,9 @@ fn bench_soft_decoding_41h12_200_candidates(bencher: divan::Bencher) {
     }
 
     // Flip bit 0
-    intensities[0] = if (orig_code & 1) == 1 { 100.0 } else { 200.0 };
+    intensities[0] = if (code_val & 1) == 1 { 100.0 } else { 200.0 };
 
-    let code = SoftStrategy::from_intensities(&intensities[..41], &thresholds[..41]);
+    let code = SoftStrategy::from_intensities(&intensities[..36], &thresholds[..36]);
 
     bencher.bench_local(move || {
         let mut count = 0;

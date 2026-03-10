@@ -9,8 +9,8 @@ This script fetches pre-defined dictionaries from OpenCV, compute canonical samp
 points in the [-1.0, 1.0] continuous space, and exports a unified JSON representation.
 
 Usage:
-    uv run scripts/data/extract_opencv.py --all
-    uv run scripts/data/extract_opencv.py --dict DICT_4X4_50
+    uv run examples/dictionary_generation/extract_opencv.py --all
+    uv run examples/dictionary_generation/extract_opencv.py --dict DICT_4X4_50
 """
 
 import argparse
@@ -39,9 +39,20 @@ SCRIPT_VERSION = "2.0.1"
 # Standard OpenCV families to extract by default
 # tuple: (opencv_name, grid_size, payload_length, min_hamming)
 # Note: min_hamming is often reported as an estimate in ArUco
+# AprilTag values are based on the family definitions (e.g. 36h11 -> payload 36, dist 11)
 STANDARD_FAMILIES = [
     ("DICT_4X4_50", 4, 16, 4),
     ("DICT_4X4_100", 4, 16, 3),
+    ("DICT_5X5_50", 5, 25, 4),
+    ("DICT_5X5_100", 5, 25, 4),
+    ("DICT_6X6_50", 6, 36, 4),
+    ("DICT_6X6_100", 6, 36, 4),
+    ("DICT_7X7_50", 7, 49, 4),
+    ("DICT_7X7_100", 7, 49, 4),
+    ("DICT_APRILTAG_16h5", 4, 16, 5),
+    ("DICT_APRILTAG_25h9", 5, 25, 9),
+    ("DICT_APRILTAG_36h10", 6, 36, 10),
+    ("DICT_APRILTAG_36h11", 6, 36, 11),
 ]
 
 
@@ -58,13 +69,17 @@ class OpenCVExtractor:
         """
         Computes sampling centers in a [-1.0, 1.0] continuous space.
         Uses a dense row-major grid corresponding to OpenCV's internal layout.
+        Assumes the canonical square [-1, 1] covers the FULL tag (including 1-bit border).
         """
+        full_dim = grid_size + 2
         points = []
         for y in range(grid_size):
             for x in range(grid_size):
-                # Map [0, grid_size-1] to centers in [-1.0, 1.0]
-                cx = -1.0 + (2.0 * x + 1.0) / grid_size
-                cy = -1.0 + (2.0 * y + 1.0) / grid_size
+                # Data bits are in indices [1, grid_size].
+                # Map [0, full_dim-1] to centers in [-1.0, 1.0]
+                # Center of cell g is (g + 0.5) * 2 / full_dim - 1
+                cx = (float(x) + 1.5) * 2.0 / full_dim - 1.0
+                cy = (float(y) + 1.5) * 2.0 / full_dim - 1.0
                 # Precision limited to 4 decimals for clean IR
                 points.append([round(float(cx), 4), round(float(cy), 4)])
         return points

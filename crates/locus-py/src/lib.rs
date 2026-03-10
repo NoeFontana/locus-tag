@@ -21,17 +21,21 @@ use pyo3::types::PyDict;
 #[pyclass(eq, eq_int, skip_from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TagFamily {
-    AprilTag36h11 = 0,
-    AprilTag41h12 = 1,
-    ArUco4x4_50 = 2,
-    ArUco4x4_100 = 3,
+    AprilTag16h5 = 0,
+    AprilTag25h9 = 1,
+    AprilTag36h10 = 2,
+    AprilTag36h11 = 3,
+    ArUco4x4_50 = 4,
+    ArUco4x4_100 = 5,
 }
 
 impl From<TagFamily> for locus_core::TagFamily {
     fn from(f: TagFamily) -> Self {
         match f {
+            TagFamily::AprilTag16h5 => locus_core::TagFamily::AprilTag16h5,
+            TagFamily::AprilTag25h9 => locus_core::TagFamily::AprilTag25h9,
+            TagFamily::AprilTag36h10 => locus_core::TagFamily::AprilTag36h10,
             TagFamily::AprilTag36h11 => locus_core::TagFamily::AprilTag36h11,
-            TagFamily::AprilTag41h12 => locus_core::TagFamily::AprilTag41h12,
             TagFamily::ArUco4x4_50 => locus_core::TagFamily::ArUco4x4_50,
             TagFamily::ArUco4x4_100 => locus_core::TagFamily::ArUco4x4_100,
         }
@@ -404,10 +408,12 @@ impl Detector {
         let mut core_families = Vec::new();
         for f in families {
             let family = match f {
-                0 => locus_core::TagFamily::AprilTag36h11,
-                1 => locus_core::TagFamily::AprilTag41h12,
-                2 => locus_core::TagFamily::ArUco4x4_50,
-                3 => locus_core::TagFamily::ArUco4x4_100,
+                0 => locus_core::TagFamily::AprilTag16h5,
+                1 => locus_core::TagFamily::AprilTag25h9,
+                2 => locus_core::TagFamily::AprilTag36h10,
+                3 => locus_core::TagFamily::AprilTag36h11,
+                4 => locus_core::TagFamily::ArUco4x4_50,
+                5 => locus_core::TagFamily::ArUco4x4_100,
                 _ => {
                     return Err(PyValueError::new_err(format!(
                         "Invalid TagFamily value: {f}"
@@ -435,10 +441,12 @@ fn create_detector(
 
     for f in families {
         let family = match f {
-            0 => locus_core::TagFamily::AprilTag36h11,
-            1 => locus_core::TagFamily::AprilTag41h12,
-            2 => locus_core::TagFamily::ArUco4x4_50,
-            3 => locus_core::TagFamily::ArUco4x4_100,
+            0 => locus_core::TagFamily::AprilTag16h5,
+            1 => locus_core::TagFamily::AprilTag25h9,
+            2 => locus_core::TagFamily::AprilTag36h10,
+            3 => locus_core::TagFamily::AprilTag36h11,
+            4 => locus_core::TagFamily::ArUco4x4_50,
+            5 => locus_core::TagFamily::ArUco4x4_100,
             _ => {
                 return Err(PyValueError::new_err(format!(
                     "Invalid TagFamily value: {f}"

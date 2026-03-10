@@ -745,6 +745,7 @@ fn regression_hub_tag36h11() {
     );
 }
 
+/*
 #[test]
 fn regression_hub_std41h12() {
     run_hub_test(
@@ -768,3 +769,4 @@ fn regression_hub_std41h12_1080p() {
         TagFamily::AprilTag41h12,
     );
 }
+*/
