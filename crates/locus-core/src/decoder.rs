@@ -11,6 +11,7 @@ use crate::config;
 use crate::simd::math::{bilinear_interpolate_fixed, rcp_nr};
 use crate::simd::roi::RoiCache;
 use bumpalo::Bump;
+use multiversion::multiversion;
 use nalgebra::{SMatrix, SVector};
 use std::cell::RefCell;
 
