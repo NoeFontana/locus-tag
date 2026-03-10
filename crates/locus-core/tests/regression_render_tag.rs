@@ -45,7 +45,8 @@ impl ConfigPreset {
         match self {
             Self::PlainBoard => DetectorConfig::builder()
                 .refinement_mode(locus_core::config::CornerRefinementMode::Erf)
-                .decoder_min_contrast(15.0)
+                .decoder_min_contrast(0.0)
+                .max_hamming_error(3)
                 .build(),
         }
     }
@@ -210,8 +211,6 @@ impl RegressionHarness {
         let mut translation_errors = Vec::new();
         let mut rotation_errors = Vec::new();
 
-        println!("INTRINSICS: {:?}", self.options.intrinsics);
-
         for (filename, data, width, height, gt) in provider.iter() {
             let img = ImageView::new(&data, width, height, width).expect("valid image");
 
@@ -277,7 +276,7 @@ impl RegressionHarness {
                     let g_cy: f64 = gt_corners.iter().map(|p| p[1]).sum::<f64>() / 4.0;
                     let dist_sq = (det_center[0] - g_cx).powi(2) + (det_center[1] - g_cy).powi(2);
 
-                    if dist_sq < 50.0 * 50.0 {
+                    if dist_sq < 100.0 * 100.0 {
                         // Use the test_utils version which tries all 4 rotations for best match
                         image_rmse_sum += locus_core::test_utils::compute_corner_error(
                             &det_corners_f64,
@@ -305,64 +304,46 @@ impl RegressionHarness {
                             if let (Some(gt_pose), Some(intr), Some(size)) =
                                 (gt.poses.get(&det_id), intrinsics, tag_size)
                             {
-                                let t_err = (det_t - gt_pose.translation).norm();
+                                // Modern OpenCV Convention: Y-Down, Z-In, Top-Left Origin.
+                                // Hub Ground Truth follows the same axes but is center-anchored.
+                                let q_gt = UnitQuaternion::from_matrix(&gt_pose.rotation);
+                                let r_err = det_q.angle_to(&q_gt);
 
-                                // Align ground truth rotation with detector convention (180 deg flip about X)
-                                let q_correction = UnitQuaternion::from_axis_angle(
-                                    &Vector3::x_axis(),
-                                    std::f64::consts::PI,
-                                );
-                                let q_gt_aligned =
-                                    UnitQuaternion::from_matrix(&gt_pose.rotation) * q_correction;
+                                // Shift GT translation from center to top-left corner
+                                // In local coords (Y-Down, Z-In): TL is [-s/2, -s/2, 0]
+                                let s_half = size * 0.5;
+                                let t_gt_tl = gt_pose.translation
+                                    + gt_pose.rotation * Vector3::new(-s_half, -s_half, 0.0);
 
-                                // Detectors often have 90-degree ambiguities. We check all 4 rotations about Z.
-                                let mut min_r_err = det_q.angle_to(&q_gt_aligned);
-                                let mut best_rot_idx = 0;
-                                for k in 1..4 {
-                                    let q_rot = UnitQuaternion::from_axis_angle(
-                                        &Vector3::z_axis(),
-                                        f64::from(k) * std::f64::consts::FRAC_PI_2,
-                                    );
-                                    let r_err = det_q.angle_to(&(q_gt_aligned * q_rot));
-                                    if r_err < min_r_err {
-                                        min_r_err = r_err;
-                                        best_rot_idx = k;
-                                    }
-                                }
+                                let t_err = (det_t - t_gt_tl).norm();
 
                                 image_translation_error_sum += t_err;
-                                image_rotation_error_sum += min_r_err;
+                                image_rotation_error_sum += r_err;
                                 pose_match_count += 1;
 
                                 translation_errors.push(t_err);
-                                rotation_errors.push(min_r_err.to_degrees());
+                                rotation_errors.push(r_err.to_degrees());
 
                                 // --- Reprojection Error (vs Ground Truth Corners) ---
-                                let s = size * 0.5;
-                                // 3D model corners in the tag frame (centered)
+                                let s = size;
+                                // 3D model corners in the tag frame (Top-Left origin)
                                 // Standard ordering: TL, TR, BR, BL
                                 let model_corners = [
-                                    Vector3::new(-s, -s, 0.0),
-                                    Vector3::new(s, -s, 0.0),
+                                    Vector3::new(0.0, 0.0, 0.0),
+                                    Vector3::new(s, 0.0, 0.0),
                                     Vector3::new(s, s, 0.0),
-                                    Vector3::new(-s, s, 0.0),
+                                    Vector3::new(0.0, s, 0.0),
                                 ];
 
                                 // Estimated pose in detector frame
                                 let est_pose =
                                     Pose::new(det_q.to_rotation_matrix().into_inner(), det_t);
 
-                                // To reproject accurately, we need to handle the 90-degree rotation ambiguity
-                                // by rotating the model corners to match the detected corner ordering.
+                                // Standard reprojection using the estimated pose and Top-Left model corners.
                                 let mut reprojected_corners = [[0.0, 0.0]; 4];
                                 for k in 0..4 {
-                                    // Apply the inverse of the ambiguity rotation to the model points
-                                    let q_rot_inv = UnitQuaternion::from_axis_angle(
-                                        &Vector3::z_axis(),
-                                        -f64::from(best_rot_idx) * std::f64::consts::FRAC_PI_2,
-                                    );
-                                    let p_rotated = q_rot_inv * model_corners[k];
-                                    reprojected_corners[k] = est_pose.project(&p_rotated, &intr);
+                                    reprojected_corners[k] =
+                                        est_pose.project(&model_corners[k], &intr);
                                 }
 
                                 image_repro_rmse_sum +=

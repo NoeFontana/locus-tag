@@ -99,12 +99,13 @@ pub(crate) fn refine_pose_lm_weighted(
     corner_covariances: &[Matrix2<f64>; 4],
 ) -> (Pose, [[f64; 6]; 6]) {
     let mut pose = initial_pose;
-    let s = tag_size * 0.5;
+    let s = tag_size;
+    // Modern OpenCV 4.6+ Convention: Origin at Top-Left, CW winding
     let obj_pts = [
-        Vector3::new(-s, -s, 0.0),
-        Vector3::new(s, -s, 0.0),
-        Vector3::new(s, s, 0.0),
-        Vector3::new(-s, s, 0.0),
+        Vector3::new(0.0, 0.0, 0.0), // 0: Top-Left
+        Vector3::new(s, 0.0, 0.0),   // 1: Top-Right
+        Vector3::new(s, s, 0.0),     // 2: Bottom-Right
+        Vector3::new(0.0, s, 0.0),   // 3: Bottom-Left
     ];
 
     let mut info_matrices = [Matrix2::zeros(); 4];

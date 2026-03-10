@@ -4,7 +4,7 @@ This page describes the coordinate systems used by **Locus** for detections and 
 
 ## 1. 2D Image Coordinates
 
-Locus follows the standard image coordinate system used by OpenCV and the `UMich/ICRA 2020` benchmark.
+Locus follows the standard image coordinate system used by OpenCV and major computer vision benchmarks.
 
 - **Origin (0,0)**: The top-left corner of the image.
 - **X-axis**: Increases from left to right.
@@ -15,26 +15,34 @@ Locus uses the **pixel-center at 0.5** convention.
 - The center of the top-left pixel is $(0.5, 0.5)$.
 - The top-left corner of the image (the boundary of the first pixel) is $(0.0, 0.0)$.
 
-This convention is strictly followed to ensure that sub-pixel corner refinement and RMSE calculations are compatible with standard computer vision datasets.
+This convention is strictly followed to ensure that sub-pixel corner refinement and RMSE calculations are compatible with standard computer vision datasets like **ICRA 2020**.
+
+!!! info "ICRA 2020 Parity"
+    While Locus uses the same pixel coordinate system as the ICRA 2020 benchmark, the **corner indexing** differs due to winding conventions:
+    - **ICRA 2020**: Uses UMich-style Counter-Clockwise (CCW) winding starting from the bottom-left $[BL, BR, TR, TL]$.
+    - **Locus**: Uses Modern OpenCV Clockwise (CW) winding starting from the top-left $[TL, TR, BR, BL]$.
+    - **Orientation**: The ICRA dataset has a 180-degree bit-rotation offset relative to Locus's row-major 0-degree orientation.
 
 ## 2. Tag Local Coordinates (Object Space)
 
-When estimating 3D pose, the tag is defined in a right-handed local coordinate system where the tag lies on the $Z=0$ plane. For a tag of physical size $s$ (e.g., in meters):
+When estimating 3D pose, the tag is defined in a right-handed local coordinate system where the tag lies on the $Z=0$ plane. This follows the **modern OpenCV (4.6+)** convention (`ARUCO_CW_TOP_LEFT_CORNER`).
 
-- **Origin (0,0,0)**: The geometric center of the tag.
-- **Z-axis**: Points outward from the tag face (the "normal" of the tag).
-- **X-axis**: Points to the right relative to the tag's orientation.
-- **Y-axis**: Points downward relative to the tag's orientation.
+For a tag of physical size $s$ (e.g., in meters):
+
+- **Origin (0,0,0)**: The **Top-Left** corner of the tag.
+- **X-axis**: Points to the right, along the top edge.
+- **Y-axis**: Points downward, along the left edge.
+- **Z-axis**: Points **into** the scene (away from the camera), established by the right-hand rule ($X \times Y$).
 
 ### Corner Ordering
-Detections return corners in a specific counter-clockwise order (when looking at the tag), matching the following object-space coordinates:
+Detections return corners in **clockwise order** (when looking at the tag), matching the following object-space coordinates:
 
 | Index | Location | Object Space Coordinates $(X, Y, Z)$ |
 | :--- | :--- | :--- |
-| **0** | Top-Left | $(-s/2, -s/2, 0)$ |
-| **1** | Top-Right | $(s/2, -s/2, 0)$ |
-| **2** | Bottom-Right | $(s/2, s/2, 0)$ |
-| **3** | Bottom-Left | $(-s/2, s/2, 0)$ |
+| **0** | Top-Left | $(0, 0, 0)$ |
+| **1** | Top-Right | $(s, 0, 0)$ |
+| **2** | Bottom-Right | $(s, s, 0)$ |
+| **3** | Bottom-Left | $(0, s, 0)$ |
 
 ## 3. Tag Layout and Bit Order
 
@@ -84,4 +92,4 @@ P_{camera} = R \cdot P_{object} + t
 $$
 
 - $R$: A $3 \times 3$ rotation matrix.
-- $t$: A $3 \times 1$ translation vector (representing the tag's center in the camera frame).
+- $t$: A $3 \times 1$ translation vector (representing the tag's **top-left corner** in the camera frame).

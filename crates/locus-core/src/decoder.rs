@@ -1277,12 +1277,10 @@ pub fn sample_grid(
     sample_grid_generic::<crate::strategy::HardStrategy>(img, arena, detection, decoder)
 }
 
-/// A trait for decoding binary payloads from extracted tags.
 /// Rotate a square bit grid 90 degrees clockwise.
 /// This is an O(1) bitwise operation but conceptually represents rotating the N x N pixel grid.
 #[must_use]
-#[allow(dead_code)]
-pub(crate) fn rotate90(bits: u64, dim: usize) -> u64 {
+pub fn rotate90(bits: u64, dim: usize) -> u64 {
     let mut res = 0u64;
     for y in 0..dim {
         for x in 0..dim {
@@ -2138,8 +2136,8 @@ mod tests {
                 if gx == 0 || gx == 7 || gy == 0 || gy == 7 {
                     for y in 0..4 {
                         for x in 0..4 {
-                            let px = 14 + (gx as f64 * 4.5) as usize + x;
-                            let py = 14 + (gy as f64 * 4.5) as usize + y;
+                            let px = 14 + (f64::from(gx) * 4.5) as usize + x;
+                            let py = 14 + (f64::from(gy) * 4.5) as usize + y;
                             if px < 64 && py < 64 {
                                 data[py * width + px] = 0;
                             }
@@ -2173,7 +2171,8 @@ mod tests {
             corners: [[14.0, 14.0], [50.0, 14.0], [50.0, 50.0], [14.0, 50.0]],
             ..Default::default()
         };
-        let bits = sample_grid(&img, &arena, &cand, &decoder, 20.0).expect("Should sample successfully");
+        let bits =
+            sample_grid(&img, &arena, &cand, &decoder, 20.0).expect("Should sample successfully");
 
         // bit 0 should be 1 (high intensity)
         assert_eq!(bits & 1, 1, "Bit 0 should be 1");

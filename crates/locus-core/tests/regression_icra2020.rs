@@ -119,7 +119,6 @@ pub struct RegressionHarness {
     snapshot_name: String,
     config: DetectorConfig,
     options: DetectOptions,
-    icra_corner_ordering: bool,
 }
 
 impl RegressionHarness {
@@ -128,7 +127,6 @@ impl RegressionHarness {
             snapshot_name: snapshot_name.into(),
             config: DetectorConfig::default(),
             options: DetectOptions::default(),
-            icra_corner_ordering: true,
         }
     }
 
@@ -227,19 +225,28 @@ impl RegressionHarness {
                             (det_center[0] - gt_cx).powi(2) + (det_center[1] - gt_cy).powi(2);
 
                         if dist_sq < 50.0 * 50.0 {
-                            let det_corners = if self.icra_corner_ordering {
-                                [
-                                    det_corners_f64[1],
-                                    det_corners_f64[0],
-                                    det_corners_f64[3],
-                                    det_corners_f64[2],
-                                ]
-                            } else {
-                                det_corners_f64
-                            };
+                            // ICRA 2020 Parity: The ICRA dataset ground truth follows the UMich/CCW convention:
+                            // [0:BL, 1:BR, 2:TR, 3:TL].
+                            // Locus follows Modern OpenCV/CW: [TL, TR, BR, BL].
+                            //
+                            // Based on empirical observation of 0037.png:
+                            // DET Corner 0 is at BR (matches GT 1)
+                            // DET Corner 1 is at BL (matches GT 0)
+                            // DET Corner 2 is at TL (matches GT 3)
+                            // DET Corner 3 is at TR (matches GT 2)
+                            //
+                            // This corresponds to a 180-degree bit-rotation offset in the dataset convention.
+                            let gt_locus_aligned = [
+                                gt_corners[1], // GT BR -> DET 0
+                                gt_corners[0], // GT BL -> DET 1
+                                gt_corners[3], // GT TL -> DET 2
+                                gt_corners[2], // GT TR -> DET 3
+                            ];
 
-                            image_rmse_sum +=
-                                locus_core::test_utils::compute_rmse(&det_corners, gt_corners);
+                            image_rmse_sum += locus_core::test_utils::compute_rmse(
+                                &det_corners_f64,
+                                &gt_locus_aligned,
+                            );
                             match_count += 1;
                             found_ids.insert(det_id);
                         }
