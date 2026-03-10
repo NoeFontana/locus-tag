@@ -4,11 +4,7 @@ expression: report
 ---
 summary:
   dataset_size: 1
-  mean_recall: 0
-  mean_rmse: 0
+  mean_recall: 1
+  mean_rmse: 0.1004
   mean_total_ms: "[DURATION]"
-  worst_offenders:
-    - filename: 0037.png
-      missed: 154
-      extra: 0
-      rmse: 0
+  worst_offenders: []
