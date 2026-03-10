@@ -33,8 +33,8 @@ Detections return corners in a specific counter-clockwise order (when looking at
 | :--- | :--- | :--- |
 | **0** | Top-Left | $(-s/2, -s/2, 0)$ |
 | **1** | Top-Right | $(s/2, -s/2, 0)$ |
-| 2 | Bottom-Right | $(s/2, s/2, 0)$ |
-| 3 | Bottom-Left | $(-s/2, s/2, 0)$ |
+| **2** | Bottom-Right | $(s/2, s/2, 0)$ |
+| **3** | Bottom-Left | $(-s/2, s/2, 0)$ |
 
 ## 3. Tag Layout and Bit Order
 
@@ -59,7 +59,6 @@ The 0-degree ("canonical") orientation of a tag is defined such that the bits ar
 
 ## 4. 3D Camera Coordinate System
 
-
 Locus utilizes a **right-handed** coordinate system for the camera, consistent with the standard pinhole camera model.
 
 - **Origin**: The optical center (focal point) of the camera.
@@ -76,7 +75,7 @@ $$
 
 This model assumes a rectified image (zero distortion). If your camera has significant lens distortion, you should undistort the image or the corner points before passing them to the pose estimator.
 
-## 4. Pose Representation
+## 5. Pose Representation
 
 A pose $(R, t)$ returned by Locus transforms a point $P_{object}$ from **Tag Local Coordinates** to **Camera Coordinates** $P_{camera}$:
 
