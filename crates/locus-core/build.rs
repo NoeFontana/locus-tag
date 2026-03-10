@@ -11,8 +11,6 @@ use std::path::PathBuf;
 /// Maps a codebase enum family string to the literal JSON file prefix
 const FAMILY_MAPPING: &[(&str, &str, usize)] = &[
     ("AprilTag16h5", "dict_apriltag_16h5", 4),
-    ("AprilTag25h9", "dict_apriltag_25h9", 5),
-    ("AprilTag36h10", "dict_apriltag_36h10", 6),
     ("AprilTag36h11", "dict_apriltag_36h11", 6),
     ("ArUco4x4_50", "dict_4x4_50", 4),
     ("ArUco4x4_100", "dict_4x4_100", 4),

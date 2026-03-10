@@ -610,8 +610,6 @@ def extract_bits(
 
     family_map = {
         "AprilTag16h5": cv2.aruco.DICT_APRILTAG_16h5,
-        "AprilTag25h9": cv2.aruco.DICT_APRILTAG_25h9,
-        "AprilTag36h10": cv2.aruco.DICT_APRILTAG_36h10,
         "AprilTag36h11": cv2.aruco.DICT_APRILTAG_36h11,
         "ArUco4x4_50": cv2.aruco.DICT_4X4_50,
         "ArUco4x4_100": cv2.aruco.DICT_4X4_100,

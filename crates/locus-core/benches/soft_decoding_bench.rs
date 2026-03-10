@@ -65,11 +65,11 @@ fn bench_soft_decoding_200_candidates(bencher: divan::Bencher) {
     });
 }
 #[bench]
-fn bench_soft_decoding_36h10_200_candidates(bencher: divan::Bencher) {
-    use locus_core::bench_api::AprilTag36h10;
-    let decoder = AprilTag36h10;
-    let dict = locus_core::dictionaries::get_dictionary(locus_core::TagFamily::AprilTag36h10);
-    // id=100 is a valid ID for 36h10
+fn bench_soft_decoding_36h11_200_candidates(bencher: divan::Bencher) {
+    use locus_core::bench_api::AprilTag36h11;
+    let decoder = AprilTag36h11;
+    let dict = locus_core::dictionaries::get_dictionary(locus_core::TagFamily::AprilTag36h11);
+    // id=100 is a valid ID for 36h11
     let code_val = dict.get_code(100).unwrap();
 
     let mut intensities = [100.0f64; 64];

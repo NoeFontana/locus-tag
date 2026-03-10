@@ -1842,98 +1842,6 @@ impl TagDecoder for AprilTag16h5 {
     }
 }
 
-/// Decoder for the AprilTag 25h9 family.
-pub struct AprilTag25h9;
-
-impl TagDecoder for AprilTag25h9 {
-    fn name(&self) -> &'static str {
-        "25h9"
-    }
-    fn dimension(&self) -> usize {
-        5
-    }
-    fn bit_count(&self) -> usize {
-        25
-    }
-    fn sample_points(&self) -> &[(f64, f64)] {
-        crate::dictionaries::POINTS_APRILTAG25H9
-    }
-    fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag25h9)
-            .decode(bits, 3)
-            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
-    }
-    fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag25h9)
-            .decode(bits, max_hamming)
-            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
-    }
-    fn get_code(&self, id: u16) -> Option<u64> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag25h9).get_code(id)
-    }
-    fn num_codes(&self) -> usize {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag25h9).len()
-    }
-    fn rotated_codes(&self) -> &[(u64, u16, u8)] {
-        &[]
-    }
-    fn for_each_candidate_within_hamming(
-        &self,
-        bits: u64,
-        max_hamming: u32,
-        callback: &mut dyn FnMut(u64, u16, u8),
-    ) {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag25h9)
-            .for_each_candidate_within_hamming(bits, max_hamming, callback);
-    }
-}
-
-/// Decoder for the AprilTag 36h10 family.
-pub struct AprilTag36h10;
-
-impl TagDecoder for AprilTag36h10 {
-    fn name(&self) -> &'static str {
-        "36h10"
-    }
-    fn dimension(&self) -> usize {
-        6
-    }
-    fn bit_count(&self) -> usize {
-        36
-    }
-    fn sample_points(&self) -> &[(f64, f64)] {
-        crate::dictionaries::POINTS_APRILTAG36H10
-    }
-    fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag36h10)
-            .decode(bits, 4)
-            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
-    }
-    fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag36h10)
-            .decode(bits, max_hamming)
-            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
-    }
-    fn get_code(&self, id: u16) -> Option<u64> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag36h10).get_code(id)
-    }
-    fn num_codes(&self) -> usize {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag36h10).len()
-    }
-    fn rotated_codes(&self) -> &[(u64, u16, u8)] {
-        &[]
-    }
-    fn for_each_candidate_within_hamming(
-        &self,
-        bits: u64,
-        max_hamming: u32,
-        callback: &mut dyn FnMut(u64, u16, u8),
-    ) {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag36h10)
-            .for_each_candidate_within_hamming(bits, max_hamming, callback);
-    }
-}
-
 /// Decoder for the ArUco 4x4_50 family.
 pub struct ArUco4x4_50;
 
@@ -2112,8 +2020,6 @@ impl TagDecoder for GenericDecoder {
 pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send + Sync> {
     match family {
         config::TagFamily::AprilTag16h5 => Box::new(AprilTag16h5),
-        config::TagFamily::AprilTag25h9 => Box::new(AprilTag25h9),
-        config::TagFamily::AprilTag36h10 => Box::new(AprilTag36h10),
         config::TagFamily::AprilTag36h11 => Box::new(AprilTag36h11),
         config::TagFamily::ArUco4x4_50 => Box::new(ArUco4x4_50),
         config::TagFamily::ArUco4x4_100 => Box::new(ArUco4x4_100),
@@ -2218,22 +2124,6 @@ mod tests {
             assert_eq!(id_out, u32::from(id));
         }
     }
-
-    #[test]
-    fn test_all_codes_decode_36h10() {
-        let decoder = AprilTag36h10;
-        let dict = crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag36h10);
-        for id in 0..dict.len() as u16 {
-            let code = dict.get_code(id).expect("valid ID");
-            let result = decoder.decode(code);
-            assert!(result.is_some(), "Failed to decode 36h10 ID {id}");
-            let (id_out, hamming_out, rot_out) = result.unwrap();
-            assert_eq!(id_out, u32::from(id));
-            assert_eq!(hamming_out, 0);
-            assert_eq!(rot_out, 0);
-        }
-    }
-
     #[test]
     fn test_grid_sampling() {
         let width = 64;

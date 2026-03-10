@@ -14,8 +14,6 @@ proptest! {
         payload in any::<u64>(),
         family in prop_oneof![
             Just(TagFamily::AprilTag16h5),
-            Just(TagFamily::AprilTag25h9),
-            Just(TagFamily::AprilTag36h10),
             Just(TagFamily::AprilTag36h11),
             Just(TagFamily::ArUco4x4_50),
             Just(TagFamily::ArUco4x4_100),

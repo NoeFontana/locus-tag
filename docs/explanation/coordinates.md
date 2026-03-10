@@ -41,7 +41,7 @@ Detections return corners in a specific counter-clockwise order (when looking at
 Locus strictly adheres to **modern OpenCV (cv2.aruco)** conventions for dictionary layout, bit ordering, and canonical orientation.
 
 ### Row-Major Bit Ordering
-For all supported families (AprilTag 16h5, 25h9, 36h10, 36h11, and ArUco 4x4), the binary payload is extracted in **row-major order**:
+For all supported families (AprilTag 16h5, 36h11, and ArUco 4x4), the binary payload is extracted in **row-major order**:
 - **Bit 0**: Top-left data cell.
 - **Bit N-1**: Bottom-right data cell.
 

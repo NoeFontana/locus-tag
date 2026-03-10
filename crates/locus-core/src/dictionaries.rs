@@ -199,8 +199,6 @@ include!(concat!(env!("OUT_DIR"), "/dictionaries.rs"));
 pub fn get_dictionary(family: crate::config::TagFamily) -> &'static TagDictionary {
     match family {
         crate::config::TagFamily::AprilTag16h5 => &DICT_APRILTAG16H5,
-        crate::config::TagFamily::AprilTag25h9 => &DICT_APRILTAG25H9,
-        crate::config::TagFamily::AprilTag36h10 => &DICT_APRILTAG36H10,
         crate::config::TagFamily::AprilTag36h11 => &DICT_APRILTAG36H11,
         crate::config::TagFamily::ArUco4x4_50 => &DICT_ARUCO4X4_50,
         crate::config::TagFamily::ArUco4x4_100 => &DICT_ARUCO4X4_100,

@@ -50,8 +50,6 @@ fn snapshot_dict(family: TagFamily) -> (usize, String, usize, String) {
 #[test]
 fn test_dictionary_snapshots() {
     assert_debug_snapshot!("tag16h5_parity", snapshot_dict(TagFamily::AprilTag16h5));
-    assert_debug_snapshot!("tag25h9_parity", snapshot_dict(TagFamily::AprilTag25h9));
-    assert_debug_snapshot!("tag36h10_parity", snapshot_dict(TagFamily::AprilTag36h10));
     assert_debug_snapshot!("tag36h11_parity", snapshot_dict(TagFamily::AprilTag36h11));
     assert_debug_snapshot!("aruco4x4_50_parity", snapshot_dict(TagFamily::ArUco4x4_50));
     assert_debug_snapshot!(
