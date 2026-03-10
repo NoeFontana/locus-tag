@@ -192,6 +192,9 @@ impl RegressionHarness {
 
     pub fn run(self, provider: impl DatasetProvider) {
         let mut detector = Detector::with_config(self.config);
+        if !self.options.families.is_empty() {
+            detector.set_families(&self.options.families);
+        }
         let mut results = BTreeMap::new();
 
         // Aggregators
@@ -651,14 +654,17 @@ impl DatasetProvider for HubProvider {
 
     fn iter(&self) -> Box<dyn Iterator<Item = DatasetItem> + '_> {
         let base_dir = self.base_dir.clone();
-        let iter = self.image_names.iter().map(move |fname| {
+        let iter = self.image_names.iter().filter_map(move |fname| {
             let img_path = base_dir.join("images").join(fname);
+            if !img_path.exists() {
+                return None;
+            }
             let img = image::open(&img_path).expect("load hub image").into_luma8();
             let (w, h) = img.dimensions();
 
             let gt = self.gt_map.get(fname).unwrap().clone();
 
-            (fname.clone(), img.into_raw(), w as usize, h as usize, gt)
+            Some((fname.clone(), img.into_raw(), w as usize, h as usize, gt))
         });
         Box::new(iter)
     }
@@ -740,6 +746,24 @@ fn regression_hub_tag36h11() {
     let _guard = common::telemetry::init("regression_hub_tag36h11");
     run_hub_test(
         "single_tag_locus_v1_tag36h11_640x480",
+        TagFamily::AprilTag36h11,
+    );
+}
+
+#[test]
+fn regression_hub_tag36h11_720p() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_720p");
+    run_hub_test(
+        "single_tag_locus_v1_tag36h11_1280x720",
+        TagFamily::AprilTag36h11,
+    );
+}
+
+#[test]
+fn regression_hub_tag36h11_1080p() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_1080p");
+    run_hub_test(
+        "single_tag_locus_v1_tag36h11_1920x1080",
         TagFamily::AprilTag36h11,
     );
 }
