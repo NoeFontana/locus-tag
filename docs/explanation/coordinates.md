@@ -33,10 +33,32 @@ Detections return corners in a specific counter-clockwise order (when looking at
 | :--- | :--- | :--- |
 | **0** | Top-Left | $(-s/2, -s/2, 0)$ |
 | **1** | Top-Right | $(s/2, -s/2, 0)$ |
-| **2** | Bottom-Right | $(s/2, s/2, 0)$ |
-| **3** | Bottom-Left | $(-s/2, s/2, 0)$ |
+| 2 | Bottom-Right | $(s/2, s/2, 0)$ |
+| 3 | Bottom-Left | $(-s/2, s/2, 0)$ |
 
-## 3. 3D Camera Coordinate System
+## 3. Tag Layout and Bit Order
+
+Locus strictly adheres to **modern OpenCV (cv2.aruco)** conventions for dictionary layout, bit ordering, and canonical orientation.
+
+### Row-Major Bit Ordering
+For all supported families (AprilTag 16h5, 25h9, 36h10, 36h11, and ArUco 4x4), the binary payload is extracted in **row-major order**:
+- **Bit 0**: Top-left data cell.
+- **Bit N-1**: Bottom-right data cell.
+
+This matches the internal memory layout of OpenCV's `bytesList`.
+
+### Canonical Orientation (0 Degrees)
+The 0-degree ("canonical") orientation of a tag is defined such that the bits are read from top-left to bottom-right without any rotation.
+
+!!! warning "Migration Warning: Orientation Shift"
+    Users migrating from the legacy **UMich C library** or `apriltag` Python package should note that Locus's 0-degree orientation is shifted by **90 degrees clockwise** relative to UMich. 
+    - **UMich 0-deg**: Origin at bottom-left (spiral bit order).
+    - **Locus/OpenCV 0-deg**: Origin at top-left (row-major bit order).
+
+    If you are comparing pose outputs ($R, t$) against UMich-based ground truth, you may need to apply a 90-degree Z-axis rotation to the results.
+
+## 4. 3D Camera Coordinate System
+
 
 Locus utilizes a **right-handed** coordinate system for the camera, consistent with the standard pinhole camera model.
 
