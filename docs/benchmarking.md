@@ -51,17 +51,19 @@ The regression suite validates that `Locus` matches or exceeds ground truth for 
 ### Hub Regression Suite (Hugging Face)
 Locus supports running regressions against large-scale datasets hosted on the Hugging Face Hub.
 
+> [!IMPORTANT]
+> `--release` is mandatory for running Hub regression tests. Running in debug mode is extremely slow and will likely timeout in CI or developer environments.
+
 1. **Synchronize Data**:
    Download the datasets to a local cache. This requires the `bench` dependency group.
    ```bash
-   PYTHONPATH=. uv run --group bench tools/cli.py bench hosted --configs single_tag_locus_v1_std41h12
+   uv run python tools/bench/sync_hub.py --configs single_tag_locus_v1_std41h12_1920x1080
    ```
 
 2. **Run Hub Tests**:
    Point the test runner to the local cache directory:
    ```bash
-   export LOCUS_HUB_DATASET_DIR=tests/data/hub_cache
-   cargo test --release --test regression_icra2020 -- regression_hub_datasets --nocapture
+   LOCUS_HUB_DATASET_DIR=tests/data/hub_cache cargo test --release --test regression_render_tag regression_hub_ -- --nocapture
    ```
 
 ### Logic-Specific Benchs (Micro-benchmarking)
