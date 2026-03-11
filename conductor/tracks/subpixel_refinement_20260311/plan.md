@@ -1,10 +1,10 @@
 # Implementation Plan: Sub-pixel Edge Refinement Testing
 
 ## Phase 1: Mathematical Verification (erf_approx)
-- [ ] Task: Implementation & Verification of erf_approx
-    - [ ] Create unit tests for erf_approx (Symmetry, Asymptotic, Zero-crossing).
-    - [ ] Implement high-precision integration tests for erf_approx vs ground truth.
-    - [ ] Verify maximum absolute error < 1.5e-7.
+- [x] Task: Implementation & Verification of erf_approx (064f829)
+    - [x] Create unit tests for erf_approx (Symmetry, Asymptotic, Zero-crossing).
+    - [x] Implement high-precision integration tests for erf_approx vs ground truth.
+    - [x] Verify maximum absolute error < 1.5e-7.
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Mathematical Verification' (Protocol in workflow.md)
 
 ## Phase 2: Synthetic Test Harness (Image Generator)
