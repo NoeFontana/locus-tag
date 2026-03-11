@@ -87,8 +87,11 @@ impl<'a> ImageView<'a> {
     /// Sample pixel value with bilinear interpolation at sub-pixel coordinates.
     #[must_use]
     pub fn sample_bilinear(&self, x: f64, y: f64) -> f64 {
+        let x = x - 0.5;
+        let y = y - 0.5;
+
         if x < 0.0 || x >= (self.width - 1) as f64 || y < 0.0 || y >= (self.height - 1) as f64 {
-            return f64::from(self.get_pixel(x.round() as usize, y.round() as usize));
+            return f64::from(self.get_pixel(x.round().max(0.0) as usize, y.round().max(0.0) as usize));
         }
 
         let x0 = x.floor() as usize;
@@ -118,6 +121,8 @@ impl<'a> ImageView<'a> {
     #[inline(always)]
     #[must_use]
     pub unsafe fn sample_bilinear_unchecked(&self, x: f64, y: f64) -> f64 {
+        let x = x - 0.5;
+        let y = y - 0.5;
         let x0 = x as usize; // Truncate is effectively floor for positive numbers
         let y0 = y as usize;
         let x1 = x0 + 1;
@@ -153,6 +158,9 @@ impl<'a> ImageView<'a> {
     /// Compute the gradient [gx, gy] at sub-pixel coordinates using bilinear interpolation.
     #[must_use]
     pub fn sample_gradient_bilinear(&self, x: f64, y: f64) -> [f64; 2] {
+        let x = x - 0.5;
+        let y = y - 0.5;
+
         // Optimization: Sample [gx, gy] directly using a 3x3 or 4x4 neighborhood
         // instead of 4 separate bilinear samples.
         // For a high-quality sub-pixel gradient, we sample the 4 nearest integer locations
@@ -412,8 +420,10 @@ mod tests {
             assert!((0.0..=255.0).contains(&val));
 
             // If inside 2x2 neighborhood, val should be within min/max of those 4 pixels
-            let x0 = x.floor() as usize;
-            let y0 = y.floor() as usize;
+            // The pixels are centered at i + 0.5, so sample (x, y) is between
+            // floor(x-0.5) and floor(x-0.5)+1.
+            let x0 = (x - 0.5).max(0.0).floor() as usize;
+            let y0 = (y - 0.5).max(0.0).floor() as usize;
             let x1 = x0 + 1;
             let y1 = y0 + 1;
 

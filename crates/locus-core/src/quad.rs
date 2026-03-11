@@ -210,22 +210,48 @@ fn extract_single_quad(
     // Scale to full resolution using center-aware mapping
     let quad_pts = [
         Point {
-            x: (quad_pts_dec[0].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[0].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[0].x * d,
+            y: quad_pts_dec[0].y * d,
         },
         Point {
-            x: (quad_pts_dec[1].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[1].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[1].x * d,
+            y: quad_pts_dec[1].y * d,
         },
         Point {
-            x: (quad_pts_dec[2].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[2].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[2].x * d,
+            y: quad_pts_dec[2].y * d,
         },
         Point {
-            x: (quad_pts_dec[3].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[3].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[3].x * d,
+            y: quad_pts_dec[3].y * d,
         },
     ];
+
+    // 3. Expand quad outward by 0.5 pixels to match physical boundaries
+    // The trace_boundary pixels are the outermost pixels of the tag.
+    // Their physical outer edge is 0.5px further out than their centers.
+    let center = Point {
+        x: (quad_pts[0].x + quad_pts[1].x + quad_pts[2].x + quad_pts[3].x) / 4.0,
+        y: (quad_pts[0].y + quad_pts[1].y + quad_pts[2].y + quad_pts[3].y) / 4.0,
+    };
+
+    let mut expanded_pts = [Point { x: 0.0, y: 0.0 }; 4];
+    for i in 0..4 {
+        let mut dx = quad_pts[i].x - center.x;
+        let mut dy = quad_pts[i].y - center.y;
+        let mag = (dx * dx + dy * dy).sqrt();
+        if mag > 1e-6 {
+            dx /= mag;
+            dy /= mag;
+            expanded_pts[i] = Point {
+                x: quad_pts[i].x + dx * 0.5,
+                y: quad_pts[i].y + dy * 0.5,
+            };
+        } else {
+            expanded_pts[i] = quad_pts[i];
+        }
+    }
+    let quad_pts = expanded_pts;
 
     let mut ok = true;
     for i in 0..4 {
@@ -824,8 +850,8 @@ fn refine_edge_intensity(
     while py <= y1 {
         let mut px = x0;
         while px <= x1 {
-            let x = px as f64;
-            let y = py as f64;
+            let x = px as f64 + 0.5;
+            let y = py as f64 + 0.5;
 
             // Check if near the edge segment (not infinite line)
             let t = ((x - p1.x) * dx + (y - p1.y) * dy) / (len * len);
@@ -1323,7 +1349,7 @@ mod tests {
 
         for y in 0..height {
             for x in 0..width {
-                let px = x as f64;
+                let px = x as f64 + 0.5;
                 let intensity =
                     f64::midpoint(a, b) + (b - a) / 2.0 * erf_approx((px - edge_x) / sigma);
                 data[y * width + x] = intensity.clamp(0.0, 255.0) as u8;
@@ -1350,8 +1376,8 @@ mod tests {
 
         for y in 0..height {
             for x in 0..width {
-                let px = x as f64;
-                let py = y as f64;
+                let px = x as f64 + 0.5;
+                let py = y as f64 + 0.5;
 
                 // Distance to vertical edge (x = corner_x)
                 let dist_v = px - corner_x;
@@ -1441,8 +1467,7 @@ mod tests {
                 true_x, true_y, refined.x, refined.y, error_x, error_y, error_total
             );
 
-            // Assert sub-pixel accuracy < 0.1px (relaxed from 0.05 for robustness)
-            // The ideal is <0.05px but real-world noise and edge cases may require relaxation
+            // Assert sub-pixel accuracy < 0.15px
             assert!(
                 error_total < 0.15,
                 "Corner ({true_x}, {true_y}): error {error_total:.4}px exceeds 0.15px threshold"

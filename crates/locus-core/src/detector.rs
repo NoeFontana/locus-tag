@@ -245,15 +245,6 @@ impl Detector {
             );
         }
 
-        // Final coordinate adjustment (+0.5) to align with pixel center convention (UMICH/OpenCV)
-        // This is applied in-place to the batch corners.
-        for i in 0..v {
-            for corner in &mut state.batch.corners[i] {
-                corner.x += 0.5;
-                corner.y += 0.5;
-            }
-        }
-
         let telemetry = if debug_telemetry {
             Some(crate::batch::TelemetryPayload {
                 binarized_ptr: binarized.as_ptr(),
