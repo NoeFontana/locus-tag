@@ -35,7 +35,7 @@ def test_decimation_mapping():
     detector = locus.Detector(
         families=[locus.TagFamily.AprilTag36h11],
         decimation=2,
-        refinement_mode=locus.CornerRefinementMode.Erf,
+        refinement_mode=locus.CornerRefinementMode.Edge,
     )
 
     batch = detector.detect(img)

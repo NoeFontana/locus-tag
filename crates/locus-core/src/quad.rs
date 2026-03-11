@@ -227,31 +227,44 @@ fn extract_single_quad(
         },
     ];
 
-    // 3. Expand quad outward by 0.5 pixels to match physical boundaries
-    // The trace_boundary pixels are the outermost pixels of the tag.
-    // Their physical outer edge is 0.5px further out than their centers.
-    let center = Point {
-        x: (quad_pts[0].x + quad_pts[1].x + quad_pts[2].x + quad_pts[3].x) / 4.0,
-        y: (quad_pts[0].y + quad_pts[1].y + quad_pts[2].y + quad_pts[3].y) / 4.0,
-    };
-
-    let mut expanded_pts = [Point { x: 0.0, y: 0.0 }; 4];
+    // 3. Mathematically inflate the quad by 0.5*d pixels along edge normals.
+    // The trace_boundary pixels (now at +0.5 centers) represent the outermost decimated pixels.
+    // Their physical outer boundaries are exactly 0.5 * decimation pixels further out.
+    let mut lines = [(0.0, 0.0, 0.0); 4]; // (nx, ny, d) where nx*x + ny*y + d = 0
+    let inflation = 0.5 * d;
     for i in 0..4 {
-        let mut dx = quad_pts[i].x - center.x;
-        let mut dy = quad_pts[i].y - center.y;
-        let mag = (dx * dx + dy * dy).sqrt();
-        if mag > 1e-6 {
-            dx /= mag;
-            dy /= mag;
-            expanded_pts[i] = Point {
-                x: quad_pts[i].x + dx * 0.5,
-                y: quad_pts[i].y + dy * 0.5,
+        let p1 = quad_pts[i];
+        let p2 = quad_pts[(i + 1) % 4];
+        let dx = p2.x - p1.x;
+        let dy = p2.y - p1.y;
+        let len = (dx * dx + dy * dy).sqrt();
+
+        // Outward normal for CW winding: (dy/len, -dx/len)
+        let nx = dy / len;
+        let ny = -dx / len;
+        let d_orig = -(nx * p1.x + ny * p1.y);
+
+        // Move line outward
+        lines[i] = (nx, ny, d_orig - inflation);
+    }
+
+    // Intersect the 4 inflated lines to find new corners
+    let mut inflated_pts = [Point { x: 0.0, y: 0.0 }; 4];
+    for i in 0..4 {
+        let l1 = lines[(i + 3) % 4]; // Line ending at corner i
+        let l2 = lines[i]; // Line starting at corner i
+
+        let det = l1.0 * l2.1 - l2.0 * l1.1;
+        if det.abs() > 1e-6 {
+            inflated_pts[i] = Point {
+                x: (l1.1 * l2.2 - l2.1 * l1.2) / det,
+                y: (l2.0 * l1.2 - l1.0 * l2.2) / det,
             };
         } else {
-            expanded_pts[i] = quad_pts[i];
+            inflated_pts[i] = quad_pts[i];
         }
     }
-    let quad_pts = expanded_pts;
+    let quad_pts = inflated_pts;
 
     let mut ok = true;
     for i in 0..4 {
@@ -264,49 +277,53 @@ fn extract_single_quad(
     }
 
     if ok {
-        let use_erf = config.refinement_mode == crate::config::CornerRefinementMode::Erf;
-        let corners = [
-            refine_corner(
-                arena,
-                refinement_img,
-                quad_pts[0],
-                quad_pts[3],
-                quad_pts[1],
-                config.subpixel_refinement_sigma,
-                decimation,
-                use_erf,
-            ),
-            refine_corner(
-                arena,
-                refinement_img,
-                quad_pts[1],
-                quad_pts[0],
-                quad_pts[2],
-                config.subpixel_refinement_sigma,
-                decimation,
-                use_erf,
-            ),
-            refine_corner(
-                arena,
-                refinement_img,
-                quad_pts[2],
-                quad_pts[1],
-                quad_pts[3],
-                config.subpixel_refinement_sigma,
-                decimation,
-                use_erf,
-            ),
-            refine_corner(
-                arena,
-                refinement_img,
-                quad_pts[3],
-                quad_pts[2],
-                quad_pts[0],
-                config.subpixel_refinement_sigma,
-                decimation,
-                use_erf,
-            ),
-        ];
+        let corners = if config.refinement_mode == crate::config::CornerRefinementMode::None {
+            quad_pts
+        } else {
+            let use_erf = config.refinement_mode == crate::config::CornerRefinementMode::Erf;
+            [
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[0],
+                    quad_pts[3],
+                    quad_pts[1],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[1],
+                    quad_pts[0],
+                    quad_pts[2],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[2],
+                    quad_pts[1],
+                    quad_pts[3],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[3],
+                    quad_pts[2],
+                    quad_pts[0],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+            ]
+        };
 
         let edge_score = calculate_edge_score(refinement_img, corners);
         if edge_score > config.quad_min_edge_score {
@@ -742,9 +759,11 @@ fn fit_edge_line(
         let px = p1.x + dx * t;
         let py = p1.y + dy * t;
 
-        let mut best_px = px;
-        let mut best_py = py;
         let mut best_mag = 0.0;
+
+        let mut plateau_start = 0.0;
+        let mut plateau_end = 0.0;
+        let mut in_plateau = false;
 
         for step in -r..=r {
             let sx = px + nx * f64::from(step);
@@ -752,14 +771,23 @@ fn fit_edge_line(
 
             let g = img.sample_gradient_bilinear(sx, sy);
             let mag = g[0] * g[0] + g[1] * g[1];
-            if mag > best_mag {
+
+            if mag > best_mag + 1e-4 {
                 best_mag = mag;
-                best_px = sx;
-                best_py = sy;
+                plateau_start = f64::from(step);
+                plateau_end = f64::from(step);
+                in_plateau = true;
+            } else if in_plateau && (mag - best_mag).abs() < 1e-4 {
+                plateau_end = f64::from(step);
             }
         }
 
         if best_mag > 10.0 {
+            // Average plateau to find true center
+            let best_step = (plateau_start + plateau_end) * 0.5;
+            let best_px = px + nx * best_step;
+            let best_py = py + ny * best_step;
+
             let mut mags = [0.0f64; 3];
             for (j, offset) in [-1.0, 0.0, 1.0].iter().enumerate() {
                 let sx = best_px + nx * offset;
@@ -827,16 +855,19 @@ fn refine_edge_intensity(
     let mut d = -(nx * mid_x + ny * mid_y);
 
     // Collect pixels within a window of the edge.
-    // Original window was 2.5 pixels
+    // Ensure the window is large enough to cover the PSF and handle initial bias.
     let window = if decimation > 1 {
-        (decimation as f64) + 1.0
+        (decimation as f64) + 1.5
     } else {
-        2.5
+        3.0
     };
-    let x0 = (p1.x.min(p2.x) - window - 0.5).max(1.0) as usize;
-    let x1 = (p1.x.max(p2.x) + window + 0.5).min((img.width - 2) as f64) as usize;
-    let y0 = (p1.y.min(p2.y) - window - 0.5).max(1.0) as usize;
-    let y1 = (p1.y.max(p2.y) + window + 0.5).min((img.height - 2) as f64) as usize;
+
+    // Calculate bounds such that pixel centers are symmetric around the edge.
+    // For an edge at x, we want samples at x ± 0.5, x ± 1.5, etc.
+    let x0 = ((p1.x.min(p2.x) - window).floor() as usize).max(1);
+    let x1 = ((p1.x.max(p2.x) + window).ceil() as usize - 1).min(img.width - 2);
+    let y0 = ((p1.y.min(p2.y) - window).floor() as usize).max(1);
+    let y1 = ((p1.y.max(p2.y) + window).ceil() as usize - 1).min(img.height - 2);
 
     // Use arena for samples to avoid heap allocation in hot loop
     // (x, y, intensity, projection)
@@ -912,7 +943,7 @@ fn refine_edge_intensity(
 
         for &(_x, _y, intensity, projection) in &samples {
             let signed_dist = (projection + d) * inv_sigma;
-            if signed_dist.abs() > 3.0 {
+            if signed_dist.abs() > 5.0 {
                 continue;
             } // Only use samples near the edge
 
@@ -1568,8 +1599,8 @@ fn trace_boundary<'a>(
 
     for _ in 0..10000 {
         points.push(Point {
-            x: curr_x as f64,
-            y: curr_y as f64,
+            x: curr_x as f64 + 0.5,
+            y: curr_y as f64 + 0.5,
         });
 
         let mut found = false;

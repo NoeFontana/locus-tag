@@ -136,9 +136,7 @@ class Detector:
         """Returns the current detector configuration."""
         raw = self._inner.config()
         # Create a dictionary of all fields to populate the Pydantic model
-        fields = {
-            field: getattr(raw, field) for field in DetectorConfig.model_fields.keys()
-        }
+        fields = {field: getattr(raw, field) for field in DetectorConfig.model_fields}
         return DetectorConfig(**fields)
 
     def set_families(self, families: list[TagFamily]):
