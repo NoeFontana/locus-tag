@@ -184,7 +184,7 @@ def visualize(
                     "pipeline/4_detections",
                     rr.LineStrips2D(det_strips, colors=[255, 50, 50], radii=1.2, labels=det_labels),
                 )
-                
+
                 # Also log detections on binarized for alignment check
                 if batch.telemetry is not None:
                     rr.log(
@@ -696,7 +696,7 @@ class LocalHubLoader:
                 item = json.loads(line)
                 img_name = item["image_filename"]
                 img_path = img_dir / img_name
-                
+
                 img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
                 if img is None:
                     continue
@@ -712,7 +712,7 @@ class LocalHubLoader:
                     gt_tags.append(
                         TagGroundTruth(tag_id=int(tid), corners=np.array(corners, dtype=np.float32))
                     )
-                
+
                 yield img_name, img, gt_tags
 
 
@@ -741,11 +741,10 @@ def debug_report(
         "Edge": 1,
         "Erf": 3,
     }
-    sel_ref_mode = ref_map.get(refinement_mode, 3) # Default to Erf (3)
+    sel_ref_mode = ref_map.get(refinement_mode, 3)  # Default to Erf (3)
 
     detector = locus.Detector(
-        families=[locus.TagFamily.AprilTag36h11],
-        refinement_mode=sel_ref_mode
+        families=[locus.TagFamily.AprilTag36h11], refinement_mode=sel_ref_mode
     )
 
     report_data = []
@@ -753,14 +752,14 @@ def debug_report(
     for config in configs:
         typer.echo(f"Processing {config}...")
         subset_stream = loader.stream_subset(config)
-        
+
         for idx, (img_name, img_np, gt_tags) in enumerate(tqdm(subset_stream, desc=config)):
             if limit and idx >= limit:
                 break
-            
+
             # Run detection with telemetry
             batch = detector.detect(img_np, debug_telemetry=True)
-            
+
             # Find best match for first GT tag (for illustration)
             best_det = None
             rmse = 0.0
@@ -782,16 +781,16 @@ def debug_report(
             # 1. Original with GT & Det
             img_pil = Image.fromarray(img_np).convert("RGB")
             draw = ImageDraw.Draw(img_pil)
-            
+
             if gt_tags:
                 for gt in gt_tags:
                     pts = [tuple(p) for p in gt.corners]
                     draw.polygon(pts, outline=(0, 255, 0), width=2)
-            
+
             if best_det is not None:
                 pts = [tuple(p) for p in best_det]
                 draw.polygon(pts, outline=(255, 0, 0), width=1)
-            
+
             orig_rel_path = f"images/{config}_{img_name}_orig.png"
             img_pil.save(output / orig_rel_path)
 
@@ -804,21 +803,23 @@ def debug_report(
                     for gt in gt_tags:
                         pts = [tuple(p) for p in gt.corners]
                         draw_bin.polygon(pts, outline=(0, 255, 0), width=1)
-                
+
                 if best_det is not None:
                     pts = [tuple(p) for p in best_det]
                     draw_bin.polygon(pts, outline=(255, 0, 0), width=1)
-                
+
                 bin_rel_path = f"images/{config}_{img_name}_bin.png"
                 bin_pil.save(output / bin_rel_path)
 
-            report_data.append({
-                "config": config,
-                "name": img_name,
-                "rmse": rmse,
-                "orig": orig_rel_path,
-                "bin": bin_rel_path
-            })
+            report_data.append(
+                {
+                    "config": config,
+                    "name": img_name,
+                    "rmse": rmse,
+                    "orig": orig_rel_path,
+                    "bin": bin_rel_path,
+                }
+            )
 
     # Generate HTML
     html = """
@@ -839,19 +840,19 @@ def debug_report(
     for d in report_data:
         html += f"""
         <div class="card">
-            <div class="meta">{d['config']} / {d['name']}</div>
-            <div class="rmse">Best Corner RMSE: {d['rmse']:.4f} px</div>
+            <div class="meta">{d["config"]} / {d["name"]}</div>
+            <div class="rmse">Best Corner RMSE: {d["rmse"]:.4f} px</div>
             <div class="img-row">
-                <img src="{d['orig']}">
-                <img src="{d['bin']}">
+                <img src="{d["orig"]}">
+                <img src="{d["bin"]}">
             </div>
         </div>
         """
     html += "</body></html>"
-    
+
     with open(output / "report.html", "w") as f:
         f.write(html)
-    
+
     typer.echo(f"\nReport generated at {output / 'report.html'}")
 
 

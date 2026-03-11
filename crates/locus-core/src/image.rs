@@ -91,7 +91,9 @@ impl<'a> ImageView<'a> {
         let y = y - 0.5;
 
         if x < 0.0 || x >= (self.width - 1) as f64 || y < 0.0 || y >= (self.height - 1) as f64 {
-            return f64::from(self.get_pixel(x.round().max(0.0) as usize, y.round().max(0.0) as usize));
+            return f64::from(
+                self.get_pixel(x.round().max(0.0) as usize, y.round().max(0.0) as usize),
+            );
         }
 
         let x0 = x.floor() as usize;

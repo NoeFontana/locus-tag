@@ -68,12 +68,14 @@ def sync_subset_to_local(subset: str, target_dir: Path, repo_id: str = DEFAULT_R
             # Fallback path: try to load the parquet file directly if config discovery fails
             ds = datasets.load_dataset(
                 repo_id,
-                data_files={ "train": f"{subset}/train-*.parquet" },
+                data_files={"train": f"{subset}/train-*.parquet"},
                 split="train",
                 streaming=True,
             )
         except Exception as e2:
-            logger.error(f"Failed to load dataset {subset} from {repo_id} (even with fallback): {e2}")
+            logger.error(
+                f"Failed to load dataset {subset} from {repo_id} (even with fallback): {e2}"
+            )
             raise
 
     jsonl_path: Path = subset_dir / "annotations.jsonl"
