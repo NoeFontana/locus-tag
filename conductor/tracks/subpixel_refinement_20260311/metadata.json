@@ -1,0 +1,8 @@
+{
+  "track_id": "subpixel_refinement_20260311",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-03-11T00:00:00Z",
+  "updated_at": "2026-03-11T00:00:00Z",
+  "description": "Implement sub-pixel edge refinement testing and verification."
+}
