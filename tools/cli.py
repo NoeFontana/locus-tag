@@ -1,6 +1,7 @@
 import json
 import time
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -132,7 +133,7 @@ def visualize(
             if img is None:
                 continue
 
-            rr.set_time_sequence("frame_idx", i)
+            rr.set_time(timeline="frame_idx", sequence=i)
 
             # Perform Detection (Vectorized API with debug telemetry)
             batch = detector.detect(img, debug_telemetry=True)
@@ -236,14 +237,14 @@ def bench_real(
 
     # Map string to locus.TagFamily
     family_mapping = {
-        "AprilTag16h5": int(locus.TagFamily.AprilTag16h5),
-        "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
-        "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
-        "16h5": int(locus.TagFamily.AprilTag16h5),
-        "36h11": int(locus.TagFamily.AprilTag36h11),
-        "4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "AprilTag16h5": locus.TagFamily.AprilTag16h5,
+        "AprilTag36h11": locus.TagFamily.AprilTag36h11,
+        "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
+        "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
+        "16h5": locus.TagFamily.AprilTag16h5,
+        "36h11": locus.TagFamily.AprilTag36h11,
+        "4x4_50": locus.TagFamily.ArUco4x4_50,
+        "4x4_100": locus.TagFamily.ArUco4x4_100,
     }
 
     tag_family_int = family_mapping.get(family)
@@ -312,7 +313,7 @@ def bench_real(
             baseline_data = json.load(f)
         typer.echo(f"Loaded baseline from {baseline}")
 
-    current_results = {}
+    current_results: dict[str, dict[str, dict[str, Any]]] = {}
 
     for scenario in scenarios:
         if not loader.prepare_icra(scenario):
@@ -330,7 +331,7 @@ def bench_real(
                 img_names = img_names[:limit]
 
             for wrapper in wrappers:
-                stats = {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []}
+                stats: dict[str, Any] = {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []}
 
                 for img_name in tqdm(img_names, desc=f"{wrapper.name:<10}"):
                     img_path = img_dir / img_name
@@ -401,14 +402,14 @@ def bench_synthetic(
 
     # Map string to locus.TagFamily
     family_mapping = {
-        "AprilTag16h5": int(locus.TagFamily.AprilTag16h5),
-        "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
-        "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
-        "16h5": int(locus.TagFamily.AprilTag16h5),
-        "36h11": int(locus.TagFamily.AprilTag36h11),
-        "4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "AprilTag16h5": locus.TagFamily.AprilTag16h5,
+        "AprilTag36h11": locus.TagFamily.AprilTag36h11,
+        "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
+        "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
+        "16h5": locus.TagFamily.AprilTag16h5,
+        "36h11": locus.TagFamily.AprilTag36h11,
+        "4x4_50": locus.TagFamily.ArUco4x4_50,
+        "4x4_100": locus.TagFamily.ArUco4x4_100,
     }
 
     tag_family_int = family_mapping.get(family)
@@ -438,7 +439,7 @@ def bench_synthetic(
 
         for wrapper in wrappers:
             latencies = []
-            detections = []
+            detections: list[dict[str, Any]] = []
             for _ in range(iterations):
                 start = time.perf_counter()
                 detections, _ = wrapper.detect(img)
@@ -478,14 +479,14 @@ def bench_hosted(
 
     # Map string to locus.TagFamily
     family_mapping = {
-        "AprilTag16h5": int(locus.TagFamily.AprilTag16h5),
-        "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
-        "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
-        "16h5": int(locus.TagFamily.AprilTag16h5),
-        "36h11": int(locus.TagFamily.AprilTag36h11),
-        "4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "AprilTag16h5": locus.TagFamily.AprilTag16h5,
+        "AprilTag36h11": locus.TagFamily.AprilTag36h11,
+        "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
+        "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
+        "16h5": locus.TagFamily.AprilTag16h5,
+        "36h11": locus.TagFamily.AprilTag36h11,
+        "4x4_50": locus.TagFamily.ArUco4x4_50,
+        "4x4_100": locus.TagFamily.ArUco4x4_100,
     }
 
     tag_family_int = family_mapping.get(family)
@@ -503,7 +504,7 @@ def bench_hosted(
 
     for config in configs:
         typer.echo(f"\nEvaluating {config} (from Hugging Face Hub)...")
-        wrapper_stats = {
+        wrapper_stats: dict[str, dict[str, Any]] = {
             w.name: {
                 "gt": 0,
                 "det": 0,
@@ -591,14 +592,14 @@ def bench_profile(
 
     # Map string to locus.TagFamily
     family_mapping = {
-        "AprilTag16h5": int(locus.TagFamily.AprilTag16h5),
-        "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
-        "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
-        "16h5": int(locus.TagFamily.AprilTag16h5),
-        "36h11": int(locus.TagFamily.AprilTag36h11),
-        "4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "AprilTag16h5": locus.TagFamily.AprilTag16h5,
+        "AprilTag36h11": locus.TagFamily.AprilTag36h11,
+        "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
+        "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
+        "16h5": locus.TagFamily.AprilTag16h5,
+        "36h11": locus.TagFamily.AprilTag36h11,
+        "4x4_50": locus.TagFamily.ArUco4x4_50,
+        "4x4_100": locus.TagFamily.ArUco4x4_100,
     }
 
     tag_family_int = family_mapping.get(family)

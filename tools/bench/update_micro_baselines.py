@@ -38,7 +38,7 @@ def get_cpu_info() -> str:
 
 
 def parse_divan_output(content: str) -> dict[str, dict[str, Any]]:
-    results = {}
+    results: dict[str, dict[str, Any]] = {}
     current_section = None
 
     for line in content.splitlines():
