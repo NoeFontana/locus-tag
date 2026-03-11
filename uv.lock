@@ -1262,6 +1262,7 @@ bench = [
     { name = "opencv-python-headless" },
     { name = "pupil-apriltags" },
     { name = "rerun-sdk" },
+    { name = "typer" },
 ]
 dev = [
     { name = "jsonschema" },
@@ -1302,6 +1303,7 @@ bench = [
     { name = "opencv-python-headless", specifier = ">=4.0.0" },
     { name = "pupil-apriltags" },
     { name = "rerun-sdk", specifier = ">=0.9.0" },
+    { name = "typer", specifier = ">=0.12.0" },
 ]
 dev = [
     { name = "jsonschema", specifier = ">=4.0.0" },

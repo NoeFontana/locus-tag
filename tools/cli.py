@@ -2,7 +2,6 @@ import json
 import time
 from pathlib import Path
 
-import jsonschema
 import typer
 
 try:
@@ -25,6 +24,8 @@ def validate_dicts(
     """
     Validate dictionary JSON files against a schema.
     """
+    import jsonschema
+
     try:
         with open(schema) as f:
             schema_data = json.load(f)

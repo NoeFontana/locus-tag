@@ -12,8 +12,6 @@ from pupil_apriltags import Detector as AprilTagDetector  # type: ignore
 
 ICRA_REPO_ID = "NoeFontana/apriltag-validation-data"
 ICRA_CACHE_DIR = Path("tests/data/icra2020")
-UMICH_DATA_URL = "https://april.eecs.umich.edu/media/apriltag/apriltag_test_images.tar.gz"
-UMICH_CACHE_DIR = Path("tests/data/umich")
 
 
 class FamilyMapper:
@@ -78,15 +76,13 @@ class EvalResult:
 
 
 class DatasetLoader:
-    def __init__(self, icra_dir: Path = ICRA_CACHE_DIR, umich_dir: Path = UMICH_CACHE_DIR):
+    def __init__(self, icra_dir: Path = ICRA_CACHE_DIR):
         self.icra_dir = icra_dir
-        self.umich_dir = umich_dir
 
     def prepare_all(self):
-        """Prepare both ICRA and Umich datasets."""
+        """Prepare ICRA datasets."""
         self.prepare_icra("forward")
         self.prepare_icra("circle")
-        self.prepare_umich()
 
     def prepare_icra(self, scenario: str) -> bool:
         self.icra_dir.mkdir(parents=True, exist_ok=True)
@@ -111,25 +107,6 @@ class DatasetLoader:
             return True
         except Exception as e:
             print(f"Error preparing ICRA scenario {scenario}: {e}")
-            return False
-
-    def prepare_umich(self) -> bool:
-        self.umich_dir.mkdir(parents=True, exist_ok=True)
-        if (self.umich_dir / "apriltag_test_images").exists():
-            return True
-
-        archive_path = self.umich_dir / "umich_images.tar.gz"
-        print(f"Downloading {UMICH_DATA_URL}...")
-        try:
-            import urllib.request
-
-            urllib.request.urlretrieve(UMICH_DATA_URL, archive_path)
-            with tarfile.open(archive_path, "r:gz") as tar:
-                tar.extractall(path=self.umich_dir)
-            archive_path.unlink()
-            return True
-        except Exception as e:
-            print(f"Error preparing Umich dataset: {e}")
             return False
 
     def find_datasets(
