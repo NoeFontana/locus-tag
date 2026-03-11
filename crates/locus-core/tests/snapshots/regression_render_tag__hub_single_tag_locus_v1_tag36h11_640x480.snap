@@ -5,35 +5,35 @@ expression: report
 summary:
   dataset_size: 45
   mean_recall: 1
-  mean_precision: 0.9888888888888889
-  mean_rmse: 1.0263
-  mean_reprojection_rmse: 2.8593
+  mean_precision: 1
+  mean_rmse: 0.9828
+  mean_reprojection_rmse: 1.8496
   p50_translation_error: 0.0908
-  p90_translation_error: 0.1032
-  p99_translation_error: 0.1366
-  p50_rotation_error: 3.1088
-  p90_rotation_error: 9.9678
-  p99_rotation_error: 18.6213
+  p90_translation_error: 0.0961
+  p99_translation_error: 0.115
+  p50_rotation_error: 0.9088
+  p90_rotation_error: 6.7186
+  p99_rotation_error: 17.2736
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
   worst_offenders:
-    - filename: scene_0022_cam_0000.png
-      missed: 0
-      extra: 1
-      rmse: 0.5772
-    - filename: scene_0018_cam_0000.png
-      missed: 0
-      extra: 0
-      rmse: 2.6756
     - filename: scene_0011_cam_0000.png
       missed: 0
       extra: 0
-      rmse: 2.5459
-    - filename: scene_0008_cam_0000.png
+      rmse: 3.0851
+    - filename: scene_0018_cam_0000.png
       missed: 0
       extra: 0
-      rmse: 2.2148
-    - filename: scene_0006_cam_0000.png
+      rmse: 3.0682
+    - filename: scene_0003_cam_0000.png
       missed: 0
       extra: 0
-      rmse: 2.1191
+      rmse: 2.5883
+    - filename: scene_0038_cam_0000.png
+      missed: 0
+      extra: 0
+      rmse: 2.5107
+    - filename: scene_0033_cam_0000.png
+      missed: 0
+      extra: 0
+      rmse: 2.2434

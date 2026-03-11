@@ -227,44 +227,35 @@ fn extract_single_quad(
         },
     ];
 
-    // 3. Mathematically inflate the quad by 0.5*d pixels along edge normals.
+    // 3. Expand quad outward to match physical boundaries.
     // The trace_boundary pixels (now at +0.5 centers) represent the outermost decimated pixels.
-    // Their physical outer boundaries are exactly 0.5 * decimation pixels further out.
-    let mut lines = [(0.0, 0.0, 0.0); 4]; // (nx, ny, d) where nx*x + ny*y + d = 0
-    let inflation = 0.5 * d;
+    // Their physical outer boundaries are 0.5 * decimation pixels further out.
+    // To expand the edges by 0.5*d, the corners of a square need to expand by 0.5*d*sqrt(2).
+    // Using radial expansion from the center is highly robust to curved edges (lens distortion),
+    // unlike shifting and intersecting straight lines.
+    let center = Point {
+        x: (quad_pts[0].x + quad_pts[1].x + quad_pts[2].x + quad_pts[3].x) / 4.0,
+        y: (quad_pts[0].y + quad_pts[1].y + quad_pts[2].y + quad_pts[3].y) / 4.0,
+    };
+
+    let inflation_dist = 0.5 * d * std::f64::consts::SQRT_2;
+    let mut expanded_pts = [Point { x: 0.0, y: 0.0 }; 4];
     for i in 0..4 {
-        let p1 = quad_pts[i];
-        let p2 = quad_pts[(i + 1) % 4];
-        let dx = p2.x - p1.x;
-        let dy = p2.y - p1.y;
-        let len = (dx * dx + dy * dy).sqrt();
-
-        // Outward normal for CW winding: (dy/len, -dx/len)
-        let nx = dy / len;
-        let ny = -dx / len;
-        let d_orig = -(nx * p1.x + ny * p1.y);
-
-        // Move line outward
-        lines[i] = (nx, ny, d_orig - inflation);
-    }
-
-    // Intersect the 4 inflated lines to find new corners
-    let mut inflated_pts = [Point { x: 0.0, y: 0.0 }; 4];
-    for i in 0..4 {
-        let l1 = lines[(i + 3) % 4]; // Line ending at corner i
-        let l2 = lines[i]; // Line starting at corner i
-
-        let det = l1.0 * l2.1 - l2.0 * l1.1;
-        if det.abs() > 1e-6 {
-            inflated_pts[i] = Point {
-                x: (l1.1 * l2.2 - l2.1 * l1.2) / det,
-                y: (l2.0 * l1.2 - l1.0 * l2.2) / det,
+        let mut dx_c = quad_pts[i].x - center.x;
+        let mut dy_c = quad_pts[i].y - center.y;
+        let mag = (dx_c * dx_c + dy_c * dy_c).sqrt();
+        if mag > 1e-6 {
+            dx_c /= mag;
+            dy_c /= mag;
+            expanded_pts[i] = Point {
+                x: quad_pts[i].x + dx_c * inflation_dist,
+                y: quad_pts[i].y + dy_c * inflation_dist,
             };
         } else {
-            inflated_pts[i] = quad_pts[i];
+            expanded_pts[i] = quad_pts[i];
         }
     }
-    let quad_pts = inflated_pts;
+    let quad_pts = expanded_pts;
 
     let mut ok = true;
     for i in 0..4 {
@@ -691,16 +682,16 @@ pub(crate) fn refine_corner(
     // Intensity-based refinement (ERF fit) is much more accurate but slower.
     let line1 = if use_erf {
         refine_edge_intensity(arena, img, p_prev, p, sigma, decimation)
-            .or_else(|| fit_edge_line(img, p_prev, p, decimation))
+            .or_else(|| fit_edge_line(arena, img, p_prev, p, decimation))
     } else {
-        fit_edge_line(img, p_prev, p, decimation)
+        fit_edge_line(arena, img, p_prev, p, decimation)
     };
 
     let line2 = if use_erf {
         refine_edge_intensity(arena, img, p, p_next, sigma, decimation)
-            .or_else(|| fit_edge_line(img, p, p_next, decimation))
+            .or_else(|| fit_edge_line(arena, img, p, p_next, decimation))
     } else {
-        fit_edge_line(img, p, p_next, decimation)
+        fit_edge_line(arena, img, p, p_next, decimation)
     };
 
     if let (Some(l1), Some(l2)) = (line1, line2) {
@@ -728,6 +719,7 @@ pub(crate) fn refine_corner(
 
 /// Fit a line (a*x + b*y + c = 0) to an edge by sampling gradient peaks.
 fn fit_edge_line(
+    _arena: &Bump,
     img: &ImageView,
     p1: Point,
     p2: Point,
@@ -747,7 +739,7 @@ fn fit_edge_line(
     let mut count = 0;
 
     let n_samples = (len as usize).clamp(5, 15);
-    // Original search range was 3 pixels
+    // Original search range
     let r = if decimation > 1 {
         (decimation as i32) + 1
     } else {
@@ -847,19 +839,21 @@ fn refine_edge_intensity(
         return None;
     }
 
-    // Initial line parameters: normal (nx, ny) and distance d from origin
-    let nx = -dy / len;
-    let ny = dx / len;
-    let mid_x = f64::midpoint(p1.x, p2.x);
-    let mid_y = f64::midpoint(p1.y, p2.y);
-    let mut d = -(nx * mid_x + ny * mid_y);
+    let nx = dy / len;
+    let ny = -dx / len;
+    let cx = (p1.x + p2.x) * 0.5;
+    let cy = (p1.y + p2.y) * 0.5;
+    let d = -(nx * cx + ny * cy);
 
+    // Initial distance to origin is not used anymore since we parameterize around cx, cy
+    // We just need initial d_prime = 0
+    let mut d_prime = 0.0;
     // Collect pixels within a window of the edge.
     // Ensure the window is large enough to cover the PSF and handle initial bias.
     let window = if decimation > 1 {
-        (decimation as f64) + 1.5
+        (decimation as f64) + 1.5 + len * 0.05
     } else {
-        3.0
+        3.0 + len * 0.05
     };
 
     // Calculate bounds such that pixel centers are symmetric around the edge.
@@ -907,60 +901,75 @@ fn refine_edge_intensity(
         return Some((nx, ny, d)); // Fall back to initial estimate
     }
 
-    // Estimate A (dark side) and B (light side) from samples
-    // Use weighted average based on distance from edge to be more robust
-    let mut dark_sum = 0.0;
-    let mut dark_weight = 0.0;
-    let mut light_sum = 0.0;
-    let mut light_weight = 0.0;
+    // Robust estimation of A (dark) and B (light) using percentiles
+    let mut intensities = BumpVec::from_iter_in(samples.iter().map(|s| s.2), arena);
+    intensities.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+    let n = intensities.len();
+    let p10 = n / 10;
+    let p90 = n * 9 / 10;
 
-    for &(_x, _y, intensity, projection) in &samples {
-        let signed_dist = projection + d;
-        if signed_dist < -1.0 {
-            let w = (-signed_dist - 1.0).min(2.0); // Weight pixels further from edge more
-            dark_sum += intensity * w;
-            dark_weight += w;
-        } else if signed_dist > 1.0 {
-            let w = (signed_dist - 1.0).min(2.0);
-            light_sum += intensity * w;
-            light_weight += w;
-        }
-    }
-
-    if dark_weight < 1.0 || light_weight < 1.0 {
-        return Some((nx, ny, d));
-    }
-
-    let a = dark_sum / dark_weight;
-    let b = light_sum / light_weight;
+    // Outward normal means signed_dist < 0 is INSIDE (dark), signed_dist > 0 is OUTSIDE (light)
+    let a = intensities[..=p10].iter().sum::<f64>() / (p10 + 1) as f64;
+    let b = intensities[p90..].iter().sum::<f64>() / (n - p90).max(1) as f64;
     let inv_sigma = 1.0 / sigma;
 
-    // Gauss-Newton optimization: refine d (offset) and angle (implicit via nx, ny)
-    // We'll stick to 1D offset refinement for now but with a more robust iteration
-    for _iter in 0..15 {
-        let mut jtj = 0.0;
-        let mut jtr = 0.0;
+    // Gauss-Newton optimization: refine d' (offset from center) and angle (theta)
+    // Parameterizing around the edge center prevents ill-conditioning that occurs
+    // when rotating around the origin.
+    let cx = (p1.x + p2.x) * 0.5;
+    let cy = (p1.y + p2.y) * 0.5;
 
-        for &(_x, _y, intensity, projection) in &samples {
-            let signed_dist = (projection + d) * inv_sigma;
+    let mut theta = ny.atan2(nx);
+
+    for _iter in 0..15 {
+        let mut jtj = [0.0; 4];
+        let mut jtr = [0.0; 2];
+
+        let cur_nx = theta.cos();
+        let cur_ny = theta.sin();
+
+        for &(_x, _y, intensity, _) in &samples {
+            let dx_c = _x - cx;
+            let dy_c = _y - cy;
+
+            let projection = cur_nx * dx_c + cur_ny * dy_c;
+            let signed_dist = (projection + d_prime) * inv_sigma;
             if signed_dist.abs() > 5.0 {
                 continue;
-            } // Only use samples near the edge
+            }
 
             let model = (a + b) * 0.5 + (b - a) * 0.5 * erf_approx(signed_dist);
             let residual = intensity - model;
 
             let exp_term = (-signed_dist * signed_dist).exp();
-            let jacobian = (b - a) * 0.5 * std::f64::consts::FRAC_2_SQRT_PI * exp_term * inv_sigma;
+            let jacobian_base =
+                (b - a) * 0.5 * std::f64::consts::FRAC_2_SQRT_PI * exp_term * inv_sigma;
 
-            jtj += jacobian * jacobian;
-            jtr += jacobian * residual;
+            let j_d = jacobian_base;
+            let j_theta = jacobian_base * (-dx_c * cur_ny + dy_c * cur_nx);
+
+            jtj[0] += j_d * j_d;
+            jtj[1] += j_d * j_theta;
+            jtj[2] += j_theta * j_d;
+            jtj[3] += j_theta * j_theta;
+
+            jtr[0] += j_d * residual;
+            jtr[1] += j_theta * residual;
         }
 
-        if jtj.abs() > 1e-10 {
-            let delta = jtr / jtj;
-            d += delta.clamp(-0.5, 0.5);
-            if delta.abs() < 0.0001 {
+        // Add Levenberg-Marquardt damping
+        jtj[0] += 1e-4;
+        jtj[3] += 1e-4;
+
+        let det = jtj[0] * jtj[3] - jtj[1] * jtj[2];
+        if det.abs() > 1e-10 {
+            let delta_d = (jtr[0] * jtj[3] - jtr[1] * jtj[1]) / det;
+            let delta_theta = (jtj[0] * jtr[1] - jtj[2] * jtr[0]) / det;
+
+            d_prime += delta_d.clamp(-1.0, 1.0);
+            theta += delta_theta.clamp(-0.1, 0.1);
+
+            if delta_d.abs() < 0.0001 && delta_theta.abs() < 0.0001 {
                 break;
             }
         } else {
@@ -968,7 +977,13 @@ fn refine_edge_intensity(
         }
     }
 
-    Some((nx, ny, d))
+    let final_nx = theta.cos();
+    let final_ny = theta.sin();
+    // Convert d_prime back to global d
+    // final_nx * cx + final_ny * cy + final_d = d_prime
+    let final_d = d_prime - (final_nx * cx + final_ny * cy);
+
+    Some((final_nx, final_ny, final_d))
 }
 
 /// Reducing a polygon to a quad (4 vertices + 1 closing) by iteratively removing
