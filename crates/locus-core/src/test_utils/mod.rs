@@ -56,8 +56,7 @@ pub fn generate_synthetic_test_image(
     let points = decoder.sample_points();
     let d_f = (dim + 2) as f64;
     for (i, p) in points.iter().enumerate() {
-        // Map canonical [-1, 1] back to grid coordinates [0, dim+2]
-        // p.x = (gx + 0.5) * 2 / d - 1  => gx = (p.x + 1) * d / 2 - 0.5
+        // Map canonical [-1, 1] to grid index [0, D]
         let gx = ((p.0 + 1.0) * d_f / 2.0 - 0.5).round() as usize;
         let gy = ((p.1 + 1.0) * d_f / 2.0 - 0.5).round() as usize;
 

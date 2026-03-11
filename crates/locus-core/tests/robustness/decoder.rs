@@ -13,8 +13,8 @@ proptest! {
     fn prop_decoder_survives_random_payloads(
         payload in any::<u64>(),
         family in prop_oneof![
+            Just(TagFamily::AprilTag16h5),
             Just(TagFamily::AprilTag36h11),
-            Just(TagFamily::AprilTag41h12),
             Just(TagFamily::ArUco4x4_50),
             Just(TagFamily::ArUco4x4_100),
         ],

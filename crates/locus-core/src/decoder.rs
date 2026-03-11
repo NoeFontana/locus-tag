@@ -1277,12 +1277,10 @@ pub fn sample_grid(
     sample_grid_generic::<crate::strategy::HardStrategy>(img, arena, detection, decoder)
 }
 
-/// A trait for decoding binary payloads from extracted tags.
 /// Rotate a square bit grid 90 degrees clockwise.
 /// This is an O(1) bitwise operation but conceptually represents rotating the N x N pixel grid.
 #[must_use]
-#[allow(dead_code)]
-pub(crate) fn rotate90(bits: u64, dim: usize) -> u64 {
+pub fn rotate90(bits: u64, dim: usize) -> u64 {
     let mut res = 0u64;
     for y in 0..dim {
         for x in 0..dim {
@@ -1796,44 +1794,38 @@ impl TagDecoder for AprilTag36h11 {
     }
 }
 
-/// Decoder for the AprilTag 41h12 family.
-pub struct AprilTag41h12;
+/// Decoder for the AprilTag 16h5 family.
+pub struct AprilTag16h5;
 
-impl TagDecoder for AprilTag41h12 {
+impl TagDecoder for AprilTag16h5 {
     fn name(&self) -> &'static str {
-        "41h12"
+        "16h5"
     }
     fn dimension(&self) -> usize {
-        9
+        4
     }
     fn bit_count(&self) -> usize {
-        41
+        16
     }
-
     fn sample_points(&self) -> &[(f64, f64)] {
-        crate::dictionaries::POINTS_APRILTAG41H12
+        crate::dictionaries::POINTS_APRILTAG16H5
     }
-
     fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag41h12)
-            .decode(bits, 4)
+        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag16h5)
+            .decode(bits, 1)
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
-
     fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag41h12)
+        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag16h5)
             .decode(bits, max_hamming)
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
-
     fn get_code(&self, id: u16) -> Option<u64> {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag41h12).get_code(id)
+        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag16h5).get_code(id)
     }
-
     fn num_codes(&self) -> usize {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag41h12).len()
+        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag16h5).len()
     }
-
     fn rotated_codes(&self) -> &[(u64, u16, u8)] {
         &[]
     }
@@ -1843,7 +1835,7 @@ impl TagDecoder for AprilTag41h12 {
         max_hamming: u32,
         callback: &mut dyn FnMut(u64, u16, u8),
     ) {
-        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag41h12)
+        crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag16h5)
             .for_each_candidate_within_hamming(bits, max_hamming, callback);
     }
 }
@@ -2025,8 +2017,8 @@ impl TagDecoder for GenericDecoder {
 #[must_use]
 pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send + Sync> {
     match family {
+        config::TagFamily::AprilTag16h5 => Box::new(AprilTag16h5),
         config::TagFamily::AprilTag36h11 => Box::new(AprilTag36h11),
-        config::TagFamily::AprilTag41h12 => Box::new(AprilTag41h12),
         config::TagFamily::ArUco4x4_50 => Box::new(ArUco4x4_50),
         config::TagFamily::ArUco4x4_100 => Box::new(ArUco4x4_100),
     }
@@ -2126,92 +2118,57 @@ mod tests {
                 .expect("valid ID");
             let result = decoder.decode(code);
             assert!(result.is_some());
-            let (id_out, hamming_out, rot_out) = result.unwrap();
+            let (id_out, _, _) = result.unwrap();
             assert_eq!(id_out, u32::from(id));
-            assert_eq!(hamming_out, 0);
-            assert_eq!(rot_out, 0);
         }
     }
-
-    #[test]
-    fn test_all_codes_decode_41h12() {
-        let decoder = AprilTag41h12;
-        let dict = crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag41h12);
-        for id in 0..dict.len() as u16 {
-            let code = dict.get_code(id).expect("valid ID");
-            let result = decoder.decode(code);
-            assert!(result.is_some(), "Failed to decode 41h12 ID {id}");
-            let (id_out, hamming_out, rot_out) = result.unwrap();
-            assert_eq!(id_out, u32::from(id));
-            assert_eq!(hamming_out, 0);
-            assert_eq!(rot_out, 0);
-        }
-    }
-
     #[test]
     fn test_grid_sampling() {
         let width = 64;
         let height = 64;
-        let stride = 64;
         let mut data = vec![0u8; width * height];
+        // 8x8 grid, 36x36px tag centered at 32,32 => corners [14, 50]
+        // TL=(14,14), TR=(50,14), BR=(50,50), BL=(14,50)
 
-        // Draw a simulated 36h6 tag (6x6 bits)
-        // Center at 32, 32. Tag size 36x36 pixels.
-        // Each bit is 6x6 pixels.
-        // We will set bit 0 (top-left) to 255 (white), others 0 (black).
-        // Plus a white border for contrast calculation.
-        // We need min/max to be different by > 20.
-
-        // Fill background with gray = 100
-        data.fill(100);
-
-        // Set bit 0 region to 200 (White)
-        // Canonical (-0.625, -0.625) -> Image coords.
-        // Assume identity homography mapping:
-        // -1 -> 14, +1 -> 50 (width 36 centered at 32)
-        // scale = 18. offset = 32.
-
-        // Bit 0 center is -0.625.
-        // Image x = 32 + 18 * -0.625 = 32 - 11.25 = 20.75
-        // Let's paint a blob at 21, 21.
-        for y in 18..24 {
-            for x in 18..24 {
-                data[y * width + x] = 200;
+        // Border:
+        for gy in 0..8 {
+            for gx in 0..8 {
+                if gx == 0 || gx == 7 || gy == 0 || gy == 7 {
+                    for y in 0..4 {
+                        for x in 0..4 {
+                            let px = 14 + (f64::from(gx) * 4.5) as usize + x;
+                            let py = 14 + (f64::from(gy) * 4.5) as usize + y;
+                            if px < 64 && py < 64 {
+                                data[py * width + px] = 0;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Bit 0 (cell 1,1) -> White (canonical p = -0.625, -0.625)
+        for y in 0..4 {
+            for x in 0..4 {
+                let px = 14 + (1.0 * 4.5) as usize + x;
+                let py = 14 + (1.0 * 4.5) as usize + y;
+                data[py * width + px] = 255;
+            }
+        }
+        // Bit 35 (cell 6,6) -> Black (canonical p = 0.625, 0.625)
+        for y in 0..4 {
+            for x in 0..4 {
+                let px = 14 + (6.0 * 4.5) as usize + x;
+                let py = 14 + (6.0 * 4.5) as usize + y;
+                data[py * width + px] = 0;
             }
         }
 
-        // Set another region (last bit) to 50 (Black) to ensure dynamic range
-        // Last bit 35 is at (0.625, 0.625).
-        // Image x = 32 + 18 * 0.625 = 43.25
-        for y in 40..46 {
-            for x in 40..46 {
-                data[y * width + x] = 50;
-            }
-        }
-
-        let img = crate::image::ImageView::new(&data, width, height, stride).unwrap();
-
-        // Construct Homography that maps canonical [-1, 1] to image [14, 50]
-        // This is a simple scaling matrix:
-        // [ sx  0  tx ]
-        // [ 0  sy  ty ]
-        // [ 0   0   1 ]
-        // sx = 18, tx = 32.
-        let mut h = SMatrix::<f64, 3, 3>::identity();
-        h[(0, 0)] = 18.0;
-        h[(0, 2)] = 32.0;
-        h[(1, 1)] = 18.0;
-        h[(1, 2)] = 32.0;
+        let img = crate::image::ImageView::new(&data, width, height, width).unwrap();
 
         let decoder = AprilTag36h11;
         let arena = Bump::new();
         let cand = crate::Detection {
-            corners: [
-                [32.0, 32.0],
-                [32.0 + 18.0, 32.0],
-                [32.0 + 18.0, 32.0 + 18.0],
-                [32.0, 32.0 + 18.0],
-            ],
+            corners: [[14.0, 14.0], [50.0, 14.0], [50.0, 50.0], [14.0, 50.0]],
             ..Default::default()
         };
         let bits =

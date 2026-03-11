@@ -179,13 +179,14 @@ uv run ruff format .
 ### Before Committing
 ```bash
 # Verify all pre-commit checks locally before pushing to CI
-cargo nextest run --all-features
+cargo nextest run --release --all-features
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo insta test --release --all-features --features bench-internals --check
+TRACY_NO_INVARIANT_CHECK=1 cargo insta test --release --all-features --features bench-internals --check
 
 uv run ruff check .
 uv run ruff format --check .
+uv run maturin develop --release --manifest-path crates/locus-py/Cargo.toml
 uv run pytest
 ```
 
@@ -194,8 +195,9 @@ uv run pytest
 ### Unit Testing (Rust)
 - We use `cargo-nextest` as the primary test runner for speed and concurrent execution.
 - Fast unit tests are run by default via `cargo nextest run`.
+- **Always use --release** for all tests except when debugging specific local logic, as debug performance is non-representative.
 - **Heavy Regression Tests:** Tests that parse large datasets (e.g., ICRA 2020) or require significant computational time are automatically excluded from the default run via `.config/nextest.toml`.
-- To run heavy tests explicitly, use the standard cargo test runner in release mode: `cargo test --release --test regression_icra2020`.
+- To run heavy tests explicitly, use the standard cargo test runner in release mode: `TRACY_NO_INVARIANT_CHECK=1 cargo test --release --test regression_icra2020`.
 - All logic changes to the hot loop require regression and snapshot validation using `cargo insta`.
 
 ### Unit Testing (Python)

@@ -480,10 +480,10 @@ impl DetectorConfigBuilder {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TagFamily {
+    /// AprilTag 16h5 family.
+    AprilTag16h5,
     /// AprilTag 36h11 family (587 codes, 11-bit hamming distance).
     AprilTag36h11,
-    /// AprilTag 41h12 family (2115 codes, 12-bit hamming distance).
-    AprilTag41h12,
     /// ArUco 4x4_50 dictionary.
     ArUco4x4_50,
     /// ArUco 4x4_100 dictionary.
@@ -495,8 +495,8 @@ impl TagFamily {
     #[must_use]
     pub const fn all() -> &'static [TagFamily] {
         &[
+            TagFamily::AprilTag16h5,
             TagFamily::AprilTag36h11,
-            TagFamily::AprilTag41h12,
             TagFamily::ArUco4x4_50,
             TagFamily::ArUco4x4_100,
         ]

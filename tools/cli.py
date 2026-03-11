@@ -216,15 +216,16 @@ def bench_real(
 
     # Map string to locus.TagFamily
     family_mapping = {
+        "AprilTag16h5": int(locus.TagFamily.AprilTag16h5),
         "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
-        "AprilTag41h12": int(locus.TagFamily.AprilTag41h12),
         "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
         "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "16h5": int(locus.TagFamily.AprilTag16h5),
         "36h11": int(locus.TagFamily.AprilTag36h11),
-        "41h12": int(locus.TagFamily.AprilTag41h12),
         "4x4_50": int(locus.TagFamily.ArUco4x4_50),
         "4x4_100": int(locus.TagFamily.ArUco4x4_100),
     }
+
     tag_family_int = family_mapping.get(family)
     if tag_family_int is None:
         typer.echo(f"Error: Unknown tag family '{family}'", err=True)
@@ -380,15 +381,16 @@ def bench_synthetic(
 
     # Map string to locus.TagFamily
     family_mapping = {
+        "AprilTag16h5": int(locus.TagFamily.AprilTag16h5),
         "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
-        "AprilTag41h12": int(locus.TagFamily.AprilTag41h12),
         "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
         "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "16h5": int(locus.TagFamily.AprilTag16h5),
         "36h11": int(locus.TagFamily.AprilTag36h11),
-        "41h12": int(locus.TagFamily.AprilTag41h12),
         "4x4_50": int(locus.TagFamily.ArUco4x4_50),
         "4x4_100": int(locus.TagFamily.ArUco4x4_100),
     }
+
     tag_family_int = family_mapping.get(family)
     if tag_family_int is None:
         typer.echo(f"Error: Unknown tag family '{family}'", err=True)
@@ -456,15 +458,16 @@ def bench_hosted(
 
     # Map string to locus.TagFamily
     family_mapping = {
+        "AprilTag16h5": int(locus.TagFamily.AprilTag16h5),
         "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
-        "AprilTag41h12": int(locus.TagFamily.AprilTag41h12),
         "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
         "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "16h5": int(locus.TagFamily.AprilTag16h5),
         "36h11": int(locus.TagFamily.AprilTag36h11),
-        "41h12": int(locus.TagFamily.AprilTag41h12),
         "4x4_50": int(locus.TagFamily.ArUco4x4_50),
         "4x4_100": int(locus.TagFamily.ArUco4x4_100),
     }
+
     tag_family_int = family_mapping.get(family)
     if tag_family_int is None:
         typer.echo(f"Error: Unknown tag family '{family}'", err=True)
@@ -568,15 +571,16 @@ def bench_profile(
 
     # Map string to locus.TagFamily
     family_mapping = {
+        "AprilTag16h5": int(locus.TagFamily.AprilTag16h5),
         "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
-        "AprilTag41h12": int(locus.TagFamily.AprilTag41h12),
         "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
         "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "16h5": int(locus.TagFamily.AprilTag16h5),
         "36h11": int(locus.TagFamily.AprilTag36h11),
-        "41h12": int(locus.TagFamily.AprilTag41h12),
         "4x4_50": int(locus.TagFamily.ArUco4x4_50),
         "4x4_100": int(locus.TagFamily.ArUco4x4_100),
     }
+
     tag_family_int = family_mapping.get(family)
     if tag_family_int is None:
         typer.echo(f"Error: Unknown tag family '{family}'", err=True)
@@ -610,8 +614,6 @@ def extract_bits(
 
     family_map = {
         "AprilTag16h5": cv2.aruco.DICT_APRILTAG_16h5,
-        "AprilTag25h9": cv2.aruco.DICT_APRILTAG_25h9,
-        "AprilTag36h10": cv2.aruco.DICT_APRILTAG_36h10,
         "AprilTag36h11": cv2.aruco.DICT_APRILTAG_36h11,
         "ArUco4x4_50": cv2.aruco.DICT_4X4_50,
         "ArUco4x4_100": cv2.aruco.DICT_4X4_100,

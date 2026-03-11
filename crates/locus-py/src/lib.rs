@@ -21,8 +21,8 @@ use pyo3::types::PyDict;
 #[pyclass(eq, eq_int, skip_from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TagFamily {
-    AprilTag36h11 = 0,
-    AprilTag41h12 = 1,
+    AprilTag16h5 = 0,
+    AprilTag36h11 = 1,
     ArUco4x4_50 = 2,
     ArUco4x4_100 = 3,
 }
@@ -30,8 +30,8 @@ pub enum TagFamily {
 impl From<TagFamily> for locus_core::TagFamily {
     fn from(f: TagFamily) -> Self {
         match f {
+            TagFamily::AprilTag16h5 => locus_core::TagFamily::AprilTag16h5,
             TagFamily::AprilTag36h11 => locus_core::TagFamily::AprilTag36h11,
-            TagFamily::AprilTag41h12 => locus_core::TagFamily::AprilTag41h12,
             TagFamily::ArUco4x4_50 => locus_core::TagFamily::ArUco4x4_50,
             TagFamily::ArUco4x4_100 => locus_core::TagFamily::ArUco4x4_100,
         }
@@ -404,8 +404,8 @@ impl Detector {
         let mut core_families = Vec::new();
         for f in families {
             let family = match f {
-                0 => locus_core::TagFamily::AprilTag36h11,
-                1 => locus_core::TagFamily::AprilTag41h12,
+                0 => locus_core::TagFamily::AprilTag16h5,
+                1 => locus_core::TagFamily::AprilTag36h11,
                 2 => locus_core::TagFamily::ArUco4x4_50,
                 3 => locus_core::TagFamily::ArUco4x4_100,
                 _ => {
@@ -435,8 +435,8 @@ fn create_detector(
 
     for f in families {
         let family = match f {
-            0 => locus_core::TagFamily::AprilTag36h11,
-            1 => locus_core::TagFamily::AprilTag41h12,
+            0 => locus_core::TagFamily::AprilTag16h5,
+            1 => locus_core::TagFamily::AprilTag36h11,
             2 => locus_core::TagFamily::ArUco4x4_50,
             3 => locus_core::TagFamily::ArUco4x4_100,
             _ => {

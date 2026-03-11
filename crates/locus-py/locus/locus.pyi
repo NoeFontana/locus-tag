@@ -4,8 +4,8 @@ from typing import Any
 import numpy as np
 
 class TagFamily(enum.IntEnum):
-    AprilTag36h11 = 0
-    AprilTag41h12 = 1
+    AprilTag16h5 = 0
+    AprilTag36h11 = 1
     ArUco4x4_50 = 2
     ArUco4x4_100 = 3
 
