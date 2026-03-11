@@ -24,8 +24,8 @@ class FamilyMapper:
         if family is None:
             return None
         mapping = {
+            int(locus.TagFamily.AprilTag16h5): locus.TagFamily.AprilTag16h5,
             int(locus.TagFamily.AprilTag36h11): locus.TagFamily.AprilTag36h11,
-            int(locus.TagFamily.AprilTag41h12): locus.TagFamily.AprilTag41h12,
             int(locus.TagFamily.ArUco4x4_50): locus.TagFamily.ArUco4x4_50,
             int(locus.TagFamily.ArUco4x4_100): locus.TagFamily.ArUco4x4_100,
         }
@@ -37,8 +37,8 @@ class FamilyMapper:
         if family is None:
             return None
         mapping = {
+            int(locus.TagFamily.AprilTag16h5): cv2.aruco.DICT_APRILTAG_16h5,
             int(locus.TagFamily.AprilTag36h11): cv2.aruco.DICT_APRILTAG_36h11,
-            int(locus.TagFamily.AprilTag41h12): None,
             int(locus.TagFamily.ArUco4x4_50): cv2.aruco.DICT_4X4_50,
             int(locus.TagFamily.ArUco4x4_100): cv2.aruco.DICT_4X4_100,
         }
@@ -49,8 +49,8 @@ class FamilyMapper:
         if family is None:
             return None
         mapping = {
+            int(locus.TagFamily.AprilTag16h5): "tag16h5",
             int(locus.TagFamily.AprilTag36h11): "tag36h11",
-            int(locus.TagFamily.AprilTag41h12): "tagStandard41h12",
             int(locus.TagFamily.ArUco4x4_50): None,
             int(locus.TagFamily.ArUco4x4_100): None,
         }
