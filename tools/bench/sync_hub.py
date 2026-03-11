@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Final
 
 import datasets
-from huggingface_hub import hf_hub_download
+from huggingface_hub import HfApi, hf_hub_download
 from huggingface_hub.utils import EntryNotFoundError
 from PIL import Image
 from tqdm import tqdm
@@ -62,8 +62,19 @@ def sync_subset_to_local(subset: str, target_dir: Path, repo_id: str = DEFAULT_R
     try:
         ds = datasets.load_dataset(repo_id, subset, split="train", streaming=True)
     except Exception as e:
-        logger.error(f"Failed to load dataset {subset} from {repo_id}: {e}")
-        raise
+        logger.warning(f"    [!] Standard load failed for {subset}: {e}")
+        logger.info("    [-->] Retrying with explicit data_files fallback...")
+        try:
+            # Fallback path: try to load the parquet file directly if config discovery fails
+            ds = datasets.load_dataset(
+                repo_id,
+                data_files={ "train": f"{subset}/train-*.parquet" },
+                split="train",
+                streaming=True,
+            )
+        except Exception as e2:
+            logger.error(f"Failed to load dataset {subset} from {repo_id} (even with fallback): {e2}")
+            raise
 
     jsonl_path: Path = subset_dir / "annotations.jsonl"
 
@@ -121,8 +132,22 @@ def main() -> None:
             configs = datasets.get_dataset_config_names(args.repo_id)
             logger.info(f"Found {len(configs)} configs: {', '.join(configs)}\n")
         except Exception as e:
-            logger.error(f"Discovery failed: {e}")
-            return
+            logger.warning(f"Discovery failed via datasets: {e}")
+            logger.info("Attempting manual discovery via Hugging Face API...")
+            try:
+                api = HfApi()
+                files = api.list_repo_tree(args.repo_id, repo_type="dataset")
+                configs = [
+                    f.path.rstrip("/")
+                    for f in files
+                    if "/" not in f.path.rstrip("/")
+                    and not f.path.startswith(".")
+                    and f.path.lower() != "readme.md"
+                ]
+                logger.info(f"Manually found {len(configs)} configs: {', '.join(configs)}\n")
+            except Exception as e2:
+                logger.error(f"Manual discovery also failed: {e2}")
+                return
 
     # Execute sync
     for config in configs:
