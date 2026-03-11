@@ -4,8 +4,15 @@ This track focuses on the mathematical verification, synthetic test harness deve
 # Functional Requirements
 - **erf_approx Verification:** Implement comprehensive tests for the Abramowitz and Stegun error function approximation, including symmetry, asymptotic bounds, zero-crossing, and precision checks against high-precision standard libraries.
 - **Analytical Image Generator:** Build a 2D floating-point image generator that simulates sub-pixel edges based on a mathematical model (Point Spread Function) using the `erf` function.
+    - **Pixel Center Rule:** Synthetic pixels MUST be sampled at $(i+0.5, j+0.5)$.
+    - **Model Equation:** Use $I(d) = \frac{A+B}{2} + \frac{B-A}{2} \cdot \text{erf}\left(\frac{d}{\sigma\sqrt{2}}\right)$.
 - **Idealized Edge Recovery:** Develop test suites for axis-aligned and arbitrary-angle edge recovery to verify sub-pixel localization accuracy (< 0.001 pixel error in zero-noise conditions).
+    - **Decimation Mapping:** Use center-aligned scaling: $x_{orig} = (x_{dec} - 0.5) \cdot \text{factor} + 0.5$.
 - **Solver Robustness & Stress Testing:** Implement tests for low-contrast scenarios, high Gaussian noise, image boundary conditions, and displaced initial seeds (off-edge capture radius testing).
+
+# Implementation Conventions (OpenCV/Blender)
+- **Coordinate System:** $(0,0)$ is top-left corner; $(0.5, 0.5)$ is first pixel center.
+- **Normal Winding:** Clockwise (CW) winding; outward normal points toward light side ($B$), where $d > 0$.
 
 # Non-Functional Requirements
 - **Performance:** Ensure the synthetic image generator is efficient enough for use in a dense test suite.

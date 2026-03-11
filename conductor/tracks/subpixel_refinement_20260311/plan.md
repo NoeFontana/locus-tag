@@ -5,18 +5,19 @@
     - [x] Create unit tests for erf_approx (Symmetry, Asymptotic, Zero-crossing).
     - [x] Implement high-precision integration tests for erf_approx vs ground truth.
     - [x] Verify maximum absolute error < 1.5e-7.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Mathematical Verification' (Protocol in workflow.md)
+- [~] Task: Conductor - User Manual Verification 'Phase 1: Mathematical Verification' (Protocol in workflow.md)
 
 ## Phase 2: Synthetic Test Harness (Image Generator)
 - [ ] Task: Implementation of Sub-pixel Edge Renderer
-    - [ ] Build the image generator based on PSF model and erf_approx.
+    - [ ] Build the image generator (sampling at i+0.5, j+0.5).
+    - [ ] Implement the ERF model I(d) = (A+B)/2 + (B-A)/2 * erf(d / (sigma * sqrt(2))).
     - [ ] Write meta-tests to verify the generator's output against manual hand-calculated values.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Synthetic Test Harness' (Protocol in workflow.md)
 
 ## Phase 3: Edge Recovery & Accuracy Testing
 - [ ] Task: Zero-noise Edge Recovery Tests
-    - [ ] Implement axis-aligned edge recovery tests (accuracy < 0.001 pixels).
-    - [ ] Implement arbitrary-angle edge recovery tests.
+    - [ ] Implement axis-aligned edge recovery tests using (x_dec - 0.5) * K + 0.5 scaling.
+    - [ ] Implement arbitrary-angle edge recovery tests (accuracy < 0.001 pixels).
     - [ ] Verify scale invariance for varying edge lengths.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Edge Recovery & Accuracy Testing' (Protocol in workflow.md)
 
