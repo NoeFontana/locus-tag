@@ -15,6 +15,7 @@ When modifying Python code in `crates/locus-py` or `scripts/`, the focus must be
 * **PEP 735 Dependency Groups:** Utilize specific groups (`dev`, `lint`, `types`, `bench`, `docs`, `etl`) when running tasks. For example: `uv run --group bench tools/cli.py bench`.
 
 ## 4. Quality Gates
-* **Linting:** `uv run ruff check .`
+* **Linting:** `uv run ruff check . --fix`
 * **Formatting:** `uv run ruff format .`
+* **Type Checking:** `uv run mypy .`
 * **Testing:** `uv run pytest`

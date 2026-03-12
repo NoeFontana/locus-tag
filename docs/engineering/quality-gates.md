@@ -8,8 +8,8 @@ Run these commands locally to ensure your code is ready for CI:
 
 ```bash
 # 1. Rust Formatting & Linting
-cargo fmt --all
 cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo fmt --all
 
 # 2. Python Formatting & Linting
 uv run ruff check . --fix
@@ -50,10 +50,15 @@ cargo bench --bench comprehensive -- "bench_thresholding"
 uv run --group bench tools/cli.py bench real --compare
 
 # 2. Regression Testing (Sequential for accurate latency)
-TRACY_NO_INVARIANT_CHECK=1 cargo test --release --test regression_icra2020 -- --test-threads=1
+# Requires LOCUS_DATASET_DIR to be set.
+TRACY_NO_INVARIANT_CHECK=1 LOCUS_DATASET_DIR=tests/data/icra2020 cargo test --release --test regression_icra2020 --features bench-internals -- --test-threads=1
 
-# 3. Snapshot Verification (if output changes are intentional)
-TRACY_NO_INVARIANT_CHECK=1 cargo insta test --release --all-features --features bench-internals --review
+# 3. Snapshot Verification & Update
+# This runs all regression suites and dictionary parity tests.
+TRACY_NO_INVARIANT_CHECK=1 \
+LOCUS_DATASET_DIR=tests/data/icra2020 \
+LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \
+cargo insta test --release --all-features --features bench-internals --review
 ```
 
 ## 3. Documentation Quality

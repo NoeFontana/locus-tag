@@ -231,6 +231,18 @@ fn extract_single_quad(
         },
     ];
 
+    // Expand 0.5px outward from centers to objects boundaries.
+    // This aligns the unrefined quad with integer pixel boundaries.
+    let center_x = (quad_pts[0].x + quad_pts[1].x + quad_pts[2].x + quad_pts[3].x) * 0.25;
+    let center_y = (quad_pts[0].y + quad_pts[1].y + quad_pts[2].y + quad_pts[3].y) * 0.25;
+
+    let mut expanded_pts = [quad_pts[0], quad_pts[1], quad_pts[2], quad_pts[3]];
+    for i in 0..4 {
+        expanded_pts[i].x += 0.5 * (quad_pts[i].x - center_x).signum();
+        expanded_pts[i].y += 0.5 * (quad_pts[i].y - center_y).signum();
+    }
+    let quad_pts = expanded_pts;
+
     let mut ok = true;
     for i in 0..4 {
         let d2 = (quad_pts[i].x - quad_pts[(i + 1) % 4].x).powi(2)
@@ -811,9 +823,9 @@ pub(crate) fn refine_edge_intensity(
 
     // Collect pixels within a window of the edge.
     let window = if decimation > 1 {
-        (decimation as f64) * 2.0 + 1.0
+        (decimation as f64) + 1.0
     } else {
-        4.0
+        2.5
     };
 
     let x0 = (p1.x.min(p2.x) - window - 0.5).max(1.0) as usize;
@@ -884,26 +896,25 @@ pub(crate) fn refine_edge_intensity(
         return Some((nx, ny, d));
     }
 
-    let mut a = dark_sum / dark_weight; // Dark side (A)
-    let mut b = light_sum / light_weight; // Light side (B)
+    let a = dark_sum / dark_weight; // Dark side (A)
+    let b = light_sum / light_weight; // Light side (B)
 
-    // Foundation Principle 2: I(d) = (A+B)/2 + (B-A)/2 * erf(d / (sigma * sqrt(2)))
-    let inv_s_sqrt2 = 1.0 / (sigma * std::f64::consts::SQRT_2);
+    // Foundation Principle 2: I(d) = (A+B)/2 + (B-A)/2 * erf(d / sigma)
+    let inv_s_sqrt2 = 1.0 / sigma;
 
-    // Gauss-Newton optimization: refine d, a, b
-    let gn_window = if decimation > 1 { 5.0 } else { 3.0 };
-
+    // Gauss-Newton optimization: refine d
     for _iter in 0..15 {
-        let mut h = nalgebra::Matrix3::<f64>::zeros();
-        let mut g = nalgebra::Vector3::<f64>::zeros();
+        let mut jtj = 0.0;
+        let mut jtr = 0.0;
 
         for &(_x, _y, intensity, projection) in &samples {
             let dist_phys = projection + d;
-            if dist_phys.abs() > gn_window {
+            let u = dist_phys * inv_s_sqrt2;
+
+            if u.abs() > 3.0 {
                 continue;
             }
 
-            let u = dist_phys * inv_s_sqrt2;
             let erf_u = erf_approx(u);
             let model = (a + b) * 0.5 + (b - a) * 0.5 * erf_u;
             let residual = intensity - model;
@@ -911,20 +922,15 @@ pub(crate) fn refine_edge_intensity(
             // Jacobians
             let exp_term = (-u * u).exp();
             let jd = (b - a) * 0.5 * std::f64::consts::FRAC_2_SQRT_PI * exp_term * inv_s_sqrt2;
-            let ja = 0.5 - 0.5 * erf_u;
-            let jb = 0.5 + 0.5 * erf_u;
 
-            let j = nalgebra::Vector3::new(jd, ja, jb);
-            h += j * j.transpose();
-            g += j * residual;
+            jtj += jd * jd;
+            jtr += jd * residual;
         }
 
-        if let Some(cholesky) = nalgebra::Cholesky::new(h) {
-            let delta = cholesky.solve(&g);
-            d += delta[0].clamp(-0.5, 0.5);
-            a += delta[1].clamp(-10.0, 10.0);
-            b += delta[2].clamp(-10.0, 10.0);
-            if delta.norm() < 1e-4 {
+        if jtj.abs() > 1e-10 {
+            let delta = jtr / jtj;
+            d += delta.clamp(-0.5, 0.5);
+            if delta.abs() < 1e-4 {
                 break;
             }
         } else {
@@ -1605,8 +1611,8 @@ fn trace_boundary<'a>(
 
     for _ in 0..10000 {
         points.push(Point {
-            x: curr_x as f64,
-            y: curr_y as f64,
+            x: curr_x as f64 + 0.5,
+            y: curr_y as f64 + 0.5,
         });
 
         let mut found = false;
