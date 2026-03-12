@@ -780,7 +780,11 @@ fn fit_edge_line(
 /// to the edge line, and σ is the blur factor (~0.6 pixels).
 ///
 /// This achieves ~0.02px accuracy vs ~0.2px for gradient-based methods.
-#[allow(clippy::similar_names, clippy::many_single_char_names, clippy::too_many_lines)]
+#[allow(
+    clippy::similar_names,
+    clippy::many_single_char_names,
+    clippy::too_many_lines
+)]
 // Collected in the quad extraction process
 pub(crate) fn refine_edge_intensity(
     arena: &Bump,
