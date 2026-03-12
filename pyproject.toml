@@ -51,6 +51,10 @@ types = [
     "mypy>=1.0.0",
     "pandas-stubs>=2.0.0",
     "types-tqdm>=4.0.0",
+    "types-jsonschema",
+    "types-requests",
+    "types-PyYAML",
+    "types-setuptools",
 ]
 bench = [
     "opencv-python-headless>=4.0.0",

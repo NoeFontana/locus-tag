@@ -40,9 +40,36 @@ class CameraIntrinsics:
 
 class PyPose:
     @property
-    def rotation(self) -> np.ndarray: ...  # 3x3
+    def quaternion(self) -> list[float]: ...  # [x, y, z, w]
     @property
-    def translation(self) -> np.ndarray: ...  # 3x1
+    def translation(self) -> list[float]: ...  # [x, y, z]
+
+class PyDetectorConfig:
+    threshold_tile_size: int
+    threshold_min_range: int
+    enable_bilateral: bool
+    bilateral_sigma_space: float
+    bilateral_sigma_color: float
+    enable_sharpening: bool
+    enable_adaptive_window: bool
+    threshold_min_radius: int
+    threshold_max_radius: int
+    adaptive_threshold_constant: int
+    adaptive_threshold_gradient_threshold: int
+    quad_min_area: int
+    quad_max_aspect_ratio: float
+    quad_min_fill_ratio: float
+    quad_max_fill_ratio: float
+    quad_min_edge_length: float
+    quad_min_edge_score: float
+    subpixel_refinement_sigma: float
+    segmentation_margin: int
+    segmentation_connectivity: SegmentationConnectivity
+    upscale_factor: int
+    decoder_min_contrast: float
+    refinement_mode: CornerRefinementMode
+    decode_mode: DecodeMode
+    max_hamming_error: int
 
 class Detector:
     def detect(
@@ -53,6 +80,8 @@ class Detector:
         pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
         debug_telemetry: bool = False,
     ) -> dict[str, Any]: ...
+    def config(self) -> PyDetectorConfig: ...
+    def set_families(self, families: list[int]) -> None: ...
 
 def create_detector(
     decimation: int = 1,
@@ -60,4 +89,6 @@ def create_detector(
     families: list[int] = [],
     **kwargs: Any,
 ) -> Detector: ...
+def production_config() -> Detector: ...
+def fast_config() -> Detector: ...
 def init_tracy() -> None: ...

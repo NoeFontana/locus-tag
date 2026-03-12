@@ -348,6 +348,7 @@ class LocusWrapper(LibraryWrapper):
 class OpenCVWrapper(LibraryWrapper):
     def __init__(self, family: int | None = None):
         super().__init__("OpenCV")
+        self.detector: cv2.aruco.ArucoDetector | None = None
         cv_family = FamilyMapper.to_opencv(family)
 
         if cv_family is not None:
