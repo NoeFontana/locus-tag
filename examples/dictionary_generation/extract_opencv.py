@@ -78,7 +78,7 @@ class OpenCVExtractor:
         except AttributeError:
             # Older OpenCV 3.x
             try:
-                return cv2.aruco.Dictionary_get(dict_id)
+                return cv2.aruco.Dictionary_get(dict_id)  # type: ignore
             except AttributeError:
                 return None
 

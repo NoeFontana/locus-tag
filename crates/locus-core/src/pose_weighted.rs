@@ -12,8 +12,8 @@ use nalgebra::{Matrix2, Matrix6, Vector2, Vector3, Vector6};
 /// The Structure Tensor is computed over a small window around the corner.
 fn compute_corner_covariance(img: &ImageView, center: [f64; 2]) -> Matrix2<f64> {
     let radius = 2; // 5x5 window
-    let cx = center[0].round() as isize;
-    let cy = center[1].round() as isize;
+    let cx = center[0].floor() as isize;
+    let cy = center[1].floor() as isize;
 
     let mut sum_gx2 = 0.0;
     let mut sum_gy2 = 0.0;
