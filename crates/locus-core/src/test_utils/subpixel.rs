@@ -345,4 +345,136 @@ mod tests {
             panic!("refine_edge_intensity failed with decimation upscaling");
         }
     }
+
+    #[test]
+    fn test_edge_recovery_robustness_low_contrast() {
+        use crate::quad::{refine_edge_intensity, Point};
+        use crate::image::ImageView;
+        use bumpalo::Bump;
+
+        let width = 100;
+        let height = 100;
+        let sigma = 0.6;
+        // Low contrast: 5 grayscale values delta
+        let intensities = (120.0, 125.0);
+
+        let renderer = SubpixelEdgeRenderer::new(width, height)
+            .with_intensities(intensities.0, intensities.1)
+            .with_sigma(sigma);
+
+        let x_gt = 50.25;
+        let line_gt = Line::from_points_cw([x_gt, 10.0], [x_gt, 90.0]);
+        let data = renderer.render_edge_u8(&line_gt);
+        let img = ImageView::new(&data, width, height, width).unwrap();
+        let arena = Bump::new();
+
+        let p1 = Point { x: 50.0, y: 10.0 };
+        let p2 = Point { x: 50.0, y: 90.0 };
+
+        // Should either converge or return Some(initial) / None
+        // But must not panic.
+        let result = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_edge_recovery_robustness_noise() {
+        use crate::quad::{refine_edge_intensity, Point};
+        use crate::image::ImageView;
+        use bumpalo::Bump;
+        use rand::RngExt;
+
+        let width = 100;
+        let height = 100;
+        let sigma = 0.8;
+        let intensities = (50.0, 200.0);
+
+        let renderer = SubpixelEdgeRenderer::new(width, height)
+            .with_intensities(intensities.0, intensities.1)
+            .with_sigma(sigma);
+
+        let x_gt = 50.25;
+        let line_gt = Line::from_points_cw([x_gt, 10.0], [x_gt, 90.0]);
+        let mut data = renderer.render_edge_u8(&line_gt);
+        
+        // Add high Gaussian noise
+        let mut rng = rand::rng();
+        for p in &mut data {
+            let noise: i16 = rng.random_range(-20..20);
+            *p = (*p as i16 + noise).clamp(0, 255) as u8;
+        }
+        
+        let img = ImageView::new(&data, width, height, width).unwrap();
+        let arena = Bump::new();
+
+        let p1 = Point { x: 50.0, y: 10.0 };
+        let p2 = Point { x: 50.0, y: 90.0 };
+
+        let result = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1);
+        assert!(result.is_some());
+        if let Some((_nx, _ny, d)) = result {
+            let x_recovered = -d;
+            let error = (x_recovered - x_gt).abs();
+            println!("Noise test error: {error}");
+            // Degrades linearly, should still be somewhat reasonable (< 0.1)
+            assert!(error < 0.1, "Error {error} too high with noise");
+        }
+    }
+
+    #[test]
+    fn test_edge_recovery_robustness_clipping() {
+        use crate::quad::{refine_edge_intensity, Point};
+        use crate::image::ImageView;
+        use bumpalo::Bump;
+
+        let width = 100;
+        let height = 100;
+        let sigma = 0.6;
+        let renderer = SubpixelEdgeRenderer::new(width, height);
+
+        // Edge right on the boundary
+        let x_gt = 1.0; 
+        let line_gt = Line::from_points_cw([x_gt, 0.0], [x_gt, 100.0]);
+        let data = renderer.render_edge_u8(&line_gt);
+        let img = ImageView::new(&data, width, height, width).unwrap();
+        let arena = Bump::new();
+
+        // Guess on boundary
+        let p1 = Point { x: 1.0, y: 0.0 };
+        let p2 = Point { x: 1.0, y: 100.0 };
+
+        let result = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_edge_recovery_robustness_off_edge_seed() {
+        use crate::quad::{refine_edge_intensity, Point};
+        use crate::image::ImageView;
+        use bumpalo::Bump;
+
+        let width = 100;
+        let height = 100;
+        let sigma = 0.8;
+        let renderer = SubpixelEdgeRenderer::new(width, height);
+
+        let x_gt = 50.0;
+        let line_gt = Line::from_points_cw([x_gt, 10.0], [x_gt, 90.0]);
+        let data = renderer.render_edge_u8(&line_gt);
+        let img = ImageView::new(&data, width, height, width).unwrap();
+        let arena = Bump::new();
+
+        // Displaced by 2 pixels (within capture radius)
+        let p1 = Point { x: 52.0, y: 10.0 };
+        let p2 = Point { x: 52.0, y: 90.0 };
+
+        let result = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1);
+        assert!(result.is_some());
+        if let Some((_nx, _ny, d)) = result {
+            let x_recovered = -d;
+            let error = (x_recovered - x_gt).abs();
+            println!("Off-edge seed error: {error}");
+            assert!(error < 0.01, "Failed to pull back off-edge seed");
+        }
+    }
 }
