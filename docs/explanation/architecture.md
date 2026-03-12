@@ -55,7 +55,7 @@ sequenceDiagram
         Det->>Quad: extract_quad()
         Quad->>Quad: Contour Tracing
         Quad->>Quad: Polygon Approx (Douglas-Peucker)
-        Quad->>Quad: Sub-pixel Refinement (Gradient)
+        Quad->>Quad: Sub-pixel Refinement (ERF Fit)
     end
     Quad-->>Det: Quad Candidates
 
