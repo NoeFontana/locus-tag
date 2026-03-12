@@ -207,25 +207,37 @@ fn extract_single_quad(
         [reduced[0], reduced[3], reduced[2], reduced[1]]
     };
 
-    // Scale to full resolution using center-aware mapping
+    // Scale to full resolution using symmetric block mapping
     let quad_pts = [
         Point {
-            x: (quad_pts_dec[0].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[0].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[0].x * d,
+            y: quad_pts_dec[0].y * d,
         },
         Point {
-            x: (quad_pts_dec[1].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[1].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[1].x * d,
+            y: quad_pts_dec[1].y * d,
         },
         Point {
-            x: (quad_pts_dec[2].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[2].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[2].x * d,
+            y: quad_pts_dec[2].y * d,
         },
         Point {
-            x: (quad_pts_dec[3].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[3].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[3].x * d,
+            y: quad_pts_dec[3].y * d,
         },
     ];
+
+    // Expand 0.5px outward from centers to objects boundaries.
+    // This aligns the unrefined quad with integer pixel boundaries.
+    let center_x = (quad_pts[0].x + quad_pts[1].x + quad_pts[2].x + quad_pts[3].x) * 0.25;
+    let center_y = (quad_pts[0].y + quad_pts[1].y + quad_pts[2].y + quad_pts[3].y) * 0.25;
+
+    let mut expanded_pts = [quad_pts[0], quad_pts[1], quad_pts[2], quad_pts[3]];
+    for i in 0..4 {
+        expanded_pts[i].x += 0.5 * (quad_pts[i].x - center_x).signum();
+        expanded_pts[i].y += 0.5 * (quad_pts[i].y - center_y).signum();
+    }
+    let quad_pts = expanded_pts;
 
     let mut ok = true;
     for i in 0..4 {
@@ -238,49 +250,53 @@ fn extract_single_quad(
     }
 
     if ok {
-        let use_erf = config.refinement_mode == crate::config::CornerRefinementMode::Erf;
-        let corners = [
-            refine_corner(
-                arena,
-                refinement_img,
-                quad_pts[0],
-                quad_pts[3],
-                quad_pts[1],
-                config.subpixel_refinement_sigma,
-                decimation,
-                use_erf,
-            ),
-            refine_corner(
-                arena,
-                refinement_img,
-                quad_pts[1],
-                quad_pts[0],
-                quad_pts[2],
-                config.subpixel_refinement_sigma,
-                decimation,
-                use_erf,
-            ),
-            refine_corner(
-                arena,
-                refinement_img,
-                quad_pts[2],
-                quad_pts[1],
-                quad_pts[3],
-                config.subpixel_refinement_sigma,
-                decimation,
-                use_erf,
-            ),
-            refine_corner(
-                arena,
-                refinement_img,
-                quad_pts[3],
-                quad_pts[2],
-                quad_pts[0],
-                config.subpixel_refinement_sigma,
-                decimation,
-                use_erf,
-            ),
-        ];
+        let corners = if config.refinement_mode == crate::config::CornerRefinementMode::None {
+            quad_pts
+        } else {
+            let use_erf = config.refinement_mode == crate::config::CornerRefinementMode::Erf;
+            [
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[0],
+                    quad_pts[3],
+                    quad_pts[1],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[1],
+                    quad_pts[0],
+                    quad_pts[2],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[2],
+                    quad_pts[1],
+                    quad_pts[3],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[3],
+                    quad_pts[2],
+                    quad_pts[0],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+            ]
+        };
 
         let edge_score = calculate_edge_score(refinement_img, corners);
         if edge_score > config.quad_min_edge_score {
@@ -645,7 +661,6 @@ pub(crate) fn refine_corner(
     decimation: usize,
     use_erf: bool,
 ) -> Point {
-    // Intensity-based refinement (ERF fit) is much more accurate but slower.
     let line1 = if use_erf {
         refine_edge_intensity(arena, img, p_prev, p, sigma, decimation)
             .or_else(|| fit_edge_line(img, p_prev, p, decimation))
@@ -725,9 +740,9 @@ fn fit_edge_line(
             let sy = py + ny * f64::from(step);
 
             let g = img.sample_gradient_bilinear(sx, sy);
-            let mag = g[0] * g[0] + g[1] * g[1];
-            if mag > best_mag {
-                best_mag = mag;
+            let mag_sq = g[0] * g[0] + g[1] * g[1];
+            if mag_sq > best_mag {
+                best_mag = mag_sq;
                 best_px = sx;
                 best_py = sy;
             }
@@ -793,7 +808,6 @@ fn refine_edge_intensity(
         return None;
     }
 
-    // Initial line parameters: normal (nx, ny) and distance d from origin
     let nx = -dy / len;
     let ny = dx / len;
     let mid_x = f64::midpoint(p1.x, p2.x);
@@ -824,8 +838,8 @@ fn refine_edge_intensity(
     while py <= y1 {
         let mut px = x0;
         while px <= x1 {
-            let x = px as f64;
-            let y = py as f64;
+            let x = px as f64 + 0.5;
+            let y = py as f64 + 0.5;
 
             // Check if near the edge segment (not infinite line)
             let t = ((x - p1.x) * dx + (y - p1.y) * dy) / (len * len);
@@ -878,8 +892,7 @@ fn refine_edge_intensity(
     let b = light_sum / light_weight;
     let inv_sigma = 1.0 / sigma;
 
-    // Gauss-Newton optimization: refine d (offset) and angle (implicit via nx, ny)
-    // We'll stick to 1D offset refinement for now but with a more robust iteration
+    // Gauss-Newton optimization: refine d (offset)
     for _iter in 0..15 {
         let mut jtj = 0.0;
         let mut jtr = 0.0;
@@ -992,7 +1005,6 @@ fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
             let t = k as f64 / (n_samples + 1) as f64;
             let x = p1.x + dx * t;
             let y = p1.y + dy * t;
-
             let g = img.sample_gradient_bilinear(x, y);
             edge_mag_sum += (g[0] * g[0] + g[1] * g[1]).sqrt();
         }
@@ -1278,6 +1290,7 @@ mod tests {
             decimation,
             ..Default::default()
         };
+
         let detections = extract_quads_with_config(
             &arena,
             &decimated_img,
@@ -1323,7 +1336,7 @@ mod tests {
 
         for y in 0..height {
             for x in 0..width {
-                let px = x as f64;
+                let px = x as f64 + 0.5;
                 let intensity =
                     f64::midpoint(a, b) + (b - a) / 2.0 * erf_approx((px - edge_x) / sigma);
                 data[y * width + x] = intensity.clamp(0.0, 255.0) as u8;
@@ -1350,8 +1363,8 @@ mod tests {
 
         for y in 0..height {
             for x in 0..width {
-                let px = x as f64;
-                let py = y as f64;
+                let px = x as f64 + 0.5;
+                let py = y as f64 + 0.5;
 
                 // Distance to vertical edge (x = corner_x)
                 let dist_v = px - corner_x;
@@ -1441,8 +1454,7 @@ mod tests {
                 true_x, true_y, refined.x, refined.y, error_x, error_y, error_total
             );
 
-            // Assert sub-pixel accuracy < 0.1px (relaxed from 0.05 for robustness)
-            // The ideal is <0.05px but real-world noise and edge cases may require relaxation
+            // Assert sub-pixel accuracy < 0.15px
             assert!(
                 error_total < 0.15,
                 "Corner ({true_x}, {true_y}): error {error_total:.4}px exceeds 0.15px threshold"
@@ -1496,6 +1508,54 @@ mod tests {
             "Vertical edge x={true_edge_x}: error {error_x:.4}px exceeds 0.1px threshold"
         );
     }
+
+    #[test]
+    fn test_refine_edge_intensity_subpixel() {
+        let arena = Bump::new();
+        let width = 40;
+        let height = 40;
+        let sigma = 0.6;
+
+        // Test vertical edge at x=20.3
+        let true_edge_x = 20.3;
+        let data = generate_vertical_edge_image(width, height, true_edge_x, sigma, 50, 200);
+        let img = ImageView::new(&data, width, height, width).unwrap();
+
+        // Edge segment defined by two points
+        let p1 = Point { x: 20.0, y: 10.0 };
+        let p2 = Point { x: 20.0, y: 30.0 };
+
+        let result = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1);
+
+        assert!(result.is_some(), "Refinement failed to converge");
+        let (nx, ny, d) = result.unwrap();
+
+        // For a vertical edge at x=Const:
+        // Equation is nx*x + ny*y + d = 0
+        // Expected normal is (-1, 0) or (1, 0)
+        // Let's check the absolute value of nx and ny
+        assert!(
+            (nx.abs() - 1.0).abs() < 0.05,
+            "Normal X should be ~1.0, got {nx}"
+        );
+        assert!(ny.abs() < 0.05, "Normal Y should be ~0.0, got {ny}");
+
+        // Distance d should encode the true edge position relative to the center parameterization
+        // Let's reconstruct the estimated edge x coordinate at y=20
+        // nx * x + ny * 20 + d = 0 => x = -(d + ny * 20) / nx
+        let est_x = -(d + ny * 20.0) / nx;
+
+        let error_x = (est_x - true_edge_x).abs();
+        println!(
+            "test_refine_edge_intensity_subpixel: true_x={true_edge_x}, est_x={est_x}, error={error_x}"
+        );
+
+        // Assert sub-pixel accuracy
+        assert!(
+            error_x < 0.05,
+            "Edge localization error {error_x:.4} px exceeds 0.05px threshold"
+        );
+    }
 }
 
 #[multiversion(targets(
@@ -1543,8 +1603,8 @@ fn trace_boundary<'a>(
 
     for _ in 0..10000 {
         points.push(Point {
-            x: curr_x as f64,
-            y: curr_y as f64,
+            x: curr_x as f64 + 0.5,
+            y: curr_y as f64 + 0.5,
         });
 
         let mut found = false;
