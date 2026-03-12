@@ -245,6 +245,9 @@ impl Detector {
             );
         }
 
+        // Detectors return corners at pixel centers (indices + 0.5) following OpenCV conventions.
+        // No additional adjustment needed as the internal pipeline is now unbiased.
+
         let telemetry = if debug_telemetry {
             Some(crate::batch::TelemetryPayload {
                 binarized_ptr: binarized.as_ptr(),

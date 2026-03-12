@@ -169,7 +169,7 @@ impl Default for DetectorConfig {
             decimation: 1,
             nthreads: 0,
             decoder_min_contrast: 20.0,
-            refinement_mode: CornerRefinementMode::Edge,
+            refinement_mode: CornerRefinementMode::Erf,
             decode_mode: DecodeMode::Hard,
             max_hamming_error: 2,
         }

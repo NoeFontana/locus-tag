@@ -207,7 +207,7 @@ fn extract_single_quad(
         [reduced[0], reduced[3], reduced[2], reduced[1]]
     };
 
-    // Scale to full resolution using center-aware mapping
+    // Scale to full resolution using symmetric block mapping
     let quad_pts = [
         Point {
             x: quad_pts_dec[0].x * d,
@@ -227,33 +227,15 @@ fn extract_single_quad(
         },
     ];
 
-    // 3. Expand quad outward to match physical boundaries.
-    // The trace_boundary pixels (now at +0.5 centers) represent the outermost decimated pixels.
-    // Their physical outer boundaries are 0.5 * decimation pixels further out.
-    // To expand the edges by 0.5*d, the corners of a square need to expand by 0.5*d*sqrt(2).
-    // Using radial expansion from the center is highly robust to curved edges (lens distortion),
-    // unlike shifting and intersecting straight lines.
-    let center = Point {
-        x: (quad_pts[0].x + quad_pts[1].x + quad_pts[2].x + quad_pts[3].x) / 4.0,
-        y: (quad_pts[0].y + quad_pts[1].y + quad_pts[2].y + quad_pts[3].y) / 4.0,
-    };
+    // Expand 0.5px outward from centers to objects boundaries.
+    // This aligns the unrefined quad with integer pixel boundaries.
+    let center_x = (quad_pts[0].x + quad_pts[1].x + quad_pts[2].x + quad_pts[3].x) * 0.25;
+    let center_y = (quad_pts[0].y + quad_pts[1].y + quad_pts[2].y + quad_pts[3].y) * 0.25;
 
-    let inflation_dist = 0.5 * d * std::f64::consts::SQRT_2;
-    let mut expanded_pts = [Point { x: 0.0, y: 0.0 }; 4];
+    let mut expanded_pts = [quad_pts[0], quad_pts[1], quad_pts[2], quad_pts[3]];
     for i in 0..4 {
-        let mut dx_c = quad_pts[i].x - center.x;
-        let mut dy_c = quad_pts[i].y - center.y;
-        let mag = (dx_c * dx_c + dy_c * dy_c).sqrt();
-        if mag > 1e-6 {
-            dx_c /= mag;
-            dy_c /= mag;
-            expanded_pts[i] = Point {
-                x: quad_pts[i].x + dx_c * inflation_dist,
-                y: quad_pts[i].y + dy_c * inflation_dist,
-            };
-        } else {
-            expanded_pts[i] = quad_pts[i];
-        }
+        expanded_pts[i].x += 0.5 * (quad_pts[i].x - center_x).signum();
+        expanded_pts[i].y += 0.5 * (quad_pts[i].y - center_y).signum();
     }
     let quad_pts = expanded_pts;
 
@@ -679,19 +661,18 @@ pub(crate) fn refine_corner(
     decimation: usize,
     use_erf: bool,
 ) -> Point {
-    // Intensity-based refinement (ERF fit) is much more accurate but slower.
     let line1 = if use_erf {
         refine_edge_intensity(arena, img, p_prev, p, sigma, decimation)
-            .or_else(|| fit_edge_line(arena, img, p_prev, p, decimation))
+            .or_else(|| fit_edge_line(img, p_prev, p, decimation))
     } else {
-        fit_edge_line(arena, img, p_prev, p, decimation)
+        fit_edge_line(img, p_prev, p, decimation)
     };
 
     let line2 = if use_erf {
         refine_edge_intensity(arena, img, p, p_next, sigma, decimation)
-            .or_else(|| fit_edge_line(arena, img, p, p_next, decimation))
+            .or_else(|| fit_edge_line(img, p, p_next, decimation))
     } else {
-        fit_edge_line(arena, img, p, p_next, decimation)
+        fit_edge_line(img, p, p_next, decimation)
     };
 
     if let (Some(l1), Some(l2)) = (line1, line2) {
@@ -719,7 +700,6 @@ pub(crate) fn refine_corner(
 
 /// Fit a line (a*x + b*y + c = 0) to an edge by sampling gradient peaks.
 fn fit_edge_line(
-    _arena: &Bump,
     img: &ImageView,
     p1: Point,
     p2: Point,
@@ -739,7 +719,7 @@ fn fit_edge_line(
     let mut count = 0;
 
     let n_samples = (len as usize).clamp(5, 15);
-    // Original search range
+    // Original search range was 3 pixels
     let r = if decimation > 1 {
         (decimation as i32) + 1
     } else {
@@ -751,35 +731,24 @@ fn fit_edge_line(
         let px = p1.x + dx * t;
         let py = p1.y + dy * t;
 
+        let mut best_px = px;
+        let mut best_py = py;
         let mut best_mag = 0.0;
-
-        let mut plateau_start = 0.0;
-        let mut plateau_end = 0.0;
-        let mut in_plateau = false;
 
         for step in -r..=r {
             let sx = px + nx * f64::from(step);
             let sy = py + ny * f64::from(step);
 
             let g = img.sample_gradient_bilinear(sx, sy);
-            let mag = g[0] * g[0] + g[1] * g[1];
-
-            if mag > best_mag + 1e-4 {
-                best_mag = mag;
-                plateau_start = f64::from(step);
-                plateau_end = f64::from(step);
-                in_plateau = true;
-            } else if in_plateau && (mag - best_mag).abs() < 1e-4 {
-                plateau_end = f64::from(step);
+            let mag_sq = g[0] * g[0] + g[1] * g[1];
+            if mag_sq > best_mag {
+                best_mag = mag_sq;
+                best_px = sx;
+                best_py = sy;
             }
         }
 
         if best_mag > 10.0 {
-            // Average plateau to find true center
-            let best_step = (plateau_start + plateau_end) * 0.5;
-            let best_px = px + nx * best_step;
-            let best_py = py + ny * best_step;
-
             let mut mags = [0.0f64; 3];
             for (j, offset) in [-1.0, 0.0, 1.0].iter().enumerate() {
                 let sx = best_px + nx * offset;
@@ -839,29 +808,23 @@ fn refine_edge_intensity(
         return None;
     }
 
-    let nx = dy / len;
-    let ny = -dx / len;
-    let cx = (p1.x + p2.x) * 0.5;
-    let cy = (p1.y + p2.y) * 0.5;
-    let d = -(nx * cx + ny * cy);
+    let nx = -dy / len;
+    let ny = dx / len;
+    let mid_x = f64::midpoint(p1.x, p2.x);
+    let mid_y = f64::midpoint(p1.y, p2.y);
+    let mut d = -(nx * mid_x + ny * mid_y);
 
-    // Initial distance to origin is not used anymore since we parameterize around cx, cy
-    // We just need initial d_prime = 0
-    let mut d_prime = 0.0;
     // Collect pixels within a window of the edge.
-    // Ensure the window is large enough to cover the PSF and handle initial bias.
+    // Original window was 2.5 pixels
     let window = if decimation > 1 {
-        (decimation as f64) + 1.5 + len * 0.05
+        (decimation as f64) + 1.0
     } else {
-        3.0 + len * 0.05
+        2.5
     };
-
-    // Calculate bounds such that pixel centers are symmetric around the edge.
-    // For an edge at x, we want samples at x ± 0.5, x ± 1.5, etc.
-    let x0 = ((p1.x.min(p2.x) - window).floor() as usize).max(1);
-    let x1 = ((p1.x.max(p2.x) + window).ceil() as usize - 1).min(img.width - 2);
-    let y0 = ((p1.y.min(p2.y) - window).floor() as usize).max(1);
-    let y1 = ((p1.y.max(p2.y) + window).ceil() as usize - 1).min(img.height - 2);
+    let x0 = (p1.x.min(p2.x) - window - 0.5).max(1.0) as usize;
+    let x1 = (p1.x.max(p2.x) + window + 0.5).min((img.width - 2) as f64) as usize;
+    let y0 = (p1.y.min(p2.y) - window - 0.5).max(1.0) as usize;
+    let y1 = (p1.y.max(p2.y) + window + 0.5).min((img.height - 2) as f64) as usize;
 
     // Use arena for samples to avoid heap allocation in hot loop
     // (x, y, intensity, projection)
@@ -901,75 +864,59 @@ fn refine_edge_intensity(
         return Some((nx, ny, d)); // Fall back to initial estimate
     }
 
-    // Robust estimation of A (dark) and B (light) using percentiles
-    let mut intensities = BumpVec::from_iter_in(samples.iter().map(|s| s.2), arena);
-    intensities.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
-    let n = intensities.len();
-    let p10 = n / 10;
-    let p90 = n * 9 / 10;
+    // Estimate A (dark side) and B (light side) from samples
+    // Use weighted average based on distance from edge to be more robust
+    let mut dark_sum = 0.0;
+    let mut dark_weight = 0.0;
+    let mut light_sum = 0.0;
+    let mut light_weight = 0.0;
 
-    // Outward normal means signed_dist < 0 is INSIDE (dark), signed_dist > 0 is OUTSIDE (light)
-    let a = intensities[..=p10].iter().sum::<f64>() / (p10 + 1) as f64;
-    let b = intensities[p90..].iter().sum::<f64>() / (n - p90).max(1) as f64;
+    for &(_x, _y, intensity, projection) in &samples {
+        let signed_dist = projection + d;
+        if signed_dist < -1.0 {
+            let w = (-signed_dist - 1.0).min(2.0); // Weight pixels further from edge more
+            dark_sum += intensity * w;
+            dark_weight += w;
+        } else if signed_dist > 1.0 {
+            let w = (signed_dist - 1.0).min(2.0);
+            light_sum += intensity * w;
+            light_weight += w;
+        }
+    }
+
+    if dark_weight < 1.0 || light_weight < 1.0 {
+        return Some((nx, ny, d));
+    }
+
+    let a = dark_sum / dark_weight;
+    let b = light_sum / light_weight;
     let inv_sigma = 1.0 / sigma;
 
-    // Gauss-Newton optimization: refine d' (offset from center) and angle (theta)
-    // Parameterizing around the edge center prevents ill-conditioning that occurs
-    // when rotating around the origin.
-    let cx = (p1.x + p2.x) * 0.5;
-    let cy = (p1.y + p2.y) * 0.5;
-
-    let mut theta = ny.atan2(nx);
-
+    // Gauss-Newton optimization: refine d (offset)
     for _iter in 0..15 {
-        let mut jtj = [0.0; 4];
-        let mut jtr = [0.0; 2];
+        let mut jtj = 0.0;
+        let mut jtr = 0.0;
 
-        let cur_nx = theta.cos();
-        let cur_ny = theta.sin();
-
-        for &(_x, _y, intensity, _) in &samples {
-            let dx_c = _x - cx;
-            let dy_c = _y - cy;
-
-            let projection = cur_nx * dx_c + cur_ny * dy_c;
-            let signed_dist = (projection + d_prime) * inv_sigma;
-            if signed_dist.abs() > 5.0 {
+        for &(_x, _y, intensity, projection) in &samples {
+            let signed_dist = (projection + d) * inv_sigma;
+            if signed_dist.abs() > 3.0 {
                 continue;
-            }
+            } // Only use samples near the edge
 
             let model = (a + b) * 0.5 + (b - a) * 0.5 * erf_approx(signed_dist);
             let residual = intensity - model;
 
             let exp_term = (-signed_dist * signed_dist).exp();
-            let jacobian_base =
-                (b - a) * 0.5 * std::f64::consts::FRAC_2_SQRT_PI * exp_term * inv_sigma;
+            let jacobian = (b - a) * 0.5 * std::f64::consts::FRAC_2_SQRT_PI * exp_term * inv_sigma;
 
-            let j_d = jacobian_base;
-            let j_theta = jacobian_base * (-dx_c * cur_ny + dy_c * cur_nx);
-
-            jtj[0] += j_d * j_d;
-            jtj[1] += j_d * j_theta;
-            jtj[2] += j_theta * j_d;
-            jtj[3] += j_theta * j_theta;
-
-            jtr[0] += j_d * residual;
-            jtr[1] += j_theta * residual;
+            jtj += jacobian * jacobian;
+            jtr += jacobian * residual;
         }
 
-        // Add Levenberg-Marquardt damping
-        jtj[0] += 1e-4;
-        jtj[3] += 1e-4;
-
-        let det = jtj[0] * jtj[3] - jtj[1] * jtj[2];
-        if det.abs() > 1e-10 {
-            let delta_d = (jtr[0] * jtj[3] - jtr[1] * jtj[1]) / det;
-            let delta_theta = (jtj[0] * jtr[1] - jtj[2] * jtr[0]) / det;
-
-            d_prime += delta_d.clamp(-1.0, 1.0);
-            theta += delta_theta.clamp(-0.1, 0.1);
-
-            if delta_d.abs() < 0.0001 && delta_theta.abs() < 0.0001 {
+        if jtj.abs() > 1e-10 {
+            let delta = jtr / jtj;
+            d += delta.clamp(-0.5, 0.5);
+            if delta.abs() < 0.0001 {
                 break;
             }
         } else {
@@ -977,13 +924,7 @@ fn refine_edge_intensity(
         }
     }
 
-    let final_nx = theta.cos();
-    let final_ny = theta.sin();
-    // Convert d_prime back to global d
-    // final_nx * cx + final_ny * cy + final_d = d_prime
-    let final_d = d_prime - (final_nx * cx + final_ny * cy);
-
-    Some((final_nx, final_ny, final_d))
+    Some((nx, ny, d))
 }
 
 /// Reducing a polygon to a quad (4 vertices + 1 closing) by iteratively removing
@@ -1064,7 +1005,6 @@ fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
             let t = k as f64 / (n_samples + 1) as f64;
             let x = p1.x + dx * t;
             let y = p1.y + dy * t;
-
             let g = img.sample_gradient_bilinear(x, y);
             edge_mag_sum += (g[0] * g[0] + g[1] * g[1]).sqrt();
         }
@@ -1350,6 +1290,7 @@ mod tests {
             decimation,
             ..Default::default()
         };
+
         let detections = extract_quads_with_config(
             &arena,
             &decimated_img,
@@ -1565,6 +1506,54 @@ mod tests {
         assert!(
             error_x < 0.1,
             "Vertical edge x={true_edge_x}: error {error_x:.4}px exceeds 0.1px threshold"
+        );
+    }
+
+    #[test]
+    fn test_refine_edge_intensity_subpixel() {
+        let arena = Bump::new();
+        let width = 40;
+        let height = 40;
+        let sigma = 0.6;
+
+        // Test vertical edge at x=20.3
+        let true_edge_x = 20.3;
+        let data = generate_vertical_edge_image(width, height, true_edge_x, sigma, 50, 200);
+        let img = ImageView::new(&data, width, height, width).unwrap();
+
+        // Edge segment defined by two points
+        let p1 = Point { x: 20.0, y: 10.0 };
+        let p2 = Point { x: 20.0, y: 30.0 };
+
+        let result = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1);
+
+        assert!(result.is_some(), "Refinement failed to converge");
+        let (nx, ny, d) = result.unwrap();
+
+        // For a vertical edge at x=Const:
+        // Equation is nx*x + ny*y + d = 0
+        // Expected normal is (-1, 0) or (1, 0)
+        // Let's check the absolute value of nx and ny
+        assert!(
+            (nx.abs() - 1.0).abs() < 0.05,
+            "Normal X should be ~1.0, got {nx}"
+        );
+        assert!(ny.abs() < 0.05, "Normal Y should be ~0.0, got {ny}");
+
+        // Distance d should encode the true edge position relative to the center parameterization
+        // Let's reconstruct the estimated edge x coordinate at y=20
+        // nx * x + ny * 20 + d = 0 => x = -(d + ny * 20) / nx
+        let est_x = -(d + ny * 20.0) / nx;
+
+        let error_x = (est_x - true_edge_x).abs();
+        println!(
+            "test_refine_edge_intensity_subpixel: true_x={true_edge_x}, est_x={est_x}, error={error_x}"
+        );
+
+        // Assert sub-pixel accuracy
+        assert!(
+            error_x < 0.05,
+            "Edge localization error {error_x:.4} px exceeds 0.05px threshold"
         );
     }
 }

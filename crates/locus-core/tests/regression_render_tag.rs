@@ -708,7 +708,7 @@ fn run_hub_test(config_name: &str, family: TagFamily) {
                 }
             }
 
-            options.pose_estimation_mode = locus_core::PoseEstimationMode::Fast;
+            options.pose_estimation_mode = locus_core::PoseEstimationMode::Accurate;
 
             let snapshot = format!("hub_{}", provider.name());
             RegressionHarness::new(snapshot)
