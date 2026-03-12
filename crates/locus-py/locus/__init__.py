@@ -134,8 +134,10 @@ class Detector:
 
     def config(self) -> DetectorConfig:
         """Returns the current detector configuration."""
-        # The inner Rust object returns a DetectorConfig struct
-        return self._inner.config()
+        raw = self._inner.config()
+        # Create a dictionary of all fields to populate the Pydantic model
+        fields = {field: getattr(raw, field) for field in DetectorConfig.model_fields}
+        return DetectorConfig(**fields)
 
     def set_families(self, families: list[TagFamily]):
         """Update the tag families to be detected."""

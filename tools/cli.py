@@ -1,6 +1,7 @@
 import json
 import time
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -132,10 +133,10 @@ def visualize(
             if img is None:
                 continue
 
-            rr.set_time_sequence("frame_idx", i)
+            rr.set_time(timeline="frame_idx", sequence=i)
 
-            # Perform Detection (Vectorized API)
-            batch = detector.detect(img)
+            # Perform Detection (Vectorized API with debug telemetry)
+            batch = detector.detect(img, debug_telemetry=True)
 
             # 1. Input & Ground Truth
             rr.log("pipeline/0_input", rr.Image(img))
@@ -153,6 +154,18 @@ def visualize(
                     "pipeline/0_input/ground_truth",
                     rr.LineStrips2D(gt_strips, colors=[0, 255, 0], radii=2.0, labels=gt_labels),
                 )
+
+            # 2. Intermediate Telemetry
+            if batch.telemetry is not None:
+                rr.log("pipeline/1_threshold", rr.Image(batch.telemetry.threshold_map))
+                rr.log("pipeline/2_binarized", rr.Image(batch.telemetry.binarized))
+
+                # Overlay GT and Detections on intermediate stages for alignment check
+                if gt_tags:
+                    rr.log(
+                        "pipeline/2_binarized/ground_truth",
+                        rr.LineStrips2D(gt_strips, colors=[0, 255, 0], radii=1.0),
+                    )
 
             # Note: Internal pipeline artifacts (binarized, labels, candidates)
             # are NOT currently exposed in the vectorized high-level API.
@@ -172,6 +185,13 @@ def visualize(
                     "pipeline/4_detections",
                     rr.LineStrips2D(det_strips, colors=[255, 50, 50], radii=1.2, labels=det_labels),
                 )
+
+                # Also log detections on binarized for alignment check
+                if batch.telemetry is not None:
+                    rr.log(
+                        "pipeline/2_binarized/detections",
+                        rr.LineStrips2D(det_strips, colors=[255, 50, 50], radii=0.8),
+                    )
 
 
 # --- Benchmarking Commands ---
@@ -217,14 +237,14 @@ def bench_real(
 
     # Map string to locus.TagFamily
     family_mapping = {
-        "AprilTag16h5": int(locus.TagFamily.AprilTag16h5),
-        "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
-        "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
-        "16h5": int(locus.TagFamily.AprilTag16h5),
-        "36h11": int(locus.TagFamily.AprilTag36h11),
-        "4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "AprilTag16h5": locus.TagFamily.AprilTag16h5,
+        "AprilTag36h11": locus.TagFamily.AprilTag36h11,
+        "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
+        "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
+        "16h5": locus.TagFamily.AprilTag16h5,
+        "36h11": locus.TagFamily.AprilTag36h11,
+        "4x4_50": locus.TagFamily.ArUco4x4_50,
+        "4x4_100": locus.TagFamily.ArUco4x4_100,
     }
 
     tag_family_int = family_mapping.get(family)
@@ -293,7 +313,7 @@ def bench_real(
             baseline_data = json.load(f)
         typer.echo(f"Loaded baseline from {baseline}")
 
-    current_results = {}
+    current_results: dict[str, dict[str, dict[str, Any]]] = {}
 
     for scenario in scenarios:
         if not loader.prepare_icra(scenario):
@@ -311,7 +331,7 @@ def bench_real(
                 img_names = img_names[:limit]
 
             for wrapper in wrappers:
-                stats = {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []}
+                stats: dict[str, Any] = {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []}
 
                 for img_name in tqdm(img_names, desc=f"{wrapper.name:<10}"):
                     img_path = img_dir / img_name
@@ -382,14 +402,14 @@ def bench_synthetic(
 
     # Map string to locus.TagFamily
     family_mapping = {
-        "AprilTag16h5": int(locus.TagFamily.AprilTag16h5),
-        "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
-        "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
-        "16h5": int(locus.TagFamily.AprilTag16h5),
-        "36h11": int(locus.TagFamily.AprilTag36h11),
-        "4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "AprilTag16h5": locus.TagFamily.AprilTag16h5,
+        "AprilTag36h11": locus.TagFamily.AprilTag36h11,
+        "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
+        "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
+        "16h5": locus.TagFamily.AprilTag16h5,
+        "36h11": locus.TagFamily.AprilTag36h11,
+        "4x4_50": locus.TagFamily.ArUco4x4_50,
+        "4x4_100": locus.TagFamily.ArUco4x4_100,
     }
 
     tag_family_int = family_mapping.get(family)
@@ -419,7 +439,7 @@ def bench_synthetic(
 
         for wrapper in wrappers:
             latencies = []
-            detections = []
+            detections: list[dict[str, Any]] = []
             for _ in range(iterations):
                 start = time.perf_counter()
                 detections, _ = wrapper.detect(img)
@@ -459,14 +479,14 @@ def bench_hosted(
 
     # Map string to locus.TagFamily
     family_mapping = {
-        "AprilTag16h5": int(locus.TagFamily.AprilTag16h5),
-        "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
-        "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
-        "16h5": int(locus.TagFamily.AprilTag16h5),
-        "36h11": int(locus.TagFamily.AprilTag36h11),
-        "4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "AprilTag16h5": locus.TagFamily.AprilTag16h5,
+        "AprilTag36h11": locus.TagFamily.AprilTag36h11,
+        "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
+        "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
+        "16h5": locus.TagFamily.AprilTag16h5,
+        "36h11": locus.TagFamily.AprilTag36h11,
+        "4x4_50": locus.TagFamily.ArUco4x4_50,
+        "4x4_100": locus.TagFamily.ArUco4x4_100,
     }
 
     tag_family_int = family_mapping.get(family)
@@ -484,7 +504,7 @@ def bench_hosted(
 
     for config in configs:
         typer.echo(f"\nEvaluating {config} (from Hugging Face Hub)...")
-        wrapper_stats = {
+        wrapper_stats: dict[str, dict[str, Any]] = {
             w.name: {
                 "gt": 0,
                 "det": 0,
@@ -572,14 +592,14 @@ def bench_profile(
 
     # Map string to locus.TagFamily
     family_mapping = {
-        "AprilTag16h5": int(locus.TagFamily.AprilTag16h5),
-        "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
-        "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
-        "16h5": int(locus.TagFamily.AprilTag16h5),
-        "36h11": int(locus.TagFamily.AprilTag36h11),
-        "4x4_50": int(locus.TagFamily.ArUco4x4_50),
-        "4x4_100": int(locus.TagFamily.ArUco4x4_100),
+        "AprilTag16h5": locus.TagFamily.AprilTag16h5,
+        "AprilTag36h11": locus.TagFamily.AprilTag36h11,
+        "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
+        "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
+        "16h5": locus.TagFamily.AprilTag16h5,
+        "36h11": locus.TagFamily.AprilTag36h11,
+        "4x4_50": locus.TagFamily.ArUco4x4_50,
+        "4x4_100": locus.TagFamily.ArUco4x4_100,
     }
 
     tag_family_int = family_mapping.get(family)
@@ -653,6 +673,188 @@ def extract_bits(
     typer.echo(f"ID {tag_id} ({family})")
     typer.echo(f"Bits (hex): {hex(bits)}")
     typer.echo(f"Bits (bin): {bin(bits)}")
+
+
+class LocalHubLoader:
+    def __init__(self, root: Path = Path("tests/data/hub_cache")):
+        self.root = root
+
+    def stream_subset(self, subset_name: str):
+        import cv2
+        import numpy as np
+
+        from tools.bench.utils import TagGroundTruth
+
+        subset_dir = self.root / subset_name
+        jsonl_path = subset_dir / "annotations.jsonl"
+        img_dir = subset_dir / "images"
+
+        if not jsonl_path.exists():
+            raise FileNotFoundError(f"Metadata not found at {jsonl_path}")
+
+        with open(jsonl_path) as f:
+            for line in f:
+                item = json.loads(line)
+                img_name = item["image_filename"]
+                img_path = img_dir / img_name
+
+                img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+                if img is None:
+                    continue
+
+                tag_ids = item["tag_id"]
+                corners_list = item["corners"]
+                if not isinstance(tag_ids, list):
+                    tag_ids = [tag_ids]
+                    corners_list = [corners_list]
+
+                gt_tags = []
+                for tid, corners in zip(tag_ids, corners_list, strict=True):
+                    gt_tags.append(
+                        TagGroundTruth(tag_id=int(tid), corners=np.array(corners, dtype=np.float32))
+                    )
+
+                yield img_name, img, gt_tags
+
+
+@app.command()
+def debug_report(
+    configs: list[str] = typer.Option(..., help="HF Hub dataset configurations"),
+    limit: int | None = typer.Option(5, help="Limit number of images per config"),
+    output: Path = typer.Option(Path("debug_report"), help="Output directory"),
+    refinement_mode: str = typer.Option("Erf", help="Sub-pixel refinement mode (None, Edge, Erf)"),
+):
+    """
+    Generate a high-fidelity HTML debug report for dataset subsets.
+    """
+    import locus
+    import numpy as np
+    from PIL import Image, ImageDraw
+    from tqdm import tqdm
+
+    output.mkdir(parents=True, exist_ok=True)
+    images_dir = output / "images"
+    images_dir.mkdir(exist_ok=True)
+
+    loader = LocalHubLoader()
+    ref_map = {
+        "None": 0,
+        "Edge": 1,
+        "Erf": 3,
+    }
+    sel_ref_mode = ref_map.get(refinement_mode, 3)  # Default to Erf (3)
+
+    detector = locus.Detector(
+        families=[locus.TagFamily.AprilTag36h11], refinement_mode=sel_ref_mode
+    )
+
+    report_data = []
+
+    for config in configs:
+        typer.echo(f"Processing {config}...")
+        subset_stream = loader.stream_subset(config)
+
+        for idx, (img_name, img_np, gt_tags) in enumerate(tqdm(subset_stream, desc=config)):
+            if limit and idx >= limit:
+                break
+
+            # Run detection with telemetry
+            batch = detector.detect(img_np, debug_telemetry=True)
+
+            # Find best match for first GT tag (for illustration)
+            best_det = None
+            rmse = 0.0
+            if gt_tags and len(batch) > 0:
+                gt = gt_tags[0]
+                gt_arr = gt.corners
+                best_err = float("inf")
+                for j in range(len(batch)):
+                    det = batch.corners[j]
+                    for rot in range(4):
+                        rotated = np.roll(det, rot, axis=0)
+                        err = np.sqrt(np.mean(np.sum((rotated - gt_arr) ** 2, axis=1)))
+                        if err < best_err:
+                            best_err = err
+                            best_det = rotated
+                rmse = best_err
+
+            # Generate Overlay Images
+            # 1. Original with GT & Det
+            img_pil = Image.fromarray(img_np).convert("RGB")
+            draw = ImageDraw.Draw(img_pil)
+
+            if gt_tags:
+                for gt in gt_tags:
+                    pts = [tuple(p) for p in gt.corners]
+                    draw.polygon(pts, outline=(0, 255, 0), width=2)
+
+            if best_det is not None:
+                pts = [tuple(p) for p in best_det]
+                draw.polygon(pts, outline=(255, 0, 0), width=1)
+
+            orig_rel_path = f"images/{config}_{img_name}_orig.png"
+            img_pil.save(output / orig_rel_path)
+
+            # 2. Binarized with GT & Det
+            bin_rel_path = "n/a"
+            if batch.telemetry:
+                bin_pil = Image.fromarray(batch.telemetry.binarized).convert("RGB")
+                draw_bin = ImageDraw.Draw(bin_pil)
+                if gt_tags:
+                    for gt in gt_tags:
+                        pts = [tuple(p) for p in gt.corners]
+                        draw_bin.polygon(pts, outline=(0, 255, 0), width=1)
+
+                if best_det is not None:
+                    pts = [tuple(p) for p in best_det]
+                    draw_bin.polygon(pts, outline=(255, 0, 0), width=1)
+
+                bin_rel_path = f"images/{config}_{img_name}_bin.png"
+                bin_pil.save(output / bin_rel_path)
+
+            report_data.append(
+                {
+                    "config": config,
+                    "name": img_name,
+                    "rmse": rmse,
+                    "orig": orig_rel_path,
+                    "bin": bin_rel_path,
+                }
+            )
+
+    # Generate HTML
+    html = """
+    <html>
+    <head>
+        <style>
+            body { font-family: sans-serif; background: #1a1a1a; color: #eee; padding: 20px; }
+            .card { background: #2a2a2a; border: 1px solid #444; padding: 15px; margin-bottom: 20px; border_radius: 8px; }
+            .img-row { display: flex; gap: 10px; margin-top: 10px; }
+            img { border: 1px solid #555; max-width: 48%; }
+            .meta { color: #aaa; margin-bottom: 5px; }
+            .rmse { color: #f0ad4e; font-weight: bold; }
+        </style>
+    </head>
+    <body>
+        <h1>Locus Debug Report</h1>
+    """
+    for d in report_data:
+        html += f"""
+        <div class="card">
+            <div class="meta">{d["config"]} / {d["name"]}</div>
+            <div class="rmse">Best Corner RMSE: {d["rmse"]:.4f} px</div>
+            <div class="img-row">
+                <img src="{d["orig"]}">
+                <img src="{d["bin"]}">
+            </div>
+        </div>
+        """
+    html += "</body></html>"
+
+    with open(output / "report.html", "w") as f:
+        f.write(html)
+
+    typer.echo(f"\nReport generated at {output / 'report.html'}")
 
 
 @bench_app.command("prepare")
