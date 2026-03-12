@@ -168,8 +168,8 @@ cargo nextest run --all-features
 uv run pytest
 
 # Format & Lint Rust
-cargo fmt --all
 cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo fmt --all
 
 # Format & Lint Python
 uv run ruff check . --fix

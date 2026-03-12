@@ -85,8 +85,8 @@ Before submitting a PR:
 
 ```bash
 # 1. Rust Formatting & Linting
-cargo fmt --all
 cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo fmt --all
 
 # 2. Python Formatting & Linting
 uv run ruff check . --fix
