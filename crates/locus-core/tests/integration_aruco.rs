@@ -10,7 +10,6 @@
     clippy::must_use_candidate,
     clippy::return_self_not_must_use
 )]
-#[cfg(feature = "bench-internals")]
 // Integration test for ArUco 4x4_50 tag detection.
 //
 // This test validates the complete detection pipeline using synthetic ArUco tags,

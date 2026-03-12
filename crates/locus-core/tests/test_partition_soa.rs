@@ -12,6 +12,7 @@
 )]
 use locus_core::bench_api::*;
 
+#[cfg(feature = "bench-internals")]
 #[test]
 fn test_partition_basic() {
     let mut batch = DetectionBatch::new();

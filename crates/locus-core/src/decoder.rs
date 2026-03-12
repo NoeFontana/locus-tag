@@ -275,6 +275,7 @@ pub(crate) fn refine_corners_with_homography(
             let t = s as f64 / (n_samples + 1) as f64;
             let px = p1[0] + dx * t;
             let py = p1[1] + dy * t;
+            // px, py are already at centers (0.5) because corners are at centers.
 
             // Search for gradient peak perpendicular to edge
             let mut best_pos = (px, py);
@@ -462,8 +463,8 @@ fn compute_grid_contrast(
         if wz.abs() < 1e-6 {
             return None;
         }
-        let img_x = (h00 * p.0 + h01 * p.1 + h02) / wz;
-        let img_y = (h10 * p.0 + h11 * p.1 + h12) / wz;
+        let img_x = (h00 * p.0 + h01 * p.1 + h02) / wz - 0.5;
+        let img_y = (h10 * p.0 + h11 * p.1 + h12) / wz - 0.5;
 
         // Check bounds
         if img_x < 0.0
@@ -727,7 +728,7 @@ fn project_gradients_optimized(
 
     for py in y0..=y1 {
         let mut px = x0;
-        let y = py as f64;
+        let y = py as f64 + 0.5;
 
         #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
         if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
@@ -740,8 +741,12 @@ fn project_gradients_optimized(
                 let v_abs_mask = _mm256_set1_pd(-0.0);
 
                 while px + 4 <= x1 {
-                    let v_x =
-                        _mm256_set_pd((px + 3) as f64, (px + 2) as f64, (px + 1) as f64, px as f64);
+                    let v_x = _mm256_set_pd(
+                        (px + 3) as f64 + 0.5,
+                        (px + 2) as f64 + 0.5,
+                        (px + 1) as f64 + 0.5,
+                        px as f64 + 0.5,
+                    );
 
                     let v_dist = _mm256_add_pd(
                         _mm256_add_pd(_mm256_mul_pd(v_nx, v_x), _mm256_mul_pd(v_ny, v_y)),
@@ -767,7 +772,7 @@ fn project_gradients_optimized(
         }
 
         while px <= x1 {
-            let x = px as f64;
+            let x = px as f64 + 0.5;
             let dist = nx * x + ny * y + scan_d;
             if dist.abs() < 1.0 {
                 let g = img.sample_gradient_bilinear(x, y);
@@ -806,7 +811,7 @@ fn collect_samples_optimized<'a>(
 
     for py in y0..=y1 {
         let mut px = x0;
-        let y = py as f64;
+        let y = py as f64 + 0.5;
 
         #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
         if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
@@ -824,8 +829,12 @@ fn collect_samples_optimized<'a>(
                 let v_abs_mask = _mm256_set1_pd(-0.0);
 
                 while px + 4 <= x1 {
-                    let v_x =
-                        _mm256_set_pd((px + 3) as f64, (px + 2) as f64, (px + 1) as f64, px as f64);
+                    let v_x = _mm256_set_pd(
+                        (px + 3) as f64 + 0.5,
+                        (px + 2) as f64 + 0.5,
+                        (px + 1) as f64 + 0.5,
+                        px as f64 + 0.5,
+                    );
 
                     let v_dist = _mm256_add_pd(
                         _mm256_add_pd(_mm256_mul_pd(v_nx, v_x), _mm256_mul_pd(v_ny, v_y)),
@@ -854,7 +863,7 @@ fn collect_samples_optimized<'a>(
                         for j in 0..4 {
                             if (final_mask >> j) & 1 != 0 {
                                 let val = f64::from(img.get_pixel(px + j, py));
-                                samples.push(((px + j) as f64, y, val));
+                                samples.push(((px + j) as f64 + 0.5, y, val));
                             }
                         }
                     }
@@ -864,7 +873,7 @@ fn collect_samples_optimized<'a>(
         }
 
         while px <= x1 {
-            let x = px as f64;
+            let x = px as f64 + 0.5;
             let dist = nx * x + ny * y + d;
             if dist.abs() <= window {
                 let t = ((x - p1[0]) * dx + (y - p1[1]) * dy) / (len * len);
@@ -1091,8 +1100,8 @@ fn sample_grid_values_optimized(
         let wz = h20 * px + h21 * py + h22;
         let winv = rcp_nr(wz);
 
-        let img_x = (h00 * px + h01 * py + h02) * winv;
-        let img_y = (h10 * px + h11 * py + h12) * winv;
+        let img_x = (h00 * px + h01 * py + h02) * winv - 0.5;
+        let img_y = (h10 * px + h11 * py + h12) * winv - 0.5;
 
         if img_x < 0.0 || img_x >= w_limit || img_y < 0.0 || img_y >= h_limit {
             return false;
