@@ -9,7 +9,7 @@ def test_datasets_available():
 
 def test_datasets_vision_extras():
     """Verify that image processing support is available in datasets."""
-    from datasets import Features, Image
+    from datasets import Features, Image  # type: ignore
 
     # Check if Image feature exists
     features = Features(image=Image())
