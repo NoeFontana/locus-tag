@@ -210,23 +210,24 @@ fn extract_single_quad(
         [reduced[0], reduced[3], reduced[2], reduced[1]]
     };
 
-    // Scale to full resolution using center-aware mapping
+    // Scale to full resolution using correct coordinate mapping.
+    // A point at (x, y) in decimated coordinates maps to (x*d, y*d) in full-res.
     let quad_pts = [
         Point {
-            x: (quad_pts_dec[0].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[0].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[0].x * d,
+            y: quad_pts_dec[0].y * d,
         },
         Point {
-            x: (quad_pts_dec[1].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[1].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[1].x * d,
+            y: quad_pts_dec[1].y * d,
         },
         Point {
-            x: (quad_pts_dec[2].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[2].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[2].x * d,
+            y: quad_pts_dec[2].y * d,
         },
         Point {
-            x: (quad_pts_dec[3].x - 0.5) * d + 0.5,
-            y: (quad_pts_dec[3].y - 0.5) * d + 0.5,
+            x: quad_pts_dec[3].x * d,
+            y: quad_pts_dec[3].y * d,
         },
     ];
 
@@ -700,8 +701,8 @@ fn fit_edge_line(
         return None;
     }
 
-    let nx = -dy / len;
-    let ny = dx / len;
+    let nx = dy / len;
+    let ny = -dx / len;
 
     let mut sum_d = 0.0;
     let mut count = 0;
@@ -779,7 +780,7 @@ fn fit_edge_line(
 /// to the edge line, and σ is the blur factor (~0.6 pixels).
 ///
 /// This achieves ~0.02px accuracy vs ~0.2px for gradient-based methods.
-#[allow(clippy::similar_names)]
+#[allow(clippy::similar_names, clippy::many_single_char_names, clippy::too_many_lines)]
 // Collected in the quad extraction process
 pub(crate) fn refine_edge_intensity(
     arena: &Bump,
@@ -881,7 +882,7 @@ pub(crate) fn refine_edge_intensity(
 
     let mut a = dark_sum / dark_weight; // Dark side (A)
     let mut b = light_sum / light_weight; // Light side (B)
-    
+
     // Foundation Principle 2: I(d) = (A+B)/2 + (B-A)/2 * erf(d / (sigma * sqrt(2)))
     let inv_s_sqrt2 = 1.0 / (sigma * std::f64::consts::SQRT_2);
 
@@ -1060,7 +1061,10 @@ mod tests {
         for (x, expected) in cases {
             let actual = erf_approx(x);
             let diff = (actual - expected).abs();
-            assert!(diff < 1.5e-7, "erf_approx({x}) error {diff} exceeds tolerance 1.5e-7");
+            assert!(
+                diff < 1.5e-7,
+                "erf_approx({x}) error {diff} exceeds tolerance 1.5e-7"
+            );
         }
     }
 
@@ -1379,12 +1383,14 @@ mod tests {
         let mut data = vec![0u8; width * height];
         let a = f64::from(dark);
         let b = f64::from(light);
+        let s_sqrt2 = sigma * std::f64::consts::SQRT_2;
 
         for y in 0..height {
             for x in 0..width {
-                let px = x as f64;
+                // Evaluation at pixel center (Foundation Principle 1)
+                let px = x as f64 + 0.5;
                 let intensity =
-                    f64::midpoint(a, b) + (b - a) / 2.0 * erf_approx((px - edge_x) / sigma);
+                    f64::midpoint(a, b) + (b - a) / 2.0 * erf_approx((px - edge_x) / s_sqrt2);
                 data[y * width + x] = intensity.clamp(0.0, 255.0) as u8;
             }
         }
@@ -1401,16 +1407,13 @@ mod tests {
         sigma: f64,
     ) -> Vec<u8> {
         let mut data = vec![0u8; width * height];
-
-        // L-shaped corner: vertical edge at corner_x (for y < corner_y)
-        //                  horizontal edge at corner_y (for x < corner_x)
-        // Inside the corner region: dark (0)
-        // Outside: light (255)
+        let s_sqrt2 = sigma * std::f64::consts::SQRT_2;
 
         for y in 0..height {
             for x in 0..width {
-                let px = x as f64;
-                let py = y as f64;
+                // Foundation Principle 1: Pixel center is at (px+0.5, py+0.5)
+                let px = x as f64 + 0.5;
+                let py = y as f64 + 0.5;
 
                 // Distance to vertical edge (x = corner_x)
                 let dist_v = px - corner_x;
@@ -1418,11 +1421,7 @@ mod tests {
                 let dist_h = py - corner_y;
 
                 // In a corner, the closest edge determines the intensity
-                // For an L-shaped dark region in the top-left quadrant:
-                // - If we're in the corner region (x < corner_x AND y < corner_y), dark
-                // - Else light
-                // Use min distance for smooth corner blending
-
+                // Use smooth transition based on the minimum distance to the two edges
                 let signed_dist = if px < corner_x && py < corner_y {
                     // Inside corner: negative distance to nearest edge
                     -dist_v.abs().min(dist_h.abs())
@@ -1438,8 +1437,8 @@ mod tests {
                     }
                 };
 
-                // PSF model: erf transition
-                let intensity = 127.5 + 127.5 * erf_approx(signed_dist / sigma);
+                // Foundation Principle 2: I(d) = (A+B)/2 + (B-A)/2 * erf(d / (sigma * sqrt(2)))
+                let intensity = 127.5 + 127.5 * erf_approx(signed_dist / s_sqrt2);
                 data[y * width + x] = intensity.clamp(0.0, 255.0) as u8;
             }
         }

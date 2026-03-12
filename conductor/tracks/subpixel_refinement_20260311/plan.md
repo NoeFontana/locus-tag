@@ -21,10 +21,10 @@
     - [x] Verify scale invariance for varying edge lengths.
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Edge Recovery & Accuracy Testing' (Protocol in workflow.md) (ccd6428)
 
-## Phase 4: Robustness & Stress Testing (cc5d793)
+## Phase 4: Robustness & Stress Testing (cc5d793) [checkpoint: a80f36a]
 - [x] Task: Solver Robustness Tests (cc5d793)
     - [x] Implement low-contrast (SNR limit) tests.
     - [x] Implement high Gaussian noise tests.
     - [x] Implement image boundary (clipping) tests.
     - [x] Implement displaced seed (convergence basin) tests.
-- [~] Task: Conductor - User Manual Verification 'Phase 4: Robustness & Stress Testing' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 4: Robustness & Stress Testing' (Protocol in workflow.md) (a80f36a)
