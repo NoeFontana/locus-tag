@@ -896,8 +896,8 @@ pub(crate) fn refine_edge_intensity(
         return Some((nx, ny, d));
     }
 
-    let mut a = dark_sum / dark_weight; // Dark side (A)
-    let mut b = light_sum / light_weight; // Light side (B)
+    let a = dark_sum / dark_weight; // Dark side (A)
+    let b = light_sum / light_weight; // Light side (B)
 
     // Foundation Principle 2: I(d) = (A+B)/2 + (B-A)/2 * erf(d / sigma)
     let inv_s_sqrt2 = 1.0 / sigma;
@@ -910,7 +910,7 @@ pub(crate) fn refine_edge_intensity(
         for &(_x, _y, intensity, projection) in &samples {
             let dist_phys = projection + d;
             let u = dist_phys * inv_s_sqrt2;
-            
+
             if u.abs() > 3.0 {
                 continue;
             }

@@ -47,13 +47,14 @@ export LOCUS_DATASET_DIR=/path/to/icra2020
 ```bash
 # 1. Run core regression suite (Forward tests + Fixtures)
 # Must use --release for meaningful performance validation
-cargo test --release --test regression_icra2020
+# Requires the 'bench-internals' feature.
+cargo test --release --test regression_icra2020 --features bench-internals
 
 # 2. Run extended regression suite (Circle, Random, Rotation - heavy)
-LOCUS_EXTENDED_REGRESSION=1 cargo test --release --test regression_icra2020
+LOCUS_EXTENDED_REGRESSION=1 cargo test --release --test regression_icra2020 --features bench-internals
 
 # 3. Run fixture-based smoke test (no dataset required)
-cargo test --release regression_fixtures
+cargo test --release --test regression_icra2020 regression_fixtures --features bench-internals
 ```
 
 ## 📸 Golden Master Snapshots
@@ -66,10 +67,8 @@ When detector behavior changes, snapshots may need updating:
 
 ```bash
 # Run tests and review pending snapshots
-cargo insta test --review
-
-# Accept all pending snapshots
-cargo insta accept
+# TRACY_NO_INVARIANT_CHECK=1 is recommended on some Linux environments.
+TRACY_NO_INVARIANT_CHECK=1 cargo insta test --release --all-features --features bench-internals --review
 ```
 
 ### When to Update Snapshots
@@ -85,17 +84,28 @@ Always document why snapshots changed in your PR description.
 Before submitting a PR:
 
 ```bash
-# 1. Format and lint
+# 1. Rust Formatting & Linting
 cargo fmt --all
-cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-# 2. Run tests
-cargo test --all-features
+# 2. Python Formatting & Linting
+uv run ruff check . --fix
+uv run ruff format .
 
-# 3. Verify doctests
+# 3. Python Type Checking
+uv run mypy .
+
+# 4. Run tests
+# Nextest is preferred for parallel execution of unit tests.
+cargo nextest run --release --all-features
+
+# 5. Snapshot Check (Ensure no accidental output drift)
+TRACY_NO_INVARIANT_CHECK=1 cargo insta test --release --all-features --features bench-internals --check
+
+# 6. Verify Rust doctests
 cargo test --doc -p locus-core
 
-# 4. Python tests (if applicable)
+# 7. Python unit tests
 uv run pytest
 ```
 

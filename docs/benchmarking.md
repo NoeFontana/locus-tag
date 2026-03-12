@@ -37,13 +37,13 @@ The regression suite validates that `Locus` matches or exceeds ground truth for 
 2. **Run Benchmarks**:
    ```bash
    # Core check (Forward dataset + Fixtures, approx 15s)
-   cargo test --release --test regression_icra2020
+   cargo test --release --test regression_icra2020 --features bench-internals
 
    # Extended check (Circle, Random, Rotation, approx 1-2 mins)
-   LOCUS_EXTENDED_REGRESSION=1 cargo test --release --test regression_icra2020
+   LOCUS_EXTENDED_REGRESSION=1 cargo test --release --test regression_icra2020 --features bench-internals
 
    # Accurate latency measurement (sequential)
-   cargo test --release --test regression_icra2020 -- --test-threads=1
+   cargo test --release --test regression_icra2020 --features bench-internals -- --test-threads=1
    ```
    > [!IMPORTANT]
    > `--release` is mandatory for running `regression_icra2020` tests. Running in debug mode is blocked and will panic.
@@ -63,7 +63,7 @@ Locus supports running regressions against large-scale datasets hosted on the Hu
 2. **Run Hub Tests**:
    Point the test runner to the local cache directory:
    ```bash
-   LOCUS_HUB_DATASET_DIR=tests/data/hub_cache cargo test --release --test regression_render_tag regression_hub_ -- --nocapture
+   LOCUS_HUB_DATASET_DIR=tests/data/hub_cache cargo test --release --test regression_render_tag regression_hub_ --features bench-internals -- --nocapture
    ```
 
 ### Logic-Specific Benchs (Micro-benchmarking)

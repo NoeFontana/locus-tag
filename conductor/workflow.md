@@ -182,7 +182,13 @@ uv run ruff format .
 cargo nextest run --release --all-features
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-TRACY_NO_INVARIANT_CHECK=1 cargo insta test --release --all-features --features bench-internals --check
+
+# Snapshot & Regression check
+# Requires datasets to be present in tests/data/
+TRACY_NO_INVARIANT_CHECK=1 \
+LOCUS_DATASET_DIR=$(pwd)/tests/data/icra2020 \
+LOCUS_HUB_DATASET_DIR=$(pwd)/tests/data/hub_cache \
+cargo insta test --release --all-features --features bench-internals --check
 
 uv run ruff check .
 uv run ruff format --check .
@@ -197,7 +203,8 @@ uv run pytest
 - Fast unit tests are run by default via `cargo nextest run`.
 - **Always use --release** for all tests except when debugging specific local logic, as debug performance is non-representative.
 - **Heavy Regression Tests:** Tests that parse large datasets (e.g., ICRA 2020) or require significant computational time are automatically excluded from the default run via `.config/nextest.toml`.
-- To run heavy tests explicitly, use the standard cargo test runner in release mode: `TRACY_NO_INVARIANT_CHECK=1 cargo test --release --test regression_icra2020`.
+- To run heavy tests explicitly, use the standard cargo test runner in release mode with required features: 
+  `TRACY_NO_INVARIANT_CHECK=1 LOCUS_DATASET_DIR=tests/data/icra2020 cargo test --release --test regression_icra2020 --features bench-internals`.
 - All logic changes to the hot loop require regression and snapshot validation using `cargo insta`.
 
 ### Unit Testing (Python)
