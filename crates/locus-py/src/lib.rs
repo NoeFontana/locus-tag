@@ -18,8 +18,8 @@ use pyo3::types::PyDict;
 // Enums
 // ============================================================================
 
-#[pyclass(eq, eq_int, skip_from_py_object)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[pyclass(eq, eq_int, hash, frozen, skip_from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TagFamily {
     AprilTag16h5 = 0,
     AprilTag36h11 = 1,
@@ -38,7 +38,7 @@ impl From<TagFamily> for locus_core::TagFamily {
     }
 }
 
-#[pyclass(eq, eq_int, from_py_object)]
+#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum SegmentationConnectivity {
     Four = 0,
@@ -54,7 +54,7 @@ impl From<SegmentationConnectivity> for locus_core::config::SegmentationConnecti
     }
 }
 
-#[pyclass(eq, eq_int, from_py_object)]
+#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum CornerRefinementMode {
     None = 0,
@@ -74,7 +74,7 @@ impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
     }
 }
 
-#[pyclass(eq, eq_int, from_py_object)]
+#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum DecodeMode {
     Hard = 0,
@@ -90,8 +90,8 @@ impl From<DecodeMode> for locus_core::config::DecodeMode {
     }
 }
 
-#[pyclass(eq, eq_int, from_py_object)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum PoseEstimationMode {
     Fast = 0,
     Accurate = 1,
