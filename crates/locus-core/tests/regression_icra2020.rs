@@ -40,7 +40,13 @@ pub enum ConfigPreset {
 impl ConfigPreset {
     pub fn detector_config(self) -> DetectorConfig {
         match self {
-            Self::PlainBoard => DetectorConfig::production_default(),
+            Self::PlainBoard => DetectorConfig::builder()
+                .decoder_min_contrast(10.0)
+                .quad_min_edge_score(2.0)
+                .refinement_mode(locus_core::config::CornerRefinementMode::Erf)
+                .enable_sharpening(true)
+                .threshold_tile_size(8)
+                .build(),
             Self::Checkerboard => DetectorConfig::builder()
                 .segmentation_connectivity(locus_core::config::SegmentationConnectivity::Four)
                 .decoder_min_contrast(10.0)
