@@ -315,7 +315,7 @@ impl RegressionHarness {
                                 // Local offset in Object Frame (Y-Down, Z-In): TL is [-s/2, -s/2, 0]
                                 let s_half = size * 0.5;
                                 let v_offset_obj = Vector3::new(-s_half, -s_half, 0.0);
-                                
+
                                 // Transform offset to Camera Frame: t_TL = t_center + R_gt * v_offset_obj
                                 let t_gt_tl = gt_pose.translation + gt_pose.rotation * v_offset_obj;
 
@@ -327,8 +327,15 @@ impl RegressionHarness {
                                 let max_physically_possible_z_shift = size * 0.75; // ~0.707 * size + epsilon
 
                                 if t_gt_tl.z <= 0.0 || z_delta > max_physically_possible_z_shift {
-                                    println!("CRITICAL GEOMETRY VIOLATION: Image: {}, Tag ID: {}, Center Z: {:.4}, TL Z: {:.4}, Delta: {:.4}, Limit: {:.4}", 
-                                        filename, det_id, gt_pose.translation.z, t_gt_tl.z, z_delta, max_physically_possible_z_shift);
+                                    println!(
+                                        "CRITICAL GEOMETRY VIOLATION: Image: {}, Tag ID: {}, Center Z: {:.4}, TL Z: {:.4}, Delta: {:.4}, Limit: {:.4}",
+                                        filename,
+                                        det_id,
+                                        gt_pose.translation.z,
+                                        t_gt_tl.z,
+                                        z_delta,
+                                        max_physically_possible_z_shift
+                                    );
                                     geometry_violations += 1;
                                     continue; // Skip this pose comparison as GT is corrupt/invalid.
                                 }
@@ -507,7 +514,10 @@ impl RegressionHarness {
         println!("  Images: {count}");
         println!("  Recall: {:.2}%", report.summary.mean_recall * 100.0);
         println!("  Precision: {:.2}%", report.summary.mean_precision * 100.0);
-        println!("  Geometry Violations: {}", report.summary.geometry_violations);
+        println!(
+            "  Geometry Violations: {}",
+            report.summary.geometry_violations
+        );
         println!("  RMSE:   {:.4} px", report.summary.mean_rmse);
         println!(
             "  Repro RMSE: {:.4} px",
@@ -541,7 +551,7 @@ struct HubEntry {
     tag_id: u32,
     corners: [[f64; 2]; 4],
     position: [f64; 3],
-    rotation_quaternion: [f64; 4], // [x, y, z, w]
+    rotation_quaternion: [f64; 4], // [w, x, y, z]
     /// Per-detection intrinsics (optional)
     k_matrix: Option<[[f64; 3]; 3]>,
     /// Per-detection tag size (optional)
@@ -599,10 +609,10 @@ impl HubProvider {
                 }
 
                 let rotation = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-                    entry.rotation_quaternion[3], // w
-                    entry.rotation_quaternion[0], // x (i)
-                    entry.rotation_quaternion[1], // y (j)
-                    entry.rotation_quaternion[2], // z (k)
+                    entry.rotation_quaternion[0], // w
+                    entry.rotation_quaternion[1], // x
+                    entry.rotation_quaternion[2], // y
+                    entry.rotation_quaternion[3], // z
                 ))
                 .to_rotation_matrix();
 
