@@ -304,8 +304,9 @@ impl RegressionHarness {
                             if let (Some(gt_pose), Some(intr), Some(size)) =
                                 (gt.poses.get(&det_id), intrinsics, tag_size)
                             {
-                                // Modern OpenCV Convention: Y-Down, Z-In, Top-Left Origin.
-                                // Hub Ground Truth follows the same axes but is center-anchored.
+                                // Modern OpenCV Convention: Y-Down, Z-In.
+                                // Generator: Origin at center.
+                                // Detector: Origin at Top-Left.
                                 let q_gt = UnitQuaternion::from_matrix(&gt_pose.rotation);
                                 let r_err = det_q.angle_to(&q_gt);
 
@@ -534,7 +535,7 @@ struct HubEntry {
 impl HubProvider {
     fn new(dataset_dir: &std::path::Path) -> Option<Self> {
         let rich_path = dataset_dir.join("rich_truth.json");
-        let jsonl_path = dataset_dir.join("annotations.jsonl");
+        let _jsonl_path = dataset_dir.join("annotations.jsonl");
         let images_dir = dataset_dir.join("images");
 
         if !images_dir.exists() {
@@ -542,74 +543,66 @@ impl HubProvider {
         }
 
         let mut gt_map: HashMap<String, GroundTruth> = HashMap::new();
-        let mut entries = Vec::new();
 
+        // Load all metadata from rich_truth.json as requested.
         if rich_path.exists() {
             let file = std::fs::File::open(&rich_path).ok()?;
-            entries = serde_json::from_reader(file).ok()?;
-        } else if jsonl_path.exists() {
-            let file = std::fs::File::open(&jsonl_path).ok()?;
-            let reader = std::io::BufReader::new(file);
-            use std::io::BufRead;
-            for line in reader.lines().map_while(Result::ok) {
-                if let Ok(entry) = serde_json::from_str::<HubEntry>(&line) {
-                    entries.push(entry);
+            let entries: Vec<HubEntry> = serde_json::from_reader(file).ok()?;
+
+            for entry in entries {
+                let image_name = &entry.image_filename;
+
+                let fname = if std::path::Path::new(image_name)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("png"))
+                {
+                    image_name.clone()
+                } else {
+                    format!("{image_name}.png")
+                };
+
+                let gt = gt_map.entry(fname.clone()).or_insert_with(|| GroundTruth {
+                    tags: HashMap::new(),
+                    poses: HashMap::new(),
+                    intrinsics: None,
+                    tag_size: None,
+                });
+
+                gt.tags.insert(entry.tag_id, entry.corners);
+
+                if gt.intrinsics.is_none()
+                    && let Some(k) = entry.k_matrix
+                {
+                    gt.intrinsics = Some(CameraIntrinsics::new(k[0][0], k[1][1], k[0][2], k[1][2]));
                 }
+
+                if gt.tag_size.is_none()
+                    && let Some(size_mm) = entry.tag_size_mm
+                {
+                    gt.tag_size = Some(size_mm / 1000.0);
+                }
+
+                let rotation = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
+                    entry.rotation_quaternion[3], // w
+                    entry.rotation_quaternion[0], // x (i)
+                    entry.rotation_quaternion[1], // y (j)
+                    entry.rotation_quaternion[2], // z (k)
+                ))
+                .to_rotation_matrix();
+
+                let pose = Pose {
+                    rotation: *rotation.matrix(),
+                    translation: Vector3::new(
+                        entry.position[0],
+                        entry.position[1],
+                        entry.position[2],
+                    ),
+                };
+
+                gt.poses.insert(entry.tag_id, pose);
             }
         } else {
             return None;
-        }
-
-        for entry in entries {
-            // Normalize filename: rich_truth uses image_id, annotations uses image_filename
-            let fname = if std::path::Path::new(&entry.image_filename)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("png"))
-            {
-                entry.image_filename.clone()
-            } else {
-                format!("{}.png", entry.image_filename)
-            };
-
-            let gt = gt_map.entry(fname.clone()).or_insert_with(|| GroundTruth {
-                tags: HashMap::new(),
-                poses: HashMap::new(),
-                intrinsics: None,
-                tag_size: None,
-            });
-
-            gt.tags.insert(entry.tag_id, entry.corners);
-
-            if gt.intrinsics.is_none()
-                && let Some(k) = entry.k_matrix
-            {
-                gt.intrinsics = Some(CameraIntrinsics::new(k[0][0], k[1][1], k[0][2], k[1][2]));
-            }
-
-            if gt.tag_size.is_none()
-                && let Some(size_mm) = entry.tag_size_mm
-            {
-                gt.tag_size = Some(size_mm / 1000.0);
-            }
-
-            let rotation = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-                entry.rotation_quaternion[3], // w
-                entry.rotation_quaternion[0], // x (i)
-                entry.rotation_quaternion[1], // y (j)
-                entry.rotation_quaternion[2], // z (k)
-            ))
-            .to_rotation_matrix();
-
-            let pose = Pose {
-                rotation: *rotation.matrix(),
-                translation: Vector3::new(entry.position[0], entry.position[1], entry.position[2]),
-            };
-
-            gt_map
-                .get_mut(&fname)
-                .unwrap()
-                .poses
-                .insert(entry.tag_id, pose);
         }
 
         let mut image_names: Vec<_> = gt_map.keys().cloned().collect();
@@ -723,8 +716,8 @@ fn run_hub_test(config_name: &str, family: TagFamily) {
 }
 
 #[test]
-fn regression_hub_tag36h11() {
-    let _guard = common::telemetry::init("regression_hub_tag36h11");
+fn regression_hub_tag36h11_640x480() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_640x480");
     run_hub_test(
         "single_tag_locus_v1_tag36h11_640x480",
         TagFamily::AprilTag36h11,
