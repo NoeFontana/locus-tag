@@ -128,6 +128,7 @@ struct SummaryMetrics {
     #[serde(serialize_with = "serialize_rmse")]
     mean_hamming: f64,
     mean_total_ms: f64,
+    geometry_violations: usize,
     worst_offenders: Vec<Offender>,
 }
 
@@ -210,6 +211,7 @@ impl RegressionHarness {
         // Individual errors for percentiles
         let mut translation_errors = Vec::new();
         let mut rotation_errors = Vec::new();
+        let mut geometry_violations = 0;
 
         for (filename, data, width, height, gt) in provider.iter() {
             let img = ImageView::new(&data, width, height, width).expect("valid image");
@@ -277,11 +279,14 @@ impl RegressionHarness {
                     let dist_sq = (det_center[0] - g_cx).powi(2) + (det_center[1] - g_cy).powi(2);
 
                     if dist_sq < 100.0 * 100.0 {
-                        // Use the test_utils version which tries all 4 rotations for best match
-                        image_rmse_sum += locus_core::test_utils::compute_corner_error(
-                            &det_corners_f64,
-                            gt_corners,
-                        );
+                        // Strict Index-to-Index Comparison (No circular shifting)
+                        let mut rmse_sq = 0.0;
+                        for k in 0..4 {
+                            rmse_sq += (det_corners_f64[k][0] - gt_corners[k][0]).powi(2)
+                                + (det_corners_f64[k][1] - gt_corners[k][1]).powi(2);
+                        }
+                        image_rmse_sum += (rmse_sq / 4.0).sqrt();
+
                         image_hamming_sum += f64::from(detections.error_rates[i]);
                         match_count += 1;
                         found_ids.insert(det_id);
@@ -304,18 +309,32 @@ impl RegressionHarness {
                             if let (Some(gt_pose), Some(intr), Some(size)) =
                                 (gt.poses.get(&det_id), intrinsics, tag_size)
                             {
-                                // Modern OpenCV Convention: Y-Down, Z-In.
+                                // --- Rigid Translation Shift (Center to Top-Left) ---
                                 // Generator: Origin at center.
                                 // Detector: Origin at Top-Left.
+                                // Local offset in Object Frame (Y-Down, Z-In): TL is [-s/2, -s/2, 0]
+                                let s_half = size * 0.5;
+                                let v_offset_obj = Vector3::new(-s_half, -s_half, 0.0);
+                                
+                                // Transform offset to Camera Frame: t_TL = t_center + R_gt * v_offset_obj
+                                let t_gt_tl = gt_pose.translation + gt_pose.rotation * v_offset_obj;
+
+                                // --- Geometry Safeguard Gate ---
+                                // 1. Z-Polarity: Tag must remain in front of the camera.
+                                // 2. Z-Depth Consistency: Planar shift cannot exceed half-diagonal (~0.707 * size).
+                                // We allow some epsilon for slightly non-orthonormal matrices if they exist.
+                                let z_delta = (t_gt_tl.z - gt_pose.translation.z).abs();
+                                let max_physically_possible_z_shift = size * 0.75; // ~0.707 * size + epsilon
+
+                                if t_gt_tl.z <= 0.0 || z_delta > max_physically_possible_z_shift {
+                                    println!("CRITICAL GEOMETRY VIOLATION: Image: {}, Tag ID: {}, Center Z: {:.4}, TL Z: {:.4}, Delta: {:.4}, Limit: {:.4}", 
+                                        filename, det_id, gt_pose.translation.z, t_gt_tl.z, z_delta, max_physically_possible_z_shift);
+                                    geometry_violations += 1;
+                                    continue; // Skip this pose comparison as GT is corrupt/invalid.
+                                }
+
                                 let q_gt = UnitQuaternion::from_matrix(&gt_pose.rotation);
                                 let r_err = det_q.angle_to(&q_gt);
-
-                                // Shift GT translation from center to top-left corner
-                                // In local coords (Y-Down, Z-In): TL is [-s/2, -s/2, 0]
-                                let s_half = size * 0.5;
-                                let t_gt_tl = gt_pose.translation
-                                    + gt_pose.rotation * Vector3::new(-s_half, -s_half, 0.0);
-
                                 let t_err = (det_t - t_gt_tl).norm();
 
                                 image_translation_error_sum += t_err;
@@ -327,31 +346,26 @@ impl RegressionHarness {
 
                                 // --- Reprojection Error (vs Ground Truth Corners) ---
                                 let s = size;
-                                // 3D model corners in the tag frame (Top-Left origin)
-                                // Standard ordering: TL, TR, BR, BL
+                                // Canonical Object Frame: Origin at Top-Left, +X Right, +Y Down
                                 let model_corners = [
-                                    Vector3::new(0.0, 0.0, 0.0),
-                                    Vector3::new(s, 0.0, 0.0),
-                                    Vector3::new(s, s, 0.0),
-                                    Vector3::new(0.0, s, 0.0),
+                                    Vector3::new(0.0, 0.0, 0.0), // 0: TL
+                                    Vector3::new(s, 0.0, 0.0),   // 1: TR
+                                    Vector3::new(s, s, 0.0),     // 2: BR
+                                    Vector3::new(0.0, s, 0.0),   // 3: BL
                                 ];
 
                                 // Estimated pose in detector frame
                                 let est_pose =
                                     Pose::new(det_q.to_rotation_matrix().into_inner(), det_t);
 
-                                // Standard reprojection using the estimated pose and Top-Left model corners.
-                                let mut reprojected_corners = [[0.0, 0.0]; 4];
+                                // Strict element-wise reprojection RMSE
+                                let mut repro_rmse_sq = 0.0;
                                 for k in 0..4 {
-                                    reprojected_corners[k] =
-                                        est_pose.project(&model_corners[k], &intr);
+                                    let proj = est_pose.project(&model_corners[k], &intr);
+                                    repro_rmse_sq += (proj[0] - gt_corners[k][0]).powi(2)
+                                        + (proj[1] - gt_corners[k][1]).powi(2);
                                 }
-
-                                image_repro_rmse_sum +=
-                                    locus_core::test_utils::compute_corner_error(
-                                        &reprojected_corners,
-                                        gt_corners,
-                                    );
+                                image_repro_rmse_sum += (repro_rmse_sq / 4.0).sqrt();
                             }
                         }
                     }
@@ -484,6 +498,7 @@ impl RegressionHarness {
                 p99_rotation_error: calculate_percentile(&mut rotation_errors, 0.99),
                 mean_hamming: total_hamming / count as f64,
                 mean_total_ms: total_time / count as f64,
+                geometry_violations,
                 worst_offenders: offenders.into_iter().take(5).collect(),
             },
         };
@@ -492,6 +507,7 @@ impl RegressionHarness {
         println!("  Images: {count}");
         println!("  Recall: {:.2}%", report.summary.mean_recall * 100.0);
         println!("  Precision: {:.2}%", report.summary.mean_precision * 100.0);
+        println!("  Geometry Violations: {}", report.summary.geometry_violations);
         println!("  RMSE:   {:.4} px", report.summary.mean_rmse);
         println!(
             "  Repro RMSE: {:.4} px",
