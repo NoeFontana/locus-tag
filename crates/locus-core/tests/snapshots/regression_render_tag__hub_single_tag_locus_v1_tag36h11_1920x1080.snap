@@ -16,6 +16,7 @@ summary:
   p99_rotation_error: 110.848
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
+  geometry_violations: 0
   worst_offenders:
     - filename: scene_0007_cam_0000.png
       missed: 0
