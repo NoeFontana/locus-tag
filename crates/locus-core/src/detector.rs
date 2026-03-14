@@ -257,63 +257,17 @@ impl Detector {
         let v = state.batch.partition(n);
 
         // 6. Pose Refinement (SoA)
-        let mut repro_errors_ptr = std::ptr::null();
-        let mut num_repro = 0;
-        if let (Some(intr), Some(size)) = (intrinsics, tag_size) {
-            crate::pose::refine_poses_soa(
-                &mut state.batch,
-                v,
-                intr,
-                size,
-                Some(&refinement_img),
-                pose_mode,
-            );
-
-            // Compute reprojection errors if requested
-            if debug_telemetry {
-                num_repro = v;
-                let repro_errors = state.arena.alloc_slice_fill_copy(num_repro, 0.0f32);
-
-                // Canonical model points (TL, TR, BR, BL)
-                let model_pts = [
-                    nalgebra::Vector3::new(0.0, 0.0, 0.0),
-                    nalgebra::Vector3::new(size, 0.0, 0.0),
-                    nalgebra::Vector3::new(size, size, 0.0),
-                    nalgebra::Vector3::new(0.0, size, 0.0),
-                ];
-
-                for (i, repro_error) in repro_errors.iter_mut().enumerate().take(v) {
-                    let det_pose_data = state.batch.poses[i].data;
-                    let det_t = nalgebra::Vector3::new(
-                        f64::from(det_pose_data[0]),
-                        f64::from(det_pose_data[1]),
-                        f64::from(det_pose_data[2]),
-                    );
-                    let det_q =
-                        nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-                            f64::from(det_pose_data[6]), // w
-                            f64::from(det_pose_data[3]), // x
-                            f64::from(det_pose_data[4]), // y
-                            f64::from(det_pose_data[5]), // z
-                        ));
-
-                    let pose = crate::pose::Pose {
-                        rotation: *det_q.to_rotation_matrix().matrix(),
-                        translation: det_t,
-                    };
-
-                    let mut sum_sq_err = 0.0;
-                    for (j, model_pt) in model_pts.iter().enumerate() {
-                        let proj = pose.project(model_pt, intr);
-                        let dx = proj[0] - f64::from(state.batch.corners[i][j].x);
-                        let dy = proj[1] - f64::from(state.batch.corners[i][j].y);
-                        sum_sq_err += dx * dx + dy * dy;
-                    }
-                    *repro_error = (sum_sq_err / 4.0).sqrt() as f32;
-                }
-                repro_errors_ptr = repro_errors.as_ptr();
-            }
-        }
+        let (repro_errors_ptr, num_repro) = run_pose_refinement(
+            &mut state.batch,
+            &state.arena,
+            v,
+            intrinsics,
+            tag_size,
+            &refinement_img,
+            pose_mode,
+            &self.config,
+            debug_telemetry,
+        );
 
         // Detectors return corners at pixel centers (indices + 0.5) following OpenCV conventions.
         // No additional adjustment needed as the internal pipeline is now unbiased.
@@ -342,6 +296,82 @@ impl Detector {
     pub fn config(&self) -> &DetectorConfig {
         &self.config
     }
+}
+
+/// Run pose refinement on valid candidates and optionally compute reprojection errors.
+///
+/// Returns `(reprojection_errors_ptr, num_reprojection)` for telemetry.
+#[allow(clippy::too_many_arguments)]
+fn run_pose_refinement(
+    batch: &mut crate::batch::DetectionBatch,
+    arena: &bumpalo::Bump,
+    v: usize,
+    intrinsics: Option<&crate::pose::CameraIntrinsics>,
+    tag_size: Option<f64>,
+    refinement_img: &ImageView,
+    pose_mode: crate::config::PoseEstimationMode,
+    config: &DetectorConfig,
+    debug_telemetry: bool,
+) -> (*const f32, usize) {
+    let mut repro_errors_ptr = std::ptr::null();
+    let mut num_repro = 0;
+
+    if let (Some(intr), Some(size)) = (intrinsics, tag_size) {
+        crate::pose::refine_poses_soa_with_config(
+            batch,
+            v,
+            intr,
+            size,
+            Some(refinement_img),
+            pose_mode,
+            config,
+        );
+
+        if debug_telemetry {
+            num_repro = v;
+            let repro_errors = arena.alloc_slice_fill_copy(num_repro, 0.0f32);
+
+            let model_pts = [
+                nalgebra::Vector3::new(0.0, 0.0, 0.0),
+                nalgebra::Vector3::new(size, 0.0, 0.0),
+                nalgebra::Vector3::new(size, size, 0.0),
+                nalgebra::Vector3::new(0.0, size, 0.0),
+            ];
+
+            for (i, repro_error) in repro_errors.iter_mut().enumerate().take(v) {
+                let det_pose_data = batch.poses[i].data;
+                let det_t = nalgebra::Vector3::new(
+                    f64::from(det_pose_data[0]),
+                    f64::from(det_pose_data[1]),
+                    f64::from(det_pose_data[2]),
+                );
+                let det_q =
+                    nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
+                        f64::from(det_pose_data[6]),
+                        f64::from(det_pose_data[3]),
+                        f64::from(det_pose_data[4]),
+                        f64::from(det_pose_data[5]),
+                    ));
+
+                let pose = crate::pose::Pose {
+                    rotation: *det_q.to_rotation_matrix().matrix(),
+                    translation: det_t,
+                };
+
+                let mut sum_sq_err = 0.0;
+                for (j, model_pt) in model_pts.iter().enumerate() {
+                    let proj = pose.project(model_pt, intr);
+                    let dx = proj[0] - f64::from(batch.corners[i][j].x);
+                    let dy = proj[1] - f64::from(batch.corners[i][j].y);
+                    sum_sq_err += dx * dx + dy * dy;
+                }
+                *repro_error = (sum_sq_err / 4.0).sqrt() as f32;
+            }
+            repro_errors_ptr = repro_errors.as_ptr();
+        }
+    }
+
+    (repro_errors_ptr, num_repro)
 }
 
 /// A builder for configuring and instantiating a [`Detector`].

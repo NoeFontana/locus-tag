@@ -139,6 +139,27 @@ pub struct DetectorConfig {
     /// Maximum number of Hamming errors allowed for tag decoding (default: 2).
     /// Higher values increase recall but also increase false positive rate in noise.
     pub max_hamming_error: u32,
+
+    // Pose estimation tuning parameters
+
+    /// Huber delta for LM reprojection (pixels) in Fast mode.
+    /// Residuals beyond this threshold are down-weighted linearly.
+    /// 1.5 px is a standard robust threshold for sub-pixel corner detectors.
+    pub huber_delta_px: f64,
+
+    /// Maximum Tikhonov regularisation alpha (px^2) for ill-conditioned corners
+    /// in Accurate mode. Controls the gain-scheduled regularisation of the
+    /// Structure Tensor information matrix on foreshortened tags.
+    pub tikhonov_alpha_max: f64,
+
+    /// Pixel noise variance (sigma_n^2) assumed for the Structure Tensor
+    /// covariance model in Accurate mode. Typical webcams: ~4.0.
+    pub sigma_n_sq: f64,
+
+    /// Radius (in pixels) of the window used for Structure Tensor computation
+    /// in Accurate mode. A radius of 2 yields a 5x5 window.
+    /// Smaller values (1) are better for small tags; larger (3-4) for noisy images.
+    pub structure_tensor_radius: u8,
 }
 
 impl Default for DetectorConfig {
@@ -172,6 +193,10 @@ impl Default for DetectorConfig {
             refinement_mode: CornerRefinementMode::Erf,
             decode_mode: DecodeMode::Hard,
             max_hamming_error: 2,
+            huber_delta_px: 1.5,
+            tikhonov_alpha_max: 0.25,
+            sigma_n_sq: 4.0,
+            structure_tensor_radius: 2,
         }
     }
 }
@@ -450,6 +475,10 @@ impl DetectorConfigBuilder {
             refinement_mode: self.refinement_mode.unwrap_or(d.refinement_mode),
             decode_mode: self.decode_mode.unwrap_or(d.decode_mode),
             max_hamming_error: self.max_hamming_error.unwrap_or(d.max_hamming_error),
+            huber_delta_px: d.huber_delta_px,
+            tikhonov_alpha_max: d.tikhonov_alpha_max,
+            sigma_n_sq: d.sigma_n_sq,
+            structure_tensor_radius: d.structure_tensor_radius,
         }
     }
 

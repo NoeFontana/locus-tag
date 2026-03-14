@@ -112,6 +112,28 @@ pub fn estimate_tag_pose(
     img: Option<&ImageView>,
     mode: PoseEstimationMode,
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>) {
+    estimate_tag_pose_with_config(
+        intrinsics,
+        corners,
+        tag_size,
+        img,
+        mode,
+        &crate::config::DetectorConfig::default(),
+    )
+}
+
+/// Estimate pose with explicit configuration for tuning parameters.
+#[must_use]
+#[allow(clippy::missing_panics_doc)]
+#[tracing::instrument(skip_all, name = "pipeline::estimate_tag_pose")]
+pub fn estimate_tag_pose_with_config(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    tag_size: f64,
+    img: Option<&ImageView>,
+    mode: PoseEstimationMode,
+    config: &crate::config::DetectorConfig,
+) -> (Option<Pose>, Option<[[f64; 6]; 6]>) {
     // 1. Canonical Homography: Map canonical square [-1,1]x[-1,1] to image pixels.
     let Some(h_poly) = crate::decoder::Homography::square_to_quad(corners) else {
         return (None, None);
@@ -149,8 +171,14 @@ pub fn estimate_tag_pose(
     match (mode, img) {
         (PoseEstimationMode::Accurate, Some(image)) => {
             // Compute corner uncertainty from structure tensor
-            let uncertainty =
-                crate::pose_weighted::compute_framework_uncertainty(image, corners, &h_poly);
+            let uncertainty = crate::pose_weighted::compute_framework_uncertainty(
+                image,
+                corners,
+                &h_poly,
+                config.tikhonov_alpha_max,
+                config.sigma_n_sq,
+                config.structure_tensor_radius,
+            );
             let (refined_pose, covariance) = crate::pose_weighted::refine_pose_lm_weighted(
                 intrinsics,
                 corners,
@@ -163,7 +191,13 @@ pub fn estimate_tag_pose(
         _ => {
             // Fast mode (Identity weights)
             (
-                Some(refine_pose_lm(intrinsics, corners, tag_size, best_pose)),
+                Some(refine_pose_lm(
+                    intrinsics,
+                    corners,
+                    tag_size,
+                    best_pose,
+                    config.huber_delta_px,
+                )),
                 None,
             )
         },
@@ -355,10 +389,9 @@ fn refine_pose_lm(
     corners: &[[f64; 2]; 4],
     tag_size: f64,
     initial_pose: Pose,
+    huber_delta_px: f64,
 ) -> Pose {
-    // Huber loss threshold (pixels). Residuals beyond this are treated as outliers.
-    // 1.5px is a standard robust threshold for sub-pixel corner detectors.
-    const HUBER_DELTA: f64 = 1.5;
+    let huber_delta = huber_delta_px;
 
     let mut pose = initial_pose;
     let s = tag_size;
@@ -373,7 +406,7 @@ fn refine_pose_lm(
     // Nielsen's trust-region state. Start with small damping to encourage Gauss-Newton steps.
     let mut lambda = 1e-3_f64;
     let mut nu = 2.0_f64;
-    let mut current_cost = huber_cost(intrinsics, corners, &obj_pts, &pose, HUBER_DELTA);
+    let mut current_cost = huber_cost(intrinsics, corners, &obj_pts, &pose, huber_delta);
 
     // Allow up to 20 iterations; typically exits in 3-6 via the convergence gates below.
     for _ in 0..20 {
@@ -397,10 +430,10 @@ fn refine_pose_lm(
             // Huber IRLS weight: w=1 inside the trust region, w=delta/r outside.
             // Applied per 2D point (geometric pixel distance).
             let r_norm = (res_u * res_u + res_v * res_v).sqrt();
-            let w = if r_norm <= HUBER_DELTA {
+            let w = if r_norm <= huber_delta {
                 1.0
             } else {
-                HUBER_DELTA / r_norm
+                huber_delta / r_norm
             };
 
             // Jacobian of projection wrt Camera Point (du/dP_cam) (2x3):
@@ -486,7 +519,7 @@ fn refine_pose_lm(
             rot_update * pose.translation + trans_update,
         );
 
-        let new_cost = huber_cost(intrinsics, corners, &obj_pts, &new_pose, HUBER_DELTA);
+        let new_cost = huber_cost(intrinsics, corners, &obj_pts, &new_pose, huber_delta);
         let actual_reduction = current_cost - new_cost;
 
         let rho = if predicted_reduction > 1e-12 {
@@ -597,6 +630,28 @@ pub fn refine_poses_soa(
     img: Option<&ImageView>,
     mode: PoseEstimationMode,
 ) {
+    refine_poses_soa_with_config(
+        batch,
+        v,
+        intrinsics,
+        tag_size,
+        img,
+        mode,
+        &crate::config::DetectorConfig::default(),
+    );
+}
+
+/// Refine poses for all valid candidates with explicit config for tuning parameters.
+#[tracing::instrument(skip_all, name = "pipeline::pose_refinement")]
+pub fn refine_poses_soa_with_config(
+    batch: &mut DetectionBatch,
+    v: usize,
+    intrinsics: &CameraIntrinsics,
+    tag_size: f64,
+    img: Option<&ImageView>,
+    mode: PoseEstimationMode,
+    config: &crate::config::DetectorConfig,
+) {
     use rayon::prelude::*;
 
     // Process valid candidates in parallel.
@@ -623,7 +678,8 @@ pub fn refine_poses_soa(
                 ],
             ];
 
-            let (pose_opt, _) = estimate_tag_pose(intrinsics, &corners, tag_size, img, mode);
+            let (pose_opt, _) =
+                estimate_tag_pose_with_config(intrinsics, &corners, tag_size, img, mode, config);
 
             if let Some(pose) = pose_opt {
                 let q = UnitQuaternion::from_matrix(&pose.rotation);
