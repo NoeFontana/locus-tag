@@ -89,8 +89,124 @@ pub(crate) fn compute_framework_uncertainty(
     covariances
 }
 
-/// Use Levenberg-Marquardt to refine the pose by minimizing Mahalanobis distance.
+/// Accumulates the Huber-augmented normal equations J^T W̃ J and J^T W̃ r at the given pose.
+///
+/// For each corner i, the augmented information matrix is:
+/// `W̃_i = w(s_i) · W_i`
+/// where `s_i = √(rᵢᵀ Wᵢ rᵢ)` is the Mahalanobis distance and `w(s_i)` is the Huber
+/// IRLS weight. This is the core computation shared between the LM inner loop and the
+/// final post-convergence covariance extraction.
+fn build_normal_equations(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    obj_pts: &[Vector3<f64>; 4],
+    pose: &Pose,
+    info_matrices: &[Matrix2<f64>; 4],
+    huber_k: f64,
+) -> (Matrix6<f64>, Vector6<f64>) {
+    let mut jtj = Matrix6::<f64>::zeros();
+    let mut jtr = Vector6::<f64>::zeros();
+
+    for i in 0..4 {
+        let p_world = obj_pts[i];
+        let p_cam = pose.rotation * p_world + pose.translation;
+        let z_inv = 1.0 / p_cam.z;
+        let z_inv2 = z_inv * z_inv;
+
+        let u_est = intrinsics.fx * p_cam.x * z_inv + intrinsics.cx;
+        let v_est = intrinsics.fy * p_cam.y * z_inv + intrinsics.cy;
+        let res = Vector2::new(corners[i][0] - u_est, corners[i][1] - v_est);
+
+        // Mahalanobis distance: s_i = √(rᵢᵀ Wᵢ rᵢ).
+        let s_i = res.dot(&(info_matrices[i] * res)).sqrt();
+        // Huber IRLS weight: w(s) = 1 inside the inlier ball, k/s outside.
+        let w = if s_i <= huber_k { 1.0 } else { huber_k / s_i };
+        // Augmented information matrix: W̃_i = w(s_i) · Wᵢ.
+        let w_tilde = info_matrices[i] * w;
+
+        // Jacobian of projection wrt Camera Point (2x3):
+        // [ fx/z   0     -fx·x/z² ]
+        // [ 0      fy/z  -fy·y/z² ]
+        let du_dp = Vector3::new(
+            intrinsics.fx * z_inv,
+            0.0,
+            -intrinsics.fx * p_cam.x * z_inv2,
+        );
+        let dv_dp = Vector3::new(
+            0.0,
+            intrinsics.fy * z_inv,
+            -intrinsics.fy * p_cam.y * z_inv2,
+        );
+
+        // Jacobian of Camera Point wrt se(3) twist δξ = [δt | δω] (3x6):
+        // d(exp(δω)·P + δt)/dδξ |_{δξ=0}  =  [ I | -[P]× ]
+        let mut jac_i = nalgebra::SMatrix::<f64, 2, 6>::zeros();
+        jac_i[(0, 0)] = du_dp[0];
+        jac_i[(0, 1)] = du_dp[1];
+        jac_i[(0, 2)] = du_dp[2];
+        jac_i[(0, 3)] = du_dp[1] * p_cam.z - du_dp[2] * p_cam.y;
+        jac_i[(0, 4)] = du_dp[2] * p_cam.x - du_dp[0] * p_cam.z;
+        jac_i[(0, 5)] = du_dp[0] * p_cam.y - du_dp[1] * p_cam.x;
+        jac_i[(1, 0)] = dv_dp[0];
+        jac_i[(1, 1)] = dv_dp[1];
+        jac_i[(1, 2)] = dv_dp[2];
+        jac_i[(1, 3)] = dv_dp[1] * p_cam.z - dv_dp[2] * p_cam.y;
+        jac_i[(1, 4)] = dv_dp[2] * p_cam.x - dv_dp[0] * p_cam.z;
+        jac_i[(1, 5)] = dv_dp[0] * p_cam.y - dv_dp[1] * p_cam.x;
+
+        let weighted_jac = jac_i.transpose() * w_tilde;
+        jtj += weighted_jac * jac_i;
+        jtr += weighted_jac * res;
+    }
+
+    (jtj, jtr)
+}
+
+/// Huber robust cost over Mahalanobis distances for all four corners.
+///
+/// `ρ(s) = ½s²` for `s ≤ k`, and `k(s − ½k)` for `s > k`.
+/// Using the Mahalanobis distance as the argument gives an anisotropic robust loss
+/// that respects the per-corner uncertainty from the Structure Tensor.
+fn huber_mahalanobis_cost(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    obj_pts: &[Vector3<f64>; 4],
+    pose: &Pose,
+    info_matrices: &[Matrix2<f64>; 4],
+    k: f64,
+) -> f64 {
+    let mut cost = 0.0;
+    for i in 0..4 {
+        let p = pose.project(&obj_pts[i], intrinsics);
+        let res = Vector2::new(corners[i][0] - p[0], corners[i][1] - p[1]);
+        let s = res.dot(&(info_matrices[i] * res)).sqrt();
+        if s <= k {
+            cost += 0.5 * s * s;
+        } else {
+            cost += k * (s - 0.5 * k);
+        }
+    }
+    cost
+}
+
+/// Refine the pose by minimizing a Huber-robust Mahalanobis objective.
+///
+/// This upgrades the previous pure-L2 weighted LM with three improvements that mirror the
+/// Fast mode solver, adapted to the anisotropic information-matrix setting:
+///
+/// 1. **Huber-on-Mahalanobis M-Estimator (IRLS):** Computes the Mahalanobis distance
+///    `s_i = √(rᵢᵀ Σᵢ⁻¹ rᵢ)` and applies weight `w(s_i) = min(1, k/s_i)` (`k = 1.345`,
+///    covering 95% of Gaussian noise). The augmented matrix `W̃_i = w(s_i) · Σᵢ⁻¹` replaces
+///    the pure information matrix, capping the gradient a single outlier corner can exert.
+///
+/// 2. **Marquardt Diagonal Scaling + Nielsen Trust-Region:** `D = diag(JᵀW̃J)` damps each
+///    DOF by its own curvature. Nielsen's gain ratio `ρ = actual/predicted` controls lambda
+///    with a smooth cubic schedule on accept and nu-doubling backoff on reject.
+///
+/// 3. **Correct Covariance Extraction:** Returns `(JᵀW̃J)⁻¹` at the converged pose — the
+///    Cramér–Rao lower bound on pose uncertainty — instead of the previous ad-hoc MSE scaling.
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub(crate) fn refine_pose_lm_weighted(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
@@ -98,136 +214,121 @@ pub(crate) fn refine_pose_lm_weighted(
     initial_pose: Pose,
     corner_covariances: &[Matrix2<f64>; 4],
 ) -> (Pose, [[f64; 6]; 6]) {
+    // Huber threshold in Mahalanobis units.
+    // k = 1.345 gives 95% asymptotic efficiency under Gaussian noise (standard choice).
+    const HUBER_K: f64 = 1.345;
+
     let mut pose = initial_pose;
-    let s = tag_size;
+    let s_tag = tag_size;
     // Modern OpenCV 4.6+ Convention: Origin at Top-Left, CW winding
     let obj_pts = [
-        Vector3::new(0.0, 0.0, 0.0), // 0: Top-Left
-        Vector3::new(s, 0.0, 0.0),   // 1: Top-Right
-        Vector3::new(s, s, 0.0),     // 2: Bottom-Right
-        Vector3::new(0.0, s, 0.0),   // 3: Bottom-Left
+        Vector3::new(0.0, 0.0, 0.0),     // 0: Top-Left
+        Vector3::new(s_tag, 0.0, 0.0),   // 1: Top-Right
+        Vector3::new(s_tag, s_tag, 0.0), // 2: Bottom-Right
+        Vector3::new(0.0, s_tag, 0.0),   // 3: Bottom-Left
     ];
 
-    let mut info_matrices = [Matrix2::zeros(); 4];
+    // W_i = Σ_i^{-1}: precompute pure structure-tensor information matrices.
+    let mut info_matrices = [Matrix2::<f64>::zeros(); 4];
     for i in 0..4 {
-        match corner_covariances[i].try_inverse() {
-            Some(inv) => info_matrices[i] = inv,
-            None => info_matrices[i] = Matrix2::identity(),
-        }
+        info_matrices[i] = corner_covariances[i]
+            .try_inverse()
+            .unwrap_or(Matrix2::identity());
     }
 
-    let mut lambda = 0.01;
-    let mut current_err =
-        weighted_reprojection_error(intrinsics, corners, &obj_pts, &pose, &info_matrices);
+    // Nielsen trust-region state.
+    let mut lambda = 1e-3_f64;
+    let mut nu = 2.0_f64;
+    let mut current_cost =
+        huber_mahalanobis_cost(intrinsics, corners, &obj_pts, &pose, &info_matrices, HUBER_K);
 
-    let mut jtj = Matrix6::<f64>::zeros();
+    for _ in 0..20 {
+        let (jtj, jtr) =
+            build_normal_equations(intrinsics, corners, &obj_pts, &pose, &info_matrices, HUBER_K);
 
-    for _ in 0..5 {
-        jtj = Matrix6::<f64>::zeros();
-        let mut jtr = Vector6::<f64>::zeros();
-
-        for i in 0..4 {
-            let p_world = obj_pts[i];
-            let p_cam = pose.rotation * p_world + pose.translation;
-            let z_inv = 1.0 / p_cam.z;
-            let z_inv2 = z_inv * z_inv;
-
-            let u_est = intrinsics.fx * p_cam.x * z_inv + intrinsics.cx;
-            let v_est = intrinsics.fy * p_cam.y * z_inv + intrinsics.cy;
-
-            let res = Vector2::new(corners[i][0] - u_est, corners[i][1] - v_est);
-
-            let du_dp = Vector3::new(
-                intrinsics.fx * z_inv,
-                0.0,
-                -intrinsics.fx * p_cam.x * z_inv2,
-            );
-            let dv_dp = Vector3::new(
-                0.0,
-                intrinsics.fy * z_inv,
-                -intrinsics.fy * p_cam.y * z_inv2,
-            );
-
-            let mut jac_i = nalgebra::SMatrix::<f64, 2, 6>::zeros();
-
-            // Row 0 (u)
-            jac_i[(0, 0)] = du_dp[0];
-            jac_i[(0, 1)] = du_dp[1];
-            jac_i[(0, 2)] = du_dp[2];
-            jac_i[(0, 3)] = du_dp[1] * p_cam.z - du_dp[2] * p_cam.y;
-            jac_i[(0, 4)] = du_dp[2] * p_cam.x - du_dp[0] * p_cam.z;
-            jac_i[(0, 5)] = du_dp[0] * p_cam.y - du_dp[1] * p_cam.x;
-
-            // Row 1 (v)
-            jac_i[(1, 0)] = dv_dp[0];
-            jac_i[(1, 1)] = dv_dp[1];
-            jac_i[(1, 2)] = dv_dp[2];
-            jac_i[(1, 3)] = dv_dp[1] * p_cam.z - dv_dp[2] * p_cam.y;
-            jac_i[(1, 4)] = dv_dp[2] * p_cam.x - dv_dp[0] * p_cam.z;
-            jac_i[(1, 5)] = dv_dp[0] * p_cam.y - dv_dp[1] * p_cam.x;
-
-            let weighted_jac = jac_i.transpose() * info_matrices[i];
-
-            jtj += weighted_jac * jac_i;
-            jtr += weighted_jac * res;
+        // Gate 1: gradient convergence — solver is at a stationary point.
+        if jtr.amax() < 1e-8 {
+            break;
         }
 
+        // Marquardt diagonal scaling: D = diag(J^T W̃ J).
+        let d_diag = Vector6::new(
+            jtj[(0, 0)].max(1e-8),
+            jtj[(1, 1)].max(1e-8),
+            jtj[(2, 2)].max(1e-8),
+            jtj[(3, 3)].max(1e-8),
+            jtj[(4, 4)].max(1e-8),
+            jtj[(5, 5)].max(1e-8),
+        );
+
+        // Solve (J^T W̃ J + λD) δξ = J^T W̃ r
         let mut jtj_damped = jtj;
         for k in 0..6 {
-            jtj_damped[(k, k)] += lambda;
+            jtj_damped[(k, k)] += lambda * d_diag[k];
         }
 
-        let decomposition = jtj_damped.cholesky();
-        let delta = if let Some(chol) = decomposition {
+        let delta = if let Some(chol) = jtj_damped.cholesky() {
             chol.solve(&jtr)
         } else {
+            // Ill-conditioned; increase damping and retry.
             lambda *= 10.0;
+            nu = 2.0;
             continue;
         };
 
-        let update_twist = Vector3::new(delta[3], delta[4], delta[5]);
-        let update_trans = Vector3::new(delta[0], delta[1], delta[2]);
-        let update_rot = nalgebra::Rotation3::new(update_twist).matrix().into_owned();
+        // Nielsen gain ratio: ρ = actual / predicted cost reduction.
+        // Predicted: L(0) − L(δ) = ½ δᵀ(λD·δ + J^T W̃ r)
+        let predicted_reduction =
+            0.5 * delta.dot(&(lambda * d_diag.component_mul(&delta) + jtr));
 
-        let new_rot = update_rot * pose.rotation;
-        let new_trans = update_rot * pose.translation + update_trans;
-        let new_pose = Pose::new(new_rot, new_trans);
+        // SE(3) exponential-map update.
+        let twist = Vector3::new(delta[3], delta[4], delta[5]);
+        let trans_update = Vector3::new(delta[0], delta[1], delta[2]);
+        let rot_update = nalgebra::Rotation3::new(twist).matrix().into_owned();
+        let new_pose = Pose::new(
+            rot_update * pose.rotation,
+            rot_update * pose.translation + trans_update,
+        );
 
-        let new_err =
-            weighted_reprojection_error(intrinsics, corners, &obj_pts, &new_pose, &info_matrices);
+        let new_cost = huber_mahalanobis_cost(
+            intrinsics,
+            corners,
+            &obj_pts,
+            &new_pose,
+            &info_matrices,
+            HUBER_K,
+        );
+        let actual_reduction = current_cost - new_cost;
 
-        if new_err < current_err {
-            pose = new_pose;
-            current_err = new_err;
-            lambda *= 0.1;
+        let rho = if predicted_reduction > 1e-12 {
+            actual_reduction / predicted_reduction
         } else {
-            lambda *= 10.0;
-        }
+            0.0
+        };
 
-        if delta.norm() < 1e-6 {
-            break;
+        if rho > 0.0 {
+            // Accept: shrink lambda toward Gauss-Newton regime.
+            pose = new_pose;
+            current_cost = new_cost;
+            lambda *= (1.0 - (2.0 * rho - 1.0).powi(3)).max(1.0 / 3.0);
+            nu = 2.0;
+            // Gate 2: step size convergence.
+            if delta.norm() < 1e-7 {
+                break;
+            }
+        } else {
+            // Reject: grow lambda with doubling backoff.
+            lambda *= nu;
+            nu *= 2.0;
         }
     }
 
-    let mse = current_err.max(1e-9) / 2.0; // Reduced dof?
-
-    let covariance = jtj.try_inverse().unwrap_or(Matrix6::identity()).scale(mse);
+    // Covariance: Σ_pose = (J^T W̃ J)^{-1} at the converged pose.
+    // This is the Cramér–Rao lower bound on pose uncertainty given the Huber-weighted
+    // information matrices. No ad-hoc MSE scaling — W_i already encodes the noise model.
+    let (jtj_final, _) =
+        build_normal_equations(intrinsics, corners, &obj_pts, &pose, &info_matrices, HUBER_K);
+    let covariance = jtj_final.try_inverse().unwrap_or(Matrix6::identity());
 
     (pose, covariance.into())
-}
-
-fn weighted_reprojection_error(
-    intrinsics: &CameraIntrinsics,
-    corners: &[[f64; 2]; 4],
-    obj_pts: &[Vector3<f64>; 4],
-    pose: &Pose,
-    info_matrices: &[Matrix2<f64>; 4],
-) -> f64 {
-    let mut err = 0.0;
-    for i in 0..4 {
-        let p = pose.project(&obj_pts[i], intrinsics);
-        let res = Vector2::new(corners[i][0] - p[0], corners[i][1] - p[1]);
-        err += res.dot(&(info_matrices[i] * res));
-    }
-    err
 }
