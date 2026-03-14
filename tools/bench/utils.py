@@ -1,6 +1,7 @@
 import csv
+import json
 import tarfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from pupil_apriltags import Detector as AprilTagDetector  # type: ignore
 
 ICRA_REPO_ID = "NoeFontana/apriltag-validation-data"
 ICRA_CACHE_DIR = Path("tests/data/icra2020")
+HUB_CACHE_DIR = Path("tests/data/hub_cache")
 
 
 class FamilyMapper:
@@ -60,19 +62,14 @@ class TagGroundTruth:
     tag_id: int
     corners: np.ndarray  # 4x2 float32
     fully_visible: bool = True
+    # 6-DOF pose if available: [tx, ty, tz, qx, qy, qz, qw] (Scalar-Last)
+    pose: np.ndarray | None = None
 
 
 @dataclass
-class EvalResult:
-    image_name: str
-    gt_tags: list[TagGroundTruth] = field(default_factory=list)
-    detections: list[dict[str, Any]] = field(default_factory=list)
-    correct: int = 0
-    false_positives: int = 0
-    corner_error_sum: float = 0.0
-    corner_error_count: int = 0
-    num_candidates: int = 0
-    latency_ms: float = 0.0
+class DatasetMetadata:
+    intrinsics: locus.CameraIntrinsics | None = None
+    tag_size: float | None = None
 
 
 class DatasetLoader:
@@ -111,7 +108,18 @@ class DatasetLoader:
 
     def find_datasets(
         self, scenario: str, filter_types: list[str]
-    ) -> list[tuple[str, Path, dict[str, list[TagGroundTruth]]]]:
+    ) -> list[tuple[str, Path, dict[str, list[TagGroundTruth]], DatasetMetadata]]:
+        # 1. Check for Hub (render-tag) dataset first (rich_truth.json)
+        hub_dir = self.icra_dir / scenario
+        if not hub_dir.exists():
+            hub_dir = HUB_CACHE_DIR / scenario
+
+        if hub_dir.exists():
+            rich_truth = hub_dir / "rich_truth.json"
+            if rich_truth.exists():
+                return self._load_hub_dataset(hub_dir, scenario)
+
+        # 2. Fallback to ICRA (CSV) dataset
         search_dir = self.icra_dir / scenario
         if not search_dir.exists():
             search_dir = self.icra_dir
@@ -140,8 +148,74 @@ class DatasetLoader:
 
                 if match:
                     name = f"{scenario}/{d_name}" if subdir != parent_dir else f"{scenario}/root"
-                    results.append((name, subdir, gt_data))
+
+                    # Estimated ICRA defaults if not present
+                    meta = DatasetMetadata(
+                        intrinsics=locus.CameraIntrinsics(fx=736.6, fy=736.6, cx=960.0, cy=540.0),
+                        tag_size=0.16,
+                    )
+                    results.append((name, subdir, gt_data, meta))
         return results
+
+    def _load_hub_dataset(
+        self, hub_dir: Path, scenario: str
+    ) -> list[tuple[str, Path, dict[str, list[TagGroundTruth]], DatasetMetadata]]:
+        """Loads Hub/render-tag datasets (rich_truth.json)."""
+        rich_path = hub_dir / "rich_truth.json"
+        prov_path = hub_dir / "provenance.json"
+        images_dir = hub_dir / "images"
+
+        with open(rich_path) as f:
+            entries = json.load(f)
+
+        gt_map: dict[str, list[TagGroundTruth]] = {}
+        for entry in entries:
+            img_name = entry.get("image_filename") or entry.get("image_id")
+            if img_name is None:
+                continue
+
+            if not img_name.endswith(".png"):
+                img_name = f"{img_name}.png"
+
+            # Map corners
+            corners = np.array(entry["corners"], dtype=np.float32)
+
+            # Map pose [tx, ty, tz, qx, qy, qz, qw]
+            # Hub quaternion is [w, x, y, z]
+            w, x, y, z = entry["rotation_quaternion"]
+            pos = entry["position"]
+            pose = np.array([pos[0], pos[1], pos[2], x, y, z, w], dtype=np.float32)
+
+            gt_tags = gt_map.setdefault(img_name, [])
+            gt_tags.append(TagGroundTruth(tag_id=int(entry["tag_id"]), corners=corners, pose=pose))
+
+        # Load metadata
+        meta = DatasetMetadata()
+        if prov_path.exists():
+            with open(prov_path) as f:
+                prov = json.load(f)
+
+            if "camera_intrinsics" in prov:
+                k = prov["camera_intrinsics"]
+                meta.intrinsics = locus.CameraIntrinsics(
+                    fx=k["fx"], fy=k["fy"], cx=k["cx"], cy=k["cy"]
+                )
+
+            if "tag_size_mm" in prov:
+                meta.tag_size = prov["tag_size_mm"] / 1000.0
+
+        # Fallback to per-detection metadata if global missing
+        if entries and (meta.intrinsics is None or meta.tag_size is None):
+            first = entries[0]
+            if meta.intrinsics is None and "k_matrix" in first:
+                k = first["k_matrix"]
+                meta.intrinsics = locus.CameraIntrinsics(
+                    fx=k[0][0], fy=k[1][1], cx=k[0][2], cy=k[1][2]
+                )
+            if meta.tag_size is None and "tag_size_mm" in first:
+                meta.tag_size = first["tag_size_mm"] / 1000.0
+
+        return [(scenario, images_dir, gt_map, meta)]
 
     def _parse_csv(self, csv_file: Path) -> dict[str, list[TagGroundTruth]]:
         """Parses ICRA 2020 ground truth CSV files."""
@@ -280,7 +354,12 @@ class LibraryWrapper:
     def __init__(self, name: str):
         self.name = name
 
-    def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
+    def detect(
+        self,
+        img: np.ndarray,
+        intrinsics: locus.CameraIntrinsics | None = None,
+        tag_size: float | None = None,
+    ) -> tuple[list[dict[str, Any]], Any]:
         """Detect tags in an image.
         Returns:
             detections: List of dicts with keys 'id', 'center', 'corners', 'hamming', 'margin'
@@ -326,8 +405,13 @@ class LocusWrapper(LibraryWrapper):
         else:
             self.detector = locus.Detector(decimation=decimation, families=families)
 
-    def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
-        batch = self.detector.detect(img)
+    def detect(
+        self,
+        img: np.ndarray,
+        intrinsics: locus.CameraIntrinsics | None = None,
+        tag_size: float | None = None,
+    ) -> tuple[list[dict[str, Any]], Any]:
+        batch = self.detector.detect(img, intrinsics=intrinsics, tag_size=tag_size)
 
         serializable = []
         for i in range(len(batch)):
@@ -366,7 +450,12 @@ class OpenCVWrapper(LibraryWrapper):
         else:
             self.detector = None
 
-    def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
+    def detect(
+        self,
+        img: np.ndarray,
+        intrinsics: locus.CameraIntrinsics | None = None,
+        tag_size: float | None = None,
+    ) -> tuple[list[dict[str, Any]], Any]:
         if self.detector is None:
             return [], None
         corners, ids, _ = self.detector.detectMarkers(img)
@@ -403,7 +492,12 @@ class AprilTagWrapper(LibraryWrapper):
         else:
             self.detector = None
 
-    def detect(self, img: np.ndarray) -> tuple[list[dict[str, Any]], Any]:
+    def detect(
+        self,
+        img: np.ndarray,
+        intrinsics: locus.CameraIntrinsics | None = None,
+        tag_size: float | None = None,
+    ) -> tuple[list[dict[str, Any]], Any]:
         if self.detector is None:
             return [], None
         raw_dets = self.detector.detect(img)
