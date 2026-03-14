@@ -14,4 +14,5 @@
 * **Modern Toolchain:** We embrace the bleeding edge of tooling to improve developer velocity: `uv` for Python environments, `cargo nextest` for parallel testing, and `maturin` for seamless cross-language builds.
 *   **Performance Observability:** We maintain nanosecond-level visibility into the pipeline without sacrificing production speed. By leveraging static `tracing` spans and compile-time erasure, we ensure that performance regressions are immediately detectable during profiling while maintaining zero runtime overhead in deployment.
 *   **Mathematical Rigor:** Sub-pixel localization is a science of offsets. We strictly adhere to the **+0.5 pixel center rule** and center-aware decimation mapping to ensure that our synthetic benchmarks and real-world optimizations are numerically consistent with standard vision libraries (OpenCV/Blender).
+*   **Zero-Overhead Debugging:** Our commitment to performance extends to our diagnostic tools. The Rerun-based debug pipeline follows a "pay-only-when-using" model: zero runtime impact on the production hot-path, arena-allocated ephemeral telemetry, and zero-copy data views.
 

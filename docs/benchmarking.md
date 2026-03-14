@@ -157,9 +157,11 @@ For diagnosing recall issues or tuning parameters, use the specialized visualiza
 uv run tools/cli.py visualize --scenario forward --limit 5
 ```
 
+Locus provides a high-fidelity debugging pipeline integrated with the [Rerun SDK](https://rerun.io). 
+
 ### Features
-- **Pipeline Stages**: View the output of the binarizer and segmentation engine side-by-side with raw imagery.
-- **Candidate Inspection**: See every quad candidate found before Hamming rejection.
-- **Failure Diagnosis**: The tool automatically identifies tags in the ground truth that were missed and logs:
-    - The reason for rejection (e.g., Hamming distance too high).
-    - The 6x6 extracted bit grid for visual inspection of the bit-sampling quality.
+- **Convergence Tracking**: Visualize subpixel jitter (yellow arrows) and reprojection errors (scalar plots) for every tag.
+- **Failure Diagnosis**: Differentiate between geometric rejections (Red) and decoding failures (Orange).
+- **Remote & Edge Ready**: Debug edge devices remotely using `--rerun-addr` to stream to a local Rerun viewer.
+
+For a comprehensive walkthrough, see the **[How-to Guide: Debugging with Rerun](./how-to/debug_with_rerun.md)**.
