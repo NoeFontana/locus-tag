@@ -303,6 +303,33 @@ impl Detector {
         dict.set_item("corners", corners_arr)?;
         dict.set_item("error_rates", error_rates_arr)?;
 
+        // Rejected Quads: (M, 4, 2)
+        let m = detections.rejected_corners.len();
+        let rejected_arr = unsafe { PyArray3::<f32>::new(py, [m, 4, 2], false) };
+        unsafe {
+            let rejected_slice = rejected_arr
+                .as_slice_mut()
+                .expect("failed to get mutable slice for rejected_corners");
+            rejected_slice.copy_from_slice(std::slice::from_raw_parts(
+                detections.rejected_corners.as_ptr().cast::<f32>(),
+                m * 8,
+            ));
+        }
+        dict.set_item("rejected_corners", rejected_arr)?;
+
+        // Rejected Error Rates: (M,)
+        let rejected_error_rates_arr = unsafe { PyArray1::<f32>::new(py, [m], false) };
+        unsafe {
+            let rejected_error_rates_slice = rejected_error_rates_arr
+                .as_slice_mut()
+                .expect("failed to get mutable slice for rejected_error_rates");
+            rejected_error_rates_slice.copy_from_slice(std::slice::from_raw_parts(
+                detections.rejected_error_rates.as_ptr(),
+                m,
+            ));
+        }
+        dict.set_item("rejected_error_rates", rejected_error_rates_arr)?;
+
         // Poses: Vectorized (N, 7) layout: [tx, ty, tz, qx, qy, qz, qw]
         if intrinsics.is_some() && tag_size.is_some() {
             let poses_arr = unsafe { PyArray2::<f32>::new(py, [n, 7], false) };
@@ -385,6 +412,31 @@ impl Detector {
 
                 tel_dict.set_item("binarized", &binarized_arr)?;
                 tel_dict.set_item("threshold_map", &threshold_arr)?;
+
+                // Subpixel Jitter
+                if !telemetry.subpixel_jitter_ptr.is_null() && telemetry.num_jitter > 0 {
+                    let nj = telemetry.num_jitter;
+                    // Jitter is [nj, 4, 2]
+                    let jitter_arr = PyArray3::<f32>::new(py, [nj, 4, 2], false);
+                    let jitter_slice = jitter_arr
+                        .as_slice_mut()
+                        .expect("Failed to get jitter slice");
+                    let src_jitter =
+                        std::slice::from_raw_parts(telemetry.subpixel_jitter_ptr, nj * 8);
+                    jitter_slice.copy_from_slice(src_jitter);
+                    tel_dict.set_item("subpixel_jitter", &jitter_arr)?;
+                }
+
+                // Reprojection Errors
+                if !telemetry.reprojection_errors_ptr.is_null() && telemetry.num_reprojection > 0 {
+                    let nr = telemetry.num_reprojection;
+                    let repro_arr = PyArray1::<f32>::new(py, [nr], false);
+                    let repro_slice = repro_arr.as_slice_mut().expect("Failed to get repro slice");
+                    let src_repro =
+                        std::slice::from_raw_parts(telemetry.reprojection_errors_ptr, nr);
+                    repro_slice.copy_from_slice(src_repro);
+                    tel_dict.set_item("reprojection_errors", &repro_arr)?;
+                }
             }
             dict.set_item("telemetry", tel_dict)?;
         } else {

@@ -41,6 +41,8 @@ class DetectionBatch:
     error_rates: np.ndarray  # Shape: (N,), Dtype: float32
     poses: np.ndarray | None = None  # Shape: (N, 7), Dtype: float32. [tx, ty, tz, qx, qy, qz, qw]
     telemetry: "PipelineTelemetry | None" = None
+    rejected_corners: np.ndarray | None = None  # Shape: (M, 4, 2), Dtype: float32
+    rejected_error_rates: np.ndarray | None = None  # Shape: (M,), Dtype: float32
 
     @property
     def centers(self) -> np.ndarray:
@@ -63,6 +65,8 @@ class PipelineTelemetry:
 
     binarized: np.ndarray  # Shape: (H, W), Dtype: uint8
     threshold_map: np.ndarray  # Shape: (H, W), Dtype: uint8
+    subpixel_jitter: np.ndarray | None = None  # Shape: (N, 4, 2), Dtype: float32
+    reprojection_errors: np.ndarray | None = None  # Shape: (N,), Dtype: float32
 
 
 class Detector:
