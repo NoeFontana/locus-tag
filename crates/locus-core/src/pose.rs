@@ -333,13 +333,33 @@ fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
     Some([pose_a, pose_b])
 }
 
-/// Use Levenberg-Marquardt to refine the pose by minimizing reprojection error.
+/// Use a Manifold-Aware Trust-Region Levenberg-Marquardt solver to refine the pose.
+///
+/// This upgrades the classic LM recipe to a SOTA production solver with three key improvements:
+///
+/// 1. **Huber M-Estimator (IRLS):** Wraps the reprojection residual in a Huber loss to
+///    dynamically down-weight corners with large errors (e.g. from motion blur or occlusion),
+///    preventing a single bad corner from corrupting the entire solution.
+///
+/// 2. **Marquardt Diagonal Scaling:** Damps each parameter proportionally to its own curvature
+///    via `D = diag(J^T W J)`, instead of a uniform identity matrix. This correctly handles the
+///    scale mismatch between rotational (radians) and translational (meters) parameters.
+///
+/// 3. **Nielsen's Gain Ratio Control:** Evaluates step quality using the ratio of actual vs.
+///    predicted cost reduction. Good steps shrink `lambda` aggressively (Gauss-Newton speed),
+///    while bad steps grow it with doubling-`nu` backoff (gradient descent safety). This is
+///    strictly superior to the heuristic `lambda *= 10 / 0.1` approach.
+#[allow(clippy::too_many_lines)]
 fn refine_pose_lm(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
     tag_size: f64,
     initial_pose: Pose,
 ) -> Pose {
+    // Huber loss threshold (pixels). Residuals beyond this are treated as outliers.
+    // 1.5px is a standard robust threshold for sub-pixel corner detectors.
+    const HUBER_DELTA: f64 = 1.5;
+
     let mut pose = initial_pose;
     let s = tag_size;
     // Modern OpenCV 4.6+ Convention: Origin at Top-Left, CW winding
@@ -350,19 +370,15 @@ fn refine_pose_lm(
         Vector3::new(0.0, s, 0.0),   // 3: Bottom-Left
     ];
 
-    // Damping factor lambda
-    let mut lambda = 0.01;
-    let mut current_err = reprojection_error(intrinsics, corners, &obj_pts, &pose);
+    // Nielsen's trust-region state. Start with small damping to encourage Gauss-Newton steps.
+    let mut lambda = 1e-3_f64;
+    let mut nu = 2.0_f64;
+    let mut current_cost = huber_cost(intrinsics, corners, &obj_pts, &pose, HUBER_DELTA);
 
-    // 3-5 iterations is usually enough for "Polish"
-    // Reduced to 4 for lower latency while maintaining accuracy.
-    for _ in 0..4 {
-        // Build Jacobian J (8x6) and residual r (8x1)
-        // 4 points * 2 coords = 8 residuals.
-        // 6 params (3 rot (lie algebra), 3 trans).
-        // J^T J (6x6) and J^T r (6x1).
-
-        // For "Zero Overhead" we construct JtJ directly accumulated.
+    // Allow up to 20 iterations; typically exits in 3-6 via the convergence gates below.
+    for _ in 0..20 {
+        // Build J^T W J (6x6) and J^T W r (6x1) with Huber IRLS weights.
+        // Layout: delta = [tx, ty, tz, rx, ry, rz] (translation then rotation in se(3)).
         let mut jtj = Matrix6::<f64>::zeros();
         let mut jtr = Vector6::<f64>::zeros();
 
@@ -372,14 +388,22 @@ fn refine_pose_lm(
             let z_inv = 1.0 / p_cam.z;
             let z_inv2 = z_inv * z_inv;
 
-            // Project: u = fx * x/z + cx
             let u_est = intrinsics.fx * p_cam.x * z_inv + intrinsics.cx;
             let v_est = intrinsics.fy * p_cam.y * z_inv + intrinsics.cy;
 
             let res_u = corners[i][0] - u_est;
             let res_v = corners[i][1] - v_est;
 
-            // Jacobian of projection wrt Camera Point (du/dP_cam) (2x3)
+            // Huber IRLS weight: w=1 inside the trust region, w=delta/r outside.
+            // Applied per 2D point (geometric pixel distance).
+            let r_norm = (res_u * res_u + res_v * res_v).sqrt();
+            let w = if r_norm <= HUBER_DELTA {
+                1.0
+            } else {
+                HUBER_DELTA / r_norm
+            };
+
+            // Jacobian of projection wrt Camera Point (du/dP_cam) (2x3):
             // [ fx/z   0     -fx*x/z^2 ]
             // [ 0      fy/z  -fy*y/z^2 ]
             let du_dp = Vector3::new(
@@ -393,23 +417,12 @@ fn refine_pose_lm(
                 -intrinsics.fy * p_cam.y * z_inv2,
             );
 
-            // Jacobian of Camera Point wrt Pose Update (Lie Algebra) (3x6)
-            // d(exp(w)*P)/d(xi) at xi=0
-            // [ I  |  -[P]_x ]
-            // [ 1 0 0   0   z  -y ]
-            // [ 0 1 0  -z   0   x ]
-            // [ 0 0 1   y  -x   0 ]
-            //
-            // We compose du/dP * dP/dxi -> 1x6 row.
-
+            // Jacobian of Camera Point wrt Pose Update (Lie Algebra) (3x6):
+            // d(exp(w)*P)/d(xi) at xi=0 = [ I | -[P]_x ]
             let mut row_u = Vector6::zeros();
-            // Translation part (du/dp * I)
             row_u[0] = du_dp[0];
             row_u[1] = du_dp[1];
             row_u[2] = du_dp[2];
-            // Rotation part (du/dp * Skew(P))
-            // Skew(P) = [0 -z y; z 0 -x; -y x 0]
-            // du_dp * col0(S) = du_dp.y * z - du_dp.z * y
             row_u[3] = du_dp[1] * p_cam.z - du_dp[2] * p_cam.y;
             row_u[4] = du_dp[2] * p_cam.x - du_dp[0] * p_cam.z;
             row_u[5] = du_dp[0] * p_cam.y - du_dp[1] * p_cam.x;
@@ -422,57 +435,114 @@ fn refine_pose_lm(
             row_v[4] = dv_dp[2] * p_cam.x - dv_dp[0] * p_cam.z;
             row_v[5] = dv_dp[0] * p_cam.y - dv_dp[1] * p_cam.x;
 
-            // Accumulate JtJ and Jtr
-            // JtJ += row^T * row
-            jtj += row_u * row_u.transpose();
-            jtj += row_v * row_v.transpose();
-
-            jtr += row_u * res_u;
-            jtr += row_v * res_v;
+            // Accumulate J^T W J and J^T W r with Huber weight.
+            jtj += w * (row_u * row_u.transpose() + row_v * row_v.transpose());
+            jtr += w * (row_u * res_u + row_v * res_v);
         }
 
-        // Dampen: (JtJ + lambda*I) delta = Jtr
+        // Gate 1: Gradient convergence — solver is at a stationary point.
+        if jtr.amax() < 1e-8 {
+            break;
+        }
+
+        // Marquardt diagonal scaling: D = diag(J^T W J).
+        // Damps each DOF proportionally to its own curvature, correcting for the
+        // scale mismatch between rotational and translational gradient magnitudes.
+        let d_diag = Vector6::new(
+            jtj[(0, 0)].max(1e-8),
+            jtj[(1, 1)].max(1e-8),
+            jtj[(2, 2)].max(1e-8),
+            jtj[(3, 3)].max(1e-8),
+            jtj[(4, 4)].max(1e-8),
+            jtj[(5, 5)].max(1e-8),
+        );
+
+        // Solve (J^T W J + lambda * D) delta = J^T W r
+        let mut jtj_damped = jtj;
         for k in 0..6 {
-            jtj[(k, k)] += lambda; // Levenberg
+            jtj_damped[(k, k)] += lambda * d_diag[k];
         }
 
-        // Solve
-        let decomposition = jtj.cholesky();
-        let delta = if let Some(chol) = decomposition {
+        let delta = if let Some(chol) = jtj_damped.cholesky() {
             chol.solve(&jtr)
         } else {
-            // Ill-conditioned, increase lambda and skip
+            // System is ill-conditioned; increase damping and retry.
             lambda *= 10.0;
+            nu = 2.0;
             continue;
         };
 
-        // Update Pose
-        let update_twist = Vector3::new(delta[3], delta[4], delta[5]);
-        let update_trans = Vector3::new(delta[0], delta[1], delta[2]);
+        // Nielsen's gain ratio: rho = actual_reduction / predicted_reduction.
+        // Predicted reduction from the quadratic model (Madsen et al. eq 3.9):
+        // L(0) - L(delta) = 0.5 * delta^T (lambda * D * delta + J^T W r)
+        let predicted_reduction =
+            0.5 * delta.dot(&(lambda * d_diag.component_mul(&delta) + jtr));
 
-        // Exp map for rotation update
-        let update_rot = nalgebra::Rotation3::new(update_twist).matrix().into_owned();
+        // Evaluate new pose via SE(3) exponential map (manifold-safe update).
+        let twist = Vector3::new(delta[3], delta[4], delta[5]);
+        let trans_update = Vector3::new(delta[0], delta[1], delta[2]);
+        let rot_update = nalgebra::Rotation3::new(twist).matrix().into_owned();
+        let new_pose = Pose::new(
+            rot_update * pose.rotation,
+            rot_update * pose.translation + trans_update,
+        );
 
-        let new_rot = update_rot * pose.rotation;
-        let new_trans = update_rot * pose.translation + update_trans;
-        let new_pose = Pose::new(new_rot, new_trans);
+        let new_cost = huber_cost(intrinsics, corners, &obj_pts, &new_pose, HUBER_DELTA);
+        let actual_reduction = current_cost - new_cost;
 
-        let new_err = reprojection_error(intrinsics, corners, &obj_pts, &new_pose);
-
-        if new_err < current_err {
-            pose = new_pose;
-            current_err = new_err;
-            lambda *= 0.1;
+        let rho = if predicted_reduction > 1e-12 {
+            actual_reduction / predicted_reduction
         } else {
-            lambda *= 10.0;
-        }
+            0.0
+        };
 
-        if delta.norm() < 1e-6 {
-            break;
+        if rho > 0.0 {
+            // Accept step: update state and shrink lambda toward Gauss-Newton regime.
+            pose = new_pose;
+            current_cost = new_cost;
+            // Nielsen's update rule: lambda scales by max(1/3, 1 - (2*rho - 1)^3).
+            lambda *= (1.0 - (2.0 * rho - 1.0).powi(3)).max(1.0 / 3.0);
+            nu = 2.0;
+
+            // Gate 2: Step size convergence — pose has stopped moving.
+            if delta.norm() < 1e-7 {
+                break;
+            }
+        } else {
+            // Reject step: grow lambda with doubling backoff to stay within trust region.
+            lambda *= nu;
+            nu *= 2.0;
         }
     }
 
     pose
+}
+
+/// Computes the total Huber robust cost over all four corner reprojection residuals.
+///
+/// The Huber function is quadratic for `|r| <= delta` (L2 regime) and linear beyond
+/// (L1 regime), providing continuous differentiability at the transition point.
+fn huber_cost(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    obj_pts: &[Vector3<f64>; 4],
+    pose: &Pose,
+    delta: f64,
+) -> f64 {
+    let mut cost = 0.0;
+    for i in 0..4 {
+        let p = pose.project(&obj_pts[i], intrinsics);
+        let r_u = corners[i][0] - p[0];
+        let r_v = corners[i][1] - p[1];
+        // Huber on the 2D geometric distance, consistent with the IRLS weight computation.
+        let r_norm = (r_u * r_u + r_v * r_v).sqrt();
+        if r_norm <= delta {
+            cost += 0.5 * r_norm * r_norm;
+        } else {
+            cost += delta * (r_norm - 0.5 * delta);
+        }
+    }
+    cost
 }
 
 fn reprojection_error(
