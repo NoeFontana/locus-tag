@@ -142,8 +142,8 @@ pub fn estimate_tag_pose(
         return (None, None);
     };
 
-    // 5. Disambiguation: Choose the pose with lower reprojection error.
-    let best_pose = find_best_pose(intrinsics, corners, tag_size, &candidates);
+    // 5. Disambiguation: geometric gate → photometric fallback.
+    let best_pose = find_best_pose(intrinsics, corners, tag_size, &candidates, img);
 
     // 6. Refinement: Levenberg-Marquardt (LM)
     match (mode, img) {
@@ -558,30 +558,135 @@ fn reprojection_error(
     err_sq
 }
 
+/// Geometric gate threshold: sum-of-squares reprojection error difference across 4 corners.
+/// 4 corners × (1.5 px)² = 9.0. When |e_a − e_b| exceeds this, foreshortening is severe
+/// enough that geometry alone resolves the Necker ambiguity definitively.
+const REPRO_GATE_SQ_TOTAL: f64 = 4.0 * 1.5 * 1.5;
+
 fn find_best_pose(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
     tag_size: f64,
     candidates: &[Pose; 2],
+    img: Option<&ImageView>,
 ) -> Pose {
-    // Need physical points for reprojection (Modern OpenCV 4.6+ Convention: Top-Left origin)
+    // Physical object points: Modern OpenCV 4.6+ convention (top-left origin, CW winding).
     let s = tag_size;
     let obj_pts = [
-        Vector3::new(0.0, 0.0, 0.0), // 0: Top-Left
-        Vector3::new(s, 0.0, 0.0),   // 1: Top-Right
-        Vector3::new(s, s, 0.0),     // 2: Bottom-Right
-        Vector3::new(0.0, s, 0.0),   // 3: Bottom-Left
+        Vector3::new(0.0, 0.0, 0.0), // Top-Left
+        Vector3::new(s, 0.0, 0.0),   // Top-Right
+        Vector3::new(s, s, 0.0),     // Bottom-Right
+        Vector3::new(0.0, s, 0.0),   // Bottom-Left
     ];
 
     let err0 = reprojection_error(intrinsics, corners, &obj_pts, &candidates[0]);
     let err1 = reprojection_error(intrinsics, corners, &obj_pts, &candidates[1]);
 
-    // Choose the candidate with lower reprojection error.
-    if err1 < err0 {
-        candidates[1]
-    } else {
-        candidates[0]
+    // Stage 1 — Geometric gate.
+    // If the reprojection error difference is large, foreshortening breaks the Necker symmetry
+    // and geometry alone is decisive. Early-exit: no pixel reads needed.
+    let delta_e = (err0 - err1).abs();
+    if delta_e > REPRO_GATE_SQ_TOTAL {
+        return if err0 <= err1 {
+            candidates[0]
+        } else {
+            candidates[1]
+        };
     }
+
+    // Stage 2 — Photometric fallback.
+    // Geometry is ambiguous (frontal or small tag). Sample the tag payload under each candidate
+    // pose and select the one with higher intensity variance. The correct pose projects onto
+    // physical black/white cells → bimodal, high-variance distribution. The Necker dual
+    // samples across cell boundaries → smeared gray values, low variance.
+    if let Some(image) = img {
+        let var0 = photometric_variance(&candidates[0], intrinsics, tag_size, image);
+        let var1 = photometric_variance(&candidates[1], intrinsics, tag_size, image);
+        if var1 > var0 {
+            return candidates[1];
+        }
+        return candidates[0];
+    }
+
+    // No image available: fall back to reprojection error.
+    if err0 <= err1 {
+        candidates[0]
+    } else {
+        candidates[1]
+    }
+}
+
+/// Samples a 4×4 grid of points in the tag's inner payload region under the given pose
+/// and returns the variance of the sampled intensities.
+///
+/// The correct pose maps sample points onto physical black/white cells → bimodal (high variance).
+/// The Necker-dual pose samples across cell boundaries → blurred gray (low variance).
+///
+/// Uses the same top-left-origin physical convention as `find_best_pose` (`[0, s]²`).
+/// Only called when geometry is ambiguous; not on the critical latency path.
+fn photometric_variance(
+    pose: &Pose,
+    intrinsics: &CameraIntrinsics,
+    tag_size: f64,
+    img: &ImageView,
+) -> f64 {
+    // 4×4 sample grid, covering the inner 20%–80% of the tag to avoid the quiet-zone border.
+    const OFFSETS: [f64; 4] = [0.2, 0.4, 0.6, 0.8];
+    const N: usize = 16;
+
+    let w = img.width.cast_signed();
+    let h = img.height.cast_signed();
+    let stride = img.stride;
+
+    let mut intensities = [0.0f64; N];
+    let mut count = 0usize;
+
+    'outer: for &fy in &OFFSETS {
+        for &fx in &OFFSETS {
+            let obj = Vector3::new(fx * tag_size, fy * tag_size, 0.0);
+            let [px, py] = pose.project(&obj, intrinsics);
+
+            // Convert from pixel-centre to top-left-of-pixel (matches decoder convention).
+            let px = px - 0.5;
+            let py = py - 0.5;
+
+            let ix = px.floor() as isize;
+            let iy = py.floor() as isize;
+
+            // Bounds: need 2×2 neighbourhood.
+            if ix < 0 || ix + 1 >= w || iy < 0 || iy + 1 >= h {
+                break 'outer;
+            }
+
+            // SAFETY: ix and iy are non-negative (checked above).
+            let ix = ix.unsigned_abs();
+            let iy = iy.unsigned_abs();
+
+            let p00 = f64::from(img.data[iy * stride + ix]);
+            let p10 = f64::from(img.data[iy * stride + ix + 1]);
+            let p01 = f64::from(img.data[(iy + 1) * stride + ix]);
+            let p11 = f64::from(img.data[(iy + 1) * stride + ix + 1]);
+
+            let tx = px - px.floor();
+            let ty = py - py.floor();
+            intensities[count] = p00 * (1.0 - tx) * (1.0 - ty)
+                + p10 * tx * (1.0 - ty)
+                + p01 * (1.0 - tx) * ty
+                + p11 * tx * ty;
+            count += 1;
+        }
+    }
+
+    if count < 2 {
+        return 0.0;
+    }
+
+    let mean = intensities[..count].iter().sum::<f64>() / count as f64;
+    intensities[..count]
+        .iter()
+        .map(|v| (v - mean).powi(2))
+        .sum::<f64>()
+        / count as f64
 }
 
 /// Refine poses for all valid candidates in the batch using the Structure of Arrays (SoA) layout.
