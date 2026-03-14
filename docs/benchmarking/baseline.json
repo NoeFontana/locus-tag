@@ -1,11 +1,11 @@
 {
   "forward/pure_tags_images": {
     "Locus (v1 Hub)": {
-      "recall": 100.0,
-      "rmse": 1.3461,
-      "repro_rmse": 7.6247,
-      "p50_rotation_error": 4.8838,
-      "p50_translation_error": 0.0935
+      "recall": 97.77777777777777,
+      "rmse": 1.4061,
+      "repro_rmse": 8.3690,
+      "p50_rotation_error": 4.0604,
+      "p50_translation_error": 0.0152
     },
     "Locus (Soft)": {
       "recall": 59.09090909090909,
