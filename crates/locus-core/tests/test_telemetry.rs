@@ -1,38 +1,115 @@
-//! Tests for telemetry initialization and log file creation.
-mod common;
-use std::env;
+#![allow(missing_docs)]
+use locus_core::test_utils::generate_synthetic_test_image;
+use locus_core::{Detector, ImageView, TagFamily};
 
 #[test]
-fn test_telemetry_initialization_creates_log_file() {
-    let log_path = "../../target/profiling/test_telemetry_events.json";
-    // Ensure the file is deleted before the test
-    let _ = std::fs::remove_file(log_path);
+fn test_capture_invalid_quads() {
+    let canvas_size = 200;
+    let (mut data, _gt_corners) =
+        generate_synthetic_test_image(TagFamily::AprilTag36h11, 42, 100, canvas_size, 0.0);
 
-    // Explicitly set JSON mode for this test, otherwise if CI runs with TRACY_NO_INVARIANT_CHECK
-    // but without TELEMETRY_MODE=json, it defaults to silent mode and fails.
-    #[allow(unsafe_code)]
-    unsafe {
-        env::set_var("TELEMETRY_MODE", "json");
-    };
+    // Corrupt bits to fail decode but stay a valid quad
+    for y in 80..120 {
+        for x in 80..120 {
+            data[y * canvas_size + x] = 255;
+        }
+    }
 
-    // This should initialize the telemetry and return a guard
-    let guard = common::telemetry::init("test_telemetry");
-
-    // Log an event
-    tracing::info!("Telemetry test event");
-
-    // Drop the guard to flush
-    drop(guard);
-
-    // Verify the file exists and contains the log
-    assert!(
-        std::path::Path::new(log_path).exists(),
-        "Telemetry log file was not created"
+    let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).expect("valid image");
+    let mut detector = Detector::builder()
+        .with_family(TagFamily::AprilTag36h11)
+        .build();
+    let batch = detector.detect(
+        &img,
+        None,
+        None,
+        locus_core::config::PoseEstimationMode::Fast,
+        true,
     );
 
-    let content = std::fs::read_to_string(log_path).expect("failed to read telemetry log");
-    assert!(
-        content.contains("Telemetry test event"),
-        "Log event not found in file"
+    assert_eq!(batch.len(), 0);
+    assert!(!batch.rejected_corners.is_empty());
+}
+
+#[test]
+fn test_subpixel_jitter_telemetry() {
+    let canvas_size = 200;
+    let (data, _gt_corners) = generate_synthetic_test_image(
+        TagFamily::AprilTag36h11,
+        42,
+        100,
+        canvas_size,
+        5.0, // Noisy
     );
+
+    let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).expect("valid image");
+    let mut detector = Detector::builder()
+        .with_family(TagFamily::AprilTag36h11)
+        .build();
+    let batch = detector.detect(
+        &img,
+        None,
+        None,
+        locus_core::config::PoseEstimationMode::Fast,
+        true,
+    );
+
+    assert!(!batch.is_empty());
+    let telemetry = batch.telemetry.expect("telemetry should be present");
+    assert!(!telemetry.subpixel_jitter_ptr.is_null());
+}
+
+#[test]
+fn test_failed_decode_telemetry() {
+    let canvas_size = 200;
+    let (mut data, _gt_corners) =
+        generate_synthetic_test_image(TagFamily::AprilTag36h11, 42, 100, canvas_size, 0.0);
+
+    for y in 80..120 {
+        for x in 80..120 {
+            data[y * canvas_size + x] = 255;
+        }
+    }
+
+    let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).expect("valid image");
+    let mut detector = Detector::builder()
+        .with_family(TagFamily::AprilTag36h11)
+        .build();
+    let batch = detector.detect(
+        &img,
+        None,
+        None,
+        locus_core::config::PoseEstimationMode::Fast,
+        true,
+    );
+
+    assert_eq!(batch.len(), 0);
+    assert_eq!(batch.rejected_corners.len(), 1);
+    assert!(batch.rejected_error_rates[0] > 0.0);
+}
+
+#[test]
+fn test_reprojection_error_telemetry() {
+    let canvas_size = 200;
+    let (data, _gt_corners) =
+        generate_synthetic_test_image(TagFamily::AprilTag36h11, 42, 100, canvas_size, 0.0);
+
+    let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).expect("valid image");
+    let mut detector = Detector::builder()
+        .with_family(TagFamily::AprilTag36h11)
+        .build();
+    let intrinsics = locus_core::CameraIntrinsics::new(100.0, 100.0, 100.0, 100.0);
+    let tag_size = 0.16;
+
+    let batch = detector.detect(
+        &img,
+        Some(&intrinsics),
+        Some(tag_size),
+        locus_core::config::PoseEstimationMode::Fast,
+        true,
+    );
+
+    assert!(!batch.is_empty());
+    let telemetry = batch.telemetry.expect("telemetry should be present");
+    assert!(!telemetry.reprojection_errors_ptr.is_null());
 }

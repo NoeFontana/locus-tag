@@ -206,14 +206,34 @@ impl Detector {
         );
 
         // 3. Quad Extraction (SoA)
-        let n = crate::quad::extract_quads_soa(
+        let (n, unrefined) = crate::quad::extract_quads_soa(
             &mut state.batch,
             &sharpened_img,
             &label_result,
             &self.config,
             self.config.decimation,
             &refinement_img,
+            debug_telemetry,
         );
+
+        // Compute subpixel jitter if requested
+        let mut jitter_ptr = std::ptr::null();
+        let mut num_jitter = 0;
+        if let (true, Some(unrefined_pts)) = (debug_telemetry, unrefined) {
+            // Number of candidates to store jitter for (all extracted ones)
+            num_jitter = unrefined_pts.len();
+            // Store 4 corners * 2 (dx, dy) per candidate = 8 floats
+            let jitter = state.arena.alloc_slice_fill_copy(num_jitter * 8, 0.0f32);
+            for (i, unrefined_corners) in unrefined_pts.iter().enumerate() {
+                for (j, unrefined_corner) in unrefined_corners.iter().enumerate() {
+                    let dx = state.batch.corners[i][j].x - unrefined_corner.x as f32;
+                    let dy = state.batch.corners[i][j].y - unrefined_corner.y as f32;
+                    jitter[i * 8 + j * 2] = dx;
+                    jitter[i * 8 + j * 2 + 1] = dy;
+                }
+            }
+            jitter_ptr = jitter.as_ptr();
+        }
 
         // 4. Homography Pass (SoA)
         crate::decoder::compute_homographies_soa(
@@ -234,6 +254,8 @@ impl Detector {
         let v = state.batch.partition(n);
 
         // 6. Pose Refinement (SoA)
+        let mut repro_errors_ptr = std::ptr::null();
+        let mut num_repro = 0;
         if let (Some(intr), Some(size)) = (intrinsics, tag_size) {
             crate::pose::refine_poses_soa(
                 &mut state.batch,
@@ -243,6 +265,51 @@ impl Detector {
                 Some(&refinement_img),
                 pose_mode,
             );
+
+            // Compute reprojection errors if requested
+            if debug_telemetry {
+                num_repro = v;
+                let repro_errors = state.arena.alloc_slice_fill_copy(num_repro, 0.0f32);
+
+                // Canonical model points (TL, TR, BR, BL)
+                let model_pts = [
+                    nalgebra::Vector3::new(0.0, 0.0, 0.0),
+                    nalgebra::Vector3::new(size, 0.0, 0.0),
+                    nalgebra::Vector3::new(size, size, 0.0),
+                    nalgebra::Vector3::new(0.0, size, 0.0),
+                ];
+
+                for (i, repro_error) in repro_errors.iter_mut().enumerate().take(v) {
+                    let det_pose_data = state.batch.poses[i].data;
+                    let det_t = nalgebra::Vector3::new(
+                        f64::from(det_pose_data[0]),
+                        f64::from(det_pose_data[1]),
+                        f64::from(det_pose_data[2]),
+                    );
+                    let det_q =
+                        nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
+                            f64::from(det_pose_data[6]), // w
+                            f64::from(det_pose_data[3]), // x
+                            f64::from(det_pose_data[4]), // y
+                            f64::from(det_pose_data[5]), // z
+                        ));
+
+                    let pose = crate::pose::Pose {
+                        rotation: *det_q.to_rotation_matrix().matrix(),
+                        translation: det_t,
+                    };
+
+                    let mut sum_sq_err = 0.0;
+                    for (j, model_pt) in model_pts.iter().enumerate() {
+                        let proj = pose.project(model_pt, intr);
+                        let dx = proj[0] - f64::from(state.batch.corners[i][j].x);
+                        let dy = proj[1] - f64::from(state.batch.corners[i][j].y);
+                        sum_sq_err += dx * dx + dy * dy;
+                    }
+                    *repro_error = (sum_sq_err / 4.0).sqrt() as f32;
+                }
+                repro_errors_ptr = repro_errors.as_ptr();
+            }
         }
 
         // Detectors return corners at pixel centers (indices + 0.5) following OpenCV conventions.
@@ -252,6 +319,10 @@ impl Detector {
             Some(crate::batch::TelemetryPayload {
                 binarized_ptr: binarized.as_ptr(),
                 threshold_map_ptr: threshold_map.as_ptr(),
+                subpixel_jitter_ptr: jitter_ptr,
+                num_jitter,
+                reprojection_errors_ptr: repro_errors_ptr,
+                num_reprojection: num_repro,
                 width: img.width,
                 height: img.height,
                 stride: img.width,
@@ -260,7 +331,7 @@ impl Detector {
             None
         };
 
-        self.state.batch.view_with_telemetry(v, telemetry)
+        self.state.batch.view_with_telemetry(v, n, telemetry)
     }
 
     /// Get the current detector configuration.

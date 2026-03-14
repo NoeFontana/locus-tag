@@ -137,7 +137,8 @@ macro_rules! hub_benchmarks {
                 bencher.bench_local(move || {
                     let _arena = Bump::new();
                     let mut batch = DetectionBatch::new();
-                    let _n = extract_quads_soa(&mut batch, &img, &label_result, &config, 1, &img);
+                    let _n =
+                        extract_quads_soa(&mut batch, &img, &label_result, &config, 1, &img, false);
                 });
             }
 

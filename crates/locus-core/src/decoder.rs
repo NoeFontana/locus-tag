@@ -1683,7 +1683,16 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                             None,
                         )
                     } else {
-                        (CandidateState::FailedDecode, 0, 0, 0, 0.0, None)
+                        // Even on failure, return the best hamming distance found for debugging.
+                        // If no code was sampled at all, best_h will be u32::MAX.
+                        (
+                            CandidateState::FailedDecode,
+                            0,
+                            0,
+                            0,
+                            if best_h == u32::MAX { 0.0 } else { best_h as f32 },
+                            None,
+                        )
                     }
                 })
         })
