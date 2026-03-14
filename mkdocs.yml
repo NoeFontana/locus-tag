@@ -64,6 +64,7 @@ nav:
       - tutorials/guide.md
   - How-To Guides:
       - how-to/add_dictionary.md
+      - how-to/debug_with_rerun.md
   - Explanation:
       - explanation/architecture.md
       - explanation/coordinates.md
@@ -71,6 +72,10 @@ nav:
           - benchmarking.md
           - benchmarking/baseline_20260302.md
           - benchmarking/soa_migration_20260303.md
+          - benchmarking/hub_multi_res_20260308.md
+          - benchmarking/hub_locus_v1_20260312.md
+          - benchmarking/micro-benchmarking-guide.md
+          - benchmarking/baseline_micro_20260307.md
   - Reference:
       - reference/api.md
   - Engineering (Internal):
