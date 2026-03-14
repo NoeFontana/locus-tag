@@ -18,7 +18,8 @@
 )]
 
 use locus_core::{
-    CameraIntrinsics, DetectOptions, Detector, DetectorConfig, ImageView, Pose, TagFamily,
+    CameraIntrinsics, DetectOptions, Detector, DetectorConfig, ImageView, Pose, PoseEstimationMode,
+    TagFamily,
 };
 use nalgebra::{UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
@@ -698,7 +699,7 @@ fn resolve_hub_root(hub_dir: &str) -> PathBuf {
     path // fallback — will fail on `exists()` with a clear skip message
 }
 
-fn run_hub_test(config_name: &str, family: TagFamily) {
+fn run_hub_test(config_name: &str, family: TagFamily, mode: PoseEstimationMode) {
     if let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") {
         let root = resolve_hub_root(&hub_dir);
         let dataset_path = root.join(config_name);
@@ -750,9 +751,13 @@ fn run_hub_test(config_name: &str, family: TagFamily) {
                 }
             }
 
-            options.pose_estimation_mode = locus_core::PoseEstimationMode::Accurate;
+            options.pose_estimation_mode = mode;
 
-            let snapshot = format!("hub_{}", provider.name());
+            let mode_suffix = match mode {
+                PoseEstimationMode::Fast => "_fast",
+                PoseEstimationMode::Accurate => "",
+            };
+            let snapshot = format!("hub_{}{}", provider.name(), mode_suffix);
             RegressionHarness::new(snapshot)
                 .with_preset(ConfigPreset::PlainBoard)
                 .with_families(vec![family])
@@ -764,12 +769,15 @@ fn run_hub_test(config_name: &str, family: TagFamily) {
     }
 }
 
+// ── Accurate mode (Structure Tensor + Weighted LM) ───────────────────────────
+
 #[test]
 fn regression_hub_tag36h11_640x480() {
     let _guard = common::telemetry::init("regression_hub_tag36h11_640x480");
     run_hub_test(
         "single_tag_locus_v1_tag36h11_640x480",
         TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
     );
 }
 
@@ -779,6 +787,7 @@ fn regression_hub_tag36h11_720p() {
     run_hub_test(
         "single_tag_locus_v1_tag36h11_1280x720",
         TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
     );
 }
 
@@ -788,5 +797,38 @@ fn regression_hub_tag36h11_1080p() {
     run_hub_test(
         "single_tag_locus_v1_tag36h11_1920x1080",
         TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
+    );
+}
+
+// ── Fast mode (Trust-Region LM + Huber M-Estimator) ──────────────────────────
+
+#[test]
+fn regression_hub_fast_tag36h11_640x480() {
+    let _guard = common::telemetry::init("regression_hub_fast_tag36h11_640x480");
+    run_hub_test(
+        "single_tag_locus_v1_tag36h11_640x480",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Fast,
+    );
+}
+
+#[test]
+fn regression_hub_fast_tag36h11_720p() {
+    let _guard = common::telemetry::init("regression_hub_fast_tag36h11_720p");
+    run_hub_test(
+        "single_tag_locus_v1_tag36h11_1280x720",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Fast,
+    );
+}
+
+#[test]
+fn regression_hub_fast_tag36h11_1080p() {
+    let _guard = common::telemetry::init("regression_hub_fast_tag36h11_1080p");
+    run_hub_test(
+        "single_tag_locus_v1_tag36h11_1920x1080",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Fast,
     );
 }
