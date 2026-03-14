@@ -674,10 +674,33 @@ impl DatasetProvider for HubProvider {
 // Test Runners
 // ============================================================================
 
+/// Resolves the hub dataset root directory, mirroring the `common::resolve_dataset_root`
+/// pattern: relative paths are anchored to `CARGO_MANIFEST_DIR` (compile-time absolute),
+/// not the process CWD (which cargo sets to the package root, not the workspace root).
+fn resolve_hub_root(hub_dir: &str) -> PathBuf {
+    let path = PathBuf::from(hub_dir);
+    if path.is_absolute() {
+        return path;
+    }
+    // Relative: first try directly (works when an absolute env var was given
+    // or when CWD happens to be the workspace root).
+    if path.is_dir() {
+        return std::fs::canonicalize(&path).unwrap_or(path);
+    }
+    // Resolve from the crate manifest dir so it works regardless of CWD.
+    // CARGO_MANIFEST_DIR for locus-core = <workspace>/crates/locus-core.
+    // Joining "../../" reaches the workspace root.
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let from_workspace = manifest.join("../../").join(&path);
+    if from_workspace.is_dir() {
+        return from_workspace;
+    }
+    path // fallback — will fail on `exists()` with a clear skip message
+}
+
 fn run_hub_test(config_name: &str, family: TagFamily) {
     if let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") {
-        let root = std::fs::canonicalize(PathBuf::from(hub_dir.clone()))
-            .unwrap_or_else(|_| PathBuf::from(hub_dir));
+        let root = resolve_hub_root(&hub_dir);
         let dataset_path = root.join(config_name);
 
         if !dataset_path.exists() {
