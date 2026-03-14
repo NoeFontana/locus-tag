@@ -475,8 +475,7 @@ fn refine_pose_lm(
         // Nielsen's gain ratio: rho = actual_reduction / predicted_reduction.
         // Predicted reduction from the quadratic model (Madsen et al. eq 3.9):
         // L(0) - L(delta) = 0.5 * delta^T (lambda * D * delta + J^T W r)
-        let predicted_reduction =
-            0.5 * delta.dot(&(lambda * d_diag.component_mul(&delta) + jtr));
+        let predicted_reduction = 0.5 * delta.dot(&(lambda * d_diag.component_mul(&delta) + jtr));
 
         // Evaluate new pose via SE(3) exponential map (manifold-safe update).
         let twist = Vector3::new(delta[3], delta[4], delta[5]);

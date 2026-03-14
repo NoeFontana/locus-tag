@@ -11,6 +11,20 @@ use nalgebra::{Matrix2, Matrix6, Vector2, Vector3, Vector6};
 ///
 /// The Structure Tensor is computed over a small window around the corner.
 fn compute_corner_covariance(img: &ImageView, center: [f64; 2]) -> Matrix2<f64> {
+    // Tikhonov regularization floor: Σ_reg = σ_n² M⁻¹ + α·I
+    //
+    // Without regularization, a foreshortened tag drives the primary eigenvalue of M to
+    // infinity (large image gradient from spatial compression). The resulting Mahalanobis
+    // distance s_i = √(rᵢᵀWᵢrᵢ) explodes even for small residuals, causing the Huber
+    // estimator to zero-out that corner's contribution and severing the rotational constraint.
+    //
+    // Adding α·I to the covariance bounds the maximum allowable information: as λ_max(M) → ∞,
+    // the regularized information eigenvalue saturates at 1/α instead of diverging. This
+    // preserves the geometric constraint at grazing angles while still rejecting true outliers.
+    //
+    // α = 0.25 px² encodes a ±0.5 px localization noise floor — below which no corner
+    // refinement algorithm can be trusted regardless of gradient strength.
+    const ALPHA: f64 = 0.25;
     let radius = 2; // 5x5 window
     let cx = center[0].floor() as isize;
     let cy = center[1].floor() as isize;
@@ -70,7 +84,7 @@ fn compute_corner_covariance(img: &ImageView, center: [f64; 2]) -> Matrix2<f64> 
     let inv_det = 1.0 / det;
     let s_inv = Matrix2::new(s[(1, 1)], -s[(0, 1)], -s[(1, 0)], s[(0, 0)]).scale(inv_det);
 
-    s_inv.scale(sigma_n_sq)
+    s_inv.scale(sigma_n_sq) + Matrix2::identity().scale(ALPHA)
 }
 
 /// Compute framework uncertainty for all 4 corners.
@@ -239,12 +253,24 @@ pub(crate) fn refine_pose_lm_weighted(
     // Nielsen trust-region state.
     let mut lambda = 1e-3_f64;
     let mut nu = 2.0_f64;
-    let mut current_cost =
-        huber_mahalanobis_cost(intrinsics, corners, &obj_pts, &pose, &info_matrices, HUBER_K);
+    let mut current_cost = huber_mahalanobis_cost(
+        intrinsics,
+        corners,
+        &obj_pts,
+        &pose,
+        &info_matrices,
+        HUBER_K,
+    );
 
     for _ in 0..20 {
-        let (jtj, jtr) =
-            build_normal_equations(intrinsics, corners, &obj_pts, &pose, &info_matrices, HUBER_K);
+        let (jtj, jtr) = build_normal_equations(
+            intrinsics,
+            corners,
+            &obj_pts,
+            &pose,
+            &info_matrices,
+            HUBER_K,
+        );
 
         // Gate 1: gradient convergence — solver is at a stationary point.
         if jtr.amax() < 1e-8 {
@@ -278,8 +304,7 @@ pub(crate) fn refine_pose_lm_weighted(
 
         // Nielsen gain ratio: ρ = actual / predicted cost reduction.
         // Predicted: L(0) − L(δ) = ½ δᵀ(λD·δ + J^T W̃ r)
-        let predicted_reduction =
-            0.5 * delta.dot(&(lambda * d_diag.component_mul(&delta) + jtr));
+        let predicted_reduction = 0.5 * delta.dot(&(lambda * d_diag.component_mul(&delta) + jtr));
 
         // SE(3) exponential-map update.
         let twist = Vector3::new(delta[3], delta[4], delta[5]);
@@ -326,8 +351,14 @@ pub(crate) fn refine_pose_lm_weighted(
     // Covariance: Σ_pose = (J^T W̃ J)^{-1} at the converged pose.
     // This is the Cramér–Rao lower bound on pose uncertainty given the Huber-weighted
     // information matrices. No ad-hoc MSE scaling — W_i already encodes the noise model.
-    let (jtj_final, _) =
-        build_normal_equations(intrinsics, corners, &obj_pts, &pose, &info_matrices, HUBER_K);
+    let (jtj_final, _) = build_normal_equations(
+        intrinsics,
+        corners,
+        &obj_pts,
+        &pose,
+        &info_matrices,
+        HUBER_K,
+    );
     let covariance = jtj_final.try_inverse().unwrap_or(Matrix6::identity());
 
     (pose, covariance.into())
