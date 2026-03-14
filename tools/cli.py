@@ -75,10 +75,14 @@ def visualize(
     ctx: typer.Context,
     limit: int | None = typer.Option(10, help="Limit number of images"),
     scenario: str = typer.Option("forward", help="Scenario to visualize"),
+    data_dir: Path = typer.Option(None, help="Custom data directory"),
     tile_size: int = typer.Option(8, help="Threshold tile size"),
     min_area: int = typer.Option(16, help="Min quad area"),
     bilateral: bool = typer.Option(False, help="Enable bilateral filter"),
     upscale: int = typer.Option(1, help="Upscale factor"),
+    rerun: bool = typer.Option(True, help="Enable Rerun visualization"),
+    rerun_addr: str = typer.Option("127.0.0.1:9876", help="Rerun server address"),
+    rerun_serve: bool = typer.Option(False, help="Serve Rerun web viewer"),
 ):
     """
     Launch the Rerun-based visualizer for the detection pipeline.
@@ -90,20 +94,35 @@ def visualize(
 
     from tools.bench.utils import DatasetLoader
 
-    if not RERUN_AVAILABLE:
+    if rerun and not RERUN_AVAILABLE:
         typer.echo(
             "Error: Rerun SDK not installed. Run 'uv add rerun-sdk' or install with [bench] group.",
             err=True,
         )
         raise typer.Exit(code=1)
 
-    # Initialize Rerun with extra arguments from context if any
-    # Note: Typer doesn't automatically handle unknown args like argparse,
-    # but we can pass common ones or just initialize.
-    rr.init("locus_debug_pipeline", spawn=True)
+    if rerun:
+        # Initialize Rerun with remote support (0.30.0 API)
+        rr.init("locus_debug_pipeline")
+        if rerun_serve:
+            rr.serve_web_viewer()
+        else:
+            # Ensure address has a scheme and /proxy pathname
+            url = rerun_addr
+            if "://" not in url:
+                url = f"rerun+http://{url}"
+            if not url.endswith("/proxy"):
+                url = url.rstrip("/") + "/proxy"
+            rr.connect_grpc(url)
 
-    loader = DatasetLoader()
-    if not loader.prepare_icra(scenario):
+    # Use custom data dir or default cache
+    from tools.bench.utils import ICRA_CACHE_DIR
+
+    search_dir = data_dir if data_dir else ICRA_CACHE_DIR
+
+    loader = DatasetLoader(icra_dir=search_dir)
+    if not data_dir and not loader.prepare_icra(scenario):
+        # Only attempt to download/prepare if we are using the default cache
         typer.echo(f"Failed to prepare scenario {scenario}", err=True)
         raise typer.Exit(code=1)
 
@@ -117,8 +136,12 @@ def visualize(
         upscale_factor=upscale,
     )
 
-    for ds_name, img_dir, gt_map in datasets:
+    for ds_name, img_dir, gt_map, meta in datasets:
         typer.echo(f"\nVisualizing {ds_name}...")
+
+        # Use metadata from dataset (intrinsics, tag_size)
+        intrinsics = meta.intrinsics
+        tag_size = meta.tag_size
 
         img_names = sorted(gt_map.keys())
         if limit:
@@ -136,7 +159,9 @@ def visualize(
             rr.set_time(timeline="frame_idx", sequence=i)
 
             # Perform Detection (Vectorized API with debug telemetry)
-            batch = detector.detect(img, debug_telemetry=True)
+            batch = detector.detect(
+                img, intrinsics=intrinsics, tag_size=tag_size, debug_telemetry=True
+            )
 
             # 1. Input & Ground Truth
             rr.log("pipeline/0_input", rr.Image(img))
@@ -150,9 +175,24 @@ def visualize(
                     gt_strips.append(c)
                     gt_labels.append(f"GT:{gt.tag_id}")
 
+                    # Log GT Pose if available
+                    if gt.pose is not None:
+                        # [tx, ty, tz, qx, qy, qz, qw]
+                        pos = gt.pose[:3]
+                        quat = gt.pose[3:]
+                        rr.log(
+                            f"pipeline/0_input/ground_truth/tags/{gt.tag_id}/pose",
+                            rr.Transform3D(
+                                translation=pos,
+                                rotation=rr.Quaternion(xyzw=quat),
+                            ),
+                        )
+
                 rr.log(
                     "pipeline/0_input/ground_truth",
-                    rr.LineStrips2D(gt_strips, colors=[0, 255, 0], radii=2.0, labels=gt_labels),
+                    rr.LineStrips2D(
+                        gt_strips, colors=[0, 255, 0, 128], radii=0.5, labels=gt_labels
+                    ),
                 )
 
             # 2. Intermediate Telemetry
@@ -160,18 +200,94 @@ def visualize(
                 rr.log("pipeline/1_threshold", rr.Image(batch.telemetry.threshold_map))
                 rr.log("pipeline/2_binarized", rr.Image(batch.telemetry.binarized))
 
-                # Overlay GT and Detections on intermediate stages for alignment check
+                # Overlay GT on intermediate stages for alignment check
                 if gt_tags:
                     rr.log(
                         "pipeline/2_binarized/ground_truth",
-                        rr.LineStrips2D(gt_strips, colors=[0, 255, 0], radii=1.0),
+                        rr.LineStrips2D(gt_strips, colors=[0, 255, 0, 128], radii=0.5),
                     )
 
-            # Note: Internal pipeline artifacts (binarized, labels, candidates)
-            # are NOT currently exposed in the vectorized high-level API.
-            # They will be re-added if/when the Rust side exposes them via DetectorState.
+                # Subpixel Jitter (Arrows from unrefined to refined)
+                if batch.telemetry.subpixel_jitter is not None:
+                    v = len(batch)
 
-            # 5. Final Detections
+                    # 1. Jitter for Valid Detections
+                    if v > 0:
+                        jitter_valid = batch.telemetry.subpixel_jitter[:v]
+                        refined_valid = batch.corners
+                        unrefined_valid = refined_valid - jitter_valid
+
+                        pts = unrefined_valid.reshape(-1, 2)
+                        vecs = jitter_valid.reshape(-1, 2)
+                        rr.log(
+                            "pipeline/detections/subpixel_jitter",
+                            rr.Arrows2D(
+                                origins=pts, vectors=vecs, colors=[[255, 255, 0]] * len(pts)
+                            ),
+                        )
+
+                    # 2. Jitter for Rejected Quads
+                    if batch.rejected_corners is not None:
+                        m = len(batch.rejected_corners)
+                        if m > 0:
+                            # Jitter array is size N (total extracted), rejected starts at v
+                            jitter_rej = batch.telemetry.subpixel_jitter[v : v + m]
+                            refined_rej = batch.rejected_corners
+                            unrefined_rej = refined_rej - jitter_rej
+
+                            pts_rej = unrefined_rej.reshape(-1, 2)
+                            vecs_rej = jitter_rej.reshape(-1, 2)
+                            rr.log(
+                                "pipeline/rejected/subpixel_jitter",
+                                rr.Arrows2D(
+                                    origins=pts_rej,
+                                    vectors=vecs_rej,
+                                    colors=[[255, 100, 0, 128]] * len(pts_rej),
+                                ),
+                            )
+
+                # Reprojection Errors
+                if batch.telemetry.reprojection_errors is not None:
+                    repro = batch.telemetry.reprojection_errors
+                    for j, err in enumerate(repro):
+                        tid = batch.ids[j]
+                        # Scalar plot for convergence tracking
+                        rr.log(
+                            f"pipeline/repro_err/tag_{tid}",
+                            rr.SeriesLines(colors=[0, 255, 0]),
+                            static=True,
+                        )
+                        rr.log(f"pipeline/repro_err/tag_{tid}", rr.Scalars([err]))
+
+                        # Text log for direct inspection
+                        rr.log(
+                            f"pipeline/detections/tags/{tid}/repro_err",
+                            rr.TextLog(f"RMSE: {err:.4f}px"),
+                        )
+
+            # 3. Rejected Quads
+            if batch.rejected_corners is not None and len(batch.rejected_corners) > 0:
+                rejected = batch.rejected_corners
+                rej_errs = batch.rejected_error_rates
+
+                colors = []
+                labels = []
+                for j in range(len(rejected)):
+                    err = rej_errs[j] if rej_errs is not None and j < len(rej_errs) else 0.0
+                    if err > 0.0:
+                        colors.append([255, 165, 0, 128])  # Orange (Failed Decode)
+                        labels.append(f"Decode Fail: {int(err)} bits")
+                    else:
+                        colors.append([255, 0, 0, 128])  # Red (Geometry Reject)
+                        labels.append("Rejected Quad")
+
+                strips = np.concatenate([rejected, rejected[:, :1, :]], axis=1)
+                rr.log(
+                    "pipeline/rejected",
+                    rr.LineStrips2D(strips, colors=colors, labels=labels, radii=0.5),
+                )
+
+            # 4. Final Detections
             if len(batch) > 0:
                 det_strips = []
                 det_labels = []
@@ -182,15 +298,24 @@ def visualize(
                     det_labels.append(f"ID:{batch.ids[j]}")
 
                 rr.log(
-                    "pipeline/4_detections",
-                    rr.LineStrips2D(det_strips, colors=[255, 50, 50], radii=1.2, labels=det_labels),
+                    "pipeline/0_input/detections",
+                    rr.LineStrips2D(
+                        det_strips, colors=[0, 0, 255, 128], radii=0.5, labels=det_labels
+                    ),
+                )
+
+                rr.log(
+                    "pipeline/3_detections",
+                    rr.LineStrips2D(
+                        det_strips, colors=[0, 0, 255, 128], radii=0.5, labels=det_labels
+                    ),
                 )
 
                 # Also log detections on binarized for alignment check
                 if batch.telemetry is not None:
                     rr.log(
                         "pipeline/2_binarized/detections",
-                        rr.LineStrips2D(det_strips, colors=[255, 50, 50], radii=0.8),
+                        rr.LineStrips2D(det_strips, colors=[0, 0, 255, 128], radii=0.5),
                     )
 
 
@@ -200,6 +325,7 @@ def visualize(
 @bench_app.command("real")
 def bench_real(
     scenarios: list[str] = typer.Option(["forward"], help="Scenarios to run"),
+    data_dir: Path = typer.Option(None, help="Custom data directory"),
     types: list[str] = typer.Option(["tags"], help="Dataset types (tags, checkerboard)"),
     limit: int | None = typer.Option(None, help="Limit number of images"),
     skip: int = typer.Option(0, help="Skip first N images"),
@@ -208,6 +334,9 @@ def bench_real(
     baseline: Path | None = typer.Option(None, help="Path to baseline JSON"),
     save_baseline: Path | None = typer.Option(None, help="Path to save results as baseline"),
     profile: bool = typer.Option(False, help="Enable Tracy profiling"),
+    rerun: bool = typer.Option(False, help="Enable Rerun visualization during benchmark"),
+    rerun_addr: str = typer.Option("127.0.0.1:9876", help="Rerun server address"),
+    rerun_serve: bool = typer.Option(False, help="Serve Rerun web viewer"),
     family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
     refinement: str = typer.Option("Erf", help="Refinement mode (None, Edge, GridFit, Erf)"),
     tile_size: int = typer.Option(8, help="Threshold tile size"),
@@ -235,6 +364,26 @@ def bench_real(
     if profile:
         locus.init_tracy()
 
+    if rerun:
+        if not RERUN_AVAILABLE:
+            typer.echo(
+                "Error: Rerun SDK not installed. Run 'uv add rerun-sdk' or install with [bench] group.",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+
+        rr.init("locus_bench_real")
+        if rerun_serve:
+            rr.serve_web_viewer()
+        else:
+            # Ensure address has a scheme and /proxy pathname
+            url = rerun_addr
+            if "://" not in url:
+                url = f"rerun+http://{url}"
+            if not url.endswith("/proxy"):
+                url = url.rstrip("/") + "/proxy"
+            rr.connect_grpc(url)
+
     # Map string to locus.TagFamily
     family_mapping = {
         "AprilTag16h5": locus.TagFamily.AprilTag16h5,
@@ -260,7 +409,11 @@ def bench_real(
     }
     refinement_mode = refinement_mapping.get(refinement, locus.CornerRefinementMode.Edge)
 
-    loader = DatasetLoader()
+    # Use custom data dir or default cache
+    from tools.bench.utils import ICRA_CACHE_DIR
+
+    search_dir = data_dir if data_dir else ICRA_CACHE_DIR
+    loader = DatasetLoader(icra_dir=search_dir)
     wrappers: list[LibraryWrapper] = []
 
     # Soft mode (Production Default + Soft Override + CLI Overrides)
@@ -316,12 +469,17 @@ def bench_real(
     current_results: dict[str, dict[str, dict[str, Any]]] = {}
 
     for scenario in scenarios:
-        if not loader.prepare_icra(scenario):
+        if not data_dir and not loader.prepare_icra(scenario):
             continue
 
         datasets = loader.find_datasets(scenario, types)
-        for ds_name, img_dir, gt_map in datasets:
+        for ds_name, img_dir, gt_map, meta in datasets:
             typer.echo(f"\nEvaluating {ds_name}...")
+
+            # Use metadata from dataset (intrinsics, tag_size)
+            intrinsics = meta.intrinsics
+            tag_size = meta.tag_size
+
             current_results[ds_name] = {}
 
             img_names = sorted(gt_map.keys())
@@ -344,8 +502,8 @@ def bench_real(
 
                     gt_tags = gt_map[img_name]
                     start = time.perf_counter()
-                    detections, _ = wrapper.detect(img)
-                    stats["latency"].append((time.perf_counter() - start) * 1000)
+                    detections, _ = wrapper.detect(img, intrinsics=intrinsics, tag_size=tag_size)
+                    _latency = (time.perf_counter() - start) * 1000.0
 
                     correct, err_sum, _ = Metrics.match_detections(detections, gt_tags)
                     stats["gt"] += len(gt_tags)
@@ -557,7 +715,7 @@ def bench_analyze(
         if not loader.prepare_icra(scenario):
             continue
         datasets = loader.find_datasets(scenario, ["tags"])
-        for ds_name, _, gt_map in datasets:
+        for ds_name, _, gt_map, _ in datasets:
             typer.echo(f"\nAnalyzing Tag Sizes in {ds_name}...")
             sizes = []
             for _, tags in gt_map.items():
