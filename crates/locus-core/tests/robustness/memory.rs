@@ -29,7 +29,7 @@ proptest! {
             };
 
             let mut detector = DetectorBuilder::new().with_config(config).build();            // It might fail gracefully or return empty, but shouldn't panic.
-            let _ = detector.detect(&image, None, None, locus_core::PoseEstimationMode::Fast, false);
+            let _ = detector.detect(&image, None, None, locus_core::PoseEstimationMode::Fast, false).unwrap();
         }
 
         prop_assert!(true);

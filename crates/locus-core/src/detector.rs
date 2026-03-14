@@ -1,6 +1,7 @@
 use crate::batch::{DetectionBatch, DetectionBatchView};
 use crate::config::DetectorConfig;
 use crate::decoder::{TagDecoder, family_to_decoder};
+use crate::error::DetectorError;
 use crate::image::ImageView;
 use bumpalo::Bump;
 
@@ -93,9 +94,10 @@ impl Detector {
     ///
     /// This method is the main execution pipeline.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the input image cannot be decimated or upscaled according to the configuration.
+    /// Returns [`DetectorError`] if the input image cannot be decimated, upscaled,
+    /// or if an intermediate image view cannot be constructed.
     #[allow(clippy::similar_names)]
     #[allow(clippy::too_many_lines)]
     pub fn detect(
@@ -105,7 +107,7 @@ impl Detector {
         tag_size: Option<f64>,
         pose_mode: crate::config::PoseEstimationMode,
         debug_telemetry: bool,
-    ) -> DetectionBatchView<'_> {
+    ) -> Result<DetectionBatchView<'_>, DetectorError> {
         self.state.reset();
         let state = &mut self.state;
 
@@ -115,7 +117,7 @@ impl Detector {
             let decimated_data = state.arena.alloc_slice_fill_copy(new_w * new_h, 0u8);
             let decimated_img = img
                 .decimate_to(self.config.decimation, decimated_data)
-                .expect("decimation failed");
+                .map_err(DetectorError::Preprocessing)?;
             (decimated_img, 1.0 / self.config.decimation as f64, *img)
         } else if self.config.upscale_factor > 1 {
             let new_w = img.width * self.config.upscale_factor;
@@ -124,7 +126,7 @@ impl Detector {
 
             let upscaled_img = img
                 .upscale_to(self.config.upscale_factor, &mut state.upscale_buf)
-                .expect("valid upscaled view");
+                .map_err(DetectorError::Preprocessing)?;
             (
                 upscaled_img,
                 self.config.upscale_factor as f64,
@@ -149,7 +151,8 @@ impl Detector {
                 self.config.bilateral_sigma_space,
                 self.config.bilateral_sigma_color,
             );
-            ImageView::new(filtered, img.width, img.height, img.width).expect("valid filtered view")
+            ImageView::new(filtered, img.width, img.height, img.width)
+                .map_err(DetectorError::InvalidImage)?
         } else {
             *img
         };
@@ -167,7 +170,7 @@ impl Detector {
                 filtered_img.height,
                 filtered_img.width,
             )
-            .expect("valid sharpened view")
+            .map_err(DetectorError::InvalidImage)?
         } else {
             filtered_img
         };
@@ -331,7 +334,7 @@ impl Detector {
             None
         };
 
-        self.state.batch.view_with_telemetry(v, n, telemetry)
+        Ok(self.state.batch.view_with_telemetry(v, n, telemetry))
     }
 
     /// Get the current detector configuration.

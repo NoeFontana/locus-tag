@@ -253,15 +253,17 @@ impl Detector {
         let core_pose_mode = locus_core::config::PoseEstimationMode::from(pose_estimation_mode);
 
         // 1. Run core pipeline
-        let detections = py.detach(|| {
-            self.inner.detect(
-                &view,
-                core_intrinsics.as_ref(),
-                tag_size,
-                core_pose_mode,
-                debug_telemetry,
-            )
-        });
+        let detections = py
+            .detach(|| {
+                self.inner.detect(
+                    &view,
+                    core_intrinsics.as_ref(),
+                    tag_size,
+                    core_pose_mode,
+                    debug_telemetry,
+                )
+            })
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
         let n = detections.len();
 

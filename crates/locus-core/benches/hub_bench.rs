@@ -156,7 +156,7 @@ macro_rules! hub_benchmarks {
                         None,
                         locus_core::PoseEstimationMode::Fast,
                         false,
-                    );
+                    ).unwrap();
                 });
             }
         }

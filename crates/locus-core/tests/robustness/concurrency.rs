@@ -32,7 +32,7 @@ proptest! {
                     .expect("Generated proptest data should always be valid for ImageView");
                 // We don't care about the result, just that it doesn't panic or deadlock
                 // when multiple threads process the exact same underlying byte slice simultaneously.
-                detector.detect(&image, None, None, locus_core::PoseEstimationMode::Fast, false);
+                detector.detect(&image, None, None, locus_core::PoseEstimationMode::Fast, false).unwrap();
             }));
         }
 

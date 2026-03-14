@@ -183,6 +183,38 @@ impl DetectorConfig {
         DetectorConfigBuilder::default()
     }
 
+    /// Validate the configuration, returning an error if any parameter is out of range.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigError`] if any parameter violates its constraints.
+    pub fn validate(&self) -> Result<(), crate::error::ConfigError> {
+        use crate::error::ConfigError;
+
+        if self.threshold_tile_size < 2 {
+            return Err(ConfigError::TileSizeTooSmall(self.threshold_tile_size));
+        }
+        if self.decimation < 1 {
+            return Err(ConfigError::InvalidDecimation(self.decimation));
+        }
+        if self.upscale_factor < 1 {
+            return Err(ConfigError::InvalidUpscaleFactor(self.upscale_factor));
+        }
+        if self.quad_min_fill_ratio < 0.0
+            || self.quad_max_fill_ratio > 1.0
+            || self.quad_min_fill_ratio >= self.quad_max_fill_ratio
+        {
+            return Err(ConfigError::InvalidFillRatio {
+                min: self.quad_min_fill_ratio,
+                max: self.quad_max_fill_ratio,
+            });
+        }
+        if self.quad_min_edge_length <= 0.0 {
+            return Err(ConfigError::InvalidEdgeLength(self.quad_min_edge_length));
+        }
+        Ok(())
+    }
+
     /// High-fidelity configuration used for production accuracy evaluations.
     ///
     /// This matches the default settings used in the Python CLI and Regression suite:
@@ -419,6 +451,17 @@ impl DetectorConfigBuilder {
             decode_mode: self.decode_mode.unwrap_or(d.decode_mode),
             max_hamming_error: self.max_hamming_error.unwrap_or(d.max_hamming_error),
         }
+    }
+
+    /// Build the configuration and validate all parameter ranges.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigError`] if any parameter is out of its valid range.
+    pub fn validated_build(self) -> Result<DetectorConfig, crate::error::ConfigError> {
+        let config = self.build();
+        config.validate()?;
+        Ok(config)
     }
 
     /// Set the segmentation connectivity.
@@ -682,5 +725,47 @@ mod tests {
     fn test_all_families() {
         let opt = DetectOptions::all_families();
         assert_eq!(opt.families.len(), 4);
+    }
+
+    #[test]
+    fn test_default_config_is_valid() {
+        let config = DetectorConfig::default();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_production_config_is_valid() {
+        let config = DetectorConfig::production_default();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validation_rejects_bad_tile_size() {
+        let mut config = DetectorConfig::default();
+        config.threshold_tile_size = 1;
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_validation_rejects_bad_fill_ratio() {
+        let mut config = DetectorConfig::default();
+        config.quad_min_fill_ratio = 0.9;
+        config.quad_max_fill_ratio = 0.5;
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_validation_rejects_negative_edge_length() {
+        let mut config = DetectorConfig::default();
+        config.quad_min_edge_length = -1.0;
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_validated_build_catches_errors() {
+        let result = DetectorConfig::builder()
+            .threshold_tile_size(0)
+            .validated_build();
+        assert!(result.is_err());
     }
 }

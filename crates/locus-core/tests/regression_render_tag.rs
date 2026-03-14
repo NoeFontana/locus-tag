@@ -227,7 +227,7 @@ impl RegressionHarness {
                 tag_size,
                 self.options.pose_estimation_mode,
                 false,
-            );
+            ).unwrap();
             let total_ms = start.elapsed().as_secs_f64() * 1000.0;
 
             // --- Metrics Calculation ---

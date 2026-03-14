@@ -22,7 +22,7 @@ fn test_smoke_icra_dataset() {
     let img_data = vec![0u8; 640 * 480];
     let input_view = ImageView::new(&img_data, 640, 480, 640).expect("valid image");
 
-    let _res = detector.detect(&input_view, None, None, PoseEstimationMode::Fast, false);
+    let _res = detector.detect(&input_view, None, None, PoseEstimationMode::Fast, false).unwrap();
 
     // Smoke test: should not crash
 }

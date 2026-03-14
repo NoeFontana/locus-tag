@@ -25,7 +25,7 @@ fn test_capture_invalid_quads() {
         None,
         locus_core::config::PoseEstimationMode::Fast,
         true,
-    );
+    ).unwrap();
 
     assert_eq!(batch.len(), 0);
     assert!(!batch.rejected_corners.is_empty());
@@ -52,7 +52,7 @@ fn test_subpixel_jitter_telemetry() {
         None,
         locus_core::config::PoseEstimationMode::Fast,
         true,
-    );
+    ).unwrap();
 
     assert!(!batch.is_empty());
     let telemetry = batch.telemetry.expect("telemetry should be present");
@@ -81,7 +81,7 @@ fn test_failed_decode_telemetry() {
         None,
         locus_core::config::PoseEstimationMode::Fast,
         true,
-    );
+    ).unwrap();
 
     assert_eq!(batch.len(), 0);
     assert_eq!(batch.rejected_corners.len(), 1);
@@ -107,7 +107,7 @@ fn test_reprojection_error_telemetry() {
         Some(tag_size),
         locus_core::config::PoseEstimationMode::Fast,
         true,
-    );
+    ).unwrap();
 
     assert!(!batch.is_empty());
     let telemetry = batch.telemetry.expect("telemetry should be present");
