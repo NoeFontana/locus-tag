@@ -11,20 +11,23 @@ use nalgebra::{Matrix2, Matrix6, Vector2, Vector3, Vector6};
 ///
 /// The Structure Tensor is computed over a small window around the corner.
 fn compute_corner_covariance(img: &ImageView, center: [f64; 2]) -> Matrix2<f64> {
-    // Tikhonov regularization floor: Σ_reg = σ_n² M⁻¹ + α·I
+    // Gain-scheduled Tikhonov regularization: Σ_reg = σ_n² M⁻¹ + α(R)·I
     //
-    // Without regularization, a foreshortened tag drives the primary eigenvalue of M to
-    // infinity (large image gradient from spatial compression). The resulting Mahalanobis
-    // distance s_i = √(rᵢᵀWᵢrᵢ) explodes even for small residuals, causing the Huber
-    // estimator to zero-out that corner's contribution and severing the rotational constraint.
+    // Without regularization, a foreshortened tag drives λ_max(M) → ∞. The Mahalanobis
+    // distance s_i = √(rᵢᵀWᵢrᵢ) then explodes even for small residuals, causing Huber to
+    // zero-out that corner and sever the rotational constraint.
     //
-    // Adding α·I to the covariance bounds the maximum allowable information: as λ_max(M) → ∞,
-    // the regularized information eigenvalue saturates at 1/α instead of diverging. This
-    // preserves the geometric constraint at grazing angles while still rejecting true outliers.
+    // Rather than a static α, we schedule it from the anisotropy ratio of M:
+    //   R = λ_min / λ_max  ∈ [0, 1]   (0 = pure edge / grazing, 1 = isotropic / frontal)
+    //   α(R) = α_max · (1 − R)²
     //
-    // α = 0.25 px² encodes a ±0.5 px localization noise floor — below which no corner
-    // refinement algorithm can be trusted regardless of gradient strength.
-    const ALPHA: f64 = 0.25;
+    // This keeps α ≈ 0 for well-conditioned frontal tags (preserving close-range precision)
+    // and smoothly ramps to α_max for severely foreshortened tags (bounding observer gain).
+    // The quadratic transfer function keeps regularization inactive until R < ~0.3, only
+    // engaging at geometrically severe angles.
+    //
+    // α_max = 0.25 px² → maximum information per corner bounded at 1/α = 4 (px⁻²).
+    const ALPHA_MAX: f64 = 0.25;
     let radius = 2; // 5x5 window
     let cx = center[0].floor() as isize;
     let cy = center[1].floor() as isize;
@@ -84,7 +87,16 @@ fn compute_corner_covariance(img: &ImageView, center: [f64; 2]) -> Matrix2<f64> 
     let inv_det = 1.0 / det;
     let s_inv = Matrix2::new(s[(1, 1)], -s[(0, 1)], -s[(1, 0)], s[(0, 0)]).scale(inv_det);
 
-    s_inv.scale(sigma_n_sq) + Matrix2::identity().scale(ALPHA)
+    // Anisotropy ratio R = λ_min / λ_max derived analytically from M's eigenvalues.
+    // trace + discriminant > 0 always (trace = a+b ≥ 2·epsilon > 0).
+    // (trace − discriminant) is clamped to 0 to absorb f64 rounding on degenerate inputs.
+    let trace = s[(0, 0)] + s[(1, 1)];
+    let diff = s[(0, 0)] - s[(1, 1)];
+    let discriminant = (diff * diff + 4.0 * s[(0, 1)] * s[(0, 1)]).sqrt();
+    let r = ((trace - discriminant) / (trace + discriminant)).max(0.0);
+    let alpha = ALPHA_MAX * (1.0 - r) * (1.0 - r);
+
+    s_inv.scale(sigma_n_sq) + Matrix2::identity().scale(alpha)
 }
 
 /// Compute framework uncertainty for all 4 corners.
