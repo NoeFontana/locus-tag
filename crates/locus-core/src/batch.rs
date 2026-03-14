@@ -98,6 +98,10 @@ impl DetectionBatch {
     pub fn partition(&mut self, n: usize) -> usize {
         let mut v = 0;
         let n_clamped = n.min(MAX_CANDIDATES);
+
+        // Two-pointer partition:
+        // Move Valid candidates to [0..v]
+        // Move everything else to [v..n_clamped]
         for i in 0..n_clamped {
             if self.status_mask[i] == CandidateState::Valid {
                 if i != v {
@@ -193,6 +197,16 @@ pub struct TelemetryPayload {
     pub binarized_ptr: *const u8,
     /// Pointer to the threshold map buffer.
     pub threshold_map_ptr: *const u8,
+    /// Pointer to subpixel jitter data [4 corners * 2 (dx, dy)] per valid candidate.
+    /// Allocated in the detector's arena.
+    pub subpixel_jitter_ptr: *const f32,
+    /// Number of valid candidates jitter data is available for.
+    pub num_jitter: usize,
+    /// Pointer to reprojection RMSE values per valid candidate.
+    /// Allocated in the detector's arena.
+    pub reprojection_errors_ptr: *const f32,
+    /// Number of valid candidates reprojection data is available for.
+    pub num_reprojection: usize,
     /// Width of the buffers.
     pub width: usize,
     /// Height of the buffers.
@@ -229,6 +243,10 @@ pub struct DetectionBatchView<'a> {
     pub poses: &'a [Pose6D],
     /// Optional telemetry data for intermediate images.
     pub telemetry: Option<TelemetryPayload>,
+    /// Corners of quads that were extracted but rejected during decoding or verification.
+    pub rejected_corners: &'a [[Point2f; 4]],
+    /// Error rates (e.g. Hamming distance) for rejected quads.
+    pub rejected_error_rates: &'a [f32],
 }
 
 impl DetectionBatchView<'_> {
@@ -258,6 +276,8 @@ impl DetectionBatch {
             error_rates: &self.error_rates[..n],
             poses: &self.poses[..n],
             telemetry: None,
+            rejected_corners: &[],
+            rejected_error_rates: &[],
         }
     }
 
@@ -266,11 +286,22 @@ impl DetectionBatch {
     pub fn view_with_telemetry(
         &self,
         v: usize,
+        n: usize,
         telemetry: Option<TelemetryPayload>,
     ) -> DetectionBatchView<'_> {
-        let mut view = self.view(v);
-        view.telemetry = telemetry;
-        view
+        let v_clamped = v.min(MAX_CANDIDATES);
+        let n_clamped = n.min(MAX_CANDIDATES);
+        DetectionBatchView {
+            ids: &self.ids[..v_clamped],
+            corners: &self.corners[..v_clamped],
+            homographies: &self.homographies[..v_clamped],
+            payloads: &self.payloads[..v_clamped],
+            error_rates: &self.error_rates[..v_clamped],
+            poses: &self.poses[..v_clamped],
+            telemetry,
+            rejected_corners: &self.corners[v_clamped..n_clamped],
+            rejected_error_rates: &self.error_rates[v_clamped..n_clamped],
+        }
     }
 }
 

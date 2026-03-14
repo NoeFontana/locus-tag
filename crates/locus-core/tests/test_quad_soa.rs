@@ -27,8 +27,15 @@ fn test_quad_extraction_soa_empty() {
         component_stats: Vec::new(),
     };
 
-    let n =
-        locus_core::bench_api::extract_quads_soa(&mut batch, &img, &label_result, &config, 1, &img);
+    let (n, _) = locus_core::bench_api::extract_quads_soa(
+        &mut batch,
+        &img,
+        &label_result,
+        &config,
+        1,
+        &img,
+        false,
+    );
 
     assert_eq!(n, 0);
 }

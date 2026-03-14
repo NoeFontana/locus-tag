@@ -44,7 +44,7 @@ pub(crate) fn erf_approx(x: f64) -> f64 {
 
 /// A 2D point with subpixel precision.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Point {
+pub struct Point {
     /// X coordinate.
     pub x: f64,
     /// Y coordinate.
@@ -76,14 +76,15 @@ pub fn extract_quads_soa(
     config: &DetectorConfig,
     decimation: usize,
     refinement_img: &ImageView,
-) -> usize {
+    debug_telemetry: bool,
+) -> (usize, Option<Vec<[Point; 4]>>) {
     use rayon::prelude::*;
 
     let stats = &label_result.component_stats;
 
     // Collect into a temporary Vec to handle the MAX_CANDIDATES limit and sequential writing.
     // In a future optimization, we could use an atomic counter to write directly into the batch.
-    let detections: Vec<[Point; 4]> = stats
+    let detections: Vec<([Point; 4], [Point; 4])> = stats
         .par_iter()
         .enumerate()
         .filter_map(|(label_idx, stat)| {
@@ -103,12 +104,21 @@ pub fn extract_quads_soa(
         .collect();
 
     let n = detections.len().min(MAX_CANDIDATES);
-    for (i, corners) in detections.into_iter().take(n).enumerate() {
+    let mut unrefined = if debug_telemetry {
+        Some(Vec::with_capacity(n))
+    } else {
+        None
+    };
+
+    for (i, (corners, unrefined_pts)) in detections.into_iter().take(n).enumerate() {
         for (j, corner) in corners.iter().enumerate() {
             batch.corners[i][j] = Point2f {
                 x: corner.x as f32,
                 y: corner.y as f32,
             };
+        }
+        if let Some(ref mut u) = unrefined {
+            u.push(unrefined_pts);
         }
         batch.status_mask[i] = CandidateState::Active;
     }
@@ -118,7 +128,7 @@ pub fn extract_quads_soa(
         batch.status_mask[i] = CandidateState::Empty;
     }
 
-    n
+    (n, unrefined)
 }
 
 /// Internal helper to extract a single quad from a component.
@@ -133,7 +143,7 @@ fn extract_single_quad(
     config: &DetectorConfig,
     decimation: usize,
     refinement_img: &ImageView,
-) -> Option<[Point; 4]> {
+) -> Option<([Point; 4], [Point; 4])> {
     let min_edge_len_sq = config.quad_min_edge_length * config.quad_min_edge_length;
     let d = decimation as f64;
 
@@ -300,7 +310,7 @@ fn extract_single_quad(
 
         let edge_score = calculate_edge_score(refinement_img, corners);
         if edge_score > config.quad_min_edge_score {
-            return Some(corners);
+            return Some((corners, quad_pts));
         }
     }
     None
@@ -333,7 +343,7 @@ pub fn extract_quads_with_config(
             let arena = Bump::new();
             let label = (label_idx + 1) as u32;
 
-            if let Some(corners) = extract_single_quad(
+            if let Some((corners, _unrefined)) = extract_single_quad(
                 &arena,
                 img,
                 label_result.labels,
