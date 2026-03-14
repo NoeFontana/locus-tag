@@ -5,7 +5,8 @@
       "Bash(cargo nextest:*)",
       "Bash(TRACY_NO_INVARIANT_CHECK=1 cargo nextest run --release --all-features -p locus-core --no-fail-fast 2>&1 | tail -30)",
       "Bash(git add:*)",
-      "Bash(TRACY_NO_INVARIANT_CHECK=1 cargo nextest run --release --all-features -p locus-core --no-fail-fast 2>&1 | tail -10)"
+      "Bash(TRACY_NO_INVARIANT_CHECK=1 cargo nextest run --release --all-features -p locus-core --no-fail-fast 2>&1 | tail -10)",
+      "Bash(cargo clippy:*)"
     ]
   }
 }

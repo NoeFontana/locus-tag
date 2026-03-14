@@ -162,9 +162,9 @@ impl DecodingStrategy for SoftStrategy {
         // Scale factor mapping a Hamming distance (integer bit-flips) to the
         // equivalent total LLR penalty. Derived from the typical saturated LLR
         // magnitude (~60 per bit for 8-bit image gradients).
-        const LLR_PER_HAMMING_BIT: u32 = 60;
+        let llr_per_hamming_bit = 60_u32;
 
-        let soft_threshold = max_error.max(1) * LLR_PER_HAMMING_BIT;
+        let soft_threshold = max_error.max(1) * llr_per_hamming_bit;
 
         // Coarse rejection ratio: candidates beyond 2x the Hamming budget are
         // pruned before the expensive soft distance computation.
@@ -188,7 +188,7 @@ impl DecodingStrategy for SoftStrategy {
 
         if best_dist < soft_threshold {
             return best_id.map(|id| {
-                let equiv_hamming = best_dist / LLR_PER_HAMMING_BIT;
+                let equiv_hamming = best_dist / llr_per_hamming_bit;
                 (id, equiv_hamming, best_rot)
             });
         }

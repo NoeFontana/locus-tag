@@ -33,7 +33,7 @@ fn test_decimation_accuracy() {
             .with_decimation(1)
             .build();
 
-        let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast, false).unwrap();
+        let detections = detector.detect(&img, None, None, PoseEstimationMode::Fast, false).expect("detection failed");
         assert!(!detections.is_empty());
         let corners1 = [
             [
@@ -61,7 +61,7 @@ fn test_decimation_accuracy() {
             .with_decimation(2)
             .build();
 
-        let detections2 = detector2.detect(&img, None, None, PoseEstimationMode::Fast, false).unwrap();
+        let detections2 = detector2.detect(&img, None, None, PoseEstimationMode::Fast, false).expect("detection failed");
         assert!(!detections2.is_empty());
         let corners2 = [
             [

@@ -182,7 +182,7 @@ impl RegressionHarness {
                     self.options.tag_size,
                     self.options.pose_estimation_mode,
                     false,
-                ).unwrap();
+                ).expect("detection failed");
                 let total_ms = start.elapsed().as_secs_f64() * 1000.0;
 
                 // --- Metrics Calculation ---

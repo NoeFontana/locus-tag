@@ -770,23 +770,29 @@ mod tests {
 
     #[test]
     fn test_validation_rejects_bad_tile_size() {
-        let mut config = DetectorConfig::default();
-        config.threshold_tile_size = 1;
+        let config = DetectorConfig {
+            threshold_tile_size: 1,
+            ..DetectorConfig::default()
+        };
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_validation_rejects_bad_fill_ratio() {
-        let mut config = DetectorConfig::default();
-        config.quad_min_fill_ratio = 0.9;
-        config.quad_max_fill_ratio = 0.5;
+        let config = DetectorConfig {
+            quad_min_fill_ratio: 0.9,
+            quad_max_fill_ratio: 0.5,
+            ..DetectorConfig::default()
+        };
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_validation_rejects_negative_edge_length() {
-        let mut config = DetectorConfig::default();
-        config.quad_min_edge_length = -1.0;
+        let config = DetectorConfig {
+            quad_min_edge_length: -1.0,
+            ..DetectorConfig::default()
+        };
         assert!(config.validate().is_err());
     }
 

@@ -8,7 +8,8 @@
     clippy::too_many_lines,
     clippy::items_after_statements,
     clippy::must_use_candidate,
-    clippy::return_self_not_must_use
+    clippy::return_self_not_must_use,
+    clippy::trivially_copy_pass_by_ref
 )]
 
 mod utils;
