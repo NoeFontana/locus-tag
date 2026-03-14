@@ -19,6 +19,12 @@ use crate::segmentation::LabelResult;
 use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
 use multiversion::multiversion;
+use std::cell::RefCell;
+
+thread_local! {
+    /// Reusable per-thread arena for quad extraction, avoiding a `Bump::new()` per candidate.
+    static QUAD_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(8 * 1024));
+}
 
 /// Approximate error function (erf) using the Abramowitz and Stegun approximation.
 pub(crate) fn erf_approx(x: f64) -> f64 {
@@ -88,18 +94,21 @@ pub fn extract_quads_soa(
         .par_iter()
         .enumerate()
         .filter_map(|(label_idx, stat)| {
-            let arena = Bump::new();
-            let label = (label_idx + 1) as u32;
-            extract_single_quad(
-                &arena,
-                img,
-                label_result.labels,
-                label,
-                stat,
-                config,
-                decimation,
-                refinement_img,
-            )
+            QUAD_ARENA.with(|cell| {
+                let mut arena = cell.borrow_mut();
+                arena.reset();
+                let label = (label_idx + 1) as u32;
+                extract_single_quad(
+                    &arena,
+                    img,
+                    label_result.labels,
+                    label,
+                    stat,
+                    config,
+                    decimation,
+                    refinement_img,
+                )
+            })
         })
         .collect();
 
@@ -339,25 +348,28 @@ pub fn extract_quads_with_config(
         .par_iter()
         .enumerate()
         .filter_map(|(label_idx, stat)| {
-            // Thread-local arena for this component
-            let arena = Bump::new();
-            let label = (label_idx + 1) as u32;
+            QUAD_ARENA.with(|cell| {
+                let mut arena = cell.borrow_mut();
+                arena.reset();
+                let label = (label_idx + 1) as u32;
 
-            if let Some((corners, _unrefined)) = extract_single_quad(
-                &arena,
-                img,
-                label_result.labels,
-                label,
-                stat,
-                config,
-                decimation,
-                refinement_img,
-            ) {
+                let quad_result = extract_single_quad(
+                    &arena,
+                    img,
+                    label_result.labels,
+                    label,
+                    stat,
+                    config,
+                    decimation,
+                    refinement_img,
+                );
+
+                let (corners, _unrefined) = quad_result?;
                 // To keep backward compatibility, we still need to calculate some fields
                 // that aren't yet in the SoA (or are derived from it).
                 let area = polygon_area(&corners);
 
-                return Some(Detection {
+                Some(Detection {
                     id: label,
                     center: [
                         (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4.0,
@@ -375,9 +387,8 @@ pub fn extract_quads_with_config(
                     bits: 0,
                     pose: None,
                     pose_covariance: None,
-                });
-            }
-            None
+                })
+            })
         })
         .collect()
 }

@@ -27,14 +27,11 @@ fn main() {
     divan::Divan::from_args().threads([1]).run_benches();
 }
 
-#[bench]
-fn bench_pose_estimation_soa_realistic(bencher: divan::Bencher) {
+#[bench(args = [10, 50])]
+fn bench_pose_fast(bencher: divan::Bencher, &v: &usize) {
     let intrinsics = CameraIntrinsics::new(800.0, 800.0, 400.0, 300.0);
     let tag_size = 0.16;
-
-    // 50 valid tags to refine
-    let mut batch = BenchDataset::generate_bench_batch(50, 0);
-    let v = 50;
+    let mut batch = BenchDataset::generate_bench_batch(v, 0);
 
     bencher.bench_local(move || {
         refine_poses_soa(
@@ -42,8 +39,34 @@ fn bench_pose_estimation_soa_realistic(bencher: divan::Bencher) {
             v,
             &intrinsics,
             tag_size,
-            None, // No refinement img
+            None,
             PoseEstimationMode::Fast,
+        );
+    });
+}
+
+#[bench(args = [10, 50])]
+fn bench_pose_accurate(bencher: divan::Bencher, &v: &usize) {
+    let intrinsics = CameraIntrinsics::new(800.0, 800.0, 400.0, 300.0);
+    let tag_size = 0.16;
+    let dataset = BenchDataset::icra_forward_0();
+    let img = locus_core::ImageView::new(
+        &dataset.raw_data,
+        dataset.width,
+        dataset.height,
+        dataset.width,
+    )
+    .unwrap();
+    let mut batch = BenchDataset::generate_bench_batch(v, 0);
+
+    bencher.bench_local(move || {
+        refine_poses_soa(
+            &mut batch,
+            v,
+            &intrinsics,
+            tag_size,
+            Some(&img),
+            PoseEstimationMode::Accurate,
         );
     });
 }

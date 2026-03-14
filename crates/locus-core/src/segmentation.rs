@@ -132,7 +132,7 @@ pub fn label_components_with_stats<'a>(
         .par_chunks(width)
         .enumerate()
         .map(|(y, row)| {
-            let mut row_runs = Vec::new();
+            let mut row_runs = Vec::with_capacity(width / 4 + 1);
             let mut x = 0;
             while x < width {
                 // Find start of background run (0)
@@ -414,7 +414,7 @@ pub fn label_components_threshold_model<'a>(
         .map(|y| {
             let row_gs = &grayscale[y * grayscale_stride..y * grayscale_stride + width];
             let row_th = &threshold_map[y * width..(y + 1) * width];
-            let mut row_runs = Vec::new();
+            let mut row_runs = Vec::with_capacity(width / 4 + 1);
             let mut x = 0;
 
             #[cfg(target_arch = "x86_64")]
@@ -456,7 +456,8 @@ pub fn label_components_threshold_model<'a>(
         })
         .collect();
 
-    let mut runs = BumpVec::new_in(arena);
+    let total_runs: usize = all_runs.iter().map(std::vec::Vec::len).sum();
+    let mut runs = BumpVec::with_capacity_in(total_runs, arena);
     for (id, mut run) in all_runs.into_iter().flatten().enumerate() {
         run.id = id as u32;
         runs.push(run);
