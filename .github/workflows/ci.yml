@@ -105,7 +105,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo insta test --release --all-features --features bench-internals --check 2>&1 | tee test-rust-insta.log
+          TRACY_NO_INVARIANT_CHECK=1 cargo insta test --release --all-features --features bench-internals --check 2>&1 | tee test-rust-insta.log
 
       - name: Upload Logs on Failure
         if: failure()
