@@ -8,9 +8,10 @@ Before performing any task, the AI MUST read the relevant documentation mapped b
 
 ### 2.1 Coding Conventions & Implementation
 When asked to modify, refactor, or write new code:
-* **Rust:** Read `docs/engineering/rust-style.md`.
-* **Python:** Read `docs/engineering/python-style.md`.
-* **General Style:** Read `docs/engineering/general-style.md`.
+*   **Workflow:** Read `docs/engineering/workflow.md` before starting any new branch.
+*   **Rust:** Read `docs/engineering/rust-style.md`.
+*   **Python:** Read `docs/engineering/python-style.md`.
+*   **General Style:** Read `docs/engineering/general-style.md`.
 
 ### 2.2 System Design & Architectural Invariants
 When asked to implement new features, modify the detection pipeline, or optimize performance (the "hot loop"):
