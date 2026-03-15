@@ -803,6 +803,16 @@ fn regression_hub_tag36h11_1080p() {
     );
 }
 
+#[test]
+fn regression_hub_tag36h11_2160p() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_2160p");
+    run_hub_test(
+        "single_tag_locus_v1_tag36h11_3840x2160",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
+    );
+}
+
 // ── Fast mode (Trust-Region LM + Huber M-Estimator) ──────────────────────────
 
 #[test]
@@ -830,6 +840,16 @@ fn regression_hub_fast_tag36h11_1080p() {
     let _guard = common::telemetry::init("regression_hub_fast_tag36h11_1080p");
     run_hub_test(
         "single_tag_locus_v1_tag36h11_1920x1080",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Fast,
+    );
+}
+
+#[test]
+fn regression_hub_fast_tag36h11_2160p() {
+    let _guard = common::telemetry::init("regression_hub_fast_tag36h11_2160p");
+    run_hub_test(
+        "single_tag_locus_v1_tag36h11_3840x2160",
         TagFamily::AprilTag36h11,
         PoseEstimationMode::Fast,
     );
