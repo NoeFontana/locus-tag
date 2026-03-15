@@ -141,7 +141,6 @@ pub struct DetectorConfig {
     pub max_hamming_error: u32,
 
     // Pose estimation tuning parameters
-
     /// Huber delta for LM reprojection (pixels) in Fast mode.
     /// Residuals beyond this threshold are down-weighted linearly.
     /// 1.5 px is a standard robust threshold for sub-pixel corner detectors.

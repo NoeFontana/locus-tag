@@ -221,13 +221,15 @@ impl RegressionHarness {
             let tag_size = gt.tag_size.or(self.options.tag_size);
 
             let start = std::time::Instant::now();
-            let detections = detector.detect(
-                &img,
-                intrinsics.as_ref(),
-                tag_size,
-                self.options.pose_estimation_mode,
-                false,
-            ).expect("detection failed");
+            let detections = detector
+                .detect(
+                    &img,
+                    intrinsics.as_ref(),
+                    tag_size,
+                    self.options.pose_estimation_mode,
+                    false,
+                )
+                .expect("detection failed");
             let total_ms = start.elapsed().as_secs_f64() * 1000.0;
 
             // --- Metrics Calculation ---

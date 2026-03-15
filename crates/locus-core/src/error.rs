@@ -27,22 +27,22 @@ impl fmt::Display for ConfigError {
         match self {
             Self::TileSizeTooSmall(size) => {
                 write!(f, "threshold_tile_size must be >= 2, got {size}")
-            }
+            },
             Self::InvalidDecimation(d) => {
                 write!(f, "decimation factor must be >= 1, got {d}")
-            }
+            },
             Self::InvalidUpscaleFactor(u) => {
                 write!(f, "upscale_factor must be >= 1, got {u}")
-            }
+            },
             Self::InvalidFillRatio { min, max } => {
                 write!(
                     f,
                     "fill ratio range invalid: min={min}, max={max} (must be 0.0..=1.0, min < max)"
                 )
-            }
+            },
             Self::InvalidEdgeLength(l) => {
                 write!(f, "quad_min_edge_length must be positive, got {l}")
-            }
+            },
         }
     }
 }

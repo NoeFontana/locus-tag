@@ -19,13 +19,15 @@ fn test_capture_invalid_quads() {
     let mut detector = Detector::builder()
         .with_family(TagFamily::AprilTag36h11)
         .build();
-    let batch = detector.detect(
-        &img,
-        None,
-        None,
-        locus_core::config::PoseEstimationMode::Fast,
-        true,
-    ).expect("detection failed");
+    let batch = detector
+        .detect(
+            &img,
+            None,
+            None,
+            locus_core::config::PoseEstimationMode::Fast,
+            true,
+        )
+        .expect("detection failed");
 
     assert_eq!(batch.len(), 0);
     assert!(!batch.rejected_corners.is_empty());
@@ -46,13 +48,15 @@ fn test_subpixel_jitter_telemetry() {
     let mut detector = Detector::builder()
         .with_family(TagFamily::AprilTag36h11)
         .build();
-    let batch = detector.detect(
-        &img,
-        None,
-        None,
-        locus_core::config::PoseEstimationMode::Fast,
-        true,
-    ).expect("detection failed");
+    let batch = detector
+        .detect(
+            &img,
+            None,
+            None,
+            locus_core::config::PoseEstimationMode::Fast,
+            true,
+        )
+        .expect("detection failed");
 
     assert!(!batch.is_empty());
     let telemetry = batch.telemetry.expect("telemetry should be present");
@@ -75,13 +79,15 @@ fn test_failed_decode_telemetry() {
     let mut detector = Detector::builder()
         .with_family(TagFamily::AprilTag36h11)
         .build();
-    let batch = detector.detect(
-        &img,
-        None,
-        None,
-        locus_core::config::PoseEstimationMode::Fast,
-        true,
-    ).expect("detection failed");
+    let batch = detector
+        .detect(
+            &img,
+            None,
+            None,
+            locus_core::config::PoseEstimationMode::Fast,
+            true,
+        )
+        .expect("detection failed");
 
     assert_eq!(batch.len(), 0);
     assert_eq!(batch.rejected_corners.len(), 1);
@@ -101,13 +107,15 @@ fn test_reprojection_error_telemetry() {
     let intrinsics = locus_core::CameraIntrinsics::new(100.0, 100.0, 100.0, 100.0);
     let tag_size = 0.16;
 
-    let batch = detector.detect(
-        &img,
-        Some(&intrinsics),
-        Some(tag_size),
-        locus_core::config::PoseEstimationMode::Fast,
-        true,
-    ).expect("detection failed");
+    let batch = detector
+        .detect(
+            &img,
+            Some(&intrinsics),
+            Some(tag_size),
+            locus_core::config::PoseEstimationMode::Fast,
+            true,
+        )
+        .expect("detection failed");
 
     assert!(!batch.is_empty());
     let telemetry = batch.telemetry.expect("telemetry should be present");

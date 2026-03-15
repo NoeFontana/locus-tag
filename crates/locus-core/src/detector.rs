@@ -345,13 +345,12 @@ fn run_pose_refinement(
                     f64::from(det_pose_data[1]),
                     f64::from(det_pose_data[2]),
                 );
-                let det_q =
-                    nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-                        f64::from(det_pose_data[6]),
-                        f64::from(det_pose_data[3]),
-                        f64::from(det_pose_data[4]),
-                        f64::from(det_pose_data[5]),
-                    ));
+                let det_q = nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
+                    f64::from(det_pose_data[6]),
+                    f64::from(det_pose_data[3]),
+                    f64::from(det_pose_data[4]),
+                    f64::from(det_pose_data[5]),
+                ));
 
                 let pose = crate::pose::Pose {
                     rotation: *det_q.to_rotation_matrix().matrix(),

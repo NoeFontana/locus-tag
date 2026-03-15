@@ -12,10 +12,10 @@ pub mod config;
 pub mod decoder;
 /// The primary public API for the detector.
 pub mod detector;
-/// Error types for the detection pipeline.
-pub mod error;
 /// Tag family dictionaries (AprilTag, ArUco).
 pub mod dictionaries;
+/// Error types for the detection pipeline.
+pub mod error;
 /// Edge-preserving filtering for small tag detection.
 pub mod filter;
 /// Gradient computation for edge refinement.

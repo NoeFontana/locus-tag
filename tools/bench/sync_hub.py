@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Final
 
-import datasets  # type: ignore
+import datasets
 from huggingface_hub import HfApi, hf_hub_download
 from huggingface_hub.utils import EntryNotFoundError
 from PIL import Image
