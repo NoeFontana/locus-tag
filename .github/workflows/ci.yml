@@ -93,6 +93,7 @@ jobs:
       - name: Check aarch64 compilation
         shell: bash
         run: |
+          sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
           rustup target add aarch64-unknown-linux-gnu
           cargo check --target aarch64-unknown-linux-gnu --all-features
 
