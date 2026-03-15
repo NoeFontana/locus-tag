@@ -1,0 +1,64 @@
+version: 2
+updates:
+  # -------------------------------------------------------------------
+  # 1. Python / uv Configuration (Native)
+  # -------------------------------------------------------------------
+  - package-ecosystem: "uv"
+    directory: "/" 
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "chore(deps):"
+    # Group all non-major Python updates into a single PR
+    groups:
+      python-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # -------------------------------------------------------------------
+  # 2. Rust / Cargo Configuration
+  # -------------------------------------------------------------------
+  - package-ecosystem: "cargo"
+    directory: "/" # Covers the Cargo workspace (locus-core, locus-py)
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "rust"
+    commit-message:
+      prefix: "chore(deps):"
+    # Group all non-major Cargo updates into a single PR
+    groups:
+      cargo-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # -------------------------------------------------------------------
+  # 3. GitHub Actions Configuration
+  # -------------------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore(deps):"
+    # Group all action updates into a single PR
+    groups:
+      actions-updates:
+        patterns:
+          - "*"
