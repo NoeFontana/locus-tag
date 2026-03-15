@@ -24,7 +24,7 @@ jobs:
         with:
           name: rust-crate
           path: target/package/*.crate
-          retention-days: 7
+          retention-days: 1
 
   build-wheels:
     name: Build Wheels (${{ matrix.target }})
@@ -52,7 +52,7 @@ jobs:
         with:
           name: wheels-${{ matrix.target }}
           path: dist/*.whl
-          retention-days: 7
+          retention-days: 1
 
   build-sdist:
     name: Build Source Distribution
@@ -73,7 +73,7 @@ jobs:
         with:
           name: sdist
           path: dist/*.tar.gz
-          retention-days: 7
+          retention-days: 1
 
   publish:
     name: Unified Publish
