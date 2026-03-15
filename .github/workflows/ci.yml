@@ -42,7 +42,7 @@ jobs:
         run: |
           uv run --frozen --with jsonschema --with pydantic python tools/cli.py validate-dicts \
             --schema crates/locus-core/tests/schemas/dictionary.schema.json \
-            data/dictionaries/*.json
+            crates/locus-core/data/dictionaries/*.json
 
       - name: Ruff Check & Format
         shell: bash
