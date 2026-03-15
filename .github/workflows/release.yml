@@ -24,7 +24,7 @@ jobs:
         with:
           name: rust-crate
           path: target/package/*.crate
-          retention-days: 1
+          retention-days: 7
 
   build-wheels:
     name: Build Wheels (${{ matrix.target }})
@@ -52,7 +52,7 @@ jobs:
         with:
           name: wheels-${{ matrix.target }}
           path: dist/*.whl
-          retention-days: 1
+          retention-days: 7
 
   build-sdist:
     name: Build Source Distribution
@@ -73,13 +73,15 @@ jobs:
         with:
           name: sdist
           path: dist/*.tar.gz
-          retention-days: 1
+          retention-days: 7
 
   publish:
     name: Unified Publish
     needs: [build-rust, build-wheels, build-sdist]
     runs-on: ubuntu-latest
     environment: release
+    # Only run publish job for production tags (vX.Y.Z), skip for RCs (vX.Y.Z-rc.N)
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-rc.')
     steps:
       - uses: actions/checkout@v4
       
