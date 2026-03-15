@@ -190,10 +190,10 @@ fn compute_mih(
 }
 
 fn main() {
-    println!("cargo:rerun-if-changed=../../data/dictionaries");
+    println!("cargo:rerun-if-changed=data/dictionaries");
     println!("cargo:rerun-if-changed=templates/dictionaries.rs.j2");
 
-    let dict_dir = PathBuf::from("../../data/dictionaries");
+    let dict_dir = PathBuf::from("data/dictionaries");
     let mut computed_dicts = Vec::new();
 
     for &(enum_name, file_prefix, dim) in FAMILY_MAPPING {

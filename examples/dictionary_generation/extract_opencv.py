@@ -151,7 +151,7 @@ class OpenCVExtractor:
 
 def main():
     parser = argparse.ArgumentParser(description="Extract OpenCV dictionaries to Locus IR")
-    parser.add_argument("--output", type=str, default="data/dictionaries", help="Output directory")
+    parser.add_argument("--output", type=str, default="crates/locus-core/data/dictionaries", help="Output directory")
     parser.add_argument("--all", action="store_true", help="Extract all standard families")
     parser.add_argument("--dict", type=str, help="Specific dictionary name (e.g. DICT_4X4_50)")
 

@@ -55,10 +55,7 @@ jobs:
       - run: uv sync --group dev
       
       - name: Build Sdist
-        uses: PyO3/maturin-action@v1
-        with:
-          command: sdist
-          args: --out dist
+        run: uv build --sdist --out dist
       
       - name: Upload Sdist
         uses: PyO3/maturin-action@v1

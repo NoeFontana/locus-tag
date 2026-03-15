@@ -29,14 +29,19 @@ pub(crate) fn rcp_nr(w: f32) -> f32 {
     }
 
     #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+    #[allow(unsafe_code)]
     unsafe {
         use std::arch::aarch64::*;
-        // vrecpes_f32 provides the estimate
-        let rcp = vrecpes_f32(w);
+        // Load f32 into a D-register (float32x2_t)
+        let w_vec = vdup_n_f32(w);
+        // vrecpe_f32 provides the estimate
+        let rcp_vec = vrecpe_f32(w_vec);
         // vrecps_f32 provides the Newton-Raphson step (2.0 - w * r0)
-        let step = vrecps_f32(w, rcp);
+        let step_vec = vrecps_f32(w_vec, rcp_vec);
         // Final refinement
-        return vmul_n_f32(rcp, step);
+        let res_vec = vmul_f32(rcp_vec, step_vec);
+        // Extract the scalar from lane 0
+        return vget_lane_f32(res_vec, 0);
     }
 
     // Scalar fallback

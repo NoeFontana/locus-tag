@@ -366,14 +366,14 @@ unsafe fn extract_runs_row_neon(
             let th_ptr = row_th.as_ptr().add(x);
             (vld1_u8(gs_ptr), vld1_u8(th_ptr))
         };
-        let mask_res = unsafe {
+        let mask_res = {
             let gs_16 = vreinterpretq_s16_u16(vmovl_u8(gs_8));
             let th_16 = vreinterpretq_s16_u16(vmovl_u8(th_8));
             let diff = vsubq_s16(gs_16, th_16);
             vcltq_s16(diff, m_vec)
         };
         let mut final_mask = 0u32;
-        let res_u16: [u16; 8] = unsafe { std::mem::transmute(mask_res) };
+        let res_u16: [u16; 8] = std::mem::transmute(mask_res);
         for (i, &val) in res_u16.iter().enumerate() {
             if val != 0 {
                 final_mask |= 1 << i;
@@ -431,7 +431,6 @@ pub fn label_components_threshold_model<'a>(
                     extract_runs_row_neon(row_gs, row_th, width, y as u32, margin, &mut row_runs)
                 };
             }
-
             // Scalar tail
             while x < width {
                 let gs = row_gs[x];
