@@ -6,6 +6,7 @@ publish = false
 
 shared-version = true
 tag-name = "v{{version}}"
+pre-release-commit-hook = ["uv", "lock"]
 
 [[pre-release-replacements]]
 file = "../../pyproject.toml"
