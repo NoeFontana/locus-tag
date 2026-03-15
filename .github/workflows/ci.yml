@@ -71,6 +71,7 @@ jobs:
         uses: ./.github/actions/setup-toolchain
         with:
           rust-components: rustfmt, clippy
+          enable-uv-cache: 'false'
           
       - name: Install Tools (Nextest, Insta)
         uses: taiki-e/install-action@v2
@@ -163,6 +164,8 @@ jobs:
       
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
+        with:
+          enable-uv-cache: 'false'
         
       - name: Run Robustness Suite
         shell: bash
