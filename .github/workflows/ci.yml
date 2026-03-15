@@ -90,6 +90,12 @@ jobs:
           set -o pipefail
           cargo clippy --all-targets --all-features -- -D warnings 2>&1 | tee rust-clippy.log
 
+      - name: Check aarch64 compilation
+        shell: bash
+        run: |
+          rustup target add aarch64-unknown-linux-gnu
+          cargo check --target aarch64-unknown-linux-gnu --all-features
+
       - name: Run Tests (Nextest)
         shell: bash
         run: |
