@@ -18,6 +18,10 @@ inputs:
     description: 'Whether to enable the Rust cache'
     required: false
     default: 'true'
+  enable-uv-cache:
+    description: 'Whether to enable the uv cache'
+    required: false
+    default: 'true'
 
 runs:
   using: "composite"
@@ -25,7 +29,7 @@ runs:
     - name: Install uv
       uses: astral-sh/setup-uv@v5
       with:
-        enable-cache: true
+        enable-cache: ${{ inputs.enable-uv-cache == 'true' }}
         python-version: ${{ inputs.python-version }}
         
     - name: Install Rust
