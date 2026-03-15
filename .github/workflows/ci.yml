@@ -27,7 +27,7 @@ jobs:
     name: Validate Project & Lint Python
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
@@ -55,7 +55,7 @@ jobs:
       - name: Upload Logs on Failure
         if: failure()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: failure-logs-validate
           path: "*.log"
@@ -65,7 +65,7 @@ jobs:
     name: Rust Lint & Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
@@ -118,7 +118,7 @@ jobs:
       - name: Upload Logs on Failure
         if: failure()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: failure-logs-rust-checks
           path: "*.log"
@@ -133,7 +133,7 @@ jobs:
       matrix:
         python-version: ${{ github.event_name == 'pull_request' && fromJSON('["3.11"]') || fromJSON('["3.10", "3.11", "3.12"]') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
@@ -155,7 +155,7 @@ jobs:
       - name: Upload Logs on Failure
         if: failure()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: failure-logs-test-python-${{ matrix.python-version }}
           path: "*.log"
@@ -167,7 +167,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
@@ -189,7 +189,7 @@ jobs:
       - name: Upload Logs on Failure
         if: failure()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: failure-logs-robustness
           path: "*.log"
