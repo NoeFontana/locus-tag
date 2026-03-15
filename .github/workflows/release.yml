@@ -58,7 +58,4 @@ jobs:
         run: uv build --sdist --out-dir dist
       
       - name: Upload Sdist
-        uses: PyO3/maturin-action@v1
-        with:
-          command: upload
-          args: --non-interactive --skip-existing dist/*
+        run: uv publish dist/* --trusted-publishing automatic
