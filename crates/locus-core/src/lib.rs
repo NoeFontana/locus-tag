@@ -14,6 +14,8 @@ pub mod decoder;
 pub mod detector;
 /// Tag family dictionaries (AprilTag, ArUco).
 pub mod dictionaries;
+/// Error types for the detection pipeline.
+pub mod error;
 /// Edge-preserving filtering for small tag detection.
 pub mod filter;
 /// Gradient computation for edge refinement.
@@ -42,6 +44,7 @@ pub use crate::config::{
     CornerRefinementMode, DecodeMode, DetectOptions, DetectorConfig, PoseEstimationMode, TagFamily,
 };
 pub use crate::detector::{Detector, DetectorBuilder};
+pub use crate::error::{ConfigError, DetectorError};
 pub use crate::image::ImageView;
 pub use crate::pose::CameraIntrinsics;
 

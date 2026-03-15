@@ -176,13 +176,15 @@ impl RegressionHarness {
                 let img = ImageView::new(&data, width, height, width).expect("valid image");
 
                 let start = std::time::Instant::now();
-                let detections = detector.detect(
-                    &img,
-                    self.options.intrinsics.as_ref(),
-                    self.options.tag_size,
-                    self.options.pose_estimation_mode,
-                    false,
-                );
+                let detections = detector
+                    .detect(
+                        &img,
+                        self.options.intrinsics.as_ref(),
+                        self.options.tag_size,
+                        self.options.pose_estimation_mode,
+                        false,
+                    )
+                    .expect("detection failed");
                 let total_ms = start.elapsed().as_secs_f64() * 1000.0;
 
                 // --- Metrics Calculation ---

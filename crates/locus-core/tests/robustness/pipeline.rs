@@ -20,7 +20,7 @@ proptest! {
         // It shouldn't panic, but should return 0 detections or gracefully handle it.
         // To make the test fail initially, we can add an intentional assert that will fail on some noise.
         let image = ImageView::new(&data, width, height, width).expect("ImageView creation should succeed with generated data");
-        let detections = detector.detect(&image, None, None, PoseEstimationMode::Fast, false);
+        let detections = detector.detect(&image, None, None, PoseEstimationMode::Fast, false).expect("detection failed");
 
         // The pipeline should survive and return zero valid detections from pure noise.
         prop_assert!(detections.is_empty(), "Expected no valid tags in pure noise.");

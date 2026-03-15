@@ -10,7 +10,13 @@ use nalgebra::{Matrix2, Matrix6, Vector2, Vector3, Vector6};
 /// where $\sigma_n^2$ is the pixel noise variance (assumed around 2.0 for typical webcams).
 ///
 /// The Structure Tensor is computed over a small window around the corner.
-fn compute_corner_covariance(img: &ImageView, center: [f64; 2]) -> Matrix2<f64> {
+fn compute_corner_covariance(
+    img: &ImageView,
+    center: [f64; 2],
+    alpha_max: f64,
+    sigma_n_sq: f64,
+    radius: i32,
+) -> Matrix2<f64> {
     // Gain-scheduled Tikhonov regularization: Σ_reg = σ_n² M⁻¹ + α(R)·I
     //
     // Without regularization, a foreshortened tag drives λ_max(M) → ∞. The Mahalanobis
@@ -26,9 +32,8 @@ fn compute_corner_covariance(img: &ImageView, center: [f64; 2]) -> Matrix2<f64> 
     // The quadratic transfer function keeps regularization inactive until R < ~0.3, only
     // engaging at geometrically severe angles.
     //
-    // α_max = 0.25 px² → maximum information per corner bounded at 1/α = 4 (px⁻²).
-    const ALPHA_MAX: f64 = 0.25;
-    let radius = 2; // 5x5 window
+    // α_max controls maximum information per corner; bounded at 1/α (px⁻²).
+    let alpha_max_val = alpha_max;
     let cx = center[0].floor() as isize;
     let cy = center[1].floor() as isize;
 
@@ -39,8 +44,8 @@ fn compute_corner_covariance(img: &ImageView, center: [f64; 2]) -> Matrix2<f64> 
     let w = img.width.cast_signed();
     let h = img.height.cast_signed();
 
-    for dy in -radius..=radius {
-        for dx in -radius..=radius {
+    for dy in -radius as isize..=radius as isize {
+        for dx in -radius as isize..=radius as isize {
             let px = cx + dx;
             let py = cy + dy;
 
@@ -77,7 +82,7 @@ fn compute_corner_covariance(img: &ImageView, center: [f64; 2]) -> Matrix2<f64> 
     let epsilon = 1.0;
     let s = Matrix2::new(sum_gx2 + epsilon, sum_gxgy, sum_gxgy, sum_gy2 + epsilon);
 
-    let sigma_n_sq = 4.0;
+    // sigma_n_sq is now passed as a parameter
 
     let det = s[(0, 0)] * s[(1, 1)] - s[(0, 1)] * s[(1, 0)];
     if det.abs() < 1e-6 {
@@ -94,7 +99,7 @@ fn compute_corner_covariance(img: &ImageView, center: [f64; 2]) -> Matrix2<f64> 
     let diff = s[(0, 0)] - s[(1, 1)];
     let discriminant = (diff * diff + 4.0 * s[(0, 1)] * s[(0, 1)]).sqrt();
     let r = ((trace - discriminant) / (trace + discriminant)).max(0.0);
-    let alpha = ALPHA_MAX * (1.0 - r) * (1.0 - r);
+    let alpha = alpha_max_val * (1.0 - r) * (1.0 - r);
 
     s_inv.scale(sigma_n_sq) + Matrix2::identity().scale(alpha)
 }
@@ -107,10 +112,19 @@ pub(crate) fn compute_framework_uncertainty(
     img: &ImageView,
     corners: &[[f64; 2]; 4],
     _h_poly: &crate::decoder::Homography,
+    tikhonov_alpha_max: f64,
+    sigma_n_sq: f64,
+    structure_tensor_radius: u8,
 ) -> [Matrix2<f64>; 4] {
     let mut covariances = [Matrix2::zeros(); 4];
     for i in 0..4 {
-        covariances[i] = compute_corner_covariance(img, corners[i]);
+        covariances[i] = compute_corner_covariance(
+            img,
+            corners[i],
+            tikhonov_alpha_max,
+            sigma_n_sq,
+            i32::from(structure_tensor_radius),
+        );
     }
     covariances
 }

@@ -31,7 +31,7 @@ proptest! {
             // If by some chance the random combination IS valid, processing it shouldn't panic
             let config = DetectorConfig::default();
             let mut detector = DetectorBuilder::new().with_config(config).build();
-            let _ = detector.detect(&image, None, None, locus_core::PoseEstimationMode::Fast, false);
+            let _ = detector.detect(&image, None, None, locus_core::PoseEstimationMode::Fast, false).expect("detection failed");
         }
 
         prop_assert!(true);

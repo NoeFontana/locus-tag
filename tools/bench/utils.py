@@ -268,7 +268,7 @@ class HubBenchmarkLoader:
         Yields:
             A tuple of (image_name, grayscale_image_np, list_of_ground_truth_tags).
         """
-        import datasets  # type: ignore
+        import datasets
 
         # Stream the dataset from the hub
         ds = datasets.load_dataset(self.repo_id, subset_name, split="train", streaming=True)

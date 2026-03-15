@@ -142,6 +142,8 @@ fn bench_full_pipeline_real(bencher: divan::Bencher) {
     let mut detector = locus_core::Detector::with_config(config);
 
     bencher.bench_local(move || {
-        let _detections = detector.detect(&img, None, None, PoseEstimationMode::Fast, false);
+        let _detections = detector
+            .detect(&img, None, None, PoseEstimationMode::Fast, false)
+            .unwrap();
     });
 }
