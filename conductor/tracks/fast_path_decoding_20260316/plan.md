@@ -2,14 +2,14 @@
 
 ## Phase 1: Foundation (SoA & Contrast Gate)
 
-- [ ] Task: Extend `DetectionBatch` SoA for the funnel status.
-    - [ ] Add `is_valid` flag to the Structure-of-Arrays (SoA) if not already present.
-    - [ ] Create a `FunnelStatus` enum to track rejection reasons for debugging.
-- [ ] Task: Implement the O(1) Edge Contrast Gate.
-    - [ ] **Red Phase**: Write failing tests for quad mid-point calculation and contrast sampling.
-    - [ ] **Green Phase**: Implement `calculate_edge_midpoints` and `sample_boundary_contrast`.
-    - [ ] Integrate into a standalone `apply_funnel_gate` function.
-    - [ ] **Refactor**: Optimize intensity fetching from the zero-copy image view.
+- [x] Task: Extend `DetectionBatch` SoA for the funnel status. b1cd92d
+    - [x] Add `is_valid` flag to the Structure-of-Arrays (SoA) if not already present.
+    - [x] Create a `FunnelStatus` enum to track rejection reasons for debugging.
+- [x] Task: Implement the O(1) Edge Contrast Gate. d3a1df1
+    - [x] **Red Phase**: Write failing tests for quad mid-point calculation and contrast sampling.
+    - [x] **Green Phase**: Implement `calculate_edge_midpoints` and `sample_boundary_contrast`.
+    - [x] Integrate into a standalone `apply_funnel_gate` function.
+    - [x] **Refactor**: Optimize intensity fetching from the zero-copy image view.
 - [ ] Task: Conductor - User Manual Verification 'Foundation (SoA & Contrast Gate)' (Protocol in workflow.md)
 
 ## Phase 2: SIMD & DDA Implementation
