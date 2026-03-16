@@ -27,7 +27,7 @@
     - [x] **Green Phase**: Implement the NEON-based sampler using `vrecpeq_f32` (or equivalent).
 - [x] Task: Conductor - User Manual Verification 'SIMD & DDA Implementation' (Protocol in workflow.md)
 
-## Phase 3: Integration & Performance Validation
+## Phase 3: Integration & Performance Validation [checkpoint: 70df37d]
 
 - [x] Task: Integrate Fast-Path Funnel into the Decoding Pipeline. 4e24359
     - [x] Replace the existing scalar homography-sampling loop with the new DDA-SIMD routine.
@@ -36,4 +36,4 @@
     - [x] **Verification**: Run `cargo nextest` to ensure zero regressions in detection accuracy.
     - [x] **Benchmark**: Run micro-benchmarks to measure decoding latency reduction.
     - [x] Target: <0.5ms per candidate in representative 640x480 images.
-- [ ] Task: Conductor - User Manual Verification 'Integration & Performance Validation' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Integration & Performance Validation' (Protocol in workflow.md)
