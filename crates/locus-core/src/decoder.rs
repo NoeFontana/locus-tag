@@ -843,6 +843,9 @@ pub(crate) fn compute_otsu_threshold(values: &[f64]) -> f64 {
     best_threshold
 }
 
+/// Maximum number of bits in a supported tag family payload.
+const MAX_BIT_COUNT: usize = 64;
+
 /// Sample values from the image using DDA-based coordinate generation and SIMD bilinear sampling.
 #[multiversion(targets(
     "x86_64+avx2+fma",
@@ -969,37 +972,29 @@ fn sample_grid_values_dda_simd(
         let dny_du = dda.dny_du as f32;
         let dd_du = dda.dd_du as f32;
 
+        let v_dnx_du = vdupq_n_f32(dnx_du);
+        let v_dny_du = vdupq_n_f32(dny_du);
+        let v_dd_du = vdupq_n_f32(dd_du);
+        let v_steps_low = vld1q_f32([0.0, 1.0, 2.0, 3.0].as_ptr());
+        let v_steps_high = vld1q_f32([4.0, 5.0, 6.0, 7.0].as_ptr());
+
         let mut idx = 0;
         for _y in 0..dim {
-            let mut nx = current_nx_row;
-            let mut ny = current_ny_row;
-            let mut d = current_d_row;
+            let mut nx_start = current_nx_row;
+            let mut ny_start = current_ny_row;
+            let mut d_start = current_d_row;
 
             for _x in (0..dim).step_by(8) {
                 let count = (dim - _x).min(8);
                 
-                let mut v_nx = [0.0f32; 8];
-                let mut v_ny = [0.0f32; 8];
-                let mut v_d = [0.0f32; 8];
-
-                for i in 0..count {
-                    v_nx[i] = nx;
-                    v_ny[i] = ny;
-                    v_d[i] = d;
-                    nx += dnx_du;
-                    ny += dny_du;
-                    d += dd_du;
-                }
-
                 // NEON perspective divide using vrecpeq_f32 + vrecpsq_f32
                 let mut v_img_x = [0.0f32; 8];
                 let mut v_img_y = [0.0f32; 8];
 
-                for chunk in 0..2 {
-                    let offset = chunk * 4;
-                    let v_nx_c = vld1q_f32(v_nx.as_ptr().add(offset));
-                    let v_ny_c = vld1q_f32(v_ny.as_ptr().add(offset));
-                    let v_d_c = vld1q_f32(v_d.as_ptr().add(offset));
+                for (chunk, v_steps) in [v_steps_low, v_steps_high].into_iter().enumerate() {
+                    let v_nx_c = vfmaq_f32(vdupq_n_f32(nx_start), v_steps, v_dnx_du);
+                    let v_ny_c = vfmaq_f32(vdupq_n_f32(ny_start), v_steps, v_dny_du);
+                    let v_d_c = vfmaq_f32(vdupq_n_f32(d_start), v_steps, v_dd_du);
 
                     let v_winv = vrecpeq_f32(v_d_c);
                     let v_winv = vmulq_f32(v_winv, vrecpsq_f32(v_d_c, v_winv));
@@ -1007,6 +1002,7 @@ fn sample_grid_values_dda_simd(
                     let img_x = vmulq_f32(v_nx_c, v_winv);
                     let img_y = vmulq_f32(v_ny_c, v_winv);
 
+                    let offset = chunk * 4;
                     vst1q_f32(v_img_x.as_mut_ptr().add(offset), img_x);
                     vst1q_f32(v_img_y.as_mut_ptr().add(offset), img_y);
                 }
@@ -1018,6 +1014,10 @@ fn sample_grid_values_dda_simd(
                     intensities[idx] = f64::from(sampled[i]);
                     idx += 1;
                 }
+
+                nx_start += 8.0 * dnx_du;
+                ny_start += 8.0 * dny_du;
+                d_start += 8.0 * dd_du;
             }
 
             current_nx_row += dda.dnx_dv as f32;
@@ -1112,8 +1112,9 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
 
     let points = decoder.sample_points();
     // Stack-allocated buffer for up to 64 sample points (covers all standard tag families)
-    let mut intensities = [0.0f64; 64];
-    let n = points.len().min(64);
+    let mut intensities = [0.0f64; MAX_BIT_COUNT];
+    let n = points.len().min(MAX_BIT_COUNT);
+    assert!(points.len() <= MAX_BIT_COUNT, "Tag bit count ({}) exceeds static buffer size ({})", points.len(), MAX_BIT_COUNT);
 
     if !sample_grid_values_dda_simd(img, &roi, &homography, decoder, &mut intensities) {
         return None;
@@ -1163,8 +1164,9 @@ pub fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
     let homography_obj = Homography { h: h_mat };
 
     let points = decoder.sample_points();
-    let mut intensities = [0.0f64; 64];
-    let n = points.len().min(64);
+    let mut intensities = [0.0f64; MAX_BIT_COUNT];
+    let n = points.len().min(MAX_BIT_COUNT);
+    assert!(points.len() <= MAX_BIT_COUNT, "Tag bit count ({}) exceeds static buffer size ({})", points.len(), MAX_BIT_COUNT);
 
     if !sample_grid_values_dda_simd(img, &roi, &homography_obj, decoder, &mut intensities) {
         return None;
@@ -1191,8 +1193,9 @@ pub fn sample_grid_soa_precomputed<S: crate::strategy::DecodingStrategy>(
     let homography_obj = Homography { h: h_mat };
 
     let points = decoder.sample_points();
-    let mut intensities = [0.0f64; 64];
-    let n = points.len().min(64);
+    let mut intensities = [0.0f64; MAX_BIT_COUNT];
+    let n = points.len().min(MAX_BIT_COUNT);
+    assert!(points.len() <= MAX_BIT_COUNT, "Tag bit count ({}) exceeds static buffer size ({})", points.len(), MAX_BIT_COUNT);
 
     if !sample_grid_values_dda_simd(img, roi, &homography_obj, decoder, &mut intensities) {
         return None;
