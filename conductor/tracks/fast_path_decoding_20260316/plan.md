@@ -29,9 +29,9 @@
 
 ## Phase 3: Integration & Performance Validation
 
-- [ ] Task: Integrate Fast-Path Funnel into the Decoding Pipeline.
-    - [ ] Replace the existing scalar homography-sampling loop with the new DDA-SIMD routine.
-    - [ ] Ensure `bumpalo` arena is correctly utilized for the temporary intensity scratchpad.
+- [x] Task: Integrate Fast-Path Funnel into the Decoding Pipeline. 4e24359
+    - [x] Replace the existing scalar homography-sampling loop with the new DDA-SIMD routine.
+    - [x] Ensure `bumpalo` arena is correctly utilized for the temporary intensity scratchpad.
 - [ ] Task: Performance Benchmarking and Verification.
     - [ ] **Verification**: Run `cargo nextest` to ensure zero regressions in detection accuracy.
     - [ ] **Benchmark**: Run micro-benchmarks to measure decoding latency reduction.
