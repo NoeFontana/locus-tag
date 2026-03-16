@@ -63,6 +63,7 @@ pub mod bench_api {
     pub use crate::pose::*;
     pub use crate::quad::*;
     pub use crate::segmentation::*;
+    pub use crate::simd::sampler::*;
     pub use crate::test_utils::*;
     pub use crate::threshold::*;
 }
