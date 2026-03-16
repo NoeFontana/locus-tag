@@ -1,6 +1,7 @@
 //! Gradient-Weighted Line Fitting (GWLF) for sub-pixel corner refinement.
 
 use crate::image::ImageView;
+use nalgebra::{Matrix2, Matrix3, Vector2, Vector3, SMatrix};
 
 /// Accumulator for gradient-weighted spatial moments of an edge.
 #[derive(Clone, Copy, Debug, Default)]
@@ -38,207 +39,234 @@ impl MomentAccumulator {
 
     /// Compute the gradient-weighted centroid (cx, cy).
     #[must_use]
-    pub fn centroid(&self) -> Option<(f64, f64)> {
+    pub fn centroid(&self) -> Option<Vector2<f64>> {
         if self.sum_w < 1e-9 {
             None
         } else {
-            Some((self.sum_wx / self.sum_w, self.sum_wy / self.sum_w))
+            Some(Vector2::new(self.sum_wx / self.sum_w, self.sum_wy / self.sum_w))
         }
     }
 
     /// Compute the 2x2 gradient-weighted spatial covariance matrix.
-    /// Returns [sigma_xx, sigma_xy, sigma_xy, sigma_yy]
     #[must_use]
-    #[allow(clippy::similar_names)]
-    pub fn covariance(&self) -> Option<[f64; 4]> {
-        let (cx, cy) = self.centroid()?;
+    pub fn covariance(&self) -> Option<Matrix2<f64>> {
+        let c = self.centroid()?;
         let s_w = self.sum_w;
 
-        let s_xx = (self.sum_wxx / s_w) - (cx * cx);
-        let s_yy = (self.sum_wyy / s_w) - (cy * cy);
-        let s_xy = (self.sum_wxy / s_w) - (cx * cy);
+        let s_xx = (self.sum_wxx / s_w) - (c.x * c.x);
+        let s_yy = (self.sum_wyy / s_w) - (c.y * c.y);
+        let s_xy = (self.sum_wxy / s_w) - (c.x * c.y);
 
-        Some([s_xx, s_xy, s_xy, s_yy])
+        Some(Matrix2::new(s_xx, s_xy, s_xy, s_yy))
     }
 }
 
-/// A line in homogeneous coordinates [nx, ny, d] such that nx*x + ny*y + d = 0.
+/// A line in homogeneous coordinates l such that l^T * [x, y, 1]^T = 0.
 #[derive(Clone, Copy, Debug)]
 pub struct HomogeneousLine {
-    /// X component of the unit normal vector.
-    pub nx: f64,
-    /// Y component of the unit normal vector.
-    pub ny: f64,
-    /// Scalar distance to the origin.
-    pub d: f64,
+    /// Line parameters [nx, ny, d].
+    pub l: Vector3<f64>,
+    /// 3x3 covariance matrix of the line parameters.
+    pub cov: Matrix3<f64>,
 }
 
 impl HomogeneousLine {
     /// Compute the intersection of two homogeneous lines.
-    /// Returns (x, y) in Cartesian coordinates.
+    /// Returns (Cartesian corner, Cartesian 2x2 covariance).
     #[must_use]
-    pub fn intersect(&self, other: &Self) -> Option<(f64, f64)> {
-        // Cross product of l1 = [n1x, n1y, d1] and l2 = [n2x, n2y, d2]
-        // c = l1 x l2 = [u, v, w]
-        let u = self.ny * other.d - self.d * other.ny;
-        let v = self.d * other.nx - self.nx * other.d;
-        let w = self.nx * other.ny - self.ny * other.nx;
-
+    pub fn intersect(&self, other: &Self) -> Option<(Vector2<f64>, Matrix2<f64>)> {
+        // 1. Cross product intersection: c_hom = l1 x l2
+        let c_hom = self.l.cross(&other.l);
+        let w = c_hom.z;
         if w.abs() < 1e-9 {
-            None // Parallel lines
-        } else {
-            Some((u / w, v / w))
+            return None; // Parallel lines
         }
+
+        // Phase B: Covariance of the Projective Intersection
+        // Σ_ch = [l2]x * Σ_l1 * [l2]x^T + [l1]x * Σ_l2 * [l1]x^T
+        let l1_x = self.l.cross_matrix();
+        let l2_x = other.l.cross_matrix();
+        let cov_ch = l2_x * self.cov * l2_x.transpose() + l1_x * other.cov * l1_x.transpose();
+
+        // Phase C: Projection to the Affine Plane
+        // c = [u/w, v/w]
+        let x = c_hom.x / w;
+        let y = c_hom.y / w;
+        let corner = Vector2::new(x, y);
+
+        // Jacobian of perspective division J_pi = (1/w) * [ 1 0 -u/w; 0 1 -v/w ]
+        let mut j_pi = SMatrix::<f64, 2, 3>::zeros();
+        let w_inv = 1.0 / w;
+        j_pi[(0, 0)] = w_inv;
+        j_pi[(0, 2)] = -x * w_inv;
+        j_pi[(1, 1)] = w_inv;
+        j_pi[(1, 2)] = -y * w_inv;
+
+        let cov_c = j_pi * cov_ch * j_pi.transpose();
+
+        Some((corner, cov_c))
     }
 }
 
 /// Result of analytic eigendecomposition of a 2x2 symmetric matrix.
 pub struct EigenResult {
+    /// Largest eigenvalue.
+    pub l_max: f64,
     /// Smallest eigenvalue.
-    pub min_eigenvalue: f64,
+    pub l_min: f64,
+    /// Eigenvector corresponding to the largest eigenvalue.
+    pub v_max: Vector2<f64>,
     /// Eigenvector corresponding to the smallest eigenvalue.
-    pub min_eigenvector: (f64, f64),
+    pub v_min: Vector2<f64>,
 }
 
-/// Solves the eigendecomposition of a 2x2 symmetric matrix [[a, b], [b, c]]
-/// and returns the result for the smallest eigenvalue.
+/// Solves the eigendecomposition of a 2x2 symmetric matrix [[a, b], [b, c]].
 #[must_use]
-pub fn solve_2x2_symmetric_min_eigen(a: f64, b: f64, c: f64) -> EigenResult {
-    // Characteristic equation: det(A - lambda*I) = 0
-    // (a - lambda)(c - lambda) - b^2 = 0
-    // lambda^2 - (a+c)lambda + (ac - b^2) = 0
+pub fn solve_2x2_symmetric(a: f64, b: f64, c: f64) -> EigenResult {
     let trace = a + c;
     let det = a * c - b * b;
 
-    // Quadratic formula: lambda = (trace +/- sqrt(trace^2 - 4*det)) / 2
     let disc = (trace * trace - 4.0 * det).max(0.0).sqrt();
+    let l_max = (trace + disc) / 2.0;
     let l_min = (trace - disc) / 2.0;
 
-    // Eigenvector (nx, ny) for l_min:
-    // (a - l_min)nx + b*ny = 0
-    // If b is not zero: ny = -(a - l_min)nx / b. Set nx = b, ny = -(a - l_min)
-    // If b is zero: diagonal matrix.
-    let (nx, ny) = if b.abs() > 1e-9 {
+    // Smallest eigenvalue eigenvector (normal n)
+    let v_min = if b.abs() > 1e-9 {
         let vx = b;
         let vy = l_min - a;
-        let mag = (vx * vx + vy * vy).sqrt();
-        (vx / mag, vy / mag)
+        Vector2::new(vx, vy).normalize()
     } else if a < c {
-        (1.0, 0.0)
+        Vector2::new(1.0, 0.0)
     } else {
-        (0.0, 1.0)
+        Vector2::new(0.0, 1.0)
     };
 
+    // Largest eigenvalue eigenvector (tangent t)
+    let v_max = Vector2::new(-v_min.y, v_min.x);
+
     EigenResult {
-        min_eigenvalue: l_min,
-        min_eigenvector: (nx, ny),
+        l_max,
+        l_min,
+        v_max,
+        v_min,
     }
 }
 
 /// Refine quad corners using Gradient-Weighted Line Fitting (GWLF).
 ///
-/// Returns the refined corners [[x, y]; 4] or None if refinement fails.
+/// Returns the refined corners [[x, y]; 4] and their 2x2 covariances [Matrix2; 4].
 #[must_use]
 #[allow(clippy::similar_names)]
 #[allow(clippy::cast_sign_loss)]
 #[allow(clippy::cast_possible_wrap)]
-pub fn refine_quad_gwlf(img: &ImageView, coarse_corners: &[[f32; 2]; 4]) -> Option<[[f32; 2]; 4]> {
+pub fn refine_quad_gwlf_with_cov(
+    img: &ImageView,
+    coarse_corners: &[[f32; 2]; 4],
+) -> Option<([[f32; 2]; 4], [Matrix2<f64>; 4])> {
     let mut lines = [HomogeneousLine {
-        nx: 0.0,
-        ny: 0.0,
-        d: 0.0,
+        l: Vector3::zeros(),
+        cov: Matrix3::zeros(),
     }; 4];
 
     for i in 0..4 {
         let p0 = coarse_corners[i];
         let p1 = coarse_corners[(i + 1) % 4];
 
-        // Edge vector and length
-        let dx = f64::from(p1[0] - p0[0]);
-        let dy = f64::from(p1[1] - p0[1]);
-        let len = (dx * dx + dy * dy).sqrt();
+        let dx_edge = f64::from(p1[0] - p0[0]);
+        let dy_edge = f64::from(p1[1] - p0[1]);
+        let len = (dx_edge * dx_edge + dy_edge * dy_edge).sqrt();
         if len < 2.0 {
             return None;
         }
 
-        // Unit vector along the edge
-        let ux = dx / len;
-        let uy = dy / len;
-
-        // Normal vector to the edge
+        let ux = dx_edge / len;
+        let uy = dy_edge / len;
         let nx_coarse = -uy;
         let ny_coarse = ux;
 
         let mut acc = MomentAccumulator::new();
-
-        // Sample points along the edge
-        let steps = (len as usize).max(2);
+        let steps = (len * 2.0) as usize;
         for s in 0..=steps {
             let t = (s as f64) / (steps as f64);
-            let px = f64::from(p0[0]) + t * dx;
-            let py = f64::from(p0[1]) + t * dy;
+            let px = f64::from(p0[0]) + t * dx_edge;
+            let py = f64::from(p0[1]) + t * dy_edge;
 
-            // Sample transversally
             for k in -2..=2 {
                 let sx = px + f64::from(k) * nx_coarse;
                 let sy = py + f64::from(k) * ny_coarse;
 
-                let ix = sx.round() as i32;
-                let iy = sy.round() as i32;
+                if sx < 1.0 || sx >= (img.width - 2) as f64 || sy < 1.0 || sy >= (img.height - 2) as f64 {
+                    continue;
+                }
 
-                let width_i32 = img.width as i32;
-                let height_i32 = img.height as i32;
-
-                if ix > 0 && ix < (width_i32 - 1) && iy > 0 && iy < (height_i32 - 1) {
-                    let uix = ix as usize;
-                    let uiy = iy as usize;
-                    // Simple finite difference gradient
-                    let g_x = f64::from(img.get_pixel(uix + 1, uiy))
-                        - f64::from(img.get_pixel(uix - 1, uiy));
-                    let g_y = f64::from(img.get_pixel(uix, uiy + 1))
-                        - f64::from(img.get_pixel(uix, uiy - 1));
-
-                    let w = g_x * g_x + g_y * g_y;
-                    if w > 100.0 {
-                        // Noise floor
-                        acc.add(f64::from(ix), f64::from(iy), w);
-                    }
+                let g = img.sample_gradient_bilinear(sx, sy);
+                let w = g[0] * g[0] + g[1] * g[1];
+                
+                // Weight noise floor
+                if w > 100.0 {
+                    acc.add(sx, sy, w);
                 }
             }
         }
 
-        let cov = acc.covariance()?;
-        let res = solve_2x2_symmetric_min_eigen(cov[0], cov[1], cov[3]);
-        let (nx, ny) = res.min_eigenvector;
-        let (cx, cy) = acc.centroid()?;
+        let cov_spatial = acc.covariance()?;
+        let res = solve_2x2_symmetric(cov_spatial[(0, 0)], cov_spatial[(0, 1)], cov_spatial[(1, 1)]);
+        let n = res.v_min;
+        let x_bar = acc.centroid()?;
+        let w_total = acc.sum_w;
+
+        // Phase A: Covariance of the Line Parameters
+        // Σ_xbar = (λ_min / W) * I
+        let sigma_xbar = Matrix2::identity().scale(res.l_min / w_total);
+        // Σ_n = (λ_min / (W * (λ_max - λ_min))) * n_perp * n_perp^T
+        let n_perp = res.v_max;
+        let sigma_n = (n_perp * n_perp.transpose()).scale(res.l_min / (w_total * (res.l_max - res.l_min).max(1e-6)));
+
+        // l = [n; -x_bar^T * n]
+        // J_n = [I; -x_bar^T], J_xbar = [0; -n^T]
+        let mut j_n = SMatrix::<f64, 3, 2>::zeros();
+        j_n.fixed_view_mut::<2, 2>(0, 0).copy_from(&Matrix2::identity());
+        j_n[(2, 0)] = -x_bar.x;
+        j_n[(2, 1)] = -x_bar.y;
+
+        let mut j_xbar = SMatrix::<f64, 3, 2>::zeros();
+        j_xbar[(2, 0)] = -n.x;
+        j_xbar[(2, 1)] = -n.y;
+
+        let cov_l = j_n * sigma_n * j_n.transpose()
+                  + j_xbar * sigma_xbar * j_xbar.transpose();
 
         lines[i] = HomogeneousLine {
-            nx,
-            ny,
-            d: -(nx * cx + ny * cy),
+            l: Vector3::new(n.x, n.y, -x_bar.dot(&n)),
+            cov: cov_l,
         };
     }
 
-    // Intersect adjacent lines
-    let mut refined = [[0.0f32; 2]; 4];
+    let mut refined_corners = [[0.0f32; 2]; 4];
+    let mut refined_covs = [Matrix2::zeros(); 4];
+
     for i in 0..4 {
-        // Line i and line i-1 intersect at corner i
         let l_prev = lines[(i + 3) % 4];
         let l_curr = lines[i];
 
-        let (ix, iy) = l_prev.intersect(&l_curr)?;
+        let (corner, cov) = l_prev.intersect(&l_curr)?;
 
-        // Sanity check: distance from coarse corner
-        let dist_sq = (ix - f64::from(coarse_corners[i][0])).powi(2)
-            + (iy - f64::from(coarse_corners[i][1])).powi(2);
-
-        if dist_sq > 9.0 {
-            // 3.0 pixel threshold
+        // Sanity check
+        let dist_sq = (corner.x - f64::from(coarse_corners[i][0])).powi(2)
+                    + (corner.y - f64::from(coarse_corners[i][1])).powi(2);
+        if dist_sq > 25.0 { // Relaxed sanity check for blur (5.0 px)
             return None;
         }
 
-        refined[i] = [ix as f32, iy as f32];
+        refined_corners[i] = [corner.x as f32, corner.y as f32];
+        refined_covs[i] = cov;
     }
 
-    Some(refined)
+    Some((refined_corners, refined_covs))
+}
+
+/// Compatibility wrapper for the existing API.
+#[must_use]
+pub fn refine_quad_gwlf(img: &ImageView, coarse_corners: &[[f32; 2]; 4]) -> Option<[[f32; 2]; 4]> {
+    refine_quad_gwlf_with_cov(img, coarse_corners).map(|(c, _)| c)
 }
