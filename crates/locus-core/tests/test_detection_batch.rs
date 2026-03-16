@@ -10,7 +10,7 @@
     clippy::must_use_candidate,
     clippy::return_self_not_must_use
 )]
-use locus_core::bench_api::DetectionBatch;
+use locus_core::bench_api::{DetectionBatch, FunnelStatus};
 
 #[test]
 fn test_batch_allocation() {
@@ -26,4 +26,10 @@ fn test_batch_alignment() {
 
     let homographies_ptr = batch.homographies.as_ptr() as usize;
     assert_eq!(homographies_ptr % 32, 0);
+}
+
+#[test]
+fn test_funnel_status_initialization() {
+    let batch = DetectionBatch::new();
+    assert_eq!(batch.funnel_status[0], FunnelStatus::None);
 }

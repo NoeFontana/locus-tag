@@ -46,6 +46,21 @@ pub enum CandidateState {
     Valid = 3,
 }
 
+/// The status of a candidate in the fast-path decoding funnel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum FunnelStatus {
+    /// Candidate has not yet been processed by the funnel.
+    #[default]
+    None = 0,
+    /// Candidate passed the O(1) contrast gate.
+    PassedContrast = 1,
+    /// Candidate rejected by the O(1) contrast gate.
+    RejectedContrast = 2,
+    /// Candidate rejected during homography DDA or SIMD sampling.
+    RejectedSampling = 3,
+}
+
 /// A batched state container for fiducial marker detections using a Structure of Arrays (SoA) layout.
 /// This structure is designed for high-performance SIMD processing and zero heap allocations.
 #[repr(C, align(32))]
@@ -64,6 +79,8 @@ pub struct DetectionBatch {
     pub poses: [Pose6D; MAX_CANDIDATES],
     /// A dense byte-array tracking the lifecycle of each candidate.
     pub status_mask: [CandidateState; MAX_CANDIDATES],
+    /// Detailed status from the fast-path funnel.
+    pub funnel_status: [FunnelStatus; MAX_CANDIDATES],
     /// Four 2x2 corner covariance matrices per quad (16 floats).
     /// Layout: [c0_xx, c0_xy, c0_yx, c0_yy, c1_xx, ...]
     pub corner_covariances: [[f32; 16]; MAX_CANDIDATES],
@@ -88,6 +105,7 @@ impl DetectionBatch {
                 padding: 0.0,
             }; MAX_CANDIDATES],
             status_mask: [CandidateState::Empty; MAX_CANDIDATES],
+            funnel_status: [FunnelStatus::None; MAX_CANDIDATES],
             corner_covariances: [[0.0; 16]; MAX_CANDIDATES],
         })
     }
@@ -117,6 +135,7 @@ impl DetectionBatch {
                     self.error_rates.swap(i, v);
                     self.poses.swap(i, v);
                     self.status_mask.swap(i, v);
+                    self.funnel_status.swap(i, v);
                     self.corner_covariances.swap(i, v);
                 }
                 v += 1;
@@ -256,6 +275,8 @@ pub struct DetectionBatchView<'a> {
     pub rejected_corners: &'a [[Point2f; 4]],
     /// Error rates (e.g. Hamming distance) for rejected quads.
     pub rejected_error_rates: &'a [f32],
+    /// Detailed status from the fast-path funnel for rejected quads.
+    pub rejected_funnel_status: &'a [FunnelStatus],
 }
 
 impl DetectionBatchView<'_> {
@@ -287,6 +308,7 @@ impl DetectionBatch {
             telemetry: None,
             rejected_corners: &[],
             rejected_error_rates: &[],
+            rejected_funnel_status: &[],
         }
     }
 
@@ -310,6 +332,7 @@ impl DetectionBatch {
             telemetry,
             rejected_corners: &self.corners[v_clamped..n_clamped],
             rejected_error_rates: &self.error_rates[v_clamped..n_clamped],
+            rejected_funnel_status: &self.funnel_status[v_clamped..n_clamped],
         }
     }
 }
