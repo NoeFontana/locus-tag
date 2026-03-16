@@ -12,7 +12,7 @@
     - [x] **Refactor**: Optimize intensity fetching from the zero-copy image view.
 - [x] Task: Conductor - User Manual Verification 'Foundation (SoA & Contrast Gate)' (Protocol in workflow.md)
 
-## Phase 2: SIMD & DDA Implementation
+## Phase 2: SIMD & DDA Implementation [checkpoint: 0bcf559]
 
 - [x] Task: Implement Homography Digital Differential Analyzer (DDA). 76b4e6a
     - [x] **Red Phase**: Write failing tests for incremental step calculation ($\partial_u, \partial_v$).
@@ -25,7 +25,7 @@
 - [x] Task: Implement SIMD-Vectorized Bilinear Interpolation (AArch64). b850a91
     - [x] **Red Phase**: Write failing tests for NEON interpolation.
     - [x] **Green Phase**: Implement the NEON-based sampler using `vrecpeq_f32` (or equivalent).
-- [ ] Task: Conductor - User Manual Verification 'SIMD & DDA Implementation' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'SIMD & DDA Implementation' (Protocol in workflow.md)
 
 ## Phase 3: Integration & Performance Validation
 
