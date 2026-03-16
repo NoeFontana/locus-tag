@@ -64,6 +64,9 @@ pub struct DetectionBatch {
     pub poses: [Pose6D; MAX_CANDIDATES],
     /// A dense byte-array tracking the lifecycle of each candidate.
     pub status_mask: [CandidateState; MAX_CANDIDATES],
+    /// Four 2x2 corner covariance matrices per quad (16 floats).
+    /// Layout: [c0_xx, c0_xy, c0_yx, c0_yy, c1_xx, ...]
+    pub corner_covariances: [[f32; 16]; MAX_CANDIDATES],
 }
 
 impl DetectionBatch {
@@ -85,6 +88,7 @@ impl DetectionBatch {
                 padding: 0.0,
             }; MAX_CANDIDATES],
             status_mask: [CandidateState::Empty; MAX_CANDIDATES],
+            corner_covariances: [[0.0; 16]; MAX_CANDIDATES],
         })
     }
     /// Returns the maximum capacity of the batch.
@@ -113,6 +117,7 @@ impl DetectionBatch {
                     self.error_rates.swap(i, v);
                     self.poses.swap(i, v);
                     self.status_mask.swap(i, v);
+                    self.corner_covariances.swap(i, v);
                 }
                 v += 1;
             }
@@ -207,6 +212,10 @@ pub struct TelemetryPayload {
     pub reprojection_errors_ptr: *const f32,
     /// Number of valid candidates reprojection data is available for.
     pub num_reprojection: usize,
+    /// Number of quads that fell back to coarse corners during GWLF.
+    pub gwlf_fallback_count: usize,
+    /// Average Euclidean distance (delta) of GWLF refinement (pixels).
+    pub gwlf_avg_delta: f32,
     /// Width of the buffers.
     pub width: usize,
     /// Height of the buffers.

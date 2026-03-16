@@ -32,6 +32,8 @@ pub enum CornerRefinementMode {
     GridFit,
     /// Erf: Fits a Gaussian to the gradient profile for sub-pixel edge alignment.
     Erf,
+    /// Gwlf: Gradient-Weighted Line Fitting (PCA on gradients).
+    Gwlf,
 }
 
 /// Mode for decoding strategy.
@@ -159,6 +161,10 @@ pub struct DetectorConfig {
     /// in Accurate mode. A radius of 2 yields a 5x5 window.
     /// Smaller values (1) are better for small tags; larger (3-4) for noisy images.
     pub structure_tensor_radius: u8,
+
+    /// Alpha parameter for GWLF adaptive transversal windowing.
+    /// The search band is set to +/- max(2, alpha * edge_length).
+    pub gwlf_transversal_alpha: f64,
 }
 
 impl Default for DetectorConfig {
@@ -196,6 +202,7 @@ impl Default for DetectorConfig {
             tikhonov_alpha_max: 0.25,
             sigma_n_sq: 4.0,
             structure_tensor_radius: 2,
+            gwlf_transversal_alpha: 0.01,
         }
     }
 }
@@ -304,6 +311,8 @@ pub struct DetectorConfigBuilder {
     pub decode_mode: Option<DecodeMode>,
     /// Maximum Hamming errors.
     pub max_hamming_error: Option<u32>,
+    /// GWLF transversal alpha.
+    pub gwlf_transversal_alpha: Option<f64>,
 }
 
 impl DetectorConfigBuilder {
@@ -478,6 +487,9 @@ impl DetectorConfigBuilder {
             tikhonov_alpha_max: d.tikhonov_alpha_max,
             sigma_n_sq: d.sigma_n_sq,
             structure_tensor_radius: d.structure_tensor_radius,
+            gwlf_transversal_alpha: self
+                .gwlf_transversal_alpha
+                .unwrap_or(d.gwlf_transversal_alpha),
         }
     }
 
@@ -539,6 +551,13 @@ impl DetectorConfigBuilder {
     #[must_use]
     pub fn max_hamming_error(mut self, errors: u32) -> Self {
         self.max_hamming_error = Some(errors);
+        self
+    }
+
+    /// Set the GWLF transversal alpha.
+    #[must_use]
+    pub fn gwlf_transversal_alpha(mut self, alpha: f64) -> Self {
+        self.gwlf_transversal_alpha = Some(alpha);
         self
     }
 }

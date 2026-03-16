@@ -55,7 +55,11 @@ sequenceDiagram
         Det->>Quad: extract_quad()
         Quad->>Quad: Contour Tracing
         Quad->>Quad: Polygon Approx (Douglas-Peucker)
-        Quad->>Quad: Sub-pixel Refinement (ERF Fit)
+        alt Mode = Erf
+            Quad->>Quad: Sub-pixel Refinement (ERF Fit)
+        else Mode = Gwlf
+            Quad->>Quad: Gradient-Weighted Line Fitting
+        end
     end
     Quad-->>Det: Quad Candidates
 
@@ -242,6 +246,21 @@ Targets a **low latency** budget for high-resolution frames on modern CPUs.
 
 *Note: Total latency ~14.5ms for 50 tags (720p) on a modern desktop CPU (e.g., Zen 4).*
 
+## Sub-pixel Refinement Strategies
+
+Locus provides two distinct algorithms for sub-pixel corner localization, selectable via `CornerRefinementMode`.
+
+| Mode | Algorithm | Strength | Target Use Case |
+| :--- | :--- | :--- | :--- |
+| **ERF** | Edge Response Function | Localized accuracy on high-contrast edges. | Front-parallel tags, stable lighting. |
+| **GWLF** | Gradient-Weighted Line Fitting | Robustness to blur and grazing angles. | Robotics, high-speed motion, steep angles. |
+
+### Edge Response Function (ERF)
+Fits a 1D Gaussian to the gradient profile along the normal of each edge. It is highly effective for front-parallel tags but can be sensitive to corner rounding caused by lens blur.
+
+### Gradient-Weighted Line Fitting (GWLF)
+A robust geometric approach that fits infinite lines to the image gradients along each of the four edges using **Weighted Orthogonal Distance Regression (PCA)**. The refined corner is computed as the algebraic intersection of these lines in homogeneous space. GWLF is significantly more robust to optical low-pass filtering and grazing angles, often providing a **~10x improvement in rotation stability** at high resolutions. The implementation uses **bilinear gradient sampling** and **Adaptive Transversal Windowing**, where the search band scales proportionally with the edge length ($\pm \max(2, 0.01L)$).
+
 ## Decoding Strategies
 
 The `DecodingStrategy` trait enables static dispatch between throughput-optimized and recall-optimized paths.
@@ -269,7 +288,7 @@ Locus provides two algorithms for 6-DOF recovery, allowing users to prioritize e
 
 ### Accurate Mode: Probabilistic
 *   **Target**: Metrology, calibration, and long-range precision landing.
-*   **Method**: Estimates sub-pixel corner uncertainty via the **Structure Tensor** ($J^T J$).
+*   **Method**: Estimates sub-pixel corner uncertainty via either the **Structure Tensor** ($J^T J$) or formal error propagation through **Gradient-Weighted Line Fitting (GWLF)**.
 *   **Refinement**: **Anisotropic Weighted LM** minimizing the Mahalanobis distance.
 *   **Output**: Provides a full $6 \times 6$ `pose_covariance` matrix.
 *   **Latency**: ~200µs per tag.
@@ -330,6 +349,7 @@ The `locus-core` crate is organized into logical modules mirroring the pipeline 
 | `threshold` | Adaptive thresholding and integral images. | `ThresholdEngine` |
 | `segmentation` | Connected components labeling. | `UnionFind` |
 | `quad` | Contour tracing and quad fitting. | `extract_quads` |
+| `gwlf` | Gradient-Weighted Line Fitting. | `refine_quad_gwlf` |
 | `decoder` | Bit extraction and hamming decoding. | `TagDecoder`, `Homography` |
 | `pose` | 3D pose estimation (PnP). | `Pose`, `CameraIntrinsics` |
 | `pose_weighted` | Structure Tensor & Weighted LM. | `refine_pose_lm_weighted` |

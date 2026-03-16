@@ -9,7 +9,7 @@
 use crate::batch::{DetectionBatch, Pose6D};
 use crate::config::PoseEstimationMode;
 use crate::image::ImageView;
-use nalgebra::{Matrix3, Matrix6, UnitQuaternion, Vector3, Vector6};
+use nalgebra::{Matrix2, Matrix3, Matrix6, UnitQuaternion, Vector3, Vector6};
 
 /// Camera intrinsics parameters.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -119,6 +119,7 @@ pub fn estimate_tag_pose(
         img,
         mode,
         &crate::config::DetectorConfig::default(),
+        None,
     )
 }
 
@@ -133,6 +134,7 @@ pub fn estimate_tag_pose_with_config(
     img: Option<&ImageView>,
     mode: PoseEstimationMode,
     config: &crate::config::DetectorConfig,
+    external_covariances: Option<&[Matrix2<f64>; 4]>,
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>) {
     // 1. Canonical Homography: Map canonical square [-1,1]x[-1,1] to image pixels.
     let Some(h_poly) = crate::decoder::Homography::square_to_quad(corners) else {
@@ -168,8 +170,15 @@ pub fn estimate_tag_pose_with_config(
     let best_pose = find_best_pose(intrinsics, corners, tag_size, &candidates);
 
     // 6. Refinement: Levenberg-Marquardt (LM)
-    match (mode, img) {
-        (PoseEstimationMode::Accurate, Some(image)) => {
+    match (mode, img, external_covariances) {
+        (PoseEstimationMode::Accurate, _, Some(ext_covs)) => {
+            // Use provided covariances (e.g. from GWLF)
+            let (refined_pose, covariance) = crate::pose_weighted::refine_pose_lm_weighted(
+                intrinsics, corners, tag_size, best_pose, ext_covs,
+            );
+            (Some(refined_pose), Some(covariance))
+        },
+        (PoseEstimationMode::Accurate, Some(image), None) => {
             // Compute corner uncertainty from structure tensor
             let uncertainty = crate::pose_weighted::compute_framework_uncertainty(
                 image,
@@ -678,8 +687,32 @@ pub fn refine_poses_soa_with_config(
                 ],
             ];
 
-            let (pose_opt, _) =
-                estimate_tag_pose_with_config(intrinsics, &corners, tag_size, img, mode, config);
+            // If GWLF is enabled, we should have corner covariances in the batch.
+            // Check if any covariance is non-zero.
+            let mut ext_covs = [Matrix2::zeros(); 4];
+            let mut has_ext_covs = false;
+            #[allow(clippy::needless_range_loop)]
+            for j in 0..4 {
+                ext_covs[j] = Matrix2::new(
+                    f64::from(batch.corner_covariances[i][j * 4]),
+                    f64::from(batch.corner_covariances[i][j * 4 + 1]),
+                    f64::from(batch.corner_covariances[i][j * 4 + 2]),
+                    f64::from(batch.corner_covariances[i][j * 4 + 3]),
+                );
+                if ext_covs[j].norm_squared() > 1e-12 {
+                    has_ext_covs = true;
+                }
+            }
+
+            let (pose_opt, _) = estimate_tag_pose_with_config(
+                intrinsics,
+                &corners,
+                tag_size,
+                img,
+                mode,
+                config,
+                if has_ext_covs { Some(&ext_covs) } else { None },
+            );
 
             if let Some(pose) = pose_opt {
                 let q = UnitQuaternion::from_matrix(&pose.rotation);

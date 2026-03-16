@@ -49,6 +49,7 @@ class DetectorConfig(BaseModel):
     refinement_mode: CornerRefinementMode = Field(default_factory=lambda: CornerRefinementMode.Erf)
     decode_mode: DecodeMode = Field(default_factory=lambda: DecodeMode.Hard)
     max_hamming_error: int = Field(default=2, ge=0)
+    gwlf_transversal_alpha: float = Field(default=0.01, ge=0.0)
 
 
 class DetectOptions(BaseModel):

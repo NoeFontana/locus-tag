@@ -20,6 +20,8 @@ pub mod error;
 pub mod filter;
 /// Gradient computation for edge refinement.
 pub mod gradient;
+/// Gradient-Weighted Line Fitting (GWLF).
+pub mod gwlf;
 /// Image buffer abstractions.
 pub mod image;
 /// 3D Pose Estimation (PnP).

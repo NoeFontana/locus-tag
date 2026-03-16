@@ -193,6 +193,11 @@ impl RegressionHarness {
         self
     }
 
+    pub fn with_refinement_mode(mut self, mode: locus_core::config::CornerRefinementMode) -> Self {
+        self.config.refinement_mode = mode;
+        self
+    }
+
     pub fn run(self, provider: impl DatasetProvider) {
         let mut detector = Detector::with_config(self.config);
         if !self.options.families.is_empty() {
@@ -701,7 +706,12 @@ fn resolve_hub_root(hub_dir: &str) -> PathBuf {
     path // fallback — will fail on `exists()` with a clear skip message
 }
 
-fn run_hub_test(config_name: &str, family: TagFamily, mode: PoseEstimationMode) {
+fn run_hub_test(
+    config_name: &str,
+    family: TagFamily,
+    mode: PoseEstimationMode,
+    refinement: Option<locus_core::config::CornerRefinementMode>,
+) {
     if let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") {
         let root = resolve_hub_root(&hub_dir);
         let dataset_path = root.join(config_name);
@@ -759,12 +769,30 @@ fn run_hub_test(config_name: &str, family: TagFamily, mode: PoseEstimationMode) 
                 PoseEstimationMode::Fast => "_fast",
                 PoseEstimationMode::Accurate => "",
             };
-            let snapshot = format!("hub_{}{}", provider.name(), mode_suffix);
-            RegressionHarness::new(snapshot)
+
+            let refinement_suffix =
+                if let Some(locus_core::config::CornerRefinementMode::Gwlf) = refinement {
+                    "_gwlf"
+                } else {
+                    ""
+                };
+
+            let snapshot = format!(
+                "hub_{}{}{}",
+                provider.name(),
+                mode_suffix,
+                refinement_suffix
+            );
+            let mut harness = RegressionHarness::new(snapshot)
                 .with_preset(ConfigPreset::PlainBoard)
                 .with_families(vec![family])
-                .with_options(options)
-                .run(provider);
+                .with_options(options);
+
+            if let Some(r) = refinement {
+                harness = harness.with_refinement_mode(r);
+            }
+
+            harness.run(provider);
         }
     } else {
         println!("Skipping hub tests. Set LOCUS_HUB_DATASET_DIR to run.");
@@ -780,6 +808,18 @@ fn regression_hub_tag36h11_640x480() {
         "single_tag_locus_v1_tag36h11_640x480",
         TagFamily::AprilTag36h11,
         PoseEstimationMode::Accurate,
+        None,
+    );
+}
+
+#[test]
+fn regression_hub_tag36h11_640x480_gwlf() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_640x480_gwlf");
+    run_hub_test(
+        "single_tag_locus_v1_tag36h11_640x480",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
+        Some(locus_core::config::CornerRefinementMode::Gwlf),
     );
 }
 
@@ -790,6 +830,18 @@ fn regression_hub_tag36h11_720p() {
         "single_tag_locus_v1_tag36h11_1280x720",
         TagFamily::AprilTag36h11,
         PoseEstimationMode::Accurate,
+        None,
+    );
+}
+
+#[test]
+fn regression_hub_tag36h11_720p_gwlf() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_720p_gwlf");
+    run_hub_test(
+        "single_tag_locus_v1_tag36h11_1280x720",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
+        Some(locus_core::config::CornerRefinementMode::Gwlf),
     );
 }
 
@@ -800,6 +852,18 @@ fn regression_hub_tag36h11_1080p() {
         "single_tag_locus_v1_tag36h11_1920x1080",
         TagFamily::AprilTag36h11,
         PoseEstimationMode::Accurate,
+        None,
+    );
+}
+
+#[test]
+fn regression_hub_tag36h11_1080p_gwlf() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_1080p_gwlf");
+    run_hub_test(
+        "single_tag_locus_v1_tag36h11_1920x1080",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
+        Some(locus_core::config::CornerRefinementMode::Gwlf),
     );
 }
 
@@ -810,6 +874,18 @@ fn regression_hub_tag36h11_2160p() {
         "single_tag_locus_v1_tag36h11_3840x2160",
         TagFamily::AprilTag36h11,
         PoseEstimationMode::Accurate,
+        None,
+    );
+}
+
+#[test]
+fn regression_hub_tag36h11_2160p_gwlf() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_2160p_gwlf");
+    run_hub_test(
+        "single_tag_locus_v1_tag36h11_3840x2160",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
+        Some(locus_core::config::CornerRefinementMode::Gwlf),
     );
 }
 
@@ -822,6 +898,7 @@ fn regression_hub_fast_tag36h11_640x480() {
         "single_tag_locus_v1_tag36h11_640x480",
         TagFamily::AprilTag36h11,
         PoseEstimationMode::Fast,
+        None,
     );
 }
 
@@ -832,6 +909,7 @@ fn regression_hub_fast_tag36h11_720p() {
         "single_tag_locus_v1_tag36h11_1280x720",
         TagFamily::AprilTag36h11,
         PoseEstimationMode::Fast,
+        None,
     );
 }
 
@@ -842,6 +920,7 @@ fn regression_hub_fast_tag36h11_1080p() {
         "single_tag_locus_v1_tag36h11_1920x1080",
         TagFamily::AprilTag36h11,
         PoseEstimationMode::Fast,
+        None,
     );
 }
 
@@ -852,5 +931,6 @@ fn regression_hub_fast_tag36h11_2160p() {
         "single_tag_locus_v1_tag36h11_3840x2160",
         TagFamily::AprilTag36h11,
         PoseEstimationMode::Fast,
+        None,
     );
 }
