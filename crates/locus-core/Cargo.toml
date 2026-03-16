@@ -29,7 +29,7 @@ rand_distr = "0.6"
 [dev-dependencies]
 divan = "0.1"
 proptest = "1.6"
-rand_chacha = "0.9"
+rand_chacha = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 image = "0.25"
