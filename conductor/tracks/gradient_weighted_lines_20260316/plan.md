@@ -17,12 +17,12 @@
 - [ ] Task: Conductor - User Manual Verification 'Core Mathematical Components' (Protocol in workflow.md)
 
 ## Phase 3: Edge Fitting and Corner Intersection
-- [ ] Task: TDD - Line Intersection
-    - [ ] Write failing test for homogeneous line intersection (`l1 x l2`).
-    - [ ] Implement projective-to-Cartesian coordinate conversion.
-- [ ] Task: TDD - Sanity Gate and Robustness
-    - [ ] Write failing test for 3.0-pixel fallback logic.
-    - [ ] Implement distance-based fallback to coarse corner coordinates.
+- [x] Task: TDD - Line Intersection (354b1f5)
+    - [x] Write failing test for homogeneous line intersection (`l1 x l2`).
+    - [x] Implement projective-to-Cartesian coordinate conversion.
+- [x] Task: TDD - Sanity Gate and Robustness (354b1f5)
+    - [x] Write failing test for 3.0-pixel fallback logic.
+    - [x] Implement distance-based fallback to coarse corner coordinates.
 - [ ] Task: Conductor - User Manual Verification 'Edge Fitting and Corner Intersection' (Protocol in workflow.md)
 
 ## Phase 4: Benchmarking and Verification
