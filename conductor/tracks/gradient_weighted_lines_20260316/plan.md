@@ -8,12 +8,12 @@
 - [ ] Task: Conductor - User Manual Verification 'Configuration and API Interface' (Protocol in workflow.md)
 
 ## Phase 2: Core Mathematical Components
-- [ ] Task: TDD - Moment Accumulation
-    - [ ] Write failing test for gradient-weighted moment accumulation on synthetic edge data.
-    - [ ] Implement single-pass, cache-coherent accumulation loop (`sum_w`, `sum_wx`, etc.).
-- [ ] Task: TDD - Analytic Eigendecomposition
-    - [ ] Write failing test for 2x2 covariance solver using known matrices.
-    - [ ] Implement analytic solution for smallest eigenvalue and normal vector.
+- [x] Task: TDD - Moment Accumulation (88ec500)
+    - [x] Write failing test for gradient-weighted moment accumulation on synthetic edge data.
+    - [x] Implement single-pass, cache-coherent accumulation loop (`sum_w`, `sum_wx`, etc.).
+- [x] Task: TDD - Analytic Eigendecomposition (88ec500)
+    - [x] Write failing test for 2x2 covariance solver using known matrices.
+    - [x] Implement analytic solution for smallest eigenvalue and normal vector.
 - [ ] Task: Conductor - User Manual Verification 'Core Mathematical Components' (Protocol in workflow.md)
 
 ## Phase 3: Edge Fitting and Corner Intersection
