@@ -160,9 +160,10 @@ classDiagram
 6.  **Runtime SIMD Dispatch**: Uses `multiversion` to target AVX2, AVX-512, or NEON based on host CPU capabilities.
 7.  **Structure of Arrays (SoA) Layout**: Built around the `DetectionBatch`, which eliminates L1 cache misses during math-heavy passes and ensures SIMD-alignment for all mathematical operations.
 8.  **Semantic Configuration**: Employs a `DetectorBuilder` to provide a human-friendly API for pipeline tuning, abstracting 20+ fine-grained parameters into high-level semantic methods.
-9.  **Fast-Math Sampling**: Rewrites homography projection and bilinear interpolation using hardware reciprocal approximation (`rcp_nr`) and fixed-point integer SIMD to bypass FPU latency.
-10. **Hybrid ROI Caching**: Minimizes L1 cache misses by copying tag candidates into contiguous stack (small tags) or arena (large tags) buffers before sampling.
-11. **Hybrid Parallelism**: Scales via `rayon` for data-parallel tasks while maintaining sequential cache-coherence for state-heavy stages.
+9.  **Fast-Path Funnel**: Implements a multi-stage rejection gate and sampling routine. It uses an O(1) contrast gate to reject background artifacts early, followed by SIMD-accelerated coordinate generation via Digital Differential Analyzer (DDA) and vectorized bilinear interpolation.
+10. **Fast-Math Sampling**: Rewrites homography projection and bilinear interpolation using hardware reciprocal approximation (`rcp_nr_v8`) and vectorized FMA instructions to minimize latency.
+11. **Hybrid ROI Caching**: Minimizes L1 cache misses by copying tag candidates into contiguous stack (small tags) or arena (large tags) buffers before sampling.
+12. **Hybrid Parallelism**: Scales via `rayon` for data-parallel tasks while maintaining sequential cache-coherence for state-heavy stages.
 
 ## Memory Architecture
 
@@ -351,6 +352,7 @@ The `locus-core` crate is organized into logical modules mirroring the pipeline 
 | `quad` | Contour tracing and quad fitting. | `extract_quads` |
 | `gwlf` | Gradient-Weighted Line Fitting. | `refine_quad_gwlf` |
 | `decoder` | Bit extraction and hamming decoding. | `TagDecoder`, `Homography` |
+| `funnel` | Fast-path rejection gate (O(1) contrast). | `apply_funnel_gate` |
 | `pose` | 3D pose estimation (PnP). | `Pose`, `CameraIntrinsics` |
 | `pose_weighted` | Structure Tensor & Weighted LM. | `refine_pose_lm_weighted` |
 | `gradient` | Image gradients & Sub-pixel windows. | `compute_structure_tensor` |
