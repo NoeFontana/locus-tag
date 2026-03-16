@@ -37,3 +37,6 @@
     - [x] **Benchmark**: Run micro-benchmarks to measure decoding latency reduction.
     - [x] Target: <0.5ms per candidate in representative 640x480 images.
 - [x] Task: Conductor - User Manual Verification 'Integration & Performance Validation' (Protocol in workflow.md)
+
+## Phase: Review Fixes
+- [x] Task: Apply review suggestions 2e5371a
