@@ -182,8 +182,8 @@ impl Detector {
             .arena
             .alloc_slice_fill_copy(img.width * img.height, 0u8);
 
-        // 1. Thresholding
-        {
+        // 1. Thresholding & 2. Segmentation & 3. Quad Extraction
+        let (n, unrefined) = {
             let engine = crate::threshold::ThresholdEngine::from_config(&self.config);
             let tile_stats = engine.compute_tile_stats(&state.arena, &sharpened_img);
             engine.apply_threshold_with_map(
@@ -193,31 +193,43 @@ impl Detector {
                 binarized,
                 threshold_map,
             );
-        }
 
-        // 2. Segmentation
-        let label_result = crate::segmentation::label_components_threshold_model(
-            &state.arena,
-            sharpened_img.data,
-            sharpened_img.stride,
-            threshold_map,
-            img.width,
-            img.height,
-            self.config.segmentation_connectivity == crate::config::SegmentationConnectivity::Eight,
-            self.config.quad_min_area,
-            self.config.segmentation_margin,
-        );
+            // 2. Segmentation
+            let label_result = crate::segmentation::label_components_threshold_model(
+                &state.arena,
+                sharpened_img.data,
+                sharpened_img.stride,
+                threshold_map,
+                img.width,
+                img.height,
+                self.config.segmentation_connectivity == crate::config::SegmentationConnectivity::Eight,
+                self.config.quad_min_area,
+                self.config.segmentation_margin,
+            );
 
-        // 3. Quad Extraction (SoA)
-        let (n, unrefined) = crate::quad::extract_quads_soa(
-            &mut state.batch,
-            &sharpened_img,
-            &label_result,
-            &self.config,
-            self.config.decimation,
-            &refinement_img,
-            debug_telemetry,
-        );
+            // 3. Quad Extraction (SoA)
+            let (n, unrefined) = crate::quad::extract_quads_soa(
+                &mut state.batch,
+                &sharpened_img,
+                &label_result,
+                &self.config,
+                self.config.decimation,
+                &refinement_img,
+                debug_telemetry,
+            );
+
+            // 3.5 Fast-Path Funnel Gate
+            // Rejects candidates early based on boundary contrast
+            crate::funnel::apply_funnel_gate(
+                &mut state.batch,
+                n,
+                &sharpened_img,
+                &tile_stats,
+                self.config.threshold_tile_size,
+            );
+
+            (n, unrefined)
+        };
 
         // Compute subpixel jitter if requested
         let mut jitter_ptr = std::ptr::null();
@@ -241,6 +253,7 @@ impl Detector {
         // 4. Homography Pass (SoA)
         crate::decoder::compute_homographies_soa(
             &state.batch.corners[0..n],
+            &state.batch.status_mask[0..n],
             &mut state.batch.homographies[0..n],
         );
 
@@ -288,6 +301,7 @@ impl Detector {
             // Recompute homographies after refinement
             crate::decoder::compute_homographies_soa(
                 &state.batch.corners[0..n],
+                &state.batch.status_mask[0..n],
                 &mut state.batch.homographies[0..n],
             );
         }

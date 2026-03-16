@@ -18,6 +18,8 @@ pub mod dictionaries;
 pub mod error;
 /// Edge-preserving filtering for small tag detection.
 pub mod filter;
+/// Fast-path decoding funnel.
+pub mod funnel;
 /// Gradient computation for edge refinement.
 pub mod gradient;
 /// Gradient-Weighted Line Fitting (GWLF).
@@ -57,6 +59,7 @@ pub mod bench_api {
     pub use crate::decoder::*;
     pub use crate::dictionaries::*;
     pub use crate::filter::*;
+    pub use crate::funnel::*;
     pub use crate::pose::*;
     pub use crate::quad::*;
     pub use crate::segmentation::*;

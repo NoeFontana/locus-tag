@@ -199,19 +199,30 @@ impl Homography {
     }
 }
 
-/// Compute homographies for all quads in the batch using a pure-function SoA approach.
+/// Compute homographies for all active quads in the batch using a pure-function SoA approach.
 ///
 /// This uses `rayon` for data-parallel computation of the square-to-quad homographies.
 /// Quads are defined by 4 corners in `corners` for each candidate index.
 #[tracing::instrument(skip_all, name = "pipeline::homography_pass")]
-pub fn compute_homographies_soa(corners: &[[Point2f; 4]], homographies: &mut [Matrix3x3]) {
+pub fn compute_homographies_soa(
+    corners: &[[Point2f; 4]],
+    status_mask: &[crate::batch::CandidateState],
+    homographies: &mut [Matrix3x3],
+) {
     use rayon::prelude::*;
+    use crate::batch::CandidateState;
 
     // Each homography maps from canonical square [(-1,-1), (1,-1), (1,1), (-1,1)] to image quads.
     homographies
         .par_iter_mut()
         .enumerate()
         .for_each(|(i, h_out)| {
+            if status_mask[i] != CandidateState::Active {
+                h_out.data = [0.0; 9];
+                h_out.padding = [0.0; 7];
+                return;
+            }
+
             let dst = [
                 [f64::from(corners[i][0].x), f64::from(corners[i][0].y)],
                 [f64::from(corners[i][1].x), f64::from(corners[i][1].y)],
@@ -1067,6 +1078,17 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
     let results: Vec<_> = (0..n)
         .into_par_iter()
         .map(|i| {
+            if batch.status_mask[i] != CandidateState::Active {
+                return (
+                    batch.status_mask[i],
+                    0,
+                    0,
+                    0,
+                    batch.error_rates[i],
+                    None,
+                );
+            }
+
             DECODE_ARENA.with_borrow_mut(|arena| {
                     arena.reset();
 
