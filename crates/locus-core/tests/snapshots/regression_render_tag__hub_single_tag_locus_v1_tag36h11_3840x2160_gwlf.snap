@@ -6,15 +6,15 @@ expression: report
 summary:
   dataset_size: 45
   mean_recall: 0.8666666666666667
-  mean_precision: 1
-  mean_rmse: 1.0634
-  mean_reprojection_rmse: 5.7161
-  p50_translation_error: 0.0279
-  p90_translation_error: 0.3465
-  p99_translation_error: 1.1611
-  p50_rotation_error: 1.8819
-  p90_rotation_error: 23.1334
-  p99_rotation_error: 90.5115
+  mean_precision: 0.9888888888888889
+  mean_rmse: 0.8058
+  mean_reprojection_rmse: 4.0987
+  p50_translation_error: 0.012
+  p90_translation_error: 0.2175
+  p99_translation_error: 1.0373
+  p50_rotation_error: 1.2553
+  p90_rotation_error: 12.5865
+  p99_rotation_error: 88.2756
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
   geometry_violations: 0
