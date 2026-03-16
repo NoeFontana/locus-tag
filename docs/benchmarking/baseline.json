@@ -7,6 +7,13 @@
       "p50_rotation_error": 4.0604,
       "p50_translation_error": 0.0152
     },
+    "Locus (GWLF)": {
+      "recall": 97.77777777777777,
+      "rmse": 1.3345,
+      "repro_rmse": 4.7572,
+      "p50_rotation_error": 0.6674,
+      "p50_translation_error": 0.0050
+    },
     "Locus (Soft)": {
       "recall": 96.23,
       "rmse": 0.3059,
