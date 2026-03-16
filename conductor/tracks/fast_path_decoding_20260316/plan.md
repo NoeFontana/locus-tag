@@ -18,10 +18,10 @@
     - [x] **Red Phase**: Write failing tests for incremental step calculation ($\partial_u, \partial_v$).
     - [x] **Green Phase**: Implement the DDA state initialization and stepping logic.
     - [x] Verify DDA precision against standard matrix-based perspective projection.
-- [ ] Task: Implement SIMD-Vectorized Bilinear Interpolation (x86_64).
-    - [ ] **Red Phase**: Write failing tests for AVX2/FMA3/SSE4.2 interpolation (where hardware permits).
-    - [ ] **Green Phase**: Implement the vectorized sampler using intrinsics.
-    - [ ] Integrate `_mm256_rcp_ps` with Newton-Raphson for perspective divide.
+- [x] Task: Implement SIMD-Vectorized Bilinear Interpolation (x86_64). d563745
+    - [x] **Red Phase**: Write failing tests for AVX2/FMA3/SSE4.2 interpolation (where hardware permits).
+    - [x] **Green Phase**: Implement the vectorized sampler using intrinsics.
+    - [x] Integrate `_mm256_rcp_ps` with Newton-Raphson for perspective divide.
 - [ ] Task: Implement SIMD-Vectorized Bilinear Interpolation (AArch64).
     - [ ] **Red Phase**: Write failing tests for NEON interpolation.
     - [ ] **Green Phase**: Implement the NEON-based sampler using `vrecpeq_f32` (or equivalent).
