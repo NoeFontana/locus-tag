@@ -4,5 +4,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Gradient-Weighted Line Fitting (GWLF)**
+- [x] **Track: Gradient-Weighted Line Fitting (GWLF)**
 *Link: [./tracks/gradient_weighted_lines_20260316/](./tracks/gradient_weighted_lines_20260316/)*

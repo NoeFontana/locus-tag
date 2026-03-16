@@ -31,4 +31,4 @@
 - [x] Task: Performance and Accuracy Validation (5956d0e)
     - [x] Run benchmarks to verify latency is < 1.0ms per quad.
     - [x] Run regression tests on ICRA 2020 to verify RMSE < 0.8px.
-- [ ] Task: Conductor - User Manual Verification 'Benchmarking and Verification' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Benchmarking and Verification' (Protocol in workflow.md) (0a8a2f2)
