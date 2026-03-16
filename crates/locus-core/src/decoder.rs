@@ -1290,8 +1290,9 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                     {
                         match config.refinement_mode {
                             crate::config::CornerRefinementMode::None
-                            | crate::config::CornerRefinementMode::GridFit => {
-                                // GridFit not ported to SoA yet to save complexity.
+                            | crate::config::CornerRefinementMode::GridFit
+                            | crate::config::CornerRefinementMode::Gwlf => {
+                                // GridFit/Gwlf not ported to SoA yet or not implemented.
                             }
                             crate::config::CornerRefinementMode::Edge
                             | crate::config::CornerRefinementMode::Erf => {

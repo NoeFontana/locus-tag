@@ -32,6 +32,8 @@ pub enum CornerRefinementMode {
     GridFit,
     /// Erf: Fits a Gaussian to the gradient profile for sub-pixel edge alignment.
     Erf,
+    /// Gwlf: Gradient-Weighted Line Fitting (PCA on gradients).
+    Gwlf,
 }
 
 /// Mode for decoding strategy.

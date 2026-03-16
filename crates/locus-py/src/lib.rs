@@ -61,6 +61,7 @@ pub enum CornerRefinementMode {
     Edge = 1,
     GridFit = 2,
     Erf = 3,
+    Gwlf = 4,
 }
 
 impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
@@ -70,6 +71,7 @@ impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
             CornerRefinementMode::Edge => locus_core::config::CornerRefinementMode::Edge,
             CornerRefinementMode::GridFit => locus_core::config::CornerRefinementMode::GridFit,
             CornerRefinementMode::Erf => locus_core::config::CornerRefinementMode::Erf,
+            CornerRefinementMode::Gwlf => locus_core::config::CornerRefinementMode::Gwlf,
         }
     }
 }
@@ -214,6 +216,7 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
                 locus_core::config::CornerRefinementMode::Edge => CornerRefinementMode::Edge,
                 locus_core::config::CornerRefinementMode::GridFit => CornerRefinementMode::GridFit,
                 locus_core::config::CornerRefinementMode::Erf => CornerRefinementMode::Erf,
+                locus_core::config::CornerRefinementMode::Gwlf => CornerRefinementMode::Gwlf,
             },
             decode_mode: match c.decode_mode {
                 locus_core::config::DecodeMode::Hard => DecodeMode::Hard,
@@ -540,6 +543,7 @@ fn create_detector(
                 1 => locus_core::config::CornerRefinementMode::Edge,
                 2 => locus_core::config::CornerRefinementMode::GridFit,
                 3 => locus_core::config::CornerRefinementMode::Erf,
+                4 => locus_core::config::CornerRefinementMode::Gwlf,
                 _ => return Err(PyValueError::new_err("Invalid refinement_mode")),
             };
             builder = builder.with_corner_refinement(mode);
