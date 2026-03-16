@@ -1,7 +1,7 @@
 # Implementation Plan: Gradient-Weighted Line Fitting (GWLF)
 
 ## Phase 1: Configuration and API Interface
-- [ ] Task: TDD - Configuration Toggle
+- [x] Task: TDD - Configuration Toggle (4f0ee8e)
     - [ ] Add `RefinementMethod` enum to Rust core (ERF vs GWLF).
     - [ ] Add `refinement_method` field to `LocusConfig`.
     - [ ] Implement toggle support in Python bindings (`locus-py`).
