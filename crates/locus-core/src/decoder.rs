@@ -843,6 +843,194 @@ pub(crate) fn compute_otsu_threshold(values: &[f64]) -> f64 {
     best_threshold
 }
 
+/// Sample values from the image using DDA-based coordinate generation and SIMD bilinear sampling.
+#[multiversion(targets(
+    "x86_64+avx2+fma",
+    "aarch64+neon"
+))]
+fn sample_grid_values_dda_simd(
+    img: &crate::image::ImageView,
+    roi: &RoiCache,
+    h: &Homography,
+    decoder: &(impl TagDecoder + ?Sized),
+    intensities: &mut [f64],
+) -> bool {
+    let dim = decoder.dimension();
+    let n = decoder.bit_count();
+    let points = decoder.sample_points();
+    if points.is_empty() {
+        return false;
+    }
+
+    let _du = if dim > 1 { points[1].0 - points[0].0 } else { 0.0 };
+    let _dv = if dim > 1 { points[dim].1 - points[0].1 } else { 0.0 };
+
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+    unsafe {
+        use std::arch::x86_64::*;
+        use crate::simd::math::rcp_nr_v8;
+        use crate::simd::sampler::sample_bilinear_v8;
+
+        let dda = h.to_dda(_du, _dv);
+
+        let w_limit = _mm256_set1_ps(img.width as f32 - 1.0);
+        let h_limit = _mm256_set1_ps(img.height as f32 - 1.0);
+
+        let mut current_nx_row = dda.nx as f32;
+        let mut current_ny_row = dda.ny as f32;
+        let mut current_d_row = dda.d as f32;
+
+        let dnx_du = dda.dnx_du as f32;
+        let dny_du = dda.dny_du as f32;
+        let dd_du = dda.dd_du as f32;
+
+        let mut idx = 0;
+        for _y in 0..dim {
+            let mut nx = current_nx_row;
+            let mut ny = current_ny_row;
+            let mut d = current_d_row;
+
+            for _x in (0..dim).step_by(8) {
+                let count = (dim - _x).min(8);
+                
+                // Vectorize the DDA steps for 8 lanes
+                let mut v_nx = [0.0f32; 8];
+                let mut v_ny = [0.0f32; 8];
+                let mut v_d = [0.0f32; 8];
+
+                for i in 0..count {
+                    v_nx[i] = nx;
+                    v_ny[i] = ny;
+                    v_d[i] = d;
+                    nx += dnx_du;
+                    ny += dny_du;
+                    d += dd_du;
+                }
+
+                let v_nx_simd = _mm256_loadu_ps(v_nx.as_ptr());
+                let v_ny_simd = _mm256_loadu_ps(v_ny.as_ptr());
+                let v_d_simd = _mm256_loadu_ps(v_d.as_ptr());
+
+                // Perspective divide: (nx/d, ny/d)
+                let v_winv = rcp_nr_v8(v_d_simd);
+                let v_img_x = _mm256_mul_ps(v_nx_simd, v_winv);
+                let v_img_y = _mm256_mul_ps(v_ny_simd, v_winv);
+
+                // Bounds check
+                let v_zero = _mm256_setzero_ps();
+                let mask_x = _mm256_and_ps(_mm256_cmp_ps(v_img_x, v_zero, _CMP_GE_OQ), _mm256_cmp_ps(v_img_x, w_limit, _CMP_LT_OQ));
+                let mask_y = _mm256_and_ps(_mm256_cmp_ps(v_img_y, v_zero, _CMP_GE_OQ), _mm256_cmp_ps(v_img_y, h_limit, _CMP_LT_OQ));
+                let mask = _mm256_movemask_ps(_mm256_and_ps(mask_x, mask_y));
+                
+                // If any point in this chunk is out of bounds, we might fail the whole tag
+                // depending on how robust we want to be. The scalar version returns false immediately.
+                if (mask & ((1 << count) - 1)) != ((1 << count) - 1) {
+                    return false;
+                }
+
+                let mut v_img_x_arr = [0.0f32; 8];
+                let mut v_img_y_arr = [0.0f32; 8];
+                _mm256_storeu_ps(v_img_x_arr.as_mut_ptr(), v_img_x);
+                _mm256_storeu_ps(v_img_y_arr.as_mut_ptr(), v_img_y);
+
+                let mut sampled = [0.0f32; 8];
+                // We use our vectorized sampler. 
+                // Wait, sample_bilinear_v8 expects x, y arrays.
+                sample_bilinear_v8(img, &v_img_x_arr, &v_img_y_arr, &mut sampled);
+
+                for i in 0..count {
+                    intensities[idx] = f64::from(sampled[i]);
+                    idx += 1;
+                }
+            }
+
+            current_nx_row += dda.dnx_dv as f32;
+            current_ny_row += dda.dny_dv as f32;
+            current_d_row += dda.dd_dv as f32;
+        }
+        return true;
+    }
+
+    #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+    unsafe {
+        use std::arch::aarch64::*;
+        use crate::simd::sampler::sample_bilinear_v8;
+
+        let dda = h.to_dda(_du, _dv);
+
+        let w_limit = vdupq_n_f32(img.width as f32 - 1.0);
+        let h_limit = vdupq_n_f32(img.height as f32 - 1.0);
+
+        let mut current_nx_row = dda.nx as f32;
+        let mut current_ny_row = dda.ny as f32;
+        let mut current_d_row = dda.d as f32;
+
+        let dnx_du = dda.dnx_du as f32;
+        let dny_du = dda.dny_du as f32;
+        let dd_du = dda.dd_du as f32;
+
+        let mut idx = 0;
+        for _y in 0..dim {
+            let mut nx = current_nx_row;
+            let mut ny = current_ny_row;
+            let mut d = current_d_row;
+
+            for _x in (0..dim).step_by(8) {
+                let count = (dim - _x).min(8);
+                
+                let mut v_nx = [0.0f32; 8];
+                let mut v_ny = [0.0f32; 8];
+                let mut v_d = [0.0f32; 8];
+
+                for i in 0..count {
+                    v_nx[i] = nx;
+                    v_ny[i] = ny;
+                    v_d[i] = d;
+                    nx += dnx_du;
+                    ny += dny_du;
+                    d += dd_du;
+                }
+
+                // NEON perspective divide using vrecpeq_f32 + vrecpsq_f32
+                let mut v_img_x = [0.0f32; 8];
+                let mut v_img_y = [0.0f32; 8];
+
+                for chunk in 0..2 {
+                    let offset = chunk * 4;
+                    let v_nx_c = vld1q_f32(v_nx.as_ptr().add(offset));
+                    let v_ny_c = vld1q_f32(v_ny.as_ptr().add(offset));
+                    let v_d_c = vld1q_f32(v_d.as_ptr().add(offset));
+
+                    let v_winv = vrecpeq_f32(v_d_c);
+                    let v_winv = vmulq_f32(v_winv, vrecpsq_f32(v_d_c, v_winv));
+                    
+                    let img_x = vmulq_f32(v_nx_c, v_winv);
+                    let img_y = vmulq_f32(v_ny_c, v_winv);
+
+                    vst1q_f32(v_img_x.as_mut_ptr().add(offset), img_x);
+                    vst1q_f32(v_img_y.as_mut_ptr().add(offset), img_y);
+                }
+
+                let mut sampled = [0.0f32; 8];
+                sample_bilinear_v8(img, &v_img_x, &v_img_y, &mut sampled);
+
+                for i in 0..count {
+                    intensities[idx] = f64::from(sampled[i]);
+                    idx += 1;
+                }
+            }
+
+            current_nx_row += dda.dnx_dv as f32;
+            current_ny_row += dda.dny_dv as f32;
+            current_d_row += dda.dd_dv as f32;
+        }
+        return true;
+    }
+
+    // Fallback: Use existing optimized scalar loop
+    sample_grid_values_optimized(img, h, roi, points, intensities, n)
+}
+
 /// Sample values from the image using SIMD-optimized Fast-Math and ROI caching.
 #[multiversion(targets(
     "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
@@ -927,7 +1115,7 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
     let mut intensities = [0.0f64; 64];
     let n = points.len().min(64);
 
-    if !sample_grid_values_optimized(img, &homography, &roi, points, &mut intensities, n) {
+    if !sample_grid_values_dda_simd(img, &roi, &homography, decoder, &mut intensities) {
         return None;
     }
 
@@ -978,7 +1166,7 @@ pub fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
     let mut intensities = [0.0f64; 64];
     let n = points.len().min(64);
 
-    if !sample_grid_values_optimized(img, &homography_obj, &roi, points, &mut intensities, n) {
+    if !sample_grid_values_dda_simd(img, &roi, &homography_obj, decoder, &mut intensities) {
         return None;
     }
 
@@ -1006,7 +1194,7 @@ pub fn sample_grid_soa_precomputed<S: crate::strategy::DecodingStrategy>(
     let mut intensities = [0.0f64; 64];
     let n = points.len().min(64);
 
-    if !sample_grid_values_optimized(img, &homography_obj, roi, points, &mut intensities, n) {
+    if !sample_grid_values_dda_simd(img, roi, &homography_obj, decoder, &mut intensities) {
         return None;
     }
 
