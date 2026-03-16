@@ -417,6 +417,8 @@ impl Detector {
 
                 tel_dict.set_item("binarized", &binarized_arr)?;
                 tel_dict.set_item("threshold_map", &threshold_arr)?;
+                tel_dict.set_item("gwlf_fallback_count", telemetry.gwlf_fallback_count)?;
+                tel_dict.set_item("gwlf_avg_delta", telemetry.gwlf_avg_delta)?;
 
                 // Subpixel Jitter
                 if !telemetry.subpixel_jitter_ptr.is_null() && telemetry.num_jitter > 0 {

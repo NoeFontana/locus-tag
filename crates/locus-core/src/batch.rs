@@ -207,6 +207,10 @@ pub struct TelemetryPayload {
     pub reprojection_errors_ptr: *const f32,
     /// Number of valid candidates reprojection data is available for.
     pub num_reprojection: usize,
+    /// Number of quads that fell back to coarse corners during GWLF.
+    pub gwlf_fallback_count: usize,
+    /// Average Euclidean distance (delta) of GWLF refinement (pixels).
+    pub gwlf_avg_delta: f32,
     /// Width of the buffers.
     pub width: usize,
     /// Height of the buffers.

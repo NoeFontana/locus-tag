@@ -244,6 +244,44 @@ impl Detector {
             &mut state.batch.homographies[0..n],
         );
 
+        // Optional: GWLF Refinement
+        let mut gwlf_fallback_count = 0;
+        let mut gwlf_avg_delta = 0.0f32;
+        if self.config.refinement_mode == crate::config::CornerRefinementMode::Gwlf {
+            let mut total_delta = 0.0f32;
+            let mut count = 0;
+            for i in 0..n {
+                let coarse = [
+                    [state.batch.corners[i][0].x, state.batch.corners[i][0].y],
+                    [state.batch.corners[i][1].x, state.batch.corners[i][1].y],
+                    [state.batch.corners[i][2].x, state.batch.corners[i][2].y],
+                    [state.batch.corners[i][3].x, state.batch.corners[i][3].y],
+                ];
+                if let Some(refined) = crate::gwlf::refine_quad_gwlf(&refinement_img, &coarse) {
+                    for j in 0..4 {
+                        let dx = refined[j][0] - coarse[j][0];
+                        let dy = refined[j][1] - coarse[j][1];
+                        total_delta += (dx * dx + dy * dy).sqrt();
+                        count += 1;
+                        
+                        state.batch.corners[i][j].x = refined[j][0];
+                        state.batch.corners[i][j].y = refined[j][1];
+                    }
+                } else {
+                    gwlf_fallback_count += 1;
+                }
+            }
+            if count > 0 {
+                gwlf_avg_delta = total_delta / count as f32;
+            }
+            
+            // Recompute homographies after refinement
+            crate::decoder::compute_homographies_soa(
+                &state.batch.corners[0..n],
+                &mut state.batch.homographies[0..n],
+            );
+        }
+
         // 5. Decoding Pass (SoA)
         crate::decoder::decode_batch_soa(
             &mut state.batch,
@@ -280,6 +318,8 @@ impl Detector {
                 num_jitter,
                 reprojection_errors_ptr: repro_errors_ptr,
                 num_reprojection: num_repro,
+                gwlf_fallback_count,
+                gwlf_avg_delta,
                 width: img.width,
                 height: img.height,
                 stride: img.width,

@@ -65,6 +65,8 @@ class PipelineTelemetry:
 
     binarized: np.ndarray  # Shape: (H, W), Dtype: uint8
     threshold_map: np.ndarray  # Shape: (H, W), Dtype: uint8
+    gwlf_fallback_count: int = 0
+    gwlf_avg_delta: float = 0.0
     subpixel_jitter: np.ndarray | None = None  # Shape: (N, 4, 2), Dtype: float32
     reprojection_errors: np.ndarray | None = None  # Shape: (N,), Dtype: float32
 
