@@ -611,11 +611,6 @@ test_icra!(
 fn regression_icra_forward_gwlf() {
     let _guard = common::telemetry::init("regression_icra_forward_gwlf");
     if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
-        let config = DetectorConfig::builder()
-            .refinement_mode(locus_core::config::CornerRefinementMode::Gwlf)
-            .decoder_min_contrast(10.0)
-            .build();
-        
         let snapshot = "icra_forward_gwlf".to_string();
         RegressionHarness::new(snapshot)
             .with_preset(ConfigPreset::PlainBoard)
@@ -625,7 +620,6 @@ fn regression_icra_forward_gwlf() {
             .run(provider);
     }
 }
-
 // Lengthy tests (Ignored by default)
 test_icra!(
     IGNORED regression_icra_circle,

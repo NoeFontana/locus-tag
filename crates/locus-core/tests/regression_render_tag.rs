@@ -769,26 +769,29 @@ fn run_hub_test(
                 PoseEstimationMode::Fast => "_fast",
                 PoseEstimationMode::Accurate => "",
             };
-            
-            let refinement_suffix = if let Some(r) = refinement {
-                match r {
-                    locus_core::config::CornerRefinementMode::Gwlf => "_gwlf",
-                    _ => "",
-                }
-            } else {
-                ""
-            };
 
-            let snapshot = format!("hub_{}{}{}", provider.name(), mode_suffix, refinement_suffix);
+            let refinement_suffix =
+                if let Some(locus_core::config::CornerRefinementMode::Gwlf) = refinement {
+                    "_gwlf"
+                } else {
+                    ""
+                };
+
+            let snapshot = format!(
+                "hub_{}{}{}",
+                provider.name(),
+                mode_suffix,
+                refinement_suffix
+            );
             let mut harness = RegressionHarness::new(snapshot)
                 .with_preset(ConfigPreset::PlainBoard)
                 .with_families(vec![family])
                 .with_options(options);
-            
+
             if let Some(r) = refinement {
                 harness = harness.with_refinement_mode(r);
             }
-            
+
             harness.run(provider);
         }
     } else {

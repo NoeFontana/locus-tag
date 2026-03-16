@@ -263,7 +263,7 @@ impl Detector {
                         let dy = refined[j][1] - coarse[j][1];
                         total_delta += (dx * dx + dy * dy).sqrt();
                         count += 1;
-                        
+
                         state.batch.corners[i][j].x = refined[j][0];
                         state.batch.corners[i][j].y = refined[j][1];
                     }
@@ -274,7 +274,7 @@ impl Detector {
             if count > 0 {
                 gwlf_avg_delta = total_delta / count as f32;
             }
-            
+
             // Recompute homographies after refinement
             crate::decoder::compute_homographies_soa(
                 &state.batch.corners[0..n],

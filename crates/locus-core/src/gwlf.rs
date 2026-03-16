@@ -49,6 +49,7 @@ impl MomentAccumulator {
     /// Compute the 2x2 gradient-weighted spatial covariance matrix.
     /// Returns [sigma_xx, sigma_xy, sigma_xy, sigma_yy]
     #[must_use]
+    #[allow(clippy::similar_names)]
     pub fn covariance(&self) -> Option<[f64; 4]> {
         let (cx, cy) = self.centroid()?;
         let s_w = self.sum_w;
@@ -139,11 +140,14 @@ pub fn solve_2x2_symmetric_min_eigen(a: f64, b: f64, c: f64) -> EigenResult {
 /// Returns the refined corners [[x, y]; 4] or None if refinement fails.
 #[must_use]
 #[allow(clippy::similar_names)]
-pub fn refine_quad_gwlf(
-    img: &ImageView,
-    coarse_corners: &[[f32; 2]; 4],
-) -> Option<[[f32; 2]; 4]> {
-    let mut lines = [HomogeneousLine { nx: 0.0, ny: 0.0, d: 0.0 }; 4];
+#[allow(clippy::cast_sign_loss)]
+#[allow(clippy::cast_possible_wrap)]
+pub fn refine_quad_gwlf(img: &ImageView, coarse_corners: &[[f32; 2]; 4]) -> Option<[[f32; 2]; 4]> {
+    let mut lines = [HomogeneousLine {
+        nx: 0.0,
+        ny: 0.0,
+        d: 0.0,
+    }; 4];
 
     for i in 0..4 {
         let p0 = coarse_corners[i];
@@ -176,19 +180,24 @@ pub fn refine_quad_gwlf(
 
             // Sample transversally
             for k in -2..=2 {
-                let sx = px + (k as f64) * nx_coarse;
-                let sy = py + (k as f64) * ny_coarse;
+                let sx = px + f64::from(k) * nx_coarse;
+                let sy = py + f64::from(k) * ny_coarse;
 
                 let ix = sx.round() as i32;
                 let iy = sy.round() as i32;
 
-                if ix > 0 && ix < (img.width - 1) as i32 && iy > 0 && iy < (img.height - 1) as i32 {
+                let width_i32 = img.width as i32;
+                let height_i32 = img.height as i32;
+
+                if ix > 0 && ix < (width_i32 - 1) && iy > 0 && iy < (height_i32 - 1) {
+                    let uix = ix as usize;
+                    let uiy = iy as usize;
                     // Simple finite difference gradient
-                    let g_x = f64::from(img.get_pixel((ix + 1) as usize, iy as usize))
-                        - f64::from(img.get_pixel((ix - 1) as usize, iy as usize));
-                    let g_y = f64::from(img.get_pixel(ix as usize, (iy + 1) as usize))
-                        - f64::from(img.get_pixel(ix as usize, (iy - 1) as usize));
-                    
+                    let g_x = f64::from(img.get_pixel(uix + 1, uiy))
+                        - f64::from(img.get_pixel(uix - 1, uiy));
+                    let g_y = f64::from(img.get_pixel(uix, uiy + 1))
+                        - f64::from(img.get_pixel(uix, uiy - 1));
+
                     let w = g_x * g_x + g_y * g_y;
                     if w > 100.0 {
                         // Noise floor
@@ -216,18 +225,18 @@ pub fn refine_quad_gwlf(
         // Line i and line i-1 intersect at corner i
         let l_prev = lines[(i + 3) % 4];
         let l_curr = lines[i];
-        
+
         let (ix, iy) = l_prev.intersect(&l_curr)?;
-        
+
         // Sanity check: distance from coarse corner
-        let dist_sq = (ix - f64::from(coarse_corners[i][0])).powi(2) 
-                    + (iy - f64::from(coarse_corners[i][1])).powi(2);
-        
+        let dist_sq = (ix - f64::from(coarse_corners[i][0])).powi(2)
+            + (iy - f64::from(coarse_corners[i][1])).powi(2);
+
         if dist_sq > 9.0 {
             // 3.0 pixel threshold
             return None;
         }
-        
+
         refined[i] = [ix as f32, iy as f32];
     }
 
