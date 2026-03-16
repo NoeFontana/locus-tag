@@ -1,3 +1,4 @@
+//! Tests for the SIMD-vectorized image sampler.
 use locus_core::bench_api::*;
 use locus_core::image::ImageView;
 

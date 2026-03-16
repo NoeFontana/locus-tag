@@ -1,7 +1,14 @@
+//! SIMD-vectorized image sampling kernels.
 use crate::image::ImageView;
 use multiversion::multiversion;
 
 /// Vectorized bilinear interpolation for 8 points simultaneously.
+///
+/// # Safety
+/// This function uses `_mm256_i32gather_epi32` to fetch 8-bit pixels by performing
+/// 32-bit unaligned loads. This requires the input image buffer to have at least
+/// **3 bytes of padding** at the end to avoid out-of-bounds reads when sampling
+/// pixels near the bottom-right corner.
 #[multiversion(targets(
     "x86_64+avx2+fma",
     "aarch64+neon"

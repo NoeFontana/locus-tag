@@ -1,3 +1,4 @@
+//! Tests for the Homography Digital Differential Analyzer (DDA).
 use locus_core::bench_api::*;
 
 #[test]

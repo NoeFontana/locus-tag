@@ -884,64 +884,64 @@ fn sample_grid_values_dda_simd(
         let dny_du = dda.dny_du as f32;
         let dd_du = dda.dd_du as f32;
 
+        let v_dnx_du = _mm256_set1_ps(dnx_du);
+        let v_dny_du = _mm256_set1_ps(dny_du);
+        let v_dd_du = _mm256_set1_ps(dd_du);
+        let v_steps = _mm256_set_ps(7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 0.0);
+        let v_half = _mm256_set1_ps(0.5);
+
         let mut idx = 0;
         for _y in 0..dim {
-            let mut nx = current_nx_row;
-            let mut ny = current_ny_row;
-            let mut d = current_d_row;
+            let mut nx_start = current_nx_row;
+            let mut ny_start = current_ny_row;
+            let mut d_start = current_d_row;
 
             for _x in (0..dim).step_by(8) {
                 let count = (dim - _x).min(8);
                 
-                // Vectorize the DDA steps for 8 lanes
-                let mut v_nx = [0.0f32; 8];
-                let mut v_ny = [0.0f32; 8];
-                let mut v_d = [0.0f32; 8];
-
-                for i in 0..count {
-                    v_nx[i] = nx;
-                    v_ny[i] = ny;
-                    v_d[i] = d;
-                    nx += dnx_du;
-                    ny += dny_du;
-                    d += dd_du;
-                }
-
-                let v_nx_simd = _mm256_loadu_ps(v_nx.as_ptr());
-                let v_ny_simd = _mm256_loadu_ps(v_ny.as_ptr());
-                let v_d_simd = _mm256_loadu_ps(v_d.as_ptr());
+                // Vectorized coordinate generation (DDA)
+                // x[i] = (nx + i*dnx_du)
+                let v_nx_simd = _mm256_fmadd_ps(v_steps, v_dnx_du, _mm256_set1_ps(nx_start));
+                let v_ny_simd = _mm256_fmadd_ps(v_steps, v_dny_du, _mm256_set1_ps(ny_start));
+                let v_d_simd = _mm256_fmadd_ps(v_steps, v_dd_du, _mm256_set1_ps(d_start));
 
                 // Perspective divide: (nx/d, ny/d)
                 let v_winv = rcp_nr_v8(v_d_simd);
-                let v_img_x = _mm256_mul_ps(v_nx_simd, v_winv);
-                let v_img_y = _mm256_mul_ps(v_ny_simd, v_winv);
+                let v_img_x_raw = _mm256_mul_ps(v_nx_simd, v_winv);
+                let v_img_y_raw = _mm256_mul_ps(v_ny_simd, v_winv);
 
-                // Bounds check
+                // Offset by -0.5 to match bilinear logic center alignment
+                let v_img_x = _mm256_sub_ps(v_img_x_raw, v_half);
+                let v_img_y = _mm256_sub_ps(v_img_y_raw, v_half);
+
+                // Bounds check: must be in [0, width - 1) for safe 2x2 bilinear fetch
                 let v_zero = _mm256_setzero_ps();
                 let mask_x = _mm256_and_ps(_mm256_cmp_ps(v_img_x, v_zero, _CMP_GE_OQ), _mm256_cmp_ps(v_img_x, w_limit, _CMP_LT_OQ));
                 let mask_y = _mm256_and_ps(_mm256_cmp_ps(v_img_y, v_zero, _CMP_GE_OQ), _mm256_cmp_ps(v_img_y, h_limit, _CMP_LT_OQ));
                 let mask = _mm256_movemask_ps(_mm256_and_ps(mask_x, mask_y));
                 
-                // If any point in this chunk is out of bounds, we might fail the whole tag
-                // depending on how robust we want to be. The scalar version returns false immediately.
                 if (mask & ((1 << count) - 1)) != ((1 << count) - 1) {
                     return false;
                 }
 
+                // Restore original (non-subtracted) coords for sample_bilinear_v8 which handles the offset
                 let mut v_img_x_arr = [0.0f32; 8];
                 let mut v_img_y_arr = [0.0f32; 8];
-                _mm256_storeu_ps(v_img_x_arr.as_mut_ptr(), v_img_x);
-                _mm256_storeu_ps(v_img_y_arr.as_mut_ptr(), v_img_y);
+                _mm256_storeu_ps(v_img_x_arr.as_mut_ptr(), v_img_x_raw);
+                _mm256_storeu_ps(v_img_y_arr.as_mut_ptr(), v_img_y_raw);
 
                 let mut sampled = [0.0f32; 8];
-                // We use our vectorized sampler. 
-                // Wait, sample_bilinear_v8 expects x, y arrays.
                 sample_bilinear_v8(img, &v_img_x_arr, &v_img_y_arr, &mut sampled);
 
                 for i in 0..count {
                     intensities[idx] = f64::from(sampled[i]);
                     idx += 1;
                 }
+
+                // Advance scalar row starts for next SIMD chunk
+                nx_start += 8.0 * dnx_du;
+                ny_start += 8.0 * dny_du;
+                d_start += 8.0 * dd_du;
             }
 
             current_nx_row += dda.dnx_dv as f32;

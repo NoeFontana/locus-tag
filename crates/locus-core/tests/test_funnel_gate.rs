@@ -1,3 +1,4 @@
+//! Tests for the fast-path decoding funnel gate.
 use locus_core::bench_api::{DetectionBatch, FunnelStatus, Point2f, TileStats, CandidateState};
 use locus_core::image::ImageView;
 

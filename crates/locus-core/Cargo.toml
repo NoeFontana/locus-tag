@@ -86,6 +86,11 @@ harness = false
 required-features = ["bench-internals"]
 
 [[bench]]
+name = "decoding_real_bench"
+harness = false
+required-features = ["bench-internals"]
+
+[[bench]]
 name = "hub_bench"
 harness = false
 required-features = ["bench-internals"]

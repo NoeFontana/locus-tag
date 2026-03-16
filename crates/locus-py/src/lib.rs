@@ -457,7 +457,7 @@ impl Detector {
 
     /// Returns the current detector configuration.
     fn config(&self) -> PyDetectorConfig {
-        PyDetectorConfig::from(*self.inner.config())
+        PyDetectorConfig::from(self.inner.config())
     }
 
     /// Update the tag families to be detected.
