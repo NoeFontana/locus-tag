@@ -259,7 +259,7 @@ Locus provides two distinct algorithms for sub-pixel corner localization, select
 Fits a 1D Gaussian to the gradient profile along the normal of each edge. It is highly effective for front-parallel tags but can be sensitive to corner rounding caused by lens blur.
 
 ### Gradient-Weighted Line Fitting (GWLF)
-A robust geometric approach that fits infinite lines to the image gradients along each of the four edges using **Weighted Orthogonal Distance Regression (PCA)**. The refined corner is computed as the algebraic intersection of these lines in homogeneous space. GWLF is significantly more robust to optical low-pass filtering and grazing angles, often providing a **~5x improvement in rotation stability**.
+A robust geometric approach that fits infinite lines to the image gradients along each of the four edges using **Weighted Orthogonal Distance Regression (PCA)**. The refined corner is computed as the algebraic intersection of these lines in homogeneous space. GWLF is significantly more robust to optical low-pass filtering and grazing angles, often providing a **~10x improvement in rotation stability** at high resolutions. The implementation uses **bilinear gradient sampling** and **Adaptive Transversal Windowing**, where the search band scales proportionally with the edge length ($\pm \max(2, 0.01L)$).
 
 ## Decoding Strategies
 

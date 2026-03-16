@@ -257,7 +257,11 @@ impl Detector {
                     [state.batch.corners[i][2].x, state.batch.corners[i][2].y],
                     [state.batch.corners[i][3].x, state.batch.corners[i][3].y],
                 ];
-                if let Some((refined, covs)) = crate::gwlf::refine_quad_gwlf_with_cov(&refinement_img, &coarse) {
+                if let Some((refined, covs)) = crate::gwlf::refine_quad_gwlf_with_cov(
+                    &refinement_img,
+                    &coarse,
+                    self.config.gwlf_transversal_alpha,
+                ) {
                     for j in 0..4 {
                         let dx = refined[j][0] - coarse[j][0];
                         let dy = refined[j][1] - coarse[j][1];
@@ -549,6 +553,13 @@ impl DetectorBuilder {
     #[must_use]
     pub fn with_decoder_min_contrast(mut self, contrast: f64) -> Self {
         self.config.decoder_min_contrast = contrast;
+        self
+    }
+
+    /// Set the GWLF transversal alpha.
+    #[must_use]
+    pub fn with_gwlf_transversal_alpha(mut self, alpha: f64) -> Self {
+        self.config.gwlf_transversal_alpha = alpha;
         self
     }
 

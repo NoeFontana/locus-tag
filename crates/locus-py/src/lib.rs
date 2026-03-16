@@ -177,6 +177,7 @@ pub struct PyDetectorConfig {
     pub refinement_mode: CornerRefinementMode,
     pub decode_mode: DecodeMode,
     pub max_hamming_error: u32,
+    pub gwlf_transversal_alpha: f64,
 }
 
 impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
@@ -223,6 +224,7 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
                 locus_core::config::DecodeMode::Soft => DecodeMode::Soft,
             },
             max_hamming_error: c.max_hamming_error,
+            gwlf_transversal_alpha: c.gwlf_transversal_alpha,
         }
     }
 }
@@ -537,6 +539,9 @@ fn create_detector(
         }
         if let Some(val) = args.get_item("max_hamming_error")? {
             builder = builder.with_max_hamming_error(val.extract()?);
+        }
+        if let Some(val) = args.get_item("gwlf_transversal_alpha")? {
+            builder = builder.with_gwlf_transversal_alpha(val.extract()?);
         }
         if let Some(val) = args.get_item("refinement_mode")? {
             let i: i32 = val.extract()?;

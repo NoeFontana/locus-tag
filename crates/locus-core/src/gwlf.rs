@@ -162,6 +162,7 @@ pub fn solve_2x2_symmetric(a: f64, b: f64, c: f64) -> EigenResult {
 pub fn refine_quad_gwlf_with_cov(
     img: &ImageView,
     coarse_corners: &[[f32; 2]; 4],
+    alpha: f64,
 ) -> Option<([[f32; 2]; 4], [Matrix2<f64>; 4])> {
     let mut lines = [HomogeneousLine {
         l: Vector3::zeros(),
@@ -186,12 +187,19 @@ pub fn refine_quad_gwlf_with_cov(
 
         let mut acc = MomentAccumulator::new();
         let steps = (len * 2.0) as usize;
+
+        // Adaptive Transversal Windowing: search band scales with edge length L.
+        // Band = +/- max(2, alpha * L).
+        let window_half_width = (alpha * len).max(2.0);
+        let k_min = -window_half_width.round() as i32;
+        let k_max = window_half_width.round() as i32;
+
         for s in 0..=steps {
             let t = (s as f64) / (steps as f64);
             let px = f64::from(p0[0]) + t * dx_edge;
             let py = f64::from(p0[1]) + t * dy_edge;
 
-            for k in -2..=2 {
+            for k in k_min..=k_max {
                 let sx = px + f64::from(k) * nx_coarse;
                 let sy = py + f64::from(k) * ny_coarse;
 
@@ -267,6 +275,10 @@ pub fn refine_quad_gwlf_with_cov(
 
 /// Compatibility wrapper for the existing API.
 #[must_use]
-pub fn refine_quad_gwlf(img: &ImageView, coarse_corners: &[[f32; 2]; 4]) -> Option<[[f32; 2]; 4]> {
-    refine_quad_gwlf_with_cov(img, coarse_corners).map(|(c, _)| c)
+pub fn refine_quad_gwlf(
+    img: &ImageView,
+    coarse_corners: &[[f32; 2]; 4],
+    alpha: f64,
+) -> Option<[[f32; 2]; 4]> {
+    refine_quad_gwlf_with_cov(img, coarse_corners, alpha).map(|(c, _)| c)
 }

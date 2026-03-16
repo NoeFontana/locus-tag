@@ -7,8 +7,8 @@ summary:
   dataset_size: 50
   mean_recall: 0.98
   mean_precision: 1
-  mean_rmse: 0.7074
-  mean_reprojection_rmse: 1.2165
+  mean_rmse: 0.7125
+  mean_reprojection_rmse: 1.2218
   p50_translation_error: 0.0039
   p90_translation_error: 0.0194
   p99_translation_error: 0.176

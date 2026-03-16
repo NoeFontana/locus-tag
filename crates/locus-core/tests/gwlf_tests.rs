@@ -23,7 +23,7 @@ fn test_gwlf_refinement_synthetic_square() {
     // Coarse corners slightly jittered from (20,20), (60,20), (60,60), (20,60)
     let coarse = [[21.5, 19.5], [59.0, 21.0], [60.5, 60.5], [19.0, 59.0]];
 
-    let refined = refine_quad_gwlf(&view, &coarse).expect("refinement should succeed");
+    let refined = refine_quad_gwlf(&view, &coarse, 0.01).expect("refinement should succeed");
 
     // Should be close to the true edges (20.0 and 60.0)
     assert!((refined[0][0] - 20.0).abs() < 1.0);
@@ -43,7 +43,7 @@ fn test_gwlf_sanity_gate_fallback() {
     let coarse = [[20.0, 20.0], [60.0, 20.0], [60.0, 60.0], [20.0, 60.0]];
 
     // Should return None because no gradients found or sanity gate triggered
-    let refined = refine_quad_gwlf(&view, &coarse);
+    let refined = refine_quad_gwlf(&view, &coarse, 0.01);
     assert!(refined.is_none());
 }
 

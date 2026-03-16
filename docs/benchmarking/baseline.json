@@ -9,8 +9,8 @@
     },
     "Locus (GWLF)": {
       "recall": 97.77777777777777,
-      "rmse": 1.0537,
-      "repro_rmse": 4.2769,
+      "rmse": 1.0459,
+      "repro_rmse": 4.2643,
       "p50_rotation_error": 0.3881,
       "p50_translation_error": 0.0055
     },
