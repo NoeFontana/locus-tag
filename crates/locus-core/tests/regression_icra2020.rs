@@ -146,6 +146,11 @@ impl RegressionHarness {
         self
     }
 
+    pub fn with_refinement_mode(mut self, mode: locus_core::config::CornerRefinementMode) -> Self {
+        self.config.refinement_mode = mode;
+        self
+    }
+
     pub fn with_families(mut self, families: Vec<TagFamily>) -> Self {
         self.options.families = families;
         self
@@ -601,6 +606,25 @@ test_icra!(
     Checkerboard,
     TagFamily::AprilTag36h11
 );
+
+#[test]
+fn regression_icra_forward_gwlf() {
+    let _guard = common::telemetry::init("regression_icra_forward_gwlf");
+    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
+        let config = DetectorConfig::builder()
+            .refinement_mode(locus_core::config::CornerRefinementMode::Gwlf)
+            .decoder_min_contrast(10.0)
+            .build();
+        
+        let snapshot = "icra_forward_gwlf".to_string();
+        RegressionHarness::new(snapshot)
+            .with_preset(ConfigPreset::PlainBoard)
+            .with_families(vec![TagFamily::AprilTag36h11])
+            // Override preset with GWLF
+            .with_refinement_mode(locus_core::config::CornerRefinementMode::Gwlf)
+            .run(provider);
+    }
+}
 
 // Lengthy tests (Ignored by default)
 test_icra!(

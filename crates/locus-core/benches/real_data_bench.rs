@@ -147,3 +147,19 @@ fn bench_full_pipeline_real(bencher: divan::Bencher) {
             .unwrap();
     });
 }
+
+#[bench]
+fn bench_full_pipeline_gwlf_real(bencher: divan::Bencher) {
+    let (data, width, height) = load_icra_image();
+    let img = ImageView::new(&data, width, height, width).unwrap();
+    let config = locus_core::DetectorConfig::builder()
+        .refinement_mode(CornerRefinementMode::Gwlf)
+        .build();
+    let mut detector = locus_core::Detector::with_config(config);
+
+    bencher.bench_local(move || {
+        let _detections = detector
+            .detect(&img, None, None, PoseEstimationMode::Fast, false)
+            .unwrap();
+    });
+}
