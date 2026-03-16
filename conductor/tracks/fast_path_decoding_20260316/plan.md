@@ -1,6 +1,6 @@
 # Implementation Plan: Fast-Path Decoding Funnel (SIMD & DDA)
 
-## Phase 1: Foundation (SoA & Contrast Gate)
+## Phase 1: Foundation (SoA & Contrast Gate) [checkpoint: f696d09]
 
 - [x] Task: Extend `DetectionBatch` SoA for the funnel status. b1cd92d
     - [x] Add `is_valid` flag to the Structure-of-Arrays (SoA) if not already present.
@@ -10,7 +10,7 @@
     - [x] **Green Phase**: Implement `calculate_edge_midpoints` and `sample_boundary_contrast`.
     - [x] Integrate into a standalone `apply_funnel_gate` function.
     - [x] **Refactor**: Optimize intensity fetching from the zero-copy image view.
-- [ ] Task: Conductor - User Manual Verification 'Foundation (SoA & Contrast Gate)' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Foundation (SoA & Contrast Gate)' (Protocol in workflow.md)
 
 ## Phase 2: SIMD & DDA Implementation
 
