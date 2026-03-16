@@ -1,8 +1,9 @@
 //! Unit tests for Gradient-Weighted Line Fitting (GWLF) components.
 use locus_core::ImageView;
 use locus_core::gwlf::{
-    HomogeneousLine, MomentAccumulator, refine_quad_gwlf, solve_2x2_symmetric_min_eigen,
+    refine_quad_gwlf, solve_2x2_symmetric, HomogeneousLine, MomentAccumulator,
 };
+use nalgebra::{Matrix2, Matrix3, Vector2, Vector3};
 
 #[test]
 fn test_gwlf_refinement_synthetic_square() {
@@ -24,11 +25,11 @@ fn test_gwlf_refinement_synthetic_square() {
 
     let refined = refine_quad_gwlf(&view, &coarse).expect("refinement should succeed");
 
-    // Should be close to the true edges
-    assert!((refined[0][0] - 19.5).abs() < 1.0);
-    assert!((refined[0][1] - 19.5).abs() < 1.0);
-    assert!((refined[2][0] - 59.5).abs() < 1.0);
-    assert!((refined[2][1] - 59.5).abs() < 1.0);
+    // Should be close to the true edges (20.0 and 60.0)
+    assert!((refined[0][0] - 20.0).abs() < 1.0);
+    assert!((refined[0][1] - 20.0).abs() < 1.0);
+    assert!((refined[2][0] - 60.0).abs() < 1.0);
+    assert!((refined[2][1] - 60.0).abs() < 1.0);
 }
 
 #[test]
@@ -50,20 +51,18 @@ fn test_gwlf_sanity_gate_fallback() {
 fn test_line_intersection() {
     // x = 5 (Vertical line: 1*x + 0*y - 5 = 0)
     let l1 = HomogeneousLine {
-        nx: 1.0,
-        ny: 0.0,
-        d: -5.0,
+        l: Vector3::new(1.0, 0.0, -5.0),
+        cov: Matrix3::zeros(),
     };
     // y = 10 (Horizontal line: 0*x + 1*y - 10 = 0)
     let l2 = HomogeneousLine {
-        nx: 0.0,
-        ny: 1.0,
-        d: -10.0,
+        l: Vector3::new(0.0, 1.0, -10.0),
+        cov: Matrix3::zeros(),
     };
 
-    let (ix, iy) = l1.intersect(&l2).expect("should intersect");
-    assert!((ix - 5.0).abs() < 1e-9);
-    assert!((iy - 10.0).abs() < 1e-9);
+    let (corner, _cov) = l1.intersect(&l2).expect("should intersect");
+    assert!((corner.x - 5.0).abs() < 1e-9);
+    assert!((corner.y - 10.0).abs() < 1e-9);
 }
 
 #[test]
@@ -76,42 +75,45 @@ fn test_moment_accumulation_horizontal_edge() {
     acc.add(1.0, 10.0, 1.0);
     acc.add(2.0, 10.0, 1.0);
 
-    let (cx, cy) = acc.centroid().expect("has points");
-    assert!((cx - 1.0).abs() < 1e-9);
-    assert!((cy - 10.0).abs() < 1e-9);
+    let centroid = acc.centroid().expect("has points");
+    assert!((centroid.x - 1.0).abs() < 1e-9);
+    assert!((centroid.y - 10.0).abs() < 1e-9);
 
     let cov = acc.covariance().expect("has points");
     // sigma_xx = (0^2 + 1^2 + 2^2)/3 - 1^2 = 5/3 - 1 = 2/3
-    assert!((cov[0] - 0.666_666_666).abs() < 1e-6);
-    assert!(cov[1].abs() < 1e-9);
-    assert!(cov[2].abs() < 1e-9);
-    assert!(cov[3].abs() < 1e-9);
+    assert!((cov[(0, 0)] - 0.666_666_666).abs() < 1e-6);
+    assert!(cov[(0, 1)].abs() < 1e-9);
+    assert!(cov[(1, 0)].abs() < 1e-9);
+    assert!(cov[(1, 1)].abs() < 1e-9);
 }
 
 #[test]
 fn test_analytic_eigendecomposition() {
     // Identity matrix: eigenvalues 1, 1. Smallest is 1.
-    let res = solve_2x2_symmetric_min_eigen(1.0, 0.0, 1.0);
-    assert!((res.min_eigenvalue - 1.0).abs() < 1e-9);
+    let res = solve_2x2_symmetric(1.0, 0.0, 1.0);
+    assert!((res.l_min - 1.0).abs() < 1e-9);
 
-    // Diagonal matrix [[1, 0], [0, 2]]: eigenvalues 1, 2. Smallest is 1, vector (1, 0)
-    let res = solve_2x2_symmetric_min_eigen(1.0, 0.0, 2.0);
-    assert!((res.min_eigenvalue - 1.0).abs() < 1e-9);
-    assert!((res.min_eigenvector.0 - 1.0).abs() < 1e-9);
-    assert!(res.min_eigenvector.1.abs() < 1e-9);
+    // Diagonal matrix [[1, 0], [0, 2]]: eigenvalues 1, 2. Smallest is 1, vector (1, 0) or (0, 1) depending on a < c
+    // a=1, b=0, c=2. det=2, trace=3. disc=sqrt(9-8)=1. l_max=(3+1)/2=2, l_min=(3-1)/2=1.
+    // v_min for a=1, c=2 is (1, 0)
+    let res = solve_2x2_symmetric(1.0, 0.0, 2.0);
+    assert!((res.l_min - 1.0).abs() < 1e-9);
+    assert!((res.v_min.x - 1.0).abs() < 1e-9);
+    assert!(res.v_min.y.abs() < 1e-9);
 
     // Diagonal matrix [[2, 0], [0, 1]]: eigenvalues 1, 2. Smallest is 1, vector (0, 1)
-    let res = solve_2x2_symmetric_min_eigen(2.0, 0.0, 1.0);
-    assert!((res.min_eigenvalue - 1.0).abs() < 1e-9);
-    assert!(res.min_eigenvector.0.abs() < 1e-9);
-    assert!((res.min_eigenvector.1 - 1.0).abs() < 1e-9);
+    let res = solve_2x2_symmetric(2.0, 0.0, 1.0);
+    assert!((res.l_min - 1.0).abs() < 1e-9);
+    assert!(res.v_min.x.abs() < 1e-9);
+    assert!((res.v_min.y - 1.0).abs() < 1e-9);
 
     // Symmetric matrix [[2, 1], [1, 2]]:
     // lambda_min = 1.
-    let res = solve_2x2_symmetric_min_eigen(2.0, 1.0, 2.0);
-    assert!((res.min_eigenvalue - 1.0).abs() < 1e-9);
+    let res = solve_2x2_symmetric(2.0, 1.0, 2.0);
+    assert!((res.l_min - 1.0).abs() < 1e-9);
     let inv_sqrt2 = std::f64::consts::FRAC_1_SQRT_2;
-    assert!((res.min_eigenvector.0.abs() - inv_sqrt2).abs() < 1e-5);
-    assert!((res.min_eigenvector.1.abs() - inv_sqrt2).abs() < 1e-5);
-    assert!((res.min_eigenvector.0 + res.min_eigenvector.1).abs() < 1e-5);
+    assert!((res.v_min.x.abs() - inv_sqrt2).abs() < 1e-5);
+    assert!((res.v_min.y.abs() - inv_sqrt2).abs() < 1e-5);
+    // Since b=1 > 0, v_min = normalize(b, l_min - a) = normalize(1, 1 - 2) = normalize(1, -1)
+    assert!((res.v_min.x + res.v_min.y).abs() < 1e-5);
 }

@@ -288,7 +288,7 @@ Locus provides two algorithms for 6-DOF recovery, allowing users to prioritize e
 
 ### Accurate Mode: Probabilistic
 *   **Target**: Metrology, calibration, and long-range precision landing.
-*   **Method**: Estimates sub-pixel corner uncertainty via the **Structure Tensor** ($J^T J$).
+*   **Method**: Estimates sub-pixel corner uncertainty via either the **Structure Tensor** ($J^T J$) or formal error propagation through **Gradient-Weighted Line Fitting (GWLF)**.
 *   **Refinement**: **Anisotropic Weighted LM** minimizing the Mahalanobis distance.
 *   **Output**: Provides a full $6 \times 6$ `pose_covariance` matrix.
 *   **Latency**: ~200µs per tag.

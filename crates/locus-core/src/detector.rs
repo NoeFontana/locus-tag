@@ -257,7 +257,7 @@ impl Detector {
                     [state.batch.corners[i][2].x, state.batch.corners[i][2].y],
                     [state.batch.corners[i][3].x, state.batch.corners[i][3].y],
                 ];
-                if let Some(refined) = crate::gwlf::refine_quad_gwlf(&refinement_img, &coarse) {
+                if let Some((refined, covs)) = crate::gwlf::refine_quad_gwlf_with_cov(&refinement_img, &coarse) {
                     for j in 0..4 {
                         let dx = refined[j][0] - coarse[j][0];
                         let dy = refined[j][1] - coarse[j][1];
@@ -266,6 +266,12 @@ impl Detector {
 
                         state.batch.corners[i][j].x = refined[j][0];
                         state.batch.corners[i][j].y = refined[j][1];
+
+                        // Store 2x2 covariance (4 floats) for each corner
+                        state.batch.corner_covariances[i][j * 4] = covs[j][(0, 0)] as f32;
+                        state.batch.corner_covariances[i][j * 4 + 1] = covs[j][(0, 1)] as f32;
+                        state.batch.corner_covariances[i][j * 4 + 2] = covs[j][(1, 0)] as f32;
+                        state.batch.corner_covariances[i][j * 4 + 3] = covs[j][(1, 1)] as f32;
                     }
                 } else {
                     gwlf_fallback_count += 1;
