@@ -174,11 +174,7 @@ pub fn estimate_tag_pose_with_config(
         (PoseEstimationMode::Accurate, _, Some(ext_covs)) => {
             // Use provided covariances (e.g. from GWLF)
             let (refined_pose, covariance) = crate::pose_weighted::refine_pose_lm_weighted(
-                intrinsics,
-                corners,
-                tag_size,
-                best_pose,
-                ext_covs,
+                intrinsics, corners, tag_size, best_pose, ext_covs,
             );
             (Some(refined_pose), Some(covariance))
         },
@@ -695,6 +691,7 @@ pub fn refine_poses_soa_with_config(
             // Check if any covariance is non-zero.
             let mut ext_covs = [Matrix2::zeros(); 4];
             let mut has_ext_covs = false;
+            #[allow(clippy::needless_range_loop)]
             for j in 0..4 {
                 ext_covs[j] = Matrix2::new(
                     f64::from(batch.corner_covariances[i][j * 4]),

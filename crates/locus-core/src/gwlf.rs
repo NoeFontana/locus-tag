@@ -1,7 +1,7 @@
 //! Gradient-Weighted Line Fitting (GWLF) for sub-pixel corner refinement.
 
 use crate::image::ImageView;
-use nalgebra::{Matrix2, Matrix3, Vector2, Vector3, SMatrix};
+use nalgebra::{Matrix2, Matrix3, SMatrix, Vector2, Vector3};
 
 /// Accumulator for gradient-weighted spatial moments of an edge.
 #[derive(Clone, Copy, Debug, Default)]
@@ -43,12 +43,16 @@ impl MomentAccumulator {
         if self.sum_w < 1e-9 {
             None
         } else {
-            Some(Vector2::new(self.sum_wx / self.sum_w, self.sum_wy / self.sum_w))
+            Some(Vector2::new(
+                self.sum_wx / self.sum_w,
+                self.sum_wy / self.sum_w,
+            ))
         }
     }
 
     /// Compute the 2x2 gradient-weighted spatial covariance matrix.
     #[must_use]
+    #[allow(clippy::similar_names)]
     pub fn covariance(&self) -> Option<Matrix2<f64>> {
         let c = self.centroid()?;
         let s_w = self.sum_w;
@@ -122,6 +126,7 @@ pub struct EigenResult {
 
 /// Solves the eigendecomposition of a 2x2 symmetric matrix [[a, b], [b, c]].
 #[must_use]
+#[allow(clippy::manual_midpoint)]
 pub fn solve_2x2_symmetric(a: f64, b: f64, c: f64) -> EigenResult {
     let trace = a + c;
     let det = a * c - b * b;
@@ -159,6 +164,7 @@ pub fn solve_2x2_symmetric(a: f64, b: f64, c: f64) -> EigenResult {
 #[allow(clippy::similar_names)]
 #[allow(clippy::cast_sign_loss)]
 #[allow(clippy::cast_possible_wrap)]
+#[allow(clippy::type_complexity)]
 pub fn refine_quad_gwlf_with_cov(
     img: &ImageView,
     coarse_corners: &[[f32; 2]; 4],
@@ -203,13 +209,17 @@ pub fn refine_quad_gwlf_with_cov(
                 let sx = px + f64::from(k) * nx_coarse;
                 let sy = py + f64::from(k) * ny_coarse;
 
-                if sx < 1.0 || sx >= (img.width - 2) as f64 || sy < 1.0 || sy >= (img.height - 2) as f64 {
+                if sx < 1.0
+                    || sx >= (img.width - 2) as f64
+                    || sy < 1.0
+                    || sy >= (img.height - 2) as f64
+                {
                     continue;
                 }
 
                 let g = img.sample_gradient_bilinear(sx, sy);
                 let w = g[0] * g[0] + g[1] * g[1];
-                
+
                 // Weight noise floor
                 if w > 100.0 {
                     acc.add(sx, sy, w);
@@ -218,7 +228,11 @@ pub fn refine_quad_gwlf_with_cov(
         }
 
         let cov_spatial = acc.covariance()?;
-        let res = solve_2x2_symmetric(cov_spatial[(0, 0)], cov_spatial[(0, 1)], cov_spatial[(1, 1)]);
+        let res = solve_2x2_symmetric(
+            cov_spatial[(0, 0)],
+            cov_spatial[(0, 1)],
+            cov_spatial[(1, 1)],
+        );
         let n = res.v_min;
         let x_bar = acc.centroid()?;
         let w_total = acc.sum_w;
@@ -228,12 +242,14 @@ pub fn refine_quad_gwlf_with_cov(
         let sigma_xbar = Matrix2::identity().scale(res.l_min / w_total);
         // Σ_n = (λ_min / (W * (λ_max - λ_min))) * n_perp * n_perp^T
         let n_perp = res.v_max;
-        let sigma_n = (n_perp * n_perp.transpose()).scale(res.l_min / (w_total * (res.l_max - res.l_min).max(1e-6)));
+        let sigma_n = (n_perp * n_perp.transpose())
+            .scale(res.l_min / (w_total * (res.l_max - res.l_min).max(1e-6)));
 
         // l = [n; -x_bar^T * n]
         // J_n = [I; -x_bar^T], J_xbar = [0; -n^T]
         let mut j_n = SMatrix::<f64, 3, 2>::zeros();
-        j_n.fixed_view_mut::<2, 2>(0, 0).copy_from(&Matrix2::identity());
+        j_n.fixed_view_mut::<2, 2>(0, 0)
+            .copy_from(&Matrix2::identity());
         j_n[(2, 0)] = -x_bar.x;
         j_n[(2, 1)] = -x_bar.y;
 
@@ -241,8 +257,7 @@ pub fn refine_quad_gwlf_with_cov(
         j_xbar[(2, 0)] = -n.x;
         j_xbar[(2, 1)] = -n.y;
 
-        let cov_l = j_n * sigma_n * j_n.transpose()
-                  + j_xbar * sigma_xbar * j_xbar.transpose();
+        let cov_l = j_n * sigma_n * j_n.transpose() + j_xbar * sigma_xbar * j_xbar.transpose();
 
         lines[i] = HomogeneousLine {
             l: Vector3::new(n.x, n.y, -x_bar.dot(&n)),
@@ -261,8 +276,9 @@ pub fn refine_quad_gwlf_with_cov(
 
         // Sanity check
         let dist_sq = (corner.x - f64::from(coarse_corners[i][0])).powi(2)
-                    + (corner.y - f64::from(coarse_corners[i][1])).powi(2);
-        if dist_sq > 25.0 { // Relaxed sanity check for blur (5.0 px)
+            + (corner.y - f64::from(coarse_corners[i][1])).powi(2);
+        if dist_sq > 25.0 {
+            // Relaxed sanity check for blur (5.0 px)
             return None;
         }
 
