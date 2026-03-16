@@ -226,6 +226,7 @@ impl Detector {
                 &sharpened_img,
                 &tile_stats,
                 self.config.threshold_tile_size,
+                self.config.decoder_min_contrast,
             );
 
             (n, unrefined)

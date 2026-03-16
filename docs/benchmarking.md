@@ -75,6 +75,7 @@ cargo bench
 
 # Run specific micro-benchmark (e.g., real-world data)
 cargo bench --bench real_data_bench
+cargo bench --bench decoding_real_bench
 ```
 
 ### Mutually Exclusive Telemetry Matrix
@@ -121,6 +122,7 @@ PYTHONPATH=. uv run --group bench tools/cli.py bench real --scenarios forward --
 You can save a "Golden Baseline" and compare current performance against it.
 
 Historical Performance Profiles:
+- [DDA-SIMD Decoding Profile (2026-03-16)](./benchmarking/funnel_dda_20260316.md)
 - [SoA Migration Profile (2026-03-03)](./benchmarking/soa_migration_20260303.md)
 - [Initial Baseline (2026-03-02)](./benchmarking/baseline_20260302.md)
 

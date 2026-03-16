@@ -12,6 +12,7 @@ pub fn apply_funnel_gate(
     img: &ImageView,
     tile_stats: &[TileStats],
     tile_size: usize,
+    min_contrast: f64,
 ) {
     let tiles_wide = img.width / tile_size;
     let tiles_high = img.height / tile_size;
@@ -22,6 +23,19 @@ pub fn apply_funnel_gate(
         }
 
         let corners = batch.corners[i];
+        
+        // Skip gate for very small quads where 2px delta might be unreliable
+        let mut side_len_sq = 0.0;
+        for j in 0..4 {
+            let dx = corners[j].x - corners[(j+1)%4].x;
+            let dy = corners[j].y - corners[(j+1)%4].y;
+            side_len_sq += dx*dx + dy*dy;
+        }
+        if side_len_sq < 20.0 * 20.0 * 4.0 { // Average side < 20px
+             batch.funnel_status[i] = FunnelStatus::PassedContrast;
+             continue;
+        }
+
         let mut total_contrast = 0.0;
         let mut valid_samples = 0;
 
@@ -33,8 +47,7 @@ pub fn apply_funnel_gate(
             let mx = (p1.x + p2.x) * 0.5;
             let my = (p1.y + p2.y) * 0.5;
 
-            // Normal vector (inward-facing)
-            // Edge vector: (dx, dy) = (p2.x - p1.x, p2.y - p1.y)
+            // Normal vector (inward-facing for CW)
             let dx = p2.x - p1.x;
             let dy = p2.y - p1.y;
             let len = (dx * dx + dy * dy).sqrt();
@@ -45,7 +58,7 @@ pub fn apply_funnel_gate(
             let ny = dx / len;
 
             // Sample two points: one inside, one outside
-            let delta = 2.0; // 2 pixels as per spec
+            let delta = 2.0; 
             let pin_x = mx + delta * nx;
             let pin_y = my + delta * ny;
             let pout_x = mx - delta * nx;
@@ -66,16 +79,18 @@ pub fn apply_funnel_gate(
         if valid_samples > 0 {
             let avg_contrast = total_contrast / f64::from(valid_samples);
 
-            // Get local range from tile_stats
-            let tx = (corners[0].x as usize / tile_size).min(tiles_wide - 1);
-            let ty = (corners[0].y as usize / tile_size).min(tiles_high - 1);
+            // Get local range from tile_stats safely
+            let cx = (corners[0].x + corners[1].x + corners[2].x + corners[3].x) * 0.25;
+            let cy = (corners[0].y + corners[1].y + corners[2].y + corners[3].y) * 0.25;
+            
+            let tx = ((cx as f32 / tile_size as f32) as usize).min(tiles_wide.saturating_sub(1));
+            let ty = ((cy as f32 / tile_size as f32) as usize).min(tiles_high.saturating_sub(1));
             let stats = tile_stats[ty * tiles_wide + tx];
             let local_range = f64::from(stats.max.saturating_sub(stats.min));
 
-            // Threshold: derived from local adaptive threshold variance.
-            // A simple threshold would be some fraction of the local range.
-            // For example, 0.2 * local_range.
-            let tau = 0.2 * local_range;
+            // Ultra-conservative threshold: 
+            // Must have at least some fraction of local range OR a minimum absolute contrast.
+            let tau = (0.1 * local_range).min(min_contrast * 0.5).max(2.0);
 
             if avg_contrast < tau {
                 batch.funnel_status[i] = FunnelStatus::RejectedContrast;
@@ -83,6 +98,9 @@ pub fn apply_funnel_gate(
             } else {
                 batch.funnel_status[i] = FunnelStatus::PassedContrast;
             }
+        } else {
+            // If we couldn't sample safely (e.g. quad at image edge), pass it to be safe.
+            batch.funnel_status[i] = FunnelStatus::PassedContrast;
         }
     }
 }
