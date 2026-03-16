@@ -22,9 +22,9 @@
     - [x] **Red Phase**: Write failing tests for AVX2/FMA3/SSE4.2 interpolation (where hardware permits).
     - [x] **Green Phase**: Implement the vectorized sampler using intrinsics.
     - [x] Integrate `_mm256_rcp_ps` with Newton-Raphson for perspective divide.
-- [ ] Task: Implement SIMD-Vectorized Bilinear Interpolation (AArch64).
-    - [ ] **Red Phase**: Write failing tests for NEON interpolation.
-    - [ ] **Green Phase**: Implement the NEON-based sampler using `vrecpeq_f32` (or equivalent).
+- [x] Task: Implement SIMD-Vectorized Bilinear Interpolation (AArch64). b850a91
+    - [x] **Red Phase**: Write failing tests for NEON interpolation.
+    - [x] **Green Phase**: Implement the NEON-based sampler using `vrecpeq_f32` (or equivalent).
 - [ ] Task: Conductor - User Manual Verification 'SIMD & DDA Implementation' (Protocol in workflow.md)
 
 ## Phase 3: Integration & Performance Validation
