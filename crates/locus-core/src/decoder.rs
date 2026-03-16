@@ -27,7 +27,56 @@ pub struct Homography {
     pub h: SMatrix<f64, 3, 3>,
 }
 
+/// A Digital Differential Analyzer (DDA) for incremental homography projection.
+///
+/// This avoids expensive matrix multiplications by using discrete partial derivatives
+/// when stepping through a uniform grid in tag space.
+#[derive(Debug, Clone, Copy)]
+pub struct HomographyDda {
+    /// Current numerator for X coordinate.
+    pub nx: f64,
+    /// Current numerator for Y coordinate.
+    pub ny: f64,
+    /// Current denominator (perspective divide).
+    pub d: f64,
+    /// Partial derivative of nx with respect to u.
+    pub dnx_du: f64,
+    /// Partial derivative of ny with respect to u.
+    pub dny_du: f64,
+    /// Partial derivative of d with respect to u.
+    pub dd_du: f64,
+    /// Partial derivative of nx with respect to v.
+    pub dnx_dv: f64,
+    /// Partial derivative of ny with respect to v.
+    pub dny_dv: f64,
+    /// Partial derivative of d with respect to v.
+    pub dd_dv: f64,
+}
+
 impl Homography {
+    /// Convert the homography into a DDA state for a grid with step size (du, dv).
+    /// Initial state is computed at (-1, -1) in canonical tag space.
+    #[must_use]
+    pub fn to_dda(&self, du: f64, dv: f64) -> HomographyDda {
+        let h = self.h;
+        // Start at (-1, -1)
+        let nx = h[(0, 0)] * (-1.0) + h[(0, 1)] * (-1.0) + h[(0, 2)];
+        let ny = h[(1, 0)] * (-1.0) + h[(1, 1)] * (-1.0) + h[(1, 2)];
+        let d = h[(2, 0)] * (-1.0) + h[(2, 1)] * (-1.0) + h[(2, 2)];
+
+        HomographyDda {
+            nx,
+            ny,
+            d,
+            dnx_du: h[(0, 0)] * du,
+            dny_du: h[(1, 0)] * du,
+            dd_du: h[(2, 0)] * du,
+            dnx_dv: h[(0, 1)] * dv,
+            dny_dv: h[(1, 1)] * dv,
+            dd_dv: h[(2, 1)] * dv,
+        }
+    }
+
     /// Compute homography from 4 source points to 4 destination points using DLT.
     /// Points are [x, y].
     /// Compute homography from 4 source points to 4 destination points using DLT.
