@@ -14,10 +14,10 @@
 
 ## Phase 2: SIMD & DDA Implementation
 
-- [ ] Task: Implement Homography Digital Differential Analyzer (DDA).
-    - [ ] **Red Phase**: Write failing tests for incremental step calculation ($\partial_u, \partial_v$).
-    - [ ] **Green Phase**: Implement the DDA state initialization and stepping logic.
-    - [ ] Verify DDA precision against standard matrix-based perspective projection.
+- [x] Task: Implement Homography Digital Differential Analyzer (DDA). 76b4e6a
+    - [x] **Red Phase**: Write failing tests for incremental step calculation ($\partial_u, \partial_v$).
+    - [x] **Green Phase**: Implement the DDA state initialization and stepping logic.
+    - [x] Verify DDA precision against standard matrix-based perspective projection.
 - [ ] Task: Implement SIMD-Vectorized Bilinear Interpolation (x86_64).
     - [ ] **Red Phase**: Write failing tests for AVX2/FMA3/SSE4.2 interpolation (where hardware permits).
     - [ ] **Green Phase**: Implement the vectorized sampler using intrinsics.
