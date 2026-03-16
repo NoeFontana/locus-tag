@@ -1,3 +1,5 @@
+//! Real-world decoding benchmarks.
+#![allow(missing_docs, clippy::unwrap_used)]
 mod utils;
 
 use divan::bench;
@@ -28,11 +30,19 @@ fn bench_decoding_only_real(bencher: divan::Bencher) {
     let config = locus_core::DetectorConfig::builder()
         .refinement_mode(locus_core::config::CornerRefinementMode::None)
         .build();
-    let mut detector = locus_core::Detector::with_config(config.clone());
-    
+    let mut detector = locus_core::Detector::with_config(config);
+
     // Warm up to get the batch populated with candidates
-    let _ = detector.detect(&img, None, None, locus_core::PoseEstimationMode::Fast, false).unwrap();
-    
+    let _ = detector
+        .detect(
+            &img,
+            None,
+            None,
+            locus_core::PoseEstimationMode::Fast,
+            false,
+        )
+        .unwrap();
+
     // Capture the state
     let mut batch = detector.bench_api_get_batch_cloned();
     let n = 1024; // Use full batch capacity for bench

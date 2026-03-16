@@ -60,9 +60,9 @@ impl Homography {
     pub fn to_dda(&self, du: f64, dv: f64) -> HomographyDda {
         let h = self.h;
         // Start at (-1, -1)
-        let nx = h[(0, 0)] * (-1.0) + h[(0, 1)] * (-1.0) + h[(0, 2)];
-        let ny = h[(1, 0)] * (-1.0) + h[(1, 1)] * (-1.0) + h[(1, 2)];
-        let d = h[(2, 0)] * (-1.0) + h[(2, 1)] * (-1.0) + h[(2, 2)];
+        let nx = -h[(0, 0)] - h[(0, 1)] + h[(0, 2)];
+        let ny = -h[(1, 0)] - h[(1, 1)] + h[(1, 2)];
+        let d = -h[(2, 0)] - h[(2, 1)] + h[(2, 2)];
 
         HomographyDda {
             nx,
@@ -258,8 +258,8 @@ pub fn compute_homographies_soa(
     status_mask: &[crate::batch::CandidateState],
     homographies: &mut [Matrix3x3],
 ) {
-    use rayon::prelude::*;
     use crate::batch::CandidateState;
+    use rayon::prelude::*;
 
     // Each homography maps from canonical square [(-1,-1), (1,-1), (1,1), (-1,1)] to image quads.
     homographies
@@ -847,10 +847,7 @@ pub(crate) fn compute_otsu_threshold(values: &[f64]) -> f64 {
 const MAX_BIT_COUNT: usize = 64;
 
 /// Sample values from the image using DDA-based coordinate generation and SIMD bilinear sampling.
-#[multiversion(targets(
-    "x86_64+avx2+fma",
-    "aarch64+neon"
-))]
+#[multiversion(targets("x86_64+avx2+fma", "aarch64+neon"))]
 fn sample_grid_values_dda_simd(
     img: &crate::image::ImageView,
     roi: &RoiCache,
@@ -865,14 +862,26 @@ fn sample_grid_values_dda_simd(
         return false;
     }
 
-    let _du = if dim > 1 { points[1].0 - points[0].0 } else { 0.0 };
-    let _dv = if dim > 1 { points[dim].1 - points[0].1 } else { 0.0 };
+    let _du = if dim > 1 {
+        points[1].0 - points[0].0
+    } else {
+        0.0
+    };
+    let _dv = if dim > 1 {
+        points[dim].1 - points[0].1
+    } else {
+        0.0
+    };
 
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+    #[cfg(all(
+        target_arch = "x86_64",
+        target_feature = "avx2",
+        target_feature = "fma"
+    ))]
     unsafe {
-        use std::arch::x86_64::*;
         use crate::simd::math::rcp_nr_v8;
         use crate::simd::sampler::sample_bilinear_v8;
+        use std::arch::x86_64::*;
 
         let dda = h.to_dda(_du, _dv);
 
@@ -901,7 +910,7 @@ fn sample_grid_values_dda_simd(
 
             for _x in (0..dim).step_by(8) {
                 let count = (dim - _x).min(8);
-                
+
                 // Vectorized coordinate generation (DDA)
                 // x[i] = (nx + i*dnx_du)
                 let v_nx_simd = _mm256_fmadd_ps(v_steps, v_dnx_du, _mm256_set1_ps(nx_start));
@@ -919,10 +928,16 @@ fn sample_grid_values_dda_simd(
 
                 // Bounds check: must be in [0, width - 1) for safe 2x2 bilinear fetch
                 let v_zero = _mm256_setzero_ps();
-                let mask_x = _mm256_and_ps(_mm256_cmp_ps(v_img_x, v_zero, _CMP_GE_OQ), _mm256_cmp_ps(v_img_x, w_limit, _CMP_LT_OQ));
-                let mask_y = _mm256_and_ps(_mm256_cmp_ps(v_img_y, v_zero, _CMP_GE_OQ), _mm256_cmp_ps(v_img_y, h_limit, _CMP_LT_OQ));
+                let mask_x = _mm256_and_ps(
+                    _mm256_cmp_ps(v_img_x, v_zero, _CMP_GE_OQ),
+                    _mm256_cmp_ps(v_img_x, w_limit, _CMP_LT_OQ),
+                );
+                let mask_y = _mm256_and_ps(
+                    _mm256_cmp_ps(v_img_y, v_zero, _CMP_GE_OQ),
+                    _mm256_cmp_ps(v_img_y, h_limit, _CMP_LT_OQ),
+                );
                 let mask = _mm256_movemask_ps(_mm256_and_ps(mask_x, mask_y));
-                
+
                 if (mask & ((1 << count) - 1)) != ((1 << count) - 1) {
                     return false;
                 }
@@ -956,8 +971,8 @@ fn sample_grid_values_dda_simd(
 
     #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
     unsafe {
-        use std::arch::aarch64::*;
         use crate::simd::sampler::sample_bilinear_v8;
+        use std::arch::aarch64::*;
 
         let dda = h.to_dda(_du, _dv);
 
@@ -986,7 +1001,7 @@ fn sample_grid_values_dda_simd(
 
             for _x in (0..dim).step_by(8) {
                 let count = (dim - _x).min(8);
-                
+
                 // NEON perspective divide using vrecpeq_f32 + vrecpsq_f32
                 let mut v_img_x = [0.0f32; 8];
                 let mut v_img_y = [0.0f32; 8];
@@ -998,7 +1013,7 @@ fn sample_grid_values_dda_simd(
 
                     let v_winv = vrecpeq_f32(v_d_c);
                     let v_winv = vmulq_f32(v_winv, vrecpsq_f32(v_d_c, v_winv));
-                    
+
                     let img_x = vmulq_f32(v_nx_c, v_winv);
                     let img_y = vmulq_f32(v_ny_c, v_winv);
 
@@ -1032,6 +1047,9 @@ fn sample_grid_values_dda_simd(
 }
 
 /// Sample values from the image using SIMD-optimized Fast-Math and ROI caching.
+///
+/// # Panics
+/// Panics if the number of sample points exceeds `MAX_BIT_COUNT`.
 #[multiversion(targets(
     "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
@@ -1098,6 +1116,9 @@ fn sample_grid_values_optimized(
 ///
 /// This computes the intensities at sample points and the adaptive thresholds,
 /// then delegates to the strategy to produce the code.
+///
+/// # Panics
+/// Panics if the number of sample points exceeds `MAX_BIT_COUNT`.
 #[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
 pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
     img: &crate::image::ImageView,
@@ -1114,7 +1135,12 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
     // Stack-allocated buffer for up to 64 sample points (covers all standard tag families)
     let mut intensities = [0.0f64; MAX_BIT_COUNT];
     let n = points.len().min(MAX_BIT_COUNT);
-    assert!(points.len() <= MAX_BIT_COUNT, "Tag bit count ({}) exceeds static buffer size ({})", points.len(), MAX_BIT_COUNT);
+    assert!(
+        points.len() <= MAX_BIT_COUNT,
+        "Tag bit count ({}) exceeds static buffer size ({})",
+        points.len(),
+        MAX_BIT_COUNT
+    );
 
     if !sample_grid_values_dda_simd(img, &roi, &homography, decoder, &mut intensities) {
         return None;
@@ -1127,6 +1153,9 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
 }
 
 /// Sample the bit grid using Structure of Arrays (SoA) data.
+///
+/// # Panics
+/// Panics if the number of sample points exceeds `MAX_BIT_COUNT`.
 pub fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
     img: &crate::image::ImageView,
     arena: &Bump,
@@ -1166,7 +1195,12 @@ pub fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
     let points = decoder.sample_points();
     let mut intensities = [0.0f64; MAX_BIT_COUNT];
     let n = points.len().min(MAX_BIT_COUNT);
-    assert!(points.len() <= MAX_BIT_COUNT, "Tag bit count ({}) exceeds static buffer size ({})", points.len(), MAX_BIT_COUNT);
+    assert!(
+        points.len() <= MAX_BIT_COUNT,
+        "Tag bit count ({}) exceeds static buffer size ({})",
+        points.len(),
+        MAX_BIT_COUNT
+    );
 
     if !sample_grid_values_dda_simd(img, &roi, &homography_obj, decoder, &mut intensities) {
         return None;
@@ -1179,6 +1213,9 @@ pub fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
 }
 
 /// Sample the bit grid using Structure of Arrays (SoA) data and a precomputed ROI cache.
+///
+/// # Panics
+/// Panics if the number of sample points exceeds `MAX_BIT_COUNT`.
 pub fn sample_grid_soa_precomputed<S: crate::strategy::DecodingStrategy>(
     img: &crate::image::ImageView,
     roi: &RoiCache,
@@ -1195,7 +1232,12 @@ pub fn sample_grid_soa_precomputed<S: crate::strategy::DecodingStrategy>(
     let points = decoder.sample_points();
     let mut intensities = [0.0f64; MAX_BIT_COUNT];
     let n = points.len().min(MAX_BIT_COUNT);
-    assert!(points.len() <= MAX_BIT_COUNT, "Tag bit count ({}) exceeds static buffer size ({})", points.len(), MAX_BIT_COUNT);
+    assert!(
+        points.len() <= MAX_BIT_COUNT,
+        "Tag bit count ({}) exceeds static buffer size ({})",
+        points.len(),
+        MAX_BIT_COUNT
+    );
 
     if !sample_grid_values_dda_simd(img, roi, &homography_obj, decoder, &mut intensities) {
         return None;
@@ -1319,14 +1361,7 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
         .into_par_iter()
         .map(|i| {
             if batch.status_mask[i] != CandidateState::Active {
-                return (
-                    batch.status_mask[i],
-                    0,
-                    0,
-                    0,
-                    batch.error_rates[i],
-                    None,
-                );
+                return (batch.status_mask[i], 0, 0, 0, batch.error_rates[i], None);
             }
 
             DECODE_ARENA.with_borrow_mut(|arena| {

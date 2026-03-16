@@ -76,10 +76,13 @@ nav:
           - benchmarking/hub_locus_v1_20260312.md
           - benchmarking/micro-benchmarking-guide.md
           - benchmarking/baseline_micro_20260307.md
+          - benchmarking/baseline_micro_20260315.md
+          - benchmarking/funnel_dda_20260316.md
   - Reference:
       - reference/api.md
   - Engineering (Internal):
       - engineering/core.md
+      - engineering/workflow.md
       - engineering/detection-batch-contract.md
       - engineering/constraints.md
       - engineering/quality-gates.md

@@ -31,7 +31,7 @@ fn test_homography_soa_single() {
     let mut homographies = vec![Matrix3x3::default()];
     let status_mask = vec![CandidateState::Active];
     compute_homographies_soa(&corners, &status_mask, &mut homographies);
-    
+
     // Non-zero homography
     assert!(homographies[0].data[0] != 0.0);
 }
@@ -47,7 +47,10 @@ fn test_homography_soa_skip_inactive() {
     let mut homographies = vec![Matrix3x3::default()];
     let status_mask = vec![CandidateState::FailedDecode];
     compute_homographies_soa(&corners, &status_mask, &mut homographies);
-    
+
     // Homography should be zero
-    assert_eq!(homographies[0].data[0], 0.0);
+    #[allow(clippy::float_cmp)]
+    {
+        assert_eq!(homographies[0].data[0], 0.0);
+    }
 }

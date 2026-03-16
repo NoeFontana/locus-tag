@@ -202,7 +202,8 @@ impl Detector {
                 threshold_map,
                 img.width,
                 img.height,
-                self.config.segmentation_connectivity == crate::config::SegmentationConnectivity::Eight,
+                self.config.segmentation_connectivity
+                    == crate::config::SegmentationConnectivity::Eight,
                 self.config.quad_min_area,
                 self.config.segmentation_margin,
             );
@@ -373,7 +374,9 @@ impl Detector {
             .homographies
             .copy_from_slice(&self.state.batch.homographies);
         new_batch.ids.copy_from_slice(&self.state.batch.ids);
-        new_batch.payloads.copy_from_slice(&self.state.batch.payloads);
+        new_batch
+            .payloads
+            .copy_from_slice(&self.state.batch.payloads);
         new_batch
             .error_rates
             .copy_from_slice(&self.state.batch.error_rates);
@@ -390,7 +393,6 @@ impl Detector {
         new_batch
     }
 }
-
 
 /// Run pose refinement on valid candidates and optionally compute reprojection errors.
 ///

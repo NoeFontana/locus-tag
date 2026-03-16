@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use locus_core::batch::{CandidateState, DetectionBatch, Point2f};
 use std::path::PathBuf;
 

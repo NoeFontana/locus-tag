@@ -13,23 +13,23 @@ fn test_vectorized_bilinear_interpolation() {
             data[y * width + x] = (x + y) as u8;
         }
     }
-    let img = ImageView::new(&data, width, height, width).unwrap();
-    
+    let img = ImageView::new(&data, width, height, width).expect("valid image");
+
     // Sample points (some integer, some sub-pixel)
     let x = [10.5, 11.5, 12.5, 13.5, 14.5, 15.5, 16.5, 17.5];
     let y = [10.5, 11.5, 12.5, 13.5, 14.5, 15.5, 16.5, 17.5];
-    
+
     // Expected values using scalar bilinear
     let mut expected = [0.0f32; 8];
     for i in 0..8 {
         expected[i] = img.sample_bilinear(f64::from(x[i]), f64::from(y[i])) as f32;
     }
-    
+
     let mut actual = [0.0f32; 8];
     sample_bilinear_v8(&img, &x, &y, &mut actual);
-    
+
     for i in 0..8 {
-        // We expect bit-perfect match if using same logic, 
+        // We expect bit-perfect match if using same logic,
         // but SIMD might have slight differences due to precision or rounding.
         // However, here we are using f32 for both (sample_bilinear uses f64 internally then casts to u8).
         // Wait, sample_bilinear returns f64.
