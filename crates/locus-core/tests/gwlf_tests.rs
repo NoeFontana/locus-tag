@@ -1,4 +1,72 @@
-use locus_core::gwlf::{MomentAccumulator, solve_2x2_symmetric_min_eigen};
+use locus_core::gwlf::{MomentAccumulator, solve_2x2_symmetric_min_eigen, HomogeneousLine, refine_quad_gwlf};
+use locus_core::ImageView;
+
+#[test]
+fn test_gwlf_refinement_synthetic_square() {
+    let width = 100;
+    let height = 100;
+    let mut data = vec![0u8; width * height];
+    
+    // Create a 40x40 white square at (20, 20) to (60, 60)
+    for y in 20..60 {
+        for x in 20..60 {
+            data[y * width + x] = 255;
+        }
+    }
+    
+    let view = ImageView::new(&data, width, height, width).unwrap();
+    
+    // Coarse corners slightly jittered from (20,20), (60,20), (60,60), (20,60)
+    let coarse = [
+        [21.5, 19.5],
+        [59.0, 21.0],
+        [60.5, 60.5],
+        [19.0, 59.0],
+    ];
+    
+    let refined = refine_quad_gwlf(&view, &coarse).unwrap();
+    
+    // Should be close to the true edges (19.5/20.5 depending on gradient implementation)
+    // Finite difference on a sharp edge will put the max gradient between pixels.
+    // For a transition from 0 (at 19) to 255 (at 20), (I(21)-I(19)) = 255.
+    // Centroid will be around 20.0.
+    assert!((refined[0][0] - 19.5).abs() < 1.0);
+    assert!((refined[0][1] - 19.5).abs() < 1.0);
+    assert!((refined[2][0] - 59.5).abs() < 1.0);
+    assert!((refined[2][1] - 59.5).abs() < 1.0);
+}
+
+#[test]
+fn test_gwlf_sanity_gate_fallback() {
+    let width = 100;
+    let height = 100;
+    let data = vec![0u8; width * height];
+    let view = ImageView::new(&data, width, height, width).unwrap();
+    
+    // Corners very far from any edges (all 0 image)
+    let coarse = [
+        [20.0, 20.0],
+        [60.0, 20.0],
+        [60.0, 60.0],
+        [20.0, 60.0],
+    ];
+    
+    // Should return None because no gradients found or sanity gate triggered
+    let refined = refine_quad_gwlf(&view, &coarse);
+    assert!(refined.is_none());
+}
+
+#[test]
+fn test_line_intersection() {
+    // x = 5 (Vertical line: 1*x + 0*y - 5 = 0)
+    let l1 = HomogeneousLine { nx: 1.0, ny: 0.0, d: -5.0 };
+    // y = 10 (Horizontal line: 0*x + 1*y - 10 = 0)
+    let l2 = HomogeneousLine { nx: 0.0, ny: 1.0, d: -10.0 };
+    
+    let (ix, iy) = l1.intersect(&l2).unwrap();
+    assert_eq!(ix, 5.0);
+    assert_eq!(iy, 10.0);
+}
 
 #[test]
 fn test_moment_accumulation_horizontal_edge() {
