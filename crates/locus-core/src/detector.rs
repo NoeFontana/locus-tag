@@ -357,10 +357,39 @@ impl Detector {
 
     /// Get the current detector configuration.
     #[must_use]
-    pub fn config(&self) -> &DetectorConfig {
-        &self.config
+    pub fn config(&self) -> DetectorConfig {
+        self.config
+    }
+
+    /// Returns a cloned copy of the internal detection batch.
+    /// Exclusively for benchmarking.
+    #[cfg(feature = "bench-internals")]
+    #[must_use]
+    pub fn bench_api_get_batch_cloned(&self) -> DetectionBatch {
+        let mut new_batch = DetectionBatch::new();
+        new_batch.corners.copy_from_slice(&self.state.batch.corners);
+        new_batch
+            .homographies
+            .copy_from_slice(&self.state.batch.homographies);
+        new_batch.ids.copy_from_slice(&self.state.batch.ids);
+        new_batch.payloads.copy_from_slice(&self.state.batch.payloads);
+        new_batch
+            .error_rates
+            .copy_from_slice(&self.state.batch.error_rates);
+        new_batch.poses.copy_from_slice(&self.state.batch.poses);
+        new_batch
+            .status_mask
+            .copy_from_slice(&self.state.batch.status_mask);
+        new_batch
+            .funnel_status
+            .copy_from_slice(&self.state.batch.funnel_status);
+        new_batch
+            .corner_covariances
+            .copy_from_slice(&self.state.batch.corner_covariances);
+        new_batch
     }
 }
+
 
 /// Run pose refinement on valid candidates and optionally compute reprojection errors.
 ///
