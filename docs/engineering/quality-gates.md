@@ -27,6 +27,11 @@ cargo nextest run --release --all-features
 # Build the Python extension in release mode before running Python tests.
 uv run maturin develop --release --manifest-path crates/locus-py/Cargo.toml
 uv run pytest
+
+# 5. Cross-Compilation Check (aarch64)
+# Ensure NEON/SIMD paths compile correctly for ARM targets.
+rustup target add aarch64-unknown-linux-gnu
+cargo check --target aarch64-unknown-linux-gnu --all-features
 ```
 
 ## 2. Performance & Regression Gates
