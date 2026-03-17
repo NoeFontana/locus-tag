@@ -504,6 +504,7 @@ def bench_real(
                     start = time.perf_counter()
                     detections, _ = wrapper.detect(img, intrinsics=intrinsics, tag_size=tag_size)
                     _latency = (time.perf_counter() - start) * 1000.0
+                    stats["latency"].append(_latency)
 
                     correct, err_sum, _ = Metrics.match_detections(detections, gt_tags)
                     stats["gt"] += len(gt_tags)

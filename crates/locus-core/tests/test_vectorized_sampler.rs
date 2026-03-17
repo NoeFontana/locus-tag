@@ -31,6 +31,12 @@ fn test_vectorized_bilinear_interpolation() {
     for i in 0..8 {
         // We expect high precision agreement between f32 SIMD and f64 scalar math.
         // Tolerating 1e-5 for floating point precision differences.
-        assert!((actual[i] - expected[i]).abs() < 1e-5, "Mismatch at index {}: actual={}, expected={}", i, actual[i], expected[i]);
+        assert!(
+            (actual[i] - expected[i]).abs() < 1e-5,
+            "Mismatch at index {}: actual={}, expected={}",
+            i,
+            actual[i],
+            expected[i]
+        );
     }
 }
