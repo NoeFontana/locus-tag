@@ -29,10 +29,8 @@ fn test_vectorized_bilinear_interpolation() {
     sample_bilinear_v8(&img, &x, &y, &mut actual);
 
     for i in 0..8 {
-        // We expect bit-perfect match if using same logic,
-        // but SIMD might have slight differences due to precision or rounding.
-        // However, here we are using f32 for both (sample_bilinear uses f64 internally then casts to u8).
-        // Wait, sample_bilinear returns f64.
-        assert!((actual[i] - expected[i]).abs() < 1.0);
+        // We expect high precision agreement between f32 SIMD and f64 scalar math.
+        // Tolerating 1e-5 for floating point precision differences.
+        assert!((actual[i] - expected[i]).abs() < 1e-5, "Mismatch at index {}: actual={}, expected={}", i, actual[i], expected[i]);
     }
 }
