@@ -970,14 +970,12 @@ fn sample_grid_values_dda_simd(
     }
 
     #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+    // SAFETY: NEON intrinsics are safe on aarch64 with neon feature.
     unsafe {
         use crate::simd::sampler::sample_bilinear_v8;
         use std::arch::aarch64::*;
 
         let dda = h.to_dda(_du, _dv);
-
-        let w_limit = vdupq_n_f32(img.width as f32 - 1.0);
-        let h_limit = vdupq_n_f32(img.height as f32 - 1.0);
 
         let mut current_nx_row = dda.nx as f32;
         let mut current_ny_row = dda.ny as f32;
@@ -1042,8 +1040,25 @@ fn sample_grid_values_dda_simd(
         return true;
     }
 
-    // Fallback: Use existing optimized scalar loop
-    sample_grid_values_optimized(img, h, roi, points, intensities, n)
+    #[cfg(not(any(
+        all(
+            target_arch = "x86_64",
+            target_feature = "avx2",
+            target_feature = "fma"
+        ),
+        all(target_arch = "aarch64", target_feature = "neon")
+    )))]
+    return sample_grid_values_optimized(img, h, roi, points, intensities, n);
+
+    #[cfg(any(
+        all(
+            target_arch = "x86_64",
+            target_feature = "avx2",
+            target_feature = "fma"
+        ),
+        all(target_arch = "aarch64", target_feature = "neon")
+    ))]
+    true
 }
 
 /// Sample values from the image using SIMD-optimized Fast-Math and ROI caching.

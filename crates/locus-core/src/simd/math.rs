@@ -14,6 +14,7 @@ use multiversion::multiversion;
 #[must_use]
 pub(crate) fn rcp_nr(w: f32) -> f32 {
     #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    // SAFETY: SSE/AVX intrinsics are safe on x86_64 with avx2.
     unsafe {
         use std::arch::x86_64::*;
         let w_vec = _mm_set_ss(w);
@@ -30,22 +31,23 @@ pub(crate) fn rcp_nr(w: f32) -> f32 {
 
     #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
     #[allow(unsafe_code)]
+    // SAFETY: NEON intrinsics are safe on aarch64 with neon feature.
     unsafe {
         use std::arch::aarch64::*;
         // Load f32 into a D-register (float32x2_t)
-        let w_vec = vdup_n_f32(w);
-        // vrecpe_f32 provides the estimate
-        let rcp_vec = vrecpe_f32(w_vec);
-        // vrecps_f32 provides the Newton-Raphson step (2.0 - w * r0)
-        let step_vec = vrecps_f32(w_vec, rcp_vec);
-        // Final refinement
-        let res_vec = vmul_f32(rcp_vec, step_vec);
-        // Extract the scalar from lane 0
-        return vget_lane_f32(res_vec, 0);
+        let v_w = vdupq_n_f32(w);
+        let res_vec = vrecpeq_f32(v_w);
+        let res_vec = vmulq_f32(res_vec, vrecpsq_f32(v_w, res_vec));
+        return vgetq_lane_f32(res_vec, 0);
     }
 
-    // Scalar fallback
-    1.0 / w
+    #[cfg(not(any(
+        all(target_arch = "x86_64", target_feature = "avx2"),
+        all(target_arch = "aarch64", target_feature = "neon")
+    )))]
+    {
+        1.0 / w
+    }
 }
 
 /// Perform bilinear interpolation using 16.16 fixed-point arithmetic.
@@ -54,7 +56,7 @@ pub(crate) fn rcp_nr(w: f32) -> f32 {
 /// Coordinates (x, y) should be sub-pixel floats.
 /// Pixels (p00, p10, p01, p11) are the 4 surrounding pixels.
 #[must_use]
-#[allow(clippy::cast_sign_loss)]
+#[allow(clippy::cast_sign_loss, dead_code)]
 pub(crate) fn bilinear_interpolate_fixed(x: f32, y: f32, p00: u8, p10: u8, p01: u8, p11: u8) -> u8 {
     // Convert to 16.16 fixed point (using only fractional part for weights)
     let fx = ((x.fract() * 65536.0) as u32) & 0xFFFF;

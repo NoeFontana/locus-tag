@@ -90,6 +90,9 @@ pub fn sample_bilinear_v8(img: &ImageView, x: &[f32; 8], y: &[f32; 8], out: &mut
     }
 
     #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+    #[allow(unsafe_code)]
+    // SAFETY: NEON intrinsics are safe on aarch64 with neon feature.
+    // Buffer bounds are checked via ImageView.
     unsafe {
         use std::arch::aarch64::*;
 
@@ -172,8 +175,18 @@ pub fn sample_bilinear_v8(img: &ImageView, x: &[f32; 8], y: &[f32; 8], out: &mut
         return;
     }
 
-    // Fallback: Scalar
-    for i in 0..8 {
-        out[i] = img.sample_bilinear(f64::from(x[i]), f64::from(y[i])) as f32;
+    #[cfg(not(any(
+        all(
+            target_arch = "x86_64",
+            target_feature = "avx2",
+            target_feature = "fma"
+        ),
+        all(target_arch = "aarch64", target_feature = "neon")
+    )))]
+    {
+        // Fallback: Scalar
+        for i in 0..8 {
+            out[i] = img.sample_bilinear(f64::from(x[i]), f64::from(y[i])) as f32;
+        }
     }
 }
