@@ -28,20 +28,20 @@ pub fn apply_funnel_gate(
         // Scale corners to the coordinate space of the image being sampled
         let corners_scaled = [
             Point2f {
-                x: (corners[0].x as f64 * sampling_scale) as f32,
-                y: (corners[0].y as f64 * sampling_scale) as f32,
+                x: (f64::from(corners[0].x) * sampling_scale) as f32,
+                y: (f64::from(corners[0].y) * sampling_scale) as f32,
             },
             Point2f {
-                x: (corners[1].x as f64 * sampling_scale) as f32,
-                y: (corners[1].y as f64 * sampling_scale) as f32,
+                x: (f64::from(corners[1].x) * sampling_scale) as f32,
+                y: (f64::from(corners[1].y) * sampling_scale) as f32,
             },
             Point2f {
-                x: (corners[2].x as f64 * sampling_scale) as f32,
-                y: (corners[2].y as f64 * sampling_scale) as f32,
+                x: (f64::from(corners[2].x) * sampling_scale) as f32,
+                y: (f64::from(corners[2].y) * sampling_scale) as f32,
             },
             Point2f {
-                x: (corners[3].x as f64 * sampling_scale) as f32,
-                y: (corners[3].y as f64 * sampling_scale) as f32,
+                x: (f64::from(corners[3].x) * sampling_scale) as f32,
+                y: (f64::from(corners[3].y) * sampling_scale) as f32,
             },
         ];
 
@@ -68,7 +68,6 @@ pub fn apply_funnel_gate(
             // Midpoint
             let mx = (p1.x + p2.x) * 0.5;
             let my = (p1.y + p2.y) * 0.5;
-
 
             // Normal vector (inward-facing for CW)
             let dx = p2.x - p1.x;

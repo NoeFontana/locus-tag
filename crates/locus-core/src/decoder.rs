@@ -849,13 +849,13 @@ const MAX_BIT_COUNT: usize = 64;
 #[multiversion(targets("x86_64+avx2+fma", "aarch64+neon"))]
 fn sample_grid_values_dda_simd(
     img: &crate::image::ImageView,
-    _roi: &RoiCache,
+    roi: &RoiCache,
     h: &Homography,
     decoder: &(impl TagDecoder + ?Sized),
     intensities: &mut [f64],
 ) -> bool {
     let dim = decoder.dimension();
-    let _n = decoder.bit_count();
+    let n = decoder.bit_count();
     let points = decoder.sample_points();
     if points.is_empty() {
         return false;
@@ -1039,13 +1039,21 @@ fn sample_grid_values_dda_simd(
     }
 
     #[cfg(not(any(
-        all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"),
+        all(
+            target_arch = "x86_64",
+            target_feature = "avx2",
+            target_feature = "fma"
+        ),
         all(target_arch = "aarch64", target_feature = "neon")
     )))]
-    return sample_grid_values_optimized(img, _roi, h, points, intensities, _n);
+    return sample_grid_values_optimized(img, h, roi, points, intensities, n);
 
     #[cfg(any(
-        all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"),
+        all(
+            target_arch = "x86_64",
+            target_feature = "avx2",
+            target_feature = "fma"
+        ),
         all(target_arch = "aarch64", target_feature = "neon")
     ))]
     true
