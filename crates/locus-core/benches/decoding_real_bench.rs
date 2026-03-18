@@ -1,16 +1,5 @@
-#![allow(
-    missing_docs,
-    dead_code,
-    clippy::unwrap_used,
-    clippy::cast_sign_loss,
-    clippy::cast_possible_wrap,
-    clippy::similar_names,
-    clippy::too_many_lines,
-    clippy::items_after_statements,
-    clippy::must_use_candidate,
-    clippy::return_self_not_must_use
-)]
-
+//! Real-world decoding benchmarks.
+#![allow(missing_docs, clippy::unwrap_used)]
 mod utils;
 
 use divan::bench;
@@ -19,7 +8,6 @@ use locus_core::bench_api::{decode_batch_soa, family_to_decoder};
 use utils::BenchDataset;
 
 fn main() {
-    // Force rayon to a single thread for microbenchmarks to avoid cache thrashing.
     let _ = rayon::ThreadPoolBuilder::new()
         .num_threads(1)
         .build_global();
@@ -28,7 +16,7 @@ fn main() {
 }
 
 #[bench]
-fn bench_decoding_soa_realistic(bencher: divan::Bencher) {
+fn bench_decoding_only_real(bencher: divan::Bencher) {
     let dataset = BenchDataset::icra_forward_0();
     let img = ImageView::new(
         &dataset.raw_data,
@@ -38,14 +26,29 @@ fn bench_decoding_soa_realistic(bencher: divan::Bencher) {
     )
     .unwrap();
 
-    // 50 valid tags, 200 false positives
-    let mut batch = BenchDataset::generate_bench_batch(50, 200);
-    let n = 250;
+    // Use a real detector to get real quads from the image
+    let config = locus_core::DetectorConfig::builder()
+        .refinement_mode(locus_core::config::CornerRefinementMode::None)
+        .build();
+    let mut detector = locus_core::Detector::with_config(config);
 
-    let config = locus_core::DetectorConfig::default();
+    // Warm up to get the batch populated with candidates
+    let _ = detector
+        .detect(
+            &img,
+            None,
+            None,
+            locus_core::PoseEstimationMode::Fast,
+            false,
+        )
+        .unwrap();
+
+    // Capture the state
+    let mut batch = detector.bench_api_get_batch_cloned();
+    let n = 1024; // Use full batch capacity for bench
     let decoders = vec![family_to_decoder(locus_core::TagFamily::AprilTag36h11)];
 
-    // Compute homographies once outside the loop
+    // Ensure homographies are computed
     locus_core::bench_api::compute_homographies_soa(
         &batch.corners[0..n],
         &batch.status_mask[0..n],

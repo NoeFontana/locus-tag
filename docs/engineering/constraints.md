@@ -17,6 +17,7 @@ The Rust-Python boundary must be invisible to performance.
   * ❌ **Forbidden:** Passing non-contiguous views (stride_x != 1) to high-performance detection methods.
   * ✅ **Required:** Use `PyReadonlyArray2<u8>` to leverage the Python Buffer Protocol. Validate strides early and once.
   * ✅ **Required:** Throw a `ValueError` for non-contiguous arrays to force users to use `.ascontiguousarray()`.
+  * ✅ **Required:** Image buffers used with SIMD-vectorized kernels (e.g., AVX2 gather) MUST have at least **3 bytes of padding** at the end to prevent out-of-bounds reads during 32-bit pixel fetching.
 
 ## 3. Unsafe Rust
 * ❌ **Forbidden:** Naked `unsafe` blocks.

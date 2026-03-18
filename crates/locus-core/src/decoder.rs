@@ -27,7 +27,55 @@ pub struct Homography {
     pub h: SMatrix<f64, 3, 3>,
 }
 
+/// A Digital Differential Analyzer (DDA) for incremental homography projection.
+///
+/// This avoids expensive matrix multiplications by using discrete partial derivatives
+/// when stepping through a uniform grid in tag space.
+#[derive(Debug, Clone, Copy)]
+pub struct HomographyDda {
+    /// Current numerator for X coordinate.
+    pub nx: f64,
+    /// Current numerator for Y coordinate.
+    pub ny: f64,
+    /// Current denominator (perspective divide).
+    pub d: f64,
+    /// Partial derivative of nx with respect to u.
+    pub dnx_du: f64,
+    /// Partial derivative of ny with respect to u.
+    pub dny_du: f64,
+    /// Partial derivative of d with respect to u.
+    pub dd_du: f64,
+    /// Partial derivative of nx with respect to v.
+    pub dnx_dv: f64,
+    /// Partial derivative of ny with respect to v.
+    pub dny_dv: f64,
+    /// Partial derivative of d with respect to v.
+    pub dd_dv: f64,
+}
+
 impl Homography {
+    /// Convert the homography into a DDA state for a grid with step size (du, dv).
+    /// Initial state is computed at (u0, v0) in canonical tag space.
+    #[must_use]
+    pub fn to_dda(&self, u0: f64, v0: f64, du: f64, dv: f64) -> HomographyDda {
+        let h = self.h;
+        let nx = h[(0, 0)] * u0 + h[(0, 1)] * v0 + h[(0, 2)];
+        let ny = h[(1, 0)] * u0 + h[(1, 1)] * v0 + h[(1, 2)];
+        let d = h[(2, 0)] * u0 + h[(2, 1)] * v0 + h[(2, 2)];
+
+        HomographyDda {
+            nx,
+            ny,
+            d,
+            dnx_du: h[(0, 0)] * du,
+            dny_du: h[(1, 0)] * du,
+            dd_du: h[(2, 0)] * du,
+            dnx_dv: h[(0, 1)] * dv,
+            dny_dv: h[(1, 1)] * dv,
+            dd_dv: h[(2, 1)] * dv,
+        }
+    }
+
     /// Compute homography from 4 source points to 4 destination points using DLT.
     /// Points are [x, y].
     /// Compute homography from 4 source points to 4 destination points using DLT.
@@ -199,12 +247,17 @@ impl Homography {
     }
 }
 
-/// Compute homographies for all quads in the batch using a pure-function SoA approach.
+/// Compute homographies for all active quads in the batch using a pure-function SoA approach.
 ///
 /// This uses `rayon` for data-parallel computation of the square-to-quad homographies.
 /// Quads are defined by 4 corners in `corners` for each candidate index.
 #[tracing::instrument(skip_all, name = "pipeline::homography_pass")]
-pub fn compute_homographies_soa(corners: &[[Point2f; 4]], homographies: &mut [Matrix3x3]) {
+pub fn compute_homographies_soa(
+    corners: &[[Point2f; 4]],
+    status_mask: &[crate::batch::CandidateState],
+    homographies: &mut [Matrix3x3],
+) {
+    use crate::batch::CandidateState;
     use rayon::prelude::*;
 
     // Each homography maps from canonical square [(-1,-1), (1,-1), (1,1), (-1,1)] to image quads.
@@ -212,6 +265,12 @@ pub fn compute_homographies_soa(corners: &[[Point2f; 4]], homographies: &mut [Ma
         .par_iter_mut()
         .enumerate()
         .for_each(|(i, h_out)| {
+            if status_mask[i] != CandidateState::Active {
+                h_out.data = [0.0; 9];
+                h_out.padding = [0.0; 7];
+                return;
+            }
+
             let dst = [
                 [f64::from(corners[i][0].x), f64::from(corners[i][0].y)],
                 [f64::from(corners[i][1].x), f64::from(corners[i][1].y)],
@@ -783,7 +842,227 @@ pub(crate) fn compute_otsu_threshold(values: &[f64]) -> f64 {
     best_threshold
 }
 
+/// Maximum number of bits in a supported tag family payload.
+const MAX_BIT_COUNT: usize = 64;
+
+/// Sample values from the image using DDA-based coordinate generation and SIMD bilinear sampling.
+#[multiversion(targets("x86_64+avx2+fma", "aarch64+neon"))]
+fn sample_grid_values_dda_simd(
+    img: &crate::image::ImageView,
+    roi: &RoiCache,
+    h: &Homography,
+    decoder: &(impl TagDecoder + ?Sized),
+    intensities: &mut [f64],
+) -> bool {
+    let dim = decoder.dimension();
+    let n = decoder.bit_count();
+    let points = decoder.sample_points();
+    if points.is_empty() {
+        return false;
+    }
+
+    let _du = if dim > 1 {
+        points[1].0 - points[0].0
+    } else {
+        0.0
+    };
+    let _dv = if dim > 1 {
+        points[dim].1 - points[0].1
+    } else {
+        0.0
+    };
+
+    #[cfg(all(
+        target_arch = "x86_64",
+        target_feature = "avx2",
+        target_feature = "fma"
+    ))]
+    unsafe {
+        use crate::simd::math::rcp_nr_v8;
+        use crate::simd::sampler::sample_bilinear_v8;
+        use std::arch::x86_64::*;
+
+        let dda = h.to_dda(points[0].0, points[0].1, _du, _dv);
+
+        let w_limit = _mm256_set1_ps(img.width as f32 - 1.0);
+        let h_limit = _mm256_set1_ps(img.height as f32 - 1.0);
+
+        let mut current_nx_row = dda.nx as f32;
+        let mut current_ny_row = dda.ny as f32;
+        let mut current_d_row = dda.d as f32;
+
+        let dnx_du = dda.dnx_du as f32;
+        let dny_du = dda.dny_du as f32;
+        let dd_du = dda.dd_du as f32;
+
+        let v_dnx_du = _mm256_set1_ps(dnx_du);
+        let v_dny_du = _mm256_set1_ps(dny_du);
+        let v_dd_du = _mm256_set1_ps(dd_du);
+        let v_steps = _mm256_set_ps(7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 0.0);
+        let v_half = _mm256_set1_ps(0.5);
+
+        let mut idx = 0;
+        for _y in 0..dim {
+            let mut nx_start = current_nx_row;
+            let mut ny_start = current_ny_row;
+            let mut d_start = current_d_row;
+
+            for _x in (0..dim).step_by(8) {
+                let count = (dim - _x).min(8);
+
+                // Vectorized coordinate generation (DDA)
+                // x[i] = (nx + i*dnx_du)
+                let v_nx_simd = _mm256_fmadd_ps(v_steps, v_dnx_du, _mm256_set1_ps(nx_start));
+                let v_ny_simd = _mm256_fmadd_ps(v_steps, v_dny_du, _mm256_set1_ps(ny_start));
+                let v_d_simd = _mm256_fmadd_ps(v_steps, v_dd_du, _mm256_set1_ps(d_start));
+
+                // Perspective divide: (nx/d, ny/d)
+                let v_winv = rcp_nr_v8(v_d_simd);
+                let v_img_x_raw = _mm256_mul_ps(v_nx_simd, v_winv);
+                let v_img_y_raw = _mm256_mul_ps(v_ny_simd, v_winv);
+
+                // Offset by -0.5 to match bilinear logic center alignment
+                let v_img_x = _mm256_sub_ps(v_img_x_raw, v_half);
+                let v_img_y = _mm256_sub_ps(v_img_y_raw, v_half);
+
+                // Bounds check: must be in [0, width - 1) for safe 2x2 bilinear fetch
+                let v_zero = _mm256_setzero_ps();
+                let mask_x = _mm256_and_ps(
+                    _mm256_cmp_ps(v_img_x, v_zero, _CMP_GE_OQ),
+                    _mm256_cmp_ps(v_img_x, w_limit, _CMP_LT_OQ),
+                );
+                let mask_y = _mm256_and_ps(
+                    _mm256_cmp_ps(v_img_y, v_zero, _CMP_GE_OQ),
+                    _mm256_cmp_ps(v_img_y, h_limit, _CMP_LT_OQ),
+                );
+                let mask = _mm256_movemask_ps(_mm256_and_ps(mask_x, mask_y));
+
+                if (mask & ((1 << count) - 1)) != ((1 << count) - 1) {
+                    return false;
+                }
+
+                // Restore original (non-subtracted) coords for sample_bilinear_v8 which handles the offset
+                let mut v_img_x_arr = [0.0f32; 8];
+                let mut v_img_y_arr = [0.0f32; 8];
+                _mm256_storeu_ps(v_img_x_arr.as_mut_ptr(), v_img_x_raw);
+                _mm256_storeu_ps(v_img_y_arr.as_mut_ptr(), v_img_y_raw);
+
+                let mut sampled = [0.0f32; 8];
+                sample_bilinear_v8(img, &v_img_x_arr, &v_img_y_arr, &mut sampled);
+
+                for i in 0..count {
+                    intensities[idx] = f64::from(sampled[i]);
+                    idx += 1;
+                }
+
+                // Advance scalar row starts for next SIMD chunk
+                nx_start += 8.0 * dnx_du;
+                ny_start += 8.0 * dny_du;
+                d_start += 8.0 * dd_du;
+            }
+
+            current_nx_row += dda.dnx_dv as f32;
+            current_ny_row += dda.dny_dv as f32;
+            current_d_row += dda.dd_dv as f32;
+        }
+    }
+
+    #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+    #[allow(unsafe_code)]
+    // SAFETY: NEON intrinsics are safe on aarch64 with neon feature.
+    unsafe {
+        use crate::simd::sampler::sample_bilinear_v8;
+        use std::arch::aarch64::*;
+
+        let dda = h.to_dda(points[0].0, points[0].1, _du, _dv);
+
+        let mut current_nx_row = dda.nx as f32;
+        let mut current_ny_row = dda.ny as f32;
+        let mut current_d_row = dda.d as f32;
+
+        let dnx_du = dda.dnx_du as f32;
+        let dny_du = dda.dny_du as f32;
+        let dd_du = dda.dd_du as f32;
+
+        let v_dnx_du = vdupq_n_f32(dnx_du);
+        let v_dny_du = vdupq_n_f32(dny_du);
+        let v_dd_du = vdupq_n_f32(dd_du);
+        let v_steps_low = vld1q_f32([0.0, 1.0, 2.0, 3.0].as_ptr());
+        let v_steps_high = vld1q_f32([4.0, 5.0, 6.0, 7.0].as_ptr());
+
+        let mut idx = 0;
+        for _y in 0..dim {
+            let mut nx_start = current_nx_row;
+            let mut ny_start = current_ny_row;
+            let mut d_start = current_d_row;
+
+            for _x in (0..dim).step_by(8) {
+                let count = (dim - _x).min(8);
+
+                // NEON perspective divide using vrecpeq_f32 + vrecpsq_f32
+                let mut v_img_x = [0.0f32; 8];
+                let mut v_img_y = [0.0f32; 8];
+
+                for (chunk, v_steps) in [v_steps_low, v_steps_high].into_iter().enumerate() {
+                    let v_nx_c = vfmaq_f32(vdupq_n_f32(nx_start), v_steps, v_dnx_du);
+                    let v_ny_c = vfmaq_f32(vdupq_n_f32(ny_start), v_steps, v_dny_du);
+                    let v_d_c = vfmaq_f32(vdupq_n_f32(d_start), v_steps, v_dd_du);
+
+                    let v_winv = vrecpeq_f32(v_d_c);
+                    let v_winv = vmulq_f32(v_winv, vrecpsq_f32(v_d_c, v_winv));
+
+                    let img_x = vmulq_f32(v_nx_c, v_winv);
+                    let img_y = vmulq_f32(v_ny_c, v_winv);
+
+                    let offset = chunk * 4;
+                    vst1q_f32(v_img_x.as_mut_ptr().add(offset), img_x);
+                    vst1q_f32(v_img_y.as_mut_ptr().add(offset), img_y);
+                }
+
+                let mut sampled = [0.0f32; 8];
+                sample_bilinear_v8(img, &v_img_x, &v_img_y, &mut sampled);
+
+                for i in 0..count {
+                    intensities[idx] = f64::from(sampled[i]);
+                    idx += 1;
+                }
+
+                nx_start += 8.0 * dnx_du;
+                ny_start += 8.0 * dny_du;
+                d_start += 8.0 * dd_du;
+            }
+
+            current_nx_row += dda.dnx_dv as f32;
+            current_ny_row += dda.dny_dv as f32;
+            current_d_row += dda.dd_dv as f32;
+        }
+    }
+
+    #[cfg(not(any(
+        all(
+            target_arch = "x86_64",
+            target_feature = "avx2",
+            target_feature = "fma"
+        ),
+        all(target_arch = "aarch64", target_feature = "neon")
+    )))]
+    return sample_grid_values_optimized(img, h, roi, points, intensities, n);
+
+    #[cfg(any(
+        all(
+            target_arch = "x86_64",
+            target_feature = "avx2",
+            target_feature = "fma"
+        ),
+        all(target_arch = "aarch64", target_feature = "neon")
+    ))]
+    true
+}
+
 /// Sample values from the image using SIMD-optimized Fast-Math and ROI caching.
+///
+/// # Panics
+/// Panics if the number of sample points exceeds `MAX_BIT_COUNT`.
 #[multiversion(targets(
     "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
@@ -850,6 +1129,9 @@ fn sample_grid_values_optimized(
 ///
 /// This computes the intensities at sample points and the adaptive thresholds,
 /// then delegates to the strategy to produce the code.
+///
+/// # Panics
+/// Panics if the number of sample points exceeds `MAX_BIT_COUNT`.
 #[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
 pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
     img: &crate::image::ImageView,
@@ -864,10 +1146,16 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
 
     let points = decoder.sample_points();
     // Stack-allocated buffer for up to 64 sample points (covers all standard tag families)
-    let mut intensities = [0.0f64; 64];
-    let n = points.len().min(64);
+    let mut intensities = [0.0f64; MAX_BIT_COUNT];
+    let n = points.len().min(MAX_BIT_COUNT);
+    assert!(
+        points.len() <= MAX_BIT_COUNT,
+        "Tag bit count ({}) exceeds static buffer size ({})",
+        points.len(),
+        MAX_BIT_COUNT
+    );
 
-    if !sample_grid_values_optimized(img, &homography, &roi, points, &mut intensities, n) {
+    if !sample_grid_values_dda_simd(img, &roi, &homography, decoder, &mut intensities) {
         return None;
     }
 
@@ -878,6 +1166,9 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
 }
 
 /// Sample the bit grid using Structure of Arrays (SoA) data.
+///
+/// # Panics
+/// Panics if the number of sample points exceeds `MAX_BIT_COUNT`.
 pub fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
     img: &crate::image::ImageView,
     arena: &Bump,
@@ -915,10 +1206,16 @@ pub fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
     let homography_obj = Homography { h: h_mat };
 
     let points = decoder.sample_points();
-    let mut intensities = [0.0f64; 64];
-    let n = points.len().min(64);
+    let mut intensities = [0.0f64; MAX_BIT_COUNT];
+    let n = points.len().min(MAX_BIT_COUNT);
+    assert!(
+        points.len() <= MAX_BIT_COUNT,
+        "Tag bit count ({}) exceeds static buffer size ({})",
+        points.len(),
+        MAX_BIT_COUNT
+    );
 
-    if !sample_grid_values_optimized(img, &homography_obj, &roi, points, &mut intensities, n) {
+    if !sample_grid_values_dda_simd(img, &roi, &homography_obj, decoder, &mut intensities) {
         return None;
     }
 
@@ -929,6 +1226,9 @@ pub fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
 }
 
 /// Sample the bit grid using Structure of Arrays (SoA) data and a precomputed ROI cache.
+///
+/// # Panics
+/// Panics if the number of sample points exceeds `MAX_BIT_COUNT`.
 pub fn sample_grid_soa_precomputed<S: crate::strategy::DecodingStrategy>(
     img: &crate::image::ImageView,
     roi: &RoiCache,
@@ -943,10 +1243,16 @@ pub fn sample_grid_soa_precomputed<S: crate::strategy::DecodingStrategy>(
     let homography_obj = Homography { h: h_mat };
 
     let points = decoder.sample_points();
-    let mut intensities = [0.0f64; 64];
-    let n = points.len().min(64);
+    let mut intensities = [0.0f64; MAX_BIT_COUNT];
+    let n = points.len().min(MAX_BIT_COUNT);
+    assert!(
+        points.len() <= MAX_BIT_COUNT,
+        "Tag bit count ({}) exceeds static buffer size ({})",
+        points.len(),
+        MAX_BIT_COUNT
+    );
 
-    if !sample_grid_values_optimized(img, &homography_obj, roi, points, &mut intensities, n) {
+    if !sample_grid_values_dda_simd(img, roi, &homography_obj, decoder, &mut intensities) {
         return None;
     }
 
@@ -1067,6 +1373,10 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
     let results: Vec<_> = (0..n)
         .into_par_iter()
         .map(|i| {
+            if batch.status_mask[i] != CandidateState::Active {
+                return (batch.status_mask[i], 0, 0, 0, batch.error_rates[i], None);
+            }
+
             DECODE_ARENA.with_borrow_mut(|arena| {
                     arena.reset();
 

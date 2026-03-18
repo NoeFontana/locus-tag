@@ -373,7 +373,8 @@ unsafe fn extract_runs_row_neon(
             vcltq_s16(diff, m_vec)
         };
         let mut final_mask = 0u32;
-        let res_u16: [u16; 8] = std::mem::transmute(mask_res);
+        // SAFETY: bitcast from uint16x8_t to [u16; 8] is safe.
+        let res_u16: [u16; 8] = unsafe { std::mem::transmute(mask_res) };
         for (i, &val) in res_u16.iter().enumerate() {
             if val != 0 {
                 final_mask |= 1 << i;
@@ -415,11 +416,12 @@ pub fn label_components_threshold_model<'a>(
             let row_gs = &grayscale[y * grayscale_stride..y * grayscale_stride + width];
             let row_th = &threshold_map[y * width..(y + 1) * width];
             let mut row_runs = Vec::with_capacity(width / 4 + 1);
-            let mut x = 0;
+            #[allow(unused_assignments)]
+            let mut x_offset = 0;
 
             #[cfg(target_arch = "x86_64")]
             if std::is_x86_feature_detected!("avx2") {
-                x = unsafe {
+                x_offset = unsafe {
                     extract_runs_row_avx2(row_gs, row_th, width, y as u32, margin, &mut row_runs)
                 };
             }
@@ -427,11 +429,12 @@ pub fn label_components_threshold_model<'a>(
             #[cfg(target_arch = "aarch64")]
             {
                 // NEON is always available on aarch64
-                x = unsafe {
+                x_offset = unsafe {
                     extract_runs_row_neon(row_gs, row_th, width, y as u32, margin, &mut row_runs)
                 };
             }
             // Scalar tail
+            let mut x = x_offset;
             while x < width {
                 let gs = row_gs[x];
                 let th = row_th[x];

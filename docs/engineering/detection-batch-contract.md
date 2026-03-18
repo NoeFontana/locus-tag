@@ -20,6 +20,7 @@ The DetectionBatch struct encapsulates the following parallel arrays (slices):
 *   `error_rates`: `[f32; MAX_CANDIDATES]` (The Hamming distance or confidence scores).
 *   `poses`: `[Pose6D; MAX_CANDIDATES]` (Translation vectors and unit quaternions, padded to 32 bytes).
 *   `status_mask`: `[CandidateState; MAX_CANDIDATES]` (A dense byte-array tracking the lifecycle. e.g., Empty, Active, FailedDecode, Valid).
+*   `funnel_status`: `[FunnelStatus; MAX_CANDIDATES]` (Detailed status from the fast-path funnel for rejected quads).
 
 ## 4. Phase-Isolated Execution Privileges
 To prevent data contention and enable lock-free parallelization (Rayon), engineers must adhere to strict Read/Write privileges for each phase of the pipeline.
@@ -31,6 +32,10 @@ To prevent data contention and enable lock-free parallelization (Rayon), enginee
 ### Phase B: Homography Computation
 *   **Privileges**: Read-Only on `corners[0..N]`, Write-Only on `homographies[0..N]`.
 *   **Contract**: A purely mathematical loop. It calculates the perspective warps. Because it has no side effects, it can be trivially parallelized using `corners[0..N].par_iter()`.
+
+### Phase B.5: Fast-Path Funnel
+*   **Privileges**: Read-Only on the Image Tensor and `corners[0..N]`. Write-Only to `status_mask[0..N]` and `funnel_status[0..N]`.
+*   **Contract**: This phase performs $O(1)$ edge contrast rejection. If a candidate lacks photometric evidence of an edge, its `status_mask` is flipped to `FailedDecode` and `funnel_status` is updated to `RejectedContrast`.
 
 ### Phase C: Batched Sampling & Decoding
 *   **Privileges**: Read-Only on the Image Tensor and `homographies[0..N]`. Write-Only to `ids[0..N]`, `payloads[0..N]`, `error_rates[0..N]`, and `status_mask[0..N]`.

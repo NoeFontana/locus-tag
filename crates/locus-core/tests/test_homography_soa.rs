@@ -16,5 +16,41 @@ use locus_core::bench_api::*;
 fn test_homography_soa_empty() {
     let corners = vec![];
     let mut homographies = vec![];
-    compute_homographies_soa(&corners, &mut homographies);
+    let status_mask = vec![];
+    compute_homographies_soa(&corners, &status_mask, &mut homographies);
+}
+
+#[test]
+fn test_homography_soa_single() {
+    let corners = vec![[
+        Point2f { x: 0.0, y: 0.0 },
+        Point2f { x: 10.0, y: 0.0 },
+        Point2f { x: 10.0, y: 10.0 },
+        Point2f { x: 0.0, y: 10.0 },
+    ]];
+    let mut homographies = vec![Matrix3x3::default()];
+    let status_mask = vec![CandidateState::Active];
+    compute_homographies_soa(&corners, &status_mask, &mut homographies);
+
+    // Non-zero homography
+    assert!(homographies[0].data[0] != 0.0);
+}
+
+#[test]
+fn test_homography_soa_skip_inactive() {
+    let corners = vec![[
+        Point2f { x: 0.0, y: 0.0 },
+        Point2f { x: 10.0, y: 0.0 },
+        Point2f { x: 10.0, y: 10.0 },
+        Point2f { x: 0.0, y: 10.0 },
+    ]];
+    let mut homographies = vec![Matrix3x3::default()];
+    let status_mask = vec![CandidateState::FailedDecode];
+    compute_homographies_soa(&corners, &status_mask, &mut homographies);
+
+    // Homography should be zero
+    #[allow(clippy::float_cmp)]
+    {
+        assert_eq!(homographies[0].data[0], 0.0);
+    }
 }

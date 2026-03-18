@@ -16,8 +16,8 @@
     },
     "Locus (Soft)": {
       "recall": 96.23,
-      "rmse": 0.3059,
-      "latency": 87.15,
+      "rmse": 0.2774,
+      "latency": 85.38,
       "stages": {
         "threshold": 10.3821218,
         "segmentation": 49.3048838,
@@ -27,8 +27,8 @@
     },
     "Locus (Hard)": {
       "recall": 76.84,
-      "rmse": 0.2658,
-      "latency": 67.80,
+      "rmse": 0.2455,
+      "latency": 69.73,
       "stages": {
         "threshold": 10.9425286,
         "segmentation": 41.7985872,

@@ -52,6 +52,20 @@ impl<'a> ImageView<'a> {
         })
     }
 
+    /// Returns true if the image buffer has sufficient padding for safe SIMD gather operations.
+    ///
+    /// Some SIMD kernels (e.g. AVX2 gather) may perform 32-bit loads on 8-bit data,
+    /// which can read up to 3 bytes past the end of the logical buffer.
+    #[must_use]
+    pub fn has_simd_padding(&self) -> bool {
+        let required_size = if self.height > 0 {
+            (self.height - 1) * self.stride + self.width
+        } else {
+            0
+        };
+        self.data.len() >= required_size + 3
+    }
+
     /// Safe accessor for a specific row.
     #[inline(always)]
     #[must_use]
