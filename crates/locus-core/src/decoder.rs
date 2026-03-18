@@ -55,14 +55,13 @@ pub struct HomographyDda {
 
 impl Homography {
     /// Convert the homography into a DDA state for a grid with step size (du, dv).
-    /// Initial state is computed at (-1, -1) in canonical tag space.
+    /// Initial state is computed at (u0, v0) in canonical tag space.
     #[must_use]
-    pub fn to_dda(&self, du: f64, dv: f64) -> HomographyDda {
+    pub fn to_dda(&self, u0: f64, v0: f64, du: f64, dv: f64) -> HomographyDda {
         let h = self.h;
-        // Start at (-1, -1)
-        let nx = -h[(0, 0)] - h[(0, 1)] + h[(0, 2)];
-        let ny = -h[(1, 0)] - h[(1, 1)] + h[(1, 2)];
-        let d = -h[(2, 0)] - h[(2, 1)] + h[(2, 2)];
+        let nx = h[(0, 0)] * u0 + h[(0, 1)] * v0 + h[(0, 2)];
+        let ny = h[(1, 0)] * u0 + h[(1, 1)] * v0 + h[(1, 2)];
+        let d = h[(2, 0)] * u0 + h[(2, 1)] * v0 + h[(2, 2)];
 
         HomographyDda {
             nx,
@@ -850,13 +849,13 @@ const MAX_BIT_COUNT: usize = 64;
 #[multiversion(targets("x86_64+avx2+fma", "aarch64+neon"))]
 fn sample_grid_values_dda_simd(
     img: &crate::image::ImageView,
-    roi: &RoiCache,
+    _roi: &RoiCache,
     h: &Homography,
     decoder: &(impl TagDecoder + ?Sized),
     intensities: &mut [f64],
 ) -> bool {
     let dim = decoder.dimension();
-    let n = decoder.bit_count();
+    let _n = decoder.bit_count();
     let points = decoder.sample_points();
     if points.is_empty() {
         return false;
@@ -883,7 +882,7 @@ fn sample_grid_values_dda_simd(
         use crate::simd::sampler::sample_bilinear_v8;
         use std::arch::x86_64::*;
 
-        let dda = h.to_dda(_du, _dv);
+        let dda = h.to_dda(points[0].0, points[0].1, _du, _dv);
 
         let w_limit = _mm256_set1_ps(img.width as f32 - 1.0);
         let h_limit = _mm256_set1_ps(img.height as f32 - 1.0);
@@ -966,16 +965,16 @@ fn sample_grid_values_dda_simd(
             current_ny_row += dda.dny_dv as f32;
             current_d_row += dda.dd_dv as f32;
         }
-        return true;
     }
 
     #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+    #[allow(unsafe_code)]
     // SAFETY: NEON intrinsics are safe on aarch64 with neon feature.
     unsafe {
         use crate::simd::sampler::sample_bilinear_v8;
         use std::arch::aarch64::*;
 
-        let dda = h.to_dda(_du, _dv);
+        let dda = h.to_dda(points[0].0, points[0].1, _du, _dv);
 
         let mut current_nx_row = dda.nx as f32;
         let mut current_ny_row = dda.ny as f32;
@@ -1037,25 +1036,16 @@ fn sample_grid_values_dda_simd(
             current_ny_row += dda.dny_dv as f32;
             current_d_row += dda.dd_dv as f32;
         }
-        return true;
     }
 
     #[cfg(not(any(
-        all(
-            target_arch = "x86_64",
-            target_feature = "avx2",
-            target_feature = "fma"
-        ),
+        all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"),
         all(target_arch = "aarch64", target_feature = "neon")
     )))]
-    return sample_grid_values_optimized(img, h, roi, points, intensities, n);
+    return sample_grid_values_optimized(img, _roi, h, points, intensities, _n);
 
     #[cfg(any(
-        all(
-            target_arch = "x86_64",
-            target_feature = "avx2",
-            target_feature = "fma"
-        ),
+        all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"),
         all(target_arch = "aarch64", target_feature = "neon")
     ))]
     true

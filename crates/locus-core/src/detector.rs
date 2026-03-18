@@ -228,6 +228,7 @@ impl Detector {
                 &tile_stats,
                 self.config.threshold_tile_size,
                 self.config.decoder_min_contrast,
+                1.0 / self.config.decimation as f64,
             );
 
             (n, unrefined)

@@ -24,7 +24,7 @@ fn test_contrast_gate_rejection() {
     // If range is 50, tau = 10. avg_contrast will be 0.
     let tile_stats = vec![TileStats { min: 100, max: 150 }; 64]; // 4x4 tiles of size 8
 
-    locus_core::bench_api::apply_funnel_gate(&mut batch, 1, &img, &tile_stats, 4, 20.0);
+    locus_core::bench_api::apply_funnel_gate(&mut batch, 1, &img, &tile_stats, 4, 20.0, 1.0);
 
     assert_eq!(batch.funnel_status[0], FunnelStatus::RejectedContrast);
     assert_eq!(batch.status_mask[0], CandidateState::FailedDecode);
@@ -59,7 +59,7 @@ fn test_contrast_gate_pass() {
     // tile_stats range = 255, tau = 51. avg_contrast should be ~255.
     let tile_stats = vec![TileStats { min: 0, max: 255 }; 64];
 
-    locus_core::bench_api::apply_funnel_gate(&mut batch, 1, &img, &tile_stats, 4, 20.0);
+    locus_core::bench_api::apply_funnel_gate(&mut batch, 1, &img, &tile_stats, 4, 20.0, 1.0);
 
     assert_eq!(batch.funnel_status[0], FunnelStatus::PassedContrast);
     assert_eq!(batch.status_mask[0], CandidateState::Active);

@@ -1,4 +1,4 @@
-use crate::batch::{CandidateState, DetectionBatch, FunnelStatus};
+use crate::batch::{CandidateState, DetectionBatch, FunnelStatus, Point2f};
 use crate::image::ImageView;
 use crate::threshold::TileStats;
 
@@ -13,6 +13,7 @@ pub fn apply_funnel_gate(
     tile_stats: &[TileStats],
     tile_size: usize,
     min_contrast: f64,
+    sampling_scale: f64,
 ) {
     let tiles_wide = img.width / tile_size;
     let tiles_high = img.height / tile_size;
@@ -24,11 +25,31 @@ pub fn apply_funnel_gate(
 
         let corners = batch.corners[i];
 
+        // Scale corners to the coordinate space of the image being sampled
+        let corners_scaled = [
+            Point2f {
+                x: (corners[0].x as f64 * sampling_scale) as f32,
+                y: (corners[0].y as f64 * sampling_scale) as f32,
+            },
+            Point2f {
+                x: (corners[1].x as f64 * sampling_scale) as f32,
+                y: (corners[1].y as f64 * sampling_scale) as f32,
+            },
+            Point2f {
+                x: (corners[2].x as f64 * sampling_scale) as f32,
+                y: (corners[2].y as f64 * sampling_scale) as f32,
+            },
+            Point2f {
+                x: (corners[3].x as f64 * sampling_scale) as f32,
+                y: (corners[3].y as f64 * sampling_scale) as f32,
+            },
+        ];
+
         // Skip gate for very small quads where 2px delta might be unreliable
         let mut side_len_sq = 0.0;
         for j in 0..4 {
-            let dx = corners[j].x - corners[(j + 1) % 4].x;
-            let dy = corners[j].y - corners[(j + 1) % 4].y;
+            let dx = corners_scaled[j].x - corners_scaled[(j + 1) % 4].x;
+            let dy = corners_scaled[j].y - corners_scaled[(j + 1) % 4].y;
             side_len_sq += dx * dx + dy * dy;
         }
         if side_len_sq < 20.0 * 20.0 * 4.0 {
@@ -41,12 +62,13 @@ pub fn apply_funnel_gate(
         let mut valid_samples = 0;
 
         for j in 0..4 {
-            let p1 = corners[j];
-            let p2 = corners[(j + 1) % 4];
+            let p1 = corners_scaled[j];
+            let p2 = corners_scaled[(j + 1) % 4];
 
             // Midpoint
             let mx = (p1.x + p2.x) * 0.5;
             let my = (p1.y + p2.y) * 0.5;
+
 
             // Normal vector (inward-facing for CW)
             let dx = p2.x - p1.x;

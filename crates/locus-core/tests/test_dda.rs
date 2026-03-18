@@ -10,7 +10,7 @@ fn test_dda_step_calculation() {
     let grid_size: i32 = 8;
     let delta = 2.0 / f64::from(grid_size - 1);
 
-    let dda = h.to_dda(delta, delta);
+    let dda = h.to_dda(-1.0, -1.0, delta, delta);
 
     // Initial point (-1, -1)
     let mut nx = dda.nx;

@@ -416,6 +416,7 @@ pub fn label_components_threshold_model<'a>(
             let row_gs = &grayscale[y * grayscale_stride..y * grayscale_stride + width];
             let row_th = &threshold_map[y * width..(y + 1) * width];
             let mut row_runs = Vec::with_capacity(width / 4 + 1);
+            #[allow(unused_assignments)]
             let mut x_offset = 0;
 
             #[cfg(target_arch = "x86_64")]
