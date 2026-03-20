@@ -26,8 +26,8 @@ Evaluated on the standard ICRA 2020 benchmark (50 images). Latency measured on a
 
 | Detector | Recall | RMSE | Latency (1080p avg) |
 | :--- | :---: | :---: | :---: |
-| **Locus (Soft)** | **96.23%** | 0.28 px | 85.4 ms |
-| **Locus (Hard)** | 76.84% | 0.25 px | **69.7 ms** |
+| **Locus (Soft)** | **96.23%** | 0.29 px | 80.2 ms |
+| **Locus (Hard)** | 76.87% | 0.26 px | **66.3 ms** |
 | AprilTag 3 | 62.34% | **0.22 px** | 105.9 ms |
 | OpenCV | 33.16% | 0.92 px | 108.2 ms |
 

@@ -45,10 +45,10 @@ sequenceDiagram
     Det->>Thresh: adaptive_threshold()
     Thresh-->>Det: Binarized Image
 
-    Note over Det: 2. Segmentation
-    Det->>Seg: label_components()
-    Note right of Seg: Union-Find (Flat Array)
-    Seg-->>Det: Component Labels
+    Note over Det: 2. Segmentation (SIMD Fused)
+    Det->>Seg: label_components_lsl()
+    Note right of Seg: Fused RLE + Light-Speed Labeling (1D)
+    Seg-->>Det: Component Labels & Stats
 
     Note over Det: 3. Quad Extraction
     loop For each component
@@ -240,7 +240,7 @@ Targets a **low latency** budget for high-resolution frames on modern CPUs.
 | Stage | Complexity | Latency (50 Tags, 720p) | Notes |
 | :--- | :--- | :--- | :--- |
 | **Preprocessing** | $O(N)$ | ~0.9 ms | Adaptive thresholding + Integral Image. |
-| **Segmentation** | $O(N)$ | ~1.8 ms | Single-pass Union-Find (SoA). |
+| **Segmentation** | $O(N)$ | ~0.5 ms | SIMD Fused RLE + Light-Speed Labeling (LSL). |
 | **Quad Extraction** | $O(K \cdot M)$ | ~1.5 ms | Massive gain from SoA extraction. |
 | **Decoding (Hard)** | $O(Q)$ | ~10.0 ms | SoA math pass; SIMD bilinear sampling. |
 | **Pose Refinement** | $O(V) | ~0.2 ms | Partitioned solver (Valid tags only). |
@@ -349,6 +349,7 @@ The `locus-core` crate is organized into logical modules mirroring the pipeline 
 | `image` | Zero-copy image views and pixel access. | `ImageView` |
 | `threshold` | Adaptive thresholding and integral images. | `ThresholdEngine` |
 | `segmentation` | Connected components labeling. | `UnionFind` |
+| `simd_ccl_fusion` | SIMD Fused RLE & LSL. | `extract_rle_segments` |
 | `quad` | Contour tracing and quad fitting. | `extract_quads` |
 | `gwlf` | Gradient-Weighted Line Fitting. | `refine_quad_gwlf` |
 | `decoder` | Bit extraction and hamming decoding. | `TagDecoder`, `Homography` |
