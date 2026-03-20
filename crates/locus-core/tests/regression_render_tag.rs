@@ -44,11 +44,7 @@ pub enum ConfigPreset {
 impl ConfigPreset {
     pub fn detector_config(self) -> DetectorConfig {
         match self {
-            Self::PlainBoard => DetectorConfig::builder()
-                .refinement_mode(locus_core::config::CornerRefinementMode::Erf)
-                .decoder_min_contrast(0.0)
-                .max_hamming_error(3)
-                .build(),
+            Self::PlainBoard => DetectorConfig::production_default(),
         }
     }
 }

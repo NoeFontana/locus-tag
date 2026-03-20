@@ -39,7 +39,8 @@ fn bench_segmentation_real_icra_threshold_model(bencher: divan::Bencher) {
     )
     .unwrap();
     let setup_arena = Bump::new();
-    let engine = ThresholdEngine::new();
+    let config = locus_core::DetectorConfig::default();
+    let engine = ThresholdEngine::from_config(&config);
 
     let tile_stats = engine.compute_tile_stats(&setup_arena, &img);
     let mut threshold_map = vec![0u8; dataset.width * dataset.height];
@@ -55,16 +56,73 @@ fn bench_segmentation_real_icra_threshold_model(bencher: divan::Bencher) {
 
     bencher.bench_local(move || {
         let arena = Bump::new();
-        let _label_result = locus_core::bench_api::label_components_threshold_model(
-            &arena,
-            &dataset.raw_data,
-            dataset.width,
-            &threshold_map,
-            dataset.width,
-            dataset.height,
-            true,
-            16,
-            1,
-        );
+        let _label_result =
+            locus_core::bench_api::label_components_lsl(&arena, &img, &threshold_map, true, 16);
+    });
+}
+
+#[bench]
+fn bench_segmentation_real_icra_threshold_model_1080p(bencher: divan::Bencher) {
+    let dataset = BenchDataset::load_and_resize_icra_frame("forward", 0, 1920, 1080);
+    let img = ImageView::new(
+        &dataset.raw_data,
+        dataset.width,
+        dataset.height,
+        dataset.width,
+    )
+    .unwrap();
+    let setup_arena = Bump::new();
+    let config = locus_core::DetectorConfig::default();
+    let engine = ThresholdEngine::from_config(&config);
+
+    let tile_stats = engine.compute_tile_stats(&setup_arena, &img);
+    let mut threshold_map = vec![0u8; dataset.width * dataset.height];
+    let mut binarized = vec![0u8; dataset.width * dataset.height];
+
+    engine.apply_threshold_with_map(
+        &setup_arena,
+        &img,
+        &tile_stats,
+        &mut binarized,
+        &mut threshold_map,
+    );
+
+    bencher.bench_local(move || {
+        let arena = Bump::new();
+        let _label_result =
+            locus_core::bench_api::label_components_lsl(&arena, &img, &threshold_map, true, 16);
+    });
+}
+
+#[bench]
+fn bench_segmentation_real_icra_threshold_model_4k(bencher: divan::Bencher) {
+    let dataset = BenchDataset::load_and_resize_icra_frame("forward", 0, 3840, 2160);
+    let img = ImageView::new(
+        &dataset.raw_data,
+        dataset.width,
+        dataset.height,
+        dataset.width,
+    )
+    .unwrap();
+    let setup_arena = Bump::new();
+    let config = locus_core::DetectorConfig::default();
+    let engine = ThresholdEngine::from_config(&config);
+
+    let tile_stats = engine.compute_tile_stats(&setup_arena, &img);
+    let mut threshold_map = vec![0u8; dataset.width * dataset.height];
+    let mut binarized = vec![0u8; dataset.width * dataset.height];
+
+    engine.apply_threshold_with_map(
+        &setup_arena,
+        &img,
+        &tile_stats,
+        &mut binarized,
+        &mut threshold_map,
+    );
+
+    bencher.bench_local(move || {
+        let arena = Bump::new();
+        let _label_result =
+            locus_core::bench_api::label_components_lsl(&arena, &img, &threshold_map, true, 16);
     });
 }

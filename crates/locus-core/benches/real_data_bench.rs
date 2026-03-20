@@ -73,17 +73,8 @@ fn bench_segmentation_real(bencher: divan::Bencher) {
 
     bencher.bench_local(move || {
         let arena = Bump::new();
-        let _label_result = locus_core::bench_api::label_components_threshold_model(
-            &arena,
-            &data,
-            width,
-            &threshold_map,
-            width,
-            height,
-            true,
-            16,
-            1,
-        );
+        let _label_result =
+            locus_core::bench_api::label_components_lsl(&arena, &img, &threshold_map, true, 16);
     });
 }
 
@@ -107,17 +98,8 @@ fn bench_quad_extraction_real(bencher: divan::Bencher) {
         &mut binarized,
         &mut threshold_map,
     );
-    let label_result = locus_core::bench_api::label_components_threshold_model(
-        &setup_arena,
-        &data,
-        width,
-        &threshold_map,
-        width,
-        height,
-        true,
-        16,
-        1,
-    );
+    let label_result =
+        locus_core::bench_api::label_components_lsl(&setup_arena, &img, &threshold_map, true, 16);
 
     bencher.bench_local(move || {
         let arena = Bump::new();

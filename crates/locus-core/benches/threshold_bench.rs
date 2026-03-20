@@ -14,8 +14,8 @@
 mod utils;
 
 use divan::bench;
-use locus_core::ImageView;
 use locus_core::threshold::ThresholdEngine;
+use locus_core::{DetectorConfig, ImageView};
 use utils::BenchDataset;
 
 fn main() {
@@ -37,7 +37,8 @@ fn bench_threshold_real_icra_stats(bencher: divan::Bencher) {
         dataset.width,
     )
     .unwrap();
-    let engine = ThresholdEngine::new();
+    let config = DetectorConfig::default();
+    let engine = ThresholdEngine::from_config(&config);
     let arena = bumpalo::Bump::new();
 
     bencher.bench_local(move || {
@@ -55,7 +56,8 @@ fn bench_threshold_real_icra_apply(bencher: divan::Bencher) {
         dataset.width,
     )
     .unwrap();
-    let engine = ThresholdEngine::new();
+    let config = DetectorConfig::default();
+    let engine = ThresholdEngine::from_config(&config);
     let arena_init = bumpalo::Bump::new();
     let stats = engine.compute_tile_stats(&arena_init, &img).to_vec();
     let mut output = vec![0u8; dataset.width * dataset.height];

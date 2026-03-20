@@ -16,7 +16,7 @@
 use bumpalo::Bump;
 use divan::Bencher;
 use locus_core::bench_api::{
-    DetectionBatch, ThresholdEngine, extract_quads_soa, label_components_threshold_model,
+    DetectionBatch, ThresholdEngine, extract_quads_soa, label_components_lsl,
 };
 use locus_core::{DetectorConfig, ImageView};
 use std::path::PathBuf;
@@ -91,16 +91,12 @@ macro_rules! hub_benchmarks {
 
                 bencher.bench_local(move || {
                     let arena = Bump::new();
-                    let _label_result = label_components_threshold_model(
+                    let _label_result = label_components_lsl(
                         &arena,
-                        &data,
-                        width,
+                        &img,
                         &threshold_map,
-                        width,
-                        height,
                         true,
                         config.quad_min_area,
-                        1,
                     );
                 });
             }
@@ -122,16 +118,12 @@ macro_rules! hub_benchmarks {
                     &mut binarized,
                     &mut threshold_map,
                 );
-                let label_result = label_components_threshold_model(
+                let label_result = label_components_lsl(
                     &setup_arena,
-                    &data,
-                    width,
+                    &img,
                     &threshold_map,
-                    width,
-                    height,
                     true,
                     config.quad_min_area,
-                    1,
                 );
 
                 bencher.bench_local(move || {
