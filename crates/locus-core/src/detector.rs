@@ -194,18 +194,14 @@ impl Detector {
                 threshold_map,
             );
 
-            // 2. Segmentation
-            let label_result = crate::segmentation::label_components_threshold_model(
+            // 2. Segmentation (SIMD Fused RLE + LSL)
+            let label_result = crate::simd_ccl_fusion::label_components_lsl(
                 &state.arena,
-                sharpened_img.data,
-                sharpened_img.stride,
+                &sharpened_img,
                 threshold_map,
-                img.width,
-                img.height,
                 self.config.segmentation_connectivity
                     == crate::config::SegmentationConnectivity::Eight,
                 self.config.quad_min_area,
-                self.config.segmentation_margin,
             );
 
             // 3. Quad Extraction (SoA)

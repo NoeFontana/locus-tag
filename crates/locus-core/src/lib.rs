@@ -36,6 +36,8 @@ pub mod quad;
 pub mod segmentation;
 /// SIMD optimized mathematical kernels.
 pub mod simd;
+/// SIMD-Accelerated Connected Components Labeling (CCL).
+pub mod simd_ccl_fusion;
 /// Decoding strategies (Hard vs Soft).
 pub mod strategy;
 /// Utilities for testing and synthetic data generation.
@@ -64,6 +66,7 @@ pub mod bench_api {
     pub use crate::quad::*;
     pub use crate::segmentation::*;
     pub use crate::simd::sampler::*;
+    pub use crate::simd_ccl_fusion::*;
     pub use crate::test_utils::*;
     pub use crate::threshold::*;
 }
