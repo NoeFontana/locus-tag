@@ -196,7 +196,7 @@ fn extract_single_quad(
         crate::config::QuadExtractionMode::EdLines => {
             let ed_cfg = crate::edlines::EdLinesConfig::from_detector_config(config);
             crate::edlines::extract_quad_edlines(arena, img, stat, &ed_cfg)?
-        }
+        },
         crate::config::QuadExtractionMode::ContourRdp => {
             let sx = stat.first_pixel_x as usize;
             let sy = stat.first_pixel_y as usize;
@@ -247,7 +247,7 @@ fn extract_single_quad(
             } else {
                 [reduced[0], reduced[3], reduced[2], reduced[1]]
             }
-        }
+        },
     };
 
     // Scale to full resolution using correct coordinate mapping.

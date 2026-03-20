@@ -10,12 +10,12 @@ pub mod batch;
 pub mod config;
 /// Tag decoding traits and implementations.
 pub mod decoder;
-/// EDLines localized quad extraction.
-pub(crate) mod edlines;
 /// The primary public API for the detector.
 pub mod detector;
 /// Tag family dictionaries (AprilTag, ArUco).
 pub mod dictionaries;
+/// EDLines localized quad extraction.
+pub(crate) mod edlines;
 /// Error types for the detection pipeline.
 pub mod error;
 /// Edge-preserving filtering for small tag detection.

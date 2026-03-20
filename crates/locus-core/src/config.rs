@@ -525,9 +525,7 @@ impl DetectorConfigBuilder {
                 .unwrap_or(d.gwlf_transversal_alpha),
             quad_max_elongation: self.quad_max_elongation.unwrap_or(d.quad_max_elongation),
             quad_min_density: self.quad_min_density.unwrap_or(d.quad_min_density),
-            quad_extraction_mode: self
-                .quad_extraction_mode
-                .unwrap_or(d.quad_extraction_mode),
+            quad_extraction_mode: self.quad_extraction_mode.unwrap_or(d.quad_extraction_mode),
         }
     }
 

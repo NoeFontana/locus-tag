@@ -52,7 +52,6 @@ pub(crate) struct Grad {
     pub mag: u16,
 }
 
-
 /// Compute Sobel gradients into a pre-allocated flat ROI buffer.
 /// `roi_w` and `roi_h` include a 1-pixel border on each side.
 fn compute_roi_gradients(
@@ -168,7 +167,11 @@ fn route_chain_one_dir<'bump>(
                 let next_angle = f32::from(g_next.gy).atan2(f32::from(g_next.gx));
                 let diff = {
                     let d = (next_angle - angle).rem_euclid(2.0 * std::f32::consts::PI);
-                    if d > std::f32::consts::PI { 2.0 * std::f32::consts::PI - d } else { d }
+                    if d > std::f32::consts::PI {
+                        2.0 * std::f32::consts::PI - d
+                    } else {
+                        d
+                    }
                 };
                 if diff > angle_tolerance {
                     continue;
@@ -221,8 +224,15 @@ fn route_chain<'bump>(
                 let nidx = ny as usize * roi_w + nx as usize;
                 if !visited[nidx] {
                     bwd = route_chain_one_dir(
-                        arena, grads, roi_w, roi_h, nx as usize, ny as usize,
-                        visited, mag_thresh, false,
+                        arena,
+                        grads,
+                        roi_w,
+                        roi_h,
+                        nx as usize,
+                        ny as usize,
+                        visited,
+                        mag_thresh,
+                        false,
                     );
                 }
             }
@@ -281,10 +291,7 @@ fn fit_line_pca(chain: &[(u16, u16)]) -> Option<(f64, f64, f64, f64)> {
 
 /// Intersect two homogeneous lines (n1x*x + n1y*y + d1 = 0) and (n2x*x + n2y*y + d2 = 0).
 #[inline]
-fn intersect_lines(
-    n1x: f64, n1y: f64, d1: f64,
-    n2x: f64, n2y: f64, d2: f64,
-) -> Option<(f64, f64)> {
+fn intersect_lines(n1x: f64, n1y: f64, d1: f64, n2x: f64, n2y: f64, d2: f64) -> Option<(f64, f64)> {
     // Cross product of homogeneous lines [n1x, n1y, d1] x [n2x, n2y, d2]
     let wx = n1y * d2 - d1 * n2y;
     let wy = d1 * n2x - n1x * d2;
@@ -387,7 +394,16 @@ pub(crate) fn extract_quad_edlines(
             continue;
         }
 
-        let chain = route_chain(arena, grads, roi_w, roi_h, rx, ry, visited, cfg.grad_threshold);
+        let chain = route_chain(
+            arena,
+            grads,
+            roi_w,
+            roi_h,
+            rx,
+            ry,
+            visited,
+            cfg.grad_threshold,
+        );
 
         if chain.len() < cfg.min_segment_length {
             continue;
@@ -405,7 +421,12 @@ pub(crate) fn extract_quad_edlines(
                 sum_gy += f32::from(g.gy);
             }
             let grad_angle = sum_gy.atan2(sum_gx);
-            line_fits.push(LineFit { nx, ny, d, grad_angle });
+            line_fits.push(LineFit {
+                nx,
+                ny,
+                d,
+                grad_angle,
+            });
         }
     }
 
@@ -519,17 +540,41 @@ pub(crate) fn extract_quad_edlines(
 
     let pts = if area > 0.0 {
         [
-            Point { x: corners_roi[0][0] + ox, y: corners_roi[0][1] + oy },
-            Point { x: corners_roi[1][0] + ox, y: corners_roi[1][1] + oy },
-            Point { x: corners_roi[2][0] + ox, y: corners_roi[2][1] + oy },
-            Point { x: corners_roi[3][0] + ox, y: corners_roi[3][1] + oy },
+            Point {
+                x: corners_roi[0][0] + ox,
+                y: corners_roi[0][1] + oy,
+            },
+            Point {
+                x: corners_roi[1][0] + ox,
+                y: corners_roi[1][1] + oy,
+            },
+            Point {
+                x: corners_roi[2][0] + ox,
+                y: corners_roi[2][1] + oy,
+            },
+            Point {
+                x: corners_roi[3][0] + ox,
+                y: corners_roi[3][1] + oy,
+            },
         ]
     } else {
         [
-            Point { x: corners_roi[0][0] + ox, y: corners_roi[0][1] + oy },
-            Point { x: corners_roi[3][0] + ox, y: corners_roi[3][1] + oy },
-            Point { x: corners_roi[2][0] + ox, y: corners_roi[2][1] + oy },
-            Point { x: corners_roi[1][0] + ox, y: corners_roi[1][1] + oy },
+            Point {
+                x: corners_roi[0][0] + ox,
+                y: corners_roi[0][1] + oy,
+            },
+            Point {
+                x: corners_roi[3][0] + ox,
+                y: corners_roi[3][1] + oy,
+            },
+            Point {
+                x: corners_roi[2][0] + ox,
+                y: corners_roi[2][1] + oy,
+            },
+            Point {
+                x: corners_roi[1][0] + ox,
+                y: corners_roi[1][1] + oy,
+            },
         ]
     };
 
@@ -553,11 +598,26 @@ mod tests {
         img
     }
 
-    fn make_stats(min_x: u16, min_y: u16, max_x: u16, max_y: u16, pixel_count: u32) -> ComponentStats {
+    fn make_stats(
+        min_x: u16,
+        min_y: u16,
+        max_x: u16,
+        max_y: u16,
+        pixel_count: u32,
+    ) -> ComponentStats {
         ComponentStats {
-            min_x, min_y, max_x, max_y, pixel_count,
-            first_pixel_x: min_x, first_pixel_y: min_y,
-            m10: 0, m01: 0, m20: 0, m02: 0, m11: 0,
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+            pixel_count,
+            first_pixel_x: min_x,
+            first_pixel_y: min_y,
+            m10: 0,
+            m01: 0,
+            m20: 0,
+            m02: 0,
+            m11: 0,
         }
     }
 
@@ -571,7 +631,8 @@ mod tests {
         let pixels = make_square_image(canvas, sq_x0, sq_y0, sq_size);
         let img = ImageView::new(&pixels, canvas, canvas, canvas).unwrap();
         let stats = make_stats(
-            sq_x0 as u16, sq_y0 as u16,
+            sq_x0 as u16,
+            sq_y0 as u16,
             (sq_x0 + sq_size - 1) as u16,
             (sq_y0 + sq_size - 1) as u16,
             (sq_size * sq_size) as u32,
@@ -583,7 +644,10 @@ mod tests {
         };
         let arena = Bump::new();
         let result = extract_quad_edlines(&arena, &img, &stats, &cfg);
-        assert!(result.is_some(), "EDLines should find a quad in a clean square image");
+        assert!(
+            result.is_some(),
+            "EDLines should find a quad in a clean square image"
+        );
 
         // All corners must be within 4px of the true square corners.
         let true_corners = [
@@ -606,7 +670,11 @@ mod tests {
                     }
                 }
             }
-            assert!(found, "Corner ({:.1}, {:.1}) not near any true corner", corner.x, corner.y);
+            assert!(
+                found,
+                "Corner ({:.1}, {:.1}) not near any true corner",
+                corner.x, corner.y
+            );
         }
     }
 
