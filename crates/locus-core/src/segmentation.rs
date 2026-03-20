@@ -307,11 +307,15 @@ pub fn label_components_with_stats<'a>(
         let a = u64::from(run.x_start);
         let b = u64::from(run.x_end) + 1; // convert inclusive end to exclusive
         let yu = u64::from(run.y);
-        stats.m10 += b * (b - 1) / 2 - a * (a - 1) / 2;
+        // SAFETY: `a - 1` and `2*a - 1` are always multiplied by `a`, so their
+        // value is irrelevant when a = 0. saturating_sub avoids u64 underflow in
+        // debug builds (release wraps, but the `* a` factor zeros the term anyway).
+        stats.m10 += b * (b - 1) / 2 - a * a.saturating_sub(1) / 2;
         stats.m01 += yu * (b - a);
-        stats.m20 += (b - 1) * b * (2 * b - 1) / 6 - (a - 1) * a * (2 * a - 1) / 6;
+        stats.m20 +=
+            (b - 1) * b * (2 * b - 1) / 6 - a.saturating_sub(1) * a * (2 * a).saturating_sub(1) / 6;
         stats.m02 += yu * yu * (b - a);
-        stats.m11 += yu * (b * (b - 1) / 2 - a * (a - 1) / 2);
+        stats.m11 += yu * (b * (b - 1) / 2 - a * a.saturating_sub(1) / 2);
     }
 
     // Pass 4: Assign labels to pixels - Optimized with slice fill
