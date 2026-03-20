@@ -73,6 +73,16 @@ pub struct ComponentStats {
     pub first_pixel_x: u16,
     /// First encountered pixel Y (for boundary start).
     pub first_pixel_y: u16,
+    /// Spatial moment: Σ x (raw, integer).
+    pub m10: u64,
+    /// Spatial moment: Σ y (raw, integer).
+    pub m01: u64,
+    /// Spatial moment: Σ x² (raw, integer).
+    pub m20: u64,
+    /// Spatial moment: Σ y² (raw, integer).
+    pub m02: u64,
+    /// Spatial moment: Σ xy (raw, integer).
+    pub m11: u64,
 }
 
 impl Default for ComponentStats {
@@ -85,8 +95,58 @@ impl Default for ComponentStats {
             pixel_count: 0,
             first_pixel_x: 0,
             first_pixel_y: 0,
+            m10: 0,
+            m01: 0,
+            m20: 0,
+            m02: 0,
+            m11: 0,
         }
     }
+}
+
+/// Compute shape descriptors from a component's spatial moments.
+///
+/// Returns `Some((elongation, density))` where:
+/// - `elongation` ε = λ_max / λ_min (ratio of principal-axis variances; ≥ 1.0).
+///   A perfect square has ε ≈ 1.0; a thin line or needle has ε >> 1.0.
+/// - `density` D = pixel_count / bbox_area (fraction of bounding box filled).
+///
+/// Returns `None` for degenerate components (λ_min < 1e-9, e.g. single-pixel rows).
+#[must_use]
+pub fn compute_moment_shape(stats: &ComponentStats) -> Option<(f64, f64)> {
+    let m00 = f64::from(stats.pixel_count);
+    if m00 < 1.0 {
+        return None;
+    }
+
+    let x_bar = stats.m10 as f64 / m00;
+    let y_bar = stats.m01 as f64 / m00;
+
+    // Central moments (unnormalized: sum of squared deviations, not divided by m00)
+    let mu20 = stats.m20 as f64 - x_bar * stats.m10 as f64;
+    let mu02 = stats.m02 as f64 - y_bar * stats.m01 as f64;
+    let mu11 = stats.m11 as f64 - x_bar * stats.m01 as f64;
+
+    // Eigenvalues of the normalized 2x2 covariance matrix.
+    // λ = ((μ20 + μ02) ± sqrt((μ20 - μ02)² + 4·μ11²)) / (2·m00)
+    let sum = mu20 + mu02;
+    let diff = mu20 - mu02;
+    let disc = (diff * diff + 4.0 * mu11 * mu11).sqrt();
+    let lambda_max = (sum + disc) / (2.0 * m00);
+    let lambda_min = (sum - disc) / (2.0 * m00);
+
+    if lambda_min < 1e-9 {
+        return None;
+    }
+
+    let elongation = lambda_max / lambda_min;
+
+    let bbox_w = u32::from(stats.max_x - stats.min_x) + 1;
+    let bbox_h = u32::from(stats.max_y - stats.min_y) + 1;
+    let bbox_area = f64::from(bbox_w * bbox_h);
+    let density = m00 / bbox_area;
+
+    Some((elongation, density))
 }
 
 /// Result of connected component labeling.
@@ -242,6 +302,20 @@ pub fn label_components_with_stats<'a>(
         stats.min_y = stats.min_y.min(run.y as u16);
         stats.max_y = stats.max_y.max(run.y as u16);
         stats.pixel_count += run.x_end - run.x_start + 1;
+        // Accumulate spatial moments using closed-form per-run sums.
+        // Run covers x in [a, b) exclusive, i.e. x = a, a+1, ..., b-1.
+        let a = u64::from(run.x_start);
+        let b = u64::from(run.x_end) + 1; // convert inclusive end to exclusive
+        let yu = u64::from(run.y);
+        // SAFETY: `a - 1` and `2*a - 1` are always multiplied by `a`, so their
+        // value is irrelevant when a = 0. saturating_sub avoids u64 underflow in
+        // debug builds (release wraps, but the `* a` factor zeros the term anyway).
+        stats.m10 += b * (b - 1) / 2 - a * a.saturating_sub(1) / 2;
+        stats.m01 += yu * (b - a);
+        stats.m20 +=
+            (b - 1) * b * (2 * b - 1) / 6 - a.saturating_sub(1) * a * (2 * a).saturating_sub(1) / 6;
+        stats.m02 += yu * yu * (b - a);
+        stats.m11 += yu * (b * (b - 1) / 2 - a * a.saturating_sub(1) / 2);
     }
 
     // Pass 4: Assign labels to pixels - Optimized with slice fill
