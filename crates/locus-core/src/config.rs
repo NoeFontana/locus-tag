@@ -60,6 +60,17 @@ pub enum PoseEstimationMode {
     Accurate,
 }
 
+/// Quad extraction algorithm.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum QuadExtractionMode {
+    /// Legacy contour tracing + Douglas-Peucker + reduce-to-quad (default, backward compatible).
+    #[default]
+    ContourRdp,
+    /// Localized Edge Drawing: anchor routing → line fitting → corner intersection.
+    EdLines,
+}
+
 /// Pipeline-level configuration for the detector.
 ///
 /// These settings affect the fundamental behavior of the detection pipeline
@@ -165,6 +176,17 @@ pub struct DetectorConfig {
     /// Alpha parameter for GWLF adaptive transversal windowing.
     /// The search band is set to +/- max(2, alpha * edge_length).
     pub gwlf_transversal_alpha: f64,
+
+    /// Maximum elongation (λ_max / λ_min) allowed for a component before contour tracing.
+    /// 0.0 = disabled. Recommended: 15.0 to reject thin lines and non-square blobs.
+    pub quad_max_elongation: f64,
+
+    /// Minimum pixel density (pixel_count / bbox_area) required to pass the moments gate.
+    /// 0.0 = disabled. Recommended: 0.2 to reject sparse/noisy regions.
+    pub quad_min_density: f64,
+
+    /// Quad extraction mode: legacy contour tracing (default) or EDLines.
+    pub quad_extraction_mode: QuadExtractionMode,
 }
 
 impl Default for DetectorConfig {
@@ -203,6 +225,9 @@ impl Default for DetectorConfig {
             sigma_n_sq: 4.0,
             structure_tensor_radius: 2,
             gwlf_transversal_alpha: 0.01,
+            quad_max_elongation: 0.0,
+            quad_min_density: 0.0,
+            quad_extraction_mode: QuadExtractionMode::ContourRdp,
         }
     }
 }
@@ -258,6 +283,8 @@ impl DetectorConfig {
             .refinement_mode(CornerRefinementMode::Erf)
             .enable_sharpening(true)
             .threshold_tile_size(8)
+            .quad_max_elongation(20.0)
+            .quad_min_density(0.15)
             .build()
     }
 
@@ -313,6 +340,12 @@ pub struct DetectorConfigBuilder {
     pub max_hamming_error: Option<u32>,
     /// GWLF transversal alpha.
     pub gwlf_transversal_alpha: Option<f64>,
+    /// Maximum elongation for the moments culling gate.
+    pub quad_max_elongation: Option<f64>,
+    /// Minimum density for the moments culling gate.
+    pub quad_min_density: Option<f64>,
+    /// Quad extraction mode.
+    pub quad_extraction_mode: Option<QuadExtractionMode>,
 }
 
 impl DetectorConfigBuilder {
@@ -490,6 +523,11 @@ impl DetectorConfigBuilder {
             gwlf_transversal_alpha: self
                 .gwlf_transversal_alpha
                 .unwrap_or(d.gwlf_transversal_alpha),
+            quad_max_elongation: self.quad_max_elongation.unwrap_or(d.quad_max_elongation),
+            quad_min_density: self.quad_min_density.unwrap_or(d.quad_min_density),
+            quad_extraction_mode: self
+                .quad_extraction_mode
+                .unwrap_or(d.quad_extraction_mode),
         }
     }
 
@@ -558,6 +596,29 @@ impl DetectorConfigBuilder {
     #[must_use]
     pub fn gwlf_transversal_alpha(mut self, alpha: f64) -> Self {
         self.gwlf_transversal_alpha = Some(alpha);
+        self
+    }
+
+    /// Set the maximum elongation for the moments-based culling gate.
+    /// Set to 0.0 to disable (default). Recommended: 15.0.
+    #[must_use]
+    pub fn quad_max_elongation(mut self, max_elongation: f64) -> Self {
+        self.quad_max_elongation = Some(max_elongation);
+        self
+    }
+
+    /// Set the minimum density for the moments-based culling gate.
+    /// Set to 0.0 to disable (default). Recommended: 0.2.
+    #[must_use]
+    pub fn quad_min_density(mut self, min_density: f64) -> Self {
+        self.quad_min_density = Some(min_density);
+        self
+    }
+
+    /// Set the quad extraction mode (ContourRdp or EdLines).
+    #[must_use]
+    pub fn quad_extraction_mode(mut self, mode: QuadExtractionMode) -> Self {
+        self.quad_extraction_mode = Some(mode);
         self
     }
 }

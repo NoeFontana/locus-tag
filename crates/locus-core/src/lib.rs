@@ -10,6 +10,8 @@ pub mod batch;
 pub mod config;
 /// Tag decoding traits and implementations.
 pub mod decoder;
+/// EDLines localized quad extraction.
+pub(crate) mod edlines;
 /// The primary public API for the detector.
 pub mod detector;
 /// Tag family dictionaries (AprilTag, ArUco).
@@ -47,7 +49,8 @@ pub mod threshold;
 
 // Re-exports for the public API
 pub use crate::config::{
-    CornerRefinementMode, DecodeMode, DetectOptions, DetectorConfig, PoseEstimationMode, TagFamily,
+    CornerRefinementMode, DecodeMode, DetectOptions, DetectorConfig, PoseEstimationMode,
+    QuadExtractionMode, TagFamily,
 };
 pub use crate::detector::{Detector, DetectorBuilder};
 pub use crate::error::{ConfigError, DetectorError};

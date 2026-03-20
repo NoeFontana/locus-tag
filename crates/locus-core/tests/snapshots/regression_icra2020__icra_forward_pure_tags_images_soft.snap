@@ -10,21 +10,21 @@ summary:
   worst_offenders:
     - filename: 0000.png
       missed: 59
-      extra: 29
+      extra: 28
       rmse: 1.1716
     - filename: 0001.png
       missed: 52
-      extra: 32
+      extra: 31
       rmse: 0.5963
     - filename: 0002.png
       missed: 46
-      extra: 35
+      extra: 34
       rmse: 0.3954
     - filename: 0003.png
       missed: 30
-      extra: 32
+      extra: 31
       rmse: 0.5785
     - filename: 0004.png
       missed: 28
-      extra: 28
+      extra: 27
       rmse: 0.3617

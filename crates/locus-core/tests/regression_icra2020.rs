@@ -155,6 +155,20 @@ impl RegressionHarness {
         self
     }
 
+    pub fn with_moments_culling(mut self, max_elongation: f64, min_density: f64) -> Self {
+        self.config.quad_max_elongation = max_elongation;
+        self.config.quad_min_density = min_density;
+        self
+    }
+
+    pub fn with_quad_extraction_mode(
+        mut self,
+        mode: locus_core::config::QuadExtractionMode,
+    ) -> Self {
+        self.config.quad_extraction_mode = mode;
+        self
+    }
+
     pub fn run(self, provider: impl DatasetProvider) {
         #[cfg(debug_assertions)]
         {
@@ -655,3 +669,79 @@ test_icra!(
     PlainBoard,
     TagFamily::AprilTag36h11
 );
+
+// ── New algorithm tuning variants ────────────────────────────────────────────
+
+#[test]
+fn regression_fixtures_moments_culling() {
+    let _guard = common::telemetry::init("regression_fixtures_moments_culling");
+    let provider = FixtureProvider::new();
+    RegressionHarness::new("fixtures_moments_culling")
+        .with_preset(ConfigPreset::PlainBoard)
+        .with_families(vec![TagFamily::AprilTag36h11])
+        .with_moments_culling(15.0, 0.15)
+        .run(provider);
+}
+
+#[test]
+fn regression_fixtures_edlines() {
+    let _guard = common::telemetry::init("regression_fixtures_edlines");
+    let provider = FixtureProvider::new();
+    RegressionHarness::new("fixtures_edlines")
+        .with_preset(ConfigPreset::PlainBoard)
+        .with_families(vec![TagFamily::AprilTag36h11])
+        .with_quad_extraction_mode(locus_core::config::QuadExtractionMode::EdLines)
+        .run(provider);
+}
+
+#[test]
+fn regression_fixtures_edlines_moments() {
+    let _guard = common::telemetry::init("regression_fixtures_edlines_moments");
+    let provider = FixtureProvider::new();
+    RegressionHarness::new("fixtures_edlines_moments")
+        .with_preset(ConfigPreset::PlainBoard)
+        .with_families(vec![TagFamily::AprilTag36h11])
+        .with_quad_extraction_mode(locus_core::config::QuadExtractionMode::EdLines)
+        .with_moments_culling(15.0, 0.15)
+        .run(provider);
+}
+
+#[test]
+fn regression_icra_forward_moments_culling() {
+    let _guard = common::telemetry::init("regression_icra_forward_moments_culling");
+    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
+        let snapshot = "icra_forward_pure_default_moments_culling".to_string();
+        RegressionHarness::new(snapshot)
+            .with_preset(ConfigPreset::PlainBoard)
+            .with_families(vec![TagFamily::AprilTag36h11])
+            .with_moments_culling(15.0, 0.15)
+            .run(provider);
+    }
+}
+
+#[test]
+fn regression_icra_forward_edlines() {
+    let _guard = common::telemetry::init("regression_icra_forward_edlines");
+    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
+        let snapshot = "icra_forward_pure_default_edlines".to_string();
+        RegressionHarness::new(snapshot)
+            .with_preset(ConfigPreset::PlainBoard)
+            .with_families(vec![TagFamily::AprilTag36h11])
+            .with_quad_extraction_mode(locus_core::config::QuadExtractionMode::EdLines)
+            .run(provider);
+    }
+}
+
+#[test]
+fn regression_icra_forward_edlines_moments() {
+    let _guard = common::telemetry::init("regression_icra_forward_edlines_moments");
+    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
+        let snapshot = "icra_forward_pure_default_edlines_moments".to_string();
+        RegressionHarness::new(snapshot)
+            .with_preset(ConfigPreset::PlainBoard)
+            .with_families(vec![TagFamily::AprilTag36h11])
+            .with_quad_extraction_mode(locus_core::config::QuadExtractionMode::EdLines)
+            .with_moments_culling(15.0, 0.15)
+            .run(provider);
+    }
+}

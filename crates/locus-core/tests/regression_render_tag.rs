@@ -194,6 +194,20 @@ impl RegressionHarness {
         self
     }
 
+    pub fn with_moments_culling(mut self, max_elongation: f64, min_density: f64) -> Self {
+        self.config.quad_max_elongation = max_elongation;
+        self.config.quad_min_density = min_density;
+        self
+    }
+
+    pub fn with_quad_extraction_mode(
+        mut self,
+        mode: locus_core::config::QuadExtractionMode,
+    ) -> Self {
+        self.config.quad_extraction_mode = mode;
+        self
+    }
+
     pub fn run(self, provider: impl DatasetProvider) {
         let mut detector = Detector::with_config(self.config);
         if !self.options.families.is_empty() {
@@ -795,6 +809,80 @@ fn run_hub_test(
     }
 }
 
+fn run_hub_test_tuned(
+    config_name: &str,
+    family: TagFamily,
+    mode: PoseEstimationMode,
+    snapshot_suffix: &str,
+    max_elongation: f64,
+    min_density: f64,
+    quad_mode: locus_core::config::QuadExtractionMode,
+) {
+    if let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") {
+        let root = resolve_hub_root(&hub_dir);
+        let dataset_path = root.join(config_name);
+
+        if !dataset_path.exists() {
+            println!("Dataset not found in cache: {config_name}. Skipping.");
+            return;
+        }
+
+        if let Some(provider) = HubProvider::new(&dataset_path) {
+            let mut options = DetectOptions::default();
+            let metadata_path = dataset_path.join("provenance.json");
+            let rich_path = dataset_path.join("rich_truth.json");
+
+            if metadata_path.exists() {
+                let metadata_str = std::fs::read_to_string(metadata_path).unwrap();
+                let meta: serde_json::Value = serde_json::from_str(&metadata_str).unwrap();
+                if let Some(intrinsics) = meta.get("camera_intrinsics") {
+                    let fx = intrinsics["fx"].as_f64().unwrap();
+                    let fy = intrinsics["fy"].as_f64().unwrap();
+                    let cx = intrinsics["cx"].as_f64().unwrap();
+                    let cy = intrinsics["cy"].as_f64().unwrap();
+                    options.intrinsics = Some(CameraIntrinsics::new(fx, fy, cx, cy));
+                }
+                if let Some(tag_size_mm) = meta.get("tag_size_mm") {
+                    options.tag_size = Some(tag_size_mm.as_f64().unwrap() / 1000.0);
+                }
+            }
+            if (options.intrinsics.is_none() || options.tag_size.is_none()) && rich_path.exists() {
+                let file = std::fs::File::open(&rich_path).unwrap();
+                let entries: Vec<HubEntry> = serde_json::from_reader(file).unwrap();
+                if let Some(first) = entries.first() {
+                    if options.intrinsics.is_none()
+                        && let Some(k) = first.k_matrix
+                    {
+                        options.intrinsics =
+                            Some(CameraIntrinsics::new(k[0][0], k[1][1], k[0][2], k[1][2]));
+                    }
+                    if options.tag_size.is_none()
+                        && let Some(size_mm) = first.tag_size_mm
+                    {
+                        options.tag_size = Some(size_mm / 1000.0);
+                    }
+                }
+            }
+
+            options.pose_estimation_mode = mode;
+            let mode_suffix = match mode {
+                PoseEstimationMode::Fast => "_fast",
+                PoseEstimationMode::Accurate => "",
+            };
+            let snapshot = format!("hub_{}{}{}", provider.name(), mode_suffix, snapshot_suffix);
+            RegressionHarness::new(snapshot)
+                .with_preset(ConfigPreset::PlainBoard)
+                .with_families(vec![family])
+                .with_options(options)
+                .with_moments_culling(max_elongation, min_density)
+                .with_quad_extraction_mode(quad_mode)
+                .run(provider);
+        }
+    } else {
+        println!("Skipping hub tests. Set LOCUS_HUB_DATASET_DIR to run.");
+    }
+}
+
 // ── Accurate mode (Structure Tensor + Weighted LM) ───────────────────────────
 
 #[test]
@@ -928,5 +1016,91 @@ fn regression_hub_fast_tag36h11_2160p() {
         TagFamily::AprilTag36h11,
         PoseEstimationMode::Fast,
         None,
+    );
+}
+
+// ── Algorithm tuning variants (moments culling + EDLines) ────────────────────
+
+#[test]
+fn regression_hub_tag36h11_720p_moments_culling() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_720p_moments_culling");
+    run_hub_test_tuned(
+        "single_tag_locus_v1_tag36h11_1280x720",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
+        "_moments_culling",
+        15.0,
+        0.15,
+        locus_core::config::QuadExtractionMode::ContourRdp,
+    );
+}
+
+#[test]
+fn regression_hub_tag36h11_720p_edlines() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_720p_edlines");
+    run_hub_test_tuned(
+        "single_tag_locus_v1_tag36h11_1280x720",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
+        "_edlines",
+        0.0,
+        0.0,
+        locus_core::config::QuadExtractionMode::EdLines,
+    );
+}
+
+#[test]
+fn regression_hub_tag36h11_720p_edlines_moments() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_720p_edlines_moments");
+    run_hub_test_tuned(
+        "single_tag_locus_v1_tag36h11_1280x720",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
+        "_edlines_moments",
+        15.0,
+        0.15,
+        locus_core::config::QuadExtractionMode::EdLines,
+    );
+}
+
+#[test]
+fn regression_hub_tag36h11_1080p_moments_culling() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_1080p_moments_culling");
+    run_hub_test_tuned(
+        "single_tag_locus_v1_tag36h11_1920x1080",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
+        "_moments_culling",
+        15.0,
+        0.15,
+        locus_core::config::QuadExtractionMode::ContourRdp,
+    );
+}
+
+#[test]
+fn regression_hub_tag36h11_1080p_edlines() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_1080p_edlines");
+    run_hub_test_tuned(
+        "single_tag_locus_v1_tag36h11_1920x1080",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
+        "_edlines",
+        0.0,
+        0.0,
+        locus_core::config::QuadExtractionMode::EdLines,
+    );
+}
+
+#[test]
+fn regression_hub_tag36h11_1080p_edlines_moments() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_1080p_edlines_moments");
+    run_hub_test_tuned(
+        "single_tag_locus_v1_tag36h11_1920x1080",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
+        "_edlines_moments",
+        15.0,
+        0.15,
+        locus_core::config::QuadExtractionMode::EdLines,
     );
 }

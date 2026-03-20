@@ -178,55 +178,76 @@ fn extract_single_quad(
         return None;
     }
 
-    // Passed filters - trace boundary and fit quad
-    let sx = stat.first_pixel_x as usize;
-    let sy = stat.first_pixel_y as usize;
-
-    let contour = trace_boundary(arena, labels, img.width, img.height, sx, sy, label);
-
-    if contour.len() < 12 {
-        return None;
-    }
-
-    let simple_contour = chain_approximation(arena, &contour);
-    let perimeter = contour.len() as f64;
-    let epsilon = (perimeter * 0.02).max(1.0);
-    let simplified = douglas_peucker(arena, &simple_contour, epsilon);
-
-    if simplified.len() < 4 || simplified.len() > 11 {
-        return None;
-    }
-
-    let simpl_len = simplified.len();
-    let reduced = if simpl_len == 5 {
-        simplified
-    } else if simpl_len == 4 {
-        let mut closed = BumpVec::new_in(arena);
-        for p in &simplified {
-            closed.push(*p);
+    // Moments-based culling gate: reject elongated or sparse blobs before contour tracing.
+    // Disabled by default (both thresholds are 0.0).
+    if (config.quad_max_elongation > 0.0 || config.quad_min_density > 0.0)
+        && let Some((elongation, density)) = crate::segmentation::compute_moment_shape(stat)
+    {
+        if config.quad_max_elongation > 0.0 && elongation > config.quad_max_elongation {
+            return None;
         }
-        closed.push(simplified[0]);
-        closed
-    } else {
-        reduce_to_quad(arena, &simplified)
-    };
-
-    if reduced.len() != 5 {
-        return None;
+        if config.quad_min_density > 0.0 && density < config.quad_min_density {
+            return None;
+        }
     }
 
-    let area = polygon_area(&reduced);
-    let compactness = (12.566 * area.abs()) / (perimeter * perimeter);
+    // Passed filters — extract rough quad corners using the configured mode.
+    let quad_pts_dec: [Point; 4] = match config.quad_extraction_mode {
+        crate::config::QuadExtractionMode::EdLines => {
+            let ed_cfg = crate::edlines::EdLinesConfig::from_detector_config(config);
+            crate::edlines::extract_quad_edlines(arena, img, stat, &ed_cfg)?
+        }
+        crate::config::QuadExtractionMode::ContourRdp => {
+            let sx = stat.first_pixel_x as usize;
+            let sy = stat.first_pixel_y as usize;
 
-    if area.abs() <= f64::from(config.quad_min_area) || compactness <= 0.1 {
-        return None;
-    }
+            let contour = trace_boundary(arena, labels, img.width, img.height, sx, sy, label);
 
-    // Standardize to CW for consistency
-    let quad_pts_dec = if area > 0.0 {
-        [reduced[0], reduced[1], reduced[2], reduced[3]]
-    } else {
-        [reduced[0], reduced[3], reduced[2], reduced[1]]
+            if contour.len() < 12 {
+                return None;
+            }
+
+            let simple_contour = chain_approximation(arena, &contour);
+            let perimeter = contour.len() as f64;
+            let epsilon = (perimeter * 0.02).max(1.0);
+            let simplified = douglas_peucker(arena, &simple_contour, epsilon);
+
+            if simplified.len() < 4 || simplified.len() > 11 {
+                return None;
+            }
+
+            let simpl_len = simplified.len();
+            let reduced = if simpl_len == 5 {
+                simplified
+            } else if simpl_len == 4 {
+                let mut closed = BumpVec::new_in(arena);
+                for p in &simplified {
+                    closed.push(*p);
+                }
+                closed.push(simplified[0]);
+                closed
+            } else {
+                reduce_to_quad(arena, &simplified)
+            };
+
+            if reduced.len() != 5 {
+                return None;
+            }
+
+            let area = polygon_area(&reduced);
+            let compactness = (12.566 * area.abs()) / (perimeter * perimeter);
+
+            if area.abs() <= f64::from(config.quad_min_area) || compactness <= 0.1 {
+                return None;
+            }
+
+            // Standardize to CW for consistency
+            if area > 0.0 {
+                [reduced[0], reduced[1], reduced[2], reduced[3]]
+            } else {
+                [reduced[0], reduced[3], reduced[2], reduced[1]]
+            }
+        }
     };
 
     // Scale to full resolution using correct coordinate mapping.

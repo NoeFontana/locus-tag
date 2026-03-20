@@ -163,11 +163,7 @@ pub fn label_components_lsl<'a>(
             temp_stats.push(ComponentStats {
                 first_pixel_x: run.start_x,
                 first_pixel_y: run.y,
-                min_x: u16::MAX,
-                max_x: 0,
-                min_y: u16::MAX,
-                max_y: 0,
-                pixel_count: 0,
+                ..ComponentStats::default()
             });
         }
         let s_idx = root_to_temp_idx[root];
@@ -177,6 +173,16 @@ pub fn label_components_lsl<'a>(
         stats.min_y = stats.min_y.min(run.y);
         stats.max_y = stats.max_y.max(run.y);
         stats.pixel_count += u32::from(run.end_x - run.start_x);
+        // Accumulate spatial moments using closed-form per-run sums.
+        // Run covers x in [a, b) exclusive (end_x is exclusive).
+        let a = u64::from(run.start_x);
+        let b = u64::from(run.end_x);
+        let yu = u64::from(run.y);
+        stats.m10 += b * (b - 1) / 2 - a * (a - 1) / 2;
+        stats.m01 += yu * (b - a);
+        stats.m20 += (b - 1) * b * (2 * b - 1) / 6 - (a - 1) * a * (2 * a - 1) / 6;
+        stats.m02 += yu * yu * (b - a);
+        stats.m11 += yu * (b * (b - 1) / 2 - a * (a - 1) / 2);
     }
 
     let mut component_stats = Vec::with_capacity(temp_stats.len());
