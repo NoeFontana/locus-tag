@@ -15,26 +15,14 @@
       "p50_translation_error": 0.0055
     },
     "Locus (Soft)": {
-      "recall": 96.23,
-      "rmse": 0.2774,
-      "latency": 85.38,
-      "stages": {
-        "threshold": 10.3821218,
-        "segmentation": 49.3048838,
-        "quad": 56.90039320000001,
-        "decoding": 221.6332484
-      }
+      "recall": 96.23376623376623,
+      "rmse": 0.28701392694134786,
+      "latency": 80.19526921911165
     },
     "Locus (Hard)": {
-      "recall": 76.84,
-      "rmse": 0.2455,
-      "latency": 69.73,
-      "stages": {
-        "threshold": 10.9425286,
-        "segmentation": 41.7985872,
-        "quad": 50.5247974,
-        "decoding": 71.0830674
-      }
+      "recall": 76.87012987012987,
+      "rmse": 0.25672022395083954,
+      "latency": 66.31861144443974
     }
   }
 }
