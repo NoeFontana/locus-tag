@@ -52,7 +52,8 @@ fn bench_thresholding(bencher: divan::Bencher, &(width, height): &(usize, usize)
     // SETUP PHASE (Not timed)
     let dataset = BenchDataset::load_and_resize_icra_frame("forward", 0, width, height);
     let img = ImageView::new(&dataset.raw_data, width, height, width).unwrap();
-    let engine = ThresholdEngine::new();
+    let config = locus_core::DetectorConfig::default();
+    let engine = ThresholdEngine::from_config(&config);
     let mut output = vec![0u8; width * height];
     let mut arena = Bump::new();
 
@@ -69,7 +70,8 @@ fn bench_segmentation(bencher: divan::Bencher, &(width, height): &(usize, usize)
     // SETUP PHASE (Not timed)
     let dataset = BenchDataset::load_and_resize_icra_frame("forward", 0, width, height);
     let img = ImageView::new(&dataset.raw_data, width, height, width).unwrap();
-    let engine = ThresholdEngine::new();
+    let config = locus_core::DetectorConfig::default();
+    let engine = ThresholdEngine::from_config(&config);
     let mut binarized = vec![0u8; width * height];
     let mut threshold_map = vec![0u8; width * height];
     let setup_arena = Bump::new();
@@ -86,17 +88,8 @@ fn bench_segmentation(bencher: divan::Bencher, &(width, height): &(usize, usize)
     // MEASUREMENT PHASE (Timed)
     bencher.bench_local(move || {
         let arena = Bump::new();
-        let _label_result = locus_core::bench_api::label_components_threshold_model(
-            &arena,
-            &dataset.raw_data,
-            width,
-            &threshold_map,
-            width,
-            height,
-            true,
-            16,
-            1,
-        );
+        let _label_result =
+            locus_core::bench_api::label_components_lsl(&arena, &img, &threshold_map, true, 16);
     });
 }
 
@@ -105,7 +98,8 @@ fn bench_quad_extraction(bencher: divan::Bencher, &(width, height): &(usize, usi
     // SETUP PHASE (Not timed)
     let dataset = BenchDataset::load_and_resize_icra_frame("forward", 0, width, height);
     let img = ImageView::new(&dataset.raw_data, width, height, width).unwrap();
-    let engine = ThresholdEngine::new();
+    let config = locus_core::DetectorConfig::default();
+    let engine = ThresholdEngine::from_config(&config);
     let mut binarized = vec![0u8; width * height];
     let mut threshold_map = vec![0u8; width * height];
     let setup_arena = Bump::new();

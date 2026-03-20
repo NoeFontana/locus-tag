@@ -1,41 +1,40 @@
 ---
 source: crates/locus-core/tests/regression_render_tag.rs
-assertion_line: 538
 expression: report
 ---
 summary:
   dataset_size: 45
-  mean_recall: 0.9777777777777777
-  mean_precision: 0.9888888888888889
-  mean_rmse: 1.0459
-  mean_reprojection_rmse: 4.2643
-  p50_translation_error: 0.0055
-  p90_translation_error: 0.1887
-  p99_translation_error: 0.5799
-  p50_rotation_error: 0.3881
-  p90_rotation_error: 19.1282
-  p99_rotation_error: 54.7313
+  mean_recall: 1
+  mean_precision: 1
+  mean_rmse: 0.9279
+  mean_reprojection_rmse: 3.6946
+  p50_translation_error: 0.0049
+  p90_translation_error: 0.0916
+  p99_translation_error: 1.0884
+  p50_rotation_error: 0.3141
+  p90_rotation_error: 6.966
+  p99_rotation_error: 53.2411
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
   geometry_violations: 0
   worst_offenders:
-    - filename: scene_0031_cam_0000.png
-      missed: 1
-      extra: 0
-      rmse: 0
-    - filename: scene_0011_cam_0000.png
-      missed: 0
-      extra: 1
-      rmse: 1.1166
-    - filename: scene_0008_cam_0000.png
-      missed: 0
-      extra: 0
-      rmse: 5.2422
     - filename: scene_0038_cam_0000.png
       missed: 0
       extra: 0
       rmse: 4.0491
-    - filename: scene_0018_cam_0000.png
+    - filename: scene_0044_cam_0000.png
       missed: 0
       extra: 0
-      rmse: 3.5977
+      rmse: 2.86
+    - filename: scene_0026_cam_0000.png
+      missed: 0
+      extra: 0
+      rmse: 2.4072
+    - filename: scene_0022_cam_0000.png
+      missed: 0
+      extra: 0
+      rmse: 2.3446
+    - filename: scene_0035_cam_0000.png
+      missed: 0
+      extra: 0
+      rmse: 2.3284

@@ -40,18 +40,17 @@ pub enum ConfigPreset {
 impl ConfigPreset {
     pub fn detector_config(self) -> DetectorConfig {
         match self {
-            Self::PlainBoard => DetectorConfig::builder()
-                .decoder_min_contrast(10.0)
-                .quad_min_edge_score(2.0)
-                .refinement_mode(locus_core::config::CornerRefinementMode::Erf)
-                .enable_sharpening(true)
-                .threshold_tile_size(8)
-                .build(),
-            Self::Checkerboard => DetectorConfig::builder()
-                .segmentation_connectivity(locus_core::config::SegmentationConnectivity::Four)
-                .decoder_min_contrast(10.0)
-                .refinement_mode(locus_core::config::CornerRefinementMode::Erf)
-                .build(),
+            Self::PlainBoard => DetectorConfig::production_default(),
+            Self::Checkerboard => {
+                let mut config = DetectorConfig::production_default();
+                config.segmentation_connectivity =
+                    locus_core::config::SegmentationConnectivity::Four;
+                // Checkerboards in this dataset are notoriously low-contrast.
+                config.decoder_min_contrast = 10.0;
+                config.quad_min_edge_score = 2.0;
+                config.enable_sharpening = false;
+                config
+            },
         }
     }
 }
