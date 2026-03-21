@@ -288,10 +288,8 @@ fn extract_single_quad(
     let quad_pts = if config.quad_extraction_mode == crate::config::QuadExtractionMode::EdLines {
         quad_pts // corners already sub-pixel accurate; no expansion needed
     } else {
-        let center_x =
-            (quad_pts[0].x + quad_pts[1].x + quad_pts[2].x + quad_pts[3].x) * 0.25;
-        let center_y =
-            (quad_pts[0].y + quad_pts[1].y + quad_pts[2].y + quad_pts[3].y) * 0.25;
+        let center_x = (quad_pts[0].x + quad_pts[1].x + quad_pts[2].x + quad_pts[3].x) * 0.25;
+        let center_y = (quad_pts[0].y + quad_pts[1].y + quad_pts[2].y + quad_pts[3].y) * 0.25;
         let mut ep = quad_pts;
         for i in 0..4 {
             ep[i].x += 0.5 * (quad_pts[i].x - center_x).signum();
