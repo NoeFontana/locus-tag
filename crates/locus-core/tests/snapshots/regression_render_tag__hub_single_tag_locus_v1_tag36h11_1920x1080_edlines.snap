@@ -1,41 +1,28 @@
 ---
 source: crates/locus-core/tests/regression_render_tag.rs
-assertion_line: 548
 expression: report
 ---
 summary:
   dataset_size: 45
-  mean_recall: 0
+  mean_recall: 0.9777777777777777
   mean_precision: 1
-  mean_rmse: 0
-  mean_reprojection_rmse: 0
-  p50_translation_error: 0
-  p90_translation_error: 0
-  p99_translation_error: 0
-  p50_rotation_error: 0
-  p90_rotation_error: 0
-  p99_rotation_error: 0
+  mean_rmse: 0.6889
+  mean_reprojection_rmse: 2.1193
+  p50_translation_error: 0.0039
+  p90_translation_error: 0.0488
+  p99_translation_error: 0.1583
+  p50_rotation_error: 0.3608
+  p90_rotation_error: 4.1598
+  p99_rotation_error: 49.4114
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
   geometry_violations: 0
   worst_offenders:
-    - filename: scene_0000_cam_0000.png
-      missed: 1
-      extra: 0
-      rmse: 0
-    - filename: scene_0001_cam_0000.png
+    - filename: scene_0022_cam_0000.png
       missed: 1
       extra: 0
       rmse: 0
     - filename: scene_0002_cam_0000.png
-      missed: 1
+      missed: 0
       extra: 0
-      rmse: 0
-    - filename: scene_0003_cam_0000.png
-      missed: 1
-      extra: 0
-      rmse: 0
-    - filename: scene_0004_cam_0000.png
-      missed: 1
-      extra: 0
-      rmse: 0
+      rmse: 4.4704
