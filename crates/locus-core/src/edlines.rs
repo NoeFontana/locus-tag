@@ -31,9 +31,9 @@ use std::f64::consts::PI;
 use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
 
+use crate::Point;
 use crate::gwlf::MomentAccumulator;
 use crate::image::ImageView;
-use crate::quad::Point;
 use crate::segmentation::ComponentStats;
 
 // ── Configuration ─────────────────────────────────────────────────────────────

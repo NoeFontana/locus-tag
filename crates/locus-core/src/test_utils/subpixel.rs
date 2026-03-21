@@ -97,7 +97,8 @@ impl SubpixelEdgeRenderer {
 
                 let d = line.signed_distance([px, py]);
 
-                let val = f64::midpoint(a, b) + (b - a) / 2.0 * crate::quad::erf_approx(d / s);
+                let val =
+                    f64::midpoint(a, b) + (b - a) / 2.0 * crate::simd::math::erf_approx(d / s);
                 data[row_off + x] = val;
             }
         }
@@ -118,8 +119,9 @@ impl SubpixelEdgeRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Point;
     use crate::image::ImageView;
-    use crate::quad::{Point, refine_edge_intensity};
+    use crate::quad::refine_edge_intensity;
     use bumpalo::Bump;
 
     #[test]

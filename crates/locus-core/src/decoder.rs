@@ -666,7 +666,7 @@ fn collect_samples_optimized<'a>(
 }
 
 #[multiversion(targets(
-    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx2+fma+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
@@ -701,7 +701,6 @@ fn refine_accumulate_optimized(
             let v_inv_sigma = _mm256_set1_pd(inv_sigma);
             let v_k = _mm256_set1_pd(k);
             let v_half = _mm256_set1_pd(0.5);
-            let v_one = _mm256_set1_pd(1.0);
             let v_abs_mask = _mm256_set1_pd(-0.0);
 
             let mut v_sum_jtj = _mm256_setzero_pd();
@@ -727,27 +726,44 @@ fn refine_accumulate_optimized(
                 let v_range_mask = _mm256_cmp_pd(v_abs_s, _mm256_set1_pd(3.0), _CMP_LE_OQ);
 
                 if _mm256_movemask_pd(v_range_mask) != 0 {
-                    // Simple ERF approx: erf(x) ~= sign(x) * sqrt(1 - exp(-x^2 * 4/pi))
-                    // For now, just use scalar fallback for the math inside to keep it sound,
-                    // but we could use a SIMD exp/erf here.
-                    let ss: [f64; 4] = std::mem::transmute(v_s);
-                    let iv: [f64; 4] = std::mem::transmute(v_img_val);
-                    let mm: [f64; 4] = std::mem::transmute(v_range_mask);
+                    // Vectorized ERF + Gauss-Newton accumulation (no scalar fallback).
+                    // SAFETY: erf_approx_v4 requires AVX2+FMA, guaranteed by multiversion target.
+                    let v_erf = crate::simd::math::erf_approx_v4(v_s);
 
-                    for j in 0..4 {
-                        if mm[j] != 0.0 {
-                            let s_val = ss[j];
-                            let model =
-                                (a + b) * 0.5 + (b - a) * 0.5 * crate::quad::erf_approx(s_val);
-                            let residual = iv[j] - model;
-                            let jac = k * (-s_val * s_val).exp();
-                            sum_jtj += jac * jac;
-                            sum_jt_res += jac * residual;
-                        }
-                    }
+                    // model = (a+b)*0.5 + (b-a)*0.5 * erf(s)
+                    let v_ab_half = _mm256_mul_pd(_mm256_add_pd(v_a, v_b), v_half);
+                    let v_ba_half = _mm256_mul_pd(_mm256_sub_pd(v_b, v_a), v_half);
+                    let v_model = _mm256_fmadd_pd(v_ba_half, v_erf, v_ab_half);
+
+                    // residual = img_val - model
+                    let v_residual = _mm256_sub_pd(v_img_val, v_model);
+
+                    // jac = k * exp(-s^2): extract for exp, then re-pack
+                    // SAFETY: transmute is safe for same-size SIMD ↔ array conversions.
+                    let v_neg_s2 = _mm256_mul_pd(v_s, v_s);
+                    let v_neg_s2 = _mm256_xor_pd(v_neg_s2, v_abs_mask); // negate
+                    let ns2: [f64; 4] = std::mem::transmute(v_neg_s2);
+                    let v_exp =
+                        _mm256_set_pd(ns2[3].exp(), ns2[2].exp(), ns2[1].exp(), ns2[0].exp());
+                    let v_jac = _mm256_mul_pd(v_k, v_exp);
+
+                    // Masked accumulation: zero out lanes outside range
+                    let v_jac_masked = _mm256_and_pd(v_jac, v_range_mask);
+                    let v_res_masked = _mm256_and_pd(v_residual, v_range_mask);
+
+                    // jtj += jac^2, jt_res += jac * residual
+                    v_sum_jtj = _mm256_fmadd_pd(v_jac_masked, v_jac_masked, v_sum_jtj);
+                    v_sum_jt_res = _mm256_fmadd_pd(v_jac_masked, v_res_masked, v_sum_jt_res);
                 }
                 i += 4;
             }
+
+            // Horizontal reduction: fold 4 lanes into scalar accumulators.
+            // SAFETY: transmute is safe for same-size SIMD ↔ array conversions.
+            let jtj_lanes: [f64; 4] = std::mem::transmute(v_sum_jtj);
+            let jtr_lanes: [f64; 4] = std::mem::transmute(v_sum_jt_res);
+            sum_jtj += jtj_lanes[0] + jtj_lanes[1] + jtj_lanes[2] + jtj_lanes[3];
+            sum_jt_res += jtr_lanes[0] + jtr_lanes[1] + jtr_lanes[2] + jtr_lanes[3];
         }
     }
 
@@ -757,7 +773,7 @@ fn refine_accumulate_optimized(
         let dist = nx * x + ny * y + d;
         let s = dist * inv_sigma;
         if s.abs() <= 3.0 {
-            let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::quad::erf_approx(s);
+            let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::simd::math::erf_approx(s);
             let residual = img_val - model;
             let jac = k * (-s * s).exp();
             sum_jtj += jac * jac;
