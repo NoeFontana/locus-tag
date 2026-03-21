@@ -14,8 +14,6 @@ pub mod decoder;
 pub mod detector;
 /// Tag family dictionaries (AprilTag, ArUco).
 pub mod dictionaries;
-/// Unified ERF-based sub-pixel edge refinement (Gauss-Newton solver).
-pub(crate) mod edge_refinement;
 /// EDLines localized quad extraction.
 pub(crate) mod edlines;
 /// Error types for the detection pipeline.
@@ -28,8 +26,6 @@ pub mod funnel;
 pub mod gradient;
 /// Gradient-Weighted Line Fitting (GWLF).
 pub mod gwlf;
-/// Projective geometry primitives (Homography, DDA, DLT solver).
-pub mod homography;
 /// Image buffer abstractions.
 pub mod image;
 /// 3D Pose Estimation (PnP).

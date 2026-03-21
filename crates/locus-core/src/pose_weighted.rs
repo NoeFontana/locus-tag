@@ -111,7 +111,7 @@ fn compute_corner_covariance(
 pub(crate) fn compute_framework_uncertainty(
     img: &ImageView,
     corners: &[[f64; 2]; 4],
-    _h_poly: &crate::homography::Homography,
+    _h_poly: &crate::decoder::Homography,
     tikhonov_alpha_max: f64,
     sigma_n_sq: f64,
     structure_tensor_radius: u8,

@@ -12,16 +12,284 @@ use crate::simd::math::{bilinear_interpolate_fixed, rcp_nr};
 use crate::simd::roi::RoiCache;
 use bumpalo::Bump;
 use multiversion::multiversion;
-use nalgebra::SMatrix;
+use nalgebra::{SMatrix, SVector};
 use std::cell::RefCell;
-
-// Re-export homography types for backward compatibility.
-pub use crate::homography::{Homography, HomographyDda, compute_homographies_soa};
 
 thread_local! {
     // Use a small initial capacity (e.g., 4KB) to avoid system allocation overhead for small workloads.
     // The arena will still grow if needed.
     pub(crate) static DECODE_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(4096));
+}
+
+/// A 3x3 Homography matrix.
+pub struct Homography {
+    /// The 3x3 homography matrix.
+    pub h: SMatrix<f64, 3, 3>,
+}
+
+/// A Digital Differential Analyzer (DDA) for incremental homography projection.
+///
+/// This avoids expensive matrix multiplications by using discrete partial derivatives
+/// when stepping through a uniform grid in tag space.
+#[derive(Debug, Clone, Copy)]
+pub struct HomographyDda {
+    /// Current numerator for X coordinate.
+    pub nx: f64,
+    /// Current numerator for Y coordinate.
+    pub ny: f64,
+    /// Current denominator (perspective divide).
+    pub d: f64,
+    /// Partial derivative of nx with respect to u.
+    pub dnx_du: f64,
+    /// Partial derivative of ny with respect to u.
+    pub dny_du: f64,
+    /// Partial derivative of d with respect to u.
+    pub dd_du: f64,
+    /// Partial derivative of nx with respect to v.
+    pub dnx_dv: f64,
+    /// Partial derivative of ny with respect to v.
+    pub dny_dv: f64,
+    /// Partial derivative of d with respect to v.
+    pub dd_dv: f64,
+}
+
+impl Homography {
+    /// Convert the homography into a DDA state for a grid with step size (du, dv).
+    /// Initial state is computed at (u0, v0) in canonical tag space.
+    #[must_use]
+    pub fn to_dda(&self, u0: f64, v0: f64, du: f64, dv: f64) -> HomographyDda {
+        let h = self.h;
+        let nx = h[(0, 0)] * u0 + h[(0, 1)] * v0 + h[(0, 2)];
+        let ny = h[(1, 0)] * u0 + h[(1, 1)] * v0 + h[(1, 2)];
+        let d = h[(2, 0)] * u0 + h[(2, 1)] * v0 + h[(2, 2)];
+
+        HomographyDda {
+            nx,
+            ny,
+            d,
+            dnx_du: h[(0, 0)] * du,
+            dny_du: h[(1, 0)] * du,
+            dd_du: h[(2, 0)] * du,
+            dnx_dv: h[(0, 1)] * dv,
+            dny_dv: h[(1, 1)] * dv,
+            dd_dv: h[(2, 1)] * dv,
+        }
+    }
+
+    /// Compute homography from 4 source points to 4 destination points using DLT.
+    /// Points are [x, y].
+    /// Compute homography from 4 source points to 4 destination points using DLT.
+    /// Points are [x, y].
+    #[must_use]
+    pub fn from_pairs(src: &[[f64; 2]; 4], dst: &[[f64; 2]; 4]) -> Option<Self> {
+        let mut a = SMatrix::<f64, 8, 9>::zeros();
+
+        for i in 0..4 {
+            let sx = src[i][0];
+            let sy = src[i][1];
+            let dx = dst[i][0];
+            let dy = dst[i][1];
+
+            a[(i * 2, 0)] = -sx;
+            a[(i * 2, 1)] = -sy;
+            a[(i * 2, 2)] = -1.0;
+            a[(i * 2, 6)] = sx * dx;
+            a[(i * 2, 7)] = sy * dx;
+            a[(i * 2, 8)] = dx;
+
+            a[(i * 2 + 1, 3)] = -sx;
+            a[(i * 2 + 1, 4)] = -sy;
+            a[(i * 2 + 1, 5)] = -1.0;
+            a[(i * 2 + 1, 6)] = sx * dy;
+            a[(i * 2 + 1, 7)] = sy * dy;
+            a[(i * 2 + 1, 8)] = dy;
+        }
+
+        let mut b = SVector::<f64, 8>::zeros();
+        let mut m = SMatrix::<f64, 8, 8>::zeros();
+        for i in 0..8 {
+            for j in 0..8 {
+                m[(i, j)] = a[(i, j)];
+            }
+            b[i] = -a[(i, 8)];
+        }
+
+        m.lu().solve(&b).and_then(|h_vec| {
+            let mut h = SMatrix::<f64, 3, 3>::identity();
+            h[(0, 0)] = h_vec[0];
+            h[(0, 1)] = h_vec[1];
+            h[(0, 2)] = h_vec[2];
+            h[(1, 0)] = h_vec[3];
+            h[(1, 1)] = h_vec[4];
+            h[(1, 2)] = h_vec[5];
+            h[(2, 0)] = h_vec[6];
+            h[(2, 1)] = h_vec[7];
+            h[(2, 2)] = 1.0;
+            let res = Self { h };
+            for i in 0..4 {
+                let p_proj = res.project(src[i]);
+                let err_sq = (p_proj[0] - dst[i][0]).powi(2) + (p_proj[1] - dst[i][1]).powi(2);
+                if !err_sq.is_finite() || err_sq > 1e-4 {
+                    return None;
+                }
+            }
+            Some(res)
+        })
+    }
+
+    /// Optimized homography computation from canonical unit square to a quad.
+    /// Source points are assumed to be: `[(-1,-1), (1,-1), (1,1), (-1,1)]`.
+    #[must_use]
+    pub fn square_to_quad(dst: &[[f64; 2]; 4]) -> Option<Self> {
+        let mut b = SVector::<f64, 8>::zeros();
+        let mut m = SMatrix::<f64, 8, 8>::zeros();
+
+        // Hardcoded coefficients for src = [(-1,-1), (1,-1), (1,1), (-1,1)]
+        // Point 0: (-1, -1) -> (x0, y0)
+        let x0 = dst[0][0];
+        let y0 = dst[0][1];
+        // h0 + h1 - h2 - x0*h6 - x0*h7 = -x0  =>  1, 1, -1, ..., -x0, -x0
+        m[(0, 0)] = 1.0;
+        m[(0, 1)] = 1.0;
+        m[(0, 2)] = -1.0;
+        m[(0, 6)] = -x0;
+        m[(0, 7)] = -x0;
+        b[0] = -x0;
+        // h3 + h4 - h5 - y0*h6 - y0*h7 = -y0  =>  ..., 1, 1, -1, -y0, -y0
+        m[(1, 3)] = 1.0;
+        m[(1, 4)] = 1.0;
+        m[(1, 5)] = -1.0;
+        m[(1, 6)] = -y0;
+        m[(1, 7)] = -y0;
+        b[1] = -y0;
+
+        // Point 1: (1, -1) -> (x1, y1)
+        let x1 = dst[1][0];
+        let y1 = dst[1][1];
+        // -h0 + h1 + h2 + x1*h6 - x1*h7 = -x1
+        m[(2, 0)] = -1.0;
+        m[(2, 1)] = 1.0;
+        m[(2, 2)] = -1.0;
+        m[(2, 6)] = x1;
+        m[(2, 7)] = -x1;
+        b[2] = -x1;
+        m[(3, 3)] = -1.0;
+        m[(3, 4)] = 1.0;
+        m[(3, 5)] = -1.0;
+        m[(3, 6)] = y1;
+        m[(3, 7)] = -y1;
+        b[3] = -y1;
+
+        // Point 2: (1, 1) -> (x2, y2)
+        let x2 = dst[2][0];
+        let y2 = dst[2][1];
+        // -h0 - h1 + h2 + x2*h6 + x2*h7 = -x2
+        m[(4, 0)] = -1.0;
+        m[(4, 1)] = -1.0;
+        m[(4, 2)] = -1.0;
+        m[(4, 6)] = x2;
+        m[(4, 7)] = x2;
+        b[4] = -x2;
+        m[(5, 3)] = -1.0;
+        m[(5, 4)] = -1.0;
+        m[(5, 5)] = -1.0;
+        m[(5, 6)] = y2;
+        m[(5, 7)] = y2;
+        b[5] = -y2;
+
+        // Point 3: (-1, 1) -> (x3, y3)
+        let x3 = dst[3][0];
+        let y3 = dst[3][1];
+        // h0 - h1 + h2 - x3*h6 + x3*h7 = -x3
+        m[(6, 0)] = 1.0;
+        m[(6, 1)] = -1.0;
+        m[(6, 2)] = -1.0;
+        m[(6, 6)] = -x3;
+        m[(6, 7)] = x3;
+        b[6] = -x3;
+        m[(7, 3)] = 1.0;
+        m[(7, 4)] = -1.0;
+        m[(7, 5)] = -1.0;
+        m[(7, 6)] = -y3;
+        m[(7, 7)] = y3;
+        b[7] = -y3;
+
+        m.lu().solve(&b).and_then(|h_vec| {
+            let mut h = SMatrix::<f64, 3, 3>::identity();
+            h[(0, 0)] = h_vec[0];
+            h[(0, 1)] = h_vec[1];
+            h[(0, 2)] = h_vec[2];
+            h[(1, 0)] = h_vec[3];
+            h[(1, 1)] = h_vec[4];
+            h[(1, 2)] = h_vec[5];
+            h[(2, 0)] = h_vec[6];
+            h[(2, 1)] = h_vec[7];
+            h[(2, 2)] = 1.0;
+            let res = Self { h };
+            let src_unit = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]];
+            for i in 0..4 {
+                let p_proj = res.project(src_unit[i]);
+                let err_sq = (p_proj[0] - dst[i][0]).powi(2) + (p_proj[1] - dst[i][1]).powi(2);
+                if err_sq > 1e-4 {
+                    return None;
+                }
+            }
+            Some(res)
+        })
+    }
+
+    /// Project a point using the homography.
+    #[must_use]
+    pub fn project(&self, p: [f64; 2]) -> [f64; 2] {
+        let res = self.h * SVector::<f64, 3>::new(p[0], p[1], 1.0);
+        let w = res[2];
+        [res[0] / w, res[1] / w]
+    }
+}
+
+/// Compute homographies for all active quads in the batch using a pure-function SoA approach.
+///
+/// This uses `rayon` for data-parallel computation of the square-to-quad homographies.
+/// Quads are defined by 4 corners in `corners` for each candidate index.
+#[tracing::instrument(skip_all, name = "pipeline::homography_pass")]
+pub fn compute_homographies_soa(
+    corners: &[[Point2f; 4]],
+    status_mask: &[crate::batch::CandidateState],
+    homographies: &mut [Matrix3x3],
+) {
+    use crate::batch::CandidateState;
+    use rayon::prelude::*;
+
+    // Each homography maps from canonical square [(-1,-1), (1,-1), (1,1), (-1,1)] to image quads.
+    homographies
+        .par_iter_mut()
+        .enumerate()
+        .for_each(|(i, h_out)| {
+            if status_mask[i] != CandidateState::Active {
+                h_out.data = [0.0; 9];
+                h_out.padding = [0.0; 7];
+                return;
+            }
+
+            let dst = [
+                [f64::from(corners[i][0].x), f64::from(corners[i][0].y)],
+                [f64::from(corners[i][1].x), f64::from(corners[i][1].y)],
+                [f64::from(corners[i][2].x), f64::from(corners[i][2].y)],
+                [f64::from(corners[i][3].x), f64::from(corners[i][3].y)],
+            ];
+
+            if let Some(h) = Homography::square_to_quad(&dst) {
+                // Copy data to f32 batch. Nalgebra stores in column-major order.
+                for (j, val) in h.h.iter().enumerate() {
+                    h_out.data[j] = *val as f32;
+                }
+                h_out.padding = [0.0; 7];
+            } else {
+                // Failed to compute homography (e.g. degenerate quad).
+                h_out.data = [0.0; 9];
+                h_out.padding = [0.0; 7];
+            }
+        });
 }
 
 /// Refine corners using "Erf-Fit" (Gaussian fit to intensity profile).
@@ -74,10 +342,428 @@ pub(crate) fn refine_corners_erf(
     refined
 }
 
+/// Helper for ERF edge fitting
+struct EdgeFitter<'a> {
+    img: &'a crate::image::ImageView<'a>,
+    p1: [f64; 2],
+    dx: f64,
+    dy: f64,
+    len: f64,
+    nx: f64,
+    ny: f64,
+    d: f64,
+}
+
+impl<'a> EdgeFitter<'a> {
+    fn new(img: &'a crate::image::ImageView<'a>, p1: [f64; 2], p2: [f64; 2]) -> Option<Self> {
+        let dx = p2[0] - p1[0];
+        let dy = p2[1] - p1[1];
+        let len = (dx * dx + dy * dy).sqrt();
+        if len < 4.0 {
+            return None;
+        }
+        let nx = -dy / len;
+        let ny = dx / len;
+        // Initial d from input corners
+        let d = -(nx * p1[0] + ny * p1[1]);
+
+        Some(Self {
+            img,
+            p1,
+            dx,
+            dy,
+            len,
+            nx,
+            ny,
+            d,
+        })
+    }
+
+    fn scan_initial_d(&mut self) {
+        let window = 2.5;
+        let (x0, x1, y0, y1) = self.get_scan_bounds(window);
+
+        let mut best_offset = 0.0;
+        let mut best_grad = 0.0;
+
+        for k in -6..=6 {
+            let offset = f64::from(k) * 0.4;
+            let scan_d = self.d + offset;
+
+            let (sum_g, count) =
+                project_gradients_optimized(self.img, self.nx, self.ny, x0, x1, y0, y1, scan_d);
+
+            if count > 0 && sum_g > best_grad {
+                best_grad = sum_g;
+                best_offset = offset;
+            }
+        }
+        self.d += best_offset;
+    }
+
+    fn collect_samples(
+        &self,
+        arena: &'a bumpalo::Bump,
+    ) -> bumpalo::collections::Vec<'a, (f64, f64, f64)> {
+        let window = 2.5;
+        let (x0, x1, y0, y1) = self.get_scan_bounds(window);
+
+        collect_samples_optimized(
+            self.img, self.nx, self.ny, self.d, self.p1, self.dx, self.dy, self.len, x0, x1, y0,
+            y1, window, arena,
+        )
+    }
+
+    fn refine(&mut self, samples: &[(f64, f64, f64)], sigma: f64) {
+        if samples.len() < 10 {
+            return;
+        }
+        let mut a = 128.0;
+        let mut b = 128.0;
+        let inv_sigma = 1.0 / sigma;
+        let _sqrt_pi = std::f64::consts::PI.sqrt();
+
+        for _ in 0..15 {
+            let mut dark_sum = 0.0;
+            let mut dark_weight = 0.0;
+            let mut light_sum = 0.0;
+            let mut light_weight = 0.0;
+
+            for &(x, y, _) in samples {
+                let dist = self.nx * x + self.ny * y + self.d;
+                let val = self.img.sample_bilinear(x, y);
+                if dist < -1.0 {
+                    let w = (-dist - 0.5).clamp(0.1, 2.0);
+                    dark_sum += val * w;
+                    dark_weight += w;
+                } else if dist > 1.0 {
+                    let w = (dist - 0.5).clamp(0.1, 2.0);
+                    light_sum += val * w;
+                    light_weight += w;
+                }
+            }
+
+            if dark_weight > 0.0 && light_weight > 0.0 {
+                a = dark_sum / dark_weight;
+                b = light_sum / light_weight;
+            }
+
+            if (b - a).abs() < 5.0 {
+                break;
+            }
+
+            let (sum_jtj, sum_jt_res) = refine_accumulate_optimized(
+                samples, self.img, self.nx, self.ny, self.d, a, b, sigma, inv_sigma,
+            );
+
+            if sum_jtj < 1e-6 {
+                break;
+            }
+            let step = sum_jt_res / sum_jtj;
+            self.d += step.clamp(-0.5, 0.5);
+            if step.abs() < 1e-4 {
+                break;
+            }
+        }
+    }
+
+    #[allow(clippy::cast_sign_loss)]
+    fn get_scan_bounds(&self, window: f64) -> (usize, usize, usize, usize) {
+        let p2_0 = self.p1[0] + self.dx;
+        let p2_1 = self.p1[1] + self.dy;
+
+        // Clamp to valid image coordinates (padding of 1 pixel)
+        let w_limit = (self.img.width - 2) as f64;
+        let h_limit = (self.img.height - 2) as f64;
+
+        let x0 = (self.p1[0].min(p2_0) - window - 0.5).clamp(1.0, w_limit) as usize;
+        let x1 = (self.p1[0].max(p2_0) + window + 0.5).clamp(1.0, w_limit) as usize;
+        let y0 = (self.p1[1].min(p2_1) - window - 0.5).clamp(1.0, h_limit) as usize;
+        let y1 = (self.p1[1].max(p2_1) + window + 0.5).clamp(1.0, h_limit) as usize;
+        (x0, x1, y0, y1)
+    }
+}
+
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+#[allow(clippy::too_many_arguments)]
+fn project_gradients_optimized(
+    img: &crate::image::ImageView,
+    nx: f64,
+    ny: f64,
+    x0: usize,
+    x1: usize,
+    y0: usize,
+    y1: usize,
+    scan_d: f64,
+) -> (f64, usize) {
+    let mut sum_g = 0.0;
+    let mut count = 0;
+
+    for py in y0..=y1 {
+        let mut px = x0;
+        let y = py as f64 + 0.5;
+
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
+            unsafe {
+                use std::arch::x86_64::*;
+                let v_nx = _mm256_set1_pd(nx);
+                let v_ny = _mm256_set1_pd(ny);
+                let v_scan_d = _mm256_set1_pd(scan_d);
+                let v_y = _mm256_set1_pd(y);
+                let v_abs_mask = _mm256_set1_pd(-0.0);
+
+                while px + 4 <= x1 {
+                    let v_x = _mm256_set_pd(
+                        (px + 3) as f64 + 0.5,
+                        (px + 2) as f64 + 0.5,
+                        (px + 1) as f64 + 0.5,
+                        px as f64 + 0.5,
+                    );
+
+                    let v_dist = _mm256_add_pd(
+                        _mm256_add_pd(_mm256_mul_pd(v_nx, v_x), _mm256_mul_pd(v_ny, v_y)),
+                        v_scan_d,
+                    );
+
+                    let v_abs_dist = _mm256_andnot_pd(v_abs_mask, v_dist);
+                    let v_cmp = _mm256_cmp_pd(v_abs_dist, _mm256_set1_pd(1.0), _CMP_LT_OQ);
+                    let mask = _mm256_movemask_pd(v_cmp);
+
+                    if mask != 0 {
+                        for j in 0..4 {
+                            if (mask >> j) & 1 != 0 {
+                                let g = img.sample_gradient_bilinear((px + j) as f64, y);
+                                sum_g += (g[0] * nx + g[1] * ny).abs();
+                                count += 1;
+                            }
+                        }
+                    }
+                    px += 4;
+                }
+            }
+        }
+
+        while px <= x1 {
+            let x = px as f64 + 0.5;
+            let dist = nx * x + ny * y + scan_d;
+            if dist.abs() < 1.0 {
+                let g = img.sample_gradient_bilinear(x, y);
+                sum_g += (g[0] * nx + g[1] * ny).abs();
+                count += 1;
+            }
+            px += 1;
+        }
+    }
+    (sum_g, count)
+}
+
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+#[allow(clippy::too_many_arguments)]
+fn collect_samples_optimized<'a>(
+    img: &crate::image::ImageView,
+    nx: f64,
+    ny: f64,
+    d: f64,
+    p1: [f64; 2],
+    dx: f64,
+    dy: f64,
+    len: f64,
+    x0: usize,
+    x1: usize,
+    y0: usize,
+    y1: usize,
+    window: f64,
+    arena: &'a bumpalo::Bump,
+) -> bumpalo::collections::Vec<'a, (f64, f64, f64)> {
+    let mut samples = bumpalo::collections::Vec::with_capacity_in(128, arena);
+
+    for py in y0..=y1 {
+        let mut px = x0;
+        let y = py as f64 + 0.5;
+
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
+            unsafe {
+                use std::arch::x86_64::*;
+                let v_nx = _mm256_set1_pd(nx);
+                let v_ny = _mm256_set1_pd(ny);
+                let v_d = _mm256_set1_pd(d);
+                let v_y = _mm256_set1_pd(y);
+                let v_p1x = _mm256_set1_pd(p1[0]);
+                let v_p1y = _mm256_set1_pd(p1[1]);
+                let v_dx = _mm256_set1_pd(dx);
+                let v_dy = _mm256_set1_pd(dy);
+                let v_inv_len_sq = _mm256_set1_pd(1.0 / (len * len));
+                let v_abs_mask = _mm256_set1_pd(-0.0);
+
+                while px + 4 <= x1 {
+                    let v_x = _mm256_set_pd(
+                        (px + 3) as f64 + 0.5,
+                        (px + 2) as f64 + 0.5,
+                        (px + 1) as f64 + 0.5,
+                        px as f64 + 0.5,
+                    );
+
+                    let v_dist = _mm256_add_pd(
+                        _mm256_add_pd(_mm256_mul_pd(v_nx, v_x), _mm256_mul_pd(v_ny, v_y)),
+                        v_d,
+                    );
+                    let v_abs_dist = _mm256_andnot_pd(v_abs_mask, v_dist);
+                    let v_dist_mask = _mm256_cmp_pd(v_abs_dist, _mm256_set1_pd(window), _CMP_LE_OQ);
+
+                    let v_t = _mm256_mul_pd(
+                        _mm256_add_pd(
+                            _mm256_mul_pd(_mm256_sub_pd(v_x, v_p1x), v_dx),
+                            _mm256_mul_pd(_mm256_sub_pd(v_y, v_p1y), v_dy),
+                        ),
+                        v_inv_len_sq,
+                    );
+
+                    let v_t_mask_low = _mm256_cmp_pd(v_t, _mm256_set1_pd(-0.1), _CMP_GE_OQ);
+                    let v_t_mask_high = _mm256_cmp_pd(v_t, _mm256_set1_pd(1.1), _CMP_LE_OQ);
+
+                    let final_mask = _mm256_movemask_pd(_mm256_and_pd(
+                        v_dist_mask,
+                        _mm256_and_pd(v_t_mask_low, v_t_mask_high),
+                    ));
+
+                    if final_mask != 0 {
+                        for j in 0..4 {
+                            if (final_mask >> j) & 1 != 0 {
+                                let val = f64::from(img.get_pixel(px + j, py));
+                                samples.push(((px + j) as f64 + 0.5, y, val));
+                            }
+                        }
+                    }
+                    px += 4;
+                }
+            }
+        }
+
+        while px <= x1 {
+            let x = px as f64 + 0.5;
+            let dist = nx * x + ny * y + d;
+            if dist.abs() <= window {
+                let t = ((x - p1[0]) * dx + (y - p1[1]) * dy) / (len * len);
+                if (-0.1..=1.1).contains(&t) {
+                    let val = f64::from(img.get_pixel(px, py));
+                    samples.push((x, y, val));
+                }
+            }
+            px += 1;
+        }
+    }
+    samples
+}
+
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+#[allow(clippy::too_many_arguments)]
+fn refine_accumulate_optimized(
+    samples: &[(f64, f64, f64)],
+    #[allow(unused_variables)] img: &crate::image::ImageView,
+    nx: f64,
+    ny: f64,
+    d: f64,
+    a: f64,
+    b: f64,
+    sigma: f64,
+    inv_sigma: f64,
+) -> (f64, f64) {
+    let mut sum_jtj = 0.0;
+    let mut sum_jt_res = 0.0;
+    let sqrt_pi = std::f64::consts::PI.sqrt();
+    let k = (b - a) / (sqrt_pi * sigma);
+
+    let mut i = 0;
+
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
+        unsafe {
+            use std::arch::x86_64::*;
+            let v_nx = _mm256_set1_pd(nx);
+            let v_ny = _mm256_set1_pd(ny);
+            let v_d = _mm256_set1_pd(d);
+            let v_a = _mm256_set1_pd(a);
+            let v_b = _mm256_set1_pd(b);
+            let v_inv_sigma = _mm256_set1_pd(inv_sigma);
+            let v_k = _mm256_set1_pd(k);
+            let v_half = _mm256_set1_pd(0.5);
+            let v_abs_mask = _mm256_set1_pd(-0.0);
+
+            while i + 4 <= samples.len() {
+                let s0 = samples[i];
+                let s1 = samples[i + 1];
+                let s2 = samples[i + 2];
+                let s3 = samples[i + 3];
+
+                let v_x = _mm256_set_pd(s3.0, s2.0, s1.0, s0.0);
+                let v_y = _mm256_set_pd(s3.1, s2.1, s1.1, s0.1);
+                let v_img_val = _mm256_set_pd(s3.2, s2.2, s1.2, s0.2);
+
+                let v_dist = _mm256_add_pd(
+                    _mm256_add_pd(_mm256_mul_pd(v_nx, v_x), _mm256_mul_pd(v_ny, v_y)),
+                    v_d,
+                );
+                let v_s = _mm256_mul_pd(v_dist, v_inv_sigma);
+
+                let v_abs_s = _mm256_andnot_pd(v_abs_mask, v_s);
+                let v_range_mask = _mm256_cmp_pd(v_abs_s, _mm256_set1_pd(3.0), _CMP_LE_OQ);
+
+                if _mm256_movemask_pd(v_range_mask) != 0 {
+                    // SAFETY: transmute is safe for same-size SIMD ↔ array conversions.
+                    let ss: [f64; 4] = std::mem::transmute(v_s);
+                    let iv: [f64; 4] = std::mem::transmute(v_img_val);
+                    let mm: [f64; 4] = std::mem::transmute(v_range_mask);
+
+                    for j in 0..4 {
+                        if mm[j] != 0.0 {
+                            let s_val = ss[j];
+                            let model = (a + b) * 0.5
+                                + (b - a) * 0.5 * crate::simd::math::erf_approx(s_val);
+                            let residual = iv[j] - model;
+                            let jac = k * (-s_val * s_val).exp();
+                            sum_jtj += jac * jac;
+                            sum_jt_res += jac * residual;
+                        }
+                    }
+                }
+                i += 4;
+            }
+        }
+    }
+
+    // Scalar tail
+    while i < samples.len() {
+        let (x, y, img_val) = samples[i];
+        let dist = nx * x + ny * y + d;
+        let s = dist * inv_sigma;
+        if s.abs() <= 3.0 {
+            let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::simd::math::erf_approx(s);
+            let residual = img_val - model;
+            let jac = k * (-s * s).exp();
+            sum_jtj += jac * jac;
+            sum_jt_res += jac * residual;
+        }
+        i += 1;
+    }
+
+    (sum_jtj, sum_jt_res)
+}
+
 /// Fit a line (nx*x + ny*y + d = 0) to an edge using the ERF intensity model.
-///
-/// Delegates to the unified `ErfEdgeFitter` with decoder-style configuration:
-/// gradient-based d scan, per-iteration A/B refinement, and SIMD accumulation.
 fn fit_edge_erf(
     arena: &bumpalo::Bump,
     img: &crate::image::ImageView,
@@ -85,21 +771,14 @@ fn fit_edge_erf(
     p2: [f64; 2],
     sigma: f64,
 ) -> Option<(f64, f64, f64)> {
-    use crate::edge_refinement::{ErfEdgeFitter, RefineConfig, SampleConfig};
-
-    let mut fitter = ErfEdgeFitter::new(img, p1, p2, false)?;
+    let mut fitter = EdgeFitter::new(img, p1, p2)?;
     fitter.scan_initial_d();
-
-    let sample_cfg = SampleConfig::default();
-    let samples = fitter.collect_samples(arena, &sample_cfg);
+    let samples = fitter.collect_samples(arena);
     if samples.len() < 10 {
         return None;
     }
-
-    let refine_cfg = RefineConfig::decoder_style(sigma);
-    fitter.refine(&samples, &refine_cfg);
-
-    Some(fitter.line_params())
+    fitter.refine(&samples, sigma);
+    Some((fitter.nx, fitter.ny, fitter.d))
 }
 
 /// Returns the threshold that maximizes inter-class variance.

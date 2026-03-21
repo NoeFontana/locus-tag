@@ -67,9 +67,6 @@ nav:
       - how-to/debug_with_rerun.md
   - Explanation:
       - explanation/architecture.md
-      - explanation/pipeline.md
-      - explanation/memory_model.md
-      - explanation/algorithms.md
       - explanation/coordinates.md
       - Benchmarking:
           - benchmarking.md
