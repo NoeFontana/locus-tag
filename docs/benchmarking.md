@@ -122,6 +122,8 @@ PYTHONPATH=. uv run --group bench tools/cli.py bench real --scenarios forward --
 You can save a "Golden Baseline" and compare current performance against it.
 
 Historical Performance Profiles:
+- [SOTA Metrology Config + GN Covariance Propagation (2026-03-21)](./benchmarking/sota_metrology_20260321.md)
+- [EDLines + Joint Gauss-Newton (2026-03-21)](./benchmarking/edlines_gauss_newton_20260321.md)
 - [DDA-SIMD Decoding Profile (2026-03-16)](./benchmarking/funnel_dda_20260316.md)
 - [SoA Migration Profile (2026-03-03)](./benchmarking/soa_migration_20260303.md)
 - [Initial Baseline (2026-03-02)](./benchmarking/baseline_20260302.md)

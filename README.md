@@ -20,18 +20,46 @@
 - **Advanced Pose Estimation**: High-precision 6-DOF recovery using IPPE-Square or weighted Levenberg-Marquardt with corner uncertainty modeling.
 - **Visual Debugging**: Native integration with the **[Rerun SDK](https://rerun.io)** for real-time pipeline inspection.
 
-## Performance (ICRA 2020 Dataset)
+## Performance
 
-Evaluated on the standard ICRA 2020 benchmark (50 images). Latency measured on a modern desktop CPU.
+Locus ships three scenario-specific SOTA presets alongside the production default. Choose the preset that matches your use case:
 
-| Detector | Recall | RMSE | Latency (1080p avg) |
-| :--- | :---: | :---: | :---: |
-| **Locus (Soft)** | **96.23%** | 0.29 px | 80.2 ms |
-| **Locus (Hard)** | 76.87% | 0.26 px | **66.3 ms** |
-| AprilTag 3 | 62.34% | **0.22 px** | 105.9 ms |
-| OpenCV | 33.16% | 0.92 px | 108.2 ms |
+| Scenario | Preset | Key metric |
+| :--- | :--- | :--- |
+| Dense multi-tag detection | `sota_pure_tags_default()` | **96.2%** recall (ICRA forward, 50 images) |
+| Touching-tag checkerboard grids | `sota_checkerboard_default()` | **91.4%** recall (ICRA checkerboard, 50 images) |
+| Single-tag metrology / calibration | `sota_metrology_default()` | **0.16–0.29 px** corner RMSE (hub, 4 resolutions) |
+| Balanced production | `production_default()` | 100% recall + precision on fixtures |
 
-*Note: Locus utilizes a Structure of Arrays (SoA) layout to achieve ~3.8x speedup over previous versions in dense tag environments.*
+### ICRA 2020 — Multi-Tag Detection (50 images, forward/pure_tags)
+
+| Detector | Recall | RMSE |
+| :--- | :---: | :---: |
+| **Locus (`sota_pure_tags_default`)** | **96.2%** | 0.315 px |
+| Locus (`production_default`) | 76.9% | **0.274 px** |
+| AprilTag 3 | 62.3% | 0.22 px |
+| OpenCV | 33.2% | 0.92 px |
+
+### ICRA 2020 — Checkerboard (50 images, forward/checkerboard_corners)
+
+| Detector | Recall | RMSE |
+| :--- | :---: | :---: |
+| **Locus (`sota_checkerboard_default`)** | **91.4%** | 0.458 px |
+| Locus (legacy checkerboard) | 73.0% | 0.332 px |
+| Locus (`production_default`) | — | — |
+
+*Production without 4-connectivity merges adjacent tag regions; not applicable to checkerboard scenes.*
+
+### Hub — Single-Tag Metrology (720p, `PoseEstimationMode::Accurate`)
+
+| Config | Recall | Corner RMSE | Trans P50 | Rot P50 |
+| :--- | :---: | :---: | :---: | :---: |
+| **Locus (`sota_metrology_default`)** | 96.0% | **0.277 px** | **1.0 mm** | **0.35°** |
+| Locus (`production_default`) | **100%** | 0.933 px | 5.8 mm | 2.20° |
+
+*`sota_metrology_default` uses the EdLines Joint Gauss-Newton solver — per-corner 2×2 covariances propagate directly to the weighted LM pose solver, achieving 3–6× lower corner RMSE and 6–8× lower pose error vs production.*
+
+Full benchmark tables, methodology, and per-resolution results: [`docs/benchmarking/sota_metrology_20260321.md`](docs/benchmarking/sota_metrology_20260321.md)
 
 ## Quick Start
 

@@ -288,6 +288,63 @@ impl DetectorConfig {
             .build()
     }
 
+    /// SOTA configuration for dense multi-tag detection (pure_tags / forward scenes).
+    ///
+    /// Optimised for maximum recall on dense scenes with many isolated tags at varying
+    /// distances, such as the ICRA 2020 `forward/pure_tags_images` benchmark.
+    ///
+    /// Key difference from [`production_default`]: `DecodeMode::Soft` — LLR-based
+    /// decoding recovers tags that Hard-decision misses due to blur or marginal contrast,
+    /// yielding ~+19pp recall on ICRA forward (96.2% vs 76.9%) at a modest RMSE cost.
+    /// All other parameters match `production_default` (Erf refinement, sharpening on,
+    /// moments culling) to preserve the quad candidate quality that Hard relies on.
+    ///
+    /// **Trade-off:** Soft decoding is ~2–4× slower on the decode phase. Use Hard
+    /// (`production_default`) when throughput is the primary constraint.
+    #[must_use]
+    pub fn sota_pure_tags_default() -> Self {
+        Self::builder()
+            .refinement_mode(CornerRefinementMode::Erf)
+            .enable_sharpening(true)
+            .threshold_tile_size(8)
+            .quad_max_elongation(20.0)
+            .quad_min_density(0.15)
+            .decode_mode(DecodeMode::Soft)
+            .build()
+    }
+
+    /// SOTA configuration for touching/adjacent tags in checkerboard grid patterns.
+    ///
+    /// Designed for scenes where tag borders share a boundary (saddle corners), such
+    /// as the ICRA 2020 `forward/checkerboard_corners_images` benchmark.
+    ///
+    /// **Non-negotiable invariants:**
+    /// - `segmentation_connectivity: Four` — 8-connectivity merges adjacent tag regions
+    ///   into one component; Four-connectivity correctly separates touching borders.
+    /// - `decoder_min_contrast: 10.0` — packed tags are low-contrast; the default 20.0
+    ///   causes the Otsu gate to reject valid tags at shared borders.
+    /// - `quad_min_edge_score: 2.0` — touching borders produce weaker edge scores;
+    ///   this relaxed threshold prevents false negatives on interior tag edges.
+    /// - `enable_sharpening: false` — Laplacian sharpening creates halos at shared
+    ///   borders, biasing the threshold and causing merged components.
+    ///
+    /// `DecodeMode::Soft` is added on top of the checkerboard invariants as it may
+    /// further improve recall for low-contrast packed tags.
+    #[must_use]
+    pub fn sota_checkerboard_default() -> Self {
+        Self::builder()
+            .refinement_mode(CornerRefinementMode::Erf)
+            .enable_sharpening(false)
+            .threshold_tile_size(8)
+            .quad_max_elongation(20.0)
+            .quad_min_density(0.15)
+            .segmentation_connectivity(SegmentationConnectivity::Four)
+            .decoder_min_contrast(10.0)
+            .quad_min_edge_score(2.0)
+            .decode_mode(DecodeMode::Soft)
+            .build()
+    }
+
     /// Low-latency configuration for high-speed tracking.
     ///
     /// Disables heavy pre-processing and uses lighter corner refinement.
@@ -296,6 +353,40 @@ impl DetectorConfig {
         Self::builder()
             .refinement_mode(CornerRefinementMode::Edge)
             .enable_sharpening(false)
+            .threshold_tile_size(8)
+            .build()
+    }
+
+    /// State-of-the-art metrology configuration for maximum pose accuracy.
+    ///
+    /// Bridges the deterministic GN 2D solver directly to the probabilistic 3D solver:
+    ///
+    /// - **Phase 1 (2D Geometric Locking):** EdLines Joint Gauss-Newton solver produces
+    ///   sub-pixel corners and their per-corner 2×2 covariance matrices (from H⁻¹).
+    /// - **Phase 2 (Uncertainty Translation):** GN covariances propagate to the pose
+    ///   solver via `batch.corner_covariances`; the Structure Tensor is used as a
+    ///   fallback only if the GN solver diverges for a given corner.
+    /// - **Phase 3 (3D Metrology):** Weighted Levenberg-Marquardt minimizes Mahalanobis
+    ///   distance weighted by the GN-derived corner covariances.
+    ///
+    /// Pre-processing filters are disabled to pass the raw PSF directly to the solver.
+    /// Hard decoding is used to maintain precision; Soft decode causes a precision
+    /// collapse (~10–20%) on EdLines due to the larger number of quad candidates.
+    /// For maximum recall on multi-tag scenes use [`sota_pure_tags_default`].
+    /// For touching-tag checkerboard grids use [`sota_checkerboard_default`].
+    ///
+    /// **Pose tuning targets:** `structure_tensor_radius`, `sigma_n_sq`,
+    /// `tikhonov_alpha_max`, `huber_delta_px` — sweep these against your sensor profile.
+    #[must_use]
+    pub fn sota_metrology_default() -> Self {
+        Self::builder()
+            .quad_extraction_mode(QuadExtractionMode::EdLines)
+            .refinement_mode(CornerRefinementMode::None)
+            .enable_sharpening(false)
+            .enable_bilateral(false)
+            .quad_max_elongation(20.0)
+            .quad_min_density(0.15)
+            .decode_mode(DecodeMode::Hard)
             .threshold_tile_size(8)
             .build()
     }
@@ -346,6 +437,14 @@ pub struct DetectorConfigBuilder {
     pub quad_min_density: Option<f64>,
     /// Quad extraction mode.
     pub quad_extraction_mode: Option<QuadExtractionMode>,
+    /// Huber delta for LM reprojection (pixels).
+    pub huber_delta_px: Option<f64>,
+    /// Maximum Tikhonov regularisation alpha for Accurate mode.
+    pub tikhonov_alpha_max: Option<f64>,
+    /// Pixel noise variance for Structure Tensor covariance model.
+    pub sigma_n_sq: Option<f64>,
+    /// Radius of the Structure Tensor window in Accurate mode.
+    pub structure_tensor_radius: Option<u8>,
 }
 
 impl DetectorConfigBuilder {
@@ -516,10 +615,12 @@ impl DetectorConfigBuilder {
             refinement_mode: self.refinement_mode.unwrap_or(d.refinement_mode),
             decode_mode: self.decode_mode.unwrap_or(d.decode_mode),
             max_hamming_error: self.max_hamming_error.unwrap_or(d.max_hamming_error),
-            huber_delta_px: d.huber_delta_px,
-            tikhonov_alpha_max: d.tikhonov_alpha_max,
-            sigma_n_sq: d.sigma_n_sq,
-            structure_tensor_radius: d.structure_tensor_radius,
+            huber_delta_px: self.huber_delta_px.unwrap_or(d.huber_delta_px),
+            tikhonov_alpha_max: self.tikhonov_alpha_max.unwrap_or(d.tikhonov_alpha_max),
+            sigma_n_sq: self.sigma_n_sq.unwrap_or(d.sigma_n_sq),
+            structure_tensor_radius: self
+                .structure_tensor_radius
+                .unwrap_or(d.structure_tensor_radius),
             gwlf_transversal_alpha: self
                 .gwlf_transversal_alpha
                 .unwrap_or(d.gwlf_transversal_alpha),
@@ -617,6 +718,34 @@ impl DetectorConfigBuilder {
     #[must_use]
     pub fn quad_extraction_mode(mut self, mode: QuadExtractionMode) -> Self {
         self.quad_extraction_mode = Some(mode);
+        self
+    }
+
+    /// Set the Huber delta for LM reprojection (pixels).
+    #[must_use]
+    pub fn huber_delta_px(mut self, delta: f64) -> Self {
+        self.huber_delta_px = Some(delta);
+        self
+    }
+
+    /// Set the maximum Tikhonov regularisation alpha for Accurate pose mode.
+    #[must_use]
+    pub fn tikhonov_alpha_max(mut self, alpha: f64) -> Self {
+        self.tikhonov_alpha_max = Some(alpha);
+        self
+    }
+
+    /// Set the pixel noise variance for the Structure Tensor covariance model.
+    #[must_use]
+    pub fn sigma_n_sq(mut self, sigma_n_sq: f64) -> Self {
+        self.sigma_n_sq = Some(sigma_n_sq);
+        self
+    }
+
+    /// Set the Structure Tensor window radius for Accurate pose mode.
+    #[must_use]
+    pub fn structure_tensor_radius(mut self, radius: u8) -> Self {
+        self.structure_tensor_radius = Some(radius);
         self
     }
 }
