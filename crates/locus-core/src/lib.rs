@@ -14,6 +14,8 @@ pub mod decoder;
 pub mod detector;
 /// Tag family dictionaries (AprilTag, ArUco).
 pub mod dictionaries;
+/// Unified ERF-based sub-pixel edge refinement (Gauss-Newton solver).
+pub(crate) mod edge_refinement;
 /// EDLines localized quad extraction.
 pub(crate) mod edlines;
 /// Error types for the detection pipeline.
