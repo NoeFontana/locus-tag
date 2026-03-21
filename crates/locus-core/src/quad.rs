@@ -21,6 +21,9 @@ use bumpalo::collections::Vec as BumpVec;
 use multiversion::multiversion;
 use std::cell::RefCell;
 
+/// Per-corner 2×2 covariances as `[[σ_xx, σ_xy, σ_yx, σ_yy]; 4]`.
+pub(crate) type CornerCovariances = [[f32; 4]; 4];
+
 thread_local! {
     /// Reusable per-thread arena for quad extraction, avoiding a `Bump::new()` per candidate.
     static QUAD_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(8 * 1024));
@@ -90,7 +93,7 @@ pub fn extract_quads_soa(
 
     // Collect into a temporary Vec to handle the MAX_CANDIDATES limit and sequential writing.
     // In a future optimization, we could use an atomic counter to write directly into the batch.
-    let detections: Vec<([Point; 4], [Point; 4])> = stats
+    let detections: Vec<([Point; 4], [Point; 4], CornerCovariances)> = stats
         .par_iter()
         .enumerate()
         .filter_map(|(label_idx, stat)| {
@@ -119,12 +122,19 @@ pub fn extract_quads_soa(
         None
     };
 
-    for (i, (corners, unrefined_pts)) in detections.into_iter().take(n).enumerate() {
+    for (i, (corners, unrefined_pts, covs)) in detections.into_iter().take(n).enumerate() {
         for (j, corner) in corners.iter().enumerate() {
             batch.corners[i][j] = Point2f {
                 x: corner.x as f32,
                 y: corner.y as f32,
             };
+        }
+        // Write per-corner 2×2 covariances (4 floats each, 16 total per candidate).
+        for (chunk, cov) in batch.corner_covariances[i]
+            .chunks_exact_mut(4)
+            .zip(covs.iter())
+        {
+            chunk.copy_from_slice(cov);
         }
         if let Some(ref mut u) = unrefined {
             u.push(unrefined_pts);
@@ -152,7 +162,7 @@ fn extract_single_quad(
     config: &DetectorConfig,
     decimation: usize,
     refinement_img: &ImageView,
-) -> Option<([Point; 4], [Point; 4])> {
+) -> Option<([Point; 4], [Point; 4], CornerCovariances)> {
     let min_edge_len_sq = config.quad_min_edge_length * config.quad_min_edge_length;
     let d = decimation as f64;
 
@@ -192,7 +202,10 @@ fn extract_single_quad(
     }
 
     // Passed filters — extract rough quad corners using the configured mode.
-    let quad_pts_dec: [Point; 4] = match config.quad_extraction_mode {
+    // `gn_covs` carries per-corner 2×2 covariances from the EdLines GN solver;
+    // zero for ContourRdp (no covariance information available).
+    let (quad_pts_dec, gn_covs): ([Point; 4], CornerCovariances) = match config.quad_extraction_mode
+    {
         crate::config::QuadExtractionMode::EdLines => {
             let ed_cfg = crate::edlines::EdLinesConfig::from_detector_config(config);
             crate::edlines::extract_quad_edlines(
@@ -251,9 +264,15 @@ fn extract_single_quad(
 
             // Standardize to CW for consistency
             if area > 0.0 {
-                [reduced[0], reduced[1], reduced[2], reduced[3]]
+                (
+                    [reduced[0], reduced[1], reduced[2], reduced[3]],
+                    [[0.0; 4]; 4],
+                )
             } else {
-                [reduced[0], reduced[3], reduced[2], reduced[1]]
+                (
+                    [reduced[0], reduced[3], reduced[2], reduced[1]],
+                    [[0.0; 4]; 4],
+                )
             }
         },
     };
@@ -313,57 +332,66 @@ fn extract_single_quad(
         // This is appropriate for EdLines, which handles sub-pixel refinement
         // internally; it is also an explicit opt-out for benchmarking.
         // All other modes call `refine_corner`.
-        let corners = if config.refinement_mode == crate::config::CornerRefinementMode::None {
-            quad_pts
-        } else {
-            let use_erf = config.refinement_mode == crate::config::CornerRefinementMode::Erf;
-            [
-                refine_corner(
-                    arena,
-                    refinement_img,
-                    quad_pts[0],
-                    quad_pts[3],
-                    quad_pts[1],
-                    config.subpixel_refinement_sigma,
-                    decimation,
-                    use_erf,
-                ),
-                refine_corner(
-                    arena,
-                    refinement_img,
-                    quad_pts[1],
-                    quad_pts[0],
-                    quad_pts[2],
-                    config.subpixel_refinement_sigma,
-                    decimation,
-                    use_erf,
-                ),
-                refine_corner(
-                    arena,
-                    refinement_img,
-                    quad_pts[2],
-                    quad_pts[1],
-                    quad_pts[3],
-                    config.subpixel_refinement_sigma,
-                    decimation,
-                    use_erf,
-                ),
-                refine_corner(
-                    arena,
-                    refinement_img,
-                    quad_pts[3],
-                    quad_pts[2],
-                    quad_pts[0],
-                    config.subpixel_refinement_sigma,
-                    decimation,
-                    use_erf,
-                ),
-            ]
-        };
+        //
+        // Covariances: only propagate GN covariances when no further refinement
+        // is applied (Mode::None).  GWLF computes its own covariances in
+        // detector.rs; ERF has none.  When refinement overwrites corners,
+        // the GN covariances are no longer valid.
+        let (corners, out_covs) =
+            if config.refinement_mode == crate::config::CornerRefinementMode::None {
+                (quad_pts, gn_covs)
+            } else {
+                let use_erf = config.refinement_mode == crate::config::CornerRefinementMode::Erf;
+                (
+                    [
+                        refine_corner(
+                            arena,
+                            refinement_img,
+                            quad_pts[0],
+                            quad_pts[3],
+                            quad_pts[1],
+                            config.subpixel_refinement_sigma,
+                            decimation,
+                            use_erf,
+                        ),
+                        refine_corner(
+                            arena,
+                            refinement_img,
+                            quad_pts[1],
+                            quad_pts[0],
+                            quad_pts[2],
+                            config.subpixel_refinement_sigma,
+                            decimation,
+                            use_erf,
+                        ),
+                        refine_corner(
+                            arena,
+                            refinement_img,
+                            quad_pts[2],
+                            quad_pts[1],
+                            quad_pts[3],
+                            config.subpixel_refinement_sigma,
+                            decimation,
+                            use_erf,
+                        ),
+                        refine_corner(
+                            arena,
+                            refinement_img,
+                            quad_pts[3],
+                            quad_pts[2],
+                            quad_pts[0],
+                            config.subpixel_refinement_sigma,
+                            decimation,
+                            use_erf,
+                        ),
+                    ],
+                    [[0.0; 4]; 4],
+                )
+            };
 
         let edge_score = calculate_edge_score(refinement_img, corners);
         if edge_score > config.quad_min_edge_score {
-            return Some((corners, quad_pts));
+            return Some((corners, quad_pts, out_covs));
         }
     }
     None
@@ -408,7 +436,7 @@ pub fn extract_quads_with_config(
                     refinement_img,
                 );
 
-                let (corners, _unrefined) = quad_result?;
+                let (corners, _unrefined, _covs) = quad_result?;
                 // To keep backward compatibility, we still need to calculate some fields
                 // that aren't yet in the SoA (or are derived from it).
                 let area = polygon_area(&corners);
