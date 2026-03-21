@@ -46,6 +46,8 @@ pub mod strategy;
 pub mod test_utils;
 /// Adaptive thresholding implementation.
 pub mod threshold;
+/// Thread-local workspace arena for per-candidate allocations.
+pub(crate) mod workspace;
 
 // Re-exports for the public API
 pub use crate::config::{
