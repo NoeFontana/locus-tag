@@ -35,6 +35,12 @@ pub enum ConfigPreset {
     PlainBoard,
     /// Optimized for touching tags in checkerboard patterns.
     Checkerboard,
+    /// SOTA metrology: EdLines GN + covariance propagation + Weighted LM.
+    SotaMetrology,
+    /// SOTA dense multi-tag: ContourRdp + Soft decode for maximum recall.
+    SotaPureTags,
+    /// SOTA checkerboard: 4-connectivity + relaxed contrast/edge gates + Soft decode.
+    SotaCheckerboard,
 }
 
 impl ConfigPreset {
@@ -51,6 +57,9 @@ impl ConfigPreset {
                 config.enable_sharpening = false;
                 config
             },
+            Self::SotaMetrology => DetectorConfig::sota_metrology_default(),
+            Self::SotaPureTags => DetectorConfig::sota_pure_tags_default(),
+            Self::SotaCheckerboard => DetectorConfig::sota_checkerboard_default(),
         }
     }
 }
@@ -742,6 +751,78 @@ fn regression_icra_forward_edlines_moments() {
             .with_families(vec![TagFamily::AprilTag36h11])
             .with_quad_extraction_mode(locus_core::config::QuadExtractionMode::EdLines)
             .with_moments_culling(15.0, 0.15)
+            .run(provider);
+    }
+}
+
+// ── SOTA Metrology (EdLines GN + covariance propagation + Weighted LM) ───────
+
+#[test]
+fn regression_fixtures_sota() {
+    let _guard = common::telemetry::init("regression_fixtures_sota");
+    let provider = FixtureProvider::new();
+    RegressionHarness::new("fixtures_sota")
+        .with_preset(ConfigPreset::SotaMetrology)
+        .with_families(vec![TagFamily::AprilTag36h11])
+        .run(provider);
+}
+
+#[test]
+fn regression_icra_forward_sota() {
+    let _guard = common::telemetry::init("regression_icra_forward_sota");
+    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
+        let snapshot = "icra_forward_pure_default_sota".to_string();
+        RegressionHarness::new(snapshot)
+            .with_preset(ConfigPreset::SotaMetrology)
+            .with_families(vec![TagFamily::AprilTag36h11])
+            .run(provider);
+    }
+}
+
+// ── SOTA Pure Tags (ContourRdp + Soft, max recall on dense multi-tag) ─────────
+
+#[test]
+fn regression_fixtures_sota_pure_tags() {
+    let _guard = common::telemetry::init("regression_fixtures_sota_pure_tags");
+    let provider = FixtureProvider::new();
+    RegressionHarness::new("fixtures_sota_pure_tags")
+        .with_preset(ConfigPreset::SotaPureTags)
+        .with_families(vec![TagFamily::AprilTag36h11])
+        .run(provider);
+}
+
+#[test]
+fn regression_icra_forward_sota_pure_tags() {
+    let _guard = common::telemetry::init("regression_icra_forward_sota_pure_tags");
+    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
+        let snapshot = "icra_forward_pure_default_sota_pure_tags".to_string();
+        RegressionHarness::new(snapshot)
+            .with_preset(ConfigPreset::SotaPureTags)
+            .with_families(vec![TagFamily::AprilTag36h11])
+            .run(provider);
+    }
+}
+
+// ── SOTA Checkerboard (4-conn + relaxed contrast/edge + Soft) ─────────────────
+
+#[test]
+fn regression_fixtures_sota_checkerboard() {
+    let _guard = common::telemetry::init("regression_fixtures_sota_checkerboard");
+    let provider = FixtureProvider::new();
+    RegressionHarness::new("fixtures_sota_checkerboard")
+        .with_preset(ConfigPreset::SotaCheckerboard)
+        .with_families(vec![TagFamily::AprilTag36h11])
+        .run(provider);
+}
+
+#[test]
+fn regression_icra_forward_sota_checkerboard() {
+    let _guard = common::telemetry::init("regression_icra_forward_sota_checkerboard");
+    if let Some(provider) = IcraProvider::new("forward", Some("checkerboard_corners_images")) {
+        let snapshot = "icra_forward_checkerboard_sota".to_string();
+        RegressionHarness::new(snapshot)
+            .with_preset(ConfigPreset::SotaCheckerboard)
+            .with_families(vec![TagFamily::AprilTag36h11])
             .run(provider);
     }
 }
