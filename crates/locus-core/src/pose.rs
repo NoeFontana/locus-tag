@@ -137,7 +137,7 @@ pub fn estimate_tag_pose_with_config(
     external_covariances: Option<&[Matrix2<f64>; 4]>,
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>) {
     // 1. Canonical Homography: Map canonical square [-1,1]x[-1,1] to image pixels.
-    let Some(h_poly) = crate::decoder::Homography::square_to_quad(corners) else {
+    let Some(h_poly) = crate::homography::Homography::square_to_quad(corners) else {
         return (None, None);
     };
     let h_pixel = h_poly.h;
