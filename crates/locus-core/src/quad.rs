@@ -279,17 +279,26 @@ fn extract_single_quad(
         },
     ];
 
-    // Expand 0.5px outward from centers to objects boundaries.
-    // This aligns the unrefined quad with integer pixel boundaries.
-    let center_x = (quad_pts[0].x + quad_pts[1].x + quad_pts[2].x + quad_pts[3].x) * 0.25;
-    let center_y = (quad_pts[0].y + quad_pts[1].y + quad_pts[2].y + quad_pts[3].y) * 0.25;
-
-    let mut expanded_pts = [quad_pts[0], quad_pts[1], quad_pts[2], quad_pts[3]];
-    for i in 0..4 {
-        expanded_pts[i].x += 0.5 * (quad_pts[i].x - center_x).signum();
-        expanded_pts[i].y += 0.5 * (quad_pts[i].y - center_y).signum();
-    }
-    let quad_pts = expanded_pts;
+    // Expand 0.5px outward from the centroid to align with pixel boundaries.
+    // This is needed for ContourRdp, whose corners are at integer-coordinate
+    // midpoints of edge segments.  EdLines already produces full-resolution
+    // sub-pixel corners (from its micro-ray parabola + Gauss-Newton pass), so
+    // applying the expansion would move them *away* from the true edge and force
+    // the subsequent refine_corner to fight the artificial offset.
+    let quad_pts = if config.quad_extraction_mode == crate::config::QuadExtractionMode::EdLines {
+        quad_pts // corners already sub-pixel accurate; no expansion needed
+    } else {
+        let center_x =
+            (quad_pts[0].x + quad_pts[1].x + quad_pts[2].x + quad_pts[3].x) * 0.25;
+        let center_y =
+            (quad_pts[0].y + quad_pts[1].y + quad_pts[2].y + quad_pts[3].y) * 0.25;
+        let mut ep = quad_pts;
+        for i in 0..4 {
+            ep[i].x += 0.5 * (quad_pts[i].x - center_x).signum();
+            ep[i].y += 0.5 * (quad_pts[i].y - center_y).signum();
+        }
+        ep
+    };
 
     let mut ok = true;
     for i in 0..4 {
@@ -302,49 +311,57 @@ fn extract_single_quad(
     }
 
     if ok {
-        let use_erf = config.refinement_mode == crate::config::CornerRefinementMode::Erf;
-        let corners = [
-            refine_corner(
-                arena,
-                refinement_img,
-                quad_pts[0],
-                quad_pts[3],
-                quad_pts[1],
-                config.subpixel_refinement_sigma,
-                decimation,
-                use_erf,
-            ),
-            refine_corner(
-                arena,
-                refinement_img,
-                quad_pts[1],
-                quad_pts[0],
-                quad_pts[2],
-                config.subpixel_refinement_sigma,
-                decimation,
-                use_erf,
-            ),
-            refine_corner(
-                arena,
-                refinement_img,
-                quad_pts[2],
-                quad_pts[1],
-                quad_pts[3],
-                config.subpixel_refinement_sigma,
-                decimation,
-                use_erf,
-            ),
-            refine_corner(
-                arena,
-                refinement_img,
-                quad_pts[3],
-                quad_pts[2],
-                quad_pts[0],
-                config.subpixel_refinement_sigma,
-                decimation,
-                use_erf,
-            ),
-        ];
+        // `CornerRefinementMode::None` passes the quad corners through untouched.
+        // This is appropriate for EdLines, which handles sub-pixel refinement
+        // internally; it is also an explicit opt-out for benchmarking.
+        // All other modes call `refine_corner`.
+        let corners = if config.refinement_mode == crate::config::CornerRefinementMode::None {
+            quad_pts
+        } else {
+            let use_erf = config.refinement_mode == crate::config::CornerRefinementMode::Erf;
+            [
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[0],
+                    quad_pts[3],
+                    quad_pts[1],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[1],
+                    quad_pts[0],
+                    quad_pts[2],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[2],
+                    quad_pts[1],
+                    quad_pts[3],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[3],
+                    quad_pts[2],
+                    quad_pts[0],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+            ]
+        };
 
         let edge_score = calculate_edge_score(refinement_img, corners);
         if edge_score > config.quad_min_edge_score {

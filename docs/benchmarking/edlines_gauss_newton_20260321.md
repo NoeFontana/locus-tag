@@ -14,8 +14,12 @@ This report covers the two algorithmic additions landed on `feat/edline-2`:
 |---|---|---|
 | **EDLines pipeline** (Phases 1–4) | Angular-arc boundary scan → Huber IRLS → micro-ray parabolic sub-pixel → per-edge IRLS re-fit + line intersection | earlier |
 | **Phase 5 Joint Gauss-Newton** | 8-DOF joint corner optimiser; stack-allocated 8×8 Cholesky, zero allocations, exclusion-zone filter | `8b1d85f` |
+| **Expansion fix** | Skip ±0.5px centroid expansion for EdLines (was designed for integer ContourRdp corners only) | main |
+| **None-mode fix** | `CornerRefinementMode::None` now correctly skips refinement; previously fell through to GWLF | main |
 
-The Gauss-Newton stage replaces independent pairwise line intersection with a joint optimisation that enforces geometric planarity across all four corners simultaneously.
+The Gauss-Newton stage replaces independent pairwise line intersection with a joint optimisation
+that enforces geometric planarity across all four corners simultaneously. The expansion fix (not
+applying ±0.5px outward push to already sub-pixel GN corners) recovers significant accuracy.
 
 ---
 
@@ -39,13 +43,16 @@ Latencies measured on the regression machine above; they include full detection 
 | ContourRdp (default) | **100%** | 0.933 px | 5.8 mm | 2.20° | 60 ms |
 | ContourRdp Fast | **100%** | 0.933 px | 5.3 mm | 2.20° | 80 ms |
 | Moments Culling | **100%** | 0.933 px | 5.8 mm | 2.20° | 58 ms |
-| GWLF | **100%** | 0.751 px | 3.7 mm | **0.31°** | 59 ms |
-| **EDLines** | 96% | **0.661 px** | **3.9 mm** | 0.39° | 68 ms |
-| **EDLines + Moments** | 96% | **0.661 px** | **3.9 mm** | 0.39° | 61 ms |
+| GWLF | **100%** | 0.751 px | 3.7 mm | 0.31° | 59 ms |
+| **EDLines + GWLF** | 96% | 0.621 px | 3.9 mm | **0.16°** | 68 ms |
+| **EDLines + ERF** | 96% | 0.592 px | 3.9 mm | 0.28° | 68 ms |
+| **EDLines + None** | 96% | **0.166 px** | **2.7 mm** | 0.27° | 65 ms |
+| **EDLines + Moments + None** | 96% | **0.166 px** | **2.7 mm** | 0.27° | 58 ms |
 
-EDLines gives the lowest corner RMSE (−29% vs ContourRdp) and excellent rotation accuracy
-(0.39° vs 2.20° for default = −82%). GWLF achieves the best absolute rotation (0.31°) at
-full recall; EDLines closes to within 0.08° at 4% recall cost.
+EDLines+None (GN corners used directly, no post-refinement) gives the lowest corner RMSE by
+far (−82% vs ContourRdp). ERF post-processing is counter-productive when applied to already
+sub-pixel GN corners. EDLines+GWLF achieves the best absolute rotation (0.16°) at the cost
+of higher per-corner RMSE, by imposing global line-direction constraints.
 
 ### 2.3 1080p / 1920×1080 (45 images)
 
@@ -55,11 +62,12 @@ full recall; EDLines closes to within 0.08° at 4% recall cost.
 | ContourRdp Fast | **100%** | 1.146 px | 11.8 mm | 2.13° | 117 ms |
 | Moments Culling | **100%** | 1.146 px | 10.7 mm | 2.24° | 109 ms |
 | GWLF | **100%** | 0.928 px | 4.9 mm | **0.31°** | 108 ms |
-| **EDLines** | 97.8% | **0.772 px** | **4.4 mm** | 0.50° | 124 ms |
-| **EDLines + Moments** | 97.8% | **0.772 px** | **4.4 mm** | 0.50° | 120 ms |
+| **EDLines + ERF** | 97.8% | 0.689 px | 4.4 mm | 0.36° | 124 ms |
+| **EDLines + Moments + ERF** | 97.8% | 0.689 px | 4.4 mm | 0.36° | 120 ms |
 
-EDLines: −33% corner RMSE vs ContourRdp default, −17% vs GWLF. Rotation within 0.19° of
-GWLF's best. Latency overhead vs ContourRdp: +14% (EDLines) / +10% (EDLines+Moments).
+Note: post-expansion-fix numbers (±0.5px centroid expansion now skipped for EdLines).
+EDLines+ERF: −40% corner RMSE vs ContourRdp default, −26% vs GWLF. See Section 5 for
+the full refinement-mode comparison; EdLines+None is recommended for best corner accuracy.
 
 ### 2.4 4K / 3840×2160 (45 images)
 
@@ -69,14 +77,13 @@ GWLF's best. Latency overhead vs ContourRdp: +14% (EDLines) / +10% (EDLines+Mome
 | ContourRdp Fast | 97.8% | 1.116 px | 41.4 mm | 6.68° | 178 ms |
 | Moments Culling | 97.8% | 1.116 px | 43.5 mm | 6.68° | 208 ms |
 | GWLF | 97.8% | **0.829 px** | **9.9 mm** | **0.97°** | 109 ms |
-| **EDLines** | 75.6% | **0.522 px** | 12.2 mm | 0.80° | 233 ms |
-| **EDLines + Moments** | 82.2% | 0.563 px | 12.2 mm | 0.80° | 231 ms |
+| **EDLines + ERF** | 82.2% | **0.506 px** | 12.2 mm | 0.70° | 233 ms |
+| **EDLines + Moments + ERF** | 84.4% | 0.516 px | 12.2 mm | 0.70° | 231 ms |
 
-At 4K, EDLines achieves the lowest corner RMSE of all configurations (−53% vs ContourRdp)
-but at a significant recall penalty (−22% absolute). Root cause: at high resolution the
-component bounding boxes are large; boundary scan + IRLS is losing some highly-oblique tags.
-Moments culling recovers 6.6 percentage points of recall (82% vs 76%). GWLF is the
-recommended mode at 4K — it matches EDLines pose accuracy while maintaining recall.
+Note: post-expansion-fix numbers. Recall at 4K improved significantly (+6.6pp) after the
+±0.5px expansion fix; corner RMSE also improved (−3%). GWLF is still recommended at 4K
+for applications requiring >85% recall. For metrology at 4K, EdLines+None will give the
+lowest per-corner RMSE (see Section 5).
 
 ---
 
@@ -153,11 +160,30 @@ corner pixel positions move slightly from their independently-optimal locations.
 | Use Case | Recommended Config | Rationale |
 |---|---|---|
 | Production robotics (single tag) | **GWLF** | Best recall + rotation accuracy |
-| Metrology / calibration | **EDLines + GN** | Lowest corner RMSE |
+| Metrology / calibration | **EDLines + GN + None** | Lowest corner RMSE (0.166 px at 720p) |
+| Angular precision (robotics) | **EDLines + GN + GWLF** | Best Rot P50 (0.16° at 720p) |
 | High-recall multi-tag scenes | **ContourRdp + Soft** | +20pp recall vs hard decode |
 | Cluttered scenes (speed) | **Moments Culling** | Rejects elongated blobs before contour |
 | 4K single tag | **GWLF** | EDLines recall loss too large at 4K |
 | Fastest path (embedded) | **ContourRdp Fast** | Skips Structure Tensor pose |
+
+### EDLines Refinement Mode Comparison (720p hub, 50 images)
+
+The GN corners produced by Phase 5 are already sub-pixel accurate. Applying ERF post-refinement
+is counter-productive — it moves corners away from their geometrically-consistent GN positions.
+
+| Config | Corner RMSE | Reprojection RMSE | Rot P50 | Notes |
+|---|---|---|---|---|
+| **EdLines + None** (GN direct) | **0.166 px** | **0.541** | 0.27° | Best for metrology |
+| EdLines + ERF (default) | 0.592 px | 0.848 | 0.28° | ERF degrades GN accuracy |
+| **EdLines + GWLF** | 0.621 px | 0.656 | **0.16°** | Best rotation stability |
+
+**Key finding:** Using `CornerRefinementMode::None` with `QuadExtractionMode::EdLines` gives
+3.5× lower corner RMSE than ERF and the lowest reprojection error. ERF was designed for integer
+ContourRdp corners; it should not be used with EDLines GN output.
+
+**Recommendation for EDLines users:** Always set `CornerRefinementMode::None` unless angular
+stability is the primary goal, in which case use `CornerRefinementMode::Gwlf`.
 
 ---
 

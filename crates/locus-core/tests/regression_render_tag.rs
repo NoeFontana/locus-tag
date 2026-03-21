@@ -818,6 +818,29 @@ fn run_hub_test_tuned(
     min_density: f64,
     quad_mode: locus_core::config::QuadExtractionMode,
 ) {
+    run_hub_test_tuned_r(
+        config_name,
+        family,
+        mode,
+        snapshot_suffix,
+        max_elongation,
+        min_density,
+        quad_mode,
+        None,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_hub_test_tuned_r(
+    config_name: &str,
+    family: TagFamily,
+    mode: PoseEstimationMode,
+    snapshot_suffix: &str,
+    max_elongation: f64,
+    min_density: f64,
+    quad_mode: locus_core::config::QuadExtractionMode,
+    refinement: Option<locus_core::config::CornerRefinementMode>,
+) {
     if let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") {
         let root = resolve_hub_root(&hub_dir);
         let dataset_path = root.join(config_name);
@@ -870,13 +893,16 @@ fn run_hub_test_tuned(
                 PoseEstimationMode::Accurate => "",
             };
             let snapshot = format!("hub_{}{}{}", provider.name(), mode_suffix, snapshot_suffix);
-            RegressionHarness::new(snapshot)
+            let mut harness = RegressionHarness::new(snapshot)
                 .with_preset(ConfigPreset::PlainBoard)
                 .with_families(vec![family])
                 .with_options(options)
                 .with_moments_culling(max_elongation, min_density)
-                .with_quad_extraction_mode(quad_mode)
-                .run(provider);
+                .with_quad_extraction_mode(quad_mode);
+            if let Some(r) = refinement {
+                harness = harness.with_refinement_mode(r);
+            }
+            harness.run(provider);
         }
     } else {
         println!("Skipping hub tests. Set LOCUS_HUB_DATASET_DIR to run.");
@@ -1060,6 +1086,36 @@ fn regression_hub_tag36h11_720p_edlines_moments() {
         15.0,
         0.15,
         locus_core::config::QuadExtractionMode::EdLines,
+    );
+}
+
+#[test]
+fn regression_hub_tag36h11_720p_edlines_none() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_720p_edlines_none");
+    run_hub_test_tuned_r(
+        "single_tag_locus_v1_tag36h11_1280x720",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
+        "_edlines_none",
+        0.0,
+        0.0,
+        locus_core::config::QuadExtractionMode::EdLines,
+        Some(locus_core::config::CornerRefinementMode::None),
+    );
+}
+
+#[test]
+fn regression_hub_tag36h11_720p_edlines_gwlf() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_720p_edlines_gwlf");
+    run_hub_test_tuned_r(
+        "single_tag_locus_v1_tag36h11_1280x720",
+        TagFamily::AprilTag36h11,
+        PoseEstimationMode::Accurate,
+        "_edlines_gwlf",
+        0.0,
+        0.0,
+        locus_core::config::QuadExtractionMode::EdLines,
+        Some(locus_core::config::CornerRefinementMode::Gwlf),
     );
 }
 
