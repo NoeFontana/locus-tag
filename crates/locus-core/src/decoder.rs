@@ -13,13 +13,8 @@ use crate::simd::roi::RoiCache;
 use bumpalo::Bump;
 use multiversion::multiversion;
 use nalgebra::{SMatrix, SVector};
-use std::cell::RefCell;
 
-thread_local! {
-    // Use a small initial capacity (e.g., 4KB) to avoid system allocation overhead for small workloads.
-    // The arena will still grow if needed.
-    pub(crate) static DECODE_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(4096));
-}
+use crate::workspace::WORKSPACE_ARENA;
 
 /// A 3x3 Homography matrix.
 pub struct Homography {
@@ -1371,7 +1366,7 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                 return (batch.status_mask[i], 0, 0, 0, batch.error_rates[i], None);
             }
 
-            DECODE_ARENA.with_borrow_mut(|arena| {
+            WORKSPACE_ARENA.with_borrow_mut(|arena| {
                     arena.reset();
 
                     let corners = &batch.corners[i];

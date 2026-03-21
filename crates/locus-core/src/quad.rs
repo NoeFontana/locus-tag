@@ -19,15 +19,11 @@ use crate::segmentation::LabelResult;
 use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
 use multiversion::multiversion;
-use std::cell::RefCell;
+
+use crate::workspace::WORKSPACE_ARENA;
 
 /// Per-corner 2×2 covariances as `[[σ_xx, σ_xy, σ_yx, σ_yy]; 4]`.
 pub(crate) type CornerCovariances = [[f32; 4]; 4];
-
-thread_local! {
-    /// Reusable per-thread arena for quad extraction, avoiding a `Bump::new()` per candidate.
-    static QUAD_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(8 * 1024));
-}
 
 // Re-export erf_approx from its canonical home in the math module.
 pub(crate) use crate::simd::math::erf_approx;
@@ -72,7 +68,7 @@ pub fn extract_quads_soa(
         .par_iter()
         .enumerate()
         .filter_map(|(label_idx, stat)| {
-            QUAD_ARENA.with(|cell| {
+            WORKSPACE_ARENA.with(|cell| {
                 let mut arena = cell.borrow_mut();
                 arena.reset();
                 let label = (label_idx + 1) as u32;
@@ -395,7 +391,7 @@ pub fn extract_quads_with_config(
         .par_iter()
         .enumerate()
         .filter_map(|(label_idx, stat)| {
-            QUAD_ARENA.with(|cell| {
+            WORKSPACE_ARENA.with(|cell| {
                 let mut arena = cell.borrow_mut();
                 arena.reset();
                 let label = (label_idx + 1) as u32;
