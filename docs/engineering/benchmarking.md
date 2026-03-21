@@ -79,7 +79,7 @@ cargo bench --bench decoding_real_bench
 ```
 
 ### Mutually Exclusive Telemetry Matrix
-Locus implements a zero-cost, mutually exclusive telemetry architecture for its regression tests to avoid the "Observer Effect". You cannot simultaneously emit structured JSON logs and capture high-fidelity Tracy profiles without the JSON serialization skewing the nanosecond timings. 
+Locus implements a zero-cost, mutually exclusive telemetry architecture for its regression tests to avoid the "Observer Effect". You cannot simultaneously emit structured JSON logs and capture high-fidelity Tracy profiles without the JSON serialization skewing the nanosecond timings.
 
 To resolve this, we decouple the profilers at the CI level using `TELEMETRY_MODE`.
 
@@ -95,6 +95,20 @@ Dumps structured pipeline timings to `target/profiling/*_events.json` for AI ana
 ```bash
 TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features bench-internals -- --test-threads=1
 ```
+
+---
+
+## Performance Reports
+
+### Current
+- [SOTA Presets + GN Covariance (2026-03-21)](benchmarking/sota_metrology_20260321.md)
+- [EDLines + Joint Gauss-Newton (2026-03-21)](benchmarking/edlines_gauss_newton_20260321.md)
+- [SIMD CCL Fusion (2026-03-19)](benchmarking/simd_ccl_fusion_20260319.md)
+- [Current Micro-Benchmark Baseline (2026-03-19)](benchmarking/baseline_micro_20260319.md)
+- [Micro-Benchmarking Guide](benchmarking/micro-benchmarking-guide.md)
+
+### Historical
+- [Performance Evolution (Mar 2–16)](benchmarking/historical_evolution.md) — consolidated timeline of superseded reports
 
 ---
 
@@ -121,19 +135,12 @@ PYTHONPATH=. uv run --group bench tools/cli.py bench real --scenarios forward --
 ### Regression Tracking (Baselines)
 You can save a "Golden Baseline" and compare current performance against it.
 
-Historical Performance Profiles:
-- [SOTA Metrology Config + GN Covariance Propagation (2026-03-21)](./benchmarking/sota_metrology_20260321.md)
-- [EDLines + Joint Gauss-Newton (2026-03-21)](./benchmarking/edlines_gauss_newton_20260321.md)
-- [DDA-SIMD Decoding Profile (2026-03-16)](./benchmarking/funnel_dda_20260316.md)
-- [SoA Migration Profile (2026-03-03)](./benchmarking/soa_migration_20260303.md)
-- [Initial Baseline (2026-03-02)](./benchmarking/baseline_20260302.md)
-
 ```bash
 # Save a baseline
-PYTHONPATH=. uv run --group bench tools/cli.py bench real --scenarios forward --save-baseline docs/benchmarking/baseline.json
+PYTHONPATH=. uv run --group bench tools/cli.py bench real --scenarios forward --save-baseline docs/engineering/benchmarking/baseline.json
 
 # Compare current run against baseline
-PYTHONPATH=. uv run --group bench tools/cli.py bench real --scenarios forward --baseline docs/benchmarking/baseline.json
+PYTHONPATH=. uv run --group bench tools/cli.py bench real --scenarios forward --baseline docs/engineering/benchmarking/baseline.json
 ```
 
 ### Deep Profiling (Tracy)
@@ -161,11 +168,11 @@ For diagnosing recall issues or tuning parameters, use the specialized visualiza
 uv run tools/cli.py visualize --scenario forward --limit 5
 ```
 
-Locus provides a high-fidelity debugging pipeline integrated with the [Rerun SDK](https://rerun.io). 
+Locus provides a high-fidelity debugging pipeline integrated with the [Rerun SDK](https://rerun.io).
 
 ### Features
 - **Convergence Tracking**: Visualize subpixel jitter (yellow arrows) and reprojection errors (scalar plots) for every tag.
 - **Failure Diagnosis**: Differentiate between geometric rejections (Red) and decoding failures (Orange).
 - **Remote & Edge Ready**: Debug edge devices remotely using `--rerun-addr` to stream to a local Rerun viewer.
 
-For a comprehensive walkthrough, see the **[How-to Guide: Debugging with Rerun](./how-to/debug_with_rerun.md)**.
+For a comprehensive walkthrough, see the **[How-to Guide: Debugging with Rerun](../how-to/debug_with_rerun.md)**.

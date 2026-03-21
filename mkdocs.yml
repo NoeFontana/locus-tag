@@ -71,21 +71,6 @@ nav:
       - explanation/memory_model.md
       - explanation/algorithms.md
       - explanation/coordinates.md
-      - Benchmarking:
-          - benchmarking.md
-          - benchmarking/baseline_20260302.md
-          - benchmarking/soa_migration_20260303.md
-          - benchmarking/hub_multi_res_20260308.md
-          - benchmarking/hub_locus_v1_20260312.md
-          - benchmarking/micro-benchmarking-guide.md
-          - benchmarking/baseline_micro_20260307.md
-          - benchmarking/baseline_micro_20260315.md
-          - benchmarking/funnel_dda_20260316.md
-          - benchmarking/simd_ccl_fusion_20260319.md
-          - benchmarking/baseline_micro_20260319.md
-          - benchmarking/improvements_regression_20260315.md
-          - benchmarking/edlines_gauss_newton_20260321.md
-          - benchmarking/sota_metrology_20260321.md
   - Reference:
       - reference/api.md
   - Engineering (Internal):
@@ -97,3 +82,11 @@ nav:
       - engineering/rust-style.md
       - engineering/python-style.md
       - engineering/general-style.md
+      - Benchmarking:
+          - engineering/benchmarking.md
+          - engineering/benchmarking/micro-benchmarking-guide.md
+          - engineering/benchmarking/baseline_micro_20260319.md
+          - engineering/benchmarking/simd_ccl_fusion_20260319.md
+          - engineering/benchmarking/edlines_gauss_newton_20260321.md
+          - engineering/benchmarking/sota_metrology_20260321.md
+          - engineering/benchmarking/historical_evolution.md

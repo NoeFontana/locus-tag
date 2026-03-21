@@ -37,4 +37,4 @@ Latest baseline for core pipeline stages across multiple resolutions after SIMD 
 
 ---
 
-*Note: Raw metrics are stored in `docs/benchmarking/divan_baseline.json`.*
+*Note: Raw metrics are stored in `docs/engineering/benchmarking/divan_baseline.json`.*

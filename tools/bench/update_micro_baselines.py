@@ -118,7 +118,7 @@ def main():
 
     input_file = Path(sys.argv[1])
     baseline_file = (
-        Path(sys.argv[2]) if len(sys.argv) > 2 else Path("docs/benchmarking/divan_baseline.json")
+        Path(sys.argv[2]) if len(sys.argv) > 2 else Path("docs/engineering/benchmarking/divan_baseline.json")
     )
     report_file = Path(sys.argv[3]) if len(sys.argv) > 3 else None
 
