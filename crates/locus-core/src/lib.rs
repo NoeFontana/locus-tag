@@ -28,6 +28,8 @@ pub mod funnel;
 pub mod gradient;
 /// Gradient-Weighted Line Fitting (GWLF).
 pub mod gwlf;
+/// Projective geometry primitives (Homography, DDA, DLT solver).
+pub mod homography;
 /// Image buffer abstractions.
 pub mod image;
 /// 3D Pose Estimation (PnP).
