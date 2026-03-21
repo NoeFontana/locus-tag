@@ -1,6 +1,6 @@
 //! Robustness tests for geometry solvers and pose estimation.
 use locus_core::{
-    CameraIntrinsics, PoseEstimationMode, homography::Homography, pose::estimate_tag_pose,
+    CameraIntrinsics, PoseEstimationMode, decoder::Homography, pose::estimate_tag_pose,
 };
 use proptest::prelude::*;
 

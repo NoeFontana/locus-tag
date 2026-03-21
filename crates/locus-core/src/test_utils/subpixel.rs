@@ -209,10 +209,9 @@ mod tests {
 
             if let Some((nx, _ny, d)) = result {
                 // Recovered edge: nx*x + ny*y + d = 0
-                // For vertical edge, |nx| should be 1.0
-                assert!((nx.abs() - 1.0).abs() < 1e-7);
-                // x_recovered = -d / nx (sign-agnostic)
-                let x_recovered = -d / nx;
+                // For vertical edge, nx should be 1.0
+                assert!((nx - 1.0).abs() < 1e-7);
+                let x_recovered = -d;
                 let error = (x_recovered - x_gt).abs();
                 println!("x_gt={x_gt}, recovered={x_recovered}, error={error}");
 
@@ -259,17 +258,10 @@ mod tests {
             );
 
             if let Some((nx, ny, d)) = result {
-                // Ground truth line is a*x + b*y + c = 0
-                // Recovered line is nx*x + ny*y + d = 0
-                // These define the same line up to a global sign flip.
-                // Normalize: if signs differ, compare against negated ground truth.
-                let sign = if nx * line_gt.a + ny * line_gt.b > 0.0 {
-                    1.0
-                } else {
-                    -1.0
-                };
-                let error_n = (nx - sign * line_gt.a).abs() + (ny - sign * line_gt.b).abs();
-                let error_d = (d - sign * line_gt.c).abs();
+                // Ground truth line is nx_gt*x + ny_gt*y + d_gt = 0
+                // Our recovered line parameters are (nx, ny, d)
+                let error_n = (nx - line_gt.a).abs() + (ny - line_gt.b).abs();
+                let error_d = (d - line_gt.c).abs();
 
                 println!("Angle {angle_deg}deg: error_n={error_n:.6}, error_d={error_d:.6}");
 
@@ -314,12 +306,11 @@ mod tests {
                 "refine_edge_intensity failed for length {len}"
             );
 
-            if let Some((nx, _ny, d)) = result {
-                let x_recovered = -d / nx;
+            if let Some((_nx, _ny, d)) = result {
+                let x_recovered = -d;
                 let error = (x_recovered - p1_x).abs();
                 println!("Length {len}: error={error:.6}");
-                // Long edges (>100px) use stride=2 subsampling, allowing ~0.015px tolerance.
-                assert!(error < 0.015, "Error {error} too high for length {len}");
+                assert!(error < 0.01);
             }
         }
     }
@@ -357,10 +348,10 @@ mod tests {
             "refine_edge_intensity failed with decimation upscaling"
         );
 
-        if let Some((nx, _ny, d)) = result {
+        if let Some((_nx, _ny, d)) = result {
             // Mapping back to full res should be x_full = (x_dec - 0.5) * (decimation as f64) + 0.5
             // because SubpixelEdgeRenderer::render_edge uses subsampling (pick top-left).
-            let x_dec_recovered = -d / nx;
+            let x_dec_recovered = -d;
             let x_full_recovered = (x_dec_recovered - 0.5) * (decimation as f64) + 0.5;
 
             let error = (x_full_recovered - x_gt).abs();
@@ -399,8 +390,8 @@ mod tests {
         let p1 = Point { x: 30.0, y: 0.0 };
         let p2 = Point { x: 30.0, y: 60.0 };
 
-        if let Some((nx, _ny, d)) = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1) {
-            let error = (-d / nx - x_gt).abs();
+        if let Some((_nx, _ny, d)) = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1) {
+            let error = (-d - x_gt).abs();
             println!("Noisy recovery error: {error:.4}");
             assert!(error < 0.05);
         }
@@ -424,8 +415,8 @@ mod tests {
         let p1 = Point { x: 30.0, y: 0.0 };
         let p2 = Point { x: 30.0, y: 60.0 };
 
-        if let Some((nx, _ny, d)) = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1) {
-            let error = (-d / nx - x_gt).abs();
+        if let Some((_nx, _ny, d)) = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1) {
+            let error = (-d - x_gt).abs();
             println!("Low contrast recovery error: {error:.4}");
             assert!(error < 0.05);
         }
@@ -449,8 +440,8 @@ mod tests {
         let p1 = Point { x: 30.0, y: 0.0 };
         let p2 = Point { x: 30.0, y: 60.0 };
 
-        if let Some((nx, _ny, d)) = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1) {
-            let error = (-d / nx - x_gt).abs();
+        if let Some((_nx, _ny, d)) = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1) {
+            let error = (-d - x_gt).abs();
             println!("Clipped recovery error: {error:.4}");
             assert!(error < 0.1);
         }
@@ -476,8 +467,8 @@ mod tests {
         let p1 = Point { x: 31.75, y: 0.0 };
         let p2 = Point { x: 31.75, y: 60.0 };
 
-        if let Some((nx, _ny, d)) = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1) {
-            let error = (-d / nx - x_gt).abs();
+        if let Some((_nx, _ny, d)) = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1) {
+            let error = (-d - x_gt).abs();
             println!("Off-edge seed recovery error: {error:.4}");
             assert!(error < 0.1);
         }

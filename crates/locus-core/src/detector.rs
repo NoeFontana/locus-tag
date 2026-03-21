@@ -250,7 +250,7 @@ impl Detector {
         }
 
         // 4. Homography Pass (SoA)
-        crate::homography::compute_homographies_soa(
+        crate::decoder::compute_homographies_soa(
             &state.batch.corners[0..n],
             &state.batch.status_mask[0..n],
             &mut state.batch.homographies[0..n],
@@ -298,7 +298,7 @@ impl Detector {
             }
 
             // Recompute homographies after refinement
-            crate::homography::compute_homographies_soa(
+            crate::decoder::compute_homographies_soa(
                 &state.batch.corners[0..n],
                 &state.batch.status_mask[0..n],
                 &mut state.batch.homographies[0..n],

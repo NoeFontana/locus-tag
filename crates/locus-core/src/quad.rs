@@ -29,6 +29,9 @@ thread_local! {
     static QUAD_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(8 * 1024));
 }
 
+// Re-export erf_approx from its canonical home in the math module.
+pub(crate) use crate::simd::math::erf_approx;
+
 // Re-export the canonical Point type from the crate root.
 pub use crate::Point;
 
@@ -851,15 +854,18 @@ fn fit_edge_line(
 /// Instead of finding gradient peaks, this minimizes the difference between
 /// observed pixel intensities and a PSF-blurred step function model:
 ///
-/// Model(x,y) = (A+B)/2 + (B-A)/2 * erf(dist(x,y,line) / σ)
+/// Model(x,y) = (A+B)/2 + (A-B)/2 * erf(dist(x,y,line) / σ)
 ///
 /// where A,B are intensities on either side, dist is perpendicular distance
 /// to the edge line, and σ is the blur factor (~0.6 pixels).
 ///
 /// This achieves ~0.02px accuracy vs ~0.2px for gradient-based methods.
-///
-/// Delegates to the unified `ErfEdgeFitter` with quad-style configuration:
-/// midpoint-based d initialization, one-shot A/B estimation, decimation-aware window.
+#[allow(
+    clippy::similar_names,
+    clippy::many_single_char_names,
+    clippy::too_many_lines
+)]
+// Collected in the quad extraction process
 pub(crate) fn refine_edge_intensity(
     arena: &Bump,
     img: &ImageView,
@@ -868,32 +874,139 @@ pub(crate) fn refine_edge_intensity(
     sigma: f64,
     decimation: usize,
 ) -> Option<(f64, f64, f64)> {
-    use crate::edge_refinement::{ErfEdgeFitter, RefineConfig, SampleConfig};
+    let dx = p2.x - p1.x;
+    let dy = p2.y - p1.y;
+    let len = (dx * dx + dy * dy).sqrt();
+    if len < 4.0 {
+        return None;
+    }
 
-    let mut fitter = ErfEdgeFitter::new(img, [p1.x, p1.y], [p2.x, p2.y], true)?;
+    // Initial line parameters: normal (nx, ny) and distance d from origin
+    // For CW winding, the outward normal is (dy/len, -dx/len)
+    let nx = dy / len;
+    let ny = -dx / len;
+    let mid_x = f64::midpoint(p1.x, p2.x);
+    let mid_y = f64::midpoint(p1.y, p2.y);
+    let mut d = -(nx * mid_x + ny * mid_y);
 
+    // Collect pixels within a window of the edge.
     let window = if decimation > 1 {
         (decimation as f64) + 1.0
     } else {
         2.5
     };
-    let stride = if fitter.edge_len() > 100.0 { 2 } else { 1 };
 
-    let sample_cfg = SampleConfig {
-        window,
-        stride,
-        t_range: (-0.1, 1.1),
-    };
-    let samples = fitter.collect_samples(arena, &sample_cfg);
+    let x0 = (p1.x.min(p2.x) - window - 0.5).max(1.0) as usize;
+    let x1 = (p1.x.max(p2.x) + window + 0.5).min((img.width - 2) as f64) as usize;
+    let y0 = (p1.y.min(p2.y) - window - 0.5).max(1.0) as usize;
+    let y1 = (p1.y.max(p2.y) + window + 0.5).min((img.height - 2) as f64) as usize;
 
-    if samples.len() < 10 {
-        return Some(fitter.line_params());
+    // Use arena for samples to avoid heap allocation in hot loop
+    // (x, y, intensity, projection)
+    let mut samples = BumpVec::new_in(arena);
+
+    // For large edges, use subsampling to reduce compute while maintaining accuracy
+    // Stride of 2 for very large edges (>100px), else 1
+    let stride = if len > 100.0 { 2 } else { 1 };
+
+    let mut py = y0;
+    while py <= y1 {
+        let mut px = x0;
+        while px <= x1 {
+            // Foundation Principle 1: Pixel center is at (px+0.5, py+0.5)
+            let x = px as f64 + 0.5;
+            let y = py as f64 + 0.5;
+
+            // Check if near the edge segment (not infinite line)
+            let t = ((x - p1.x) * dx + (y - p1.y) * dy) / (len * len);
+            if !(-0.1..=1.1).contains(&t) {
+                px += stride;
+                continue;
+            }
+
+            let dist_signed = nx * x + ny * y + d;
+            if dist_signed.abs() < window {
+                let intensity = f64::from(img.get_pixel(px, py));
+                // Pre-calculate nx*x + ny*y
+                let projection = nx * x + ny * y;
+                samples.push((x, y, intensity, projection));
+            }
+            px += stride;
+        }
+        py += stride;
     }
 
-    let refine_cfg = RefineConfig::quad_style(sigma);
-    fitter.refine(&samples, &refine_cfg);
+    if samples.len() < 10 {
+        return Some((nx, ny, d)); // Fall back to initial estimate
+    }
 
-    Some(fitter.line_params())
+    // Estimate A (dark side) and B (light side) from samples
+    // Use weighted average based on distance from edge to be more robust
+    let mut dark_sum = 0.0;
+    let mut dark_weight = 0.0;
+    let mut light_sum = 0.0;
+    let mut light_weight = 0.0;
+
+    for &(_x, _y, intensity, projection) in &samples {
+        let signed_dist = projection + d;
+        if signed_dist < -1.0 {
+            let w = (-signed_dist - 1.0).min(2.0); // Weight pixels further from edge more
+            dark_sum += intensity * w;
+            dark_weight += w;
+        } else if signed_dist > 1.0 {
+            let w = (signed_dist - 1.0).min(2.0);
+            light_sum += intensity * w;
+            light_weight += w;
+        }
+    }
+
+    if dark_weight < 1.0 || light_weight < 1.0 {
+        return Some((nx, ny, d));
+    }
+
+    let a = dark_sum / dark_weight; // Dark side (A)
+    let b = light_sum / light_weight; // Light side (B)
+
+    // Foundation Principle 2: I(d) = (A+B)/2 + (B-A)/2 * erf(d / sigma)
+    let inv_s_sqrt2 = 1.0 / sigma;
+
+    // Gauss-Newton optimization: refine d
+    for _iter in 0..15 {
+        let mut jtj = 0.0;
+        let mut jtr = 0.0;
+
+        for &(_x, _y, intensity, projection) in &samples {
+            let dist_phys = projection + d;
+            let u = dist_phys * inv_s_sqrt2;
+
+            if u.abs() > 3.0 {
+                continue;
+            }
+
+            let erf_u = erf_approx(u);
+            let model = (a + b) * 0.5 + (b - a) * 0.5 * erf_u;
+            let residual = intensity - model;
+
+            // Jacobians
+            let exp_term = (-u * u).exp();
+            let jd = (b - a) * 0.5 * std::f64::consts::FRAC_2_SQRT_PI * exp_term * inv_s_sqrt2;
+
+            jtj += jd * jd;
+            jtr += jd * residual;
+        }
+
+        if jtj.abs() > 1e-10 {
+            let delta = jtr / jtj;
+            d += delta.clamp(-0.5, 0.5);
+            if delta.abs() < 1e-4 {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    Some((nx, ny, d))
 }
 
 /// Reducing a polygon to a quad (4 vertices + 1 closing) by iteratively removing
@@ -992,7 +1105,6 @@ fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
 #[allow(clippy::unwrap_used, clippy::float_cmp)]
 mod tests {
     use super::*;
-    use crate::simd::math::erf_approx;
     use bumpalo::Bump;
     use proptest::prelude::*;
 
