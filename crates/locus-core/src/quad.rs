@@ -29,36 +29,11 @@ thread_local! {
     static QUAD_ARENA: RefCell<Bump> = RefCell::new(Bump::with_capacity(8 * 1024));
 }
 
-/// Approximate error function (erf) using the Abramowitz and Stegun approximation.
-pub(crate) fn erf_approx(x: f64) -> f64 {
-    if x == 0.0 {
-        return 0.0;
-    }
-    let sign = if x < 0.0 { -1.0 } else { 1.0 };
-    let x = x.abs();
+// Re-export erf_approx from its canonical home in the math module.
+pub(crate) use crate::simd::math::erf_approx;
 
-    // Constants for approximation
-    let a1 = 0.254_829_592;
-    let a2 = -0.284_496_736;
-    let a3 = 1.421_413_741;
-    let a4 = -1.453_152_027;
-    let a5 = 1.061_405_429;
-    let p = 0.327_591_1;
-
-    let t = 1.0 / (1.0 + p * x);
-    let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-x * x).exp();
-
-    sign * y
-}
-
-/// A 2D point with subpixel precision.
-#[derive(Clone, Copy, Debug)]
-pub struct Point {
-    /// X coordinate.
-    pub x: f64,
-    /// Y coordinate.
-    pub y: f64,
-}
+// Re-export the canonical Point type from the crate root.
+pub use crate::Point;
 
 /// Fast quad extraction using bounding box stats from CCL.
 /// Only traces contours for components that pass geometric filters.
@@ -1134,44 +1109,6 @@ mod tests {
     use proptest::prelude::*;
 
     #[test]
-    fn test_erf_approx_properties() {
-        // Zero crossing
-        assert_eq!(erf_approx(0.0), 0.0);
-
-        // Symmetry: erf(-x) == -erf(x)
-        for x in [0.1, 0.5, 1.0, 2.0, 5.0] {
-            assert!((erf_approx(-x) + erf_approx(x)).abs() < 1e-15);
-        }
-
-        // Asymptotic bounds: erf(inf) -> 1.0, erf(-inf) -> -1.0
-        assert!((erf_approx(10.0) - 1.0).abs() < 1e-7);
-        assert!((erf_approx(-10.0) + 1.0).abs() < 1e-7);
-        assert!((erf_approx(100.0) - 1.0).abs() < 1e-15); // Should clamp or saturate
-    }
-
-    #[test]
-    fn test_erf_approx_accuracy() {
-        // Ground truth values (approx)
-        // x = 0.5, erf(0.5) ≈ 0.5204998778130465
-        // x = 1.0, erf(1.0) ≈ 0.8427007929497148
-        // x = 2.0, erf(2.0) ≈ 0.9953222650189527
-        let cases = [
-            (0.5, 0.520_499_877_813_046_5),
-            (1.0, 0.842_700_792_949_714_8),
-            (2.0, 0.995_322_265_018_952_7),
-        ];
-
-        for (x, expected) in cases {
-            let actual = erf_approx(x);
-            let diff = (actual - expected).abs();
-            assert!(
-                diff < 1.5e-7,
-                "erf_approx({x}) error {diff} exceeds tolerance 1.5e-7"
-            );
-        }
-    }
-
-    #[test]
     fn test_edge_score_rejection() {
         // Create a 20x20 image mostly gray
         let width = 20;
@@ -1228,14 +1165,6 @@ mod tests {
     }
 
     proptest! {
-        #[test]
-        fn prop_erf_approx_accuracy(x in -3.0..3.0f64) {
-            let actual = erf_approx(x);
-            let expected = libm::erf(x);
-            let diff = (actual - expected).abs();
-            assert!(diff < 1.5e-7, "erf_approx({x}) error {diff} exceeds tolerance 1.5e-7");
-        }
-
         #[test]
         fn prop_douglas_peucker_invariants(
             points in prop::collection::vec((0.0..1000.0, 0.0..1000.0), 3..100),

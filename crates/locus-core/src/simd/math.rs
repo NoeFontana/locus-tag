@@ -78,7 +78,114 @@ pub(crate) fn bilinear_interpolate_fixed(x: f32, y: f32, p00: u8, p10: u8, p01: 
     res as u8
 }
 
+/// Approximate error function (erf) using the Abramowitz and Stegun approximation.
+///
+/// Maximum error: 1.5e-7 over the entire domain.
+/// This is a pure, stateless mathematical function extracted from the quad module
+/// to serve as a foundational leaf dependency for both quad refinement and decoder stages.
+#[must_use]
+pub(crate) fn erf_approx(x: f64) -> f64 {
+    if x == 0.0 {
+        return 0.0;
+    }
+    let sign = if x < 0.0 { -1.0 } else { 1.0 };
+    let x = x.abs();
+
+    // Abramowitz and Stegun constants (formula 7.1.26)
+    let a1 = 0.254_829_592;
+    let a2 = -0.284_496_736;
+    let a3 = 1.421_413_741;
+    let a4 = -1.453_152_027;
+    let a5 = 1.061_405_429;
+    let p = 0.327_591_1;
+
+    let t = 1.0 / (1.0 + p * x);
+    let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-x * x).exp();
+
+    sign * y
+}
+
+/// Vectorized error function approximation over 4 lanes (AVX2 `__m256d`).
+///
+/// Computes `erf_approx` for 4 `f64` values simultaneously using FMA instructions,
+/// eliminating the register-spill penalty of unpacking to scalar in the Gauss-Newton loop.
+///
+/// On non-AVX2 targets, falls back to 4 scalar evaluations.
+#[cfg(all(
+    target_arch = "x86_64",
+    target_feature = "avx2",
+    target_feature = "fma"
+))]
+#[must_use]
+pub(crate) unsafe fn erf_approx_v4(x: std::arch::x86_64::__m256d) -> std::arch::x86_64::__m256d {
+    use std::arch::x86_64::*;
+
+    // sign = copysign(1.0, x)
+    let sign_mask = _mm256_set1_pd(-0.0);
+    let sign_bits = _mm256_and_pd(x, sign_mask);
+    let abs_x = _mm256_andnot_pd(sign_mask, x);
+
+    // Abramowitz and Stegun constants
+    let a1 = _mm256_set1_pd(0.254_829_592);
+    let a2 = _mm256_set1_pd(-0.284_496_736);
+    let a3 = _mm256_set1_pd(1.421_413_741);
+    let a4 = _mm256_set1_pd(-1.453_152_027);
+    let a5 = _mm256_set1_pd(1.061_405_429);
+    let p = _mm256_set1_pd(0.327_591_1);
+    let one = _mm256_set1_pd(1.0);
+
+    // t = 1.0 / (1.0 + p * |x|)
+    let t = _mm256_div_pd(one, _mm256_fmadd_pd(p, abs_x, one));
+
+    // Horner's method: poly = ((((a5*t + a4)*t + a3)*t + a2)*t + a1)
+    let poly = _mm256_fmadd_pd(a5, t, a4);
+    let poly = _mm256_fmadd_pd(poly, t, a3);
+    let poly = _mm256_fmadd_pd(poly, t, a2);
+    let poly = _mm256_fmadd_pd(poly, t, a1);
+
+    // exp(-x^2): compute using scalar fallback since there's no fast _mm256_exp_pd.
+    // We extract, compute exp, and re-pack. This is still faster than full scalar erf
+    // because the polynomial chain above is fully vectorized.
+    let neg_x2 = _mm256_mul_pd(abs_x, abs_x);
+    let neg_x2 = _mm256_xor_pd(neg_x2, sign_mask); // negate
+
+    // SAFETY: transmute is safe for same-size SIMD ↔ array conversions.
+    let neg_x2_arr: [f64; 4] = std::mem::transmute(neg_x2);
+    let exp_vals = _mm256_set_pd(
+        neg_x2_arr[3].exp(),
+        neg_x2_arr[2].exp(),
+        neg_x2_arr[1].exp(),
+        neg_x2_arr[0].exp(),
+    );
+
+    // y = 1.0 - poly * t * exp(-x^2)
+    let y = _mm256_fnmadd_pd(_mm256_mul_pd(poly, t), exp_vals, one);
+
+    // Apply sign: result = y XOR sign_bits
+    _mm256_or_pd(y, sign_bits)
+}
+
+/// Scalar fallback for `erf_approx_v4` on non-AVX2 targets.
+///
+/// Evaluates 4 `f64` values independently using the scalar `erf_approx`.
+#[cfg(not(all(
+    target_arch = "x86_64",
+    target_feature = "avx2",
+    target_feature = "fma"
+)))]
+#[must_use]
+#[allow(dead_code)]
+pub(crate) fn erf_approx_v4(x: [f64; 4]) -> [f64; 4] {
+    [
+        erf_approx(x[0]),
+        erf_approx(x[1]),
+        erf_approx(x[2]),
+        erf_approx(x[3]),
+    ]
+}
+
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
 
@@ -94,6 +201,87 @@ mod tests {
                 diff < 1e-4,
                 "rcp_nr({w}) failed: expected {expected}, got {actual}, diff {diff}"
             );
+        }
+    }
+
+    #[test]
+    fn test_erf_approx_properties() {
+        // Zero crossing
+        assert_eq!(erf_approx(0.0), 0.0);
+
+        // Symmetry: erf(-x) == -erf(x)
+        for x in [0.1, 0.5, 1.0, 2.0, 5.0] {
+            assert!((erf_approx(-x) + erf_approx(x)).abs() < 1e-15);
+        }
+
+        // Asymptotic bounds
+        assert!((erf_approx(10.0) - 1.0).abs() < 1e-7);
+        assert!((erf_approx(-10.0) + 1.0).abs() < 1e-7);
+        assert!((erf_approx(100.0) - 1.0).abs() < 1e-15);
+    }
+
+    #[test]
+    fn test_erf_approx_accuracy() {
+        let cases = [
+            (0.5, 0.520_499_877_813_046_5),
+            (1.0, 0.842_700_792_949_714_8),
+            (2.0, 0.995_322_265_018_952_7),
+        ];
+
+        for (x, expected) in cases {
+            let actual = erf_approx(x);
+            let diff = (actual - expected).abs();
+            assert!(
+                diff < 1.5e-7,
+                "erf_approx({x}) error {diff} exceeds tolerance 1.5e-7"
+            );
+        }
+    }
+
+    #[test]
+    fn test_erf_approx_v4_matches_scalar() {
+        let inputs = [0.5, -1.0, 2.0, -0.3];
+
+        #[cfg(all(
+            target_arch = "x86_64",
+            target_feature = "avx2",
+            target_feature = "fma"
+        ))]
+        {
+            use std::arch::x86_64::*;
+            // SAFETY: AVX2+FMA checked by cfg.
+            unsafe {
+                let v = _mm256_set_pd(inputs[3], inputs[2], inputs[1], inputs[0]);
+                let result = erf_approx_v4(v);
+                let result_arr: [f64; 4] = std::mem::transmute(result);
+                for i in 0..4 {
+                    let scalar = erf_approx(inputs[i]);
+                    let diff = (result_arr[i] - scalar).abs();
+                    assert!(
+                        diff < 1e-15,
+                        "erf_approx_v4 lane {i}: expected {scalar}, got {}, diff {diff}",
+                        result_arr[i]
+                    );
+                }
+            }
+        }
+
+        #[cfg(not(all(
+            target_arch = "x86_64",
+            target_feature = "avx2",
+            target_feature = "fma"
+        )))]
+        {
+            let result = erf_approx_v4(inputs);
+            for i in 0..4 {
+                let scalar = erf_approx(inputs[i]);
+                let diff = (result[i] - scalar).abs();
+                assert!(
+                    diff < 1e-15,
+                    "erf_approx_v4 lane {i}: expected {scalar}, got {}, diff {diff}",
+                    result[i]
+                );
+            }
         }
     }
 
