@@ -214,11 +214,12 @@ fn shoelace_area(pts: &[(f64, f64); 4]) -> f64 {
 /// (any diagonal pivot drops below `1e-12`).
 #[must_use]
 #[allow(clippy::many_single_char_names)]
-fn cholesky_solve_8x8(h_in: &[f64; 64], b: &[f64; 8]) -> Option<[f64; 8]> {
-    // Work in-place on a copy so we don't clobber the caller's H.
-    // After factorisation, the lower-triangular half holds L (L[j][i] = l[j*8+i], j≥i).
+/// Cholesky factorisation of a symmetric positive-definite 8×8 matrix.
+///
+/// Returns the lower-triangular factor L (row-major) such that H = L·L^T,
+/// or `None` if any diagonal pivot drops below 1e-12.
+fn cholesky_factor_8x8(h_in: &[f64; 64]) -> Option<[f64; 64]> {
     let mut l = *h_in;
-
     for i in 0..8_usize {
         // Diagonal pivot: L[i][i]² = H[i][i] − Σ_{k<i} L[i][k]²
         let mut s = l[i * 8 + i];
@@ -241,7 +242,12 @@ fn cholesky_solve_8x8(h_in: &[f64; 64], b: &[f64; 8]) -> Option<[f64; 8]> {
             l[j * 8 + i] = sum * inv_lii;
         }
     }
+    Some(l)
+}
 
+/// Solve L·L^T·x = b given the Cholesky factor L (forward + backward substitution).
+#[allow(clippy::many_single_char_names)]
+fn cholesky_solve_with_factor(l: &[f64; 64], b: &[f64; 8]) -> [f64; 8] {
     // Forward substitution: L·y = b
     let mut y = [0.0_f64; 8];
     for i in 0..8 {
@@ -261,8 +267,30 @@ fn cholesky_solve_8x8(h_in: &[f64; 64], b: &[f64; 8]) -> Option<[f64; 8]> {
         }
         x[i] = s / l[i * 8 + i];
     }
+    x
+}
 
-    Some(x)
+fn cholesky_solve_8x8(h_in: &[f64; 64], b: &[f64; 8]) -> Option<[f64; 8]> {
+    let l = cholesky_factor_8x8(h_in)?;
+    Some(cholesky_solve_with_factor(&l, b))
+}
+
+/// Compute the full 8×8 inverse from a Cholesky factor L (lower-triangular, row-major).
+///
+/// Solves `L·L^T·x = e_col` for each column of the identity matrix.
+/// Returns H⁻¹ as a flat 8×8 row-major array.
+fn cholesky_inverse_8x8(l: &[f64; 64]) -> [f64; 64] {
+    let mut inv = [0.0_f64; 64];
+    let mut e = [0.0_f64; 8];
+    for col in 0..8_usize {
+        e.fill(0.0);
+        e[col] = 1.0;
+        let x = cholesky_solve_with_factor(l, &e);
+        for i in 0..8 {
+            inv[i * 8 + col] = x[i];
+        }
+    }
+    inv
 }
 
 /// Joint Gauss-Newton refinement of all four corners.
@@ -274,20 +302,30 @@ fn cholesky_solve_8x8(h_in: &[f64; 64], b: &[f64; 8]) -> Option<[f64; 8]> {
 /// State θ = [x₀,y₀,x₁,y₁,x₂,y₂,x₃,y₃].  Edge k connects corner k to corner
 /// (k+1)%4.  sp[k] is the slice of (x, y) sub-pixel observations for edge k.
 ///
-/// Returns the refined corners, or the original `corners` if the solver diverges.
-#[allow(clippy::too_many_lines)]
+/// Returns `(refined_corners, covariances)`.  The covariance is `Some` when
+/// the solver converged normally, containing per-corner 2×2 covariances
+/// `[[σ_xx, σ_xy, σ_yx, σ_yy]; 4]` extracted from the Hessian inverse.
+/// Returns `None` covariance if the solver diverged and reverted to Phase-4.
+#[allow(clippy::too_many_lines, clippy::type_complexity)]
 fn refine_corners_gauss_newton(
     mut corners: [(f64, f64); 4],
     sp: [&[(f64, f64)]; 4],
     max_iters: usize,
-) -> [(f64, f64); 4] {
+) -> ([(f64, f64); 4], Option<[[f64; 4]; 4]>) {
     const TOL: f64 = 0.005; // convergence: max corner displacement < 0.005 px
 
     let original = corners;
 
+    // Track residual stats from the last iteration for covariance estimation.
+    let mut last_h = [0.0_f64; 64];
+    let mut total_residual_sq = 0.0_f64;
+    let mut n_obs: usize = 0;
+
     for _iter in 0..max_iters {
         let mut h = [0.0_f64; 64]; // 8×8 symmetric Gauss-Newton Hessian (J^T J)
         let mut g = [0.0_f64; 8]; // gradient vector (J^T r)
+        let mut iter_residual_sq = 0.0_f64;
+        let mut iter_n_obs: usize = 0;
 
         for k in 0..4_usize {
             let ck = corners[k];
@@ -346,11 +384,20 @@ fn refine_corners_gauss_newton(
                         h[a * 8 + b] += ja * jb;
                     }
                 }
+
+                iter_residual_sq += r * r;
+                iter_n_obs += 1;
             }
         }
 
+        // Snapshot residual stats (scalars only; H is saved below only on exit).
+        total_residual_sq = iter_residual_sq;
+        n_obs = iter_n_obs;
+
         // Tikhonov regularisation: H += λ·I.  Prevents singular systems when
         // an edge has too few valid observations after exclusion-zone filtering.
+        // Save the un-regularised H first for covariance extraction.
+        last_h = h;
         for i in 0..8 {
             h[i * 8 + i] += 1e-6;
         }
@@ -380,11 +427,36 @@ fn refine_corners_gauss_newton(
         let dx = corners[i].0 - original[i].0;
         let dy = corners[i].1 - original[i].1;
         if dx * dx + dy * dy > 25.0 {
-            return original;
+            return (original, None);
         }
     }
 
-    corners
+    // Extract per-corner 2×2 covariances from H⁻¹.
+    // σ² = Σ r² / (n_obs - 8) is the residual variance estimate.
+    // Σ_c[k] = σ² · H⁻¹[2k:2k+2, 2k:2k+2].
+    let covs = if n_obs > 8 {
+        // Add regularisation to last_h before inversion (same λ as solve step).
+        for i in 0..8 {
+            last_h[i * 8 + i] += 1e-6;
+        }
+        cholesky_factor_8x8(&last_h).map(|l| {
+            let h_inv = cholesky_inverse_8x8(&l);
+            let sigma_sq = total_residual_sq / (n_obs - 8) as f64;
+            std::array::from_fn(|k| {
+                let r = 2 * k;
+                [
+                    sigma_sq * h_inv[r * 8 + r],             // σ_xx
+                    sigma_sq * h_inv[r * 8 + (r + 1)],       // σ_xy
+                    sigma_sq * h_inv[(r + 1) * 8 + r],       // σ_yx
+                    sigma_sq * h_inv[(r + 1) * 8 + (r + 1)], // σ_yy
+                ]
+            })
+        })
+    } else {
+        None
+    };
+
+    (corners, covs)
 }
 
 // ── Phase 1: Angular Arc Boundary ─────────────────────────────────────────────
@@ -893,7 +965,7 @@ pub(crate) fn extract_quad_edlines(
     comp_label: u32,
     stat: &ComponentStats,
     cfg: &EdLinesConfig,
-) -> Option<[Point; 4]> {
+) -> Option<([Point; 4], crate::quad::CornerCovariances)> {
     let bbox_w = (stat.max_x - stat.min_x) as usize + 1;
     let bbox_h = (stat.max_y - stat.min_y) as usize + 1;
     if bbox_w < 5 || bbox_h < 5 {
@@ -1033,7 +1105,8 @@ pub(crate) fn extract_quad_edlines(
         sp[2].as_slice(),
         sp[3].as_slice(),
     ];
-    let [ct, cr, cb, cl] = refine_corners_gauss_newton([ct, cr, cb, cl], sp_slices, cfg.gn_iters);
+    let (refined, gn_covs) = refine_corners_gauss_newton([ct, cr, cb, cl], sp_slices, cfg.gn_iters);
+    let [ct, cr, cb, cl] = refined;
 
     // Validate: all corners within the expanded bbox (gray-image space).
     let margin_x = (max_x_bin - min_x_bin) * dec * 0.25;
@@ -1070,10 +1143,24 @@ pub(crate) fn extract_quad_edlines(
         y: y * inv_dec,
     };
 
+    // GN covariances are in gray-image space.  Since corners are converted via
+    // inv_dec, then later multiplied by d (decimation) in quad.rs, and d × inv_dec = 1,
+    // the covariances are already in full-res pixel² units — no scaling needed.
+    // Cast f64 → f32 for batch storage.
+    let covs_f32: [[f32; 4]; 4] = match gn_covs {
+        Some(c) => std::array::from_fn(|i| c[i].map(|v| v as f32)),
+        None => [[0.0; 4]; 4],
+    };
+
     Some(if area >= 0.0 {
-        [to_pt(ct), to_pt(cr), to_pt(cb), to_pt(cl)]
+        ([to_pt(ct), to_pt(cr), to_pt(cb), to_pt(cl)], covs_f32)
     } else {
-        [to_pt(ct), to_pt(cl), to_pt(cb), to_pt(cr)]
+        // Reverse winding: corners go [T, L, B, R], so reorder covariances too.
+        // Original order: [T=0, R=1, B=2, L=3] → reversed: [T=0, L=3, B=2, R=1]
+        (
+            [to_pt(ct), to_pt(cl), to_pt(cb), to_pt(cr)],
+            [covs_f32[0], covs_f32[3], covs_f32[2], covs_f32[1]],
+        )
     })
 }
 
@@ -1168,7 +1255,7 @@ mod tests {
             [f64::from(sq_x0 + sq_size), f64::from(sq_y0 + sq_size)],
             [f64::from(sq_x0), f64::from(sq_y0 + sq_size)],
         ];
-        let corners = result.unwrap();
+        let (corners, _covs) = result.unwrap();
         let mut matched = [false; 4];
         for corner in &corners {
             let mut found = false;
@@ -1222,5 +1309,115 @@ mod tests {
         // labels and comp_label are not accessed because the bbox guard fires first.
         let result = extract_quad_edlines(&arena, &img, &img, &[], 0, &stats, &cfg);
         assert!(result.is_none(), "Tiny ROI must return None");
+    }
+
+    /// Verify that the GN solver returns non-zero, diagonal-dominant covariances
+    /// when observations have small perpendicular noise (simulating real sub-pixel
+    /// edge detection).  With zero noise the residual variance σ² = 0, which
+    /// correctly yields zero covariances; we test the realistic case here.
+    #[test]
+    fn test_gn_covariance_nonzero() {
+        let corners: [(f64, f64); 4] = [(30.0, 30.0), (70.0, 30.0), (70.0, 70.0), (30.0, 70.0)];
+
+        let mut sp: [Vec<(f64, f64)>; 4] = [vec![], vec![], vec![], vec![]];
+        let n = 20_usize;
+        for k in 0..4 {
+            let (ax, ay) = corners[k];
+            let (bx, by) = corners[(k + 1) % 4];
+            let ex = bx - ax;
+            let ey = by - ay;
+            let len = (ex * ex + ey * ey).sqrt();
+            let nx = -ey / len;
+            let ny = ex / len;
+            for i in 0..n {
+                let t = (i as f64 + 0.5) / n as f64;
+                // Add small deterministic perpendicular noise (~0.1 px).
+                let noise = 0.1 * ((i * 7 + k * 13) as f64).sin();
+                sp[k].push((
+                    ax + t * (bx - ax) + noise * nx,
+                    ay + t * (by - ay) + noise * ny,
+                ));
+            }
+        }
+
+        let sp_refs: [&[(f64, f64)]; 4] = [&sp[0], &sp[1], &sp[2], &sp[3]];
+        let (refined, cov_opt) = refine_corners_gauss_newton(corners, sp_refs, 5);
+
+        // Solver should converge (observations are close to the edges).
+        for (i, &rc) in refined.iter().enumerate() {
+            let dx = rc.0 - corners[i].0;
+            let dy = rc.1 - corners[i].1;
+            assert!(
+                dx.abs() < 0.5 && dy.abs() < 0.5,
+                "Corner {i} moved too far: ({dx:.4}, {dy:.4})"
+            );
+        }
+
+        // Covariances must be Some and non-zero (noise → σ² > 0).
+        let covs = cov_opt.expect("GN should return covariances for a converged solution");
+        for (k, cov) in covs.iter().enumerate() {
+            let sigma_xx = cov[0];
+            let sigma_yy = cov[3];
+            assert!(
+                sigma_xx > 0.0 && sigma_yy > 0.0,
+                "Corner {k}: diagonal covariances must be positive, got σ_xx={sigma_xx}, σ_yy={sigma_yy}"
+            );
+            // Diagonal-dominant: |σ_xx| and |σ_yy| should exceed cross-terms.
+            let sigma_xy = cov[1];
+            assert!(
+                sigma_xx.abs() >= sigma_xy.abs(),
+                "Corner {k}: expected diagonal dominance"
+            );
+        }
+    }
+
+    /// Verify that adding noise to observations increases the covariance magnitudes.
+    #[test]
+    fn test_gn_covariance_scales_with_noise() {
+        let corners: [(f64, f64); 4] = [(30.0, 30.0), (70.0, 30.0), (70.0, 70.0), (30.0, 70.0)];
+
+        let n = 30_usize;
+        let mut sp_clean: [Vec<(f64, f64)>; 4] = [vec![], vec![], vec![], vec![]];
+        let mut sp_noisy: [Vec<(f64, f64)>; 4] = [vec![], vec![], vec![], vec![]];
+
+        // Simple deterministic "noise" pattern using sin to avoid RNG dependency.
+        for k in 0..4 {
+            let (ax, ay) = corners[k];
+            let (bx, by) = corners[(k + 1) % 4];
+            let ex = bx - ax;
+            let ey = by - ay;
+            let len = (ex * ex + ey * ey).sqrt();
+            // Normal direction (perpendicular to edge).
+            let nx = -ey / len;
+            let ny = ex / len;
+            for i in 0..n {
+                let t = (i as f64 + 0.5) / n as f64;
+                let px = ax + t * (bx - ax);
+                let py = ay + t * (by - ay);
+                sp_clean[k].push((px, py));
+                // Add perpendicular noise of ~0.5 px amplitude.
+                let noise = 0.5 * ((i * 7 + k * 13) as f64).sin();
+                sp_noisy[k].push((px + noise * nx, py + noise * ny));
+            }
+        }
+
+        let refs_clean: [&[(f64, f64)]; 4] =
+            [&sp_clean[0], &sp_clean[1], &sp_clean[2], &sp_clean[3]];
+        let refs_noisy: [&[(f64, f64)]; 4] =
+            [&sp_noisy[0], &sp_noisy[1], &sp_noisy[2], &sp_noisy[3]];
+
+        let (_, cov_clean) = refine_corners_gauss_newton(corners, refs_clean, 5);
+        let (_, cov_noisy) = refine_corners_gauss_newton(corners, refs_noisy, 5);
+
+        let covs_c = cov_clean.expect("clean should converge");
+        let covs_n = cov_noisy.expect("noisy should converge");
+
+        // Sum of diagonal variances should be larger for the noisy case.
+        let trace_clean: f64 = covs_c.iter().map(|c| c[0] + c[3]).sum();
+        let trace_noisy: f64 = covs_n.iter().map(|c| c[0] + c[3]).sum();
+        assert!(
+            trace_noisy > trace_clean,
+            "Noisy observations should yield larger covariances: clean={trace_clean:.6}, noisy={trace_noisy:.6}"
+        );
     }
 }
