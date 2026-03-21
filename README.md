@@ -59,7 +59,7 @@ Locus ships three scenario-specific SOTA presets alongside the production defaul
 
 *`sota_metrology_default` uses the EdLines Joint Gauss-Newton solver — per-corner 2×2 covariances propagate directly to the weighted LM pose solver, achieving 3–6× lower corner RMSE and 6–8× lower pose error vs production.*
 
-Full benchmark tables, methodology, and per-resolution results: [`docs/benchmarking/sota_metrology_20260321.md`](docs/benchmarking/sota_metrology_20260321.md)
+Full benchmark tables, methodology, and per-resolution results: `docs/benchmarking/sota_metrology_20260321.md`
 
 ## Quick Start
 
