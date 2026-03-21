@@ -195,7 +195,15 @@ fn extract_single_quad(
     let quad_pts_dec: [Point; 4] = match config.quad_extraction_mode {
         crate::config::QuadExtractionMode::EdLines => {
             let ed_cfg = crate::edlines::EdLinesConfig::from_detector_config(config);
-            crate::edlines::extract_quad_edlines(arena, img, stat, &ed_cfg)?
+            crate::edlines::extract_quad_edlines(
+                arena,
+                img,
+                refinement_img,
+                labels,
+                label,
+                stat,
+                &ed_cfg,
+            )?
         },
         crate::config::QuadExtractionMode::ContourRdp => {
             let sx = stat.first_pixel_x as usize;

@@ -1,18 +1,28 @@
-//! EDLines quad extraction: localized Edge Drawing within a component bounding box.
+//! Hybrid quad extraction: Angular Arc Boundary → Huber IRLS → Sub-Pixel Parabola.
 //!
-//! For each surviving component, this module:
-//! 1. Computes Sobel gradients within the ROI.
-//! 2. Identifies anchor pixels (local gradient maxima above threshold).
-//! 3. Routes edge chains from anchors along the gradient ridge.
-//! 4. Fits line segments to chains via PCA (reusing `MomentAccumulator`).
-//! 5. Clusters segments into 4 angular groups and intersects adjacent lines to get corners.
+//! Pipeline:
+//!   1. **Angular Arc Boundary** — collect all 4-connected outer boundary pixels of
+//!      the component.  The four extremal boundary pixels (topmost T, rightmost R,
+//!      bottommost B, leftmost L) partition the boundary into four CW arcs, one arc
+//!      per edge of the quadrilateral.  This correctly handles any rotation angle.
+//!   2. **Huber IRLS** — fit a robust TLS line to each arc.  Three iterations of
+//!      Iteratively Reweighted Least Squares with a Huber loss suppress corner-bleed
+//!      outliers.
+//!   3. **Micro-Ray Gradient Parabola** — sample the full-resolution grayscale image
+//!      along short normals (±2 px) to each IRLS line.  Fit a 3-point parabola to
+//!      the 1-D gradient profile; extract the sub-pixel peak.  This escapes the
+//!      ±0.5 px binary quantization limit.
+//!   4. **Sub-Pixel IRLS Re-fit + Intersection** — re-fit lines to the continuous
+//!      edge points (tighter Huber δ), then intersect adjacent pairs to recover the
+//!      four corners in the coordinate space expected by the caller.
 
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::similar_names)]
-#![allow(clippy::too_many_lines)]
-#![allow(clippy::items_after_statements)]
+#![allow(clippy::too_many_arguments)]
+
+use std::f64::consts::PI;
 
 use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
@@ -22,564 +32,859 @@ use crate::image::ImageView;
 use crate::quad::Point;
 use crate::segmentation::ComponentStats;
 
-/// Configuration for the EDLines quad extractor.
+// ── Configuration ─────────────────────────────────────────────────────────────
+
+/// Configuration for the hybrid EDLines quad extractor.
 pub(crate) struct EdLinesConfig {
-    /// Gradient magnitude threshold to qualify as an anchor (default: 20).
-    pub grad_threshold: u16,
-    /// Maximum mean-squared residual for a pixel to remain in a line segment (default: 1.5).
-    pub line_mse_threshold: f64,
-    /// Minimum number of pixels in an accepted line segment (default: 8).
-    pub min_segment_length: usize,
+    /// Huber δ for Phase 2 binary IRLS (pixels). Default: 1.5.
+    pub huber_delta: f64,
+    /// Number of IRLS iterations for Phase 2. Default: 3.
+    pub irls_iters: usize,
+    /// Huber δ for Phase 4 sub-pixel IRLS (pixels in gray-image space). Default: 0.5.
+    pub sp_huber_delta: f64,
+    /// Number of IRLS iterations for Phase 4. Default: 2.
+    pub sp_irls_iters: usize,
+    /// Distance between ray probes along the tangent direction (pixels). Default: 1.5.
+    pub sample_step: f64,
+    /// Minimum absolute gradient at the probe centre to accept a sub-pixel point.
+    /// Default: 8.0 (intensity units).
+    pub grad_min_mag: f64,
+    /// Minimum number of sub-pixel points per side to attempt a Phase 4 re-fit.
+    /// Default: 5.
+    pub min_edge_pts: usize,
 }
 
 impl EdLinesConfig {
-    /// Derive config from the detector config (uses hard-coded defaults for now).
+    /// Construct from the detector config (hard-coded defaults pending empirical tuning).
     #[must_use]
     pub fn from_detector_config(_cfg: &crate::config::DetectorConfig) -> Self {
         Self {
-            grad_threshold: 20,
-            line_mse_threshold: 1.5,
-            min_segment_length: 8,
+            huber_delta: 1.5,
+            irls_iters: 3,
+            sp_huber_delta: 0.5,
+            sp_irls_iters: 2,
+            sample_step: 1.5,
+            grad_min_mag: 8.0,
+            min_edge_pts: 5,
         }
     }
 }
 
-/// Compact gradient cell for the ROI / full-image gradient buffer.
-#[derive(Clone, Copy, Default)]
-pub(crate) struct Grad {
-    pub gx: i16,
-    pub gy: i16,
-    pub mag: u16,
+// ── Internal types ─────────────────────────────────────────────────────────────
+
+/// A homogeneous line `nx·x + ny·y + d = 0` together with its weighted centroid.
+#[derive(Clone, Copy)]
+struct Line {
+    /// Unit normal (nx² + ny² = 1).
+    nx: f64,
+    /// Unit normal (nx² + ny² = 1).
+    ny: f64,
+    /// Homogeneous offset.
+    d: f64,
+    /// Centroid — a point known to lie on the line, used to parameterise the tangent.
+    cx: f64,
+    cy: f64,
 }
 
-/// Compute Sobel gradients into a pre-allocated flat ROI buffer.
-/// `roi_w` and `roi_h` include a 1-pixel border on each side.
-fn compute_roi_gradients(
-    img: &ImageView,
-    x0: usize, // ROI left  (inclusive, with border already added by caller)
-    y0: usize, // ROI top
-    roi_w: usize,
-    roi_h: usize,
-    buf: &mut [Grad],
-) {
-    for ry in 1..roi_h.saturating_sub(1) {
-        let iy = y0 + ry;
-        if iy == 0 || iy + 1 >= img.height {
-            continue;
-        }
-        for rx in 1..roi_w.saturating_sub(1) {
-            let ix = x0 + rx;
-            if ix == 0 || ix + 1 >= img.width {
-                continue;
-            }
-            let p00 = i16::from(img.get_pixel(ix - 1, iy - 1));
-            let p10 = i16::from(img.get_pixel(ix, iy - 1));
-            let p20 = i16::from(img.get_pixel(ix + 1, iy - 1));
-            let p01 = i16::from(img.get_pixel(ix - 1, iy));
-            let p21 = i16::from(img.get_pixel(ix + 1, iy));
-            let p02 = i16::from(img.get_pixel(ix - 1, iy + 1));
-            let p12 = i16::from(img.get_pixel(ix, iy + 1));
-            let p22 = i16::from(img.get_pixel(ix + 1, iy + 1));
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
-            let gx = -p00 + p20 - 2 * p01 + 2 * p21 - p02 + p22;
-            let gy = -p00 - 2 * p10 - p20 + p02 + 2 * p12 + p22;
-            let mag = ((gx.abs() + gy.abs()) as u16).min(1023);
-
-            buf[ry * roi_w + rx] = Grad { gx, gy, mag };
-        }
-    }
-}
-
-/// Walk from an anchor along the gradient ridge in one direction, collecting pixels.
-/// Marks visited pixels to prevent reuse by subsequent anchors.
-#[allow(clippy::too_many_arguments)]
-fn route_chain_one_dir<'bump>(
-    arena: &'bump Bump,
-    grads: &[Grad],
-    roi_w: usize,
-    roi_h: usize,
-    start_rx: usize,
-    start_ry: usize,
-    visited: &mut [bool],
-    mag_thresh: u16,
-    forward: bool,
-) -> BumpVec<'bump, (u16, u16)> {
-    let mut chain: BumpVec<(u16, u16)> = BumpVec::new_in(arena);
-    let mut rx = start_rx as i32;
-    let mut ry = start_ry as i32;
-
-    loop {
-        if rx < 1 || ry < 1 || rx >= roi_w as i32 - 1 || ry >= roi_h as i32 - 1 {
-            break;
-        }
-        let idx = ry as usize * roi_w + rx as usize;
-        if visited[idx] {
-            break;
-        }
-        visited[idx] = true;
-        chain.push((rx as u16, ry as u16));
-
-        // Step direction: perpendicular to gradient (along the edge).
-        let cur = grads[idx];
-        if cur.mag < mag_thresh {
-            break;
-        }
-        let angle = f32::from(cur.gy).atan2(f32::from(cur.gx));
-        let sign = if forward { 1.0f32 } else { -1.0 };
-        let step_dx = (-angle.sin() * sign).round() as i32;
-        let step_dy = (angle.cos() * sign).round() as i32;
-
-        // Find the strongest unvisited neighbor in the forward half-plane
-        // whose gradient direction is consistent with the current pixel (≤ 45° tolerance).
-        // This stops routing at corners where the edge direction changes sharply.
-        let angle_tolerance = std::f32::consts::PI / 6.0; // 30 degrees — strict enough to stop at corners
-        let mut best_mag = mag_thresh.saturating_sub(1);
-        let mut best_dx = step_dx;
-        let mut best_dy = step_dy;
-        let mut found = false;
-
-        for dy in -1i32..=1 {
-            for dx in -1i32..=1 {
-                if dx == 0 && dy == 0 {
-                    continue;
-                }
-                if step_dx != 0 || step_dy != 0 {
-                    // Only forward half-plane.
-                    if dx * step_dx + dy * step_dy < 0 {
-                        continue;
-                    }
-                }
-                let nx = rx + dx;
-                let ny = ry + dy;
-                if nx < 1 || ny < 1 || nx >= roi_w as i32 - 1 || ny >= roi_h as i32 - 1 {
-                    continue;
-                }
-                let nidx = ny as usize * roi_w + nx as usize;
-                if visited[nidx] {
-                    continue;
-                }
-                let g_next = grads[nidx];
-                let m = g_next.mag;
-                if m <= best_mag {
-                    continue;
-                }
-                // Gradient direction consistency: reject sharp turns.
-                let next_angle = f32::from(g_next.gy).atan2(f32::from(g_next.gx));
-                let diff = {
-                    let d = (next_angle - angle).rem_euclid(2.0 * std::f32::consts::PI);
-                    if d > std::f32::consts::PI {
-                        2.0 * std::f32::consts::PI - d
-                    } else {
-                        d
-                    }
-                };
-                if diff > angle_tolerance {
-                    continue;
-                }
-                best_mag = m;
-                best_dx = dx;
-                best_dy = dy;
-                found = true;
-            }
-        }
-
-        if !found {
-            break;
-        }
-        rx += best_dx;
-        ry += best_dy;
-    }
-
-    chain
-}
-
-/// Walk both directions from an anchor and merge into a single chain.
-#[allow(clippy::too_many_arguments)]
-fn route_chain<'bump>(
-    arena: &'bump Bump,
-    grads: &[Grad],
-    roi_w: usize,
-    roi_h: usize,
-    start_rx: usize,
-    start_ry: usize,
-    visited: &mut [bool],
-    mag_thresh: u16,
-) -> BumpVec<'bump, (u16, u16)> {
-    // Forward direction: start -> end
-    let fwd = route_chain_one_dir(
-        arena, grads, roi_w, roi_h, start_rx, start_ry, visited, mag_thresh, true,
-    );
-    // Backward direction from start (start is already visited, so begin from first unvisited neighbor).
-    // Re-find the backward neighbor manually.
-    let mut bwd: BumpVec<(u16, u16)> = BumpVec::new_in(arena);
-    {
-        let cur = grads[start_ry * roi_w + start_rx];
-        if cur.mag >= mag_thresh {
-            let angle = f32::from(cur.gy).atan2(f32::from(cur.gx));
-            let step_dx = (angle.sin()).round() as i32; // backward: opposite sign
-            let step_dy = (-angle.cos()).round() as i32;
-            let nx = start_rx as i32 + step_dx;
-            let ny = start_ry as i32 + step_dy;
-            if nx >= 1 && ny >= 1 && nx < roi_w as i32 - 1 && ny < roi_h as i32 - 1 {
-                let nidx = ny as usize * roi_w + nx as usize;
-                if !visited[nidx] {
-                    bwd = route_chain_one_dir(
-                        arena,
-                        grads,
-                        roi_w,
-                        roi_h,
-                        nx as usize,
-                        ny as usize,
-                        visited,
-                        mag_thresh,
-                        false,
-                    );
-                }
-            }
-        }
-    }
-
-    // Merge: bwd (reversed) + fwd
-    let mut chain: BumpVec<(u16, u16)> = BumpVec::with_capacity_in(fwd.len() + bwd.len(), arena);
-    for &pt in bwd.iter().rev() {
-        chain.push(pt);
-    }
-    for &pt in fwd.as_slice() {
-        chain.push(pt);
-    }
-    chain
-}
-
-/// Fit a line segment to a pixel chain using PCA via `MomentAccumulator`.
-/// Returns `(nx, ny, d)` (homogeneous line: nx*x + ny*y + d = 0) and MSE,
-/// or `None` if the chain is too short or degenerate.
-fn fit_line_pca(chain: &[(u16, u16)]) -> Option<(f64, f64, f64, f64)> {
+/// Fit a weighted TLS line to `points` using `weights` (parallel slices).
+///
+/// Returns `None` if the weighted sum is degenerate.
+fn fit_line_weighted(points: &[(f64, f64)], weights: &[f64]) -> Option<Line> {
+    debug_assert_eq!(points.len(), weights.len());
     let mut acc = MomentAccumulator::new();
-    for &(x, y) in chain {
-        acc.add(f64::from(x), f64::from(y), 1.0);
+    for (&(x, y), &w) in points.iter().zip(weights.iter()) {
+        if w > 1e-12 {
+            acc.add(x, y, w);
+        }
     }
+
     let cov = acc.covariance()?;
     let centroid = acc.centroid()?;
 
     let a = cov[(0, 0)];
-    let b_val = cov[(0, 1)];
+    let b = cov[(0, 1)];
     let c = cov[(1, 1)];
 
-    // Eigendecomposition for the minimum-variance direction (line normal).
+    // Minimum-variance eigenvector = line normal.
     let trace = a + c;
-    let disc = ((a - c) * (a - c) + 4.0 * b_val * b_val).sqrt();
+    let disc = ((a - c) * (a - c) + 4.0 * b * b).sqrt();
     let lambda_min = (trace - disc) / 2.0;
 
-    let (nx, ny) = if b_val.abs() > 1e-9 {
-        let vx = b_val;
+    let (nx, ny) = if b.abs() > 1e-9 {
+        let vx = b;
         let vy = lambda_min - a;
         let len = (vx * vx + vy * vy).sqrt();
+        if len < 1e-12 {
+            return None;
+        }
         (vx / len, vy / len)
     } else if a < c {
-        (1.0, 0.0)
+        (1.0_f64, 0.0_f64)
     } else {
-        (0.0, 1.0)
+        (0.0_f64, 1.0_f64)
     };
 
     let d = -(nx * centroid.x + ny * centroid.y);
-
-    // Compute MSE = λ_min / n  (mean squared orthogonal distance).
-    let mse = lambda_min.max(0.0) / acc.sum_w.max(1.0);
-
-    Some((nx, ny, d, mse))
+    Some(Line {
+        nx,
+        ny,
+        d,
+        cx: centroid.x,
+        cy: centroid.y,
+    })
 }
 
-/// Intersect two homogeneous lines (n1x*x + n1y*y + d1 = 0) and (n2x*x + n2y*y + d2 = 0).
-#[inline]
-fn intersect_lines(n1x: f64, n1y: f64, d1: f64, n2x: f64, n2y: f64, d2: f64) -> Option<(f64, f64)> {
-    // Cross product of homogeneous lines [n1x, n1y, d1] x [n2x, n2y, d2]
-    let wx = n1y * d2 - d1 * n2y;
-    let wy = d1 * n2x - n1x * d2;
-    let ww = n1x * n2y - n1y * n2x;
-    if ww.abs() < 1e-9 {
-        return None; // Parallel
+/// Iteratively Reweighted Least Squares (Huber loss) line fit.
+///
+/// Allocates the weight vector in `arena` to avoid heap allocation.
+fn fit_line_irls(
+    arena: &Bump,
+    points: &[(f64, f64)],
+    huber_delta: f64,
+    iters: usize,
+) -> Option<Line> {
+    if points.len() < 2 {
+        return None;
     }
+
+    let n = points.len();
+    // Arena-allocated weights: zero `Vec::new()` cost.
+    let weights: &mut [f64] = arena.alloc_slice_fill_copy(n, 1.0_f64);
+    let mut line: Option<Line> = None;
+
+    for _ in 0..iters {
+        let l = fit_line_weighted(points, weights)?;
+        // Huber weight update.
+        for (i, &(x, y)) in points.iter().enumerate() {
+            let r = (l.nx * x + l.ny * y + l.d).abs();
+            weights[i] = if r < huber_delta {
+                1.0
+            } else {
+                huber_delta / r.max(1e-9)
+            };
+        }
+        line = Some(l);
+    }
+    line
+}
+
+/// Intersect two homogeneous lines via the cross-product rule.
+///
+/// Returns `None` if the lines are (nearly) parallel.
+fn intersect_lines(l1: &Line, l2: &Line) -> Option<(f64, f64)> {
+    let ww = l1.nx * l2.ny - l1.ny * l2.nx;
+    if ww.abs() < 1e-9 {
+        return None;
+    }
+    let wx = l1.ny * l2.d - l1.d * l2.ny;
+    let wy = l1.d * l2.nx - l1.nx * l2.d;
     Some((wx / ww, wy / ww))
 }
 
-/// Angular difference between two DIRECTED gradient angles (period 2π), result in [0, π].
-/// Opposite directions (differing by π) have diff = π, not 0.
+/// Signed shoelace area of a 4-point polygon.
+///
+/// Positive ⟺ the polygon is CCW in standard (y-up) math, which equals CW in
+/// image (y-down) coordinates.
 #[inline]
-fn grad_angle_diff(a: f32, b: f32) -> f32 {
-    let d = (a - b).rem_euclid(2.0 * std::f32::consts::PI);
-    if d > std::f32::consts::PI {
-        2.0 * std::f32::consts::PI - d
-    } else {
-        d
+fn shoelace_area(pts: &[(f64, f64); 4]) -> f64 {
+    let mut area = 0.0_f64;
+    for i in 0..4 {
+        let j = (i + 1) % 4;
+        area += pts[i].0 * pts[j].1;
+        area -= pts[j].0 * pts[i].1;
     }
+    area * 0.5
 }
 
-/// Extract a quad using the EDLines algorithm within a component's bounding box.
+// ── Phase 1: Angular Arc Boundary ─────────────────────────────────────────────
+
+/// Extract outer boundary pixels and assign them to four edge groups using
+/// angular arc segmentation.
 ///
-/// Computes Sobel gradients within the ROI, identifies anchors, routes edge chains,
-/// fits line segments via PCA, and returns 4 corners as intersections of dominant lines.
+/// **Two-stage approach** that combines the strengths of monotone scanning
+/// and angular arc segmentation:
+///
+/// *Stage 1 — Monotone scan* (inner-bit filtering):
+/// For each column, record only the **topmost** and **bottommost** foreground
+/// pixel.  For each row, record only the **leftmost** and **rightmost**.
+/// This naturally selects the convex outer boundary of the component, discarding
+/// interior dark data-bit pixels that would otherwise bias the line fits.
+///
+/// *Stage 2 — Angular arc assignment* (rotation awareness):
+/// The four extremal outer-boundary pixels (T=topmost, R=rightmost,
+/// B=bottommost, L=leftmost) divide the collected pixels into four CW arcs
+/// in image (y-down) coordinates, one arc per edge of the quadrilateral:
+///
+///   edge\[0\]: T → R  (top-right facing edge)
+///   edge\[1\]: R → B  (bottom-right facing edge)
+///   edge\[2\]: B → L  (bottom-left facing edge)
+///   edge\[3\]: L → T  (top-left facing edge, wraps around)
+///
+/// This correctly handles any tag rotation angle without interior contamination.
+#[allow(clippy::too_many_lines)]
+fn extract_boundary_segments<'a>(
+    arena: &'a Bump,
+    labels: &[u32],
+    img_width: usize,
+    img_height: usize,
+    comp_label: u32,
+    stat: &ComponentStats,
+) -> [BumpVec<'a, (f64, f64)>; 4] {
+    // Centroid from moments accumulated during the LSL pass.
+    let m00 = f64::from(stat.pixel_count).max(1.0);
+    let cx = stat.m10 as f64 / m00 + 0.5;
+    let cy = stat.m01 as f64 / m00 + 0.5;
+
+    let min_x = stat.min_x as usize;
+    let max_x = stat.max_x as usize;
+    let min_y = stat.min_y as usize;
+    let max_y = stat.max_y as usize;
+
+    // Stage 1: monotone scan — collect outer boundary pixels only.
+    // For each column: topmost + bottommost foreground pixel.
+    // For each row:    leftmost + rightmost foreground pixel.
+    // Use a BumpVec of (px, py, angle) to feed Stage 2.
+    let mut all_bnd: BumpVec<(f64, f64, f64)> = BumpVec::new_in(arena);
+
+    // Track TWO sets of 4 extremal pixels for arc boundary selection.
+    //
+    // Axis-aligned: T=min_y, R=max_x, B=max_y, L=min_x.
+    //   For axis-aligned tags these map to the 4 edge midpoints, giving 4 clean
+    //   arcs. Degenerate when two adjacent corners share the same axis extremal.
+    //
+    // Diagonal (45°-rotated): NW=min(x+y), NE=min(y-x), SE=max(x+y), SW=max(y-x).
+    //   Always corresponds to the actual 4 corners, but degenerate for a different
+    //   class of quadrilateral geometries.
+    //
+    // Stage 2 will pick whichever system has no degenerate (zero-width) arc.
+    let mut t_y = usize::MAX;
+    let mut t_x = 0usize; // min y (then min x)
+    let mut r_x = 0usize;
+    let mut r_y = usize::MAX; // max x (then min y)
+    let mut b_y = 0usize;
+    let mut b_x = 0usize; // max y (then max x)
+    let mut l_x = usize::MAX;
+    let mut l_y = 0usize; // min x (then max y)
+
+    let mut nw_sum = isize::MAX;
+    let mut nw_x = 0usize;
+    let mut nw_y = 0usize;
+    let mut ne_dif = isize::MAX;
+    let mut ne_x = 0usize;
+    let mut ne_y = 0usize;
+    let mut se_sum = isize::MIN;
+    let mut se_x = 0usize;
+    let mut se_y = 0usize;
+    let mut sw_dif = isize::MIN;
+    let mut sw_x = 0usize;
+    let mut sw_y = 0usize;
+
+    let push_pt = |x: usize,
+                   y: usize,
+                   t_y: &mut usize,
+                   t_x: &mut usize,
+                   r_x: &mut usize,
+                   r_y: &mut usize,
+                   b_y: &mut usize,
+                   b_x: &mut usize,
+                   l_x: &mut usize,
+                   l_y: &mut usize,
+                   nw_sum: &mut isize,
+                   nw_x: &mut usize,
+                   nw_y: &mut usize,
+                   ne_dif: &mut isize,
+                   ne_x: &mut usize,
+                   ne_y: &mut usize,
+                   se_sum: &mut isize,
+                   se_x: &mut usize,
+                   se_y: &mut usize,
+                   sw_dif: &mut isize,
+                   sw_x: &mut usize,
+                   sw_y: &mut usize,
+                   all_bnd: &mut BumpVec<(f64, f64, f64)>| {
+        // Axis-aligned extremals
+        if y < *t_y || (y == *t_y && x < *t_x) {
+            *t_y = y;
+            *t_x = x;
+        }
+        if x > *r_x || (x == *r_x && y < *r_y) {
+            *r_x = x;
+            *r_y = y;
+        }
+        if y > *b_y || (y == *b_y && x > *b_x) {
+            *b_y = y;
+            *b_x = x;
+        }
+        if x < *l_x || (x == *l_x && y > *l_y) {
+            *l_x = x;
+            *l_y = y;
+        }
+        // Diagonal extremals
+        let ix = x as isize;
+        let iy = y as isize;
+        let sum = ix + iy;
+        let dif = iy - ix;
+        if sum < *nw_sum {
+            *nw_sum = sum;
+            *nw_x = x;
+            *nw_y = y;
+        }
+        if dif < *ne_dif {
+            *ne_dif = dif;
+            *ne_x = x;
+            *ne_y = y;
+        }
+        if sum > *se_sum {
+            *se_sum = sum;
+            *se_x = x;
+            *se_y = y;
+        }
+        if dif > *sw_dif {
+            *sw_dif = dif;
+            *sw_x = x;
+            *sw_y = y;
+        }
+        let px = x as f64 + 0.5;
+        let py = y as f64 + 0.5;
+        let angle = (py - cy).atan2(px - cx);
+        all_bnd.push((px, py, angle));
+    };
+
+    // Column scan: topmost and bottommost foreground pixel per column.
+    for x in min_x..=max_x {
+        let mut top_y: Option<usize> = None;
+        let mut bot_y: Option<usize> = None;
+        for y in min_y..=max_y {
+            if labels[y * img_width + x] == comp_label {
+                if top_y.is_none() {
+                    top_y = Some(y);
+                }
+                bot_y = Some(y);
+            }
+        }
+        if let Some(ty) = top_y {
+            push_pt(
+                x,
+                ty,
+                &mut t_y,
+                &mut t_x,
+                &mut r_x,
+                &mut r_y,
+                &mut b_y,
+                &mut b_x,
+                &mut l_x,
+                &mut l_y,
+                &mut nw_sum,
+                &mut nw_x,
+                &mut nw_y,
+                &mut ne_dif,
+                &mut ne_x,
+                &mut ne_y,
+                &mut se_sum,
+                &mut se_x,
+                &mut se_y,
+                &mut sw_dif,
+                &mut sw_x,
+                &mut sw_y,
+                &mut all_bnd,
+            );
+        }
+        if let Some(by) = bot_y
+            && top_y != bot_y
+        {
+            push_pt(
+                x,
+                by,
+                &mut t_y,
+                &mut t_x,
+                &mut r_x,
+                &mut r_y,
+                &mut b_y,
+                &mut b_x,
+                &mut l_x,
+                &mut l_y,
+                &mut nw_sum,
+                &mut nw_x,
+                &mut nw_y,
+                &mut ne_dif,
+                &mut ne_x,
+                &mut ne_y,
+                &mut se_sum,
+                &mut se_x,
+                &mut se_y,
+                &mut sw_dif,
+                &mut sw_x,
+                &mut sw_y,
+                &mut all_bnd,
+            );
+        }
+    }
+
+    // Row scan: leftmost and rightmost foreground pixel per row.
+    for y in min_y..=max_y {
+        let row_off = y * img_width;
+        let mut lft_x: Option<usize> = None;
+        let mut rgt_x: Option<usize> = None;
+        for x in min_x..=max_x {
+            if labels[row_off + x] == comp_label {
+                if lft_x.is_none() {
+                    lft_x = Some(x);
+                }
+                rgt_x = Some(x);
+            }
+        }
+        if let Some(lx) = lft_x {
+            push_pt(
+                lx,
+                y,
+                &mut t_y,
+                &mut t_x,
+                &mut r_x,
+                &mut r_y,
+                &mut b_y,
+                &mut b_x,
+                &mut l_x,
+                &mut l_y,
+                &mut nw_sum,
+                &mut nw_x,
+                &mut nw_y,
+                &mut ne_dif,
+                &mut ne_x,
+                &mut ne_y,
+                &mut se_sum,
+                &mut se_x,
+                &mut se_y,
+                &mut sw_dif,
+                &mut sw_x,
+                &mut sw_y,
+                &mut all_bnd,
+            );
+        }
+        if let Some(rx) = rgt_x
+            && lft_x != rgt_x
+        {
+            push_pt(
+                rx,
+                y,
+                &mut t_y,
+                &mut t_x,
+                &mut r_x,
+                &mut r_y,
+                &mut b_y,
+                &mut b_x,
+                &mut l_x,
+                &mut l_y,
+                &mut nw_sum,
+                &mut nw_x,
+                &mut nw_y,
+                &mut ne_dif,
+                &mut ne_x,
+                &mut ne_y,
+                &mut se_sum,
+                &mut se_x,
+                &mut se_y,
+                &mut sw_dif,
+                &mut sw_x,
+                &mut sw_y,
+                &mut all_bnd,
+            );
+        }
+    }
+
+    let empty: [BumpVec<(f64, f64)>; 4] = [
+        BumpVec::new_in(arena),
+        BumpVec::new_in(arena),
+        BumpVec::new_in(arena),
+        BumpVec::new_in(arena),
+    ];
+
+    if t_y == usize::MAX || all_bnd.len() < 8 {
+        return empty;
+    }
+
+    // Stage 2: angular arc assignment.
+    // Try axis-aligned extremals (T/R/B/L) first; fall back to diagonal
+    // extremals (NW/NE/SE/SW) if any axis-aligned arc is degenerate.
+    // Both systems together cover all convex quadrilateral orientations:
+    // for any parallelogram geometry, at least one system will have 4 distinct
+    // non-degenerate arcs.
+    //
+    // Min-arc-width threshold: 5° (0.087 rad). Narrower arcs produce too few
+    // points on one edge for reliable IRLS convergence.
+    #[allow(clippy::items_after_statements)]
+    const MIN_ARC: f64 = 5.0 * PI / 180.0;
+
+    // Compute axis-aligned arc widths (CW: T→R→B→L→T).
+    let t_angle = ((t_y as f64 + 0.5) - cy).atan2((t_x as f64 + 0.5) - cx);
+    let r_angle = ((r_y as f64 + 0.5) - cy).atan2((r_x as f64 + 0.5) - cx);
+    let b_angle = ((b_y as f64 + 0.5) - cy).atan2((b_x as f64 + 0.5) - cx);
+    let l_angle = ((l_y as f64 + 0.5) - cy).atan2((l_x as f64 + 0.5) - cx);
+    let r_norm = (r_angle - t_angle).rem_euclid(2.0 * PI);
+    let b_norm = (b_angle - t_angle).rem_euclid(2.0 * PI);
+    let l_norm = (l_angle - t_angle).rem_euclid(2.0 * PI);
+    let trbl_ok = r_norm >= MIN_ARC && (b_norm - r_norm) >= MIN_ARC && (l_norm - b_norm) >= MIN_ARC;
+
+    // Compute diagonal arc widths (CW: NW→NE→SE→SW→NW).
+    let nw_angle = ((nw_y as f64 + 0.5) - cy).atan2((nw_x as f64 + 0.5) - cx);
+    let ne_angle = ((ne_y as f64 + 0.5) - cy).atan2((ne_x as f64 + 0.5) - cx);
+    let se_angle = ((se_y as f64 + 0.5) - cy).atan2((se_x as f64 + 0.5) - cx);
+    let sw_angle = ((sw_y as f64 + 0.5) - cy).atan2((sw_x as f64 + 0.5) - cx);
+    let ne_norm = (ne_angle - nw_angle).rem_euclid(2.0 * PI);
+    let se_norm = (se_angle - nw_angle).rem_euclid(2.0 * PI);
+    let sw_norm = (sw_angle - nw_angle).rem_euclid(2.0 * PI);
+    let diag_ok =
+        ne_norm >= MIN_ARC && (se_norm - ne_norm) >= MIN_ARC && (sw_norm - se_norm) >= MIN_ARC;
+
+    if !trbl_ok && !diag_ok {
+        return empty;
+    }
+
+    // Prefer axis-aligned arcs; use diagonal only when axis-aligned is degenerate.
+    let (base_angle, a1, a2, a3) = if trbl_ok {
+        (t_angle, r_norm, b_norm, l_norm)
+    } else {
+        (nw_angle, ne_norm, se_norm, sw_norm)
+    };
+
+    // Assign each outer-boundary pixel to one of four arc groups.
+    let mut edges: [BumpVec<(f64, f64)>; 4] = [
+        BumpVec::new_in(arena),
+        BumpVec::new_in(arena),
+        BumpVec::new_in(arena),
+        BumpVec::new_in(arena),
+    ];
+
+    // The column/row scans may emit the same corner pixel twice; duplicates are
+    // harmless for IRLS (Huber re-weighting handles repeated points gracefully).
+    for &(px, py, angle) in &all_bnd {
+        let a_norm = (angle - base_angle).rem_euclid(2.0 * PI);
+        let group = if a_norm < a1 {
+            0
+        } else if a_norm < a2 {
+            1
+        } else if a_norm < a3 {
+            2
+        } else {
+            3
+        };
+        edges[group].push((px, py));
+    }
+
+    // Suppress the `img_height` unused-variable warning in the new code path
+    // (still needed for the 4-connected check in the old path — kept as a param
+    // for API stability).
+    let _ = img_height;
+
+    edges
+}
+
+// ── Phase 3: Micro-Ray Parabolic Sub-Pixel Refinement ─────────────────────────
+
+/// For each probe point along the IRLS line (in binary-image space), cast a
+/// short ray (±2 integer steps) along the normal in *gray-image space*, fit a
+/// parabola to the 1-D gradient profile, and collect the sub-pixel edge
+/// position in gray-image space.
+///
+/// `line` carries coordinates in binary-image space.  `dec` scales those to
+/// gray-image space (`dec = gray.width / binary.width`).  The returned points
+/// are in gray-image space.
+fn refine_edge_subpixel<'a>(
+    arena: &'a Bump,
+    gray: &ImageView,
+    line: &Line,
+    dec: f64,
+    min_x_bin: f64,
+    max_x_bin: f64,
+    min_y_bin: f64,
+    max_y_bin: f64,
+    sample_step: f64,
+    grad_min_mag: f64,
+) -> BumpVec<'a, (f64, f64)> {
+    let mut result: BumpVec<(f64, f64)> = BumpVec::new_in(arena);
+
+    // Tangent direction (perpendicular to normal).
+    let tx = -line.ny;
+    let ty = line.nx;
+
+    // Find the tangent-coordinate range of the line within the bounding box.
+    // Project all 4 bbox corners onto the tangent.
+    let corners = [
+        (min_x_bin, min_y_bin),
+        (max_x_bin, min_y_bin),
+        (max_x_bin, max_y_bin),
+        (min_x_bin, max_y_bin),
+    ];
+    let t_vals: [f64; 4] = corners.map(|(bx, by)| (bx - line.cx) * tx + (by - line.cy) * ty);
+
+    let t_min = t_vals.iter().copied().fold(f64::INFINITY, f64::min);
+    let t_max = t_vals.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+
+    let gray_w = gray.width as f64;
+    let gray_h = gray.height as f64;
+
+    // Normal direction in gray-image space (same direction, just scaled image).
+    let nx = line.nx;
+    let ny = line.ny;
+
+    let mut t = t_min;
+    while t <= t_max {
+        // Probe centre in binary-image space.
+        let px_bin = line.cx + t * tx;
+        let py_bin = line.cy + t * ty;
+
+        // Scale to gray-image space (pixel-center convention preserved).
+        let px = px_bin * dec;
+        let py = py_bin * dec;
+
+        // Sample 5 intensities at k ∈ {-2, -1, 0, 1, 2} along the normal.
+        // k=0 should be near the edge by construction (the IRLS line tracks the edge).
+        // intensities[k+2] for k in {-2,-1,0,1,2}
+        let mut intensities = [0.0_f64; 5];
+        let mut all_in_bounds = true;
+        for (ki, slot) in intensities.iter_mut().enumerate() {
+            let k = ki as f64 - 2.0; // k ∈ {-2,-1,0,1,2}
+            let sx = px + k * nx;
+            let sy = py + k * ny;
+            if sx < 0.5 || sy < 0.5 || sx >= gray_w - 0.5 || sy >= gray_h - 0.5 {
+                all_in_bounds = false;
+                break;
+            }
+            *slot = gray.sample_bilinear(sx, sy);
+        }
+
+        if all_in_bounds {
+            // Central-difference gradient at positions k = -1, 0, +1.
+            // g[j] = (intensities[j+1] - intensities[j-1]) / 2, at j = 1,2,3 (k = -1,0,+1).
+            let g_neg1 = (intensities[2] - intensities[0]) * 0.5; // gradient at k = -1
+            let g_0 = (intensities[3] - intensities[1]) * 0.5; // gradient at k =  0
+            let g_pos1 = (intensities[4] - intensities[2]) * 0.5; // gradient at k = +1
+
+            // Require a minimum gradient magnitude at the probe centre.
+            if g_0.abs() >= grad_min_mag {
+                // 3-point parabolic peak estimator.
+                // f(k) = a·k² + b·k + c fitted to (g_neg1, g_0, g_pos1) at k = (-1,0,1).
+                // Vertex at k* = -b/(2a) = -(g_pos1 - g_neg1) / (g_pos1 + g_neg1 - 2·g_0).
+                let denom = g_pos1 + g_neg1 - 2.0 * g_0;
+                let k_star = if denom.abs() > 1e-6 {
+                    (-(g_pos1 - g_neg1) / denom).clamp(-1.5, 1.5)
+                } else {
+                    0.0 // gradient nearly linear; no clear peak — stay at centre
+                };
+
+                // Sub-pixel edge location in gray-image space.
+                result.push((px + k_star * nx, py + k_star * ny));
+            }
+        }
+
+        t += sample_step;
+    }
+
+    result
+}
+
+// ── Main entry ─────────────────────────────────────────────────────────────────
+
+/// Extract a quad using the hybrid angular-boundary / IRLS / sub-pixel pipeline.
+///
+/// `binary` is the binarised (decimated) image; `gray` is the full-resolution
+/// grayscale image for sub-pixel refinement.  `labels` and `comp_label` identify
+/// the specific connected component to process.
+///
+/// Returns corners in **binary-image (decimated) coordinates** so that the
+/// caller's `corners * decimation` conversion produces full-resolution positions,
+/// consistent with the [`ContourRdp`] path.
+#[allow(clippy::too_many_lines)]
 pub(crate) fn extract_quad_edlines(
     arena: &Bump,
-    img: &ImageView,
+    binary: &ImageView,
+    gray: &ImageView,
+    labels: &[u32],
+    comp_label: u32,
     stat: &ComponentStats,
     cfg: &EdLinesConfig,
 ) -> Option<[Point; 4]> {
-    // ROI with 1-pixel border on each side.
-    let rx0 = (stat.min_x as usize).saturating_sub(1);
-    let ry0 = (stat.min_y as usize).saturating_sub(1);
-    let rx1 = (stat.max_x as usize + 2).min(img.width);
-    let ry1 = (stat.max_y as usize + 2).min(img.height);
-
-    let roi_w = rx1 - rx0;
-    let roi_h = ry1 - ry0;
-
-    if roi_w < 5 || roi_h < 5 {
+    let bbox_w = (stat.max_x - stat.min_x) as usize + 1;
+    let bbox_h = (stat.max_y - stat.min_y) as usize + 1;
+    if bbox_w < 5 || bbox_h < 5 {
         return None;
     }
 
-    // Allocate gradient buffer in the arena.
-    let grads: &mut [Grad] = arena.alloc_slice_fill_default(roi_w * roi_h);
-    compute_roi_gradients(img, rx0, ry0, roi_w, roi_h, grads);
+    // ── Phase 1: Angular arc boundary segmentation ────────────────────────────
+    // edges[0]: T→R arc, edges[1]: R→B arc, edges[2]: B→L arc, edges[3]: L→T arc
+    let edges =
+        extract_boundary_segments(arena, labels, binary.width, binary.height, comp_label, stat);
 
-    let visited: &mut [bool] = arena.alloc_slice_fill_copy(roi_w * roi_h, false);
-
-    // Collect anchors: scan every interior pixel; the local-maximum + magnitude
-    // criteria do the filtering. Subsampling via anchor_interval would risk missing
-    // edges that happen to fall on off-phase rows/columns.
-    let mut anchors: BumpVec<(usize, usize)> = BumpVec::new_in(arena);
-
-    for ry in 1..roi_h - 1 {
-        for rx in 1..roi_w - 1 {
-            let g = grads[ry * roi_w + rx];
-            if g.mag < cfg.grad_threshold {
-                continue;
-            }
-            // Local max along the gradient direction.
-            let ax = f32::from(g.gx);
-            let ay = f32::from(g.gy);
-            let len = (ax * ax + ay * ay).sqrt().max(1.0);
-            let gnx = (ax / len).round() as i32;
-            let gny = (ay / len).round() as i32;
-
-            let m_prev = grads[(ry as i32 - gny) as usize * roi_w + (rx as i32 - gnx) as usize].mag;
-            let m_next = grads[(ry as i32 + gny) as usize * roi_w + (rx as i32 + gnx) as usize].mag;
-            if g.mag >= m_prev && g.mag >= m_next {
-                anchors.push((rx, ry));
-            }
+    for e in &edges {
+        if e.len() < 2 {
+            return None;
         }
     }
 
-    if anchors.is_empty() {
-        return None;
-    }
+    // ── Phase 2: Huber IRLS on binary boundary points ─────────────────────────
+    let line0 = fit_line_irls(arena, edges[0].as_slice(), cfg.huber_delta, cfg.irls_iters)?;
+    let line1 = fit_line_irls(arena, edges[1].as_slice(), cfg.huber_delta, cfg.irls_iters)?;
+    let line2 = fit_line_irls(arena, edges[2].as_slice(), cfg.huber_delta, cfg.irls_iters)?;
+    let line3 = fit_line_irls(arena, edges[3].as_slice(), cfg.huber_delta, cfg.irls_iters)?;
+    let bin_lines = [line0, line1, line2, line3];
 
-    // A fitted line segment: PCA line params + mean gradient direction for clustering.
-    struct LineFit {
-        /// Homogeneous line normal (from PCA minimum-variance eigenvector).
-        nx: f64,
-        ny: f64,
-        /// Homogeneous offset: nx*x + ny*y + d = 0 for all points on the line.
-        d: f64,
-        /// Mean GRADIENT direction of the chain pixels in [-π, π].
-        /// This distinguishes the 4 edges of a quad (top/bottom/left/right have distinct
-        /// gradient directions unlike their line normals which come in parallel pairs).
-        grad_angle: f32,
-    }
+    // Decimation scale factor: gray-image pixels per binary-image pixel.
+    // When decimation = 1, dec = 1.0 and all coordinate conversions are no-ops.
+    let dec = gray.width as f64 / binary.width as f64;
 
-    let mut line_fits: BumpVec<LineFit> = BumpVec::new_in(arena);
+    // Bounding box in binary-image pixel-centre coordinates.
+    let min_x_bin = f64::from(stat.min_x) + 0.5;
+    let max_x_bin = f64::from(stat.max_x) + 0.5;
+    let min_y_bin = f64::from(stat.min_y) + 0.5;
+    let max_y_bin = f64::from(stat.max_y) + 0.5;
 
-    for &(rx, ry) in &anchors {
-        let idx = ry * roi_w + rx;
-        if visited[idx] {
-            continue;
-        }
-
-        let chain = route_chain(
+    // ── Phase 3: Sub-pixel refinement (results in gray-image space) ───────────
+    let sp: [BumpVec<(f64, f64)>; 4] = [
+        refine_edge_subpixel(
             arena,
-            grads,
-            roi_w,
-            roi_h,
-            rx,
-            ry,
-            visited,
-            cfg.grad_threshold,
-        );
-
-        if chain.len() < cfg.min_segment_length {
-            continue;
-        }
-
-        if let Some((nx, ny, d, mse)) = fit_line_pca(&chain)
-            && mse <= cfg.line_mse_threshold
-        {
-            // Compute mean gradient direction (directed, period 2π) for clustering.
-            let mut sum_gx = 0.0f32;
-            let mut sum_gy = 0.0f32;
-            for &(prx, pry) in chain.as_slice() {
-                let g = grads[pry as usize * roi_w + prx as usize];
-                sum_gx += f32::from(g.gx);
-                sum_gy += f32::from(g.gy);
-            }
-            let grad_angle = sum_gy.atan2(sum_gx);
-            line_fits.push(LineFit {
-                nx,
-                ny,
-                d,
-                grad_angle,
-            });
-        }
-    }
-
-    if line_fits.len() < 4 {
-        return None;
-    }
-
-    // Cluster into 4 angular groups using the mean gradient DIRECTION (period 2π).
-    // For a square: top ≈ π/2, right ≈ 0, bottom ≈ -π/2, left ≈ ±π.
-    // These are 4 distinct directed angles separated by ~π/2.
-    //
-    // Seed initialization: use the 4*angle circular mean trick (4-fold symmetry at π/2).
-    let mut sum_sin4 = 0.0f32;
-    let mut sum_cos4 = 0.0f32;
-    for lf in line_fits.as_slice() {
-        sum_sin4 += (4.0 * lf.grad_angle).sin();
-        sum_cos4 += (4.0 * lf.grad_angle).cos();
-    }
-    let mean_4theta = sum_sin4.atan2(sum_cos4);
-    let theta0 = mean_4theta / 4.0;
-
-    let seeds = [
-        theta0,
-        theta0 + std::f32::consts::FRAC_PI_2,
-        theta0 + std::f32::consts::PI,
-        theta0 - std::f32::consts::FRAC_PI_2,
+            gray,
+            &bin_lines[0],
+            dec,
+            min_x_bin,
+            max_x_bin,
+            min_y_bin,
+            max_y_bin,
+            cfg.sample_step,
+            cfg.grad_min_mag,
+        ),
+        refine_edge_subpixel(
+            arena,
+            gray,
+            &bin_lines[1],
+            dec,
+            min_x_bin,
+            max_x_bin,
+            min_y_bin,
+            max_y_bin,
+            cfg.sample_step,
+            cfg.grad_min_mag,
+        ),
+        refine_edge_subpixel(
+            arena,
+            gray,
+            &bin_lines[2],
+            dec,
+            min_x_bin,
+            max_x_bin,
+            min_y_bin,
+            max_y_bin,
+            cfg.sample_step,
+            cfg.grad_min_mag,
+        ),
+        refine_edge_subpixel(
+            arena,
+            gray,
+            &bin_lines[3],
+            dec,
+            min_x_bin,
+            max_x_bin,
+            min_y_bin,
+            max_y_bin,
+            cfg.sample_step,
+            cfg.grad_min_mag,
+        ),
     ];
 
-    let mut groups: [BumpVec<usize>; 4] = [
-        BumpVec::new_in(arena),
-        BumpVec::new_in(arena),
-        BumpVec::new_in(arena),
-        BumpVec::new_in(arena),
+    // ── Phase 4: Sub-pixel IRLS re-fit, then intersect ───────────────────────
+    // Convert a binary-space Line to gray-image space (scale centroid by dec;
+    // unit normal is direction-only and does not scale).
+    let to_gray = |l: &Line| -> Line {
+        let cx_g = l.cx * dec;
+        let cy_g = l.cy * dec;
+        Line {
+            nx: l.nx,
+            ny: l.ny,
+            d: -(l.nx * cx_g + l.ny * cy_g),
+            cx: cx_g,
+            cy: cy_g,
+        }
+    };
+
+    // Try Phase-4 IRLS on the sub-pixel point set; fall back to scaled Phase-2 line.
+    let try_refit = |pts: &[(f64, f64)], fallback: Line| -> Line {
+        if pts.len() >= cfg.min_edge_pts {
+            fit_line_irls(arena, pts, cfg.sp_huber_delta, cfg.sp_irls_iters).unwrap_or(fallback)
+        } else {
+            fallback
+        }
+    };
+
+    let fl: [Line; 4] = [
+        try_refit(sp[0].as_slice(), to_gray(&bin_lines[0])),
+        try_refit(sp[1].as_slice(), to_gray(&bin_lines[1])),
+        try_refit(sp[2].as_slice(), to_gray(&bin_lines[2])),
+        try_refit(sp[3].as_slice(), to_gray(&bin_lines[3])),
     ];
 
-    for (i, lf) in line_fits.iter().enumerate() {
-        let mut best_g = 0;
-        let mut best_d = f32::MAX;
-        for (g, &seed) in seeds.iter().enumerate() {
-            let d = grad_angle_diff(lf.grad_angle, seed);
-            if d < best_d {
-                best_d = d;
-                best_g = g;
-            }
-        }
-        groups[best_g].push(i);
-    }
+    // Intersect adjacent edge pairs to get 4 corners (gray-image space):
+    //   corner_T = edge[3] ∩ edge[0]   (L→T arc meets T→R arc)
+    //   corner_R = edge[0] ∩ edge[1]   (T→R arc meets R→B arc)
+    //   corner_B = edge[1] ∩ edge[2]   (R→B arc meets B→L arc)
+    //   corner_L = edge[2] ∩ edge[3]   (B→L arc meets L→T arc)
+    let (ct_x, ct_y) = intersect_lines(&fl[3], &fl[0])?;
+    let (cr_x, cr_y) = intersect_lines(&fl[0], &fl[1])?;
+    let (cb_x, cb_y) = intersect_lines(&fl[1], &fl[2])?;
+    let (cl_x, cl_y) = intersect_lines(&fl[2], &fl[3])?;
 
-    // All 4 groups must be populated.
-    for grp in &groups {
-        if grp.is_empty() {
+    // Validate: all corners within the expanded bbox (gray-image space).
+    let margin_x = (max_x_bin - min_x_bin) * dec * 0.25;
+    let margin_y = (max_y_bin - min_y_bin) * dec * 0.25;
+    let g_min_x = min_x_bin * dec - margin_x;
+    let g_max_x = max_x_bin * dec + margin_x;
+    let g_min_y = min_y_bin * dec - margin_y;
+    let g_max_y = max_y_bin * dec + margin_y;
+
+    for &(qx, qy) in &[(ct_x, ct_y), (cr_x, cr_y), (cb_x, cb_y), (cl_x, cl_y)] {
+        if qx < g_min_x || qx > g_max_x || qy < g_min_y || qy > g_max_y {
             return None;
         }
     }
 
-    // Pick the dominant line per group: the one with grad_angle closest to the group's mean.
-    let mut dominant: [Option<(f64, f64, f64)>; 4] = [None; 4];
-    for (g, grp) in groups.iter().enumerate() {
-        let mut s = 0.0f32;
-        let mut c_val = 0.0f32;
-        for &idx in grp.as_slice() {
-            s += line_fits[idx].grad_angle.sin();
-            c_val += line_fits[idx].grad_angle.cos();
-        }
-        let mean_angle = s.atan2(c_val);
-
-        let mut best_idx = grp[0];
-        let mut best_diff = f32::MAX;
-        for &idx in grp.as_slice() {
-            let d = grad_angle_diff(line_fits[idx].grad_angle, mean_angle);
-            if d < best_diff {
-                best_diff = d;
-                best_idx = idx;
-            }
-        }
-
-        let lf = &line_fits[best_idx];
-        dominant[g] = Some((lf.nx, lf.ny, lf.d));
-    }
-
-    // Compute 4 corners as intersections of adjacent dominant lines.
-    // Groups in angular order (0 → π/2 → π → 3π/2): corners at group boundaries 0&1, 1&2, 2&3, 3&0.
-    let mut corners_roi = [[0.0f64; 2]; 4];
-    for i in 0..4 {
-        let j = (i + 1) % 4;
-        let (n1x, n1y, d1) = dominant[i]?;
-        let (n2x, n2y, d2) = dominant[j]?;
-        let (cx, cy) = intersect_lines(n1x, n1y, d1, n2x, n2y, d2)?;
-        if cx < -2.0 || cy < -2.0 || cx > roi_w as f64 + 2.0 || cy > roi_h as f64 + 2.0 {
-            return None;
-        }
-        corners_roi[i] = [cx, cy];
-    }
-
-    // Validate via signed area (shoelace).
-    let mut area = 0.0f64;
-    for i in 0..4 {
-        let j = (i + 1) % 4;
-        area += corners_roi[i][0] * corners_roi[j][1];
-        area -= corners_roi[j][0] * corners_roi[i][1];
-    }
-    area *= 0.5;
-
-    if area.abs() < f64::from(stat.pixel_count) * 0.1 {
+    // Validate signed area (shoelace in gray-image space).
+    // `pixel_count` is in binary pixels; scale the threshold to gray pixels².
+    let pts4 = [(ct_x, ct_y), (cr_x, cr_y), (cb_x, cb_y), (cl_x, cl_y)];
+    let area = shoelace_area(&pts4);
+    if area.abs() < f64::from(stat.pixel_count) * dec * dec * 0.1 {
         return None;
     }
 
-    // Convert ROI-relative coords to full image coords, return in CW order.
-    let ox = rx0 as f64;
-    let oy = ry0 as f64;
+    // ── Return corners in binary-image (decimated) space ──────────────────────
+    // The caller in `quad.rs` multiplies by `decimation as f64` to get full-res
+    // coordinates; we must undo our own `dec` scaling before returning.
+    let inv_dec = 1.0 / dec;
 
-    let pts = if area > 0.0 {
+    // Arc assignment guarantees CW traversal [T, R, B, L] in y-down image coords,
+    // which gives positive shoelace area.  If unexpectedly negative, reverse to
+    // restore CW winding.
+    let to_pt = |x: f64, y: f64| Point {
+        x: x * inv_dec,
+        y: y * inv_dec,
+    };
+
+    Some(if area >= 0.0 {
         [
-            Point {
-                x: corners_roi[0][0] + ox,
-                y: corners_roi[0][1] + oy,
-            },
-            Point {
-                x: corners_roi[1][0] + ox,
-                y: corners_roi[1][1] + oy,
-            },
-            Point {
-                x: corners_roi[2][0] + ox,
-                y: corners_roi[2][1] + oy,
-            },
-            Point {
-                x: corners_roi[3][0] + ox,
-                y: corners_roi[3][1] + oy,
-            },
+            to_pt(ct_x, ct_y),
+            to_pt(cr_x, cr_y),
+            to_pt(cb_x, cb_y),
+            to_pt(cl_x, cl_y),
         ]
     } else {
         [
-            Point {
-                x: corners_roi[0][0] + ox,
-                y: corners_roi[0][1] + oy,
-            },
-            Point {
-                x: corners_roi[3][0] + ox,
-                y: corners_roi[3][1] + oy,
-            },
-            Point {
-                x: corners_roi[2][0] + ox,
-                y: corners_roi[2][1] + oy,
-            },
-            Point {
-                x: corners_roi[1][0] + ox,
-                y: corners_roi[1][1] + oy,
-            },
+            to_pt(ct_x, ct_y),
+            to_pt(cl_x, cl_y),
+            to_pt(cb_x, cb_y),
+            to_pt(cr_x, cr_y),
         ]
-    };
-
-    Some(pts)
+    })
 }
+
+// ── Tests ──────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
@@ -588,6 +893,7 @@ mod tests {
     use crate::image::ImageView;
     use crate::segmentation::ComponentStats;
 
+    /// Build a grayscale image with a filled dark square on a bright background.
     fn make_square_image(canvas: usize, sq_x0: usize, sq_y0: usize, sq_size: usize) -> Vec<u8> {
         let mut img = vec![200u8; canvas * canvas];
         for y in sq_y0..sq_y0 + sq_size {
@@ -598,23 +904,35 @@ mod tests {
         img
     }
 
-    fn make_stats(
-        min_x: u16,
-        min_y: u16,
-        max_x: u16,
-        max_y: u16,
-        pixel_count: u32,
-    ) -> ComponentStats {
+    /// Build a label map with `comp_label = 1` inside the square.
+    fn make_labels(canvas: usize, sq_x0: usize, sq_y0: usize, sq_size: usize) -> Vec<u32> {
+        let mut labels = vec![0u32; canvas * canvas];
+        for y in sq_y0..sq_y0 + sq_size {
+            for x in sq_x0..sq_x0 + sq_size {
+                labels[y * canvas + x] = 1;
+            }
+        }
+        labels
+    }
+
+    /// Build ComponentStats with correct moment accumulators for a filled square.
+    fn make_stats_square(sq_x0: u16, sq_y0: u16, sq_size: u16) -> ComponentStats {
+        let x1 = u64::from(sq_x0);
+        let y1 = u64::from(sq_y0);
+        let n = u64::from(sq_size);
+        // Σ(x = x1..x1+n-1) x = n * (2*x1 + n - 1) / 2
+        let m10 = n * (2 * x1 + n - 1) / 2 * n; // n rows, each row contributes Σ x
+        let m01 = n * (2 * y1 + n - 1) / 2 * n; // n cols, each col contributes Σ y
         ComponentStats {
-            min_x,
-            min_y,
-            max_x,
-            max_y,
-            pixel_count,
-            first_pixel_x: min_x,
-            first_pixel_y: min_y,
-            m10: 0,
-            m01: 0,
+            min_x: sq_x0,
+            min_y: sq_y0,
+            max_x: sq_x0 + sq_size - 1,
+            max_y: sq_y0 + sq_size - 1,
+            pixel_count: u32::from(sq_size) * u32::from(sq_size),
+            first_pixel_x: sq_x0,
+            first_pixel_y: sq_y0,
+            m10,
+            m01,
             m20: 0,
             m02: 0,
             m11: 0,
@@ -624,37 +942,37 @@ mod tests {
     #[test]
     fn test_edlines_square_returns_corners() {
         let canvas = 100usize;
-        let sq_x0 = 30usize;
-        let sq_y0 = 30usize;
-        let sq_size = 40usize;
+        let sq_x0 = 30u16;
+        let sq_y0 = 30u16;
+        let sq_size = 40u16;
 
-        let pixels = make_square_image(canvas, sq_x0, sq_y0, sq_size);
+        let pixels = make_square_image(canvas, sq_x0 as usize, sq_y0 as usize, sq_size as usize);
+        let labels = make_labels(canvas, sq_x0 as usize, sq_y0 as usize, sq_size as usize);
         let img = ImageView::new(&pixels, canvas, canvas, canvas).unwrap();
-        let stats = make_stats(
-            sq_x0 as u16,
-            sq_y0 as u16,
-            (sq_x0 + sq_size - 1) as u16,
-            (sq_y0 + sq_size - 1) as u16,
-            (sq_size * sq_size) as u32,
-        );
+        let stats = make_stats_square(sq_x0, sq_y0, sq_size);
         let cfg = EdLinesConfig {
-            grad_threshold: 10,
-            line_mse_threshold: 3.0,
-            min_segment_length: 4,
+            huber_delta: 1.5,
+            irls_iters: 3,
+            sp_huber_delta: 0.5,
+            sp_irls_iters: 2,
+            sample_step: 1.5,
+            grad_min_mag: 4.0, // lower threshold for synthetic hard-edge image
+            min_edge_pts: 5,
         };
         let arena = Bump::new();
-        let result = extract_quad_edlines(&arena, &img, &stats, &cfg);
+        // Use the same image as both binary and gray (dec = 1.0).
+        let result = extract_quad_edlines(&arena, &img, &img, &labels, 1, &stats, &cfg);
         assert!(
             result.is_some(),
-            "EDLines should find a quad in a clean square image"
+            "EDLines should detect a quad in a clean synthetic square"
         );
 
-        // All corners must be within 4px of the true square corners.
+        // All returned corners must be within 4 px of one of the true square corners.
         let true_corners = [
-            [sq_x0 as f64, sq_y0 as f64],
-            [(sq_x0 + sq_size) as f64, sq_y0 as f64],
-            [(sq_x0 + sq_size) as f64, (sq_y0 + sq_size) as f64],
-            [sq_x0 as f64, (sq_y0 + sq_size) as f64],
+            [f64::from(sq_x0), f64::from(sq_y0)],
+            [f64::from(sq_x0 + sq_size), f64::from(sq_y0)],
+            [f64::from(sq_x0 + sq_size), f64::from(sq_y0 + sq_size)],
+            [f64::from(sq_x0), f64::from(sq_y0 + sq_size)],
         ];
         let corners = result.unwrap();
         let mut matched = [false; 4];
@@ -672,7 +990,7 @@ mod tests {
             }
             assert!(
                 found,
-                "Corner ({:.1}, {:.1}) not near any true corner",
+                "Corner ({:.1}, {:.1}) is not within 4 px of any true corner",
                 corner.x, corner.y
             );
         }
@@ -682,14 +1000,32 @@ mod tests {
     fn test_edlines_tiny_roi_returns_none() {
         let pixels = vec![100u8; 10 * 10];
         let img = ImageView::new(&pixels, 10, 10, 10).unwrap();
-        let stats = make_stats(1, 1, 3, 3, 9);
+        let stats = ComponentStats {
+            min_x: 1,
+            min_y: 1,
+            max_x: 3,
+            max_y: 3,
+            pixel_count: 9,
+            first_pixel_x: 1,
+            first_pixel_y: 1,
+            m10: 0,
+            m01: 0,
+            m20: 0,
+            m02: 0,
+            m11: 0,
+        };
         let cfg = EdLinesConfig {
-            grad_threshold: 20,
-            line_mse_threshold: 1.5,
-            min_segment_length: 8,
+            huber_delta: 1.5,
+            irls_iters: 3,
+            sp_huber_delta: 0.5,
+            sp_irls_iters: 2,
+            sample_step: 1.5,
+            grad_min_mag: 8.0,
+            min_edge_pts: 5,
         };
         let arena = Bump::new();
-        let result = extract_quad_edlines(&arena, &img, &stats, &cfg);
-        assert!(result.is_none(), "Tiny ROI should return None");
+        // labels and comp_label are not accessed because the bbox guard fires first.
+        let result = extract_quad_edlines(&arena, &img, &img, &[], 0, &stats, &cfg);
+        assert!(result.is_none(), "Tiny ROI must return None");
     }
 }
