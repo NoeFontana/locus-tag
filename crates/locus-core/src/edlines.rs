@@ -13,8 +13,12 @@
 //!      the 1-D gradient profile; extract the sub-pixel peak.  This escapes the
 //!      ±0.5 px binary quantization limit.
 //!   4. **Sub-Pixel IRLS Re-fit + Intersection** — re-fit lines to the continuous
-//!      edge points (tighter Huber δ), then intersect adjacent pairs to recover the
-//!      four corners in the coordinate space expected by the caller.
+//!      edge points (tighter Huber δ), then intersect adjacent pairs to produce an
+//!      initial four-corner estimate.
+//!   5. **Joint Gauss-Newton** — jointly optimise all eight corner DOFs (4 corners ×
+//!      2 coordinates) by minimising the sum of squared perpendicular distances from
+//!      the sub-pixel observations to their respective edge.  An unrolled 8×8
+//!      Cholesky solver (all stack, zero allocations) converges in 1–3 iterations.
 
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::cast_possible_wrap)]
@@ -52,6 +56,9 @@ pub(crate) struct EdLinesConfig {
     /// Minimum number of sub-pixel points per side to attempt a Phase 4 re-fit.
     /// Default: 5.
     pub min_edge_pts: usize,
+    /// Number of Joint Gauss-Newton iterations for Phase 5 corner refinement.
+    /// Default: 3.  Set to 0 to disable.
+    pub gn_iters: usize,
 }
 
 impl EdLinesConfig {
@@ -66,6 +73,7 @@ impl EdLinesConfig {
             sample_step: 1.5,
             grad_min_mag: 8.0,
             min_edge_pts: 5,
+            gn_iters: 3,
         }
     }
 }
@@ -196,6 +204,187 @@ fn shoelace_area(pts: &[(f64, f64); 4]) -> f64 {
         area -= pts[j].0 * pts[i].1;
     }
     area * 0.5
+}
+
+// ── Phase 5 helpers: 8×8 Cholesky + Joint Gauss-Newton ───────────────────────
+
+/// Solve the 8×8 symmetric positive-definite system H·x = b via LL^T Cholesky.
+///
+/// All computation is on the stack.  Returns `None` if the system is degenerate
+/// (any diagonal pivot drops below `1e-12`).
+#[must_use]
+#[allow(clippy::many_single_char_names)]
+fn cholesky_solve_8x8(h_in: &[f64; 64], b: &[f64; 8]) -> Option<[f64; 8]> {
+    // Work in-place on a copy so we don't clobber the caller's H.
+    // After factorisation, the lower-triangular half holds L (L[j][i] = l[j*8+i], j≥i).
+    let mut l = *h_in;
+
+    for i in 0..8_usize {
+        // Diagonal pivot: L[i][i]² = H[i][i] − Σ_{k<i} L[i][k]²
+        let mut s = l[i * 8 + i];
+        for k in 0..i {
+            s -= l[i * 8 + k] * l[i * 8 + k];
+        }
+        if s < 1e-12 {
+            return None; // not positive-definite
+        }
+        let l_ii = s.sqrt();
+        l[i * 8 + i] = l_ii;
+        let inv_lii = 1.0 / l_ii;
+
+        // Off-diagonal: L[j][i] = (H[j][i] − Σ_{k<i} L[j][k]·L[i][k]) / L[i][i]
+        for j in (i + 1)..8 {
+            let mut sum = l[j * 8 + i]; // lower-triangular read of H (symmetric)
+            for k in 0..i {
+                sum -= l[j * 8 + k] * l[i * 8 + k];
+            }
+            l[j * 8 + i] = sum * inv_lii;
+        }
+    }
+
+    // Forward substitution: L·y = b
+    let mut y = [0.0_f64; 8];
+    for i in 0..8 {
+        let mut s = b[i];
+        for k in 0..i {
+            s -= l[i * 8 + k] * y[k];
+        }
+        y[i] = s / l[i * 8 + i];
+    }
+
+    // Backward substitution: L^T·x = y
+    let mut x = [0.0_f64; 8];
+    for i in (0..8).rev() {
+        let mut s = y[i];
+        for k in (i + 1)..8 {
+            s -= l[k * 8 + i] * x[k]; // L^T[i][k] = L[k][i] = l[k*8+i]
+        }
+        x[i] = s / l[i * 8 + i];
+    }
+
+    Some(x)
+}
+
+/// Joint Gauss-Newton refinement of all four corners.
+///
+/// Jointly minimises Σ_k Σ_{q∈edge_k} r_q² where r_q is the signed perpendicular
+/// distance from sub-pixel observation q (on edge k) to the line connecting the
+/// current corners[k] and corners[(k+1)%4].
+///
+/// State θ = [x₀,y₀,x₁,y₁,x₂,y₂,x₃,y₃].  Edge k connects corner k to corner
+/// (k+1)%4.  sp[k] is the slice of (x, y) sub-pixel observations for edge k.
+///
+/// Returns the refined corners, or the original `corners` if the solver diverges.
+#[allow(clippy::too_many_lines)]
+fn refine_corners_gauss_newton(
+    mut corners: [(f64, f64); 4],
+    sp: [&[(f64, f64)]; 4],
+    max_iters: usize,
+) -> [(f64, f64); 4] {
+    const TOL: f64 = 0.005; // convergence: max corner displacement < 0.005 px
+
+    let original = corners;
+
+    for _iter in 0..max_iters {
+        let mut h = [0.0_f64; 64]; // 8×8 symmetric Gauss-Newton Hessian (J^T J)
+        let mut g = [0.0_f64; 8]; // gradient vector (J^T r)
+
+        for k in 0..4_usize {
+            let ck = corners[k];
+            let ck1 = corners[(k + 1) % 4];
+
+            let ex = ck1.0 - ck.0;
+            let ey = ck1.1 - ck.1;
+            let len = (ex * ex + ey * ey).sqrt();
+            if len < 1e-6 {
+                continue;
+            }
+
+            // Unit tangent and normal for the current edge direction.
+            let tx = ex / len;
+            let ty = ey / len;
+            let nx = -ty; // unit normal (CCW rotation of tangent)
+            let ny = tx;
+
+            // State-vector indices for the two endpoints of edge k.
+            let ik_x = 2 * k;
+            let ik_y = 2 * k + 1;
+            let ik1_x = 2 * ((k + 1) % 4);
+            let ik1_y = 2 * ((k + 1) % 4) + 1;
+
+            for &(qx, qy) in sp[k] {
+                // Projection parameter α ∈ [0,1] along edge (0 = corner k, 1 = corner k+1).
+                let alpha = ((qx - ck.0) * tx + (qy - ck.1) * ty) / len;
+
+                // Exclusion zone: discard observations too close to corners (corner bleed).
+                if !(0.05_f64..=0.95_f64).contains(&alpha) {
+                    continue;
+                }
+
+                // Perpendicular residual: signed distance from q to the current edge line.
+                let r = (qx - ck.0) * nx + (qy - ck.1) * ny;
+
+                // Sparse Jacobian row (4 non-zero elements out of 8):
+                //   ∂r/∂x_k       = -(1-α)·nₓ
+                //   ∂r/∂y_k       = -(1-α)·nᵧ
+                //   ∂r/∂x_{k+1}   =    -α ·nₓ
+                //   ∂r/∂y_{k+1}   =    -α ·nᵧ
+                let a_k = 1.0 - alpha;
+                let js = [
+                    (ik_x, -a_k * nx),
+                    (ik_y, -a_k * ny),
+                    (ik1_x, -alpha * nx),
+                    (ik1_y, -alpha * ny),
+                ];
+
+                // Accumulate H += J^T J and g += J^T r (unit weight).
+                // Populate the full 8×8 matrix (both triangles) so that the
+                // Cholesky can read either the upper or lower half consistently.
+                for &(a, ja) in &js {
+                    g[a] += ja * r;
+                    for &(b, jb) in &js {
+                        h[a * 8 + b] += ja * jb;
+                    }
+                }
+            }
+        }
+
+        // Tikhonov regularisation: H += λ·I.  Prevents singular systems when
+        // an edge has too few valid observations after exclusion-zone filtering.
+        for i in 0..8 {
+            h[i * 8 + i] += 1e-6;
+        }
+
+        // Solve H·Δθ = −g.
+        let neg_g = g.map(|x| -x);
+        let Some(delta) = cholesky_solve_8x8(&h, &neg_g) else {
+            break; // singular — keep current estimate
+        };
+
+        // Apply update and check convergence.
+        let mut max_step = 0.0_f64;
+        for i in 0..4 {
+            corners[i].0 += delta[2 * i];
+            corners[i].1 += delta[2 * i + 1];
+            max_step = max_step.max(delta[2 * i].abs()).max(delta[2 * i + 1].abs());
+        }
+
+        if max_step < TOL {
+            break;
+        }
+    }
+
+    // Sanity check: if any corner moved more than 5 px from the initial estimate,
+    // the solver likely diverged — revert to the Phase-4 intersections.
+    for i in 0..4 {
+        let dx = corners[i].0 - original[i].0;
+        let dy = corners[i].1 - original[i].1;
+        if dx * dx + dy * dy > 25.0 {
+            return original;
+        }
+    }
+
+    corners
 }
 
 // ── Phase 1: Angular Arc Boundary ─────────────────────────────────────────────
@@ -822,15 +1011,29 @@ pub(crate) fn extract_quad_edlines(
         try_refit(sp[3].as_slice(), to_gray(&bin_lines[3])),
     ];
 
-    // Intersect adjacent edge pairs to get 4 corners (gray-image space):
+    // Intersect adjacent edge pairs to get 4 initial corners (gray-image space):
     //   corner_T = edge[3] ∩ edge[0]   (L→T arc meets T→R arc)
     //   corner_R = edge[0] ∩ edge[1]   (T→R arc meets R→B arc)
     //   corner_B = edge[1] ∩ edge[2]   (R→B arc meets B→L arc)
     //   corner_L = edge[2] ∩ edge[3]   (B→L arc meets L→T arc)
-    let (ct_x, ct_y) = intersect_lines(&fl[3], &fl[0])?;
-    let (cr_x, cr_y) = intersect_lines(&fl[0], &fl[1])?;
-    let (cb_x, cb_y) = intersect_lines(&fl[1], &fl[2])?;
-    let (cl_x, cl_y) = intersect_lines(&fl[2], &fl[3])?;
+    let ct = intersect_lines(&fl[3], &fl[0])?;
+    let cr = intersect_lines(&fl[0], &fl[1])?;
+    let cb = intersect_lines(&fl[1], &fl[2])?;
+    let cl = intersect_lines(&fl[2], &fl[3])?;
+
+    // ── Phase 5: Joint Gauss-Newton corner refinement ─────────────────────────
+    // Jointly optimise all 8 corner DOFs by minimising the sum of squared
+    // perpendicular distances from the Phase-3 sub-pixel observations to their
+    // respective edge.  The 8×8 normal equations are solved via an unrolled
+    // Cholesky on the stack (zero allocations).  Initialised from Phase-4
+    // intersections; falls back to Phase-4 if the solver diverges.
+    let sp_slices = [
+        sp[0].as_slice(),
+        sp[1].as_slice(),
+        sp[2].as_slice(),
+        sp[3].as_slice(),
+    ];
+    let [ct, cr, cb, cl] = refine_corners_gauss_newton([ct, cr, cb, cl], sp_slices, cfg.gn_iters);
 
     // Validate: all corners within the expanded bbox (gray-image space).
     let margin_x = (max_x_bin - min_x_bin) * dec * 0.25;
@@ -840,7 +1043,7 @@ pub(crate) fn extract_quad_edlines(
     let g_min_y = min_y_bin * dec - margin_y;
     let g_max_y = max_y_bin * dec + margin_y;
 
-    for &(qx, qy) in &[(ct_x, ct_y), (cr_x, cr_y), (cb_x, cb_y), (cl_x, cl_y)] {
+    for &(qx, qy) in &[ct, cr, cb, cl] {
         if qx < g_min_x || qx > g_max_x || qy < g_min_y || qy > g_max_y {
             return None;
         }
@@ -848,7 +1051,7 @@ pub(crate) fn extract_quad_edlines(
 
     // Validate signed area (shoelace in gray-image space).
     // `pixel_count` is in binary pixels; scale the threshold to gray pixels².
-    let pts4 = [(ct_x, ct_y), (cr_x, cr_y), (cb_x, cb_y), (cl_x, cl_y)];
+    let pts4 = [ct, cr, cb, cl];
     let area = shoelace_area(&pts4);
     if area.abs() < f64::from(stat.pixel_count) * dec * dec * 0.1 {
         return None;
@@ -862,25 +1065,15 @@ pub(crate) fn extract_quad_edlines(
     // Arc assignment guarantees CW traversal [T, R, B, L] in y-down image coords,
     // which gives positive shoelace area.  If unexpectedly negative, reverse to
     // restore CW winding.
-    let to_pt = |x: f64, y: f64| Point {
+    let to_pt = |(x, y): (f64, f64)| Point {
         x: x * inv_dec,
         y: y * inv_dec,
     };
 
     Some(if area >= 0.0 {
-        [
-            to_pt(ct_x, ct_y),
-            to_pt(cr_x, cr_y),
-            to_pt(cb_x, cb_y),
-            to_pt(cl_x, cl_y),
-        ]
+        [to_pt(ct), to_pt(cr), to_pt(cb), to_pt(cl)]
     } else {
-        [
-            to_pt(ct_x, ct_y),
-            to_pt(cl_x, cl_y),
-            to_pt(cb_x, cb_y),
-            to_pt(cr_x, cr_y),
-        ]
+        [to_pt(ct), to_pt(cl), to_pt(cb), to_pt(cr)]
     })
 }
 
@@ -958,6 +1151,7 @@ mod tests {
             sample_step: 1.5,
             grad_min_mag: 4.0, // lower threshold for synthetic hard-edge image
             min_edge_pts: 5,
+            gn_iters: 3,
         };
         let arena = Bump::new();
         // Use the same image as both binary and gray (dec = 1.0).
@@ -1022,6 +1216,7 @@ mod tests {
             sample_step: 1.5,
             grad_min_mag: 8.0,
             min_edge_pts: 5,
+            gn_iters: 3,
         };
         let arena = Bump::new();
         // labels and comp_label are not accessed because the bbox guard fires first.

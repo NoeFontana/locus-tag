@@ -1,5 +1,6 @@
 ---
 source: crates/locus-core/tests/regression_render_tag.rs
+assertion_line: 548
 expression: report
 ---
 summary:
