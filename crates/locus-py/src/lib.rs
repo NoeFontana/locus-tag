@@ -178,6 +178,9 @@ pub struct PyDetectorConfig {
     pub decode_mode: DecodeMode,
     pub max_hamming_error: u32,
     pub gwlf_transversal_alpha: f64,
+    pub quad_max_elongation: f64,
+    pub quad_min_density: f64,
+    pub quad_extraction_mode: i32,
 }
 
 impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
@@ -225,6 +228,12 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             },
             max_hamming_error: c.max_hamming_error,
             gwlf_transversal_alpha: c.gwlf_transversal_alpha,
+            quad_max_elongation: c.quad_max_elongation,
+            quad_min_density: c.quad_min_density,
+            quad_extraction_mode: match c.quad_extraction_mode {
+                locus_core::config::QuadExtractionMode::ContourRdp => 0,
+                locus_core::config::QuadExtractionMode::EdLines => 1,
+            },
         }
     }
 }
@@ -542,6 +551,21 @@ fn create_detector(
         }
         if let Some(val) = args.get_item("gwlf_transversal_alpha")? {
             builder = builder.with_gwlf_transversal_alpha(val.extract()?);
+        }
+        if let Some(val) = args.get_item("quad_max_elongation")? {
+            builder = builder.with_quad_max_elongation(val.extract()?);
+        }
+        if let Some(val) = args.get_item("quad_min_density")? {
+            builder = builder.with_quad_min_density(val.extract()?);
+        }
+        if let Some(val) = args.get_item("quad_extraction_mode")? {
+            let i: i32 = val.extract()?;
+            let mode = match i {
+                0 => locus_core::config::QuadExtractionMode::ContourRdp,
+                1 => locus_core::config::QuadExtractionMode::EdLines,
+                _ => return Err(PyValueError::new_err("Invalid quad_extraction_mode")),
+            };
+            builder = builder.with_quad_extraction_mode(mode);
         }
         if let Some(val) = args.get_item("refinement_mode")? {
             let i: i32 = val.extract()?;

@@ -101,11 +101,15 @@ pub fn extract_quads_soa(
             };
         }
         // Write per-corner 2×2 covariances (4 floats each, 16 total per candidate).
-        for (chunk, cov) in batch.corner_covariances[i]
-            .chunks_exact_mut(4)
-            .zip(covs.iter())
-        {
-            chunk.copy_from_slice(cov);
+        if covs.is_empty() {
+            batch.corner_covariances[i].fill(0.0);
+        } else {
+            for (chunk, cov) in batch.corner_covariances[i]
+                .chunks_exact_mut(4)
+                .zip(covs.iter())
+            {
+                chunk.copy_from_slice(cov);
+            }
         }
         if let Some(ref mut u) = unrefined {
             u.push(unrefined_pts);
