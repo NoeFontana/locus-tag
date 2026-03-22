@@ -9,7 +9,7 @@
 use crate::batch::{DetectionBatch, Pose6D};
 use crate::config::PoseEstimationMode;
 use crate::image::ImageView;
-use nalgebra::{Matrix2, Matrix3, Matrix6, UnitQuaternion, Vector3, Vector6};
+use nalgebra::{Matrix2, Matrix3, Matrix6, Rotation3, UnitQuaternion, Vector3, Vector6};
 
 /// Camera intrinsics parameters.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -715,7 +715,17 @@ pub fn refine_poses_soa_with_config(
             );
 
             if let Some(pose) = pose_opt {
-                let q = UnitQuaternion::from_matrix(&pose.rotation);
+                // `UnitQuaternion::from_matrix` delegates to `Rotation3::from_matrix_eps` with
+                // `max_iter = 0`, which nalgebra treats as usize::MAX ("loop until convergence").
+                // For degenerate IPPE outputs (near-singular homographies at extreme tag angles),
+                // the Müller iterative algorithm never converges — infinite loop.
+                //
+                // Use the closed-form Shepperd method instead: wrap the matrix as a `Rotation3`
+                // (no orthogonalization) then extract the quaternion analytically. The LM solver
+                // maintains pose on SO(3) via the exponential map, so `pose.rotation` is always
+                // sufficiently close to orthogonal for this to be accurate.
+                let rot = Rotation3::from_matrix_unchecked(pose.rotation);
+                let q = UnitQuaternion::from_rotation_matrix(&rot);
                 let t = pose.translation;
 
                 // Data layout: [tx, ty, tz, qx, qy, qz, qw]
