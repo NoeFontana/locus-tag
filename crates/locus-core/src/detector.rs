@@ -606,6 +606,27 @@ impl DetectorBuilder {
         self
     }
 
+    /// Set the maximum elongation allowed for a component.
+    #[must_use]
+    pub fn with_quad_max_elongation(mut self, elongation: f64) -> Self {
+        self.config.quad_max_elongation = elongation;
+        self
+    }
+
+    /// Set the minimum pixel density required to pass the moments gate.
+    #[must_use]
+    pub fn with_quad_min_density(mut self, density: f64) -> Self {
+        self.config.quad_min_density = density;
+        self
+    }
+
+    /// Set the quad extraction mode.
+    #[must_use]
+    pub fn with_quad_extraction_mode(mut self, mode: crate::config::QuadExtractionMode) -> Self {
+        self.config.quad_extraction_mode = mode;
+        self
+    }
+
     /// Enable or disable Laplacian sharpening.
     #[must_use]
     pub fn with_sharpening(mut self, enable: bool) -> Self {

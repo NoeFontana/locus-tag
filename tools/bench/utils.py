@@ -399,6 +399,9 @@ class LocusWrapper(LibraryWrapper):
                 quad_min_area=config.quad_min_area,
                 quad_min_fill_ratio=config.quad_min_fill_ratio,
                 quad_min_edge_score=config.quad_min_edge_score,
+                quad_max_elongation=config.quad_max_elongation,
+                quad_min_density=config.quad_min_density,
+                quad_extraction_mode=int(config.quad_extraction_mode),
                 decoder_min_contrast=config.decoder_min_contrast,
                 max_hamming_error=config.max_hamming_error,
             )

@@ -50,6 +50,9 @@ class DetectorConfig(BaseModel):
     decode_mode: DecodeMode = Field(default_factory=lambda: DecodeMode.Hard)
     max_hamming_error: int = Field(default=2, ge=0)
     gwlf_transversal_alpha: float = Field(default=0.01, ge=0.0)
+    quad_max_elongation: float = Field(default=0.0, ge=0.0)
+    quad_min_density: float = Field(default=0.0, ge=0.0, le=1.0)
+    quad_extraction_mode: int = Field(default=0)
 
 
 class DetectOptions(BaseModel):
