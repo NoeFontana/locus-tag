@@ -218,7 +218,7 @@ pub fn estimate_tag_pose_with_config(
 ///
 /// This uses an analytical approach derived from the homography Jacobian's SVD.
 /// The second solution handles the "Necker reversal" ambiguity inherent in planar pose estimation.
-fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
+pub(crate) fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
     // IpPE-Square Analytical Solution (Zero Alloc)
     // Jacobian J = [h1, h2]
     let h1 = h.column(0);

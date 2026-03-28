@@ -1,7 +1,8 @@
 use nalgebra::Vector3;
-use crate::batch::DetectionBatch;
-use crate::pose::Pose;
+use crate::batch::{DetectionBatch, CandidateState};
+use crate::pose::{Pose, CameraIntrinsics};
 use crate::workspace::WORKSPACE_ARENA;
+use crate::decoder::Homography;
 
 /// A 3D pose result for the entire board.
 pub type BoardPose = Pose;
@@ -24,16 +25,68 @@ impl BoardEstimator {
     /// This method leverages a thread-local `WORKSPACE_ARENA` to perform
     /// zero-heap allocations during the fast-path RANSAC inner loop.
     #[must_use]
-    pub fn estimate(&self, _batch: &DetectionBatch) -> Option<BoardPose> {
+    pub fn estimate(&self, batch: &DetectionBatch, intrinsics: &CameraIntrinsics) -> Option<BoardPose> {
         WORKSPACE_ARENA.with(|cell| {
             let mut arena = cell.borrow_mut();
             
-            // Dummy allocation to verify arena functionality
-            let _scratchpad = arena.alloc([0u8; 128]);
+            // Collect valid tag indices
+            let mut valid_indices = Vec::new(); // TODO: Use arena for this vector to avoid heap allocation
+            for i in 0..crate::batch::MAX_CANDIDATES {
+                if batch.status_mask[i] == CandidateState::Active {
+                    valid_indices.push(i);
+                }
+            }
+
+            // Need at least 4 tags for a robust planar minimal sample
+            if valid_indices.len() < 4 {
+                arena.reset();
+                return None;
+            }
+
+            // Step 1: Minimal Sample Generator (IPPE)
+            // Select 4 tags (for now, just take the first 4)
+            let sample_indices = [&valid_indices[0], &valid_indices[1], &valid_indices[2], &valid_indices[3]];
             
-            // Clear arena before returning
+            // Extract 4 widely spaced corners (e.g., top-left of tag 0, top-right of tag 1, etc.)
+            // to compute an initial homography.
+            let mut src_pts = [[0.0; 2]; 4];
+            let mut dst_pts = [[0.0; 2]; 4];
+
+            for (k, &idx) in sample_indices.iter().enumerate() {
+                let id = batch.ids[*idx] as usize;
+                if id >= self.config.obj_points.len() {
+                    continue; // ID out of bounds for this board
+                }
+                
+                let obj_corners = &self.config.obj_points[id];
+                let img_corners = &batch.corners[*idx];
+
+                // Use the k-th corner of the k-th tag for spread
+                src_pts[k] = [obj_corners[k].x, obj_corners[k].y];
+                dst_pts[k] = [img_corners[k].x as f64, img_corners[k].y as f64];
+            }
+
+            // Compute DLT Homography from metric object plane to image plane
+            let Some(h_pixel) = Homography::from_pairs(&src_pts, &dst_pts) else {
+                arena.reset();
+                return None;
+            };
+
+            // Normalize Homography: H_norm = K_inv * H_pixel
+            let k_inv = intrinsics.inv_matrix();
+            let h_norm = k_inv * h_pixel.h;
+
+            // IPPE Core: Decompose Jacobian
+            let Some(candidates) = crate::pose::solve_ippe_square(&h_norm) else {
+                arena.reset();
+                return None;
+            };
+
+            // Basic disambiguation (select first for now, proper reproj check in next phase)
+            let best_pose = candidates[0];
+
             arena.reset();
-            None
+            Some(best_pose) // Temporarily return the initial minimal pose
         })
     }
 }
@@ -199,9 +252,46 @@ mod tests {
         let estimator = BoardEstimator::new(config);
         
         let batch = crate::batch::DetectionBatch::new();
-        let result = estimator.estimate(&batch);
+        let intrinsics = crate::pose::CameraIntrinsics::new(800.0, 800.0, 400.0, 300.0);
+        let result = estimator.estimate(&batch, &intrinsics);
         
-        // For now, it should return None, but shouldn't panic (arena is correctly borrowed).
+        // Since batch is empty, it should return None
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_minimal_sample_ippe() {
+        let config = BoardConfig::new_charuco(3, 3, 0.04, 0.02);
+        let estimator = BoardEstimator::new(config);
+        let intrinsics = crate::pose::CameraIntrinsics::new(800.0, 800.0, 400.0, 300.0);
+        
+        // Ground truth pose
+        let gt_rot = nalgebra::Matrix3::identity();
+        let gt_t = nalgebra::Vector3::new(0.0, 0.0, 1.0);
+        let gt_pose = crate::pose::Pose::new(gt_rot, gt_t);
+        
+        let mut batch = crate::batch::DetectionBatch::new();
+        
+        // Populate 4 tags
+        for i in 0..4 {
+            batch.status_mask[i] = crate::batch::CandidateState::Active;
+            batch.ids[i] = i as u32;
+            
+            let obj_corners = &estimator.config.obj_points[i];
+            for j in 0..4 {
+                let p_img = gt_pose.project(&obj_corners[j], &intrinsics);
+                batch.corners[i][j].x = p_img[0] as f32;
+                batch.corners[i][j].y = p_img[1] as f32;
+            }
+        }
+        
+        let est_pose = estimator.estimate(&batch, &intrinsics).expect("Failed to estimate pose");
+        
+        // IPPE returns one of the two ambiguities. It might have Z translation flipped if we aren't careful,
+        // but typically the first one is the "forward" facing one for IPPE.
+        // Wait, IPPE could return a flipped Necker reversal. Let's just check if it's close to GT
+        // or its reverse.
+        let t_err = (est_pose.translation - gt_t).norm();
+        assert!(t_err < 0.1, "Translation error {} too high", t_err);
     }
 }
