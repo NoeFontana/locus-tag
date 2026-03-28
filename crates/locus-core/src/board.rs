@@ -1,4 +1,5 @@
-use nalgebra::Vector3;
+use multiversion::multiversion;
+use nalgebra::{Matrix3, Vector3};
 use crate::batch::{DetectionBatch, CandidateState};
 use crate::pose::{Pose, CameraIntrinsics};
 use crate::workspace::WORKSPACE_ARENA;
@@ -6,6 +7,43 @@ use crate::decoder::Homography;
 
 /// A 3D pose result for the entire board.
 pub type BoardPose = Pose;
+
+/// Evaluates reprojection errors for planar points using SIMD (auto-vectorized FMA).
+#[multiversion(targets = "simd")]
+pub(crate) fn compute_reprojection_errors_simd(
+    r: &Matrix3<f64>,
+    t: &Vector3<f64>,
+    fx: f64,
+    fy: f64,
+    cx: f64,
+    cy: f64,
+    obj_x: &[f64],
+    obj_y: &[f64],
+    img_u: &[f64],
+    img_v: &[f64],
+    errors: &mut [f64],
+) {
+    // LLVM will unroll and vectorize this loop using AVX2/AVX-512 FMA instructions
+    for i in 0..obj_x.len() {
+        let ox = obj_x[i];
+        let oy = obj_y[i];
+        
+        // Z=0 assumed for board local frame
+        let x = r[(0, 0)] * ox + r[(0, 1)] * oy + t.x;
+        let y = r[(1, 0)] * ox + r[(1, 1)] * oy + t.y;
+        let z = r[(2, 0)] * ox + r[(2, 1)] * oy + t.z;
+        
+        let z_inv = 1.0 / z;
+        
+        let u_est = fx * x * z_inv + cx;
+        let v_est = fy * y * z_inv + cy;
+        
+        let du = img_u[i] - u_est;
+        let dv = img_v[i] - v_est;
+        
+        errors[i] = du * du + dv * dv;
+    }
+}
 
 /// Core engine for board pose estimation.
 pub struct BoardEstimator {
@@ -29,16 +67,23 @@ impl BoardEstimator {
         WORKSPACE_ARENA.with(|cell| {
             let mut arena = cell.borrow_mut();
             
-            // Collect valid tag indices
-            let mut valid_indices = Vec::new(); // TODO: Use arena for this vector to avoid heap allocation
+            // Collect valid tag indices without heap allocation
+            // Max candidates is 1024. We can allocate a slice from the arena.
+            let valid_indices = arena.alloc_slice_fill_default(crate::batch::MAX_CANDIDATES);
+            let mut num_valid = 0;
+            
             for i in 0..crate::batch::MAX_CANDIDATES {
                 if batch.status_mask[i] == CandidateState::Active {
-                    valid_indices.push(i);
+                    let id = batch.ids[i] as usize;
+                    if id < self.config.obj_points.len() {
+                        valid_indices[num_valid] = i;
+                        num_valid += 1;
+                    }
                 }
             }
 
             // Need at least 4 tags for a robust planar minimal sample
-            if valid_indices.len() < 4 {
+            if num_valid < 4 {
                 arena.reset();
                 return None;
             }
@@ -47,46 +92,105 @@ impl BoardEstimator {
             // Select 4 tags (for now, just take the first 4)
             let sample_indices = [&valid_indices[0], &valid_indices[1], &valid_indices[2], &valid_indices[3]];
             
-            // Extract 4 widely spaced corners (e.g., top-left of tag 0, top-right of tag 1, etc.)
-            // to compute an initial homography.
             let mut src_pts = [[0.0; 2]; 4];
             let mut dst_pts = [[0.0; 2]; 4];
 
             for (k, &idx) in sample_indices.iter().enumerate() {
                 let id = batch.ids[*idx] as usize;
-                if id >= self.config.obj_points.len() {
-                    continue; // ID out of bounds for this board
-                }
-                
                 let obj_corners = &self.config.obj_points[id];
                 let img_corners = &batch.corners[*idx];
 
-                // Use the k-th corner of the k-th tag for spread
                 src_pts[k] = [obj_corners[k].x, obj_corners[k].y];
-                dst_pts[k] = [img_corners[k].x as f64, img_corners[k].y as f64];
+                dst_pts[k] = [f64::from(img_corners[k].x), f64::from(img_corners[k].y)];
             }
 
-            // Compute DLT Homography from metric object plane to image plane
             let Some(h_pixel) = Homography::from_pairs(&src_pts, &dst_pts) else {
                 arena.reset();
                 return None;
             };
 
-            // Normalize Homography: H_norm = K_inv * H_pixel
             let k_inv = intrinsics.inv_matrix();
             let h_norm = k_inv * h_pixel.h;
 
-            // IPPE Core: Decompose Jacobian
             let Some(candidates) = crate::pose::solve_ippe_square(&h_norm) else {
                 arena.reset();
                 return None;
             };
 
-            // Basic disambiguation (select first for now, proper reproj check in next phase)
-            let best_pose = candidates[0];
+            // Prepare flat arrays for SIMD Consensus Evaluation
+            let total_corners = num_valid * 4;
+            let obj_x = arena.alloc_slice_fill_default(total_corners);
+            let obj_y = arena.alloc_slice_fill_default(total_corners);
+            let img_u = arena.alloc_slice_fill_default(total_corners);
+            let img_v = arena.alloc_slice_fill_default(total_corners);
+            let errors = arena.alloc_slice_fill_default(total_corners);
+
+            for i in 0..num_valid {
+                let idx = valid_indices[i];
+                let id = batch.ids[idx] as usize;
+                let obj_corners = &self.config.obj_points[id];
+                let img_corners = &batch.corners[idx];
+
+                for j in 0..4 {
+                    let flat_idx = i * 4 + j;
+                    obj_x[flat_idx] = obj_corners[j].x;
+                    obj_y[flat_idx] = obj_corners[j].y;
+                    img_u[flat_idx] = f64::from(img_corners[j].x);
+                    img_v[flat_idx] = f64::from(img_corners[j].y);
+                }
+            }
+
+            let tau_sq = 2.0 * 2.0; // relaxed geometric threshold (~2.0 pixels)
+            
+            let mut best_pose = None;
+            let mut best_inliers = 0;
+            let mut _best_inlier_mask = [0u64; 16];
+
+            for pose in candidates {
+                compute_reprojection_errors_simd(
+                    &pose.rotation,
+                    &pose.translation,
+                    intrinsics.fx,
+                    intrinsics.fy,
+                    intrinsics.cx,
+                    intrinsics.cy,
+                    obj_x,
+                    obj_y,
+                    img_u,
+                    img_v,
+                    errors,
+                );
+
+                let mut inlier_count = 0;
+                let mut mask = [0u64; 16];
+                
+                // Construct bitmask over tags (1 bit per tag)
+                for i in 0..num_valid {
+                    let mut tag_inlier = true;
+                    for j in 0..4 {
+                        if errors[i * 4 + j] > tau_sq {
+                            tag_inlier = false;
+                            break;
+                        }
+                    }
+                    if tag_inlier {
+                        inlier_count += 1;
+                        let idx = valid_indices[i];
+                        mask[idx / 64] |= 1 << (idx % 64);
+                    }
+                }
+
+                if inlier_count > best_inliers {
+                    best_inliers = inlier_count;
+                    _best_inlier_mask = mask;
+                    best_pose = Some(pose);
+                }
+            }
+
+            // Next phase will use _best_inlier_mask for Local Optimization (LO) Handoff
 
             arena.reset();
-            Some(best_pose) // Temporarily return the initial minimal pose
+            best_pose
         })
     }
 }
@@ -260,6 +364,42 @@ mod tests {
     }
 
     #[test]
+    fn test_compute_reprojection_errors_simd() {
+        let mut errors = [0.0; 4];
+        let r = nalgebra::Matrix3::identity();
+        let t = nalgebra::Vector3::new(0.0, 0.0, 1.0);
+        let fx = 500.0;
+        let fy = 500.0;
+        let cx = 320.0;
+        let cy = 240.0;
+        
+        // 4 points on the board
+        let obj_x = [0.0, 0.1, 0.1, 0.0];
+        let obj_y = [0.0, 0.0, 0.1, 0.1];
+        
+        // Let's say image points are exactly at projection for first two,
+        // and have 1 pixel error for the last two.
+        // For (0,0,1): u = 500 * 0/1 + 320 = 320, v = 240
+        // For (0.1,0,1): u = 500 * 0.1/1 + 320 = 370, v = 240
+        // For (0.1,0.1,1): u = 370, v = 290
+        // For (0,0.1,1): u = 320, v = 290
+        
+        let img_u = [320.0, 370.0, 371.0, 320.0];
+        let img_v = [240.0, 240.0, 290.0, 291.0];
+        
+        super::compute_reprojection_errors_simd(
+            &r, &t, fx, fy, cx, cy, &obj_x, &obj_y, &img_u, &img_v, &mut errors
+        );
+        
+        assert!((errors[0] - 0.0).abs() < 1e-6);
+        assert!((errors[1] - 0.0).abs() < 1e-6);
+        // Error is 1px in U for point 2 => error_sq = 1.0
+        assert!((errors[2] - 1.0).abs() < 1e-6);
+        // Error is 1px in V for point 3 => error_sq = 1.0
+        assert!((errors[3] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
     fn test_minimal_sample_ippe() {
         let config = BoardConfig::new_charuco(3, 3, 0.04, 0.02);
         let estimator = BoardEstimator::new(config);
@@ -287,10 +427,6 @@ mod tests {
         
         let est_pose = estimator.estimate(&batch, &intrinsics).expect("Failed to estimate pose");
         
-        // IPPE returns one of the two ambiguities. It might have Z translation flipped if we aren't careful,
-        // but typically the first one is the "forward" facing one for IPPE.
-        // Wait, IPPE could return a flipped Necker reversal. Let's just check if it's close to GT
-        // or its reverse.
         let t_err = (est_pose.translation - gt_t).norm();
         assert!(t_err < 0.1, "Translation error {} too high", t_err);
     }
