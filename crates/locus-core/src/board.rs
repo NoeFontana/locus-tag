@@ -1,4 +1,42 @@
 use nalgebra::Vector3;
+use crate::batch::DetectionBatch;
+use crate::pose::Pose;
+use crate::workspace::WORKSPACE_ARENA;
+
+/// A 3D pose result for the entire board.
+pub type BoardPose = Pose;
+
+/// Core engine for board pose estimation.
+pub struct BoardEstimator {
+    /// The canonical 3D geometry of the board.
+    pub config: BoardConfig,
+}
+
+impl BoardEstimator {
+    /// Creates a new `BoardEstimator` with the given configuration.
+    #[must_use]
+    pub fn new(config: BoardConfig) -> Self {
+        Self { config }
+    }
+
+    /// Estimates the board pose given a batch of detected tags.
+    ///
+    /// This method leverages a thread-local `WORKSPACE_ARENA` to perform
+    /// zero-heap allocations during the fast-path RANSAC inner loop.
+    #[must_use]
+    pub fn estimate(&self, _batch: &DetectionBatch) -> Option<BoardPose> {
+        WORKSPACE_ARENA.with(|cell| {
+            let mut arena = cell.borrow_mut();
+            
+            // Dummy allocation to verify arena functionality
+            let _scratchpad = arena.alloc([0u8; 128]);
+            
+            // Clear arena before returning
+            arena.reset();
+            None
+        })
+    }
+}
 
 /// Configuration and canonical 3D geometry for a fiducial marker board (ChAruco/AprilGrid).
 #[derive(Clone, Debug, PartialEq)]
@@ -153,5 +191,17 @@ mod tests {
 
         assert!((m[2].x - 0.17).abs() < 1e-9); // 0.12 + 0.05
         assert!((m[2].y - 0.11).abs() < 1e-9); // 0.06 + 0.05
+    }
+
+    #[test]
+    fn test_board_estimator_arena_borrow() {
+        let config = BoardConfig::new_charuco(5, 5, 0.04, 0.02);
+        let estimator = BoardEstimator::new(config);
+        
+        let batch = crate::batch::DetectionBatch::new();
+        let result = estimator.estimate(&batch);
+        
+        // For now, it should return None, but shouldn't panic (arena is correctly borrowed).
+        assert!(result.is_none());
     }
 }
