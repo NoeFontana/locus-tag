@@ -1,0 +1,8 @@
+{
+  "track_id": "board_estimator_20260328",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-03-28T00:00:00Z",
+  "updated_at": "2026-03-28T00:00:00Z",
+  "description": "Implement a pure-Rust, high-performance ChAruco/AprilGrid board detector prioritizing theoretical purity and latency budgets, with rigorous OpenCV regression benchmark."
+}
