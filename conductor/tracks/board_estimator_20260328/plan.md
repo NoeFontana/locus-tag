@@ -4,9 +4,9 @@
 - [x] Task: Implement `BoardConfig` 8c369cd
     - [x] Write tests for `BoardConfig` struct initialization and coordinate computation.
     - [x] Implement `BoardConfig` (static, immutable) for canonical 3D coordinates.
-- [ ] Task: Implement Workspace Arena Borrow Pattern
-    - [ ] Write tests for `WORKSPACE_ARENA` allocation and `BoardEstimator::estimate` API interface.
-    - [ ] Implement thread-local `WORKSPACE_ARENA` and `BoardEstimator::estimate` method signature taking a read-only `DetectionBatch`.
+- [x] Task: Implement Workspace Arena Borrow Pattern 1f08b8a
+    - [x] Write tests for `WORKSPACE_ARENA` allocation and `BoardEstimator::estimate` API interface.
+    - [x] Implement thread-local `WORKSPACE_ARENA` and `BoardEstimator::estimate` method signature taking a read-only `DetectionBatch`.
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Data-Oriented Modeling & Context Contract' (Protocol in workflow.md)
 
 ## Phase 2: Classification Engine (LO-RANSAC)
