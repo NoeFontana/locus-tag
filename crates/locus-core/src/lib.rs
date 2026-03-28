@@ -6,6 +6,8 @@
 
 /// Batched state container for Structure of Arrays (SoA) layout.
 pub mod batch;
+/// Fiducial marker board configurations (ChAruco/AprilGrid).
+pub mod board;
 /// Configuration types for the detector pipeline.
 pub mod config;
 /// Tag decoding traits and implementations.
