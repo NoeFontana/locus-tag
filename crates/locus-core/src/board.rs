@@ -1,5 +1,5 @@
 use multiversion::multiversion;
-use nalgebra::{Matrix3, Vector3};
+use nalgebra::{Matrix3, Vector3, Matrix6, Vector6, Rotation3};
 use crate::batch::{DetectionBatch, CandidateState};
 use crate::pose::{Pose, CameraIntrinsics};
 use crate::workspace::WORKSPACE_ARENA;
@@ -42,6 +42,86 @@ pub(crate) fn compute_reprojection_errors_simd(
         let dv = img_v[i] - v_est;
         
         errors[i] = du * du + dv * dv;
+    }
+}
+
+/// Executes a fast, unweighted Gauss-Newton step using all flagged inliers.
+fn unweighted_gn_step(
+    pose: &Pose,
+    intrinsics: &CameraIntrinsics,
+    obj_x: &[f64],
+    obj_y: &[f64],
+    img_u: &[f64],
+    img_v: &[f64],
+    valid_mask: &[u64; 16],
+    valid_indices: &[usize],
+    num_tags: usize,
+) -> Pose {
+    let mut jtj = Matrix6::<f64>::zeros();
+    let mut jtr = Vector6::<f64>::zeros();
+    
+    let fx = intrinsics.fx;
+    let fy = intrinsics.fy;
+    let cx = intrinsics.cx;
+    let cy = intrinsics.cy;
+
+    for i in 0..num_tags {
+        let batch_idx = valid_indices[i];
+        if (valid_mask[batch_idx / 64] & (1 << (batch_idx % 64))) == 0 {
+            continue;
+        }
+
+        for j in 0..4 {
+            let flat_idx = i * 4 + j;
+            let ox = obj_x[flat_idx];
+            let oy = obj_y[flat_idx];
+            let p_world = Vector3::new(ox, oy, 0.0);
+            
+            let p_cam = pose.rotation * p_world + pose.translation;
+            let z_inv = 1.0 / p_cam.z;
+            let z_inv2 = z_inv * z_inv;
+
+            let u_est = fx * p_cam.x * z_inv + cx;
+            let v_est = fy * p_cam.y * z_inv + cy;
+
+            let res_u = img_u[flat_idx] - u_est;
+            let res_v = img_v[flat_idx] - v_est;
+
+            let du_dp = Vector3::new(fx * z_inv, 0.0, -fx * p_cam.x * z_inv2);
+            let dv_dp = Vector3::new(0.0, fy * z_inv, -fy * p_cam.y * z_inv2);
+
+            let mut row_u = Vector6::zeros();
+            row_u[0] = du_dp[0];
+            row_u[1] = du_dp[1];
+            row_u[2] = du_dp[2];
+            row_u[3] = du_dp[1] * p_cam.z - du_dp[2] * p_cam.y;
+            row_u[4] = du_dp[2] * p_cam.x - du_dp[0] * p_cam.z;
+            row_u[5] = du_dp[0] * p_cam.y - du_dp[1] * p_cam.x;
+
+            let mut row_v = Vector6::zeros();
+            row_v[0] = dv_dp[0];
+            row_v[1] = dv_dp[1];
+            row_v[2] = dv_dp[2];
+            row_v[3] = dv_dp[1] * p_cam.z - dv_dp[2] * p_cam.y;
+            row_v[4] = dv_dp[2] * p_cam.x - dv_dp[0] * p_cam.z;
+            row_v[5] = dv_dp[0] * p_cam.y - dv_dp[1] * p_cam.x;
+
+            jtj += row_u * row_u.transpose() + row_v * row_v.transpose();
+            jtr += row_u * res_u + row_v * res_v;
+        }
+    }
+
+    if let Some(chol) = jtj.cholesky() {
+        let delta = chol.solve(&jtr);
+        let twist = Vector3::new(delta[3], delta[4], delta[5]);
+        let trans_update = Vector3::new(delta[0], delta[1], delta[2]);
+        let rot_update = Rotation3::new(twist).matrix().into_owned();
+        Pose::new(
+            rot_update * pose.rotation,
+            rot_update * pose.translation + trans_update,
+        )
+    } else {
+        *pose
     }
 }
 
@@ -181,9 +261,56 @@ impl BoardEstimator {
                 }
 
                 if inlier_count > best_inliers {
-                    best_inliers = inlier_count;
-                    _best_inlier_mask = mask;
-                    best_pose = Some(pose);
+                    // Local Optimization (LO) Handoff
+                    let lo_pose = unweighted_gn_step(
+                        &pose, intrinsics, obj_x, obj_y, img_u, img_v, &mask, valid_indices, num_valid
+                    );
+                    
+                    // Re-evaluate consensus
+                    compute_reprojection_errors_simd(
+                        &lo_pose.rotation,
+                        &lo_pose.translation,
+                        intrinsics.fx,
+                        intrinsics.fy,
+                        intrinsics.cx,
+                        intrinsics.cy,
+                        obj_x,
+                        obj_y,
+                        img_u,
+                        img_v,
+                        errors,
+                    );
+                    
+                    let mut lo_inliers = 0;
+                    let mut lo_mask = [0u64; 16];
+                    for i in 0..num_valid {
+                        let mut tag_inlier = true;
+                        for j in 0..4 {
+                            if errors[i * 4 + j] > tau_sq {
+                                tag_inlier = false;
+                                break;
+                            }
+                        }
+                        if tag_inlier {
+                            lo_inliers += 1;
+                            let idx = valid_indices[i];
+                            lo_mask[idx / 64] |= 1 << (idx % 64);
+                        }
+                    }
+
+                    if lo_inliers > best_inliers {
+                        best_inliers = lo_inliers;
+                        _best_inlier_mask = lo_mask;
+                        best_pose = Some(lo_pose);
+                        
+                        if lo_inliers as f64 / num_valid as f64 > 0.95 {
+                            break; // Early termination
+                        }
+                    } else if inlier_count > best_inliers {
+                        best_inliers = inlier_count;
+                        _best_inlier_mask = mask;
+                        best_pose = Some(pose);
+                    }
                 }
             }
 
@@ -400,19 +527,58 @@ mod tests {
     }
 
     #[test]
+    fn test_unweighted_gn_step() {
+        let r = nalgebra::Matrix3::identity();
+        // Give the initial pose a slight error in translation
+        let initial_t = nalgebra::Vector3::new(0.01, -0.01, 1.05);
+        let gt_t = nalgebra::Vector3::new(0.0, 0.0, 1.0);
+        let pose = crate::pose::Pose::new(r, initial_t);
+
+        let fx = 500.0;
+        let fy = 500.0;
+        let cx = 320.0;
+        let cy = 240.0;
+        let intrinsics = crate::pose::CameraIntrinsics::new(fx, fy, cx, cy);
+        
+        let obj_x = [0.0, 0.1, 0.1, 0.0];
+        let obj_y = [0.0, 0.0, 0.1, 0.1];
+        
+        // Ground truth image points using gt_t
+        let mut img_u = [0.0; 4];
+        let mut img_v = [0.0; 4];
+        let gt_pose = crate::pose::Pose::new(r, gt_t);
+        for i in 0..4 {
+            let p_world = nalgebra::Vector3::new(obj_x[i], obj_y[i], 0.0);
+            let p_img = gt_pose.project(&p_world, &intrinsics);
+            img_u[i] = p_img[0];
+            img_v[i] = p_img[1];
+        }
+        
+        let valid_mask = [1u64; 16]; // First tag is valid
+        let valid_indices = [0];
+        
+        let refined_pose = super::unweighted_gn_step(
+            &pose, &intrinsics, &obj_x, &obj_y, &img_u, &img_v, &valid_mask, &valid_indices, 1
+        );
+        
+        // Check if refined pose is closer to GT than initial pose
+        let initial_err = (pose.translation - gt_t).norm();
+        let refined_err = (refined_pose.translation - gt_t).norm();
+        assert!(refined_err < initial_err);
+    }
+
+    #[test]
     fn test_minimal_sample_ippe() {
         let config = BoardConfig::new_charuco(3, 3, 0.04, 0.02);
         let estimator = BoardEstimator::new(config);
         let intrinsics = crate::pose::CameraIntrinsics::new(800.0, 800.0, 400.0, 300.0);
         
-        // Ground truth pose
         let gt_rot = nalgebra::Matrix3::identity();
         let gt_t = nalgebra::Vector3::new(0.0, 0.0, 1.0);
         let gt_pose = crate::pose::Pose::new(gt_rot, gt_t);
         
         let mut batch = crate::batch::DetectionBatch::new();
         
-        // Populate 4 tags
         for i in 0..4 {
             batch.status_mask[i] = crate::batch::CandidateState::Active;
             batch.ids[i] = i as u32;
