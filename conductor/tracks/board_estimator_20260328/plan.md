@@ -10,9 +10,9 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Data-Oriented Modeling & Context Contract' (Protocol in workflow.md)
 
 ## Phase 2: Classification Engine (LO-RANSAC)
-- [ ] Task: Minimal Sample Generator (IPPE)
-    - [ ] Write tests for minimal planar pose generation from 4 decoded tags using existing IPPE.
-    - [ ] Implement logic to extract 16 corners and fetch corresponding 3D coordinates to solve pose.
+- [x] Task: Minimal Sample Generator (IPPE) 17a42d1
+    - [x] Write tests for minimal planar pose generation from 4 decoded tags using existing IPPE.
+    - [x] Implement logic to extract 16 corners and fetch corresponding 3D coordinates to solve pose.
 - [ ] Task: SIMD Consensus Evaluation
     - [ ] Write tests for projecting 3D board corners and computing $L_2$ reprojection errors.
     - [ ] Implement SIMD consensus (AVX2, AVX-512, ARM NEON) applying relaxed geometric threshold ($\tau \approx 2.0$ pixels).
