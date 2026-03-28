@@ -13,9 +13,9 @@
 - [x] Task: Minimal Sample Generator (IPPE) 17a42d1
     - [x] Write tests for minimal planar pose generation from 4 decoded tags using existing IPPE.
     - [x] Implement logic to extract 16 corners and fetch corresponding 3D coordinates to solve pose.
-- [ ] Task: SIMD Consensus Evaluation
-    - [ ] Write tests for projecting 3D board corners and computing $L_2$ reprojection errors.
-    - [ ] Implement SIMD consensus (AVX2, AVX-512, ARM NEON) applying relaxed geometric threshold ($\tau \approx 2.0$ pixels).
+- [x] Task: SIMD Consensus Evaluation 2d74d87
+    - [x] Write tests for projecting 3D board corners and computing $L_2$ reprojection errors.
+    - [x] Implement SIMD consensus (AVX2, AVX-512, ARM NEON) applying relaxed geometric threshold ($\tau \approx 2.0$ pixels).
 - [ ] Task: Local Optimization (LO) Handoff
     - [ ] Write tests for fast, unweighted Gauss-Newton step and early termination.
     - [ ] Implement LO handoff to settle pose and finalize the boolean mask, reusing existing optimization routines where appropriate.
