@@ -16,9 +16,9 @@
 - [x] Task: SIMD Consensus Evaluation 2d74d87
     - [x] Write tests for projecting 3D board corners and computing $L_2$ reprojection errors.
     - [x] Implement SIMD consensus (AVX2, AVX-512, ARM NEON) applying relaxed geometric threshold ($\tau \approx 2.0$ pixels).
-- [ ] Task: Local Optimization (LO) Handoff
-    - [ ] Write tests for fast, unweighted Gauss-Newton step and early termination.
-    - [ ] Implement LO handoff to settle pose and finalize the boolean mask, reusing existing optimization routines where appropriate.
+- [x] Task: Local Optimization (LO) Handoff c3a40ea
+    - [x] Write tests for fast, unweighted Gauss-Newton step and early termination.
+    - [x] Implement LO handoff to settle pose and finalize the boolean mask, reusing existing optimization routines where appropriate.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Classification Engine (LO-RANSAC)' (Protocol in workflow.md)
 
 ## Phase 3: Metrology Engine (AW-LM)
