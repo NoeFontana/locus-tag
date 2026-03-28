@@ -9,7 +9,7 @@
     - [x] Implement thread-local `WORKSPACE_ARENA` and `BoardEstimator::estimate` method signature taking a read-only `DetectionBatch`.
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Data-Oriented Modeling & Context Contract' (Protocol in workflow.md)
 
-## Phase 2: Classification Engine (LO-RANSAC)
+## Phase 2: Classification Engine (LO-RANSAC) [checkpoint: a871edf]
 - [x] Task: Minimal Sample Generator (IPPE) 17a42d1
     - [x] Write tests for minimal planar pose generation from 4 decoded tags using existing IPPE.
     - [x] Implement logic to extract 16 corners and fetch corresponding 3D coordinates to solve pose.
@@ -19,7 +19,7 @@
 - [x] Task: Local Optimization (LO) Handoff c3a40ea
     - [x] Write tests for fast, unweighted Gauss-Newton step and early termination.
     - [x] Implement LO handoff to settle pose and finalize the boolean mask, reusing existing optimization routines where appropriate.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Classification Engine (LO-RANSAC)' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Classification Engine (LO-RANSAC)' (Protocol in workflow.md)
 
 ## Phase 3: Metrology Engine (AW-LM)
 - [ ] Task: Covariance Injection & Sparse Jacobian Stacking
