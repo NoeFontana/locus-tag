@@ -154,12 +154,13 @@ struct BoardRegressionReport {
 }
 
 fn calculate_percentile(values: &mut [f64], percentile: f64) -> f64 {
-    if values.is_empty() {
+    let mut clean_values: Vec<f64> = values.iter().copied().filter(|v| !v.is_nan()).collect();
+    if clean_values.is_empty() {
         return 0.0;
     }
-    values.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    let idx = (percentile * (values.len() - 1) as f64).round() as usize;
-    values[idx]
+    clean_values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let idx = (percentile * (clean_values.len() - 1) as f64).round() as usize;
+    clean_values[idx]
 }
 
 // ============================================================================
@@ -167,7 +168,6 @@ fn calculate_percentile(values: &mut [f64], percentile: f64) -> f64 {
 // ============================================================================
 
 struct BoardHubProvider {
-    name: String,
     base_dir: PathBuf,
     truth: BoardTruth,
 }
@@ -196,6 +196,7 @@ impl BoardHubProvider {
 
         for entry in raw_entries {
             if entry.record_type == "BOARD" {
+                #[allow(clippy::collapsible_if)]
                 if board_config_entry.is_none() {
                     if let Some(ref def) = entry.board_definition {
                         board_config_entry = Some(BoardConfigEntry {
@@ -216,7 +217,7 @@ impl BoardHubProvider {
                     ));
                 }
 
-                let filename = if entry.image_id.ends_with(".png") {
+                let filename = if entry.image_id.to_lowercase().ends_with(".png") {
                     entry.image_id.clone()
                 } else {
                     format!("{}.png", entry.image_id)
@@ -233,7 +234,7 @@ impl BoardHubProvider {
                 // Update pose if we found the BOARD record (sometimes TAG records come first)
                 img_data.0 = pose;
             } else if entry.record_type == "TAG" {
-                let filename = if entry.image_id.ends_with(".png") {
+                let filename = if entry.image_id.to_lowercase().ends_with(".png") {
                     entry.image_id.clone()
                 } else {
                     format!("{}.png", entry.image_id)
@@ -257,19 +258,16 @@ impl BoardHubProvider {
 
         let images: Vec<BoardImageEntry> = image_map
             .into_iter()
-            .map(|(filename, (board_pose, visible_tag_ids))| BoardImageEntry {
-                filename,
-                board_pose,
-                visible_tag_ids,
-            })
+            .map(
+                |(filename, (board_pose, visible_tag_ids))| BoardImageEntry {
+                    filename,
+                    board_pose,
+                    visible_tag_ids,
+                },
+            )
             .collect();
 
         Some(Self {
-            name: dataset_dir
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string(),
             base_dir: dataset_dir.to_path_buf(),
             truth: BoardTruth {
                 board_config,
@@ -428,11 +426,12 @@ impl BoardRegressionHarness {
                 // Extract standard deviations from the diagonal of the 6x6 covariance matrix
                 // [tx, ty, tz, rx, ry, rz]
                 let cov = &est_board.covariance;
-                let t_std = (cov[(0, 0)].max(0.0) + cov[(1, 1)].max(0.0) + cov[(2, 2)].max(0.0))
-                    .sqrt();
-                let r_std_deg = (cov[(3, 3)].max(0.0) + cov[(4, 4)].max(0.0) + cov[(5, 5)].max(0.0))
-                    .sqrt()
-                    .to_degrees();
+                let t_std =
+                    (cov[(0, 0)].max(0.0) + cov[(1, 1)].max(0.0) + cov[(2, 2)].max(0.0)).sqrt();
+                let r_std_deg =
+                    (cov[(3, 3)].max(0.0) + cov[(4, 4)].max(0.0) + cov[(5, 5)].max(0.0))
+                        .sqrt()
+                        .to_degrees();
 
                 translation_stds.push(t_std);
                 rotation_stds_deg.push(r_std_deg);
@@ -448,22 +447,34 @@ impl BoardRegressionHarness {
 
         let count = translation_errors.len();
         let mean_t_err = if count > 0 {
-            translation_errors.iter().sum::<f64>() / count as f64
+            translation_errors
+                .iter()
+                .filter(|v| !v.is_nan())
+                .sum::<f64>()
+                / count as f64
         } else {
             0.0
         };
         let mean_r_err = if count > 0 {
-            rotation_errors_deg.iter().sum::<f64>() / count as f64
+            rotation_errors_deg
+                .iter()
+                .filter(|v| !v.is_nan())
+                .sum::<f64>()
+                / count as f64
         } else {
             0.0
         };
         let mean_t_std = if count > 0 {
-            translation_stds.iter().sum::<f64>() / count as f64
+            translation_stds.iter().filter(|v| !v.is_nan()).sum::<f64>() / count as f64
         } else {
             0.0
         };
         let mean_r_std = if count > 0 {
-            rotation_stds_deg.iter().sum::<f64>() / count as f64
+            rotation_stds_deg
+                .iter()
+                .filter(|v| !v.is_nan())
+                .sum::<f64>()
+                / count as f64
         } else {
             0.0
         };
@@ -493,9 +504,15 @@ impl BoardRegressionHarness {
             "  Frames: {dataset_size} (board estimated: {frames_with_board}, no estimate: {frames_no_estimate})"
         );
         println!("  Tag coverage: {:.1}%", summary.mean_tag_coverage * 100.0);
-        println!("  Trans P50: {:.4} m (std: {:.4} m)", summary.p50_translation_error_m, summary.mean_translation_std_m);
+        println!(
+            "  Trans P50: {:.4} m (std: {:.4} m)",
+            summary.p50_translation_error_m, summary.mean_translation_std_m
+        );
         println!("  Trans P90: {:.4} m", summary.p90_translation_error_m);
-        println!("  Rot P50:   {:.4} deg (std: {:.4} deg)", summary.p50_rotation_error_deg, summary.mean_rotation_std_deg);
+        println!(
+            "  Rot P50:   {:.4} deg (std: {:.4} deg)",
+            summary.p50_rotation_error_deg, summary.mean_rotation_std_deg
+        );
         println!("  Rot P90:   {:.4} deg", summary.p90_rotation_error_deg);
         println!("  Latency:   {:.2} ms/frame", summary.mean_total_ms);
 

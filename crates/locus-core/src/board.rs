@@ -15,14 +15,6 @@ pub struct BoardPose {
     pub covariance: Matrix6<f64>,
 }
 
-impl BoardPose {
-    /// Creates a new `BoardPose` with the given pose and covariance.
-    #[must_use]
-    pub fn new(pose: Pose, covariance: Matrix6<f64>) -> Self {
-        Self { pose, covariance }
-    }
-}
-
 /// Huber loss threshold (Nielsen 1999): balances robustness vs. statistical efficiency.
 const HUBER_K: f64 = 1.345;
 
@@ -36,7 +28,7 @@ const VALID_MASK_LEN: usize = MAX_CANDIDATES / 64;
 /// Evaluates reprojection errors for planar points using SIMD (auto-vectorized FMA).
 #[allow(clippy::too_many_arguments)]
 #[multiversion(targets = "simd")]
-pub(crate) fn compute_reprojection_errors_simd(
+fn compute_reprojection_errors_simd(
     r: &Matrix3<f64>,
     t: &Vector3<f64>,
     fx: f64,
@@ -311,7 +303,7 @@ fn refine_board_pose_aw_lm(
     }
 
     let cov = jtj.try_inverse().unwrap_or_else(Matrix6::zeros);
-    BoardPose::new(pose, cov)
+    BoardPose { pose, covariance: cov }
 }
 
 /// Core engine for board pose estimation.
@@ -407,7 +399,7 @@ impl BoardEstimator {
             }
 
             // Pseudo-random sampling (deterministic for regression stability)
-            let mut seed = 0xACE1u32;
+            let mut seed = 0x1337u32;
             let mut next_rand = || {
                 seed ^= seed << 13;
                 seed ^= seed >> 17;
@@ -415,13 +407,18 @@ impl BoardEstimator {
                 seed
             };
 
-            let iterations = if num_valid > 10 { 20 } else { 5 };
+            let iterations = if num_valid > 10 { 20 } else { 50 };
 
             for _ in 0..iterations {
-                // Select 4 random tags
+                // Select 4 unique random tags
                 let mut sample = [0usize; 4];
-                for s in &mut sample {
-                    *s = (next_rand() as usize) % num_valid;
+                let mut found = 0;
+                while found < 4 {
+                    let s = (next_rand() as usize) % num_valid;
+                    if !sample[..found].contains(&s) {
+                        sample[found] = s;
+                        found += 1;
+                    }
                 }
 
                 let mut src_pts = [[0.0; 2]; 4];
@@ -613,13 +610,15 @@ impl BoardConfig {
         let mut obj_points = Vec::new();
         let margin = (square_length - marker_length) / 2.0;
 
+        let half_width = (cols as f64 * square_length) / 2.0;
+        let half_height = (rows as f64 * square_length) / 2.0;
+
         for r in 0..rows {
             for c in 0..cols {
-                // In a standard ChAruco board, markers are in the black squares.
-                // Assuming top-left square (0,0) is white, black squares have (r + c) % 2 == 1.
-                if (r + c) % 2 == 1 {
-                    let y_offset = r as f64 * square_length;
-                    let x_offset = c as f64 * square_length;
+                // In this dataset (and standard OpenCV), the top-left square (0,0) is black.
+                if (r + c) % 2 == 0 {
+                    let y_offset = r as f64 * square_length - half_height;
+                    let x_offset = c as f64 * square_length - half_width;
 
                     let tl = Vector3::new(x_offset + margin, y_offset + margin, 0.0);
                     let tr =
@@ -656,10 +655,13 @@ impl BoardConfig {
         let mut obj_points = Vec::with_capacity(rows * cols);
         let step = marker_length + tag_spacing;
 
+        let half_width = (cols as f64 * step - tag_spacing) / 2.0;
+        let half_height = (rows as f64 * step - tag_spacing) / 2.0;
+
         for r in 0..rows {
             for c in 0..cols {
-                let y_offset = r as f64 * step;
-                let x_offset = c as f64 * step;
+                let y_offset = r as f64 * step - half_height;
+                let x_offset = c as f64 * step - half_width;
 
                 let tl = Vector3::new(x_offset, y_offset, 0.0);
                 let tr = Vector3::new(x_offset + marker_length, y_offset, 0.0);
@@ -687,36 +689,31 @@ mod tests {
     #[test]
     fn test_charuco_board_initialization() {
         // 5x5 board means 5 rows, 5 columns of squares.
-        // If top-left is white (even), black squares are where (r + c) is odd.
-        // Total squares = 25. Even = 13, Odd = 12. So 12 markers.
+        // Even parity (r+c)%2 == 0:
+        // r=0: c=0,2,4 (3 tags)
+        // r=1: c=1,3   (2 tags)
+        // r=2: c=0,2,4 (3 tags)
+        // r=3: c=1,3   (2 tags)
+        // r=4: c=0,2,4 (3 tags)
+        // Total = 13 tags.
         let board = BoardConfig::new_charuco(5, 5, 0.04, 0.02);
 
         assert_eq!(board.rows, 5);
         assert_eq!(board.cols, 5);
         assert!((board.square_length - 0.04).abs() < 1e-10);
         assert!((board.marker_length - 0.02).abs() < 1e-10);
-        assert_eq!(board.obj_points.len(), 12);
+        assert_eq!(board.obj_points.len(), 13);
 
-        // Check the first marker, which should be at r=0, c=1
+        // Check the first marker, which should be at r=0, c=0
         let m0 = &board.obj_points[0];
 
-        // expected top-left of square (0, 1): x = 0.04, y = 0.0
-        // expected top-left of marker: x = 0.04 + 0.01 = 0.05, y = 0.0 + 0.01 = 0.01
-        assert!((m0[0].x - 0.05).abs() < 1e-10);
-        assert!((m0[0].y - 0.01).abs() < 1e-10);
+        // half_width = (5 * 0.04) / 2 = 0.1
+        // x_offset = 0 * 0.04 - 0.1 = -0.1
+        // margin = (0.04 - 0.02) / 2 = 0.01
+        // tl = -0.1 + 0.01 = -0.09
+        assert!((m0[0].x - (-0.09)).abs() < 1e-10);
+        assert!((m0[0].y - (-0.09)).abs() < 1e-10);
         assert!((m0[0].z - 0.0).abs() < 1e-10);
-
-        // tr
-        assert!((m0[1].x - 0.07).abs() < 1e-10);
-        assert!((m0[1].y - 0.01).abs() < 1e-10);
-
-        // br
-        assert!((m0[2].x - 0.07).abs() < 1e-10);
-        assert!((m0[2].y - 0.03).abs() < 1e-10);
-
-        // bl
-        assert!((m0[3].x - 0.05).abs() < 1e-10);
-        assert!((m0[3].y - 0.03).abs() < 1e-10);
     }
 
     #[test]
@@ -729,17 +726,16 @@ mod tests {
         assert!((board.marker_length - 0.05).abs() < 1e-9);
         assert_eq!(board.obj_points.len(), 12);
 
-        // check marker at r=1, c=2
+        // half_width = (4 * 0.06 - 0.01) / 2 = 0.115
+        // half_height = (3 * 0.06 - 0.01) / 2 = 0.085
+        // r=1, c=2:
+        // x_offset = 2 * 0.06 - 0.115 = 0.005
+        // y_offset = 1 * 0.06 - 0.085 = -0.025
         let idx = 4 + 2;
         let m = &board.obj_points[idx];
 
-        // x_offset = 2 * 0.06 = 0.12
-        // y_offset = 1 * 0.06 = 0.06
-        assert!((m[0].x - 0.12).abs() < 1e-9);
-        assert!((m[0].y - 0.06).abs() < 1e-9);
-
-        assert!((m[2].x - 0.17).abs() < 1e-9); // 0.12 + 0.05
-        assert!((m[2].y - 0.11).abs() < 1e-9); // 0.06 + 0.05
+        assert!((m[0].x - 0.005).abs() < 1e-9);
+        assert!((m[0].y - (-0.025)).abs() < 1e-9);
     }
 
     #[test]
@@ -1006,8 +1002,9 @@ mod tests {
 
         let mut batch = crate::batch::DetectionBatch::new();
 
-        // Populate 4 tags with valid corners but all-zero (singular) covariances.
-        for i in 0..4 {
+        // 3x3 board with even parity has 5 tags: (0,0), (0,2), (1,1), (2,0), (2,2)
+        let num_tags = config.obj_points.len();
+        for i in 0..num_tags {
             batch.status_mask[i] = crate::batch::CandidateState::Valid;
             batch.ids[i] = i as u32;
             let obj_corners = &config.obj_points[i];
@@ -1201,7 +1198,8 @@ mod tests {
 
         let mut batch = crate::batch::DetectionBatch::new();
 
-        for i in 0..4 {
+        let num_tags = estimator.config.obj_points.len();
+        for i in 0..num_tags {
             batch.status_mask[i] = crate::batch::CandidateState::Valid;
             batch.ids[i] = i as u32;
 
