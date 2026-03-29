@@ -24,9 +24,9 @@ fn compute_corner_covariance(
     let mut sum_gy2 = 0.0;
     let mut sum_gxgy = 0.0;
 
-    let w = img.width as isize;
-    let h = img.height as isize;
-    let stride = img.stride as isize;
+    let w = img.width.cast_signed();
+    let h = img.height.cast_signed();
+    let stride = img.stride.cast_signed();
 
     let x_start = (cx - radius as isize).max(1);
     let x_end = (cx + radius as isize).min(w - 2);
@@ -35,13 +35,13 @@ fn compute_corner_covariance(
 
     for py in y_start..=y_end {
         let offset = py * stride;
-        let row0 = &img.data[(offset - stride) as usize..];
-        let row1 = &img.data[offset as usize..];
-        let row2 = &img.data[(offset + stride) as usize..];
+        let row0 = &img.data[(offset - stride).cast_unsigned()..];
+        let row1 = &img.data[offset.cast_unsigned()..];
+        let row2 = &img.data[(offset + stride).cast_unsigned()..];
 
         for px in x_start..=x_end {
-            let px = px as usize;
-            
+            let px = px.cast_unsigned();
+
             let p00 = i32::from(row0[px - 1]);
             let p01 = i32::from(row0[px]);
             let p02 = i32::from(row0[px + 1]);
@@ -299,7 +299,7 @@ pub(crate) fn refine_pose_lm_weighted(
 
     let mut lambda = 1e-3_f64;
     let mut nu = 2.0_f64;
-    
+
     // Cache for normal equations at the current accepted pose.
     let mut current_jtj = Matrix6::zeros();
     let mut current_jtr = Vector6::zeros();
@@ -359,7 +359,8 @@ pub(crate) fn refine_pose_lm_weighted(
         );
 
         // Gain ratio denominator: Predicted reduction based on quadratic model
-        let predicted_reduction = 0.5 * delta.dot(&(lambda * delta.component_mul(&current_jtj.diagonal()) + current_jtr));
+        let predicted_reduction =
+            0.5 * delta.dot(&(lambda * delta.component_mul(&current_jtj.diagonal()) + current_jtr));
         let actual_reduction = current_cost - new_cost;
         let rho = if predicted_reduction > 1e-12 {
             actual_reduction / predicted_reduction
@@ -386,7 +387,14 @@ pub(crate) fn refine_pose_lm_weighted(
 
     // Final covariance extraction from the last cached Hessian.
     if needs_rebuild {
-        let (jtj, _, _) = build_normal_equations(intrinsics, corners, &obj_pts, &pose, &info_matrices, HUBER_K);
+        let (jtj, _, _) = build_normal_equations(
+            intrinsics,
+            corners,
+            &obj_pts,
+            &pose,
+            &info_matrices,
+            HUBER_K,
+        );
         current_jtj = jtj;
     }
     let covariance = current_jtj.try_inverse().unwrap_or_else(Matrix6::identity);
@@ -522,7 +530,8 @@ mod tests {
         let info = [Matrix2::<f64>::identity(); 4];
 
         // Analytical gradient: jtr[k] = (J^T W̃ r)[k], so ∂C/∂ξ_k = -jtr[k].
-        let (_jtj, jtr, _cost) = build_normal_equations(&intrinsics, &corners, &obj_pts, &pose, &info, K);
+        let (_jtj, jtr, _cost) =
+            build_normal_equations(&intrinsics, &corners, &obj_pts, &pose, &info, K);
 
         let eps = 1e-6;
         for dof in 0..6 {
