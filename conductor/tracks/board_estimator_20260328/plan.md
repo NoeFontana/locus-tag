@@ -1,25 +1,25 @@
 # Implementation Plan: Board Estimator (ChAruco/AprilGrid)
 
-## Phase 1: Data-Oriented Modeling & Context Contract
-- [ ] Task: Implement `BoardConfig`
-    - [ ] Write tests for `BoardConfig` struct initialization and coordinate computation.
-    - [ ] Implement `BoardConfig` (static, immutable) for canonical 3D coordinates.
-- [ ] Task: Implement Workspace Arena Borrow Pattern
-    - [ ] Write tests for `WORKSPACE_ARENA` allocation and `BoardEstimator::estimate` API interface.
-    - [ ] Implement thread-local `WORKSPACE_ARENA` and `BoardEstimator::estimate` method signature taking a read-only `DetectionBatch`.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Data-Oriented Modeling & Context Contract' (Protocol in workflow.md)
+## Phase 1: Data-Oriented Modeling & Context Contract [checkpoint: 90cc095]
+- [x] Task: Implement `BoardConfig` 8c369cd
+    - [x] Write tests for `BoardConfig` struct initialization and coordinate computation.
+    - [x] Implement `BoardConfig` (static, immutable) for canonical 3D coordinates.
+- [x] Task: Implement Workspace Arena Borrow Pattern 1f08b8a
+    - [x] Write tests for `WORKSPACE_ARENA` allocation and `BoardEstimator::estimate` API interface.
+    - [x] Implement thread-local `WORKSPACE_ARENA` and `BoardEstimator::estimate` method signature taking a read-only `DetectionBatch`.
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Data-Oriented Modeling & Context Contract' (Protocol in workflow.md)
 
-## Phase 2: Classification Engine (LO-RANSAC)
-- [ ] Task: Minimal Sample Generator (IPPE)
-    - [ ] Write tests for minimal planar pose generation from 4 decoded tags using existing IPPE.
-    - [ ] Implement logic to extract 16 corners and fetch corresponding 3D coordinates to solve pose.
-- [ ] Task: SIMD Consensus Evaluation
-    - [ ] Write tests for projecting 3D board corners and computing $L_2$ reprojection errors.
-    - [ ] Implement SIMD consensus (AVX2, AVX-512, ARM NEON) applying relaxed geometric threshold ($\tau \approx 2.0$ pixels).
-- [ ] Task: Local Optimization (LO) Handoff
-    - [ ] Write tests for fast, unweighted Gauss-Newton step and early termination.
-    - [ ] Implement LO handoff to settle pose and finalize the boolean mask, reusing existing optimization routines where appropriate.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Classification Engine (LO-RANSAC)' (Protocol in workflow.md)
+## Phase 2: Classification Engine (LO-RANSAC) [checkpoint: a871edf]
+- [x] Task: Minimal Sample Generator (IPPE) 17a42d1
+    - [x] Write tests for minimal planar pose generation from 4 decoded tags using existing IPPE.
+    - [x] Implement logic to extract 16 corners and fetch corresponding 3D coordinates to solve pose.
+- [x] Task: SIMD Consensus Evaluation 2d74d87
+    - [x] Write tests for projecting 3D board corners and computing $L_2$ reprojection errors.
+    - [x] Implement SIMD consensus (AVX2, AVX-512, ARM NEON) applying relaxed geometric threshold ($\tau \approx 2.0$ pixels).
+- [x] Task: Local Optimization (LO) Handoff c3a40ea
+    - [x] Write tests for fast, unweighted Gauss-Newton step and early termination.
+    - [x] Implement LO handoff to settle pose and finalize the boolean mask, reusing existing optimization routines where appropriate.
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Classification Engine (LO-RANSAC)' (Protocol in workflow.md)
 
 ## Phase 3: Metrology Engine (AW-LM)
 - [ ] Task: Covariance Injection & Sparse Jacobian Stacking
