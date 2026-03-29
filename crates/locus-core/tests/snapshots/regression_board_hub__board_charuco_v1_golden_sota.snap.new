@@ -1,0 +1,19 @@
+---
+source: crates/locus-core/tests/regression_board_hub.rs
+assertion_line: 504
+expression: report
+---
+summary:
+  dataset_size: 150
+  frames_with_board: 64
+  mean_translation_error_m: 0.5061
+  p50_translation_error_m: 0.4335
+  p90_translation_error_m: 0.6002
+  mean_rotation_error_deg: 0.0536
+  p50_rotation_error_deg: 0.0256
+  p90_rotation_error_deg: 0.1322
+  mean_translation_std_m: 0.0019
+  mean_rotation_std_deg: 0.0263
+  mean_tag_coverage: 0.9535
+  mean_total_ms: "[DURATION]"
+  frames_no_estimate: 86

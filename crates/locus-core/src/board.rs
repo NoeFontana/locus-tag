@@ -5,14 +5,29 @@ use crate::workspace::WORKSPACE_ARENA;
 use multiversion::multiversion;
 use nalgebra::{Matrix2, Matrix3, Matrix6, Rotation3, Vector3, Vector6};
 
-/// A 3D pose result for the entire board.
-pub type BoardPose = Pose;
+/// A 3D pose result for the entire board, including estimation uncertainty.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BoardPose {
+    /// The SE(3) pose (rotation and translation).
+    pub pose: Pose,
+    /// The 6x6 covariance matrix in the se(3) tangent space.
+    /// Order: [tx, ty, tz, rx, ry, rz].
+    pub covariance: Matrix6<f64>,
+}
+
+impl BoardPose {
+    /// Creates a new `BoardPose` with the given pose and covariance.
+    #[must_use]
+    pub fn new(pose: Pose, covariance: Matrix6<f64>) -> Self {
+        Self { pose, covariance }
+    }
+}
 
 /// Huber loss threshold (Nielsen 1999): balances robustness vs. statistical efficiency.
 const HUBER_K: f64 = 1.345;
 
-/// Squared reprojection-error threshold for LO-RANSAC consensus (~2.0 px).
-const CONSENSUS_THRESHOLD_SQ: f64 = 4.0; // 2.0² px²
+/// Squared reprojection-error threshold for LO-RANSAC consensus (~10.0 px).
+const CONSENSUS_THRESHOLD_SQ: f64 = 100.0; // 10.0² px²
 
 /// Length of the bitmask array for tracking inlier status.
 /// Each `u64` covers 64 candidates; `MAX_CANDIDATES / 64` entries span the full batch.
@@ -72,7 +87,7 @@ fn unweighted_gn_step(
     valid_mask: &[u64; VALID_MASK_LEN],
     valid_indices: &[usize],
     num_tags: usize,
-) -> Pose {
+) -> (Pose, Matrix6<f64>) {
     debug_assert!(num_tags <= valid_indices.len());
     debug_assert!(num_tags * 4 <= obj_x.len());
 
@@ -124,12 +139,15 @@ fn unweighted_gn_step(
         let twist = Vector3::new(delta[3], delta[4], delta[5]);
         let trans_update = Vector3::new(delta[0], delta[1], delta[2]);
         let rot_update = Rotation3::new(twist).matrix().into_owned();
-        Pose::new(
-            rot_update * pose.rotation,
-            rot_update * pose.translation + trans_update,
+        (
+            Pose::new(
+                rot_update * pose.rotation,
+                rot_update * pose.translation + trans_update,
+            ),
+            jtj,
         )
     } else {
-        *pose
+        (*pose, jtj)
     }
 }
 
@@ -150,7 +168,7 @@ fn refine_board_pose_aw_lm(
     valid_mask: &[u64; VALID_MASK_LEN],
     valid_indices: &[usize],
     num_tags: usize,
-) -> Pose {
+) -> BoardPose {
     debug_assert!(num_tags <= valid_indices.len());
     debug_assert!(num_tags * 4 <= info_mats.len());
 
@@ -292,7 +310,8 @@ fn refine_board_pose_aw_lm(
         }
     }
 
-    pose
+    let cov = jtj.try_inverse().unwrap_or_else(Matrix6::zeros);
+    BoardPose::new(pose, cov)
 }
 
 /// Core engine for board pose estimation.
@@ -343,39 +362,11 @@ impl BoardEstimator {
                 return None;
             }
 
-            // Step 1: Minimal Sample Generator (IPPE)
-            // Select 4 tags (for now, just take the first 4)
-            let sample_indices = [
-                &valid_indices[0],
-                &valid_indices[1],
-                &valid_indices[2],
-                &valid_indices[3],
-            ];
-
-            let mut src_pts = [[0.0; 2]; 4];
-            let mut dst_pts = [[0.0; 2]; 4];
-
-            for (k, &idx) in sample_indices.iter().enumerate() {
-                let id = batch.ids[*idx] as usize;
-                let obj_corners = &self.config.obj_points[id];
-                let img_corners = &batch.corners[*idx];
-
-                src_pts[k] = [obj_corners[k].x, obj_corners[k].y];
-                dst_pts[k] = [f64::from(img_corners[k].x), f64::from(img_corners[k].y)];
-            }
-
-            let Some(h_pixel) = Homography::from_pairs(&src_pts, &dst_pts) else {
-                arena.reset();
-                return None;
-            };
-
-            let k_inv = intrinsics.inv_matrix();
-            let h_norm = k_inv * h_pixel.h;
-
-            let Some(candidates) = crate::pose::solve_ippe_square(&h_norm) else {
-                arena.reset();
-                return None;
-            };
+            // RANSAC Loop for Robust Initial Pose
+            let mut best_pose = None;
+            let mut best_inliers = 0;
+            let mut best_inlier_mask = [0u64; 16];
+            let tau_sq = CONSENSUS_THRESHOLD_SQ;
 
             // Prepare flat arrays for SIMD Consensus Evaluation and Metrology Engine
             let total_corners = num_valid * 4;
@@ -415,64 +406,64 @@ impl BoardEstimator {
                 }
             }
 
-            let tau_sq = CONSENSUS_THRESHOLD_SQ;
+            // Pseudo-random sampling (deterministic for regression stability)
+            let mut seed = 0xACE1u32;
+            let mut next_rand = || {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                seed
+            };
 
-            let mut best_pose = None;
-            let mut best_inliers = 0;
-            let mut best_inlier_mask = [0u64; 16];
+            let iterations = if num_valid > 10 { 20 } else { 5 };
 
-            for pose in candidates {
-                compute_reprojection_errors_simd(
-                    &pose.rotation,
-                    &pose.translation,
-                    intrinsics.fx,
-                    intrinsics.fy,
-                    intrinsics.cx,
-                    intrinsics.cy,
-                    obj_x,
-                    obj_y,
-                    img_u,
-                    img_v,
-                    errors,
-                );
-
-                let mut inlier_count = 0;
-                let mut mask = [0u64; 16];
-
-                // Construct bitmask over tags (1 bit per tag)
-                for i in 0..num_valid {
-                    let mut tag_inlier = true;
-                    for j in 0..4 {
-                        if errors[i * 4 + j] > tau_sq {
-                            tag_inlier = false;
-                            break;
-                        }
-                    }
-                    if tag_inlier {
-                        inlier_count += 1;
-                        let idx = valid_indices[i];
-                        mask[idx / 64] |= 1 << (idx % 64);
-                    }
+            for _ in 0..iterations {
+                // Select 4 random tags
+                let mut sample = [0usize; 4];
+                for s in &mut sample {
+                    *s = (next_rand() as usize) % num_valid;
                 }
 
-                if inlier_count > best_inliers {
-                    // Local Optimization (LO) Handoff
-                    let lo_pose = unweighted_gn_step(
-                        &pose,
-                        intrinsics,
-                        obj_x,
-                        obj_y,
-                        img_u,
-                        img_v,
-                        &mask,
-                        valid_indices,
-                        num_valid,
-                    );
+                let mut src_pts = [[0.0; 2]; 4];
+                let mut dst_pts = [[0.0; 2]; 4];
 
-                    // Re-evaluate consensus
+                for (k, &s_idx) in sample.iter().enumerate() {
+                    let b_idx = valid_indices[s_idx];
+                    let id = batch.ids[b_idx] as usize;
+                    let obj_corners = &self.config.obj_points[id];
+                    let img_corners = &batch.corners[b_idx];
+
+                    // Use center of tag
+                    let mut obj_center = Vector3::zeros();
+                    let mut img_center = [0.0; 2];
+                    for j in 0..4 {
+                        obj_center += obj_corners[j];
+                        img_center[0] += f64::from(img_corners[j].x);
+                        img_center[1] += f64::from(img_corners[j].y);
+                    }
+                    obj_center /= 4.0;
+                    img_center[0] /= 4.0;
+                    img_center[1] /= 4.0;
+
+                    src_pts[k] = [obj_center.x, obj_center.y];
+                    dst_pts[k] = img_center;
+                }
+
+                let Some(h_pixel) = Homography::from_pairs(&src_pts, &dst_pts) else {
+                    continue;
+                };
+
+                let k_inv = intrinsics.inv_matrix();
+                let h_norm = k_inv * h_pixel.h;
+
+                let Some(candidates) = crate::pose::solve_ippe_square(&h_norm) else {
+                    continue;
+                };
+
+                for pose in candidates {
                     compute_reprojection_errors_simd(
-                        &lo_pose.rotation,
-                        &lo_pose.translation,
+                        &pose.rotation,
+                        &pose.translation,
                         intrinsics.fx,
                         intrinsics.fy,
                         intrinsics.cx,
@@ -484,8 +475,9 @@ impl BoardEstimator {
                         errors,
                     );
 
-                    let mut lo_inliers = 0;
-                    let mut lo_mask = [0u64; 16];
+                    let mut inlier_count = 0;
+                    let mut mask = [0u64; 16];
+
                     for i in 0..num_valid {
                         let mut tag_inlier = true;
                         for j in 0..4 {
@@ -495,30 +487,81 @@ impl BoardEstimator {
                             }
                         }
                         if tag_inlier {
-                            lo_inliers += 1;
+                            inlier_count += 1;
                             let idx = valid_indices[i];
-                            lo_mask[idx / 64] |= 1 << (idx % 64);
+                            mask[idx / 64] |= 1 << (idx % 64);
                         }
                     }
 
-                    if lo_inliers > best_inliers {
-                        best_inliers = lo_inliers;
-                        best_inlier_mask = lo_mask;
-                        best_pose = Some(lo_pose);
+                    if inlier_count > best_inliers {
+                        // Local Optimization (LO) Handoff
+                        let (lo_pose, _lo_jtj) = unweighted_gn_step(
+                            &pose,
+                            intrinsics,
+                            obj_x,
+                            obj_y,
+                            img_u,
+                            img_v,
+                            &mask,
+                            valid_indices,
+                            num_valid,
+                        );
 
-                        if f64::from(lo_inliers) / num_valid as f64 > 0.95 {
-                            break; // Early termination
+                        // Re-evaluate consensus
+                        compute_reprojection_errors_simd(
+                            &lo_pose.rotation,
+                            &lo_pose.translation,
+                            intrinsics.fx,
+                            intrinsics.fy,
+                            intrinsics.cx,
+                            intrinsics.cy,
+                            obj_x,
+                            obj_y,
+                            img_u,
+                            img_v,
+                            errors,
+                        );
+
+                        let mut lo_inliers = 0;
+                        let mut lo_mask = [0u64; 16];
+                        for i in 0..num_valid {
+                            let mut tag_inlier = true;
+                            for j in 0..4 {
+                                if errors[i * 4 + j] > tau_sq {
+                                    tag_inlier = false;
+                                    break;
+                                }
+                            }
+                            if tag_inlier {
+                                lo_inliers += 1;
+                                let idx = valid_indices[i];
+                                lo_mask[idx / 64] |= 1 << (idx % 64);
+                            }
                         }
-                    } else if inlier_count > best_inliers {
-                        best_inliers = inlier_count;
-                        best_inlier_mask = mask;
-                        best_pose = Some(pose);
+
+                        if lo_inliers > best_inliers {
+                            best_inliers = lo_inliers;
+                            best_inlier_mask = lo_mask;
+                            best_pose = Some(lo_pose);
+
+                            if f64::from(lo_inliers) / num_valid as f64 > 0.95 {
+                                break; // Early termination
+                            }
+                        } else if inlier_count > best_inliers {
+                            best_inliers = inlier_count;
+                            best_inlier_mask = mask;
+                            best_pose = Some(pose);
+                        }
                     }
+                }
+
+                if f64::from(best_inliers) / num_valid as f64 > 0.95 {
+                    break;
                 }
             }
 
             // Metrology Engine (AW-LM)
-            let final_pose = best_pose.map(|pose| {
+            let final_board_pose = best_pose.map(|pose| {
                 refine_board_pose_aw_lm(
                     &pose,
                     intrinsics,
@@ -534,7 +577,7 @@ impl BoardEstimator {
             });
 
             arena.reset();
-            final_pose
+            final_board_pose
         })
     }
 }
@@ -574,7 +617,6 @@ impl BoardConfig {
             for c in 0..cols {
                 // In a standard ChAruco board, markers are in the black squares.
                 // Assuming top-left square (0,0) is white, black squares have (r + c) % 2 == 1.
-                // Let's adopt this convention for assigning marker IDs sequentially.
                 if (r + c) % 2 == 1 {
                     let y_offset = r as f64 * square_length;
                     let x_offset = c as f64 * square_length;
@@ -790,7 +832,7 @@ mod tests {
         let valid_mask = [1u64; 16]; // First tag is valid
         let valid_indices = [0];
 
-        let refined_pose = super::unweighted_gn_step(
+        let (refined_pose, _jtj) = super::unweighted_gn_step(
             &pose,
             &intrinsics,
             &obj_x,
@@ -838,7 +880,7 @@ mod tests {
         let valid_indices = [0];
         let info_mats = [nalgebra::Matrix2::identity(); 4];
 
-        let refined_pose = super::refine_board_pose_aw_lm(
+        let refined_board_pose = super::refine_board_pose_aw_lm(
             &pose,
             &intrinsics,
             &obj_x,
@@ -852,9 +894,10 @@ mod tests {
         );
 
         let initial_err = (pose.translation - gt_t).norm();
-        let refined_err = (refined_pose.translation - gt_t).norm();
+        let refined_err = (refined_board_pose.pose.translation - gt_t).norm();
         println!("Initial err: {initial_err}, Refined err: {refined_err}");
         assert!(refined_err < initial_err);
+        assert!(refined_board_pose.covariance.amax() > 0.0);
     }
 
     /// Test A: Anisotropic covariance injection produces lower error than isotropic weighting.
@@ -909,7 +952,7 @@ mod tests {
             iso_mats[k] = iso_info;
         }
 
-        let pose_aniso = super::refine_board_pose_aw_lm(
+        let board_pose_aniso = super::refine_board_pose_aw_lm(
             &initial_pose,
             &intrinsics,
             &obj_x,
@@ -921,7 +964,7 @@ mod tests {
             &valid_indices,
             num_tags,
         );
-        let pose_iso = super::refine_board_pose_aw_lm(
+        let board_pose_iso = super::refine_board_pose_aw_lm(
             &initial_pose,
             &intrinsics,
             &obj_x,
@@ -937,8 +980,8 @@ mod tests {
         // Anisotropic weighting should down-weight the noisy V observations,
         // yielding a better X/Z estimate (less pulled toward V noise).
         // At minimum, the anisotropic run must converge to within 5cm of GT.
-        let err_aniso = (pose_aniso.translation - gt_t).norm();
-        let err_iso = (pose_iso.translation - gt_t).norm();
+        let err_aniso = (board_pose_aniso.pose.translation - gt_t).norm();
+        let err_iso = (board_pose_iso.pose.translation - gt_t).norm();
         // Both should converge reasonably; anisotropic should be at least as good.
         assert!(
             err_aniso <= err_iso + 1e-4,
@@ -1026,7 +1069,7 @@ mod tests {
         let valid_indices: Vec<usize> = (0..num_tags).collect();
         let info_mats = vec![nalgebra::Matrix2::<f64>::identity(); total];
 
-        let pose_clean = super::refine_board_pose_aw_lm(
+        let board_pose_clean = super::refine_board_pose_aw_lm(
             &initial_pose,
             &intrinsics,
             &obj_x,
@@ -1038,7 +1081,7 @@ mod tests {
             &valid_indices,
             num_tags,
         );
-        let pose_outlier = super::refine_board_pose_aw_lm(
+        let board_pose_outlier = super::refine_board_pose_aw_lm(
             &initial_pose,
             &intrinsics,
             &obj_x,
@@ -1051,8 +1094,8 @@ mod tests {
             num_tags,
         );
 
-        let err_clean = (pose_clean.translation - gt_t).norm();
-        let err_outlier = (pose_outlier.translation - gt_t).norm();
+        let err_clean = (board_pose_clean.pose.translation - gt_t).norm();
+        let err_outlier = (board_pose_outlier.pose.translation - gt_t).norm();
 
         // With Huber loss, the outlier-contaminated solution should stay close
         // to the clean solution (within 5mm difference).
@@ -1174,7 +1217,7 @@ mod tests {
             .estimate(&batch, &intrinsics)
             .expect("Failed to estimate pose");
 
-        let t_err = (est_pose.translation - gt_t).norm();
+        let t_err = (est_pose.pose.translation - gt_t).norm();
         assert!(t_err < 0.1, "Translation error {t_err} too high");
     }
 }

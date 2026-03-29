@@ -54,49 +54,59 @@ impl ConfigPreset {
 }
 
 // ============================================================================
-// Ground Truth Schema
+// Ground Truth Schema (rich_truth.json)
 // ============================================================================
 
-/// Per-image board pose ground truth.
 #[derive(Deserialize, Clone)]
+struct RichTruthEntry {
+    image_id: String,
+    tag_id: i32,
+    record_type: String,
+    position: [f64; 3],
+    rotation_quaternion: [f64; 4], // [w, x, y, z]
+    #[serde(default)]
+    k_matrix: Vec<Vec<f64>>,
+    #[serde(default)]
+    board_definition: Option<BoardDefinitionEntry>,
+}
+
+#[derive(Deserialize, Clone)]
+struct BoardDefinitionEntry {
+    #[serde(rename = "type")]
+    board_type: String,
+    rows: usize,
+    cols: usize,
+    square_size_mm: f64,
+    marker_size_mm: f64,
+}
+
+#[derive(Clone)]
 struct BoardImageEntry {
     filename: String,
     board_pose: BoardPoseEntry,
     visible_tag_ids: Vec<u32>,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Clone)]
 struct BoardPoseEntry {
     rotation_quaternion: [f64; 4], // [w, x, y, z]
     translation: [f64; 3],
 }
 
-/// Board configuration from JSON.
-#[derive(Deserialize, Clone)]
+/// Top-level aggregation from rich_truth.json.
+struct BoardTruth {
+    board_config: BoardConfigEntry,
+    camera_intrinsics: CameraIntrinsics,
+    images: Vec<BoardImageEntry>,
+}
+
+#[derive(Clone)]
 struct BoardConfigEntry {
-    #[serde(rename = "type")]
     board_type: String,
     rows: usize,
     cols: usize,
     square_length_m: f64,
     marker_length_m: f64,
-}
-
-/// Camera intrinsics from JSON.
-#[derive(Deserialize, Clone)]
-struct IntrinsicsEntry {
-    fx: f64,
-    fy: f64,
-    cx: f64,
-    cy: f64,
-}
-
-/// Top-level board_truth.json schema.
-#[derive(Deserialize)]
-struct BoardTruth {
-    board_config: BoardConfigEntry,
-    camera_intrinsics: IntrinsicsEntry,
-    images: Vec<BoardImageEntry>,
 }
 
 // ============================================================================
@@ -129,6 +139,10 @@ struct BoardSummaryMetrics {
     #[serde(serialize_with = "serialize_rmse")]
     p90_rotation_error_deg: f64,
     #[serde(serialize_with = "serialize_rmse")]
+    mean_translation_std_m: f64,
+    #[serde(serialize_with = "serialize_rmse")]
+    mean_rotation_std_deg: f64,
+    #[serde(serialize_with = "serialize_rmse")]
     mean_tag_coverage: f64,
     mean_total_ms: f64,
     frames_no_estimate: usize,
@@ -160,15 +174,95 @@ struct BoardHubProvider {
 
 impl BoardHubProvider {
     fn new(dataset_dir: &std::path::Path) -> Option<Self> {
-        let board_truth_path = dataset_dir.join("board_truth.json");
+        let rich_truth_path = dataset_dir.join("rich_truth.json");
         let images_dir = dataset_dir.join("images");
 
-        if !images_dir.exists() || !board_truth_path.exists() {
+        if !images_dir.exists() || !rich_truth_path.exists() {
             return None;
         }
 
-        let file = std::fs::File::open(&board_truth_path).ok()?;
-        let truth: BoardTruth = serde_json::from_reader(file).ok()?;
+        let file = std::fs::File::open(&rich_truth_path).ok()?;
+        let raw_entries: Vec<RichTruthEntry> = serde_json::from_reader(file).ok()?;
+
+        if raw_entries.is_empty() {
+            return None;
+        }
+
+        // 1. Group tags by image and extract global board config/intrinsics
+        let mut board_config_entry = None;
+        let mut intrinsics = None;
+        let mut image_map: std::collections::BTreeMap<String, (BoardPoseEntry, Vec<u32>)> =
+            std::collections::BTreeMap::new();
+
+        for entry in raw_entries {
+            if entry.record_type == "BOARD" {
+                if board_config_entry.is_none() {
+                    if let Some(ref def) = entry.board_definition {
+                        board_config_entry = Some(BoardConfigEntry {
+                            board_type: def.board_type.clone(),
+                            rows: def.rows,
+                            cols: def.cols,
+                            square_length_m: def.square_size_mm / 1000.0,
+                            marker_length_m: def.marker_size_mm / 1000.0,
+                        });
+                    }
+                }
+                if intrinsics.is_none() && entry.k_matrix.len() >= 2 {
+                    intrinsics = Some(CameraIntrinsics::new(
+                        entry.k_matrix[0][0],
+                        entry.k_matrix[1][1],
+                        entry.k_matrix[0][2],
+                        entry.k_matrix[1][2],
+                    ));
+                }
+
+                let filename = if entry.image_id.ends_with(".png") {
+                    entry.image_id.clone()
+                } else {
+                    format!("{}.png", entry.image_id)
+                };
+
+                let pose = BoardPoseEntry {
+                    rotation_quaternion: entry.rotation_quaternion,
+                    translation: entry.position,
+                };
+
+                let img_data = image_map
+                    .entry(filename)
+                    .or_insert((pose.clone(), Vec::new()));
+                // Update pose if we found the BOARD record (sometimes TAG records come first)
+                img_data.0 = pose;
+            } else if entry.record_type == "TAG" {
+                let filename = if entry.image_id.ends_with(".png") {
+                    entry.image_id.clone()
+                } else {
+                    format!("{}.png", entry.image_id)
+                };
+
+                // Use identity pose as placeholder until BOARD record is found
+                let placeholder_pose = BoardPoseEntry {
+                    rotation_quaternion: [1.0, 0.0, 0.0, 0.0],
+                    translation: [0.0, 0.0, 0.0],
+                };
+
+                let img_data = image_map
+                    .entry(filename)
+                    .or_insert((placeholder_pose, Vec::new()));
+                img_data.1.push(entry.tag_id as u32);
+            }
+        }
+
+        let board_config = board_config_entry?;
+        let camera_intrinsics = intrinsics?;
+
+        let images: Vec<BoardImageEntry> = image_map
+            .into_iter()
+            .map(|(filename, (board_pose, visible_tag_ids))| BoardImageEntry {
+                filename,
+                board_pose,
+                visible_tag_ids,
+            })
+            .collect();
 
         Some(Self {
             name: dataset_dir
@@ -177,27 +271,32 @@ impl BoardHubProvider {
                 .to_string_lossy()
                 .to_string(),
             base_dir: dataset_dir.to_path_buf(),
-            truth,
+            truth: BoardTruth {
+                board_config,
+                camera_intrinsics,
+                images,
+            },
         })
     }
 
     #[allow(clippy::panic)]
     fn board_config(&self) -> BoardConfig {
         let bc = &self.truth.board_config;
-        match bc.board_type.as_str() {
-            "charuco" => {
-                BoardConfig::new_charuco(bc.rows, bc.cols, bc.square_length_m, bc.marker_length_m)
-            },
-            "aprilgrid" => {
-                BoardConfig::new_aprilgrid(bc.rows, bc.cols, bc.square_length_m, bc.marker_length_m)
-            },
-            other => panic!("Unknown board type: {other}"),
+        if bc.board_type.contains("charuco") {
+            BoardConfig::new_charuco(bc.rows, bc.cols, bc.square_length_m, bc.marker_length_m)
+        } else if bc.board_type.contains("april") {
+            // Assume 20% spacing for AprilGrid if not specified, or match the constructor logic
+            // In BoardConfig::new_aprilgrid, step = marker + spacing.
+            // Here we have square_length_m (step) and marker_length_m.
+            let spacing = bc.square_length_m - bc.marker_length_m;
+            BoardConfig::new_aprilgrid(bc.rows, bc.cols, spacing, bc.marker_length_m)
+        } else {
+            panic!("Unknown board type: {}", bc.board_type);
         }
     }
 
     fn intrinsics(&self) -> CameraIntrinsics {
-        let k = &self.truth.camera_intrinsics;
-        CameraIntrinsics::new(k.fx, k.fy, k.cx, k.cy)
+        self.truth.camera_intrinsics
     }
 }
 
@@ -242,6 +341,8 @@ impl BoardRegressionHarness {
 
         let mut translation_errors: Vec<f64> = Vec::new();
         let mut rotation_errors_deg: Vec<f64> = Vec::new();
+        let mut translation_stds: Vec<f64> = Vec::new();
+        let mut rotation_stds_deg: Vec<f64> = Vec::new();
         let mut total_time = 0.0;
         let mut frames_with_board = 0;
         let mut frames_no_estimate = 0;
@@ -303,7 +404,7 @@ impl BoardRegressionHarness {
             let board_ms = board_start.elapsed().as_secs_f64() * 1000.0;
             total_time += detect_ms + board_ms;
 
-            if let Some(est_pose) = board_pose {
+            if let Some(est_board) = board_pose {
                 frames_with_board += 1;
 
                 // Ground truth pose
@@ -316,12 +417,25 @@ impl BoardRegressionHarness {
                 ));
                 let t_gt = Vector3::new(bp.translation[0], bp.translation[1], bp.translation[2]);
 
+                let est_pose = &est_board.pose;
                 let t_err = (est_pose.translation - t_gt).norm();
                 let q_est = UnitQuaternion::from_matrix(&est_pose.rotation);
                 let r_err_deg = q_est.angle_to(&q_gt).to_degrees();
 
                 translation_errors.push(t_err);
                 rotation_errors_deg.push(r_err_deg);
+
+                // Extract standard deviations from the diagonal of the 6x6 covariance matrix
+                // [tx, ty, tz, rx, ry, rz]
+                let cov = &est_board.covariance;
+                let t_std = (cov[(0, 0)].max(0.0) + cov[(1, 1)].max(0.0) + cov[(2, 2)].max(0.0))
+                    .sqrt();
+                let r_std_deg = (cov[(3, 3)].max(0.0) + cov[(4, 4)].max(0.0) + cov[(5, 5)].max(0.0))
+                    .sqrt()
+                    .to_degrees();
+
+                translation_stds.push(t_std);
+                rotation_stds_deg.push(r_std_deg);
             } else {
                 frames_no_estimate += 1;
             }
@@ -343,6 +457,16 @@ impl BoardRegressionHarness {
         } else {
             0.0
         };
+        let mean_t_std = if count > 0 {
+            translation_stds.iter().sum::<f64>() / count as f64
+        } else {
+            0.0
+        };
+        let mean_r_std = if count > 0 {
+            rotation_stds_deg.iter().sum::<f64>() / count as f64
+        } else {
+            0.0
+        };
 
         let summary = BoardSummaryMetrics {
             dataset_size,
@@ -353,6 +477,8 @@ impl BoardRegressionHarness {
             mean_rotation_error_deg: mean_r_err,
             p50_rotation_error_deg: calculate_percentile(&mut rotation_errors_deg, 0.5),
             p90_rotation_error_deg: calculate_percentile(&mut rotation_errors_deg, 0.9),
+            mean_translation_std_m: mean_t_std,
+            mean_rotation_std_deg: mean_r_std,
             mean_tag_coverage: if dataset_size > 0 {
                 total_coverage / dataset_size as f64
             } else {
@@ -367,9 +493,9 @@ impl BoardRegressionHarness {
             "  Frames: {dataset_size} (board estimated: {frames_with_board}, no estimate: {frames_no_estimate})"
         );
         println!("  Tag coverage: {:.1}%", summary.mean_tag_coverage * 100.0);
-        println!("  Trans P50: {:.4} m", summary.p50_translation_error_m);
+        println!("  Trans P50: {:.4} m (std: {:.4} m)", summary.p50_translation_error_m, summary.mean_translation_std_m);
         println!("  Trans P90: {:.4} m", summary.p90_translation_error_m);
-        println!("  Rot P50:   {:.4} deg", summary.p50_rotation_error_deg);
+        println!("  Rot P50:   {:.4} deg (std: {:.4} deg)", summary.p50_rotation_error_deg, summary.mean_rotation_std_deg);
         println!("  Rot P90:   {:.4} deg", summary.p90_rotation_error_deg);
         println!("  Latency:   {:.2} ms/frame", summary.mean_total_ms);
 
@@ -460,7 +586,7 @@ fn regression_board_charuco_sota() {
 /// Board regression: ChArUco board v1 golden, production config (tag36h11).
 #[test]
 fn regression_board_charuco_v1_golden_plain() {
-    let dataset_name = "charuco_v1_golden";
+    let dataset_name = "charuco_golden_v1";
     let Some(provider) = try_load_board_provider(dataset_name) else {
         println!("Skipping board regression: dataset '{dataset_name}' not found.");
         println!(
@@ -470,14 +596,14 @@ fn regression_board_charuco_v1_golden_plain() {
     };
     BoardRegressionHarness::new("board_charuco_v1_golden_plain")
         .with_preset(ConfigPreset::PlainBoard)
-        .with_families(vec![TagFamily::AprilTag36h11])
+        .with_families(vec![TagFamily::ArUco6x6_250])
         .run(&provider);
 }
 
 /// Board regression: ChArUco board v1 golden, SOTA metrology config (tag36h11).
 #[test]
 fn regression_board_charuco_v1_golden_sota() {
-    let dataset_name = "charuco_v1_golden";
+    let dataset_name = "charuco_golden_v1";
     let Some(provider) = try_load_board_provider(dataset_name) else {
         println!("Skipping board regression: dataset '{dataset_name}' not found.");
         println!(
@@ -487,6 +613,6 @@ fn regression_board_charuco_v1_golden_sota() {
     };
     BoardRegressionHarness::new("board_charuco_v1_golden_sota")
         .with_preset(ConfigPreset::SotaMetrology)
-        .with_families(vec![TagFamily::AprilTag36h11])
+        .with_families(vec![TagFamily::ArUco6x6_250])
         .run(&provider);
 }

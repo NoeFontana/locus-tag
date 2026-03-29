@@ -1980,6 +1980,58 @@ impl TagDecoder for ArUco4x4_100 {
     }
 }
 
+/// Decoder for the ArUco 6x6_250 family.
+pub struct ArUco6x6_250;
+
+impl TagDecoder for ArUco6x6_250 {
+    fn name(&self) -> &'static str {
+        "6X6_250"
+    }
+    fn dimension(&self) -> usize {
+        6
+    }
+    fn bit_count(&self) -> usize {
+        36
+    }
+
+    fn sample_points(&self) -> &[(f64, f64)] {
+        crate::dictionaries::POINTS_ARUCO6X6_250
+    }
+
+    fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
+        crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUco6x6_250)
+            .decode(bits, 2)
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
+    }
+
+    fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)> {
+        crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUco6x6_250)
+            .decode(bits, max_hamming)
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
+    }
+
+    fn get_code(&self, id: u16) -> Option<u64> {
+        crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUco6x6_250).get_code(id)
+    }
+
+    fn num_codes(&self) -> usize {
+        crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUco6x6_250).len()
+    }
+
+    fn rotated_codes(&self) -> &[(u64, u16, u8)] {
+        &[]
+    }
+    fn for_each_candidate_within_hamming(
+        &self,
+        bits: u64,
+        max_hamming: u32,
+        callback: &mut dyn FnMut(u64, u16, u8),
+    ) {
+        crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUco6x6_250)
+            .for_each_candidate_within_hamming(bits, max_hamming, callback);
+    }
+}
+
 /// Convert a TagFamily enum to a boxed decoder instance.
 #[must_use]
 pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send + Sync> {
@@ -1988,6 +2040,7 @@ pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send
         config::TagFamily::AprilTag36h11 => Box::new(AprilTag36h11),
         config::TagFamily::ArUco4x4_50 => Box::new(ArUco4x4_50),
         config::TagFamily::ArUco4x4_100 => Box::new(ArUco4x4_100),
+        config::TagFamily::ArUco6x6_250 => Box::new(ArUco6x6_250),
     }
 }
 

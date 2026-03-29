@@ -57,7 +57,7 @@ impl CameraIntrinsics {
 
 // 3D Pose Estimation using PnP (Perspective-n-Point).
 /// A 3D pose representing rotation and translation.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Pose {
     /// 3x3 Rotation matrix.
