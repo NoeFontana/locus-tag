@@ -1,6 +1,5 @@
 ---
 source: crates/locus-core/tests/regression_render_tag.rs
-assertion_line: 556
 expression: report
 ---
 summary:
@@ -8,13 +7,13 @@ summary:
   mean_recall: 0.96
   mean_precision: 1
   mean_rmse: 0.2767
-  mean_reprojection_rmse: 1.9064
-  p50_translation_error: 0.001
-  p90_translation_error: 0.0195
-  p99_translation_error: 0.4416
-  p50_rotation_error: 0.3512
-  p90_rotation_error: 4.8668
-  p99_rotation_error: 34.8244
+  mean_reprojection_rmse: 0.1984
+  p50_translation_error: 0.0005
+  p90_translation_error: 0.0044
+  p99_translation_error: 0.0246
+  p50_rotation_error: 0.0642
+  p90_rotation_error: 0.3406
+  p99_rotation_error: 2.1016
   mean_hamming: 0.02
   mean_total_ms: "[DURATION]"
   geometry_violations: 0

@@ -7,13 +7,13 @@ summary:
   mean_recall: 1
   mean_precision: 1
   mean_rmse: 0.994
-  mean_reprojection_rmse: 1.9689
-  p50_translation_error: 0.0041
-  p90_translation_error: 0.0249
-  p99_translation_error: 0.0489
-  p50_rotation_error: 1.2903
-  p90_rotation_error: 6.5263
-  p99_rotation_error: 16.1474
+  mean_reprojection_rmse: 0.9041
+  p50_translation_error: 0.0039
+  p90_translation_error: 0.0094
+  p99_translation_error: 0.023
+  p50_rotation_error: 0.454
+  p90_rotation_error: 1.4876
+  p99_rotation_error: 10.1359
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
   geometry_violations: 0
