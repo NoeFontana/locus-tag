@@ -196,6 +196,7 @@ The `locus-core` crate is organized into logical modules mirroring the pipeline 
 | `funnel` | Fast-path rejection gate (O(1) contrast). | `apply_funnel_gate` |
 | `pose` | 3D pose estimation (PnP). | `Pose`, `CameraIntrinsics` |
 | `pose_weighted` | Structure Tensor & Weighted LM. | `refine_pose_lm_weighted` |
+| `board` | Multi-tag board pose estimation. | `BoardEstimator`, `BoardConfig` |
 | `gradient` | Image gradients & Sub-pixel windows. | `compute_structure_tensor` |
 | `filter` | Pre-processing filters (Bilateral, Sharpen). | `bilateral_filter` |
 | `edge_refinement` | Unified ERF sub-pixel refinement. | `ErfEdgeFitter` |

@@ -63,7 +63,11 @@ Locus supports running regressions against large-scale datasets hosted on the Hu
 2. **Run Hub Tests**:
    Point the test runner to the local cache directory:
    ```bash
-   LOCUS_HUB_DATASET_DIR=tests/data/hub_cache cargo test --release --test regression_render_tag regression_hub_ --features bench-internals -- --nocapture
+   # Tag-level regression
+   LOCUS_HUB_DATASET_DIR=tests/data/hub_cache cargo test --release --test regression_render_tag --features bench-internals
+
+   # Board-level regression (Multi-tag estimation)
+   LOCUS_HUB_DATASET_DIR=tests/data/hub_cache cargo test --release --test regression_board_hub --features bench-internals
    ```
 
 ### Logic-Specific Benchs (Micro-benchmarking)
