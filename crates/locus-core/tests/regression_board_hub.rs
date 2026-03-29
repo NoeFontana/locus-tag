@@ -127,21 +127,21 @@ struct BoardSummaryMetrics {
     dataset_size: usize,
     frames_with_board: usize,
     #[serde(serialize_with = "serialize_rmse")]
-    mean_translation_error_m: f64,
+    mean_board_translation_error_m: f64,
     #[serde(serialize_with = "serialize_rmse")]
-    p50_translation_error_m: f64,
+    p50_board_translation_error_m: f64,
     #[serde(serialize_with = "serialize_rmse")]
-    p90_translation_error_m: f64,
+    p90_board_translation_error_m: f64,
     #[serde(serialize_with = "serialize_rmse")]
-    mean_rotation_error_deg: f64,
+    mean_board_rotation_error_deg: f64,
     #[serde(serialize_with = "serialize_rmse")]
-    p50_rotation_error_deg: f64,
+    p50_board_rotation_error_deg: f64,
     #[serde(serialize_with = "serialize_rmse")]
-    p90_rotation_error_deg: f64,
+    p90_board_rotation_error_deg: f64,
     #[serde(serialize_with = "serialize_rmse")]
-    mean_translation_std_m: f64,
+    mean_board_translation_std_m: f64,
     #[serde(serialize_with = "serialize_rmse")]
-    mean_rotation_std_deg: f64,
+    mean_board_rotation_std_deg: f64,
     #[serde(serialize_with = "serialize_rmse")]
     mean_tag_coverage: f64,
     mean_total_ms: f64,
@@ -482,14 +482,14 @@ impl BoardRegressionHarness {
         let summary = BoardSummaryMetrics {
             dataset_size,
             frames_with_board,
-            mean_translation_error_m: mean_t_err,
-            p50_translation_error_m: calculate_percentile(&mut translation_errors, 0.5),
-            p90_translation_error_m: calculate_percentile(&mut translation_errors, 0.9),
-            mean_rotation_error_deg: mean_r_err,
-            p50_rotation_error_deg: calculate_percentile(&mut rotation_errors_deg, 0.5),
-            p90_rotation_error_deg: calculate_percentile(&mut rotation_errors_deg, 0.9),
-            mean_translation_std_m: mean_t_std,
-            mean_rotation_std_deg: mean_r_std,
+            mean_board_translation_error_m: mean_t_err,
+            p50_board_translation_error_m: calculate_percentile(&mut translation_errors, 0.5),
+            p90_board_translation_error_m: calculate_percentile(&mut translation_errors, 0.9),
+            mean_board_rotation_error_deg: mean_r_err,
+            p50_board_rotation_error_deg: calculate_percentile(&mut rotation_errors_deg, 0.5),
+            p90_board_rotation_error_deg: calculate_percentile(&mut rotation_errors_deg, 0.9),
+            mean_board_translation_std_m: mean_t_std,
+            mean_board_rotation_std_deg: mean_r_std,
             mean_tag_coverage: if dataset_size > 0 {
                 total_coverage / dataset_size as f64
             } else {
@@ -505,16 +505,16 @@ impl BoardRegressionHarness {
         );
         println!("  Tag coverage: {:.1}%", summary.mean_tag_coverage * 100.0);
         println!(
-            "  Trans P50: {:.4} m (std: {:.4} m)",
-            summary.p50_translation_error_m, summary.mean_translation_std_m
+            "  Board Trans P50: {:.4} m (std: {:.4} m)",
+            summary.p50_board_translation_error_m, summary.mean_board_translation_std_m
         );
-        println!("  Trans P90: {:.4} m", summary.p90_translation_error_m);
+        println!("  Board Trans P90: {:.4} m", summary.p90_board_translation_error_m);
         println!(
-            "  Rot P50:   {:.4} deg (std: {:.4} deg)",
-            summary.p50_rotation_error_deg, summary.mean_rotation_std_deg
+            "  Board Rot P50:   {:.4} deg (std: {:.4} deg)",
+            summary.p50_board_rotation_error_deg, summary.mean_board_rotation_std_deg
         );
-        println!("  Rot P90:   {:.4} deg", summary.p90_rotation_error_deg);
-        println!("  Latency:   {:.2} ms/frame", summary.mean_total_ms);
+        println!("  Board Rot P90:   {:.4} deg", summary.p90_board_rotation_error_deg);
+        println!("  Latency:         {:.2} ms/frame", summary.mean_total_ms);
 
         let report = BoardRegressionReport { summary };
 
@@ -565,40 +565,6 @@ fn try_load_board_provider(dataset_name: &str) -> Option<BoardHubProvider> {
 // ============================================================================
 // Test Functions
 // ============================================================================
-
-/// Board regression: ChArUco board, production config (tag36h11).
-#[test]
-fn regression_board_charuco_plain() {
-    let dataset_name = "charuco_board_tag36h11_1280x720";
-    let Some(provider) = try_load_board_provider(dataset_name) else {
-        println!("Skipping board regression: dataset '{dataset_name}' not found.");
-        println!(
-            "Set LOCUS_HUB_DATASET_DIR or place dataset at tests/data/hub_cache/{dataset_name}"
-        );
-        return;
-    };
-    BoardRegressionHarness::new("board_charuco_plain")
-        .with_preset(ConfigPreset::PlainBoard)
-        .with_families(vec![TagFamily::AprilTag36h11])
-        .run(&provider);
-}
-
-/// Board regression: ChArUco board, SOTA metrology config (tag36h11).
-#[test]
-fn regression_board_charuco_sota() {
-    let dataset_name = "charuco_board_tag36h11_1280x720";
-    let Some(provider) = try_load_board_provider(dataset_name) else {
-        println!("Skipping board regression: dataset '{dataset_name}' not found.");
-        println!(
-            "Set LOCUS_HUB_DATASET_DIR or place dataset at tests/data/hub_cache/{dataset_name}"
-        );
-        return;
-    };
-    BoardRegressionHarness::new("board_charuco_sota")
-        .with_preset(ConfigPreset::SotaMetrology)
-        .with_families(vec![TagFamily::AprilTag36h11])
-        .run(&provider);
-}
 
 /// Board regression: ChArUco board v1 golden, production config (tag36h11).
 #[test]
