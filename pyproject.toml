@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "locus-tag"
-version = "0.3.0"
+version = "0.3.1"
 description = "A high-performance fiducial marker detector for robotics."
 readme = "README.md"
 authors = [{name = "Noé Fontana"}]
