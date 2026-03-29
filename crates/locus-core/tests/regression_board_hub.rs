@@ -456,3 +456,37 @@ fn regression_board_charuco_sota() {
         .with_families(vec![TagFamily::AprilTag36h11])
         .run(&provider);
 }
+
+/// Board regression: ChArUco board v1 golden, production config (tag36h11).
+#[test]
+fn regression_board_charuco_v1_golden_plain() {
+    let dataset_name = "charuco_v1_golden";
+    let Some(provider) = try_load_board_provider(dataset_name) else {
+        println!("Skipping board regression: dataset '{dataset_name}' not found.");
+        println!(
+            "Set LOCUS_HUB_DATASET_DIR or place dataset at tests/data/hub_cache/{dataset_name}"
+        );
+        return;
+    };
+    BoardRegressionHarness::new("board_charuco_v1_golden_plain")
+        .with_preset(ConfigPreset::PlainBoard)
+        .with_families(vec![TagFamily::AprilTag36h11])
+        .run(&provider);
+}
+
+/// Board regression: ChArUco board v1 golden, SOTA metrology config (tag36h11).
+#[test]
+fn regression_board_charuco_v1_golden_sota() {
+    let dataset_name = "charuco_v1_golden";
+    let Some(provider) = try_load_board_provider(dataset_name) else {
+        println!("Skipping board regression: dataset '{dataset_name}' not found.");
+        println!(
+            "Set LOCUS_HUB_DATASET_DIR or place dataset at tests/data/hub_cache/{dataset_name}"
+        );
+        return;
+    };
+    BoardRegressionHarness::new("board_charuco_v1_golden_sota")
+        .with_preset(ConfigPreset::SotaMetrology)
+        .with_families(vec![TagFamily::AprilTag36h11])
+        .run(&provider);
+}
