@@ -43,6 +43,11 @@ flowchart LR
         PoseRefine["LM Refinement"]
     end
 
+    subgraph BoardEst ["Board Estimation (Optional)"]
+        BoardRansac["RANSAC Consensus"]
+        BoardRefine["Board AW-LM"]
+    end
+
     Integral --> Thresh
     Thresh --> RLE --> LSL
     LSL --> Contour --> DP --> Refine
@@ -52,6 +57,7 @@ flowchart LR
     EC --> PoseInit --> PoseRefine
     PoseInit -.->|IPPE| Geometry
     PoseRefine -.->|LM| Geometry
+    PoseRefine --> BoardRansac --> BoardRefine
 ```
 
 ## Stage 0: Pre-allocation & Upscaling
@@ -153,6 +159,23 @@ Both solvers use Nielsen trust-region scheduling with Marquardt diagonal scaling
 
 **Module:** `pose.rs`, `pose_weighted.rs` | **Complexity:** $O(V)$ | **Typical Latency:** ~0.05-0.2 ms per tag
 
+## Stage 6: Board Estimation (Optional)
+
+For applications using ChAruco or AprilGrid boards, Locus provides a high-level estimator that aggregates multiple tag observations into a single, robust board pose.
+
+### 6a. RANSAC Consensus
+
+The estimator uses a deterministic RANSAC loop to find the best consensus set among detected tags. It samples 4-tag subsets, generates initial candidates via IPPE, and evaluates them using SIMD-accelerated reprojection.
+
+### 6b. Board AW-LM Refinement
+
+The winning consensus set is refined using the **Anisotropic Weighted Levenberg-Marquardt** engine. This stage:
+1. Injects $2 \times 2$ corner covariances (from GWLF or the Structure Tensor).
+2. Minimizes a Huber-robust Mahalanobis objective across all inlier corners.
+3. Propagates uncertainty to a final $6 \times 6$ board pose covariance matrix.
+
+**Module:** `board.rs` | **Typical Latency:** ~0.2-0.5 ms (depending on tag count)
+
 ## End-to-End Sequence
 
 ```mermaid
@@ -200,6 +223,12 @@ sequenceDiagram
         Pose->>Geom: IPPE Decomposition
         Pose->>Geom: LM Refinement
         Geom-->>Pose: Refined Poses
+
+        opt If Board Config Provided
+            Det->>Pose: Board Pose Estimation
+            Pose->>Geom: RANSAC + Board AW-LM
+            Geom-->>Pose: Board Pose + Covariance
+        end
     end
 
     Det-->>App: DetectionBatch

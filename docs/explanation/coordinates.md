@@ -44,7 +44,20 @@ Detections return corners in **clockwise order** (when looking at the tag), matc
 | **2** | Bottom-Right | $(s, s, 0)$ |
 | **3** | Bottom-Left | $(0, s, 0)$ |
 
-## 3. Tag Layout and Bit Order
+## 3. Board Local Coordinates (ChAruco / AprilGrid)
+
+For multi-tag board pose estimation, Locus adopts a **centered origin** convention to align with standard calibration targets and synthetic datasets (e.g., `charuco_golden_v1`).
+
+- **Origin (0,0,0)**: The **Geometric Center** of the board.
+- **X-axis**: Points to the right.
+- **Y-axis**: Points downward.
+- **Z-axis**: Points **into** the board (away from the camera).
+
+### Parity and ID Assignment
+- **ChAruco**: Markers are placed in squares where $(row + col)$ is **even**, starting with a marker at the top-left square $(0,0)$.
+- **AprilGrid**: Markers are placed in every grid cell, separated by a configurable spacing.
+
+## 4. Tag Layout and Bit Order
 
 Locus strictly adheres to **modern OpenCV (cv2.aruco)** conventions for dictionary layout, bit ordering, and canonical orientation.
 
