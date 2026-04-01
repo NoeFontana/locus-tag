@@ -1,0 +1,35 @@
+# Implementation Plan: charuco_support_20260401
+
+## Phase 1: Core Mathematical Foundation (Subpixel Refinement)
+- [x] **Task: Implement Bivariate Polynomial Surface Fitting** 56ede68
+    - [x] Write failing unit tests for `BivariatePolynomial` fitting (Rust).
+    - [x] Implement analytical 2nd-order Taylor expansion solver ($H^{-1}\mathbf{J}$).
+    - [x] Verify subpixel accuracy against synthetic saddle point images.
+- [ ] **Task: Refinement API Integration**
+    - [ ] Define `SubpixelRefinement` trait for future extensibility (e.g., Template Matching).
+    - [ ] Implement `PolynomialRefiner` with configurable search window ($N \times N$).
+- [ ] **Task: Conductor - User Manual Verification 'Core Mathematical Foundation' (Protocol in workflow.md)**
+
+## Phase 2: ChArUco Board Logic & Pipeline Decoupling
+- [ ] **Task: Decouple Detection API**
+    - [ ] Refactor detection entry points to include `detect_aprilgrid` and `detect_charuco`.
+    - [ ] Define `CharucoBoard` configuration (tag IDs, checkerboard layout).
+- [ ] **Task: Coarse Detection & Corner Prediction**
+    - [ ] Implement coarse tag detection stage and rough board homography.
+    - [ ] Implement geometric projection of checkerboard intersections from tag corners.
+- [ ] **Task: Conductor - User Manual Verification 'ChArUco Board Logic & Pipeline Decoupling' (Protocol in workflow.md)**
+
+## Phase 3: Integration & Pose Estimation
+- [ ] **Task: ChArUco PnP Solver Integration**
+    - [ ] Map 2D refined corners to 3D board coordinates.
+    - [ ] Integrate with existing `solvePnP` solver.
+- [ ] **Task: Benchmarking & Regression**
+    - [ ] Re-run pose estimation benchmarks to verify improvement.
+    - [ ] Run full regression suite to ensure zero impact on AprilGrid detection.
+- [ ] **Task: Conductor - User Manual Verification 'Integration & Pose Estimation' (Protocol in workflow.md)**
+
+## Phase 4: Finalization & Documentation
+- [ ] **Task: Documentation Update**
+    - [ ] Update `docs/explanation/pipeline.md` with ChArUco-specific details.
+    - [ ] Update API reference for new detection methods.
+- [ ] **Task: Conductor - User Manual Verification 'Finalization & Documentation' (Protocol in workflow.md)**
