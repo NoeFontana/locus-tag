@@ -1,6 +1,6 @@
 # Implementation Plan: charuco_support_20260401
 
-## Phase 1: Core Mathematical Foundation (Subpixel Refinement)
+## Phase 1: Core Mathematical Foundation (Subpixel Refinement) [checkpoint: 5a654a6]
 - [x] **Task: Implement Bivariate Polynomial Surface Fitting** 56ede68
     - [x] Write failing unit tests for `BivariatePolynomial` fitting (Rust).
     - [x] Implement analytical 2nd-order Taylor expansion solver ($H^{-1}\mathbf{J}$).
@@ -8,7 +8,7 @@
 - [x] **Task: Refinement API Integration** da72bf1
     - [x] Define `SubpixelRefinement` trait for future extensibility (e.g., Template Matching).
     - [x] Implement `PolynomialRefiner` with configurable search window ($N \times N$).
-- [x] **Task: Conductor - User Manual Verification 'Core Mathematical Foundation' (Protocol in workflow.md)** [checkpoint: TBD]
+- [x] **Task: Conductor - User Manual Verification 'Core Mathematical Foundation' (Protocol in workflow.md)** 5a654a6
 
 ## Phase 2: ChArUco Board Logic & Pipeline Decoupling
 - [ ] **Task: Decouple Detection API**
