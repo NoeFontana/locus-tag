@@ -57,13 +57,18 @@ Locus supports running regressions against large-scale datasets hosted on the Hu
 1. **Synchronize Data**:
    Download the datasets to a local cache. This requires the `bench` dependency group.
    ```bash
-   uv run python tools/bench/sync_hub.py --configs single_tag_locus_v1_std41h12_1920x1080
+   uv run python tools/bench/sync_hub.py --configs single_tag_locus_v1_std41h12_1920x1080 charuco_golden_v1 aprilgrid_golden_v1
    ```
 
 2. **Run Hub Tests**:
    Point the test runner to the local cache directory:
    ```bash
-   LOCUS_HUB_DATASET_DIR=tests/data/hub_cache cargo test --release --test regression_render_tag regression_hub_ --features bench-internals -- --nocapture
+   # Tag-level regression
+   LOCUS_HUB_DATASET_DIR=tests/data/hub_cache cargo test --release --test regression_render_tag --features bench-internals -- --nocapture
+
+   # Board-level regression (Multi-tag estimation)
+   # Validates ChAruco and AprilGrid golden datasets (150 images each)
+   LOCUS_HUB_DATASET_DIR=tests/data/hub_cache cargo test --release --test regression_board_hub --features bench-internals -- --nocapture
    ```
 
 ### Logic-Specific Benchs (Micro-benchmarking)
