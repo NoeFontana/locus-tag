@@ -1,9 +1,24 @@
-//! Data provider and parsing utilities for board-level hub datasets.
-#![allow(dead_code, missing_docs, clippy::collapsible_if)]
+//! Regression tests for board-level pose estimation using hub datasets.
+#![allow(
+    dead_code,
+    missing_docs,
+    clippy::unwrap_used,
+    clippy::collapsible_if,
+    clippy::too_many_lines,
+    clippy::cast_sign_loss
+)]
 
-use locus_core::{CameraIntrinsics, board::BoardConfig};
-use serde::Deserialize;
+use locus_core::{
+    CameraIntrinsics, Detector, DetectorConfig, PoseEstimationMode, TagFamily,
+    board::{BoardConfig, BoardEstimator},
+};
+use nalgebra::{UnitQuaternion, Vector3};
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+
+// ============================================================================
+// Data Provider
+// ============================================================================
 
 #[derive(Deserialize, Clone)]
 struct RichTruthEntry {
@@ -159,6 +174,213 @@ impl BoardHubProvider {
     }
 }
 
+// ============================================================================
+// Metrics
+// ============================================================================
+
+#[derive(Serialize, Default)]
+struct BoardSummaryMetrics {
+    dataset_size: usize,
+    frames_with_board: usize,
+    mean_board_translation_error_m: f64,
+    p50_board_translation_error_m: f64,
+    mean_board_rotation_error_deg: f64,
+    p50_board_rotation_error_deg: f64,
+    mean_board_translation_std_m: f64,
+    mean_board_rotation_std_deg: f64,
+    mean_tag_coverage: f64,
+    mean_total_ms: f64,
+    frames_no_estimate: usize,
+}
+
+#[derive(Serialize)]
+struct BoardRegressionReport {
+    summary: BoardSummaryMetrics,
+}
+
+fn calculate_percentile(values: &mut [f64], percentile: f64) -> f64 {
+    let mut clean_values: Vec<f64> = values.iter().copied().filter(|v| !v.is_nan()).collect();
+    if clean_values.is_empty() {
+        return 0.0;
+    }
+    clean_values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let idx = (percentile * (clean_values.len() - 1) as f64).round() as usize;
+    clean_values[idx]
+}
+
+// ============================================================================
+// Harness
+// ============================================================================
+
+struct BoardRegressionHarness {
+    snapshot_name: String,
+    config: DetectorConfig,
+    families: Vec<TagFamily>,
+}
+
+impl BoardRegressionHarness {
+    pub fn new(snapshot_name: impl Into<String>) -> Self {
+        Self {
+            snapshot_name: snapshot_name.into(),
+            config: DetectorConfig::production_default(),
+            families: Vec::new(),
+        }
+    }
+
+    pub fn with_families(mut self, families: Vec<TagFamily>) -> Self {
+        self.families = families;
+        self
+    }
+
+    pub fn run(self, provider: &BoardHubProvider) {
+        let estimator = BoardEstimator::new(provider.board_config.clone());
+        let mut detector = Detector::with_config(self.config);
+        if !self.families.is_empty() {
+            detector.set_families(&self.families);
+        }
+
+        let mut t_errors = Vec::new();
+        let mut r_errors = Vec::new();
+        let mut t_stds = Vec::new();
+        let mut r_stds = Vec::new();
+        let mut frames_with_board = 0;
+        let mut frames_no_estimate = 0;
+        let mut total_coverage = 0.0;
+        let mut total_time = 0.0;
+
+        for (i, entry) in provider.images.iter().enumerate() {
+            if i % 20 == 0 {
+                println!("  Processing frame {}/{}...", i, provider.images.len());
+            }
+            let img_path = provider.base_dir.join("images").join(&entry.filename);
+            if !img_path.exists() {
+                continue;
+            }
+
+            let img = image::open(img_path).unwrap().into_luma8();
+            let (w, h) = img.dimensions();
+            let raw = img.into_raw();
+            let img_view =
+                locus_core::ImageView::new(&raw, w as usize, h as usize, w as usize).unwrap();
+
+            let start = std::time::Instant::now();
+            let _ = detector
+                .detect(
+                    &img_view,
+                    Some(&provider.camera_intrinsics),
+                    Some(provider.board_config.marker_length),
+                    PoseEstimationMode::Accurate,
+                    false,
+                )
+                .unwrap();
+            let detect_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+            #[cfg(feature = "bench-internals")]
+            {
+                let batch_cloned = detector.bench_api_get_batch_cloned();
+
+                // Tag coverage calculation
+                let visible_set: std::collections::HashSet<u32> =
+                    entry.visible_tag_ids.iter().copied().collect();
+                let detected_valid = batch_cloned
+                    .status_mask
+                    .iter()
+                    .zip(batch_cloned.ids.iter())
+                    .filter(|&(state, id)| {
+                        *state == locus_core::batch::CandidateState::Valid
+                            && visible_set.contains(id)
+                    })
+                    .count();
+                total_coverage += if visible_set.is_empty() {
+                    1.0
+                } else {
+                    detected_valid as f64 / visible_set.len() as f64
+                };
+
+                let board_start = std::time::Instant::now();
+                let board_pose = estimator.estimate(&batch_cloned, &provider.camera_intrinsics);
+                let board_ms = board_start.elapsed().as_secs_f64() * 1000.0;
+                total_time += detect_ms + board_ms;
+
+                if let Some(est) = board_pose {
+                    frames_with_board += 1;
+
+                    let gt_q = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
+                        entry.board_pose.rotation_quaternion[0],
+                        entry.board_pose.rotation_quaternion[1],
+                        entry.board_pose.rotation_quaternion[2],
+                        entry.board_pose.rotation_quaternion[3],
+                    ));
+                    let gt_t = Vector3::new(
+                        entry.board_pose.translation[0],
+                        entry.board_pose.translation[1],
+                        entry.board_pose.translation[2],
+                    );
+
+                    t_errors.push((est.pose.translation - gt_t).norm());
+                    r_errors.push(
+                        UnitQuaternion::from_matrix(&est.pose.rotation)
+                            .angle_to(&gt_q)
+                            .to_degrees(),
+                    );
+
+                    t_stds.push(
+                        (est.covariance[(0, 0)].max(0.0)
+                            + est.covariance[(1, 1)].max(0.0)
+                            + est.covariance[(2, 2)].max(0.0))
+                        .sqrt(),
+                    );
+                    r_stds.push(
+                        (est.covariance[(3, 3)].max(0.0)
+                            + est.covariance[(4, 4)].max(0.0)
+                            + est.covariance[(5, 5)].max(0.0))
+                        .sqrt()
+                        .to_degrees(),
+                    );
+                } else {
+                    frames_no_estimate += 1;
+                }
+            }
+        }
+
+        let count = t_errors.len() as f64;
+        let summary = BoardSummaryMetrics {
+            dataset_size: provider.images.len(),
+            frames_with_board,
+            mean_board_translation_error_m: if count > 0.0 {
+                t_errors.iter().sum::<f64>() / count
+            } else {
+                0.0
+            },
+            p50_board_translation_error_m: calculate_percentile(&mut t_errors, 0.5),
+            mean_board_rotation_error_deg: if count > 0.0 {
+                r_errors.iter().sum::<f64>() / count
+            } else {
+                0.0
+            },
+            p50_board_rotation_error_deg: calculate_percentile(&mut r_errors, 0.5),
+            mean_board_translation_std_m: if count > 0.0 {
+                t_stds.iter().sum::<f64>() / count
+            } else {
+                0.0
+            },
+            mean_board_rotation_std_deg: if count > 0.0 {
+                r_stds.iter().sum::<f64>() / count
+            } else {
+                0.0
+            },
+            mean_tag_coverage: total_coverage / provider.images.len() as f64,
+            mean_total_ms: total_time / provider.images.len() as f64,
+            frames_no_estimate,
+        };
+
+        let report = BoardRegressionReport { summary };
+        insta::assert_yaml_snapshot!(self.snapshot_name, report, {
+            ".summary.mean_total_ms" => "[DURATION]"
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,6 +417,34 @@ mod tests {
                 "Loaded {} images from aprilgrid golden dataset",
                 provider.images.len()
             );
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "bench-internals")]
+    fn regression_board_charuco_v1_golden() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let dataset_path = manifest_dir.join("../../tests/data/hub_cache/charuco_golden_v1");
+
+        if dataset_path.exists() {
+            let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
+            BoardRegressionHarness::new("board_charuco_v1_golden")
+                .with_families(vec![TagFamily::ArUco6x6_250])
+                .run(&provider);
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "bench-internals")]
+    fn regression_board_aprilgrid_v1_golden() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let dataset_path = manifest_dir.join("../../tests/data/hub_cache/aprilgrid_golden_v1");
+
+        if dataset_path.exists() {
+            let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
+            BoardRegressionHarness::new("board_aprilgrid_v1_golden")
+                .with_families(vec![TagFamily::AprilTag36h11])
+                .run(&provider);
         }
     }
 }
