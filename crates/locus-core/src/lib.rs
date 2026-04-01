@@ -54,7 +54,7 @@ pub mod threshold;
 pub(crate) mod workspace;
 
 // Re-exports for the public API
-pub use crate::board::BoardConfig;
+pub use crate::board::{BoardConfig, CharucoBoard};
 pub use crate::config::{
     CornerRefinementMode, DecodeMode, DetectOptions, DetectorConfig, PoseEstimationMode,
     QuadExtractionMode, TagFamily,

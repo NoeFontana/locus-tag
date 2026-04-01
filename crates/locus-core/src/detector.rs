@@ -354,6 +354,70 @@ impl Detector {
         Ok(self.state.batch.view_with_telemetry(v, n, telemetry))
     }
 
+    /// Detect AprilGrid boards.
+    ///
+    /// # Errors
+    /// Returns [`DetectorError`] if the input image cannot be processed.
+    pub fn detect_aprilgrid(
+        &mut self,
+        img: &ImageView,
+        board: &crate::board::BoardConfig,
+        intrinsics: &crate::pose::CameraIntrinsics,
+    ) -> Result<Option<crate::board::BoardPose>, DetectorError> {
+        // Step 1: Detect tags in the image.
+        // AprilGrid typically uses AprilTag36h11.
+        self.set_families(&[crate::config::TagFamily::AprilTag36h11]);
+        let view = self.detect(
+            img,
+            Some(intrinsics),
+            Some(board.marker_length),
+            crate::config::PoseEstimationMode::Fast,
+            false,
+        )?;
+
+        if view.is_empty() {
+            return Ok(None);
+        }
+
+        // Step 2: Robust board pose estimation.
+        let estimator = crate::board::BoardEstimator::new(board.clone());
+        Ok(estimator.estimate(&self.state.batch, intrinsics))
+    }
+
+    /// Detect ChArUco boards.
+    ///
+    /// # Errors
+    /// Returns [`DetectorError`] if the input image cannot be processed.
+    pub fn detect_charuco(
+        &mut self,
+        img: &ImageView,
+        board: &crate::board::CharucoBoard,
+        intrinsics: &crate::pose::CameraIntrinsics,
+    ) -> Result<Option<crate::board::BoardPose>, DetectorError> {
+        // Step 1: Coarse Detection (Detect markers).
+        // ChArUco typically uses ArUco families.
+        // Note: The board config should specify which family to use, but for now we default to ArUco4x4_50
+        // or whatever is already set in the detector.
+        let view = self.detect(
+            img,
+            Some(intrinsics),
+            Some(board.config.marker_length),
+            crate::config::PoseEstimationMode::Fast,
+            false,
+        )?;
+
+        if view.is_empty() {
+            return Ok(None);
+        }
+
+        // Step 2: Board-level robust pose from tags.
+        let estimator = crate::board::BoardEstimator::new(board.config.clone());
+        let board_pose = estimator.estimate(&self.state.batch, intrinsics);
+
+        // TODO: Phase 2.2 Corner Prediction & Refinement will be implemented in the next task.
+        Ok(board_pose)
+    }
+
     /// Get the current detector configuration.
     #[must_use]
     pub fn config(&self) -> DetectorConfig {

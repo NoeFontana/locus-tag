@@ -83,6 +83,50 @@ pub struct BoardConfig {
     pub obj_points: Vec<Option<[[f64; 3]; 4]>>,
 }
 
+/// A ChArUco board configuration, defining the checkerboard and marker layout.
+#[derive(Clone, Debug)]
+pub struct CharucoBoard {
+    /// The underlying board configuration for tag detection.
+    pub config: BoardConfig,
+    /// The size of the checkerboard squares (meters).
+    pub square_length: f64,
+    /// 3D coordinates of the checkerboard corners (saddle points).
+    pub checkerboard_corners: Vec<[f64; 3]>,
+}
+
+impl CharucoBoard {
+    /// Create a new ChArUco board configuration.
+    ///
+    /// The board has `rows` rows and `cols` columns of checkerboard squares.
+    /// Markers are placed in the white squares.
+    #[must_use]
+    pub fn new(rows: usize, cols: usize, square_length: f64, marker_length: f64) -> Self {
+        let config = BoardConfig::new_charuco(rows, cols, square_length, marker_length);
+
+        // Checkerboard corners are the intersections between squares.
+        // For a grid of rows x cols squares, there are (rows-1) x (cols-1) internal corners.
+        let mut checkerboard_corners = Vec::with_capacity((rows - 1) * (cols - 1));
+        let total_width = cols as f64 * square_length;
+        let total_height = rows as f64 * square_length;
+        let offset_x = -total_width / 2.0;
+        let offset_y = -total_height / 2.0;
+
+        for r in 1..rows {
+            for c in 1..cols {
+                let x = offset_x + c as f64 * square_length;
+                let y = offset_y + r as f64 * square_length;
+                checkerboard_corners.push([x, y, 0.0]);
+            }
+        }
+
+        Self {
+            config,
+            square_length,
+            checkerboard_corners,
+        }
+    }
+}
+
 impl BoardConfig {
     /// Creates a new ChAruco board configuration.
     ///
