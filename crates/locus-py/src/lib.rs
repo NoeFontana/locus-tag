@@ -494,6 +494,19 @@ impl Detector {
     }
 }
 
+fn tag_family_from_i32(f: i32) -> PyResult<locus_core::TagFamily> {
+    match f {
+        0 => Ok(locus_core::TagFamily::AprilTag16h5),
+        1 => Ok(locus_core::TagFamily::AprilTag36h11),
+        2 => Ok(locus_core::TagFamily::ArUco4x4_50),
+        3 => Ok(locus_core::TagFamily::ArUco4x4_100),
+        4 => Ok(locus_core::TagFamily::ArUco6x6_250),
+        _ => Err(PyValueError::new_err(format!(
+            "Invalid TagFamily value: {f}"
+        ))),
+    }
+}
+
 #[pyfunction]
 #[pyo3(signature = (decimation=1, threads=0, families=vec![], **kwargs))]
 fn create_detector(
@@ -507,19 +520,7 @@ fn create_detector(
         .with_threads(threads);
 
     for f in families {
-        let family = match f {
-            0 => locus_core::TagFamily::AprilTag16h5,
-            1 => locus_core::TagFamily::AprilTag36h11,
-            2 => locus_core::TagFamily::ArUco4x4_50,
-            3 => locus_core::TagFamily::ArUco4x4_100,
-            4 => locus_core::TagFamily::ArUco6x6_250,
-            _ => {
-                return Err(PyValueError::new_err(format!(
-                    "Invalid TagFamily value: {f}"
-                )));
-            },
-        };
-        builder = builder.with_family(family);
+        builder = builder.with_family(tag_family_from_i32(f)?);
     }
 
     if let Some(args) = kwargs {
