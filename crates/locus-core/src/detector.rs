@@ -3,6 +3,7 @@ use crate::config::DetectorConfig;
 use crate::decoder::{TagDecoder, family_to_decoder};
 use crate::error::DetectorError;
 use crate::image::ImageView;
+use crate::refinement::SubpixelRefiner;
 use bumpalo::Bump;
 
 /// Internal state container for the detector.
@@ -414,8 +415,38 @@ impl Detector {
         let estimator = crate::board::BoardEstimator::new(board.config.clone());
         let board_pose = estimator.estimate(&self.state.batch, intrinsics);
 
-        // TODO: Phase 2.2 Corner Prediction & Refinement will be implemented in the next task.
-        Ok(board_pose)
+        let Some(best_pose) = board_pose else {
+            return Ok(None);
+        };
+
+        // Step 3: Corner Prediction & Refinement.
+        // Project all checkerboard corners into the image.
+        let mut refined_corners = Vec::with_capacity(board.checkerboard_corners.len());
+        let refiner = crate::refinement::PolynomialRefiner::new(5); // radius 5
+
+        for &pt_world in &board.checkerboard_corners {
+            let p_world = nalgebra::Vector3::new(pt_world[0], pt_world[1], pt_world[2]);
+            let proj = best_pose.pose.project(&p_world, intrinsics);
+
+            // Basic boundary check.
+            if proj[0] < 0.0
+                || proj[1] < 0.0
+                || proj[0] >= img.width as f64
+                || proj[1] >= img.height as f64
+            {
+                continue;
+            }
+
+            // Subpixel refinement of the projected corner.
+            if let Some((rx, ry)) = refiner.refine(img, proj[0], proj[1]) {
+                refined_corners.push((pt_world, [rx, ry]));
+            }
+        }
+
+        // TODO: Phase 3 Integration & Pose Estimation.
+        // For now return the board pose from tags.
+        let _ = refined_corners; 
+        Ok(Some(best_pose))
     }
 
     /// Get the current detector configuration.
