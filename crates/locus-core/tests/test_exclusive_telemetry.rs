@@ -1,8 +1,6 @@
 //! Tests for mutually exclusive telemetry and profiling.
-#![allow(unsafe_code)]
 mod common;
 
-use std::env;
 use std::path::Path;
 
 #[test]
@@ -11,10 +9,7 @@ fn test_telemetry_json_mode_creates_file() {
     let log_path = format!("../../target/profiling/{test_id}_events.json");
     let _ = std::fs::remove_file(&log_path);
 
-    // SAFETY: We are in a test environment setting a telemetry mode.
-    unsafe { env::set_var("TELEMETRY_MODE", "json") };
-
-    let guard = common::telemetry::init(test_id);
+    let guard = common::telemetry::init_with_mode(test_id, "json");
     tracing::info!("Test JSON mode");
     drop(guard);
 
@@ -33,10 +28,7 @@ fn test_telemetry_silent_mode_no_file() {
     let log_path = format!("../../target/profiling/{test_id}_events.json");
     let _ = std::fs::remove_file(&log_path);
 
-    // SAFETY: We are in a test environment removing a telemetry mode.
-    unsafe { env::remove_var("TELEMETRY_MODE") };
-
-    let guard = common::telemetry::init(test_id);
+    let guard = common::telemetry::init_with_mode(test_id, "silent");
     tracing::info!("Test silent mode");
     drop(guard);
 

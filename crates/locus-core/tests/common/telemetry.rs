@@ -10,7 +10,10 @@ pub struct TelemetryGuard {
 
 pub fn init(test_id: &str) -> TelemetryGuard {
     let mode = std::env::var("TELEMETRY_MODE").unwrap_or_default();
+    init_with_mode(test_id, &mode)
+}
 
+pub fn init_with_mode(test_id: &str, mode: &str) -> TelemetryGuard {
     if mode == "json" {
         let log_path = PathBuf::from(format!("../../target/profiling/{test_id}_events.json"));
         if let Some(parent) = log_path.parent() {
