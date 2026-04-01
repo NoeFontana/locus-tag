@@ -25,6 +25,7 @@ pub enum TagFamily {
     AprilTag36h11 = 1,
     ArUco4x4_50 = 2,
     ArUco4x4_100 = 3,
+    ArUco6x6_250 = 4,
 }
 
 impl From<TagFamily> for locus_core::TagFamily {
@@ -34,6 +35,7 @@ impl From<TagFamily> for locus_core::TagFamily {
             TagFamily::AprilTag36h11 => locus_core::TagFamily::AprilTag36h11,
             TagFamily::ArUco4x4_50 => locus_core::TagFamily::ArUco4x4_50,
             TagFamily::ArUco4x4_100 => locus_core::TagFamily::ArUco4x4_100,
+            TagFamily::ArUco6x6_250 => locus_core::TagFamily::ArUco6x6_250,
         }
     }
 }
@@ -478,6 +480,7 @@ impl Detector {
                 1 => locus_core::TagFamily::AprilTag36h11,
                 2 => locus_core::TagFamily::ArUco4x4_50,
                 3 => locus_core::TagFamily::ArUco4x4_100,
+                4 => locus_core::TagFamily::ArUco6x6_250,
                 _ => {
                     return Err(PyValueError::new_err(format!(
                         "Invalid TagFamily value: {f}"
@@ -509,6 +512,7 @@ fn create_detector(
             1 => locus_core::TagFamily::AprilTag36h11,
             2 => locus_core::TagFamily::ArUco4x4_50,
             3 => locus_core::TagFamily::ArUco4x4_100,
+            4 => locus_core::TagFamily::ArUco6x6_250,
             _ => {
                 return Err(PyValueError::new_err(format!(
                     "Invalid TagFamily value: {f}"

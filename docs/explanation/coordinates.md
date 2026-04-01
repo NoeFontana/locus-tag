@@ -49,7 +49,7 @@ Detections return corners in **clockwise order** (when looking at the tag), matc
 Locus strictly adheres to **modern OpenCV (cv2.aruco)** conventions for dictionary layout, bit ordering, and canonical orientation.
 
 ### Row-Major Bit Ordering
-For all supported families (AprilTag 16h5, 36h11, and ArUco 4x4), the binary payload is extracted in **row-major order**:
+For all supported families (AprilTag 16h5, 36h11, ArUco 4x4, and ArUco 6x6), the binary payload is extracted in **row-major order**:
 - **Bit 0**: Top-left data cell.
 - **Bit N-1**: Bottom-right data cell.
 

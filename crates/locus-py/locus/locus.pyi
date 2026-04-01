@@ -8,6 +8,7 @@ class TagFamily(enum.IntEnum):
     AprilTag36h11 = 1
     ArUco4x4_50 = 2
     ArUco4x4_100 = 3
+    ArUco6x6_250 = 4
 
 class SegmentationConnectivity(enum.IntEnum):
     Four = 0

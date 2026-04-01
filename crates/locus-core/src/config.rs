@@ -766,6 +766,8 @@ pub enum TagFamily {
     ArUco4x4_50,
     /// ArUco 4x4_100 dictionary.
     ArUco4x4_100,
+    /// ArUco 6x6_250 dictionary.
+    ArUco6x6_250,
 }
 
 impl TagFamily {
@@ -777,6 +779,7 @@ impl TagFamily {
             TagFamily::AprilTag36h11,
             TagFamily::ArUco4x4_50,
             TagFamily::ArUco4x4_100,
+            TagFamily::ArUco6x6_250,
         ]
     }
 }
@@ -959,7 +962,7 @@ mod tests {
     #[test]
     fn test_all_families() {
         let opt = DetectOptions::all_families();
-        assert_eq!(opt.families.len(), 4);
+        assert_eq!(opt.families.len(), 5);
     }
 
     #[test]
