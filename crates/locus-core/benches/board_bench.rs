@@ -22,8 +22,7 @@
 
 use divan::Bencher;
 use locus_core::{
-    CameraIntrinsics, Detector, DetectorConfig, PoseEstimationMode, TagFamily,
-    ImageView,
+    CameraIntrinsics, Detector, DetectorConfig, ImageView, PoseEstimationMode, TagFamily,
     board::{BoardConfig, BoardEstimator, LoRansacConfig},
 };
 use std::path::PathBuf;
@@ -72,16 +71,16 @@ fn load_board_meta(dataset: &str) -> (BoardConfig, CameraIntrinsics) {
     }
 
     let path = hub_dir().join(dataset).join("rich_truth.json");
-    let raw: Vec<Entry> =
-        serde_json::from_reader(std::fs::File::open(&path).unwrap()).unwrap();
+    let raw: Vec<Entry> = serde_json::from_reader(std::fs::File::open(&path).unwrap()).unwrap();
 
     let mut board_cfg = None;
     let mut intrinsics = None;
 
     for e in &raw {
         if e.record_type == "BOARD" {
-            if board_cfg.is_none() {
-                if let Some(ref d) = e.board_definition {
+            if board_cfg.is_none()
+                && let Some(ref d) = e.board_definition
+            {
                     let sq_m = d.square_size_mm / 1000.0;
                     let mk_m = d.marker_size_mm / 1000.0;
                     board_cfg = Some(if d.board_type.contains("charuco") {
@@ -89,7 +88,6 @@ fn load_board_meta(dataset: &str) -> (BoardConfig, CameraIntrinsics) {
                     } else {
                         BoardConfig::new_aprilgrid(d.rows, d.cols, sq_m - mk_m, mk_m)
                     });
-                }
             }
             if intrinsics.is_none() && e.k_matrix.len() >= 2 {
                 intrinsics = Some(CameraIntrinsics::new(
@@ -171,8 +169,7 @@ fn bench_board_estimate_aprilgrid_fast(bencher: Bencher) {
         k_max: 20,
         ..LoRansacConfig::default()
     };
-    let estimator = BoardEstimator::new(board_config.clone())
-        .with_lo_ransac_config(fast_ransac);
+    let estimator = BoardEstimator::new(board_config.clone()).with_lo_ransac_config(fast_ransac);
 
     let img_path = hub_dir().join(DATASET).join("images").join(IMAGE);
     let luma = image::open(img_path).unwrap().to_luma8();

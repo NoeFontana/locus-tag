@@ -318,7 +318,6 @@ impl BoardEstimator {
         let mut seed = 0x1337u32;
 
         for _iter in 0..cfg.k_max {
-
             // ── Draw 4 distinct tags without replacement ─────────────────
             let mut sample = [0usize; 4];
             let mut found = 0usize;
@@ -352,13 +351,8 @@ impl BoardEstimator {
                     continue;
                 };
 
-                let (outer_mask, outer_count) = self.evaluate_inliers(
-                    &pose_init,
-                    batch,
-                    intrinsics,
-                    valid,
-                    cfg.tau_outer_sq,
-                );
+                let (outer_mask, outer_count) =
+                    self.evaluate_inliers(&pose_init, batch, intrinsics, valid, cfg.tau_outer_sq);
 
                 if outer_count >= cfg.min_inliers && outer_count > best_outer_count {
                     best_outer_count = outer_count;
@@ -382,13 +376,7 @@ impl BoardEstimator {
             // GN pose is discarded (spec mandate). lo_inner runs for
             // monotonicity-guarded tight refinement; its mask is unused here
             // since estimate() re-evaluates at tau_aw_lm anyway.
-            let _ = self.lo_inner(
-                seed_pose,
-                &best_outer_mask,
-                batch,
-                intrinsics,
-                valid,
-            );
+            let _ = self.lo_inner(seed_pose, &best_outer_mask, batch, intrinsics, valid);
         }
 
         // Return the IPPE seed with the best outer consensus.  estimate() will
@@ -406,11 +394,7 @@ impl BoardEstimator {
             return None;
         }
 
-        let det_t = Vector3::new(
-            f64::from(data[0]),
-            f64::from(data[1]),
-            f64::from(data[2]),
-        );
+        let det_t = Vector3::new(f64::from(data[0]), f64::from(data[1]), f64::from(data[2]));
         // Quaternion layout in Pose6D: [qx, qy, qz, qw] at indices [3,4,5,6].
         let det_q = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
             f64::from(data[6]), // w
@@ -762,4 +746,3 @@ impl BoardEstimator {
         (pose, covariance)
     }
 }
-
