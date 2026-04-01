@@ -11,9 +11,9 @@
 - [x] **Task: Conductor - User Manual Verification 'Core Mathematical Foundation' (Protocol in workflow.md)** 5a654a6
 
 ## Phase 2: ChArUco Board Logic & Pipeline Decoupling
-- [ ] **Task: Decouple Detection API**
-    - [ ] Refactor detection entry points to include `detect_aprilgrid` and `detect_charuco`.
-    - [ ] Define `CharucoBoard` configuration (tag IDs, checkerboard layout).
+- [x] **Task: Decouple Detection API** efc8797
+    - [x] Refactor detection entry points to include `detect_aprilgrid` and `detect_charuco`.
+    - [x] Define `CharucoBoard` configuration (tag IDs, checkerboard layout).
 - [ ] **Task: Coarse Detection & Corner Prediction**
     - [ ] Implement coarse tag detection stage and rough board homography.
     - [ ] Implement geometric projection of checkerboard intersections from tag corners.
