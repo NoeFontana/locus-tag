@@ -38,6 +38,8 @@ pub mod pose_weighted;
 pub mod quad;
 /// Connected components labeling using Union-Find.
 pub mod segmentation;
+/// Sub-pixel refinement for corners and saddle points.
+pub mod refinement;
 /// SIMD optimized mathematical kernels.
 pub mod simd;
 /// SIMD-Accelerated Connected Components Labeling (CCL).
@@ -72,7 +74,9 @@ pub mod bench_api {
     pub use crate::funnel::*;
     pub use crate::pose::*;
     pub use crate::quad::*;
+    pub use crate::refinement::*;
     pub use crate::segmentation::*;
+    pub use crate::simd::math::*;
     pub use crate::simd::sampler::*;
     pub use crate::simd_ccl_fusion::*;
     pub use crate::test_utils::*;

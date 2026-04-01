@@ -82,9 +82,9 @@ pub(crate) fn bilinear_interpolate_fixed(x: f32, y: f32, p00: u8, p10: u8, p01: 
 ///
 /// Maximum error: 1.5e-7 over the entire domain.
 /// This is a pure, stateless mathematical function extracted from the quad module
-/// to serve as a foundational leaf dependency for both quad refinement and decoder stages.
+/// foundational leaf dependency for both quad refinement and decoder stages.
 #[must_use]
-pub(crate) fn erf_approx(x: f64) -> f64 {
+pub fn erf_approx(x: f64) -> f64 {
     if x == 0.0 {
         return 0.0;
     }
