@@ -164,7 +164,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_load_golden_v1_metadata() {
+    fn test_load_charuco_golden_v1_metadata() {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let dataset_path = manifest_dir.join("../../tests/data/hub_cache/charuco_golden_v1");
 
@@ -174,7 +174,25 @@ mod tests {
             assert_eq!(provider.board_config.cols, 6);
             assert!(!provider.images.is_empty());
             println!(
-                "Loaded {} images from golden dataset",
+                "Loaded {} images from charuco golden dataset",
+                provider.images.len()
+            );
+        }
+    }
+
+    #[test]
+    fn test_load_aprilgrid_golden_v1_metadata() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let dataset_path = manifest_dir.join("../../tests/data/hub_cache/aprilgrid_golden_v1");
+
+        if dataset_path.exists() {
+            let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
+            // AprilGrid Golden v1 is 6x6 tags
+            assert_eq!(provider.board_config.rows, 6);
+            assert_eq!(provider.board_config.cols, 6);
+            assert!(!provider.images.is_empty());
+            println!(
+                "Loaded {} images from aprilgrid golden dataset",
                 provider.images.len()
             );
         }
