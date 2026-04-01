@@ -746,3 +746,514 @@ impl BoardEstimator {
         (pose, covariance)
     }
 }
+
+// ── Tests ──────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::cast_sign_loss,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    missing_docs
+)]
+mod tests {
+    use super::*;
+    use crate::batch::{CandidateState, DetectionBatch, Point2f};
+    use nalgebra::Matrix3;
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /// Standard synthetic intrinsics used across tests.
+    fn test_intrinsics() -> CameraIntrinsics {
+        CameraIntrinsics::new(500.0, 500.0, 320.0, 240.0)
+    }
+
+    /// Collect all corner points from a `BoardConfig` into a flat `Vec`.
+    fn all_corners(config: &BoardConfig) -> Vec<[f64; 3]> {
+        config
+            .obj_points
+            .iter()
+            .filter_map(|opt| *opt)
+            .flat_map(std::iter::IntoIterator::into_iter)
+            .collect()
+    }
+
+    /// Compute the centroid of a set of 3D points.
+    fn centroid(pts: &[[f64; 3]]) -> [f64; 3] {
+        let n = pts.len() as f64;
+        let (sx, sy, sz) = pts.iter().fold((0.0, 0.0, 0.0), |(ax, ay, az), p| {
+            (ax + p[0], ay + p[1], az + p[2])
+        });
+        [sx / n, sy / n, sz / n]
+    }
+
+    /// Build a `DetectionBatch` by projecting every board marker through `pose` and
+    /// `intrinsics`.  Corners are stored as f32 (matching `Point2f`); per-tag pose
+    /// data encodes the camera-space position of each tag's TL corner and the board
+    /// rotation quaternion so that `init_pose_from_batch_tag` recovers `pose` exactly.
+    /// Identity corner covariances are set so AW-LM applies isotropic weighting.
+    fn build_synthetic_batch(
+        config: &BoardConfig,
+        pose: &Pose,
+        intrinsics: &CameraIntrinsics,
+    ) -> (DetectionBatch, usize) {
+        let mut batch = DetectionBatch::new();
+        let mut n = 0usize;
+
+        let q = UnitQuaternion::from_matrix(&pose.rotation);
+
+        for (tag_id, opt_pts) in config.obj_points.iter().enumerate() {
+            let Some(obj) = opt_pts else { continue };
+
+            // Project all 4 corners into the image.
+            for (j, pt) in obj.iter().enumerate() {
+                let p_world = Vector3::new(pt[0], pt[1], pt[2]);
+                let proj = pose.project(&p_world, intrinsics);
+                batch.corners[n][j] = Point2f {
+                    x: proj[0] as f32,
+                    y: proj[1] as f32,
+                };
+            }
+
+            // Per-tag pose: det_t = R * tl_board + t_board (camera-space TL corner).
+            let tl = Vector3::new(obj[0][0], obj[0][1], obj[0][2]);
+            let det_t = pose.rotation * tl + pose.translation;
+            // Layout: [tx, ty, tz, qx, qy, qz, qw]
+            batch.poses[n].data = [
+                det_t.x as f32,
+                det_t.y as f32,
+                det_t.z as f32,
+                q.i as f32,
+                q.j as f32,
+                q.k as f32,
+                q.w as f32,
+            ];
+
+            // Identity 2×2 corner covariances → isotropic unit weighting for AW-LM.
+            for j in 0..4 {
+                batch.corner_covariances[n][j * 4] = 1.0; // (0,0)
+                batch.corner_covariances[n][j * 4 + 3] = 1.0; // (1,1)
+            }
+
+            batch.ids[n] = tag_id as u32;
+            batch.status_mask[n] = CandidateState::Valid;
+            n += 1;
+        }
+
+        (batch, n)
+    }
+
+    /// Compute the per-corner mean squared reprojection error (in pixel²) for the
+    /// first `num_valid` candidates in the batch.
+    fn mean_reprojection_sq(
+        pose: &Pose,
+        batch: &DetectionBatch,
+        intrinsics: &CameraIntrinsics,
+        config: &BoardConfig,
+        num_valid: usize,
+    ) -> f64 {
+        let mut sum_sq = 0.0f64;
+        let mut count = 0usize;
+        for i in 0..num_valid {
+            let id = batch.ids[i] as usize;
+            let obj = config.obj_points[id].unwrap();
+            for (j, pt) in obj.iter().enumerate() {
+                let p_world = Vector3::new(pt[0], pt[1], pt[2]);
+                let proj = pose.project(&p_world, intrinsics);
+                let dx = proj[0] - f64::from(batch.corners[i][j].x);
+                let dy = proj[1] - f64::from(batch.corners[i][j].y);
+                sum_sq += dx * dx + dy * dy;
+                count += 1;
+            }
+        }
+        sum_sq / count.max(1) as f64
+    }
+
+    // ── Board layout tests ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_charuco_board_marker_count() {
+        // 6×6 grid: markers appear in cells where (r+c) is even → exactly 18 markers.
+        let config = BoardConfig::new_charuco(6, 6, 0.1, 0.08);
+        let count = config.obj_points.iter().filter(|o| o.is_some()).count();
+        assert_eq!(count, 18);
+    }
+
+    #[test]
+    fn test_charuco_board_centroid_is_origin() {
+        // For a symmetric ChAruco board the geometric centroid of all marker corners
+        // must coincide with the board coordinate origin.
+        let config = BoardConfig::new_charuco(6, 6, 0.1, 0.08);
+        let pts = all_corners(&config);
+        assert!(!pts.is_empty());
+        let c = centroid(&pts);
+        assert!(c[0].abs() < 1e-9, "centroid x = {}", c[0]);
+        assert!(c[1].abs() < 1e-9, "centroid y = {}", c[1]);
+        assert!(c[2].abs() < 1e-9, "all points must lie on z = 0");
+    }
+
+    #[test]
+    fn test_charuco_corner_order_tl_tr_br_bl() {
+        // For every marker the corners must follow the [TL, TR, BR, BL] order:
+        //   TL.x < TR.x, TR.x == BR.x, BL.x == TL.x, BL.y > TL.y
+        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        for opt in &config.obj_points {
+            let [tl, tr, br, bl] = opt.unwrap();
+            assert!(tl[0] < tr[0], "TL.x must be left of TR.x");
+            assert!(
+                (tl[1] - tr[1]).abs() < 1e-9,
+                "TL and TR must share the same y"
+            );
+            assert!(
+                (tr[0] - br[0]).abs() < 1e-9,
+                "TR and BR must share the same x"
+            );
+            assert!(
+                (bl[0] - tl[0]).abs() < 1e-9,
+                "BL and TL must share the same x"
+            );
+            assert!(
+                bl[1] > tl[1],
+                "BL.y must be below TL.y (y increases downward)"
+            );
+            assert!(
+                (bl[1] - br[1]).abs() < 1e-9,
+                "BL and BR must share the same y"
+            );
+            for pt in &[tl, tr, br, bl] {
+                assert!(pt[2].abs() < 1e-9, "all corners must lie on z = 0");
+            }
+        }
+    }
+
+    #[test]
+    fn test_charuco_marker_size_matches_config() {
+        // Each marker's width and height must equal `marker_length`.
+        let marker_length = 0.08;
+        let config = BoardConfig::new_charuco(4, 4, 0.1, marker_length);
+        for opt in &config.obj_points {
+            let [tl, tr, _br, bl] = opt.unwrap();
+            let width = tr[0] - tl[0];
+            let height = bl[1] - tl[1];
+            assert!((width - marker_length).abs() < 1e-9, "marker width {width}");
+            assert!(
+                (height - marker_length).abs() < 1e-9,
+                "marker height {height}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_aprilgrid_board_marker_count() {
+        // AprilGrid: every cell has a marker.
+        let config = BoardConfig::new_aprilgrid(4, 4, 0.01, 0.1);
+        let count = config.obj_points.iter().filter(|o| o.is_some()).count();
+        assert_eq!(count, 16);
+    }
+
+    #[test]
+    fn test_aprilgrid_board_centroid_is_origin() {
+        let config = BoardConfig::new_aprilgrid(6, 6, 0.01, 0.1);
+        let pts = all_corners(&config);
+        let c = centroid(&pts);
+        assert!(c[0].abs() < 1e-9, "centroid x = {}", c[0]);
+        assert!(c[1].abs() < 1e-9, "centroid y = {}", c[1]);
+    }
+
+    #[test]
+    fn test_aprilgrid_adjacent_marker_step() {
+        // Adjacent markers in the same row must be separated by marker_length + spacing.
+        let marker_length = 0.1;
+        let spacing = 0.02;
+        let config = BoardConfig::new_aprilgrid(2, 3, spacing, marker_length);
+        let step = marker_length + spacing;
+
+        // Col 0 → col 1 within row 0.
+        let tl0 = config.obj_points[0].unwrap()[0];
+        let tl1 = config.obj_points[1].unwrap()[0];
+        assert!(
+            (tl1[0] - tl0[0] - step).abs() < 1e-9,
+            "expected step {step}, got {}",
+            tl1[0] - tl0[0]
+        );
+
+        // Row 0 → row 1 within col 0.
+        let tl_r0 = config.obj_points[0].unwrap()[0];
+        let tl_r1 = config.obj_points[3].unwrap()[0]; // row 1, col 0 → index = 1*3+0 = 3
+        assert!(
+            (tl_r1[1] - tl_r0[1] - step).abs() < 1e-9,
+            "expected row step {step}, got {}",
+            tl_r1[1] - tl_r0[1]
+        );
+    }
+
+    // ── Mathematical correctness tests ────────────────────────────────────────
+
+    #[test]
+    fn test_evaluate_inliers_perfect_pose_all_inliers() {
+        // Under the exact ground-truth pose the reprojection error is sub-pixel
+        // (limited only by f32 quantisation ≈ 1e-5 px); tau_sq = 1.0 must admit all tags.
+        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let estimator = BoardEstimator::new(config.clone());
+        let intrinsics = test_intrinsics();
+        let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
+        let (batch, num_valid) = build_synthetic_batch(&config, &pose, &intrinsics);
+
+        let valid: Vec<usize> = (0..num_valid).collect();
+        let (_, count) = estimator.evaluate_inliers(&pose, &batch, &intrinsics, &valid, 1.0);
+        assert_eq!(
+            count, num_valid,
+            "all tags must be inliers under perfect pose"
+        );
+    }
+
+    #[test]
+    fn test_evaluate_inliers_bad_pose_no_inliers() {
+        // A pose shifted 0.5 m in X produces ~250 px reprojection error;
+        // even the generous tau_sq = 100 (10 px²) must reject all tags.
+        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let estimator = BoardEstimator::new(config.clone());
+        let intrinsics = test_intrinsics();
+        let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
+        let (batch, num_valid) = build_synthetic_batch(&config, &true_pose, &intrinsics);
+
+        let bad_pose = Pose::new(Matrix3::identity(), Vector3::new(0.5, 0.0, 1.0));
+        let valid: Vec<usize> = (0..num_valid).collect();
+        let (_, count) = estimator.evaluate_inliers(&bad_pose, &batch, &intrinsics, &valid, 100.0);
+        assert_eq!(
+            count, 0,
+            "no tags should survive under a heavily shifted pose"
+        );
+    }
+
+    #[test]
+    fn test_evaluate_inliers_inlier_mask_consistency() {
+        // The bitmask returned by evaluate_inliers must have exactly `count` bits set.
+        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let estimator = BoardEstimator::new(config.clone());
+        let intrinsics = test_intrinsics();
+        let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
+        let (batch, num_valid) = build_synthetic_batch(&config, &pose, &intrinsics);
+
+        let valid: Vec<usize> = (0..num_valid).collect();
+        let (mask, count) = estimator.evaluate_inliers(&pose, &batch, &intrinsics, &valid, 1.0);
+
+        let bits_set: usize = mask.iter().map(|w| w.count_ones() as usize).sum();
+        assert_eq!(
+            bits_set, count,
+            "bitmask popcount must equal reported count"
+        );
+    }
+
+    #[test]
+    fn test_init_pose_from_batch_tag_recovers_board_pose() {
+        // init_pose_from_batch_tag must reconstruct the board pose from any single
+        // tag's stored per-tag pose data.
+        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let estimator = BoardEstimator::new(config.clone());
+        let intrinsics = test_intrinsics();
+        let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
+        let (batch, num_valid) = build_synthetic_batch(&config, &true_pose, &intrinsics);
+
+        for b_idx in 0..num_valid {
+            let pose = estimator
+                .init_pose_from_batch_tag(b_idx, &batch)
+                .expect("tag must produce a valid pose");
+            let t_error = (pose.translation - true_pose.translation).norm();
+            assert!(
+                t_error < 1e-5,
+                "tag {b_idx}: translation error {t_error} m exceeds 10 µm"
+            );
+        }
+    }
+
+    #[test]
+    fn test_init_pose_from_batch_tag_nan_returns_none() {
+        // A tag whose stored pose contains NaN must yield None.
+        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let estimator = BoardEstimator::new(config.clone());
+        let mut batch = DetectionBatch::new();
+        batch.ids[0] = 0;
+        batch.poses[0].data = [f32::NAN; 7];
+        assert!(estimator.init_pose_from_batch_tag(0, &batch).is_none());
+    }
+
+    #[test]
+    fn test_init_pose_from_batch_tag_near_zero_depth_returns_none() {
+        // A tag at near-zero depth (Z ≈ 0) is degenerate and must yield None.
+        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let estimator = BoardEstimator::new(config.clone());
+        let mut batch = DetectionBatch::new();
+        batch.ids[0] = 0;
+        batch.poses[0].data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]; // z = 0
+        assert!(estimator.init_pose_from_batch_tag(0, &batch).is_none());
+    }
+
+    #[test]
+    fn test_gn_step_reduces_reprojection_error() {
+        // A single unweighted Gauss-Newton step from a 2 cm offset must strictly
+        // reduce the mean squared reprojection error.
+        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let estimator = BoardEstimator::new(config.clone());
+        let intrinsics = test_intrinsics();
+        let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
+        let (batch, num_valid) = build_synthetic_batch(&config, &true_pose, &intrinsics);
+
+        let perturbed = Pose::new(Matrix3::identity(), Vector3::new(0.02, 0.0, 1.0));
+        let valid: Vec<usize> = (0..num_valid).collect();
+        // Mark all candidates as inliers.
+        let all_inliers = [u64::MAX; 16];
+
+        let before = mean_reprojection_sq(&perturbed, &batch, &intrinsics, &config, num_valid);
+        let stepped = estimator.gn_step(&perturbed, &batch, &intrinsics, &valid, &all_inliers);
+        let after = mean_reprojection_sq(&stepped, &batch, &intrinsics, &config, num_valid);
+
+        assert!(
+            after < before,
+            "GN step must reduce error: {before:.6} → {after:.6} px²"
+        );
+    }
+
+    #[test]
+    fn test_gn_step_singular_returns_original() {
+        // With no inliers the normal equations are all-zero (singular);
+        // gn_step must return the input pose unchanged.
+        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let estimator = BoardEstimator::new(config.clone());
+        let intrinsics = test_intrinsics();
+        let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
+        let (batch, num_valid) = build_synthetic_batch(&config, &pose, &intrinsics);
+
+        let valid: Vec<usize> = (0..num_valid).collect();
+        let no_inliers = [0u64; 16];
+
+        let result = estimator.gn_step(&pose, &batch, &intrinsics, &valid, &no_inliers);
+        assert!(
+            (result.translation - pose.translation).norm() < 1e-12,
+            "pose must be unchanged when normal equations are singular"
+        );
+    }
+
+    #[test]
+    fn test_refine_aw_lm_converges_from_small_offset() {
+        // AW-LM from a 2 cm / 1 cm offset must converge to within 0.1 mm of the true
+        // translation, and the covariance diagonal must be non-negative.
+        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let estimator = BoardEstimator::new(config.clone());
+        let intrinsics = test_intrinsics();
+        let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
+        let (batch, num_valid) = build_synthetic_batch(&config, &true_pose, &intrinsics);
+
+        let perturbed = Pose::new(Matrix3::identity(), Vector3::new(0.02, -0.01, 1.0));
+        let valid: Vec<usize> = (0..num_valid).collect();
+        let all_inliers = [u64::MAX; 16];
+
+        let (refined, cov) =
+            estimator.refine_aw_lm(&perturbed, &batch, &intrinsics, &valid, &all_inliers);
+
+        let t_error = (refined.translation - true_pose.translation).norm();
+        assert!(
+            t_error < 1e-4,
+            "translation error {t_error} m exceeds 0.1 mm"
+        );
+
+        for i in 0..6 {
+            assert!(
+                cov[(i, i)] >= 0.0,
+                "covariance diagonal [{i},{i}] must be non-negative"
+            );
+        }
+    }
+
+    #[test]
+    fn test_refine_aw_lm_covariance_is_symmetric() {
+        // The returned covariance (J^T J)^{-1} must be symmetric.
+        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let estimator = BoardEstimator::new(config.clone());
+        let intrinsics = test_intrinsics();
+        let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
+        let (batch, num_valid) = build_synthetic_batch(&config, &pose, &intrinsics);
+
+        let valid: Vec<usize> = (0..num_valid).collect();
+        let all_inliers = [u64::MAX; 16];
+        let (_, cov) = estimator.refine_aw_lm(&pose, &batch, &intrinsics, &valid, &all_inliers);
+
+        for i in 0..6 {
+            for j in (i + 1)..6 {
+                assert!(
+                    (cov[(i, j)] - cov[(j, i)]).abs() < 1e-12,
+                    "covariance must be symmetric: [{i},{j}]={} ≠ [{j},{i}]={}",
+                    cov[(i, j)],
+                    cov[(j, i)]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_estimate_none_with_fewer_than_four_valid_tags() {
+        // estimate() must return None when fewer than 4 board-matched tags are present.
+        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let estimator = BoardEstimator::new(config);
+        let intrinsics = test_intrinsics();
+
+        for n_valid in 0..4 {
+            let mut batch = DetectionBatch::new();
+            for i in 0..n_valid {
+                batch.ids[i] = i as u32;
+                batch.status_mask[i] = CandidateState::Valid;
+            }
+            assert!(
+                estimator.estimate(&batch, &intrinsics).is_none(),
+                "expected None with {n_valid} valid tags"
+            );
+        }
+    }
+
+    #[test]
+    fn test_estimate_end_to_end_recovers_translation() {
+        // End-to-end: synthesise all markers of a 4×4 ChAruco board from a known pose
+        // and verify that estimate() recovers the pose to within 1 mm / 0.1°.
+        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let estimator = BoardEstimator::new(config.clone());
+        let intrinsics = test_intrinsics();
+        let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.05, -0.03, 1.5));
+        let (batch, _) = build_synthetic_batch(&config, &true_pose, &intrinsics);
+
+        let result = estimator.estimate(&batch, &intrinsics);
+        assert!(
+            result.is_some(),
+            "estimate() must succeed with all tags visible"
+        );
+
+        let board_pose = result.unwrap();
+        let t_error = (board_pose.pose.translation - true_pose.translation).norm();
+        assert!(t_error < 1e-3, "translation error {t_error} m exceeds 1 mm");
+
+        let est_q = UnitQuaternion::from_matrix(&board_pose.pose.rotation);
+        let true_q = UnitQuaternion::from_matrix(&true_pose.rotation);
+        let r_error = est_q.angle_to(&true_q).to_degrees();
+        assert!(r_error < 0.1, "rotation error {r_error}° exceeds 0.1°");
+    }
+
+    #[test]
+    fn test_estimate_covariance_is_positive_definite() {
+        // The covariance returned alongside a valid estimate must have a positive
+        // diagonal (positive semi-definite is sufficient for a well-conditioned scene).
+        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let estimator = BoardEstimator::new(config.clone());
+        let intrinsics = test_intrinsics();
+        let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
+        let (batch, _) = build_synthetic_batch(&config, &pose, &intrinsics);
+
+        let result = estimator.estimate(&batch, &intrinsics).unwrap();
+        for i in 0..6 {
+            assert!(
+                result.covariance[(i, i)] > 0.0,
+                "covariance diagonal [{i},{i}] must be positive"
+            );
+        }
+    }
+}
