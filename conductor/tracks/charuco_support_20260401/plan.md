@@ -14,9 +14,9 @@
 - [x] **Task: Decouple Detection API** efc8797
     - [x] Refactor detection entry points to include `detect_aprilgrid` and `detect_charuco`.
     - [x] Define `CharucoBoard` configuration (tag IDs, checkerboard layout).
-- [ ] **Task: Coarse Detection & Corner Prediction**
-    - [ ] Implement coarse tag detection stage and rough board homography.
-    - [ ] Implement geometric projection of checkerboard intersections from tag corners.
+- [x] **Task: Coarse Detection & Corner Prediction** 67cbbd6
+    - [x] Implement coarse tag detection stage and rough board homography.
+    - [x] Implement geometric projection of checkerboard intersections from tag corners.
 - [ ] **Task: Conductor - User Manual Verification 'ChArUco Board Logic & Pipeline Decoupling' (Protocol in workflow.md)**
 
 ## Phase 3: Integration & Pose Estimation
