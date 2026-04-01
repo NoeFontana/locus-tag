@@ -23,7 +23,8 @@ use std::path::{Path, PathBuf};
 #[derive(Deserialize, Clone)]
 struct RichTruthEntry {
     image_id: String,
-    tag_id: i32,
+    #[serde(rename = "tag_id")]
+    tag_id_raw: i32,
     record_type: String,
     position: [f64; 3],
     rotation_quaternion: [f64; 4], // [w, x, y, z]
@@ -31,6 +32,12 @@ struct RichTruthEntry {
     k_matrix: Vec<Vec<f64>>,
     #[serde(default)]
     board_definition: Option<BoardDefinitionEntry>,
+}
+
+impl RichTruthEntry {
+    fn tag_id(&self) -> u32 {
+        self.tag_id_raw as u32
+    }
 }
 
 #[derive(Deserialize, Clone)]
@@ -139,8 +146,7 @@ impl BoardHubProvider {
                 let img_data = image_map
                     .entry(filename)
                     .or_insert((placeholder_pose, Vec::new()));
-                #[allow(clippy::cast_sign_loss)]
-                img_data.1.push(entry.tag_id as u32);
+                img_data.1.push(entry.tag_id());
             }
         }
 
@@ -369,8 +375,8 @@ impl BoardRegressionHarness {
             } else {
                 0.0
             },
-            mean_tag_coverage: total_coverage / provider.images.len() as f64,
-            mean_total_ms: total_time / provider.images.len() as f64,
+            mean_tag_coverage: total_coverage / (provider.images.len() as f64).max(1.0),
+            mean_total_ms: total_time / (provider.images.len() as f64).max(1.0),
             frames_no_estimate,
         };
 

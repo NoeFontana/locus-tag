@@ -259,7 +259,7 @@ impl BoardEstimator {
         }
 
         best_pose.map(|pose| {
-            let (refined_pose, covariance) = self.ref_aw_lm(
+            let (refined_pose, covariance) = self.refine_aw_lm(
                 &pose,
                 batch,
                 intrinsics,
@@ -274,7 +274,7 @@ impl BoardEstimator {
     }
 
     #[allow(clippy::too_many_lines, clippy::similar_names)]
-    fn ref_aw_lm(
+    fn refine_aw_lm(
         &self,
         initial_pose: &Pose,
         batch: &DetectionBatch,
@@ -285,6 +285,25 @@ impl BoardEstimator {
         let mut pose = *initial_pose;
         let mut lambda = 1e-3;
         let mut nu = 2.0;
+
+        // Pre-compute information matrices (inverses of covariances) to avoid repeated inversions in the loop
+        let mut info_matrices = Vec::with_capacity(valid_indices.len());
+        for (i, &b_idx) in valid_indices.iter().enumerate() {
+            let mut infos = [Matrix2::identity(); 4];
+            if (inlier_mask[i / 64] & (1 << (i % 64))) != 0 {
+                for (j, info) in infos.iter_mut().enumerate() {
+                    *info = Matrix2::new(
+                        f64::from(batch.corner_covariances[b_idx][j * 4]),
+                        f64::from(batch.corner_covariances[b_idx][j * 4 + 1]),
+                        f64::from(batch.corner_covariances[b_idx][j * 4 + 2]),
+                        f64::from(batch.corner_covariances[b_idx][j * 4 + 3]),
+                    )
+                    .try_inverse()
+                    .unwrap_or_else(Matrix2::identity);
+                }
+            }
+            info_matrices.push(infos);
+        }
 
         let compute_equations = |current_pose: &Pose| -> (f64, Matrix6<f64>, Vector6<f64>) {
             let mut jtj = Matrix6::<f64>::zeros();
@@ -298,11 +317,13 @@ impl BoardEstimator {
 
                 let id = batch.ids[b_idx] as usize;
                 let obj = self.config.obj_points[id].expect("missing obj_points");
+                let infos = &info_matrices[i];
 
                 for (j, pt) in obj.iter().enumerate() {
                     let p_world = Vector3::new(pt[0], pt[1], pt[2]);
                     let p_cam = current_pose.rotation * p_world + current_pose.translation;
-                    let z_inv = 1.0 / p_cam.z.max(1e-6);
+                    let z = p_cam.z.max(1e-6);
+                    let z_inv = 1.0 / z;
                     let z_inv2 = z_inv * z_inv;
 
                     let u = intrinsics.fx * p_cam.x * z_inv + intrinsics.cx;
@@ -311,14 +332,7 @@ impl BoardEstimator {
                     let res_u = f64::from(batch.corners[b_idx][j].x) - u;
                     let res_v = f64::from(batch.corners[b_idx][j].y) - v;
 
-                    let info = Matrix2::new(
-                        f64::from(batch.corner_covariances[b_idx][j * 4]),
-                        f64::from(batch.corner_covariances[b_idx][j * 4 + 1]),
-                        f64::from(batch.corner_covariances[b_idx][j * 4 + 2]),
-                        f64::from(batch.corner_covariances[b_idx][j * 4 + 3]),
-                    )
-                    .try_inverse()
-                    .unwrap_or_else(Matrix2::identity);
+                    let info = infos[j];
 
                     let dist_sq = res_u * (info[(0, 0)] * res_u + info[(0, 1)] * res_v)
                         + res_v * (info[(1, 0)] * res_u + info[(1, 1)] * res_v);
