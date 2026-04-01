@@ -202,5 +202,6 @@ pub fn get_dictionary(family: crate::config::TagFamily) -> &'static TagDictionar
         crate::config::TagFamily::AprilTag36h11 => &DICT_APRILTAG36H11,
         crate::config::TagFamily::ArUco4x4_50 => &DICT_ARUCO4X4_50,
         crate::config::TagFamily::ArUco4x4_100 => &DICT_ARUCO4X4_100,
+        crate::config::TagFamily::ArUco6x6_250 => &DICT_ARUCO6X6_250,
     }
 }
