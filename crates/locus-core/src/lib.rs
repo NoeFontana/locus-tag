@@ -36,10 +36,10 @@ pub mod pose;
 pub mod pose_weighted;
 /// Quad extraction and geometric primitives.
 pub mod quad;
-/// Connected components labeling using Union-Find.
-pub mod segmentation;
 /// Sub-pixel refinement for corners and saddle points.
 pub mod refinement;
+/// Connected components labeling using Union-Find.
+pub mod segmentation;
 /// SIMD optimized mathematical kernels.
 pub mod simd;
 /// SIMD-Accelerated Connected Components Labeling (CCL).

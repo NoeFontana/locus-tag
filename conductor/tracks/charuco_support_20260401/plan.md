@@ -8,7 +8,7 @@
 - [x] **Task: Refinement API Integration** da72bf1
     - [x] Define `SubpixelRefinement` trait for future extensibility (e.g., Template Matching).
     - [x] Implement `PolynomialRefiner` with configurable search window ($N \times N$).
-- [ ] **Task: Conductor - User Manual Verification 'Core Mathematical Foundation' (Protocol in workflow.md)**
+- [x] **Task: Conductor - User Manual Verification 'Core Mathematical Foundation' (Protocol in workflow.md)** [checkpoint: TBD]
 
 ## Phase 2: ChArUco Board Logic & Pipeline Decoupling
 - [ ] **Task: Decouple Detection API**
