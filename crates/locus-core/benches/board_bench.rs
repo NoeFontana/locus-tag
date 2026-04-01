@@ -81,13 +81,13 @@ fn load_board_meta(dataset: &str) -> (BoardConfig, CameraIntrinsics) {
             if board_cfg.is_none()
                 && let Some(ref d) = e.board_definition
             {
-                    let sq_m = d.square_size_mm / 1000.0;
-                    let mk_m = d.marker_size_mm / 1000.0;
-                    board_cfg = Some(if d.board_type.contains("charuco") {
-                        BoardConfig::new_charuco(d.rows, d.cols, sq_m, mk_m)
-                    } else {
-                        BoardConfig::new_aprilgrid(d.rows, d.cols, sq_m - mk_m, mk_m)
-                    });
+                let sq_m = d.square_size_mm / 1000.0;
+                let mk_m = d.marker_size_mm / 1000.0;
+                board_cfg = Some(if d.board_type.contains("charuco") {
+                    BoardConfig::new_charuco(d.rows, d.cols, sq_m, mk_m)
+                } else {
+                    BoardConfig::new_aprilgrid(d.rows, d.cols, sq_m - mk_m, mk_m)
+                });
             }
             if intrinsics.is_none() && e.k_matrix.len() >= 2 {
                 intrinsics = Some(CameraIntrinsics::new(
