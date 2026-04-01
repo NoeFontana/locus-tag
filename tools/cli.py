@@ -390,10 +390,12 @@ def bench_real(
         "AprilTag36h11": locus.TagFamily.AprilTag36h11,
         "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
         "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
+        "ArUco6x6_250": locus.TagFamily.ArUco6x6_250,
         "16h5": locus.TagFamily.AprilTag16h5,
         "36h11": locus.TagFamily.AprilTag36h11,
         "4x4_50": locus.TagFamily.ArUco4x4_50,
         "4x4_100": locus.TagFamily.ArUco4x4_100,
+        "6x6_250": locus.TagFamily.ArUco6x6_250,
     }
 
     tag_family_int = family_mapping.get(family)
@@ -565,10 +567,12 @@ def bench_synthetic(
         "AprilTag36h11": locus.TagFamily.AprilTag36h11,
         "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
         "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
+        "ArUco6x6_250": locus.TagFamily.ArUco6x6_250,
         "16h5": locus.TagFamily.AprilTag16h5,
         "36h11": locus.TagFamily.AprilTag36h11,
         "4x4_50": locus.TagFamily.ArUco4x4_50,
         "4x4_100": locus.TagFamily.ArUco4x4_100,
+        "6x6_250": locus.TagFamily.ArUco6x6_250,
     }
 
     tag_family_int = family_mapping.get(family)
@@ -642,10 +646,12 @@ def bench_hosted(
         "AprilTag36h11": locus.TagFamily.AprilTag36h11,
         "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
         "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
+        "ArUco6x6_250": locus.TagFamily.ArUco6x6_250,
         "16h5": locus.TagFamily.AprilTag16h5,
         "36h11": locus.TagFamily.AprilTag36h11,
         "4x4_50": locus.TagFamily.ArUco4x4_50,
         "4x4_100": locus.TagFamily.ArUco4x4_100,
+        "6x6_250": locus.TagFamily.ArUco6x6_250,
     }
 
     tag_family_int = family_mapping.get(family)
@@ -755,10 +761,12 @@ def bench_profile(
         "AprilTag36h11": locus.TagFamily.AprilTag36h11,
         "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
         "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
+        "ArUco6x6_250": locus.TagFamily.ArUco6x6_250,
         "16h5": locus.TagFamily.AprilTag16h5,
         "36h11": locus.TagFamily.AprilTag36h11,
         "4x4_50": locus.TagFamily.ArUco4x4_50,
         "4x4_100": locus.TagFamily.ArUco4x4_100,
+        "6x6_250": locus.TagFamily.ArUco6x6_250,
     }
 
     tag_family_int = family_mapping.get(family)
