@@ -52,11 +52,11 @@ pub mod threshold;
 pub(crate) mod workspace;
 
 // Re-exports for the public API
+pub use crate::board::BoardConfig;
 pub use crate::config::{
     CornerRefinementMode, DecodeMode, DetectOptions, DetectorConfig, PoseEstimationMode,
     QuadExtractionMode, TagFamily,
 };
-pub use crate::board::BoardConfig;
 pub use crate::detector::{Detector, DetectorBuilder};
 pub use crate::error::{ConfigError, DetectorError};
 pub use crate::image::ImageView;

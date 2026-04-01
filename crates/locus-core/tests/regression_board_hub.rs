@@ -1,5 +1,5 @@
 //! Data provider and parsing utilities for board-level hub datasets.
-#![allow(dead_code, missing_docs)]
+#![allow(dead_code, missing_docs, clippy::collapsible_if)]
 
 use locus_core::{CameraIntrinsics, board::BoardConfig};
 use serde::Deserialize;
@@ -19,34 +19,34 @@ struct RichTruthEntry {
 }
 
 #[derive(Deserialize, Clone)]
-struct BoardDefinitionEntry {
+pub struct BoardDefinitionEntry {
     #[serde(rename = "type")]
-    board_type: String,
-    rows: usize,
-    cols: usize,
-    square_size_mm: f64,
-    marker_size_mm: f64,
+    pub board_type: String,
+    pub rows: usize,
+    pub cols: usize,
+    pub square_size_mm: f64,
+    pub marker_size_mm: f64,
 }
 
 #[derive(Clone)]
-struct BoardImageEntry {
-    filename: String,
-    board_pose: BoardPoseEntry,
-    visible_tag_ids: Vec<u32>,
+pub struct BoardImageEntry {
+    pub filename: String,
+    pub board_pose: BoardPoseEntry,
+    pub visible_tag_ids: Vec<u32>,
 }
 
 #[derive(Clone)]
-struct BoardPoseEntry {
-    rotation_quaternion: [f64; 4], // [w, x, y, z]
-    translation: [f64; 3],
+pub struct BoardPoseEntry {
+    pub rotation_quaternion: [f64; 4], // [w, x, y, z]
+    pub translation: [f64; 3],
 }
 
-struct BoardConfigEntry {
-    board_type: String,
-    rows: usize,
-    cols: usize,
-    square_length_m: f64,
-    marker_length_m: f64,
+pub struct BoardConfigEntry {
+    pub board_type: String,
+    pub rows: usize,
+    pub cols: usize,
+    pub square_length_m: f64,
+    pub marker_length_m: f64,
 }
 
 pub struct BoardHubProvider {
@@ -57,6 +57,7 @@ pub struct BoardHubProvider {
 }
 
 impl BoardHubProvider {
+    #[must_use]
     pub fn new(dataset_dir: &Path) -> Option<Self> {
         let rich_truth_path = dataset_dir.join("rich_truth.json");
         if !rich_truth_path.exists() {
@@ -123,6 +124,7 @@ impl BoardHubProvider {
                 let img_data = image_map
                     .entry(filename)
                     .or_insert((placeholder_pose, Vec::new()));
+                #[allow(clippy::cast_sign_loss)]
                 img_data.1.push(entry.tag_id as u32);
             }
         }
@@ -139,11 +141,13 @@ impl BoardHubProvider {
 
         let images: Vec<BoardImageEntry> = image_map
             .into_iter()
-            .map(|(filename, (board_pose, visible_tag_ids))| BoardImageEntry {
-                filename,
-                board_pose,
-                visible_tag_ids,
-            })
+            .map(
+                |(filename, (board_pose, visible_tag_ids))| BoardImageEntry {
+                    filename,
+                    board_pose,
+                    visible_tag_ids,
+                },
+            )
             .collect();
 
         Some(Self {
@@ -163,13 +167,16 @@ mod tests {
     fn test_load_golden_v1_metadata() {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let dataset_path = manifest_dir.join("../../tests/data/hub_cache/charuco_golden_v1");
-        
+
         if dataset_path.exists() {
             let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
             assert_eq!(provider.board_config.rows, 6);
             assert_eq!(provider.board_config.cols, 6);
-            assert!(provider.images.len() > 0);
-            println!("Loaded {} images from golden dataset", provider.images.len());
+            assert!(!provider.images.is_empty());
+            println!(
+                "Loaded {} images from golden dataset",
+                provider.images.len()
+            );
         }
     }
 }

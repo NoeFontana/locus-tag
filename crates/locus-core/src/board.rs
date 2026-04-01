@@ -20,13 +20,8 @@ impl BoardConfig {
     /// ChAruco boards have markers in squares where (row + col) is even.
     /// The origin (0,0,0) is at the geometric center of the board.
     #[must_use]
-    pub fn new_charuco(
-        rows: usize,
-        cols: usize,
-        square_length: f64,
-        marker_length: f64,
-    ) -> Self {
-        let mut obj_points = vec![None; (rows * cols + 1) / 2];
+    pub fn new_charuco(rows: usize, cols: usize, square_length: f64, marker_length: f64) -> Self {
+        let mut obj_points = vec![None; (rows * cols).div_ceil(2)];
         let board_width = cols as f64 * square_length;
         let board_height = rows as f64 * square_length;
 
@@ -69,12 +64,7 @@ impl BoardConfig {
     /// AprilGrids have markers in every cell, separated by spacing.
     /// The origin (0,0,0) is at the geometric center of the board.
     #[must_use]
-    pub fn new_aprilgrid(
-        rows: usize,
-        cols: usize,
-        spacing: f64,
-        marker_length: f64,
-    ) -> Self {
+    pub fn new_aprilgrid(rows: usize, cols: usize, spacing: f64, marker_length: f64) -> Self {
         let mut obj_points = vec![None; rows * cols];
         let step = marker_length + spacing;
         let board_width = cols as f64 * marker_length + (cols - 1) as f64 * spacing;
