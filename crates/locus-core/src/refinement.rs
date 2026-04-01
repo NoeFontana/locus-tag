@@ -127,3 +127,32 @@ pub fn refine_saddle_point(view: &ImageView, x: f64, y: f64, radius: usize) -> O
     let (dx, dy) = poly.solve_saddle_point()?;
     Some((x + dx, y + dy))
 }
+
+/// Trait for sub-pixel refinement strategies.
+pub trait SubpixelRefiner {
+    /// Refines a coarse estimate (x, y) in the given image view.
+    /// Returns the refined (x, y) coordinates.
+    #[must_use]
+    fn refine(&self, view: &ImageView, x: f64, y: f64) -> Option<(f64, f64)>;
+}
+
+/// A sub-pixel refiner that uses bivariate polynomial surface fitting.
+#[derive(Debug, Clone, Copy)]
+pub struct PolynomialRefiner {
+    /// Radius of the square search window.
+    pub radius: usize,
+}
+
+impl PolynomialRefiner {
+    /// Create a new polynomial refiner with the given radius.
+    #[must_use]
+    pub fn new(radius: usize) -> Self {
+        Self { radius }
+    }
+}
+
+impl SubpixelRefiner for PolynomialRefiner {
+    fn refine(&self, view: &ImageView, x: f64, y: f64) -> Option<(f64, f64)> {
+        refine_saddle_point(view, x, y, self.radius)
+    }
+}

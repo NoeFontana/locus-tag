@@ -1,7 +1,7 @@
 #![allow(missing_docs, clippy::unwrap_used, clippy::cast_sign_loss)]
 
-use locus_core::bench_api::*;
 use locus_core::ImageView;
+use locus_core::bench_api::*;
 
 fn render_saddle_point(x0: f64, y0: f64, sigma: f64, width: usize, height: usize) -> Vec<u8> {
     let mut data = vec![0u8; width * height];
@@ -43,4 +43,22 @@ fn test_refine_saddle_point_synthetic() {
     // We expect < 0.1 pixel error
     assert!(err_x < 0.1, "Refined X {rx} far from ground truth {gt_x}");
     assert!(err_y < 0.1, "Refined Y {ry} far from ground truth {gt_y}");
+}
+
+#[test]
+fn test_polynomial_refiner_trait() {
+    let width = 11;
+    let height = 11;
+    let gt_x = 5.3;
+    let gt_y = 5.7;
+    let data = render_saddle_point(gt_x, gt_y, 0.8, width, height);
+    let view = ImageView::new(&data, width, height, width).unwrap();
+
+    let poly_refiner = PolynomialRefiner::new(5); // radius 5
+    let refined = poly_refiner.refine(&view, 5.0, 5.0);
+
+    assert!(refined.is_some());
+    let (rx, ry) = refined.unwrap();
+    assert!((rx - gt_x).abs() < 0.1);
+    assert!((ry - gt_y).abs() < 0.1);
 }
