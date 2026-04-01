@@ -6,6 +6,8 @@
 
 /// Batched state container for Structure of Arrays (SoA) layout.
 pub mod batch;
+/// Board-level configuration and layout utilities.
+pub mod board;
 /// Configuration types for the detector pipeline.
 pub mod config;
 /// Tag decoding traits and implementations.
@@ -54,6 +56,7 @@ pub use crate::config::{
     CornerRefinementMode, DecodeMode, DetectOptions, DetectorConfig, PoseEstimationMode,
     QuadExtractionMode, TagFamily,
 };
+pub use crate::board::BoardConfig;
 pub use crate::detector::{Detector, DetectorBuilder};
 pub use crate::error::{ConfigError, DetectorError};
 pub use crate::image::ImageView;
