@@ -232,3 +232,34 @@ fn bench_board_full_pipeline_aprilgrid(bencher: Bencher) {
         let _ = estimator.estimate(&batch, &intrinsics);
     });
 }
+
+/// Benchmarks the full `detect_charuco` pipeline end-to-end on a hub frame.
+#[divan::bench]
+fn bench_board_full_pipeline_charuco(bencher: Bencher) {
+    const DATASET: &str = "charuco_golden_v1";
+    const IMAGE: &str = "scene_0010_cam_0000.png";
+
+    let (board_config, intrinsics) = load_board_meta(DATASET);
+    // Use square size for ChArUco board setup in this bench script
+    let charuco = locus_core::CharucoBoard::new(
+        board_config.rows,
+        board_config.cols,
+        board_config.marker_length * 1.25, // Assuming square size = 1.25 * marker size
+        board_config.marker_length,
+    );
+
+    let img_path = hub_dir().join(DATASET).join("images").join(IMAGE);
+    let luma = image::open(img_path).unwrap().to_luma8();
+    let (w, h) = luma.dimensions();
+    let raw = luma.into_raw();
+    let img_view = ImageView::new(&raw, w as usize, h as usize, w as usize).unwrap();
+
+    let mut detector = Detector::with_config(DetectorConfig::production_default());
+    detector.set_families(&[TagFamily::ArUco4x4_50]);
+
+    bencher.bench_local(|| {
+        let _ = detector
+            .detect_charuco(&img_view, &charuco, &intrinsics)
+            .unwrap();
+    });
+}
