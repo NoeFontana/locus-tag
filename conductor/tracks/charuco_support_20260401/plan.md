@@ -10,14 +10,14 @@
     - [x] Implement `PolynomialRefiner` with configurable search window ($N \times N$).
 - [x] **Task: Conductor - User Manual Verification 'Core Mathematical Foundation' (Protocol in workflow.md)** 5a654a6
 
-## Phase 2: ChArUco Board Logic & Pipeline Decoupling
+## Phase 2: ChArUco Board Logic & Pipeline Decoupling [checkpoint: 9862113]
 - [x] **Task: Decouple Detection API** efc8797
     - [x] Refactor detection entry points to include `detect_aprilgrid` and `detect_charuco`.
     - [x] Define `CharucoBoard` configuration (tag IDs, checkerboard layout).
 - [x] **Task: Coarse Detection & Corner Prediction** 67cbbd6
     - [x] Implement coarse tag detection stage and rough board homography.
     - [x] Implement geometric projection of checkerboard intersections from tag corners.
-- [x] **Task: Conductor - User Manual Verification 'ChArUco Board Logic & Pipeline Decoupling' (Protocol in workflow.md)** [checkpoint: TBD]
+- [x] **Task: Conductor - User Manual Verification 'ChArUco Board Logic & Pipeline Decoupling' (Protocol in workflow.md)** 9862113
 
 ## Phase 3: Integration & Pose Estimation
 - [ ] **Task: ChArUco PnP Solver Integration**
