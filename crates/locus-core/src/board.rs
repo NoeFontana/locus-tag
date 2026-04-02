@@ -289,16 +289,20 @@ impl BoardEstimator {
     /// Outer loop: random 4-tag sampling → IPPE seed → outer-threshold evaluation.
     /// Inner loop (LO): unweighted Gauss-Newton refinement + tight re-evaluation
     ///                  with monotonicity guard.
-    /// Dynamic stopping: `k` is updated after each improvement using the
-    /// standard formula `k = log(1-p) / log(1-ω⁴)`.
+    /// Dynamic stopping: `k` is updated after each tight-count improvement using
+    /// the standard RANSAC formula `k = log(1-p) / log(1-ω⁴)` where `ω` is the
+    /// **verified** tight inlier ratio from `lo_inner`.
     ///
-    /// **Per the architectural specification**, the noisy spatial pose computed
-    /// *inside* the LO inner loop is discarded once the mask is finalised.
-    /// This function returns the best **IPPE seed pose** (clean, unbiased by
-    /// a small subset of GN steps) alongside the tight (`tau_inner`) inlier
-    /// bitmask.  AW-LM then drives the final refinement from this unbiased
-    /// starting point.
-    #[allow(clippy::too_many_lines)]
+    /// **Per the architectural specification**, the unweighted GN pose produced
+    /// *inside* `lo_inner` is discarded once the tight consensus mask is
+    /// finalised.  `lo_inner` acts as the **strict verification gate**: it proves
+    /// that the outer-wide consensus set is in the true global basin of attraction
+    /// (tight count stays high), not a phantom induced by background clutter.
+    /// The `tight_count` from that gate then collapses `dynamic_k` to enable
+    /// bounded early termination.  The retained seed is the **original, clean
+    /// IPPE pose** — free from the unweighted GN bias — so AW-LM starts from the
+    /// best-conditioned initialisation point.
+    #[allow(clippy::too_many_lines, clippy::cast_sign_loss)]
     fn lo_ransac_loop(
         &self,
         valid: &[usize],
@@ -308,16 +312,21 @@ impl BoardEstimator {
         let cfg = &self.lo_ransac;
         let num_valid = valid.len();
 
-        // Seed selection uses OUTER count: the IPPE seed with the most
-        // tau_outer inliers is the best-conditioned starting point for AW-LM.
-        // Tight count (tau_inner) is used only inside lo_inner for GN steps.
-        let mut best_outer_inliers = 0usize;
-        let mut best_outer_seed: Option<Pose> = None;
+        // Global best tracked by the tight (tau_inner) inlier count produced by
+        // lo_inner — not the wide outer count.  This ensures the retained seed has
+        // been rigorously verified against the strict 1-px² gate.
+        let mut global_best_tight_count = 0usize;
+        let mut global_best_seed: Option<Pose> = None;
+
+        // Dynamic stopping criterion, initialised to the hard ceiling.
+        // Collapses toward k_min as lo_inner verifies increasingly large
+        // tight consensus sets.
+        let mut dynamic_k = cfg.k_max;
 
         // Deterministic XOR-shift RNG (reproducible across frames).
         let mut seed = 0x1337u32;
 
-        for _iter in 0..cfg.k_max {
+        for iter in 0..cfg.k_max {
             // ── Draw 4 distinct tags without replacement ─────────────────
             let mut sample = [0usize; 4];
             let mut found = 0usize;
@@ -365,23 +374,48 @@ impl BoardEstimator {
                 continue;
             };
 
-            // ── Outer-count-based seed selection ─────────────────────────
-            // Use the IPPE seed with the most outer inliers as the AW-LM seed.
-            if best_outer_count > best_outer_inliers {
-                best_outer_inliers = best_outer_count;
-                best_outer_seed = Some(seed_pose);
+            // ── LO inner loop (verification gate) ─────────────────────────
+            // Run tight GN refinement to prove the outer consensus is in the
+            // true basin of attraction.  The unweighted GN pose is discarded
+            // (spec mandate) to prevent biasing the AW-LM initialisation.
+            // Only `tight_count` is retained to govern global state and the
+            // dynamic stopping criterion.
+            let (_gn_pose, _tight_mask, tight_count) =
+                self.lo_inner(seed_pose, &best_outer_mask, batch, intrinsics, valid);
+
+            if tight_count > global_best_tight_count {
+                global_best_tight_count = tight_count;
+                // Retain the clean IPPE seed, not the unweighted GN pose.
+                global_best_seed = Some(seed_pose);
+
+                // Update dynamic stopping criterion from the verified tight ratio.
+                let inlier_ratio = tight_count as f64 / num_valid as f64;
+                if inlier_ratio >= 0.99 {
+                    // Near-perfect board: k_min iterations are sufficient.
+                    dynamic_k = cfg.k_min;
+                } else {
+                    let p_fail = 1.0 - cfg.confidence;
+                    // Probability that a random 4-tag sample contains at least
+                    // one outlier under the tight inlier ratio.
+                    let p_good_sample = 1.0 - inlier_ratio.powi(4);
+                    let k_compute = p_fail.ln() / p_good_sample.ln();
+                    dynamic_k = (k_compute.max(0.0).ceil() as u32).clamp(cfg.k_min, cfg.k_max);
+                }
             }
 
-            // ── LO inner loop ─────────────────────────────────────────────
-            // GN pose is discarded (spec mandate). lo_inner runs for
-            // monotonicity-guarded tight refinement; its mask is unused here
-            // since estimate() re-evaluates at tau_aw_lm anyway.
-            let _ = self.lo_inner(seed_pose, &best_outer_mask, batch, intrinsics, valid);
+            // ── Bounded early termination ─────────────────────────────────
+            // Guard: at least k_min iterations must complete before stopping,
+            // regardless of how quickly dynamic_k collapses, to escape
+            // spatially-correlated occlusion clusters.
+            if iter >= cfg.k_min && iter >= dynamic_k {
+                break;
+            }
         }
 
-        // Return the IPPE seed with the best outer consensus.  estimate() will
-        // re-evaluate the inlier mask at tau_aw_lm before calling AW-LM.
-        let final_seed = best_outer_seed?;
+        // Return the clean IPPE seed that survived the lo_inner tight gate.
+        // estimate() re-evaluates the inlier mask at tau_aw_lm before calling
+        // AW-LM, so no mask needs to be threaded through here.
+        let final_seed = global_best_seed?;
         Some((final_seed, [0u64; 16]))
     }
 
