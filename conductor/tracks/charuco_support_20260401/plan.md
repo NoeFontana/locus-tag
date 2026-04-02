@@ -20,9 +20,9 @@
 - [x] **Task: Conductor - User Manual Verification 'ChArUco Board Logic & Pipeline Decoupling' (Protocol in workflow.md)** 9862113
 
 ## Phase 3: Integration & Pose Estimation
-- [ ] **Task: ChArUco PnP Solver Integration**
-    - [ ] Map 2D refined corners to 3D board coordinates.
-    - [ ] Integrate with existing `solvePnP` solver.
+- [x] **Task: ChArUco PnP Solver Integration** 6652a53
+    - [x] Map 2D refined corners to 3D board coordinates.
+    - [x] Integrate with existing `solvePnP` solver.
 - [ ] **Task: Benchmarking & Regression**
     - [ ] Re-run pose estimation benchmarks to verify improvement.
     - [ ] Run full regression suite to ensure zero impact on AprilGrid detection.
