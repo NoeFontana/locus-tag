@@ -1,4 +1,4 @@
-#![allow(missing_docs, clippy::unwrap_used)]
+#![allow(missing_docs)]
 
 use locus_core::config::TagFamily;
 use locus_core::{CameraIntrinsics, CharucoBoard, Detector};
@@ -27,8 +27,8 @@ fn test_charuco_coarse_detection() {
         canvas_size,
         0.0,
     );
-    let img =
-        locus_core::image::ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
+    let img = locus_core::image::ImageView::new(&data, canvas_size, canvas_size, canvas_size)
+        .expect("Failed to create image view");
 
     let mut detector = Detector::new();
     detector.set_families(&[family]);
@@ -42,7 +42,5 @@ fn test_charuco_coarse_detection() {
 
     // Since we only have one tag and it's not positioned according to the board layout,
     // the estimator might not find a consensus, but detect_charuco should at least run.
-    // For a real integration test, we would need to render a full board.
-    // But this verifies the API entry point.
     assert!(result.is_none() || result.is_some());
 }

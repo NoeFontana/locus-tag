@@ -11,8 +11,6 @@
 //!
 //! Solving for $(x,y)$ yields the sub-pixel refinement offset.
 
-#![allow(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
-
 use crate::image::ImageView;
 use nalgebra::{SMatrix, SVector};
 
@@ -41,6 +39,7 @@ impl BivariatePolynomial {
     /// The input `window` should be a square patch centered around the coarse point.
     /// Returns the fitted coefficients.
     #[must_use]
+    #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
     pub fn fit(view: &ImageView, cx: f64, cy: f64, radius: usize) -> Option<Self> {
         let mut ata = SMatrix::<f64, 6, 6>::zeros();
         let mut atb = SVector::<f64, 6>::zeros();
@@ -66,11 +65,7 @@ impl BivariatePolynomial {
                 let x = px as f64 + 0.5 - cx;
                 let y = py as f64 + 0.5 - cy;
 
-                let x2 = x * x;
-                let y2 = y * y;
-                let xy = x * y;
-
-                let row = [x2, xy, y2, x, y, 1.0];
+                let row = [x * x, x * y, y * y, x, y, 1.0];
 
                 for i in 0..6 {
                     for j in i..6 {

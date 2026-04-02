@@ -445,15 +445,24 @@ impl Detector {
 
         // Step 4: Final PnP Refinement from checkerboard corners.
         if refined_corners.len() >= 4 {
-            // Convert to format expected by the estimator
-            let best_board_pose = best_pose;
+            let mut points_3d = Vec::with_capacity(refined_corners.len());
+            let mut points_2d = Vec::with_capacity(refined_corners.len());
+            for (p3, p2) in refined_corners {
+                points_3d.push(p3);
+                points_2d.push(p2);
+            }
 
-            // TODO: In a future phase, we could implement a specialized PnP solver
-            // that takes N arbitrary 2D-3D correspondences.
-            // For now, the existing board estimator uses tag-based correspondences.
-            // We've verified the corners are refined.
+            let refined_pose = crate::pose::refine_pose_generic(
+                intrinsics,
+                &points_3d,
+                &points_2d,
+                best_pose.pose,
+            );
 
-            Ok(Some(best_board_pose))
+            Ok(Some(crate::board::BoardPose {
+                pose: refined_pose,
+                covariance: best_pose.covariance, // TODO: Update covariance from refined corners
+            }))
         } else {
             Ok(Some(best_pose))
         }

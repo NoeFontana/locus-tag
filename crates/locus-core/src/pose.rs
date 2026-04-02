@@ -86,6 +86,102 @@ impl Pose {
     }
 }
 
+/// Refines a pose using a set of 2D-3D correspondences.
+#[must_use]
+pub fn refine_pose_generic(
+    intrinsics: &CameraIntrinsics,
+    points_3d: &[[f64; 3]],
+    points_2d: &[[f64; 2]],
+    initial_pose: Pose,
+) -> Pose {
+    if points_3d.len() != points_2d.len() || points_3d.len() < 4 {
+        return initial_pose;
+    }
+
+    let mut pose = initial_pose;
+    let mut lambda = 1e-3;
+
+    for _iter in 0..10 {
+        let mut jtj = Matrix6::<f64>::zeros();
+        let mut jtr = Vector6::<f64>::zeros();
+        let mut cost = 0.0;
+
+        for (p3, p2) in points_3d.iter().zip(points_2d.iter()) {
+            let p_world = Vector3::new(p3[0], p3[1], p3[2]);
+            let p_cam = pose.rotation * p_world + pose.translation;
+            let z = p_cam.z.max(1e-6);
+            let z_inv = 1.0 / z;
+            let z_inv2 = z_inv * z_inv;
+
+            let u = intrinsics.fx * p_cam.x * z_inv + intrinsics.cx;
+            let v = intrinsics.fy * p_cam.y * z_inv + intrinsics.cy;
+
+            let res_u = p2[0] - u;
+            let res_v = p2[1] - v;
+            cost += res_u * res_u + res_v * res_v;
+
+            let mut jac = nalgebra::Matrix2x6::<f64>::zeros();
+            let pcx = p_cam.x;
+            let pcy = p_cam.y;
+
+            jac[(0, 0)] = intrinsics.fx * z_inv;
+            jac[(0, 2)] = -intrinsics.fx * pcx * z_inv2;
+            jac[(0, 3)] = -intrinsics.fx * pcx * pcy * z_inv2;
+            jac[(0, 4)] = intrinsics.fx * (1.0 + pcx * pcx * z_inv2);
+            jac[(0, 5)] = -intrinsics.fx * pcy * z_inv;
+
+            jac[(1, 1)] = intrinsics.fy * z_inv;
+            jac[(1, 2)] = -intrinsics.fy * pcy * z_inv2;
+            jac[(1, 3)] = -intrinsics.fy * (1.0 + pcy * pcy * z_inv2);
+            jac[(1, 4)] = intrinsics.fy * pcx * pcy * z_inv2;
+            jac[(1, 5)] = intrinsics.fy * pcx * z_inv;
+
+            let res = nalgebra::Vector2::new(res_u, res_v);
+            jtj += jac.transpose() * jac;
+            jtr += jac.transpose() * res;
+        }
+
+        let diag = jtj.diagonal();
+        for i in 0..6 {
+            jtj[(i, i)] += lambda * (diag[i] + 1e-6);
+        }
+
+        if let Some(chol) = jtj.cholesky() {
+            let delta = chol.solve(&jtr);
+            let twist = Vector3::new(delta[3], delta[4], delta[5]);
+            let dq = UnitQuaternion::from_scaled_axis(twist);
+            let next_pose = Pose {
+                rotation: (dq * UnitQuaternion::from_matrix(&pose.rotation))
+                    .to_rotation_matrix()
+                    .into_inner(),
+                translation: pose.translation + Vector3::new(delta[0], delta[1], delta[2]),
+            };
+
+            let mut next_cost = 0.0;
+            for (p3, p2) in points_3d.iter().zip(points_2d.iter()) {
+                let p_world = Vector3::new(p3[0], p3[1], p3[2]);
+                let proj = next_pose.project(&p_world, intrinsics);
+                let dx = p2[0] - proj[0];
+                let dy = p2[1] - proj[1];
+                next_cost += dx * dx + dy * dy;
+            }
+
+            if next_cost < cost {
+                pose = next_pose;
+                lambda *= 0.1;
+                if delta.norm() < 1e-6 {
+                    break;
+                }
+            } else {
+                lambda *= 10.0;
+            }
+        } else {
+            break;
+        }
+    }
+    pose
+}
+
 /// Estimate pose from tag detection using homography decomposition and refinement.
 ///
 /// # Arguments
