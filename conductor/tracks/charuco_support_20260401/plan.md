@@ -29,7 +29,7 @@
 - [x] **Task: Conductor - User Manual Verification 'Integration & Pose Estimation' (Protocol in workflow.md)** c79d0b8
 
 ## Phase 4: Finalization & Documentation
-- [ ] **Task: Documentation Update**
-    - [ ] Update `docs/explanation/pipeline.md` with ChArUco-specific details.
-    - [ ] Update API reference for new detection methods.
+- [~] **Task: Documentation Update**
+    - [x] Update `docs/explanation/pipeline.md` with ChArUco-specific details.
+    - [~] Update API reference for new detection methods (Blocked: PyO3 0.28 compilation issues in `locus-py`).
 - [ ] **Task: Conductor - User Manual Verification 'Finalization & Documentation' (Protocol in workflow.md)**
