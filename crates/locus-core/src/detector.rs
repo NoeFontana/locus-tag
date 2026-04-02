@@ -445,7 +445,7 @@ impl Detector {
 
         // TODO: Phase 3 Integration & Pose Estimation.
         // For now return the board pose from tags.
-        let _ = refined_corners; 
+        let _ = refined_corners;
         Ok(Some(best_pose))
     }
 

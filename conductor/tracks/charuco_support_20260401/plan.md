@@ -17,7 +17,7 @@
 - [x] **Task: Coarse Detection & Corner Prediction** 67cbbd6
     - [x] Implement coarse tag detection stage and rough board homography.
     - [x] Implement geometric projection of checkerboard intersections from tag corners.
-- [ ] **Task: Conductor - User Manual Verification 'ChArUco Board Logic & Pipeline Decoupling' (Protocol in workflow.md)**
+- [x] **Task: Conductor - User Manual Verification 'ChArUco Board Logic & Pipeline Decoupling' (Protocol in workflow.md)** [checkpoint: TBD]
 
 ## Phase 3: Integration & Pose Estimation
 - [ ] **Task: ChArUco PnP Solver Integration**
