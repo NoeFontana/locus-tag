@@ -80,8 +80,9 @@ impl Pose {
     #[must_use]
     pub fn project(&self, point: &Vector3<f64>, intrinsics: &CameraIntrinsics) -> [f64; 2] {
         let p_cam = self.rotation * point + self.translation;
-        let x = (p_cam.x / p_cam.z) * intrinsics.fx + intrinsics.cx;
-        let y = (p_cam.y / p_cam.z) * intrinsics.fy + intrinsics.cy;
+        let z = p_cam.z.max(1e-4);
+        let x = (p_cam.x / z) * intrinsics.fx + intrinsics.cx;
+        let y = (p_cam.y / z) * intrinsics.fy + intrinsics.cy;
         [x, y]
     }
 }
