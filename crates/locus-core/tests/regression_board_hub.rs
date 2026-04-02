@@ -239,7 +239,7 @@ impl BoardRegressionHarness {
     }
 
     pub fn run(self, provider: &BoardHubProvider) {
-        let estimator = BoardEstimator::new(provider.board_config.clone());
+        let mut estimator = BoardEstimator::new(provider.board_config.clone());
         let mut detector = Detector::with_config(self.config);
         if !self.families.is_empty() {
             detector.set_families(&self.families);
