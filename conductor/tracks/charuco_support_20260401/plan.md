@@ -19,14 +19,14 @@
     - [x] Implement geometric projection of checkerboard intersections from tag corners.
 - [x] **Task: Conductor - User Manual Verification 'ChArUco Board Logic & Pipeline Decoupling' (Protocol in workflow.md)** 9862113
 
-## Phase 3: Integration & Pose Estimation
+## Phase 3: Integration & Pose Estimation [checkpoint: c79d0b8]
 - [x] **Task: ChArUco PnP Solver Integration** 6652a53
     - [x] Map 2D refined corners to 3D board coordinates.
     - [x] Integrate with existing `solvePnP` solver.
 - [x] **Task: Benchmarking & Regression** 3e5af86
     - [x] Re-run pose estimation benchmarks to verify improvement.
     - [x] Run full regression suite to ensure zero impact on AprilGrid detection.
-- [x] **Task: Conductor - User Manual Verification 'Integration & Pose Estimation' (Protocol in workflow.md)** [checkpoint: TBD]
+- [x] **Task: Conductor - User Manual Verification 'Integration & Pose Estimation' (Protocol in workflow.md)** c79d0b8
 
 ## Phase 4: Finalization & Documentation
 - [ ] **Task: Documentation Update**
