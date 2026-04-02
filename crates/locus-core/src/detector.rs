@@ -381,7 +381,7 @@ impl Detector {
         }
 
         // Step 2: Robust board pose estimation.
-        let estimator = crate::board::BoardEstimator::new(board.clone());
+        let mut estimator = crate::board::BoardEstimator::new(board.clone());
         Ok(estimator.estimate(&self.state.batch, intrinsics))
     }
 
@@ -412,7 +412,7 @@ impl Detector {
         }
 
         // Step 2: Board-level robust pose from tags.
-        let estimator = crate::board::BoardEstimator::new(board.config.clone());
+        let mut estimator = crate::board::BoardEstimator::new(board.config.clone());
         let board_pose = estimator.estimate(&self.state.batch, intrinsics);
 
         let Some(best_pose) = board_pose else {

@@ -1,6 +1,6 @@
 #![allow(clippy::similar_names)]
 use crate::image::ImageView;
-use crate::pose::{CameraIntrinsics, Pose};
+use crate::pose::{CameraIntrinsics, Pose, projection_jacobian};
 use nalgebra::{Matrix2, Matrix6, Vector3, Vector6};
 
 /// Compute the covariance of the corner position estimation error based on the Structure Tensor.
@@ -33,23 +33,35 @@ fn compute_corner_covariance(
     let y_start = (cy - radius as isize).max(1);
     let y_end = (cy + radius as isize).min(h - 2);
 
+    // Pre-slice each row to the exact columns accessed: [x_start-1 .. x_end+1].
+    // x_start >= 1 and x_end <= w-2, so x_start-1 >= 0 and x_end+1 <= w-1.
+    // LLVM can now prove that k, k+1, k+2 ∈ [0, row_slice_len) and elide all
+    // bounds checks in the inner loop, enabling auto-vectorisation.
+    let x_min = (x_start - 1).cast_unsigned();
+    let x_count = (x_end - x_start + 1).cast_unsigned();
+    let row_slice_len = x_count + 2; // left neighbor + x_count pixels + right neighbor
+
     for py in y_start..=y_end {
-        let offset = py * stride;
-        let row0 = &img.data[(offset - stride).cast_unsigned()..];
-        let row1 = &img.data[offset.cast_unsigned()..];
-        let row2 = &img.data[(offset + stride).cast_unsigned()..];
+        let offset = (py * stride).cast_unsigned();
+        let su = stride.cast_unsigned();
 
-        for px in x_start..=x_end {
-            let px = px.cast_unsigned();
+        let base0 = offset - su + x_min;
+        let base1 = offset + x_min;
+        let base2 = offset + su + x_min;
 
-            let p00 = i32::from(row0[px - 1]);
-            let p01 = i32::from(row0[px]);
-            let p02 = i32::from(row0[px + 1]);
-            let p10 = i32::from(row1[px - 1]);
-            let p12 = i32::from(row1[px + 1]);
-            let p20 = i32::from(row2[px - 1]);
-            let p21 = i32::from(row2[px]);
-            let p22 = i32::from(row2[px + 1]);
+        let row0 = &img.data[base0..base0 + row_slice_len];
+        let row1 = &img.data[base1..base1 + row_slice_len];
+        let row2 = &img.data[base2..base2 + row_slice_len];
+
+        for k in 0..x_count {
+            let p00 = i32::from(row0[k]);
+            let p01 = i32::from(row0[k + 1]);
+            let p02 = i32::from(row0[k + 2]);
+            let p10 = i32::from(row1[k]);
+            let p12 = i32::from(row1[k + 2]);
+            let p20 = i32::from(row2[k]);
+            let p21 = i32::from(row2[k + 1]);
+            let p22 = i32::from(row2[k + 2]);
 
             let gx = (p02 + 2 * p12 + p22) - (p00 + 2 * p10 + p20);
             let gy = (p22 + 2 * p21 + p20) - (p02 + 2 * p01 + p00);
@@ -122,11 +134,6 @@ fn build_normal_equations(
     let mut jtr = Vector6::<f64>::zeros();
     let mut total_cost = 0.0;
 
-    let fx = intrinsics.fx;
-    let fy = intrinsics.fy;
-    let cx = intrinsics.cx;
-    let cy = intrinsics.cy;
-
     for i in 0..4 {
         let p_cam = pose.rotation * obj_pts[i] + pose.translation;
         if p_cam.z < 1e-4 {
@@ -138,8 +145,8 @@ fn build_normal_equations(
         let x_z = p_cam.x * z_inv;
         let y_z = p_cam.y * z_inv;
 
-        let u_est = fx * x_z + cx;
-        let v_est = fy * y_z + cy;
+        let u_est = intrinsics.fx * x_z + intrinsics.cx;
+        let v_est = intrinsics.fy * y_z + intrinsics.cy;
         let res_u = corners[i][0] - u_est;
         let res_v = corners[i][1] - v_est;
 
@@ -160,17 +167,8 @@ fn build_normal_equations(
         let w10 = info[(1, 0)] * w;
         let w11 = info[(1, 1)] * w;
 
-        let ju0 = fx * z_inv;
-        let ju2 = -fx * x_z * z_inv;
-        let ju3 = -fx * x_z * y_z;
-        let ju4 = fx * (x_z * x_z + 1.0);
-        let ju5 = -fx * y_z;
-
-        let jv1 = fy * z_inv;
-        let jv2 = -fy * y_z * z_inv;
-        let jv3 = -fy * (y_z * y_z + 1.0);
-        let jv4 = fy * y_z * x_z;
-        let jv5 = fy * x_z;
+        let (ju0, ju2, ju3, ju4, ju5, jv1, jv2, jv3, jv4, jv5) =
+            projection_jacobian(x_z, y_z, z_inv, intrinsics);
 
         let k00 = ju0 * w00;
         let k01 = ju0 * w01;

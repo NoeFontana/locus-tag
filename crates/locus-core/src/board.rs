@@ -1,7 +1,7 @@
 //! Board-level configuration and layout utilities.
 
-use crate::batch::DetectionBatch;
-use crate::pose::{CameraIntrinsics, Pose};
+use crate::batch::{DetectionBatch, MAX_CANDIDATES};
+use crate::pose::{CameraIntrinsics, Pose, projection_jacobian};
 use nalgebra::{Matrix2, Matrix6, UnitQuaternion, Vector3, Vector6};
 
 // ── LO-RANSAC Configuration ────────────────────────────────────────────────
@@ -235,6 +235,10 @@ pub struct BoardEstimator {
     pub config: BoardConfig,
     /// Configuration for the LO-RANSAC robust solver.
     pub lo_ransac: LoRansacConfig,
+    /// Pre-allocated scratch buffer for information matrices in AW-LM.
+    /// Avoids a per-`estimate()` heap allocation; sized to MAX_CANDIDATES so
+    /// it matches the batch capacity exactly.
+    info_scratch: Box<[[Matrix2<f64>; 4]]>,
 }
 
 impl BoardEstimator {
@@ -244,6 +248,7 @@ impl BoardEstimator {
         Self {
             config,
             lo_ransac: LoRansacConfig::default(),
+            info_scratch: vec![[Matrix2::<f64>::identity(); 4]; MAX_CANDIDATES].into_boxed_slice(),
         }
     }
 
@@ -266,7 +271,7 @@ impl BoardEstimator {
     /// Panics if the internal `obj_points` for a valid tag index is missing.
     #[must_use]
     pub fn estimate(
-        &self,
+        &mut self,
         batch: &DetectionBatch,
         intrinsics: &CameraIntrinsics,
     ) -> Option<BoardPose> {
@@ -484,6 +489,12 @@ impl BoardEstimator {
             let mut sum_sq = 0.0f64;
             for (j, pt) in obj.iter().enumerate() {
                 let p_world = Vector3::new(pt[0], pt[1], pt[2]);
+                let p_cam = pose.rotation * p_world + pose.translation;
+                if p_cam.z < 1e-4 {
+                    // Behind camera or too close — treat as non-inlier.
+                    sum_sq += 4.0 * tau_sq + 1.0;
+                    break;
+                }
                 let proj = pose.project(&p_world, intrinsics);
                 let dx = proj[0] - f64::from(batch.corners[b_idx][j].x);
                 let dy = proj[1] - f64::from(batch.corners[b_idx][j].y);
@@ -562,7 +573,6 @@ impl BoardEstimator {
     /// least-squares step designed to quickly smooth a noisy minimal-sample pose.
     ///
     /// Returns the original pose unchanged if the normal equations are singular.
-    #[allow(clippy::similar_names)]
     fn gn_step(
         &self,
         pose: &Pose,
@@ -585,37 +595,63 @@ impl BoardEstimator {
             for (j, pt) in obj.iter().enumerate() {
                 let p_world = Vector3::new(pt[0], pt[1], pt[2]);
                 let p_cam = pose.rotation * p_world + pose.translation;
-                let z = p_cam.z.max(1e-6);
-                let z_inv = 1.0 / z;
-                let z_inv2 = z_inv * z_inv;
+                if p_cam.z < 1e-4 {
+                    continue;
+                }
+                let z_inv = 1.0 / p_cam.z;
+                let x_z = p_cam.x * z_inv;
+                let y_z = p_cam.y * z_inv;
 
-                let u = intrinsics.fx * p_cam.x * z_inv + intrinsics.cx;
-                let v = intrinsics.fy * p_cam.y * z_inv + intrinsics.cy;
+                let u = intrinsics.fx * x_z + intrinsics.cx;
+                let v = intrinsics.fy * y_z + intrinsics.cy;
 
                 let res_u = f64::from(batch.corners[b_idx][j].x) - u;
                 let res_v = f64::from(batch.corners[b_idx][j].y) - v;
 
-                let pcx = p_cam.x;
-                let pcy = p_cam.y;
+                // Left-perturbation SE(3) Jacobian (scalar accumulation — no
+                // intermediate Matrix2x6; mirrors build_normal_equations in
+                // pose_weighted.rs with identity information matrix / w=1).
+                let (ju0, ju2, ju3, ju4, ju5, jv1, jv2, jv3, jv4, jv5) =
+                    projection_jacobian(x_z, y_z, z_inv, intrinsics);
 
-                // Left-perturbation SE(3) Jacobian rows (2 × 6):
-                // du/dξ = [fx/z,  0,    -fx·x/z²,  -fx·x·y/z²,  fx·(1+x²/z²),  -fx·y/z]
-                // dv/dξ = [0,     fy/z, -fy·y/z²,  -fy·(1+y²/z²), fy·x·y/z²,    fy·x/z]
-                let mut jac = nalgebra::Matrix2x6::<f64>::zeros();
-                jac[(0, 0)] = intrinsics.fx * z_inv;
-                jac[(0, 2)] = -intrinsics.fx * pcx * z_inv2;
-                jac[(0, 3)] = -intrinsics.fx * pcx * pcy * z_inv2;
-                jac[(0, 4)] = intrinsics.fx * (1.0 + pcx * pcx * z_inv2);
-                jac[(0, 5)] = -intrinsics.fx * pcy * z_inv;
-                jac[(1, 1)] = intrinsics.fy * z_inv;
-                jac[(1, 2)] = -intrinsics.fy * pcy * z_inv2;
-                jac[(1, 3)] = -intrinsics.fy * (1.0 + pcy * pcy * z_inv2);
-                jac[(1, 4)] = intrinsics.fy * pcx * pcy * z_inv2;
-                jac[(1, 5)] = intrinsics.fy * pcx * z_inv;
+                jtr[0] += ju0 * res_u;
+                jtr[1] += jv1 * res_v;
+                jtr[2] += ju2 * res_u + jv2 * res_v;
+                jtr[3] += ju3 * res_u + jv3 * res_v;
+                jtr[4] += ju4 * res_u + jv4 * res_v;
+                jtr[5] += ju5 * res_u + jv5 * res_v;
 
-                let res = nalgebra::Vector2::new(res_u, res_v);
-                jtj += jac.transpose() * jac;
-                jtr += jac.transpose() * res;
+                jtj[(0, 0)] += ju0 * ju0;
+                jtj[(0, 2)] += ju0 * ju2;
+                jtj[(0, 3)] += ju0 * ju3;
+                jtj[(0, 4)] += ju0 * ju4;
+                jtj[(0, 5)] += ju0 * ju5;
+
+                jtj[(1, 1)] += jv1 * jv1;
+                jtj[(1, 2)] += jv1 * jv2;
+                jtj[(1, 3)] += jv1 * jv3;
+                jtj[(1, 4)] += jv1 * jv4;
+                jtj[(1, 5)] += jv1 * jv5;
+
+                jtj[(2, 2)] += ju2 * ju2 + jv2 * jv2;
+                jtj[(2, 3)] += ju2 * ju3 + jv2 * jv3;
+                jtj[(2, 4)] += ju2 * ju4 + jv2 * jv4;
+                jtj[(2, 5)] += ju2 * ju5 + jv2 * jv5;
+
+                jtj[(3, 3)] += ju3 * ju3 + jv3 * jv3;
+                jtj[(3, 4)] += ju3 * ju4 + jv3 * jv4;
+                jtj[(3, 5)] += ju3 * ju5 + jv3 * jv5;
+
+                jtj[(4, 4)] += ju4 * ju4 + jv4 * jv4;
+                jtj[(4, 5)] += ju4 * ju5 + jv4 * jv5;
+
+                jtj[(5, 5)] += ju5 * ju5 + jv5 * jv5;
+            }
+        }
+        // Symmetrize upper → lower triangle.
+        for r in 1..6 {
+            for c in 0..r {
+                jtj[(r, c)] = jtj[(c, r)];
             }
         }
 
@@ -639,7 +675,7 @@ impl BoardEstimator {
 
     #[allow(clippy::too_many_lines, clippy::similar_names)]
     fn refine_aw_lm(
-        &self,
+        &mut self,
         initial_pose: &Pose,
         batch: &DetectionBatch,
         intrinsics: &CameraIntrinsics,
@@ -650,9 +686,8 @@ impl BoardEstimator {
         let mut lambda = 1e-3;
         let mut nu = 2.0;
 
-        // Pre-compute information matrices (inverses of covariances) to avoid
-        // repeated inversions inside the iteration loop.
-        let mut info_matrices = Vec::with_capacity(valid_indices.len());
+        // Pre-compute information matrices (inverses of covariances) into the
+        // pre-allocated scratch buffer — zero heap allocation per call.
         for (i, &b_idx) in valid_indices.iter().enumerate() {
             let mut infos = [Matrix2::identity(); 4];
             if (inlier_mask[i / 64] & (1 << (i % 64))) != 0 {
@@ -667,8 +702,9 @@ impl BoardEstimator {
                     .unwrap_or_else(Matrix2::identity);
                 }
             }
-            info_matrices.push(infos);
+            self.info_scratch[i] = infos;
         }
+        let info_scratch = &self.info_scratch[..valid_indices.len()];
 
         let compute_equations = |current_pose: &Pose| -> (f64, Matrix6<f64>, Vector6<f64>) {
             let mut jtj = Matrix6::<f64>::zeros();
@@ -682,17 +718,21 @@ impl BoardEstimator {
 
                 let id = batch.ids[b_idx] as usize;
                 let obj = self.config.obj_points[id].expect("missing obj_points");
-                let infos = &info_matrices[i];
+                let infos = &info_scratch[i];
 
                 for (j, pt) in obj.iter().enumerate() {
                     let p_world = Vector3::new(pt[0], pt[1], pt[2]);
                     let p_cam = current_pose.rotation * p_world + current_pose.translation;
-                    let z = p_cam.z.max(1e-6);
-                    let z_inv = 1.0 / z;
-                    let z_inv2 = z_inv * z_inv;
+                    if p_cam.z < 1e-4 {
+                        total_cost += 1e6;
+                        continue;
+                    }
+                    let z_inv = 1.0 / p_cam.z;
+                    let x_z = p_cam.x * z_inv;
+                    let y_z = p_cam.y * z_inv;
 
-                    let u = intrinsics.fx * p_cam.x * z_inv + intrinsics.cx;
-                    let v = intrinsics.fy * p_cam.y * z_inv + intrinsics.cy;
+                    let u = intrinsics.fx * x_z + intrinsics.cx;
+                    let v = intrinsics.fy * y_z + intrinsics.cy;
 
                     let res_u = f64::from(batch.corners[b_idx][j].x) - u;
                     let res_v = f64::from(batch.corners[b_idx][j].y) - v;
@@ -711,29 +751,66 @@ impl BoardEstimator {
                         0.5 * dist_sq
                     };
 
-                    let weighted_info = info * weight;
+                    let (ju0, ju2, ju3, ju4, ju5, jv1, jv2, jv3, jv4, jv5) =
+                        projection_jacobian(x_z, y_z, z_inv, intrinsics);
 
-                    let mut jac = nalgebra::Matrix2x6::<f64>::zeros();
-                    let pcx = p_cam.x;
-                    let pcy = p_cam.y;
+                    let w00 = info[(0, 0)] * weight;
+                    let w01 = info[(0, 1)] * weight;
+                    let w10 = info[(1, 0)] * weight;
+                    let w11 = info[(1, 1)] * weight;
 
-                    jac[(0, 0)] = intrinsics.fx * z_inv;
-                    jac[(0, 1)] = 0.0;
-                    jac[(0, 2)] = -intrinsics.fx * pcx * z_inv2;
-                    jac[(0, 3)] = -intrinsics.fx * pcx * pcy * z_inv2;
-                    jac[(0, 4)] = intrinsics.fx * (1.0 + pcx * pcx * z_inv2);
-                    jac[(0, 5)] = -intrinsics.fx * pcy * z_inv;
+                    let k00 = ju0 * w00;
+                    let k01 = ju0 * w01;
+                    let k10 = jv1 * w10;
+                    let k11 = jv1 * w11;
+                    let k20 = ju2 * w00 + jv2 * w10;
+                    let k21 = ju2 * w01 + jv2 * w11;
+                    let k30 = ju3 * w00 + jv3 * w10;
+                    let k31 = ju3 * w01 + jv3 * w11;
+                    let k40 = ju4 * w00 + jv4 * w10;
+                    let k41 = ju4 * w01 + jv4 * w11;
+                    let k50 = ju5 * w00 + jv5 * w10;
+                    let k51 = ju5 * w01 + jv5 * w11;
 
-                    jac[(1, 0)] = 0.0;
-                    jac[(1, 1)] = intrinsics.fy * z_inv;
-                    jac[(1, 2)] = -intrinsics.fy * pcy * z_inv2;
-                    jac[(1, 3)] = -intrinsics.fy * (1.0 + pcy * pcy * z_inv2);
-                    jac[(1, 4)] = intrinsics.fy * pcx * pcy * z_inv2;
-                    jac[(1, 5)] = intrinsics.fy * pcx * z_inv;
+                    jtr[0] += k00 * res_u + k01 * res_v;
+                    jtr[1] += k10 * res_u + k11 * res_v;
+                    jtr[2] += k20 * res_u + k21 * res_v;
+                    jtr[3] += k30 * res_u + k31 * res_v;
+                    jtr[4] += k40 * res_u + k41 * res_v;
+                    jtr[5] += k50 * res_u + k51 * res_v;
 
-                    let res = nalgebra::Vector2::new(res_u, res_v);
-                    jtj += jac.transpose() * weighted_info * jac;
-                    jtr += jac.transpose() * weighted_info * res;
+                    jtj[(0, 0)] += k00 * ju0;
+                    jtj[(0, 1)] += k01 * jv1;
+                    jtj[(0, 2)] += k00 * ju2 + k01 * jv2;
+                    jtj[(0, 3)] += k00 * ju3 + k01 * jv3;
+                    jtj[(0, 4)] += k00 * ju4 + k01 * jv4;
+                    jtj[(0, 5)] += k00 * ju5 + k01 * jv5;
+
+                    jtj[(1, 1)] += k11 * jv1;
+                    jtj[(1, 2)] += k10 * ju2 + k11 * jv2;
+                    jtj[(1, 3)] += k10 * ju3 + k11 * jv3;
+                    jtj[(1, 4)] += k10 * ju4 + k11 * jv4;
+                    jtj[(1, 5)] += k10 * ju5 + k11 * jv5;
+
+                    jtj[(2, 2)] += k20 * ju2 + k21 * jv2;
+                    jtj[(2, 3)] += k20 * ju3 + k21 * jv3;
+                    jtj[(2, 4)] += k20 * ju4 + k21 * jv4;
+                    jtj[(2, 5)] += k20 * ju5 + k21 * jv5;
+
+                    jtj[(3, 3)] += k30 * ju3 + k31 * jv3;
+                    jtj[(3, 4)] += k30 * ju4 + k31 * jv4;
+                    jtj[(3, 5)] += k30 * ju5 + k31 * jv5;
+
+                    jtj[(4, 4)] += k40 * ju4 + k41 * jv4;
+                    jtj[(4, 5)] += k40 * ju5 + k41 * jv5;
+
+                    jtj[(5, 5)] += k50 * ju5 + k51 * jv5;
+                }
+            }
+            // Symmetrize upper → lower triangle.
+            for r in 1..6 {
+                for c in 0..r {
+                    jtj[(r, c)] = jtj[(c, r)];
                 }
             }
             (total_cost, jtj, jtr)

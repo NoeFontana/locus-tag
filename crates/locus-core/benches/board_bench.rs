@@ -119,7 +119,7 @@ fn bench_board_estimate_aprilgrid(bencher: Bencher) {
     const IMAGE: &str = "scene_0010_cam_0000.png";
 
     let (board_config, intrinsics) = load_board_meta(DATASET);
-    let estimator = BoardEstimator::new(board_config.clone());
+    let mut estimator = BoardEstimator::new(board_config.clone());
 
     // Run detector once to get a realistic batch — NOT timed.
     let img_path = hub_dir().join(DATASET).join("images").join(IMAGE);
@@ -169,7 +169,8 @@ fn bench_board_estimate_aprilgrid_fast(bencher: Bencher) {
         k_max: 20,
         ..LoRansacConfig::default()
     };
-    let estimator = BoardEstimator::new(board_config.clone()).with_lo_ransac_config(fast_ransac);
+    let mut estimator =
+        BoardEstimator::new(board_config.clone()).with_lo_ransac_config(fast_ransac);
 
     let img_path = hub_dir().join(DATASET).join("images").join(IMAGE);
     let luma = image::open(img_path).unwrap().to_luma8();
@@ -207,7 +208,7 @@ fn bench_board_full_pipeline_aprilgrid(bencher: Bencher) {
     const IMAGE: &str = "scene_0010_cam_0000.png";
 
     let (board_config, intrinsics) = load_board_meta(DATASET);
-    let estimator = BoardEstimator::new(board_config.clone());
+    let mut estimator = BoardEstimator::new(board_config.clone());
 
     let img_path = hub_dir().join(DATASET).join("images").join(IMAGE);
     let luma = image::open(img_path).unwrap().to_luma8();

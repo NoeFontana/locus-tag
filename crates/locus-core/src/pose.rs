@@ -86,6 +86,37 @@ impl Pose {
     }
 }
 
+/// Computes the 10 non-zero scalar entries of the 2×6 left-perturbation SE(3) Jacobian
+/// for a calibrated projection.
+///
+/// The full 2×6 Jacobian has zeros at column (0,1) and (1,0); those are omitted.
+///
+/// # Returns
+/// `(ju0, ju2, ju3, ju4, ju5, jv1, jv2, jv3, jv4, jv5)` where
+/// `du/dξ = [ju0, 0, ju2, ju3, ju4, ju5]` and `dv/dξ = [0, jv1, jv2, jv3, jv4, jv5]`.
+#[inline]
+pub(crate) fn projection_jacobian(
+    x_z: f64,
+    y_z: f64,
+    z_inv: f64,
+    intrinsics: &CameraIntrinsics,
+) -> (f64, f64, f64, f64, f64, f64, f64, f64, f64, f64) {
+    let fx = intrinsics.fx;
+    let fy = intrinsics.fy;
+    (
+        fx * z_inv,              // ju0
+        -fx * x_z * z_inv,       // ju2
+        -fx * x_z * y_z,         // ju3
+        fx * (x_z * x_z + 1.0),  // ju4
+        -fx * y_z,               // ju5
+        fy * z_inv,              // jv1
+        -fy * y_z * z_inv,       // jv2
+        -fy * (y_z * y_z + 1.0), // jv3
+        fy * y_z * x_z,          // jv4
+        fy * x_z,                // jv5
+    )
+}
+
 /// Refines a pose using a set of 2D-3D correspondences.
 #[must_use]
 pub fn refine_pose_generic(
