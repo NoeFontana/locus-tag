@@ -26,7 +26,7 @@
 - [x] **Task: Benchmarking & Regression** 3e5af86
     - [x] Re-run pose estimation benchmarks to verify improvement.
     - [x] Run full regression suite to ensure zero impact on AprilGrid detection.
-- [ ] **Task: Conductor - User Manual Verification 'Integration & Pose Estimation' (Protocol in workflow.md)**
+- [x] **Task: Conductor - User Manual Verification 'Integration & Pose Estimation' (Protocol in workflow.md)** [checkpoint: TBD]
 
 ## Phase 4: Finalization & Documentation
 - [ ] **Task: Documentation Update**
