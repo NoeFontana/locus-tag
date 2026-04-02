@@ -1,7 +1,7 @@
 //! Board-level configuration and layout utilities.
 
 use crate::batch::{DetectionBatch, MAX_CANDIDATES};
-use crate::pose::{CameraIntrinsics, Pose, projection_jacobian};
+use crate::pose::{CameraIntrinsics, Pose, projection_jacobian, symmetrize_jtj6};
 use nalgebra::{Matrix2, Matrix6, UnitQuaternion, Vector3, Vector6};
 
 // ── LO-RANSAC Configuration ────────────────────────────────────────────────
@@ -208,7 +208,7 @@ impl BoardEstimator {
         Self {
             config,
             lo_ransac: LoRansacConfig::default(),
-            info_scratch: vec![[Matrix2::<f64>::identity(); 4]; MAX_CANDIDATES].into_boxed_slice(),
+            info_scratch: vec![[Matrix2::<f64>::zeros(); 4]; MAX_CANDIDATES].into_boxed_slice(),
         }
     }
 
@@ -643,12 +643,7 @@ impl BoardEstimator {
                 jtj[(5, 5)] += ju5 * ju5 + jv5 * jv5;
             }
         }
-        // Symmetrize upper → lower triangle.
-        for r in 1..6 {
-            for c in 0..r {
-                jtj[(r, c)] = jtj[(c, r)];
-            }
-        }
+        symmetrize_jtj6(&mut jtj);
 
         // Solve the normal equations; return original pose if system is singular.
         if let Some(chol) = jtj.cholesky() {
@@ -802,12 +797,7 @@ impl BoardEstimator {
                     jtj[(5, 5)] += k50 * ju5 + k51 * jv5;
                 }
             }
-            // Symmetrize upper → lower triangle.
-            for r in 1..6 {
-                for c in 0..r {
-                    jtj[(r, c)] = jtj[(c, r)];
-                }
-            }
+            symmetrize_jtj6(&mut jtj);
             (total_cost, jtj, jtr)
         };
 

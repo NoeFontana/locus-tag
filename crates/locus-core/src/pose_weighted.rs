@@ -1,6 +1,6 @@
 #![allow(clippy::similar_names)]
 use crate::image::ImageView;
-use crate::pose::{CameraIntrinsics, Pose, projection_jacobian};
+use crate::pose::{CameraIntrinsics, Pose, projection_jacobian, symmetrize_jtj6};
 use nalgebra::{Matrix2, Matrix6, Vector3, Vector6};
 
 /// Compute the covariance of the corner position estimation error based on the Structure Tensor.
@@ -216,11 +216,7 @@ fn build_normal_equations(
         jtj[(5, 5)] += k50 * ju5 + k51 * jv5;
     }
 
-    for r in 1..6 {
-        for c in 0..r {
-            jtj[(r, c)] = jtj[(c, r)];
-        }
-    }
+    symmetrize_jtj6(&mut jtj);
 
     (jtj, jtr, total_cost)
 }
