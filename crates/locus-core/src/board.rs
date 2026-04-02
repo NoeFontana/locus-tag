@@ -1102,7 +1102,7 @@ mod tests {
         // Under the exact ground-truth pose the reprojection error is sub-pixel
         // (limited only by f32 quantisation ≈ 1e-5 px); tau_sq = 1.0 must admit all tags.
         let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let mut estimator = BoardEstimator::new(config.clone());
+        let estimator = BoardEstimator::new(config.clone());
         let intrinsics = test_intrinsics();
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
         let (batch, num_valid) = build_synthetic_batch(&config, &pose, &intrinsics);
@@ -1120,7 +1120,7 @@ mod tests {
         // A pose shifted 0.5 m in X produces ~250 px reprojection error;
         // even the generous tau_sq = 100 (10 px²) must reject all tags.
         let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let mut estimator = BoardEstimator::new(config.clone());
+        let estimator = BoardEstimator::new(config.clone());
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
         let (batch, num_valid) = build_synthetic_batch(&config, &true_pose, &intrinsics);
@@ -1138,7 +1138,7 @@ mod tests {
     fn test_evaluate_inliers_inlier_mask_consistency() {
         // The bitmask returned by evaluate_inliers must have exactly `count` bits set.
         let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let mut estimator = BoardEstimator::new(config.clone());
+        let estimator = BoardEstimator::new(config.clone());
         let intrinsics = test_intrinsics();
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
         let (batch, num_valid) = build_synthetic_batch(&config, &pose, &intrinsics);
@@ -1158,7 +1158,7 @@ mod tests {
         // init_pose_from_batch_tag must reconstruct the board pose from any single
         // tag's stored per-tag pose data.
         let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let mut estimator = BoardEstimator::new(config.clone());
+        let estimator = BoardEstimator::new(config.clone());
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
         let (batch, num_valid) = build_synthetic_batch(&config, &true_pose, &intrinsics);
@@ -1179,7 +1179,7 @@ mod tests {
     fn test_init_pose_from_batch_tag_nan_returns_none() {
         // A tag whose stored pose contains NaN must yield None.
         let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let mut estimator = BoardEstimator::new(config.clone());
+        let estimator = BoardEstimator::new(config.clone());
         let mut batch = DetectionBatch::new();
         batch.ids[0] = 0;
         batch.poses[0].data = [f32::NAN; 7];
@@ -1190,7 +1190,7 @@ mod tests {
     fn test_init_pose_from_batch_tag_near_zero_depth_returns_none() {
         // A tag at near-zero depth (Z ≈ 0) is degenerate and must yield None.
         let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let mut estimator = BoardEstimator::new(config.clone());
+        let estimator = BoardEstimator::new(config.clone());
         let mut batch = DetectionBatch::new();
         batch.ids[0] = 0;
         batch.poses[0].data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]; // z = 0
@@ -1202,7 +1202,7 @@ mod tests {
         // A single unweighted Gauss-Newton step from a 2 cm offset must strictly
         // reduce the mean squared reprojection error.
         let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let mut estimator = BoardEstimator::new(config.clone());
+        let estimator = BoardEstimator::new(config.clone());
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
         let (batch, num_valid) = build_synthetic_batch(&config, &true_pose, &intrinsics);
@@ -1227,7 +1227,7 @@ mod tests {
         // With no inliers the normal equations are all-zero (singular);
         // gn_step must return the input pose unchanged.
         let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let mut estimator = BoardEstimator::new(config.clone());
+        let estimator = BoardEstimator::new(config.clone());
         let intrinsics = test_intrinsics();
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
         let (batch, num_valid) = build_synthetic_batch(&config, &pose, &intrinsics);
