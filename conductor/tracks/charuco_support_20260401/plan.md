@@ -23,9 +23,9 @@
 - [x] **Task: ChArUco PnP Solver Integration** 6652a53
     - [x] Map 2D refined corners to 3D board coordinates.
     - [x] Integrate with existing `solvePnP` solver.
-- [ ] **Task: Benchmarking & Regression**
-    - [ ] Re-run pose estimation benchmarks to verify improvement.
-    - [ ] Run full regression suite to ensure zero impact on AprilGrid detection.
+- [x] **Task: Benchmarking & Regression** 3e5af86
+    - [x] Re-run pose estimation benchmarks to verify improvement.
+    - [x] Run full regression suite to ensure zero impact on AprilGrid detection.
 - [ ] **Task: Conductor - User Manual Verification 'Integration & Pose Estimation' (Protocol in workflow.md)**
 
 ## Phase 4: Finalization & Documentation
