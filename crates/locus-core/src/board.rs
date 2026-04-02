@@ -243,6 +243,10 @@ pub struct BoardEstimator {
 
 impl BoardEstimator {
     /// Creates a new `BoardEstimator` with default LO-RANSAC parameters.
+    ///
+    /// Allocates a 128 KB scratch buffer for information matrices. For zero
+    /// per-frame allocation, reuse the same `BoardEstimator` across calls to
+    /// [`estimate`](Self::estimate) rather than creating a new one each frame.
     #[must_use]
     pub fn new(config: BoardConfig) -> Self {
         Self {
@@ -491,13 +495,14 @@ impl BoardEstimator {
                 let p_world = Vector3::new(pt[0], pt[1], pt[2]);
                 let p_cam = pose.rotation * p_world + pose.translation;
                 if p_cam.z < 1e-4 {
-                    // Behind camera or too close — treat as non-inlier.
                     sum_sq += 4.0 * tau_sq + 1.0;
                     break;
                 }
-                let proj = pose.project(&p_world, intrinsics);
-                let dx = proj[0] - f64::from(batch.corners[b_idx][j].x);
-                let dy = proj[1] - f64::from(batch.corners[b_idx][j].y);
+                let z_inv = 1.0 / p_cam.z;
+                let px = intrinsics.fx * p_cam.x * z_inv + intrinsics.cx;
+                let py = intrinsics.fy * p_cam.y * z_inv + intrinsics.cy;
+                let dx = px - f64::from(batch.corners[b_idx][j].x);
+                let dy = py - f64::from(batch.corners[b_idx][j].y);
                 sum_sq += dx * dx + dy * dy;
             }
 

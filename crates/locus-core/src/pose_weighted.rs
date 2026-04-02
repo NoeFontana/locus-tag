@@ -33,10 +33,8 @@ fn compute_corner_covariance(
     let y_start = (cy - radius as isize).max(1);
     let y_end = (cy + radius as isize).min(h - 2);
 
-    // Pre-slice each row to the exact columns accessed: [x_start-1 .. x_end+1].
-    // x_start >= 1 and x_end <= w-2, so x_start-1 >= 0 and x_end+1 <= w-1.
-    // LLVM can now prove that k, k+1, k+2 ∈ [0, row_slice_len) and elide all
-    // bounds checks in the inner loop, enabling auto-vectorisation.
+    // Pre-slice rows to exact bounds so LLVM can prove k, k+1, k+2 ∈ [0, len)
+    // and elide bounds checks, enabling inner-loop auto-vectorisation.
     let x_min = (x_start - 1).cast_unsigned();
     let x_count = (x_end - x_start + 1).cast_unsigned();
     let row_slice_len = x_count + 2; // left neighbor + x_count pixels + right neighbor
