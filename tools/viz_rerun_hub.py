@@ -203,5 +203,45 @@ def main():
     print(f"Finished visualizing {count} images.")
 
 
+def log_charuco_frame(result: dict) -> None:
+    """Log accepted and rejected ChAruco saddle points to Rerun.
+
+    Green crosshairs show successfully refined saddles; red markers show
+    rejected predictions with the structure tensor determinant as a label
+    (low determinant = blurry or flat region at the predicted location).
+    """
+    saddle_pts = result.get("saddle_pts")
+    if saddle_pts is not None and len(saddle_pts) > 0:
+        rr.log(
+            "world/camera/charuco/saddles_accepted",
+            rr.Points2D(
+                saddle_pts,
+                colors=[[0, 220, 0]] * len(saddle_pts),
+                radii=3.0,
+                labels=["accepted"] * len(saddle_pts),
+            ),
+        )
+    else:
+        rr.log("world/camera/charuco/saddles_accepted", rr.Clear(recursive=False))
+
+    telemetry = result.get("telemetry")
+    if telemetry is not None:
+        rej_pts = telemetry.get("rejected_saddles")
+        rej_dets = telemetry.get("rejected_determinants")
+        if rej_pts is not None and len(rej_pts) > 0:
+            labels = [f"det={d:.2e}" for d in rej_dets]
+            rr.log(
+                "world/camera/charuco/saddles_rejected",
+                rr.Points2D(
+                    rej_pts,
+                    colors=[[220, 0, 0]] * len(rej_pts),
+                    radii=3.0,
+                    labels=labels,
+                ),
+            )
+        else:
+            rr.log("world/camera/charuco/saddles_rejected", rr.Clear(recursive=False))
+
+
 if __name__ == "__main__":
     main()
