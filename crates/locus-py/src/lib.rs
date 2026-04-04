@@ -427,7 +427,6 @@ impl CharucoRefiner {
         let n = batch_view.len();
 
         // 2. Run ChAruco saddle extraction + board pose estimation.
-        //    Dispatch to the telemetry or production monomorphisation based on the flag.
         if debug_telemetry {
             py.detach(|| {
                 self.inner.estimate_with_telemetry(
@@ -502,7 +501,7 @@ impl CharucoRefiner {
         dict.set_item("saddle_obj", saddle_obj_arr)?;
 
         // 5. Board pose and covariance (None if insufficient saddles or RANSAC failed).
-        // We need a mutable reference here — reborrow from the appropriate batch.
+        // board_pose.take() requires &mut, so we can't go through active_batch.
         let board_pose = if debug_telemetry {
             self.telem_batch.board_pose.take()
         } else {
@@ -538,31 +537,26 @@ impl CharucoRefiner {
             dict.set_item("board_cov", py.None())?;
         }
 
-        // 6. Telemetry (None unless debug_telemetry=True).
-        if debug_telemetry {
-            if let Some(t) = self.telem_batch.telemetry.as_ref() {
-                let r = t.count;
-                let rej_pts_arr = unsafe { PyArray2::<f32>::new(py, [r, 2], false) };
-                let rej_det_arr = unsafe { PyArray1::<f32>::new(py, [r], false) };
-                unsafe {
-                    // SAFETY: Point2f is repr(C) [f32; 2]; flat reinterpretation is sound.
-                    let rpts = rej_pts_arr.as_slice_mut().expect("rej_pts slice");
-                    rpts.copy_from_slice(std::slice::from_raw_parts(
-                        t.rejected_predictions.as_ptr().cast::<f32>(),
-                        r * 2,
-                    ));
-                    let rdet = rej_det_arr.as_slice_mut().expect("rej_det slice");
-                    rdet.copy_from_slice(&t.rejected_determinants[..r]);
-                }
-                let telem_dict = PyDict::new(py);
-                telem_dict.set_item("rejected_saddles", rej_pts_arr)?;
-                telem_dict.set_item("rejected_determinants", rej_det_arr)?;
-                dict.set_item("telemetry", telem_dict)?;
-            } else {
-                dict.set_item("telemetry", py.None())?;
+        // 6. Telemetry (populated only when debug_telemetry=True and batch has telemetry).
+        dict.set_item("telemetry", py.None())?;
+        if debug_telemetry && let Some(t) = self.telem_batch.telemetry.as_ref() {
+            let r = t.count;
+            let rej_pts_arr = unsafe { PyArray2::<f32>::new(py, [r, 2], false) };
+            let rej_det_arr = unsafe { PyArray1::<f32>::new(py, [r], false) };
+            unsafe {
+                // SAFETY: Point2f is repr(C) [f32; 2]; flat reinterpretation is sound.
+                let rpts = rej_pts_arr.as_slice_mut().expect("rej_pts slice");
+                rpts.copy_from_slice(std::slice::from_raw_parts(
+                    t.rejected_predictions.as_ptr().cast::<f32>(),
+                    r * 2,
+                ));
+                let rdet = rej_det_arr.as_slice_mut().expect("rej_det slice");
+                rdet.copy_from_slice(&t.rejected_determinants[..r]);
             }
-        } else {
-            dict.set_item("telemetry", py.None())?;
+            let telem_dict = PyDict::new(py);
+            telem_dict.set_item("rejected_saddles", rej_pts_arr)?;
+            telem_dict.set_item("rejected_determinants", rej_det_arr)?;
+            dict.set_item("telemetry", telem_dict)?;
         }
 
         Ok(dict)

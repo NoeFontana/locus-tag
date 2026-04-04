@@ -212,13 +212,14 @@ def log_charuco_frame(result: dict) -> None:
     """
     saddle_pts = result.get("saddle_pts")
     if saddle_pts is not None and len(saddle_pts) > 0:
+        n = len(saddle_pts)
         rr.log(
             "world/camera/charuco/saddles_accepted",
             rr.Points2D(
                 saddle_pts,
-                colors=[[0, 220, 0]] * len(saddle_pts),
+                colors=np.tile([0, 220, 0], (n, 1)),
                 radii=3.0,
-                labels=["accepted"] * len(saddle_pts),
+                labels=["accepted"] * n,
             ),
         )
     else:
@@ -229,12 +230,13 @@ def log_charuco_frame(result: dict) -> None:
         rej_pts = telemetry.get("rejected_saddles")
         rej_dets = telemetry.get("rejected_determinants")
         if rej_pts is not None and len(rej_pts) > 0:
+            r = len(rej_pts)
             labels = [f"det={d:.2e}" for d in rej_dets]
             rr.log(
                 "world/camera/charuco/saddles_rejected",
                 rr.Points2D(
                     rej_pts,
-                    colors=[[220, 0, 0]] * len(rej_pts),
+                    colors=np.tile([220, 0, 0], (r, 1)),
                     radii=3.0,
                     labels=labels,
                 ),
