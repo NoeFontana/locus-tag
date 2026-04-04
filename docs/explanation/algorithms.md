@@ -333,3 +333,81 @@ $$\text{LLR}_j = \log \frac{P(\text{bit}_j = 1 \mid I_j)}{P(\text{bit}_j = 0 \mi
 The Maximum Likelihood codeword is found via **Multi-Index Hashing (MIH)**: the code is split into $k$ substrings, each indexing into a hash table of dictionary entries. Candidates from matching substrings are scored using the full LLR vector. This achieves sub-linear search over the dictionary with early-exit pruning.
 
 The implementation is zero-allocation (stack-allocated `SoftCode`) and uses `SmallVec`-style fixed buffers.
+
+---
+
+## 7. Board-Level Pose Estimation
+
+**Module:** `board.rs`, `charuco.rs`
+
+Board pose estimation aggregates evidence from multiple detected tags into a single, more precise 6-DOF board pose. The solver backend (`RobustPoseSolver`) is shared by both board types; the two paths differ only in how they assemble the point correspondences.
+
+---
+
+### 7.1 AprilGrid: Tag-Corner Correspondences
+
+**Struct:** `BoardEstimator`
+
+Each visible tag contributes 4 point correspondences: its refined image corners paired with pre-computed 3D board-frame coordinates from `AprilGridTopology::obj_points`.
+
+The `group_size=4` parameter tells `RobustPoseSolver` that these 4 points belong to a rigid group — RANSAC hypotheses are drawn from whole tags, not individual corners, preventing degenerate single-tag hypotheses.
+
+**Seed poses** are derived from each tag's individual Stage-5 pose by subtracting the tag's board-frame origin:
+
+$$\mathbf{t}_{\text{board}} = \mathbf{t}_{\text{tag}} - \mathbf{R}_{\text{tag}} \, \mathbf{o}_{\text{tag}}$$
+
+where $\mathbf{o}_{\text{tag}}$ is the tag's top-left corner in board coordinates.
+
+---
+
+### 7.2 ChAruco: Saddle-Point Correspondences
+
+**Struct:** `CharucoRefiner`
+
+ChAruco boards embed ArUco markers in alternating cells of a checkerboard. The interior checkerboard corners — *saddle points* — are sharper, more photometrically stable features than tag corners and are used as the primary measurement for board pose.
+
+#### Board Geometry (Two-Layer Model)
+
+| Layer | Feature | Coordinate Source |
+| :--- | :--- | :--- |
+| **A — Tags** | ArUco markers occupying cells where $(r+c)$ is even. Each tag fills `marker_length × marker_length` within its `square_length × square_length` cell. | `CharucoTopology::obj_points` |
+| **B — Saddles** | Interior checkerboard corners at the outer corners of each square. Indexed as `sr*(cols-1)+sc` for grid position `(sr, sc)`. | `CharucoTopology::saddle_points` |
+
+The white padding margin between a tag edge and its enclosing square corner is:
+
+$$\delta = \frac{\text{square\_length} - \text{marker\_length}}{2}$$
+
+This means saddle points are **outside** the tag's physical boundary — they cannot be obtained by interpolating the tag's own corners.
+
+#### Saddle Prediction via Homography Extrapolation
+
+Each tag stores a $3 \times 3$ homography mapping canonical coordinates $[-1, 1]^2$ to the tag's image corners. The canonical coordinates of a saddle at board position $(s_x, s_y)$ relative to a tag with top-left corner $(t_x, t_y)$ are:
+
+$$u = \frac{2(s_x - t_x)}{\text{marker\_length}} - 1, \qquad v = \frac{2(s_y - t_y)}{\text{marker\_length}} - 1$$
+
+Because the saddle is at the outer corner of the *enclosing square* (not the marker), $|u| > 1$ or $|v| > 1$ — the homography is evaluated *outside* its training domain. This is a valid linear extrapolation for the projective model and correctly maps to the saddle's image location.
+
+The predicted image coordinates are:
+
+$$\begin{bmatrix} x_h \\ y_h \\ w_h \end{bmatrix} = \mathbf{H} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix}, \qquad (p_x, p_y) = (x_h / w_h, \; y_h / w_h)$$
+
+#### Gauss-Newton Saddle Refinement
+
+Starting from the predicted position, a Gauss-Newton iteration drives the gradient to zero using the structure tensor as a surrogate Hessian. This is the standard sub-pixel saddle localization technique (Harris/Shi-Tomasi variant):
+
+$$\mathbf{p}^{(k+1)} = \mathbf{p}^{(k)} - \mathbf{S}^{-1}(\mathbf{p}^{(k)}) \, \nabla I(\mathbf{p}^{(k)})$$
+
+where the structure tensor $\mathbf{S}$ is accumulated over a $\text{radius} \times \text{radius}$ window using 3×3 Sobel kernels:
+
+$$\mathbf{S} = \sum_{\mathbf{q} \in \mathcal{W}} \begin{bmatrix} g_x^2 & g_x g_y \\ g_x g_y & g_y^2 \end{bmatrix}\bigg|_\mathbf{q}$$
+
+Convergence is declared after at most 5 iterations. A saddle is rejected if:
+
+- $\|\mathbf{p}^{(k+1)} - \mathbf{p}^{(0)}\| > \text{max\_drift\_px}$ (default 5.0 px), or
+- $\det(\mathbf{S}) < 10^{-3}$ (degenerate, non-corner region).
+
+#### LO-RANSAC + AW-LM
+
+Accepted saddles feed `RobustPoseSolver` with `group_size=1` (each saddle is independent). The solver runs LO-RANSAC followed by anisotropically-weighted Levenberg-Marquardt using the inverse structure tensor as the per-point information matrix. Returns `None` if fewer than 4 saddles survive.
+
+**Memory model**: all scratch buffers (`img`, `obj`, `info`, `seeds`, `seen`, `touched`) are pre-allocated in `CharucoRefiner::new()`. `estimate()` performs zero heap allocations.
