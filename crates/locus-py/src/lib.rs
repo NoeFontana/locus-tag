@@ -356,6 +356,8 @@ impl AprilGrid {
 #[pyclass(unsendable)]
 pub struct CharucoRefiner {
     inner: locus_core::charuco::CharucoRefiner,
+    /// Pre-allocated output buffer reused across frames (zero per-frame alloc).
+    batch: locus_core::charuco::CharucoBatch,
 }
 
 #[pymethods]
@@ -365,12 +367,12 @@ impl CharucoRefiner {
     /// Reuse the same refiner across frames to avoid re-allocating scratch buffers.
     #[new]
     fn new(board: &CharucoBoard) -> Self {
-        Self {
-            inner: locus_core::charuco::CharucoRefiner::from_arc(
-                std::sync::Arc::clone(&board.inner),
-                locus_core::board::LoRansacConfig::default(),
-            ),
-        }
+        let inner = locus_core::charuco::CharucoRefiner::from_arc(
+            std::sync::Arc::clone(&board.inner),
+            locus_core::board::LoRansacConfig::default(),
+        );
+        let batch = inner.new_batch();
+        Self { inner, batch }
     }
 
     /// Run the full ChAruco pipeline on a single frame.
@@ -414,7 +416,11 @@ impl CharucoRefiner {
         let n = batch_view.len();
 
         // 2. Run ChAruco saddle extraction + board pose estimation.
-        let charuco = py.detach(|| self.inner.estimate(&batch_view, &view, &core_intr));
+        py.detach(|| {
+            self.inner
+                .estimate(&batch_view, &view, &core_intr, &mut self.batch);
+        });
+        let s = self.batch.count;
 
         // 3. Package ArUco detections (ids + corners).
         let ids_arr = unsafe { PyArray1::<i32>::new(py, [n], false) };
@@ -433,29 +439,29 @@ impl CharucoRefiner {
         }
 
         // 4. Package saddle-point detections.
-        let s = charuco.saddle_ids.len();
         let saddle_ids_arr = unsafe { PyArray1::<i32>::new(py, [s], false) };
         let saddle_pts_arr = unsafe { PyArray2::<f32>::new(py, [s, 2], false) };
         let saddle_obj_arr = unsafe { PyArray2::<f64>::new(py, [s, 3], false) };
         unsafe {
             let sid_slice = saddle_ids_arr.as_slice_mut().expect("saddle_ids slice");
-            for (dst, &src) in sid_slice.iter_mut().zip(charuco.saddle_ids.iter()) {
+            for (dst, &src) in sid_slice.iter_mut().zip(self.batch.saddle_ids()) {
                 // saddle IDs are bounded by board saddle count (≤ (rows-1)*(cols-1) ≤ ~400).
                 #[allow(clippy::cast_possible_wrap)]
                 {
                     *dst = src as i32;
                 }
             }
-            // SAFETY: [f32; 2] / [f64; 3] are repr(C) arrays with the same element type as
-            // the target NumPy slice; flat reinterpretation is sound for packed arrays.
+            // SAFETY: Point2f is repr(C) with two f32 fields; reinterpreting as &[f32] is
+            // sound for a packed, contiguous slice.  [f64; 3] has the same element type as
+            // the target NumPy slice.
             let spts_slice = saddle_pts_arr.as_slice_mut().expect("saddle_pts slice");
             spts_slice.copy_from_slice(std::slice::from_raw_parts(
-                charuco.saddle_image_pts.as_ptr().cast::<f32>(),
+                self.batch.saddle_image_pts().as_ptr().cast::<f32>(),
                 s * 2,
             ));
             let sobj_slice = saddle_obj_arr.as_slice_mut().expect("saddle_obj slice");
             sobj_slice.copy_from_slice(std::slice::from_raw_parts(
-                charuco.saddle_obj_pts.as_ptr().cast::<f64>(),
+                self.batch.saddle_obj_pts().as_ptr().cast::<f64>(),
                 s * 3,
             ));
         }
@@ -468,7 +474,7 @@ impl CharucoRefiner {
         dict.set_item("saddle_obj", saddle_obj_arr)?;
 
         // 5. Board pose and covariance (None if insufficient saddles or RANSAC failed).
-        if let Some(board_pose) = charuco.board_pose {
+        if let Some(board_pose) = self.batch.board_pose.take() {
             let q = nalgebra::UnitQuaternion::from_matrix(&board_pose.pose.rotation);
             let t = board_pose.pose.translation;
             let pose_arr = unsafe { PyArray1::<f64>::new(py, [7], false) };

@@ -32,20 +32,64 @@ use crate::pose_weighted::compute_corner_covariance;
 use nalgebra::Matrix2;
 use std::sync::Arc;
 
-// ── Public result type ─────────────────────────────────────────────────────
+// ── Public output buffer ───────────────────────────────────────────────────
 
-/// Output of a single [`CharucoRefiner::estimate`] call.
-#[derive(Debug, Clone)]
-pub struct CharucoResult {
+/// Pre-allocated output buffer for a single [`CharucoRefiner::estimate`] call.
+///
+/// Allocate once (via [`CharucoRefiner::new_batch`] or [`CharucoBatch::new`])
+/// and reuse across frames — `estimate()` performs zero heap allocations.
+///
+/// After each call the valid results occupy `[0..count]` in each array.
+pub struct CharucoBatch {
+    /// Indices into [`CharucoTopology::saddle_points`] for each accepted saddle.
+    pub saddle_ids: Box<[usize]>,
+    /// Refined 2D image coordinates for each accepted saddle.
+    pub saddle_image_pts: Box<[Point2f]>,
+    /// Board-frame 3D coordinates for each accepted saddle.
+    pub saddle_obj_pts: Box<[[f64; 3]]>,
     /// Estimated board pose, or `None` if fewer than 4 saddle points were
     /// accepted or LO-RANSAC could not find a consensus.
     pub board_pose: Option<BoardPose>,
-    /// Indices into [`CharucoTopology::saddle_points`] for each accepted saddle.
-    pub saddle_ids: Vec<usize>,
-    /// Refined image-space coordinates for each accepted saddle.
-    pub saddle_image_pts: Vec<[f32; 2]>,
-    /// Board-frame 3D coordinates for each accepted saddle.
-    pub saddle_obj_pts: Vec<[f64; 3]>,
+    /// Number of valid saddles written into `[0..count]` on the last frame.
+    pub count: usize,
+}
+
+impl CharucoBatch {
+    /// Create a batch pre-sized for `max_saddles` entries.
+    ///
+    /// Pass `topology.saddle_points.len()` as `max_saddles`.
+    #[must_use]
+    pub fn new(max_saddles: usize) -> Self {
+        let n = max_saddles.max(1);
+        Self {
+            saddle_ids: vec![0usize; n].into_boxed_slice(),
+            saddle_image_pts: vec![Point2f { x: 0.0, y: 0.0 }; n].into_boxed_slice(),
+            saddle_obj_pts: vec![[0.0f64; 3]; n].into_boxed_slice(),
+            board_pose: None,
+            count: 0,
+        }
+    }
+
+    /// Slice of accepted saddle indices for this frame.
+    #[inline]
+    #[must_use]
+    pub fn saddle_ids(&self) -> &[usize] {
+        &self.saddle_ids[..self.count]
+    }
+
+    /// Slice of refined 2D image coordinates for this frame.
+    #[inline]
+    #[must_use]
+    pub fn saddle_image_pts(&self) -> &[Point2f] {
+        &self.saddle_image_pts[..self.count]
+    }
+
+    /// Slice of board-frame 3D coordinates for this frame.
+    #[inline]
+    #[must_use]
+    pub fn saddle_obj_pts(&self) -> &[[f64; 3]] {
+        &self.saddle_obj_pts[..self.count]
+    }
 }
 
 // ── ChAruco refiner ────────────────────────────────────────────────────────
@@ -96,6 +140,14 @@ impl CharucoRefiner {
         Self::from_arc(Arc::new(config), LoRansacConfig::default())
     }
 
+    /// Allocate a [`CharucoBatch`] correctly sized for this board's saddle count.
+    ///
+    /// Call once during initialisation and reuse the batch across frames.
+    #[must_use]
+    pub fn new_batch(&self) -> CharucoBatch {
+        CharucoBatch::new(self.config.saddle_points.len())
+    }
+
     /// Creates a new `CharucoRefiner` from a shared [`Arc`] topology.
     ///
     /// Use this when the same [`CharucoTopology`] is shared across multiple
@@ -119,19 +171,22 @@ impl CharucoRefiner {
     /// Estimates the board pose from decoded ArUco tags.
     ///
     /// Runs the full ChAruco pipeline: saddle prediction, Gauss-Newton
-    /// refinement, and LO-RANSAC + AW-LM pose estimation.
+    /// refinement, and LO-RANSAC + AW-LM pose estimation.  Results are written
+    /// into `batch`; `batch.count` and `batch.board_pose` are updated on every
+    /// call.
     ///
     /// # Parameters
     /// - `view`       — slice view of valid decoded tags (from `Detector::detect`).
     /// - `img`        — the same image that was fed to the detector.
     /// - `intrinsics` — camera intrinsics for pose estimation.
-    #[must_use]
+    /// - `batch`      — caller-allocated output buffer (reuse across frames).
     pub fn estimate(
         &mut self,
         view: &DetectionBatchView<'_>,
         img: &ImageView,
         intrinsics: &CameraIntrinsics,
-    ) -> CharucoResult {
+        batch: &mut CharucoBatch,
+    ) {
         let mut num_touched = 0usize;
         let mut num_accepted = 0usize;
 
@@ -220,17 +275,6 @@ impl CharucoRefiner {
             self.scratch_seen[id] = false;
         }
 
-        // ── Collect accepted saddles for the result ────────────────────────
-        // These Vecs are allocated at the FFI boundary layer, not in the hot path.
-        let mut saddle_ids_out = Vec::with_capacity(num_accepted);
-        let mut image_pts_out = Vec::with_capacity(num_accepted);
-        let mut obj_pts_out = Vec::with_capacity(num_accepted);
-        for i in 0..num_accepted {
-            saddle_ids_out.push(self.scratch_saddle_ids[i]);
-            image_pts_out.push([self.scratch_img[i].x, self.scratch_img[i].y]);
-            obj_pts_out.push(self.scratch_obj[i]);
-        }
-
         // ── Pose estimation ────────────────────────────────────────────────
         let board_pose = if num_accepted >= 4 {
             let corr = PointCorrespondences {
@@ -245,12 +289,12 @@ impl CharucoRefiner {
             None
         };
 
-        CharucoResult {
-            board_pose,
-            saddle_ids: saddle_ids_out,
-            saddle_image_pts: image_pts_out,
-            saddle_obj_pts: obj_pts_out,
-        }
+        // ── Write results into caller-supplied batch (zero allocation) ─────
+        batch.saddle_ids[..num_accepted].copy_from_slice(&self.scratch_saddle_ids[..num_accepted]);
+        batch.saddle_image_pts[..num_accepted].copy_from_slice(&self.scratch_img[..num_accepted]);
+        batch.saddle_obj_pts[..num_accepted].copy_from_slice(&self.scratch_obj[..num_accepted]);
+        batch.count = num_accepted;
+        batch.board_pose = board_pose;
     }
 }
 
@@ -481,14 +525,15 @@ mod tests {
         let config = CharucoTopology::new(4, 4, 0.04, 0.03, usize::MAX).unwrap();
         let mut refiner = CharucoRefiner::new(config);
 
-        let batch = DetectionBatch::new();
-        let view = batch.view(0);
+        let det_batch = DetectionBatch::new();
+        let view = det_batch.view(0);
         let buf = vec![128u8; 256 * 256];
         let img = ImageView::new(&buf, 256, 256, 256).unwrap();
         let intrinsics = CameraIntrinsics::new(500.0, 500.0, 128.0, 128.0);
 
-        let result = refiner.estimate(&view, &img, &intrinsics);
-        assert_eq!(result.saddle_ids.len(), 0);
+        let mut out = refiner.new_batch();
+        refiner.estimate(&view, &img, &intrinsics, &mut out);
+        assert_eq!(out.count, 0);
         assert!(
             refiner.scratch_seen.iter().all(|&b| !b),
             "scratch_seen must be fully reset after estimate()"
@@ -501,14 +546,15 @@ mod tests {
         let config = CharucoTopology::new(4, 4, 0.04, 0.03, usize::MAX).unwrap();
         let mut refiner = CharucoRefiner::new(config);
 
-        let batch = DetectionBatch::new();
-        let view = batch.view(0);
+        let det_batch = DetectionBatch::new();
+        let view = det_batch.view(0);
         let buf = vec![128u8; 256 * 256];
         let img = ImageView::new(&buf, 256, 256, 256).unwrap();
         let intrinsics = CameraIntrinsics::new(500.0, 500.0, 128.0, 128.0);
 
-        let result = refiner.estimate(&view, &img, &intrinsics);
-        assert!(result.board_pose.is_none());
+        let mut out = refiner.new_batch();
+        refiner.estimate(&view, &img, &intrinsics, &mut out);
+        assert!(out.board_pose.is_none());
     }
 
     #[test]
