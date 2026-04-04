@@ -1,6 +1,6 @@
 //! Board-level configuration and layout utilities.
 
-use crate::batch::{DetectionBatch, MAX_CANDIDATES};
+use crate::batch::{DetectionBatch, MAX_CANDIDATES, Point2f};
 use crate::pose::{CameraIntrinsics, Pose, projection_jacobian, symmetrize_jtj6};
 use nalgebra::{Matrix2, Matrix6, UnitQuaternion, Vector3, Vector6};
 
@@ -183,33 +183,71 @@ pub struct BoardPose {
     pub covariance: Matrix6<f64>,
 }
 
-// ── Estimator ─────────────────────────────────────────────────────────────
+// ── Generic Correspondence Interface ──────────────────────────────────────
 
-/// Estimator for multi-tag board poses.
-pub struct BoardEstimator {
-    /// Configuration of the board layout.
-    pub config: BoardConfig,
-    /// Configuration for the LO-RANSAC robust solver.
-    pub lo_ransac: LoRansacConfig,
-    /// Pre-allocated scratch buffer for information matrices in AW-LM.
-    /// Avoids a per-`estimate()` heap allocation; sized to MAX_CANDIDATES so
-    /// it matches the batch capacity exactly.
-    info_scratch: Box<[[Matrix2<f64>; 4]]>,
+/// A flat, contiguous view of M 2D-3D point correspondences for pose estimation.
+///
+/// Points are organised in contiguous *groups* of [`group_size`](Self::group_size)
+/// elements. The inlier bitmask operated on by [`RobustPoseSolver`] tracks one
+/// bit *per group*, keeping the mask size bounded at 1 024 bits regardless of
+/// `group_size`.
+///
+/// | Pipeline        | `group_size` | Bit semantics             |
+/// |-----------------|--------------|---------------------------|
+/// | AprilGrid       | 4            | 1 bit = 1 tag (4 corners) |
+/// | ChAruco saddles | 1            | 1 bit = 1 saddle point    |
+///
+/// **Lifetime**: the slices are typically backed by pre-allocated scratch
+/// buffers owned by [`BoardEstimator`] or by arena memory, ensuring zero heap
+/// allocation on the hot path.
+pub struct PointCorrespondences<'a> {
+    /// Observed 2D image points (pixels). Length = M.
+    pub image_points: &'a [Point2f],
+    /// Corresponding 3D model points (board frame, metres). Length = M.
+    pub object_points: &'a [[f64; 3]],
+    /// Pre-inverted observation covariances (information matrices). Length = M.
+    /// Must be positive semi-definite; use [`Matrix2::identity`] for isotropic
+    /// unit weighting.
+    pub information_matrices: &'a [Matrix2<f64>],
+    /// Number of consecutive points forming one logical correspondence group.
+    /// `M` must be an exact multiple of `group_size`.
+    pub group_size: usize,
+    /// Per-group seed pose hypotheses for RANSAC initialisation.
+    /// Length = M / `group_size`.  `None` signals a degenerate or occluded
+    /// group that RANSAC must skip as a minimal-sample candidate.
+    pub seed_poses: &'a [Option<Pose>],
 }
 
-impl BoardEstimator {
-    /// Creates a new `BoardEstimator` with default LO-RANSAC parameters.
-    ///
-    /// Allocates a 128 KB scratch buffer for information matrices. For zero
-    /// per-frame allocation, reuse the same `BoardEstimator` across calls to
-    /// [`estimate`](Self::estimate) rather than creating a new one each frame.
+impl PointCorrespondences<'_> {
+    /// Number of correspondence groups: `M / group_size`.
+    #[inline]
     #[must_use]
-    pub fn new(config: BoardConfig) -> Self {
-        Self {
-            config,
-            lo_ransac: LoRansacConfig::default(),
-            info_scratch: vec![[Matrix2::<f64>::zeros(); 4]; MAX_CANDIDATES].into_boxed_slice(),
-        }
+    pub fn num_groups(&self) -> usize {
+        self.image_points.len() / self.group_size
+    }
+}
+
+// ── Robust Pose Solver ─────────────────────────────────────────────────────
+
+/// Pure mathematical engine for robust, multi-correspondence board pose
+/// estimation.
+///
+/// Completely decoupled from [`DetectionBatch`] and tag layout.  Accepts flat
+/// [`PointCorrespondences`] slices and returns a verified [`BoardPose`].
+///
+/// **Algorithm**: LO-RANSAC (outer) → unweighted Gauss-Newton verification
+/// (inner) → Anisotropic Weighted Levenberg-Marquardt final refinement.
+#[derive(Default)]
+pub struct RobustPoseSolver {
+    /// LO-RANSAC hyper-parameters.
+    pub lo_ransac: LoRansacConfig,
+}
+
+impl RobustPoseSolver {
+    /// Creates a new solver with default LO-RANSAC parameters.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Builder: override the LO-RANSAC configuration.
@@ -221,49 +259,32 @@ impl BoardEstimator {
 
     // ── Public entry point ───────────────────────────────────────────────
 
-    /// Estimates the board pose from a batch of detections.
+    /// Estimates a board pose from flat point correspondences.
     ///
-    /// Returns `None` if fewer than 4 valid tags match the board layout or if
-    /// LO-RANSAC cannot find a consensus set.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the internal `obj_points` for a valid tag index is missing.
+    /// Returns `None` if fewer than 4 groups are present, or if LO-RANSAC
+    /// cannot find a consensus set.
     #[must_use]
     pub fn estimate(
-        &mut self,
-        batch: &DetectionBatch,
+        &self,
+        corr: &PointCorrespondences<'_>,
         intrinsics: &CameraIntrinsics,
     ) -> Option<BoardPose> {
-        // Phase 1: collect batch indices of valid tags that belong to this board.
-        let (valid_indices, num_valid) = self.collect_valid_candidates(batch);
-        if num_valid < 4 {
+        if corr.num_groups() < 4 {
             return None;
         }
-        let valid = &valid_indices[..num_valid];
 
-        // Phase 2: LO-RANSAC → verified pose + tight inlier set (tau_inner).
-        // The LO inner loop uses tau_inner for its GN steps to stay clean, but
-        // AW-LM needs a richer inlier set to maximise covariance quality.
-        let (best_pose, _tight_mask) = self.lo_ransac_loop(valid, batch, intrinsics)?;
+        // Phase 1: LO-RANSAC → verified IPPE seed + tight inlier count.
+        let (best_pose, _tight_mask) = self.lo_ransac_loop(corr, intrinsics)?;
 
-        // Phase 3: re-evaluate inliers at tau_aw_lm using the LO-verified pose.
-        // The LO has already identified true outliers (occluded/aliased tags).
-        // Using the generous tau_aw_lm (default 10px) on the LO-refined pose
-        // maximises the number of geometrically consistent observations that
-        // AW-LM can exploit. AW-LM's Huber weighting (k = 1.345) robustly
-        // downweights any residual mild outliers inside this wider window.
-        let (aw_lm_mask, _) = self.evaluate_inliers(
-            &best_pose,
-            batch,
-            intrinsics,
-            valid,
-            self.lo_ransac.tau_aw_lm_sq,
-        );
+        // Phase 2: re-evaluate inliers at the generous tau_aw_lm on the
+        // LO-verified pose.  The wider window maximises the AW-LM observation
+        // count; Huber weighting (k = 1.345) handles any residual mild outliers.
+        let (aw_lm_mask, _) =
+            self.evaluate_inliers(&best_pose, corr, intrinsics, self.lo_ransac.tau_aw_lm_sq);
 
-        // Phase 4: final AW-LM over the verified, relaxed inlier set.
+        // Phase 3: final AW-LM over the verified, relaxed inlier set.
         let (refined_pose, covariance) =
-            self.refine_aw_lm(&best_pose, batch, intrinsics, valid, &aw_lm_mask);
+            self.refine_aw_lm(&best_pose, corr, intrinsics, &aw_lm_mask);
 
         Some(BoardPose {
             pose: refined_pose,
@@ -273,79 +294,41 @@ impl BoardEstimator {
 
     // ── Private helpers ──────────────────────────────────────────────────
 
-    /// Scans the batch and returns all indices of `Valid` candidates that map
-    /// to a known board tag.
-    fn collect_valid_candidates(
-        &self,
-        batch: &DetectionBatch,
-    ) -> ([usize; crate::batch::MAX_CANDIDATES], usize) {
-        let mut valid_indices = [0usize; crate::batch::MAX_CANDIDATES];
-        let mut num_valid = 0;
-        for i in 0..crate::batch::MAX_CANDIDATES {
-            if batch.status_mask[i] == crate::batch::CandidateState::Valid {
-                let id = batch.ids[i] as usize;
-                if id < self.config.obj_points.len() && self.config.obj_points[id].is_some() {
-                    valid_indices[num_valid] = i;
-                    num_valid += 1;
-                }
-            }
-        }
-        (valid_indices, num_valid)
-    }
-
     /// Core LO-RANSAC loop.
     ///
-    /// Outer loop: random 4-tag sampling → IPPE seed → outer-threshold evaluation.
-    /// Inner loop (LO): unweighted Gauss-Newton refinement + tight re-evaluation
-    ///                  with monotonicity guard.
+    /// Outer loop: random 4-group sampling → seed pose → outer-threshold
+    /// evaluation.  Inner loop (LO): unweighted Gauss-Newton refinement +
+    /// tight re-evaluation with monotonicity guard.
     /// Dynamic stopping: `k` is updated after each tight-count improvement using
     /// the standard RANSAC formula `k = log(1-p) / log(1-ω⁴)` where `ω` is the
-    /// **verified** tight inlier ratio from `lo_inner`.
-    ///
-    /// **Per the architectural specification**, the unweighted GN pose produced
-    /// *inside* `lo_inner` is discarded once the tight consensus mask is
-    /// finalised.  `lo_inner` acts as the **strict verification gate**: it proves
-    /// that the outer-wide consensus set is in the true global basin of attraction
-    /// (tight count stays high), not a phantom induced by background clutter.
-    /// The `tight_count` from that gate then collapses `dynamic_k` to enable
-    /// bounded early termination.  The retained seed is the **original, clean
-    /// IPPE pose** — free from the unweighted GN bias — so AW-LM starts from the
-    /// best-conditioned initialisation point.
+    /// verified tight inlier ratio from `lo_inner`.
     #[allow(clippy::too_many_lines, clippy::cast_sign_loss)]
     fn lo_ransac_loop(
         &self,
-        valid: &[usize],
-        batch: &DetectionBatch,
+        corr: &PointCorrespondences<'_>,
         intrinsics: &CameraIntrinsics,
     ) -> Option<(Pose, [u64; 16])> {
         let cfg = &self.lo_ransac;
-        let num_valid = valid.len();
+        let num_groups = corr.num_groups();
 
-        // Global best tracked by the tight (tau_inner) inlier count produced by
-        // lo_inner — not the wide outer count.  This ensures the retained seed has
-        // been rigorously verified against the strict 1-px² gate.
         let mut global_best_tight_count = 0usize;
         let mut global_best_seed: Option<Pose> = None;
-
-        // Dynamic stopping criterion, initialised to the hard ceiling.
-        // Collapses toward k_min as lo_inner verifies increasingly large
-        // tight consensus sets.
         let mut dynamic_k = cfg.k_max;
 
         // Deterministic XOR-shift RNG (reproducible across frames).
-        let mut seed = 0x1337u32;
+        let mut rng_seed = 0x1337u32;
 
         for iter in 0..cfg.k_max {
-            // ── Draw 4 distinct tags without replacement ─────────────────
+            // ── Draw 4 distinct groups without replacement ────────────────
             let mut sample = [0usize; 4];
             let mut found = 0usize;
             let mut attempts = 0u32;
             while found < 4 && attempts < 1000 {
                 attempts += 1;
-                seed ^= seed << 13;
-                seed ^= seed >> 17;
-                seed ^= seed << 5;
-                let s = (seed as usize) % num_valid;
+                rng_seed ^= rng_seed << 13;
+                rng_seed ^= rng_seed >> 17;
+                rng_seed ^= rng_seed << 5;
+                let s = (rng_seed as usize) % num_groups;
                 if !sample[..found].contains(&s) {
                     sample[found] = s;
                     found += 1;
@@ -355,22 +338,18 @@ impl BoardEstimator {
                 continue;
             }
 
-            // ── Initialise from each sampled tag; keep the best seed ──────
-            // Each tag's stored per-tag pose is converted to a board-frame
-            // hypothesis. We pick whichever seed produces the most outer
-            // inliers to pass to the LO inner loop.
+            // ── Try each sampled group's seed pose as a hypothesis ────────
             let mut best_outer_count = 0usize;
             let mut best_outer_mask = [0u64; 16];
             let mut best_outer_pose: Option<Pose> = None;
 
             for &s_val in &sample {
-                let b_idx = valid[s_val];
-                let Some(pose_init) = self.init_pose_from_batch_tag(b_idx, batch) else {
+                let Some(pose_init) = corr.seed_poses[s_val] else {
                     continue;
                 };
 
                 let (outer_mask, outer_count) =
-                    self.evaluate_inliers(&pose_init, batch, intrinsics, valid, cfg.tau_outer_sq);
+                    self.evaluate_inliers(&pose_init, corr, intrinsics, cfg.tau_outer_sq);
 
                 if outer_count >= cfg.min_inliers && outer_count > best_outer_count {
                     best_outer_count = outer_count;
@@ -383,29 +362,22 @@ impl BoardEstimator {
                 continue;
             };
 
-            // ── LO inner loop (verification gate) ─────────────────────────
-            // Run tight GN refinement to prove the outer consensus is in the
-            // true basin of attraction.  The unweighted GN pose is discarded
+            // ── LO inner loop (verification gate) ────────────────────────
+            // The unweighted GN pose produced inside lo_inner is discarded
             // (spec mandate) to prevent biasing the AW-LM initialisation.
-            // Only `tight_count` is retained to govern global state and the
-            // dynamic stopping criterion.
+            // Only tight_count governs global state and dynamic stopping.
             let (_gn_pose, _tight_mask, tight_count) =
-                self.lo_inner(seed_pose, &best_outer_mask, batch, intrinsics, valid);
+                self.lo_inner(seed_pose, &best_outer_mask, corr, intrinsics);
 
             if tight_count > global_best_tight_count {
                 global_best_tight_count = tight_count;
-                // Retain the clean IPPE seed, not the unweighted GN pose.
                 global_best_seed = Some(seed_pose);
 
-                // Update dynamic stopping criterion from the verified tight ratio.
-                let inlier_ratio = tight_count as f64 / num_valid as f64;
+                let inlier_ratio = tight_count as f64 / num_groups as f64;
                 if inlier_ratio >= 0.99 {
-                    // Near-perfect board: k_min iterations are sufficient.
                     dynamic_k = cfg.k_min;
                 } else {
                     let p_fail = 1.0 - cfg.confidence;
-                    // Probability that a random 4-tag sample contains at least
-                    // one outlier under the tight inlier ratio.
                     let p_good_sample = 1.0 - inlier_ratio.powi(4);
                     let k_compute = p_fail.ln() / p_good_sample.ln();
                     dynamic_k = (k_compute.max(0.0).ceil() as u32).clamp(cfg.k_min, cfg.k_max);
@@ -413,138 +385,48 @@ impl BoardEstimator {
             }
 
             // ── Bounded early termination ─────────────────────────────────
-            // Guard: at least k_min iterations must complete before stopping,
-            // regardless of how quickly dynamic_k collapses, to escape
-            // spatially-correlated occlusion clusters.
             if iter >= cfg.k_min && iter >= dynamic_k {
                 break;
             }
         }
 
-        // Return the clean IPPE seed that survived the lo_inner tight gate.
-        // estimate() re-evaluates the inlier mask at tau_aw_lm before calling
-        // AW-LM, so no mask needs to be threaded through here.
         let final_seed = global_best_seed?;
         Some((final_seed, [0u64; 16]))
-    }
-
-    /// Converts a single tag's stored per-tag `Pose6D` into a board-frame `Pose`.
-    ///
-    /// Returns `None` if the stored pose is degenerate (NaN or near-zero depth).
-    fn init_pose_from_batch_tag(&self, b_idx: usize, batch: &DetectionBatch) -> Option<Pose> {
-        let data = batch.poses[b_idx].data;
-        if data.iter().any(|v| v.is_nan()) || data[2].abs() < 1e-6 {
-            return None;
-        }
-
-        let det_t = Vector3::new(f64::from(data[0]), f64::from(data[1]), f64::from(data[2]));
-        // Quaternion layout in Pose6D: [qx, qy, qz, qw] at indices [3,4,5,6].
-        let det_q = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-            f64::from(data[6]), // w
-            f64::from(data[3]), // x
-            f64::from(data[4]), // y
-            f64::from(data[5]), // z
-        ));
-
-        let tag_id = batch.ids[b_idx] as usize;
-        let tag_obj_origin = self.config.obj_points[tag_id]?[0];
-        let tag_origin = Vector3::new(tag_obj_origin[0], tag_obj_origin[1], tag_obj_origin[2]);
-
-        // Board-frame translation: t_board = t_tag - R * origin_of_tag_in_board
-        Some(Pose {
-            rotation: *det_q.to_rotation_matrix().matrix(),
-            translation: det_t - (det_q * tag_origin),
-        })
-    }
-
-    /// Projects all 4 corners of every candidate in `valid` and classifies
-    /// each tag as an inlier if its mean squared reprojection error is below
-    /// `tau_sq`.
-    ///
-    /// Uses squared-error comparison to avoid `sqrt` on the critical path.
-    /// Returns a 1024-bit inlier bitmask (16 × u64) and the inlier count.
-    fn evaluate_inliers(
-        &self,
-        pose: &Pose,
-        batch: &DetectionBatch,
-        intrinsics: &CameraIntrinsics,
-        valid: &[usize],
-        tau_sq: f64,
-    ) -> ([u64; 16], usize) {
-        let mut mask = [0u64; 16];
-        let mut count = 0usize;
-
-        for (i, &b_idx) in valid.iter().enumerate() {
-            let id = batch.ids[b_idx] as usize;
-            let obj = self.config.obj_points[id].expect("missing obj_points");
-
-            // Accumulate squared reprojection error over all 4 corners.
-            // Threshold: sum_sq < 4 * tau_sq  ⟺  mean_sq < tau_sq (no sqrt needed).
-            let mut sum_sq = 0.0f64;
-            for (j, pt) in obj.iter().enumerate() {
-                let p_world = Vector3::new(pt[0], pt[1], pt[2]);
-                let p_cam = pose.rotation * p_world + pose.translation;
-                if p_cam.z < 1e-4 {
-                    sum_sq += 4.0 * tau_sq + 1.0;
-                    break;
-                }
-                let z_inv = 1.0 / p_cam.z;
-                let px = intrinsics.fx * p_cam.x * z_inv + intrinsics.cx;
-                let py = intrinsics.fy * p_cam.y * z_inv + intrinsics.cy;
-                let dx = px - f64::from(batch.corners[b_idx][j].x);
-                let dy = py - f64::from(batch.corners[b_idx][j].y);
-                sum_sq += dx * dx + dy * dy;
-            }
-
-            if sum_sq < 4.0 * tau_sq {
-                count += 1;
-                mask[i / 64] |= 1 << (i % 64);
-            }
-        }
-
-        (mask, count)
     }
 
     /// LO inner loop: iteratively refines the pose with unweighted Gauss-Newton
     /// and re-evaluates inliers with the tight `tau_inner` threshold.
     ///
     /// **Monotonicity guard:** if the tight inlier count stops improving,
-    /// the GN has reached the bottom of the objective basin — terminate early.
-    ///
-    /// Returns the best `(pose, tight_inlier_mask, tight_inlier_count)` found.
+    /// the GN has reached the basin bottom — terminate early.
     fn lo_inner(
         &self,
         seed_pose: Pose,
         outer_mask: &[u64; 16],
-        batch: &DetectionBatch,
+        corr: &PointCorrespondences<'_>,
         intrinsics: &CameraIntrinsics,
-        valid: &[usize],
     ) -> (Pose, [u64; 16], usize) {
         let cfg = &self.lo_ransac;
 
-        // Establish baseline: evaluate the IPPE seed with the tight threshold.
         let (init_inner_mask, init_inner_count) =
-            self.evaluate_inliers(&seed_pose, batch, intrinsics, valid, cfg.tau_inner_sq);
+            self.evaluate_inliers(&seed_pose, corr, intrinsics, cfg.tau_inner_sq);
 
         let mut lo_pose = seed_pose;
         // First GN step uses the outer (wider) inlier mask for better conditioning.
         let mut lo_gn_mask = *outer_mask;
         let mut prev_inner_count = init_inner_count;
 
-        // Track the best tight result seen across all LO iterations.
         let mut best_pose = seed_pose;
         let mut best_mask = init_inner_mask;
         let mut best_count = init_inner_count;
 
         for _lo_iter in 0..cfg.lo_max_iterations {
-            // One step of unweighted Gauss-Newton over the current GN mask.
-            let new_pose = self.gn_step(&lo_pose, batch, intrinsics, valid, &lo_gn_mask);
+            let new_pose = self.gn_step(&lo_pose, corr, intrinsics, &lo_gn_mask);
 
-            // Re-evaluate with the tight threshold.
             let (new_inner_mask, new_inner_count) =
-                self.evaluate_inliers(&new_pose, batch, intrinsics, valid, cfg.tau_inner_sq);
+                self.evaluate_inliers(&new_pose, corr, intrinsics, cfg.tau_inner_sq);
 
-            // Monotonicity guard: the tight consensus must strictly grow.
+            // Monotonicity guard: tight consensus must strictly grow.
             if new_inner_count <= prev_inner_count {
                 break;
             }
@@ -561,34 +443,94 @@ impl BoardEstimator {
         (best_pose, best_mask, best_count)
     }
 
-    /// One step of **unweighted** Gauss-Newton pose refinement.
+    /// Projects all correspondence groups and classifies each group as an
+    /// inlier if its mean squared reprojection error is below `tau_sq`.
+    ///
+    /// The threshold comparison avoids `sqrt`:
+    /// `sum_sq < group_size * tau_sq  ⟺  mean_sq < tau_sq`.
+    ///
+    /// Returns a 1 024-bit group-level inlier bitmask (16 × u64) and the
+    /// inlier count.
+    ///
+    /// If *any* point in a group has near-zero camera depth the whole group is
+    /// rejected immediately (break + `valid_group = false`).  This differs from
+    /// `gn_step` / `refine_aw_lm` which silently `continue` past degenerate
+    /// points: those solvers accumulate whatever non-degenerate corners remain,
+    /// whereas the inlier test must be conservative — a partial error sum would
+    /// undercount reprojection error and admit a bad pose as an inlier.
+    #[allow(clippy::unused_self)]
+    fn evaluate_inliers(
+        &self,
+        pose: &Pose,
+        corr: &PointCorrespondences<'_>,
+        intrinsics: &CameraIntrinsics,
+        tau_sq: f64,
+    ) -> ([u64; 16], usize) {
+        let mut mask = [0u64; 16];
+        let mut count = 0usize;
+        let num_groups = corr.num_groups();
+        let gs = corr.group_size;
+
+        for g in 0..num_groups {
+            let start = g * gs;
+            let threshold = gs as f64 * tau_sq;
+
+            let mut sum_sq = 0.0f64;
+            let mut valid_group = true;
+
+            for k in start..(start + gs) {
+                let obj = corr.object_points[k];
+                let p_world = Vector3::new(obj[0], obj[1], obj[2]);
+                let p_cam = pose.rotation * p_world + pose.translation;
+                if p_cam.z < 1e-4 {
+                    valid_group = false;
+                    break;
+                }
+                let z_inv = 1.0 / p_cam.z;
+                let px = intrinsics.fx * p_cam.x * z_inv + intrinsics.cx;
+                let py = intrinsics.fy * p_cam.y * z_inv + intrinsics.cy;
+                let dx = px - f64::from(corr.image_points[k].x);
+                let dy = py - f64::from(corr.image_points[k].y);
+                sum_sq += dx * dx + dy * dy;
+            }
+
+            if valid_group && sum_sq < threshold {
+                count += 1;
+                mask[g / 64] |= 1 << (g % 64);
+            }
+        }
+
+        (mask, count)
+    }
+
+    /// One step of **unweighted** Gauss-Newton pose refinement over inlier groups.
     ///
     /// Solves `(J^T J) δ = J^T r` with the left-perturbation SE(3) Jacobian.
-    /// No Marquardt damping, no information-matrix weighting — this is a pure
-    /// least-squares step designed to quickly smooth a noisy minimal-sample pose.
+    /// No Marquardt damping, no information-matrix weighting.
     ///
     /// Returns the original pose unchanged if the normal equations are singular.
+    #[allow(clippy::unused_self)]
     fn gn_step(
         &self,
         pose: &Pose,
-        batch: &DetectionBatch,
+        corr: &PointCorrespondences<'_>,
         intrinsics: &CameraIntrinsics,
-        valid: &[usize],
         inlier_mask: &[u64; 16],
     ) -> Pose {
         let mut jtj = Matrix6::<f64>::zeros();
         let mut jtr = Vector6::<f64>::zeros();
+        let gs = corr.group_size;
+        let num_groups = corr.num_groups();
 
-        for (i, &b_idx) in valid.iter().enumerate() {
-            if (inlier_mask[i / 64] & (1 << (i % 64))) == 0 {
+        for g in 0..num_groups {
+            if (inlier_mask[g / 64] & (1 << (g % 64))) == 0 {
                 continue;
             }
+            let start = g * gs;
 
-            let id = batch.ids[b_idx] as usize;
-            let obj = self.config.obj_points[id].expect("missing obj_points");
-
-            for (j, pt) in obj.iter().enumerate() {
-                let p_world = Vector3::new(pt[0], pt[1], pt[2]);
+            for k in start..(start + gs) {
+                let obj = corr.object_points[k];
+                let p_world = Vector3::new(obj[0], obj[1], obj[2]);
                 let p_cam = pose.rotation * p_world + pose.translation;
                 if p_cam.z < 1e-4 {
                     continue;
@@ -600,8 +542,8 @@ impl BoardEstimator {
                 let u = intrinsics.fx * x_z + intrinsics.cx;
                 let v = intrinsics.fy * y_z + intrinsics.cy;
 
-                let res_u = f64::from(batch.corners[b_idx][j].x) - u;
-                let res_v = f64::from(batch.corners[b_idx][j].y) - v;
+                let res_u = f64::from(corr.image_points[k].x) - u;
+                let res_v = f64::from(corr.image_points[k].y) - v;
 
                 // Left-perturbation SE(3) Jacobian (scalar accumulation — no
                 // intermediate Matrix2x6; mirrors build_normal_equations in
@@ -661,57 +603,41 @@ impl BoardEstimator {
         }
     }
 
-    // ── Final refinement ─────────────────────────────────────────────────
-
-    #[allow(clippy::too_many_lines, clippy::similar_names)]
+    /// Final refinement: Anisotropic Weighted Levenberg-Marquardt over the
+    /// verified inlier set.
+    ///
+    /// Uses pre-inverted information matrices from `corr.information_matrices`
+    /// and Huber weighting (k = 1.345) for robustness against mild outliers
+    /// inside the wide `tau_aw_lm` window.
+    #[allow(clippy::too_many_lines, clippy::similar_names, clippy::unused_self)]
     fn refine_aw_lm(
-        &mut self,
+        &self,
         initial_pose: &Pose,
-        batch: &DetectionBatch,
+        corr: &PointCorrespondences<'_>,
         intrinsics: &CameraIntrinsics,
-        valid_indices: &[usize],
         inlier_mask: &[u64; 16],
     ) -> (Pose, Matrix6<f64>) {
         let mut pose = *initial_pose;
         let mut lambda = 1e-3;
         let mut nu = 2.0;
 
-        // Pre-compute information matrices (inverses of covariances) into the
-        // pre-allocated scratch buffer — zero heap allocation per call.
-        for (i, &b_idx) in valid_indices.iter().enumerate() {
-            let mut infos = [Matrix2::identity(); 4];
-            if (inlier_mask[i / 64] & (1 << (i % 64))) != 0 {
-                for (j, info) in infos.iter_mut().enumerate() {
-                    *info = Matrix2::new(
-                        f64::from(batch.corner_covariances[b_idx][j * 4]),
-                        f64::from(batch.corner_covariances[b_idx][j * 4 + 1]),
-                        f64::from(batch.corner_covariances[b_idx][j * 4 + 2]),
-                        f64::from(batch.corner_covariances[b_idx][j * 4 + 3]),
-                    )
-                    .try_inverse()
-                    .unwrap_or_else(Matrix2::identity);
-                }
-            }
-            self.info_scratch[i] = infos;
-        }
-        let info_scratch = &self.info_scratch[..valid_indices.len()];
+        let gs = corr.group_size;
+        let num_groups = corr.num_groups();
 
         let compute_equations = |current_pose: &Pose| -> (f64, Matrix6<f64>, Vector6<f64>) {
             let mut jtj = Matrix6::<f64>::zeros();
             let mut jtr = Vector6::<f64>::zeros();
             let mut total_cost = 0.0;
 
-            for (i, &b_idx) in valid_indices.iter().enumerate() {
-                if (inlier_mask[i / 64] & (1 << (i % 64))) == 0 {
+            for g in 0..num_groups {
+                if (inlier_mask[g / 64] & (1 << (g % 64))) == 0 {
                     continue;
                 }
+                let start = g * gs;
 
-                let id = batch.ids[b_idx] as usize;
-                let obj = self.config.obj_points[id].expect("missing obj_points");
-                let infos = &info_scratch[i];
-
-                for (j, pt) in obj.iter().enumerate() {
-                    let p_world = Vector3::new(pt[0], pt[1], pt[2]);
+                for k in start..(start + gs) {
+                    let obj = corr.object_points[k];
+                    let p_world = Vector3::new(obj[0], obj[1], obj[2]);
                     let p_cam = current_pose.rotation * p_world + current_pose.translation;
                     if p_cam.z < 1e-4 {
                         total_cost += 1e6;
@@ -724,10 +650,10 @@ impl BoardEstimator {
                     let u = intrinsics.fx * x_z + intrinsics.cx;
                     let v = intrinsics.fy * y_z + intrinsics.cy;
 
-                    let res_u = f64::from(batch.corners[b_idx][j].x) - u;
-                    let res_v = f64::from(batch.corners[b_idx][j].y) - v;
+                    let res_u = f64::from(corr.image_points[k].x) - u;
+                    let res_v = f64::from(corr.image_points[k].y) - v;
 
-                    let info = infos[j];
+                    let info = corr.information_matrices[k];
 
                     let dist_sq = res_u * (info[(0, 0)] * res_u + info[(0, 1)] * res_v)
                         + res_v * (info[(1, 0)] * res_u + info[(1, 1)] * res_v);
@@ -853,6 +779,167 @@ impl BoardEstimator {
     }
 }
 
+// ── Board Estimator (AprilGrid adapter) ────────────────────────────────────
+
+/// Estimator for multi-tag board poses.
+///
+/// Bridges the [`DetectionBatch`] SoA layout and [`BoardConfig`] tag geometry
+/// with the tag-layout-agnostic [`RobustPoseSolver`].  All heavy pose
+/// mathematics lives in the solver; this struct is responsible only for
+/// constructing the flat [`PointCorrespondences`] view and retaining the
+/// pre-allocated scratch buffers needed to do so without heap allocation.
+pub struct BoardEstimator {
+    /// Configuration of the board layout.
+    pub config: BoardConfig,
+    /// The underlying robust pose solver (contains LO-RANSAC config).
+    pub solver: RobustPoseSolver,
+    // ── Pre-allocated scratch buffers (single heap allocation in new()) ──────
+    // img/obj/info are per-point: MAX_CORR = MAX_CANDIDATES × CORNERS_PER_TAG.
+    // seeds are per-group: MAX_CANDIDATES (one seed pose per tag, not per corner).
+    scratch_img: Box<[Point2f]>,
+    scratch_obj: Box<[[f64; 3]]>,
+    scratch_info: Box<[Matrix2<f64>]>,
+    scratch_seeds: Box<[Option<Pose>]>,
+}
+
+impl BoardEstimator {
+    const CORNERS_PER_TAG: usize = 4;
+    const MAX_CORR: usize = MAX_CANDIDATES * Self::CORNERS_PER_TAG;
+
+    /// Creates a new `BoardEstimator` with default LO-RANSAC parameters.
+    ///
+    /// Performs a single one-time heap allocation to back the scratch buffers.
+    /// Reuse the same `BoardEstimator` across frames to amortise this cost and
+    /// guarantee zero per-`estimate()` allocations.
+    #[must_use]
+    pub fn new(config: BoardConfig) -> Self {
+        Self {
+            config,
+            solver: RobustPoseSolver::new(),
+            scratch_img: vec![Point2f { x: 0.0, y: 0.0 }; Self::MAX_CORR].into_boxed_slice(),
+            scratch_obj: vec![[0.0f64; 3]; Self::MAX_CORR].into_boxed_slice(),
+            scratch_info: vec![Matrix2::zeros(); Self::MAX_CORR].into_boxed_slice(),
+            scratch_seeds: vec![None; MAX_CANDIDATES].into_boxed_slice(),
+        }
+    }
+
+    /// Builder: override the LO-RANSAC configuration.
+    #[must_use]
+    pub fn with_lo_ransac_config(mut self, cfg: LoRansacConfig) -> Self {
+        self.solver.lo_ransac = cfg;
+        self
+    }
+
+    // ── Public entry point ───────────────────────────────────────────────
+
+    /// Estimates the board pose from a batch of detections.
+    ///
+    /// Returns `None` if fewer than 4 valid tags match the board layout or if
+    /// LO-RANSAC cannot find a consensus set.
+    #[must_use]
+    pub fn estimate(
+        &mut self,
+        batch: &DetectionBatch,
+        intrinsics: &CameraIntrinsics,
+    ) -> Option<BoardPose> {
+        // Phase 1: flatten valid batch entries into the pre-allocated scratch
+        // slices, inverting covariances and gathering IPPE seed poses.
+        let num_groups = self.flatten_batch(batch);
+        if num_groups < 4 {
+            return None;
+        }
+
+        let m = num_groups * Self::CORNERS_PER_TAG;
+        let corr = PointCorrespondences {
+            image_points: &self.scratch_img[..m],
+            object_points: &self.scratch_obj[..m],
+            information_matrices: &self.scratch_info[..m],
+            group_size: Self::CORNERS_PER_TAG,
+            seed_poses: &self.scratch_seeds[..num_groups],
+        };
+
+        // Phase 2–4: LO-RANSAC → GN verification → AW-LM refinement.
+        self.solver.estimate(&corr, intrinsics)
+    }
+
+    // ── Private helpers ──────────────────────────────────────────────────
+
+    /// Scans the batch and writes all valid, board-matched tag data into the
+    /// pre-allocated scratch buffers.
+    ///
+    /// Returns the number of tag groups written (i.e. the value of `num_groups`
+    /// for the subsequent `PointCorrespondences`).
+    fn flatten_batch(&mut self, batch: &DetectionBatch) -> usize {
+        let mut g = 0usize;
+
+        for i in 0..MAX_CANDIDATES {
+            if batch.status_mask[i] != crate::batch::CandidateState::Valid {
+                continue;
+            }
+            let id = batch.ids[i] as usize;
+            if id >= self.config.obj_points.len() {
+                continue;
+            }
+            let Some(obj) = self.config.obj_points[id] else {
+                continue;
+            };
+
+            let base = g * Self::CORNERS_PER_TAG;
+            for (j, obj_pt) in obj.iter().enumerate() {
+                self.scratch_img[base + j] = batch.corners[i][j];
+                self.scratch_obj[base + j] = *obj_pt;
+                // Invert the per-corner covariance into an information matrix.
+                // Fall back to identity if the covariance is singular.
+                self.scratch_info[base + j] = Matrix2::new(
+                    f64::from(batch.corner_covariances[i][j * 4]),
+                    f64::from(batch.corner_covariances[i][j * 4 + 1]),
+                    f64::from(batch.corner_covariances[i][j * 4 + 2]),
+                    f64::from(batch.corner_covariances[i][j * 4 + 3]),
+                )
+                .try_inverse()
+                .unwrap_or_else(Matrix2::identity);
+            }
+
+            // Compute the seed pose before writing to scratch_seeds to avoid
+            // conflicting borrows of self within the same statement.
+            let seed = self.init_pose_from_batch_tag(i, batch);
+            self.scratch_seeds[g] = seed;
+            g += 1;
+        }
+
+        g
+    }
+
+    /// Converts a single tag's stored per-tag `Pose6D` into a board-frame `Pose`.
+    ///
+    /// Returns `None` if the stored pose is degenerate (NaN or near-zero depth).
+    fn init_pose_from_batch_tag(&self, b_idx: usize, batch: &DetectionBatch) -> Option<Pose> {
+        let data = batch.poses[b_idx].data;
+        if data.iter().any(|v| v.is_nan()) || data[2].abs() < 1e-6 {
+            return None;
+        }
+
+        let det_t = Vector3::new(f64::from(data[0]), f64::from(data[1]), f64::from(data[2]));
+        // Quaternion layout in Pose6D: [qx, qy, qz, qw] at indices [3,4,5,6].
+        let det_q = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
+            f64::from(data[6]), // w
+            f64::from(data[3]), // x
+            f64::from(data[4]), // y
+            f64::from(data[5]), // z
+        ));
+
+        let tag_id = batch.ids[b_idx] as usize;
+        let tag_obj_origin = self.config.obj_points[tag_id]?[0];
+        let tag_origin = Vector3::new(tag_obj_origin[0], tag_obj_origin[1], tag_obj_origin[2]);
+
+        // Board-frame translation: t_board = t_tag - R * origin_of_tag_in_board
+        Some(Pose {
+            rotation: *det_q.to_rotation_matrix().matrix(),
+            translation: det_t - (det_q * tag_origin),
+        })
+    }
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -949,6 +1036,43 @@ mod tests {
         }
 
         (batch, n)
+    }
+
+    /// Flatten the first `num_valid` batch entries into `PointCorrespondences`
+    /// buffers using unit information matrices.
+    ///
+    /// Returns the four backing `Vec`s so the caller can keep them alive for the
+    /// lifetime of the `PointCorrespondences` view.
+    #[allow(clippy::type_complexity)]
+    fn build_correspondences_from_batch(
+        config: &BoardConfig,
+        batch: &DetectionBatch,
+        estimator: &BoardEstimator,
+        num_valid: usize,
+    ) -> (
+        Vec<Point2f>,
+        Vec<[f64; 3]>,
+        Vec<Matrix2<f64>>,
+        Vec<Option<Pose>>,
+    ) {
+        let mut img = Vec::with_capacity(num_valid * 4);
+        let mut obj = Vec::with_capacity(num_valid * 4);
+        let mut info = Vec::with_capacity(num_valid * 4);
+        let mut seeds = Vec::with_capacity(num_valid);
+
+        for b_idx in 0..num_valid {
+            let id = batch.ids[b_idx] as usize;
+            let pts = config.obj_points[id].unwrap();
+            for (j, &obj_pt) in pts.iter().enumerate() {
+                img.push(batch.corners[b_idx][j]);
+                obj.push(obj_pt);
+                // Use identity information matrices (unit covariance) for tests.
+                info.push(Matrix2::identity());
+            }
+            seeds.push(estimator.init_pose_from_batch_tag(b_idx, batch));
+        }
+
+        (img, obj, info, seeds)
     }
 
     /// Compute the per-corner mean squared reprojection error (in pixel²) for the
@@ -1052,6 +1176,30 @@ mod tests {
     }
 
     #[test]
+    fn test_charuco_board_no_marker_overlap() {
+        // No two markers may share a corner position.
+        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let mut corners: Vec<[f64; 3]> = config
+            .obj_points
+            .iter()
+            .filter_map(|o| *o)
+            .flat_map(IntoIterator::into_iter)
+            .collect();
+        corners.sort_by(|a, b| {
+            a[0].partial_cmp(&b[0])
+                .unwrap()
+                .then(a[1].partial_cmp(&b[1]).unwrap())
+        });
+        for w in corners.windows(2) {
+            assert!(
+                (w[0][0] - w[1][0]).abs() > 1e-9 || (w[0][1] - w[1][1]).abs() > 1e-9,
+                "duplicate corner: {:?}",
+                w[0]
+            );
+        }
+    }
+
+    #[test]
     fn test_aprilgrid_board_marker_count() {
         // AprilGrid: every cell has a marker.
         let config = BoardConfig::new_aprilgrid(4, 4, 0.01, 0.1);
@@ -1107,8 +1255,18 @@ mod tests {
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
         let (batch, num_valid) = build_synthetic_batch(&config, &pose, &intrinsics);
 
-        let valid: Vec<usize> = (0..num_valid).collect();
-        let (_, count) = estimator.evaluate_inliers(&pose, &batch, &intrinsics, &valid, 1.0);
+        let (img, obj, info, seeds) =
+            build_correspondences_from_batch(&config, &batch, &estimator, num_valid);
+        let corr = PointCorrespondences {
+            image_points: &img,
+            object_points: &obj,
+            information_matrices: &info,
+            group_size: 4,
+            seed_poses: &seeds,
+        };
+
+        let solver = RobustPoseSolver::new();
+        let (_, count) = solver.evaluate_inliers(&pose, &corr, &intrinsics, 1.0);
         assert_eq!(
             count, num_valid,
             "all tags must be inliers under perfect pose"
@@ -1126,8 +1284,18 @@ mod tests {
         let (batch, num_valid) = build_synthetic_batch(&config, &true_pose, &intrinsics);
 
         let bad_pose = Pose::new(Matrix3::identity(), Vector3::new(0.5, 0.0, 1.0));
-        let valid: Vec<usize> = (0..num_valid).collect();
-        let (_, count) = estimator.evaluate_inliers(&bad_pose, &batch, &intrinsics, &valid, 100.0);
+        let (img, obj, info, seeds) =
+            build_correspondences_from_batch(&config, &batch, &estimator, num_valid);
+        let corr = PointCorrespondences {
+            image_points: &img,
+            object_points: &obj,
+            information_matrices: &info,
+            group_size: 4,
+            seed_poses: &seeds,
+        };
+
+        let solver = RobustPoseSolver::new();
+        let (_, count) = solver.evaluate_inliers(&bad_pose, &corr, &intrinsics, 100.0);
         assert_eq!(
             count, 0,
             "no tags should survive under a heavily shifted pose"
@@ -1143,8 +1311,18 @@ mod tests {
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
         let (batch, num_valid) = build_synthetic_batch(&config, &pose, &intrinsics);
 
-        let valid: Vec<usize> = (0..num_valid).collect();
-        let (mask, count) = estimator.evaluate_inliers(&pose, &batch, &intrinsics, &valid, 1.0);
+        let (img, obj, info, seeds) =
+            build_correspondences_from_batch(&config, &batch, &estimator, num_valid);
+        let corr = PointCorrespondences {
+            image_points: &img,
+            object_points: &obj,
+            information_matrices: &info,
+            group_size: 4,
+            seed_poses: &seeds,
+        };
+
+        let solver = RobustPoseSolver::new();
+        let (mask, count) = solver.evaluate_inliers(&pose, &corr, &intrinsics, 1.0);
 
         let bits_set: usize = mask.iter().map(|w| w.count_ones() as usize).sum();
         assert_eq!(
@@ -1208,12 +1386,21 @@ mod tests {
         let (batch, num_valid) = build_synthetic_batch(&config, &true_pose, &intrinsics);
 
         let perturbed = Pose::new(Matrix3::identity(), Vector3::new(0.02, 0.0, 1.0));
-        let valid: Vec<usize> = (0..num_valid).collect();
-        // Mark all candidates as inliers.
+        let (img, obj, info, seeds) =
+            build_correspondences_from_batch(&config, &batch, &estimator, num_valid);
+        let corr = PointCorrespondences {
+            image_points: &img,
+            object_points: &obj,
+            information_matrices: &info,
+            group_size: 4,
+            seed_poses: &seeds,
+        };
+        // Mark all groups as inliers.
         let all_inliers = [u64::MAX; 16];
 
+        let solver = RobustPoseSolver::new();
         let before = mean_reprojection_sq(&perturbed, &batch, &intrinsics, &config, num_valid);
-        let stepped = estimator.gn_step(&perturbed, &batch, &intrinsics, &valid, &all_inliers);
+        let stepped = solver.gn_step(&perturbed, &corr, &intrinsics, &all_inliers);
         let after = mean_reprojection_sq(&stepped, &batch, &intrinsics, &config, num_valid);
 
         assert!(
@@ -1232,10 +1419,19 @@ mod tests {
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
         let (batch, num_valid) = build_synthetic_batch(&config, &pose, &intrinsics);
 
-        let valid: Vec<usize> = (0..num_valid).collect();
+        let (img, obj, info, seeds) =
+            build_correspondences_from_batch(&config, &batch, &estimator, num_valid);
+        let corr = PointCorrespondences {
+            image_points: &img,
+            object_points: &obj,
+            information_matrices: &info,
+            group_size: 4,
+            seed_poses: &seeds,
+        };
         let no_inliers = [0u64; 16];
 
-        let result = estimator.gn_step(&pose, &batch, &intrinsics, &valid, &no_inliers);
+        let solver = RobustPoseSolver::new();
+        let result = solver.gn_step(&pose, &corr, &intrinsics, &no_inliers);
         assert!(
             (result.translation - pose.translation).norm() < 1e-12,
             "pose must be unchanged when normal equations are singular"
@@ -1247,17 +1443,25 @@ mod tests {
         // AW-LM from a 2 cm / 1 cm offset must converge to within 0.1 mm of the true
         // translation, and the covariance diagonal must be non-negative.
         let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let mut estimator = BoardEstimator::new(config.clone());
+        let estimator = BoardEstimator::new(config.clone());
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
         let (batch, num_valid) = build_synthetic_batch(&config, &true_pose, &intrinsics);
 
         let perturbed = Pose::new(Matrix3::identity(), Vector3::new(0.02, -0.01, 1.0));
-        let valid: Vec<usize> = (0..num_valid).collect();
+        let (img, obj, info, seeds) =
+            build_correspondences_from_batch(&config, &batch, &estimator, num_valid);
+        let corr = PointCorrespondences {
+            image_points: &img,
+            object_points: &obj,
+            information_matrices: &info,
+            group_size: 4,
+            seed_poses: &seeds,
+        };
         let all_inliers = [u64::MAX; 16];
 
-        let (refined, cov) =
-            estimator.refine_aw_lm(&perturbed, &batch, &intrinsics, &valid, &all_inliers);
+        let solver = RobustPoseSolver::new();
+        let (refined, cov) = solver.refine_aw_lm(&perturbed, &corr, &intrinsics, &all_inliers);
 
         let t_error = (refined.translation - true_pose.translation).norm();
         assert!(
@@ -1277,14 +1481,24 @@ mod tests {
     fn test_refine_aw_lm_covariance_is_symmetric() {
         // The returned covariance (J^T J)^{-1} must be symmetric.
         let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let mut estimator = BoardEstimator::new(config.clone());
+        let estimator = BoardEstimator::new(config.clone());
         let intrinsics = test_intrinsics();
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
         let (batch, num_valid) = build_synthetic_batch(&config, &pose, &intrinsics);
 
-        let valid: Vec<usize> = (0..num_valid).collect();
+        let (img, obj, info, seeds) =
+            build_correspondences_from_batch(&config, &batch, &estimator, num_valid);
+        let corr = PointCorrespondences {
+            image_points: &img,
+            object_points: &obj,
+            information_matrices: &info,
+            group_size: 4,
+            seed_poses: &seeds,
+        };
         let all_inliers = [u64::MAX; 16];
-        let (_, cov) = estimator.refine_aw_lm(&pose, &batch, &intrinsics, &valid, &all_inliers);
+
+        let solver = RobustPoseSolver::new();
+        let (_, cov) = solver.refine_aw_lm(&pose, &corr, &intrinsics, &all_inliers);
 
         for i in 0..6 {
             for j in (i + 1)..6 {
