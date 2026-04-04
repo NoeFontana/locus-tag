@@ -10,7 +10,7 @@ use nalgebra::{Matrix2, Matrix6, Vector3, Vector6};
 /// where $\sigma_n^2$ is the pixel noise variance (assumed around 2.0 for typical webcams).
 ///
 /// The Structure Tensor is computed over a small window around the corner.
-fn compute_corner_covariance(
+pub(crate) fn compute_corner_covariance(
     img: &ImageView,
     center: [f64; 2],
     alpha_max: f64,

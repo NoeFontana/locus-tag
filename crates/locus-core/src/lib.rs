@@ -8,6 +8,8 @@
 pub mod batch;
 /// Board-level configuration and layout utilities.
 pub mod board;
+/// ChAruco board saddle-point extraction and pose estimation.
+pub mod charuco;
 /// Configuration types for the detector pipeline.
 pub mod config;
 /// Tag decoding traits and implementations.

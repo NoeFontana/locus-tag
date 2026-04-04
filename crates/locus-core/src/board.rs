@@ -81,6 +81,16 @@ pub struct BoardConfig {
     /// 3D object points for each tag ID, indexed by tag ID.
     /// Each entry contains 4 points: [TL, TR, BR, BL] in board-local coordinates.
     pub obj_points: Vec<Option<[[f64; 3]; 4]>>,
+    /// 3D coordinates of interior checkerboard corners (saddle points), indexed by saddle ID.
+    ///
+    /// Only populated for ChAruco boards; empty for AprilGrid.
+    /// Saddle at row `sr`, col `sc` (0-indexed interior grid) has ID `sr*(cols-1)+sc`.
+    pub saddle_points: Vec<[f64; 3]>,
+    /// For each marker index, the IDs of up to 4 adjacent interior corners: `[TL, TR, BR, BL]`.
+    ///
+    /// `None` means that corner of the marker's square lies on the board boundary.
+    /// Only populated for ChAruco boards; empty for AprilGrid.
+    pub marker_saddle_adjacency: Vec<[Option<usize>; 4]>,
 }
 
 impl BoardConfig {
@@ -121,11 +131,57 @@ impl BoardConfig {
             }
         }
 
+        // ── Saddle points (interior checkerboard corners) ────────────────
+        // An R×C square grid has (R-1)×(C-1) interior corners.
+        let num_saddles = rows.saturating_sub(1) * cols.saturating_sub(1);
+        let mut saddle_points = Vec::with_capacity(num_saddles);
+        let saddle_cols = cols.saturating_sub(1);
+        for sr in 0..rows.saturating_sub(1) {
+            for sc in 0..cols.saturating_sub(1) {
+                let x = offset_x + (sc + 1) as f64 * square_length;
+                let y = offset_y + (sr + 1) as f64 * square_length;
+                saddle_points.push([x, y, 0.0]);
+            }
+        }
+
+        // ── Marker→saddle adjacency ──────────────────────────────────────
+        // Marker at grid cell (r, c) occupies that square. Its four square
+        // corners map to saddles at (r-1,c-1), (r-1,c), (r,c), (r,c-1).
+        let num_markers = obj_points.len();
+        let mut marker_saddle_adjacency = vec![[None; 4]; num_markers];
+        let saddle_id = |sr: isize, sc: isize| -> Option<usize> {
+            let saddle_rows_max: isize = rows.saturating_sub(1).cast_signed();
+            let saddle_cols_max: isize = cols.saturating_sub(1).cast_signed();
+            if sr < 0 || sc < 0 || sr >= saddle_rows_max || sc >= saddle_cols_max {
+                None
+            } else {
+                Some(sr.cast_unsigned() * saddle_cols + sc.cast_unsigned())
+            }
+        };
+        let mut midx = 0usize;
+        for r in 0..rows {
+            for c in 0..cols {
+                if (r + c) % 2 == 0 {
+                    let ri = r.cast_signed();
+                    let ci = c.cast_signed();
+                    marker_saddle_adjacency[midx] = [
+                        saddle_id(ri - 1, ci - 1), // TL corner of square
+                        saddle_id(ri - 1, ci),     // TR corner of square
+                        saddle_id(ri, ci),         // BR corner of square
+                        saddle_id(ri, ci - 1),     // BL corner of square
+                    ];
+                    midx += 1;
+                }
+            }
+        }
+
         Self {
             rows,
             cols,
             marker_length,
             obj_points,
+            saddle_points,
+            marker_saddle_adjacency,
         }
     }
 
@@ -167,6 +223,8 @@ impl BoardConfig {
             cols,
             marker_length,
             obj_points,
+            saddle_points: Vec::new(),
+            marker_saddle_adjacency: Vec::new(),
         }
     }
 }
@@ -779,6 +837,41 @@ impl RobustPoseSolver {
     }
 }
 
+// ── Shared pose reconstruction helper ─────────────────────────────────────
+
+/// Reconstruct a board-frame [`Pose`] from a stored per-tag [`Pose6D`] payload.
+///
+/// The `Pose6D` encodes the camera-to-tag transform. We subtract the tag's
+/// board-frame origin to recover the camera-to-board transform.
+///
+/// Returns `None` if the stored data is degenerate (NaN or near-zero depth).
+pub(crate) fn board_seed_from_pose6d(
+    pose6d_data: &[f32; 7],
+    tag_id: usize,
+    config: &BoardConfig,
+) -> Option<Pose> {
+    if pose6d_data.iter().any(|v| v.is_nan()) || pose6d_data[2].abs() < 1e-6 {
+        return None;
+    }
+    let det_t = Vector3::new(
+        f64::from(pose6d_data[0]),
+        f64::from(pose6d_data[1]),
+        f64::from(pose6d_data[2]),
+    );
+    let det_q = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
+        f64::from(pose6d_data[6]), // w
+        f64::from(pose6d_data[3]), // x
+        f64::from(pose6d_data[4]), // y
+        f64::from(pose6d_data[5]), // z
+    ));
+    let tag_obj_origin = config.obj_points.get(tag_id)?.as_ref()?[0];
+    let tag_origin = Vector3::new(tag_obj_origin[0], tag_obj_origin[1], tag_obj_origin[2]);
+    Some(Pose {
+        rotation: *det_q.to_rotation_matrix().matrix(),
+        translation: det_t - (det_q * tag_origin),
+    })
+}
+
 // ── Board Estimator (AprilGrid adapter) ────────────────────────────────────
 
 /// Estimator for multi-tag board poses.
@@ -914,29 +1007,11 @@ impl BoardEstimator {
     ///
     /// Returns `None` if the stored pose is degenerate (NaN or near-zero depth).
     fn init_pose_from_batch_tag(&self, b_idx: usize, batch: &DetectionBatch) -> Option<Pose> {
-        let data = batch.poses[b_idx].data;
-        if data.iter().any(|v| v.is_nan()) || data[2].abs() < 1e-6 {
-            return None;
-        }
-
-        let det_t = Vector3::new(f64::from(data[0]), f64::from(data[1]), f64::from(data[2]));
-        // Quaternion layout in Pose6D: [qx, qy, qz, qw] at indices [3,4,5,6].
-        let det_q = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-            f64::from(data[6]), // w
-            f64::from(data[3]), // x
-            f64::from(data[4]), // y
-            f64::from(data[5]), // z
-        ));
-
-        let tag_id = batch.ids[b_idx] as usize;
-        let tag_obj_origin = self.config.obj_points[tag_id]?[0];
-        let tag_origin = Vector3::new(tag_obj_origin[0], tag_obj_origin[1], tag_obj_origin[2]);
-
-        // Board-frame translation: t_board = t_tag - R * origin_of_tag_in_board
-        Some(Pose {
-            rotation: *det_q.to_rotation_matrix().matrix(),
-            translation: det_t - (det_q * tag_origin),
-        })
+        board_seed_from_pose6d(
+            &batch.poses[b_idx].data,
+            batch.ids[b_idx] as usize,
+            &self.config,
+        )
     }
 }
 
@@ -1575,5 +1650,78 @@ mod tests {
                 "covariance diagonal [{i},{i}] must be positive"
             );
         }
+    }
+
+    // ── ChAruco saddle topology tests ─────────────────────────────────────────
+
+    #[test]
+    fn test_charuco_saddle_count() {
+        // A 6×6 square grid has (6-1)×(6-1) = 25 interior corners.
+        let config = BoardConfig::new_charuco(6, 6, 0.04, 0.03);
+        assert_eq!(config.saddle_points.len(), 25);
+    }
+
+    #[test]
+    fn test_charuco_saddle_coords_on_grid() {
+        // Saddle points must lie exactly on the integer-multiple square grid.
+        let sq = 0.04_f64;
+        let config = BoardConfig::new_charuco(4, 4, sq, 0.03);
+        let offset_x = -4.0 * sq / 2.0;
+        let offset_y = -4.0 * sq / 2.0;
+        // Saddle (sr=0, sc=0) is at (offset_x + 1*sq, offset_y + 1*sq).
+        let s0 = config.saddle_points[0];
+        assert!(
+            (s0[0] - (offset_x + sq)).abs() < 1e-12,
+            "saddle x: {}",
+            s0[0]
+        );
+        assert!(
+            (s0[1] - (offset_y + sq)).abs() < 1e-12,
+            "saddle y: {}",
+            s0[1]
+        );
+        assert!(s0[2].abs() < 1e-12, "saddle z must be 0");
+        // Saddle (sr=1, sc=2) is at (offset_x + 3*sq, offset_y + 2*sq).
+        let saddle_cols = 3usize;
+        let s = config.saddle_points[saddle_cols + 2];
+        assert!(
+            (s[0] - (offset_x + 3.0 * sq)).abs() < 1e-12,
+            "saddle x: {}",
+            s[0]
+        );
+        assert!(
+            (s[1] - (offset_y + 2.0 * sq)).abs() < 1e-12,
+            "saddle y: {}",
+            s[1]
+        );
+    }
+
+    #[test]
+    fn test_charuco_saddle_adjacency_interior_marker() {
+        // For a 4×4 board, marker at grid (r=2, c=2) is index 4 (markers at (0,0),(0,2),(1,1),(2,0),(2,2)).
+        // Actually let's check (r=2, c=0) — all 4 of its adjacent saddles should be non-None
+        // since row 2, col 0 means: TL=(1,-1)→ None (c-1<0), TR=(1,0)→saddle, BR=(2,0)→saddle, BL=(2,-1)→None.
+        // Use a larger board so we have an interior marker with all 4 saddles.
+        // 6×6 board, marker at (r=2, c=2) (index when counting (r+c)%2==0 cells).
+        let config = BoardConfig::new_charuco(6, 6, 0.04, 0.03);
+        // Find the marker index for (r=2, c=2) — count (r+c)%2==0 cells in row-major order:
+        // (0,0),(0,2),(0,4),(1,1),(1,3),(1,5),(2,0),(2,2)... → index 7
+        let adj = config.marker_saddle_adjacency[7];
+        assert!(adj[0].is_some(), "TL saddle of interior marker must exist");
+        assert!(adj[1].is_some(), "TR saddle of interior marker must exist");
+        assert!(adj[2].is_some(), "BR saddle of interior marker must exist");
+        assert!(adj[3].is_some(), "BL saddle of interior marker must exist");
+    }
+
+    #[test]
+    fn test_charuco_saddle_adjacency_corner_marker() {
+        // Marker at (r=0, c=0) → only the BR corner of the square is an interior saddle.
+        let config = BoardConfig::new_charuco(4, 4, 0.04, 0.03);
+        // (0,0) is the first marker (index 0).
+        let adj = config.marker_saddle_adjacency[0];
+        assert!(adj[0].is_none(), "TL: (r-1,c-1) = (-1,-1) is out of bounds");
+        assert!(adj[1].is_none(), "TR: (r-1,c) = (-1,0) is out of bounds");
+        assert!(adj[2].is_some(), "BR: (r=0,c=0) is a valid interior saddle");
+        assert!(adj[3].is_none(), "BL: (r,c-1) = (0,-1) is out of bounds");
     }
 }
