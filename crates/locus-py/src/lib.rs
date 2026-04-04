@@ -276,7 +276,9 @@ impl CharucoBoard {
     ) -> PyResult<Self> {
         let max_id = locus_core::TagFamily::from(family).max_id_count();
         locus_core::board::CharucoTopology::new(rows, cols, square_length, marker_length, max_id)
-            .map(|t| Self { inner: std::sync::Arc::new(t) })
+            .map(|t| Self {
+                inner: std::sync::Arc::new(t),
+            })
             .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
@@ -323,7 +325,9 @@ impl AprilGrid {
     ) -> PyResult<Self> {
         let max_id = locus_core::TagFamily::from(family).max_id_count();
         locus_core::board::AprilGridTopology::new(rows, cols, spacing, marker_length, max_id)
-            .map(|t| Self { inner: std::sync::Arc::new(t) })
+            .map(|t| Self {
+                inner: std::sync::Arc::new(t),
+            })
             .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
@@ -438,7 +442,9 @@ impl CharucoRefiner {
             for (dst, &src) in sid_slice.iter_mut().zip(charuco.saddle_ids.iter()) {
                 // saddle IDs are bounded by board saddle count (≤ (rows-1)*(cols-1) ≤ ~400).
                 #[allow(clippy::cast_possible_wrap)]
-                { *dst = src as i32; }
+                {
+                    *dst = src as i32;
+                }
             }
             // SAFETY: [f32; 2] / [f64; 3] are repr(C) arrays with the same element type as
             // the target NumPy slice; flat reinterpretation is sound for packed arrays.

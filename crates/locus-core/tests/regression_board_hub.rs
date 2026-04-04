@@ -12,10 +12,10 @@ use locus_core::{
     CameraIntrinsics, Detector, DetectorConfig, PoseEstimationMode, TagFamily,
     board::{AprilGridTopology, BoardEstimator, CharucoTopology},
 };
-use std::sync::Arc;
 use nalgebra::{UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 // ============================================================================
 // Data Provider

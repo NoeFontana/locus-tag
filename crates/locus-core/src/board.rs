@@ -22,7 +22,10 @@ pub enum BoardConfigError {
 impl std::fmt::Display for BoardConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::DictionaryTooSmall { required, available } => write!(
+            Self::DictionaryTooSmall {
+                required,
+                available,
+            } => write!(
                 f,
                 "board requires {required} tag IDs but the dictionary only has {available}"
             ),
@@ -130,7 +133,13 @@ impl AprilGridTopology {
         marker_length: f64,
         obj_points: Vec<Option<[[f64; 3]; 4]>>,
     ) -> Self {
-        Self { rows, cols, marker_length, spacing: 0.0, obj_points }
+        Self {
+            rows,
+            cols,
+            marker_length,
+            spacing: 0.0,
+            obj_points,
+        }
     }
 
     /// Build an AprilGrid topology, validating marker count against `max_tag_id`.
@@ -180,7 +189,13 @@ impl AprilGridTopology {
             }
         }
 
-        Ok(Self { rows, cols, marker_length, spacing, obj_points })
+        Ok(Self {
+            rows,
+            cols,
+            marker_length,
+            spacing,
+            obj_points,
+        })
     }
 }
 
@@ -1578,8 +1593,13 @@ mod tests {
         let all_inliers = [u64::MAX; 16];
 
         let solver = RobustPoseSolver::new();
-        let before =
-            mean_reprojection_sq(&perturbed, &batch, &intrinsics, &config.obj_points, num_valid);
+        let before = mean_reprojection_sq(
+            &perturbed,
+            &batch,
+            &intrinsics,
+            &config.obj_points,
+            num_valid,
+        );
         let stepped = solver.gn_step(&perturbed, &corr, &intrinsics, &all_inliers);
         let after =
             mean_reprojection_sq(&stepped, &batch, &intrinsics, &config.obj_points, num_valid);

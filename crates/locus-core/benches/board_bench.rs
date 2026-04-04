@@ -26,8 +26,8 @@ use locus_core::{
     TagFamily,
     board::{BoardEstimator, LoRansacConfig},
 };
-use std::sync::Arc;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 fn main() {
     // Single-threaded mandate: prevents Rayon / OS scheduler from thrashing L1.
@@ -88,15 +88,21 @@ fn load_board_meta(dataset: &str) -> (Arc<AprilGridTopology>, CameraIntrinsics) 
                 board_cfg = Some(Arc::new(if d.board_type.contains("charuco") {
                     // Adapt ChAruco marker table for use with BoardEstimator.
                     let topo = locus_core::board::CharucoTopology::new(
-                        d.rows, d.cols, sq_m, mk_m, usize::MAX,
+                        d.rows,
+                        d.cols,
+                        sq_m,
+                        mk_m,
+                        usize::MAX,
                     )
                     .unwrap();
                     AprilGridTopology::from_obj_points(
-                        topo.rows, topo.cols, topo.marker_length, topo.obj_points,
+                        topo.rows,
+                        topo.cols,
+                        topo.marker_length,
+                        topo.obj_points,
                     )
                 } else {
-                    AprilGridTopology::new(d.rows, d.cols, sq_m - mk_m, mk_m, usize::MAX)
-                        .unwrap()
+                    AprilGridTopology::new(d.rows, d.cols, sq_m - mk_m, mk_m, usize::MAX).unwrap()
                 }));
             }
             if intrinsics.is_none() && e.k_matrix.len() >= 2 {
