@@ -782,6 +782,15 @@ impl TagFamily {
             TagFamily::ArUco6x6_250,
         ]
     }
+
+    /// Returns the number of unique tag IDs in this family's dictionary.
+    ///
+    /// Use this to validate board configurations before use: the number of
+    /// markers on the board must not exceed this count.
+    #[must_use]
+    pub fn max_id_count(self) -> usize {
+        crate::dictionaries::get_dictionary(self).len()
+    }
 }
 
 /// Per-call detection options.

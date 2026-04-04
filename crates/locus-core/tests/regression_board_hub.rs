@@ -10,11 +10,12 @@
 
 use locus_core::{
     CameraIntrinsics, Detector, DetectorConfig, PoseEstimationMode, TagFamily,
-    board::{BoardConfig, BoardEstimator},
+    board::{AprilGridTopology, BoardEstimator, CharucoTopology},
 };
 use nalgebra::{UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 // ============================================================================
 // Data Provider
@@ -73,13 +74,18 @@ pub struct BoardConfigEntry {
 
 pub struct BoardHubProvider {
     pub base_dir: PathBuf,
-    pub board_config: BoardConfig,
+    /// Marker geometry used by [`BoardEstimator`].
+    ///
+    /// For ChAruco boards this is built from the marker table only (no saddle
+    /// refinement); for AprilGrid boards it is the full topology.
+    pub board_config: Arc<AprilGridTopology>,
     pub camera_intrinsics: CameraIntrinsics,
     pub images: Vec<BoardImageEntry>,
 }
 
 impl BoardHubProvider {
     #[must_use]
+    #[allow(clippy::missing_panics_doc)]
     pub fn new(dataset_dir: &Path) -> Option<Self> {
         let rich_truth_path = dataset_dir.join("rich_truth.json");
         if !rich_truth_path.exists() {
@@ -151,12 +157,27 @@ impl BoardHubProvider {
         }
 
         let bce = board_config_entry?;
-        let board_config = if bce.board_type.contains("charuco") {
-            BoardConfig::new_charuco(bce.rows, bce.cols, bce.square_length_m, bce.marker_length_m)
+        let board_config = Arc::new(if bce.board_type.contains("charuco") {
+            // Build ChAruco marker table, then adapt it for tag-only BoardEstimator use.
+            let topo = CharucoTopology::new(
+                bce.rows,
+                bce.cols,
+                bce.square_length_m,
+                bce.marker_length_m,
+                usize::MAX,
+            )
+            .expect("valid charuco topology from dataset");
+            AprilGridTopology::from_obj_points(
+                topo.rows,
+                topo.cols,
+                topo.marker_length,
+                topo.obj_points,
+            )
         } else {
             let spacing = bce.square_length_m - bce.marker_length_m;
-            BoardConfig::new_aprilgrid(bce.rows, bce.cols, spacing, bce.marker_length_m)
-        };
+            AprilGridTopology::new(bce.rows, bce.cols, spacing, bce.marker_length_m, usize::MAX)
+                .expect("valid aprilgrid topology from dataset")
+        });
 
         let camera_intrinsics = intrinsics?;
 
@@ -239,7 +260,7 @@ impl BoardRegressionHarness {
     }
 
     pub fn run(self, provider: &BoardHubProvider) {
-        let mut estimator = BoardEstimator::new(provider.board_config.clone());
+        let mut estimator = BoardEstimator::new(Arc::clone(&provider.board_config));
         let mut detector = Detector::with_config(self.config);
         if !self.families.is_empty() {
             detector.set_families(&self.families);

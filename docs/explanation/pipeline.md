@@ -153,6 +153,36 @@ Both solvers use Nielsen trust-region scheduling with Marquardt diagonal scaling
 
 **Module:** `pose.rs`, `pose_weighted.rs` | **Complexity:** $O(V)$ | **Typical Latency:** ~0.05-0.2 ms per tag
 
+## Stage 6: Board-Level Pose Estimation (Optional)
+
+When a board topology is provided alongside the decoded tags, a single 6-DOF board pose is estimated from the full set of visible markers. Two board types are supported, each following a distinct pipeline branch.
+
+### 6a. AprilGrid (`BoardEstimator`)
+
+Treats each visible tag's four corners as independent 3D point correspondences:
+
+1. **Correspondence assembly** — For each valid tag, look up its 3D corner coordinates in `AprilGridTopology::obj_points` and pair them with the refined image corners from the batch. Per-corner information matrices from Stage 5b are carried forward.
+2. **Seed pose selection** — Each tag's Stage-5 individual pose is converted from tag-local to board-frame as a starting hypothesis for the solver.
+3. **LO-RANSAC + AW-LM** — `RobustPoseSolver` runs LO-RANSAC over all tag-corner correspondences (grouped by tag, `group_size=4`) followed by anisotropically-weighted Levenberg-Marquardt refinement. Returns the board pose and full $6 \times 6$ covariance.
+
+**Module:** `board.rs` | **Struct:** `BoardEstimator` | **Complexity:** $O(V)$
+
+### 6b. ChAruco (`CharucoRefiner`)
+
+Uses the *interior checkerboard corners* (saddle points) rather than tag corners for higher precision — saddles are sharp image features localizable to sub-pixel accuracy:
+
+1. **Saddle prediction via homography extrapolation** — For each visible tag, look up its adjacent saddle IDs from `CharucoTopology::tag_cell_corners`. Each saddle lies at the outer corner of the tag's *enclosing square*, beyond the tag boundary by the padding margin `(square_length − marker_length) / 2`. The tag's stored homography is applied to canonical coordinates with `|u| > 1` or `|v| > 1` (intentional extrapolation) to predict the saddle's image location.
+2. **Deduplication** — Saddles shared by adjacent tags are deduplicated in O(V) using a pre-allocated boolean scratch array.
+3. **Gauss-Newton saddle refinement** — Each predicted saddle is refined with up to 5 Newton steps using the structure tensor as a surrogate Hessian:
+$$\delta\mathbf{p} = -\mathbf{S}^{-1} \nabla I(\mathbf{p}), \qquad \mathbf{S} = \sum_{\mathcal{W}} \nabla I \nabla I^T$$
+   Saddles that drift more than `max_drift_px` from the prediction, or where $\det(\mathbf{S}) < 10^{-3}$, are rejected.
+4. **LO-RANSAC + AW-LM** — `RobustPoseSolver` runs over the accepted saddles with `group_size=1` (each saddle is an independent point), yielding the board pose and covariance.
+
+**Module:** `charuco.rs` | **Struct:** `CharucoRefiner` | **Complexity:** $O(V + S_\text{accepted})$ | **Allocations:** zero inside `estimate()`
+
+!!! note "Why saddles, not tag corners?"
+    Tag corners are at the boundary of the ArUco marker (Layer A). Saddle points are at the outer corners of the *enclosing black square* (Layer B), which is a sharper, unambiguous image feature and is independent of the tag's own corner quality. The white padding margin between a tag's edge and its enclosing square is precisely `(square_length − marker_length) / 2`.
+
 ## End-to-End Sequence
 
 ```mermaid
@@ -215,5 +245,7 @@ sequenceDiagram
 | **Quad Extraction** | $O(K \cdot M)$ | ~1.5 ms | SoA extraction + sub-pixel refinement. |
 | **Decoding (Hard)** | $O(Q)$ | ~10.0 ms | SoA math pass; SIMD bilinear sampling. |
 | **Pose Refinement** | $O(V)$ | ~0.2 ms | Partitioned solver (valid tags only). |
+| **Board Pose (AprilGrid)** | $O(V)$ | ~0.5 ms | LO-RANSAC + AW-LM over tag corners. |
+| **Board Pose (ChAruco)** | $O(V + S)$ | ~0.8 ms | Saddle prediction + GN refinement + LO-RANSAC. |
 
-*Total: ~14.5 ms for 50 tags (720p) on a modern desktop CPU (e.g., Zen 4).*
+*Total (detection only): ~14.5 ms for 50 tags (720p) on a modern desktop CPU (e.g., Zen 4).*

@@ -8,6 +8,8 @@
 pub mod batch;
 /// Board-level configuration and layout utilities.
 pub mod board;
+/// ChAruco board saddle-point extraction and pose estimation.
+pub mod charuco;
 /// Configuration types for the detector pipeline.
 pub mod config;
 /// Tag decoding traits and implementations.
@@ -52,7 +54,7 @@ pub mod threshold;
 pub(crate) mod workspace;
 
 // Re-exports for the public API
-pub use crate::board::BoardConfig;
+pub use crate::board::{AprilGridTopology, BoardConfigError, CharucoTopology};
 pub use crate::config::{
     CornerRefinementMode, DecodeMode, DetectOptions, DetectorConfig, PoseEstimationMode,
     QuadExtractionMode, TagFamily,

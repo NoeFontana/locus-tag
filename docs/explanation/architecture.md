@@ -103,6 +103,7 @@ classDiagram
 10. **Fast-Math Sampling**: Rewrites homography projection and bilinear interpolation using hardware reciprocal approximation (`rcp_nr_v8`) and vectorized FMA instructions to minimize latency.
 11. **Hybrid ROI Caching**: Minimizes L1 cache misses by copying tag candidates into contiguous stack (small tags) or arena (large tags) buffers before sampling.
 12. **Hybrid Parallelism**: Scales via `rayon` for data-parallel tasks while maintaining sequential cache-coherence for state-heavy stages.
+13. **Typed Board Topology**: Board geometry is expressed as typed, immutable structs (`AprilGridTopology`, `CharucoTopology`) wrapped in `Arc` for zero-clone sharing across frames and threads. Constructor validation fails fast if the marker count exceeds the target dictionary size.
 
 ## Observability & Debugging
 
@@ -200,3 +201,5 @@ The `locus-core` crate is organized into logical modules mirroring the pipeline 
 | `filter` | Pre-processing filters (Bilateral, Sharpen). | `bilateral_filter` |
 | `edge_refinement` | Unified ERF sub-pixel refinement. | `ErfEdgeFitter` |
 | `simd::math` | Centralized math kernels (erf, rcp). | `erf_approx`, `erf_approx_v4` |
+| `board` | Board topology types and multi-tag pose estimation. | `AprilGridTopology`, `CharucoTopology`, `BoardEstimator` |
+| `charuco` | ChAruco saddle-point extraction and board pose. | `CharucoRefiner`, `CharucoResult` |

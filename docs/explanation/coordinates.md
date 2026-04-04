@@ -93,3 +93,36 @@ $$
 
 - $R$: A $3 \times 3$ rotation matrix.
 - $t$: A $3 \times 1$ translation vector (representing the tag's **top-left corner** in the camera frame).
+
+## 6. Board Coordinate Systems
+
+When using multi-tag boards, all poses are expressed in a **board-frame** coordinate system defined at the geometric centre of the board.
+
+### 6.1 Board Origin
+
+For both `AprilGridTopology` and `CharucoTopology`, the 3D origin `(0, 0, 0)` is placed at the **geometric centre** of the board. The X-axis extends to the right and the Y-axis downward, consistent with the tag-local frame (Section 2).
+
+Marker object points are expressed relative to this origin, so the top-left corner of the board is at approximately $(-W/2, -H/2, 0)$ where $W$ and $H$ are the total board width and height.
+
+### 6.2 ChAruco Two-Layer Geometry
+
+A ChAruco board has two distinct layers of geometric primitives that must not be confused:
+
+| Layer | Name | Description |
+| :--- | :--- | :--- |
+| **A** | Tags | ArUco markers in the dark squares where $(r+c)$ is even. Each tag occupies an inner `marker_length × marker_length` area within its `square_length × square_length` cell. |
+| **B** | Saddles | Interior checkerboard corners at the outer corners of every square. There are $(rows-1) \times (cols-1)$ saddle points, indexed row-major as `sr*(cols-1)+sc`. |
+
+The white padding margin between a tag's edge and the outer corner of its enclosing square is:
+
+$$\delta = \frac{\text{square\_length} - \text{marker\_length}}{2}$$
+
+Saddle points therefore lie **outside** the tag's physical boundary. The `CharucoTopology::tag_cell_corners` field maps each tag to the four saddle IDs at the corners of its enclosing square (not the tag corners themselves).
+
+### 6.3 Board Pose Convention
+
+A board pose $(R, t)$ transforms a point $P_{\text{board}}$ from board coordinates into camera coordinates:
+
+$$P_{\text{camera}} = R \cdot P_{\text{board}} + t$$
+
+This is the same convention as the single-tag pose (Section 5). The covariance matrix returned alongside the board pose is a $6 \times 6$ matrix in $\mathfrak{se}(3)$ tangent space, ordered $[\mathbf{t}, \boldsymbol{\omega}]$.

@@ -18,7 +18,7 @@ use pyo3::types::PyDict;
 // Enums
 // ============================================================================
 
-#[pyclass(eq, eq_int, hash, frozen, skip_from_py_object)]
+#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TagFamily {
     AprilTag16h5 = 0,
@@ -237,6 +237,268 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
                 locus_core::config::QuadExtractionMode::EdLines => 1,
             },
         }
+    }
+}
+
+// ============================================================================
+// Board topology types
+// ============================================================================
+
+/// Configuration for a ChAruco board.
+///
+/// Markers occupy the checkerboard squares where `(row + col)` is even.
+/// The interior checkerboard corners (saddle points) are used for sub-pixel
+/// pose estimation.
+///
+/// The `family` parameter is checked against the board marker count at
+/// construction time: if the board needs more tag IDs than the dictionary
+/// provides, a `ValueError` is raised.
+#[pyclass]
+pub struct CharucoBoard {
+    pub(crate) inner: std::sync::Arc<locus_core::board::CharucoTopology>,
+}
+
+#[pymethods]
+impl CharucoBoard {
+    /// Create a ChAruco board configuration.
+    ///
+    /// - `rows` / `cols`: number of checkerboard squares in each dimension.
+    /// - `square_length`: physical side length of one square (metres).
+    /// - `marker_length`: physical side length of one ArUco marker (metres).
+    /// - `family`: tag family used on this board (determines max valid ID).
+    #[new]
+    fn new(
+        rows: usize,
+        cols: usize,
+        square_length: f64,
+        marker_length: f64,
+        family: TagFamily,
+    ) -> PyResult<Self> {
+        let max_id = locus_core::TagFamily::from(family).max_id_count();
+        locus_core::board::CharucoTopology::new(rows, cols, square_length, marker_length, max_id)
+            .map(|t| Self {
+                inner: std::sync::Arc::new(t),
+            })
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// Number of square rows.
+    #[getter]
+    fn rows(&self) -> usize {
+        self.inner.rows
+    }
+
+    /// Number of square columns.
+    #[getter]
+    fn cols(&self) -> usize {
+        self.inner.cols
+    }
+}
+
+/// Configuration for an AprilGrid board.
+///
+/// Every grid cell contains one marker; tag IDs are assigned in row-major order.
+///
+/// The `family` parameter is checked against the board marker count at
+/// construction time: if the board needs more tag IDs than the dictionary
+/// provides, a `ValueError` is raised.
+#[pyclass]
+pub struct AprilGrid {
+    pub(crate) inner: std::sync::Arc<locus_core::board::AprilGridTopology>,
+}
+
+#[pymethods]
+impl AprilGrid {
+    /// Create an AprilGrid board configuration.
+    ///
+    /// - `rows` / `cols`: number of markers in each dimension.
+    /// - `spacing`: gap between adjacent markers (metres).
+    /// - `marker_length`: physical side length of one marker (metres).
+    /// - `family`: tag family used on this board (determines max valid ID).
+    #[new]
+    fn new(
+        rows: usize,
+        cols: usize,
+        spacing: f64,
+        marker_length: f64,
+        family: TagFamily,
+    ) -> PyResult<Self> {
+        let max_id = locus_core::TagFamily::from(family).max_id_count();
+        locus_core::board::AprilGridTopology::new(rows, cols, spacing, marker_length, max_id)
+            .map(|t| Self {
+                inner: std::sync::Arc::new(t),
+            })
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// Number of marker rows.
+    #[getter]
+    fn rows(&self) -> usize {
+        self.inner.rows
+    }
+
+    /// Number of marker columns.
+    #[getter]
+    fn cols(&self) -> usize {
+        self.inner.cols
+    }
+}
+
+// ============================================================================
+// CharucoRefiner
+// ============================================================================
+
+/// Extracts ChAruco saddle points from decoded ArUco detections and estimates
+/// the board pose via LO-RANSAC + Anisotropic Weighted Levenberg–Marquardt.
+///
+/// Reuse a single `CharucoRefiner` across frames to amortise the one-time
+/// scratch-buffer allocation.
+#[pyclass(unsendable)]
+pub struct CharucoRefiner {
+    inner: locus_core::charuco::CharucoRefiner,
+}
+
+#[pymethods]
+impl CharucoRefiner {
+    /// Create a `CharucoRefiner` for the given board.
+    ///
+    /// Reuse the same refiner across frames to avoid re-allocating scratch buffers.
+    #[new]
+    fn new(board: &CharucoBoard) -> Self {
+        Self {
+            inner: locus_core::charuco::CharucoRefiner::from_arc(
+                std::sync::Arc::clone(&board.inner),
+                locus_core::board::LoRansacConfig::default(),
+            ),
+        }
+    }
+
+    /// Run the full ChAruco pipeline on a single frame.
+    ///
+    /// Calls the standard ArUco tag detector internally, then extracts and
+    /// refines saddle points, and estimates the board pose.
+    ///
+    /// Returns a dict with keys:
+    /// - `ids`:         `(N,) int32`  — decoded ArUco IDs
+    /// - `corners`:     `(N, 4, 2) float32`  — tag corners
+    /// - `saddle_ids`:  `(S,) int32`  — accepted saddle-point indices
+    /// - `saddle_pts`:  `(S, 2) float32`  — refined image coordinates
+    /// - `saddle_obj`:  `(S, 3) float64`  — board-frame 3D coordinates
+    /// - `board_pose`:  `(7,) float64` `[tx, ty, tz, qx, qy, qz, qw]` or `None`
+    /// - `board_cov`:   `(6, 6) float64` pose covariance or `None`
+    #[pyo3(signature = (detector, img, intrinsics))]
+    #[allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
+    fn estimate<'py>(
+        &mut self,
+        py: Python<'py>,
+        detector: &mut Detector,
+        img: PyReadonlyArray2<'_, u8>,
+        intrinsics: CameraIntrinsics,
+    ) -> Result<Bound<'py, PyDict>, PyErr> {
+        let view = prepare_image_view(&img)?;
+        let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
+
+        // 1. Run ArUco detection (releases GIL; populates detector's internal batch).
+        let batch_view = py
+            .detach(|| {
+                detector.inner.detect(
+                    &view,
+                    Some(&core_intr),
+                    None,
+                    locus_core::config::PoseEstimationMode::Fast,
+                    false,
+                )
+            })
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+
+        let n = batch_view.len();
+
+        // 2. Run ChAruco saddle extraction + board pose estimation.
+        let charuco = py.detach(|| self.inner.estimate(&batch_view, &view, &core_intr));
+
+        // 3. Package ArUco detections (ids + corners).
+        let ids_arr = unsafe { PyArray1::<i32>::new(py, [n], false) };
+        let corners_arr = unsafe { PyArray3::<f32>::new(py, [n, 4, 2], false) };
+        unsafe {
+            let ids_slice = ids_arr.as_slice_mut().expect("ids slice");
+            ids_slice.copy_from_slice(std::slice::from_raw_parts(
+                batch_view.ids.as_ptr().cast::<i32>(),
+                n,
+            ));
+            let corners_slice = corners_arr.as_slice_mut().expect("corners slice");
+            corners_slice.copy_from_slice(std::slice::from_raw_parts(
+                batch_view.corners.as_ptr().cast::<f32>(),
+                n * 8,
+            ));
+        }
+
+        // 4. Package saddle-point detections.
+        let s = charuco.saddle_ids.len();
+        let saddle_ids_arr = unsafe { PyArray1::<i32>::new(py, [s], false) };
+        let saddle_pts_arr = unsafe { PyArray2::<f32>::new(py, [s, 2], false) };
+        let saddle_obj_arr = unsafe { PyArray2::<f64>::new(py, [s, 3], false) };
+        unsafe {
+            let sid_slice = saddle_ids_arr.as_slice_mut().expect("saddle_ids slice");
+            for (dst, &src) in sid_slice.iter_mut().zip(charuco.saddle_ids.iter()) {
+                // saddle IDs are bounded by board saddle count (≤ (rows-1)*(cols-1) ≤ ~400).
+                #[allow(clippy::cast_possible_wrap)]
+                {
+                    *dst = src as i32;
+                }
+            }
+            // SAFETY: [f32; 2] / [f64; 3] are repr(C) arrays with the same element type as
+            // the target NumPy slice; flat reinterpretation is sound for packed arrays.
+            let spts_slice = saddle_pts_arr.as_slice_mut().expect("saddle_pts slice");
+            spts_slice.copy_from_slice(std::slice::from_raw_parts(
+                charuco.saddle_image_pts.as_ptr().cast::<f32>(),
+                s * 2,
+            ));
+            let sobj_slice = saddle_obj_arr.as_slice_mut().expect("saddle_obj slice");
+            sobj_slice.copy_from_slice(std::slice::from_raw_parts(
+                charuco.saddle_obj_pts.as_ptr().cast::<f64>(),
+                s * 3,
+            ));
+        }
+
+        let dict = PyDict::new(py);
+        dict.set_item("ids", ids_arr)?;
+        dict.set_item("corners", corners_arr)?;
+        dict.set_item("saddle_ids", saddle_ids_arr)?;
+        dict.set_item("saddle_pts", saddle_pts_arr)?;
+        dict.set_item("saddle_obj", saddle_obj_arr)?;
+
+        // 5. Board pose and covariance (None if insufficient saddles or RANSAC failed).
+        if let Some(board_pose) = charuco.board_pose {
+            let q = nalgebra::UnitQuaternion::from_matrix(&board_pose.pose.rotation);
+            let t = board_pose.pose.translation;
+            let pose_arr = unsafe { PyArray1::<f64>::new(py, [7], false) };
+            unsafe {
+                let ps = pose_arr.as_slice_mut().expect("pose slice");
+                ps[0] = t.x;
+                ps[1] = t.y;
+                ps[2] = t.z;
+                ps[3] = q.i;
+                ps[4] = q.j;
+                ps[5] = q.k;
+                ps[6] = q.w;
+            }
+            let cov_arr = unsafe { PyArray2::<f64>::new(py, [6, 6], false) };
+            unsafe {
+                let cs = cov_arr.as_slice_mut().expect("cov slice");
+                for row in 0..6 {
+                    for col in 0..6 {
+                        cs[row * 6 + col] = board_pose.covariance[(row, col)];
+                    }
+                }
+            }
+            dict.set_item("board_pose", pose_arr)?;
+            dict.set_item("board_cov", cov_arr)?;
+        } else {
+            dict.set_item("board_pose", py.None())?;
+            dict.set_item("board_cov", py.None())?;
+        }
+
+        Ok(dict)
     }
 }
 
@@ -679,6 +941,9 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PoseEstimationMode>()?;
     m.add_class::<CameraIntrinsics>()?;
     m.add_class::<PyPose>()?;
+    m.add_class::<CharucoBoard>()?;
+    m.add_class::<AprilGrid>()?;
+    m.add_class::<CharucoRefiner>()?;
 
     m.add_function(wrap_pyfunction!(create_detector, m)?)?;
     m.add_function(wrap_pyfunction!(production_config, m)?)?;
