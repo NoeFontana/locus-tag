@@ -1,6 +1,6 @@
 //! Board-level configuration and layout utilities.
 
-use crate::batch::{DetectionBatch, Point2f, MAX_CANDIDATES};
+use crate::batch::{DetectionBatch, MAX_CANDIDATES, Point2f};
 use crate::pose::{CameraIntrinsics, Pose, projection_jacobian, symmetrize_jtj6};
 use nalgebra::{Matrix2, Matrix6, UnitQuaternion, Vector3, Vector6};
 
@@ -279,15 +279,12 @@ impl RobustPoseSolver {
         // Phase 2: re-evaluate inliers at the generous tau_aw_lm on the
         // LO-verified pose.  The wider window maximises the AW-LM observation
         // count; Huber weighting (k = 1.345) handles any residual mild outliers.
-        let (aw_lm_mask, _) = self.evaluate_inliers(
-            &best_pose,
-            corr,
-            intrinsics,
-            self.lo_ransac.tau_aw_lm_sq,
-        );
+        let (aw_lm_mask, _) =
+            self.evaluate_inliers(&best_pose, corr, intrinsics, self.lo_ransac.tau_aw_lm_sq);
 
         // Phase 3: final AW-LM over the verified, relaxed inlier set.
-        let (refined_pose, covariance) = self.refine_aw_lm(&best_pose, corr, intrinsics, &aw_lm_mask);
+        let (refined_pose, covariance) =
+            self.refine_aw_lm(&best_pose, corr, intrinsics, &aw_lm_mask);
 
         Some(BoardPose {
             pose: refined_pose,
@@ -1046,6 +1043,7 @@ mod tests {
     ///
     /// Returns the four backing `Vec`s so the caller can keep them alive for the
     /// lifetime of the `PointCorrespondences` view.
+    #[allow(clippy::type_complexity)]
     fn build_correspondences_from_batch(
         config: &BoardConfig,
         batch: &DetectionBatch,
@@ -1065,9 +1063,9 @@ mod tests {
         for b_idx in 0..num_valid {
             let id = batch.ids[b_idx] as usize;
             let pts = config.obj_points[id].unwrap();
-            for j in 0..4 {
+            for (j, &obj_pt) in pts.iter().enumerate() {
                 img.push(batch.corners[b_idx][j]);
-                obj.push(pts[j]);
+                obj.push(obj_pt);
                 // Use identity information matrices (unit covariance) for tests.
                 info.push(Matrix2::identity());
             }
@@ -1185,7 +1183,7 @@ mod tests {
             .obj_points
             .iter()
             .filter_map(|o| *o)
-            .flat_map(|pts| pts.into_iter())
+            .flat_map(IntoIterator::into_iter)
             .collect();
         corners.sort_by(|a, b| {
             a[0].partial_cmp(&b[0])
