@@ -356,8 +356,10 @@ impl AprilGrid {
 #[pyclass(unsendable)]
 pub struct CharucoRefiner {
     inner: locus_core::charuco::CharucoRefiner,
-    /// Pre-allocated output buffer reused across frames (zero per-frame alloc).
+    /// Production output buffer — no telemetry overhead.
     batch: locus_core::charuco::CharucoBatch,
+    /// Debug output buffer — telemetry pre-allocated once.
+    telem_batch: locus_core::charuco::CharucoBatch,
 }
 
 #[pymethods]
@@ -372,7 +374,12 @@ impl CharucoRefiner {
             locus_core::board::LoRansacConfig::default(),
         );
         let batch = inner.new_batch();
-        Self { inner, batch }
+        let telem_batch = inner.new_batch_with_telemetry();
+        Self {
+            inner,
+            batch,
+            telem_batch,
+        }
     }
 
     /// Run the full ChAruco pipeline on a single frame.
@@ -388,7 +395,10 @@ impl CharucoRefiner {
     /// - `saddle_obj`:  `(S, 3) float64`  — board-frame 3D coordinates
     /// - `board_pose`:  `(7,) float64` `[tx, ty, tz, qx, qy, qz, qw]` or `None`
     /// - `board_cov`:   `(6, 6) float64` pose covariance or `None`
-    #[pyo3(signature = (detector, img, intrinsics))]
+    /// - `telemetry`:   dict with `"rejected_saddles"` `(R,2) float32` and
+    ///                  `"rejected_determinants"` `(R,) float32`, or `None`
+    ///                  (only populated when `debug_telemetry=True`)
+    #[pyo3(signature = (detector, img, intrinsics, debug_telemetry = false))]
     #[allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
     fn estimate<'py>(
         &mut self,
@@ -396,6 +406,7 @@ impl CharucoRefiner {
         detector: &mut Detector,
         img: PyReadonlyArray2<'_, u8>,
         intrinsics: CameraIntrinsics,
+        debug_telemetry: bool,
     ) -> Result<Bound<'py, PyDict>, PyErr> {
         let view = prepare_image_view(&img)?;
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
@@ -416,11 +427,28 @@ impl CharucoRefiner {
         let n = batch_view.len();
 
         // 2. Run ChAruco saddle extraction + board pose estimation.
-        py.detach(|| {
-            self.inner
-                .estimate(&batch_view, &view, &core_intr, &mut self.batch);
-        });
-        let s = self.batch.count;
+        //    Dispatch to the telemetry or production monomorphisation based on the flag.
+        if debug_telemetry {
+            py.detach(|| {
+                self.inner.estimate_with_telemetry(
+                    &batch_view,
+                    &view,
+                    &core_intr,
+                    &mut self.telem_batch,
+                );
+            });
+        } else {
+            py.detach(|| {
+                self.inner
+                    .estimate(&batch_view, &view, &core_intr, &mut self.batch);
+            });
+        }
+        let active_batch = if debug_telemetry {
+            &self.telem_batch
+        } else {
+            &self.batch
+        };
+        let s = active_batch.count;
 
         // 3. Package ArUco detections (ids + corners).
         let ids_arr = unsafe { PyArray1::<i32>::new(py, [n], false) };
@@ -444,7 +472,7 @@ impl CharucoRefiner {
         let saddle_obj_arr = unsafe { PyArray2::<f64>::new(py, [s, 3], false) };
         unsafe {
             let sid_slice = saddle_ids_arr.as_slice_mut().expect("saddle_ids slice");
-            for (dst, &src) in sid_slice.iter_mut().zip(self.batch.saddle_ids()) {
+            for (dst, &src) in sid_slice.iter_mut().zip(active_batch.saddle_ids()) {
                 // saddle IDs are bounded by board saddle count (≤ (rows-1)*(cols-1) ≤ ~400).
                 #[allow(clippy::cast_possible_wrap)]
                 {
@@ -456,12 +484,12 @@ impl CharucoRefiner {
             // the target NumPy slice.
             let spts_slice = saddle_pts_arr.as_slice_mut().expect("saddle_pts slice");
             spts_slice.copy_from_slice(std::slice::from_raw_parts(
-                self.batch.saddle_image_pts().as_ptr().cast::<f32>(),
+                active_batch.saddle_image_pts().as_ptr().cast::<f32>(),
                 s * 2,
             ));
             let sobj_slice = saddle_obj_arr.as_slice_mut().expect("saddle_obj slice");
             sobj_slice.copy_from_slice(std::slice::from_raw_parts(
-                self.batch.saddle_obj_pts().as_ptr().cast::<f64>(),
+                active_batch.saddle_obj_pts().as_ptr().cast::<f64>(),
                 s * 3,
             ));
         }
@@ -474,7 +502,13 @@ impl CharucoRefiner {
         dict.set_item("saddle_obj", saddle_obj_arr)?;
 
         // 5. Board pose and covariance (None if insufficient saddles or RANSAC failed).
-        if let Some(board_pose) = self.batch.board_pose.take() {
+        // We need a mutable reference here — reborrow from the appropriate batch.
+        let board_pose = if debug_telemetry {
+            self.telem_batch.board_pose.take()
+        } else {
+            self.batch.board_pose.take()
+        };
+        if let Some(board_pose) = board_pose {
             let q = nalgebra::UnitQuaternion::from_matrix(&board_pose.pose.rotation);
             let t = board_pose.pose.translation;
             let pose_arr = unsafe { PyArray1::<f64>::new(py, [7], false) };
@@ -502,6 +536,33 @@ impl CharucoRefiner {
         } else {
             dict.set_item("board_pose", py.None())?;
             dict.set_item("board_cov", py.None())?;
+        }
+
+        // 6. Telemetry (None unless debug_telemetry=True).
+        if debug_telemetry {
+            if let Some(t) = self.telem_batch.telemetry.as_ref() {
+                let r = t.count;
+                let rej_pts_arr = unsafe { PyArray2::<f32>::new(py, [r, 2], false) };
+                let rej_det_arr = unsafe { PyArray1::<f32>::new(py, [r], false) };
+                unsafe {
+                    // SAFETY: Point2f is repr(C) [f32; 2]; flat reinterpretation is sound.
+                    let rpts = rej_pts_arr.as_slice_mut().expect("rej_pts slice");
+                    rpts.copy_from_slice(std::slice::from_raw_parts(
+                        t.rejected_predictions.as_ptr().cast::<f32>(),
+                        r * 2,
+                    ));
+                    let rdet = rej_det_arr.as_slice_mut().expect("rej_det slice");
+                    rdet.copy_from_slice(&t.rejected_determinants[..r]);
+                }
+                let telem_dict = PyDict::new(py);
+                telem_dict.set_item("rejected_saddles", rej_pts_arr)?;
+                telem_dict.set_item("rejected_determinants", rej_det_arr)?;
+                dict.set_item("telemetry", telem_dict)?;
+            } else {
+                dict.set_item("telemetry", py.None())?;
+            }
+        } else {
+            dict.set_item("telemetry", py.None())?;
         }
 
         Ok(dict)

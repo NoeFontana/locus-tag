@@ -32,6 +32,48 @@ use crate::pose_weighted::compute_corner_covariance;
 use nalgebra::Matrix2;
 use std::sync::Arc;
 
+// ── Telemetry sub-buffer ──────────────────────────────────────────────────
+
+/// Per-frame diagnostic record of rejected saddle candidates.
+///
+/// Pre-allocated once; reused across frames with zero heap allocation.
+/// Only populated when [`CharucoRefiner::estimate_with_telemetry`] is called.
+pub struct CharucoTelemetry {
+    /// Homography-predicted 2D position of each rejected saddle (before refinement).
+    pub rejected_predictions: Box<[Point2f]>,
+    /// Structure tensor determinant at rejection (lower = blurrier / flatter region).
+    pub rejected_determinants: Box<[f32]>,
+    /// Number of valid entries in `[0..count]` on the last frame.
+    pub count: usize,
+}
+
+impl CharucoTelemetry {
+    /// Create a telemetry buffer pre-sized for `max_saddles` rejection entries.
+    #[must_use]
+    pub fn new(max_saddles: usize) -> Self {
+        let n = max_saddles.max(1);
+        Self {
+            rejected_predictions: vec![Point2f { x: 0.0, y: 0.0 }; n].into_boxed_slice(),
+            rejected_determinants: vec![0.0f32; n].into_boxed_slice(),
+            count: 0,
+        }
+    }
+
+    /// Slice of rejected saddle predictions for this frame.
+    #[inline]
+    #[must_use]
+    pub fn rejected_predictions(&self) -> &[Point2f] {
+        &self.rejected_predictions[..self.count]
+    }
+
+    /// Slice of rejection determinants for this frame.
+    #[inline]
+    #[must_use]
+    pub fn rejected_determinants(&self) -> &[f32] {
+        &self.rejected_determinants[..self.count]
+    }
+}
+
 // ── Public output buffer ───────────────────────────────────────────────────
 
 /// Pre-allocated output buffer for a single [`CharucoRefiner::estimate`] call.
@@ -52,10 +94,13 @@ pub struct CharucoBatch {
     pub board_pose: Option<BoardPose>,
     /// Number of valid saddles written into `[0..count]` on the last frame.
     pub count: usize,
+    /// Diagnostic rejection data; `None` unless constructed via
+    /// [`CharucoBatch::with_telemetry`].
+    pub telemetry: Option<Box<CharucoTelemetry>>,
 }
 
 impl CharucoBatch {
-    /// Create a batch pre-sized for `max_saddles` entries.
+    /// Create a batch pre-sized for `max_saddles` entries (no telemetry).
     ///
     /// Pass `topology.saddle_points.len()` as `max_saddles`.
     #[must_use]
@@ -67,7 +112,19 @@ impl CharucoBatch {
             saddle_obj_pts: vec![[0.0f64; 3]; n].into_boxed_slice(),
             board_pose: None,
             count: 0,
+            telemetry: None,
         }
+    }
+
+    /// Create a batch with the telemetry sub-buffer pre-allocated.
+    ///
+    /// Reuse across frames — `estimate_with_telemetry()` performs zero heap
+    /// allocations and resets [`CharucoTelemetry::count`] each call.
+    #[must_use]
+    pub fn with_telemetry(max_saddles: usize) -> Self {
+        let mut b = Self::new(max_saddles);
+        b.telemetry = Some(Box::new(CharucoTelemetry::new(max_saddles)));
+        b
     }
 
     /// Slice of accepted saddle indices for this frame.
@@ -140,12 +197,20 @@ impl CharucoRefiner {
         Self::from_arc(Arc::new(config), LoRansacConfig::default())
     }
 
-    /// Allocate a [`CharucoBatch`] correctly sized for this board's saddle count.
+    /// Allocate a production [`CharucoBatch`] sized for this board (no telemetry).
     ///
     /// Call once during initialisation and reuse the batch across frames.
     #[must_use]
     pub fn new_batch(&self) -> CharucoBatch {
         CharucoBatch::new(self.config.saddle_points.len())
+    }
+
+    /// Allocate a [`CharucoBatch`] with telemetry pre-allocated for debug sessions.
+    ///
+    /// Use with [`CharucoRefiner::estimate_with_telemetry`].
+    #[must_use]
+    pub fn new_batch_with_telemetry(&self) -> CharucoBatch {
+        CharucoBatch::with_telemetry(self.config.saddle_points.len())
     }
 
     /// Creates a new `CharucoRefiner` from a shared [`Arc`] topology.
@@ -168,12 +233,10 @@ impl CharucoRefiner {
         }
     }
 
-    /// Estimates the board pose from decoded ArUco tags.
+    /// Production path — estimates board pose with zero telemetry overhead.
     ///
-    /// Runs the full ChAruco pipeline: saddle prediction, Gauss-Newton
-    /// refinement, and LO-RANSAC + AW-LM pose estimation.  Results are written
-    /// into `batch`; `batch.count` and `batch.board_pose` are updated on every
-    /// call.
+    /// Results are written into `batch`; `batch.count` and `batch.board_pose`
+    /// are updated on every call.
     ///
     /// # Parameters
     /// - `view`       — slice view of valid decoded tags (from `Detector::detect`).
@@ -187,8 +250,43 @@ impl CharucoRefiner {
         intrinsics: &CameraIntrinsics,
         batch: &mut CharucoBatch,
     ) {
+        self.estimate_impl::<false>(view, img, intrinsics, batch);
+    }
+
+    /// Debug path — same as [`estimate`](Self::estimate) but also records
+    /// rejected saddle predictions into `batch.telemetry`.
+    ///
+    /// Requires `batch` to have been constructed via
+    /// [`CharucoRefiner::new_batch_with_telemetry`].  When `batch.telemetry`
+    /// is `None` this degrades gracefully to the production path.
+    pub fn estimate_with_telemetry(
+        &mut self,
+        view: &DetectionBatchView<'_>,
+        img: &ImageView,
+        intrinsics: &CameraIntrinsics,
+        batch: &mut CharucoBatch,
+    ) {
+        self.estimate_impl::<true>(view, img, intrinsics, batch);
+    }
+
+    /// Core implementation — monomorphised at compile time via `TELEMETRY`.
+    ///
+    /// When `TELEMETRY = false` every `if TELEMETRY { }` block is statically
+    /// dead code and is fully stripped by LLVM, leaving zero overhead in the
+    /// production binary.
+    fn estimate_impl<const TELEMETRY: bool>(
+        &mut self,
+        view: &DetectionBatchView<'_>,
+        img: &ImageView,
+        intrinsics: &CameraIntrinsics,
+        batch: &mut CharucoBatch,
+    ) {
         let mut num_touched = 0usize;
         let mut num_accepted = 0usize;
+
+        if TELEMETRY && let Some(t) = batch.telemetry.as_mut() {
+            t.count = 0;
+        }
 
         for tag_i in 0..view.len() {
             let tag_id = view.ids[tag_i] as usize;
@@ -233,14 +331,20 @@ impl CharucoRefiner {
                 }
 
                 // ── Step C: Gauss-Newton refinement ───────────────────────
-                let Some((refined_px, refined_py, final_s)) =
-                    refine_saddle(img, px, py, Self::MAX_ITERS, Self::ST_RADIUS)
-                else {
+                let (maybe_refined, last_det) =
+                    refine_saddle(img, px, py, Self::MAX_ITERS, Self::ST_RADIUS);
+                let Some((refined_px, refined_py, final_s)) = maybe_refined else {
+                    if TELEMETRY {
+                        record_rejection(&mut batch.telemetry, px, py, last_det);
+                    }
                     continue;
                 };
 
                 let drift = ((refined_px - px).powi(2) + (refined_py - py).powi(2)).sqrt();
                 if drift > Self::MAX_DRIFT_PX || final_s < Self::MIN_DET {
+                    if TELEMETRY {
+                        record_rejection(&mut batch.telemetry, px, py, final_s);
+                    }
                     continue;
                 }
 
@@ -412,18 +516,40 @@ fn compute_structure_tensor_and_gradient(
     (s, [centre_gx, centre_gy])
 }
 
+/// Record a rejected saddle prediction into the telemetry buffer (no-op when
+/// `telemetry` is `None`).  Inlined so the call site is zero-cost for
+/// `TELEMETRY = false` (dead-code eliminated by LLVM).
+#[inline]
+fn record_rejection(telemetry: &mut Option<Box<CharucoTelemetry>>, px: f64, py: f64, det: f64) {
+    if let Some(t) = telemetry.as_mut() {
+        let idx = t.count;
+        if idx < t.rejected_predictions.len() {
+            t.rejected_predictions[idx] = Point2f {
+                x: px as f32,
+                y: py as f32,
+            };
+            #[allow(clippy::cast_possible_truncation)]
+            {
+                t.rejected_determinants[idx] = det as f32;
+            }
+            t.count += 1;
+        }
+    }
+}
+
 /// Iteratively refine a saddle-point estimate using Newton's method with the
 /// structure tensor as the surrogate Hessian.
 ///
-/// Returns `Some((refined_x, refined_y, det_S))` on convergence, or `None`
-/// if the window is flat or the refined position drifts out of bounds.
+/// Returns `(Some((refined_x, refined_y, det_S)), det_S)` on convergence.
+/// On failure returns `(None, last_det)` where `last_det` is the structure
+/// tensor determinant at the rejection point (0.0 if iteration never started).
 fn refine_saddle(
     img: &ImageView,
     mut px: f64,
     mut py: f64,
     max_iters: u32,
     radius: isize,
-) -> Option<(f64, f64, f64)> {
+) -> (Option<(f64, f64, f64)>, f64) {
     let w = img.width as f64;
     let h = img.height as f64;
 
@@ -439,7 +565,8 @@ fn refine_saddle(
 
         let det = s00 * s11 - s01 * s01;
         if det < 1e-6 {
-            return None;
+            // Flat window — return the failing determinant for diagnostics.
+            return (None, det);
         }
         final_det = det;
 
@@ -452,7 +579,8 @@ fn refine_saddle(
         py += dy;
 
         if px < 1.0 || py < 1.0 || px > w - 2.0 || py > h - 2.0 {
-            return None;
+            // Drifted out of bounds — return last good determinant.
+            return (None, final_det);
         }
 
         if dx * dx + dy * dy < 1e-10 {
@@ -460,7 +588,7 @@ fn refine_saddle(
         }
     }
 
-    Some((px, py, final_det))
+    (Some((px, py, final_det)), final_det)
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -510,7 +638,7 @@ mod tests {
         let init_x = true_x + 0.5;
         let init_y = true_y + 0.5;
 
-        let result = refine_saddle(&img, init_x, init_y, 10, 3);
+        let (result, _last_det) = refine_saddle(&img, init_x, init_y, 10, 3);
         assert!(result.is_some(), "refinement must return Some");
         let (_rx, _ry, det) = result.unwrap();
         assert!(
