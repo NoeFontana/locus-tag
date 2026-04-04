@@ -24,12 +24,13 @@
 
 use crate::batch::{DetectionBatchView, Point2f};
 use crate::board::{
-    BoardConfig, BoardPose, LoRansacConfig, PointCorrespondences, RobustPoseSolver,
+    BoardPose, CharucoTopology, LoRansacConfig, PointCorrespondences, RobustPoseSolver,
 };
 use crate::image::ImageView;
 use crate::pose::{CameraIntrinsics, Pose};
 use crate::pose_weighted::compute_corner_covariance;
 use nalgebra::Matrix2;
+use std::sync::Arc;
 
 // ── Public result type ─────────────────────────────────────────────────────
 
@@ -39,7 +40,7 @@ pub struct CharucoResult {
     /// Estimated board pose, or `None` if fewer than 4 saddle points were
     /// accepted or LO-RANSAC could not find a consensus.
     pub board_pose: Option<BoardPose>,
-    /// Indices into [`BoardConfig::saddle_points`] for each accepted saddle.
+    /// Indices into [`CharucoTopology::saddle_points`] for each accepted saddle.
     pub saddle_ids: Vec<usize>,
     /// Refined image-space coordinates for each accepted saddle.
     pub saddle_image_pts: Vec<[f32; 2]>,
@@ -56,7 +57,10 @@ pub struct CharucoResult {
 /// [`CharucoRefiner::estimate`] performs **zero heap allocations**.
 pub struct CharucoRefiner {
     /// Board layout with saddle topology.
-    pub config: BoardConfig,
+    ///
+    /// Stored in an [`Arc`] so the same topology can be shared across frames or
+    /// threads without cloning the marker/saddle tables.
+    pub config: Arc<CharucoTopology>,
     /// Underlying robust pose solver (LO-RANSAC + AW-LM).
     pub solver: RobustPoseSolver,
     // Pre-allocated scratch (one-time Box allocations in new()):
@@ -83,18 +87,21 @@ impl CharucoRefiner {
     /// Structure tensor window radius (pixels).
     const ST_RADIUS: isize = 3;
 
-    /// Creates a new `CharucoRefiner`.
+    /// Creates a new `CharucoRefiner`, taking ownership of `config`.
     ///
-    /// Performs a single one-time heap allocation proportional to the number of
-    /// saddle points in `config`.  Reuse the same `CharucoRefiner` across frames.
+    /// Wraps `config` in an [`Arc`] internally.  Reuse the same `CharucoRefiner`
+    /// across frames to amortise the one-time scratch-buffer allocation.
     #[must_use]
-    pub fn new(config: BoardConfig) -> Self {
-        Self::with_lo_ransac_config(config, LoRansacConfig::default())
+    pub fn new(config: CharucoTopology) -> Self {
+        Self::from_arc(Arc::new(config), LoRansacConfig::default())
     }
 
-    /// Creates a new `CharucoRefiner` with a custom LO-RANSAC configuration.
+    /// Creates a new `CharucoRefiner` from a shared [`Arc`] topology.
+    ///
+    /// Use this when the same [`CharucoTopology`] is shared across multiple
+    /// refiners or threads.
     #[must_use]
-    pub fn with_lo_ransac_config(config: BoardConfig, ransac_cfg: LoRansacConfig) -> Self {
+    pub fn from_arc(config: Arc<CharucoTopology>, ransac_cfg: LoRansacConfig) -> Self {
         let n = config.saddle_points.len().max(1);
         Self {
             solver: RobustPoseSolver::new().with_lo_ransac_config(ransac_cfg),
@@ -104,7 +111,7 @@ impl CharucoRefiner {
             scratch_seeds: vec![None; n].into_boxed_slice(),
             scratch_seen: vec![false; n].into_boxed_slice(),
             scratch_saddle_ids: vec![0usize; n].into_boxed_slice(),
-            scratch_touched: vec![0usize; n * 4].into_boxed_slice(),
+            scratch_touched: vec![0usize; n].into_boxed_slice(),
             config,
         }
     }
@@ -130,11 +137,11 @@ impl CharucoRefiner {
 
         for tag_i in 0..view.len() {
             let tag_id = view.ids[tag_i] as usize;
-            if tag_id >= self.config.marker_saddle_adjacency.len() {
+            if tag_id >= self.config.tag_cell_corners.len() {
                 continue;
             }
 
-            let adj = self.config.marker_saddle_adjacency[tag_id];
+            let adj = self.config.tag_cell_corners[tag_id];
 
             // Get the tag's TL board coordinate and the stored homography.
             let Some(obj_pts) = self.config.obj_points.get(tag_id).and_then(|o| *o) else {
@@ -202,7 +209,7 @@ impl CharucoRefiner {
                 self.scratch_seeds[num_accepted] = crate::board::board_seed_from_pose6d(
                     &view.poses[tag_i].data,
                     tag_id,
-                    &self.config,
+                    &self.config.obj_points,
                 );
                 num_accepted += 1;
             }
@@ -252,9 +259,13 @@ impl CharucoRefiner {
 /// Convert a board-frame 2D point `(sx, sy)` to the canonical `[-1, 1]²`
 /// coordinate system of the tag's stored homography.
 ///
-/// The canonical square maps `(-1,-1)` → TL and `(1,1)` → BR of the **marker**
-/// (not the square).  Points outside `[-1,1]` are valid — they project to
-/// positions beyond the marker boundary in the image.
+/// The homography maps canonical `(-1,-1)` → TL image corner and `(1,1)` → BR
+/// image corner of the **marker** (Layer A).  Because saddle points (Layer B)
+/// lie at the outer corners of the *enclosing square*, which is larger than the
+/// marker by the padding margin `(square_length - marker_length) / 2`, the
+/// resulting canonical values satisfy `|u| > 1` or `|v| > 1`.
+/// This is **intentional extrapolation** — the homography is linear and correctly
+/// maps out-of-range canonical coordinates to the saddle's image position.
 #[inline]
 fn board_to_canonical(sx: f64, sy: f64, tag_tl: [f64; 3], marker_length: f64) -> [f64; 2] {
     [
@@ -467,7 +478,7 @@ mod tests {
     #[test]
     fn test_deduplication_no_double_count() {
         // Feed a trivial empty batch — verify that scratch_seen is fully reset.
-        let config = BoardConfig::new_charuco(4, 4, 0.04, 0.03);
+        let config = CharucoTopology::new(4, 4, 0.04, 0.03, usize::MAX).unwrap();
         let mut refiner = CharucoRefiner::new(config);
 
         let batch = DetectionBatch::new();
@@ -487,7 +498,7 @@ mod tests {
     #[test]
     fn test_estimate_returns_none_with_few_saddles() {
         // With an empty batch, board_pose must be None.
-        let config = BoardConfig::new_charuco(4, 4, 0.04, 0.03);
+        let config = CharucoTopology::new(4, 4, 0.04, 0.03, usize::MAX).unwrap();
         let mut refiner = CharucoRefiner::new(config);
 
         let batch = DetectionBatch::new();

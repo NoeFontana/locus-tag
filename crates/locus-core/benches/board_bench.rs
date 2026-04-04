@@ -22,9 +22,11 @@
 
 use divan::Bencher;
 use locus_core::{
-    CameraIntrinsics, Detector, DetectorConfig, ImageView, PoseEstimationMode, TagFamily,
-    board::{BoardConfig, BoardEstimator, LoRansacConfig},
+    AprilGridTopology, CameraIntrinsics, Detector, DetectorConfig, ImageView, PoseEstimationMode,
+    TagFamily,
+    board::{BoardEstimator, LoRansacConfig},
 };
+use std::sync::Arc;
 use std::path::PathBuf;
 
 fn main() {
@@ -50,7 +52,7 @@ fn hub_dir() -> PathBuf {
 }
 
 /// Parses the board config and camera intrinsics from `rich_truth.json`.
-fn load_board_meta(dataset: &str) -> (BoardConfig, CameraIntrinsics) {
+fn load_board_meta(dataset: &str) -> (Arc<AprilGridTopology>, CameraIntrinsics) {
     use serde::Deserialize;
     #[derive(Deserialize)]
     struct Entry {
@@ -73,7 +75,7 @@ fn load_board_meta(dataset: &str) -> (BoardConfig, CameraIntrinsics) {
     let path = hub_dir().join(dataset).join("rich_truth.json");
     let raw: Vec<Entry> = serde_json::from_reader(std::fs::File::open(&path).unwrap()).unwrap();
 
-    let mut board_cfg = None;
+    let mut board_cfg: Option<Arc<AprilGridTopology>> = None;
     let mut intrinsics = None;
 
     for e in &raw {
@@ -83,11 +85,19 @@ fn load_board_meta(dataset: &str) -> (BoardConfig, CameraIntrinsics) {
             {
                 let sq_m = d.square_size_mm / 1000.0;
                 let mk_m = d.marker_size_mm / 1000.0;
-                board_cfg = Some(if d.board_type.contains("charuco") {
-                    BoardConfig::new_charuco(d.rows, d.cols, sq_m, mk_m)
+                board_cfg = Some(Arc::new(if d.board_type.contains("charuco") {
+                    // Adapt ChAruco marker table for use with BoardEstimator.
+                    let topo = locus_core::board::CharucoTopology::new(
+                        d.rows, d.cols, sq_m, mk_m, usize::MAX,
+                    )
+                    .unwrap();
+                    AprilGridTopology::from_obj_points(
+                        topo.rows, topo.cols, topo.marker_length, topo.obj_points,
+                    )
                 } else {
-                    BoardConfig::new_aprilgrid(d.rows, d.cols, sq_m - mk_m, mk_m)
-                });
+                    AprilGridTopology::new(d.rows, d.cols, sq_m - mk_m, mk_m, usize::MAX)
+                        .unwrap()
+                }));
             }
             if intrinsics.is_none() && e.k_matrix.len() >= 2 {
                 intrinsics = Some(CameraIntrinsics::new(
@@ -119,7 +129,7 @@ fn bench_board_estimate_aprilgrid(bencher: Bencher) {
     const IMAGE: &str = "scene_0010_cam_0000.png";
 
     let (board_config, intrinsics) = load_board_meta(DATASET);
-    let mut estimator = BoardEstimator::new(board_config.clone());
+    let mut estimator = BoardEstimator::new(Arc::clone(&board_config));
 
     // Run detector once to get a realistic batch — NOT timed.
     let img_path = hub_dir().join(DATASET).join("images").join(IMAGE);
@@ -170,7 +180,7 @@ fn bench_board_estimate_aprilgrid_fast(bencher: Bencher) {
         ..LoRansacConfig::default()
     };
     let mut estimator =
-        BoardEstimator::new(board_config.clone()).with_lo_ransac_config(fast_ransac);
+        BoardEstimator::new(Arc::clone(&board_config)).with_lo_ransac_config(fast_ransac);
 
     let img_path = hub_dir().join(DATASET).join("images").join(IMAGE);
     let luma = image::open(img_path).unwrap().to_luma8();
@@ -208,7 +218,7 @@ fn bench_board_full_pipeline_aprilgrid(bencher: Bencher) {
     const IMAGE: &str = "scene_0010_cam_0000.png";
 
     let (board_config, intrinsics) = load_board_meta(DATASET);
-    let mut estimator = BoardEstimator::new(board_config.clone());
+    let mut estimator = BoardEstimator::new(Arc::clone(&board_config));
 
     let img_path = hub_dir().join(DATASET).join("images").join(IMAGE);
     let luma = image::open(img_path).unwrap().to_luma8();

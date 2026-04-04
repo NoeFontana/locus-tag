@@ -18,7 +18,7 @@ use pyo3::types::PyDict;
 // Enums
 // ============================================================================
 
-#[pyclass(eq, eq_int, hash, frozen, skip_from_py_object)]
+#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TagFamily {
     AprilTag16h5 = 0,
@@ -241,49 +241,102 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
 }
 
 // ============================================================================
-// BoardConfig
+// Board topology types
 // ============================================================================
 
-/// Configuration for a fiducial marker board layout (ChAruco or AprilGrid).
+/// Configuration for a ChAruco board.
+///
+/// Markers occupy the checkerboard squares where `(row + col)` is even.
+/// The interior checkerboard corners (saddle points) are used for sub-pixel
+/// pose estimation.
+///
+/// The `family` parameter is checked against the board marker count at
+/// construction time: if the board needs more tag IDs than the dictionary
+/// provides, a `ValueError` is raised.
 #[pyclass]
-pub struct BoardConfig {
-    pub(crate) inner: locus_core::board::BoardConfig,
+pub struct CharucoBoard {
+    pub(crate) inner: std::sync::Arc<locus_core::board::CharucoTopology>,
 }
 
 #[pymethods]
-impl BoardConfig {
+impl CharucoBoard {
     /// Create a ChAruco board configuration.
     ///
-    /// - `rows` / `cols`: number of squares in each dimension.
-    /// - `square_length`: physical side length of each checkerboard square (metres).
-    /// - `marker_length`: physical side length of each ArUco marker (metres).
-    #[staticmethod]
-    fn new_charuco(rows: usize, cols: usize, square_length: f64, marker_length: f64) -> Self {
-        Self {
-            inner: locus_core::board::BoardConfig::new_charuco(
-                rows,
-                cols,
-                square_length,
-                marker_length,
-            ),
-        }
+    /// - `rows` / `cols`: number of checkerboard squares in each dimension.
+    /// - `square_length`: physical side length of one square (metres).
+    /// - `marker_length`: physical side length of one ArUco marker (metres).
+    /// - `family`: tag family used on this board (determines max valid ID).
+    #[new]
+    fn new(
+        rows: usize,
+        cols: usize,
+        square_length: f64,
+        marker_length: f64,
+        family: TagFamily,
+    ) -> PyResult<Self> {
+        let max_id = locus_core::TagFamily::from(family).max_id_count();
+        locus_core::board::CharucoTopology::new(rows, cols, square_length, marker_length, max_id)
+            .map(|t| Self { inner: std::sync::Arc::new(t) })
+            .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
+    /// Number of square rows.
+    #[getter]
+    fn rows(&self) -> usize {
+        self.inner.rows
+    }
+
+    /// Number of square columns.
+    #[getter]
+    fn cols(&self) -> usize {
+        self.inner.cols
+    }
+}
+
+/// Configuration for an AprilGrid board.
+///
+/// Every grid cell contains one marker; tag IDs are assigned in row-major order.
+///
+/// The `family` parameter is checked against the board marker count at
+/// construction time: if the board needs more tag IDs than the dictionary
+/// provides, a `ValueError` is raised.
+#[pyclass]
+pub struct AprilGrid {
+    pub(crate) inner: std::sync::Arc<locus_core::board::AprilGridTopology>,
+}
+
+#[pymethods]
+impl AprilGrid {
     /// Create an AprilGrid board configuration.
     ///
     /// - `rows` / `cols`: number of markers in each dimension.
     /// - `spacing`: gap between adjacent markers (metres).
-    /// - `marker_length`: physical side length of each marker (metres).
-    #[staticmethod]
-    fn new_aprilgrid(rows: usize, cols: usize, spacing: f64, marker_length: f64) -> Self {
-        Self {
-            inner: locus_core::board::BoardConfig::new_aprilgrid(
-                rows,
-                cols,
-                spacing,
-                marker_length,
-            ),
-        }
+    /// - `marker_length`: physical side length of one marker (metres).
+    /// - `family`: tag family used on this board (determines max valid ID).
+    #[new]
+    fn new(
+        rows: usize,
+        cols: usize,
+        spacing: f64,
+        marker_length: f64,
+        family: TagFamily,
+    ) -> PyResult<Self> {
+        let max_id = locus_core::TagFamily::from(family).max_id_count();
+        locus_core::board::AprilGridTopology::new(rows, cols, spacing, marker_length, max_id)
+            .map(|t| Self { inner: std::sync::Arc::new(t) })
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// Number of marker rows.
+    #[getter]
+    fn rows(&self) -> usize {
+        self.inner.rows
+    }
+
+    /// Number of marker columns.
+    #[getter]
+    fn cols(&self) -> usize {
+        self.inner.cols
     }
 }
 
@@ -303,10 +356,16 @@ pub struct CharucoRefiner {
 
 #[pymethods]
 impl CharucoRefiner {
+    /// Create a `CharucoRefiner` for the given board.
+    ///
+    /// Reuse the same refiner across frames to avoid re-allocating scratch buffers.
     #[new]
-    fn new(board: &BoardConfig) -> Self {
+    fn new(board: &CharucoBoard) -> Self {
         Self {
-            inner: locus_core::charuco::CharucoRefiner::new(board.inner.clone()),
+            inner: locus_core::charuco::CharucoRefiner::from_arc(
+                std::sync::Arc::clone(&board.inner),
+                locus_core::board::LoRansacConfig::default(),
+            ),
         }
     }
 
@@ -376,24 +435,23 @@ impl CharucoRefiner {
         let saddle_obj_arr = unsafe { PyArray2::<f64>::new(py, [s, 3], false) };
         unsafe {
             let sid_slice = saddle_ids_arr.as_slice_mut().expect("saddle_ids slice");
-            for (i, &sid) in charuco.saddle_ids.iter().enumerate() {
+            for (dst, &src) in sid_slice.iter_mut().zip(charuco.saddle_ids.iter()) {
                 // saddle IDs are bounded by board saddle count (≤ (rows-1)*(cols-1) ≤ ~400).
                 #[allow(clippy::cast_possible_wrap)]
-                {
-                    sid_slice[i] = sid as i32;
-                }
+                { *dst = src as i32; }
             }
+            // SAFETY: [f32; 2] / [f64; 3] are repr(C) arrays with the same element type as
+            // the target NumPy slice; flat reinterpretation is sound for packed arrays.
             let spts_slice = saddle_pts_arr.as_slice_mut().expect("saddle_pts slice");
-            for (i, &[x, y]) in charuco.saddle_image_pts.iter().enumerate() {
-                spts_slice[i * 2] = x;
-                spts_slice[i * 2 + 1] = y;
-            }
+            spts_slice.copy_from_slice(std::slice::from_raw_parts(
+                charuco.saddle_image_pts.as_ptr().cast::<f32>(),
+                s * 2,
+            ));
             let sobj_slice = saddle_obj_arr.as_slice_mut().expect("saddle_obj slice");
-            for (i, &[x, y, z]) in charuco.saddle_obj_pts.iter().enumerate() {
-                sobj_slice[i * 3] = x;
-                sobj_slice[i * 3 + 1] = y;
-                sobj_slice[i * 3 + 2] = z;
-            }
+            sobj_slice.copy_from_slice(std::slice::from_raw_parts(
+                charuco.saddle_obj_pts.as_ptr().cast::<f64>(),
+                s * 3,
+            ));
         }
 
         let dict = PyDict::new(py);
@@ -877,7 +935,8 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PoseEstimationMode>()?;
     m.add_class::<CameraIntrinsics>()?;
     m.add_class::<PyPose>()?;
-    m.add_class::<BoardConfig>()?;
+    m.add_class::<CharucoBoard>()?;
+    m.add_class::<AprilGrid>()?;
     m.add_class::<CharucoRefiner>()?;
 
     m.add_function(wrap_pyfunction!(create_detector, m)?)?;

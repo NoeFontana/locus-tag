@@ -3,6 +3,34 @@
 use crate::batch::{DetectionBatch, MAX_CANDIDATES, Point2f};
 use crate::pose::{CameraIntrinsics, Pose, projection_jacobian, symmetrize_jtj6};
 use nalgebra::{Matrix2, Matrix6, UnitQuaternion, Vector3, Vector6};
+use std::sync::Arc;
+
+// ── Board configuration error ──────────────────────────────────────────────
+
+/// Errors that can occur when constructing a board topology.
+#[derive(Debug, Clone)]
+pub enum BoardConfigError {
+    /// The requested board requires more tag IDs than the chosen dictionary provides.
+    DictionaryTooSmall {
+        /// Number of markers the board needs.
+        required: usize,
+        /// Number of unique IDs the dictionary offers.
+        available: usize,
+    },
+}
+
+impl std::fmt::Display for BoardConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DictionaryTooSmall { required, available } => write!(
+                f,
+                "board requires {required} tag IDs but the dictionary only has {available}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for BoardConfigError {}
 
 // ── LO-RANSAC Configuration ────────────────────────────────────────────────
 
@@ -67,64 +95,183 @@ impl Default for LoRansacConfig {
     }
 }
 
-// ── Board layout ───────────────────────────────────────────────────────────
+// ── Board topologies ───────────────────────────────────────────────────────
 
-/// Configuration for a fiducial marker board (ChAruco or AprilGrid).
+/// Typed topology for an AprilGrid board.
+///
+/// Every grid cell contains one marker; tag IDs are assigned in row-major order.
+/// Use [`AprilGridTopology::new`] to construct with dictionary-bounds validation.
 #[derive(Clone, Debug)]
-pub struct BoardConfig {
-    /// Number of rows in the grid.
+pub struct AprilGridTopology {
+    /// Number of rows in the marker grid.
     pub rows: usize,
-    /// Number of columns in the grid.
+    /// Number of columns in the marker grid.
     pub cols: usize,
-    /// Physical length of one side of a marker (meters).
+    /// Physical side length of one marker (metres).
     pub marker_length: f64,
-    /// 3D object points for each tag ID, indexed by tag ID.
-    /// Each entry contains 4 points: [TL, TR, BR, BL] in board-local coordinates.
+    /// Physical gap between adjacent markers (metres).
+    pub spacing: f64,
+    /// 3D object points for each tag ID (row-major, [TL, TR, BR, BL]).
     pub obj_points: Vec<Option<[[f64; 3]; 4]>>,
-    /// 3D coordinates of interior checkerboard corners (saddle points), indexed by saddle ID.
-    ///
-    /// Only populated for ChAruco boards; empty for AprilGrid.
-    /// Saddle at row `sr`, col `sc` (0-indexed interior grid) has ID `sr*(cols-1)+sc`.
-    pub saddle_points: Vec<[f64; 3]>,
-    /// For each marker index, the IDs of up to 4 adjacent interior corners: `[TL, TR, BR, BL]`.
-    ///
-    /// `None` means that corner of the marker's square lies on the board boundary.
-    /// Only populated for ChAruco boards; empty for AprilGrid.
-    pub marker_saddle_adjacency: Vec<[Option<usize>; 4]>,
 }
 
-impl BoardConfig {
-    /// Creates a new ChAruco board configuration.
+impl AprilGridTopology {
+    /// Construct from pre-computed `obj_points` for adapters and tests.
     ///
-    /// ChAruco boards have markers in squares where (row + col) is even.
-    /// The origin (0,0,0) is at the geometric center of the board.
+    /// Bypasses the standard AprilGrid geometry calculation.  Callers are
+    /// responsible for ensuring `obj_points` are consistent with `rows × cols`.
+    /// This is primarily useful when adapting a [`CharucoTopology`]'s marker
+    /// table for use with [`BoardEstimator`] (tag-only pose estimation without
+    /// saddle refinement).
     #[must_use]
-    pub fn new_charuco(rows: usize, cols: usize, square_length: f64, marker_length: f64) -> Self {
-        let mut obj_points = vec![None; (rows * cols).div_ceil(2)];
+    pub fn from_obj_points(
+        rows: usize,
+        cols: usize,
+        marker_length: f64,
+        obj_points: Vec<Option<[[f64; 3]; 4]>>,
+    ) -> Self {
+        Self { rows, cols, marker_length, spacing: 0.0, obj_points }
+    }
+
+    /// Build an AprilGrid topology, validating marker count against `max_tag_id`.
+    ///
+    /// `max_tag_id` is the number of unique IDs the target dictionary provides
+    /// (obtain via [`TagFamily::max_id_count`]).  Pass `usize::MAX` to skip the
+    /// check (e.g. in tests).
+    ///
+    /// The origin `(0,0,0)` is at the geometric centre of the board.
+    ///
+    /// # Errors
+    /// Returns [`BoardConfigError::DictionaryTooSmall`] when `rows × cols >
+    /// max_tag_id`.
+    pub fn new(
+        rows: usize,
+        cols: usize,
+        spacing: f64,
+        marker_length: f64,
+        max_tag_id: usize,
+    ) -> Result<Self, BoardConfigError> {
+        let num_markers = rows * cols;
+        if num_markers > max_tag_id {
+            return Err(BoardConfigError::DictionaryTooSmall {
+                required: num_markers,
+                available: max_tag_id,
+            });
+        }
+
+        let mut obj_points = vec![None; num_markers];
+        let step = marker_length + spacing;
+        let board_width = cols as f64 * marker_length + (cols - 1) as f64 * spacing;
+        let board_height = rows as f64 * marker_length + (rows - 1) as f64 * spacing;
+        let offset_x = -board_width / 2.0;
+        let offset_y = -board_height / 2.0;
+
+        for r in 0..rows {
+            for c in 0..cols {
+                let x = offset_x + c as f64 * step;
+                let y = offset_y + r as f64 * step;
+                let idx = r * cols + c;
+                obj_points[idx] = Some([
+                    [x, y, 0.0],
+                    [x + marker_length, y, 0.0],
+                    [x + marker_length, y + marker_length, 0.0],
+                    [x, y + marker_length, 0.0],
+                ]);
+            }
+        }
+
+        Ok(Self { rows, cols, marker_length, spacing, obj_points })
+    }
+}
+
+/// Typed topology for a ChAruco board.
+///
+/// The board has two distinct layers of geometric primitives:
+///
+/// **Layer A — Tags**: ArUco markers that occupy the dark squares where `(row + col)` is even.
+/// Each tag fills only the inner `marker_length × marker_length` area of its
+/// `square_length × square_length` cell, leaving a white padding margin of
+/// `(square_length - marker_length) / 2` on every side.
+///
+/// **Layer B — Saddles**: The `(rows-1) × (cols-1)` interior checkerboard corners.
+/// These are the intersection points of the black squares' outer edges.
+/// Crucially, saddle points lie *outside* the tag's physical boundary — they are at the
+/// corners of the *enclosing square*, not the tag itself.
+///
+/// Use [`CharucoTopology::new`] to construct with dictionary-bounds validation.
+#[derive(Clone, Debug)]
+pub struct CharucoTopology {
+    /// Number of square rows on the board.
+    pub rows: usize,
+    /// Number of square columns on the board.
+    pub cols: usize,
+    /// Physical side length of one ArUco marker (metres).
+    pub marker_length: f64,
+    /// Physical side length of one checkerboard square (metres).
+    pub square_length: f64,
+    /// 3D object points for each marker ID (indexed by detection ID, [TL, TR, BR, BL]).
+    pub obj_points: Vec<Option<[[f64; 3]; 4]>>,
+    /// 3D coordinates of interior checkerboard corners (saddle points).
+    ///
+    /// Saddle at interior-grid position `(sr, sc)` has ID `sr*(cols-1)+sc`.
+    pub saddle_points: Vec<[f64; 3]>,
+    /// For each marker index, the IDs of the 4 corners of its enclosing black square: `[TL, TR, BR, BL]`.
+    ///
+    /// These are **saddle-point IDs** (Layer B), not tag corner IDs (Layer A).
+    /// Because markers occupy only the inner `marker_length × marker_length` area of their
+    /// `square_length × square_length` cell, each saddle lies *outside* the physical tag
+    /// boundary by a padding margin of `(square_length - marker_length) / 2`.
+    /// `None` indicates the corner is on the board perimeter (no interior saddle there).
+    pub tag_cell_corners: Vec<[Option<usize>; 4]>,
+}
+
+impl CharucoTopology {
+    /// Build a ChAruco topology, validating marker count against `max_tag_id`.
+    ///
+    /// `max_tag_id` is the number of unique IDs the target dictionary provides
+    /// (obtain via [`TagFamily::max_id_count`]).  Pass `usize::MAX` to skip the
+    /// check (e.g. in tests).
+    ///
+    /// The origin `(0,0,0)` is at the geometric centre of the board.
+    ///
+    /// # Errors
+    /// Returns [`BoardConfigError::DictionaryTooSmall`] when the number of
+    /// markers on the board exceeds `max_tag_id`.
+    pub fn new(
+        rows: usize,
+        cols: usize,
+        square_length: f64,
+        marker_length: f64,
+        max_tag_id: usize,
+    ) -> Result<Self, BoardConfigError> {
+        let num_markers = (rows * cols).div_ceil(2);
+        if num_markers > max_tag_id {
+            return Err(BoardConfigError::DictionaryTooSmall {
+                required: num_markers,
+                available: max_tag_id,
+            });
+        }
 
         let total_width = cols as f64 * square_length;
         let total_height = rows as f64 * square_length;
         let offset_x = -total_width / 2.0;
         let offset_y = -total_height / 2.0;
-
         let marker_padding = (square_length - marker_length) / 2.0;
 
+        let mut obj_points = vec![None; num_markers];
         let mut marker_idx = 0;
         for r in 0..rows {
             for c in 0..cols {
                 if (r + c) % 2 == 0 {
                     let x = offset_x + c as f64 * square_length + marker_padding;
                     let y = offset_y + r as f64 * square_length + marker_padding;
-
-                    let pts = [
-                        [x, y, 0.0],
-                        [x + marker_length, y, 0.0],
-                        [x + marker_length, y + marker_length, 0.0],
-                        [x, y + marker_length, 0.0],
-                    ];
-
                     if marker_idx < obj_points.len() {
-                        obj_points[marker_idx] = Some(pts);
+                        obj_points[marker_idx] = Some([
+                            [x, y, 0.0],
+                            [x + marker_length, y, 0.0],
+                            [x + marker_length, y + marker_length, 0.0],
+                            [x, y + marker_length, 0.0],
+                        ]);
                         marker_idx += 1;
                     }
                 }
@@ -132,23 +279,21 @@ impl BoardConfig {
         }
 
         // ── Saddle points (interior checkerboard corners) ────────────────
-        // An R×C square grid has (R-1)×(C-1) interior corners.
-        let num_saddles = rows.saturating_sub(1) * cols.saturating_sub(1);
-        let mut saddle_points = Vec::with_capacity(num_saddles);
         let saddle_cols = cols.saturating_sub(1);
+        let num_saddles = rows.saturating_sub(1) * saddle_cols;
+        let mut saddle_points = Vec::with_capacity(num_saddles);
         for sr in 0..rows.saturating_sub(1) {
-            for sc in 0..cols.saturating_sub(1) {
+            for sc in 0..saddle_cols {
                 let x = offset_x + (sc + 1) as f64 * square_length;
                 let y = offset_y + (sr + 1) as f64 * square_length;
                 saddle_points.push([x, y, 0.0]);
             }
         }
 
-        // ── Marker→saddle adjacency ──────────────────────────────────────
-        // Marker at grid cell (r, c) occupies that square. Its four square
-        // corners map to saddles at (r-1,c-1), (r-1,c), (r,c), (r,c-1).
-        let num_markers = obj_points.len();
-        let mut marker_saddle_adjacency = vec![[None; 4]; num_markers];
+        // ── Tag→square-corner adjacency (tag_cell_corners) ──────────────
+        // Maps each marker to the 4 saddle IDs at the corners of its enclosing square.
+        // The saddles lie outside the tag's physical boundary; see field-level docs.
+        let mut tag_cell_corners = vec![[None; 4]; num_markers];
         let saddle_id = |sr: isize, sc: isize| -> Option<usize> {
             let saddle_rows_max: isize = rows.saturating_sub(1).cast_signed();
             let saddle_cols_max: isize = cols.saturating_sub(1).cast_signed();
@@ -164,68 +309,26 @@ impl BoardConfig {
                 if (r + c) % 2 == 0 {
                     let ri = r.cast_signed();
                     let ci = c.cast_signed();
-                    marker_saddle_adjacency[midx] = [
-                        saddle_id(ri - 1, ci - 1), // TL corner of square
-                        saddle_id(ri - 1, ci),     // TR corner of square
-                        saddle_id(ri, ci),         // BR corner of square
-                        saddle_id(ri, ci - 1),     // BL corner of square
+                    tag_cell_corners[midx] = [
+                        saddle_id(ri - 1, ci - 1), // TL corner of enclosing square
+                        saddle_id(ri - 1, ci),     // TR corner of enclosing square
+                        saddle_id(ri, ci),         // BR corner of enclosing square
+                        saddle_id(ri, ci - 1),     // BL corner of enclosing square
                     ];
                     midx += 1;
                 }
             }
         }
 
-        Self {
+        Ok(Self {
             rows,
             cols,
             marker_length,
+            square_length,
             obj_points,
             saddle_points,
-            marker_saddle_adjacency,
-        }
-    }
-
-    /// Creates a new AprilGrid board configuration.
-    ///
-    /// AprilGrids have markers in every cell, separated by spacing.
-    /// The origin (0,0,0) is at the geometric center of the board.
-    #[must_use]
-    pub fn new_aprilgrid(rows: usize, cols: usize, spacing: f64, marker_length: f64) -> Self {
-        let mut obj_points = vec![None; rows * cols];
-        let step = marker_length + spacing;
-        let board_width = cols as f64 * marker_length + (cols - 1) as f64 * spacing;
-        let board_height = rows as f64 * marker_length + (rows - 1) as f64 * spacing;
-
-        let offset_x = -board_width / 2.0;
-        let offset_y = -board_height / 2.0;
-
-        for r in 0..rows {
-            for c in 0..cols {
-                let x = offset_x + c as f64 * step;
-                let y = offset_y + r as f64 * step;
-
-                let pts = [
-                    [x, y, 0.0],
-                    [x + marker_length, y, 0.0],
-                    [x + marker_length, y + marker_length, 0.0],
-                    [x, y + marker_length, 0.0],
-                ];
-
-                let idx = r * cols + c;
-                if idx < obj_points.len() {
-                    obj_points[idx] = Some(pts);
-                }
-            }
-        }
-
-        Self {
-            rows,
-            cols,
-            marker_length,
-            obj_points,
-            saddle_points: Vec::new(),
-            marker_saddle_adjacency: Vec::new(),
-        }
+            tag_cell_corners,
+        })
     }
 }
 
@@ -848,7 +951,7 @@ impl RobustPoseSolver {
 pub(crate) fn board_seed_from_pose6d(
     pose6d_data: &[f32; 7],
     tag_id: usize,
-    config: &BoardConfig,
+    obj_points: &[Option<[[f64; 3]; 4]>],
 ) -> Option<Pose> {
     if pose6d_data.iter().any(|v| v.is_nan()) || pose6d_data[2].abs() < 1e-6 {
         return None;
@@ -864,7 +967,7 @@ pub(crate) fn board_seed_from_pose6d(
         f64::from(pose6d_data[4]), // y
         f64::from(pose6d_data[5]), // z
     ));
-    let tag_obj_origin = config.obj_points.get(tag_id)?.as_ref()?[0];
+    let tag_obj_origin = obj_points.get(tag_id)?.as_ref()?[0];
     let tag_origin = Vector3::new(tag_obj_origin[0], tag_obj_origin[1], tag_obj_origin[2]);
     Some(Pose {
         rotation: *det_q.to_rotation_matrix().matrix(),
@@ -874,16 +977,16 @@ pub(crate) fn board_seed_from_pose6d(
 
 // ── Board Estimator (AprilGrid adapter) ────────────────────────────────────
 
-/// Estimator for multi-tag board poses.
+/// Estimator for multi-tag AprilGrid board poses.
 ///
-/// Bridges the [`DetectionBatch`] SoA layout and [`BoardConfig`] tag geometry
-/// with the tag-layout-agnostic [`RobustPoseSolver`].  All heavy pose
+/// Bridges the [`DetectionBatch`] SoA layout and [`AprilGridTopology`] marker
+/// geometry with the tag-layout-agnostic [`RobustPoseSolver`].  All heavy pose
 /// mathematics lives in the solver; this struct is responsible only for
 /// constructing the flat [`PointCorrespondences`] view and retaining the
 /// pre-allocated scratch buffers needed to do so without heap allocation.
 pub struct BoardEstimator {
     /// Configuration of the board layout.
-    pub config: BoardConfig,
+    pub config: Arc<AprilGridTopology>,
     /// The underlying robust pose solver (contains LO-RANSAC config).
     pub solver: RobustPoseSolver,
     // ── Pre-allocated scratch buffers (single heap allocation in new()) ──────
@@ -899,13 +1002,16 @@ impl BoardEstimator {
     const CORNERS_PER_TAG: usize = 4;
     const MAX_CORR: usize = MAX_CANDIDATES * Self::CORNERS_PER_TAG;
 
-    /// Creates a new `BoardEstimator` with default LO-RANSAC parameters.
+    /// Creates a new `BoardEstimator`.
     ///
     /// Performs a single one-time heap allocation to back the scratch buffers.
     /// Reuse the same `BoardEstimator` across frames to amortise this cost and
     /// guarantee zero per-`estimate()` allocations.
+    ///
+    /// `config` is wrapped in [`Arc`] so multiple estimators or frames can share
+    /// the same board geometry without cloning the marker table.
     #[must_use]
-    pub fn new(config: BoardConfig) -> Self {
+    pub fn new(config: Arc<AprilGridTopology>) -> Self {
         Self {
             config,
             solver: RobustPoseSolver::new(),
@@ -1010,7 +1116,7 @@ impl BoardEstimator {
         board_seed_from_pose6d(
             &batch.poses[b_idx].data,
             batch.ids[b_idx] as usize,
-            &self.config,
+            &self.config.obj_points,
         )
     }
 }
@@ -1038,10 +1144,9 @@ mod tests {
         CameraIntrinsics::new(500.0, 500.0, 320.0, 240.0)
     }
 
-    /// Collect all corner points from a `BoardConfig` into a flat `Vec`.
-    fn all_corners(config: &BoardConfig) -> Vec<[f64; 3]> {
-        config
-            .obj_points
+    /// Collect all corner points from an obj_points slice into a flat `Vec`.
+    fn all_corners(obj_points: &[Option<[[f64; 3]; 4]>]) -> Vec<[f64; 3]> {
+        obj_points
             .iter()
             .filter_map(|opt| *opt)
             .flat_map(std::iter::IntoIterator::into_iter)
@@ -1057,13 +1162,13 @@ mod tests {
         [sx / n, sy / n, sz / n]
     }
 
-    /// Build a `DetectionBatch` by projecting every board marker through `pose` and
-    /// `intrinsics`.  Corners are stored as f32 (matching `Point2f`); per-tag pose
-    /// data encodes the camera-space position of each tag's TL corner and the board
-    /// rotation quaternion so that `init_pose_from_batch_tag` recovers `pose` exactly.
-    /// Identity corner covariances are set so AW-LM applies isotropic weighting.
+    /// Build a `DetectionBatch` by projecting every marker in `obj_points` through
+    /// `pose` and `intrinsics`.  Corners are stored as f32 (matching `Point2f`);
+    /// per-tag pose data encodes the camera-space position of each tag's TL corner
+    /// and the board rotation quaternion so that `init_pose_from_batch_tag` recovers
+    /// `pose` exactly.  Identity corner covariances → isotropic AW-LM weighting.
     fn build_synthetic_batch(
-        config: &BoardConfig,
+        obj_points: &[Option<[[f64; 3]; 4]>],
         pose: &Pose,
         intrinsics: &CameraIntrinsics,
     ) -> (DetectionBatch, usize) {
@@ -1072,10 +1177,9 @@ mod tests {
 
         let q = UnitQuaternion::from_matrix(&pose.rotation);
 
-        for (tag_id, opt_pts) in config.obj_points.iter().enumerate() {
+        for (tag_id, opt_pts) in obj_points.iter().enumerate() {
             let Some(obj) = opt_pts else { continue };
 
-            // Project all 4 corners into the image.
             for (j, pt) in obj.iter().enumerate() {
                 let p_world = Vector3::new(pt[0], pt[1], pt[2]);
                 let proj = pose.project(&p_world, intrinsics);
@@ -1085,10 +1189,8 @@ mod tests {
                 };
             }
 
-            // Per-tag pose: det_t = R * tl_board + t_board (camera-space TL corner).
             let tl = Vector3::new(obj[0][0], obj[0][1], obj[0][2]);
             let det_t = pose.rotation * tl + pose.translation;
-            // Layout: [tx, ty, tz, qx, qy, qz, qw]
             batch.poses[n].data = [
                 det_t.x as f32,
                 det_t.y as f32,
@@ -1099,10 +1201,11 @@ mod tests {
                 q.w as f32,
             ];
 
-            // Identity 2×2 corner covariances → isotropic unit weighting for AW-LM.
             for j in 0..4 {
-                batch.corner_covariances[n][j * 4] = 1.0; // (0,0)
-                batch.corner_covariances[n][j * 4 + 3] = 1.0; // (1,1)
+                // corner_covariances[n] is 4 × 2×2 matrices packed row-major (16 f32).
+                // j*4 = (0,0), j*4+3 = (1,1) — set identity for each corner.
+                batch.corner_covariances[n][j * 4] = 1.0;
+                batch.corner_covariances[n][j * 4 + 3] = 1.0;
             }
 
             batch.ids[n] = tag_id as u32;
@@ -1120,7 +1223,7 @@ mod tests {
     /// lifetime of the `PointCorrespondences` view.
     #[allow(clippy::type_complexity)]
     fn build_correspondences_from_batch(
-        config: &BoardConfig,
+        obj_points: &[Option<[[f64; 3]; 4]>],
         batch: &DetectionBatch,
         estimator: &BoardEstimator,
         num_valid: usize,
@@ -1137,11 +1240,10 @@ mod tests {
 
         for b_idx in 0..num_valid {
             let id = batch.ids[b_idx] as usize;
-            let pts = config.obj_points[id].unwrap();
+            let pts = obj_points[id].unwrap();
             for (j, &obj_pt) in pts.iter().enumerate() {
                 img.push(batch.corners[b_idx][j]);
                 obj.push(obj_pt);
-                // Use identity information matrices (unit covariance) for tests.
                 info.push(Matrix2::identity());
             }
             seeds.push(estimator.init_pose_from_batch_tag(b_idx, batch));
@@ -1150,20 +1252,20 @@ mod tests {
         (img, obj, info, seeds)
     }
 
-    /// Compute the per-corner mean squared reprojection error (in pixel²) for the
-    /// first `num_valid` candidates in the batch.
+    /// Per-corner mean squared reprojection error (in pixel²) for the first
+    /// `num_valid` candidates in the batch.
     fn mean_reprojection_sq(
         pose: &Pose,
         batch: &DetectionBatch,
         intrinsics: &CameraIntrinsics,
-        config: &BoardConfig,
+        obj_points: &[Option<[[f64; 3]; 4]>],
         num_valid: usize,
     ) -> f64 {
         let mut sum_sq = 0.0f64;
         let mut count = 0usize;
         for i in 0..num_valid {
             let id = batch.ids[i] as usize;
-            let obj = config.obj_points[id].unwrap();
+            let obj = obj_points[id].unwrap();
             for (j, pt) in obj.iter().enumerate() {
                 let p_world = Vector3::new(pt[0], pt[1], pt[2]);
                 let proj = pose.project(&p_world, intrinsics);
@@ -1181,7 +1283,7 @@ mod tests {
     #[test]
     fn test_charuco_board_marker_count() {
         // 6×6 grid: markers appear in cells where (r+c) is even → exactly 18 markers.
-        let config = BoardConfig::new_charuco(6, 6, 0.1, 0.08);
+        let config = CharucoTopology::new(6, 6, 0.1, 0.08, usize::MAX).unwrap();
         let count = config.obj_points.iter().filter(|o| o.is_some()).count();
         assert_eq!(count, 18);
     }
@@ -1190,8 +1292,8 @@ mod tests {
     fn test_charuco_board_centroid_is_origin() {
         // For a symmetric ChAruco board the geometric centroid of all marker corners
         // must coincide with the board coordinate origin.
-        let config = BoardConfig::new_charuco(6, 6, 0.1, 0.08);
-        let pts = all_corners(&config);
+        let config = CharucoTopology::new(6, 6, 0.1, 0.08, usize::MAX).unwrap();
+        let pts = all_corners(&config.obj_points);
         assert!(!pts.is_empty());
         let c = centroid(&pts);
         assert!(c[0].abs() < 1e-9, "centroid x = {}", c[0]);
@@ -1203,7 +1305,7 @@ mod tests {
     fn test_charuco_corner_order_tl_tr_br_bl() {
         // For every marker the corners must follow the [TL, TR, BR, BL] order:
         //   TL.x < TR.x, TR.x == BR.x, BL.x == TL.x, BL.y > TL.y
-        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let config = CharucoTopology::new(4, 4, 0.1, 0.08, usize::MAX).unwrap();
         for opt in &config.obj_points {
             let [tl, tr, br, bl] = opt.unwrap();
             assert!(tl[0] < tr[0], "TL.x must be left of TR.x");
@@ -1237,7 +1339,7 @@ mod tests {
     fn test_charuco_marker_size_matches_config() {
         // Each marker's width and height must equal `marker_length`.
         let marker_length = 0.08;
-        let config = BoardConfig::new_charuco(4, 4, 0.1, marker_length);
+        let config = CharucoTopology::new(4, 4, 0.1, marker_length, usize::MAX).unwrap();
         for opt in &config.obj_points {
             let [tl, tr, _br, bl] = opt.unwrap();
             let width = tr[0] - tl[0];
@@ -1253,7 +1355,7 @@ mod tests {
     #[test]
     fn test_charuco_board_no_marker_overlap() {
         // No two markers may share a corner position.
-        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let config = CharucoTopology::new(4, 4, 0.1, 0.08, usize::MAX).unwrap();
         let mut corners: Vec<[f64; 3]> = config
             .obj_points
             .iter()
@@ -1277,15 +1379,15 @@ mod tests {
     #[test]
     fn test_aprilgrid_board_marker_count() {
         // AprilGrid: every cell has a marker.
-        let config = BoardConfig::new_aprilgrid(4, 4, 0.01, 0.1);
+        let config = AprilGridTopology::new(4, 4, 0.01, 0.1, usize::MAX).unwrap();
         let count = config.obj_points.iter().filter(|o| o.is_some()).count();
         assert_eq!(count, 16);
     }
 
     #[test]
     fn test_aprilgrid_board_centroid_is_origin() {
-        let config = BoardConfig::new_aprilgrid(6, 6, 0.01, 0.1);
-        let pts = all_corners(&config);
+        let config = AprilGridTopology::new(6, 6, 0.01, 0.1, usize::MAX).unwrap();
+        let pts = all_corners(&config.obj_points);
         let c = centroid(&pts);
         assert!(c[0].abs() < 1e-9, "centroid x = {}", c[0]);
         assert!(c[1].abs() < 1e-9, "centroid y = {}", c[1]);
@@ -1296,10 +1398,9 @@ mod tests {
         // Adjacent markers in the same row must be separated by marker_length + spacing.
         let marker_length = 0.1;
         let spacing = 0.02;
-        let config = BoardConfig::new_aprilgrid(2, 3, spacing, marker_length);
+        let config = AprilGridTopology::new(2, 3, spacing, marker_length, usize::MAX).unwrap();
         let step = marker_length + spacing;
 
-        // Col 0 → col 1 within row 0.
         let tl0 = config.obj_points[0].unwrap()[0];
         let tl1 = config.obj_points[1].unwrap()[0];
         assert!(
@@ -1308,7 +1409,6 @@ mod tests {
             tl1[0] - tl0[0]
         );
 
-        // Row 0 → row 1 within col 0.
         let tl_r0 = config.obj_points[0].unwrap()[0];
         let tl_r1 = config.obj_points[3].unwrap()[0]; // row 1, col 0 → index = 1*3+0 = 3
         assert!(
@@ -1320,18 +1420,23 @@ mod tests {
 
     // ── Mathematical correctness tests ────────────────────────────────────────
 
+    // AprilGrid config shared across the solver/estimator math tests.
+    fn math_test_config() -> Arc<AprilGridTopology> {
+        Arc::new(AprilGridTopology::new(4, 4, 0.02, 0.08, usize::MAX).unwrap())
+    }
+
     #[test]
     fn test_evaluate_inliers_perfect_pose_all_inliers() {
         // Under the exact ground-truth pose the reprojection error is sub-pixel
         // (limited only by f32 quantisation ≈ 1e-5 px); tau_sq = 1.0 must admit all tags.
-        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let estimator = BoardEstimator::new(config.clone());
+        let config = math_test_config();
+        let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config, &pose, &intrinsics);
+        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
 
         let (img, obj, info, seeds) =
-            build_correspondences_from_batch(&config, &batch, &estimator, num_valid);
+            build_correspondences_from_batch(&config.obj_points, &batch, &estimator, num_valid);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
@@ -1350,17 +1455,17 @@ mod tests {
 
     #[test]
     fn test_evaluate_inliers_bad_pose_no_inliers() {
-        // A pose shifted 0.5 m in X produces ~250 px reprojection error;
-        // even the generous tau_sq = 100 (10 px²) must reject all tags.
-        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let estimator = BoardEstimator::new(config.clone());
+        // A pose shifted 0.5 m in X produces large reprojection error;
+        // even the generous tau_sq = 100 must reject all tags.
+        let config = math_test_config();
+        let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config, &true_pose, &intrinsics);
+        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
 
         let bad_pose = Pose::new(Matrix3::identity(), Vector3::new(0.5, 0.0, 1.0));
         let (img, obj, info, seeds) =
-            build_correspondences_from_batch(&config, &batch, &estimator, num_valid);
+            build_correspondences_from_batch(&config.obj_points, &batch, &estimator, num_valid);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
@@ -1380,14 +1485,14 @@ mod tests {
     #[test]
     fn test_evaluate_inliers_inlier_mask_consistency() {
         // The bitmask returned by evaluate_inliers must have exactly `count` bits set.
-        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let estimator = BoardEstimator::new(config.clone());
+        let config = math_test_config();
+        let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config, &pose, &intrinsics);
+        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
 
         let (img, obj, info, seeds) =
-            build_correspondences_from_batch(&config, &batch, &estimator, num_valid);
+            build_correspondences_from_batch(&config.obj_points, &batch, &estimator, num_valid);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
@@ -1410,11 +1515,11 @@ mod tests {
     fn test_init_pose_from_batch_tag_recovers_board_pose() {
         // init_pose_from_batch_tag must reconstruct the board pose from any single
         // tag's stored per-tag pose data.
-        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let estimator = BoardEstimator::new(config.clone());
+        let config = math_test_config();
+        let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config, &true_pose, &intrinsics);
+        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
 
         for b_idx in 0..num_valid {
             let pose = estimator
@@ -1431,8 +1536,8 @@ mod tests {
     #[test]
     fn test_init_pose_from_batch_tag_nan_returns_none() {
         // A tag whose stored pose contains NaN must yield None.
-        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let estimator = BoardEstimator::new(config.clone());
+        let config = math_test_config();
+        let estimator = BoardEstimator::new(Arc::clone(&config));
         let mut batch = DetectionBatch::new();
         batch.ids[0] = 0;
         batch.poses[0].data = [f32::NAN; 7];
@@ -1442,8 +1547,8 @@ mod tests {
     #[test]
     fn test_init_pose_from_batch_tag_near_zero_depth_returns_none() {
         // A tag at near-zero depth (Z ≈ 0) is degenerate and must yield None.
-        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let estimator = BoardEstimator::new(config.clone());
+        let config = math_test_config();
+        let estimator = BoardEstimator::new(Arc::clone(&config));
         let mut batch = DetectionBatch::new();
         batch.ids[0] = 0;
         batch.poses[0].data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]; // z = 0
@@ -1454,15 +1559,15 @@ mod tests {
     fn test_gn_step_reduces_reprojection_error() {
         // A single unweighted Gauss-Newton step from a 2 cm offset must strictly
         // reduce the mean squared reprojection error.
-        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let estimator = BoardEstimator::new(config.clone());
+        let config = math_test_config();
+        let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config, &true_pose, &intrinsics);
+        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
 
         let perturbed = Pose::new(Matrix3::identity(), Vector3::new(0.02, 0.0, 1.0));
         let (img, obj, info, seeds) =
-            build_correspondences_from_batch(&config, &batch, &estimator, num_valid);
+            build_correspondences_from_batch(&config.obj_points, &batch, &estimator, num_valid);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
@@ -1470,13 +1575,14 @@ mod tests {
             group_size: 4,
             seed_poses: &seeds,
         };
-        // Mark all groups as inliers.
         let all_inliers = [u64::MAX; 16];
 
         let solver = RobustPoseSolver::new();
-        let before = mean_reprojection_sq(&perturbed, &batch, &intrinsics, &config, num_valid);
+        let before =
+            mean_reprojection_sq(&perturbed, &batch, &intrinsics, &config.obj_points, num_valid);
         let stepped = solver.gn_step(&perturbed, &corr, &intrinsics, &all_inliers);
-        let after = mean_reprojection_sq(&stepped, &batch, &intrinsics, &config, num_valid);
+        let after =
+            mean_reprojection_sq(&stepped, &batch, &intrinsics, &config.obj_points, num_valid);
 
         assert!(
             after < before,
@@ -1488,14 +1594,14 @@ mod tests {
     fn test_gn_step_singular_returns_original() {
         // With no inliers the normal equations are all-zero (singular);
         // gn_step must return the input pose unchanged.
-        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let estimator = BoardEstimator::new(config.clone());
+        let config = math_test_config();
+        let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config, &pose, &intrinsics);
+        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
 
         let (img, obj, info, seeds) =
-            build_correspondences_from_batch(&config, &batch, &estimator, num_valid);
+            build_correspondences_from_batch(&config.obj_points, &batch, &estimator, num_valid);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
@@ -1515,17 +1621,16 @@ mod tests {
 
     #[test]
     fn test_refine_aw_lm_converges_from_small_offset() {
-        // AW-LM from a 2 cm / 1 cm offset must converge to within 0.1 mm of the true
-        // translation, and the covariance diagonal must be non-negative.
-        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let estimator = BoardEstimator::new(config.clone());
+        // AW-LM from a 2 cm / 1 cm offset must converge to within 0.1 mm.
+        let config = math_test_config();
+        let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config, &true_pose, &intrinsics);
+        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
 
         let perturbed = Pose::new(Matrix3::identity(), Vector3::new(0.02, -0.01, 1.0));
         let (img, obj, info, seeds) =
-            build_correspondences_from_batch(&config, &batch, &estimator, num_valid);
+            build_correspondences_from_batch(&config.obj_points, &batch, &estimator, num_valid);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
@@ -1555,14 +1660,14 @@ mod tests {
     #[test]
     fn test_refine_aw_lm_covariance_is_symmetric() {
         // The returned covariance (J^T J)^{-1} must be symmetric.
-        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let estimator = BoardEstimator::new(config.clone());
+        let config = math_test_config();
+        let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config, &pose, &intrinsics);
+        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
 
         let (img, obj, info, seeds) =
-            build_correspondences_from_batch(&config, &batch, &estimator, num_valid);
+            build_correspondences_from_batch(&config.obj_points, &batch, &estimator, num_valid);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
@@ -1590,7 +1695,7 @@ mod tests {
     #[test]
     fn test_estimate_none_with_fewer_than_four_valid_tags() {
         // estimate() must return None when fewer than 4 board-matched tags are present.
-        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
+        let config = math_test_config();
         let mut estimator = BoardEstimator::new(config);
         let intrinsics = test_intrinsics();
 
@@ -1609,13 +1714,13 @@ mod tests {
 
     #[test]
     fn test_estimate_end_to_end_recovers_translation() {
-        // End-to-end: synthesise all markers of a 4×4 ChAruco board from a known pose
+        // End-to-end: synthesise all markers of a 4×4 AprilGrid from a known pose
         // and verify that estimate() recovers the pose to within 1 mm / 0.1°.
-        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let mut estimator = BoardEstimator::new(config.clone());
+        let config = math_test_config();
+        let mut estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.05, -0.03, 1.5));
-        let (batch, _) = build_synthetic_batch(&config, &true_pose, &intrinsics);
+        let (batch, _) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
 
         let result = estimator.estimate(&batch, &intrinsics);
         assert!(
@@ -1635,13 +1740,12 @@ mod tests {
 
     #[test]
     fn test_estimate_covariance_is_positive_definite() {
-        // The covariance returned alongside a valid estimate must have a positive
-        // diagonal (positive semi-definite is sufficient for a well-conditioned scene).
-        let config = BoardConfig::new_charuco(4, 4, 0.1, 0.08);
-        let mut estimator = BoardEstimator::new(config.clone());
+        // The covariance returned alongside a valid estimate must have a positive diagonal.
+        let config = math_test_config();
+        let mut estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, _) = build_synthetic_batch(&config, &pose, &intrinsics);
+        let (batch, _) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
 
         let result = estimator.estimate(&batch, &intrinsics).unwrap();
         for i in 0..6 {
@@ -1657,7 +1761,7 @@ mod tests {
     #[test]
     fn test_charuco_saddle_count() {
         // A 6×6 square grid has (6-1)×(6-1) = 25 interior corners.
-        let config = BoardConfig::new_charuco(6, 6, 0.04, 0.03);
+        let config = CharucoTopology::new(6, 6, 0.04, 0.03, usize::MAX).unwrap();
         assert_eq!(config.saddle_points.len(), 25);
     }
 
@@ -1665,10 +1769,9 @@ mod tests {
     fn test_charuco_saddle_coords_on_grid() {
         // Saddle points must lie exactly on the integer-multiple square grid.
         let sq = 0.04_f64;
-        let config = BoardConfig::new_charuco(4, 4, sq, 0.03);
+        let config = CharucoTopology::new(4, 4, sq, 0.03, usize::MAX).unwrap();
         let offset_x = -4.0 * sq / 2.0;
         let offset_y = -4.0 * sq / 2.0;
-        // Saddle (sr=0, sc=0) is at (offset_x + 1*sq, offset_y + 1*sq).
         let s0 = config.saddle_points[0];
         assert!(
             (s0[0] - (offset_x + sq)).abs() < 1e-12,
@@ -1681,7 +1784,6 @@ mod tests {
             s0[1]
         );
         assert!(s0[2].abs() < 1e-12, "saddle z must be 0");
-        // Saddle (sr=1, sc=2) is at (offset_x + 3*sq, offset_y + 2*sq).
         let saddle_cols = 3usize;
         let s = config.saddle_points[saddle_cols + 2];
         assert!(
@@ -1698,15 +1800,10 @@ mod tests {
 
     #[test]
     fn test_charuco_saddle_adjacency_interior_marker() {
-        // For a 4×4 board, marker at grid (r=2, c=2) is index 4 (markers at (0,0),(0,2),(1,1),(2,0),(2,2)).
-        // Actually let's check (r=2, c=0) — all 4 of its adjacent saddles should be non-None
-        // since row 2, col 0 means: TL=(1,-1)→ None (c-1<0), TR=(1,0)→saddle, BR=(2,0)→saddle, BL=(2,-1)→None.
-        // Use a larger board so we have an interior marker with all 4 saddles.
-        // 6×6 board, marker at (r=2, c=2) (index when counting (r+c)%2==0 cells).
-        let config = BoardConfig::new_charuco(6, 6, 0.04, 0.03);
-        // Find the marker index for (r=2, c=2) — count (r+c)%2==0 cells in row-major order:
-        // (0,0),(0,2),(0,4),(1,1),(1,3),(1,5),(2,0),(2,2)... → index 7
-        let adj = config.marker_saddle_adjacency[7];
+        // 6×6 board, marker at (r=2, c=2) has index 7 when counting (r+c)%2==0 cells.
+        // All 4 adjacent saddles must be non-None for this interior marker.
+        let config = CharucoTopology::new(6, 6, 0.04, 0.03, usize::MAX).unwrap();
+        let adj = config.tag_cell_corners[7];
         assert!(adj[0].is_some(), "TL saddle of interior marker must exist");
         assert!(adj[1].is_some(), "TR saddle of interior marker must exist");
         assert!(adj[2].is_some(), "BR saddle of interior marker must exist");
@@ -1716,12 +1813,34 @@ mod tests {
     #[test]
     fn test_charuco_saddle_adjacency_corner_marker() {
         // Marker at (r=0, c=0) → only the BR corner of the square is an interior saddle.
-        let config = BoardConfig::new_charuco(4, 4, 0.04, 0.03);
-        // (0,0) is the first marker (index 0).
-        let adj = config.marker_saddle_adjacency[0];
+        let config = CharucoTopology::new(4, 4, 0.04, 0.03, usize::MAX).unwrap();
+        let adj = config.tag_cell_corners[0];
         assert!(adj[0].is_none(), "TL: (r-1,c-1) = (-1,-1) is out of bounds");
         assert!(adj[1].is_none(), "TR: (r-1,c) = (-1,0) is out of bounds");
         assert!(adj[2].is_some(), "BR: (r=0,c=0) is a valid interior saddle");
         assert!(adj[3].is_none(), "BL: (r,c-1) = (0,-1) is out of bounds");
+    }
+
+    #[test]
+    fn test_dictionary_bounds_check_charuco() {
+        // Requesting more markers than the dictionary has IDs must fail.
+        // 10×10 board needs 50 markers; a limit of 49 must reject it.
+        let err = CharucoTopology::new(10, 10, 0.04, 0.03, 49);
+        assert!(err.is_err(), "must fail when markers > max_tag_id");
+    }
+
+    #[test]
+    fn test_dictionary_bounds_check_aprilgrid() {
+        // 5×5 AprilGrid needs 25 markers; a limit of 24 must reject it.
+        let err = AprilGridTopology::new(5, 5, 0.01, 0.04, 24);
+        assert!(err.is_err(), "must fail when markers > max_tag_id");
+    }
+
+    #[test]
+    fn test_tag_family_max_id_count() {
+        // Spot-check known dictionary sizes.
+        use crate::config::TagFamily;
+        assert_eq!(TagFamily::ArUco4x4_50.max_id_count(), 50);
+        assert_eq!(TagFamily::ArUco4x4_100.max_id_count(), 100);
     }
 }
