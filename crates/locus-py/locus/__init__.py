@@ -6,10 +6,19 @@ import numpy as np
 
 from ._config import DetectOptions, DetectorConfig
 from .locus import (
+    AprilGrid,
     CameraIntrinsics,
+    CharucoBoard,
+    CharucoEstimateResult,
+    CharucoRefiner,
+    CharucoTelemetryResult,
     CornerRefinementMode,
     DecodeMode,
+    DetectionResult,
+    DetectorBuilder,
+    PipelineTelemetryResult,
     PoseEstimationMode,
+    QuadExtractionMode,
     SegmentationConnectivity,
     TagFamily,
     init_tracy,
@@ -56,11 +65,10 @@ class DetectionBatch:
 @dataclass(frozen=True)
 class PipelineTelemetry:
     """
-    Zero-copy intermediate artifacts from the detection pipeline.
+    Intermediate artifacts captured during the detection pipeline.
 
-    WARNING: These arrays are ephemeral. They point directly into the Rust
-    arena memory and become invalid the moment another frame is processed
-    by the same Detector instance.
+    The underlying pixel data is copied out of the Rust arena at result
+    construction time, so these arrays remain valid across frames.
     """
 
     binarized: np.ndarray  # Shape: (H, W), Dtype: uint8
@@ -174,7 +182,7 @@ class Detector:
         if img.dtype != np.uint8:
             raise ValueError(f"Input image must be uint8, got {img.dtype}")
 
-        res_dict = self._inner.detect(
+        raw = self._inner.detect(
             img,
             intrinsics=intrinsics,
             tag_size=tag_size,
@@ -183,25 +191,49 @@ class Detector:
             **kwargs,
         )
 
-        tel_res = res_dict.pop("telemetry", None)
         telemetry = None
-        if tel_res is not None:
-            telemetry = PipelineTelemetry(**tel_res)
+        if raw.telemetry is not None:
+            t = raw.telemetry
+            telemetry = PipelineTelemetry(
+                binarized=t.binarized,
+                threshold_map=t.threshold_map,
+                gwlf_fallback_count=t.gwlf_fallback_count,
+                gwlf_avg_delta=t.gwlf_avg_delta,
+                subpixel_jitter=t.subpixel_jitter,
+                reprojection_errors=t.reprojection_errors,
+            )
 
-        return DetectionBatch(**res_dict, telemetry=telemetry)
+        return DetectionBatch(
+            ids=raw.ids,
+            corners=raw.corners,
+            error_rates=raw.error_rates,
+            poses=raw.poses,
+            rejected_corners=raw.rejected_corners,
+            rejected_error_rates=raw.rejected_error_rates,
+            telemetry=telemetry,
+        )
 
 
 __all__ = [
-    "Detector",
-    "TagFamily",
-    "SegmentationConnectivity",
+    "AprilGrid",
+    "CameraIntrinsics",
+    "CharucoBoard",
+    "CharucoEstimateResult",
+    "CharucoRefiner",
+    "CharucoTelemetryResult",
     "CornerRefinementMode",
     "DecodeMode",
-    "PoseEstimationMode",
-    "CameraIntrinsics",
-    "Pose",
-    "DetectorConfig",
     "DetectOptions",
     "DetectionBatch",
+    "DetectionResult",
+    "Detector",
+    "DetectorBuilder",
+    "DetectorConfig",
+    "PipelineTelemetryResult",
+    "PoseEstimationMode",
+    "Pose",
+    "QuadExtractionMode",
+    "SegmentationConnectivity",
+    "TagFamily",
     "init_tracy",
 ]

@@ -5,6 +5,7 @@ from .locus import (
     CornerRefinementMode,
     DecodeMode,
     PoseEstimationMode,
+    QuadExtractionMode,
     SegmentationConnectivity,
     TagFamily,
 )
@@ -52,7 +53,9 @@ class DetectorConfig(BaseModel):
     gwlf_transversal_alpha: float = Field(default=0.01, ge=0.0)
     quad_max_elongation: float = Field(default=0.0, ge=0.0)
     quad_min_density: float = Field(default=0.0, ge=0.0, le=1.0)
-    quad_extraction_mode: int = Field(default=0)
+    quad_extraction_mode: QuadExtractionMode = Field(
+        default_factory=lambda: QuadExtractionMode.ContourRdp
+    )
 
 
 class DetectOptions(BaseModel):

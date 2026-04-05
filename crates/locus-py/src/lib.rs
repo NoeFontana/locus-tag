@@ -110,6 +110,22 @@ impl From<PoseEstimationMode> for locus_core::config::PoseEstimationMode {
     }
 }
 
+#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum QuadExtractionMode {
+    ContourRdp = 0,
+    EdLines = 1,
+}
+
+impl From<QuadExtractionMode> for locus_core::config::QuadExtractionMode {
+    fn from(m: QuadExtractionMode) -> Self {
+        match m {
+            QuadExtractionMode::ContourRdp => locus_core::config::QuadExtractionMode::ContourRdp,
+            QuadExtractionMode::EdLines => locus_core::config::QuadExtractionMode::EdLines,
+        }
+    }
+}
+
 // ============================================================================
 // Structs
 // ============================================================================
@@ -182,7 +198,7 @@ pub struct PyDetectorConfig {
     pub gwlf_transversal_alpha: f64,
     pub quad_max_elongation: f64,
     pub quad_min_density: f64,
-    pub quad_extraction_mode: i32,
+    pub quad_extraction_mode: QuadExtractionMode,
 }
 
 impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
@@ -233,11 +249,60 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             quad_max_elongation: c.quad_max_elongation,
             quad_min_density: c.quad_min_density,
             quad_extraction_mode: match c.quad_extraction_mode {
-                locus_core::config::QuadExtractionMode::ContourRdp => 0,
-                locus_core::config::QuadExtractionMode::EdLines => 1,
+                locus_core::config::QuadExtractionMode::ContourRdp => {
+                    QuadExtractionMode::ContourRdp
+                },
+                locus_core::config::QuadExtractionMode::EdLines => QuadExtractionMode::EdLines,
             },
         }
     }
+}
+
+// ============================================================================
+// Result types
+// ============================================================================
+
+/// Intermediate pipeline artifacts emitted when `debug_telemetry=True`.
+#[pyclass(get_all, frozen)]
+pub struct PipelineTelemetryResult {
+    pub binarized: Py<PyArray2<u8>>,
+    pub threshold_map: Py<PyArray2<u8>>,
+    pub subpixel_jitter: Option<Py<PyArray3<f32>>>,
+    pub reprojection_errors: Option<Py<PyArray1<f32>>>,
+    pub gwlf_fallback_count: usize,
+    pub gwlf_avg_delta: f32,
+}
+
+/// Typed result returned by [`Detector::detect`].
+#[pyclass(get_all, frozen)]
+pub struct DetectionResult {
+    pub ids: Py<PyArray1<i32>>,
+    pub corners: Py<PyArray3<f32>>,
+    pub error_rates: Py<PyArray1<f32>>,
+    pub poses: Option<Py<PyArray2<f32>>>,
+    pub rejected_corners: Py<PyArray3<f32>>,
+    pub rejected_error_rates: Py<PyArray1<f32>>,
+    pub telemetry: Option<Py<PipelineTelemetryResult>>,
+}
+
+/// Telemetry from [`CharucoRefiner::estimate`], populated when `debug_telemetry=True`.
+#[pyclass(get_all, frozen)]
+pub struct CharucoTelemetryResult {
+    pub rejected_saddles: Py<PyArray2<f32>>,
+    pub rejected_determinants: Py<PyArray1<f32>>,
+}
+
+/// Typed result returned by [`CharucoRefiner::estimate`].
+#[pyclass(get_all, frozen)]
+pub struct CharucoEstimateResult {
+    pub ids: Py<PyArray1<i32>>,
+    pub corners: Py<PyArray3<f32>>,
+    pub saddle_ids: Py<PyArray1<i32>>,
+    pub saddle_pts: Py<PyArray2<f32>>,
+    pub saddle_obj: Py<PyArray2<f64>>,
+    pub board_pose: Option<Py<PyArray1<f64>>>,
+    pub board_cov: Option<Py<PyArray2<f64>>>,
+    pub telemetry: Option<Py<CharucoTelemetryResult>>,
 }
 
 // ============================================================================
@@ -400,14 +465,14 @@ impl CharucoRefiner {
     ///                  (only populated when `debug_telemetry=True`)
     #[pyo3(signature = (detector, img, intrinsics, debug_telemetry = false))]
     #[allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
-    fn estimate<'py>(
+    fn estimate(
         &mut self,
-        py: Python<'py>,
+        py: Python<'_>,
         detector: &mut Detector,
         img: PyReadonlyArray2<'_, u8>,
         intrinsics: CameraIntrinsics,
         debug_telemetry: bool,
-    ) -> Result<Bound<'py, PyDict>, PyErr> {
+    ) -> PyResult<CharucoEstimateResult> {
         let view = prepare_image_view(&img)?;
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
 
@@ -493,23 +558,16 @@ impl CharucoRefiner {
             ));
         }
 
-        let dict = PyDict::new(py);
-        dict.set_item("ids", ids_arr)?;
-        dict.set_item("corners", corners_arr)?;
-        dict.set_item("saddle_ids", saddle_ids_arr)?;
-        dict.set_item("saddle_pts", saddle_pts_arr)?;
-        dict.set_item("saddle_obj", saddle_obj_arr)?;
-
         // 5. Board pose and covariance (None if insufficient saddles or RANSAC failed).
         // board_pose.take() requires &mut, so we can't go through active_batch.
-        let board_pose = if debug_telemetry {
+        let board_pose_raw = if debug_telemetry {
             self.telem_batch.board_pose.take()
         } else {
             self.batch.board_pose.take()
         };
-        if let Some(board_pose) = board_pose {
-            let q = nalgebra::UnitQuaternion::from_matrix(&board_pose.pose.rotation);
-            let t = board_pose.pose.translation;
+        let (board_pose, board_cov) = if let Some(bp) = board_pose_raw {
+            let q = nalgebra::UnitQuaternion::from_matrix(&bp.pose.rotation);
+            let t = bp.pose.translation;
             let pose_arr = unsafe { PyArray1::<f64>::new(py, [7], false) };
             unsafe {
                 let ps = pose_arr.as_slice_mut().expect("pose slice");
@@ -526,20 +584,17 @@ impl CharucoRefiner {
                 let cs = cov_arr.as_slice_mut().expect("cov slice");
                 for row in 0..6 {
                     for col in 0..6 {
-                        cs[row * 6 + col] = board_pose.covariance[(row, col)];
+                        cs[row * 6 + col] = bp.covariance[(row, col)];
                     }
                 }
             }
-            dict.set_item("board_pose", pose_arr)?;
-            dict.set_item("board_cov", cov_arr)?;
+            (Some(pose_arr.unbind()), Some(cov_arr.unbind()))
         } else {
-            dict.set_item("board_pose", py.None())?;
-            dict.set_item("board_cov", py.None())?;
-        }
+            (None, None)
+        };
 
         // 6. Telemetry (populated only when debug_telemetry=True and batch has telemetry).
-        dict.set_item("telemetry", py.None())?;
-        if debug_telemetry && let Some(t) = self.telem_batch.telemetry.as_ref() {
+        let telemetry = if debug_telemetry && let Some(t) = self.telem_batch.telemetry.as_ref() {
             let r = t.count;
             let rej_pts_arr = unsafe { PyArray2::<f32>::new(py, [r, 2], false) };
             let rej_det_arr = unsafe { PyArray1::<f32>::new(py, [r], false) };
@@ -553,13 +608,126 @@ impl CharucoRefiner {
                 let rdet = rej_det_arr.as_slice_mut().expect("rej_det slice");
                 rdet.copy_from_slice(&t.rejected_determinants[..r]);
             }
-            let telem_dict = PyDict::new(py);
-            telem_dict.set_item("rejected_saddles", rej_pts_arr)?;
-            telem_dict.set_item("rejected_determinants", rej_det_arr)?;
-            dict.set_item("telemetry", telem_dict)?;
-        }
+            Some(Py::new(
+                py,
+                CharucoTelemetryResult {
+                    rejected_saddles: rej_pts_arr.unbind(),
+                    rejected_determinants: rej_det_arr.unbind(),
+                },
+            )?)
+        } else {
+            None
+        };
 
-        Ok(dict)
+        Ok(CharucoEstimateResult {
+            ids: ids_arr.unbind(),
+            corners: corners_arr.unbind(),
+            saddle_ids: saddle_ids_arr.unbind(),
+            saddle_pts: saddle_pts_arr.unbind(),
+            saddle_obj: saddle_obj_arr.unbind(),
+            board_pose,
+            board_cov,
+            telemetry,
+        })
+    }
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/// Copy a (possibly row-padded) image buffer into a contiguous `dst` slice.
+///
+/// # Safety
+/// `src` must be valid for `height * stride` bytes.
+/// # Safety
+/// `src` must be valid for `height * stride` bytes and must not alias `dst`.
+unsafe fn copy_strided_image(
+    src: *const u8,
+    dst: &mut [u8],
+    height: usize,
+    width: usize,
+    stride: usize,
+) {
+    if stride == width {
+        // SAFETY: caller guarantees src is valid for height*stride == dst.len() bytes.
+        unsafe { std::ptr::copy_nonoverlapping(src, dst.as_mut_ptr(), dst.len()) };
+    } else {
+        for y in 0..height {
+            // SAFETY: y*stride < height*stride (valid by caller); y*width < dst.len().
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    src.add(y * stride),
+                    dst.as_mut_ptr().add(y * width),
+                    width,
+                );
+            }
+        }
+    }
+}
+
+fn build_pipeline_telemetry(
+    py: Python<'_>,
+    telem: &locus_core::batch::TelemetryPayload,
+) -> PipelineTelemetryResult {
+    let binarized_arr = unsafe { PyArray2::<u8>::new(py, [telem.height, telem.width], false) };
+    let threshold_arr = unsafe { PyArray2::<u8>::new(py, [telem.height, telem.width], false) };
+    // SAFETY: Both pointers are valid for `height * stride` bytes (guaranteed by the Rust
+    // arena that owns them for the lifetime of this `detect()` call).  The destination slices
+    // are freshly allocated by PyArray2::new and exclusively owned here.  When stride > width
+    // the source rows are padded, so we copy each row independently.
+    unsafe {
+        copy_strided_image(
+            telem.binarized_ptr,
+            binarized_arr.as_slice_mut().expect("binarized slice"),
+            telem.height,
+            telem.width,
+            telem.stride,
+        );
+        copy_strided_image(
+            telem.threshold_map_ptr,
+            threshold_arr.as_slice_mut().expect("threshold slice"),
+            telem.height,
+            telem.width,
+            telem.stride,
+        );
+    }
+
+    let subpixel_jitter =
+        if !telem.subpixel_jitter_ptr.is_null() && telem.num_jitter > 0 {
+            let nj = telem.num_jitter;
+            let arr = unsafe { PyArray3::<f32>::new(py, [nj, 4, 2], false) };
+            unsafe {
+                arr.as_slice_mut().expect("jitter slice").copy_from_slice(
+                    std::slice::from_raw_parts(telem.subpixel_jitter_ptr, nj * 8),
+                );
+            }
+            Some(arr.unbind())
+        } else {
+            None
+        };
+
+    let reprojection_errors =
+        if !telem.reprojection_errors_ptr.is_null() && telem.num_reprojection > 0 {
+            let nr = telem.num_reprojection;
+            let arr = unsafe { PyArray1::<f32>::new(py, [nr], false) };
+            unsafe {
+                arr.as_slice_mut().expect("repro slice").copy_from_slice(
+                    std::slice::from_raw_parts(telem.reprojection_errors_ptr, nr),
+                );
+            }
+            Some(arr.unbind())
+        } else {
+            None
+        };
+
+    PipelineTelemetryResult {
+        binarized: binarized_arr.unbind(),
+        threshold_map: threshold_arr.unbind(),
+        subpixel_jitter,
+        reprojection_errors,
+        gwlf_fallback_count: telem.gwlf_fallback_count,
+        gwlf_avg_delta: telem.gwlf_avg_delta,
     }
 }
 
@@ -573,19 +741,19 @@ pub struct Detector {
 
 #[pymethods]
 impl Detector {
-    /// Detect tags and return a dictionary of NumPy arrays (SoA layout).
+    /// Detect tags and return a typed [`DetectionResult`] containing NumPy arrays.
     #[pyo3(signature = (img, intrinsics=None, tag_size=None, pose_estimation_mode=PoseEstimationMode::Fast, debug_telemetry=false))]
     #[allow(clippy::needless_pass_by_value)]
     #[allow(clippy::too_many_lines)]
-    fn detect<'py>(
+    fn detect(
         &mut self,
-        py: Python<'py>,
+        py: Python<'_>,
         img: PyReadonlyArray2<'_, u8>,
         intrinsics: Option<CameraIntrinsics>,
         tag_size: Option<f64>,
         pose_estimation_mode: PoseEstimationMode,
         debug_telemetry: bool,
-    ) -> Result<Bound<'py, PyDict>, PyErr> {
+    ) -> PyResult<DetectionResult> {
         let view = prepare_image_view(&img)?;
 
         let core_intrinsics = intrinsics.map(locus_core::CameraIntrinsics::from);
@@ -639,11 +807,6 @@ impl Detector {
             ));
         }
 
-        let dict = PyDict::new(py);
-        dict.set_item("ids", ids_arr)?;
-        dict.set_item("corners", corners_arr)?;
-        dict.set_item("error_rates", error_rates_arr)?;
-
         // Rejected Quads: (M, 4, 2)
         let m = detections.rejected_corners.len();
         let rejected_arr = unsafe { PyArray3::<f32>::new(py, [m, 4, 2], false) };
@@ -656,7 +819,6 @@ impl Detector {
                 m * 8,
             ));
         }
-        dict.set_item("rejected_corners", rejected_arr)?;
 
         // Rejected Error Rates: (M,)
         let rejected_error_rates_arr = unsafe { PyArray1::<f32>::new(py, [m], false) };
@@ -669,124 +831,40 @@ impl Detector {
                 m,
             ));
         }
-        dict.set_item("rejected_error_rates", rejected_error_rates_arr)?;
 
         // Poses: Vectorized (N, 7) layout: [tx, ty, tz, qx, qy, qz, qw]
-        if intrinsics.is_some() && tag_size.is_some() {
+        let poses = if intrinsics.is_some() && tag_size.is_some() {
             let poses_arr = unsafe { PyArray2::<f32>::new(py, [n, 7], false) };
             unsafe {
                 let poses_slice = poses_arr.as_slice_mut().expect("failed to get poses slice");
 
-                // Optmized block copy for Pose6D (ignoring f32 padding)
+                // Optimised block copy for Pose6D (ignoring f32 padding)
                 for (i, pose) in detections.poses.iter().enumerate() {
                     poses_slice[i * 7..(i + 1) * 7].copy_from_slice(&pose.data);
                 }
             }
-            dict.set_item("poses", poses_arr)?;
+            Some(poses_arr.unbind())
         } else {
-            dict.set_item("poses", py.None())?;
-        }
+            None
+        };
 
-        // 3. Telemetry (Zero-copy intermediate images)
-        if let Some(telemetry) = detections.telemetry {
-            let tel_dict = PyDict::new(py);
-            unsafe {
-                let binarized_arr =
-                    PyArray2::<u8>::new(py, [telemetry.height, telemetry.width], false);
-                let dest_slice = binarized_arr
-                    .as_slice_mut()
-                    .expect("Failed to get PyArray slice");
-                let src_slice = std::slice::from_raw_parts(
-                    telemetry.binarized_ptr,
-                    telemetry.height * telemetry.stride,
-                );
-
-                if telemetry.stride == telemetry.width {
-                    // Contiguous memory layout
-                    std::ptr::copy_nonoverlapping(
-                        src_slice.as_ptr(),
-                        dest_slice.as_mut_ptr(),
-                        dest_slice.len(),
-                    );
-                } else {
-                    // Strided memory layout
-                    for y in 0..telemetry.height {
-                        let src_offset = y * telemetry.stride;
-                        let dest_offset = y * telemetry.width;
-                        std::ptr::copy_nonoverlapping(
-                            src_slice.as_ptr().add(src_offset),
-                            dest_slice.as_mut_ptr().add(dest_offset),
-                            telemetry.width,
-                        );
-                    }
-                }
-
-                let threshold_arr =
-                    PyArray2::<u8>::new(py, [telemetry.height, telemetry.width], false);
-                let dest_slice = threshold_arr
-                    .as_slice_mut()
-                    .expect("Failed to get PyArray slice");
-                let src_slice = std::slice::from_raw_parts(
-                    telemetry.threshold_map_ptr,
-                    telemetry.height * telemetry.stride,
-                );
-
-                if telemetry.stride == telemetry.width {
-                    // Contiguous memory layout
-                    std::ptr::copy_nonoverlapping(
-                        src_slice.as_ptr(),
-                        dest_slice.as_mut_ptr(),
-                        dest_slice.len(),
-                    );
-                } else {
-                    // Strided memory layout
-                    for y in 0..telemetry.height {
-                        let src_offset = y * telemetry.stride;
-                        let dest_offset = y * telemetry.width;
-                        std::ptr::copy_nonoverlapping(
-                            src_slice.as_ptr().add(src_offset),
-                            dest_slice.as_mut_ptr().add(dest_offset),
-                            telemetry.width,
-                        );
-                    }
-                }
-
-                tel_dict.set_item("binarized", &binarized_arr)?;
-                tel_dict.set_item("threshold_map", &threshold_arr)?;
-                tel_dict.set_item("gwlf_fallback_count", telemetry.gwlf_fallback_count)?;
-                tel_dict.set_item("gwlf_avg_delta", telemetry.gwlf_avg_delta)?;
-
-                // Subpixel Jitter
-                if !telemetry.subpixel_jitter_ptr.is_null() && telemetry.num_jitter > 0 {
-                    let nj = telemetry.num_jitter;
-                    // Jitter is [nj, 4, 2]
-                    let jitter_arr = PyArray3::<f32>::new(py, [nj, 4, 2], false);
-                    let jitter_slice = jitter_arr
-                        .as_slice_mut()
-                        .expect("Failed to get jitter slice");
-                    let src_jitter =
-                        std::slice::from_raw_parts(telemetry.subpixel_jitter_ptr, nj * 8);
-                    jitter_slice.copy_from_slice(src_jitter);
-                    tel_dict.set_item("subpixel_jitter", &jitter_arr)?;
-                }
-
-                // Reprojection Errors
-                if !telemetry.reprojection_errors_ptr.is_null() && telemetry.num_reprojection > 0 {
-                    let nr = telemetry.num_reprojection;
-                    let repro_arr = PyArray1::<f32>::new(py, [nr], false);
-                    let repro_slice = repro_arr.as_slice_mut().expect("Failed to get repro slice");
-                    let src_repro =
-                        std::slice::from_raw_parts(telemetry.reprojection_errors_ptr, nr);
-                    repro_slice.copy_from_slice(src_repro);
-                    tel_dict.set_item("reprojection_errors", &repro_arr)?;
-                }
-            }
-            dict.set_item("telemetry", tel_dict)?;
+        // Telemetry (zero-copy intermediate images)
+        let telemetry = if let Some(telem) = detections.telemetry {
+            let telem_result = build_pipeline_telemetry(py, &telem);
+            Some(Py::new(py, telem_result)?)
         } else {
-            dict.set_item("telemetry", py.None())?;
-        }
+            None
+        };
 
-        Ok(dict)
+        Ok(DetectionResult {
+            ids: ids_arr.unbind(),
+            corners: corners_arr.unbind(),
+            error_rates: error_rates_arr.unbind(),
+            poses,
+            rejected_corners: rejected_arr.unbind(),
+            rejected_error_rates: rejected_error_rates_arr.unbind(),
+            telemetry,
+        })
     }
 
     /// Returns the current detector configuration.
@@ -796,22 +874,10 @@ impl Detector {
 
     /// Update the tag families to be detected.
     fn set_families(&mut self, families: Vec<i32>) -> PyResult<()> {
-        let mut core_families = Vec::new();
-        for f in families {
-            let family = match f {
-                0 => locus_core::TagFamily::AprilTag16h5,
-                1 => locus_core::TagFamily::AprilTag36h11,
-                2 => locus_core::TagFamily::ArUco4x4_50,
-                3 => locus_core::TagFamily::ArUco4x4_100,
-                4 => locus_core::TagFamily::ArUco6x6_250,
-                _ => {
-                    return Err(PyValueError::new_err(format!(
-                        "Invalid TagFamily value: {f}"
-                    )));
-                },
-            };
-            core_families.push(family);
-        }
+        let core_families = families
+            .into_iter()
+            .map(tag_family_from_i32)
+            .collect::<PyResult<Vec<_>>>()?;
         self.inner.set_families(&core_families);
         Ok(())
     }
@@ -887,8 +953,7 @@ fn create_detector(
             builder = builder.with_quad_min_density(val.extract()?);
         }
         if let Some(val) = args.get_item("quad_extraction_mode")? {
-            let i: i32 = val.extract()?;
-            let mode = match i {
+            let mode = match val.extract::<i32>()? {
                 0 => locus_core::config::QuadExtractionMode::ContourRdp,
                 1 => locus_core::config::QuadExtractionMode::EdLines,
                 _ => return Err(PyValueError::new_err("Invalid quad_extraction_mode")),
@@ -896,8 +961,7 @@ fn create_detector(
             builder = builder.with_quad_extraction_mode(mode);
         }
         if let Some(val) = args.get_item("refinement_mode")? {
-            let i: i32 = val.extract()?;
-            let mode = match i {
+            let mode = match val.extract::<i32>()? {
                 0 => locus_core::config::CornerRefinementMode::None,
                 1 => locus_core::config::CornerRefinementMode::Edge,
                 2 => locus_core::config::CornerRefinementMode::GridFit,
@@ -908,8 +972,7 @@ fn create_detector(
             builder = builder.with_corner_refinement(mode);
         }
         if let Some(val) = args.get_item("decode_mode")? {
-            let i: i32 = val.extract()?;
-            let mode = match i {
+            let mode = match val.extract::<i32>()? {
                 0 => locus_core::config::DecodeMode::Hard,
                 1 => locus_core::config::DecodeMode::Soft,
                 _ => return Err(PyValueError::new_err("Invalid decode_mode")),
@@ -917,8 +980,7 @@ fn create_detector(
             builder = builder.with_decode_mode(mode);
         }
         if let Some(val) = args.get_item("segmentation_connectivity")? {
-            let i: i32 = val.extract()?;
-            let conn = match i {
+            let conn = match val.extract::<i32>()? {
                 0 => locus_core::config::SegmentationConnectivity::Four,
                 1 => locus_core::config::SegmentationConnectivity::Eight,
                 _ => return Err(PyValueError::new_err("Invalid connectivity")),
@@ -930,6 +992,204 @@ fn create_detector(
     Ok(Detector {
         inner: Box::new(builder.build()),
     })
+}
+
+// ============================================================================
+// DetectorBuilder
+// ============================================================================
+
+/// Fluent builder for constructing a [`Detector`].
+///
+/// Methods return `self` so they can be chained in Python:
+/// ```python
+/// detector = (
+///     locus.DetectorBuilder()
+///         .with_decimation(2)
+///         .with_family(locus.TagFamily.AprilTag36h11)
+///         .with_corner_refinement(locus.CornerRefinementMode.Gwlf)
+///         .build()
+/// )
+/// ```
+#[pyclass]
+pub struct DetectorBuilder {
+    inner: Option<locus_core::DetectorBuilder>,
+}
+
+impl DetectorBuilder {
+    fn take_inner(slf: &Py<Self>, py: Python<'_>) -> PyResult<locus_core::DetectorBuilder> {
+        slf.borrow_mut(py).inner.take().ok_or_else(|| {
+            PyRuntimeError::new_err("DetectorBuilder has already been consumed by build()")
+        })
+    }
+}
+
+#[pymethods]
+impl DetectorBuilder {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: Some(locus_core::DetectorBuilder::new()),
+        }
+    }
+
+    fn with_decimation(slf: Py<Self>, py: Python<'_>, decimation: usize) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_decimation(decimation);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_threads(slf: Py<Self>, py: Python<'_>, threads: usize) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_threads(threads);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_family(slf: Py<Self>, py: Python<'_>, family: TagFamily) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_family(family.into());
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_upscale_factor(slf: Py<Self>, py: Python<'_>, factor: usize) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_upscale_factor(factor);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_corner_refinement(
+        slf: Py<Self>,
+        py: Python<'_>,
+        mode: CornerRefinementMode,
+    ) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_corner_refinement(mode.into());
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_decode_mode(slf: Py<Self>, py: Python<'_>, mode: DecodeMode) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_decode_mode(mode.into());
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_connectivity(
+        slf: Py<Self>,
+        py: Python<'_>,
+        connectivity: SegmentationConnectivity,
+    ) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_connectivity(connectivity.into());
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_threshold_tile_size(slf: Py<Self>, py: Python<'_>, size: usize) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_threshold_tile_size(size);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_threshold_min_range(slf: Py<Self>, py: Python<'_>, range: u8) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_threshold_min_range(range);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_adaptive_threshold_constant(
+        slf: Py<Self>,
+        py: Python<'_>,
+        c: i16,
+    ) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_adaptive_threshold_constant(c);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_quad_min_area(slf: Py<Self>, py: Python<'_>, area: u32) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_quad_min_area(area);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_quad_min_fill_ratio(slf: Py<Self>, py: Python<'_>, ratio: f32) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_quad_min_fill_ratio(ratio);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_quad_min_edge_score(slf: Py<Self>, py: Python<'_>, score: f64) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_quad_min_edge_score(score);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_max_hamming_error(slf: Py<Self>, py: Python<'_>, errors: u32) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_max_hamming_error(errors);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_decoder_min_contrast(
+        slf: Py<Self>,
+        py: Python<'_>,
+        contrast: f64,
+    ) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_decoder_min_contrast(contrast);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_gwlf_transversal_alpha(
+        slf: Py<Self>,
+        py: Python<'_>,
+        alpha: f64,
+    ) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_gwlf_transversal_alpha(alpha);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_quad_max_elongation(
+        slf: Py<Self>,
+        py: Python<'_>,
+        elongation: f64,
+    ) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_quad_max_elongation(elongation);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_quad_min_density(slf: Py<Self>, py: Python<'_>, density: f64) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_quad_min_density(density);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_quad_extraction_mode(
+        slf: Py<Self>,
+        py: Python<'_>,
+        mode: QuadExtractionMode,
+    ) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_quad_extraction_mode(mode.into());
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    fn with_sharpening(slf: Py<Self>, py: Python<'_>, enable: bool) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_sharpening(enable);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
+    /// Consume the builder and return a ready-to-use [`Detector`].
+    fn build(&mut self) -> PyResult<Detector> {
+        let inner = self
+            .inner
+            .take()
+            .ok_or_else(|| PyRuntimeError::new_err("DetectorBuilder has already been consumed"))?;
+        Ok(Detector {
+            inner: Box::new(inner.build()),
+        })
+    }
 }
 
 fn prepare_image_view<'a>(img: &PyReadonlyArray2<'_, u8>) -> PyResult<ImageView<'a>> {
@@ -993,18 +1253,29 @@ fn fast_config() -> Detector {
 
 #[pymodule]
 fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<Detector>()?;
-    m.add_class::<PyDetectorConfig>()?;
+    // Enums
     m.add_class::<TagFamily>()?;
     m.add_class::<SegmentationConnectivity>()?;
     m.add_class::<CornerRefinementMode>()?;
     m.add_class::<DecodeMode>()?;
     m.add_class::<PoseEstimationMode>()?;
+    m.add_class::<QuadExtractionMode>()?;
+    // Config / misc structs
     m.add_class::<CameraIntrinsics>()?;
     m.add_class::<PyPose>()?;
+    m.add_class::<PyDetectorConfig>()?;
+    // Result types
+    m.add_class::<PipelineTelemetryResult>()?;
+    m.add_class::<DetectionResult>()?;
+    m.add_class::<CharucoTelemetryResult>()?;
+    m.add_class::<CharucoEstimateResult>()?;
+    // Board topology
     m.add_class::<CharucoBoard>()?;
     m.add_class::<AprilGrid>()?;
     m.add_class::<CharucoRefiner>()?;
+    // Detector
+    m.add_class::<Detector>()?;
+    m.add_class::<DetectorBuilder>()?;
 
     m.add_function(wrap_pyfunction!(create_detector, m)?)?;
     m.add_function(wrap_pyfunction!(production_config, m)?)?;
