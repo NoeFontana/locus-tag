@@ -249,7 +249,9 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             quad_max_elongation: c.quad_max_elongation,
             quad_min_density: c.quad_min_density,
             quad_extraction_mode: match c.quad_extraction_mode {
-                locus_core::config::QuadExtractionMode::ContourRdp => QuadExtractionMode::ContourRdp,
+                locus_core::config::QuadExtractionMode::ContourRdp => {
+                    QuadExtractionMode::ContourRdp
+                },
                 locus_core::config::QuadExtractionMode::EdLines => QuadExtractionMode::EdLines,
             },
         }
@@ -592,31 +594,30 @@ impl CharucoRefiner {
         };
 
         // 6. Telemetry (populated only when debug_telemetry=True and batch has telemetry).
-        let telemetry =
-            if debug_telemetry && let Some(t) = self.telem_batch.telemetry.as_ref() {
-                let r = t.count;
-                let rej_pts_arr = unsafe { PyArray2::<f32>::new(py, [r, 2], false) };
-                let rej_det_arr = unsafe { PyArray1::<f32>::new(py, [r], false) };
-                unsafe {
-                    // SAFETY: Point2f is repr(C) [f32; 2]; flat reinterpretation is sound.
-                    let rpts = rej_pts_arr.as_slice_mut().expect("rej_pts slice");
-                    rpts.copy_from_slice(std::slice::from_raw_parts(
-                        t.rejected_predictions.as_ptr().cast::<f32>(),
-                        r * 2,
-                    ));
-                    let rdet = rej_det_arr.as_slice_mut().expect("rej_det slice");
-                    rdet.copy_from_slice(&t.rejected_determinants[..r]);
-                }
-                Some(Py::new(
-                    py,
-                    CharucoTelemetryResult {
-                        rejected_saddles: rej_pts_arr.unbind(),
-                        rejected_determinants: rej_det_arr.unbind(),
-                    },
-                )?)
-            } else {
-                None
-            };
+        let telemetry = if debug_telemetry && let Some(t) = self.telem_batch.telemetry.as_ref() {
+            let r = t.count;
+            let rej_pts_arr = unsafe { PyArray2::<f32>::new(py, [r, 2], false) };
+            let rej_det_arr = unsafe { PyArray1::<f32>::new(py, [r], false) };
+            unsafe {
+                // SAFETY: Point2f is repr(C) [f32; 2]; flat reinterpretation is sound.
+                let rpts = rej_pts_arr.as_slice_mut().expect("rej_pts slice");
+                rpts.copy_from_slice(std::slice::from_raw_parts(
+                    t.rejected_predictions.as_ptr().cast::<f32>(),
+                    r * 2,
+                ));
+                let rdet = rej_det_arr.as_slice_mut().expect("rej_det slice");
+                rdet.copy_from_slice(&t.rejected_determinants[..r]);
+            }
+            Some(Py::new(
+                py,
+                CharucoTelemetryResult {
+                    rejected_saddles: rej_pts_arr.unbind(),
+                    rejected_determinants: rej_det_arr.unbind(),
+                },
+            )?)
+        } else {
+            None
+        };
 
         Ok(CharucoEstimateResult {
             ids: ids_arr.unbind(),
@@ -641,7 +642,13 @@ impl CharucoRefiner {
 /// `src` must be valid for `height * stride` bytes.
 /// # Safety
 /// `src` must be valid for `height * stride` bytes and must not alias `dst`.
-unsafe fn copy_strided_image(src: *const u8, dst: &mut [u8], height: usize, width: usize, stride: usize) {
+unsafe fn copy_strided_image(
+    src: *const u8,
+    dst: &mut [u8],
+    height: usize,
+    width: usize,
+    stride: usize,
+) {
     if stride == width {
         // SAFETY: caller guarantees src is valid for height*stride == dst.len() bytes.
         unsafe { std::ptr::copy_nonoverlapping(src, dst.as_mut_ptr(), dst.len()) };
@@ -1009,10 +1016,7 @@ pub struct DetectorBuilder {
 }
 
 impl DetectorBuilder {
-    fn take_inner(
-        slf: &Py<Self>,
-        py: Python<'_>,
-    ) -> PyResult<locus_core::DetectorBuilder> {
+    fn take_inner(slf: &Py<Self>, py: Python<'_>) -> PyResult<locus_core::DetectorBuilder> {
         slf.borrow_mut(py).inner.take().ok_or_else(|| {
             PyRuntimeError::new_err("DetectorBuilder has already been consumed by build()")
         })
@@ -1078,21 +1082,13 @@ impl DetectorBuilder {
         Ok(slf)
     }
 
-    fn with_threshold_tile_size(
-        slf: Py<Self>,
-        py: Python<'_>,
-        size: usize,
-    ) -> PyResult<Py<Self>> {
+    fn with_threshold_tile_size(slf: Py<Self>, py: Python<'_>, size: usize) -> PyResult<Py<Self>> {
         let b = Self::take_inner(&slf, py)?.with_threshold_tile_size(size);
         slf.borrow_mut(py).inner = Some(b);
         Ok(slf)
     }
 
-    fn with_threshold_min_range(
-        slf: Py<Self>,
-        py: Python<'_>,
-        range: u8,
-    ) -> PyResult<Py<Self>> {
+    fn with_threshold_min_range(slf: Py<Self>, py: Python<'_>, range: u8) -> PyResult<Py<Self>> {
         let b = Self::take_inner(&slf, py)?.with_threshold_min_range(range);
         slf.borrow_mut(py).inner = Some(b);
         Ok(slf)
@@ -1114,21 +1110,13 @@ impl DetectorBuilder {
         Ok(slf)
     }
 
-    fn with_quad_min_fill_ratio(
-        slf: Py<Self>,
-        py: Python<'_>,
-        ratio: f32,
-    ) -> PyResult<Py<Self>> {
+    fn with_quad_min_fill_ratio(slf: Py<Self>, py: Python<'_>, ratio: f32) -> PyResult<Py<Self>> {
         let b = Self::take_inner(&slf, py)?.with_quad_min_fill_ratio(ratio);
         slf.borrow_mut(py).inner = Some(b);
         Ok(slf)
     }
 
-    fn with_quad_min_edge_score(
-        slf: Py<Self>,
-        py: Python<'_>,
-        score: f64,
-    ) -> PyResult<Py<Self>> {
+    fn with_quad_min_edge_score(slf: Py<Self>, py: Python<'_>, score: f64) -> PyResult<Py<Self>> {
         let b = Self::take_inner(&slf, py)?.with_quad_min_edge_score(score);
         slf.borrow_mut(py).inner = Some(b);
         Ok(slf)
