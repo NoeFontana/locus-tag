@@ -18,13 +18,21 @@ from .locus import (
     DetectorBuilder,
     PipelineTelemetryResult,
     PoseEstimationMode,
-    PyPose as Pose,
     QuadExtractionMode,
     SegmentationConnectivity,
     TagFamily,
-    create_detector as _create_detector,
-    fast_config as _fast_config,
     init_tracy,
+)
+from .locus import (
+    PyPose as Pose,
+)
+from .locus import (
+    create_detector as _create_detector,
+)
+from .locus import (
+    fast_config as _fast_config,
+)
+from .locus import (
     production_config as _production_config,
 )
 
