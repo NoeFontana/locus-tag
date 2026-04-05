@@ -5,11 +5,11 @@ use crate::error::DetectorError;
 use crate::image::ImageView;
 use bumpalo::Bump;
 
-/// Internal state container for the detector.
+/// Per-thread mutable state for the detection pipeline.
 ///
-/// Owns the memory pools and reusable buffers to ensure zero-allocation
-/// in the detection hot-path.
-pub struct DetectorState {
+/// Owns the arena allocator and the fixed-capacity SoA batch. Construct one
+/// per thread and reuse across frames to preserve the zero-allocation hot-path.
+pub struct FrameContext {
     /// Memory pool for ephemeral per-frame allocations.
     pub arena: Bump,
     /// Vectorized storage for quad candidates and results.
@@ -18,8 +18,8 @@ pub struct DetectorState {
     pub upscale_buf: Vec<u8>,
 }
 
-impl DetectorState {
-    /// Create a new internal state container.
+impl FrameContext {
+    /// Create a new frame context.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -35,7 +35,7 @@ impl DetectorState {
     }
 }
 
-impl Default for DetectorState {
+impl Default for FrameContext {
     fn default() -> Self {
         Self::new()
     }
@@ -43,11 +43,13 @@ impl Default for DetectorState {
 
 /// The primary entry point for the Locus perception library.
 ///
-/// `Detector` encapsulates the entire detection pipeline.
+/// `Detector` encapsulates the entire detection pipeline. For concurrent
+/// multi-frame detection, construct with a `max_concurrent_frames > 1` via
+/// [`DetectorBuilder::with_max_concurrent_frames`] and call
+/// [`Detector::detect_concurrent`].
 pub struct Detector {
-    config: DetectorConfig,
-    decoders: Vec<Box<dyn TagDecoder + Send + Sync>>,
-    state: DetectorState,
+    engine: LocusEngine,
+    ctx: FrameContext,
 }
 
 impl Default for Detector {
@@ -75,19 +77,16 @@ impl Detector {
         Self::builder().with_config(config).build()
     }
 
-    /// Access the internal state (for advanced inspection or FFI).
+    /// Access the internal frame context (for advanced inspection or FFI).
     #[must_use]
-    pub fn state(&self) -> &DetectorState {
-        &self.state
+    pub fn state(&self) -> &FrameContext {
+        &self.ctx
     }
 
-    /// Clear all decoders and set new ones based on tag families.
-    pub fn set_families(&mut self, families: &[crate::config::TagFamily]) {
-        self.decoders.clear();
-        for &family in families {
-            self.decoders
-                .push(crate::decoder::family_to_decoder(family));
-        }
+    /// Access the shared engine (for advanced FFI use only).
+    #[must_use]
+    pub fn engine(&self) -> &LocusEngine {
+        &self.engine
     }
 
     /// Detect tags in the provided image.
@@ -98,8 +97,6 @@ impl Detector {
     ///
     /// Returns [`DetectorError`] if the input image cannot be decimated, upscaled,
     /// or if an intermediate image view cannot be constructed.
-    #[allow(clippy::similar_names)]
-    #[allow(clippy::too_many_lines)]
     pub fn detect(
         &mut self,
         img: &ImageView,
@@ -108,256 +105,42 @@ impl Detector {
         pose_mode: crate::config::PoseEstimationMode,
         debug_telemetry: bool,
     ) -> Result<DetectionBatchView<'_>, DetectorError> {
-        self.state.reset();
-        let state = &mut self.state;
-
-        let (detection_img, _effective_scale, refinement_img) = if self.config.decimation > 1 {
-            let new_w = img.width / self.config.decimation;
-            let new_h = img.height / self.config.decimation;
-            let decimated_data = state.arena.alloc_slice_fill_copy(new_w * new_h, 0u8);
-            let decimated_img = img
-                .decimate_to(self.config.decimation, decimated_data)
-                .map_err(DetectorError::Preprocessing)?;
-            (decimated_img, 1.0 / self.config.decimation as f64, *img)
-        } else if self.config.upscale_factor > 1 {
-            let new_w = img.width * self.config.upscale_factor;
-            let new_h = img.height * self.config.upscale_factor;
-            state.upscale_buf.resize(new_w * new_h, 0);
-
-            let upscaled_img = img
-                .upscale_to(self.config.upscale_factor, &mut state.upscale_buf)
-                .map_err(DetectorError::Preprocessing)?;
-            (
-                upscaled_img,
-                self.config.upscale_factor as f64,
-                upscaled_img,
-            )
-        } else {
-            (*img, 1.0, *img)
-        };
-
-        let img = &detection_img;
-
-        // 1a. Optional bilateral pre-filtering
-        let filtered_img = if self.config.enable_bilateral {
-            let filtered = state
-                .arena
-                .alloc_slice_fill_copy(img.width * img.height, 0u8);
-            crate::filter::bilateral_filter(
-                &state.arena,
-                img,
-                filtered,
-                3, // spatial radius
-                self.config.bilateral_sigma_space,
-                self.config.bilateral_sigma_color,
-            );
-            ImageView::new(filtered, img.width, img.height, img.width)
-                .map_err(DetectorError::InvalidImage)?
-        } else {
-            *img
-        };
-
-        // 1b. Optional Laplacian sharpening
-        let sharpened_img = if self.config.enable_sharpening {
-            let sharpened = state
-                .arena
-                .alloc_slice_fill_copy(filtered_img.width * filtered_img.height, 0u8);
-            crate::filter::laplacian_sharpen(&filtered_img, sharpened);
-
-            ImageView::new(
-                sharpened,
-                filtered_img.width,
-                filtered_img.height,
-                filtered_img.width,
-            )
-            .map_err(DetectorError::InvalidImage)?
-        } else {
-            filtered_img
-        };
-
-        let binarized = state
-            .arena
-            .alloc_slice_fill_copy(img.width * img.height, 0u8);
-        let threshold_map = state
-            .arena
-            .alloc_slice_fill_copy(img.width * img.height, 0u8);
-
-        // 1. Thresholding & 2. Segmentation & 3. Quad Extraction
-        let (n, unrefined) = {
-            let engine = crate::threshold::ThresholdEngine::from_config(&self.config);
-            let tile_stats = engine.compute_tile_stats(&state.arena, &sharpened_img);
-            engine.apply_threshold_with_map(
-                &state.arena,
-                &sharpened_img,
-                &tile_stats,
-                binarized,
-                threshold_map,
-            );
-
-            // 2. Segmentation (SIMD Fused RLE + LSL)
-            let label_result = crate::simd_ccl_fusion::label_components_lsl(
-                &state.arena,
-                &sharpened_img,
-                threshold_map,
-                self.config.segmentation_connectivity
-                    == crate::config::SegmentationConnectivity::Eight,
-                self.config.quad_min_area,
-            );
-
-            // 3. Quad Extraction (SoA)
-            let (n, unrefined) = crate::quad::extract_quads_soa(
-                &mut state.batch,
-                &sharpened_img,
-                &label_result,
-                &self.config,
-                self.config.decimation,
-                &refinement_img,
-                debug_telemetry,
-            );
-
-            // 3.5 Fast-Path Funnel Gate
-            // Rejects candidates early based on boundary contrast
-            crate::funnel::apply_funnel_gate(
-                &mut state.batch,
-                n,
-                &sharpened_img,
-                &tile_stats,
-                self.config.threshold_tile_size,
-                self.config.decoder_min_contrast,
-                1.0 / self.config.decimation as f64,
-            );
-
-            (n, unrefined)
-        };
-
-        // Compute subpixel jitter if requested
-        let mut jitter_ptr = std::ptr::null();
-        let mut num_jitter = 0;
-        if let (true, Some(unrefined_pts)) = (debug_telemetry, unrefined) {
-            // Number of candidates to store jitter for (all extracted ones)
-            num_jitter = unrefined_pts.len();
-            // Store 4 corners * 2 (dx, dy) per candidate = 8 floats
-            let jitter = state.arena.alloc_slice_fill_copy(num_jitter * 8, 0.0f32);
-            for (i, unrefined_corners) in unrefined_pts.iter().enumerate() {
-                for (j, unrefined_corner) in unrefined_corners.iter().enumerate() {
-                    let dx = state.batch.corners[i][j].x - unrefined_corner.x as f32;
-                    let dy = state.batch.corners[i][j].y - unrefined_corner.y as f32;
-                    jitter[i * 8 + j * 2] = dx;
-                    jitter[i * 8 + j * 2 + 1] = dy;
-                }
-            }
-            jitter_ptr = jitter.as_ptr();
-        }
-
-        // 4. Homography Pass (SoA)
-        crate::decoder::compute_homographies_soa(
-            &state.batch.corners[0..n],
-            &state.batch.status_mask[0..n],
-            &mut state.batch.homographies[0..n],
-        );
-
-        // Optional: GWLF Refinement
-        let mut gwlf_fallback_count = 0;
-        let mut gwlf_avg_delta = 0.0f32;
-        if self.config.refinement_mode == crate::config::CornerRefinementMode::Gwlf {
-            let mut total_delta = 0.0f32;
-            let mut count = 0;
-            for i in 0..n {
-                let coarse = [
-                    [state.batch.corners[i][0].x, state.batch.corners[i][0].y],
-                    [state.batch.corners[i][1].x, state.batch.corners[i][1].y],
-                    [state.batch.corners[i][2].x, state.batch.corners[i][2].y],
-                    [state.batch.corners[i][3].x, state.batch.corners[i][3].y],
-                ];
-                if let Some((refined, covs)) = crate::gwlf::refine_quad_gwlf_with_cov(
-                    &refinement_img,
-                    &coarse,
-                    self.config.gwlf_transversal_alpha,
-                ) {
-                    for j in 0..4 {
-                        let dx = refined[j][0] - coarse[j][0];
-                        let dy = refined[j][1] - coarse[j][1];
-                        total_delta += (dx * dx + dy * dy).sqrt();
-                        count += 1;
-
-                        state.batch.corners[i][j].x = refined[j][0];
-                        state.batch.corners[i][j].y = refined[j][1];
-
-                        // Store 2x2 covariance (4 floats) for each corner
-                        state.batch.corner_covariances[i][j * 4] = covs[j][(0, 0)] as f32;
-                        state.batch.corner_covariances[i][j * 4 + 1] = covs[j][(0, 1)] as f32;
-                        state.batch.corner_covariances[i][j * 4 + 2] = covs[j][(1, 0)] as f32;
-                        state.batch.corner_covariances[i][j * 4 + 3] = covs[j][(1, 1)] as f32;
-                    }
-                } else {
-                    gwlf_fallback_count += 1;
-                }
-            }
-            if count > 0 {
-                gwlf_avg_delta = total_delta / count as f32;
-            }
-
-            // Recompute homographies after refinement
-            crate::decoder::compute_homographies_soa(
-                &state.batch.corners[0..n],
-                &state.batch.status_mask[0..n],
-                &mut state.batch.homographies[0..n],
-            );
-        }
-
-        // 5. Decoding Pass (SoA)
-        crate::decoder::decode_batch_soa(
-            &mut state.batch,
-            n,
-            &refinement_img,
-            &self.decoders,
-            &self.config,
-        );
-
-        // Partition valid candidates to the front [0..v]
-        let v = state.batch.partition(n);
-
-        // 6. Pose Refinement (SoA)
-        let (repro_errors_ptr, num_repro) = run_pose_refinement(
-            &mut state.batch,
-            &state.arena,
-            v,
+        self.engine.detect_with_context(
+            img,
+            &mut self.ctx,
             intrinsics,
             tag_size,
-            &refinement_img,
             pose_mode,
-            &self.config,
             debug_telemetry,
-        );
+        )
+    }
 
-        // Detectors return corners at pixel centers (indices + 0.5) following OpenCV conventions.
-        // No additional adjustment needed as the internal pipeline is now unbiased.
+    /// Detect tags in multiple frames concurrently using Rayon.
+    ///
+    /// Delegates to the internal [`LocusEngine`] pool. The pool is sized to
+    /// `max_concurrent_frames` at construction time (see
+    /// [`DetectorBuilder::with_max_concurrent_frames`]). Telemetry is not
+    /// available via this method.
+    pub fn detect_concurrent(
+        &self,
+        frames: &[ImageView<'_>],
+        intrinsics: Option<&crate::pose::CameraIntrinsics>,
+        tag_size: Option<f64>,
+        pose_mode: crate::config::PoseEstimationMode,
+    ) -> Vec<Result<Vec<crate::Detection>, DetectorError>> {
+        self.engine
+            .detect_concurrent(frames, intrinsics, tag_size, pose_mode)
+    }
 
-        let telemetry = if debug_telemetry {
-            Some(crate::batch::TelemetryPayload {
-                binarized_ptr: binarized.as_ptr(),
-                threshold_map_ptr: threshold_map.as_ptr(),
-                subpixel_jitter_ptr: jitter_ptr,
-                num_jitter,
-                reprojection_errors_ptr: repro_errors_ptr,
-                num_reprojection: num_repro,
-                gwlf_fallback_count,
-                gwlf_avg_delta,
-                width: img.width,
-                height: img.height,
-                stride: img.width,
-            })
-        } else {
-            None
-        };
-
-        Ok(self.state.batch.view_with_telemetry(v, n, telemetry))
+    /// Clear all decoders and set new ones based on tag families.
+    pub fn set_families(&mut self, families: &[crate::config::TagFamily]) {
+        self.engine.set_families(families);
     }
 
     /// Get the current detector configuration.
     #[must_use]
     pub fn config(&self) -> DetectorConfig {
-        self.config
+        self.engine.config()
     }
 
     /// Returns a cloned copy of the internal detection batch.
@@ -366,29 +149,279 @@ impl Detector {
     #[must_use]
     pub fn bench_api_get_batch_cloned(&self) -> DetectionBatch {
         let mut new_batch = DetectionBatch::new();
-        new_batch.corners.copy_from_slice(&self.state.batch.corners);
+        new_batch.corners.copy_from_slice(&self.ctx.batch.corners);
         new_batch
             .homographies
-            .copy_from_slice(&self.state.batch.homographies);
-        new_batch.ids.copy_from_slice(&self.state.batch.ids);
-        new_batch
-            .payloads
-            .copy_from_slice(&self.state.batch.payloads);
+            .copy_from_slice(&self.ctx.batch.homographies);
+        new_batch.ids.copy_from_slice(&self.ctx.batch.ids);
+        new_batch.payloads.copy_from_slice(&self.ctx.batch.payloads);
         new_batch
             .error_rates
-            .copy_from_slice(&self.state.batch.error_rates);
-        new_batch.poses.copy_from_slice(&self.state.batch.poses);
+            .copy_from_slice(&self.ctx.batch.error_rates);
+        new_batch.poses.copy_from_slice(&self.ctx.batch.poses);
         new_batch
             .status_mask
-            .copy_from_slice(&self.state.batch.status_mask);
+            .copy_from_slice(&self.ctx.batch.status_mask);
         new_batch
             .funnel_status
-            .copy_from_slice(&self.state.batch.funnel_status);
+            .copy_from_slice(&self.ctx.batch.funnel_status);
         new_batch
             .corner_covariances
-            .copy_from_slice(&self.state.batch.corner_covariances);
+            .copy_from_slice(&self.ctx.batch.corner_covariances);
         new_batch
     }
+}
+
+/// Core detection pipeline — shared by [`Detector`] and [`LocusEngine`].
+///
+/// Runs the full pipeline (thresholding → segmentation → quad extraction →
+/// homography → decoding → pose) using the provided mutable [`FrameContext`].
+/// Returns a [`DetectionBatchView`] whose lifetime is tied to `ctx`.
+#[allow(clippy::similar_names)]
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_arguments)]
+fn run_detection_pipeline<'ctx>(
+    config: &DetectorConfig,
+    decoders: &[Box<dyn TagDecoder + Send + Sync>],
+    img: &ImageView,
+    ctx: &'ctx mut FrameContext,
+    intrinsics: Option<&crate::pose::CameraIntrinsics>,
+    tag_size: Option<f64>,
+    pose_mode: crate::config::PoseEstimationMode,
+    debug_telemetry: bool,
+) -> Result<DetectionBatchView<'ctx>, DetectorError> {
+    ctx.reset();
+    let state = ctx;
+
+    let (detection_img, _effective_scale, refinement_img) = if config.decimation > 1 {
+        let new_w = img.width / config.decimation;
+        let new_h = img.height / config.decimation;
+        let decimated_data = state.arena.alloc_slice_fill_copy(new_w * new_h, 0u8);
+        let decimated_img = img
+            .decimate_to(config.decimation, decimated_data)
+            .map_err(DetectorError::Preprocessing)?;
+        (decimated_img, 1.0 / config.decimation as f64, *img)
+    } else if config.upscale_factor > 1 {
+        let new_w = img.width * config.upscale_factor;
+        let new_h = img.height * config.upscale_factor;
+        state.upscale_buf.resize(new_w * new_h, 0);
+
+        let upscaled_img = img
+            .upscale_to(config.upscale_factor, &mut state.upscale_buf)
+            .map_err(DetectorError::Preprocessing)?;
+        (upscaled_img, config.upscale_factor as f64, upscaled_img)
+    } else {
+        (*img, 1.0, *img)
+    };
+
+    let img = &detection_img;
+
+    // 1a. Optional bilateral pre-filtering
+    let filtered_img = if config.enable_bilateral {
+        let filtered = state
+            .arena
+            .alloc_slice_fill_copy(img.width * img.height, 0u8);
+        crate::filter::bilateral_filter(
+            &state.arena,
+            img,
+            filtered,
+            3, // spatial radius
+            config.bilateral_sigma_space,
+            config.bilateral_sigma_color,
+        );
+        ImageView::new(filtered, img.width, img.height, img.width)
+            .map_err(DetectorError::InvalidImage)?
+    } else {
+        *img
+    };
+
+    // 1b. Optional Laplacian sharpening
+    let sharpened_img = if config.enable_sharpening {
+        let sharpened = state
+            .arena
+            .alloc_slice_fill_copy(filtered_img.width * filtered_img.height, 0u8);
+        crate::filter::laplacian_sharpen(&filtered_img, sharpened);
+
+        ImageView::new(
+            sharpened,
+            filtered_img.width,
+            filtered_img.height,
+            filtered_img.width,
+        )
+        .map_err(DetectorError::InvalidImage)?
+    } else {
+        filtered_img
+    };
+
+    let binarized = state
+        .arena
+        .alloc_slice_fill_copy(img.width * img.height, 0u8);
+    let threshold_map = state
+        .arena
+        .alloc_slice_fill_copy(img.width * img.height, 0u8);
+
+    // 1. Thresholding & 2. Segmentation & 3. Quad Extraction
+    let (n, unrefined) = {
+        let engine = crate::threshold::ThresholdEngine::from_config(config);
+        let tile_stats = engine.compute_tile_stats(&state.arena, &sharpened_img);
+        engine.apply_threshold_with_map(
+            &state.arena,
+            &sharpened_img,
+            &tile_stats,
+            binarized,
+            threshold_map,
+        );
+
+        // 2. Segmentation (SIMD Fused RLE + LSL)
+        let label_result = crate::simd_ccl_fusion::label_components_lsl(
+            &state.arena,
+            &sharpened_img,
+            threshold_map,
+            config.segmentation_connectivity == crate::config::SegmentationConnectivity::Eight,
+            config.quad_min_area,
+        );
+
+        // 3. Quad Extraction (SoA)
+        let (n, unrefined) = crate::quad::extract_quads_soa(
+            &mut state.batch,
+            &sharpened_img,
+            &label_result,
+            config,
+            config.decimation,
+            &refinement_img,
+            debug_telemetry,
+        );
+
+        // 3.5 Fast-Path Funnel Gate
+        // Rejects candidates early based on boundary contrast
+        crate::funnel::apply_funnel_gate(
+            &mut state.batch,
+            n,
+            &sharpened_img,
+            &tile_stats,
+            config.threshold_tile_size,
+            config.decoder_min_contrast,
+            1.0 / config.decimation as f64,
+        );
+
+        (n, unrefined)
+    };
+
+    // Compute subpixel jitter if requested
+    let mut jitter_ptr = std::ptr::null();
+    let mut num_jitter = 0;
+    if let (true, Some(unrefined_pts)) = (debug_telemetry, unrefined) {
+        num_jitter = unrefined_pts.len();
+        // Store 4 corners * 2 (dx, dy) per candidate = 8 floats
+        let jitter = state.arena.alloc_slice_fill_copy(num_jitter * 8, 0.0f32);
+        for (i, unrefined_corners) in unrefined_pts.iter().enumerate() {
+            for (j, unrefined_corner) in unrefined_corners.iter().enumerate() {
+                let dx = state.batch.corners[i][j].x - unrefined_corner.x as f32;
+                let dy = state.batch.corners[i][j].y - unrefined_corner.y as f32;
+                jitter[i * 8 + j * 2] = dx;
+                jitter[i * 8 + j * 2 + 1] = dy;
+            }
+        }
+        jitter_ptr = jitter.as_ptr();
+    }
+
+    // 4. Homography Pass (SoA)
+    crate::decoder::compute_homographies_soa(
+        &state.batch.corners[0..n],
+        &state.batch.status_mask[0..n],
+        &mut state.batch.homographies[0..n],
+    );
+
+    // Optional: GWLF Refinement
+    let mut gwlf_fallback_count = 0;
+    let mut gwlf_avg_delta = 0.0f32;
+    if config.refinement_mode == crate::config::CornerRefinementMode::Gwlf {
+        let mut total_delta = 0.0f32;
+        let mut count = 0;
+        for i in 0..n {
+            let coarse = [
+                [state.batch.corners[i][0].x, state.batch.corners[i][0].y],
+                [state.batch.corners[i][1].x, state.batch.corners[i][1].y],
+                [state.batch.corners[i][2].x, state.batch.corners[i][2].y],
+                [state.batch.corners[i][3].x, state.batch.corners[i][3].y],
+            ];
+            if let Some((refined, covs)) = crate::gwlf::refine_quad_gwlf_with_cov(
+                &refinement_img,
+                &coarse,
+                config.gwlf_transversal_alpha,
+            ) {
+                for j in 0..4 {
+                    let dx = refined[j][0] - coarse[j][0];
+                    let dy = refined[j][1] - coarse[j][1];
+                    total_delta += (dx * dx + dy * dy).sqrt();
+                    count += 1;
+
+                    state.batch.corners[i][j].x = refined[j][0];
+                    state.batch.corners[i][j].y = refined[j][1];
+
+                    // Store 2x2 covariance (4 floats) for each corner
+                    state.batch.corner_covariances[i][j * 4] = covs[j][(0, 0)] as f32;
+                    state.batch.corner_covariances[i][j * 4 + 1] = covs[j][(0, 1)] as f32;
+                    state.batch.corner_covariances[i][j * 4 + 2] = covs[j][(1, 0)] as f32;
+                    state.batch.corner_covariances[i][j * 4 + 3] = covs[j][(1, 1)] as f32;
+                }
+            } else {
+                gwlf_fallback_count += 1;
+            }
+        }
+        if count > 0 {
+            gwlf_avg_delta = total_delta / count as f32;
+        }
+
+        // Recompute homographies after refinement
+        crate::decoder::compute_homographies_soa(
+            &state.batch.corners[0..n],
+            &state.batch.status_mask[0..n],
+            &mut state.batch.homographies[0..n],
+        );
+    }
+
+    // 5. Decoding Pass (SoA)
+    crate::decoder::decode_batch_soa(&mut state.batch, n, &refinement_img, decoders, config);
+
+    // Partition valid candidates to the front [0..v]
+    let v = state.batch.partition(n);
+
+    // 6. Pose Refinement (SoA)
+    let (repro_errors_ptr, num_repro) = run_pose_refinement(
+        &mut state.batch,
+        &state.arena,
+        v,
+        intrinsics,
+        tag_size,
+        &refinement_img,
+        pose_mode,
+        config,
+        debug_telemetry,
+    );
+
+    // Detectors return corners at pixel centers (indices + 0.5) following OpenCV conventions.
+    // No additional adjustment needed as the internal pipeline is now unbiased.
+
+    let telemetry = if debug_telemetry {
+        Some(crate::batch::TelemetryPayload {
+            binarized_ptr: binarized.as_ptr(),
+            threshold_map_ptr: threshold_map.as_ptr(),
+            subpixel_jitter_ptr: jitter_ptr,
+            num_jitter,
+            reprojection_errors_ptr: repro_errors_ptr,
+            num_reprojection: num_repro,
+            gwlf_fallback_count,
+            gwlf_avg_delta,
+            width: img.width,
+            height: img.height,
+            stride: img.width,
+        })
+    } else {
+        None
+    };
+
+    Ok(state.batch.view_with_telemetry(v, n, telemetry))
 }
 
 /// Run pose refinement on valid candidates and optionally compute reprojection errors.
@@ -470,6 +503,7 @@ fn run_pose_refinement(
 pub struct DetectorBuilder {
     config: DetectorConfig,
     families: Vec<crate::config::TagFamily>,
+    max_concurrent_frames: usize,
 }
 
 impl DetectorBuilder {
@@ -479,6 +513,7 @@ impl DetectorBuilder {
         Self {
             config: DetectorConfig::default(),
             families: Vec::new(),
+            max_concurrent_frames: 1,
         }
     }
 
@@ -635,28 +670,208 @@ impl DetectorBuilder {
     }
 
     /// Build the [`Detector`] instance.
+    ///
+    /// The internal pool is sized to `max_concurrent_frames` (default 1).
+    /// For purely single-frame use (`detect`), the default is optimal.
+    /// Increase via [`DetectorBuilder::with_max_concurrent_frames`] when
+    /// calling [`Detector::detect_concurrent`] with large batches.
     #[must_use]
     pub fn build(self) -> Detector {
-        let mut decoders = Vec::new();
+        let pool_size = self.max_concurrent_frames.max(1);
+        let decoders = self.build_decoders();
+        let engine = LocusEngine::new(self.config, decoders, pool_size);
+        Detector {
+            engine,
+            ctx: FrameContext::new(),
+        }
+    }
+
+    /// Set the number of frames that [`Detector::detect_concurrent`] can process
+    /// simultaneously. This pre-allocates that many [`FrameContext`] objects in
+    /// the internal pool.
+    ///
+    /// Defaults to `1` (sequential). For batch workloads set this to the
+    /// expected batch size or `rayon::current_num_threads()`.
+    #[must_use]
+    pub fn with_max_concurrent_frames(mut self, n: usize) -> Self {
+        self.max_concurrent_frames = n.max(1);
+        self
+    }
+
+    /// Build a standalone [`LocusEngine`] with an explicit pool size.
+    ///
+    /// Intended for advanced Rust users who want to manage their own
+    /// `FrameContext` lifecycle. Python users should use `build()` instead.
+    ///
+    /// `pool_size = 0` falls back to `rayon::current_num_threads()`.
+    #[must_use]
+    pub fn build_engine(self) -> LocusEngine {
+        let pool_size = if self.max_concurrent_frames == 0 {
+            rayon::current_num_threads()
+        } else {
+            self.max_concurrent_frames
+        };
+        let decoders = self.build_decoders();
+        LocusEngine::new(self.config, decoders, pool_size)
+    }
+
+    fn build_decoders(&self) -> Vec<Box<dyn TagDecoder + Send + Sync>> {
         let families = if self.families.is_empty() {
             vec![crate::config::TagFamily::AprilTag36h11]
         } else {
-            self.families
+            self.families.clone()
         };
-        for family in families {
-            decoders.push(family_to_decoder(family));
-        }
-
-        Detector {
-            config: self.config,
-            decoders,
-            state: DetectorState::new(),
-        }
+        families.into_iter().map(family_to_decoder).collect()
     }
 }
 
 impl Default for DetectorBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ============================================================================
+// LocusEngine
+// ============================================================================
+
+/// A shared, thread-safe detection engine.
+///
+/// Separates the immutable pipeline configuration from mutable per-frame state,
+/// enabling one engine to be shared across many threads. Each concurrent caller
+/// either supplies its own [`FrameContext`] (explicit API) or leases one from the
+/// engine's internal lock-free pool (implicit API via [`LocusEngine::detect_concurrent`]).
+///
+/// # Construction
+///
+/// ```ignore
+/// let engine = locus_core::DetectorBuilder::new()
+///     .with_family(TagFamily::AprilTag36h11)
+///     .build_engine();
+/// ```
+pub struct LocusEngine {
+    config: DetectorConfig,
+    decoders: Vec<Box<dyn TagDecoder + Send + Sync>>,
+    /// Lock-free pool of reusable frame contexts.
+    pool: crossbeam_queue::ArrayQueue<Box<FrameContext>>,
+}
+
+impl LocusEngine {
+    /// Create a new engine with a pre-populated context pool.
+    ///
+    /// `pool_size` must be ≥ 1. Callers should use [`DetectorBuilder::build_engine`]
+    /// rather than calling this directly.
+    #[must_use]
+    pub fn new(
+        config: DetectorConfig,
+        decoders: Vec<Box<dyn TagDecoder + Send + Sync>>,
+        pool_size: usize,
+    ) -> Self {
+        let capacity = pool_size.max(1);
+        let pool = crossbeam_queue::ArrayQueue::new(capacity);
+        for _ in 0..pool_size {
+            // Box<FrameContext> to heap-allocate the ~200 KB DetectionBatch.
+            let _ = pool.push(Box::new(FrameContext::new()));
+        }
+        Self {
+            config,
+            decoders,
+            pool,
+        }
+    }
+
+    /// Run the detection pipeline using an explicitly supplied context.
+    ///
+    /// The returned [`DetectionBatchView`] borrows from `ctx`; drop the view before
+    /// calling this method again on the same context or returning it to the pool.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DetectorError`] if the input image is invalid.
+    pub fn detect_with_context<'ctx>(
+        &self,
+        img: &ImageView,
+        ctx: &'ctx mut FrameContext,
+        intrinsics: Option<&crate::pose::CameraIntrinsics>,
+        tag_size: Option<f64>,
+        pose_mode: crate::config::PoseEstimationMode,
+        debug_telemetry: bool,
+    ) -> Result<DetectionBatchView<'ctx>, DetectorError> {
+        run_detection_pipeline(
+            &self.config,
+            &self.decoders,
+            img,
+            ctx,
+            intrinsics,
+            tag_size,
+            pose_mode,
+            debug_telemetry,
+        )
+    }
+
+    /// Detect tags in multiple frames concurrently using Rayon.
+    ///
+    /// Pool contexts are leased to Rayon threads; each result is assembled into an
+    /// owned `Vec<Detection>` before the context is returned. Telemetry is
+    /// unavailable in this mode (debug overhead would outlive the arena).
+    ///
+    /// If the pool is exhausted (more concurrent callers than pool size), a
+    /// temporary overflow context is allocated and discarded after use.
+    pub fn detect_concurrent(
+        &self,
+        frames: &[ImageView<'_>],
+        intrinsics: Option<&crate::pose::CameraIntrinsics>,
+        tag_size: Option<f64>,
+        pose_mode: crate::config::PoseEstimationMode,
+    ) -> Vec<Result<Vec<crate::Detection>, DetectorError>> {
+        use rayon::prelude::*;
+        frames
+            .par_iter()
+            .map(|img| {
+                // Pop a context from the pool, or create a temporary overflow context.
+                let (mut ctx, to_pool) = if let Some(c) = self.pool.pop() {
+                    (c, true)
+                } else {
+                    (Box::new(FrameContext::new()), false)
+                };
+
+                let owned = run_detection_pipeline(
+                    &self.config,
+                    &self.decoders,
+                    img,
+                    &mut ctx,
+                    intrinsics,
+                    tag_size,
+                    pose_mode,
+                    false, // telemetry disabled: arena pointers would not survive pool return
+                )
+                .map(|view| {
+                    // Extract owned data BEFORE releasing ctx back to the pool.
+                    // `view` borrows from ctx.batch; reassemble_owned() copies into Vec.
+                    // The view is implicitly dropped at the end of this closure.
+                    view.reassemble_owned()
+                });
+
+                if to_pool {
+                    let _ = self.pool.push(ctx);
+                }
+                owned
+            })
+            .collect()
+    }
+
+    /// Clear all decoders and replace them with the given tag families.
+    pub fn set_families(&mut self, families: &[crate::config::TagFamily]) {
+        self.decoders.clear();
+        for &family in families {
+            self.decoders
+                .push(crate::decoder::family_to_decoder(family));
+        }
+    }
+
+    /// Get the current detector configuration.
+    #[must_use]
+    pub fn config(&self) -> DetectorConfig {
+        self.config
     }
 }

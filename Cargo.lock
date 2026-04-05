@@ -3914,6 +3914,7 @@ version = "0.3.1"
 dependencies = [
  "askama",
  "bumpalo",
+ "crossbeam-queue",
  "csv",
  "divan",
  "image",

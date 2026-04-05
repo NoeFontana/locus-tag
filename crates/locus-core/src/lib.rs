@@ -59,7 +59,7 @@ pub use crate::config::{
     CornerRefinementMode, DecodeMode, DetectOptions, DetectorConfig, PoseEstimationMode,
     QuadExtractionMode, TagFamily,
 };
-pub use crate::detector::{Detector, DetectorBuilder};
+pub use crate::detector::{Detector, DetectorBuilder, FrameContext, LocusEngine};
 pub use crate::error::{ConfigError, DetectorError};
 pub use crate::image::ImageView;
 pub use crate::pose::CameraIntrinsics;
