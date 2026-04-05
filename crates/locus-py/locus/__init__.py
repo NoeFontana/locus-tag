@@ -213,6 +213,51 @@ class Detector:
             telemetry=telemetry,
         )
 
+    def detect_concurrent(
+        self,
+        frames: list[np.ndarray],
+        intrinsics: CameraIntrinsics | None = None,
+        tag_size: float | None = None,
+        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
+    ) -> list[DetectionBatch]:
+        """
+        Detect tags in multiple frames concurrently.
+
+        Releases the GIL for the entire parallel section. Telemetry and
+        rejected-corner data are not available via this method.
+
+        Args:
+            frames: List of grayscale uint8 images.
+            intrinsics: Optional CameraIntrinsics for 3D pose estimation.
+            tag_size: Optional physical tag size (meters).
+            pose_estimation_mode: Fast or Accurate.
+
+        Returns:
+            A list of DetectionBatch, one per input frame, in the same order.
+        """
+        for i, img in enumerate(frames):
+            if img.dtype != np.uint8:
+                raise ValueError(f"Frame {i} must be uint8, got {img.dtype}")
+
+        raw_results = self._inner.detect_concurrent(
+            frames,
+            intrinsics=intrinsics,
+            tag_size=tag_size,
+            pose_estimation_mode=pose_estimation_mode,
+        )
+
+        return [
+            DetectionBatch(
+                ids=r.ids,
+                corners=r.corners,
+                error_rates=r.error_rates,
+                poses=r.poses,
+                rejected_corners=r.rejected_corners,
+                rejected_error_rates=r.rejected_error_rates,
+            )
+            for r in raw_results
+        ]
+
 
 __all__ = [
     "AprilGrid",

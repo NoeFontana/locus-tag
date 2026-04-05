@@ -8,7 +8,7 @@ This document provides a high-level overview of the Locus system architecture, d
 
 ## High-Level Overview
 
-Locus is built as a hybrid Rust/Python system. The core logic resides in a high-performance Rust crate (`locus-core`), which is exposed to Python via `pyo3` bindings (`locus-py`). All operations are conducted through the `Detector` class, which manages persistent state and enforces strict zero-copy, GIL-free execution.
+Locus is built as a hybrid Rust/Python system. The core logic resides in a high-performance Rust crate (`locus-core`), which is exposed to Python via `pyo3` bindings (`locus-py`). All operations go through a single `Detector` class: single-frame via `detect()`, or concurrent batch via `detect_concurrent()` when constructed with `max_concurrent_frames > 1`.
 
 ```mermaid
 flowchart TD
@@ -27,15 +27,27 @@ flowchart TD
 
 ## Component Diagram
 
-The system is structured around the `Detector` struct, which manages configuration and state.
+The system is structured around a single `Detector` class that wraps an immutable `LocusEngine` (config + decoders + pool) and a dedicated `FrameContext` for single-frame use. `LocusEngine` and `FrameContext` are internal implementation details; the Python API exposes only `Detector`.
 
 ```mermaid
 classDiagram
     class Detector {
-        -DetectorConfig config
-        -DetectorState state
-        -Vec~Box~TagDecoder~~ decoders
+        -LocusEngine engine
+        -FrameContext ctx
         +detect(image) DetectionBatch
+        +detect_concurrent(images) List~DetectionBatch~
+    }
+
+    class LocusEngine {
+        -DetectorConfig config
+        -Vec~Box~TagDecoder~~ decoders
+        -ArrayQueue~FrameContext~ pool
+    }
+
+    class FrameContext {
+        -Bump arena
+        -DetectionBatch batch
+        -Vec~u8~ upscale_buf
     }
 
     class DetectorConfig {
@@ -50,21 +62,6 @@ classDiagram
         +decode(bits) Option~id, hamming~
         +sample_points()
         +rotated_codes()
-    }
-
-    class DecodingStrategy {
-        <<interface>>
-        +Code from_intensities(intensities, thresholds)
-        +u32 distance(code, target)
-        +decode(code, decoder)
-    }
-
-    class HardStrategy {
-        +Code = u64
-    }
-
-    class SoftStrategy {
-        +Code = SoftCode (stack-allocated)
     }
 
     class AprilTag36h11 {
@@ -82,8 +79,11 @@ classDiagram
         +Pose pose
     }
 
-    Detector *-- DetectorConfig
-    Detector o-- TagDecoder
+    Detector *-- LocusEngine
+    Detector *-- FrameContext
+    LocusEngine *-- DetectorConfig
+    LocusEngine o-- TagDecoder
+    LocusEngine --> FrameContext : pool
     TagDecoder <|-- AprilTag36h11
     TagDecoder <|-- ArUco4x4
     Detector ..> Detection : Produces
@@ -91,9 +91,9 @@ classDiagram
 
 ## Design Principles
 
-1.  **Encapsulated Facade**: The `Detector` struct provides a single, robust entry point that owns all complex memory lifetimes (arenas, SoA batches), removing the cognitive burden of resource management from the user.
+1.  **Encapsulated Facade**: The `Detector` struct provides a single, robust entry point for single-threaded use that owns all complex memory lifetimes (arenas, SoA batches), removing the cognitive burden of resource management from the user.
 2.  **Zero-Copy Integration**: Utilizes the Python Buffer Protocol to access NumPy arrays directly. Python results are returned as a vectorized `DetectionBatch` dataclass containing zero-copy NumPy views of the internal SoA layout, maximizing throughput for downstream consumers.
-3.  **Thread Concurrency (GIL-Free)**: Releases the Python Global Interpreter Lock (GIL) during the heavy perception pipeline, allowing true multi-threaded execution and preventing blocking in concurrent Python applications.
+3.  **Thread Concurrency (GIL-Free)**: `Detector` exposes two orthogonal concurrency axes: `threads` controls intra-frame Rayon parallelism; `max_concurrent_frames` sizes an internal lock-free `crossbeam::ArrayQueue` pool of `FrameContext` objects for inter-frame parallelism via `detect_concurrent`. The GIL is released for the entire compute section of both `detect` and `detect_concurrent`.
 4.  **Arena Memory**: Internal per-frame scratchpad (`bumpalo`) eliminates `malloc`/`free` overhead in the hot path. See [Memory Model](memory_model.md) for details.
 5.  **Cache Locality**: Algorithms (thresholding, CCL) process data in linear, cache-friendly passes.
 6.  **Runtime SIMD Dispatch**: Uses `multiversion` to target AVX2, AVX-512, or NEON based on host CPU capabilities.
