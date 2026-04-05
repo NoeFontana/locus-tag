@@ -639,8 +639,6 @@ impl CharucoRefiner {
 /// Copy a (possibly row-padded) image buffer into a contiguous `dst` slice.
 ///
 /// # Safety
-/// `src` must be valid for `height * stride` bytes.
-/// # Safety
 /// `src` must be valid for `height * stride` bytes and must not alias `dst`.
 unsafe fn copy_strided_image(
     src: *const u8,
@@ -733,6 +731,18 @@ fn build_pipeline_telemetry(
 
 // Detector class
 // ============================================================================
+
+/// Wraps a raw `usize` so the address can cross the `py.detach()` `Send` boundary.
+///
+/// # Safety
+///
+/// The caller must ensure no concurrent access to the pointed-to data occurs
+/// while this wrapper is alive outside the originating thread.
+struct SendPtr(usize);
+
+// SAFETY: `py.detach()` runs its closure synchronously on the *same OS thread*
+// that holds the GIL. The pointer remains exclusively owned by that thread.
+unsafe impl Send for SendPtr {}
 
 #[pyclass(unsendable)]
 pub struct Detector {
@@ -867,6 +877,58 @@ impl Detector {
         })
     }
 
+    /// Detect tags in multiple frames concurrently using Rayon.
+    ///
+    /// Releases the Python GIL for the entire parallel section. The detector
+    /// leases [`FrameContext`] objects from its internal pool; the pool size
+    /// was set via `max_concurrent_frames` at construction time.
+    ///
+    /// Telemetry and rejected-corner data are not available via this method.
+    #[pyo3(signature = (frames, intrinsics=None, tag_size=None, pose_estimation_mode=PoseEstimationMode::Fast))]
+    #[allow(clippy::needless_pass_by_value)]
+    fn detect_concurrent(
+        &self,
+        py: Python<'_>,
+        frames: Vec<PyReadonlyArray2<'_, u8>>,
+        intrinsics: Option<CameraIntrinsics>,
+        tag_size: Option<f64>,
+        pose_estimation_mode: PoseEstimationMode,
+    ) -> PyResult<Vec<DetectionResult>> {
+        // Prepare image views while GIL is held (PyReadonlyArray2 is GIL-bound).
+        let views: Vec<ImageView<'_>> = frames
+            .iter()
+            .map(prepare_image_view)
+            .collect::<PyResult<_>>()?;
+
+        let core_intrinsics = intrinsics.map(locus_core::CameraIntrinsics::from);
+        let core_pose_mode = locus_core::config::PoseEstimationMode::from(pose_estimation_mode);
+        let has_pose = intrinsics.is_some() && tag_size.is_some();
+
+        // Extract a raw pointer to the engine (which is Send+Sync) before releasing
+        // the GIL. `self.inner` is pinned on the heap (Box) and kept alive by `self`.
+        //
+        // SAFETY: `Detector` is `#[pyclass(unsendable)]` — Python guarantees no
+        // concurrent Python-level access. `py.detach()` runs synchronously on the
+        // same OS thread. The pointer remains valid for the duration of this call.
+        // SAFETY: `addr_of!` avoids the "reference as raw pointer" lint by not
+        // creating an intermediate `&T` before casting to `*const T`.
+        let ptr = SendPtr(std::ptr::addr_of!(*self.inner.engine()) as usize);
+
+        let results: Vec<Result<Vec<locus_core::Detection>, locus_core::DetectorError>> = py
+            .detach(move || {
+                let engine = unsafe { &*(ptr.0 as *const locus_core::LocusEngine) };
+                engine.detect_concurrent(&views, core_intrinsics.as_ref(), tag_size, core_pose_mode)
+            });
+
+        results
+            .into_iter()
+            .map(|r| {
+                let dets = r.map_err(|e| PyValueError::new_err(e.to_string()))?;
+                build_detection_result_from_owned(py, &dets, has_pose)
+            })
+            .collect()
+    }
+
     /// Returns the current detector configuration.
     fn config(&self) -> PyDetectorConfig {
         PyDetectorConfig::from(self.inner.config())
@@ -997,6 +1059,7 @@ fn create_detector(
 // ============================================================================
 // DetectorBuilder
 // ============================================================================
+
 
 /// Fluent builder for constructing a [`Detector`].
 ///
@@ -1180,6 +1243,12 @@ impl DetectorBuilder {
         Ok(slf)
     }
 
+    fn with_max_concurrent_frames(slf: Py<Self>, py: Python<'_>, n: usize) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_max_concurrent_frames(n);
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
     /// Consume the builder and return a ready-to-use [`Detector`].
     fn build(&mut self) -> PyResult<Detector> {
         let inner = self
@@ -1214,6 +1283,79 @@ fn prepare_image_view<'a>(img: &PyReadonlyArray2<'_, u8>) -> PyResult<ImageView<
             "Array must be C-contiguous. Call np.ascontiguousarray(image) first.",
         ))
     }
+}
+
+/// Convert an owned [`Vec<locus_core::Detection>`] to a [`DetectionResult`] with NumPy arrays.
+///
+/// Used by [`Detector::detect_concurrent`] where the detection pipeline runs
+/// in a GIL-free closure and returns owned data.
+///
+/// Rejected corners are not available via this path (only valid detections are returned).
+#[allow(clippy::unnecessary_wraps)] // PyResult is required by callers that chain with `?`
+fn build_detection_result_from_owned(
+    py: Python<'_>,
+    detections: &[locus_core::Detection],
+    has_pose: bool,
+) -> PyResult<DetectionResult> {
+    let n = detections.len();
+
+    let ids_arr = unsafe { PyArray1::<i32>::new(py, [n], false) };
+    let corners_arr = unsafe { PyArray3::<f32>::new(py, [n, 4, 2], false) };
+    let error_rates_arr = unsafe { PyArray1::<f32>::new(py, [n], false) };
+
+    unsafe {
+        let ids_sl = ids_arr.as_slice_mut().expect("ids");
+        let corners_sl = corners_arr.as_slice_mut().expect("corners");
+        let error_sl = error_rates_arr.as_slice_mut().expect("error_rates");
+
+        for (i, det) in detections.iter().enumerate() {
+            #[allow(clippy::cast_possible_wrap)]
+            { ids_sl[i] = det.id as i32; }
+            error_sl[i] = det.hamming as f32;
+            for (j, corner) in det.corners.iter().enumerate() {
+                corners_sl[i * 8 + j * 2] = corner[0] as f32;
+                corners_sl[i * 8 + j * 2 + 1] = corner[1] as f32;
+            }
+        }
+    }
+
+    let poses = if has_pose {
+        let poses_arr = unsafe { PyArray2::<f32>::new(py, [n, 7], false) };
+        unsafe {
+            let poses_sl = poses_arr.as_slice_mut().expect("poses");
+            for (i, det) in detections.iter().enumerate() {
+                if let Some(ref pose) = det.pose {
+                    // Reconstruct [tx, ty, tz, qx, qy, qz, qw] from Pose struct.
+                    let r = nalgebra::Rotation3::from_matrix_unchecked(pose.rotation);
+                    let q = nalgebra::UnitQuaternion::from_rotation_matrix(&r);
+                    poses_sl[i * 7] = pose.translation[0] as f32;
+                    poses_sl[i * 7 + 1] = pose.translation[1] as f32;
+                    poses_sl[i * 7 + 2] = pose.translation[2] as f32;
+                    poses_sl[i * 7 + 3] = q.i as f32;
+                    poses_sl[i * 7 + 4] = q.j as f32;
+                    poses_sl[i * 7 + 5] = q.k as f32;
+                    poses_sl[i * 7 + 6] = q.w as f32;
+                }
+            }
+        }
+        Some(poses_arr.unbind())
+    } else {
+        None
+    };
+
+    // Rejected corners are not available on the owned path.
+    let rejected_arr = unsafe { PyArray3::<f32>::new(py, [0, 4, 2], false) };
+    let rejected_error_rates_arr = unsafe { PyArray1::<f32>::new(py, [0], false) };
+
+    Ok(DetectionResult {
+        ids: ids_arr.unbind(),
+        corners: corners_arr.unbind(),
+        error_rates: error_rates_arr.unbind(),
+        poses,
+        rejected_corners: rejected_arr.unbind(),
+        rejected_error_rates: rejected_error_rates_arr.unbind(),
+        telemetry: None,
+    })
 }
 
 // ============================================================================

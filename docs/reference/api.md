@@ -4,7 +4,7 @@ This page provides detailed information about the Locus Python API.
 
 ## Core Interface
 
-The primary entry point for using Locus is the `Detector` class.
+The primary entry point for single-threaded use is the `Detector` class.
 
 ::: locus.Detector
     options:
@@ -12,6 +12,49 @@ The primary entry point for using Locus is the `Detector` class.
         members:
             - __init__
             - detect
+
+## Concurrent Detection
+
+`Detector` supports concurrent multi-frame processing via `detect_concurrent`. Set `max_concurrent_frames` at construction time to control the internal pool size.
+
+See the [Concurrent Detection how-to](../how-to/concurrent_detection.md) for full usage examples.
+
+### `DetectorBuilder`
+
+The fluent builder constructs `Detector` instances.
+
+```python
+import locus
+
+detector = (
+    locus.DetectorBuilder()
+    .with_family(locus.TagFamily.AprilTag36h11)
+    .with_threads(4)
+    .with_max_concurrent_frames(8)
+    .build()
+)
+```
+
+| Method | Description |
+| :--- | :--- |
+| `with_family(family)` | Add a tag family to detect. |
+| `with_decimation(n)` | Spatial decimation factor (default 1). |
+| `with_threads(n)` | Rayon intra-frame thread count (0 = all cores). |
+| `with_corner_refinement(mode)` | `CornerRefinementMode` for subpixel accuracy. |
+| `with_decode_mode(mode)` | `DecodeMode.Hard` or `DecodeMode.Soft`. |
+| `with_max_concurrent_frames(n)` | Pool size for `detect_concurrent` (default 1 = sequential). |
+| `build()` | Build the `Detector`. |
+
+**`detect_concurrent(frames, *, intrinsics=None, tag_size=None, pose_estimation_mode=PoseEstimationMode.Fast) -> list[DetectionResult]`**
+
+Detect tags in multiple frames concurrently using Rayon. Releases the GIL for the entire parallel section. Pool contexts are managed internally. Rejected-corner data and telemetry are not available via this method.
+
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `frames` | `list[np.ndarray]` | List of (H, W) uint8 grayscale frames. |
+| `intrinsics` | `CameraIntrinsics \| None` | Camera intrinsics for 3D pose estimation. |
+| `tag_size` | `float \| None` | Physical tag side length in metres. |
+| `pose_estimation_mode` | `PoseEstimationMode` | `Fast` or `Accurate`. |
 
 ## Configuration
 

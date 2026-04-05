@@ -65,6 +65,7 @@ nav:
   - How-To Guides:
       - how-to/add_dictionary.md
       - how-to/debug_with_rerun.md
+      - how-to/concurrent_detection.md
   - Explanation:
       - explanation/architecture.md
       - explanation/pipeline.md
