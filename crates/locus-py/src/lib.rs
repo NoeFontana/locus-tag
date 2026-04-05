@@ -1060,7 +1060,6 @@ fn create_detector(
 // DetectorBuilder
 // ============================================================================
 
-
 /// Fluent builder for constructing a [`Detector`].
 ///
 /// Methods return `self` so they can be chained in Python:
@@ -1310,7 +1309,9 @@ fn build_detection_result_from_owned(
 
         for (i, det) in detections.iter().enumerate() {
             #[allow(clippy::cast_possible_wrap)]
-            { ids_sl[i] = det.id as i32; }
+            {
+                ids_sl[i] = det.id as i32;
+            }
             error_sl[i] = det.hamming as f32;
             for (j, corner) in det.corners.iter().enumerate() {
                 corners_sl[i * 8 + j * 2] = corner[0] as f32;
