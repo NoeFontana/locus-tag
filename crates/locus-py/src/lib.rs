@@ -126,6 +126,28 @@ impl From<QuadExtractionMode> for locus_core::config::QuadExtractionMode {
     }
 }
 
+#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum DetectorPreset {
+    Metrology = 0,
+    PureTags = 1,
+    Checkerboard = 2,
+    Production = 3,
+    Fast = 4,
+}
+
+impl From<DetectorPreset> for locus_core::DetectorConfig {
+    fn from(p: DetectorPreset) -> Self {
+        match p {
+            DetectorPreset::Metrology => locus_core::DetectorConfig::sota_metrology_default(),
+            DetectorPreset::PureTags => locus_core::DetectorConfig::sota_pure_tags_default(),
+            DetectorPreset::Checkerboard => locus_core::DetectorConfig::sota_checkerboard_default(),
+            DetectorPreset::Production => locus_core::DetectorConfig::production_default(),
+            DetectorPreset::Fast => locus_core::DetectorConfig::fast_default(),
+        }
+    }
+}
+
 // ============================================================================
 // Structs
 // ============================================================================
@@ -959,16 +981,26 @@ fn tag_family_from_i32(f: i32) -> PyResult<locus_core::TagFamily> {
 }
 
 #[pyfunction]
-#[pyo3(signature = (decimation=1, threads=0, families=vec![], **kwargs))]
+#[pyo3(signature = (decimation=None, threads=None, families=vec![], preset=None, **kwargs))]
 fn create_detector(
-    decimation: usize,
-    threads: usize,
+    decimation: Option<usize>,
+    threads: Option<usize>,
     families: Vec<i32>,
+    preset: Option<DetectorPreset>,
     kwargs: Option<Bound<'_, PyDict>>,
 ) -> PyResult<Detector> {
-    let mut builder = locus_core::DetectorBuilder::new()
-        .with_decimation(decimation)
-        .with_threads(threads);
+    let mut builder = locus_core::DetectorBuilder::new();
+
+    if let Some(p) = preset {
+        builder = builder.with_config(locus_core::config::DetectorConfig::from(p));
+    }
+
+    if let Some(d) = decimation {
+        builder = builder.with_decimation(d);
+    }
+    if let Some(t) = threads {
+        builder = builder.with_threads(t);
+    }
 
     for f in families {
         builder = builder.with_family(tag_family_from_i32(f)?);
@@ -1376,24 +1408,6 @@ fn init_tracy() {
     }
 }
 
-#[pyfunction]
-fn production_config() -> Detector {
-    Detector {
-        inner: Box::new(locus_core::Detector::with_config(
-            locus_core::DetectorConfig::production_default(),
-        )),
-    }
-}
-
-#[pyfunction]
-fn fast_config() -> Detector {
-    Detector {
-        inner: Box::new(locus_core::Detector::with_config(
-            locus_core::DetectorConfig::fast_default(),
-        )),
-    }
-}
-
 #[pymodule]
 fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Enums
@@ -1403,6 +1417,7 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<DecodeMode>()?;
     m.add_class::<PoseEstimationMode>()?;
     m.add_class::<QuadExtractionMode>()?;
+    m.add_class::<DetectorPreset>()?;
     // Config / misc structs
     m.add_class::<CameraIntrinsics>()?;
     m.add_class::<PyPose>()?;
@@ -1421,8 +1436,6 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<DetectorBuilder>()?;
 
     m.add_function(wrap_pyfunction!(create_detector, m)?)?;
-    m.add_function(wrap_pyfunction!(production_config, m)?)?;
-    m.add_function(wrap_pyfunction!(fast_config, m)?)?;
     m.add_function(wrap_pyfunction!(init_tracy, m)?)?;
     Ok(())
 }

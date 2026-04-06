@@ -38,6 +38,25 @@ class QuadExtractionMode(enum.IntEnum):
     ContourRdp = 0
     EdLines = 1
 
+class DetectorPreset(enum.IntEnum):
+    """
+    Semantic presets for standard detector topologies and algorithms.
+
+    Metrology: Optimized for single-tag calibration and structure-from-motion.
+               Uses EdLines without sharpening to preserve raw PSF and Hard decoding.
+    PureTags: Maximum recall on dense, multi-tag scenes at varying distances.
+              Uses Soft decoding which can recover tags missed by Hard decision.
+    Checkerboard: Optimized for tightly packed grids like ChAruco/AprilGrid.
+                  Enforces 4-connectivity and reduces contrast gates for touching tags.
+    Production: Balanced, high-fidelity default configuration.
+    Fast: Low-latency configuration with minimal refinement and larger tiles.
+    """
+    Metrology = 0
+    PureTags = 1
+    Checkerboard = 2
+    Production = 3
+    Fast = 4
+
 # ---------------------------------------------------------------------------
 # Config / misc structs
 # ---------------------------------------------------------------------------
@@ -202,6 +221,22 @@ class CharucoRefiner:
 # ---------------------------------------------------------------------------
 
 class Detector:
+    def __init__(
+        self,
+        decimation: int | None = None,
+        threads: int | None = None,
+        families: list[TagFamily] | None = None,
+        preset: DetectorPreset | None = None,
+        threshold_tile_size: int | None = None,
+        threshold_min_range: int | None = None,
+        adaptive_threshold_constant: int | None = None,
+        quad_min_area: int | None = None,
+        quad_min_fill_ratio: float | None = None,
+        quad_min_edge_score: float | None = None,
+        decoder_min_contrast: float | None = None,
+        max_hamming_error: int | None = None,
+        **kwargs: Any,
+    ) -> None: ...
     def detect(
         self,
         img: npt.NDArray[np.uint8],
@@ -258,9 +293,10 @@ class DetectorBuilder:
 # ---------------------------------------------------------------------------
 
 def create_detector(
-    decimation: int = 1,
-    threads: int = 0,
+    decimation: int | None = None,
+    threads: int | None = None,
     families: list[int] = [],
+    preset: DetectorPreset | None = None,
     **kwargs: Any,
 ) -> Detector: ...
 def production_config() -> Detector: ...
