@@ -114,7 +114,10 @@ class Detector:
         merged_kwargs = {**config_args, **kwargs}
 
         # Validate preset constraints
-        if preset == DetectorPreset.Metrology and merged_kwargs.get("decode_mode") == DecodeMode.Soft:
+        if (
+            preset == DetectorPreset.Metrology
+            and merged_kwargs.get("decode_mode") == DecodeMode.Soft
+        ):
             warnings.warn(
                 "DecodeMode.Soft causes known precision collapse when used with the Metrology preset.",
                 stacklevel=2,

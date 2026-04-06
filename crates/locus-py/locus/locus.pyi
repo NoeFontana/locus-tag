@@ -51,6 +51,7 @@ class DetectorPreset(enum.IntEnum):
     Production: Balanced, high-fidelity default configuration.
     Fast: Low-latency configuration with minimal refinement and larger tiles.
     """
+
     Metrology = 0
     PureTags = 1
     Checkerboard = 2
