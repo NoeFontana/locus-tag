@@ -1,4 +1,5 @@
 import enum
+import warnings
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,6 +17,7 @@ from .locus import (
     DecodeMode,
     DetectionResult,
     DetectorBuilder,
+    DetectorPreset,
     PipelineTelemetryResult,
     PoseEstimationMode,
     QuadExtractionMode,
@@ -28,12 +30,6 @@ from .locus import (
 )
 from .locus import (
     create_detector as _create_detector,
-)
-from .locus import (
-    fast_config as _fast_config,
-)
-from .locus import (
-    production_config as _production_config,
 )
 
 
@@ -82,27 +78,28 @@ class PipelineTelemetry:
 class Detector:
     def __init__(
         self,
-        decimation: int = 1,
-        threads: int = 0,
+        decimation: int | None = None,
+        threads: int | None = None,
         families: list[TagFamily] | None = None,
-        threshold_tile_size: int = 8,
-        threshold_min_range: int = 10,
-        adaptive_threshold_constant: int = 0,
-        quad_min_area: int = 16,
-        quad_min_fill_ratio: float = 0.10,
-        quad_min_edge_score: float = 4.0,
-        decoder_min_contrast: float = 20.0,
-        max_hamming_error: int = 2,
+        preset: DetectorPreset | None = None,
+        threshold_tile_size: int | None = None,
+        threshold_min_range: int | None = None,
+        adaptive_threshold_constant: int | None = None,
+        quad_min_area: int | None = None,
+        quad_min_fill_ratio: float | None = None,
+        quad_min_edge_score: float | None = None,
+        decoder_min_contrast: float | None = None,
+        max_hamming_error: int | None = None,
         **kwargs: Any,
     ):
-        # Map enum to int values for Rust. Rust expects a Vec<i32>.
+        # Default family if none provided (legacy behavior)
         if families is None:
             families = [TagFamily.AprilTag36h11]
 
         family_values = [int(f) for f in families]
 
-        # Merge explicit args into kwargs for create_detector
-        rust_kwargs: dict[str, Any] = {
+        # Collect explicit config arguments
+        config_args = {
             "threshold_tile_size": threshold_tile_size,
             "threshold_min_range": threshold_min_range,
             "adaptive_threshold_constant": adaptive_threshold_constant,
@@ -112,16 +109,37 @@ class Detector:
             "decoder_min_contrast": decoder_min_contrast,
             "max_hamming_error": max_hamming_error,
         }
-        rust_kwargs.update(kwargs)
 
-        # Prepare kwargs for Rust by converting enums to ints
+        # Merge explicit config with additional kwargs
+        merged_kwargs = {**config_args, **kwargs}
+
+        # Validate preset constraints
+        if (
+            preset == DetectorPreset.Metrology
+            and merged_kwargs.get("decode_mode") == DecodeMode.Soft
+        ):
+            warnings.warn(
+                "DecodeMode.Soft causes known precision collapse when used with the Metrology preset.",
+                stacklevel=2,
+            )
+        elif (
+            preset == DetectorPreset.Checkerboard
+            and merged_kwargs.get("segmentation_connectivity") == SegmentationConnectivity.Eight
+        ):
+            warnings.warn(
+                "Checkerboard preset relies on 4-connectivity; enforcing 8-connectivity reduces touching-tag separation.",
+                stacklevel=2,
+            )
+
+        # Prepare kwargs for Rust by converting enums and filtering None
         final_rust_kwargs: dict[str, Any] = {}
-        for k, v in rust_kwargs.items():
-            # Boolean types must be preserved
+        for k, v in merged_kwargs.items():
+            if v is None:
+                continue
             if isinstance(v, bool):
                 final_rust_kwargs[k] = v
-            # PyO3 enums might not inherit from enum.Enum but are int-convertible
-            elif hasattr(v, "__int__"):
+            elif hasattr(v, "__int__") and not isinstance(v, (int, float)):
+                # Handle PyO3 enums and standard enums
                 final_rust_kwargs[k] = int(v)
             elif isinstance(v, enum.Enum):
                 final_rust_kwargs[k] = v.value
@@ -129,22 +147,22 @@ class Detector:
                 final_rust_kwargs[k] = v
 
         self._inner = _create_detector(
-            decimation=decimation, threads=threads, families=family_values, **final_rust_kwargs
+            decimation=decimation,
+            threads=threads,
+            families=family_values,
+            preset=preset,
+            **final_rust_kwargs,
         )
 
     @staticmethod
     def production_config() -> "Detector":
         """Create a detector with high-fidelity production defaults."""
-        d = Detector.__new__(Detector)
-        d._inner = _production_config()
-        return d
+        return Detector(preset=DetectorPreset.Production)
 
     @staticmethod
     def fast_config() -> "Detector":
         """Create a detector with low-latency defaults."""
-        d = Detector.__new__(Detector)
-        d._inner = _fast_config()
-        return d
+        return Detector(preset=DetectorPreset.Fast)
 
     def config(self) -> DetectorConfig:
         """Returns the current detector configuration."""
@@ -274,6 +292,7 @@ __all__ = [
     "Detector",
     "DetectorBuilder",
     "DetectorConfig",
+    "DetectorPreset",
     "PipelineTelemetryResult",
     "PoseEstimationMode",
     "Pose",
