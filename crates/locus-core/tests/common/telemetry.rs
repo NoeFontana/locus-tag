@@ -1,5 +1,4 @@
 use std::fs::File;
-use std::path::PathBuf;
 use tracing_subscriber::{Registry, layer::SubscriberExt};
 
 /// Represents the active guard. If None, telemetry is not writing to file.
@@ -15,7 +14,8 @@ pub fn init(test_id: &str) -> TelemetryGuard {
 
 pub fn init_with_mode(test_id: &str, mode: &str) -> TelemetryGuard {
     if mode == "json" {
-        let log_path = PathBuf::from(format!("../../target/profiling/{test_id}_events.json"));
+        let root = super::resolve_workspace_root();
+        let log_path = root.join(format!("target/profiling/{test_id}_events.json"));
         if let Some(parent) = log_path.parent() {
             std::fs::create_dir_all(parent).expect("Failed to create log directory");
         }

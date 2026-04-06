@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+mod common;
+
 // ============================================================================
 // Data Provider
 // ============================================================================
@@ -414,8 +416,7 @@ mod tests {
 
     #[test]
     fn test_load_charuco_golden_v1_metadata() {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let dataset_path = manifest_dir.join("../../tests/data/hub_cache/charuco_golden_v1");
+        let dataset_path = common::resolve_hub_root("charuco_golden_v1");
 
         if dataset_path.exists() {
             let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
@@ -431,8 +432,7 @@ mod tests {
 
     #[test]
     fn test_load_aprilgrid_golden_v1_metadata() {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let dataset_path = manifest_dir.join("../../tests/data/hub_cache/aprilgrid_golden_v1");
+        let dataset_path = common::resolve_hub_root("aprilgrid_golden_v1");
 
         if dataset_path.exists() {
             let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
@@ -450,8 +450,7 @@ mod tests {
     #[test]
     #[cfg(feature = "bench-internals")]
     fn regression_board_charuco_v1_golden() {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let dataset_path = manifest_dir.join("../../tests/data/hub_cache/charuco_golden_v1");
+        let dataset_path = common::resolve_hub_root("charuco_golden_v1");
 
         if dataset_path.exists() {
             let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
@@ -464,8 +463,7 @@ mod tests {
     #[test]
     #[cfg(feature = "bench-internals")]
     fn regression_board_aprilgrid_v1_golden() {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let dataset_path = manifest_dir.join("../../tests/data/hub_cache/aprilgrid_golden_v1");
+        let dataset_path = common::resolve_hub_root("aprilgrid_golden_v1");
 
         if dataset_path.exists() {
             let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
