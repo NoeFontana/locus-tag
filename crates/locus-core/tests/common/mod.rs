@@ -20,6 +20,11 @@ pub struct ImageGroundTruth {
     pub corners: HashMap<u32, [[f64; 2]; 4]>,
 }
 
+/// Resolves the workspace root from the crate root.
+pub fn resolve_workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../")
+}
+
 /// Resolves the root directory of the ICRA 2020 dataset.
 ///
 /// This function is "lazy": it returns the path if the directory exists,
@@ -38,8 +43,8 @@ pub fn resolve_dataset_root() -> Option<PathBuf> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     // Try standard locations relative to crate root
     let candidates = [
+        manifest_dir.join("tests/fixtures/icra2020"),
         manifest_dir.join("../../tests/data/icra2020"),
-        manifest_dir.join("tests/data/icra2020"),
     ];
 
     for p in &candidates {
@@ -49,6 +54,40 @@ pub fn resolve_dataset_root() -> Option<PathBuf> {
     }
 
     None
+}
+
+/// Resolves the hub dataset root directory.
+///
+/// Anchors relative paths to the crate manifest dir so they work regardless of CWD.
+pub fn resolve_hub_root(hub_dir_raw: &str) -> PathBuf {
+    let path = PathBuf::from(hub_dir_raw);
+    if path.is_absolute() {
+        return path;
+    }
+    // Relative: first try directly (works when an absolute env var was given
+    // or when CWD happens to be the workspace root).
+    if path.is_dir() {
+        return std::fs::canonicalize(&path).unwrap_or(path);
+    }
+    // Resolve from the crate manifest dir.
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    // Priority:
+    // 1. Crate-local fixtures (published package)
+    // 2. Workspace-relative tests (development repo)
+    let candidates = [
+        manifest.join("tests/fixtures/hub_cache"),
+        manifest.join("../../tests/data/hub_cache"),
+    ];
+
+    for base in &candidates {
+        let candidate = base.join(&path);
+        if candidate.is_dir() {
+            return candidate;
+        }
+    }
+
+    path // fallback — will fail on `exists()` with a clear skip message
 }
 
 /// Smartly loads ground truth.
