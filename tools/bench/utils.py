@@ -16,11 +16,44 @@ ICRA_CACHE_DIR = Path("tests/data/icra2020")
 HUB_CACHE_DIR = Path("tests/data/hub_cache")
 
 
+@dataclass
+class HubDatasetResult:
+    images_dir: Path
+    gt_map: dict[str, Any]  # img_name -> {"tags": {id: tag_data}, "board_pose": np.ndarray | None}
+    board_config_entry: dict[str, Any] | None
+    intrinsics: locus.CameraIntrinsics | None
+    tag_size: float | None  # in meters
+
+
+def build_board_refiner(
+    board_config_entry: dict[str, Any], tag_family: locus.TagFamily
+) -> locus.BoardEstimator:
+    """Build a BoardEstimator from a board config dict.
+
+    Raises:
+        ValueError: If the board type is unrecognised.
+    """
+    bt = board_config_entry.get("type", "").lower()
+    rows = board_config_entry["rows"]
+    cols = board_config_entry["cols"]
+    sq_m = board_config_entry["square_size_mm"] / 1000.0
+    mk_m = board_config_entry["marker_size_mm"] / 1000.0
+
+    if "charuco" in bt:
+        charuco_board = locus.CharucoBoard(rows, cols, sq_m, mk_m, tag_family)
+        return locus.BoardEstimator.from_charuco(charuco_board)
+    if "aprilgrid" in bt:
+        spacing = sq_m - mk_m
+        april_grid = locus.AprilGrid(rows, cols, spacing, mk_m, tag_family)
+        return locus.BoardEstimator(april_grid)
+    raise ValueError(f"Unknown board type: {bt!r}")
+
+
 class HubDatasetLoader:
     def __init__(self, root: Path = HUB_CACHE_DIR):
         self.root = root
 
-    def load_dataset(self, config_name: str):
+    def load_dataset(self, config_name: str) -> HubDatasetResult:
         hub_dir = self.root / config_name
         rich_path = hub_dir / "rich_truth.json"
         images_dir = hub_dir / "images"
@@ -31,7 +64,7 @@ class HubDatasetLoader:
         with open(rich_path) as f:
             entries = json.load(f)
 
-        gt_map = {}
+        gt_map: dict[str, Any] = {}
         board_config_entry = None
         intrinsics = None
         tag_size_mm = None
@@ -60,14 +93,13 @@ class HubDatasetLoader:
 
                 pos = entry["position"]
                 quat = entry["rotation_quaternion"]  # [w, x, y, z]
-                board_pose = np.array(
+                gt_map[img_name]["board_pose"] = np.array(
                     [pos[0], pos[1], pos[2], quat[1], quat[2], quat[3], quat[0]], dtype=np.float64
                 )
-                gt_map[img_name]["board_pose"] = board_pose
 
             elif record_type == "TAG":
                 tid = int(entry["tag_id"])
-                tag_data = {"corners": np.array(entry["corners"], dtype=np.float32)}
+                tag_data: dict[str, Any] = {"corners": np.array(entry["corners"], dtype=np.float32)}
                 if "position" in entry and "rotation_quaternion" in entry:
                     pos = entry["position"]
                     quat = entry["rotation_quaternion"]  # [w, x, y, z]
@@ -78,7 +110,13 @@ class HubDatasetLoader:
                 gt_map[img_name]["tags"][tid] = tag_data
 
         tag_size = tag_size_mm / 1000.0 if tag_size_mm else None
-        return images_dir, gt_map, board_config_entry, intrinsics, tag_size
+        return HubDatasetResult(
+            images_dir=images_dir,
+            gt_map=gt_map,
+            board_config_entry=board_config_entry,
+            intrinsics=intrinsics,
+            tag_size=tag_size,
+        )
 
 
 class FamilyMapper:
@@ -481,40 +519,16 @@ class LocusWrapper(LibraryWrapper):
     def __init__(
         self,
         name: str = "Locus",
-        config: locus.DetectorConfig | None = None,
         decimation: int = 1,
         family: int | None = None,
         detector: locus.Detector | None = None,
     ):
         super().__init__(name)
 
-        if detector:
+        if detector is not None:
             self.detector = detector
-            return
-
-        families = FamilyMapper.to_locus(family)
-
-        if config:
-            self.detector = locus.Detector(
-                decimation=decimation,
-                families=families,
-                decode_mode=config.decode_mode,
-                enable_sharpening=config.enable_sharpening,
-                upscale_factor=config.upscale_factor,
-                refinement_mode=config.refinement_mode,
-                threshold_tile_size=config.threshold_tile_size,
-                threshold_min_range=config.threshold_min_range,
-                adaptive_threshold_constant=config.adaptive_threshold_constant,
-                quad_min_area=config.quad_min_area,
-                quad_min_fill_ratio=config.quad_min_fill_ratio,
-                quad_min_edge_score=config.quad_min_edge_score,
-                quad_max_elongation=config.quad_max_elongation,
-                quad_min_density=config.quad_min_density,
-                quad_extraction_mode=int(config.quad_extraction_mode),
-                decoder_min_contrast=config.decoder_min_contrast,
-                max_hamming_error=config.max_hamming_error,
-            )
         else:
+            families = FamilyMapper.to_locus(family)
             self.detector = locus.Detector(decimation=decimation, families=families)
 
     def detect(
