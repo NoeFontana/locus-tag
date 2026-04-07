@@ -156,19 +156,14 @@ fn bench_board_estimate_aprilgrid(bencher: Bencher) {
         )
         .unwrap();
 
-    let batch = detector.bench_api_get_batch_cloned();
+    let mut batch = detector.bench_api_get_batch_cloned();
+    let v = batch.partition(batch.capacity());
 
-    // Count valid tags so we can report the input complexity.
-    let n_valid = batch
-        .status_mask
-        .iter()
-        .filter(|&&s| s == locus_core::batch::CandidateState::Valid)
-        .count();
-    println!("\n  [setup] valid tags in batch: {n_valid}");
+    println!("\n  [setup] valid tags in batch: {v}");
 
     // MEASUREMENT: only estimate() is timed.
     bencher.bench_local(|| {
-        let _ = estimator.estimate(&batch, &intrinsics);
+        let _ = estimator.estimate(&batch.view(v), &intrinsics);
     });
 }
 
@@ -206,10 +201,11 @@ fn bench_board_estimate_aprilgrid_fast(bencher: Bencher) {
         )
         .unwrap();
 
-    let batch = detector.bench_api_get_batch_cloned();
+    let mut batch = detector.bench_api_get_batch_cloned();
+    let v = batch.partition(batch.capacity());
 
     bencher.bench_local(|| {
-        let _ = estimator.estimate(&batch, &intrinsics);
+        let _ = estimator.estimate(&batch.view(v), &intrinsics);
     });
 }
 
@@ -245,7 +241,8 @@ fn bench_board_full_pipeline_aprilgrid(bencher: Bencher) {
                 false,
             )
             .unwrap();
-        let batch = detector.bench_api_get_batch_cloned();
-        let _ = estimator.estimate(&batch, &intrinsics);
+        let mut batch = detector.bench_api_get_batch_cloned();
+        let v = batch.partition(batch.capacity());
+        let _ = estimator.estimate(&batch.view(v), &intrinsics);
     });
 }

@@ -463,7 +463,7 @@ impl BoardEstimator {
     ///
     /// This uses the ArUco tags for board pose estimation without refining saddle points.
     #[classmethod]
-    fn from_charuco(_cls: &Bound<'_, pyo3::types::PyType>, board: &CharucoBoard) -> PyResult<Self> {
+    fn from_charuco(_cls: &Bound<'_, pyo3::types::PyType>, board: &CharucoBoard) -> Self {
         let topo = &board.inner;
         let april_grid_topo = locus_core::board::AprilGridTopology::from_obj_points(
             topo.rows,
@@ -471,9 +471,9 @@ impl BoardEstimator {
             topo.marker_length,
             topo.obj_points.clone(),
         );
-        Ok(Self {
+        Self {
             inner: locus_core::board::BoardEstimator::new(std::sync::Arc::new(april_grid_topo)),
-        })
+        }
     }
 
     /// Run the board pose estimation pipeline on a single frame.
