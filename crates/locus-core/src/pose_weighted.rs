@@ -3,6 +3,18 @@ use crate::image::ImageView;
 use crate::pose::{CameraIntrinsics, Pose, projection_jacobian, symmetrize_jtj6};
 use nalgebra::{Matrix2, Matrix6, Vector3, Vector6};
 
+const OFF_IMAGE_CORNER_VARIANCE: f64 = 100.0;
+
+fn corner_has_structure_tensor_support(img: &ImageView, center: [f64; 2], radius: i32) -> bool {
+    let cx = center[0].floor() as isize;
+    let cy = center[1].floor() as isize;
+    let radius = radius as isize;
+    let w = img.width.cast_signed();
+    let h = img.height.cast_signed();
+
+    cx - radius >= 1 && cx + radius <= w - 2 && cy - radius >= 1 && cy + radius <= h - 2
+}
+
 /// Compute the covariance of the corner position estimation error based on the Structure Tensor.
 ///
 /// The covariance $\Sigma_c$ is approximated as the inverse of the Structure Tensor $S$:
@@ -32,6 +44,8 @@ pub(crate) fn compute_corner_covariance(
     let x_end = (cx + radius as isize).min(w - 2);
     let y_start = (cy - radius as isize).max(1);
     let y_end = (cy + radius as isize).min(h - 2);
+
+    debug_assert!(x_start <= x_end && y_start <= y_end);
 
     // Pre-slice rows to exact bounds so LLVM can prove k, k+1, k+2 ∈ [0, len)
     // and elide bounds checks, enabling inner-loop auto-vectorisation.
@@ -81,7 +95,7 @@ pub(crate) fn compute_corner_covariance(
     let det = s00 * s11 - s01 * s01;
     // Det check: if the window is flat, return high uncertainty.
     if det < 1e-4 {
-        return Matrix2::identity().scale(100.0);
+        return Matrix2::identity().scale(OFF_IMAGE_CORNER_VARIANCE);
     }
 
     let inv_det = 1.0 / det;
@@ -107,14 +121,13 @@ pub(crate) fn compute_framework_uncertainty(
     structure_tensor_radius: u8,
 ) -> [Matrix2<f64>; 4] {
     let mut covariances = [Matrix2::zeros(); 4];
+    let radius = i32::from(structure_tensor_radius);
     for i in 0..4 {
-        covariances[i] = compute_corner_covariance(
-            img,
-            corners[i],
-            tikhonov_alpha_max,
-            sigma_n_sq,
-            i32::from(structure_tensor_radius),
-        );
+        covariances[i] = if corner_has_structure_tensor_support(img, corners[i], radius) {
+            compute_corner_covariance(img, corners[i], tikhonov_alpha_max, sigma_n_sq, radius)
+        } else {
+            Matrix2::identity().scale(OFF_IMAGE_CORNER_VARIANCE)
+        };
     }
     covariances
 }
@@ -398,6 +411,7 @@ pub(crate) fn refine_pose_lm_weighted(
 mod tests {
     use super::*;
     use crate::pose::{CameraIntrinsics, Pose};
+    use crate::{decoder::Homography, image::ImageView};
 
     #[test]
     fn test_jacobian_rotation_rows() {
@@ -570,5 +584,42 @@ mod tests {
             r_update * pose.rotation,
             r_update * pose.translation + t_update,
         )
+    }
+
+    #[test]
+    fn test_framework_uncertainty_culls_off_image_corners() {
+        let mut pixels = vec![0_u8; 9 * 9];
+        for y in 0..9 {
+            for x in 0..9 {
+                pixels[y * 9 + x] = match (x >= 4, y >= 4) {
+                    (false, false) | (true, true) => 0,
+                    (true, false) | (false, true) => 255,
+                };
+            }
+        }
+        let img = ImageView::new(&pixels, 9, 9, 9).expect("valid test image");
+        let corners = [[4.0, 4.0], [0.2, 4.0], [4.0, 8.9], [4.0, 0.1]];
+        let h = Homography {
+            h: nalgebra::Matrix3::identity(),
+        };
+
+        let covariances = compute_framework_uncertainty(&img, &corners, &h, 0.1, 2.0, 2);
+
+        assert_ne!(
+            covariances[0],
+            Matrix2::identity().scale(OFF_IMAGE_CORNER_VARIANCE)
+        );
+        assert_eq!(
+            covariances[1],
+            Matrix2::identity().scale(OFF_IMAGE_CORNER_VARIANCE)
+        );
+        assert_eq!(
+            covariances[2],
+            Matrix2::identity().scale(OFF_IMAGE_CORNER_VARIANCE)
+        );
+        assert_eq!(
+            covariances[3],
+            Matrix2::identity().scale(OFF_IMAGE_CORNER_VARIANCE)
+        );
     }
 }
