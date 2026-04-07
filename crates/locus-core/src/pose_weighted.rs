@@ -33,6 +33,10 @@ pub(crate) fn compute_corner_covariance(
     let y_start = (cy - radius as isize).max(1);
     let y_end = (cy + radius as isize).min(h - 2);
 
+    if x_start > x_end || y_start > y_end {
+        return Matrix2::identity() * alpha_max;
+    }
+
     // Pre-slice rows to exact bounds so LLVM can prove k, k+1, k+2 ∈ [0, len)
     // and elide bounds checks, enabling inner-loop auto-vectorisation.
     let x_min = (x_start - 1).cast_unsigned();

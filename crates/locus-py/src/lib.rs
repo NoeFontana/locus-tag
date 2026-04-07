@@ -1583,6 +1583,8 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<CharucoBoard>()?;
     m.add_class::<AprilGrid>()?;
     m.add_class::<CharucoRefiner>()?;
+    m.add_class::<BoardEstimator>()?;
+    m.add_class::<BoardEstimateResult>()?;
     // Detector
     m.add_class::<Detector>()?;
     m.add_class::<DetectorBuilder>()?;
