@@ -1476,7 +1476,8 @@ mod tests {
         let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (mut batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let (mut batch, num_valid) =
+            build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
         let v = batch.partition(num_valid);
         let view = batch.view(v);
 
@@ -1538,7 +1539,8 @@ mod tests {
         let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (mut batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let (mut batch, num_valid) =
+            build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
         let v = batch.partition(num_valid);
         let view = batch.view(v);
 
@@ -1562,7 +1564,11 @@ mod tests {
         let mut batch = DetectionBatch::new();
         batch.ids[0] = 0;
         batch.poses[0].data = [f32::NAN; 7];
-        assert!(estimator.init_pose_from_batch_tag(0, &batch.view(1)).is_none());
+        assert!(
+            estimator
+                .init_pose_from_batch_tag(0, &batch.view(1))
+                .is_none()
+        );
     }
 
     #[test]
@@ -1573,7 +1579,11 @@ mod tests {
         let mut batch = DetectionBatch::new();
         batch.ids[0] = 0;
         batch.poses[0].data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]; // z = 0
-        assert!(estimator.init_pose_from_batch_tag(0, &batch.view(1)).is_none());
+        assert!(
+            estimator
+                .init_pose_from_batch_tag(0, &batch.view(1))
+                .is_none()
+        );
     }
 
     #[test]
@@ -1584,7 +1594,8 @@ mod tests {
         let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (mut batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let (mut batch, num_valid) =
+            build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
         let v = batch.partition(num_valid);
         let view = batch.view(v);
 
@@ -1649,7 +1660,8 @@ mod tests {
         let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (mut batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let (mut batch, num_valid) =
+            build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
         let v = batch.partition(num_valid);
         let view = batch.view(v);
 
