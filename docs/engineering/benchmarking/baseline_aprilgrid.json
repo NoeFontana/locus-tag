@@ -1,0 +1,14 @@
+{
+  "aprilgrid_golden_v1": {
+    "Locus (Soft)": {
+      "recall": 100.0,
+      "pose_rmse": 0.014966375432949394,
+      "latency": 39.88658431034278
+    },
+    "Locus (Hard)": {
+      "recall": 100.0,
+      "pose_rmse": 0.010558292021365882,
+      "latency": 23.526553489663737
+    }
+  }
+}
