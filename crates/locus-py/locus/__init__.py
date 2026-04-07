@@ -8,10 +8,10 @@ import numpy as np
 from ._config import DetectOptions, DetectorConfig
 from .locus import (
     AprilGrid,
+    BoardEstimateResult,
     CameraIntrinsics,
     CharucoBoard,
     CharucoEstimateResult,
-    CharucoRefiner,
     CharucoTelemetryResult,
     CornerRefinementMode,
     DecodeMode,
@@ -25,12 +25,51 @@ from .locus import (
     TagFamily,
     init_tracy,
 )
+from .locus import BoardEstimator as _BoardEstimator
+from .locus import CharucoRefiner as _CharucoRefiner
 from .locus import (
     PyPose as Pose,
 )
 from .locus import (
     create_detector as _create_detector,
 )
+
+
+class BoardEstimator:
+    """Estimator for multi-tag board poses (AprilGrid)."""
+
+    def __init__(self, board: AprilGrid) -> None:
+        self._inner = _BoardEstimator(board)
+
+    @classmethod
+    def from_charuco(cls, board: CharucoBoard) -> "BoardEstimator":
+        instance = cls.__new__(cls)
+        instance._inner = _BoardEstimator.from_charuco(board)
+        return instance
+
+    def estimate(
+        self,
+        detector: "Detector",
+        img: np.ndarray,
+        intrinsics: CameraIntrinsics,
+    ) -> BoardEstimateResult:
+        return self._inner.estimate(detector._inner, img, intrinsics)
+
+
+class CharucoRefiner:
+    """Extracts ChAruco saddle points and estimates board pose."""
+
+    def __init__(self, board: CharucoBoard) -> None:
+        self._inner = _CharucoRefiner(board)
+
+    def estimate(
+        self,
+        detector: "Detector",
+        img: np.ndarray,
+        intrinsics: CameraIntrinsics,
+        debug_telemetry: bool = False,
+    ) -> CharucoEstimateResult:
+        return self._inner.estimate(detector._inner, img, intrinsics, debug_telemetry)
 
 
 @dataclass(frozen=True)
@@ -279,6 +318,8 @@ class Detector:
 
 __all__ = [
     "AprilGrid",
+    "BoardEstimateResult",
+    "BoardEstimator",
     "CameraIntrinsics",
     "CharucoBoard",
     "CharucoEstimateResult",
