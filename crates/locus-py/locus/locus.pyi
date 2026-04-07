@@ -172,6 +172,17 @@ class CharucoEstimateResult:
     @property
     def telemetry(self) -> CharucoTelemetryResult | None: ...
 
+class BoardEstimateResult:
+    """Typed result from :meth:`BoardEstimator.estimate`."""
+    @property
+    def ids(self) -> npt.NDArray[np.int32]: ...  # (N,)
+    @property
+    def corners(self) -> npt.NDArray[np.float32]: ...  # (N, 4, 2)
+    @property
+    def board_pose(self) -> npt.NDArray[np.float64] | None: ...  # (7,) [tx,ty,tz,qx,qy,qz,qw]
+    @property
+    def board_cov(self) -> npt.NDArray[np.float64] | None: ...  # (6, 6)
+
 # ---------------------------------------------------------------------------
 # Board topology
 # ---------------------------------------------------------------------------
@@ -205,6 +216,18 @@ class AprilGrid:
     def rows(self) -> int: ...
     @property
     def cols(self) -> int: ...
+
+class BoardEstimator:
+    """Estimator for multi-tag board poses (AprilGrid)."""
+    def __init__(self, board: AprilGrid) -> None: ...
+    @classmethod
+    def from_charuco(cls, board: CharucoBoard) -> BoardEstimator: ...
+    def estimate(
+        self,
+        detector: Detector,
+        img: npt.NDArray[np.uint8],
+        intrinsics: CameraIntrinsics,
+    ) -> BoardEstimateResult: ...
 
 class CharucoRefiner:
     """Extracts ChAruco saddle points and estimates board pose."""

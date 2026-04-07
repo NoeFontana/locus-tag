@@ -1,6 +1,6 @@
 //! Board-level configuration and layout utilities.
 
-use crate::batch::{DetectionBatch, MAX_CANDIDATES, Point2f};
+use crate::batch::{MAX_CANDIDATES, Point2f};
 use crate::pose::{CameraIntrinsics, Pose, projection_jacobian, symmetrize_jtj6};
 use nalgebra::{Matrix2, Matrix6, UnitQuaternion, Vector3, Vector6};
 use std::sync::Arc;
@@ -1053,7 +1053,7 @@ impl BoardEstimator {
     #[must_use]
     pub fn estimate(
         &mut self,
-        batch: &DetectionBatch,
+        batch: &crate::batch::DetectionBatchView<'_>,
         intrinsics: &CameraIntrinsics,
     ) -> Option<BoardPose> {
         // Phase 1: flatten valid batch entries into the pre-allocated scratch
@@ -1083,13 +1083,10 @@ impl BoardEstimator {
     ///
     /// Returns the number of tag groups written (i.e. the value of `num_groups`
     /// for the subsequent `PointCorrespondences`).
-    fn flatten_batch(&mut self, batch: &DetectionBatch) -> usize {
+    fn flatten_batch(&mut self, batch: &crate::batch::DetectionBatchView<'_>) -> usize {
         let mut g = 0usize;
 
-        for i in 0..MAX_CANDIDATES {
-            if batch.status_mask[i] != crate::batch::CandidateState::Valid {
-                continue;
-            }
+        for i in 0..batch.len() {
             let id = batch.ids[i] as usize;
             if id >= self.config.obj_points.len() {
                 continue;
@@ -1127,7 +1124,11 @@ impl BoardEstimator {
     /// Converts a single tag's stored per-tag `Pose6D` into a board-frame `Pose`.
     ///
     /// Returns `None` if the stored pose is degenerate (NaN or near-zero depth).
-    fn init_pose_from_batch_tag(&self, b_idx: usize, batch: &DetectionBatch) -> Option<Pose> {
+    fn init_pose_from_batch_tag(
+        &self,
+        b_idx: usize,
+        batch: &crate::batch::DetectionBatchView<'_>,
+    ) -> Option<Pose> {
         board_seed_from_pose6d(
             &batch.poses[b_idx].data,
             batch.ids[b_idx] as usize,
@@ -1149,7 +1150,7 @@ impl BoardEstimator {
 )]
 mod tests {
     use super::*;
-    use crate::batch::{CandidateState, DetectionBatch, Point2f};
+    use crate::batch::{CandidateState, DetectionBatch, DetectionBatchView, Point2f};
     use nalgebra::Matrix3;
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -1239,29 +1240,29 @@ mod tests {
     #[allow(clippy::type_complexity)]
     fn build_correspondences_from_batch(
         obj_points: &[Option<[[f64; 3]; 4]>],
-        batch: &DetectionBatch,
+        view: &DetectionBatchView<'_>,
         estimator: &BoardEstimator,
-        num_valid: usize,
     ) -> (
         Vec<Point2f>,
         Vec<[f64; 3]>,
         Vec<Matrix2<f64>>,
         Vec<Option<Pose>>,
     ) {
+        let num_valid = view.len();
         let mut img = Vec::with_capacity(num_valid * 4);
         let mut obj = Vec::with_capacity(num_valid * 4);
         let mut info = Vec::with_capacity(num_valid * 4);
         let mut seeds = Vec::with_capacity(num_valid);
 
         for b_idx in 0..num_valid {
-            let id = batch.ids[b_idx] as usize;
+            let id = view.ids[b_idx] as usize;
             let pts = obj_points[id].unwrap();
             for (j, &obj_pt) in pts.iter().enumerate() {
-                img.push(batch.corners[b_idx][j]);
+                img.push(view.corners[b_idx][j]);
                 obj.push(obj_pt);
                 info.push(Matrix2::identity());
             }
-            seeds.push(estimator.init_pose_from_batch_tag(b_idx, batch));
+            seeds.push(estimator.init_pose_from_batch_tag(b_idx, view));
         }
 
         (img, obj, info, seeds)
@@ -1448,10 +1449,12 @@ mod tests {
         let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
+        let (mut batch, num_valid) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
+        let v = batch.partition(num_valid);
+        let view = batch.view(v);
 
         let (img, obj, info, seeds) =
-            build_correspondences_from_batch(&config.obj_points, &batch, &estimator, num_valid);
+            build_correspondences_from_batch(&config.obj_points, &view, &estimator);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
@@ -1462,10 +1465,7 @@ mod tests {
 
         let solver = RobustPoseSolver::new();
         let (_, count) = solver.evaluate_inliers(&pose, &corr, &intrinsics, 1.0);
-        assert_eq!(
-            count, num_valid,
-            "all tags must be inliers under perfect pose"
-        );
+        assert_eq!(count, v, "all tags must be inliers under perfect pose");
     }
 
     #[test]
@@ -1476,11 +1476,13 @@ mod tests {
         let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let (mut batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let v = batch.partition(num_valid);
+        let view = batch.view(v);
 
         let bad_pose = Pose::new(Matrix3::identity(), Vector3::new(0.5, 0.0, 1.0));
         let (img, obj, info, seeds) =
-            build_correspondences_from_batch(&config.obj_points, &batch, &estimator, num_valid);
+            build_correspondences_from_batch(&config.obj_points, &view, &estimator);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
@@ -1504,10 +1506,12 @@ mod tests {
         let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
+        let (mut batch, num_valid) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
+        let v = batch.partition(num_valid);
+        let view = batch.view(v);
 
         let (img, obj, info, seeds) =
-            build_correspondences_from_batch(&config.obj_points, &batch, &estimator, num_valid);
+            build_correspondences_from_batch(&config.obj_points, &view, &estimator);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
@@ -1534,11 +1538,13 @@ mod tests {
         let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let (mut batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let v = batch.partition(num_valid);
+        let view = batch.view(v);
 
-        for b_idx in 0..num_valid {
+        for b_idx in 0..v {
             let pose = estimator
-                .init_pose_from_batch_tag(b_idx, &batch)
+                .init_pose_from_batch_tag(b_idx, &view)
                 .expect("tag must produce a valid pose");
             let t_error = (pose.translation - true_pose.translation).norm();
             assert!(
@@ -1556,7 +1562,7 @@ mod tests {
         let mut batch = DetectionBatch::new();
         batch.ids[0] = 0;
         batch.poses[0].data = [f32::NAN; 7];
-        assert!(estimator.init_pose_from_batch_tag(0, &batch).is_none());
+        assert!(estimator.init_pose_from_batch_tag(0, &batch.view(1)).is_none());
     }
 
     #[test]
@@ -1567,7 +1573,7 @@ mod tests {
         let mut batch = DetectionBatch::new();
         batch.ids[0] = 0;
         batch.poses[0].data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]; // z = 0
-        assert!(estimator.init_pose_from_batch_tag(0, &batch).is_none());
+        assert!(estimator.init_pose_from_batch_tag(0, &batch.view(1)).is_none());
     }
 
     #[test]
@@ -1578,11 +1584,13 @@ mod tests {
         let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let (mut batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let v = batch.partition(num_valid);
+        let view = batch.view(v);
 
         let perturbed = Pose::new(Matrix3::identity(), Vector3::new(0.02, 0.0, 1.0));
         let (img, obj, info, seeds) =
-            build_correspondences_from_batch(&config.obj_points, &batch, &estimator, num_valid);
+            build_correspondences_from_batch(&config.obj_points, &view, &estimator);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
@@ -1593,16 +1601,9 @@ mod tests {
         let all_inliers = [u64::MAX; 16];
 
         let solver = RobustPoseSolver::new();
-        let before = mean_reprojection_sq(
-            &perturbed,
-            &batch,
-            &intrinsics,
-            &config.obj_points,
-            num_valid,
-        );
+        let before = mean_reprojection_sq(&perturbed, &batch, &intrinsics, &config.obj_points, v);
         let stepped = solver.gn_step(&perturbed, &corr, &intrinsics, &all_inliers);
-        let after =
-            mean_reprojection_sq(&stepped, &batch, &intrinsics, &config.obj_points, num_valid);
+        let after = mean_reprojection_sq(&stepped, &batch, &intrinsics, &config.obj_points, v);
 
         assert!(
             after < before,
@@ -1618,10 +1619,12 @@ mod tests {
         let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
+        let (mut batch, num_valid) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
+        let v = batch.partition(num_valid);
+        let view = batch.view(v);
 
         let (img, obj, info, seeds) =
-            build_correspondences_from_batch(&config.obj_points, &batch, &estimator, num_valid);
+            build_correspondences_from_batch(&config.obj_points, &view, &estimator);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
@@ -1646,11 +1649,13 @@ mod tests {
         let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let (mut batch, num_valid) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let v = batch.partition(num_valid);
+        let view = batch.view(v);
 
         let perturbed = Pose::new(Matrix3::identity(), Vector3::new(0.02, -0.01, 1.0));
         let (img, obj, info, seeds) =
-            build_correspondences_from_batch(&config.obj_points, &batch, &estimator, num_valid);
+            build_correspondences_from_batch(&config.obj_points, &view, &estimator);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
@@ -1684,10 +1689,12 @@ mod tests {
         let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, num_valid) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
+        let (mut batch, num_valid) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
+        let v = batch.partition(num_valid);
+        let view = batch.view(v);
 
         let (img, obj, info, seeds) =
-            build_correspondences_from_batch(&config.obj_points, &batch, &estimator, num_valid);
+            build_correspondences_from_batch(&config.obj_points, &view, &estimator);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
@@ -1725,8 +1732,9 @@ mod tests {
                 batch.ids[i] = i as u32;
                 batch.status_mask[i] = CandidateState::Valid;
             }
+            let v = batch.partition(n_valid);
             assert!(
-                estimator.estimate(&batch, &intrinsics).is_none(),
+                estimator.estimate(&batch.view(v), &intrinsics).is_none(),
                 "expected None with {n_valid} valid tags"
             );
         }
@@ -1740,9 +1748,10 @@ mod tests {
         let mut estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.05, -0.03, 1.5));
-        let (batch, _) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let (mut batch, n) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let v = batch.partition(n);
 
-        let result = estimator.estimate(&batch, &intrinsics);
+        let result = estimator.estimate(&batch.view(v), &intrinsics);
         assert!(
             result.is_some(),
             "estimate() must succeed with all tags visible"
@@ -1765,9 +1774,10 @@ mod tests {
         let mut estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (batch, _) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
+        let (mut batch, n) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
+        let v = batch.partition(n);
 
-        let result = estimator.estimate(&batch, &intrinsics).unwrap();
+        let result = estimator.estimate(&batch.view(v), &intrinsics).unwrap();
         for i in 0..6 {
             assert!(
                 result.covariance[(i, i)] > 0.0,

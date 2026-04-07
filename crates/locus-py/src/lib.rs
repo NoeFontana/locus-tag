@@ -432,6 +432,163 @@ impl AprilGrid {
 }
 
 // ============================================================================
+// BoardEstimator
+// ============================================================================
+
+/// Estimator for multi-tag board poses (AprilGrid).
+///
+/// Uses the decoded tags as geometric priors to estimate the camera-to-board
+/// transform via LO-RANSAC + Anisotropic Weighted Levenberg–Marquardt.
+///
+/// Reuse a single `BoardEstimator` across frames to amortise the one-time
+/// scratch-buffer allocation.
+#[pyclass(unsendable)]
+pub struct BoardEstimator {
+    inner: locus_core::board::BoardEstimator,
+}
+
+#[pymethods]
+impl BoardEstimator {
+    /// Create a `BoardEstimator` for the given board.
+    ///
+    /// Reuse the same estimator across frames to avoid re-allocating scratch buffers.
+    #[new]
+    fn new(board: &AprilGrid) -> Self {
+        Self {
+            inner: locus_core::board::BoardEstimator::new(std::sync::Arc::clone(&board.inner)),
+        }
+    }
+
+    /// Create a `BoardEstimator` for a ChAruco board.
+    ///
+    /// This uses the ArUco tags for board pose estimation without refining saddle points.
+    #[classmethod]
+    fn from_charuco(_cls: &Bound<'_, pyo3::types::PyType>, board: &CharucoBoard) -> PyResult<Self> {
+        let topo = &board.inner;
+        let april_grid_topo = locus_core::board::AprilGridTopology::from_obj_points(
+            topo.rows,
+            topo.cols,
+            topo.marker_length,
+            topo.obj_points.clone(),
+        );
+        Ok(Self {
+            inner: locus_core::board::BoardEstimator::new(std::sync::Arc::new(april_grid_topo)),
+        })
+    }
+
+    /// Run the board pose estimation pipeline on a single frame.
+    ///
+    /// Calls the standard tag detector internally, then solves for the board
+    /// pose using all detected markers.
+    ///
+    /// Returns a [`BoardEstimateResult`] with fields:
+    /// - `ids`:         `(N,) int32`  — decoded ArUco IDs
+    /// - `corners`:     `(N, 4, 2) float32`  — tag corners
+    /// - `board_pose`:  `(7,) float64` `[tx, ty, tz, qx, qy, qz, qw]` or `None`
+    /// - `board_cov`:   `(6, 6) float64` pose covariance or `None`
+    #[pyo3(signature = (detector, img, intrinsics))]
+    #[allow(clippy::needless_pass_by_value)]
+    fn estimate(
+        &mut self,
+        py: Python<'_>,
+        detector: &mut Detector,
+        img: PyReadonlyArray2<'_, u8>,
+        intrinsics: CameraIntrinsics,
+    ) -> PyResult<BoardEstimateResult> {
+        let view = prepare_image_view(&img)?;
+        let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
+        let tag_size = self.inner.config.marker_length;
+
+        // 1. Run tag detection (releases GIL; populates detector's internal batch).
+        // Board estimation requires per-tag poses as RANSAC seeds.
+        let batch_view = py
+            .detach(|| {
+                detector.inner.detect(
+                    &view,
+                    Some(&core_intr),
+                    Some(tag_size),
+                    locus_core::config::PoseEstimationMode::Accurate,
+                    false,
+                )
+            })
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+
+        let n = batch_view.len();
+
+        // 2. Run board pose estimation.
+        let board_pose_raw = py.detach(|| self.inner.estimate(&batch_view, &core_intr));
+
+        // 3. Package detections (ids + corners).
+        // SAFETY: PyArray::new allocates an uninitialized C-contiguous array; we
+        // immediately overwrite every element below before the array escapes.
+        let ids_arr = unsafe { PyArray1::<i32>::new(py, [n], false) };
+        let corners_arr = unsafe { PyArray3::<f32>::new(py, [n, 4, 2], false) };
+        // SAFETY: ids are u32; reinterpreting as i32 is well-defined (same width,
+        // two's-complement). ArUco IDs fit within i32::MAX by convention.
+        // SAFETY: Point2f is repr(C) with two f32 fields; flat reinterpretation as
+        // &[f32] is sound (same as the existing CharucoRefiner path).
+        // SAFETY: as_slice_mut is safe because the array was just allocated above
+        // with the exact same length, is C-contiguous, and has no other references.
+        let ids_slice = unsafe { ids_arr.as_slice_mut() }
+            .map_err(|e| PyRuntimeError::new_err(format!("ids array layout error: {e}")))?;
+        ids_slice.copy_from_slice(unsafe {
+            std::slice::from_raw_parts(batch_view.ids.as_ptr().cast::<i32>(), n)
+        });
+        let corners_slice = unsafe { corners_arr.as_slice_mut() }
+            .map_err(|e| PyRuntimeError::new_err(format!("corners array layout error: {e}")))?;
+        corners_slice.copy_from_slice(unsafe {
+            std::slice::from_raw_parts(batch_view.corners.as_ptr().cast::<f32>(), n * 8)
+        });
+
+        // 4. Board pose and covariance.
+        let (board_pose, board_cov) = if let Some(bp) = board_pose_raw {
+            let q = nalgebra::UnitQuaternion::from_matrix(&bp.pose.rotation);
+            let t = bp.pose.translation;
+            // SAFETY: PyArray::new allocates uninitialized storage; we fill every
+            // element immediately after.
+            let pose_arr = unsafe { PyArray1::<f64>::new(py, [7], false) };
+            let ps = unsafe { pose_arr.as_slice_mut() }
+                .map_err(|e| PyRuntimeError::new_err(format!("pose array layout error: {e}")))?;
+            ps[0] = t.x;
+            ps[1] = t.y;
+            ps[2] = t.z;
+            ps[3] = q.i;
+            ps[4] = q.j;
+            ps[5] = q.k;
+            ps[6] = q.w;
+            // SAFETY: same as above — newly allocated, immediately filled.
+            let cov_arr = unsafe { PyArray2::<f64>::new(py, [6, 6], false) };
+            let cs = unsafe { cov_arr.as_slice_mut() }
+                .map_err(|e| PyRuntimeError::new_err(format!("cov array layout error: {e}")))?;
+            for row in 0..6 {
+                for col in 0..6 {
+                    cs[row * 6 + col] = bp.covariance[(row, col)];
+                }
+            }
+            (Some(pose_arr.unbind()), Some(cov_arr.unbind()))
+        } else {
+            (None, None)
+        };
+
+        Ok(BoardEstimateResult {
+            ids: ids_arr.unbind(),
+            corners: corners_arr.unbind(),
+            board_pose,
+            board_cov,
+        })
+    }
+}
+
+/// Typed result returned by [`BoardEstimator::estimate`].
+#[pyclass(get_all, frozen)]
+pub struct BoardEstimateResult {
+    pub ids: Py<PyArray1<i32>>,
+    pub corners: Py<PyArray3<f32>>,
+    pub board_pose: Option<Py<PyArray1<f64>>>,
+    pub board_cov: Option<Py<PyArray2<f64>>>,
+}
+
+// ============================================================================
 // CharucoRefiner
 // ============================================================================
 
@@ -497,15 +654,17 @@ impl CharucoRefiner {
     ) -> PyResult<CharucoEstimateResult> {
         let view = prepare_image_view(&img)?;
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
+        let tag_size = self.inner.config.marker_length;
 
         // 1. Run ArUco detection (releases GIL; populates detector's internal batch).
+        // Board estimation requires per-tag poses as RANSAC seeds.
         let batch_view = py
             .detach(|| {
                 detector.inner.detect(
                     &view,
                     Some(&core_intr),
-                    None,
-                    locus_core::config::PoseEstimationMode::Fast,
+                    Some(tag_size),
+                    locus_core::config::PoseEstimationMode::Accurate,
                     false,
                 )
             })

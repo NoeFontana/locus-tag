@@ -269,6 +269,8 @@ pub struct DetectionBatchView<'a> {
     pub error_rates: &'a [f32],
     /// 3D poses (rotation + translation).
     pub poses: &'a [Pose6D],
+    /// Corner covariances (Fisher information priors).
+    pub corner_covariances: &'a [[f32; 16]],
     /// Optional telemetry data for intermediate images.
     pub telemetry: Option<TelemetryPayload>,
     /// Corners of quads that were extracted but rejected during decoding or verification.
@@ -369,6 +371,7 @@ impl DetectionBatch {
             payloads: &self.payloads[..n],
             error_rates: &self.error_rates[..n],
             poses: &self.poses[..n],
+            corner_covariances: &self.corner_covariances[..n],
             telemetry: None,
             rejected_corners: &[],
             rejected_error_rates: &[],
@@ -393,6 +396,7 @@ impl DetectionBatch {
             payloads: &self.payloads[..v_clamped],
             error_rates: &self.error_rates[..v_clamped],
             poses: &self.poses[..v_clamped],
+            corner_covariances: &self.corner_covariances[..v_clamped],
             telemetry,
             rejected_corners: &self.corners[v_clamped..n_clamped],
             rejected_error_rates: &self.error_rates[v_clamped..n_clamped],
