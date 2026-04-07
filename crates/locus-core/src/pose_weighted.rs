@@ -9,8 +9,8 @@ fn corner_has_structure_tensor_support(img: &ImageView, center: [f64; 2], radius
     let cx = center[0].floor() as isize;
     let cy = center[1].floor() as isize;
     let radius = radius as isize;
-    let w = img.width as isize;
-    let h = img.height as isize;
+    let w = img.width.cast_signed();
+    let h = img.height.cast_signed();
 
     cx - radius >= 1 && cx + radius <= w - 2 && cy - radius >= 1 && cy + radius <= h - 2
 }
