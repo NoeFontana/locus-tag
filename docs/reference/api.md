@@ -135,34 +135,38 @@ Raises `ValueError` if the required marker count exceeds `family.max_id_count()`
 | `rows` | `int` | Number of square rows. |
 | `cols` | `int` | Number of square columns. |
 
-### `CharucoRefiner`
+### `BoardEstimator`
+
+Unified stateful estimator for both AprilGrid and ChAruco boards. All scratch buffers
+are pre-allocated at construction; `estimate()` performs **zero heap allocations**.
+
+**Construction:**
 
 ```python
-locus.CharucoRefiner(board: CharucoBoard)
+# AprilGrid board
+estimator = locus.BoardEstimator(board: AprilGrid)
+
+# ChAruco board
+estimator = locus.BoardEstimator.from_charuco(board: CharucoBoard)
 ```
 
-Stateful estimator that extracts ChAruco saddle points from a decoded `DetectionBatch`
-and estimates the board pose. All scratch buffers are pre-allocated at construction;
-`estimate()` performs **zero heap allocations**.
+**Estimation:**
 
 ```python
-result: dict = refiner.estimate(
+result: BoardEstimateResult = estimator.estimate(
+    detector: locus.Detector,
     img: np.ndarray,           # (H, W) uint8 grayscale
-    batch_view,                # internal DetectionBatchView from CharucoRefiner
     intrinsics: CameraIntrinsics,
-) -> dict
+)
 ```
 
-Returned dictionary:
+`BoardEstimateResult` attributes:
 
-| Key | Shape / Type | Description |
+| Attribute | Shape / Type | Description |
 | :--- | :--- | :--- |
-| `ids` | `(N,) int32` | Decoded ArUco tag IDs. |
-| `corners` | `(N, 4, 2) float32` | Refined tag corner coordinates. |
-| `saddle_ids` | `(S,) int32` | Accepted saddle-point indices into `CharucoBoard.saddle_points`. |
-| `saddle_pts` | `(S, 2) float32` | Refined saddle image coordinates. |
-| `saddle_obj` | `(S, 3) float64` | Board-frame 3D coordinates of accepted saddles. |
-| `board_pose` | `(7,) float64` or `None` | `[tx, ty, tz, qx, qy, qz, qw]` — `None` if fewer than 4 saddles accepted. |
+| `ids` | `(N,) int32` | Decoded tag IDs visible in this frame. |
+| `corners` | `(N, 4, 2) float32` | Refined tag corner image coordinates. |
+| `board_pose` | `(7,) float64` or `None` | `[tx, ty, tz, qx, qy, qz, qw]` in camera frame — `None` if insufficient observations. Pose origin is the board's top-left marker corner. |
 | `board_cov` | `(6, 6) float64` or `None` | Pose covariance in $\mathfrak{se}(3)$ tangent space `[t, ω]`. |
 
 ## Enumerations

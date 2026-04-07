@@ -7,8 +7,8 @@ Locus is built with a focus on extreme performance. To maintain this, we provide
 To tune the Locus codebase for maximum throughput, we enforce strict boundaries between measurement tools to avoid the "Observer Effect".
 
 ### Tier 1: End-to-End Regression (The Python CLI)
-*   **Tool**: `uv run tools/cli.py bench real` (using the ICRA 2020 dataset).
-*   **Purpose**: Measures the true wall-clock time from Python memory ingestion, through the FFI boundary, across the Rust math kernels, and back to Python.
+*   **Tool**: `uv run tools/cli.py bench real` (ICRA 2020 scenarios or Hugging Face Hub datasets via `--hub-config`).
+*   **Purpose**: Measures the true wall-clock time from Python memory ingestion, through the FFI boundary, across the Rust math kernels, and back to Python. Also reports recall and pose error (translation RMSE in metres) when ground truth poses are available.
 *   **Rule**: This is the ultimate ground truth for latency. If a micro-optimization doesn't lower this number, it didn't actually work.
 
 ### Tier 2: Macro-Profiling (Tracy)
@@ -55,20 +55,33 @@ Locus supports running regressions against large-scale datasets hosted on the Hu
 > `--release` is mandatory for running Hub regression tests. Running in debug mode is extremely slow and will likely timeout in CI or developer environments.
 
 1. **Synchronize Data**:
-   Download the datasets to a local cache. This requires the `bench` dependency group.
+   Download all Hub subsets to the local cache (`tests/data/hub_cache/`). The script auto-discovers every available config by default:
    ```bash
-   uv run python tools/bench/sync_hub.py --configs single_tag_locus_v1_std41h12_1920x1080 charuco_golden_v1 aprilgrid_golden_v1
+   uv run python tools/bench/sync_hub.py --configs all
+   ```
+   Or sync a specific subset:
+   ```bash
+   uv run python tools/bench/sync_hub.py --configs \
+     single_tag_locus_v1_tag36h11_640x480 \
+     single_tag_locus_v1_tag36h11_1280x720 \
+     single_tag_locus_v1_tag36h11_1920x1080 \
+     single_tag_locus_v1_tag36h11_3840x2160 \
+     charuco_golden_v1 \
+     aprilgrid_golden_v1
    ```
 
 2. **Run Hub Tests**:
-   Point the test runner to the local cache directory:
    ```bash
-   # Tag-level regression
-   LOCUS_HUB_DATASET_DIR=tests/data/hub_cache cargo test --release --test regression_render_tag --features bench-internals -- --nocapture
+   # Tag-level regression (regression_render_tag)
+   # Covers 4 resolutions × Erf/GWLF/EdLines variants and Fast/Accurate pose modes.
+   # Requires LOCUS_HUB_DATASET_DIR to locate the cache.
+   LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \
+     cargo test --release --test regression_render_tag --features bench-internals -- --nocapture
 
-   # Board-level regression (Multi-tag estimation)
-   # Validates ChAruco and AprilGrid golden datasets (150 images each)
-   LOCUS_HUB_DATASET_DIR=tests/data/hub_cache cargo test --release --test regression_board_hub --features bench-internals -- --nocapture
+   # Board-level regression (regression_board_hub)
+   # Validates ChAruco and AprilGrid golden datasets.
+   # Uses workspace-relative tests/data/hub_cache/ automatically — no env var needed.
+   cargo test --release --test regression_board_hub --features bench-internals -- --nocapture
    ```
 
 ### Logic-Specific Benchs (Micro-benchmarking)
@@ -123,12 +136,13 @@ TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features b
 The `tools/cli.py` tool is the central entry point for high-level evaluations and development tasks.
 
 ### Data Preparation
-Before running benchmarks, download all required datasets (AprilTag Mosaic and ICRA 2020):
+Download all required datasets (ICRA 2020 and Hugging Face Hub subsets):
 ```bash
 PYTHONPATH=. uv run --group bench tools/cli.py bench prepare
 ```
+This command downloads the ICRA 2020 scenarios and auto-discovers and syncs all Hub dataset subsets from the configured HF repository to `tests/data/hub_cache/`.
 
-### Real-World Evaluation
+### Real-World Evaluation (ICRA 2020)
 Evaluate performance on the ICRA 2020 dataset scenarios (`forward`, `circle`):
 ```bash
 # Basic run on Locus
@@ -137,6 +151,34 @@ PYTHONPATH=. uv run --group bench tools/cli.py bench real --scenarios forward
 # Compare against OpenCV and AprilTag 3
 PYTHONPATH=. uv run --group bench tools/cli.py bench real --scenarios forward --compare
 ```
+
+### Hub Dataset Evaluation
+Evaluate against rendered Hugging Face Hub datasets. These datasets include ground-truth 6-DOF poses, so the CLI reports both recall and pose error (translation RMSE in metres).
+
+> [!NOTE]
+> **Pose convention:** Hub ground truth poses use a center origin (the pose describes the tag center). Locus reports poses at the top-left corner origin. The CLI automatically applies the rigid center-to-top-left shift via `Metrics.align_pose` before computing the error.
+
+```bash
+# Single-tag evaluation
+PYTHONPATH=. uv run --group bench tools/cli.py bench real \
+  --hub-config single_tag_locus_v1_std41h12_1920x1080
+
+# Board-level evaluation (AprilGrid or ChAruco)
+# The board topology is inferred automatically from the dataset's rich_truth.json.
+PYTHONPATH=. uv run --group bench tools/cli.py bench real \
+  --hub-config aprilgrid_golden_v1
+
+PYTHONPATH=. uv run --group bench tools/cli.py bench real \
+  --hub-config charuco_golden_v1
+
+# Limit frames and use a custom cache directory
+PYTHONPATH=. uv run --group bench tools/cli.py bench real \
+  --hub-config aprilgrid_golden_v1 \
+  --data-dir tests/data/hub_cache \
+  --limit 50
+```
+
+Hub evaluation is mutually exclusive with ICRA scenarios — passing `--hub-config` skips the `--scenarios` loop.
 
 ### Regression Tracking (Baselines)
 You can save a "Golden Baseline" and compare current performance against it.

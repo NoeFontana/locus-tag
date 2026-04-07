@@ -325,6 +325,7 @@ def visualize(
 @bench_app.command("real")
 def bench_real(
     scenarios: list[str] = typer.Option(["forward"], help="Scenarios to run"),
+    hub_config: str | None = typer.Option(None, help="Hugging Face Hub configuration to run"),
     data_dir: Path = typer.Option(None, help="Custom data directory"),
     types: list[str] = typer.Option(["tags"], help="Dataset types (tags, checkerboard)"),
     limit: int | None = typer.Option(None, help="Limit number of images"),
@@ -353,12 +354,16 @@ def bench_real(
     from tqdm import tqdm
 
     from tools.bench.utils import (
+        HUB_CACHE_DIR,
+        ICRA_CACHE_DIR,
         AprilTagWrapper,
         DatasetLoader,
+        HubDatasetLoader,
         LibraryWrapper,
         LocusWrapper,
         Metrics,
         OpenCVWrapper,
+        build_board_refiner,
     )
 
     if profile:
@@ -412,47 +417,42 @@ def bench_real(
     refinement_mode = refinement_mapping.get(refinement, locus.CornerRefinementMode.Edge)
 
     # Use custom data dir or default cache
-    from tools.bench.utils import ICRA_CACHE_DIR
-
-    search_dir = data_dir if data_dir else ICRA_CACHE_DIR
-    loader = DatasetLoader(icra_dir=search_dir)
+    icra_dir = data_dir if data_dir else ICRA_CACHE_DIR
+    loader = DatasetLoader(icra_dir=icra_dir)
     wrappers: list[LibraryWrapper] = []
 
-    # Soft mode (Production Default + Soft Override + CLI Overrides)
-    soft_detector = locus.Detector.production_config()
-    soft_detector.set_families([tag_family_int])
-    soft_config = soft_detector.config()
-    soft_config.decode_mode = locus.DecodeMode.Soft
-    soft_config.refinement_mode = refinement_mode
-    soft_config.threshold_tile_size = tile_size
-    soft_config.adaptive_threshold_constant = constant
-    soft_config.quad_min_fill_ratio = min_fill
-    soft_config.threshold_min_range = min_range
-    soft_config.max_hamming_error = max_hamming
-    soft_config.quad_min_edge_score = min_edge_score
+    # Common detector parameters
+    detector_kwargs = {
+        "families": [tag_family_int],
+        "preset": locus.DetectorPreset.Production,
+        "refinement_mode": refinement_mode,
+        "threshold_tile_size": tile_size,
+        "adaptive_threshold_constant": constant,
+        "quad_min_fill_ratio": min_fill,
+        "threshold_min_range": min_range,
+        "max_hamming_error": max_hamming,
+        "quad_min_edge_score": min_edge_score,
+    }
 
+    # Soft mode
+    soft_detector = locus.Detector(decode_mode=locus.DecodeMode.Soft, **detector_kwargs)
     wrappers.append(
         LocusWrapper(
-            name="Locus (Soft)", config=soft_config, decimation=decimation, family=tag_family_int
+            name="Locus (Soft)",
+            detector=soft_detector,
+            decimation=decimation,
+            family=tag_family_int,
         )
     )
 
-    # Hard mode (Production Default + Hard Override + CLI Overrides)
-    hard_detector = locus.Detector.production_config()
-    hard_detector.set_families([tag_family_int])
-    hard_config = hard_detector.config()
-    hard_config.decode_mode = locus.DecodeMode.Hard
-    hard_config.refinement_mode = refinement_mode
-    hard_config.threshold_tile_size = tile_size
-    hard_config.adaptive_threshold_constant = constant
-    hard_config.quad_min_fill_ratio = min_fill
-    hard_config.threshold_min_range = min_range
-    hard_config.max_hamming_error = max_hamming
-    hard_config.quad_min_edge_score = min_edge_score
-
+    # Hard mode
+    hard_detector = locus.Detector(decode_mode=locus.DecodeMode.Hard, **detector_kwargs)
     wrappers.append(
         LocusWrapper(
-            name="Locus (Hard)", config=hard_config, decimation=decimation, family=tag_family_int
+            name="Locus (Hard)",
+            detector=hard_detector,
+            decimation=decimation,
+            family=tag_family_int,
         )
     )
 
@@ -470,68 +470,188 @@ def bench_real(
 
     current_results: dict[str, dict[str, dict[str, Any]]] = {}
 
-    for scenario in scenarios:
-        if not data_dir and not loader.prepare_icra(scenario):
-            continue
+    if hub_config:
+        hub_dir = data_dir if data_dir else HUB_CACHE_DIR
+        ds = HubDatasetLoader(root=hub_dir).load_dataset(hub_config)
 
-        datasets = loader.find_datasets(scenario, types)
-        for ds_name, img_dir, gt_map, meta in datasets:
-            typer.echo(f"\nEvaluating {ds_name}...")
+        refiner = None
+        is_board = ds.board_config_entry is not None
+        if ds.board_config_entry is not None:
+            try:
+                refiner = build_board_refiner(ds.board_config_entry, tag_family_int)
+            except ValueError as e:
+                typer.echo(str(e), err=True)
+                raise typer.Exit(code=1) from e
 
-            # Use metadata from dataset (intrinsics, tag_size)
-            intrinsics = meta.intrinsics
-            tag_size = meta.tag_size
+        typer.echo(f"\nEvaluating Hub Dataset: {hub_config}...")
+        current_results[hub_config] = {}
 
-            current_results[ds_name] = {}
+        img_names = sorted(ds.gt_map.keys())
+        if skip:
+            img_names = img_names[skip:]
+        if limit:
+            img_names = img_names[:limit]
 
-            img_names = sorted(gt_map.keys())
-            if skip:
-                img_names = img_names[skip:]
-            if limit:
-                img_names = img_names[:limit]
+        eval_tag_size = ds.tag_size if ds.tag_size is not None else 1.0
 
-            for wrapper in wrappers:
-                stats: dict[str, Any] = {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []}
+        for wrapper in wrappers:
+            stats: dict[str, Any] = {"gt": 0, "det": 0, "latency": [], "pose_err_sum": 0.0}
 
-                for img_name in tqdm(img_names, desc=f"{wrapper.name:<10}"):
-                    img_path = img_dir / img_name
-                    if not img_path.exists():
-                        continue
+            for img_name in tqdm(img_names, desc=f"{wrapper.name:<10}"):
+                img_path = ds.images_dir / img_name
+                if not img_path.exists():
+                    continue
 
-                    img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
-                    if img is None:
-                        continue
+                img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+                if img is None:
+                    continue
 
-                    gt_tags = gt_map[img_name]
-                    start = time.perf_counter()
-                    detections, _ = wrapper.detect(img, intrinsics=intrinsics, tag_size=tag_size)
-                    _latency = (time.perf_counter() - start) * 1000.0
-                    stats["latency"].append(_latency)
+                start = time.perf_counter()
 
-                    correct, err_sum, _ = Metrics.match_detections(detections, gt_tags)
-                    stats["gt"] += len(gt_tags)
-                    stats["det"] += correct
-                    stats["err_sum"] += err_sum
-
-                recall = (stats["det"] / stats["gt"] * 100) if stats["gt"] > 0 else 0
-                avg_err = (stats["err_sum"] / stats["det"]) if stats["det"] > 0 else 0
-                avg_lat = np.mean(stats["latency"])
-
-                res = {"recall": recall, "rmse": avg_err, "latency": avg_lat}
-                current_results[ds_name][wrapper.name] = res
-
-                typer.echo(
-                    f"  {wrapper.name:<10} | Recall: {recall:>6.2f}% | RMSE: {avg_err:>6.4f} px | Latency: {avg_lat:>6.2f} ms"
-                )
-
-                if ds_name in baseline_data and wrapper.name in baseline_data[ds_name]:
-                    base = baseline_data[ds_name][wrapper.name]
-                    lat_diff = avg_lat - base["latency"]
-                    recall_diff = recall - base["recall"]
-                    typer.echo(
-                        f"    [Baseline] Latency: {lat_diff:+.2f}ms ({lat_diff / base['latency'] * 100:+.1f}%) | "
-                        f"Recall: {recall_diff:+.2f}%"
+                batch = None
+                detections = None
+                if isinstance(wrapper, LocusWrapper):
+                    if is_board and refiner:
+                        batch = refiner.estimate(wrapper.detector, img, intrinsics=ds.intrinsics)
+                    else:
+                        batch = wrapper.detector.detect(
+                            img,
+                            intrinsics=ds.intrinsics,
+                            tag_size=eval_tag_size,
+                            pose_estimation_mode=locus.PoseEstimationMode.Accurate,
+                        )
+                else:
+                    # OpenCV/Pupil fallback: board refiner not supported
+                    detections, _ = wrapper.detect(
+                        img, intrinsics=ds.intrinsics, tag_size=eval_tag_size
                     )
+
+                stats["latency"].append((time.perf_counter() - start) * 1000.0)
+
+                if is_board:
+                    board_gt = ds.gt_map[img_name]["board_pose"]
+                    stats["gt"] += 1
+                    if (
+                        batch is not None
+                        and getattr(batch, "board_pose", None) is not None
+                        and board_gt is not None
+                    ):
+                        stats["det"] += 1
+                        stats["pose_err_sum"] += np.linalg.norm(batch.board_pose[:3] - board_gt[:3])
+                else:
+                    gt_tags = ds.gt_map[img_name]["tags"]
+                    stats["gt"] += len(gt_tags)
+
+                    matched_tids: set[int] = set()
+                    if batch is not None:
+                        for i in range(len(batch.ids)):
+                            tid = int(batch.ids[i])
+                            if tid in gt_tags and tid not in matched_tids:
+                                matched_tids.add(tid)
+                                stats["det"] += 1
+                                gt_tag = gt_tags[tid]
+                                if "pose" in gt_tag and batch.poses is not None:
+                                    # Align center-origin GT to top-left Locus convention
+                                    t_gt_tl = Metrics.align_pose(
+                                        gt_tag["pose"][:3], gt_tag["pose"][3:], eval_tag_size
+                                    )
+                                    stats["pose_err_sum"] += np.linalg.norm(
+                                        batch.poses[i, :3] - t_gt_tl
+                                    )
+                    elif detections is not None:
+                        for det in detections:
+                            tid = det["id"]
+                            if tid in gt_tags and tid not in matched_tids:
+                                matched_tids.add(tid)
+                                stats["det"] += 1
+                                gt_tag = gt_tags[tid]
+                                if "pose" in gt_tag and det.get("pose") is not None:
+                                    t_gt_tl = Metrics.align_pose(
+                                        gt_tag["pose"][:3], gt_tag["pose"][3:], eval_tag_size
+                                    )
+                                    stats["pose_err_sum"] += np.linalg.norm(
+                                        np.array(det["pose"])[:3] - t_gt_tl
+                                    )
+
+            recall = float(stats["det"] / stats["gt"] * 100) if stats["gt"] > 0 else 0.0
+            avg_pose_err = float(stats["pose_err_sum"] / stats["det"]) if stats["det"] > 0 else 0.0
+            avg_lat = float(np.mean(stats["latency"]))
+
+            current_results[hub_config][wrapper.name] = {
+                "recall": recall,
+                "pose_rmse": avg_pose_err,
+                "latency": avg_lat,
+            }
+            typer.echo(
+                f"  {wrapper.name:<10} | {'Board' if is_board else 'Tag'} Recall: {recall:>6.2f}%"
+                f" | Pose Err: {avg_pose_err:>6.4f} m | Latency: {avg_lat:>6.2f} ms"
+            )
+
+    else:
+        for scenario in scenarios:
+            if not data_dir and not loader.prepare_icra(scenario):
+                continue
+
+            datasets = loader.find_datasets(scenario, types)
+            for ds_name, img_dir, gt_map, meta in datasets:
+                typer.echo(f"\nEvaluating {ds_name}...")
+
+                intrinsics = meta.intrinsics
+                tag_size = meta.tag_size
+
+                current_results[ds_name] = {}
+
+                img_names = sorted(gt_map.keys())
+                if skip:
+                    img_names = img_names[skip:]
+                if limit:
+                    img_names = img_names[:limit]
+
+                for wrapper in wrappers:
+                    stats: dict[str, Any] = {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []}
+
+                    for img_name in tqdm(img_names, desc=f"{wrapper.name:<10}"):
+                        img_path = img_dir / img_name
+                        if not img_path.exists():
+                            continue
+
+                        img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+                        if img is None:
+                            continue
+
+                        gt_tags = gt_map[img_name]
+                        start = time.perf_counter()
+                        detections, _ = wrapper.detect(
+                            img, intrinsics=intrinsics, tag_size=tag_size
+                        )
+                        stats["latency"].append((time.perf_counter() - start) * 1000.0)
+
+                        correct, err_sum, _ = Metrics.match_detections(detections, gt_tags)
+                        stats["gt"] += len(gt_tags)
+                        stats["det"] += correct
+                        stats["err_sum"] += err_sum
+
+                    recall = (stats["det"] / stats["gt"] * 100) if stats["gt"] > 0 else 0
+                    avg_err = (stats["err_sum"] / stats["det"]) if stats["det"] > 0 else 0
+                    avg_lat = np.mean(stats["latency"])
+
+                    current_results[ds_name][wrapper.name] = {
+                        "recall": recall,
+                        "rmse": avg_err,
+                        "latency": avg_lat,
+                    }
+                    typer.echo(
+                        f"  {wrapper.name:<10} | Recall: {recall:>6.2f}% | RMSE: {avg_err:>6.4f} px | Latency: {avg_lat:>6.2f} ms"
+                    )
+
+                    if ds_name in baseline_data and wrapper.name in baseline_data[ds_name]:
+                        base = baseline_data[ds_name][wrapper.name]
+                        lat_diff = avg_lat - base["latency"]
+                        recall_diff = recall - base["recall"]
+                        typer.echo(
+                            f"    [Baseline] Latency: {lat_diff:+.2f}ms ({lat_diff / base['latency'] * 100:+.1f}%) | "
+                            f"Recall: {recall_diff:+.2f}%"
+                        )
 
     if save_baseline:
         with open(save_baseline, "w") as f:
@@ -1027,11 +1147,37 @@ def debug_report(
 @bench_app.command("prepare")
 def bench_prepare():
     """Download and prepare all benchmarking datasets."""
+    from tools.bench.sync_hub import DEFAULT_CACHE_DIR, DEFAULT_REPO_ID, sync_subset_to_local
     from tools.bench.utils import DatasetLoader
 
     loader = DatasetLoader()
-    typer.echo("Preparing datasets...")
+    typer.echo("Preparing ICRA datasets...")
     loader.prepare_all()
+
+    typer.echo("Preparing Hub datasets...")
+    try:
+        import datasets
+        from huggingface_hub import HfApi
+
+        try:
+            configs = datasets.get_dataset_config_names(DEFAULT_REPO_ID)
+        except Exception:
+            api = HfApi()
+            files = api.list_repo_tree(DEFAULT_REPO_ID, repo_type="dataset")
+            configs = [
+                f.path.rstrip("/")
+                for f in files
+                if "/" not in f.path.rstrip("/")
+                and not f.path.startswith(".")
+                and f.path.lower() != "readme.md"
+            ]
+
+        for config in configs:
+            sync_subset_to_local(config, DEFAULT_CACHE_DIR, DEFAULT_REPO_ID)
+
+    except Exception as e:
+        typer.echo(f"Warning: Failed to sync Hub datasets: {e}", err=True)
+
     typer.echo("Done.")
 
 

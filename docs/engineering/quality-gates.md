@@ -51,15 +51,23 @@ cargo bench --bench comprehensive -- "bench_thresholding"
 
 ### System-Level Verification
 ```bash
-# 1. Forward Evaluation (Accuracy & Yield)
+# 1. Forward Evaluation — ICRA 2020 (Accuracy & Yield)
 uv run --group bench tools/cli.py bench real --compare
 
-# 2. Regression Testing (Sequential for accurate latency)
+# 2. Hub Dataset Evaluation — Python CLI (Recall + Pose RMSE)
+# Requires hub_cache to be populated via `bench prepare` first.
+PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config single_tag_locus_v1_std41h12_1920x1080
+PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config aprilgrid_golden_v1
+PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config charuco_golden_v1
+
+# 3. Rust Regression Testing (Sequential for accurate latency)
 # Requires LOCUS_DATASET_DIR to be set.
 TRACY_NO_INVARIANT_CHECK=1 LOCUS_DATASET_DIR=tests/data/icra2020 cargo test --release --test regression_icra2020 --features bench-internals -- --test-threads=1
 
-# 3. Snapshot Verification & Update
-# This runs all regression suites and dictionary parity tests.
+# 4. Snapshot Verification & Update
+# Runs all regression suites (ICRA, Hub tag-level, Hub board-level) and dictionary parity tests.
+# LOCUS_HUB_DATASET_DIR is required by regression_render_tag; regression_board_hub
+# resolves tests/data/hub_cache/ automatically from the workspace root.
 TRACY_NO_INVARIANT_CHECK=1 \
 LOCUS_DATASET_DIR=tests/data/icra2020 \
 LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \

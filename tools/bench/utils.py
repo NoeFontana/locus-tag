@@ -16,6 +16,109 @@ ICRA_CACHE_DIR = Path("tests/data/icra2020")
 HUB_CACHE_DIR = Path("tests/data/hub_cache")
 
 
+@dataclass
+class HubDatasetResult:
+    images_dir: Path
+    gt_map: dict[str, Any]  # img_name -> {"tags": {id: tag_data}, "board_pose": np.ndarray | None}
+    board_config_entry: dict[str, Any] | None
+    intrinsics: locus.CameraIntrinsics | None
+    tag_size: float | None  # in meters
+
+
+def build_board_refiner(
+    board_config_entry: dict[str, Any], tag_family: locus.TagFamily
+) -> locus.BoardEstimator:
+    """Build a BoardEstimator from a board config dict.
+
+    Raises:
+        ValueError: If the board type is unrecognised.
+    """
+    bt = board_config_entry.get("type", "").lower()
+    rows = board_config_entry["rows"]
+    cols = board_config_entry["cols"]
+    sq_m = board_config_entry["square_size_mm"] / 1000.0
+    mk_m = board_config_entry["marker_size_mm"] / 1000.0
+
+    if "charuco" in bt:
+        charuco_board = locus.CharucoBoard(rows, cols, sq_m, mk_m, tag_family)
+        return locus.BoardEstimator.from_charuco(charuco_board)
+    if "aprilgrid" in bt:
+        spacing = sq_m - mk_m
+        april_grid = locus.AprilGrid(rows, cols, spacing, mk_m, tag_family)
+        return locus.BoardEstimator(april_grid)
+    raise ValueError(f"Unknown board type: {bt!r}")
+
+
+class HubDatasetLoader:
+    def __init__(self, root: Path = HUB_CACHE_DIR):
+        self.root = root
+
+    def load_dataset(self, config_name: str) -> HubDatasetResult:
+        hub_dir = self.root / config_name
+        rich_path = hub_dir / "rich_truth.json"
+        images_dir = hub_dir / "images"
+
+        if not rich_path.exists():
+            raise FileNotFoundError(f"Metadata not found at {rich_path}")
+
+        with open(rich_path) as f:
+            entries = json.load(f)
+
+        gt_map: dict[str, Any] = {}
+        board_config_entry = None
+        intrinsics = None
+        tag_size_mm = None
+
+        for entry in entries:
+            img_name = entry.get("image_filename") or entry.get("image_id")
+            if img_name is None:
+                continue
+            if not img_name.endswith(".png"):
+                img_name = f"{img_name}.png"
+
+            if intrinsics is None and "k_matrix" in entry and len(entry["k_matrix"]) >= 2:
+                k = entry["k_matrix"]
+                intrinsics = locus.CameraIntrinsics(fx=k[0][0], fy=k[1][1], cx=k[0][2], cy=k[1][2])
+
+            if tag_size_mm is None and "tag_size_mm" in entry:
+                tag_size_mm = entry["tag_size_mm"]
+
+            if img_name not in gt_map:
+                gt_map[img_name] = {"tags": {}, "board_pose": None}
+
+            record_type = entry.get("record_type")
+            if record_type == "BOARD":
+                if board_config_entry is None:
+                    board_config_entry = entry.get("board_definition")
+
+                pos = entry["position"]
+                quat = entry["rotation_quaternion"]  # [w, x, y, z]
+                gt_map[img_name]["board_pose"] = np.array(
+                    [pos[0], pos[1], pos[2], quat[1], quat[2], quat[3], quat[0]], dtype=np.float64
+                )
+
+            elif record_type == "TAG":
+                tid = int(entry["tag_id"])
+                tag_data: dict[str, Any] = {"corners": np.array(entry["corners"], dtype=np.float32)}
+                if "position" in entry and "rotation_quaternion" in entry:
+                    pos = entry["position"]
+                    quat = entry["rotation_quaternion"]  # [w, x, y, z]
+                    tag_data["pose"] = np.array(
+                        [pos[0], pos[1], pos[2], quat[1], quat[2], quat[3], quat[0]],
+                        dtype=np.float64,
+                    )
+                gt_map[img_name]["tags"][tid] = tag_data
+
+        tag_size = tag_size_mm / 1000.0 if tag_size_mm else None
+        return HubDatasetResult(
+            images_dir=images_dir,
+            gt_map=gt_map,
+            board_config_entry=board_config_entry,
+            intrinsics=intrinsics,
+            tag_size=tag_size,
+        )
+
+
 class FamilyMapper:
     """Centralized mapping for tag families across different libraries."""
 
@@ -187,7 +290,7 @@ class DatasetLoader:
             # Hub quaternion is [w, x, y, z]
             w, x, y, z = entry["rotation_quaternion"]
             pos = entry["position"]
-            pose = np.array([pos[0], pos[1], pos[2], x, y, z, w], dtype=np.float32)
+            pose = np.array([pos[0], pos[1], pos[2], x, y, z, w], dtype=np.float64)
 
             gt_tags = gt_map.setdefault(img_name, [])
             gt_tags.append(TagGroundTruth(tag_id=int(entry["tag_id"]), corners=corners, pose=pose))
@@ -306,6 +409,47 @@ class HubBenchmarkLoader:
 
 class Metrics:
     @staticmethod
+    def align_pose(gt_pos: np.ndarray, gt_quat: np.ndarray, tag_size: float) -> np.ndarray:
+        """Aligns a center-origin ground truth pose to a top-left origin pose.
+
+        Args:
+            gt_pos: [x, y, z] position in camera frame.
+            gt_quat: [x, y, z, w] quaternion.
+            tag_size: Physical side length of the tag.
+
+        Returns:
+            shifted_pos: [x, y, z] position of the top-left corner in camera frame.
+        """
+        qx, qy, qz, qw = gt_quat
+        # Convert quaternion to rotation matrix
+        r_gt = np.array(
+            [
+                [
+                    1 - 2 * (qy**2 + qz**2),
+                    2 * (qx * qy - qz * qw),
+                    2 * (qx * qz + qy * qw),
+                ],
+                [
+                    2 * (qx * qy + qz * qw),
+                    1 - 2 * (qx**2 + qz**2),
+                    2 * (qy * qz - qx * qw),
+                ],
+                [
+                    2 * (qx * qz - qy * qw),
+                    2 * (qy * qz + qx * qw),
+                    1 - 2 * (qx**2 + qy**2),
+                ],
+            ]
+        )
+
+        # Local offset in Object Frame (Y-Down, Z-In): TL is [-s/2, -s/2, 0]
+        s_half = tag_size * 0.5
+        v_offset_obj = np.array([-s_half, -s_half, 0.0])
+
+        # Transform offset to Camera Frame: t_TL = t_center + R_gt * v_offset_obj
+        return gt_pos + r_gt @ v_offset_obj
+
+    @staticmethod
     def compute_corner_error(det_corners: np.ndarray, gt_corners: np.ndarray) -> float:
         min_err = float("inf")
         # Try rotations
@@ -375,40 +519,16 @@ class LocusWrapper(LibraryWrapper):
     def __init__(
         self,
         name: str = "Locus",
-        config: locus.DetectorConfig | None = None,
         decimation: int = 1,
         family: int | None = None,
         detector: locus.Detector | None = None,
     ):
         super().__init__(name)
 
-        if detector:
+        if detector is not None:
             self.detector = detector
-            return
-
-        families = FamilyMapper.to_locus(family)
-
-        if config:
-            self.detector = locus.Detector(
-                decimation=decimation,
-                families=families,
-                decode_mode=config.decode_mode,
-                enable_sharpening=config.enable_sharpening,
-                upscale_factor=config.upscale_factor,
-                refinement_mode=config.refinement_mode,
-                threshold_tile_size=config.threshold_tile_size,
-                threshold_min_range=config.threshold_min_range,
-                adaptive_threshold_constant=config.adaptive_threshold_constant,
-                quad_min_area=config.quad_min_area,
-                quad_min_fill_ratio=config.quad_min_fill_ratio,
-                quad_min_edge_score=config.quad_min_edge_score,
-                quad_max_elongation=config.quad_max_elongation,
-                quad_min_density=config.quad_min_density,
-                quad_extraction_mode=int(config.quad_extraction_mode),
-                decoder_min_contrast=config.decoder_min_contrast,
-                max_hamming_error=config.max_hamming_error,
-            )
         else:
+            families = FamilyMapper.to_locus(family)
             self.detector = locus.Detector(decimation=decimation, families=families)
 
     def detect(
@@ -423,15 +543,16 @@ class LocusWrapper(LibraryWrapper):
         for i in range(len(batch)):
             corners = batch.corners[i]
             center = np.mean(corners, axis=0).tolist()
-            serializable.append(
-                {
-                    "id": int(batch.ids[i]),
-                    "center": center,
-                    "corners": corners.tolist(),
-                    "hamming": int(batch.error_rates[i]),
-                    "margin": 0.0,  # Not currently exposed
-                }
-            )
+            det = {
+                "id": int(batch.ids[i]),
+                "center": center,
+                "corners": corners.tolist(),
+                "hamming": int(batch.error_rates[i]),
+                "margin": 0.0,  # Not currently exposed
+            }
+            if batch.poses is not None:
+                det["pose"] = batch.poses[i].tolist()
+            serializable.append(det)
         return serializable, None
 
 
