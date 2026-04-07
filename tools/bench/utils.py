@@ -16,6 +16,74 @@ ICRA_CACHE_DIR = Path("tests/data/icra2020")
 HUB_CACHE_DIR = Path("tests/data/hub_cache")
 
 
+class HubDatasetLoader:
+    def __init__(self, root: Path = HUB_CACHE_DIR):
+        self.root = root
+
+    def load_dataset(self, config_name: str):
+        import locus
+        import numpy as np
+
+        hub_dir = self.root / config_name
+        rich_path = hub_dir / "rich_truth.json"
+        images_dir = hub_dir / "images"
+
+        if not rich_path.exists():
+            raise FileNotFoundError(f"Metadata not found at {rich_path}")
+
+        with open(rich_path) as f:
+            entries = json.load(f)
+
+        gt_map = {}
+        board_config_entry = None
+        intrinsics = None
+        tag_size_mm = None
+
+        for entry in entries:
+            img_name = entry.get("image_filename") or entry.get("image_id")
+            if img_name is None:
+                continue
+            if not img_name.endswith(".png"):
+                img_name = f"{img_name}.png"
+
+            if intrinsics is None and "k_matrix" in entry and len(entry["k_matrix"]) >= 2:
+                k = entry["k_matrix"]
+                intrinsics = locus.CameraIntrinsics(fx=k[0][0], fy=k[1][1], cx=k[0][2], cy=k[1][2])
+
+            if tag_size_mm is None and "tag_size_mm" in entry:
+                tag_size_mm = entry["tag_size_mm"]
+
+            if img_name not in gt_map:
+                gt_map[img_name] = {"tags": {}, "board_pose": None}
+
+            if entry.get("record_type") == "BOARD":
+                if (
+                    board_config_entry is None
+                    and "board_definition" in entry
+                    and entry["board_definition"]
+                ):
+                    board_config_entry = entry["board_definition"]
+
+                pos = entry["position"]
+                w, x, y, z = entry["rotation_quaternion"]
+                board_pose = np.array([pos[0], pos[1], pos[2], x, y, z, w], dtype=np.float32)
+                gt_map[img_name]["board_pose"] = board_pose
+
+            elif entry.get("record_type") == "TAG":
+                tid = int(entry["tag_id"])
+                tag_data = {"corners": entry.get("corners")}
+                if "position" in entry and "rotation_quaternion" in entry:
+                    pos = entry["position"]
+                    w, x, y, z = entry["rotation_quaternion"]
+                    tag_data["pose"] = np.array(
+                        [pos[0], pos[1], pos[2], x, y, z, w], dtype=np.float32
+                    )
+                gt_map[img_name]["tags"][tid] = tag_data
+
+        tag_size = tag_size_mm / 1000.0 if tag_size_mm else None
+        return images_dir, gt_map, board_config_entry, intrinsics, tag_size
+
+
 class FamilyMapper:
     """Centralized mapping for tag families across different libraries."""
 

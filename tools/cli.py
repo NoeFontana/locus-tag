@@ -325,6 +325,7 @@ def visualize(
 @bench_app.command("real")
 def bench_real(
     scenarios: list[str] = typer.Option(["forward"], help="Scenarios to run"),
+    hub_config: str | None = typer.Option(None, help="Hugging Face Hub configuration to run"),
     data_dir: Path = typer.Option(None, help="Custom data directory"),
     types: list[str] = typer.Option(["tags"], help="Dataset types (tags, checkerboard)"),
     limit: int | None = typer.Option(None, help="Limit number of images"),
@@ -355,6 +356,7 @@ def bench_real(
     from tools.bench.utils import (
         AprilTagWrapper,
         DatasetLoader,
+        HubDatasetLoader,
         LibraryWrapper,
         LocusWrapper,
         Metrics,
@@ -433,7 +435,10 @@ def bench_real(
 
     wrappers.append(
         LocusWrapper(
-            name="Locus (Soft)", config=soft_config, decimation=decimation, family=tag_family_int
+            name="Locus (Soft)",
+            detector=soft_detector,
+            decimation=decimation,
+            family=tag_family_int,
         )
     )
 
@@ -449,11 +454,44 @@ def bench_real(
     hard_config.threshold_min_range = min_range
     hard_config.max_hamming_error = max_hamming
     hard_config.quad_min_edge_score = min_edge_score
+    hard_detector = locus.Detector(
+        families=[tag_family_int],
+        preset=locus.DetectorPreset.Production,
+        decode_mode=hard_config.decode_mode,
+        refinement_mode=hard_config.refinement_mode,
+        threshold_tile_size=hard_config.threshold_tile_size,
+        adaptive_threshold_constant=hard_config.adaptive_threshold_constant,
+        quad_min_fill_ratio=hard_config.quad_min_fill_ratio,
+        threshold_min_range=hard_config.threshold_min_range,
+        max_hamming_error=hard_config.max_hamming_error,
+        quad_min_edge_score=hard_config.quad_min_edge_score,
+    )
 
     wrappers.append(
         LocusWrapper(
-            name="Locus (Hard)", config=hard_config, decimation=decimation, family=tag_family_int
+            name="Locus (Hard)",
+            detector=hard_detector,
+            decimation=decimation,
+            family=tag_family_int,
         )
+    )
+
+    # Fix soft_detector to use the same kwarg injection logic
+    soft_detector = locus.Detector(
+        families=[tag_family_int],
+        preset=locus.DetectorPreset.Production,
+        decode_mode=soft_config.decode_mode,
+        refinement_mode=soft_config.refinement_mode,
+        threshold_tile_size=soft_config.threshold_tile_size,
+        adaptive_threshold_constant=soft_config.adaptive_threshold_constant,
+        quad_min_fill_ratio=soft_config.quad_min_fill_ratio,
+        threshold_min_range=soft_config.threshold_min_range,
+        max_hamming_error=soft_config.max_hamming_error,
+        quad_min_edge_score=soft_config.quad_min_edge_score,
+    )
+    # Re-assign to wrappers[0] cleanly
+    wrappers[0] = LocusWrapper(
+        name="Locus (Soft)", detector=soft_detector, decimation=decimation, family=tag_family_int
     )
 
     if compare:
@@ -470,7 +508,209 @@ def bench_real(
 
     current_results: dict[str, dict[str, dict[str, Any]]] = {}
 
+    if hub_config:
+        from tools.bench.utils import HUB_CACHE_DIR, HubDatasetLoader
+
+        search_dir = data_dir if data_dir else HUB_CACHE_DIR
+        board_loader = HubDatasetLoader(root=search_dir)
+        images_dir, gt_map, board_config_entry, intrinsics, ds_tag_size = board_loader.load_dataset(
+            hub_config
+        )
+
+        # Setup board topology if applicable
+        refiner = None
+        is_board = False
+        if board_config_entry:
+            is_board = True
+            bt = board_config_entry.get("type", "").lower()
+            rows = board_config_entry["rows"]
+            cols = board_config_entry["cols"]
+            sq_m = board_config_entry["square_size_mm"] / 1000.0
+            mk_m = board_config_entry["marker_size_mm"] / 1000.0
+
+            if "charuco" in bt:
+                board_topology = locus.CharucoBoard(rows, cols, sq_m, mk_m, tag_family_int)
+                refiner = locus.BoardEstimator.from_charuco(board_topology)
+            elif "aprilgrid" in bt:
+                # spacing = square_size - marker_size
+                spacing = sq_m - mk_m
+                board_topology = locus.AprilGrid(rows, cols, spacing, mk_m, tag_family_int)
+                refiner = locus.BoardEstimator(board_topology)
+            else:
+                typer.echo(f"Unknown board type: {bt}", err=True)
+                raise typer.Exit(code=1)
+
+        typer.echo(f"\nEvaluating Hub Dataset: {hub_config}...")
+        current_results[hub_config] = {}
+
+        img_names = sorted(gt_map.keys())
+        if skip:
+            img_names = img_names[skip:]
+        if limit:
+            img_names = img_names[:limit]
+
+        for wrapper in wrappers:
+            stats: dict[str, Any] = {
+                "gt": 0,
+                "det": 0,
+                "err_sum": 0.0,
+                "latency": [],
+                "pose_err_sum": 0.0,
+            }
+
+            for img_name in tqdm(img_names, desc=f"{wrapper.name:<10}"):
+                img_path = images_dir / img_name
+                if not img_path.exists():
+                    continue
+
+                img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+                if img is None:
+                    continue
+
+                start = time.perf_counter()
+
+                # Perform detection using locus internal detector directly to access board pose
+                batch = None
+                detections = None
+                if isinstance(wrapper, LocusWrapper):
+                    if is_board and refiner:
+                        batch = refiner.estimate(wrapper.detector, img, intrinsics=intrinsics)
+                    else:
+                        eval_tag_size = ds_tag_size if ds_tag_size is not None else 1.0
+                        batch = wrapper.detector.detect(
+                            img,
+                            intrinsics=intrinsics,
+                            tag_size=eval_tag_size,
+                            pose_estimation_mode=locus.PoseEstimationMode.Accurate,
+                        )
+                else:
+                    # OpenCV/Pupil fallback does not have board refiner attached here
+                    # Just run the baseline tag detection
+                    eval_tag_size = ds_tag_size if ds_tag_size is not None else 1.0
+                    detections, _ = wrapper.detect(
+                        img, intrinsics=intrinsics, tag_size=eval_tag_size
+                    )
+
+                _latency = (time.perf_counter() - start) * 1000.0
+                stats["latency"].append(_latency)
+
+                if is_board:
+                    board_gt = gt_map[img_name]["board_pose"]
+                    stats["gt"] += 1
+                    if (
+                        batch is not None
+                        and getattr(batch, "board_pose", None) is not None
+                        and board_gt is not None
+                    ):
+                        stats["det"] += 1
+                        t_err = np.linalg.norm(batch.board_pose[:3] - board_gt[:3])
+                        stats["pose_err_sum"] += t_err
+                else:
+                    gt_tags = gt_map[img_name]["tags"]
+                    stats["gt"] += len(gt_tags)
+
+                    matched_tids = set()
+                    if batch is not None:
+                        for i in range(len(batch.ids)):
+                            tid = int(batch.ids[i])
+                            if tid in gt_tags and tid not in matched_tids:
+                                matched_tids.add(tid)
+                                stats["det"] += 1
+                                gt_tag = gt_tags[tid]
+                                if "pose" in gt_tag and batch.poses is not None:
+                                    # --- Rigid Translation Shift (Center to Top-Left) ---
+                                    # Locus returns pose for Top-Left corner.
+                                    # Ground truth in these datasets is typically for the Center.
+                                    gt_p = gt_tag["pose"]
+                                    t_gt = gt_p[:3]
+                                    q_gt = gt_p[3:]  # [x, y, z, w]
+
+                                    # Convert quaternion [x, y, z, w] to rotation matrix
+                                    qx, qy, qz, qw = q_gt
+                                    r_gt = np.array(
+                                        [
+                                            [
+                                                1 - 2 * (qy**2 + qz**2),
+                                                2 * (qx * qy - qz * qw),
+                                                2 * (qx * qz + qy * qw),
+                                            ],
+                                            [
+                                                2 * (qx * qy + qz * qw),
+                                                1 - 2 * (qx**2 + qz**2),
+                                                2 * (qy * qz - qx * qw),
+                                            ],
+                                            [
+                                                2 * (qx * qz - qy * qw),
+                                                2 * (qy * qz + qx * qw),
+                                                1 - 2 * (qx**2 + qy**2),
+                                            ],
+                                        ]
+                                    )
+
+                                    # Local offset in Object Frame (Y-Down, Z-In): TL is [-s/2, -s/2, 0]
+                                    s_half = eval_tag_size * 0.5
+                                    v_offset_obj = np.array([-s_half, -s_half, 0.0])
+
+                                    # Transform offset to Camera Frame: t_TL = t_center + R_gt * v_offset_obj
+                                    t_gt_tl = t_gt + r_gt @ v_offset_obj
+
+                                    t_err = np.linalg.norm(batch.poses[i, :3] - t_gt_tl)
+                                    stats["pose_err_sum"] += t_err
+                    elif detections is not None:
+                        for det in detections:
+                            tid = det["id"]
+                            if tid in gt_tags and tid not in matched_tids:
+                                matched_tids.add(tid)
+                                stats["det"] += 1
+                                gt_tag = gt_tags[tid]
+                                if "pose" in gt_tag and "pose" in det and det["pose"] is not None:
+                                    gt_p = gt_tag["pose"]
+                                    t_gt = gt_p[:3]
+                                    q_gt = gt_p[3:]
+
+                                    qx, qy, qz, qw = q_gt
+                                    r_gt = np.array(
+                                        [
+                                            [
+                                                1 - 2 * (qy**2 + qz**2),
+                                                2 * (qx * qy - qz * qw),
+                                                2 * (qx * qz + qy * qw),
+                                            ],
+                                            [
+                                                2 * (qx * qy + qz * qw),
+                                                1 - 2 * (qx**2 + qz**2),
+                                                2 * (qy * qz - qx * qw),
+                                            ],
+                                            [
+                                                2 * (qx * qz - qy * qw),
+                                                2 * (qy * qz + qx * qw),
+                                                1 - 2 * (qx**2 + qy**2),
+                                            ],
+                                        ]
+                                    )
+
+                                    s_half = eval_tag_size * 0.5
+                                    v_offset_obj = np.array([-s_half, -s_half, 0.0])
+                                    t_gt_tl = t_gt + r_gt @ v_offset_obj
+
+                                    t_err = np.linalg.norm(np.array(det["pose"])[:3] - t_gt_tl)
+                                    stats["pose_err_sum"] += t_err
+
+            # Print stats
+            recall = float((stats["det"] / stats["gt"] * 100) if stats["gt"] > 0 else 0)
+            avg_pose_err = float((stats["pose_err_sum"] / stats["det"]) if stats["det"] > 0 else 0)
+            avg_lat = float(np.mean(stats["latency"]))
+
+            res = {"recall": recall, "pose_rmse": avg_pose_err, "latency": avg_lat}
+            current_results[hub_config][wrapper.name] = res
+
+            typer.echo(
+                f"  {wrapper.name:<10} | {'Board' if is_board else 'Tag'} Recall: {recall:>6.2f}% | Pose Err: {avg_pose_err:>6.4f} m | Latency: {avg_lat:>6.2f} ms"
+            )
+
     for scenario in scenarios:
+        if hub_config:
+            break
         if not data_dir and not loader.prepare_icra(scenario):
             continue
 
@@ -1027,11 +1267,37 @@ def debug_report(
 @bench_app.command("prepare")
 def bench_prepare():
     """Download and prepare all benchmarking datasets."""
+    from tools.bench.sync_hub import DEFAULT_CACHE_DIR, DEFAULT_REPO_ID, sync_subset_to_local
     from tools.bench.utils import DatasetLoader
 
     loader = DatasetLoader()
-    typer.echo("Preparing datasets...")
+    typer.echo("Preparing ICRA datasets...")
     loader.prepare_all()
+
+    typer.echo("Preparing Hub datasets...")
+    try:
+        import datasets
+        from huggingface_hub import HfApi
+
+        try:
+            configs = datasets.get_dataset_config_names(DEFAULT_REPO_ID)
+        except Exception:
+            api = HfApi()
+            files = api.list_repo_tree(DEFAULT_REPO_ID, repo_type="dataset")
+            configs = [
+                f.path.rstrip("/")
+                for f in files
+                if "/" not in f.path.rstrip("/")
+                and not f.path.startswith(".")
+                and f.path.lower() != "readme.md"
+            ]
+
+        for config in configs:
+            sync_subset_to_local(config, DEFAULT_CACHE_DIR, DEFAULT_REPO_ID)
+
+    except Exception as e:
+        typer.echo(f"Warning: Failed to sync Hub datasets: {e}", err=True)
+
     typer.echo("Done.")
 
 
