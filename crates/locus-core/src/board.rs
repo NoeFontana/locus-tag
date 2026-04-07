@@ -1053,7 +1053,7 @@ impl BoardEstimator {
     #[must_use]
     pub fn estimate(
         &mut self,
-        batch: &DetectionBatch,
+        batch: &crate::batch::DetectionBatchView<'_>,
         intrinsics: &CameraIntrinsics,
     ) -> Option<BoardPose> {
         // Phase 1: flatten valid batch entries into the pre-allocated scratch
@@ -1083,13 +1083,10 @@ impl BoardEstimator {
     ///
     /// Returns the number of tag groups written (i.e. the value of `num_groups`
     /// for the subsequent `PointCorrespondences`).
-    fn flatten_batch(&mut self, batch: &DetectionBatch) -> usize {
+    fn flatten_batch(&mut self, batch: &crate::batch::DetectionBatchView<'_>) -> usize {
         let mut g = 0usize;
 
-        for i in 0..MAX_CANDIDATES {
-            if batch.status_mask[i] != crate::batch::CandidateState::Valid {
-                continue;
-            }
+        for i in 0..batch.len() {
             let id = batch.ids[i] as usize;
             if id >= self.config.obj_points.len() {
                 continue;
@@ -1127,7 +1124,11 @@ impl BoardEstimator {
     /// Converts a single tag's stored per-tag `Pose6D` into a board-frame `Pose`.
     ///
     /// Returns `None` if the stored pose is degenerate (NaN or near-zero depth).
-    fn init_pose_from_batch_tag(&self, b_idx: usize, batch: &DetectionBatch) -> Option<Pose> {
+    fn init_pose_from_batch_tag(
+        &self,
+        b_idx: usize,
+        batch: &crate::batch::DetectionBatchView<'_>,
+    ) -> Option<Pose> {
         board_seed_from_pose6d(
             &batch.poses[b_idx].data,
             batch.ids[b_idx] as usize,

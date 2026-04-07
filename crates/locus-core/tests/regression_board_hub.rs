@@ -306,7 +306,7 @@ impl BoardRegressionHarness {
 
             #[cfg(feature = "bench-internals")]
             {
-                let batch_cloned = detector.bench_api_get_batch_cloned();
+                let mut batch_cloned = detector.bench_api_get_batch_cloned();
 
                 // Tag coverage calculation
                 let visible_set: std::collections::HashSet<u32> =
@@ -327,7 +327,9 @@ impl BoardRegressionHarness {
                 };
 
                 let board_start = std::time::Instant::now();
-                let board_pose = estimator.estimate(&batch_cloned, &provider.camera_intrinsics);
+                let v = batch_cloned.partition(batch_cloned.capacity());
+                let board_pose =
+                    estimator.estimate(&batch_cloned.view(v), &provider.camera_intrinsics);
                 let board_ms = board_start.elapsed().as_secs_f64() * 1000.0;
                 total_time += detect_ms + board_ms;
 
