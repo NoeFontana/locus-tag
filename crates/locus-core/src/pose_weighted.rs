@@ -32,10 +32,6 @@ pub(crate) fn compute_corner_covariance(
     let cx = center[0].floor() as isize;
     let cy = center[1].floor() as isize;
 
-    let mut sum_gx2 = 0.0;
-    let mut sum_gy2 = 0.0;
-    let mut sum_gxgy = 0.0;
-
     let w = img.width.cast_signed();
     let h = img.height.cast_signed();
     let stride = img.stride.cast_signed();
@@ -44,16 +40,54 @@ pub(crate) fn compute_corner_covariance(
     let x_end = (cx + radius as isize).min(w - 2);
     let y_start = (cy - radius as isize).max(1);
     let y_end = (cy + radius as isize).min(h - 2);
+    if x_start > x_end || y_start > y_end {
+        return Matrix2::identity().scale(OFF_IMAGE_CORNER_VARIANCE);
+    }
 
-    debug_assert!(x_start <= x_end && y_start <= y_end);
+    let sigma_sq = (f64::from(radius.max(1)) / 2.0).powi(2);
+    let (sum_gx2, sum_gy2, sum_gxgy) = accumulate_structure_tensor_sums(
+        img, center, stride, x_start, x_end, y_start, y_end, sigma_sq,
+    );
 
-    // Pre-slice rows to exact bounds so LLVM can prove k, k+1, k+2 ∈ [0, len)
-    // and elide bounds checks, enabling inner-loop auto-vectorisation.
-    let x_min = (x_start - 1).cast_unsigned();
+    finalize_corner_covariance(sum_gx2, sum_gy2, sum_gxgy, alpha_max, sigma_n_sq)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn accumulate_structure_tensor_sums(
+    img: &ImageView,
+    center: [f64; 2],
+    stride: isize,
+    x_start: isize,
+    x_end: isize,
+    y_start: isize,
+    y_end: isize,
+    sigma_sq: f64,
+) -> (f64, f64, f64) {
+    let mut sum_gx2 = 0.0;
+    let mut sum_gy2 = 0.0;
+    let mut sum_gxgy = 0.0;
+
     let x_count = (x_end - x_start + 1).cast_unsigned();
-    let row_slice_len = x_count + 2; // left neighbor + x_count pixels + right neighbor
+    let y_count = (y_end - y_start + 1).cast_unsigned();
+    let x_min = (x_start - 1).cast_unsigned();
+    let row_slice_len = x_count + 2;
 
-    for py in y_start..=y_end {
+    let mut x_weights = Vec::with_capacity(x_count);
+    for k in 0..x_count {
+        let px = x_start + k.cast_signed();
+        let dx = px as f64 - center[0];
+        x_weights.push((-(dx * dx) / (2.0 * sigma_sq)).exp());
+    }
+
+    let mut y_weights = Vec::with_capacity(y_count);
+    for row in 0..y_count {
+        let py = y_start + row.cast_signed();
+        let dy = py as f64 - center[1];
+        y_weights.push((-(dy * dy) / (2.0 * sigma_sq)).exp());
+    }
+
+    for (row, py) in (y_start..=y_end).enumerate() {
+        let y_weight = y_weights[row];
         let offset = (py * stride).cast_unsigned();
         let su = stride.cast_unsigned();
 
@@ -80,13 +114,24 @@ pub(crate) fn compute_corner_covariance(
 
             let gx_f = f64::from(gx);
             let gy_f = f64::from(gy);
+            let weight = x_weights[k] * y_weight;
 
-            sum_gx2 += gx_f * gx_f;
-            sum_gy2 += gy_f * gy_f;
-            sum_gxgy += gx_f * gy_f;
+            sum_gx2 += gx_f * gx_f * weight;
+            sum_gy2 += gy_f * gy_f * weight;
+            sum_gxgy += gx_f * gy_f * weight;
         }
     }
 
+    (sum_gx2, sum_gy2, sum_gxgy)
+}
+
+fn finalize_corner_covariance(
+    sum_gx2: f64,
+    sum_gy2: f64,
+    sum_gxgy: f64,
+    alpha_max: f64,
+    sigma_n_sq: f64,
+) -> Matrix2<f64> {
     // Tikhonov regularization on the structure tensor (ε=1.0)
     let s00 = sum_gx2 + 1.0;
     let s11 = sum_gy2 + 1.0;
@@ -108,6 +153,19 @@ pub(crate) fn compute_corner_covariance(
     let alpha = alpha_max * (1.0 - r).powi(2);
 
     s_inv.scale(sigma_n_sq) + Matrix2::identity().scale(alpha)
+}
+
+#[cfg(feature = "bench-internals")]
+#[must_use]
+/// Bench-only wrapper for the production corner-covariance kernel.
+pub fn bench_compute_corner_covariance(
+    img: &ImageView,
+    center: [f64; 2],
+    alpha_max: f64,
+    sigma_n_sq: f64,
+    radius: i32,
+) -> Matrix2<f64> {
+    compute_corner_covariance(img, center, alpha_max, sigma_n_sq, radius)
 }
 
 /// Compute framework uncertainty for all 4 corners.

@@ -73,6 +73,7 @@ pub mod bench_api {
     pub use crate::filter::*;
     pub use crate::funnel::*;
     pub use crate::pose::*;
+    pub use crate::pose_weighted::bench_compute_corner_covariance;
     pub use crate::quad::*;
     pub use crate::segmentation::*;
     pub use crate::simd::sampler::*;
