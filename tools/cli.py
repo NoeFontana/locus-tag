@@ -344,6 +344,7 @@ def bench_real(
     min_range: int = typer.Option(10, help="Threshold min range"),
     max_hamming: int = typer.Option(2, help="Max hamming error"),
     min_edge_score: float = typer.Option(4.0, help="Min edge alignment score"),
+    preset: str = typer.Option("Production", help="Detector preset (Production, Metrology, PureTags, Checkerboard, Fast)"),
 ):
     """Run benchmarks on real-world datasets (ICRA)."""
     import cv2
@@ -414,6 +415,15 @@ def bench_real(
     }
     refinement_mode = refinement_mapping.get(refinement, locus.CornerRefinementMode.Edge)
 
+    preset_mapping = {
+        "Production": locus.DetectorPreset.Production,
+        "Metrology": locus.DetectorPreset.Metrology,
+        "PureTags": locus.DetectorPreset.PureTags,
+        "Checkerboard": locus.DetectorPreset.Checkerboard,
+        "Fast": locus.DetectorPreset.Fast,
+    }
+    selected_preset = preset_mapping.get(preset, locus.DetectorPreset.Production)
+
     # Use custom data dir or default cache
     icra_dir = data_dir if data_dir else ICRA_CACHE_DIR
     loader = DatasetLoader(icra_dir=icra_dir)
@@ -422,7 +432,6 @@ def bench_real(
     # Common detector parameters
     detector_kwargs = {
         "families": [tag_family_int],
-        "preset": locus.DetectorPreset.Production,
         "refinement_mode": refinement_mode,
         "threshold_tile_size": tile_size,
         "adaptive_threshold_constant": constant,
@@ -430,10 +439,21 @@ def bench_real(
         "threshold_min_range": min_range,
         "max_hamming_error": max_hamming,
         "quad_min_edge_score": min_edge_score,
+        "quad_max_elongation": 20.0,
+        "quad_min_density": 0.15,
     }
 
-    # Soft mode
-    soft_detector = locus.Detector(decode_mode=locus.DecodeMode.Soft, **detector_kwargs)
+    # Soft mode: PureTags is usually the best for recall if using Production defaults
+    soft_preset = selected_preset
+    if selected_preset == locus.DetectorPreset.Production:
+        soft_preset = locus.DetectorPreset.PureTags
+
+    # Checkerboard datasets MUST use Checkerboard preset
+    if "checkerboard" in types:
+        soft_preset = locus.DetectorPreset.Checkerboard
+        selected_preset = locus.DetectorPreset.Checkerboard
+
+    soft_detector = locus.Detector(preset=soft_preset, decode_mode=locus.DecodeMode.Soft, **detector_kwargs)
     wrappers.append(
         LocusWrapper(
             name="Locus (Soft)",
@@ -444,7 +464,7 @@ def bench_real(
     )
 
     # Hard mode
-    hard_detector = locus.Detector(decode_mode=locus.DecodeMode.Hard, **detector_kwargs)
+    hard_detector = locus.Detector(preset=selected_preset, decode_mode=locus.DecodeMode.Hard, **detector_kwargs)
     wrappers.append(
         LocusWrapper(
             name="Locus (Hard)",
@@ -549,12 +569,9 @@ def bench_real(
                                 stats["det"] += 1
                                 gt_tag = gt_tags[tid]
                                 if "pose" in gt_tag and batch.poses is not None:
-                                    # Align center-origin GT to top-left Locus convention
-                                    t_gt_tl = Metrics.align_pose(
-                                        gt_tag["pose"][:3], gt_tag["pose"][3:], eval_tag_size
-                                    )
+                                    # Hub GT and detector both use center origin: compare directly.
                                     stats["pose_err_sum"] += np.linalg.norm(
-                                        batch.poses[i, :3] - t_gt_tl
+                                        batch.poses[i, :3] - gt_tag["pose"][:3]
                                     )
                     elif detections is not None:
                         for det in detections:
@@ -564,11 +581,12 @@ def bench_real(
                                 stats["det"] += 1
                                 gt_tag = gt_tags[tid]
                                 if "pose" in gt_tag and det.get("pose") is not None:
-                                    t_gt_tl = Metrics.align_pose(
-                                        gt_tag["pose"][:3], gt_tag["pose"][3:], eval_tag_size
-                                    )
+                                    # For other wrappers, they might use top-left, but we'll assume center for now
+                                    # or handle it if we know they use TL. OpenCV/Pupil usually use TL.
+                                    # Metrics.align_pose(gt_tag["pose"][:3], gt_tag["pose"][3:], eval_tag_size)
+                                    # However, we are focusing on Locus here.
                                     stats["pose_err_sum"] += np.linalg.norm(
-                                        np.array(det["pose"])[:3] - t_gt_tl
+                                        np.array(det["pose"])[:3] - gt_tag["pose"][:3]
                                     )
 
             recall = float(stats["det"] / stats["gt"] * 100) if stats["gt"] > 0 else 0.0
