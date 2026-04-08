@@ -20,6 +20,8 @@ pub enum ConfigError {
     },
     /// Minimum edge length must be positive.
     InvalidEdgeLength(f64),
+    /// Structure tensor radius must stay within the supported kernel bound.
+    InvalidStructureTensorRadius(u8),
 }
 
 impl fmt::Display for ConfigError {
@@ -42,6 +44,9 @@ impl fmt::Display for ConfigError {
             },
             Self::InvalidEdgeLength(l) => {
                 write!(f, "quad_min_edge_length must be positive, got {l}")
+            },
+            Self::InvalidStructureTensorRadius(r) => {
+                write!(f, "structure_tensor_radius must be <= 8, got {r}")
             },
         }
     }

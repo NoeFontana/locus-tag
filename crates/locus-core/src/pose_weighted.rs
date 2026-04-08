@@ -4,6 +4,7 @@ use crate::pose::{CameraIntrinsics, Pose, projection_jacobian, symmetrize_jtj6};
 use nalgebra::{Matrix2, Matrix6, Vector3, Vector6};
 
 const OFF_IMAGE_CORNER_VARIANCE: f64 = 100.0;
+const STACK_WEIGHT_CAPACITY: usize = 17;
 
 fn corner_has_structure_tensor_support(img: &ImageView, center: [f64; 2], radius: i32) -> bool {
     let cx = center[0].floor() as isize;
@@ -68,26 +69,22 @@ fn accumulate_structure_tensor_sums(
     let mut sum_gxgy = 0.0;
 
     let x_count = (x_end - x_start + 1).cast_unsigned();
-    let y_count = (y_end - y_start + 1).cast_unsigned();
     let x_min = (x_start - 1).cast_unsigned();
     let row_slice_len = x_count + 2;
+    debug_assert!(x_count <= STACK_WEIGHT_CAPACITY);
 
-    let mut x_weights = Vec::with_capacity(x_count);
-    for k in 0..x_count {
+    let mut x_weights_stack = [0.0_f64; STACK_WEIGHT_CAPACITY];
+    let x_weights = &mut x_weights_stack[..x_count];
+
+    for (k, weight) in x_weights.iter_mut().enumerate() {
         let px = x_start + k.cast_signed();
         let dx = px as f64 - center[0];
-        x_weights.push((-(dx * dx) / (2.0 * sigma_sq)).exp());
+        *weight = (-(dx * dx) / (2.0 * sigma_sq)).exp();
     }
 
-    let mut y_weights = Vec::with_capacity(y_count);
-    for row in 0..y_count {
-        let py = y_start + row.cast_signed();
+    for py in y_start..=y_end {
         let dy = py as f64 - center[1];
-        y_weights.push((-(dy * dy) / (2.0 * sigma_sq)).exp());
-    }
-
-    for (row, py) in (y_start..=y_end).enumerate() {
-        let y_weight = y_weights[row];
+        let y_weight = (-(dy * dy) / (2.0 * sigma_sq)).exp();
         let offset = (py * stride).cast_unsigned();
         let su = stride.cast_unsigned();
 

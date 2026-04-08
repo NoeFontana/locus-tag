@@ -171,6 +171,7 @@ pub struct DetectorConfig {
     /// Radius (in pixels) of the window used for Structure Tensor computation
     /// in Accurate mode. A radius of 2 yields a 5x5 window.
     /// Smaller values (1) are better for small tags; larger (3-4) for noisy images.
+    /// Validation caps this at 8 to keep the covariance kernel stack-only.
     pub structure_tensor_radius: u8,
 
     /// Alpha parameter for GWLF adaptive transversal windowing.
@@ -267,6 +268,11 @@ impl DetectorConfig {
         }
         if self.quad_min_edge_length <= 0.0 {
             return Err(ConfigError::InvalidEdgeLength(self.quad_min_edge_length));
+        }
+        if self.structure_tensor_radius > 8 {
+            return Err(ConfigError::InvalidStructureTensorRadius(
+                self.structure_tensor_radius,
+            ));
         }
         Ok(())
     }
@@ -743,6 +749,7 @@ impl DetectorConfigBuilder {
     }
 
     /// Set the Structure Tensor window radius for Accurate pose mode.
+    /// Valid range: `0..=8`.
     #[must_use]
     pub fn structure_tensor_radius(mut self, radius: u8) -> Self {
         self.structure_tensor_radius = Some(radius);
@@ -1009,6 +1016,15 @@ mod tests {
     fn test_validation_rejects_negative_edge_length() {
         let config = DetectorConfig {
             quad_min_edge_length: -1.0,
+            ..DetectorConfig::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_validation_rejects_large_structure_tensor_radius() {
+        let config = DetectorConfig {
+            structure_tensor_radius: 9,
             ..DetectorConfig::default()
         };
         assert!(config.validate().is_err());
