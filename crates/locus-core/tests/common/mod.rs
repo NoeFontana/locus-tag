@@ -64,27 +64,19 @@ pub fn resolve_hub_root(hub_dir_raw: &str) -> PathBuf {
     if path.is_absolute() {
         return path;
     }
-    // Relative: first try directly (works when an absolute env var was given
+    // Relative: resolve against workspace root first (CARGO_MANIFEST_DIR is the
+    // crate root at crates/locus-core/, so ../../ reaches the workspace root).
+    // This handles the common case: LOCUS_HUB_DATASET_DIR=tests/data/hub_cache.
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let from_workspace = manifest.join("../../").join(&path);
+    if from_workspace.is_dir() {
+        return std::fs::canonicalize(&from_workspace).unwrap_or(from_workspace);
+    }
+
+    // Also try directly (works if the caller passed an already-correct relative path
     // or when CWD happens to be the workspace root).
     if path.is_dir() {
         return std::fs::canonicalize(&path).unwrap_or(path);
-    }
-    // Resolve from the crate manifest dir.
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-
-    // Priority:
-    // 1. Crate-local fixtures (published package)
-    // 2. Workspace-relative tests (development repo)
-    let candidates = [
-        manifest.join("tests/fixtures/hub_cache"),
-        manifest.join("../../tests/data/hub_cache"),
-    ];
-
-    for base in &candidates {
-        let candidate = base.join(&path);
-        if candidate.is_dir() {
-            return candidate;
-        }
     }
 
     path // fallback — will fail on `exists()` with a clear skip message
