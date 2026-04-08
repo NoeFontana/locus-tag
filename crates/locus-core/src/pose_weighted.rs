@@ -1,6 +1,8 @@
 #![allow(clippy::similar_names)]
 use crate::image::ImageView;
-use crate::pose::{CameraIntrinsics, Pose, projection_jacobian, symmetrize_jtj6};
+use crate::pose::{
+    CameraIntrinsics, Pose, centered_tag_corners, projection_jacobian, symmetrize_jtj6,
+};
 use nalgebra::{Matrix2, Matrix6, Vector3, Vector6};
 
 const OFF_IMAGE_CORNER_VARIANCE: f64 = 100.0;
@@ -343,12 +345,7 @@ pub(crate) fn refine_pose_lm_weighted(
     const MAX_ITERS: usize = 20;
 
     let mut pose = initial_pose;
-    let obj_pts = [
-        Vector3::new(0.0, 0.0, 0.0),
-        Vector3::new(tag_size, 0.0, 0.0),
-        Vector3::new(tag_size, tag_size, 0.0),
-        Vector3::new(0.0, tag_size, 0.0),
-    ];
+    let obj_pts = centered_tag_corners(tag_size);
 
     let mut info_matrices = [Matrix2::<f64>::zeros(); 4];
     for i in 0..4 {
@@ -510,15 +507,8 @@ mod tests {
         let gt_t = nalgebra::Vector3::new(0.02, -0.01, 0.5);
         let gt_pose = Pose::new(gt_rot, gt_t);
 
-        // tag_size = 0.02m; obj_pts match refine_pose_lm_weighted internal layout:
-        // [0,0,0], [s,0,0], [s,s,0], [0,s,0]
         let s = 0.02_f64;
-        let obj_pts = [
-            nalgebra::Vector3::new(0.0, 0.0, 0.0),
-            nalgebra::Vector3::new(s, 0.0, 0.0),
-            nalgebra::Vector3::new(s, s, 0.0),
-            nalgebra::Vector3::new(0.0, s, 0.0),
-        ];
+        let obj_pts = centered_tag_corners(s);
 
         // Perfect observed corners (no noise)
         let corners: [[f64; 2]; 4] =
@@ -570,12 +560,7 @@ mod tests {
         let pose = Pose::new(rot, t);
 
         let s = 0.04_f64;
-        let obj_pts = [
-            nalgebra::Vector3::new(0.0, 0.0, 0.0),
-            nalgebra::Vector3::new(s, 0.0, 0.0),
-            nalgebra::Vector3::new(s, s, 0.0),
-            nalgebra::Vector3::new(0.0, s, 0.0),
-        ];
+        let obj_pts = centered_tag_corners(s);
 
         // Perfect projections with deliberate noise → non-zero residuals required
         // for the gradient to expose the sign error.

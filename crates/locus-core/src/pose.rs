@@ -188,20 +188,15 @@ pub fn estimate_tag_pose_with_config(
     let k_inv = intrinsics.inv_matrix();
     let h_norm = k_inv * h_pixel;
 
-    // 3. Scale to Physical Model (Modern OpenCV 4.6+ Convention: Top-Left Origin)
-    // Legacy mapping: xc = x_obj * (2/s), yc = y_obj * (2/s)
-    // Modern mapping: xc = (2/s)*x_obj - 1, yc = (2/s)*y_obj - 1
-    // P_cam = H_norm * [ (2/s)*x_obj - 1, (2/s)*y_obj - 1, 1 ]^T
-    // P_cam = [ (2/s)*h1, (2/s)*h2, h3 - h1 - h2 ] * [x_obj, y_obj, 1 ]^T
+    // 3. Scale to Physical Model (Center Origin Convention)
+    // Object points are centered: x_obj in [-s/2, s/2], y_obj in [-s/2, s/2]
+    // Canonical mapping: xc = (2/s)*x_obj, yc = (2/s)*y_obj  (no offset)
+    // P_cam = H_norm * [ (2/s)*x_obj, (2/s)*y_obj, 1 ]^T
+    // P_cam = [ (2/s)*h1, (2/s)*h2, h3 ] * [x_obj, y_obj, 1 ]^T
     let scaler = 2.0 / tag_size;
     let mut h_metric = h_norm;
-    let h1 = h_norm.column(0).into_owned();
-    let h2 = h_norm.column(1).into_owned();
     h_metric.column_mut(0).scale_mut(scaler);
     h_metric.column_mut(1).scale_mut(scaler);
-    h_metric
-        .column_mut(2)
-        .copy_from(&(h_norm.column(2) - h1 - h2));
 
     // 4. IPPE Core: Decompose Jacobian (first 2 image cols) into 2 potential poses.
     let Some(candidates) = solve_ippe_square(&h_metric) else {
@@ -418,6 +413,18 @@ fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
     Some([pose_a, pose_b])
 }
 
+/// Returns the 4 tag corners in object space with origin at the geometric center of the tag.
+/// Corner order: TL, TR, BR, BL (clockwise). All Z=0 (tag lies on the object plane).
+pub(crate) fn centered_tag_corners(tag_size: f64) -> [Vector3<f64>; 4] {
+    let h = tag_size * 0.5;
+    [
+        Vector3::new(-h, -h, 0.0),
+        Vector3::new(h, -h, 0.0),
+        Vector3::new(h, h, 0.0),
+        Vector3::new(-h, h, 0.0),
+    ]
+}
+
 /// Use a Manifold-Aware Trust-Region Levenberg-Marquardt solver to refine the pose.
 ///
 /// This upgrades the classic LM recipe to a SOTA production solver with three key improvements:
@@ -445,14 +452,7 @@ fn refine_pose_lm(
     let huber_delta = huber_delta_px;
 
     let mut pose = initial_pose;
-    let s = tag_size;
-    // Modern OpenCV 4.6+ Convention: Origin at Top-Left, CW winding
-    let obj_pts = [
-        Vector3::new(0.0, 0.0, 0.0), // 0: Top-Left
-        Vector3::new(s, 0.0, 0.0),   // 1: Top-Right
-        Vector3::new(s, s, 0.0),     // 2: Bottom-Right
-        Vector3::new(0.0, s, 0.0),   // 3: Bottom-Left
-    ];
+    let obj_pts = centered_tag_corners(tag_size);
 
     // Nielsen's trust-region state. Start with small damping to encourage Gauss-Newton steps.
     let mut lambda = 1e-3_f64;
@@ -648,14 +648,7 @@ fn find_best_pose(
     tag_size: f64,
     candidates: &[Pose; 2],
 ) -> Pose {
-    // Need physical points for reprojection (Modern OpenCV 4.6+ Convention: Top-Left origin)
-    let s = tag_size;
-    let obj_pts = [
-        Vector3::new(0.0, 0.0, 0.0), // 0: Top-Left
-        Vector3::new(s, 0.0, 0.0),   // 1: Top-Right
-        Vector3::new(s, s, 0.0),     // 2: Bottom-Right
-        Vector3::new(0.0, s, 0.0),   // 3: Bottom-Left
-    ];
+    let obj_pts = centered_tag_corners(tag_size);
 
     let err0 = reprojection_error(intrinsics, corners, &obj_pts, &candidates[0]);
     let err1 = reprojection_error(intrinsics, corners, &obj_pts, &candidates[1]);
@@ -827,14 +820,7 @@ mod tests {
         let gt_pose = Pose::new(gt_rot, gt_t);
 
         let tag_size = 0.16; // 16cm
-        let s = tag_size;
-        // Modern OpenCV 4.6+ Convention: Top-Left origin
-        let obj_pts = [
-            Vector3::new(0.0, 0.0, 0.0), // 0: Top-Left
-            Vector3::new(s, 0.0, 0.0),   // 1: Top-Right
-            Vector3::new(s, s, 0.0),     // 2: Bottom-Right
-            Vector3::new(0.0, s, 0.0),   // 3: Bottom-Left
-        ];
+        let obj_pts = centered_tag_corners(tag_size);
 
         let mut img_pts = [[0.0, 0.0]; 4];
         for i in 0..4 {
@@ -900,14 +886,7 @@ mod tests {
             let gt_pose = Pose::new(rotation, translation);
 
             let tag_size = 0.16;
-            let s = tag_size;
-            // Modern OpenCV 4.6+ Convention: Top-Left origin
-            let obj_pts = [
-                Vector3::new(0.0, 0.0, 0.0), // 0: Top-Left
-                Vector3::new(s, 0.0, 0.0),   // 1: Top-Right
-                Vector3::new(s, s, 0.0),     // 2: Bottom-Right
-                Vector3::new(0.0, s, 0.0),   // 3: Bottom-Left
-            ];
+            let obj_pts = centered_tag_corners(tag_size);
 
             let mut img_pts = [[0.0, 0.0]; 4];
             for i in 0..4 {

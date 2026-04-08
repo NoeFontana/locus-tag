@@ -32,7 +32,7 @@ The regression suite validates that `Locus` matches or exceeds ground truth for 
 
 1. **Set Dataset Path**:
    ```bash
-   export LOCUS_DATASET_DIR=/path/to/icra2020
+   export LOCUS_ICRA_DATASET_DIR=/path/to/icra2020
    ```
 2. **Run Benchmarks**:
    ```bash

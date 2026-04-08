@@ -959,8 +959,9 @@ impl RobustPoseSolver {
 
 /// Reconstruct a board-frame [`Pose`] from a stored per-tag [`Pose6D`] payload.
 ///
-/// The `Pose6D` encodes the camera-to-tag transform. We subtract the tag's
-/// board-frame origin to recover the camera-to-board transform.
+/// The `Pose6D` encodes the camera-to-tag transform where `t` points to the
+/// tag's geometric center (center-origin convention). We subtract the tag's
+/// board-frame center to recover the camera-to-board transform.
 ///
 /// Returns `None` if the stored data is degenerate (NaN or near-zero depth).
 pub(crate) fn board_seed_from_pose6d(
@@ -982,11 +983,19 @@ pub(crate) fn board_seed_from_pose6d(
         f64::from(pose6d_data[4]), // y
         f64::from(pose6d_data[5]), // z
     ));
-    let tag_obj_origin = obj_points.get(tag_id)?.as_ref()?[0];
-    let tag_origin = Vector3::new(tag_obj_origin[0], tag_obj_origin[1], tag_obj_origin[2]);
+    // The single-tag pose convention uses the tag center as origin.
+    // Compute the tag center in board frame as the midpoint of TL (corner 0) and BR (corner 2).
+    let corners = obj_points.get(tag_id)?.as_ref()?;
+    let tl = corners[0];
+    let br = corners[2];
+    let tag_center = Vector3::new(
+        (tl[0] + br[0]) * 0.5,
+        (tl[1] + br[1]) * 0.5,
+        (tl[2] + br[2]) * 0.5,
+    );
     Some(Pose {
         rotation: *det_q.to_rotation_matrix().matrix(),
-        translation: det_t - (det_q * tag_origin),
+        translation: det_t - (det_q * tag_center),
     })
 }
 
@@ -1180,7 +1189,7 @@ mod tests {
 
     /// Build a `DetectionBatch` by projecting every marker in `obj_points` through
     /// `pose` and `intrinsics`.  Corners are stored as f32 (matching `Point2f`);
-    /// per-tag pose data encodes the camera-space position of each tag's TL corner
+    /// per-tag pose data encodes the camera-space position of each tag's geometric center
     /// and the board rotation quaternion so that `init_pose_from_batch_tag` recovers
     /// `pose` exactly.  Identity corner covariances → isotropic AW-LM weighting.
     fn build_synthetic_batch(
@@ -1205,8 +1214,13 @@ mod tests {
                 };
             }
 
-            let tl = Vector3::new(obj[0][0], obj[0][1], obj[0][2]);
-            let det_t = pose.rotation * tl + pose.translation;
+            // Center-origin convention: encode the tag's geometric center in camera frame.
+            let center = Vector3::new(
+                (obj[0][0] + obj[2][0]) * 0.5,
+                (obj[0][1] + obj[2][1]) * 0.5,
+                (obj[0][2] + obj[2][2]) * 0.5,
+            );
+            let det_t = pose.rotation * center + pose.translation;
             batch.poses[n].data = [
                 det_t.x as f32,
                 det_t.y as f32,

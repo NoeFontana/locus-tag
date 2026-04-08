@@ -7,16 +7,15 @@ summary:
   mean_recall: 0.9777777777777777
   mean_precision: 1
   mean_rmse: 0.7179
-  mean_reprojection_rmse: 0.6997
-  p50_translation_error: 0.0038
-  p90_translation_error: 0.0117
-  p99_translation_error: 0.0356
-  p50_rotation_error: 0.1274
-  p90_rotation_error: 0.3074
-  p99_rotation_error: 6.2015
+  mean_reprojection_rmse: 0.6778
+  p50_translation_error: 0.0039
+  p90_translation_error: 0.0115
+  p99_translation_error: 0.0335
+  p50_rotation_error: 0.1233
+  p90_rotation_error: 0.3147
+  p99_rotation_error: 5.2825
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
-  geometry_violations: 0
   worst_offenders:
     - filename: scene_0018_cam_0000.png
       missed: 1
