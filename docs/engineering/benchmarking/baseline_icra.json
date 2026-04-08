@@ -1,0 +1,38 @@
+{
+  "forward/pure_tags_images": {
+    "Locus (Soft)": {
+      "recall": 96.23376623376623,
+      "rmse": 0.28701392694134786,
+      "latency": 47.06728619901696
+    },
+    "Locus (Hard)": {
+      "recall": 76.87012987012987,
+      "rmse": 0.25672022395083954,
+      "latency": 34.926933801034465
+    }
+  },
+  "circle/pure_tags_images": {
+    "Locus (Soft)": {
+      "recall": 84.6924126049817,
+      "rmse": 0.4004212449903803,
+      "latency": 40.54719115943823
+    },
+    "Locus (Hard)": {
+      "recall": 83.29983490058143,
+      "rmse": 0.3988496156021563,
+      "latency": 37.21947701625688
+    }
+  },
+  "random/pure_tags_images": {
+    "Locus (Soft)": {
+      "recall": 99.71540469973891,
+      "rmse": 0.6441420883310467,
+      "latency": 36.775340665153635
+    },
+    "Locus (Hard)": {
+      "recall": 99.71540469973891,
+      "rmse": 0.6441420883310467,
+      "latency": 34.21799516730971
+    }
+  }
+}

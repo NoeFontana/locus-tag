@@ -1,0 +1,14 @@
+{
+  "single_tag_locus_v1_tag36h11_1280x720": {
+    "Locus (Soft)": {
+      "recall": 96.0,
+      "pose_rmse": 0.14893343757726343,
+      "latency": 9.599862280883826
+    },
+    "Locus (Hard)": {
+      "recall": 96.0,
+      "pose_rmse": 0.0017129528984456133,
+      "latency": 5.800016119610518
+    }
+  }
+}
