@@ -61,15 +61,15 @@ PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config aprilgrid
 PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config charuco_golden_v1
 
 # 3. Rust Regression Testing (Sequential for accurate latency)
-# Requires LOCUS_DATASET_DIR to be set.
-TRACY_NO_INVARIANT_CHECK=1 LOCUS_DATASET_DIR=tests/data/icra2020 cargo test --release --test regression_icra2020 --features bench-internals -- --test-threads=1
+# Requires LOCUS_ICRA_DATASET_DIR to be set.
+TRACY_NO_INVARIANT_CHECK=1 LOCUS_ICRA_DATASET_DIR=tests/data/icra2020 cargo test --release --test regression_icra2020 --features bench-internals -- --test-threads=1
 
 # 4. Snapshot Verification & Update
 # Runs all regression suites (ICRA, Hub tag-level, Hub board-level) and dictionary parity tests.
 # LOCUS_HUB_DATASET_DIR is required by regression_render_tag; regression_board_hub
 # resolves tests/data/hub_cache/ automatically from the workspace root.
 TRACY_NO_INVARIANT_CHECK=1 \
-LOCUS_DATASET_DIR=tests/data/icra2020 \
+LOCUS_ICRA_DATASET_DIR=tests/data/icra2020 \
 LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \
 cargo insta test --release --all-features --features bench-internals --review
 ```

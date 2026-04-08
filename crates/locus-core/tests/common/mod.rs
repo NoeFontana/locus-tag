@@ -32,7 +32,7 @@ pub fn resolve_workspace_root() -> PathBuf {
 /// dataset layouts (split CSVs, master CSVs, etc.).
 pub fn resolve_dataset_root() -> Option<PathBuf> {
     // 1. Trust the Environment Variable explicitly
-    if let Ok(path_str) = env::var("LOCUS_DATASET_DIR") {
+    if let Ok(path_str) = env::var("LOCUS_ICRA_DATASET_DIR") {
         let path = PathBuf::from(path_str);
         if path.is_dir() {
             return Some(path);

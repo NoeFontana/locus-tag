@@ -39,7 +39,7 @@ The ICRA 2020 regression tests validate detector accuracy against golden master 
 
 Download the ICRA 2020 dataset and set the environment variable:
 ```bash
-export LOCUS_DATASET_DIR=/path/to/icra2020
+export LOCUS_ICRA_DATASET_DIR=/path/to/icra2020
 ```
 
 ### Running Tests
