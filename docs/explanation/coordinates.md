@@ -25,11 +25,11 @@ This convention is strictly followed to ensure that sub-pixel corner refinement 
 
 ## 2. Tag Local Coordinates (Object Space)
 
-When estimating 3D pose, the tag is defined in a right-handed local coordinate system where the tag lies on the $Z=0$ plane. This follows the **modern OpenCV (4.6+)** convention (`ARUCO_CW_TOP_LEFT_CORNER`).
+When estimating 3D pose, the tag is defined in a right-handed local coordinate system where the tag lies on the $Z=0$ plane. The origin is placed at the **geometric center** of the tag, consistent with the board coordinate convention used by `AprilGridTopology` and `CharucoTopology`.
 
 For a tag of physical size $s$ (e.g., in meters):
 
-- **Origin (0,0,0)**: The **Top-Left** corner of the tag.
+- **Origin (0,0,0)**: The **geometric center** of the tag.
 - **X-axis**: Points to the right, along the top edge.
 - **Y-axis**: Points downward, along the left edge.
 - **Z-axis**: Points **into** the scene (away from the camera), established by the right-hand rule ($X \times Y$).
@@ -39,10 +39,10 @@ Detections return corners in **clockwise order** (when looking at the tag), matc
 
 | Index | Location | Object Space Coordinates $(X, Y, Z)$ |
 | :--- | :--- | :--- |
-| **0** | Top-Left | $(0, 0, 0)$ |
-| **1** | Top-Right | $(s, 0, 0)$ |
-| **2** | Bottom-Right | $(s, s, 0)$ |
-| **3** | Bottom-Left | $(0, s, 0)$ |
+| **0** | Top-Left | $(-s/2, -s/2, 0)$ |
+| **1** | Top-Right | $(s/2, -s/2, 0)$ |
+| **2** | Bottom-Right | $(s/2, s/2, 0)$ |
+| **3** | Bottom-Left | $(-s/2, s/2, 0)$ |
 
 ## 3. Tag Layout and Bit Order
 
@@ -92,7 +92,7 @@ P_{camera} = R \cdot P_{object} + t
 $$
 
 - $R$: A $3 \times 3$ rotation matrix.
-- $t$: A $3 \times 1$ translation vector (representing the tag's **top-left corner** in the camera frame).
+- $t$: A $3 \times 1$ translation vector (representing the tag's **geometric center** in the camera frame).
 
 ## 6. Board Coordinate Systems
 
