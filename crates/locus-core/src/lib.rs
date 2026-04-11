@@ -5,7 +5,7 @@
 //! with strict zero-heap allocation in the detection hot-path.
 
 /// Batched state container for Structure of Arrays (SoA) layout.
-pub mod batch;
+pub(crate) mod batch;
 /// Board-level configuration and layout utilities.
 pub mod board;
 /// ChAruco board saddle-point extraction and pose estimation.
@@ -13,47 +13,48 @@ pub mod charuco;
 /// Configuration types for the detector pipeline.
 pub mod config;
 /// Tag decoding traits and implementations.
-pub mod decoder;
+pub(crate) mod decoder;
 /// The primary public API for the detector.
 pub mod detector;
 /// Tag family dictionaries (AprilTag, ArUco).
-pub mod dictionaries;
+pub(crate) mod dictionaries;
 /// EDLines localized quad extraction.
 pub(crate) mod edlines;
 /// Error types for the detection pipeline.
 pub mod error;
 /// Edge-preserving filtering for small tag detection.
-pub mod filter;
+pub(crate) mod filter;
 /// Fast-path decoding funnel.
-pub mod funnel;
+pub(crate) mod funnel;
 /// Gradient computation for edge refinement.
-pub mod gradient;
+pub(crate) mod gradient;
 /// Gradient-Weighted Line Fitting (GWLF).
-pub mod gwlf;
+pub(crate) mod gwlf;
 /// Image buffer abstractions.
 pub mod image;
 /// 3D Pose Estimation (PnP).
 pub mod pose;
 /// Weighted pose estimation logic.
-pub mod pose_weighted;
+pub(crate) mod pose_weighted;
 /// Quad extraction and geometric primitives.
-pub mod quad;
+pub(crate) mod quad;
 /// Connected components labeling using Union-Find.
-pub mod segmentation;
+pub(crate) mod segmentation;
 /// SIMD optimized mathematical kernels.
-pub mod simd;
+pub(crate) mod simd;
 /// SIMD-Accelerated Connected Components Labeling (CCL).
-pub mod simd_ccl_fusion;
+pub(crate) mod simd_ccl_fusion;
 /// Decoding strategies (Hard vs Soft).
-pub mod strategy;
+pub(crate) mod strategy;
 /// Utilities for testing and synthetic data generation.
-pub mod test_utils;
+pub(crate) mod test_utils;
 /// Adaptive thresholding implementation.
-pub mod threshold;
+pub(crate) mod threshold;
 /// Thread-local workspace arena for per-candidate allocations.
 pub(crate) mod workspace;
 
 // Re-exports for the public API
+pub use crate::batch::TelemetryPayload;
 pub use crate::board::{AprilGridTopology, BoardConfigError, CharucoTopology};
 pub use crate::config::{
     CornerRefinementMode, DecodeMode, DetectOptions, DetectorConfig, PoseEstimationMode,
@@ -72,12 +73,14 @@ pub mod bench_api {
     pub use crate::dictionaries::*;
     pub use crate::filter::*;
     pub use crate::funnel::*;
+    pub use crate::gwlf::*;
     pub use crate::pose::*;
     pub use crate::pose_weighted::bench_compute_corner_covariance;
     pub use crate::quad::*;
     pub use crate::segmentation::*;
     pub use crate::simd::sampler::*;
     pub use crate::simd_ccl_fusion::*;
+    pub use crate::strategy::*;
     pub use crate::test_utils::*;
     pub use crate::threshold::*;
 }

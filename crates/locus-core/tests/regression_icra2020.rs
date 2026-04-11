@@ -278,7 +278,7 @@ impl RegressionHarness {
                                 gt_corners[2], // GT TR -> DET 3
                             ];
 
-                            image_rmse_sum += locus_core::test_utils::compute_rmse(
+                            image_rmse_sum += locus_core::bench_api::compute_rmse(
                                 &det_corners_f64,
                                 &gt_locus_aligned,
                             );

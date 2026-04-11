@@ -847,7 +847,7 @@ unsafe fn copy_strided_image(
 
 fn build_pipeline_telemetry(
     py: Python<'_>,
-    telem: &locus_core::batch::TelemetryPayload,
+    telem: &locus_core::TelemetryPayload,
 ) -> PipelineTelemetryResult {
     let binarized_arr = unsafe { PyArray2::<u8>::new(py, [telem.height, telem.width], false) };
     let threshold_arr = unsafe { PyArray2::<u8>::new(py, [telem.height, telem.width], false) };

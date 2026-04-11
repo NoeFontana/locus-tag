@@ -16,7 +16,7 @@ mod utils;
 use bumpalo::Bump;
 use divan::bench;
 use locus_core::ImageView;
-use locus_core::threshold::ThresholdEngine;
+use locus_core::bench_api::ThresholdEngine;
 use utils::BenchDataset;
 
 fn main() {

@@ -17,7 +17,7 @@ use locus_core::bench_api::generate_checkered;
 use locus_core::bench_api::{
     adaptive_threshold_gradient_window, adaptive_threshold_integral, compute_integral_image,
 };
-use locus_core::filter::{bilateral_filter, compute_gradient_map};
+use locus_core::bench_api::{bilateral_filter, compute_gradient_map};
 
 fn main() {
     // Force rayon to a single thread for microbenchmarks to avoid cache thrashing.

@@ -1,5 +1,5 @@
 #![allow(missing_docs)]
-use locus_core::test_utils::generate_synthetic_test_image;
+use locus_core::bench_api::generate_synthetic_test_image;
 use locus_core::{Detector, ImageView, TagFamily};
 
 #[test]

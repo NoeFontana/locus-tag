@@ -16,7 +16,7 @@
 
 use divan::Bencher;
 use locus_core::TagFamily;
-use locus_core::dictionaries::get_dictionary;
+use locus_core::bench_api::get_dictionary;
 
 fn main() {
     // Force rayon to a single thread for microbenchmarks to avoid cache thrashing.
