@@ -11,7 +11,6 @@ import locus
 
 detector = locus.Detector(
     threshold_tile_size=16, # Larger tiles are faster (8-16 is typical)
-    enable_bilateral=False  # Disable for 20-30% speedup if image noise is low
 )
 
 # Use decimation=2 to process at half resolution (4x speed boost)
@@ -24,7 +23,6 @@ print(f"Detected {len(tags)} tags")
 | Parameter | Impact | Recommendation |
 | :--- | :--- | :--- |
 | `decimation` | Linear speedup in preprocessing. | Use `2` for 1080p+ images if tags are >40px. |
-| `enable_bilateral` | High. Improves noise rejection. | Disable for high-SNR sensors. |
 | `threshold_tile_size` | Low. Affects local adaptive threshold. | Use `8` or `16`. |
 
 ## Soft-Decision Decoding (Maximum Recall)

@@ -52,7 +52,6 @@ classDiagram
 
     class DetectorConfig {
         +usize threshold_tile_size
-        +bool enable_bilateral
         +f64 quad_min_edge_score
         +...
     }
@@ -198,7 +197,7 @@ The `locus-core` crate is organized into logical modules mirroring the pipeline 
 | `pose` | 3D pose estimation (PnP). | `Pose`, `CameraIntrinsics` |
 | `pose_weighted` | Structure Tensor & Weighted LM. | `refine_pose_lm_weighted` |
 | `gradient` | Image gradients & Sub-pixel windows. | `compute_structure_tensor` |
-| `filter` | Pre-processing filters (Bilateral, Sharpen). | `bilateral_filter` |
+| `filter` | Pre-processing filters (Sharpen). | `laplacian_sharpen` |
 | `edge_refinement` | Unified ERF sub-pixel refinement. | `ErfEdgeFitter` |
 | `simd::math` | Centralized math kernels (erf, rcp). | `erf_approx`, `erf_approx_v4` |
 | `board` | Board topology types and multi-tag pose estimation. | `AprilGridTopology`, `CharucoTopology`, `BoardEstimator` |

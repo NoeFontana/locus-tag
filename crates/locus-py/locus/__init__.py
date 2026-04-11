@@ -154,14 +154,6 @@ class Detector:
 
         # Validate preset constraints
         if (
-            preset == DetectorPreset.Metrology
-            and merged_kwargs.get("decode_mode") == DecodeMode.Soft
-        ):
-            warnings.warn(
-                "DecodeMode.Soft causes known precision collapse when used with the Metrology preset.",
-                stacklevel=2,
-            )
-        elif (
             preset == DetectorPreset.Checkerboard
             and merged_kwargs.get("segmentation_connectivity") == SegmentationConnectivity.Eight
         ):

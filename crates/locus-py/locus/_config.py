@@ -22,10 +22,6 @@ class DetectorConfig(BaseModel):
     threshold_tile_size: int = Field(default=8, ge=2, le=64)
     threshold_min_range: int = Field(default=10, ge=0, le=255)
 
-    enable_bilateral: bool = Field(default=False)
-    bilateral_sigma_space: float = Field(default=0.8, ge=0.1)
-    bilateral_sigma_color: float = Field(default=30.0, ge=0.1)
-
     enable_sharpening: bool = Field(default=False)
 
     enable_adaptive_window: bool = Field(default=False)

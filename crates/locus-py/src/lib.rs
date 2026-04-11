@@ -61,9 +61,8 @@ impl From<SegmentationConnectivity> for locus_core::config::SegmentationConnecti
 pub enum CornerRefinementMode {
     None = 0,
     Edge = 1,
-    GridFit = 2,
-    Erf = 3,
-    Gwlf = 4,
+    Erf = 2,
+    Gwlf = 3,
 }
 
 impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
@@ -71,7 +70,6 @@ impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
         match m {
             CornerRefinementMode::None => locus_core::config::CornerRefinementMode::None,
             CornerRefinementMode::Edge => locus_core::config::CornerRefinementMode::Edge,
-            CornerRefinementMode::GridFit => locus_core::config::CornerRefinementMode::GridFit,
             CornerRefinementMode::Erf => locus_core::config::CornerRefinementMode::Erf,
             CornerRefinementMode::Gwlf => locus_core::config::CornerRefinementMode::Gwlf,
         }
@@ -194,9 +192,6 @@ pub struct PyPose {
 pub struct PyDetectorConfig {
     pub threshold_tile_size: usize,
     pub threshold_min_range: u8,
-    pub enable_bilateral: bool,
-    pub bilateral_sigma_space: f32,
-    pub bilateral_sigma_color: f32,
     pub enable_sharpening: bool,
     pub enable_adaptive_window: bool,
     pub threshold_min_radius: usize,
@@ -228,9 +223,6 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
         Self {
             threshold_tile_size: c.threshold_tile_size,
             threshold_min_range: c.threshold_min_range,
-            enable_bilateral: c.enable_bilateral,
-            bilateral_sigma_space: c.bilateral_sigma_space,
-            bilateral_sigma_color: c.bilateral_sigma_color,
             enable_sharpening: c.enable_sharpening,
             enable_adaptive_window: c.enable_adaptive_window,
             threshold_min_radius: c.threshold_min_radius,
@@ -258,7 +250,6 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             refinement_mode: match c.refinement_mode {
                 locus_core::config::CornerRefinementMode::None => CornerRefinementMode::None,
                 locus_core::config::CornerRefinementMode::Edge => CornerRefinementMode::Edge,
-                locus_core::config::CornerRefinementMode::GridFit => CornerRefinementMode::GridFit,
                 locus_core::config::CornerRefinementMode::Erf => CornerRefinementMode::Erf,
                 locus_core::config::CornerRefinementMode::Gwlf => CornerRefinementMode::Gwlf,
             },
@@ -1217,9 +1208,8 @@ fn create_detector(
             let mode = match val.extract::<i32>()? {
                 0 => locus_core::config::CornerRefinementMode::None,
                 1 => locus_core::config::CornerRefinementMode::Edge,
-                2 => locus_core::config::CornerRefinementMode::GridFit,
-                3 => locus_core::config::CornerRefinementMode::Erf,
-                4 => locus_core::config::CornerRefinementMode::Gwlf,
+                2 => locus_core::config::CornerRefinementMode::Erf,
+                3 => locus_core::config::CornerRefinementMode::Gwlf,
                 _ => return Err(PyValueError::new_err("Invalid refinement_mode")),
             };
             builder = builder.with_corner_refinement(mode);
@@ -1242,8 +1232,11 @@ fn create_detector(
         }
     }
 
+    let detector = builder
+        .validated_build()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(Detector {
-        inner: Box::new(builder.build()),
+        inner: Box::new(detector),
     })
 }
 
@@ -1445,8 +1438,11 @@ impl DetectorBuilder {
             .inner
             .take()
             .ok_or_else(|| PyRuntimeError::new_err("DetectorBuilder has already been consumed"))?;
+        let detector = inner
+            .validated_build()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(Detector {
-            inner: Box::new(inner.build()),
+            inner: Box::new(detector),
         })
     }
 }

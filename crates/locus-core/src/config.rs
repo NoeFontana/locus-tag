@@ -28,8 +28,6 @@ pub enum CornerRefinementMode {
     None,
     /// Edge-based refinement using gradient maxima (Default).
     Edge,
-    /// GridFit: Optimizes corners by maximizing code contrast.
-    GridFit,
     /// Erf: Fits a Gaussian to the gradient profile for sub-pixel edge alignment.
     Erf,
     /// Gwlf: Gradient-Weighted Line Fitting (PCA on gradients).
@@ -86,15 +84,6 @@ pub struct DetectorConfig {
     /// Minimum intensity range in a tile to be considered valid (default: 10).
     /// Tiles with lower range are treated as uniform (no edges).
     pub threshold_min_range: u8,
-
-    // Adaptive filtering parameters
-    /// Enable bilateral pre-filtering for edge-preserving noise reduction (default: true).
-    pub enable_bilateral: bool,
-    /// Bilateral spatial sigma for spatial smoothing (default: 3.0).
-    pub bilateral_sigma_space: f32,
-    /// Bilateral color sigma for edge preservation (default: 30.0).
-    /// Higher values = more smoothing across edges.
-    pub bilateral_sigma_color: f32,
 
     /// Enable Laplacian sharpening to enhance edges for small tags (default: true).
     pub enable_sharpening: bool,
@@ -195,9 +184,6 @@ impl Default for DetectorConfig {
         Self {
             threshold_tile_size: 8,
             threshold_min_range: 10,
-            enable_bilateral: false,
-            bilateral_sigma_space: 0.8,
-            bilateral_sigma_color: 30.0,
             enable_sharpening: false,
             enable_adaptive_window: false,
             threshold_min_radius: 2,
@@ -273,6 +259,14 @@ impl DetectorConfig {
             return Err(ConfigError::InvalidStructureTensorRadius(
                 self.structure_tensor_radius,
             ));
+        }
+        if self.quad_extraction_mode == QuadExtractionMode::EdLines {
+            if self.refinement_mode == CornerRefinementMode::Erf {
+                return Err(ConfigError::EdLinesIncompatibleWithErf);
+            }
+            if self.decode_mode == DecodeMode::Soft {
+                return Err(ConfigError::EdLinesIncompatibleWithSoftDecode);
+            }
         }
         Ok(())
     }
@@ -389,7 +383,6 @@ impl DetectorConfig {
             .quad_extraction_mode(QuadExtractionMode::EdLines)
             .refinement_mode(CornerRefinementMode::None)
             .enable_sharpening(false)
-            .enable_bilateral(false)
             .quad_max_elongation(20.0)
             .quad_min_density(0.15)
             .decode_mode(DecodeMode::Hard)
@@ -403,9 +396,6 @@ impl DetectorConfig {
 pub struct DetectorConfigBuilder {
     threshold_tile_size: Option<usize>,
     threshold_min_range: Option<u8>,
-    enable_bilateral: Option<bool>,
-    bilateral_sigma_space: Option<f32>,
-    bilateral_sigma_color: Option<f32>,
     enable_sharpening: Option<bool>,
     enable_adaptive_window: Option<bool>,
     threshold_min_radius: Option<usize>,
@@ -510,27 +500,6 @@ impl DetectorConfigBuilder {
         self
     }
 
-    /// Enable or disable bilateral pre-filtering.
-    #[must_use]
-    pub fn enable_bilateral(mut self, enable: bool) -> Self {
-        self.enable_bilateral = Some(enable);
-        self
-    }
-
-    /// Set bilateral spatial sigma.
-    #[must_use]
-    pub fn bilateral_sigma_space(mut self, sigma: f32) -> Self {
-        self.bilateral_sigma_space = Some(sigma);
-        self
-    }
-
-    /// Set bilateral color sigma.
-    #[must_use]
-    pub fn bilateral_sigma_color(mut self, sigma: f32) -> Self {
-        self.bilateral_sigma_color = Some(sigma);
-        self
-    }
-
     /// Enable or disable Laplacian sharpening.
     #[must_use]
     pub fn enable_sharpening(mut self, enable: bool) -> Self {
@@ -580,13 +549,6 @@ impl DetectorConfigBuilder {
         DetectorConfig {
             threshold_tile_size: self.threshold_tile_size.unwrap_or(d.threshold_tile_size),
             threshold_min_range: self.threshold_min_range.unwrap_or(d.threshold_min_range),
-            enable_bilateral: self.enable_bilateral.unwrap_or(d.enable_bilateral),
-            bilateral_sigma_space: self
-                .bilateral_sigma_space
-                .unwrap_or(d.bilateral_sigma_space),
-            bilateral_sigma_color: self
-                .bilateral_sigma_color
-                .unwrap_or(d.bilateral_sigma_color),
             enable_sharpening: self.enable_sharpening.unwrap_or(d.enable_sharpening),
             enable_adaptive_window: self
                 .enable_adaptive_window

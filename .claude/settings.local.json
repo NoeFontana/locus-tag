@@ -13,7 +13,8 @@
       "Bash(TRACY_NO_INVARIANT_CHECK=1 LOCUS_ICRA_DATASET_DIR=tests/data/icra2020 cargo nextest run --release --all-features -E 'binary\\(~regression_icra2020\\)' --ignore-default-filter 2>&1)",
       "Bash(TRACY_NO_INVARIANT_CHECK=1 LOCUS_HUB_DATASET_DIR=tests/data/hub_cache cargo nextest run --release --all-features -E 'binary\\(~regression_render_tag\\)' --ignore-default-filter 2>&1)",
       "Bash(cargo bench:*)",
-      "Bash(lscpu:*)"
+      "Bash(lscpu:*)",
+      "Bash(grep:*)"
     ]
   }
 }
