@@ -13,11 +13,11 @@
 use bumpalo::Bump;
 use divan::bench;
 use locus_core::ImageView;
+use locus_core::bench_api::compute_gradient_map;
 use locus_core::bench_api::generate_checkered;
 use locus_core::bench_api::{
     adaptive_threshold_gradient_window, adaptive_threshold_integral, compute_integral_image,
 };
-use locus_core::bench_api::{bilateral_filter, compute_gradient_map};
 
 fn main() {
     // Force rayon to a single thread for microbenchmarks to avoid cache thrashing.
@@ -88,19 +88,5 @@ fn bench_tile_threshold_1080p(bencher: divan::Bencher) {
     bencher.bench_local(move || {
         arena.reset();
         let _stats = engine.compute_tile_stats(&arena, &img);
-    });
-}
-
-#[bench]
-fn bench_bilateral_r3_1080p(bencher: divan::Bencher) {
-    let width = 1920;
-    let height = 1080;
-    let data = generate_checkered(width, height);
-    let img = ImageView::new(&data, width, height, width).unwrap();
-    let mut output = vec![0u8; width * height];
-    let arena = Bump::new();
-
-    bencher.bench_local(move || {
-        bilateral_filter(&arena, &img, &mut output, 3, 0.8, 30.0);
     });
 }

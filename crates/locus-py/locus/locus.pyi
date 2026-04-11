@@ -22,9 +22,8 @@ class SegmentationConnectivity(enum.IntEnum):
 class CornerRefinementMode(enum.IntEnum):
     None_ = 0
     Edge = 1
-    GridFit = 2
-    Erf = 3
-    Gwlf = 4
+    Erf = 2
+    Gwlf = 3
 
 class DecodeMode(enum.IntEnum):
     Hard = 0
@@ -82,9 +81,6 @@ class PyPose:
 class PyDetectorConfig:
     threshold_tile_size: int
     threshold_min_range: int
-    enable_bilateral: bool
-    bilateral_sigma_space: float
-    bilateral_sigma_color: float
     enable_sharpening: bool
     enable_adaptive_window: bool
     threshold_min_radius: int

@@ -21,8 +21,9 @@ def test_preset_initialization():
 
 
 def test_preset_warnings():
-    """Test that conflicting kwargs trigger warnings."""
-    with pytest.warns(UserWarning, match="DecodeMode.Soft causes known precision collapse"):
+    """Test that conflicting kwargs trigger the appropriate error or warning."""
+    # EdLines + Soft is now a hard validation error.
+    with pytest.raises(ValueError, match="EdLines.*Soft"):
         locus.Detector(preset=locus.DetectorPreset.Metrology, decode_mode=locus.DecodeMode.Soft)
 
     with pytest.warns(UserWarning, match="Checkerboard preset relies on 4-connectivity"):

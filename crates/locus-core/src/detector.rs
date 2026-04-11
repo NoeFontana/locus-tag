@@ -216,41 +216,17 @@ fn run_detection_pipeline<'ctx>(
 
     let img = &detection_img;
 
-    // 1a. Optional bilateral pre-filtering
-    let filtered_img = if config.enable_bilateral {
-        let filtered = state
-            .arena
-            .alloc_slice_fill_copy(img.width * img.height, 0u8);
-        crate::filter::bilateral_filter(
-            &state.arena,
-            img,
-            filtered,
-            3, // spatial radius
-            config.bilateral_sigma_space,
-            config.bilateral_sigma_color,
-        );
-        ImageView::new(filtered, img.width, img.height, img.width)
-            .map_err(DetectorError::InvalidImage)?
-    } else {
-        *img
-    };
-
     // 1b. Optional Laplacian sharpening
     let sharpened_img = if config.enable_sharpening {
         let sharpened = state
             .arena
-            .alloc_slice_fill_copy(filtered_img.width * filtered_img.height, 0u8);
-        crate::filter::laplacian_sharpen(&filtered_img, sharpened);
+            .alloc_slice_fill_copy(img.width * img.height, 0u8);
+        crate::filter::laplacian_sharpen(img, sharpened);
 
-        ImageView::new(
-            sharpened,
-            filtered_img.width,
-            filtered_img.height,
-            filtered_img.width,
-        )
-        .map_err(DetectorError::InvalidImage)?
+        ImageView::new(sharpened, img.width, img.height, img.width)
+            .map_err(DetectorError::InvalidImage)?
     } else {
-        filtered_img
+        *img
     };
 
     let binarized = state
@@ -684,6 +660,17 @@ impl DetectorBuilder {
             engine,
             ctx: FrameContext::new(),
         }
+    }
+
+    /// Build the detector, validating the configuration first.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigError`] if the configuration is invalid (e.g., incompatible
+    /// `quad_extraction_mode` + `refinement_mode` or `decode_mode` combination).
+    pub fn validated_build(self) -> Result<Detector, crate::error::ConfigError> {
+        self.config.validate()?;
+        Ok(self.build())
     }
 
     /// Set the number of frames that [`Detector::detect_concurrent`] can process

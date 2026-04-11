@@ -339,7 +339,7 @@ def bench_real(
     rerun_addr: str = typer.Option("127.0.0.1:9876", help="Rerun server address"),
     rerun_serve: bool = typer.Option(False, help="Serve Rerun web viewer"),
     family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
-    refinement: str = typer.Option("Erf", help="Refinement mode (None, Edge, GridFit, Erf)"),
+    refinement: str = typer.Option("Erf", help="Refinement mode (None, Edge, Erf, Gwlf)"),
     tile_size: int = typer.Option(8, help="Threshold tile size"),
     constant: int = typer.Option(0, help="Adaptive threshold constant"),
     min_fill: float = typer.Option(0.10, help="Min quad fill ratio"),
@@ -411,8 +411,8 @@ def bench_real(
     refinement_mapping = {
         "None": getattr(locus.CornerRefinementMode, "None"),
         "Edge": locus.CornerRefinementMode.Edge,
-        "GridFit": locus.CornerRefinementMode.GridFit,
         "Erf": locus.CornerRefinementMode.Erf,
+        "Gwlf": locus.CornerRefinementMode.Gwlf,
     }
     refinement_mode = refinement_mapping.get(refinement, locus.CornerRefinementMode.Edge)
 
