@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Tests for mutually exclusive telemetry and profiling.
 mod common;
 

@@ -94,7 +94,7 @@ impl<'a> ImageView<'a> {
         // debug_assert ensures we catch violations in debug mode
         debug_assert!(x < self.width, "x {} out of bounds {}", x, self.width);
         debug_assert!(y < self.height, "y {} out of bounds {}", y, self.height);
-        // SAFETY: Caller guarantees bounds
+        // SAFETY: Caller guarantees that (x, y) are within the image dimensions.
         unsafe { *self.data.get_unchecked(y * self.stride + x) }
     }
 
@@ -152,12 +152,13 @@ impl<'a> ImageView<'a> {
 
         // Use unchecked pixel access
         // We know strides and offsets are valid because of the assertions (in debug) and caller contract (in release)
-        // SAFETY: Caller guarantees checks.
+        // SAFETY: Caller guarantees that floor(x), floor(x)+1, floor(y), floor(y)+1 are within bounds.
         let row0 = unsafe { self.get_row_unchecked(y0) };
+        // SAFETY: Same as above.
         let row1 = unsafe { self.get_row_unchecked(y1) };
 
         // We can access x0/x1 directly from the row slice
-        // SAFETY: Caller guarantees checks.
+        // SAFETY: x0 and x1 are within bounds guaranteed by the caller.
         unsafe {
             let v00 = f64::from(*row0.get_unchecked(x0));
             let v10 = f64::from(*row0.get_unchecked(x1));
@@ -201,6 +202,7 @@ impl<'a> ImageView<'a> {
         let mut g01 = [0.0, 0.0];
         let mut g11 = [0.0, 0.0];
 
+        // SAFETY: Bounds are checked above (x >= 1.0, y >= 1.0, etc.)
         unsafe {
             for j in 0..2 {
                 for i in 0..2 {
@@ -346,6 +348,7 @@ impl<'a> ImageView<'a> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use proptest::prelude::*;

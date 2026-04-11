@@ -2044,7 +2044,7 @@ pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use proptest::prelude::*;

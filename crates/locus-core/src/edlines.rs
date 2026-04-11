@@ -1167,7 +1167,7 @@ pub(crate) fn extract_quad_edlines(
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::image::ImageView;

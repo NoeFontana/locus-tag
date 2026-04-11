@@ -1,10 +1,11 @@
 #![allow(
-    missing_docs,
-    clippy::cast_precision_loss,
     clippy::cast_possible_wrap,
-    clippy::cast_sign_loss
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::expect_used,
+    clippy::unwrap_used,
+    missing_docs
 )]
-
 mod utils;
 
 use divan::bench;

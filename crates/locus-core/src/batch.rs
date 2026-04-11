@@ -248,6 +248,9 @@ pub struct TelemetryPayload {
 // are only accessed from the Python thread while the arena is still alive.
 #[allow(unsafe_code)]
 unsafe impl Send for TelemetryPayload {}
+
+// SAFETY: TelemetryPayload is read-only from the Python thread and does not
+// contain any interior mutability.
 #[allow(unsafe_code)]
 unsafe impl Sync for TelemetryPayload {}
 

@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 use std::fs::File;
 use tracing_subscriber::{Registry, layer::SubscriberExt};
 

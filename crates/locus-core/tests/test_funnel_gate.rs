@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Tests for the fast-path decoding funnel gate.
 use locus_core::bench_api::{CandidateState, DetectionBatch, FunnelStatus, Point2f, TileStats};
 use locus_core::image::ImageView;

@@ -1,11 +1,14 @@
-#![allow(clippy::cast_possible_wrap)]
-#![allow(clippy::cast_sign_loss)]
-#![allow(clippy::cast_lossless)]
-#![allow(clippy::manual_range_contains)]
-#![allow(clippy::manual_midpoint)]
-#![allow(clippy::must_use_candidate)]
-#![allow(clippy::return_self_not_must_use)]
-
+#![allow(
+    clippy::cast_lossless,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::expect_used,
+    clippy::manual_midpoint,
+    clippy::manual_range_contains,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use,
+    clippy::unwrap_used
+)]
 use crate::config::TagFamily;
 use crate::dictionaries::get_dictionary;
 use rand::distr::{Distribution, Uniform};

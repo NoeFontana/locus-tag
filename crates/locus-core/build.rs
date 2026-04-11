@@ -190,7 +190,7 @@ fn compute_mih(
     )
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=data/dictionaries");
     println!("cargo:rerun-if-changed=templates/dictionaries.rs.j2");
 
@@ -205,12 +205,12 @@ fn main() {
             json_path.display()
         );
 
-        let content = fs::read_to_string(&json_path).expect("failed to read json");
-        let ir: DictionaryIR = serde_json::from_str(&content).expect("failed to parse json");
+        let content = fs::read_to_string(&json_path)?;
+        let ir: DictionaryIR = serde_json::from_str(&content)?;
 
         let mut all_codes = Vec::with_capacity(ir.base_codes.len() * 4);
         for hex_str in &ir.base_codes {
-            let base_code = u64::from_str_radix(hex_str, 16).expect("invalid hex base code");
+            let base_code = u64::from_str_radix(hex_str, 16)?;
 
             let rots =
                 compute_rotations(base_code, ir.payload_length, &ir.canonical_sampling_points);
@@ -246,9 +246,10 @@ fn main() {
     let template = DictionariesTemplate {
         dictionaries: computed_dicts,
     };
-    let rendered = template.render().expect("failed to render askama template");
+    let rendered = template.render()?;
 
-    let out_dir = env::var_os("OUT_DIR").unwrap();
+    let out_dir = env::var_os("OUT_DIR").ok_or("OUT_DIR not set")?;
     let dest_path = PathBuf::from(out_dir).join("dictionaries.rs");
-    fs::write(&dest_path, rendered).unwrap();
+    fs::write(&dest_path, rendered)?;
+    Ok(())
 }

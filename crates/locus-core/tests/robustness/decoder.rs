@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Robustness tests for tag decoding logic.
 
 use locus_core::TagFamily;

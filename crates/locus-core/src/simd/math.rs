@@ -185,7 +185,7 @@ pub(crate) fn erf_approx_v4(x: [f64; 4]) -> [f64; 4] {
 }
 
 #[cfg(test)]
-#[allow(clippy::float_cmp)]
+#[allow(clippy::expect_used, clippy::float_cmp, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

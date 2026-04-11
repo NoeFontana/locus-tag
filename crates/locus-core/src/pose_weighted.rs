@@ -460,6 +460,7 @@ pub(crate) fn refine_pose_lm_weighted(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::pose::{CameraIntrinsics, Pose};

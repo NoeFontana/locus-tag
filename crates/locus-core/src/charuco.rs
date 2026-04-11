@@ -596,6 +596,7 @@ fn refine_saddle(
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
+    clippy::expect_used,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
     missing_docs

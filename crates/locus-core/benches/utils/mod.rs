@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(clippy::expect_used, clippy::unwrap_used, dead_code)]
 use locus_core::bench_api::{CandidateState, DetectionBatch, Point2f};
 use std::path::PathBuf;
 

@@ -511,6 +511,7 @@ fn threshold_row_simd(src: &[u8], dst: &mut [u8], thresholds: &[u8], valid_mask:
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
+    clippy::expect_used,
     clippy::naive_bytecount,
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss

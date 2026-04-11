@@ -332,7 +332,7 @@ pub fn label_components_with_stats<'a>(
     }
 }
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::cast_sign_loss)]
+#[allow(clippy::cast_sign_loss, clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use bumpalo::Bump;

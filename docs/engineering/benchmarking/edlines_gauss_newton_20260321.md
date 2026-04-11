@@ -216,3 +216,15 @@ EDLines pipeline per-quad allocation budget (arena):
 - Phase 2 IRLS weight vectors: 4 × O(N/4) f64 slices
 - Phase 3 sub-pixel points: 4 × O(L/step) f64 pair slices
 - Phase 5 GN: zero — all on stack ([f64;64] H, [f64;8] g, [f64;8] Δθ)
+
+---
+
+## 2026.04.11 Addendum: Algorithm Pruning and Baseline Stabilization
+
+As part of the Reconciliation and Stabilization phase, the following algorithms and configurations have been sunsetted:
+
+### 1. Removal of Bilateral Filtering
+**Rationale:** Bilateral filtering was originally introduced to handle high-noise scenarios. However, empirical testing in Phase 5 revealed that bilateral filtering distorts the optical PSF (Point Spread Function), introducing non-linear artifacts that actively degrade the Phase 5 Gauss-Newton solver's convergence. The solver's inherent weighted least-squares formulation provides superior noise rejection without distorting the underlying image geometry.
+
+### 2. Removal of `GridFit` Corner Refinement
+**Rationale:** `GridFit` (template-based corner fitting) proved mathematically incompatible with the EDLines-to-Gauss-Newton pipeline. `GridFit` assumes a rigid 2D grid template which conflicts with the flexible, edge-driven sub-pixel refinement required for high-accuracy metrology. The unification around `CornerRefinementMode::Erf` and `CornerRefinementMode::Gwlf` provides a more consistent mathematical baseline for the IPPE-Square and Phase 5 solvers.

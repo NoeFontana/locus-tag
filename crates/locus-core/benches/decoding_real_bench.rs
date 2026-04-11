@@ -1,5 +1,5 @@
+#![allow(clippy::expect_used, clippy::unwrap_used, missing_docs)]
 //! Real-world decoding benchmarks.
-#![allow(missing_docs, clippy::unwrap_used)]
 mod utils;
 
 use divan::bench;

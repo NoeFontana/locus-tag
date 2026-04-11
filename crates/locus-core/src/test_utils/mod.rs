@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 use rand_distr::{Distribution, Normal};
 
 /// Generate a synthetic image containing a single AprilTag or ArUco tag.

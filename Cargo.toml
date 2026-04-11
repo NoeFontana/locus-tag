@@ -17,10 +17,15 @@ unexpected_cfgs = { level = "warn", check-cfg = [
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 unwrap_used = "deny" # Production safety
+expect_used = "deny"
+undocumented_unsafe_blocks = "deny"
 panic = "deny"
 cast_possible_truncation = "allow" # Common in image processing
 cast_precision_loss = "allow" # f64 has enough precision for pixel coordinates
 doc_markdown = "allow" # Avoids false positives with "AprilTag" etc.
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
 
 [profile.release]
 opt-level = 3
