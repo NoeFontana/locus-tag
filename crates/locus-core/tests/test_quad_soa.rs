@@ -11,7 +11,7 @@
     clippy::return_self_not_must_use
 )]
 use locus_core::bench_api::DetectionBatch;
-use locus_core::segmentation::LabelResult;
+use locus_core::bench_api::LabelResult;
 use locus_core::{DetectorConfig, ImageView};
 
 #[test]

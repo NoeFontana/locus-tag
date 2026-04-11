@@ -42,7 +42,7 @@ fn bench_preprocessing_real(bencher: divan::Bencher) {
     let config = locus_core::DetectorConfig::builder()
         .refinement_mode(CornerRefinementMode::Erf)
         .build();
-    let engine = locus_core::threshold::ThresholdEngine::from_config(&config);
+    let engine = locus_core::bench_api::ThresholdEngine::from_config(&config);
 
     bencher.bench_local(move || {
         let arena = Bump::new();
@@ -58,7 +58,7 @@ fn bench_segmentation_real(bencher: divan::Bencher) {
     let config = locus_core::DetectorConfig::builder()
         .refinement_mode(CornerRefinementMode::Erf)
         .build();
-    let engine = locus_core::threshold::ThresholdEngine::from_config(&config);
+    let engine = locus_core::bench_api::ThresholdEngine::from_config(&config);
 
     let tile_stats = engine.compute_tile_stats(&setup_arena, &img);
     let mut binarized = vec![0u8; width * height];
@@ -86,7 +86,7 @@ fn bench_quad_extraction_real(bencher: divan::Bencher) {
     let config = locus_core::DetectorConfig::builder()
         .refinement_mode(CornerRefinementMode::Erf)
         .build();
-    let engine = locus_core::threshold::ThresholdEngine::from_config(&config);
+    let engine = locus_core::bench_api::ThresholdEngine::from_config(&config);
 
     let tile_stats = engine.compute_tile_stats(&setup_arena, &img);
     let mut binarized = vec![0u8; width * height];

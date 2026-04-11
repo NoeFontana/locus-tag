@@ -25,7 +25,7 @@ fn test_aruco_4x4_50_detection() {
     const CANVAS_SIZE: usize = 400;
     const FAMILY: TagFamily = TagFamily::ArUco4x4_50;
 
-    let (data, _) = locus_core::test_utils::generate_synthetic_test_image(
+    let (data, _) = locus_core::bench_api::generate_synthetic_test_image(
         FAMILY,
         TAG_ID,
         TAG_SIZE,
@@ -59,7 +59,7 @@ fn test_aruco_multiple_ids() {
     detector.set_families(&[FAMILY]);
 
     for tag_id in [0u16, 1, 5, 10, 25, 49] {
-        let (data, _) = locus_core::test_utils::generate_synthetic_test_image(
+        let (data, _) = locus_core::bench_api::generate_synthetic_test_image(
             FAMILY,
             tag_id,
             TAG_SIZE,

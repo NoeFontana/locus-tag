@@ -1,6 +1,8 @@
 //! Unit tests for Gradient-Weighted Line Fitting (GWLF) components.
 use locus_core::ImageView;
-use locus_core::gwlf::{HomogeneousLine, MomentAccumulator, refine_quad_gwlf, solve_2x2_symmetric};
+use locus_core::bench_api::{
+    HomogeneousLine, MomentAccumulator, refine_quad_gwlf, solve_2x2_symmetric,
+};
 use nalgebra::{Matrix3, Vector3};
 
 #[test]

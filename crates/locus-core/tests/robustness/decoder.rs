@@ -1,6 +1,7 @@
 //! Robustness tests for tag decoding logic.
 
-use locus_core::{TagFamily, decoder::family_to_decoder};
+use locus_core::TagFamily;
+use locus_core::bench_api::family_to_decoder;
 use proptest::prelude::*;
 
 proptest! {

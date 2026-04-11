@@ -112,6 +112,96 @@ harness = true
 required-features = ["bench-internals"]
 
 [[test]]
+name = "regression_board_hub"
+path = "tests/regression_board_hub.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "gwlf_tests"
+path = "tests/gwlf_tests.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "integration_aruco"
+path = "tests/integration_aruco.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "integration_detection"
+path = "tests/integration_detection.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "snapshot_dictionaries"
+path = "tests/snapshot_dictionaries.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "test_dda"
+path = "tests/test_dda.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "test_decoding_soa"
+path = "tests/test_decoding_soa.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "test_decimation"
+path = "tests/test_decimation.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "test_detection_batch"
+path = "tests/test_detection_batch.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "test_funnel_gate"
+path = "tests/test_funnel_gate.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "test_homography_soa"
+path = "tests/test_homography_soa.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "test_partition_soa"
+path = "tests/test_partition_soa.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "test_pose_soa"
+path = "tests/test_pose_soa.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "test_quad_soa"
+path = "tests/test_quad_soa.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "test_reassemble_soa"
+path = "tests/test_reassemble_soa.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "test_telemetry"
+path = "tests/test_telemetry.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "test_vectorized_sampler"
+path = "tests/test_vectorized_sampler.rs"
+required-features = ["bench-internals"]
+
+[[test]]
+name = "test_detector_facade"
+path = "tests/test_detector_facade.rs"
+required-features = ["bench-internals"]
+
+[[test]]
 name = "robustness_pipeline"
 path = "tests/robustness/pipeline.rs"
 
@@ -122,10 +212,12 @@ path = "tests/robustness/threshold.rs"
 [[test]]
 name = "robustness_geometry"
 path = "tests/robustness/geometry.rs"
+required-features = ["bench-internals"]
 
 [[test]]
 name = "robustness_decoder"
 path = "tests/robustness/decoder.rs"
+required-features = ["bench-internals"]
 
 [[test]]
 name = "robustness_concurrency"

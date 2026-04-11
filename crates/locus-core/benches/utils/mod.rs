@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use locus_core::batch::{CandidateState, DetectionBatch, Point2f};
+use locus_core::bench_api::{CandidateState, DetectionBatch, Point2f};
 use std::path::PathBuf;
 
 /// A utility struct to hold image data loaded from the ICRA 2020 dataset for benchmarking.

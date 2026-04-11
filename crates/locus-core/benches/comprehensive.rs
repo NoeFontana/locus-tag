@@ -22,7 +22,7 @@ use locus_core::Detector;
 use locus_core::ImageView;
 use locus_core::PoseEstimationMode;
 use locus_core::TagFamily;
-use locus_core::threshold::ThresholdEngine;
+use locus_core::bench_api::ThresholdEngine;
 
 fn main() {
     // Force rayon to a single thread for microbenchmarks to avoid cache thrashing.

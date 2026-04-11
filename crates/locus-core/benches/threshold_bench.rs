@@ -14,7 +14,7 @@
 mod utils;
 
 use divan::bench;
-use locus_core::threshold::ThresholdEngine;
+use locus_core::bench_api::ThresholdEngine;
 use locus_core::{DetectorConfig, ImageView};
 use utils::BenchDataset;
 

@@ -12,7 +12,7 @@
 )]
 use divan::bench;
 use locus_core::bench_api::AprilTag36h11;
-use locus_core::strategy::{DecodingStrategy, SoftStrategy};
+use locus_core::bench_api::{DecodingStrategy, SoftStrategy};
 
 fn main() {
     // Force rayon to a single thread for microbenchmarks to avoid cache thrashing.
@@ -26,7 +26,7 @@ fn main() {
 #[bench]
 fn bench_soft_decoding_200_candidates(bencher: divan::Bencher) {
     let decoder = AprilTag36h11;
-    let dict = locus_core::dictionaries::get_dictionary(locus_core::TagFamily::AprilTag36h11);
+    let dict = locus_core::bench_api::get_dictionary(locus_core::TagFamily::AprilTag36h11);
     // Create a SoftCode from a known match (ID 42)
     let orig_code = dict.get_code(42).unwrap();
 
@@ -68,7 +68,7 @@ fn bench_soft_decoding_200_candidates(bencher: divan::Bencher) {
 fn bench_soft_decoding_36h11_200_candidates(bencher: divan::Bencher) {
     use locus_core::bench_api::AprilTag36h11;
     let decoder = AprilTag36h11;
-    let dict = locus_core::dictionaries::get_dictionary(locus_core::TagFamily::AprilTag36h11);
+    let dict = locus_core::bench_api::get_dictionary(locus_core::TagFamily::AprilTag36h11);
     // id=100 is a valid ID for 36h11
     let code_val = dict.get_code(100).unwrap();
 

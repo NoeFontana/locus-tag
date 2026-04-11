@@ -316,7 +316,7 @@ impl BoardRegressionHarness {
                     .iter()
                     .zip(batch_cloned.ids.iter())
                     .filter(|&(state, id)| {
-                        *state == locus_core::batch::CandidateState::Valid
+                        *state == locus_core::bench_api::CandidateState::Valid
                             && visible_set.contains(id)
                     })
                     .count();

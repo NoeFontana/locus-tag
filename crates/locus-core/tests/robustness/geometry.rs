@@ -1,7 +1,7 @@
 //! Robustness tests for geometry solvers and pose estimation.
-use locus_core::{
-    CameraIntrinsics, PoseEstimationMode, decoder::Homography, pose::estimate_tag_pose,
-};
+use locus_core::bench_api::Homography;
+use locus_core::pose::estimate_tag_pose;
+use locus_core::{CameraIntrinsics, PoseEstimationMode};
 use proptest::prelude::*;
 
 proptest! {
