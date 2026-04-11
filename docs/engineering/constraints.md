@@ -27,7 +27,24 @@ The Rust-Python boundary must be invisible to performance.
 * ❌ **Forbidden:** `unwrap()` or `expect()` in library code. (Enforced via `#![deny(clippy::unwrap_used)]`).
 * ✅ **Required:** Propagate errors gracefully using `Result<T, E>` and `thiserror` for structured error definitions.
 
-## 5. Performance Reporting & Benchmarking
+## 5. Dependency Hygiene
+Keeping the dependency graph lean is as important as keeping the hot loop lean — every unnecessary crate adds compile time, binary size, and a potential instability vector.
+
+* **Randomness:**
+  * ❌ **Forbidden:** `rand`, `rand_distr`, or any stochastic crates in `[dependencies]` (even as a non-optional entry).
+  * ✅ **Required:** Place randomness crates in `[dev-dependencies]` or, when needed by `bench-internals` library code (e.g., `test_utils`), as `optional = true` deps activated exclusively by the `bench-internals` feature.
+  * **Rationale:** The production binary must be mathematically deterministic. Stochastic code has no place in a library that targets reproducible robotic perception pipelines.
+
+* **Feature Discipline for Math Crates:**
+  * ❌ **Forbidden:** Bare version strings (e.g., `nalgebra = "0.34"`) for heavy mathematical crates. Default features can silently expand across minor releases.
+  * ✅ **Required:** Always set `default-features = false` with an explicit `features = [...]` allowlist for `nalgebra` and `ndarray`. Pin only what is actually used.
+  * **Current allowlists:** `nalgebra = { ..., default-features = false, features = ["std"] }` · `ndarray = { ..., default-features = false, features = ["std"] }`.
+
+* **Telemetry Erasure:**
+  * ❌ **Forbidden:** `tracing` dependencies without `release_max_level_info` in any Locus crate.
+  * ✅ **Required:** Every `tracing` entry — in both `locus-core` and `locus-py` — must carry `features = ["release_max_level_info"]` to guarantee compile-time erasure of `debug!`/`trace!` spans in release builds. This is the only way to uphold the zero-overhead telemetry contract.
+
+## 6. Performance Reporting & Benchmarking
 To ensure reproducibility and scientific integrity, all benchmark reports must be grounded in verified system state.
 * ❌ **Forbidden:** Placeholder or assumed hardware specifications (e.g., "Intel CPU" without verification).
 * ✅ **Required:** Every performance or accuracy report MUST include verified hardware metadata obtained via system tools (e.g., `lscpu`, `/proc/cpuinfo`) during the same session the benchmark was executed.

@@ -15,21 +15,24 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 [dependencies]
-nalgebra = "0.34"
+nalgebra = { version = "0.34", default-features = false, features = ["std"] }
 rayon = "1.11"
 bumpalo = { version = "3.20", features = ["collections"] }
 multiversion = "0.8"
+thiserror = "2.0"
 tracing = { version = "0.1", features = ["release_max_level_info"] }
 tracing-tracy = { version = "0.11", optional = true }
 rerun = { version = "0.20", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 crossbeam-queue = "0.3"
-rand = "0.10"
-rand_distr = "0.6"
+rand = { version = "0.10", optional = true }
+rand_distr = { version = "0.6", optional = true }
 
 [dev-dependencies]
 divan = "0.1"
 proptest = "1.11"
+rand = "0.10"
+rand_distr = "0.6"
 rand_chacha = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -238,7 +241,7 @@ viz = ["dep:rerun"]
 serde = ["dep:serde", "nalgebra/serde-serialize"]
 extended-tests = []
 extended-bench = []
-bench-internals = []
+bench-internals = ["dep:rand", "dep:rand_distr"]
 
 [lints]
 workspace = true

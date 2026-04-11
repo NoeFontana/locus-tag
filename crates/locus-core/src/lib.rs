@@ -47,6 +47,7 @@ pub(crate) mod simd_ccl_fusion;
 /// Decoding strategies (Hard vs Soft).
 pub(crate) mod strategy;
 /// Utilities for testing and synthetic data generation.
+#[cfg(any(test, feature = "bench-internals"))]
 pub(crate) mod test_utils;
 /// Adaptive thresholding implementation.
 pub(crate) mod threshold;
