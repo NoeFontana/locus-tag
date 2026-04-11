@@ -78,7 +78,6 @@ def visualize(
     data_dir: Path = typer.Option(None, help="Custom data directory"),
     tile_size: int = typer.Option(8, help="Threshold tile size"),
     min_area: int = typer.Option(16, help="Min quad area"),
-    bilateral: bool = typer.Option(False, help="Enable bilateral filter"),
     upscale: int = typer.Option(1, help="Upscale factor"),
     rerun: bool = typer.Option(True, help="Enable Rerun visualization"),
     rerun_addr: str = typer.Option("127.0.0.1:9876", help="Rerun server address"),
@@ -132,7 +131,6 @@ def visualize(
     detector = locus.Detector(
         threshold_tile_size=tile_size,
         quad_min_area=min_area,
-        enable_bilateral=bilateral,
         upscale_factor=upscale,
     )
 

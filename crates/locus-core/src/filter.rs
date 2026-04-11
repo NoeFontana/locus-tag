@@ -243,7 +243,7 @@ pub(crate) fn laplacian_sharpen(img: &ImageView, output: &mut [u8]) {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::image::ImageView;

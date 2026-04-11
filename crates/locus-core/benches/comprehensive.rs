@@ -1,19 +1,19 @@
 #![allow(
-    missing_docs,
-    dead_code,
-    clippy::unwrap_used,
-    clippy::cast_sign_loss,
     clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::expect_used,
+    clippy::items_after_statements,
+    clippy::missing_panics_doc,
+    clippy::must_use_candidate,
+    clippy::ptr_arg,
+    clippy::return_self_not_must_use,
     clippy::similar_names,
     clippy::too_many_lines,
-    clippy::items_after_statements,
-    clippy::must_use_candidate,
-    clippy::return_self_not_must_use,
-    clippy::missing_panics_doc,
-    clippy::cast_precision_loss,
-    clippy::ptr_arg
+    clippy::unwrap_used,
+    dead_code,
+    missing_docs
 )]
-
 //! Comprehensive benchmarking suite for complex scenes and pipeline stages.
 
 use bumpalo::Bump;

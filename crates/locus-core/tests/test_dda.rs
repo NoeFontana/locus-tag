@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Tests for the Homography Digital Differential Analyzer (DDA).
 use locus_core::bench_api::*;
 

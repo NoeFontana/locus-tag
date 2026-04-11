@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Robustness tests for adaptive thresholding logic.
 
 use locus_core::{DetectorBuilder, DetectorConfig, ImageView};

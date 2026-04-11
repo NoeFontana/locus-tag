@@ -1,12 +1,13 @@
-//! Regression tests for board-level pose estimation using hub datasets.
 #![allow(
-    dead_code,
-    missing_docs,
-    clippy::unwrap_used,
+    clippy::cast_sign_loss,
     clippy::collapsible_if,
+    clippy::expect_used,
     clippy::too_many_lines,
-    clippy::cast_sign_loss
+    clippy::unwrap_used,
+    dead_code,
+    missing_docs
 )]
+//! Regression tests for board-level pose estimation using hub datasets.
 
 use locus_core::{
     CameraIntrinsics, Detector, DetectorConfig, PoseEstimationMode, TagFamily,

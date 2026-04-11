@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Integration tests for tracing configuration and static level erasure.
 
 use tracing::level_filters::LevelFilter;

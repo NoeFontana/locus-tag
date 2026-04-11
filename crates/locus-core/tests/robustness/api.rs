@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Robustness tests for the public API boundaries.
 use locus_core::{DetectorBuilder, DetectorConfig, ImageView};
 use proptest::prelude::*;

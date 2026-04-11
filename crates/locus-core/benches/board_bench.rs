@@ -1,3 +1,12 @@
+#![allow(
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::expect_used,
+    clippy::too_many_lines,
+    clippy::unwrap_used,
+    dead_code,
+    missing_docs
+)]
 //! Micro-benchmark for `BoardEstimator::estimate()`.
 //!
 //! Isolates the LO-RANSAC + AW-LM board pose estimation step from the
@@ -11,14 +20,6 @@
 //! LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \
 //!   cargo bench --bench board_bench --features bench-internals -- --threads 1
 //! ```
-#![allow(
-    missing_docs,
-    dead_code,
-    clippy::unwrap_used,
-    clippy::cast_sign_loss,
-    clippy::cast_possible_wrap,
-    clippy::too_many_lines
-)]
 
 use divan::Bencher;
 use locus_core::{

@@ -108,9 +108,9 @@ pub(crate) fn extract_line_segments(
             let mut changed = true;
             while changed && points.len() < 500 {
                 changed = false;
-                let (lx, ly) = *points
-                    .last()
-                    .expect("Points list should not be empty during refinement");
+                let Some(&(lx, ly)) = points.last() else {
+                    break;
+                };
 
                 for dy in -1i32..=1 {
                     for dx in -1i32..=1 {
@@ -232,14 +232,15 @@ fn try_form_quad(
         return None;
     }
 
-    let g1 = [
-        group1[0].expect("g1[0] exists"),
-        group1[1].expect("g1[1] exists"),
-    ];
-    let g2 = [
-        group2[0].expect("g2[0] exists"),
-        group2[1].expect("g2[1] exists"),
-    ];
+    let (Some(g1_0), Some(g1_1)) = (group1[0], group1[1]) else {
+        return None;
+    };
+    let (Some(g2_0), Some(g2_1)) = (group2[0], group2[1]) else {
+        return None;
+    };
+
+    let g1 = [g1_0, g1_1];
+    let g2 = [g2_0, g2_1];
 
     // Ensure the two groups are roughly perpendicular
     let angle_between_groups = angle_diff(g1[0].angle, g2[0].angle);

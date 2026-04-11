@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Robustness tests for geometry solvers and pose estimation.
 use locus_core::bench_api::Homography;
 use locus_core::pose::estimate_tag_pose;

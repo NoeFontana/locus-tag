@@ -1102,7 +1102,7 @@ fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::float_cmp)]
+#[allow(clippy::expect_used, clippy::float_cmp, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use bumpalo::Bump;

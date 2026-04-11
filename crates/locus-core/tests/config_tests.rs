@@ -1,4 +1,4 @@
-#![allow(missing_docs)]
+#![allow(clippy::expect_used, clippy::unwrap_used, missing_docs)]
 use locus_core::config::{CornerRefinementMode, DetectorConfig};
 
 #[test]

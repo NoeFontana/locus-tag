@@ -1,23 +1,24 @@
-//! ICRA 2020 Dataset Regression Tests.
 #![allow(
-    missing_docs,
-    dead_code,
-    clippy::unwrap_used,
-    clippy::cast_sign_loss,
     clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::expect_used,
+    clippy::items_after_statements,
+    clippy::missing_panics_doc,
+    clippy::must_use_candidate,
+    clippy::needless_pass_by_value,
+    clippy::panic,
+    clippy::return_self_not_must_use,
     clippy::similar_names,
     clippy::too_many_lines,
-    clippy::items_after_statements,
-    clippy::must_use_candidate,
-    clippy::return_self_not_must_use,
+    clippy::trivially_copy_pass_by_ref,
     clippy::type_complexity,
     clippy::unnecessary_debug_formatting,
-    clippy::trivially_copy_pass_by_ref,
-    clippy::needless_pass_by_value,
-    clippy::missing_panics_doc,
-    clippy::panic,
+    clippy::unwrap_used,
+    dead_code,
+    missing_docs,
     unused_imports
 )]
+//! ICRA 2020 Dataset Regression Tests.
 use locus_core::{DetectOptions, DetectorConfig, TagFamily};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};

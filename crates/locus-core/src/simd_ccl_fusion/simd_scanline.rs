@@ -28,8 +28,10 @@ fn process_row_simd(src: &[u8], thresh: &[u8], y: u16, segments: &mut Vec<RleSeg
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn process_row_simd(src: &[u8], thresh: &[u8], y: u16, segments: &mut Vec<RleSegment>) {
     if std::is_x86_feature_detected!("avx512f") && std::is_x86_feature_detected!("avx512bw") {
+        // SAFETY: Feature check above ensures AVX-512 is available.
         unsafe { process_row_avx512(src, thresh, y, segments) }
     } else if std::is_x86_feature_detected!("avx2") {
+        // SAFETY: Feature check above ensures AVX2 is available.
         unsafe { process_row_avx2(src, thresh, y, segments) }
     } else {
         super::process_row_scalar(src, thresh, y, segments);
@@ -263,6 +265,7 @@ unsafe fn process_row_neon(src: &[u8], thresh: &[u8], y: u16, segments: &mut Vec
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::simd_ccl_fusion::extract_rle_segments_scalar;

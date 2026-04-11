@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Robustness tests for the end-to-end perception pipeline.
 use locus_core::{DetectorBuilder, ImageView, PoseEstimationMode};
 use proptest::prelude::*;

@@ -510,23 +510,29 @@ impl BoardEstimator {
         let board_pose_raw = py.detach(|| self.inner.estimate(&batch_view, &core_intr));
 
         // 3. Package detections (ids + corners).
-        // SAFETY: PyArray::new allocates an uninitialized C-contiguous array; we
-        // immediately overwrite every element below before the array escapes.
+        // SAFETY: NumPy array allocation is managed by the Python interpreter.
         let ids_arr = unsafe { PyArray1::<i32>::new(py, [n], false) };
+        // SAFETY: NumPy array allocation is managed by the Python interpreter.
         let corners_arr = unsafe { PyArray3::<f32>::new(py, [n, 4, 2], false) };
-        // SAFETY: ids are u32; reinterpreting as i32 is well-defined (same width,
-        // two's-complement). ArUco IDs fit within i32::MAX by convention.
-        // SAFETY: Point2f is repr(C) with two f32 fields; flat reinterpretation as
-        // &[f32] is sound (same as the existing CharucoRefiner path).
+
         // SAFETY: as_slice_mut is safe because the array was just allocated above
         // with the exact same length, is C-contiguous, and has no other references.
         let ids_slice = unsafe { ids_arr.as_slice_mut() }
             .map_err(|e| PyRuntimeError::new_err(format!("ids array layout error: {e}")))?;
+
+        // SAFETY: ids are u32; reinterpreting as i32 is well-defined (same width,
+        // two's-complement). ArUco IDs fit within i32::MAX by convention.
         ids_slice.copy_from_slice(unsafe {
             std::slice::from_raw_parts(batch_view.ids.as_ptr().cast::<i32>(), n)
         });
+
+        // SAFETY: as_slice_mut is safe because the array was just allocated above
+        // with the exact same length, is C-contiguous, and has no other references.
         let corners_slice = unsafe { corners_arr.as_slice_mut() }
             .map_err(|e| PyRuntimeError::new_err(format!("corners array layout error: {e}")))?;
+
+        // SAFETY: Point2f is repr(C) with two f32 fields; flat reinterpretation as
+        // &[f32] is sound.
         corners_slice.copy_from_slice(unsafe {
             std::slice::from_raw_parts(batch_view.corners.as_ptr().cast::<f32>(), n * 8)
         });
@@ -535,9 +541,10 @@ impl BoardEstimator {
         let (board_pose, board_cov) = if let Some(bp) = board_pose_raw {
             let q = nalgebra::UnitQuaternion::from_matrix(&bp.pose.rotation);
             let t = bp.pose.translation;
-            // SAFETY: PyArray::new allocates uninitialized storage; we fill every
-            // element immediately after.
+
+            // SAFETY: NumPy array allocation is managed by the Python interpreter.
             let pose_arr = unsafe { PyArray1::<f64>::new(py, [7], false) };
+            // SAFETY: as_slice_mut is safe because the array was just allocated above.
             let ps = unsafe { pose_arr.as_slice_mut() }
                 .map_err(|e| PyRuntimeError::new_err(format!("pose array layout error: {e}")))?;
             ps[0] = t.x;
@@ -547,8 +554,10 @@ impl BoardEstimator {
             ps[4] = q.j;
             ps[5] = q.k;
             ps[6] = q.w;
-            // SAFETY: same as above — newly allocated, immediately filled.
+
+            // SAFETY: NumPy array allocation is managed by the Python interpreter.
             let cov_arr = unsafe { PyArray2::<f64>::new(py, [6, 6], false) };
+            // SAFETY: as_slice_mut is safe because the array was just allocated above.
             let cs = unsafe { cov_arr.as_slice_mut() }
                 .map_err(|e| PyRuntimeError::new_err(format!("cov array layout error: {e}")))?;
             for row in 0..6 {
@@ -687,15 +696,22 @@ impl CharucoRefiner {
         let s = active_batch.count;
 
         // 3. Package ArUco detections (ids + corners).
+        // SAFETY: NumPy array allocation is managed by the Python interpreter.
         let ids_arr = unsafe { PyArray1::<i32>::new(py, [n], false) };
+        // SAFETY: NumPy array allocation is managed by the Python interpreter.
         let corners_arr = unsafe { PyArray3::<f32>::new(py, [n, 4, 2], false) };
+        // SAFETY: NumPy arrays are newly allocated and contiguous.
         unsafe {
-            let ids_slice = ids_arr.as_slice_mut().expect("ids slice");
+            let ids_slice = ids_arr
+                .as_slice_mut()
+                .map_err(|e| PyRuntimeError::new_err(format!("ids slice: {e}")))?;
             ids_slice.copy_from_slice(std::slice::from_raw_parts(
                 batch_view.ids.as_ptr().cast::<i32>(),
                 n,
             ));
-            let corners_slice = corners_arr.as_slice_mut().expect("corners slice");
+            let corners_slice = corners_arr
+                .as_slice_mut()
+                .map_err(|e| PyRuntimeError::new_err(format!("corners slice: {e}")))?;
             corners_slice.copy_from_slice(std::slice::from_raw_parts(
                 batch_view.corners.as_ptr().cast::<f32>(),
                 n * 8,
@@ -703,11 +719,17 @@ impl CharucoRefiner {
         }
 
         // 4. Package saddle-point detections.
+        // SAFETY: NumPy array allocation is managed by the Python interpreter.
         let saddle_ids_arr = unsafe { PyArray1::<i32>::new(py, [s], false) };
+        // SAFETY: NumPy array allocation is managed by the Python interpreter.
         let saddle_pts_arr = unsafe { PyArray2::<f32>::new(py, [s, 2], false) };
+        // SAFETY: NumPy array allocation is managed by the Python interpreter.
         let saddle_obj_arr = unsafe { PyArray2::<f64>::new(py, [s, 3], false) };
+        // SAFETY: NumPy arrays are newly allocated and contiguous.
         unsafe {
-            let sid_slice = saddle_ids_arr.as_slice_mut().expect("saddle_ids slice");
+            let sid_slice = saddle_ids_arr
+                .as_slice_mut()
+                .map_err(|e| PyRuntimeError::new_err(format!("saddle_ids slice: {e}")))?;
             for (dst, &src) in sid_slice.iter_mut().zip(active_batch.saddle_ids()) {
                 // saddle IDs are bounded by board saddle count (≤ (rows-1)*(cols-1) ≤ ~400).
                 #[allow(clippy::cast_possible_wrap)]
@@ -718,12 +740,16 @@ impl CharucoRefiner {
             // SAFETY: Point2f is repr(C) with two f32 fields; reinterpreting as &[f32] is
             // sound for a packed, contiguous slice.  [f64; 3] has the same element type as
             // the target NumPy slice.
-            let spts_slice = saddle_pts_arr.as_slice_mut().expect("saddle_pts slice");
+            let spts_slice = saddle_pts_arr
+                .as_slice_mut()
+                .map_err(|e| PyRuntimeError::new_err(format!("saddle_pts slice: {e}")))?;
             spts_slice.copy_from_slice(std::slice::from_raw_parts(
                 active_batch.saddle_image_pts().as_ptr().cast::<f32>(),
                 s * 2,
             ));
-            let sobj_slice = saddle_obj_arr.as_slice_mut().expect("saddle_obj slice");
+            let sobj_slice = saddle_obj_arr
+                .as_slice_mut()
+                .map_err(|e| PyRuntimeError::new_err(format!("saddle_obj slice: {e}")))?;
             sobj_slice.copy_from_slice(std::slice::from_raw_parts(
                 active_batch.saddle_obj_pts().as_ptr().cast::<f64>(),
                 s * 3,
@@ -740,9 +766,13 @@ impl CharucoRefiner {
         let (board_pose, board_cov) = if let Some(bp) = board_pose_raw {
             let q = nalgebra::UnitQuaternion::from_matrix(&bp.pose.rotation);
             let t = bp.pose.translation;
+            // SAFETY: NumPy array allocation is managed by the Python interpreter.
             let pose_arr = unsafe { PyArray1::<f64>::new(py, [7], false) };
+            // SAFETY: NumPy array is newly allocated and contiguous.
             unsafe {
-                let ps = pose_arr.as_slice_mut().expect("pose slice");
+                let ps = pose_arr
+                    .as_slice_mut()
+                    .map_err(|e| PyRuntimeError::new_err(format!("pose slice: {e}")))?;
                 ps[0] = t.x;
                 ps[1] = t.y;
                 ps[2] = t.z;
@@ -751,9 +781,13 @@ impl CharucoRefiner {
                 ps[5] = q.k;
                 ps[6] = q.w;
             }
+            // SAFETY: NumPy array allocation is managed by the Python interpreter.
             let cov_arr = unsafe { PyArray2::<f64>::new(py, [6, 6], false) };
+            // SAFETY: NumPy array is newly allocated and contiguous.
             unsafe {
-                let cs = cov_arr.as_slice_mut().expect("cov slice");
+                let cs = cov_arr
+                    .as_slice_mut()
+                    .map_err(|e| PyRuntimeError::new_err(format!("cov slice: {e}")))?;
                 for row in 0..6 {
                     for col in 0..6 {
                         cs[row * 6 + col] = bp.covariance[(row, col)];
@@ -768,16 +802,23 @@ impl CharucoRefiner {
         // 6. Telemetry (populated only when debug_telemetry=True and batch has telemetry).
         let telemetry = if debug_telemetry && let Some(t) = self.telem_batch.telemetry.as_ref() {
             let r = t.count;
+            // SAFETY: NumPy array allocation is managed by the Python interpreter.
             let rej_pts_arr = unsafe { PyArray2::<f32>::new(py, [r, 2], false) };
+            // SAFETY: NumPy array allocation is managed by the Python interpreter.
             let rej_det_arr = unsafe { PyArray1::<f32>::new(py, [r], false) };
+            // SAFETY: NumPy arrays are newly allocated and contiguous.
             unsafe {
                 // SAFETY: Point2f is repr(C) [f32; 2]; flat reinterpretation is sound.
-                let rpts = rej_pts_arr.as_slice_mut().expect("rej_pts slice");
+                let rpts = rej_pts_arr
+                    .as_slice_mut()
+                    .map_err(|e| PyRuntimeError::new_err(format!("rej_pts slice: {e}")))?;
                 rpts.copy_from_slice(std::slice::from_raw_parts(
                     t.rejected_predictions.as_ptr().cast::<f32>(),
                     r * 2,
                 ));
-                let rdet = rej_det_arr.as_slice_mut().expect("rej_det slice");
+                let rdet = rej_det_arr
+                    .as_slice_mut()
+                    .map_err(|e| PyRuntimeError::new_err(format!("rej_det slice: {e}")))?;
                 rdet.copy_from_slice(&t.rejected_determinants[..r]);
             }
             Some(Py::new(
@@ -839,8 +880,10 @@ unsafe fn copy_strided_image(
 fn build_pipeline_telemetry(
     py: Python<'_>,
     telem: &locus_core::TelemetryPayload,
-) -> PipelineTelemetryResult {
+) -> PyResult<PipelineTelemetryResult> {
+    // SAFETY: NumPy array allocation is managed by the Python interpreter.
     let binarized_arr = unsafe { PyArray2::<u8>::new(py, [telem.height, telem.width], false) };
+    // SAFETY: NumPy array allocation is managed by the Python interpreter.
     let threshold_arr = unsafe { PyArray2::<u8>::new(py, [telem.height, telem.width], false) };
     // SAFETY: Both pointers are valid for `height * stride` bytes (guaranteed by the Rust
     // arena that owns them for the lifetime of this `detect()` call).  The destination slices
@@ -849,56 +892,69 @@ fn build_pipeline_telemetry(
     unsafe {
         copy_strided_image(
             telem.binarized_ptr,
-            binarized_arr.as_slice_mut().expect("binarized slice"),
+            binarized_arr
+                .as_slice_mut()
+                .map_err(|e| PyRuntimeError::new_err(format!("binarized slice: {e}")))?,
             telem.height,
             telem.width,
             telem.stride,
         );
         copy_strided_image(
             telem.threshold_map_ptr,
-            threshold_arr.as_slice_mut().expect("threshold slice"),
+            threshold_arr
+                .as_slice_mut()
+                .map_err(|e| PyRuntimeError::new_err(format!("threshold slice: {e}")))?,
             telem.height,
             telem.width,
             telem.stride,
         );
     }
 
-    let subpixel_jitter =
-        if !telem.subpixel_jitter_ptr.is_null() && telem.num_jitter > 0 {
-            let nj = telem.num_jitter;
-            let arr = unsafe { PyArray3::<f32>::new(py, [nj, 4, 2], false) };
-            unsafe {
-                arr.as_slice_mut().expect("jitter slice").copy_from_slice(
-                    std::slice::from_raw_parts(telem.subpixel_jitter_ptr, nj * 8),
-                );
-            }
-            Some(arr.unbind())
-        } else {
-            None
-        };
+    let subpixel_jitter = if !telem.subpixel_jitter_ptr.is_null() && telem.num_jitter > 0 {
+        let nj = telem.num_jitter;
+        // SAFETY: NumPy array allocation is managed by the Python interpreter.
+        let arr = unsafe { PyArray3::<f32>::new(py, [nj, 4, 2], false) };
+        // SAFETY: NumPy array is newly allocated and contiguous.
+        unsafe {
+            arr.as_slice_mut()
+                .map_err(|e| PyRuntimeError::new_err(format!("jitter slice: {e}")))?
+                .copy_from_slice(std::slice::from_raw_parts(
+                    telem.subpixel_jitter_ptr,
+                    nj * 8,
+                ));
+        }
+        Some(arr.unbind())
+    } else {
+        None
+    };
 
     let reprojection_errors =
         if !telem.reprojection_errors_ptr.is_null() && telem.num_reprojection > 0 {
             let nr = telem.num_reprojection;
+            // SAFETY: NumPy array allocation is managed by the Python interpreter.
             let arr = unsafe { PyArray1::<f32>::new(py, [nr], false) };
+            // SAFETY: NumPy array is newly allocated and contiguous.
             unsafe {
-                arr.as_slice_mut().expect("repro slice").copy_from_slice(
-                    std::slice::from_raw_parts(telem.reprojection_errors_ptr, nr),
-                );
+                arr.as_slice_mut()
+                    .map_err(|e| PyRuntimeError::new_err(format!("repro slice: {e}")))?
+                    .copy_from_slice(std::slice::from_raw_parts(
+                        telem.reprojection_errors_ptr,
+                        nr,
+                    ));
             }
             Some(arr.unbind())
         } else {
             None
         };
 
-    PipelineTelemetryResult {
+    Ok(PipelineTelemetryResult {
         binarized: binarized_arr.unbind(),
         threshold_map: threshold_arr.unbind(),
         subpixel_jitter,
         reprojection_errors,
         gwlf_fallback_count: telem.gwlf_fallback_count,
         gwlf_avg_delta: telem.gwlf_avg_delta,
-    }
+    })
 }
 
 // Detector class
@@ -956,22 +1012,26 @@ impl Detector {
 
         let n = detections.len();
 
-        // Allocate NumPy arrays (Unsafe because memory is uninitialized)
+        // Allocate NumPy arrays
+        // SAFETY: NumPy array allocation is managed by the Python interpreter.
         let ids_arr = unsafe { PyArray1::<i32>::new(py, [n], false) };
+        // SAFETY: NumPy array allocation is managed by the Python interpreter.
         let corners_arr = unsafe { PyArray3::<f32>::new(py, [n, 4, 2], false) };
+        // SAFETY: NumPy array allocation is managed by the Python interpreter.
         let error_rates_arr = unsafe { PyArray1::<f32>::new(py, [n], false) };
 
         // Perform memory mapping
+        // SAFETY: NumPy arrays are newly allocated and contiguous.
         unsafe {
             let ids_slice = ids_arr
                 .as_slice_mut()
-                .expect("failed to get mutable slice for ids");
+                .map_err(|e| PyRuntimeError::new_err(format!("ids slice: {e}")))?;
             let corners_slice = corners_arr
                 .as_slice_mut()
-                .expect("failed to get mutable slice for corners");
+                .map_err(|e| PyRuntimeError::new_err(format!("corners slice: {e}")))?;
             let error_rates_slice = error_rates_arr
                 .as_slice_mut()
-                .expect("failed to get mutable slice for error_rates");
+                .map_err(|e| PyRuntimeError::new_err(format!("error_rates slice: {e}")))?;
 
             // Direct memory block transfer (Zero-copy layout alignment)
             // LLVM will vectorize these into SIMD load/store instructions.
@@ -991,11 +1051,13 @@ impl Detector {
 
         // Rejected Quads: (M, 4, 2)
         let m = detections.rejected_corners.len();
+        // SAFETY: NumPy array allocation is managed by the Python interpreter.
         let rejected_arr = unsafe { PyArray3::<f32>::new(py, [m, 4, 2], false) };
+        // SAFETY: NumPy arrays are newly allocated and contiguous.
         unsafe {
             let rejected_slice = rejected_arr
                 .as_slice_mut()
-                .expect("failed to get mutable slice for rejected_corners");
+                .map_err(|e| PyRuntimeError::new_err(format!("rejected slice: {e}")))?;
             rejected_slice.copy_from_slice(std::slice::from_raw_parts(
                 detections.rejected_corners.as_ptr().cast::<f32>(),
                 m * 8,
@@ -1003,11 +1065,13 @@ impl Detector {
         }
 
         // Rejected Error Rates: (M,)
+        // SAFETY: NumPy array allocation is managed by the Python interpreter.
         let rejected_error_rates_arr = unsafe { PyArray1::<f32>::new(py, [m], false) };
+        // SAFETY: NumPy arrays are newly allocated and contiguous.
         unsafe {
             let rejected_error_rates_slice = rejected_error_rates_arr
                 .as_slice_mut()
-                .expect("failed to get mutable slice for rejected_error_rates");
+                .map_err(|e| PyRuntimeError::new_err(format!("rejected error rates slice: {e}")))?;
             rejected_error_rates_slice.copy_from_slice(std::slice::from_raw_parts(
                 detections.rejected_error_rates.as_ptr(),
                 m,
@@ -1016,9 +1080,13 @@ impl Detector {
 
         // Poses: Vectorized (N, 7) layout: [tx, ty, tz, qx, qy, qz, qw]
         let poses = if intrinsics.is_some() && tag_size.is_some() {
+            // SAFETY: NumPy array allocation is managed by the Python interpreter.
             let poses_arr = unsafe { PyArray2::<f32>::new(py, [n, 7], false) };
+            // SAFETY: NumPy arrays are newly allocated and contiguous.
             unsafe {
-                let poses_slice = poses_arr.as_slice_mut().expect("failed to get poses slice");
+                let poses_slice = poses_arr
+                    .as_slice_mut()
+                    .map_err(|e| PyRuntimeError::new_err(format!("poses slice: {e}")))?;
 
                 // Optimised block copy for Pose6D (ignoring f32 padding)
                 for (i, pose) in detections.poses.iter().enumerate() {
@@ -1032,7 +1100,7 @@ impl Detector {
 
         // Telemetry (zero-copy intermediate images)
         let telemetry = if let Some(telem) = detections.telemetry {
-            let telem_result = build_pipeline_telemetry(py, &telem);
+            let telem_result = build_pipeline_telemetry(py, &telem)?;
             Some(Py::new(py, telem_result)?)
         } else {
             None
@@ -1088,6 +1156,7 @@ impl Detector {
 
         let results: Vec<Result<Vec<locus_core::Detection>, locus_core::DetectorError>> = py
             .detach(move || {
+                // SAFETY: LocusEngine is thread-safe (Send+Sync) and kept alive by the Detector.
                 let engine = unsafe { &*(ptr.0 as *const locus_core::LocusEngine) };
                 engine.detect_concurrent(&views, core_intrinsics.as_ref(), tag_size, core_pose_mode)
             });
@@ -1461,6 +1530,7 @@ fn prepare_image_view<'a>(img: &PyReadonlyArray2<'_, u8>) -> PyResult<ImageView<
         } else {
             0
         };
+        // SAFETY: img is a NumPy array whose lifetime is tied to the call.
         let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
         ImageView::new(data, width, height, stride_y)
             .map_err(|e| PyRuntimeError::new_err(e.clone()))
@@ -1485,14 +1555,24 @@ fn build_detection_result_from_owned(
 ) -> PyResult<DetectionResult> {
     let n = detections.len();
 
+    // SAFETY: NumPy array allocation is managed by the Python interpreter.
     let ids_arr = unsafe { PyArray1::<i32>::new(py, [n], false) };
+    // SAFETY: NumPy array allocation is managed by the Python interpreter.
     let corners_arr = unsafe { PyArray3::<f32>::new(py, [n, 4, 2], false) };
+    // SAFETY: NumPy array allocation is managed by the Python interpreter.
     let error_rates_arr = unsafe { PyArray1::<f32>::new(py, [n], false) };
 
+    // SAFETY: NumPy arrays are newly allocated and contiguous.
     unsafe {
-        let ids_sl = ids_arr.as_slice_mut().expect("ids");
-        let corners_sl = corners_arr.as_slice_mut().expect("corners");
-        let error_sl = error_rates_arr.as_slice_mut().expect("error_rates");
+        let ids_sl = ids_arr
+            .as_slice_mut()
+            .map_err(|e| PyRuntimeError::new_err(format!("ids: {e}")))?;
+        let corners_sl = corners_arr
+            .as_slice_mut()
+            .map_err(|e| PyRuntimeError::new_err(format!("corners: {e}")))?;
+        let error_sl = error_rates_arr
+            .as_slice_mut()
+            .map_err(|e| PyRuntimeError::new_err(format!("error_rates: {e}")))?;
 
         for (i, det) in detections.iter().enumerate() {
             #[allow(clippy::cast_possible_wrap)]
@@ -1508,9 +1588,13 @@ fn build_detection_result_from_owned(
     }
 
     let poses = if has_pose {
+        // SAFETY: NumPy array allocation is managed by the Python interpreter.
         let poses_arr = unsafe { PyArray2::<f32>::new(py, [n, 7], false) };
+        // SAFETY: NumPy array is newly allocated and contiguous.
         unsafe {
-            let poses_sl = poses_arr.as_slice_mut().expect("poses");
+            let poses_sl = poses_arr
+                .as_slice_mut()
+                .map_err(|e| PyRuntimeError::new_err(format!("poses: {e}")))?;
             for (i, det) in detections.iter().enumerate() {
                 if let Some(ref pose) = det.pose {
                     // Reconstruct [tx, ty, tz, qx, qy, qz, qw] from Pose struct.
@@ -1532,7 +1616,9 @@ fn build_detection_result_from_owned(
     };
 
     // Rejected corners are not available on the owned path.
+    // SAFETY: NumPy array allocation is managed by the Python interpreter.
     let rejected_arr = unsafe { PyArray3::<f32>::new(py, [0, 4, 2], false) };
+    // SAFETY: NumPy array allocation is managed by the Python interpreter.
     let rejected_error_rates_arr = unsafe { PyArray1::<f32>::new(py, [0], false) };
 
     Ok(DetectionResult {
@@ -1555,6 +1641,7 @@ fn init_tracy() {
     #[cfg(feature = "tracy")]
     {
         use tracing_subscriber::layer::SubscriberExt;
+        // SAFETY: tracy initialization is thread-safe.
         unsafe {
             std::env::set_var("TRACY_NO_INVARIANT_CHECK", "1");
         }

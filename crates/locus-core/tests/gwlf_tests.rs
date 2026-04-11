@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Unit tests for Gradient-Weighted Line Fitting (GWLF) components.
 use locus_core::ImageView;
 use locus_core::bench_api::{

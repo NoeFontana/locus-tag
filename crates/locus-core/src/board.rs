@@ -1151,6 +1151,7 @@ impl BoardEstimator {
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
+    clippy::expect_used,
     clippy::cast_sign_loss,
     clippy::similar_names,
     clippy::too_many_lines,

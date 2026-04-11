@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 /// A simple line model for synthetic edge generation.
 /// Defined by a*x + b*y + c = 0, where (a,b) is the unit normal.
 #[derive(Clone, Copy, Debug)]
@@ -117,6 +118,7 @@ impl SubpixelEdgeRenderer {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::Point;

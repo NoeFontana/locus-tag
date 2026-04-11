@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Robustness tests for concurrency and thread safety.
 
 use locus_core::{DetectorBuilder, ImageView};
