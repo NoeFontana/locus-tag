@@ -11,7 +11,54 @@ use crate::config::PoseEstimationMode;
 use crate::image::ImageView;
 use nalgebra::{Matrix2, Matrix3, Matrix6, Rotation3, UnitQuaternion, Vector3, Vector6};
 
-/// Camera intrinsics parameters.
+// ---------------------------------------------------------------------------
+// Distortion model storage (embedded in CameraIntrinsics)
+// ---------------------------------------------------------------------------
+
+/// Lens distortion coefficients stored alongside the intrinsic parameters.
+///
+/// Variants correspond to the two supported distortion models plus the ideal
+/// pinhole (no distortion) case.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum DistortionCoeffs {
+    /// No distortion — ideal pinhole / pre-rectified image.
+    None,
+    /// Brown-Conrady polynomial radial + tangential distortion (OpenCV convention).
+    ///
+    /// Coefficient order: `k1, k2, p1, p2, k3`.
+    BrownConrady {
+        /// Radial coefficient k1.
+        k1: f64,
+        /// Radial coefficient k2.
+        k2: f64,
+        /// Tangential coefficient p1.
+        p1: f64,
+        /// Tangential coefficient p2.
+        p2: f64,
+        /// Radial coefficient k3.
+        k3: f64,
+    },
+    /// Kannala-Brandt equidistant fisheye model.
+    ///
+    /// Coefficient order: `k1, k2, k3, k4`.
+    KannalaBrandt {
+        /// Fisheye coefficient k1.
+        k1: f64,
+        /// Fisheye coefficient k2.
+        k2: f64,
+        /// Fisheye coefficient k3.
+        k3: f64,
+        /// Fisheye coefficient k4.
+        k4: f64,
+    },
+}
+
+// ---------------------------------------------------------------------------
+// CameraIntrinsics
+// ---------------------------------------------------------------------------
+
+/// Camera intrinsics parameters with optional lens distortion.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CameraIntrinsics {
@@ -23,13 +70,68 @@ pub struct CameraIntrinsics {
     pub cx: f64,
     /// Principal point y (pixels).
     pub cy: f64,
+    /// Lens distortion model and coefficients. Defaults to [`DistortionCoeffs::None`].
+    pub distortion: DistortionCoeffs,
 }
 
 impl CameraIntrinsics {
-    /// Create new intrinsics.
+    /// Create new intrinsics with no distortion (ideal pinhole).
+    ///
+    /// Existing call sites remain unchanged.
     #[must_use]
     pub fn new(fx: f64, fy: f64, cx: f64, cy: f64) -> Self {
-        Self { fx, fy, cx, cy }
+        Self {
+            fx,
+            fy,
+            cx,
+            cy,
+            distortion: DistortionCoeffs::None,
+        }
+    }
+
+    /// Create new intrinsics with Brown-Conrady distortion.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_brown_conrady(
+        fx: f64,
+        fy: f64,
+        cx: f64,
+        cy: f64,
+        k1: f64,
+        k2: f64,
+        p1: f64,
+        p2: f64,
+        k3: f64,
+    ) -> Self {
+        Self {
+            fx,
+            fy,
+            cx,
+            cy,
+            distortion: DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 },
+        }
+    }
+
+    /// Create new intrinsics with Kannala-Brandt fisheye distortion.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_kannala_brandt(
+        fx: f64,
+        fy: f64,
+        cx: f64,
+        cy: f64,
+        k1: f64,
+        k2: f64,
+        k3: f64,
+        k4: f64,
+    ) -> Self {
+        Self {
+            fx,
+            fy,
+            cx,
+            cy,
+            distortion: DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 },
+        }
     }
 
     /// Convert to a 3x3 matrix.
@@ -52,6 +154,69 @@ impl CameraIntrinsics {
             0.0,
             1.0,
         )
+    }
+
+    /// Map a pixel coordinate `(px, py)` in the distorted image to an ideal
+    /// (undistorted) pixel coordinate.
+    ///
+    /// For [`DistortionCoeffs::None`] this is an identity operation.
+    #[must_use]
+    pub fn undistort_pixel(&self, px: f64, py: f64) -> [f64; 2] {
+        match self.distortion {
+            DistortionCoeffs::None => [px, py],
+            DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 } => {
+                let m = crate::camera::BrownConradyModel { k1, k2, p1, p2, k3 };
+                let xn = (px - self.cx) / self.fx;
+                let yn = (py - self.cy) / self.fy;
+                let [xu, yu] = crate::camera::CameraModel::undistort(&m, xn, yn);
+                [xu * self.fx + self.cx, yu * self.fy + self.cy]
+            },
+            DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 } => {
+                let m = crate::camera::KannalaBrandtModel { k1, k2, k3, k4 };
+                let xn = (px - self.cx) / self.fx;
+                let yn = (py - self.cy) / self.fy;
+                let [xu, yu] = crate::camera::CameraModel::undistort(&m, xn, yn);
+                [xu * self.fx + self.cx, yu * self.fy + self.cy]
+            },
+        }
+    }
+
+    /// Apply distortion to a normalized ideal point `(xn, yn)` and return
+    /// the distorted pixel coordinates `(px, py)`.
+    ///
+    /// For [`DistortionCoeffs::None`] this projects without distortion.
+    #[must_use]
+    pub fn distort_normalized(&self, xn: f64, yn: f64) -> [f64; 2] {
+        let [xd, yd] = match self.distortion {
+            DistortionCoeffs::None => [xn, yn],
+            DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 } => {
+                let m = crate::camera::BrownConradyModel { k1, k2, p1, p2, k3 };
+                crate::camera::CameraModel::distort(&m, xn, yn)
+            },
+            DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 } => {
+                let m = crate::camera::KannalaBrandtModel { k1, k2, k3, k4 };
+                crate::camera::CameraModel::distort(&m, xn, yn)
+            },
+        };
+        [xd * self.fx + self.cx, yd * self.fy + self.cy]
+    }
+
+    /// Compute the 2×2 Jacobian of the distortion map at normalized point `(xn, yn)`.
+    ///
+    /// Returns `[[∂xd/∂xn, ∂xd/∂yn], [∂yd/∂xn, ∂yd/∂yn]]`.
+    #[must_use]
+    pub(crate) fn distortion_jacobian(&self, xn: f64, yn: f64) -> [[f64; 2]; 2] {
+        match self.distortion {
+            DistortionCoeffs::None => [[1.0, 0.0], [0.0, 1.0]],
+            DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 } => {
+                let m = crate::camera::BrownConradyModel { k1, k2, p1, p2, k3 };
+                crate::camera::CameraModel::distort_jacobian(&m, xn, yn)
+            },
+            DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 } => {
+                let m = crate::camera::KannalaBrandtModel { k1, k2, k3, k4 };
+                crate::camera::CameraModel::distort_jacobian(&m, xn, yn)
+            },
+        }
     }
 }
 
@@ -178,8 +343,18 @@ pub fn estimate_tag_pose_with_config(
     config: &crate::config::DetectorConfig,
     external_covariances: Option<&[Matrix2<f64>; 4]>,
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>) {
-    // 1. Canonical Homography: Map canonical square [-1,1]x[-1,1] to image pixels.
-    let Some(h_poly) = crate::decoder::Homography::square_to_quad(corners) else {
+    // For distorted cameras, undistort the detected corners before feeding them
+    // into the homography / IPPE solver, which operates in ideal projective space.
+    // The original distorted `corners` are preserved for the LM residual step, where
+    // the distorted projection is compared against the raw observations.
+    let ideal_corners: [[f64; 2]; 4] = if intrinsics.distortion == DistortionCoeffs::None {
+        *corners
+    } else {
+        core::array::from_fn(|i| intrinsics.undistort_pixel(corners[i][0], corners[i][1]))
+    };
+
+    // 1. Canonical Homography: Map canonical square [-1,1]x[-1,1] to ideal image pixels.
+    let Some(h_poly) = crate::decoder::Homography::square_to_quad(&ideal_corners) else {
         return (None, None);
     };
     let h_pixel = h_poly.h;
@@ -204,9 +379,12 @@ pub fn estimate_tag_pose_with_config(
     };
 
     // 5. Disambiguation: Choose the pose with lower reprojection error.
-    let best_pose = find_best_pose(intrinsics, corners, tag_size, &candidates);
+    // Use ideal_corners because the initial poses were derived from ideal homography.
+    let best_pose = find_best_pose(intrinsics, &ideal_corners, tag_size, &candidates);
 
     // 6. Refinement: Levenberg-Marquardt (LM)
+    // Pass original distorted `corners` — the LM solver applies distortion internally
+    // so its projections match the raw observations.
     match (mode, img, external_covariances) {
         (PoseEstimationMode::Accurate, _, Some(ext_covs)) => {
             // Use provided covariances (e.g. from GWLF)
@@ -216,10 +394,10 @@ pub fn estimate_tag_pose_with_config(
             (Some(refined_pose), Some(covariance))
         },
         (PoseEstimationMode::Accurate, Some(image), None) => {
-            // Compute corner uncertainty from structure tensor
+            // Compute corner uncertainty from structure tensor (use ideal corners for h_poly)
             let uncertainty = crate::pose_weighted::compute_framework_uncertainty(
                 image,
-                corners,
+                &ideal_corners,
                 &h_poly,
                 config.tikhonov_alpha_max,
                 config.sigma_n_sq,
@@ -425,6 +603,17 @@ pub(crate) fn centered_tag_corners(tag_size: f64) -> [Vector3<f64>; 4] {
     ]
 }
 
+/// Project a 3D camera-space point through the intrinsics (with distortion if present).
+///
+/// Returns `[u, v]` in pixel coordinates.
+#[inline]
+fn project_with_distortion(p_cam: &Vector3<f64>, intrinsics: &CameraIntrinsics) -> [f64; 2] {
+    let z = p_cam.z.max(1e-4);
+    let xn = p_cam.x / z;
+    let yn = p_cam.y / z;
+    intrinsics.distort_normalized(xn, yn)
+}
+
 /// Use a Manifold-Aware Trust-Region Levenberg-Marquardt solver to refine the pose.
 ///
 /// This upgrades the classic LM recipe to a SOTA production solver with three key improvements:
@@ -441,6 +630,11 @@ pub(crate) fn centered_tag_corners(tag_size: f64) -> [Vector3<f64>; 4] {
 ///    predicted cost reduction. Good steps shrink `lambda` aggressively (Gauss-Newton speed),
 ///    while bad steps grow it with doubling-`nu` backoff (gradient descent safety). This is
 ///    strictly superior to the heuristic `lambda *= 10 / 0.1` approach.
+///
+/// 4. **Distortion-Aware Jacobian:** When `intrinsics` carries a non-trivial distortion model,
+///    the projection `P_cam → pixel` routes through the distortion map, and the analytic
+///    chain-rule Jacobian `∂[u,v]/∂P_cam = diag(fx,fy) · J_dist · J_normalize` is used,
+///    ensuring the solver converges to the correct distortion-compensated pose.
 #[allow(clippy::too_many_lines)]
 fn refine_pose_lm(
     intrinsics: &CameraIntrinsics,
@@ -469,11 +663,14 @@ fn refine_pose_lm(
         for i in 0..4 {
             let p_world = obj_pts[i];
             let p_cam = pose.rotation * p_world + pose.translation;
-            let z_inv = 1.0 / p_cam.z;
-            let z_inv2 = z_inv * z_inv;
+            let z = p_cam.z.max(1e-4);
+            let z_inv = 1.0 / z;
+            let xn = p_cam.x / z;
+            let yn = p_cam.y / z;
 
-            let u_est = intrinsics.fx * p_cam.x * z_inv + intrinsics.cx;
-            let v_est = intrinsics.fy * p_cam.y * z_inv + intrinsics.cy;
+            // Apply distortion and compute pixel residual.
+            // For DistortionCoeffs::None, distort_normalized is an identity pass-through.
+            let [u_est, v_est] = intrinsics.distort_normalized(xn, yn);
 
             let res_u = corners[i][0] - u_est;
             let res_v = corners[i][1] - v_est;
@@ -487,18 +684,29 @@ fn refine_pose_lm(
                 huber_delta / r_norm
             };
 
-            // Jacobian of projection wrt Camera Point (du/dP_cam) (2x3):
-            // [ fx/z   0     -fx*x/z^2 ]
-            // [ 0      fy/z  -fy*y/z^2 ]
+            // Distortion Jacobian J_dist = [[∂xd/∂xn, ∂xd/∂yn], [∂yd/∂xn, ∂yd/∂yn]].
+            // For DistortionCoeffs::None this is the 2×2 identity, which recovers the
+            // original pinhole Jacobian exactly.
+            let jd = intrinsics.distortion_jacobian(xn, yn);
+
+            // Full Jacobian of pixel coordinates wrt camera-space point P_cam:
+            //
+            //   ∂u/∂P_cam = fx · [J_dist[0][0]/z, J_dist[0][1]/z, -(J_dist[0][0]·xn + J_dist[0][1]·yn)/z]
+            //   ∂v/∂P_cam = fy · [J_dist[1][0]/z, J_dist[1][1]/z, -(J_dist[1][0]·xn + J_dist[1][1]·yn)/z]
+            //
+            // Derivation: u = fx·xd + cx, xd = distort_x(xn, yn), xn = Px/Pz, yn = Py/Pz
+            //   ∂u/∂Px = fx·(∂xd/∂xn·1/z) = fx·jd[0][0]/z
+            //   ∂u/∂Py = fx·(∂xd/∂yn·1/z) = fx·jd[0][1]/z
+            //   ∂u/∂Pz = fx·(∂xd/∂xn·(-xn/z) + ∂xd/∂yn·(-yn/z))
             let du_dp = Vector3::new(
-                intrinsics.fx * z_inv,
-                0.0,
-                -intrinsics.fx * p_cam.x * z_inv2,
+                intrinsics.fx * jd[0][0] * z_inv,
+                intrinsics.fx * jd[0][1] * z_inv,
+                -intrinsics.fx * (jd[0][0] * xn + jd[0][1] * yn) * z_inv,
             );
             let dv_dp = Vector3::new(
-                0.0,
-                intrinsics.fy * z_inv,
-                -intrinsics.fy * p_cam.y * z_inv2,
+                intrinsics.fy * jd[1][0] * z_inv,
+                intrinsics.fy * jd[1][1] * z_inv,
+                -intrinsics.fy * (jd[1][0] * xn + jd[1][1] * yn) * z_inv,
             );
 
             // Jacobian of Camera Point wrt Pose Update (Lie Algebra) (3x6):
@@ -605,6 +813,7 @@ fn refine_pose_lm(
 ///
 /// The Huber function is quadratic for `|r| <= delta` (L2 regime) and linear beyond
 /// (L1 regime), providing continuous differentiability at the transition point.
+/// Uses distortion-aware projection when `intrinsics` carries a distortion model.
 fn huber_cost(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
@@ -614,7 +823,8 @@ fn huber_cost(
 ) -> f64 {
     let mut cost = 0.0;
     for i in 0..4 {
-        let p = pose.project(&obj_pts[i], intrinsics);
+        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
+        let p = project_with_distortion(&p_cam, intrinsics);
         let r_u = corners[i][0] - p[0];
         let r_v = corners[i][1] - p[1];
         // Huber on the 2D geometric distance, consistent with the IRLS weight computation.
@@ -636,7 +846,8 @@ fn reprojection_error(
 ) -> f64 {
     let mut err_sq = 0.0;
     for i in 0..4 {
-        let p = pose.project(&obj_pts[i], intrinsics);
+        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
+        let p = project_with_distortion(&p_cam, intrinsics);
         err_sq += (p[0] - corners[i][0]).powi(2) + (p[1] - corners[i][1]).powi(2);
     }
     err_sq

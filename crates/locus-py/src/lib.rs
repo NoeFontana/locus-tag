@@ -150,8 +150,48 @@ impl From<DetectorPreset> for locus_core::DetectorConfig {
 // Structs
 // ============================================================================
 
+/// Identifies which lens distortion model the [`CameraIntrinsics`] coefficients apply to.
+#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub enum DistortionModel {
+    /// Ideal pinhole camera — no distortion (pre-rectified image). Default.
+    #[default]
+    Pinhole = 0,
+    /// Brown-Conrady polynomial radial + tangential distortion (OpenCV convention).
+    ///
+    /// `dist_coeffs` must contain exactly **5** values: `[k1, k2, p1, p2, k3]`.
+    BrownConrady = 1,
+    /// Kannala-Brandt equidistant fisheye model.
+    ///
+    /// `dist_coeffs` must contain exactly **4** values: `[k1, k2, k3, k4]`.
+    KannalaBrandt = 2,
+}
+
+/// Camera intrinsic parameters with optional lens distortion.
+///
+/// Construct with just `(fx, fy, cx, cy)` for a rectified camera, or
+/// pass `distortion_model` and `dist_coeffs` for a distorted camera:
+///
+/// ```python
+/// # Pinhole (no distortion)
+/// k = CameraIntrinsics(fx=800.0, fy=800.0, cx=400.0, cy=300.0)
+///
+/// # Brown-Conrady
+/// k = CameraIntrinsics(
+///     fx=800.0, fy=800.0, cx=400.0, cy=300.0,
+///     distortion_model=DistortionModel.BrownConrady,
+///     dist_coeffs=[-0.3, 0.1, 0.001, -0.002, 0.0],
+/// )
+///
+/// # Kannala-Brandt fisheye
+/// k = CameraIntrinsics(
+///     fx=380.0, fy=380.0, cx=320.0, cy=240.0,
+///     distortion_model=DistortionModel.KannalaBrandt,
+///     dist_coeffs=[0.1, -0.01, 0.001, 0.0],
+/// )
+/// ```
 #[pyclass(from_py_object)]
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct CameraIntrinsics {
     #[pyo3(get, set)]
     pub fx: f64,
@@ -161,19 +201,87 @@ pub struct CameraIntrinsics {
     pub cx: f64,
     #[pyo3(get, set)]
     pub cy: f64,
+    /// The distortion model to use. Defaults to [`DistortionModel::Pinhole`].
+    #[pyo3(get, set)]
+    pub distortion_model: DistortionModel,
+    /// Distortion coefficients corresponding to the chosen model.
+    ///
+    /// - `BrownConrady`: `[k1, k2, p1, p2, k3]` (5 values)
+    /// - `KannalaBrandt`: `[k1, k2, k3, k4]` (4 values)
+    /// - `Pinhole`: ignored (may be empty)
+    #[pyo3(get, set)]
+    pub dist_coeffs: Vec<f64>,
 }
 
 #[pymethods]
 impl CameraIntrinsics {
     #[new]
-    fn new(fx: f64, fy: f64, cx: f64, cy: f64) -> Self {
-        Self { fx, fy, cx, cy }
+    #[pyo3(signature = (fx, fy, cx, cy, distortion_model=DistortionModel::Pinhole, dist_coeffs=None))]
+    fn new(
+        fx: f64,
+        fy: f64,
+        cx: f64,
+        cy: f64,
+        distortion_model: DistortionModel,
+        dist_coeffs: Option<Vec<f64>>,
+    ) -> PyResult<Self> {
+        let dist_coeffs = dist_coeffs.unwrap_or_default();
+
+        // Validate coefficient count for the chosen model.
+        match distortion_model {
+            DistortionModel::BrownConrady => {
+                if dist_coeffs.len() != 5 {
+                    return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                        "DistortionModel.BrownConrady requires exactly 5 dist_coeffs \
+                         [k1, k2, p1, p2, k3], got {}",
+                        dist_coeffs.len()
+                    )));
+                }
+            },
+            DistortionModel::KannalaBrandt => {
+                if dist_coeffs.len() != 4 {
+                    return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                        "DistortionModel.KannalaBrandt requires exactly 4 dist_coeffs \
+                         [k1, k2, k3, k4], got {}",
+                        dist_coeffs.len()
+                    )));
+                }
+            },
+            DistortionModel::Pinhole => {
+                // Any (or no) coefficients are accepted for Pinhole; they are ignored.
+            },
+        }
+
+        Ok(Self {
+            fx,
+            fy,
+            cx,
+            cy,
+            distortion_model,
+            dist_coeffs,
+        })
     }
 }
 
 impl From<CameraIntrinsics> for locus_core::CameraIntrinsics {
     fn from(c: CameraIntrinsics) -> Self {
-        Self::new(c.fx, c.fy, c.cx, c.cy)
+        match c.distortion_model {
+            DistortionModel::Pinhole => Self::new(c.fx, c.fy, c.cx, c.cy),
+            DistortionModel::BrownConrady => {
+                // Validated in CameraIntrinsics::new — length is guaranteed to be 5.
+                let coeffs = &c.dist_coeffs;
+                Self::with_brown_conrady(
+                    c.fx, c.fy, c.cx, c.cy, coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4],
+                )
+            },
+            DistortionModel::KannalaBrandt => {
+                // Validated in CameraIntrinsics::new — length is guaranteed to be 4.
+                let coeffs = &c.dist_coeffs;
+                Self::with_kannala_brandt(
+                    c.fx, c.fy, c.cx, c.cy, coeffs[0], coeffs[1], coeffs[2], coeffs[3],
+                )
+            },
+        }
     }
 }
 
@@ -994,6 +1102,7 @@ impl Detector {
     ) -> PyResult<DetectionResult> {
         let view = prepare_image_view(&img)?;
 
+        let has_intrinsics = intrinsics.is_some();
         let core_intrinsics = intrinsics.map(locus_core::CameraIntrinsics::from);
         let core_pose_mode = locus_core::config::PoseEstimationMode::from(pose_estimation_mode);
 
@@ -1079,7 +1188,7 @@ impl Detector {
         }
 
         // Poses: Vectorized (N, 7) layout: [tx, ty, tz, qx, qy, qz, qw]
-        let poses = if intrinsics.is_some() && tag_size.is_some() {
+        let poses = if has_intrinsics && tag_size.is_some() {
             // SAFETY: NumPy array allocation is managed by the Python interpreter.
             let poses_arr = unsafe { PyArray2::<f32>::new(py, [n, 7], false) };
             // SAFETY: NumPy arrays are newly allocated and contiguous.
@@ -1140,9 +1249,9 @@ impl Detector {
             .map(prepare_image_view)
             .collect::<PyResult<_>>()?;
 
+        let has_pose = intrinsics.is_some() && tag_size.is_some();
         let core_intrinsics = intrinsics.map(locus_core::CameraIntrinsics::from);
         let core_pose_mode = locus_core::config::PoseEstimationMode::from(pose_estimation_mode);
-        let has_pose = intrinsics.is_some() && tag_size.is_some();
 
         // Extract a raw pointer to the engine (which is Send+Sync) before releasing
         // the GIL. `self.inner` is pinned on the heap (Box) and kept alive by `self`.
@@ -1661,6 +1770,7 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<QuadExtractionMode>()?;
     m.add_class::<DetectorPreset>()?;
     // Config / misc structs
+    m.add_class::<DistortionModel>()?;
     m.add_class::<CameraIntrinsics>()?;
     m.add_class::<PyPose>()?;
     m.add_class::<PyDetectorConfig>()?;

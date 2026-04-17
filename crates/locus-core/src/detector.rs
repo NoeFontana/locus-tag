@@ -357,8 +357,56 @@ fn run_detection_pipeline<'ctx>(
         );
     }
 
-    // 5. Decoding Pass (SoA)
-    crate::decoder::decode_batch_soa(&mut state.batch, n, &refinement_img, decoders, config);
+    // 5. Decoding Pass (SoA) — dispatch on distortion model
+    // For rectified cameras (PinholeModel or no intrinsics), the compiler eliminates
+    // the distortion path entirely via monomorphization of CameraModel::IS_RECTIFIED.
+    match intrinsics.map(|k| &k.distortion) {
+        Some(crate::pose::DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 }) => {
+            let model = crate::camera::BrownConradyModel {
+                k1: *k1,
+                k2: *k2,
+                p1: *p1,
+                p2: *p2,
+                k3: *k3,
+            };
+            crate::decoder::decode_batch_soa_with_camera(
+                &mut state.batch,
+                n,
+                &refinement_img,
+                decoders,
+                config,
+                intrinsics,
+                &model,
+            );
+        },
+        Some(crate::pose::DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 }) => {
+            let model = crate::camera::KannalaBrandtModel {
+                k1: *k1,
+                k2: *k2,
+                k3: *k3,
+                k4: *k4,
+            };
+            crate::decoder::decode_batch_soa_with_camera(
+                &mut state.batch,
+                n,
+                &refinement_img,
+                decoders,
+                config,
+                intrinsics,
+                &model,
+            );
+        },
+        _ => {
+            // No distortion or no intrinsics — use the existing SIMD path with PinholeModel.
+            crate::decoder::decode_batch_soa(
+                &mut state.batch,
+                n,
+                &refinement_img,
+                decoders,
+                config,
+            );
+        },
+    }
 
     // Partition valid candidates to the front [0..v]
     let v = state.batch.partition(n);

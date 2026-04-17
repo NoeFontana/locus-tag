@@ -1316,6 +1316,238 @@ pub fn rotate90(bits: u64, dim: usize) -> u64 {
     res
 }
 
+/// Sample the bit grid using scalar bilinear interpolation with distortion remapping.
+///
+/// Projects each canonical tag sample point through the ideal homography `h_ideal`
+/// (computed from undistorted corners), then applies the camera distortion map to
+/// convert the ideal pixel coordinate to the actual coordinate in the distorted image,
+/// finally sampling the distorted image via bilinear interpolation.
+///
+/// This path is only called for non-rectified cameras (`!C::IS_RECTIFIED`). For rectified
+/// cameras the faster SIMD path in [`sample_grid_soa_precomputed`] is used instead.
+#[allow(clippy::similar_names)]
+fn sample_grid_values_distorted<C: crate::camera::CameraModel>(
+    img: &crate::image::ImageView,
+    h_ideal: &Homography,
+    decoder: &(impl TagDecoder + ?Sized),
+    intrinsics: &crate::pose::CameraIntrinsics,
+    model: &C,
+    intensities: &mut [f64; MAX_BIT_COUNT],
+) -> bool {
+    let points = decoder.sample_points();
+    if points.is_empty() {
+        return false;
+    }
+    let hm = &h_ideal.h;
+    let w_limit = (img.width as f64) - 1.0 - 1e-4;
+    let h_limit = (img.height as f64) - 1.0 - 1e-4;
+
+    for (i, (u, v)) in points.iter().enumerate() {
+        let u = *u;
+        let v = *v;
+
+        // Project canonical point through the ideal homography.
+        let nx = hm[(0, 0)] * u + hm[(0, 1)] * v + hm[(0, 2)];
+        let ny = hm[(1, 0)] * u + hm[(1, 1)] * v + hm[(1, 2)];
+        let d = hm[(2, 0)] * u + hm[(2, 1)] * v + hm[(2, 2)];
+
+        if d.abs() < 1e-8 {
+            return false;
+        }
+
+        // Ideal pixel coordinates.
+        let px_ideal = nx / d;
+        let py_ideal = ny / d;
+
+        // Convert ideal pixel → normalized → apply distortion → distorted pixel.
+        let xn = (px_ideal - intrinsics.cx) / intrinsics.fx;
+        let yn = (py_ideal - intrinsics.cy) / intrinsics.fy;
+        let [xd, yd] = model.distort(xn, yn);
+        let px = xd * intrinsics.fx + intrinsics.cx;
+        let py = yd * intrinsics.fy + intrinsics.cy;
+
+        // Bounds check.
+        if px < 0.0 || px > w_limit || py < 0.0 || py > h_limit {
+            return false;
+        }
+
+        // Scalar bilinear interpolation directly from the full (distorted) image.
+        let ix = px.floor() as usize;
+        let iy = py.floor() as usize;
+        let stride = img.stride;
+        // SAFETY: bounds checked above; ix <= w_limit - 1 < width - 1, iy <= h_limit - 1 < height - 1.
+        let v00 = unsafe { *img.data.get_unchecked(iy * stride + ix) };
+        // SAFETY: bounds checked above; ix+1 <= w_limit < width, iy within height.
+        let v10 = unsafe { *img.data.get_unchecked(iy * stride + ix + 1) };
+        // SAFETY: bounds checked above; iy+1 <= h_limit < height, ix within width.
+        let v01 = unsafe { *img.data.get_unchecked((iy + 1) * stride + ix) };
+        // SAFETY: bounds checked above; ix+1 <= w_limit < width, iy+1 <= h_limit < height.
+        let v11 = unsafe { *img.data.get_unchecked((iy + 1) * stride + ix + 1) };
+        intensities[i] = f64::from(bilinear_interpolate_fixed(
+            px as f32, py as f32, v00, v10, v01, v11,
+        ));
+    }
+    true
+}
+
+/// Distortion-aware decode for a single candidate using scalar sampling.
+///
+/// Undistorts the detected corners to compute an ideal homography, then samples the
+/// distorted image at the correctly distortion-mapped coordinates for each bit sample
+/// point. Called by [`decode_batch_soa_with_camera`] for non-rectified cameras.
+fn decode_candidate_distorted<
+    S: crate::strategy::DecodingStrategy,
+    C: crate::camera::CameraModel,
+>(
+    img: &crate::image::ImageView,
+    corners: &[Point2f; 4],
+    decoders: &[Box<dyn TagDecoder + Send + Sync>],
+    config: &crate::config::DetectorConfig,
+    intrinsics: &crate::pose::CameraIntrinsics,
+    model: &C,
+) -> (crate::batch::CandidateState, u32, u8, u64, f32) {
+    use crate::batch::CandidateState;
+
+    // Undistort corners to get ideal (rectified) pixel coordinates.
+    let ideal: [[f64; 2]; 4] = core::array::from_fn(|j| {
+        intrinsics.undistort_pixel(f64::from(corners[j].x), f64::from(corners[j].y))
+    });
+
+    let center = [
+        (ideal[0][0] + ideal[1][0] + ideal[2][0] + ideal[3][0]) * 0.25,
+        (ideal[0][1] + ideal[1][1] + ideal[2][1] + ideal[3][1]) * 0.25,
+    ];
+
+    let mut best_h = u32::MAX;
+    let mut best_id = 0u32;
+    let mut best_rot = 0u8;
+    let mut best_bits = 0u64;
+
+    for &scale in &[1.0f64, 0.9, 1.1] {
+        let scaled: [[f64; 2]; 4] = core::array::from_fn(|j| {
+            [
+                center[0] + (ideal[j][0] - center[0]) * scale,
+                center[1] + (ideal[j][1] - center[1]) * scale,
+            ]
+        });
+
+        let Some(h_ideal) = Homography::square_to_quad(&scaled) else {
+            continue;
+        };
+
+        let mut intensities = [0.0f64; MAX_BIT_COUNT];
+
+        for decoder in decoders {
+            let n = decoder.bit_count();
+            if !sample_grid_values_distorted::<C>(
+                img,
+                &h_ideal,
+                decoder.as_ref(),
+                intrinsics,
+                model,
+                &mut intensities,
+            ) {
+                continue;
+            }
+
+            let pts = decoder.sample_points();
+            let thresholds = compute_adaptive_thresholds(&intensities[..n], pts);
+            let code = S::from_intensities(&intensities[..n], &thresholds);
+
+            if let Some((id, hamming, rot)) = S::decode(&code, decoder.as_ref(), 255) {
+                if hamming < best_h {
+                    best_h = hamming;
+                    best_bits = S::to_debug_bits(&code);
+                    if hamming <= config.max_hamming_error {
+                        best_id = id;
+                        best_rot = rot;
+                    }
+                }
+                if best_h == 0 {
+                    break;
+                }
+            }
+        }
+        if best_h == 0 {
+            break;
+        }
+    }
+
+    if best_h <= config.max_hamming_error {
+        (
+            CandidateState::Valid,
+            best_id,
+            best_rot,
+            best_bits,
+            best_h as f32,
+        )
+    } else {
+        (
+            CandidateState::FailedDecode,
+            0,
+            0,
+            if best_h == u32::MAX { 0 } else { best_bits },
+            if best_h == u32::MAX {
+                0.0
+            } else {
+                best_h as f32
+            },
+        )
+    }
+}
+
+/// Distortion-aware batch decode for non-rectified cameras.
+fn decode_batch_soa_with_camera_inner<
+    S: crate::strategy::DecodingStrategy,
+    C: crate::camera::CameraModel,
+>(
+    batch: &mut crate::batch::DetectionBatch,
+    n: usize,
+    img: &crate::image::ImageView,
+    decoders: &[Box<dyn TagDecoder + Send + Sync>],
+    config: &crate::config::DetectorConfig,
+    intrinsics: &crate::pose::CameraIntrinsics,
+    model: &C,
+) {
+    use crate::batch::CandidateState;
+    use rayon::prelude::*;
+
+    let results: Vec<_> = (0..n)
+        .into_par_iter()
+        .map(|i| {
+            if batch.status_mask[i] != CandidateState::Active {
+                return (batch.status_mask[i], 0u32, 0u8, 0u64, batch.error_rates[i]);
+            }
+            let (state, id, rot, bits, err) = decode_candidate_distorted::<S, C>(
+                img,
+                &batch.corners[i],
+                decoders,
+                config,
+                intrinsics,
+                model,
+            );
+            (state, id, rot, bits, err)
+        })
+        .collect();
+
+    for (i, (state, id, rot, payload, error_rate)) in results.into_iter().enumerate() {
+        batch.status_mask[i] = state;
+        batch.ids[i] = id;
+        batch.payloads[i] = payload;
+        batch.error_rates[i] = error_rate;
+
+        // Reorder corners based on the decoded rotation (same convention as the SIMD path).
+        if state == CandidateState::Valid && rot > 0 {
+            let mut tmp = [Point2f::default(); 4];
+            for (j, item) in tmp.iter_mut().enumerate() {
+                let src = (j + usize::from(rot)) % 4;
+                *item = batch.corners[i][src];
+            }
+            batch.corners[i] = tmp;
+        }
+    }
+}
+
 /// Decode all active candidates in the batch using the Structure of Arrays (SoA) layout.
 ///
 /// This phase executes SIMD bilinear interpolation and Hamming error correction.
@@ -1339,6 +1571,52 @@ pub fn decode_batch_soa(
                 batch, n, img, decoders, config,
             );
         },
+    }
+}
+
+/// Distortion-aware entry point for [`decode_batch_soa`].
+///
+/// When `C::IS_RECTIFIED = true` (i.e., [`PinholeModel`](crate::camera::PinholeModel)),
+/// this delegates to the existing SIMD pipeline with zero overhead — the compiler
+/// eliminates the distortion branch entirely via monomorphization.
+///
+/// When `C::IS_RECTIFIED = false`, each candidate's corners are undistorted to compute
+/// an ideal homography. The bit grid is then sampled by projecting through the ideal
+/// homography and applying the distortion map to get coordinates in the raw distorted
+/// image, ensuring accurate bit sampling even under large fisheye distortion.
+///
+/// [`PinholeModel`]: crate::camera::PinholeModel
+#[tracing::instrument(skip_all, name = "pipeline::decoding_pass_distortion")]
+pub fn decode_batch_soa_with_camera<C: crate::camera::CameraModel>(
+    batch: &mut crate::batch::DetectionBatch,
+    n: usize,
+    img: &crate::image::ImageView,
+    decoders: &[Box<dyn TagDecoder + Send + Sync>],
+    config: &crate::config::DetectorConfig,
+    intrinsics: Option<&crate::pose::CameraIntrinsics>,
+    model: &C,
+) {
+    if C::IS_RECTIFIED {
+        // Zero-overhead path for rectified images: delegate to the existing SIMD pipeline.
+        // The `if C::IS_RECTIFIED` is a compile-time constant; for PinholeModel the
+        // compiler eliminates the else branch entirely via dead-code elimination.
+        decode_batch_soa(batch, n, img, decoders, config);
+    } else if let Some(intrinsics) = intrinsics {
+        match config.decode_mode {
+            crate::config::DecodeMode::Hard => {
+                decode_batch_soa_with_camera_inner::<crate::strategy::HardStrategy, C>(
+                    batch, n, img, decoders, config, intrinsics, model,
+                );
+            },
+            crate::config::DecodeMode::Soft => {
+                decode_batch_soa_with_camera_inner::<crate::strategy::SoftStrategy, C>(
+                    batch, n, img, decoders, config, intrinsics, model,
+                );
+            },
+        }
+    } else {
+        // No intrinsics provided — fall back to the standard path.
+        decode_batch_soa(batch, n, img, decoders, config);
     }
 }
 

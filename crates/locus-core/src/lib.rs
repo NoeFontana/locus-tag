@@ -8,6 +8,8 @@
 pub(crate) mod batch;
 /// Board-level configuration and layout utilities.
 pub mod board;
+/// Zero-cost camera distortion model trait and implementations.
+pub mod camera;
 /// ChAruco board saddle-point extraction and pose estimation.
 pub mod charuco;
 /// Configuration types for the detector pipeline.
@@ -57,6 +59,7 @@ pub(crate) mod workspace;
 // Re-exports for the public API
 pub use crate::batch::TelemetryPayload;
 pub use crate::board::{AprilGridTopology, BoardConfigError, CharucoTopology};
+pub use crate::camera::{BrownConradyModel, CameraModel, KannalaBrandtModel, PinholeModel};
 pub use crate::config::{
     CornerRefinementMode, DecodeMode, DetectOptions, DetectorConfig, PoseEstimationMode,
     QuadExtractionMode, TagFamily,
@@ -64,12 +67,13 @@ pub use crate::config::{
 pub use crate::detector::{Detector, DetectorBuilder, FrameContext, LocusEngine};
 pub use crate::error::{ConfigError, DetectorError};
 pub use crate::image::ImageView;
-pub use crate::pose::CameraIntrinsics;
+pub use crate::pose::{CameraIntrinsics, DistortionCoeffs};
 
 #[cfg(feature = "bench-internals")]
 pub mod bench_api {
     //! Internal API exposed exclusively for benchmarking and integration testing.
     pub use crate::batch::*;
+    pub use crate::camera::*;
     pub use crate::decoder::*;
     pub use crate::dictionaries::*;
     pub use crate::filter::*;

@@ -48,6 +48,7 @@ proptest! {
             fy: 800.0,
             cx: 320.0,
             cy: 240.0,
+            distortion: locus_core::pose::DistortionCoeffs::None,
         };
 
         // The estimation can return None, but it shouldn't panic on collinear/degenerate points.
