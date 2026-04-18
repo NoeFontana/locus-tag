@@ -233,7 +233,7 @@ impl CharucoRefiner {
         }
     }
 
-    /// Production path — estimates board pose with zero telemetry overhead.
+    /// Standard path — estimates board pose with zero telemetry overhead.
     ///
     /// Results are written into `batch`; `batch.count` and `batch.board_pose`
     /// are updated on every call.

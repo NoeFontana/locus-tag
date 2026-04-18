@@ -422,7 +422,7 @@ def bench_real(
     # Common detector parameters
     detector_kwargs = {
         "families": [tag_family_int],
-        "preset": locus.DetectorPreset.Production,
+        "preset": locus.DetectorPreset.Standard,
         "refinement_mode": refinement_mode,
         "threshold_tile_size": tile_size,
         "adaptive_threshold_constant": constant,

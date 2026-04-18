@@ -83,7 +83,7 @@ fn run_distortion_hub_test(config_name: &str, family: TagFamily, mode: PoseEstim
     let snapshot = format!("hub_{}{}", provider.name(), mode_suffix);
 
     RegressionHarness::new(snapshot)
-        .with_preset(ConfigPreset::PlainBoard)
+        .with_preset(ConfigPreset::Standard)
         .with_families(vec![family])
         .with_options(options)
         .run(provider);

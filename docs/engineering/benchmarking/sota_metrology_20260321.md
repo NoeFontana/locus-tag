@@ -14,9 +14,9 @@ Three additions enable scenario-specific SOTA presets:
 |---|---|---|
 | **GN covariance propagation** | `cholesky_inverse_8x8` extracts per-corner 2×2 covariances from the GN Hessian H⁻¹; threaded through `extract_quad_edlines` → `batch.corner_covariances` | `31f247a` |
 | **Builder setters** | `huber_delta_px`, `tikhonov_alpha_max`, `sigma_n_sq`, `structure_tensor_radius` tunable via builder | this session |
-| **Three SOTA presets** | `sota_metrology_default`, `sota_pure_tags_default`, `sota_checkerboard_default` | this session |
+| **Three SOTA presets** | `high_accuracy_default`, `standard_default`, `grid_default` | this session |
 
-### Architecture: The GN→Pose Handover (Metrology preset only)
+### Architecture: The GN→Pose Handover (HighAccuracy preset only)
 
 ```
 Before:  GN corners → batch.corners → pose: Structure Tensor fallback
@@ -34,15 +34,15 @@ If GN diverges, `corner_covariances` is zeroed and pose falls back to the Struct
 
 | Preset | Target Scenario | Key Differences vs Production |
 |---|---|---|
-| `sota_metrology_default()` | Single isolated tag, pose accuracy | EdLines + GN + None; sharpening off; Hard decode |
-| `sota_pure_tags_default()` | Dense multi-tag scenes | Soft decode (+19pp recall); else identical to production |
-| `sota_checkerboard_default()` | Touching tags in grid patterns | 4-connectivity; Soft decode; relaxed contrast/edge gates; sharpening off |
+| `high_accuracy_default()` | Single isolated tag, pose accuracy | EdLines + GN + None; sharpening off; Hard decode |
+| `standard_default()` | Dense multi-tag scenes | Soft decode (+19pp recall); else identical to production |
+| `grid_default()` | Touching tags in grid patterns | 4-connectivity; Soft decode; relaxed contrast/edge gates; sharpening off |
 
 ### Why three separate presets?
 
 The three target scenarios have mutually incompatible requirements:
 
-- **Metrology** needs the lowest possible corner RMSE. This requires EdLines + GN corners
+- **HighAccuracy** needs the lowest possible corner RMSE. This requires EdLines + GN corners
   (never post-processed), but the missing sharpening and None refinement hurt recall on
   multi-tag images where small/distant tags are marginal.
 - **Pure tags** needs maximum recall without harming precision. Soft decoding is the dominant
@@ -55,7 +55,7 @@ The three target scenarios have mutually incompatible requirements:
 
 ### Preset parameters
 
-#### `sota_metrology_default()`
+#### `high_accuracy_default()`
 ```
 quad_extraction_mode:  EdLines
 refinement_mode:       None        ← GN corners are sub-pixel; ERF degrades them
@@ -66,7 +66,7 @@ quad_min_density:      0.15
 decode_mode:           Hard        ← Soft causes precision collapse on EdLines
 ```
 
-#### `sota_pure_tags_default()`
+#### `standard_default()`
 ```
 refinement_mode:       Erf         ← same as production
 enable_sharpening:     true        ← same as production
@@ -75,7 +75,7 @@ quad_min_density:      0.15        ← same as production
 decode_mode:           Soft        ← only difference; +19pp recall on ICRA forward
 ```
 
-#### `sota_checkerboard_default()`
+#### `grid_default()`
 ```
 refinement_mode:       Erf
 enable_sharpening:     false       ← sharpening creates halos at shared borders
@@ -100,10 +100,10 @@ decode_mode:           Soft        ← extends recall on low-contrast packed tag
 | Production (ContourRdp + Erf + Hard) | **100%** | 0.131 px |
 | ContourRdp + Soft | **100%** | 0.131 px |
 | EdLines + Erf + Hard | **100%** | **0.071 px** |
-| SOTA Metrology (EdLines + None + Hard, no sharp) | 74.0% | 0.713 px |
-| **SOTA Pure Tags (ContourRdp + Erf + Soft)** | **100%** | 0.131 px |
+| HighAccuracy (EdLines + None + Hard, no sharp) | 74.0% | 0.713 px |
+| **Standard (ContourRdp + Erf + Soft)** | **100%** | 0.131 px |
 
-SOTA Pure Tags matches production recall exactly on the fixture and inherits the same RMSE —
+Standard matches production recall exactly on the fixture and inherits the same RMSE —
 the only change (Soft decode) has no effect on a clean high-contrast image.
 
 ### 3.2 Forward Dataset (50 images)
@@ -113,8 +113,8 @@ the only change (Soft decode) has no effect on a clean high-contrast image.
 | Production (ContourRdp + Erf + Hard) | 76.9% | 0.274 px | 164.4 ms |
 | GWLF | 65.6% | 0.545 px | 179.3 ms |
 | EDLines + Erf + Hard | 71.1% | 0.254 px | 196.8 ms |
-| SOTA Metrology (EdLines + None + Hard, no sharp) | 46.3% | 0.754 px | 106.6 ms |
-| **SOTA Pure Tags (ContourRdp + Erf + Soft)** | **96.2%** | **0.315 px** | **70.8 ms** |
+| HighAccuracy (EdLines + None + Hard, no sharp) | 46.3% | 0.754 px | 106.6 ms |
+| **Standard (ContourRdp + Erf + Soft)** | **96.2%** | **0.315 px** | **70.8 ms** |
 
 **+19.3pp recall vs production** at a modest +15% RMSE cost, with a **−57% latency reduction**.
 Soft decode's MIH search is branch-limited — on this dataset it terminates early more often than
@@ -132,7 +132,7 @@ Hard decode's full threshold pass, making it faster despite the increased code c
 |---|---|---|
 | Production (ContourRdp + Erf + Hard) | **100%** | 0.131 px |
 | Legacy Checkerboard (4-conn + Hard, no sharp) | **100%** | 0.131 px |
-| **SOTA Checkerboard (4-conn + Soft, no sharp)** | **100%** | 0.144 px |
+| **Grid (4-conn + Soft, no sharp)** | **100%** | 0.144 px |
 
 ### 4.2 Forward Checkerboard Dataset (50 images)
 
@@ -140,7 +140,7 @@ Hard decode's full threshold pass, making it faster despite the increased code c
 |---|---|---|---|
 | Production (ContourRdp + Erf + Hard) | — | — | — |
 | Legacy Checkerboard (4-conn + Hard, no sharp) | 73.0% | 0.332 px | 153.6 ms |
-| **SOTA Checkerboard (4-conn + Soft, no sharp)** | **91.4%** | **0.458 px** | **103.2 ms** |
+| **Grid (4-conn + Soft, no sharp)** | **91.4%** | **0.458 px** | **103.2 ms** |
 
 **+18.4pp recall vs the legacy checkerboard preset** (+25pp vs production), with a **−33%
 latency reduction** over legacy. Soft decoding proves equally effective on touching tags as
@@ -158,20 +158,20 @@ the primary outputs.
 |---|---|---|---|---|---|---|---|---|
 | 640×480 | Production | **100%** | **100%** | 0.994 px | — | 4.1 mm | 1.29° | 74.3 ms |
 | | GWLF | 97.8% | **100%** | 0.718 px | — | 3.5 mm | **0.25°** | — |
-| | **SOTA Metrology** | 93.3% | **100%** | **0.173 px** | **0.440 px** | **1.0 mm** | 0.32° | **53.9 ms** |
+| | **HighAccuracy** | 93.3% | **100%** | **0.173 px** | **0.440 px** | **1.0 mm** | 0.32° | **53.9 ms** |
 | 720p | Production | **100%** | **100%** | 0.933 px | — | 5.8 mm | 2.20° | 116.6 ms |
 | | GWLF | **100%** | **100%** | 0.751 px | — | 3.9 mm | **0.31°** | — |
-| | **SOTA Metrology** | 96.0% | **100%** | **0.277 px** | **1.906 px** | **1.0 mm** | 0.35° | **25.5 ms** |
+| | **HighAccuracy** | 96.0% | **100%** | **0.277 px** | **1.906 px** | **1.0 mm** | 0.35° | **25.5 ms** |
 | 1080p | Production | **100%** | **100%** | 1.146 px | — | 10.7 mm | 2.24° | 106.6 ms |
 | | GWLF | **100%** | **100%** | 0.928 px | — | 4.9 mm | **0.31°** | — |
-| | **SOTA Metrology** | 95.6% | 97.8% | **0.291 px** | **2.142 px** | **1.9 mm** | 0.34° | **102.6 ms** |
+| | **HighAccuracy** | 95.6% | 97.8% | **0.291 px** | **2.142 px** | **1.9 mm** | 0.34° | **102.6 ms** |
 | 4K | Production | 97.8% | **100%** | 1.116 px | — | 43.5 mm | 6.68° | 278.4 ms |
 | | GWLF | 97.8% | **100%** | 0.829 px | — | 9.9 mm | 0.97° | — |
-| | **SOTA Metrology** | 88.9% | **100%** | **0.157 px** | **1.690 px** | **5.6 mm** | **0.58°** | **182.2 ms** |
+| | **HighAccuracy** | 88.9% | **100%** | **0.157 px** | **1.690 px** | **5.6 mm** | **0.58°** | **182.2 ms** |
 
 *Latency = total test time for 45–50 images including Accurate pose estimation. Hardware: AMD EPYC-Milan, 4 cores / 8 threads.*
 
-### 5.2 SOTA Metrology vs Production (Hub)
+### 5.2 HighAccuracy vs Production (Hub)
 
 | Resolution | Corner RMSE Δ | Rot P50 Δ | Trans P50 Δ | Recall Δ |
 |---|---|---|---|---|
@@ -180,7 +180,7 @@ the primary outputs.
 | 1080p | **−75%** (0.29 vs 1.15 px) | **−85%** (0.34° vs 2.24°) | **−82%** (1.9 vs 10.7 mm) | −4.4 pp |
 | 4K | **−86%** (0.16 vs 1.12 px) | **−91%** (0.58° vs 6.68°) | **−87%** (5.6 vs 43.5 mm) | −8.9 pp |
 
-> **Note:** SOTA Pure Tags and SOTA Checkerboard were not tested on the hub dataset. Soft
+> **Note:** Standard and Grid were not tested on the hub dataset. Soft
 > decoding causes a precision collapse (10–22%) on EdLines due to the larger candidate set
 > from background edges. ContourRdp + Soft on single isolated hub tags would likely restore
 > precision; this can be added as `regression_hub_tag36h11_*_sota_pure_tags` if needed.
@@ -196,14 +196,14 @@ All measurements: `--release`, single-threaded test runner (`--test-threads=1`),
 | Preset | Dataset | Total Latency | Per-Image |
 |---|---|---|---|
 | Production (ContourRdp + Erf + Hard) | forward/pure_tags | 164.4 ms | 3.3 ms |
-| **SOTA Pure Tags (ContourRdp + Erf + Soft)** | forward/pure_tags | **70.8 ms** | **1.4 ms** |
-| SOTA Metrology (EdLines + None + Hard) | forward/pure_tags | 106.6 ms | 2.1 ms |
+| **Standard (ContourRdp + Erf + Soft)** | forward/pure_tags | **70.8 ms** | **1.4 ms** |
+| HighAccuracy (EdLines + None + Hard) | forward/pure_tags | 106.6 ms | 2.1 ms |
 | Legacy Checkerboard (4-conn + Hard) | checkerboard | 153.6 ms | 3.1 ms |
-| **SOTA Checkerboard (4-conn + Soft)** | checkerboard | **103.2 ms** | **2.1 ms** |
+| **Grid (4-conn + Soft)** | checkerboard | **103.2 ms** | **2.1 ms** |
 
 ### Hub Single-Tag (Accurate pose, ~45–50 images each)
 
-| Resolution | Production | SOTA Metrology | Speedup |
+| Resolution | Production | HighAccuracy | Speedup |
 |---|---|---|---|
 | 640×480 | 74.3 ms (45 img) | **53.9 ms** | 1.4× |
 | 720p | 116.6 ms (50 img) | **25.5 ms** | **4.6×** |
@@ -222,11 +222,11 @@ offsets the GN advantage.
 
 | Scenario | Preset | Key metric |
 |---|---|---|
-| **Single-tag metrology / calibration** | `sota_metrology_default()` | 0.16–0.29px RMSE, 0.32–0.58° P50 rotation |
-| **Dense multi-tag detection** | `sota_pure_tags_default()` | **96.2%** recall (vs 76.9% production) |
-| **Touching-tag checkerboard grids** | `sota_checkerboard_default()` | **91.4%** recall (vs 73.0% legacy) |
-| **Balanced production** | `production_default()` | 100% recall + precision, fast |
-| **Low latency** | `fast_default()` | Lowest decode overhead |
+| **Single-tag metrology / calibration** | `high_accuracy_default()` | 0.16–0.29px RMSE, 0.32–0.58° P50 rotation |
+| **Dense multi-tag detection** | `standard_default()` | **96.2%** recall (vs 76.9% production) |
+| **Touching-tag checkerboard grids** | `grid_default()` | **91.4%** recall (vs 73.0% legacy) |
+| **Balanced production** | `standard_default()` | 100% recall + precision, fast |
+| **Low latency** | `standard_default()` | Lowest decode overhead |
 
 ---
 
