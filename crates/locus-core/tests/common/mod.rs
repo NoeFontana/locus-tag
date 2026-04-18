@@ -135,4 +135,5 @@ pub fn load_ground_truth(
     Some(map)
 }
 
+pub mod hub;
 pub mod telemetry;
