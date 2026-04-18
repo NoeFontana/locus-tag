@@ -20,7 +20,7 @@ use locus_core::{DetectOptions, PoseEstimationMode, TagFamily};
 mod common;
 
 use common::hub::{
-    build_intrinsics, ConfigPreset, DatasetProvider, HubEntry, HubProvider, RegressionHarness,
+    ConfigPreset, DatasetProvider, HubEntry, HubProvider, RegressionHarness, build_intrinsics,
 };
 
 // ============================================================================
@@ -95,8 +95,7 @@ fn run_distortion_hub_test(config_name: &str, family: TagFamily, mode: PoseEstim
 
 #[test]
 fn regression_hub_distortion_brown_conrady_accurate() {
-    let _guard =
-        common::telemetry::init("regression_hub_distortion_brown_conrady_accurate");
+    let _guard = common::telemetry::init("regression_hub_distortion_brown_conrady_accurate");
     run_distortion_hub_test(
         "aprilgrid_distortion_brown_conrady_v1",
         TagFamily::AprilTag36h11,
@@ -120,8 +119,7 @@ fn regression_hub_distortion_brown_conrady_fast() {
 
 #[test]
 fn regression_hub_distortion_kannala_brandt_accurate() {
-    let _guard =
-        common::telemetry::init("regression_hub_distortion_kannala_brandt_accurate");
+    let _guard = common::telemetry::init("regression_hub_distortion_kannala_brandt_accurate");
     run_distortion_hub_test(
         "aprilgrid_distortion_kannala_brandt_v1",
         TagFamily::AprilTag36h11,

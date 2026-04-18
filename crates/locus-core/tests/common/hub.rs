@@ -1,3 +1,4 @@
+#![allow(clippy::collapsible_if, clippy::needless_pass_by_value)]
 //! Shared hub dataset infrastructure reused by multiple regression test files.
 
 use locus_core::{
@@ -39,6 +40,7 @@ pub struct PipelineMetrics {
     pub num_detections: usize,
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
 pub fn serialize_rmse<S>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
@@ -275,8 +277,7 @@ impl RegressionHarness {
                 if let Some(gt_corners) = gt.tags.get(&det_id) {
                     let g_cx: f64 = gt_corners.iter().map(|p| p[0]).sum::<f64>() / 4.0;
                     let g_cy: f64 = gt_corners.iter().map(|p| p[1]).sum::<f64>() / 4.0;
-                    let dist_sq =
-                        (det_center[0] - g_cx).powi(2) + (det_center[1] - g_cy).powi(2);
+                    let dist_sq = (det_center[0] - g_cx).powi(2) + (det_center[1] - g_cy).powi(2);
 
                     if dist_sq < 100.0 * 100.0 {
                         let mut rmse_sq = 0.0;
@@ -297,13 +298,12 @@ impl RegressionHarness {
                                 f64::from(det_pose_data[1]),
                                 f64::from(det_pose_data[2]),
                             );
-                            let det_q =
-                                UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-                                    f64::from(det_pose_data[6]),
-                                    f64::from(det_pose_data[3]),
-                                    f64::from(det_pose_data[4]),
-                                    f64::from(det_pose_data[5]),
-                                ));
+                            let det_q = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
+                                f64::from(det_pose_data[6]),
+                                f64::from(det_pose_data[3]),
+                                f64::from(det_pose_data[4]),
+                                f64::from(det_pose_data[5]),
+                            ));
 
                             if let (Some(gt_pose), Some(intr), Some(size)) =
                                 (gt.poses.get(&det_id), intrinsics, tag_size)
@@ -528,10 +528,10 @@ pub fn build_intrinsics(
     match (distortion_model, dist_coeffs) {
         (Some("brown_conrady"), Some(c)) if c.len() >= 5 => {
             CameraIntrinsics::with_brown_conrady(fx, fy, cx, cy, c[0], c[1], c[2], c[3], c[4])
-        }
+        },
         (Some("kannala_brandt"), Some(c)) if c.len() >= 4 => {
             CameraIntrinsics::with_kannala_brandt(fx, fy, cx, cy, c[0], c[1], c[2], c[3])
-        }
+        },
         _ => CameraIntrinsics::new(fx, fy, cx, cy),
     }
 }
@@ -555,7 +555,7 @@ pub fn load_detect_options(dataset_path: &Path) -> DetectOptions {
                     options.intrinsics = Some(CameraIntrinsics::new(fx, fy, cx, cy));
                 }
             }
-            if let Some(sz) = meta.get("tag_size_mm").and_then(|v| v.as_f64()) {
+            if let Some(sz) = meta.get("tag_size_mm").and_then(serde_json::Value::as_f64) {
                 options.tag_size = Some(sz / 1000.0);
             }
         }
@@ -691,7 +691,13 @@ impl DatasetProvider for HubProvider {
             let img_path = base_dir.join("images").join(fname);
             let img = image::open(&img_path).ok()?.into_luma8();
             let (w, h) = img.dimensions();
-            Some((fname.clone(), img.into_raw(), w as usize, h as usize, gt.clone()))
+            Some((
+                fname.clone(),
+                img.into_raw(),
+                w as usize,
+                h as usize,
+                gt.clone(),
+            ))
         });
         Box::new(iter)
     }

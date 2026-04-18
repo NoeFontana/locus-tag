@@ -23,7 +23,7 @@ use locus_core::{CameraIntrinsics, DetectOptions, PoseEstimationMode, TagFamily}
 mod common;
 
 use common::hub::{
-    build_intrinsics, ConfigPreset, DatasetProvider, HubEntry, HubProvider, RegressionHarness,
+    ConfigPreset, DatasetProvider, HubEntry, HubProvider, RegressionHarness, build_intrinsics,
 };
 
 // ============================================================================
