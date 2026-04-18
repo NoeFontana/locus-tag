@@ -1346,7 +1346,6 @@ fn sample_grid_values_distorted<C: crate::camera::CameraModel>(
         let u = *u;
         let v = *v;
 
-        // Project canonical point through the ideal homography.
         let nx = hm[(0, 0)] * u + hm[(0, 1)] * v + hm[(0, 2)];
         let ny = hm[(1, 0)] * u + hm[(1, 1)] * v + hm[(1, 2)];
         let d = hm[(2, 0)] * u + hm[(2, 1)] * v + hm[(2, 2)];
@@ -1355,7 +1354,6 @@ fn sample_grid_values_distorted<C: crate::camera::CameraModel>(
             return false;
         }
 
-        // Ideal pixel coordinates.
         let px_ideal = nx / d;
         let py_ideal = ny / d;
 
@@ -1366,12 +1364,10 @@ fn sample_grid_values_distorted<C: crate::camera::CameraModel>(
         let px = xd * intrinsics.fx + intrinsics.cx;
         let py = yd * intrinsics.fy + intrinsics.cy;
 
-        // Bounds check.
         if px < 0.0 || px > w_limit || py < 0.0 || py > h_limit {
             return false;
         }
 
-        // Scalar bilinear interpolation directly from the full (distorted) image.
         let ix = px.floor() as usize;
         let iy = py.floor() as usize;
         let stride = img.stride;
@@ -1408,7 +1404,6 @@ fn decode_candidate_distorted<
 ) -> (crate::batch::CandidateState, u32, u8, u64, f32) {
     use crate::batch::CandidateState;
 
-    // Undistort corners to get ideal (rectified) pixel coordinates.
     let ideal: [[f64; 2]; 4] = core::array::from_fn(|j| {
         intrinsics.undistort_pixel(f64::from(corners[j].x), f64::from(corners[j].y))
     });

@@ -142,8 +142,14 @@ impl CameraModel for BrownConradyModel {
             let radial = 1.0 + self.k1 * r2 + self.k2 * r4 + self.k3 * r6;
             let dx = 2.0 * self.p1 * xu * yu + self.p2 * (r2 + 2.0 * xu * xu);
             let dy = self.p1 * (r2 + 2.0 * yu * yu) + 2.0 * self.p2 * xu * yu;
-            xu = (xd - dx) / radial.max(1e-8);
-            yu = (yd - dy) / radial.max(1e-8);
+            let xu_new = (xd - dx) / radial.max(1e-8);
+            let yu_new = (yd - dy) / radial.max(1e-8);
+            let converged = (xu_new - xu).abs() < 1e-12 && (yu_new - yu).abs() < 1e-12;
+            xu = xu_new;
+            yu = yu_new;
+            if converged {
+                break;
+            }
         }
         [xu, yu]
     }
@@ -270,8 +276,10 @@ impl CameraModel for KannalaBrandtModel {
         for _ in 0..10 {
             let (theta_d, d_theta_d) = self.angle_poly(theta);
             let f = theta_d - r_d;
-            let df = d_theta_d.max(1e-8);
-            theta -= f / df;
+            if f.abs() < 1e-12 {
+                break;
+            }
+            theta -= f / d_theta_d.max(1e-8);
             theta = theta.max(0.0);
         }
         // r_undistorted = tan(θ)
