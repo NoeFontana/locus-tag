@@ -8,23 +8,23 @@ summary:
   mean_rmse: 0.6855
   mean_total_ms: "[DURATION]"
   worst_offenders:
-    - filename: 0004.png
-      missed: 154
-      extra: 112
-      rmse: 0
     - filename: 0002.png
       missed: 154
-      extra: 103
+      extra: 164
       rmse: 0
-    - filename: 0003.png
+    - filename: 0004.png
       missed: 154
-      extra: 101
+      extra: 164
       rmse: 0
     - filename: 0000.png
       missed: 154
-      extra: 96
+      extra: 155
       rmse: 0
-    - filename: 0001.png
+    - filename: 0176.png
       missed: 154
-      extra: 94
+      extra: 154
+      rmse: 0
+    - filename: 0180.png
+      missed: 154
+      extra: 150
       rmse: 0

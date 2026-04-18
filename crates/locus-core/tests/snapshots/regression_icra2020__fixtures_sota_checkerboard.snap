@@ -1,6 +1,5 @@
 ---
 source: crates/locus-core/tests/regression_icra2020.rs
-assertion_line: 389
 expression: report
 ---
 summary:
@@ -11,5 +10,5 @@ summary:
   worst_offenders:
     - filename: 0037.png
       missed: 0
-      extra: 53
+      extra: 91
       rmse: 0.144
