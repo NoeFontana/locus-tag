@@ -78,6 +78,7 @@ pub mod bench_api {
     pub use crate::camera::*;
     pub use crate::decoder::*;
     pub use crate::dictionaries::*;
+    pub use crate::edge_refinement::*;
     pub use crate::filter::*;
     pub use crate::funnel::*;
     pub use crate::gwlf::*;
