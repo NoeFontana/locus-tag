@@ -72,7 +72,7 @@ fn run_bench(bencher: Bencher, sigma: f64, decoder_style: bool) {
                 !decoder_style, // quad uses midpoint init, decoder uses p1
             )
             .unwrap();
-            black_box(fitter.fit(&arena, &sample_cfg, &refine_cfg));
+            fitter.fit(&arena, &sample_cfg, &refine_cfg);
             black_box(fitter.line_params());
         }
     });
