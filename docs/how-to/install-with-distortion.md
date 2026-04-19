@@ -1,6 +1,6 @@
 # Install with distortion support
 
-The PyPI wheel (`pip install locus-tag`) is compiled **without** the `non_rectified` Cargo feature. It supports the ideal pinhole camera model only. To detect markers in imagery from cameras with significant lens distortion (Brown-Conrady, Kannala-Brandt fisheye), you must build from source with the `non_rectified` feature enabled.
+The PyPI wheel (`pip install locus-tag`) is compiled **without** the `non_rectified` Cargo feature. It supports the ideal pinhole camera model only. To detect markers in imagery from unrectified cameras — i.e. cameras with significant lens distortion (Brown-Conrady polynomial, Kannala-Brandt equidistant fisheye) — you must build from source with the `non_rectified` feature enabled.
 
 ## Prerequisites
 
@@ -87,4 +87,4 @@ except locus.LocusFeatureError:
 
 ## Why isn't this a separate PyPI wheel?
 
-Two wheels (`locus-tag`, `locus-tag-fisheye`) would both ship a `locus.abi3.so` native extension and mechanically overwrite each other on `pip install`. The sdist-with-feature path keeps the PyPI surface clean while letting downstream robotics and AV users opt in to distortion at build time.
+Two wheels (`locus-tag`, `locus-tag-unrectified`) would both ship a `locus.abi3.so` native extension and mechanically overwrite each other on `pip install`. The sdist-with-feature path keeps the PyPI surface clean while letting downstream robotics and AV users opt in to distortion at build time.

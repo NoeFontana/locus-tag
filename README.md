@@ -42,7 +42,7 @@ Presets are selected via the `preset` argument in the `Detector` constructor:
 pip install locus-tag
 ```
 
-The PyPI wheel is compiled for rectified (pinhole) imagery. For cameras with significant lens distortion (Brown-Conrady, Kannala-Brandt fisheye), see [Install with distortion support](https://noefontana.github.io/locus-tag/how-to/install-with-distortion/).
+The PyPI wheel is compiled for rectified (pinhole) imagery. For unrectified cameras (Brown-Conrady polynomial, Kannala-Brandt equidistant fisheye), see [Install with distortion support](https://noefontana.github.io/locus-tag/how-to/install-with-distortion/).
 
 ## Quick Start
 

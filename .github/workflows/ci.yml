@@ -167,7 +167,7 @@ jobs:
           path: "*.log"
           retention-days: 1
 
-  source-build-fisheye:
+  source-build-unrectified:
     name: Source Install (non_rectified)
     needs: [validate-project, rust-checks]
     runs-on: ubuntu-latest
@@ -194,16 +194,16 @@ jobs:
           set -o pipefail
           SDIST=$(ls dist/locus_tag-*.tar.gz)
           test -n "$SDIST" || { echo "no sdist found in dist/" >&2; exit 1; }
-          uv pip install --no-binary=:all: "$SDIST" 2>&1 | tee install-fisheye.log
+          uv pip install --no-binary=:all: "$SDIST" 2>&1 | tee install-unrectified.log
 
       - name: Smoke-test distortion API
         shell: bash
         run: |
           set -o pipefail
-          uv run --no-sync python - <<'PY' 2>&1 | tee smoke-fisheye.log
+          uv run --no-sync python - <<'PY' 2>&1 | tee smoke-unrectified.log
           import locus
 
-          assert locus.HAS_NON_RECTIFIED, "HAS_NON_RECTIFIED must be True on the fisheye build"
+          assert locus.HAS_NON_RECTIFIED, "HAS_NON_RECTIFIED must be True on the unrectified build"
           assert hasattr(locus.DistortionModel, "BrownConrady")
           assert hasattr(locus.DistortionModel, "KannalaBrandt")
 
@@ -222,7 +222,7 @@ jobs:
           )
           assert fisheye.distortion_model == locus.DistortionModel.KannalaBrandt
           assert len(fisheye.dist_coeffs) == 4
-          print("fisheye source install OK")
+          print("unrectified source install OK")
           PY
 
       - name: Upload Logs on Failure
@@ -230,7 +230,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
-          name: failure-logs-source-build-fisheye
+          name: failure-logs-source-build-unrectified
           path: "*.log"
           retention-days: 1
 
