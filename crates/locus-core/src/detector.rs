@@ -190,6 +190,13 @@ fn run_detection_pipeline<'ctx>(
     pose_mode: crate::config::PoseEstimationMode,
     debug_telemetry: bool,
 ) -> Result<DetectionBatchView<'ctx>, DetectorError> {
+    let has_distortion = intrinsics.is_some_and(|k| k.distortion.is_distorted());
+    if has_distortion && config.quad_extraction_mode == crate::config::QuadExtractionMode::EdLines {
+        return Err(DetectorError::Config(
+            crate::error::ConfigError::EdLinesUnsupportedWithDistortion,
+        ));
+    }
+
     ctx.reset();
     let state = ctx;
 
@@ -257,7 +264,49 @@ fn run_detection_pipeline<'ctx>(
             config.quad_min_area,
         );
 
-        // 3. Quad Extraction (SoA)
+        // 3. Quad Extraction (SoA). Distorted cameras run RDP in straight
+        // space via `_with_camera`; the `_` arm is the pinhole flow.
+        #[cfg(feature = "non_rectified")]
+        let (n, unrefined) = match intrinsics.map(|k| (k, k.distortion)) {
+            Some((k, crate::pose::DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 })) => {
+                let model = crate::camera::BrownConradyModel { k1, k2, p1, p2, k3 };
+                crate::quad::extract_quads_soa_with_camera(
+                    &mut state.batch,
+                    &sharpened_img,
+                    &label_result,
+                    config,
+                    config.decimation,
+                    &refinement_img,
+                    debug_telemetry,
+                    &model,
+                    k,
+                )
+            },
+            Some((k, crate::pose::DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 })) => {
+                let model = crate::camera::KannalaBrandtModel { k1, k2, k3, k4 };
+                crate::quad::extract_quads_soa_with_camera(
+                    &mut state.batch,
+                    &sharpened_img,
+                    &label_result,
+                    config,
+                    config.decimation,
+                    &refinement_img,
+                    debug_telemetry,
+                    &model,
+                    k,
+                )
+            },
+            _ => crate::quad::extract_quads_soa(
+                &mut state.batch,
+                &sharpened_img,
+                &label_result,
+                config,
+                config.decimation,
+                &refinement_img,
+                debug_telemetry,
+            ),
+        };
+        #[cfg(not(feature = "non_rectified"))]
         let (n, unrefined) = crate::quad::extract_quads_soa(
             &mut state.batch,
             &sharpened_img,
@@ -268,17 +317,22 @@ fn run_detection_pipeline<'ctx>(
             debug_telemetry,
         );
 
-        // 3.5 Fast-Path Funnel Gate
-        // Rejects candidates early based on boundary contrast
-        crate::funnel::apply_funnel_gate(
-            &mut state.batch,
-            n,
-            &sharpened_img,
-            &tile_stats,
-            config.threshold_tile_size,
-            config.decoder_min_contrast,
-            1.0 / config.decimation as f64,
-        );
+        // 3.5 Fast-Path Funnel Gate — rejects candidates early based on
+        // boundary contrast. The midpoint sampling assumes straight-line
+        // edges, which is violated under distortion (midpoint falls inside
+        // the tag and produces a spurious 0-contrast reject). Correctness
+        // without the funnel is covered by `decode_batch_soa_with_camera`.
+        if !has_distortion {
+            crate::funnel::apply_funnel_gate(
+                &mut state.batch,
+                n,
+                &sharpened_img,
+                &tile_stats,
+                config.threshold_tile_size,
+                config.decoder_min_contrast,
+                1.0 / config.decimation as f64,
+            );
+        }
 
         (n, unrefined)
     };
@@ -910,5 +964,72 @@ impl LocusEngine {
     #[must_use]
     pub fn config(&self) -> DetectorConfig {
         self.config
+    }
+}
+
+#[cfg(all(test, feature = "non_rectified"))]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::config::{CornerRefinementMode, DecodeMode, PoseEstimationMode, QuadExtractionMode};
+    use crate::error::ConfigError;
+    use crate::pose::CameraIntrinsics;
+
+    #[test]
+    fn edlines_with_distortion_is_rejected_at_detect_time() {
+        let config = DetectorConfig::builder()
+            .quad_extraction_mode(QuadExtractionMode::EdLines)
+            .refinement_mode(CornerRefinementMode::None)
+            .decode_mode(DecodeMode::Hard)
+            .build();
+
+        let mut detector = Detector::with_config(config);
+        let pixels = vec![0u8; 64 * 64];
+        let img = ImageView::new(&pixels, 64, 64, 64).expect("valid view");
+        let intrinsics = CameraIntrinsics::with_brown_conrady(
+            800.0, 800.0, 32.0, 32.0, -0.3, 0.1, 0.001, -0.002, 0.0,
+        );
+
+        let err = detector
+            .detect(
+                &img,
+                Some(&intrinsics),
+                None,
+                PoseEstimationMode::Fast,
+                false,
+            )
+            .expect_err("distorted EdLines must fail");
+
+        assert!(
+            matches!(
+                err,
+                DetectorError::Config(ConfigError::EdLinesUnsupportedWithDistortion)
+            ),
+            "expected EdLinesUnsupportedWithDistortion, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn edlines_with_pinhole_is_accepted() {
+        let config = DetectorConfig::builder()
+            .quad_extraction_mode(QuadExtractionMode::EdLines)
+            .refinement_mode(CornerRefinementMode::None)
+            .decode_mode(DecodeMode::Hard)
+            .build();
+
+        let mut detector = Detector::with_config(config);
+        let pixels = vec![0u8; 64 * 64];
+        let img = ImageView::new(&pixels, 64, 64, 64).expect("valid view");
+        let intrinsics = CameraIntrinsics::new(800.0, 800.0, 32.0, 32.0);
+
+        detector
+            .detect(
+                &img,
+                Some(&intrinsics),
+                None,
+                PoseEstimationMode::Fast,
+                false,
+            )
+            .expect("edlines with pinhole intrinsics must succeed");
     }
 }

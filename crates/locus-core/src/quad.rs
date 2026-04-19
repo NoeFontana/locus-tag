@@ -370,6 +370,433 @@ fn extract_single_quad(
     None
 }
 
+/// Max per-point `distort(undistort(xd)) − xd` drift tolerated during
+/// boundary rectification. Chosen at 2× the `camera_geometry.rs` round-trip
+/// proptest envelope (`< 1e-4`) so Newton blow-up bails while
+/// well-conditioned points stay.
+#[cfg(feature = "non_rectified")]
+const MAX_UNDISTORT_RESIDUAL: f64 = 2e-4;
+
+/// Intrinsics rescaled to the decimation grid: `p_dec = (p_full + 0.5) / d − 0.5`
+/// on the principal point, focals divided by `d`. The +0.5 shifts come from
+/// the project's center-aware decimation convention (see `.agent/rules/core.md`).
+#[cfg(feature = "non_rectified")]
+#[derive(Clone, Copy, Debug)]
+struct ScaledIntrinsics {
+    fx: f64,
+    fy: f64,
+    cx: f64,
+    cy: f64,
+}
+
+#[cfg(feature = "non_rectified")]
+impl ScaledIntrinsics {
+    #[inline]
+    fn from_intrinsics(intrinsics: &crate::pose::CameraIntrinsics, decimation: usize) -> Self {
+        let d = decimation as f64;
+        Self {
+            fx: intrinsics.fx / d,
+            fy: intrinsics.fy / d,
+            cx: (intrinsics.cx + 0.5) / d - 0.5,
+            cy: (intrinsics.cy + 0.5) / d - 0.5,
+        }
+    }
+}
+
+/// Camera-aware quad extraction with Structure of Arrays (SoA) output.
+///
+/// Identical contract to [`extract_quads_soa`], but runs Douglas-Peucker in
+/// *normalized (straight-line)* camera coordinates by undistorting each
+/// boundary point through `C::undistort` before simplification. This keeps
+/// curved marker edges from being mis-quantized into >4 RDP points on
+/// distorted (Brown-Conrady / Kannala-Brandt) imagery.
+///
+/// The pinhole path (`C::IS_RECTIFIED == true`) is compile-time erased to
+/// the existing rectified flow via monomorphization.
+#[cfg(feature = "non_rectified")]
+#[allow(clippy::too_many_arguments)]
+#[tracing::instrument(skip_all, name = "pipeline::quad_extraction_camera")]
+pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
+    batch: &mut DetectionBatch,
+    img: &ImageView,
+    label_result: &LabelResult,
+    config: &DetectorConfig,
+    decimation: usize,
+    refinement_img: &ImageView,
+    debug_telemetry: bool,
+    camera: &C,
+    intrinsics: &crate::pose::CameraIntrinsics,
+) -> (usize, Option<Vec<[Point; 4]>>) {
+    use rayon::prelude::*;
+
+    let stats = &label_result.component_stats;
+    let scaled = ScaledIntrinsics::from_intrinsics(intrinsics, decimation);
+
+    let detections: Vec<([Point; 4], [Point; 4], CornerCovariances)> = stats
+        .par_iter()
+        .enumerate()
+        .filter_map(|(label_idx, stat)| {
+            WORKSPACE_ARENA.with(|cell| {
+                let mut arena = cell.borrow_mut();
+                arena.reset();
+                let label = (label_idx + 1) as u32;
+                extract_single_quad_with_camera(
+                    &arena,
+                    img,
+                    label_result.labels,
+                    label,
+                    stat,
+                    config,
+                    decimation,
+                    refinement_img,
+                    camera,
+                    scaled,
+                    intrinsics,
+                )
+            })
+        })
+        .collect();
+
+    let n = detections.len().min(MAX_CANDIDATES);
+    let mut unrefined = if debug_telemetry {
+        Some(Vec::with_capacity(n))
+    } else {
+        None
+    };
+
+    for (i, (corners, unrefined_pts, covs)) in detections.into_iter().take(n).enumerate() {
+        for (j, corner) in corners.iter().enumerate() {
+            batch.corners[i][j] = Point2f {
+                x: corner.x as f32,
+                y: corner.y as f32,
+            };
+        }
+        if covs.is_empty() {
+            batch.corner_covariances[i].fill(0.0);
+        } else {
+            for (chunk, cov) in batch.corner_covariances[i]
+                .chunks_exact_mut(4)
+                .zip(covs.iter())
+            {
+                chunk.copy_from_slice(cov);
+            }
+        }
+        if let Some(ref mut u) = unrefined {
+            u.push(unrefined_pts);
+        }
+        batch.status_mask[i] = CandidateState::Active;
+    }
+
+    for i in n..MAX_CANDIDATES {
+        batch.status_mask[i] = CandidateState::Empty;
+    }
+
+    (n, unrefined)
+}
+
+/// Per-component worker for [`extract_quads_soa_with_camera`].
+///
+/// Runs the ContourRdp pipeline in normalized (undistorted) camera space so
+/// that projectively-straight lines remain straight under RDP. EdLines is
+/// intentionally unsupported on this path and is blocked upstream by
+/// `DetectorError::Config(EdLinesUnsupportedWithDistortion)`.
+#[cfg(feature = "non_rectified")]
+#[inline]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
+    arena: &Bump,
+    img: &ImageView,
+    labels: &[u32],
+    label: u32,
+    stat: &crate::segmentation::ComponentStats,
+    config: &DetectorConfig,
+    decimation: usize,
+    refinement_img: &ImageView,
+    camera: &C,
+    scaled: ScaledIntrinsics,
+    intrinsics: &crate::pose::CameraIntrinsics,
+) -> Option<([Point; 4], [Point; 4], CornerCovariances)> {
+    // EdLines is blocked upstream for distorted cameras; this path is
+    // ContourRdp-only. For pinhole the monomorphization is bit-identical
+    // to the rectified flow (IS_RECTIFIED erases the rectify steps).
+    if config.quad_extraction_mode != crate::config::QuadExtractionMode::ContourRdp {
+        return None;
+    }
+
+    let min_edge_len_sq = config.quad_min_edge_length * config.quad_min_edge_length;
+    let d = decimation as f64;
+
+    let bbox_w = u32::from(stat.max_x - stat.min_x) + 1;
+    let bbox_h = u32::from(stat.max_y - stat.min_y) + 1;
+    let bbox_area = bbox_w * bbox_h;
+
+    if bbox_area < config.quad_min_area || bbox_area > (img.width * img.height * 9 / 10) as u32 {
+        return None;
+    }
+
+    let aspect = bbox_w.max(bbox_h) as f32 / bbox_w.min(bbox_h).max(1) as f32;
+    if aspect > config.quad_max_aspect_ratio {
+        return None;
+    }
+
+    let fill = stat.pixel_count as f32 / bbox_area as f32;
+    if fill < config.quad_min_fill_ratio || fill > config.quad_max_fill_ratio {
+        return None;
+    }
+
+    if (config.quad_max_elongation > 0.0 || config.quad_min_density > 0.0)
+        && let Some((elongation, density)) = crate::segmentation::compute_moment_shape(stat)
+    {
+        if config.quad_max_elongation > 0.0 && elongation > config.quad_max_elongation {
+            return None;
+        }
+        if config.quad_min_density > 0.0 && density < config.quad_min_density {
+            return None;
+        }
+    }
+
+    let sx = stat.first_pixel_x as usize;
+    let sy = stat.first_pixel_y as usize;
+    let contour = trace_boundary(arena, labels, img.width, img.height, sx, sy, label);
+
+    if contour.len() < 12 {
+        return None;
+    }
+
+    // Rectify the boundary in decimated-pixel units so downstream pixel
+    // thresholds (RDP epsilon, min edge length) still apply. Newton
+    // divergence is the only failure signal since `CameraModel::undistort`
+    // is infallible; we detect it by re-distorting and bailing on drift.
+    let rectified = if C::IS_RECTIFIED {
+        contour
+    } else {
+        let mut rect = BumpVec::with_capacity_in(contour.len(), arena);
+        for p in &contour {
+            let xd = (p.x - scaled.cx) / scaled.fx;
+            let yd = (p.y - scaled.cy) / scaled.fy;
+            let [xn, yn] = camera.undistort(xd, yd);
+            let [xd_chk, yd_chk] = camera.distort(xn, yn);
+            let dx = xd_chk - xd;
+            let dy = yd_chk - yd;
+            if (dx * dx + dy * dy).sqrt() > MAX_UNDISTORT_RESIDUAL {
+                return None;
+            }
+            rect.push(Point {
+                x: xn * scaled.fx + scaled.cx,
+                y: yn * scaled.fy + scaled.cy,
+            });
+        }
+        rect
+    };
+
+    let simple_contour = chain_approximation(arena, &rectified);
+    let perimeter = rectified.len() as f64;
+    let epsilon = (perimeter * 0.02).max(1.0);
+    let simplified = douglas_peucker(arena, &simple_contour, epsilon);
+
+    if simplified.len() < 4 || simplified.len() > 11 {
+        return None;
+    }
+
+    let simpl_len = simplified.len();
+    let reduced = if simpl_len == 5 {
+        simplified
+    } else if simpl_len == 4 {
+        let mut closed = BumpVec::new_in(arena);
+        for p in &simplified {
+            closed.push(*p);
+        }
+        closed.push(simplified[0]);
+        closed
+    } else {
+        reduce_to_quad(arena, &simplified)
+    };
+
+    if reduced.len() != 5 {
+        return None;
+    }
+
+    let area = polygon_area(&reduced);
+    let compactness = (12.566 * area.abs()) / (perimeter * perimeter);
+
+    if area.abs() <= f64::from(config.quad_min_area) || compactness <= 0.1 {
+        return None;
+    }
+
+    // Standardize to CW in rectified space.
+    let quad_rect: [Point; 4] = if area > 0.0 {
+        [reduced[0], reduced[1], reduced[2], reduced[3]]
+    } else {
+        [reduced[0], reduced[3], reduced[2], reduced[1]]
+    };
+
+    // Un-rectify the 4 corners back to decimated-pixel distorted space.
+    let quad_pts_dec: [Point; 4] = if C::IS_RECTIFIED {
+        quad_rect
+    } else {
+        let mut out = quad_rect;
+        for p in &mut out {
+            let xn = (p.x - scaled.cx) / scaled.fx;
+            let yn = (p.y - scaled.cy) / scaled.fy;
+            let [xd, yd] = camera.distort(xn, yn);
+            p.x = xd * scaled.fx + scaled.cx;
+            p.y = yd * scaled.fy + scaled.cy;
+        }
+        out
+    };
+
+    let quad_pts = quad_pts_dec.map(|p| Point {
+        x: p.x * d,
+        y: p.y * d,
+    });
+
+    // Gate the +0.5 outward expansion on `C::IS_RECTIFIED`: corners produced
+    // by RDP in straight-space are projectively exact intersections, not
+    // integer-midpoint artifacts of a stepped pixel contour. Applying the
+    // 0.5px nudge would move them off the true edge and fight later
+    // refinement.
+    let quad_pts = if C::IS_RECTIFIED {
+        let center_x = (quad_pts[0].x + quad_pts[1].x + quad_pts[2].x + quad_pts[3].x) * 0.25;
+        let center_y = (quad_pts[0].y + quad_pts[1].y + quad_pts[2].y + quad_pts[3].y) * 0.25;
+        let mut ep = quad_pts;
+        for i in 0..4 {
+            ep[i].x += 0.5 * (quad_pts[i].x - center_x).signum();
+            ep[i].y += 0.5 * (quad_pts[i].y - center_y).signum();
+        }
+        ep
+    } else {
+        quad_pts
+    };
+
+    for i in 0..4 {
+        let d2 = (quad_pts[i].x - quad_pts[(i + 1) % 4].x).powi(2)
+            + (quad_pts[i].y - quad_pts[(i + 1) % 4].y).powi(2);
+        if d2 < min_edge_len_sq {
+            return None;
+        }
+    }
+
+    // Full-res rectified corners — only meaningful on the distorted path,
+    // where `refine_corner_with_camera` expects its triplet in straight space.
+    let quad_rect_full = quad_rect.map(|p| Point {
+        x: p.x * d,
+        y: p.y * d,
+    });
+
+    let (corners, out_covs) = if config.refinement_mode == crate::config::CornerRefinementMode::None
+    {
+        (quad_pts, [[0.0_f32; 4]; 4])
+    } else if C::IS_RECTIFIED {
+        let use_erf = config.refinement_mode == crate::config::CornerRefinementMode::Erf;
+        (
+            [
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[0],
+                    quad_pts[3],
+                    quad_pts[1],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[1],
+                    quad_pts[0],
+                    quad_pts[2],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[2],
+                    quad_pts[1],
+                    quad_pts[3],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+                refine_corner(
+                    arena,
+                    refinement_img,
+                    quad_pts[3],
+                    quad_pts[2],
+                    quad_pts[0],
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                    use_erf,
+                ),
+            ],
+            [[0.0_f32; 4]; 4],
+        )
+    } else {
+        (
+            [
+                refine_corner_with_camera(
+                    refinement_img,
+                    quad_rect_full[0],
+                    quad_rect_full[3],
+                    quad_rect_full[1],
+                    quad_pts[0],
+                    decimation,
+                    intrinsics,
+                    camera,
+                ),
+                refine_corner_with_camera(
+                    refinement_img,
+                    quad_rect_full[1],
+                    quad_rect_full[0],
+                    quad_rect_full[2],
+                    quad_pts[1],
+                    decimation,
+                    intrinsics,
+                    camera,
+                ),
+                refine_corner_with_camera(
+                    refinement_img,
+                    quad_rect_full[2],
+                    quad_rect_full[1],
+                    quad_rect_full[3],
+                    quad_pts[2],
+                    decimation,
+                    intrinsics,
+                    camera,
+                ),
+                refine_corner_with_camera(
+                    refinement_img,
+                    quad_rect_full[3],
+                    quad_rect_full[2],
+                    quad_rect_full[0],
+                    quad_pts[3],
+                    decimation,
+                    intrinsics,
+                    camera,
+                ),
+            ],
+            [[0.0_f32; 4]; 4],
+        )
+    };
+
+    // Edges between distorted corners are *curved* in the image, so a
+    // straight-line edge score would sample the tag interior and spuriously
+    // reject. Sample along the rectified straight line and forward-distort
+    // each point to read pixels from the real (distorted) image.
+    let edge_score = if C::IS_RECTIFIED {
+        calculate_edge_score(refinement_img, corners)
+    } else {
+        calculate_edge_score_curved(refinement_img, &quad_rect, camera, scaled, decimation)
+    };
+    if edge_score <= config.quad_min_edge_score {
+        return None;
+    }
+
+    Some((corners, quad_pts, out_covs))
+}
+
 /// Quad extraction with custom configuration.
 ///
 /// This is the main entry point for quad detection with custom parameters.
@@ -872,6 +1299,194 @@ fn refine_edge_erf(
     Some(fitter.line_params())
 }
 
+/// Camera-aware corner refinement for the straight-space extractor.
+///
+/// The incoming triplet is in *rectified full-res pixel space*. For each
+/// of the two edges meeting at `p_rect`, `fit_edge_line_curved` returns a
+/// straight line fit in rectified space (the space where the edges truly
+/// are lines). We intersect those two lines in rectified space and
+/// forward-distort the intersection to get the refined pixel-space corner.
+///
+/// `p_px` (the current distorted pixel-space corner) is used only for the
+/// "stay near the original" sanity check, matching `refine_corner`.
+#[cfg(feature = "non_rectified")]
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+fn refine_corner_with_camera<C: crate::camera::CameraModel>(
+    img: &ImageView,
+    p_rect: Point,
+    p_prev_rect: Point,
+    p_next_rect: Point,
+    p_px: Point,
+    decimation: usize,
+    intrinsics: &crate::pose::CameraIntrinsics,
+    camera: &C,
+) -> Point {
+    let line1 = fit_edge_line_curved(img, p_prev_rect, p_rect, decimation, intrinsics, camera);
+    let line2 = fit_edge_line_curved(img, p_rect, p_next_rect, decimation, intrinsics, camera);
+
+    if let (Some(l1), Some(l2)) = (line1, line2) {
+        // Intersect in rectified space, then re-distort to pixel space.
+        let det = l1.0 * l2.1 - l2.0 * l1.1;
+        if det.abs() > 1e-6 {
+            let xr = (l1.1 * l2.2 - l2.1 * l1.2) / det;
+            let yr = (l2.0 * l1.2 - l1.0 * l2.2) / det;
+            let xn = (xr - intrinsics.cx) / intrinsics.fx;
+            let yn = (yr - intrinsics.cy) / intrinsics.fy;
+            let [xd, yd] = camera.distort(xn, yn);
+            let x = xd * intrinsics.fx + intrinsics.cx;
+            let y = yd * intrinsics.fy + intrinsics.cy;
+            let dist_sq = (x - p_px.x).powi(2) + (y - p_px.y).powi(2);
+            let max_dist = if decimation > 1 {
+                (decimation as f64) + 2.0
+            } else {
+                2.0
+            };
+            if dist_sq < max_dist * max_dist {
+                return Point { x, y };
+            }
+        }
+    }
+
+    p_px
+}
+
+/// Curve-aware line fit. Walks along the forward-distorted rectified edge
+/// in pixel space, finds the gradient peak along a local normal at each
+/// sample, and undistorts each peak back to rectified space. A straight
+/// line is then least-squares fit in rectified space (where the edge truly
+/// is straight) and returned as `(a, b, c)` with `a*xr + b*yr + c = 0`,
+/// `a^2 + b^2 = 1`.
+///
+/// Fitting in rectified space is what makes this correct: the curved pixel
+/// edge only approximates a straight line locally, so a pixel-space fit
+/// picks up a systematic inward bias. Rectifying each peak sample removes
+/// it.
+#[cfg(feature = "non_rectified")]
+fn fit_edge_line_curved<C: crate::camera::CameraModel>(
+    img: &ImageView,
+    p1_rect: Point,
+    p2_rect: Point,
+    decimation: usize,
+    intrinsics: &crate::pose::CameraIntrinsics,
+    camera: &C,
+) -> Option<(f64, f64, f64)> {
+    let dx_r = p2_rect.x - p1_rect.x;
+    let dy_r = p2_rect.y - p1_rect.y;
+    let len_r = (dx_r * dx_r + dy_r * dy_r).sqrt();
+    if len_r < 4.0 {
+        return None;
+    }
+
+    let n_samples = (len_r as usize).clamp(5, 15);
+    let r = if decimation > 1 {
+        (decimation as i32) + 1
+    } else {
+        3
+    };
+
+    let fx = intrinsics.fx;
+    let fy = intrinsics.fy;
+    let cx = intrinsics.cx;
+    let cy = intrinsics.cy;
+    let fx_over_fy = fx / fy;
+    let fy_over_fx = fy / fx;
+
+    let mut moments = crate::gwlf::MomentAccumulator::new();
+
+    for i in 1..=n_samples {
+        let t = i as f64 / (n_samples + 1) as f64;
+        let rx = p1_rect.x + dx_r * t;
+        let ry = p1_rect.y + dy_r * t;
+        let xn = (rx - cx) / fx;
+        let yn = (ry - cy) / fy;
+        let [xd, yd] = camera.distort(xn, yn);
+        let px = xd * fx + cx;
+        let py = yd * fy + cy;
+
+        let j = camera.distort_jacobian(xn, yn);
+        let t_px_x = j[0][0] * dx_r + j[0][1] * dy_r * fx_over_fy;
+        let t_px_y = j[1][0] * dx_r * fy_over_fx + j[1][1] * dy_r;
+        let t_len = (t_px_x * t_px_x + t_px_y * t_px_y).sqrt();
+        if t_len < 1e-6 {
+            continue;
+        }
+        let nx = t_px_y / t_len;
+        let ny = -t_px_x / t_len;
+
+        // Window scan along the normal. Cache magnitudes so the parabolic
+        // sub-pixel refine can reuse samples that coincide with integer steps.
+        let window = (2 * r + 1) as usize;
+        let mut mag_buf = [0.0f64; 16];
+        let mag_slice = &mut mag_buf[..window];
+        let mut best_idx: usize = 0;
+        let mut best_mag = 0.0;
+        for step in -r..=r {
+            let idx = (step + r) as usize;
+            let sx = px + nx * f64::from(step);
+            let sy = py + ny * f64::from(step);
+            let g = img.sample_gradient_bilinear(sx, sy);
+            let mag = g[0] * g[0] + g[1] * g[1];
+            mag_slice[idx] = mag;
+            if mag > best_mag {
+                best_mag = mag;
+                best_idx = idx;
+            }
+        }
+
+        if best_mag <= 10.0 {
+            continue;
+        }
+
+        let step_best = best_idx as i32 - r;
+        let best_px = px + nx * f64::from(step_best);
+        let best_py = py + ny * f64::from(step_best);
+
+        // Re-use cached neighbors when available; fall back to a fresh sample
+        // when the peak sat at an edge of the scan window.
+        let m_center = best_mag;
+        let m_minus = if best_idx > 0 {
+            mag_slice[best_idx - 1]
+        } else {
+            let g = img.sample_gradient_bilinear(best_px - nx, best_py - ny);
+            g[0] * g[0] + g[1] * g[1]
+        };
+        let m_plus = if best_idx + 1 < window {
+            mag_slice[best_idx + 1]
+        } else {
+            let g = img.sample_gradient_bilinear(best_px + nx, best_py + ny);
+            g[0] * g[0] + g[1] * g[1]
+        };
+
+        let num = m_plus - m_minus;
+        let den = 2.0 * (m_minus + m_plus - 2.0 * m_center);
+        let sub_offset = if den.abs() > 1e-6 {
+            (-num / den).clamp(-0.5, 0.5)
+        } else {
+            0.0
+        };
+        let refined_px = best_px + nx * sub_offset;
+        let refined_py = best_py + ny * sub_offset;
+
+        let [xn_r, yn_r] = camera.undistort((refined_px - cx) / fx, (refined_py - cy) / fy);
+        moments.add(xn_r * fx + cx, yn_r * fy + cy, 1.0);
+    }
+
+    if moments.sum_w < 3.0 {
+        return None;
+    }
+
+    // TLS line fit in rectified space: normal = eigenvector of the smallest
+    // covariance eigenvalue. Fit there, not in pixel space — the pixel edge
+    // is curved, so a pixel-space TLS picks up a systematic inward bias.
+    let centroid = moments.centroid()?;
+    let cov = moments.covariance()?;
+    let eig = crate::gwlf::solve_2x2_symmetric(cov[(0, 0)], cov[(0, 1)], cov[(1, 1)]);
+    let n_vec = eig.v_min;
+    let c = -(n_vec.x * centroid.x + n_vec.y * centroid.y);
+    Some((n_vec.x, n_vec.y, c))
+}
+
 /// Reducing a polygon to a quad (4 vertices + 1 closing) by iteratively removing
 /// the vertex that forms the smallest area triangle with its neighbors.
 /// This is robust for noisy/jagged shapes that are approximately quadrilateral.
@@ -925,6 +1540,55 @@ fn reduce_to_quad<'a>(arena: &'a Bump, poly: &[Point]) -> BumpVec<'a, Point> {
 ///
 /// Returns the lowest score among the 4 edges. If any edge is very weak,
 /// the return value will be low, indicating a likely false positive.
+/// Camera-aware edge-score for the straight-space quad extractor.
+///
+/// `rect_corners` are in **decimated rectified-pixel** space (the output of
+/// RDP). For each edge we walk a parametric straight line in that space,
+/// forward-distort each sample with `camera` to get the pixel in the real
+/// (distorted) `img`, and read the gradient there. This follows the true
+/// curved edge in the distorted image instead of the straight-line chord
+/// between corners.
+#[cfg(feature = "non_rectified")]
+fn calculate_edge_score_curved<C: crate::camera::CameraModel>(
+    img: &ImageView,
+    rect_corners: &[Point; 4],
+    camera: &C,
+    scaled: ScaledIntrinsics,
+    decimation: usize,
+) -> f64 {
+    let d = decimation as f64;
+    let mut min_score = f64::MAX;
+    for i in 0..4 {
+        let p1 = rect_corners[i];
+        let p2 = rect_corners[(i + 1) % 4];
+        let dx = p2.x - p1.x;
+        let dy = p2.y - p1.y;
+        let len = (dx * dx + dy * dy).sqrt();
+        if len < 4.0 {
+            return 0.0;
+        }
+        let n_samples = (len as usize).clamp(3, 10);
+        let mut edge_mag_sum = 0.0;
+        for k in 1..=n_samples {
+            let t = k as f64 / (n_samples + 1) as f64;
+            let rx = p1.x + dx * t;
+            let ry = p1.y + dy * t;
+            let xn = (rx - scaled.cx) / scaled.fx;
+            let yn = (ry - scaled.cy) / scaled.fy;
+            let [xd, yd] = camera.distort(xn, yn);
+            let px = (xd * scaled.fx + scaled.cx) * d;
+            let py = (yd * scaled.fy + scaled.cy) * d;
+            let g = img.sample_gradient_bilinear(px, py);
+            edge_mag_sum += (g[0] * g[0] + g[1] * g[1]).sqrt();
+        }
+        let avg_mag = edge_mag_sum / n_samples as f64;
+        if avg_mag < min_score {
+            min_score = avg_mag;
+        }
+    }
+    min_score
+}
+
 fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
     let mut min_score = f64::MAX;
 

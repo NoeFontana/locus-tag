@@ -239,6 +239,16 @@ path = "tests/robustness/memory.rs"
 name = "robustness_api"
 path = "tests/robustness/api.rs"
 
+[[test]]
+name = "robustness_camera_geometry"
+path = "tests/robustness/camera_geometry.rs"
+required-features = ["non_rectified"]
+
+[[test]]
+name = "regression_straight_space"
+path = "tests/regression_straight_space.rs"
+required-features = ["non_rectified", "bench-internals"]
+
 [features]
 default = []
 tracy = ["dep:tracing-tracy"]

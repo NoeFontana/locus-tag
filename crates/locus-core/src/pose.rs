@@ -56,6 +56,15 @@ pub enum DistortionCoeffs {
     },
 }
 
+impl DistortionCoeffs {
+    /// Returns `true` for any non-pinhole distortion model.
+    #[must_use]
+    #[inline]
+    pub const fn is_distorted(&self) -> bool {
+        !matches!(self, Self::None)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // CameraIntrinsics
 // ---------------------------------------------------------------------------
