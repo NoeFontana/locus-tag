@@ -20,7 +20,7 @@ use multiversion::multiversion;
 
 /// Configuration for sample collection along an edge.
 #[derive(Clone, Debug)]
-pub(crate) struct SampleConfig {
+pub struct SampleConfig {
     /// Half-width of the search band perpendicular to the edge (in pixels).
     pub window: f64,
     /// Pixel stride for subsampling (1 = every pixel, 2 = skip alternate).
@@ -69,7 +69,7 @@ impl SampleConfig {
 
 /// Configuration for the Gauss-Newton refinement loop.
 #[derive(Clone, Debug)]
-pub(crate) struct RefineConfig {
+pub struct RefineConfig {
     /// Gaussian blur sigma for the ERF model.
     pub sigma: f64,
     /// Maximum number of Gauss-Newton iterations.
@@ -135,7 +135,7 @@ impl RefineConfig {
 /// The normal `(nx, ny)` points from the dark side toward the light side.
 /// The convention is `nx = -dy/len, ny = dx/len` (left-hand normal of the
 /// directed edge p1 → p2 for CW-wound quads).
-pub(crate) struct ErfEdgeFitter<'a> {
+pub struct ErfEdgeFitter<'a> {
     img: &'a ImageView<'a>,
     p1: [f64; 2],
     dx: f64,

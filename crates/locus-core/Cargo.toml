@@ -109,6 +109,11 @@ name = "board_bench"
 harness = false
 required-features = ["bench-internals"]
 
+[[bench]]
+name = "edge_refinement"
+harness = false
+required-features = ["bench-internals"]
+
 [[test]]
 name = "regression_icra2020"
 harness = true
