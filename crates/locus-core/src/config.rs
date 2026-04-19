@@ -316,7 +316,7 @@ impl DetectorConfig {
             .segmentation_connectivity(SegmentationConnectivity::Four)
             .decoder_min_contrast(10.0)
             .quad_min_edge_score(2.0)
-            .decode_mode(DecodeMode::Soft)
+            .decode_mode(DecodeMode::Hard)
             .build()
     }
 
