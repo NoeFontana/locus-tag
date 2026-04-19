@@ -43,28 +43,15 @@ pub enum ConfigPreset {
 impl ConfigPreset {
     pub fn detector_config(self) -> DetectorConfig {
         match self {
-            Self::Standard => {
-                let mut config = DetectorConfig::standard_default();
-                // ICRA 2020 Tuning: Small, blurry tags require relaxed gates.
-                config.quad_min_edge_score = 2.0;
-                config.decoder_min_contrast = 10.0;
-                config
-            }
+            Self::Standard => DetectorConfig::standard_default(),
             Self::Grid => {
                 let mut config = DetectorConfig::grid_default();
-                // ICRA 2020 Tuning: Packed tags in checkerboards need even more relaxation.
+                // ICRA 2020 Tuning: Packed tags in checkerboards need relaxation.
                 config.quad_min_edge_score = 1.0;
                 config.decoder_min_contrast = 5.0;
                 config
-            }
-            Self::HighAccuracy => {
-                let mut config = DetectorConfig::high_accuracy_default();
-                // ICRA 2020 Tuning: EdLines is fragile on sub-pixel tags; 
-                // relax as much as possible, though it remains recall-limited.
-                config.quad_min_edge_score = 2.0;
-                config.decoder_min_contrast = 10.0;
-                config
-            }
+            },
+            Self::HighAccuracy => DetectorConfig::high_accuracy_default(),
         }
     }
 }
