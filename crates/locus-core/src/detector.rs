@@ -361,6 +361,7 @@ fn run_detection_pipeline<'ctx>(
     // For rectified cameras (PinholeModel or no intrinsics), the compiler eliminates
     // the distortion path entirely via monomorphization of CameraModel::IS_RECTIFIED.
     match intrinsics.map(|k| &k.distortion) {
+        #[cfg(feature = "non_rectified")]
         Some(crate::pose::DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 }) => {
             let model = crate::camera::BrownConradyModel {
                 k1: *k1,
@@ -379,6 +380,7 @@ fn run_detection_pipeline<'ctx>(
                 &model,
             );
         },
+        #[cfg(feature = "non_rectified")]
         Some(crate::pose::DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 }) => {
             let model = crate::camera::KannalaBrandtModel {
                 k1: *k1,

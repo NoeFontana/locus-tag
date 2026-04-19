@@ -61,7 +61,9 @@ pub(crate) mod workspace;
 // Re-exports for the public API
 pub use crate::batch::TelemetryPayload;
 pub use crate::board::{AprilGridTopology, BoardConfigError, CharucoTopology};
-pub use crate::camera::{BrownConradyModel, CameraModel, KannalaBrandtModel, PinholeModel};
+#[cfg(feature = "non_rectified")]
+pub use crate::camera::{BrownConradyModel, KannalaBrandtModel};
+pub use crate::camera::{CameraModel, PinholeModel};
 pub use crate::config::{
     CornerRefinementMode, DecodeMode, DetectOptions, DetectorConfig, PoseEstimationMode,
     QuadExtractionMode, TagFamily,

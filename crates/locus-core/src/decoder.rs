@@ -892,6 +892,7 @@ pub fn rotate90(bits: u64, dim: usize) -> u64 {
 ///
 /// This path is only called for non-rectified cameras (`!C::IS_RECTIFIED`). For rectified
 /// cameras the faster SIMD path in [`sample_grid_soa_precomputed`] is used instead.
+#[cfg(feature = "non_rectified")]
 #[allow(clippy::similar_names)]
 fn sample_grid_values_distorted<C: crate::camera::CameraModel>(
     img: &crate::image::ImageView,
@@ -958,6 +959,7 @@ fn sample_grid_values_distorted<C: crate::camera::CameraModel>(
 /// Undistorts the detected corners to compute an ideal homography, then samples the
 /// distorted image at the correctly distortion-mapped coordinates for each bit sample
 /// point. Called by [`decode_batch_soa_with_camera`] for non-rectified cameras.
+#[cfg(feature = "non_rectified")]
 fn decode_candidate_distorted<
     S: crate::strategy::DecodingStrategy,
     C: crate::camera::CameraModel,
@@ -1059,6 +1061,7 @@ fn decode_candidate_distorted<
 }
 
 /// Distortion-aware batch decode for non-rectified cameras.
+#[cfg(feature = "non_rectified")]
 fn decode_batch_soa_with_camera_inner<
     S: crate::strategy::DecodingStrategy,
     C: crate::camera::CameraModel,
@@ -1148,6 +1151,7 @@ pub fn decode_batch_soa(
 /// image, ensuring accurate bit sampling even under large fisheye distortion.
 ///
 /// [`PinholeModel`]: crate::camera::PinholeModel
+#[cfg(feature = "non_rectified")]
 #[tracing::instrument(skip_all, name = "pipeline::decoding_pass_distortion")]
 pub fn decode_batch_soa_with_camera<C: crate::camera::CameraModel>(
     batch: &mut crate::batch::DetectionBatch,

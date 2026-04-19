@@ -526,9 +526,11 @@ pub fn build_intrinsics(
 ) -> CameraIntrinsics {
     let (fx, fy, cx, cy) = (k[0][0], k[1][1], k[0][2], k[1][2]);
     match (distortion_model, dist_coeffs) {
+        #[cfg(feature = "non_rectified")]
         (Some("brown_conrady"), Some(c)) if c.len() >= 5 => {
             CameraIntrinsics::with_brown_conrady(fx, fy, cx, cy, c[0], c[1], c[2], c[3], c[4])
         },
+        #[cfg(feature = "non_rectified")]
         (Some("kannala_brandt"), Some(c)) if c.len() >= 4 => {
             CameraIntrinsics::with_kannala_brandt(fx, fy, cx, cy, c[0], c[1], c[2], c[3])
         },

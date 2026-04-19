@@ -22,5 +22,6 @@ nalgebra = { version = "0.34", default-features = false, features = ["std"] }
 [features]
 default = []
 tracy = ["locus-core/tracy", "dep:tracing-tracy", "dep:tracing-subscriber"]
+non_rectified = ["locus-core/non_rectified"]
 [lints]
 workspace = true

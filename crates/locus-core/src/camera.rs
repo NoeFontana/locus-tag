@@ -73,6 +73,7 @@ impl CameraModel for PinholeModel {
 // BrownConradyModel — standard polynomial radial + tangential distortion
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "non_rectified")]
 /// Brown-Conrady (OpenCV) lens distortion model.
 ///
 /// Distortion formula (operating on normalized coordinates):
@@ -98,6 +99,7 @@ pub struct BrownConradyModel {
     pub k3: f64,
 }
 
+#[cfg(feature = "non_rectified")]
 impl BrownConradyModel {
     /// Construct from a flat coefficient slice `[k1, k2, p1, p2, k3]`.
     ///
@@ -117,6 +119,7 @@ impl BrownConradyModel {
     }
 }
 
+#[cfg(feature = "non_rectified")]
 impl CameraModel for BrownConradyModel {
     const IS_RECTIFIED: bool = false;
 
@@ -195,6 +198,7 @@ impl CameraModel for BrownConradyModel {
 // KannalaBrandtModel — equidistant fisheye projection
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "non_rectified")]
 /// Kannala-Brandt equidistant fisheye camera model.
 ///
 /// Projection formula (operating on normalized coordinates):
@@ -219,6 +223,7 @@ pub struct KannalaBrandtModel {
     pub k4: f64,
 }
 
+#[cfg(feature = "non_rectified")]
 impl KannalaBrandtModel {
     /// Construct from a flat coefficient slice `[k1, k2, k3, k4]`.
     ///
@@ -251,6 +256,7 @@ impl KannalaBrandtModel {
     }
 }
 
+#[cfg(feature = "non_rectified")]
 impl CameraModel for KannalaBrandtModel {
     const IS_RECTIFIED: bool = false;
 
@@ -330,53 +336,6 @@ impl CameraModel for KannalaBrandtModel {
 mod tests {
     use super::*;
 
-    /// Round-trip identity: distort then undistort should recover the original point.
-    fn check_roundtrip<C: CameraModel>(model: &C, xn: f64, yn: f64, tol: f64) {
-        let [xd, yd] = model.distort(xn, yn);
-        let [xu, yu] = model.undistort(xd, yd);
-        assert!((xu - xn).abs() < tol, "xn round-trip failed: {xu} vs {xn}");
-        assert!((yu - yn).abs() < tol, "yn round-trip failed: {yu} vs {yn}");
-    }
-
-    /// Numerical Jacobian check via finite differences.
-    #[allow(clippy::similar_names)]
-    fn check_jacobian<C: CameraModel>(model: &C, xn: f64, yn: f64) {
-        let eps = 1e-6;
-        let jac = model.distort_jacobian(xn, yn);
-
-        let [x0, y0] = model.distort(xn, yn);
-        let [x1, _] = model.distort(xn + eps, yn);
-        let [_, y1] = model.distort(xn, yn + eps);
-        let [x2, _] = model.distort(xn, yn + eps);
-        let [_, y2] = model.distort(xn + eps, yn);
-
-        let num_dxd_dxn = (x1 - x0) / eps;
-        let num_dxd_dyn = (x2 - x0) / eps;
-        let num_dyd_dxn = (y2 - y0) / eps;
-        let num_dyd_dyn = (y1 - y0) / eps;
-
-        assert!(
-            (jac[0][0] - num_dxd_dxn).abs() < 1e-5,
-            "∂xd/∂xn: analytic={} numeric={num_dxd_dxn}",
-            jac[0][0]
-        );
-        assert!(
-            (jac[0][1] - num_dxd_dyn).abs() < 1e-5,
-            "∂xd/∂yn: analytic={} numeric={num_dxd_dyn}",
-            jac[0][1]
-        );
-        assert!(
-            (jac[1][0] - num_dyd_dxn).abs() < 1e-5,
-            "∂yd/∂xn: analytic={} numeric={num_dyd_dxn}",
-            jac[1][0]
-        );
-        assert!(
-            (jac[1][1] - num_dyd_dyn).abs() < 1e-5,
-            "∂yd/∂yn: analytic={} numeric={num_dyd_dyn}",
-            jac[1][1]
-        );
-    }
-
     #[test]
     fn pinhole_is_identity() {
         let m = PinholeModel;
@@ -388,72 +347,123 @@ mod tests {
         assert!((yu - (-0.2)).abs() < f64::EPSILON);
     }
 
-    #[test]
-    fn brown_conrady_roundtrip() {
-        let m = BrownConradyModel {
-            k1: -0.3,
-            k2: 0.1,
-            p1: 0.001,
-            p2: -0.002,
-            k3: 0.0,
-        };
-        for &(xn, yn) in &[(0.1, 0.2), (-0.3, 0.15), (0.0, 0.4)] {
-            // 5 Newton iterations; tolerance 1e-7 is well within sub-pixel accuracy.
-            check_roundtrip(&m, xn, yn, 1e-7);
+    #[cfg(feature = "non_rectified")]
+    mod non_rectified {
+        use super::*;
+
+        /// Round-trip identity: distort then undistort should recover the original point.
+        fn check_roundtrip<C: CameraModel>(model: &C, xn: f64, yn: f64, tol: f64) {
+            let [xd, yd] = model.distort(xn, yn);
+            let [xu, yu] = model.undistort(xd, yd);
+            assert!((xu - xn).abs() < tol, "xn round-trip failed: {xu} vs {xn}");
+            assert!((yu - yn).abs() < tol, "yn round-trip failed: {yu} vs {yn}");
         }
-    }
 
-    #[test]
-    fn brown_conrady_jacobian() {
-        let m = BrownConradyModel {
-            k1: -0.3,
-            k2: 0.1,
-            p1: 0.001,
-            p2: -0.002,
-            k3: 0.0,
-        };
-        for &(xn, yn) in &[(0.1, 0.2), (-0.3, 0.15), (0.05, -0.05)] {
-            check_jacobian(&m, xn, yn);
+        /// Numerical Jacobian check via finite differences.
+        #[allow(clippy::similar_names)]
+        fn check_jacobian<C: CameraModel>(model: &C, xn: f64, yn: f64) {
+            let eps = 1e-6;
+            let jac = model.distort_jacobian(xn, yn);
+
+            let [x0, y0] = model.distort(xn, yn);
+            let [x1, _] = model.distort(xn + eps, yn);
+            let [_, y1] = model.distort(xn, yn + eps);
+            let [x2, _] = model.distort(xn, yn + eps);
+            let [_, y2] = model.distort(xn + eps, yn);
+
+            let num_dxd_dxn = (x1 - x0) / eps;
+            let num_dxd_dyn = (x2 - x0) / eps;
+            let num_dyd_dxn = (y2 - y0) / eps;
+            let num_dyd_dyn = (y1 - y0) / eps;
+
+            assert!(
+                (jac[0][0] - num_dxd_dxn).abs() < 1e-5,
+                "∂xd/∂xn: analytic={} numeric={num_dxd_dxn}",
+                jac[0][0]
+            );
+            assert!(
+                (jac[0][1] - num_dxd_dyn).abs() < 1e-5,
+                "∂xd/∂yn: analytic={} numeric={num_dxd_dyn}",
+                jac[0][1]
+            );
+            assert!(
+                (jac[1][0] - num_dyd_dxn).abs() < 1e-5,
+                "∂yd/∂xn: analytic={} numeric={num_dyd_dxn}",
+                jac[1][0]
+            );
+            assert!(
+                (jac[1][1] - num_dyd_dyn).abs() < 1e-5,
+                "∂yd/∂yn: analytic={} numeric={num_dyd_dyn}",
+                jac[1][1]
+            );
         }
-    }
 
-    #[test]
-    fn kannala_brandt_roundtrip() {
-        let m = KannalaBrandtModel {
-            k1: 0.1,
-            k2: -0.01,
-            k3: 0.001,
-            k4: 0.0,
-        };
-        for &(xn, yn) in &[(0.1, 0.2), (-0.3, 0.15), (0.5, 0.5)] {
-            check_roundtrip(&m, xn, yn, 1e-7);
+        #[test]
+        fn brown_conrady_roundtrip() {
+            let m = BrownConradyModel {
+                k1: -0.3,
+                k2: 0.1,
+                p1: 0.001,
+                p2: -0.002,
+                k3: 0.0,
+            };
+            for &(xn, yn) in &[(0.1, 0.2), (-0.3, 0.15), (0.0, 0.4)] {
+                check_roundtrip(&m, xn, yn, 1e-7);
+            }
         }
-    }
 
-    #[test]
-    fn kannala_brandt_jacobian() {
-        let m = KannalaBrandtModel {
-            k1: 0.1,
-            k2: -0.01,
-            k3: 0.001,
-            k4: 0.0,
-        };
-        for &(xn, yn) in &[(0.1, 0.2), (-0.3, 0.15), (0.3, -0.3)] {
-            check_jacobian(&m, xn, yn);
+        #[test]
+        fn brown_conrady_jacobian() {
+            let m = BrownConradyModel {
+                k1: -0.3,
+                k2: 0.1,
+                p1: 0.001,
+                p2: -0.002,
+                k3: 0.0,
+            };
+            for &(xn, yn) in &[(0.1, 0.2), (-0.3, 0.15), (0.05, -0.05)] {
+                check_jacobian(&m, xn, yn);
+            }
         }
-    }
 
-    #[test]
-    fn brown_conrady_from_coeffs_validates_length() {
-        assert!(BrownConradyModel::from_coeffs(&[0.0; 4]).is_err());
-        assert!(BrownConradyModel::from_coeffs(&[0.0; 5]).is_ok());
-        assert!(BrownConradyModel::from_coeffs(&[0.0; 6]).is_err());
-    }
+        #[test]
+        fn kannala_brandt_roundtrip() {
+            let m = KannalaBrandtModel {
+                k1: 0.1,
+                k2: -0.01,
+                k3: 0.001,
+                k4: 0.0,
+            };
+            for &(xn, yn) in &[(0.1, 0.2), (-0.3, 0.15), (0.5, 0.5)] {
+                check_roundtrip(&m, xn, yn, 1e-7);
+            }
+        }
 
-    #[test]
-    fn kannala_brandt_from_coeffs_validates_length() {
-        assert!(KannalaBrandtModel::from_coeffs(&[0.0; 3]).is_err());
-        assert!(KannalaBrandtModel::from_coeffs(&[0.0; 4]).is_ok());
-        assert!(KannalaBrandtModel::from_coeffs(&[0.0; 5]).is_err());
+        #[test]
+        fn kannala_brandt_jacobian() {
+            let m = KannalaBrandtModel {
+                k1: 0.1,
+                k2: -0.01,
+                k3: 0.001,
+                k4: 0.0,
+            };
+            for &(xn, yn) in &[(0.1, 0.2), (-0.3, 0.15), (0.3, -0.3)] {
+                check_jacobian(&m, xn, yn);
+            }
+        }
+
+        #[test]
+        fn brown_conrady_from_coeffs_validates_length() {
+            assert!(BrownConradyModel::from_coeffs(&[0.0; 4]).is_err());
+            assert!(BrownConradyModel::from_coeffs(&[0.0; 5]).is_ok());
+            assert!(BrownConradyModel::from_coeffs(&[0.0; 6]).is_err());
+        }
+
+        #[test]
+        fn kannala_brandt_from_coeffs_validates_length() {
+            assert!(KannalaBrandtModel::from_coeffs(&[0.0; 3]).is_err());
+            assert!(KannalaBrandtModel::from_coeffs(&[0.0; 4]).is_ok());
+            assert!(KannalaBrandtModel::from_coeffs(&[0.0; 5]).is_err());
+        }
     }
 }
