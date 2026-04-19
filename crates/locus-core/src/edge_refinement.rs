@@ -824,3 +824,139 @@ fn collect_samples_strided<'a>(
     }
     samples
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::subpixel::{Line, SubpixelEdgeRenderer};
+
+    #[test]
+    fn quad_style_recovers_axis_aligned_subpixel_edge() {
+        let width = 100;
+        let height = 100;
+        let sigma = 0.6;
+        let renderer = SubpixelEdgeRenderer::new(width, height)
+            .with_intensities(0.0, 255.0)
+            .with_sigma(sigma);
+
+        for x_gt in [50.0, 50.25, 50.5, 50.75] {
+            let line_gt = Line::from_points_cw([x_gt, 10.0], [x_gt, 90.0]);
+            let data = renderer.render_edge_u8(&line_gt);
+            let img = ImageView::new(&data, width, height, width).expect("invalid image view");
+            let arena = Bump::new();
+
+            let mut fitter = ErfEdgeFitter::new(&img, [50.0, 10.0], [50.0, 90.0], true)
+                .expect("edge length too short");
+            let sample_cfg = SampleConfig::for_quad(fitter.edge_len(), 1);
+            let refine_cfg = RefineConfig::quad_style(sigma);
+            assert!(fitter.fit(&arena, &sample_cfg, &refine_cfg));
+
+            // LHN: nx = -dy/len = 0, ny = dx/len = 0 for vertical edge p1→p2.
+            // With p1=(50,10)→p2=(50,90): dy=80, dx=0 ⇒ nx=-1, ny=0.
+            let (nx, _ny, d) = fitter.line_params();
+            assert!((nx + 1.0).abs() < 1e-7, "nx = {nx}");
+            let x_recovered = d; // -x + d = 0
+            let error = (x_recovered - x_gt).abs();
+            assert!(error < 0.02, "x_gt={x_gt} recovered={x_recovered} error={error}");
+        }
+    }
+
+    #[test]
+    fn quad_style_recovers_angled_edge() {
+        let width = 120;
+        let height = 120;
+        let sigma = 0.6;
+        let renderer = SubpixelEdgeRenderer::new(width, height)
+            .with_intensities(20.0, 230.0)
+            .with_sigma(sigma);
+
+        // 30-degree edge from (40, 20) to (80, 20 + 40*tan30)
+        let angle = 30f64.to_radians();
+        let p1 = [40.0, 20.0];
+        let p2 = [80.0, 20.0 + 40.0 * angle.tan()];
+        let line_gt = Line::from_points_cw(p1, p2);
+        let data = renderer.render_edge_u8(&line_gt);
+        let img = ImageView::new(&data, width, height, width).expect("invalid image view");
+        let arena = Bump::new();
+
+        let mut fitter = ErfEdgeFitter::new(&img, p1, p2, true).expect("edge length too short");
+        let sample_cfg = SampleConfig::for_quad(fitter.edge_len(), 1);
+        let refine_cfg = RefineConfig::quad_style(sigma);
+        assert!(fitter.fit(&arena, &sample_cfg, &refine_cfg));
+
+        // The ground-truth line is `line_gt.a*x + line_gt.b*y + line_gt.c = 0` (RHN),
+        // while the fitter uses LHN — the triple is negated.
+        let (nx, ny, d) = fitter.line_params();
+        let err_a = (nx + line_gt.a).abs().min((nx - line_gt.a).abs());
+        let err_b = (ny + line_gt.b).abs().min((ny - line_gt.b).abs());
+        let err_c = (d + line_gt.c).abs().min((d - line_gt.c).abs());
+        assert!(
+            err_a < 1e-2 && err_b < 1e-2 && err_c < 5e-2,
+            "angled-edge line-param error: a={err_a} b={err_b} c={err_c}"
+        );
+    }
+
+    #[test]
+    fn decoder_style_scan_initial_d_recovers_from_perturbed_seed() {
+        let width = 120;
+        let height = 120;
+        let sigma = 0.6;
+        let x_gt = 60.25;
+
+        let renderer = SubpixelEdgeRenderer::new(width, height)
+            .with_intensities(30.0, 220.0)
+            .with_sigma(sigma);
+        let line_gt = Line::from_points_cw([x_gt, 10.0], [x_gt, 110.0]);
+        let data = renderer.render_edge_u8(&line_gt);
+        let img = ImageView::new(&data, width, height, width).expect("invalid image view");
+
+        // Seed the fitter 1.5 px off the true edge — outside the GN capture radius
+        // but within scan_initial_d's ±2.4 px search window.
+        let p1 = [61.75, 10.0];
+        let p2 = [61.75, 110.0];
+        let arena = Bump::new();
+        let mut fitter = ErfEdgeFitter::new(&img, p1, p2, false).expect("edge length too short");
+        let sample_cfg = SampleConfig::for_decoder();
+        let refine_cfg = RefineConfig::decoder_style(sigma);
+        assert!(fitter.fit(&arena, &sample_cfg, &refine_cfg));
+
+        let (nx, _ny, d) = fitter.line_params();
+        assert!((nx + 1.0).abs() < 1e-7);
+        let x_recovered = d;
+        let error = (x_recovered - x_gt).abs();
+        assert!(error < 0.05, "perturbed seed recovered={x_recovered} error={error}");
+    }
+
+    #[test]
+    fn decoder_style_early_exits_on_low_contrast() {
+        let width = 80;
+        let height = 80;
+        let sigma = 0.6;
+        let x_gt = 40.25;
+
+        // |B - A| = 3 < min_contrast (5.0) — refinement must break out early and
+        // leave the line params essentially at their seed values.
+        let renderer = SubpixelEdgeRenderer::new(width, height)
+            .with_intensities(127.0, 130.0)
+            .with_sigma(sigma);
+        let line_gt = Line::from_points_cw([x_gt, 5.0], [x_gt, 75.0]);
+        let data = renderer.render_edge_u8(&line_gt);
+        let img = ImageView::new(&data, width, height, width).expect("invalid image view");
+
+        let p1 = [40.0, 5.0];
+        let p2 = [40.0, 75.0];
+        let arena = Bump::new();
+        let mut fitter = ErfEdgeFitter::new(&img, p1, p2, false).expect("edge length too short");
+        let d_before_scan = fitter.d;
+        let sample_cfg = SampleConfig::for_decoder();
+        let refine_cfg = RefineConfig::decoder_style(sigma);
+        // `fit` may return true (samples collected) but the GN loop must bail on
+        // min_contrast — so d stays within scan_initial_d's ±2.4 px adjustment.
+        fitter.fit(&arena, &sample_cfg, &refine_cfg);
+        let (_nx, _ny, d) = fitter.line_params();
+        assert!(
+            (d - d_before_scan).abs() <= 2.5,
+            "low-contrast: d drifted beyond scan window (d_before={d_before_scan}, d_after={d})"
+        );
+    }
+}
