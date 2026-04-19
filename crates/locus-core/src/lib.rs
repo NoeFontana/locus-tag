@@ -3,6 +3,13 @@
 //! Locus is a research-oriented, memory-safe fiducial marker detector targeting low
 //! latency. It provides a performance-focused pipeline for robotics and computer vision,
 //! with strict zero-heap allocation in the detection hot-path.
+//!
+//! # Cargo features
+//!
+//! - `non_rectified` — enables [`BrownConradyModel`] and [`KannalaBrandtModel`] alongside
+//!   the corresponding [`pose::DistortionCoeffs`] variants. Off by default; opt in for
+//!   cameras with significant lens distortion (OpenCV Brown-Conrady or Kannala-Brandt
+//!   equidistant fisheye). See `README.md` for the full feature matrix.
 
 /// Batched state container for Structure of Arrays (SoA) layout.
 pub(crate) mod batch;

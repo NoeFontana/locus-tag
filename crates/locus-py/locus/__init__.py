@@ -27,12 +27,54 @@ from .locus import (
 )
 from .locus import BoardEstimator as _BoardEstimator
 from .locus import CharucoRefiner as _CharucoRefiner
+from .locus import DistortionModel as _RustDistortionModel
 from .locus import (
     PyPose as Pose,
 )
 from .locus import (
     create_detector as _create_detector,
 )
+
+HAS_NON_RECTIFIED = hasattr(_RustDistortionModel, "BrownConrady")
+"""True when this wheel was built with the `non_rectified` Cargo feature."""
+
+
+class LocusFeatureError(RuntimeError):
+    """Raised when an operation requires a Cargo feature this wheel was not built with."""
+
+
+_DISTORTION_REMEDIATION = (
+    "Distortion models require the `non_rectified` Cargo feature, which is not "
+    "compiled into this wheel. Reinstall from source:\n"
+    '    MATURIN_PEP517_ARGS="--features locus-py/non_rectified" \\\n'
+    "        pip install --no-binary=locus-tag --force-reinstall locus-tag\n"
+    "See the 'Install with distortion support' how-to for details."
+)
+
+
+if HAS_NON_RECTIFIED:
+    DistortionModel = _RustDistortionModel
+else:
+
+    class _LeanDistortionModelMeta(type):
+        _STRIPPED = ("BrownConrady", "KannalaBrandt")
+
+        def __getattr__(cls, name: str) -> Any:
+            if name in cls._STRIPPED:
+                raise LocusFeatureError(
+                    f"DistortionModel.{name} is unavailable.\n\n{_DISTORTION_REMEDIATION}"
+                )
+            raise AttributeError(name)
+
+    class DistortionModel(metaclass=_LeanDistortionModelMeta):  # type: ignore[no-redef]
+        """Lean-build placeholder for the compiled `DistortionModel` enum.
+
+        Exposes only the variants compiled into this wheel. Accessing a variant
+        stripped by the lean build (`BrownConrady`, `KannalaBrandt`) raises
+        `LocusFeatureError` with a source-install recipe.
+        """
+
+        Pinhole = _RustDistortionModel.Pinhole
 
 
 class BoardEstimator:
@@ -304,6 +346,7 @@ class Detector:
 
 
 __all__ = [
+    "HAS_NON_RECTIFIED",
     "AprilGrid",
     "BoardEstimateResult",
     "BoardEstimator",
@@ -321,9 +364,11 @@ __all__ = [
     "DetectorBuilder",
     "DetectorConfig",
     "DetectorPreset",
+    "DistortionModel",
+    "LocusFeatureError",
     "PipelineTelemetryResult",
-    "PoseEstimationMode",
     "Pose",
+    "PoseEstimationMode",
     "QuadExtractionMode",
     "SegmentationConnectivity",
     "TagFamily",

@@ -44,12 +44,34 @@ class DetectorPreset(enum.IntEnum):
     Grid = 1
     Standard = 2
 
+class DistortionModel(enum.IntEnum):
+    """Lens distortion model tag for `CameraIntrinsics`.
+
+    `BrownConrady` and `KannalaBrandt` are only available when the `non_rectified`
+    Cargo feature is compiled in. Accessing them on a lean wheel raises
+    `locus.LocusFeatureError` at runtime — see `locus.HAS_NON_RECTIFIED`.
+    """
+
+    Pinhole = 0
+    BrownConrady = 1
+    KannalaBrandt = 2
+
 # ---------------------------------------------------------------------------
 # Config / misc structs
 # ---------------------------------------------------------------------------
 
 class CameraIntrinsics:
-    def __init__(self, fx: float, fy: float, cx: float, cy: float) -> None: ...
+    def __init__(
+        self,
+        fx: float,
+        fy: float,
+        cx: float,
+        cy: float,
+        distortion_model: DistortionModel = ...,
+        dist_coeffs: list[float] | None = ...,
+    ) -> None: ...
+    distortion_model: DistortionModel
+    dist_coeffs: list[float]
     @property
     def fx(self) -> float: ...
     @property

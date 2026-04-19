@@ -19,6 +19,22 @@ Add this to your `Cargo.toml`:
 locus-core = "0.2.5"
 ```
 
+## Cargo features
+
+| Feature | Default | Description |
+| :--- | :---: | :--- |
+| `non_rectified` | off | Enables the `BrownConradyModel` and `KannalaBrandtModel` camera types and the corresponding `DistortionCoeffs` variants. Required for detecting markers in imagery with significant lens distortion. |
+| `tracy` | off | Enables the [Tracy](https://github.com/wolfpld/tracy) profiler backend via the `tracing-tracy` bridge. |
+| `rerun` | off | Enables [Rerun](https://rerun.io) SDK logging of intermediate pipeline artifacts for visual debugging. |
+| `bench-internals` | off | Exposes internal modules (`bench_api`) for benchmarking and integration testing. Do not enable in production. |
+
+Opt in with:
+
+```toml
+[dependencies]
+locus-core = { version = "0.3", features = ["non_rectified"] }
+```
+
 ### Basic Example
 
 ```rust
