@@ -506,12 +506,14 @@ def bench_real(
 
                 start = time.perf_counter()
 
-                batch = None
+                batch: Any = None
                 detections = None
                 if isinstance(wrapper, LocusWrapper):
                     if is_board and refiner:
+                        assert ds.intrinsics is not None
                         batch = refiner.estimate(wrapper.detector, img, intrinsics=ds.intrinsics)
                     else:
+                        assert ds.intrinsics is not None
                         batch = wrapper.detector.detect(
                             img,
                             intrinsics=ds.intrinsics,
@@ -529,32 +531,30 @@ def bench_real(
                 if is_board:
                     board_gt = ds.gt_map[img_name]["board_pose"]
                     stats["gt"] += 1
-                    if (
-                        batch is not None
-                        and getattr(batch, "board_pose", None) is not None
-                        and board_gt is not None
-                    ):
+                    board_pose = getattr(batch, "board_pose", None)
+                    if batch is not None and board_pose is not None and board_gt is not None:
                         stats["det"] += 1
-                        stats["pose_err_sum"] += np.linalg.norm(batch.board_pose[:3] - board_gt[:3])
+                        stats["pose_err_sum"] += np.linalg.norm(board_pose[:3] - board_gt[:3])
                 else:
                     gt_tags = ds.gt_map[img_name]["tags"]
                     stats["gt"] += len(gt_tags)
 
                     matched_tids: set[int] = set()
                     if batch is not None:
+                        batch_poses = getattr(batch, "poses", None)
                         for i in range(len(batch.ids)):
                             tid = int(batch.ids[i])
                             if tid in gt_tags and tid not in matched_tids:
                                 matched_tids.add(tid)
                                 stats["det"] += 1
                                 gt_tag = gt_tags[tid]
-                                if "pose" in gt_tag and batch.poses is not None:
+                                if "pose" in gt_tag and batch_poses is not None:
                                     # Align center-origin GT to top-left Locus convention
                                     t_gt_tl = Metrics.align_pose(
                                         gt_tag["pose"][:3], gt_tag["pose"][3:], eval_tag_size
                                     )
                                     stats["pose_err_sum"] += np.linalg.norm(
-                                        batch.poses[i, :3] - t_gt_tl
+                                        batch_poses[i, :3] - t_gt_tl
                                     )
                     elif detections is not None:
                         for det in detections:
@@ -606,7 +606,7 @@ def bench_real(
                     img_names = img_names[:limit]
 
                 for wrapper in wrappers:
-                    stats: dict[str, Any] = {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []}
+                    stats = {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []}
 
                     for img_name in tqdm(img_names, desc=f"{wrapper.name:<10}"):
                         img_path = img_dir / img_name
