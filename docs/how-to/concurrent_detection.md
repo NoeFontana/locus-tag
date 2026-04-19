@@ -1,6 +1,9 @@
 # How to Run Concurrent Detection
 
-`Detector` supports two modes controlled by `max_concurrent_frames` at construction:
+`Detector` supports two modes controlled by `max_concurrent_frames` at construction.
+
+!!! note "API Constraint"
+    Currently, `max_concurrent_frames` is only exposed through the `DetectorBuilder` API. Using the standard `locus.Detector()` constructor will default to a single-frame pool.
 
 | `max_concurrent_frames` | Behaviour |
 | :--- | :--- |
@@ -14,6 +17,7 @@
 ```python
 import locus
 
+# DetectorBuilder is required to set max_concurrent_frames
 detector = (
     locus.DetectorBuilder()
     .with_family(locus.TagFamily.AprilTag36h11)

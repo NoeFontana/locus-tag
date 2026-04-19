@@ -4,7 +4,21 @@ This page provides detailed information about the Locus Python API.
 
 ## Core Interface
 
-The primary entry point for single-threaded use is the `Detector` class.
+The primary entry point is the `Detector` class. It can be initialized with various configuration parameters passed as keyword arguments.
+
+```python
+import locus
+
+# Initialize with keyword arguments
+detector = locus.Detector(
+    families=[locus.TagFamily.AprilTag36h11, locus.TagFamily.ArUco4x4_50],
+    decimation=2,
+    threads=4,
+    decode_mode=locus.DecodeMode.Soft,
+)
+
+batch = detector.detect(img)
+```
 
 ::: locus.Detector
     options:
@@ -15,13 +29,13 @@ The primary entry point for single-threaded use is the `Detector` class.
 
 ## Concurrent Detection
 
-`Detector` supports concurrent multi-frame processing via `detect_concurrent`. Set `max_concurrent_frames` at construction time to control the internal pool size.
+`Detector` supports concurrent multi-frame processing via `detect_concurrent`. To configure the internal pool size (`max_concurrent_frames`), you must use the `DetectorBuilder`.
 
 See the [Concurrent Detection how-to](../how-to/concurrent_detection.md) for full usage examples.
 
 ### `DetectorBuilder`
 
-The fluent builder constructs `Detector` instances.
+The fluent builder is used to construct `Detector` instances with advanced settings not yet exposed in the primary `Detector` constructor, specifically `max_concurrent_frames`.
 
 ```python
 import locus
@@ -30,7 +44,7 @@ detector = (
     locus.DetectorBuilder()
     .with_family(locus.TagFamily.AprilTag36h11)
     .with_threads(4)
-    .with_max_concurrent_frames(8)
+    .with_max_concurrent_frames(8) # Enable parallel batch processing
     .build()
 )
 ```
