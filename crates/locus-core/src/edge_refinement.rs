@@ -40,6 +40,33 @@ impl Default for SampleConfig {
     }
 }
 
+impl SampleConfig {
+    /// Sampling config mirroring the legacy quad-extraction path:
+    /// widen the window under decimation, stride through very long edges,
+    /// and permit a wider parametric range to preserve the legacy bbox-only
+    /// inclusion semantics on short edges.
+    #[must_use]
+    pub fn for_quad(edge_len: f64, decimation: usize) -> Self {
+        let window = if decimation > 1 {
+            decimation as f64 + 1.0
+        } else {
+            2.5
+        };
+        let stride = if edge_len > 100.0 { 2 } else { 1 };
+        Self {
+            window,
+            stride,
+            t_range: (-0.3, 1.3),
+        }
+    }
+
+    /// Sampling config mirroring the legacy decoder ERF path.
+    #[must_use]
+    pub fn for_decoder() -> Self {
+        Self::default()
+    }
+}
+
 /// Configuration for the Gauss-Newton refinement loop.
 #[derive(Clone, Debug)]
 pub(crate) struct RefineConfig {
@@ -50,6 +77,10 @@ pub(crate) struct RefineConfig {
     /// If true, re-estimate A/B intensities each iteration (decoder style).
     /// If false, estimate A/B once before the GN loop (quad style).
     pub re_estimate_ab: bool,
+    /// If true, pre-scan initial `d` by maximizing gradient alignment before GN.
+    /// Decoder-style priors warrant this; quad-style priors already sit within the
+    /// 2 px sanity gate and scanning risks pushing refined corners past the gate.
+    pub scan_initial: bool,
     /// Convergence threshold: stop if |step| < this value.
     pub convergence_threshold: f64,
     /// Singularity threshold for J^T J.
@@ -62,13 +93,14 @@ pub(crate) struct RefineConfig {
 
 impl RefineConfig {
     /// Configuration matching the original `quad.rs` behavior:
-    /// one-shot A/B estimation, no minimum contrast check.
+    /// one-shot A/B estimation, no minimum contrast check, no initial `d` scan.
     #[must_use]
     pub fn quad_style(sigma: f64) -> Self {
         Self {
             sigma,
             max_iterations: 15,
             re_estimate_ab: false,
+            scan_initial: false,
             convergence_threshold: 1e-4,
             singular_threshold: 1e-10,
             step_clamp: 0.5,
@@ -77,13 +109,14 @@ impl RefineConfig {
     }
 
     /// Configuration matching the original `decoder.rs` behavior:
-    /// per-iteration A/B refinement, early exit on low contrast.
+    /// per-iteration A/B refinement, pre-refine scan, early exit on low contrast.
     #[must_use]
     pub fn decoder_style(sigma: f64) -> Self {
         Self {
             sigma,
             max_iterations: 15,
             re_estimate_ab: true,
+            scan_initial: true,
             convergence_threshold: 1e-4,
             singular_threshold: 1e-6,
             step_clamp: 0.5,
@@ -304,6 +337,27 @@ impl<'a> ErfEdgeFitter<'a> {
                 break;
             }
         }
+    }
+
+    /// End-to-end fit: optional initial-`d` scan, sample collection, and GN refinement.
+    ///
+    /// Returns `true` if samples were sufficient to run the GN loop. When `false`,
+    /// `(nx, ny, d)` retain their values from `new(...)` (and, if applicable, the scan).
+    pub fn fit(
+        &mut self,
+        arena: &'a Bump,
+        sample_cfg: &SampleConfig,
+        refine_cfg: &RefineConfig,
+    ) -> bool {
+        if refine_cfg.scan_initial {
+            self.scan_initial_d();
+        }
+        let samples = self.collect_samples(arena, sample_cfg);
+        if samples.len() < 10 {
+            return false;
+        }
+        self.refine(&samples, refine_cfg);
+        true
     }
 
     /// Get the result as `(nx, ny, d)`.
