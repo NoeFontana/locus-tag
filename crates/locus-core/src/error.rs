@@ -45,6 +45,17 @@ pub enum ConfigError {
     /// causing a 10–22% precision collapse compared to Hard decoding.
     #[error("EdLines + Soft decoding are incompatible: use DecodeMode::Hard with EdLines")]
     EdLinesIncompatibleWithSoftDecode,
+    /// EdLines is geometrically incompatible with distorted cameras.
+    ///
+    /// EdLines' Huber IRLS line fit, micro-ray parabola, and GN refinement all
+    /// assume Euclidean pixel geometry. A Brown-Conrady or Kannala-Brandt
+    /// intrinsic bends marker edges into curves, invalidating that assumption.
+    /// Use `QuadExtractionMode::ContourRdp` when passing distortion coefficients.
+    #[error(
+        "EdLines is geometrically incompatible with distorted cameras (BrownConrady / \
+         KannalaBrandt): use QuadExtractionMode::ContourRdp"
+    )]
+    EdLinesUnsupportedWithDistortion,
 }
 
 /// Errors that can occur during tag detection.
