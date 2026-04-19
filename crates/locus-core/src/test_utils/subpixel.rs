@@ -122,9 +122,27 @@ impl SubpixelEdgeRenderer {
 mod tests {
     use super::*;
     use crate::Point;
+    use crate::edge_refinement::{ErfEdgeFitter, RefineConfig, SampleConfig};
     use crate::image::ImageView;
-    use crate::quad::refine_edge_intensity;
     use bumpalo::Bump;
+
+    /// Quad-style fit helper: mirrors the semantics that `quad.rs::refine_corner`
+    /// relies on. Returns the fitted line `(nx, ny, d)` under the LHN convention
+    /// of `ErfEdgeFitter` (opposite sign to `Line::from_points_cw`).
+    fn fit_quad_style(
+        arena: &Bump,
+        img: &ImageView,
+        p1: Point,
+        p2: Point,
+        sigma: f64,
+        decimation: usize,
+    ) -> Option<(f64, f64, f64)> {
+        let mut fitter = ErfEdgeFitter::new(img, [p1.x, p1.y], [p2.x, p2.y], true)?;
+        let sample_cfg = SampleConfig::for_quad(fitter.edge_len(), decimation);
+        let refine_cfg = RefineConfig::quad_style(sigma);
+        fitter.fit(arena, &sample_cfg, &refine_cfg);
+        Some(fitter.line_params())
+    }
 
     #[test]
     fn test_line_distance() {
@@ -203,17 +221,15 @@ mod tests {
             let p1 = Point { x: 50.0, y: 10.0 };
             let p2 = Point { x: 50.0, y: 90.0 };
 
-            let result = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1);
-            assert!(
-                result.is_some(),
-                "refine_edge_intensity failed for x_gt={x_gt}"
-            );
+            let result = fit_quad_style(&arena, &img, p1, p2, sigma, 1);
+            assert!(result.is_some(), "ErfEdgeFitter returned None for x_gt={x_gt}");
 
             if let Some((nx, _ny, d)) = result {
                 // Recovered edge: nx*x + ny*y + d = 0
-                // For vertical edge, nx should be 1.0
-                assert!((nx - 1.0).abs() < 1e-7);
-                let x_recovered = -d;
+                // LHN for CW edge p1→p2 points to x < x_gt, so nx = -1.0.
+                assert!((nx + 1.0).abs() < 1e-7);
+                // With nx = -1, ny = 0: -x + d = 0 ⇒ x = d.
+                let x_recovered = d;
                 let error = (x_recovered - x_gt).abs();
                 println!("x_gt={x_gt}, recovered={x_recovered}, error={error}");
 
@@ -253,17 +269,14 @@ mod tests {
             let p1 = Point { x: p1_x, y: p1_y };
             let p2 = Point { x: p2_x, y: p2_y };
 
-            let result = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1);
-            assert!(
-                result.is_some(),
-                "refine_edge_intensity failed for angle {angle_deg}"
-            );
+            let result = fit_quad_style(&arena, &img, p1, p2, sigma, 1);
+            assert!(result.is_some(), "ErfEdgeFitter returned None for angle {angle_deg}");
 
             if let Some((nx, ny, d)) = result {
-                // Ground truth line is nx_gt*x + ny_gt*y + d_gt = 0
-                // Our recovered line parameters are (nx, ny, d)
-                let error_n = (nx - line_gt.a).abs() + (ny - line_gt.b).abs();
-                let error_d = (d - line_gt.c).abs();
+                // Ground truth uses RHN; ErfEdgeFitter uses LHN, so compare against
+                // negated ground-truth line parameters.
+                let error_n = (nx + line_gt.a).abs() + (ny + line_gt.b).abs();
+                let error_d = (d + line_gt.c).abs();
 
                 println!("Angle {angle_deg}deg: error_n={error_n:.6}, error_d={error_d:.6}");
 
@@ -302,14 +315,12 @@ mod tests {
             let p1 = Point { x: p1_x, y: p1_y };
             let p2 = Point { x: p2_x, y: p2_y };
 
-            let result = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1);
-            assert!(
-                result.is_some(),
-                "refine_edge_intensity failed for length {len}"
-            );
+            let result = fit_quad_style(&arena, &img, p1, p2, sigma, 1);
+            assert!(result.is_some(), "ErfEdgeFitter returned None for length {len}");
 
             if let Some((_nx, _ny, d)) = result {
-                let x_recovered = -d;
+                // LHN vertical edge: x_recovered = d.
+                let x_recovered = d;
                 let error = (x_recovered - p1_x).abs();
                 println!("Length {len}: error={error:.6}");
                 assert!(error < 0.01);
@@ -344,16 +355,16 @@ mod tests {
         let p2_dec = Point { x: 50.0, y: 100.0 };
 
         // Refine on the decimated image
-        let result = refine_edge_intensity(&arena, &img_dec, p1_dec, p2_dec, sigma, decimation);
+        let result = fit_quad_style(&arena, &img_dec, p1_dec, p2_dec, sigma, decimation);
         assert!(
             result.is_some(),
-            "refine_edge_intensity failed with decimation upscaling"
+            "fit_quad_style failed with decimation upscaling"
         );
 
         if let Some((_nx, _ny, d)) = result {
             // Mapping back to full res should be x_full = (x_dec - 0.5) * (decimation as f64) + 0.5
             // because SubpixelEdgeRenderer::render_edge uses subsampling (pick top-left).
-            let x_dec_recovered = -d;
+            let x_dec_recovered = d;
             let x_full_recovered = (x_dec_recovered - 0.5) * (decimation as f64) + 0.5;
 
             let error = (x_full_recovered - x_gt).abs();
@@ -392,8 +403,8 @@ mod tests {
         let p1 = Point { x: 30.0, y: 0.0 };
         let p2 = Point { x: 30.0, y: 60.0 };
 
-        if let Some((_nx, _ny, d)) = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1) {
-            let error = (-d - x_gt).abs();
+        if let Some((_nx, _ny, d)) = fit_quad_style(&arena, &img, p1, p2, sigma, 1) {
+            let error = (d - x_gt).abs();
             println!("Noisy recovery error: {error:.4}");
             assert!(error < 0.05);
         }
@@ -417,8 +428,8 @@ mod tests {
         let p1 = Point { x: 30.0, y: 0.0 };
         let p2 = Point { x: 30.0, y: 60.0 };
 
-        if let Some((_nx, _ny, d)) = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1) {
-            let error = (-d - x_gt).abs();
+        if let Some((_nx, _ny, d)) = fit_quad_style(&arena, &img, p1, p2, sigma, 1) {
+            let error = (d - x_gt).abs();
             println!("Low contrast recovery error: {error:.4}");
             assert!(error < 0.05);
         }
@@ -442,8 +453,8 @@ mod tests {
         let p1 = Point { x: 30.0, y: 0.0 };
         let p2 = Point { x: 30.0, y: 60.0 };
 
-        if let Some((_nx, _ny, d)) = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1) {
-            let error = (-d - x_gt).abs();
+        if let Some((_nx, _ny, d)) = fit_quad_style(&arena, &img, p1, p2, sigma, 1) {
+            let error = (d - x_gt).abs();
             println!("Clipped recovery error: {error:.4}");
             assert!(error < 0.1);
         }
@@ -469,8 +480,8 @@ mod tests {
         let p1 = Point { x: 31.75, y: 0.0 };
         let p2 = Point { x: 31.75, y: 60.0 };
 
-        if let Some((_nx, _ny, d)) = refine_edge_intensity(&arena, &img, p1, p2, sigma, 1) {
-            let error = (-d - x_gt).abs();
+        if let Some((_nx, _ny, d)) = fit_quad_style(&arena, &img, p1, p2, sigma, 1) {
+            let error = (d - x_gt).abs();
             println!("Off-edge seed recovery error: {error:.4}");
             assert!(error < 0.1);
         }
