@@ -90,19 +90,14 @@ classDiagram
 
 ## Design Principles
 
-1.  **Encapsulated Facade**: The `Detector` struct provides a single, robust entry point for single-threaded use that owns all complex memory lifetimes (arenas, SoA batches), removing the cognitive burden of resource management from the user.
-2.  **Zero-Copy Integration**: Utilizes the Python Buffer Protocol to access NumPy arrays directly. Python results are returned as a vectorized `DetectionBatch` dataclass containing zero-copy NumPy views of the internal SoA layout, maximizing throughput for downstream consumers.
-3.  **Thread Concurrency (GIL-Free)**: `Detector` exposes two orthogonal concurrency axes: `threads` controls intra-frame Rayon parallelism; `max_concurrent_frames` sizes an internal lock-free `crossbeam::ArrayQueue` pool of `FrameContext` objects for inter-frame parallelism via `detect_concurrent`. The GIL is released for the entire compute section of both `detect` and `detect_concurrent`.
-4.  **Arena Memory**: Internal per-frame scratchpad (`bumpalo`) eliminates `malloc`/`free` overhead in the hot path. See [Memory Model](memory_model.md) for details.
-5.  **Cache Locality**: Algorithms (thresholding, CCL) process data in linear, cache-friendly passes.
-6.  **Runtime SIMD Dispatch**: Uses `multiversion` to target AVX2, AVX-512, or NEON based on host CPU capabilities.
-7.  **Structure of Arrays (SoA) Layout**: Built around the `DetectionBatch`, which eliminates L1 cache misses during math-heavy passes and ensures SIMD-alignment for all mathematical operations.
-8.  **Semantic Configuration**: Employs a `DetectorBuilder` to provide a human-friendly API for pipeline tuning, abstracting 20+ fine-grained parameters into high-level semantic methods.
-9.  **Fast-Path Funnel**: Implements a multi-stage rejection gate and sampling routine. It uses an O(1) contrast gate to reject background artifacts early, followed by SIMD-accelerated coordinate generation via Digital Differential Analyzer (DDA) and vectorized bilinear interpolation.
-10. **Fast-Math Sampling**: Rewrites homography projection and bilinear interpolation using hardware reciprocal approximation (`rcp_nr_v8`) and vectorized FMA instructions to minimize latency.
-11. **Hybrid ROI Caching**: Minimizes L1 cache misses by copying tag candidates into contiguous stack (small tags) or arena (large tags) buffers before sampling.
-12. **Hybrid Parallelism**: Scales via `rayon` for data-parallel tasks while maintaining sequential cache-coherence for state-heavy stages.
-13. **Typed Board Topology**: Board geometry is expressed as typed, immutable structs (`AprilGridTopology`, `CharucoTopology`) wrapped in `Arc` for zero-clone sharing across frames and threads. Constructor validation fails fast if the marker count exceeds the target dictionary size.
+1.  **Direct Memory Access**: Locus uses the Python Buffer Protocol to read NumPy arrays directly, avoiding copies at the FFI boundary.
+2.  **GIL-Free Pipeline**: The Python Global Interpreter Lock is released for the entire detection pass, enabling true multi-threaded perception in Python.
+3.  **Arena Allocation**: A per-frame `bumpalo` arena handles all ephemeral scratch memory, resulting in zero `malloc`/`free` calls in the detection hot-path.
+4.  **Structure of Arrays (SoA)**: Internal state is stored in parallel arrays (`DetectionBatch`) to maximize L1 cache hits and enable SIMD-aligned loads.
+5.  **Runtime SIMD Dispatch**: Mathematical kernels (bilinear sampling, DDA, thresholding) are specialized for AVX2, AVX-512, or NEON at runtime.
+6.  **Fast-Path Rejection**: A multi-stage funnel rejects 70-80% of false-positive candidates using O(1) photometric gates before expensive bit-sampling.
+7.  **Immutable Topology**: Board geometries (AprilGrid, ChAruco) are immutable structs shared across threads via `Arc`, with strict validation at construction.
+8.  **Zero-Overhead Telemetry**: Performance tracing is compiled out in release builds unless explicitly requested via `debug_telemetry=True`.
 
 ## Observability & Debugging
 
@@ -143,7 +138,7 @@ The `TagDecoder` trait serves as the extension point. To add a new family (e.g.,
 
 1.  **Implement `TagDecoder`**: Define the grid dimension and bit extraction logic.
 2.  **Define `TagDictionary`**: Provide the hamming distance lookup table.
-3.  **Register**: Pass the new decoder to the detector (typically via `DetectorBuilder`).
+3.  **Register**: Pass the new decoder to the detector (typically via the Rust `DetectorBuilder`).
 
 ```rust
 struct MyCustomDecoder;
@@ -155,7 +150,7 @@ impl TagDecoder for MyCustomDecoder {
     // ... implementation ...
 }
 
-// Usage
+// Usage (Rust)
 let mut detector = DetectorBuilder::new()
     .with_family(TagFamily::AprilTag36h11)
     .build();

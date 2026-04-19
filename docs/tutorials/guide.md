@@ -11,11 +11,11 @@ import locus
 
 detector = locus.Detector(
     threshold_tile_size=16, # Larger tiles are faster (8-16 is typical)
+    decimation=2,           # Process at half resolution (4x speed boost)
 )
 
-# Use decimation=2 to process at half resolution (4x speed boost)
 # Note: Use decimation=1 if tags are small (< 20 pixels)
-tags = detector.detect(img, decimation=2)
+tags = detector.detect(img)
 
 print(f"Detected {len(tags)} tags")
 ```
@@ -31,11 +31,10 @@ For challenging conditions where tags are tiny, blurry, or noisy, Locus supports
 
 ```python
 # Enable Soft-Decision mode
-config = locus.DetectorConfig(
+detector = locus.Detector(
     decode_mode=locus.DecodeMode.Soft,
     decoder_min_contrast=10.0 # Lower threshold to capture faint tags
 )
-detector = locus.Detector(config=config)
 
 tags = detector.detect(img)
 ```
@@ -53,7 +52,7 @@ Locus includes pre-configured profiles for specific use cases.
 Used for calibration patterns or densely packed tags where black squares touch. This profile uses 4-way connectivity to prevent component merging.
 
 ```python
-detector = locus.Detector.checkerboard()
+detector = locus.Detector(preset=locus.DetectorPreset.Grid)
 ```
 
 ### Targeted Families
@@ -68,15 +67,14 @@ detector.set_families([
 
 ## Precise Configuration
 
-The `DetectorConfig` class allows fine-tuning every stage of the pipeline:
+The `Detector` class allows fine-tuning every stage of the pipeline via keyword arguments:
 
 ```python
-config = locus.DetectorConfig(
+detector = locus.Detector(
     quad_min_area=16,           # Filter small components early
     subpixel_refinement_sigma=0.8, # Gaussian kernel for corner refinement
     decoder_min_contrast=10.0      # Sensitivity to bit transitions
 )
-detector = locus.Detector(config=config)
 ```
 
 ## Pose Estimation
