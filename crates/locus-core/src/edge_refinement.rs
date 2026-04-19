@@ -300,14 +300,14 @@ impl<'a> ErfEdgeFitter<'a> {
         }
 
         for _ in 0..config.max_iterations {
-            // Per-iteration A/B refinement (decoder style)
-            if config.re_estimate_ab {
-                let (new_a, new_b) =
-                    estimate_ab_per_iter(self.img, samples, self.nx, self.ny, self.d);
-                if new_a.is_finite() && new_b.is_finite() {
-                    a = new_a;
-                    b = new_b;
-                }
+            // Per-iteration A/B refinement (decoder style).
+            // Preserve previous (a, b) on zero-weight iterations, matching legacy.
+            if config.re_estimate_ab
+                && let Some((new_a, new_b)) =
+                    estimate_ab_per_iter(self.img, samples, self.nx, self.ny, self.d)
+            {
+                a = new_a;
+                b = new_b;
             }
 
             if config.min_contrast > 0.0 && (b - a).abs() < config.min_contrast {
@@ -422,14 +422,16 @@ fn estimate_ab_oneshot(samples: &[(f64, f64, f64)], nx: f64, ny: f64, d: f64) ->
 /// Per-iteration A/B estimation using bilinear sampling (decoder-style).
 ///
 /// Re-reads intensities via bilinear interpolation each iteration to track
-/// the line as `d` evolves.
+/// the line as `d` evolves. Returns `None` when either side lacks weight —
+/// callers are expected to keep the previous iteration's estimate in that
+/// case, matching the legacy decoder behavior.
 fn estimate_ab_per_iter(
     img: &ImageView,
     samples: &[(f64, f64, f64)],
     nx: f64,
     ny: f64,
     d: f64,
-) -> (f64, f64) {
+) -> Option<(f64, f64)> {
     let mut dark_sum = 0.0;
     let mut dark_weight = 0.0;
     let mut light_sum = 0.0;
@@ -449,18 +451,11 @@ fn estimate_ab_per_iter(
         }
     }
 
-    let a = if dark_weight > 0.0 {
-        dark_sum / dark_weight
-    } else {
-        128.0
-    };
-    let b = if light_weight > 0.0 {
-        light_sum / light_weight
-    } else {
-        128.0
-    };
+    if dark_weight <= 0.0 || light_weight <= 0.0 {
+        return None;
+    }
 
-    (a, b)
+    Some((dark_sum / dark_weight, light_sum / light_weight))
 }
 
 // ── SIMD-Accelerated Gauss-Newton Accumulation ───────────────────────────────
