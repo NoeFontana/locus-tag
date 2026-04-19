@@ -12,8 +12,8 @@
 use bumpalo::Bump;
 use divan::{Bencher, black_box};
 use locus_core::ImageView;
-use locus_core::bench_api::{ErfEdgeFitter, RefineConfig, SampleConfig};
 use locus_core::bench_api::subpixel::{Line, SubpixelEdgeRenderer};
+use locus_core::bench_api::{ErfEdgeFitter, RefineConfig, SampleConfig};
 
 fn main() {
     divan::Divan::from_args().threads([1]).run_benches();

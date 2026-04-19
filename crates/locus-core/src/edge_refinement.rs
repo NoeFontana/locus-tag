@@ -826,6 +826,7 @@ fn collect_samples_strided<'a>(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::test_utils::subpixel::{Line, SubpixelEdgeRenderer};
@@ -857,7 +858,10 @@ mod tests {
             assert!((nx + 1.0).abs() < 1e-7, "nx = {nx}");
             let x_recovered = d; // -x + d = 0
             let error = (x_recovered - x_gt).abs();
-            assert!(error < 0.02, "x_gt={x_gt} recovered={x_recovered} error={error}");
+            assert!(
+                error < 0.02,
+                "x_gt={x_gt} recovered={x_recovered} error={error}"
+            );
         }
     }
 
@@ -924,7 +928,10 @@ mod tests {
         assert!((nx + 1.0).abs() < 1e-7);
         let x_recovered = d;
         let error = (x_recovered - x_gt).abs();
-        assert!(error < 0.05, "perturbed seed recovered={x_recovered} error={error}");
+        assert!(
+            error < 0.05,
+            "perturbed seed recovered={x_recovered} error={error}"
+        );
     }
 
     #[test]

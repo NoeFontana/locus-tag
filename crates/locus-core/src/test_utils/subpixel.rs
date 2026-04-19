@@ -222,7 +222,10 @@ mod tests {
             let p2 = Point { x: 50.0, y: 90.0 };
 
             let result = fit_quad_style(&arena, &img, p1, p2, sigma, 1);
-            assert!(result.is_some(), "ErfEdgeFitter returned None for x_gt={x_gt}");
+            assert!(
+                result.is_some(),
+                "ErfEdgeFitter returned None for x_gt={x_gt}"
+            );
 
             if let Some((nx, _ny, d)) = result {
                 // Recovered edge: nx*x + ny*y + d = 0
@@ -270,7 +273,10 @@ mod tests {
             let p2 = Point { x: p2_x, y: p2_y };
 
             let result = fit_quad_style(&arena, &img, p1, p2, sigma, 1);
-            assert!(result.is_some(), "ErfEdgeFitter returned None for angle {angle_deg}");
+            assert!(
+                result.is_some(),
+                "ErfEdgeFitter returned None for angle {angle_deg}"
+            );
 
             if let Some((nx, ny, d)) = result {
                 // Ground truth uses RHN; ErfEdgeFitter uses LHN, so compare against
@@ -316,7 +322,10 @@ mod tests {
             let p2 = Point { x: p2_x, y: p2_y };
 
             let result = fit_quad_style(&arena, &img, p1, p2, sigma, 1);
-            assert!(result.is_some(), "ErfEdgeFitter returned None for length {len}");
+            assert!(
+                result.is_some(),
+                "ErfEdgeFitter returned None for length {len}"
+            );
 
             if let Some((_nx, _ny, d)) = result {
                 // LHN vertical edge: x_recovered = d.

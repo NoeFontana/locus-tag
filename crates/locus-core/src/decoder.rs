@@ -310,11 +310,11 @@ pub(crate) fn refine_corners_erf(
         let p1 = corners[i];
         let p2 = corners[next];
 
-        if let Some(mut fitter) = ErfEdgeFitter::new(img, p1, p2, false) {
-            if fitter.fit(arena, &sample_cfg, &refine_cfg) {
-                lines[i] = fitter.line_params();
-                line_valid[i] = true;
-            }
+        if let Some(mut fitter) = ErfEdgeFitter::new(img, p1, p2, false)
+            && fitter.fit(arena, &sample_cfg, &refine_cfg)
+        {
+            lines[i] = fitter.line_params();
+            line_valid[i] = true;
         }
     }
 
