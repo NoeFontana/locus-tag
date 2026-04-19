@@ -4,15 +4,15 @@ expression: report
 ---
 summary:
   dataset_size: 45
-  mean_recall: 0.8222222222222222
+  mean_recall: 0.8
   mean_precision: 1
-  mean_rmse: 0.5058
-  mean_reprojection_rmse: 0.5038
+  mean_rmse: 0.493
+  mean_reprojection_rmse: 0.4911
   p50_translation_error: 0.0099
-  p90_translation_error: 0.0578
+  p90_translation_error: 0.0857
   p99_translation_error: 0.1075
   p50_rotation_error: 0.0856
-  p90_rotation_error: 0.226
+  p90_rotation_error: 0.2373
   p99_rotation_error: 0.8019
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
