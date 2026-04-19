@@ -156,10 +156,12 @@ pub enum DistortionModel {
     /// Brown-Conrady polynomial radial + tangential distortion (OpenCV convention).
     ///
     /// `dist_coeffs` must contain exactly **5** values: `[k1, k2, p1, p2, k3]`.
+    #[cfg(feature = "non_rectified")]
     BrownConrady = 1,
     /// Kannala-Brandt equidistant fisheye model.
     ///
     /// `dist_coeffs` must contain exactly **4** values: `[k1, k2, k3, k4]`.
+    #[cfg(feature = "non_rectified")]
     KannalaBrandt = 2,
 }
 
@@ -213,6 +215,7 @@ pub struct CameraIntrinsics {
 impl CameraIntrinsics {
     #[new]
     #[pyo3(signature = (fx, fy, cx, cy, distortion_model=DistortionModel::Pinhole, dist_coeffs=None))]
+    #[cfg_attr(not(feature = "non_rectified"), allow(clippy::unnecessary_wraps))]
     fn new(
         fx: f64,
         fy: f64,
@@ -225,6 +228,7 @@ impl CameraIntrinsics {
 
         // Validate coefficient count for the chosen model.
         match distortion_model {
+            #[cfg(feature = "non_rectified")]
             DistortionModel::BrownConrady => {
                 if dist_coeffs.len() != 5 {
                     return Err(pyo3::exceptions::PyValueError::new_err(format!(
@@ -234,6 +238,7 @@ impl CameraIntrinsics {
                     )));
                 }
             },
+            #[cfg(feature = "non_rectified")]
             DistortionModel::KannalaBrandt => {
                 if dist_coeffs.len() != 4 {
                     return Err(pyo3::exceptions::PyValueError::new_err(format!(
@@ -263,6 +268,7 @@ impl From<CameraIntrinsics> for locus_core::CameraIntrinsics {
     fn from(c: CameraIntrinsics) -> Self {
         match c.distortion_model {
             DistortionModel::Pinhole => Self::new(c.fx, c.fy, c.cx, c.cy),
+            #[cfg(feature = "non_rectified")]
             DistortionModel::BrownConrady => {
                 // Validated in CameraIntrinsics::new — length is guaranteed to be 5.
                 let coeffs = &c.dist_coeffs;
@@ -270,6 +276,7 @@ impl From<CameraIntrinsics> for locus_core::CameraIntrinsics {
                     c.fx, c.fy, c.cx, c.cy, coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4],
                 )
             },
+            #[cfg(feature = "non_rectified")]
             DistortionModel::KannalaBrandt => {
                 // Validated in CameraIntrinsics::new — length is guaranteed to be 4.
                 let coeffs = &c.dist_coeffs;

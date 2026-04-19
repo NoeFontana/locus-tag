@@ -247,6 +247,7 @@ serde = ["dep:serde", "nalgebra/serde-serialize"]
 extended-tests = []
 extended-bench = []
 bench-internals = ["dep:rand", "dep:rand_distr"]
+non_rectified = []
 
 [lints]
 workspace = true

@@ -27,6 +27,7 @@ pub enum DistortionCoeffs {
     /// Brown-Conrady polynomial radial + tangential distortion (OpenCV convention).
     ///
     /// Coefficient order: `k1, k2, p1, p2, k3`.
+    #[cfg(feature = "non_rectified")]
     BrownConrady {
         /// Radial coefficient k1.
         k1: f64,
@@ -42,6 +43,7 @@ pub enum DistortionCoeffs {
     /// Kannala-Brandt equidistant fisheye model.
     ///
     /// Coefficient order: `k1, k2, k3, k4`.
+    #[cfg(feature = "non_rectified")]
     KannalaBrandt {
         /// Fisheye coefficient k1.
         k1: f64,
@@ -90,6 +92,7 @@ impl CameraIntrinsics {
     }
 
     /// Create new intrinsics with Brown-Conrady distortion.
+    #[cfg(feature = "non_rectified")]
     #[must_use]
     #[allow(clippy::too_many_arguments)]
     pub fn with_brown_conrady(
@@ -113,6 +116,7 @@ impl CameraIntrinsics {
     }
 
     /// Create new intrinsics with Kannala-Brandt fisheye distortion.
+    #[cfg(feature = "non_rectified")]
     #[must_use]
     #[allow(clippy::too_many_arguments)]
     pub fn with_kannala_brandt(
@@ -164,6 +168,7 @@ impl CameraIntrinsics {
     pub fn undistort_pixel(&self, px: f64, py: f64) -> [f64; 2] {
         match self.distortion {
             DistortionCoeffs::None => [px, py],
+            #[cfg(feature = "non_rectified")]
             DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 } => {
                 let m = crate::camera::BrownConradyModel { k1, k2, p1, p2, k3 };
                 let xn = (px - self.cx) / self.fx;
@@ -171,6 +176,7 @@ impl CameraIntrinsics {
                 let [xu, yu] = crate::camera::CameraModel::undistort(&m, xn, yn);
                 [xu * self.fx + self.cx, yu * self.fy + self.cy]
             },
+            #[cfg(feature = "non_rectified")]
             DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 } => {
                 let m = crate::camera::KannalaBrandtModel { k1, k2, k3, k4 };
                 let xn = (px - self.cx) / self.fx;
@@ -189,10 +195,12 @@ impl CameraIntrinsics {
     pub fn distort_normalized(&self, xn: f64, yn: f64) -> [f64; 2] {
         let [xd, yd] = match self.distortion {
             DistortionCoeffs::None => [xn, yn],
+            #[cfg(feature = "non_rectified")]
             DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 } => {
                 let m = crate::camera::BrownConradyModel { k1, k2, p1, p2, k3 };
                 crate::camera::CameraModel::distort(&m, xn, yn)
             },
+            #[cfg(feature = "non_rectified")]
             DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 } => {
                 let m = crate::camera::KannalaBrandtModel { k1, k2, k3, k4 };
                 crate::camera::CameraModel::distort(&m, xn, yn)
@@ -205,13 +213,16 @@ impl CameraIntrinsics {
     ///
     /// Returns `[[∂xd/∂xn, ∂xd/∂yn], [∂yd/∂xn, ∂yd/∂yn]]`.
     #[must_use]
+    #[cfg_attr(not(feature = "non_rectified"), allow(unused_variables))]
     pub(crate) fn distortion_jacobian(&self, xn: f64, yn: f64) -> [[f64; 2]; 2] {
         match self.distortion {
             DistortionCoeffs::None => [[1.0, 0.0], [0.0, 1.0]],
+            #[cfg(feature = "non_rectified")]
             DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 } => {
                 let m = crate::camera::BrownConradyModel { k1, k2, p1, p2, k3 };
                 crate::camera::CameraModel::distort_jacobian(&m, xn, yn)
             },
+            #[cfg(feature = "non_rectified")]
             DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 } => {
                 let m = crate::camera::KannalaBrandtModel { k1, k2, k3, k4 };
                 crate::camera::CameraModel::distort_jacobian(&m, xn, yn)
