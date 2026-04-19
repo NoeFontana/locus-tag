@@ -38,24 +38,11 @@ class QuadExtractionMode(enum.IntEnum):
     EdLines = 1
 
 class DetectorPreset(enum.IntEnum):
-    """
-    Semantic presets for standard detector topologies and algorithms.
+    """Preset configurations for the detector."""
 
-    Metrology: Optimized for single-tag calibration and structure-from-motion.
-               Uses EdLines without sharpening to preserve raw PSF and Hard decoding.
-    PureTags: Maximum recall on dense, multi-tag scenes at varying distances.
-              Uses Soft decoding which can recover tags missed by Hard decision.
-    Checkerboard: Optimized for tightly packed grids like ChAruco/AprilGrid.
-                  Enforces 4-connectivity and reduces contrast gates for touching tags.
-    Production: Balanced, high-fidelity default configuration.
-    Fast: Low-latency configuration with minimal refinement and larger tiles.
-    """
-
-    Metrology = 0
-    PureTags = 1
-    Checkerboard = 2
-    Production = 3
-    Fast = 4
+    HighAccuracy = 0
+    Grid = 1
+    Standard = 2
 
 # ---------------------------------------------------------------------------
 # Config / misc structs
@@ -241,6 +228,8 @@ class CharucoRefiner:
 # ---------------------------------------------------------------------------
 
 class Detector:
+    @staticmethod
+    def standard_config() -> Detector: ...
     def __init__(
         self,
         decimation: int | None = None,

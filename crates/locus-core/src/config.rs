@@ -278,38 +278,13 @@ impl DetectorConfig {
     /// - Pre-processing: `Sharpening Enabled`
     /// - Tile Size: `8`
     #[must_use]
-    pub fn production_default() -> Self {
+    pub fn standard_default() -> Self {
         Self::builder()
             .refinement_mode(CornerRefinementMode::Erf)
             .enable_sharpening(true)
             .threshold_tile_size(8)
             .quad_max_elongation(20.0)
             .quad_min_density(0.15)
-            .build()
-    }
-
-    /// SOTA configuration for dense multi-tag detection (pure_tags / forward scenes).
-    ///
-    /// Optimised for maximum recall on dense scenes with many isolated tags at varying
-    /// distances, such as the ICRA 2020 `forward/pure_tags_images` benchmark.
-    ///
-    /// Key difference from [`production_default`]: `DecodeMode::Soft` — LLR-based
-    /// decoding recovers tags that Hard-decision misses due to blur or marginal contrast,
-    /// yielding ~+19pp recall on ICRA forward (96.2% vs 76.9%) at a modest RMSE cost.
-    /// All other parameters match `production_default` (Erf refinement, sharpening on,
-    /// moments culling) to preserve the quad candidate quality that Hard relies on.
-    ///
-    /// **Trade-off:** Soft decoding is ~2–4× slower on the decode phase. Use Hard
-    /// (`production_default`) when throughput is the primary constraint.
-    #[must_use]
-    pub fn sota_pure_tags_default() -> Self {
-        Self::builder()
-            .refinement_mode(CornerRefinementMode::Erf)
-            .enable_sharpening(true)
-            .threshold_tile_size(8)
-            .quad_max_elongation(20.0)
-            .quad_min_density(0.15)
-            .decode_mode(DecodeMode::Soft)
             .build()
     }
 
@@ -331,7 +306,7 @@ impl DetectorConfig {
     /// `DecodeMode::Soft` is added on top of the checkerboard invariants as it may
     /// further improve recall for low-contrast packed tags.
     #[must_use]
-    pub fn sota_checkerboard_default() -> Self {
+    pub fn grid_default() -> Self {
         Self::builder()
             .refinement_mode(CornerRefinementMode::Erf)
             .enable_sharpening(false)
@@ -341,19 +316,7 @@ impl DetectorConfig {
             .segmentation_connectivity(SegmentationConnectivity::Four)
             .decoder_min_contrast(10.0)
             .quad_min_edge_score(2.0)
-            .decode_mode(DecodeMode::Soft)
-            .build()
-    }
-
-    /// Low-latency configuration for high-speed tracking.
-    ///
-    /// Disables heavy pre-processing and uses lighter corner refinement.
-    #[must_use]
-    pub fn fast_default() -> Self {
-        Self::builder()
-            .refinement_mode(CornerRefinementMode::Edge)
-            .enable_sharpening(false)
-            .threshold_tile_size(8)
+            .decode_mode(DecodeMode::Hard)
             .build()
     }
 
@@ -372,13 +335,13 @@ impl DetectorConfig {
     /// Pre-processing filters are disabled to pass the raw PSF directly to the solver.
     /// Hard decoding is used to maintain precision; Soft decode causes a precision
     /// collapse (~10–20%) on EdLines due to the larger number of quad candidates.
-    /// For maximum recall on multi-tag scenes use [`sota_pure_tags_default`].
-    /// For touching-tag checkerboard grids use [`sota_checkerboard_default`].
+    /// For maximum recall on multi-tag scenes use [`standard_default`].
+    /// For touching-tag checkerboard grids use [`grid_default`].
     ///
     /// **Pose tuning targets:** `structure_tensor_radius`, `sigma_n_sq`,
     /// `tikhonov_alpha_max`, `huber_delta_px` — sweep these against your sensor profile.
     #[must_use]
-    pub fn sota_metrology_default() -> Self {
+    pub fn high_accuracy_default() -> Self {
         Self::builder()
             .quad_extraction_mode(QuadExtractionMode::EdLines)
             .refinement_mode(CornerRefinementMode::None)
@@ -951,8 +914,8 @@ mod tests {
     }
 
     #[test]
-    fn test_production_config_is_valid() {
-        let config = DetectorConfig::production_default();
+    fn test_standard_config_is_valid() {
+        let config = DetectorConfig::standard_default();
         assert!(config.validate().is_ok());
     }
 

@@ -119,7 +119,7 @@ TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features b
 ## Performance Reports
 
 ### Current
-- [Release Performance Report (2026-03-22)](benchmarking/release_performance_20260322.md)
+- [Release Performance Report (2026-04-18)](benchmarking/release_performance_20260418.md)
 - [SOTA Presets + GN Covariance (2026-03-21)](benchmarking/sota_metrology_20260321.md)
 - [EDLines + Joint Gauss-Newton (2026-03-21)](benchmarking/edlines_gauss_newton_20260321.md)
 - [SIMD CCL Fusion (2026-03-19)](benchmarking/simd_ccl_fusion_20260319.md)
@@ -127,6 +127,7 @@ TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features b
 - [Micro-Benchmarking Guide](benchmarking/micro-benchmarking-guide.md)
 
 ### Historical
+- [Release Performance Report (2026-03-22)](benchmarking/release_performance_20260322.md)
 - [Performance Evolution (Mar 2–16)](benchmarking/historical_evolution.md) — consolidated timeline of superseded reports
 
 ---

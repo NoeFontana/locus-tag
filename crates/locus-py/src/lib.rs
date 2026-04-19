@@ -127,21 +127,17 @@ impl From<QuadExtractionMode> for locus_core::config::QuadExtractionMode {
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum DetectorPreset {
-    Metrology = 0,
-    PureTags = 1,
-    Checkerboard = 2,
-    Production = 3,
-    Fast = 4,
+    HighAccuracy = 0,
+    Grid = 1,
+    Standard = 2,
 }
 
 impl From<DetectorPreset> for locus_core::DetectorConfig {
     fn from(p: DetectorPreset) -> Self {
         match p {
-            DetectorPreset::Metrology => locus_core::DetectorConfig::sota_metrology_default(),
-            DetectorPreset::PureTags => locus_core::DetectorConfig::sota_pure_tags_default(),
-            DetectorPreset::Checkerboard => locus_core::DetectorConfig::sota_checkerboard_default(),
-            DetectorPreset::Production => locus_core::DetectorConfig::production_default(),
-            DetectorPreset::Fast => locus_core::DetectorConfig::fast_default(),
+            DetectorPreset::HighAccuracy => locus_core::DetectorConfig::high_accuracy_default(),
+            DetectorPreset::Grid => locus_core::DetectorConfig::grid_default(),
+            DetectorPreset::Standard => locus_core::DetectorConfig::standard_default(),
         }
     }
 }

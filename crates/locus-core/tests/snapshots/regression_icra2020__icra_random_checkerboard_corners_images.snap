@@ -4,8 +4,8 @@ expression: report
 ---
 summary:
   dataset_size: 400
-  mean_recall: 0.8983980095326314
-  mean_rmse: 0.7356
+  mean_recall: 0.8980817550990197
+  mean_rmse: 0.7416
   mean_total_ms: "[DURATION]"
   worst_offenders:
     - filename: 0126.png

@@ -109,7 +109,7 @@ fn run_hub_test(
                 refinement_suffix
             );
             let mut harness = RegressionHarness::new(snapshot)
-                .with_preset(ConfigPreset::PlainBoard)
+                .with_preset(ConfigPreset::Standard)
                 .with_families(vec![family])
                 .with_options(options);
 
@@ -212,7 +212,7 @@ fn run_hub_test_tuned_r(
             };
             let snapshot = format!("hub_{}{}{}", provider.name(), mode_suffix, snapshot_suffix);
             let mut harness = RegressionHarness::new(snapshot)
-                .with_preset(ConfigPreset::PlainBoard)
+                .with_preset(ConfigPreset::Standard)
                 .with_families(vec![family])
                 .with_options(options)
                 .with_moments_culling(max_elongation, min_density)
@@ -280,7 +280,7 @@ fn run_hub_test_sota(config_name: &str, family: TagFamily) {
 
             let snapshot = format!("hub_{}_sota", provider.name());
             RegressionHarness::new(snapshot)
-                .with_preset(ConfigPreset::SotaMetrology)
+                .with_preset(ConfigPreset::HighAccuracy)
                 .with_families(vec![family])
                 .with_options(options)
                 .run(provider);
@@ -584,7 +584,7 @@ fn regression_hub_tag36h11_2160p_edlines_moments() {
     );
 }
 
-// ── SOTA Metrology (EdLines GN + covariance propagation + Weighted LM) ───────
+// ── HighAccuracy (EdLines GN + covariance propagation + Weighted LM) ───────
 
 #[test]
 fn regression_hub_tag36h11_640x480_sota() {

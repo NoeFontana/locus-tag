@@ -252,7 +252,7 @@ impl BoardRegressionHarness {
     pub fn new(snapshot_name: impl Into<String>) -> Self {
         Self {
             snapshot_name: snapshot_name.into(),
-            config: DetectorConfig::production_default(),
+            config: DetectorConfig::standard_default(),
             families: Vec::new(),
         }
     }

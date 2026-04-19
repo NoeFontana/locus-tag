@@ -16,16 +16,16 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Copy, Debug)]
 pub enum ConfigPreset {
     /// Optimized for isolated tags on plain backgrounds.
-    PlainBoard,
+    Standard,
     /// SOTA metrology: EdLines GN + covariance propagation + Weighted LM.
-    SotaMetrology,
+    HighAccuracy,
 }
 
 impl ConfigPreset {
     pub fn detector_config(self) -> DetectorConfig {
         match self {
-            Self::PlainBoard => DetectorConfig::production_default(),
-            Self::SotaMetrology => DetectorConfig::sota_metrology_default(),
+            Self::Standard => DetectorConfig::standard_default(),
+            Self::HighAccuracy => DetectorConfig::high_accuracy_default(),
         }
     }
 }

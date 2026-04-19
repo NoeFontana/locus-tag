@@ -154,11 +154,11 @@ class Detector:
 
         # Validate preset constraints
         if (
-            preset == DetectorPreset.Checkerboard
+            preset == DetectorPreset.Grid
             and merged_kwargs.get("segmentation_connectivity") == SegmentationConnectivity.Eight
         ):
             warnings.warn(
-                "Checkerboard preset relies on 4-connectivity; enforcing 8-connectivity reduces touching-tag separation.",
+                "Grid preset relies on 4-connectivity; enforcing 8-connectivity reduces touching-tag separation.",
                 stacklevel=2,
             )
 
@@ -186,14 +186,9 @@ class Detector:
         )
 
     @staticmethod
-    def production_config() -> "Detector":
+    def standard_config() -> "Detector":
         """Create a detector with high-fidelity production defaults."""
-        return Detector(preset=DetectorPreset.Production)
-
-    @staticmethod
-    def fast_config() -> "Detector":
-        """Create a detector with low-latency defaults."""
-        return Detector(preset=DetectorPreset.Fast)
+        return Detector(preset=DetectorPreset.Standard)
 
     def config(self) -> DetectorConfig:
         """Returns the current detector configuration."""

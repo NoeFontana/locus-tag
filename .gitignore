@@ -4,3 +4,4 @@ tests/data
 *.pgm
 /conductor/archive/
 /conductor/tracks/
+*.tracy
