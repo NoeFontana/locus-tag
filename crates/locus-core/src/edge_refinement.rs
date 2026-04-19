@@ -18,6 +18,10 @@ use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
 use multiversion::multiversion;
 
+/// Precomputed `1 / sqrt(pi)` — the Jacobian of `erf(x)` at `x` is
+/// `(2 / sqrt(pi)) * exp(-x^2)`; factoring the constant saves a `sqrt` per GN iteration.
+const INV_SQRT_PI: f64 = 0.564_189_583_547_756_3;
+
 /// Configuration for sample collection along an edge.
 #[derive(Clone, Debug)]
 pub struct SampleConfig {
@@ -41,10 +45,9 @@ impl Default for SampleConfig {
 }
 
 impl SampleConfig {
-    /// Sampling config mirroring the legacy quad-extraction path:
-    /// widen the window under decimation and stride through very long edges.
-    /// `t_range` matches the legacy `(-0.1, 1.1)` to avoid pulling in samples
-    /// from the adjacent leg of an L-corner during refine_corner.
+    /// Sampling config for the quad-extraction path: widen the window under
+    /// decimation, stride through very long edges, and clip `t_range` tightly
+    /// enough that samples from the adjacent leg of an L-corner don't leak in.
     #[must_use]
     pub fn for_quad(edge_len: f64, decimation: usize) -> Self {
         let window = if decimation > 1 {
@@ -60,7 +63,7 @@ impl SampleConfig {
         }
     }
 
-    /// Sampling config mirroring the legacy decoder ERF path.
+    /// Sampling config for the decoder ERF path (same as [`SampleConfig::default`]).
     #[must_use]
     pub fn for_decoder() -> Self {
         Self::default()
@@ -92,8 +95,8 @@ pub struct RefineConfig {
 }
 
 impl RefineConfig {
-    /// Configuration matching the original `quad.rs` behavior:
-    /// one-shot A/B estimation, no minimum contrast check, no initial `d` scan.
+    /// One-shot A/B estimation, no minimum contrast check, no initial `d` scan.
+    /// Used by the quad extraction corner-refinement path.
     #[must_use]
     pub fn quad_style(sigma: f64) -> Self {
         Self {
@@ -108,8 +111,8 @@ impl RefineConfig {
         }
     }
 
-    /// Configuration matching the original `decoder.rs` behavior:
-    /// per-iteration A/B refinement, pre-refine scan, early exit on low contrast.
+    /// Per-iteration A/B refinement, pre-refine scan, early exit on low contrast.
+    /// Used by the decoder corner-refinement path.
     #[must_use]
     pub fn decoder_style(sigma: f64) -> Self {
         Self {
@@ -141,12 +144,9 @@ pub struct ErfEdgeFitter<'a> {
     dx: f64,
     dy: f64,
     len: f64,
-    /// Normal x-component of the fitted line.
-    pub nx: f64,
-    /// Normal y-component of the fitted line.
-    pub ny: f64,
-    /// Signed distance parameter of the fitted line.
-    pub d: f64,
+    nx: f64,
+    ny: f64,
+    d: f64,
 }
 
 impl<'a> ErfEdgeFitter<'a> {
@@ -314,17 +314,8 @@ impl<'a> ErfEdgeFitter<'a> {
                 break;
             }
 
-            let (sum_jtj, sum_jt_res) = refine_accumulate_optimized(
-                samples,
-                self.img,
-                self.nx,
-                self.ny,
-                self.d,
-                a,
-                b,
-                config.sigma,
-                inv_sigma,
-            );
+            let (sum_jtj, sum_jt_res) =
+                refine_accumulate_optimized(samples, self.nx, self.ny, self.d, a, b, inv_sigma);
 
             if sum_jtj < config.singular_threshold {
                 break;
@@ -361,17 +352,20 @@ impl<'a> ErfEdgeFitter<'a> {
     }
 
     /// Get the result as `(nx, ny, d)`.
+    #[inline]
     #[must_use]
     pub fn line_params(&self) -> (f64, f64, f64) {
         (self.nx, self.ny, self.d)
     }
 
     /// Get the edge length in pixels.
+    #[inline]
     #[must_use]
     pub fn edge_len(&self) -> f64 {
         self.len
     }
 
+    #[inline]
     fn get_scan_bounds(&self, window: f64) -> (usize, usize, usize, usize) {
         let p2_0 = self.p1[0] + self.dx;
         let p2_1 = self.p1[1] + self.dy;
@@ -474,19 +468,16 @@ fn estimate_ab_per_iter(
 #[allow(clippy::too_many_arguments)]
 fn refine_accumulate_optimized(
     samples: &[(f64, f64, f64)],
-    #[allow(unused_variables)] img: &ImageView,
     nx: f64,
     ny: f64,
     d: f64,
     a: f64,
     b: f64,
-    sigma: f64,
     inv_sigma: f64,
 ) -> (f64, f64) {
     let mut sum_jtj = 0.0;
     let mut sum_jt_res = 0.0;
-    let sqrt_pi = std::f64::consts::PI.sqrt();
-    let k = (b - a) / (sqrt_pi * sigma);
+    let k = (b - a) * inv_sigma * INV_SQRT_PI;
 
     let mut i = 0;
 
@@ -954,7 +945,7 @@ mod tests {
         let p2 = [40.0, 75.0];
         let arena = Bump::new();
         let mut fitter = ErfEdgeFitter::new(&img, p1, p2, false).expect("edge length too short");
-        let d_before_scan = fitter.d;
+        let (_, _, d_before_scan) = fitter.line_params();
         let sample_cfg = SampleConfig::for_decoder();
         let refine_cfg = RefineConfig::decoder_style(sigma);
         // `fit` may return true (samples collected) but the GN loop must bail on

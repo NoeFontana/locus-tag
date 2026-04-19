@@ -847,15 +847,16 @@ fn fit_edge_line(
     Some((nx, ny, sum_d / f64::from(count)))
 }
 
-/// Refine edge position using the unified ERF intensity model.
+/// Refine edge position using the unified ERF intensity model and return
+/// the line coefficients `(nx, ny, d)` for downstream intersection in
+/// `refine_corner`.
 ///
-/// Thin wrapper over `ErfEdgeFitter` that preserves the legacy one-shot A/B
-/// semantics (`RefineConfig::quad_style`) and returns the line coefficients
-/// `(nx, ny, d)` for downstream line intersection in `refine_corner`.
+/// The fitter uses a left-hand normal convention; `refine_corner`'s
+/// intersection math is sign-invariant because both sibling lines flip together.
 ///
-/// Note: the unified fitter uses a left-hand normal convention (opposite of
-/// the previous implementation). The line-intersection math in `refine_corner`
-/// is sign-invariant — both sibling lines flip together.
+/// `fit()` may return false on sample shortfall or low contrast; in that case
+/// `line_params()` still holds the geometric normal of p1→p2, which is a
+/// safer fallback than `fit_edge_line`'s gradient-peak search.
 fn refine_edge_erf(
     arena: &Bump,
     img: &ImageView,
@@ -867,10 +868,6 @@ fn refine_edge_erf(
     let mut fitter = ErfEdgeFitter::new(img, [p1.x, p1.y], [p2.x, p2.y], true)?;
     let sample_cfg = SampleConfig::for_quad(fitter.edge_len(), decimation);
     let refine_cfg = RefineConfig::quad_style(sigma);
-    // Legacy parity: on sample shortfall or low contrast, `fit()` returns false
-    // but `line_params()` still holds the initial geometric normal — which the
-    // old `refine_edge_intensity` also returned in those cases. Line intersection
-    // then uses this geometric line rather than falling back to gradient-peak.
     fitter.fit(arena, &sample_cfg, &refine_cfg);
     Some(fitter.line_params())
 }
