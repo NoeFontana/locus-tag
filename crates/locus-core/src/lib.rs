@@ -20,6 +20,8 @@ pub(crate) mod decoder;
 pub mod detector;
 /// Tag family dictionaries (AprilTag, ArUco).
 pub(crate) mod dictionaries;
+/// Unified ERF-based sub-pixel edge refinement shared by quad and decoder stages.
+pub(crate) mod edge_refinement;
 /// EDLines localized quad extraction.
 pub(crate) mod edlines;
 /// Error types for the detection pipeline.
