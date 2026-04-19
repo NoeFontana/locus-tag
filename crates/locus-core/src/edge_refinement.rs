@@ -42,9 +42,9 @@ impl Default for SampleConfig {
 
 impl SampleConfig {
     /// Sampling config mirroring the legacy quad-extraction path:
-    /// widen the window under decimation, stride through very long edges,
-    /// and permit a wider parametric range to preserve the legacy bbox-only
-    /// inclusion semantics on short edges.
+    /// widen the window under decimation and stride through very long edges.
+    /// `t_range` matches the legacy `(-0.1, 1.1)` to avoid pulling in samples
+    /// from the adjacent leg of an L-corner during refine_corner.
     #[must_use]
     pub fn for_quad(edge_len: f64, decimation: usize) -> Self {
         let window = if decimation > 1 {
@@ -56,7 +56,7 @@ impl SampleConfig {
         Self {
             window,
             stride,
-            t_range: (-0.3, 1.3),
+            t_range: (-0.1, 1.1),
         }
     }
 
