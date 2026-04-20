@@ -20,7 +20,8 @@ use locus_core::{DetectOptions, PoseEstimationMode, TagFamily};
 mod common;
 
 use common::hub::{
-    ConfigPreset, DatasetProvider, HubEntry, HubProvider, RegressionHarness, build_intrinsics,
+    ConfigPreset, DatasetProvider, HubProvider, RegressionHarness, build_intrinsics,
+    load_rich_truth_entries,
 };
 
 // ============================================================================
@@ -54,10 +55,7 @@ fn run_distortion_hub_test(config_name: &str, family: TagFamily, mode: PoseEstim
     // rich_truth.json. Build a fallback for the options in case any image
     // lacks per-entry intrinsics (HubProvider already sets gt.intrinsics).
     let mut options = DetectOptions::default();
-    let rich_path = dataset_path.join("rich_truth.json");
-    if rich_path.exists() {
-        let file = std::fs::File::open(&rich_path).unwrap();
-        let entries: Vec<HubEntry> = serde_json::from_reader(file).unwrap();
+    if let Some(entries) = load_rich_truth_entries(&dataset_path.join("rich_truth.json")) {
         if let Some(first) = entries.first()
             && let Some(k) = first.k_matrix
         {

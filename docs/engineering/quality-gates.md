@@ -65,9 +65,15 @@ PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config charuco_g
 TRACY_NO_INVARIANT_CHECK=1 LOCUS_ICRA_DATASET_DIR=tests/data/icra2020 cargo test --release --test regression_icra2020 --features bench-internals -- --test-threads=1
 
 # 4. Snapshot Verification & Update
-# Runs all regression suites (ICRA, Hub tag-level, Hub board-level) and dictionary parity tests.
-# LOCUS_HUB_DATASET_DIR is required by regression_render_tag; regression_board_hub
+# Runs all regression suites (ICRA, Hub tag-level, Hub board-level, distortion)
+# and dictionary parity tests. LOCUS_HUB_DATASET_DIR is required by
+# regression_render_tag and regression_distortion_hub; regression_board_hub
 # resolves tests/data/hub_cache/ automatically from the workspace root.
+#
+# The distortion suite (regression_distortion_hub) additionally requires
+# syncing the `aprilgrid_distortion_brown_conrady_v1` and
+# `aprilgrid_distortion_kannala_brandt_v1` configs — see
+# `.agent/skills/testing/SKILL.md` for the one-time setup.
 TRACY_NO_INVARIANT_CHECK=1 \
 LOCUS_ICRA_DATASET_DIR=tests/data/icra2020 \
 LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \

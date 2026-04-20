@@ -515,7 +515,39 @@ pub struct HubEntry {
     /// Lens distortion model: "brown_conrady" or "kannala_brandt"
     pub distortion_model: Option<String>,
     /// Distortion coefficients matching the model
+    #[serde(alias = "distortion_coeffs")]
     pub dist_coeffs: Option<Vec<f64>>,
+}
+
+/// `rich_truth.json` format dispatcher.
+///
+/// v1 datasets write a flat JSON array. v2 datasets (distortion suites onward)
+/// wrap entries in `{ "version": …, "records": [...] }` and mix per-tag
+/// records with per-board records (`record_type = "BOARD"`, `tag_id = -1`,
+/// 1-point `corners`) that don't match the per-tag `HubEntry` shape.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum RichTruthEnvelope {
+    V2 { records: Vec<serde_json::Value> },
+    V1(Vec<serde_json::Value>),
+}
+
+/// Load `rich_truth.json` entries, transparently handling v1 and v2 schemas.
+/// Non-tag records (v2 `record_type = "BOARD"`, etc.) are filtered out.
+pub fn load_rich_truth_entries(path: &Path) -> Option<Vec<HubEntry>> {
+    let file = std::fs::File::open(path).ok()?;
+    let raw = match serde_json::from_reader::<_, RichTruthEnvelope>(file).ok()? {
+        RichTruthEnvelope::V1(v) | RichTruthEnvelope::V2 { records: v } => v,
+    };
+    raw.into_iter()
+        .filter(|r| {
+            r.get("record_type")
+                .and_then(serde_json::Value::as_str)
+                .is_none_or(|t| t == "TAG")
+        })
+        .map(serde_json::from_value)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()
 }
 
 /// Build `CameraIntrinsics` from a 3×3 K-matrix, optionally with distortion.
@@ -564,22 +596,20 @@ pub fn load_detect_options(dataset_path: &Path) -> DetectOptions {
     }
 
     if options.intrinsics.is_none() || options.tag_size.is_none() {
-        if let Ok(file) = std::fs::File::open(dataset_path.join("rich_truth.json")) {
-            if let Ok(entries) = serde_json::from_reader::<_, Vec<HubEntry>>(file) {
-                if let Some(first) = entries.first() {
-                    if options.intrinsics.is_none() {
-                        if let Some(k) = first.k_matrix {
-                            options.intrinsics = Some(build_intrinsics(
-                                k,
-                                first.distortion_model.as_deref(),
-                                first.dist_coeffs.as_deref(),
-                            ));
-                        }
+        if let Some(entries) = load_rich_truth_entries(&dataset_path.join("rich_truth.json")) {
+            if let Some(first) = entries.first() {
+                if options.intrinsics.is_none() {
+                    if let Some(k) = first.k_matrix {
+                        options.intrinsics = Some(build_intrinsics(
+                            k,
+                            first.distortion_model.as_deref(),
+                            first.dist_coeffs.as_deref(),
+                        ));
                     }
-                    if options.tag_size.is_none() {
-                        if let Some(sz) = first.tag_size_mm {
-                            options.tag_size = Some(sz / 1000.0);
-                        }
+                }
+                if options.tag_size.is_none() {
+                    if let Some(sz) = first.tag_size_mm {
+                        options.tag_size = Some(sz / 1000.0);
                     }
                 }
             }
@@ -596,8 +626,7 @@ impl HubProvider {
             return None;
         }
 
-        let file = std::fs::File::open(dataset_dir.join("rich_truth.json")).ok()?;
-        let entries: Vec<HubEntry> = serde_json::from_reader(file).ok()?;
+        let entries = load_rich_truth_entries(&dataset_dir.join("rich_truth.json"))?;
 
         let mut gt_map: BTreeMap<String, GroundTruth> = BTreeMap::new();
 
