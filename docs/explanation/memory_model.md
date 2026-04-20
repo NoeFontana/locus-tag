@@ -166,11 +166,13 @@ To enable lock-free parallelization, each pipeline phase has strict read/write p
 
 | Phase | Reads | Writes |
 | :--- | :--- | :--- |
-| **A: Contour Extraction** | Image | `corners`, `status_mask` |
-| **B: Homography** | `corners` | `homographies` |
+| **A: Contour Extraction** | Image | `corners`, `status_mask`, `corner_covariances` |
+| **B: Homography** | `corners`, `status_mask` | `homographies` |
 | **B.5: Funnel** | Image, `corners` | `status_mask`, `funnel_status` |
-| **C: Decoding** | Image, `homographies` | `ids`, `payloads`, `error_rates`, `status_mask` |
-| **D: Pose** | `corners`, `status_mask` | `poses` |
+| **C: Decoding** | Image, `homographies` | `ids`, `payloads`, `error_rates`, `status_mask`, `corners`¹ |
+| **D: Pose** | `corners`, `status_mask`, `corner_covariances` | `poses` |
+
+¹ Phase C's write to `corners` is restricted to a rotation-permutation (and optional sub-pixel refinement) — the four corner slots of a single index are cyclically re-labelled to reflect the decoded rotation, preserving the identity invariant. See `docs/engineering/detection-batch-contract.md §4 Phase C` and the enforcing test at `crates/locus-core/tests/contract_detection_batch.rs`.
 
 This isolation guarantees that phases B and C can be parallelized via `rayon` without synchronization.
 
