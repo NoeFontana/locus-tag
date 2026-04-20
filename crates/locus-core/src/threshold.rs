@@ -139,8 +139,6 @@ impl ThresholdEngine {
                     let t_idx = tx;
                     let res = ((u16::from(nmin) + u16::from(nmax)) >> 1) as u8;
 
-                    // Safety: Unique index per thread for tile_valid access via raw pointer to avoid multiple mutable borrows of the same slice
-                    // However, tile_valid is not yet parallelized here. Let's fix that.
                     t_row[t_idx] = res;
                 }
             });
@@ -225,27 +223,9 @@ impl ThresholdEngine {
                     if ty >= tiles_high {
                         return;
                     }
-                    // Reset buffers? No, they are fully overwritten below by the loops over tiles and pixels.
-                    // Just ensure they are correct size if they were hypothetically resized (they are not).
-                    // Actually, the loop logic depends on writing to `row_thresholds` and `row_valid` at specific indices.
-                    // The loops:
-                    // for tx in 0..tiles_wide ... row_thresholds[tx*ts+i] = ...
-                    // This covers [0 .. tiles_wide*ts].
-                    // If tiles_wide * ts < img.width (e.g. edge cases), remaining pixels might be stale.
-                    // However, the original code `vec![0u8; img.width]` zero-inits.
-                    // The previous loop logic:
-                    // `for tx in 0..tiles_wide` covers up to `tiles_wide * ts`.
-                    // `img.width` might be slightly larger than `tiles_wide * ts`.
-                    // The original code zero-initialized the WHOLE vector.
-                    // To maintain correctness, we should zero-init (or fill with default) the buffers, or at least the tail.
-                    // Or better, just fill them entirely if cheap, or rely on logic correctness.
-                    // Let's look at `threshold_row_simd`. It reads `thresholds[i]` and `valid_mask[i]`.
-                    // It iterates `0..len` where len is `src.len()` (== img.width).
-                    // If `row_thresholds` has stale garbage at the end, `threshold_row_simd` will use it.
-                    // The original code produced 0s at the end (due to `vec![0u8; ...]`).
-                    // So we MUST zero-init or fill the reused buffers.
-                    // `row_thresholds.fill(0)` and `row_valid.fill(0)` is safe and fast enough (memset).
-
+                    // Zero-fill the trailing pixels beyond `tiles_wide * ts`: the
+                    // per-tile loop below only writes indices `[0, tiles_wide * ts)`
+                    // but `threshold_row_simd` reads the full `img.width`.
                     row_thresholds.fill(0);
                     row_valid.fill(0);
 
@@ -405,7 +385,12 @@ impl ThresholdEngine {
                     if ty >= tiles_high {
                         return;
                     }
-                    // Safety: Each thread writes to unique portion of threshold_output
+                    // SAFETY: `binary_output.par_chunks_mut(ts * img.width)`
+                    // yields one `ty` per worker; the parallel `threshold_output`
+                    // tile slice for the same `ty` is therefore disjoint from
+                    // every other worker's write set. The `ty < tiles_high`
+                    // guard above keeps `ty * ts * img.width + ts * img.width`
+                    // within the original `threshold_output` length.
                     let thresh_tile_rows = unsafe {
                         let ptr = threshold_output.as_ptr().cast_mut();
                         std::slice::from_raw_parts_mut(ptr.add(ty * ts * img.width), ts * img.width)
@@ -899,7 +884,14 @@ pub fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
         // we can just use a fixed-size array if we want to avoid allocation entirely.
         let mut col_sums = [0u64; BLOCK_SIZE];
 
-        // Safety: We are writing to unique columns in each parallel task.
+        // SAFETY: `(0..num_blocks).into_par_iter()` partitions the column
+        // range into BLOCK_SIZE-wide stripes; each rayon worker handles one
+        // `b`, so the `[start_x, end_x)` column window for a given `b` is
+        // disjoint from every other worker's window. `integral` length is
+        // `(h + 1) * stride`, so `y * stride + start_x + i` for
+        // `y ∈ [1, h], i < end_x - start_x` stays in-bounds. The outer
+        // `par_iter` borrows `integral` mutably for its full lifetime, so
+        // no other reader exists.
         unsafe {
             let base_ptr = integral.as_ptr().cast_mut();
             for y in 1..=h {
@@ -950,7 +942,11 @@ pub fn adaptive_threshold_integral(
         let y_offset = y * w;
         let src_row = img.get_row(y);
 
-        // Safety: Unique row per thread
+        // SAFETY: `(0..h).into_par_iter()` yields each `y` exactly once
+        // across rayon workers, so the `[y * w, y * w + w)` slice is
+        // disjoint from every other worker's slice. `output` length is
+        // `h * w`, so the slice is in-bounds. The outer `par_iter` borrows
+        // `output` mutably for its lifetime, so no concurrent reader exists.
         let dst_row = unsafe {
             let ptr = output.as_ptr().cast_mut();
             std::slice::from_raw_parts_mut(ptr.add(y_offset), w)
@@ -1109,7 +1105,11 @@ pub fn adaptive_threshold_gradient_window(
         let y_offset = y * w;
         let src_row = img.get_row(y);
 
-        // Safety: Unique row per thread
+        // SAFETY: `(0..h).into_par_iter()` yields each `y` exactly once
+        // across rayon workers, so the `[y * w, y * w + w)` slice is
+        // disjoint from every other worker's slice. `output` length is
+        // `h * w`, so the slice is in-bounds. The outer `par_iter` borrows
+        // `output` mutably for its lifetime, so no concurrent reader exists.
         let dst_row = unsafe {
             let ptr = output.as_ptr().cast_mut();
             std::slice::from_raw_parts_mut(ptr.add(y_offset), w)
@@ -1175,7 +1175,11 @@ pub(crate) fn compute_threshold_map(
     (0..h).into_par_iter().for_each(|y| {
         let y_offset = y * w;
 
-        // Safety: Unique row per thread
+        // SAFETY: `(0..h).into_par_iter()` yields each `y` exactly once
+        // across rayon workers, so the `[y * w, y * w + w)` slice is
+        // disjoint from every other worker's slice. `output` length is
+        // `h * w`, so the slice is in-bounds. The outer `par_iter` borrows
+        // `output` mutably for its lifetime, so no concurrent reader exists.
         let dst_row = unsafe {
             let ptr = output.as_ptr().cast_mut();
             std::slice::from_raw_parts_mut(ptr.add(y_offset), w)

@@ -347,6 +347,7 @@ pub(crate) fn measure_border_integrity(
 
 /// Generates a checkered pattern image for benchmarking.
 #[must_use]
+#[cfg(feature = "bench-internals")]
 pub fn generate_checkered(width: usize, height: usize) -> Vec<u8> {
     let mut data = vec![200u8; width * height];
     for y in (0..height).step_by(16) {

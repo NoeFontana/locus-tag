@@ -489,7 +489,6 @@ fn extract_boundary_segments<'a>(
     arena: &'a Bump,
     labels: &[u32],
     img_width: usize,
-    img_height: usize,
     comp_label: u32,
     stat: &ComponentStats,
 ) -> [BumpVec<'a, (f64, f64)>; 4] {
@@ -833,11 +832,6 @@ fn extract_boundary_segments<'a>(
         edges[group].push((px, py));
     }
 
-    // Suppress the `img_height` unused-variable warning in the new code path
-    // (still needed for the 4-connected check in the old path — kept as a param
-    // for API stability).
-    let _ = img_height;
-
     edges
 }
 
@@ -974,8 +968,7 @@ pub(crate) fn extract_quad_edlines(
 
     // ── Phase 1: Angular arc boundary segmentation ────────────────────────────
     // edges[0]: T→R arc, edges[1]: R→B arc, edges[2]: B→L arc, edges[3]: L→T arc
-    let edges =
-        extract_boundary_segments(arena, labels, binary.width, binary.height, comp_label, stat);
+    let edges = extract_boundary_segments(arena, labels, binary.width, comp_label, stat);
 
     for e in &edges {
         if e.len() < 2 {

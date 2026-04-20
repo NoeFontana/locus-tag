@@ -10,6 +10,7 @@ use crate::batch::{Matrix3x3, Point2f};
 use crate::config;
 use crate::simd::math::{bilinear_interpolate_fixed, rcp_nr};
 use crate::simd::roi::RoiCache;
+#[cfg(any(test, feature = "bench-internals"))]
 use bumpalo::Bump;
 use multiversion::multiversion;
 use nalgebra::{SMatrix, SVector};
@@ -26,6 +27,10 @@ pub struct Homography {
 ///
 /// This avoids expensive matrix multiplications by using discrete partial derivatives
 /// when stepping through a uniform grid in tag space.
+// Constructed only by `Homography::to_dda`, which is itself called from
+// target-feature-gated SIMD blocks in `sample_grid_values_dda_simd` and from
+// bench-internals tests. Appears unused in default-target builds.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub struct HomographyDda {
     /// Current numerator for X coordinate.
@@ -51,6 +56,9 @@ pub struct HomographyDda {
 impl Homography {
     /// Convert the homography into a DDA state for a grid with step size (du, dv).
     /// Initial state is computed at (u0, v0) in canonical tag space.
+    // Called from target-feature-gated SIMD blocks and bench-internals tests;
+    // appears unused in default-target builds.
+    #[allow(dead_code)]
     #[must_use]
     pub fn to_dda(&self, u0: f64, v0: f64, du: f64, dv: f64) -> HomographyDda {
         let h = self.h;
@@ -73,8 +81,7 @@ impl Homography {
 
     /// Compute homography from 4 source points to 4 destination points using DLT.
     /// Points are [x, y].
-    /// Compute homography from 4 source points to 4 destination points using DLT.
-    /// Points are [x, y].
+    #[cfg(any(test, feature = "bench-internals"))]
     #[must_use]
     pub fn from_pairs(src: &[[f64; 2]; 4], dst: &[[f64; 2]; 4]) -> Option<Self> {
         let mut a = SMatrix::<f64, 8, 9>::zeros();
@@ -688,6 +695,7 @@ fn sample_grid_values_optimized(
 ///
 /// # Panics
 /// Panics if the number of sample points exceeds `MAX_BIT_COUNT`.
+#[cfg(any(test, feature = "bench-internals"))]
 #[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
 pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
     img: &crate::image::ImageView,
@@ -712,66 +720,6 @@ pub fn sample_grid_generic<S: crate::strategy::DecodingStrategy>(
     );
 
     if !sample_grid_values_dda_simd(img, &roi, &homography, decoder, &mut intensities) {
-        return None;
-    }
-
-    Some(S::from_intensities(
-        &intensities[..n],
-        &compute_adaptive_thresholds(&intensities[..n], points),
-    ))
-}
-
-/// Sample the bit grid using Structure of Arrays (SoA) data.
-///
-/// # Panics
-/// Panics if the number of sample points exceeds `MAX_BIT_COUNT`.
-pub fn sample_grid_soa<S: crate::strategy::DecodingStrategy>(
-    img: &crate::image::ImageView,
-    arena: &Bump,
-    corners: &[Point2f],
-    homography: &Matrix3x3,
-    decoder: &(impl TagDecoder + ?Sized),
-) -> Option<S::Code> {
-    // Compute AABB for RoiCache
-    let mut min_x = f32::MAX;
-    let mut min_y = f32::MAX;
-    let mut max_x = f32::MIN;
-    let mut max_y = f32::MIN;
-    for p in corners {
-        min_x = min_x.min(p.x);
-        min_y = min_y.min(p.y);
-        max_x = max_x.max(p.x);
-        max_y = max_y.max(p.y);
-    }
-
-    let roi = RoiCache::new(
-        img,
-        arena,
-        (min_x.floor() as i32).max(0) as usize,
-        (min_y.floor() as i32).max(0) as usize,
-        (max_x.ceil() as i32).max(0) as usize,
-        (max_y.ceil() as i32).max(0) as usize,
-    );
-
-    // Convert Matrix3x3 to Homography (internal use).
-    // Nalgebra stores in column-major order, which matches our data layout.
-    let mut h_mat = SMatrix::<f64, 3, 3>::identity();
-    for (i, val) in homography.data.iter().enumerate() {
-        h_mat.as_mut_slice()[i] = f64::from(*val);
-    }
-    let homography_obj = Homography { h: h_mat };
-
-    let points = decoder.sample_points();
-    let mut intensities = [0.0f64; MAX_BIT_COUNT];
-    let n = points.len().min(MAX_BIT_COUNT);
-    assert!(
-        points.len() <= MAX_BIT_COUNT,
-        "Tag bit count ({}) exceeds static buffer size ({})",
-        points.len(),
-        MAX_BIT_COUNT
-    );
-
-    if !sample_grid_values_dda_simd(img, &roi, &homography_obj, decoder, &mut intensities) {
         return None;
     }
 
@@ -855,6 +803,7 @@ fn compute_adaptive_thresholds(intensities: &[f64], points: &[(f64, f64)]) -> [f
 }
 
 /// Sample the bit grid from the image (Legacy/Hard wrapper).
+#[cfg(any(test, feature = "bench-internals"))]
 #[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
 pub fn sample_grid(
     img: &crate::image::ImageView,
@@ -868,6 +817,7 @@ pub fn sample_grid(
 
 /// Rotate a square bit grid 90 degrees clockwise.
 /// This is an O(1) bitwise operation but conceptually represents rotating the N x N pixel grid.
+#[cfg(any(test, feature = "bench-internals"))]
 #[must_use]
 pub fn rotate90(bits: u64, dim: usize) -> u64 {
     let mut res = 0u64;

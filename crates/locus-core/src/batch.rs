@@ -111,6 +111,7 @@ impl DetectionBatch {
     }
     /// Returns the maximum capacity of the batch.
     #[must_use]
+    #[allow(clippy::unused_self)]
     pub fn capacity(&self) -> usize {
         MAX_CANDIDATES
     }
@@ -210,6 +211,7 @@ impl DetectionBatch {
 }
 
 /// Helper function to partition a batch, moving all valid candidates to the front.
+#[cfg(feature = "bench-internals")]
 pub fn partition_batch_soa(batch: &mut DetectionBatch, n: usize) -> usize {
     batch.partition(n)
 }

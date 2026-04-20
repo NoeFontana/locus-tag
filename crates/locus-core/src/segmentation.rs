@@ -10,7 +10,9 @@
 #![allow(unsafe_code)]
 
 use bumpalo::Bump;
+#[cfg(any(test, feature = "bench-internals"))]
 use bumpalo::collections::Vec as BumpVec;
+#[cfg(any(test, feature = "bench-internals"))]
 use rayon::prelude::*;
 
 /// A disjoint-set forest (Union-Find) with path compression and rank optimization.
@@ -158,6 +160,7 @@ pub struct LabelResult<'a> {
 }
 
 /// A detected run of background pixels in a row.
+#[cfg(any(test, feature = "bench-internals"))]
 #[derive(Clone, Copy, Debug)]
 struct Run {
     y: u32,
@@ -166,18 +169,12 @@ struct Run {
     id: u32,
 }
 
-/// Label connected components in a binary image.
-pub fn label_components<'a>(
-    arena: &'a Bump,
-    binary: &[u8],
-    width: usize,
-    height: usize,
-    use_8_connectivity: bool,
-) -> &'a [u32] {
-    label_components_with_stats(arena, binary, width, height, use_8_connectivity).labels
-}
-
 /// Label components and compute bounding box stats for each.
+///
+/// The detector hot-path uses `simd_ccl_fusion::label_components_lsl`; this
+/// implementation is retained for tests and benches that exercise the
+/// reference RLE+UnionFind path.
+#[cfg(any(test, feature = "bench-internals"))]
 #[allow(clippy::too_many_lines)]
 pub fn label_components_with_stats<'a>(
     arena: &'a Bump,
