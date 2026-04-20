@@ -234,6 +234,88 @@ jobs:
           path: "*.log"
           retention-days: 1
 
+  schema-parity:
+    name: Profile Schema Parity
+    needs: validate-project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Toolchains
+        uses: ./.github/actions/setup-toolchain
+        with:
+          python-version: '3.11'
+          enable-rust-cache: 'false'
+
+      - name: Install Python deps and build bridge
+        run: |
+          uv sync --frozen --group dev
+          uv run maturin develop --release --manifest-path crates/locus-py/Cargo.toml
+
+      - name: Check schema is up to date
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run python tools/export_profile_schema.py --check 2>&1 | tee schema-parity.log
+
+      - name: Upload Logs on Failure
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: failure-logs-schema-parity
+          path: "*.log"
+          retention-days: 1
+
+  wheel-smoke:
+    name: Wheel Install Smoke Test
+    needs: [validate-project, rust-checks]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Toolchains
+        uses: ./.github/actions/setup-toolchain
+        with:
+          python-version: '3.11'
+
+      - name: Build wheel
+        shell: bash
+        run: |
+          set -o pipefail
+          uv sync --frozen --group dev
+          uv run maturin build --release --manifest-path crates/locus-py/Cargo.toml --out dist 2>&1 | tee build-wheel.log
+
+      - name: Smoke test each shipped profile
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m venv /tmp/locus-smoke
+          source /tmp/locus-smoke/bin/activate
+          pip install --quiet numpy
+          WHEEL=$(ls dist/locus_tag-*.whl | head -n 1)
+          test -n "$WHEEL" || { echo "no wheel found in dist/" >&2; exit 1; }
+          pip install "$WHEEL"
+          python - <<'PY' 2>&1 | tee smoke-wheel.log
+          import numpy as np
+          from locus import Detector, DetectorConfig
+          Detector(profile="standard").detect(np.zeros((480, 640), dtype=np.uint8))
+          Detector(profile="grid")
+          Detector(profile="high_accuracy")
+          cfg = DetectorConfig.from_profile("standard")
+          Detector(config=cfg)
+          print("wheel smoke ok")
+          PY
+
+      - name: Upload Logs on Failure
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: failure-logs-wheel-smoke
+          path: "*.log"
+          retention-days: 1
+
   robustness-testing:
     name: Robustness Testing (Proptest)
     needs: rust-checks

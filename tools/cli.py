@@ -127,12 +127,12 @@ def visualize(
 
     datasets = loader.find_datasets(scenario, ["tags"])
 
-    # Initialize Detector using new keyword arguments
-    detector = locus.Detector(
-        threshold_tile_size=tile_size,
-        quad_min_area=min_area,
-        upscale_factor=upscale,
-    )
+    # Derive a custom config from the `standard` profile.
+    _cfg_dict = locus.DetectorConfig.from_profile("standard").model_dump()
+    _cfg_dict["threshold"]["tile_size"] = tile_size
+    _cfg_dict["quad"]["min_area"] = min_area
+    _cfg_dict["quad"]["upscale_factor"] = upscale
+    detector = locus.Detector(config=locus.DetectorConfig.model_validate(_cfg_dict))
 
     for ds_name, img_dir, gt_map, meta in datasets:
         typer.echo(f"\nVisualizing {ds_name}...")
@@ -419,21 +419,25 @@ def bench_real(
     loader = DatasetLoader(icra_dir=icra_dir)
     wrappers: list[LibraryWrapper] = []
 
-    # Common detector parameters
-    detector_kwargs = {
-        "families": [tag_family_int],
-        "preset": locus.DetectorPreset.Standard,
-        "refinement_mode": refinement_mode,
-        "threshold_tile_size": tile_size,
-        "adaptive_threshold_constant": constant,
-        "quad_min_fill_ratio": min_fill,
-        "threshold_min_range": min_range,
-        "max_hamming_error": max_hamming,
-        "quad_min_edge_score": min_edge_score,
-    }
+    # Common detector config — derived from the shipped `standard` profile
+    # with CLI-level overrides applied at the nested-group level. Enum values
+    # round-trip through Pydantic as PyO3 variant instances.
+    def _build_cli_config(decode_mode: locus.DecodeMode) -> locus.DetectorConfig:
+        base = locus.DetectorConfig.from_profile("standard").model_dump()
+        base["threshold"]["tile_size"] = tile_size
+        base["threshold"]["constant"] = constant
+        base["threshold"]["min_range"] = min_range
+        base["quad"]["min_fill_ratio"] = min_fill
+        base["quad"]["min_edge_score"] = min_edge_score
+        base["decoder"]["max_hamming_error"] = max_hamming
+        base["decoder"]["refinement_mode"] = refinement_mode
+        base["decoder"]["decode_mode"] = decode_mode
+        return locus.DetectorConfig.model_validate(base)
 
     # Soft mode
-    soft_detector = locus.Detector(decode_mode=locus.DecodeMode.Soft, **detector_kwargs)
+    soft_detector = locus.Detector(
+        config=_build_cli_config(locus.DecodeMode.Soft), families=[tag_family_int]
+    )
     wrappers.append(
         LocusWrapper(
             name="Locus (Soft)",
@@ -444,7 +448,9 @@ def bench_real(
     )
 
     # Hard mode
-    hard_detector = locus.Detector(decode_mode=locus.DecodeMode.Hard, **detector_kwargs)
+    hard_detector = locus.Detector(
+        config=_build_cli_config(locus.DecodeMode.Hard), families=[tag_family_int]
+    )
     wrappers.append(
         LocusWrapper(
             name="Locus (Hard)",
@@ -1022,15 +1028,14 @@ def debug_report(
     images_dir.mkdir(exist_ok=True)
 
     loader = LocalHubLoader()
-    ref_map = {
-        "None": 0,
-        "Edge": 1,
-        "Erf": 3,
-    }
-    sel_ref_mode = ref_map.get(refinement_mode, 3)  # Default to Erf (3)
+    if refinement_mode not in {"None", "Edge", "Erf"}:
+        refinement_mode = "Erf"
 
+    _cfg_dict = locus.DetectorConfig.from_profile("standard").model_dump()
+    _cfg_dict["decoder"]["refinement_mode"] = refinement_mode
     detector = locus.Detector(
-        families=[locus.TagFamily.AprilTag36h11], refinement_mode=sel_ref_mode
+        config=locus.DetectorConfig.model_validate(_cfg_dict),
+        families=[locus.TagFamily.AprilTag36h11],
     )
 
     report_data = []

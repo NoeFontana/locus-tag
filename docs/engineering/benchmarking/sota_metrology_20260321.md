@@ -14,7 +14,7 @@ Three additions enable scenario-specific SOTA presets:
 |---|---|---|
 | **GN covariance propagation** | `cholesky_inverse_8x8` extracts per-corner 2×2 covariances from the GN Hessian H⁻¹; threaded through `extract_quad_edlines` → `batch.corner_covariances` | `31f247a` |
 | **Builder setters** | `huber_delta_px`, `tikhonov_alpha_max`, `sigma_n_sq`, `structure_tensor_radius` tunable via builder | this session |
-| **Three SOTA presets** | `high_accuracy_default`, `standard_default`, `grid_default` | this session |
+| **Three SOTA presets** | `"high_accuracy"`, `"standard"`, `"grid"` | this session |
 
 ### Architecture: The GN→Pose Handover (HighAccuracy preset only)
 
@@ -34,9 +34,9 @@ If GN diverges, `corner_covariances` is zeroed and pose falls back to the Struct
 
 | Preset | Target Scenario | Key Differences vs Production |
 |---|---|---|
-| `high_accuracy_default()` | Single isolated tag, pose accuracy | EdLines + GN + None; sharpening off; Hard decode |
-| `standard_default()` | Dense multi-tag scenes | Soft decode (+19pp recall); else identical to production |
-| `grid_default()` | Touching tags in grid patterns | 4-connectivity; Soft decode; relaxed contrast/edge gates; sharpening off |
+| `"high_accuracy"` profile | Single isolated tag, pose accuracy | EdLines + GN + None; sharpening off; Hard decode |
+| `"standard"` profile | Dense multi-tag scenes | Soft decode (+19pp recall); else identical to production |
+| `"grid"` profile | Touching tags in grid patterns | 4-connectivity; Soft decode; relaxed contrast/edge gates; sharpening off |
 
 ### Why three separate presets?
 
@@ -55,7 +55,7 @@ The three target scenarios have mutually incompatible requirements:
 
 ### Preset parameters
 
-#### `high_accuracy_default()`
+#### `"high_accuracy"` profile
 ```
 quad_extraction_mode:  EdLines
 refinement_mode:       None        ← GN corners are sub-pixel; ERF degrades them
@@ -66,7 +66,7 @@ quad_min_density:      0.15
 decode_mode:           Hard        ← Soft causes precision collapse on EdLines
 ```
 
-#### `standard_default()`
+#### `"standard"` profile
 ```
 refinement_mode:       Erf         ← same as production
 enable_sharpening:     true        ← same as production
@@ -75,7 +75,7 @@ quad_min_density:      0.15        ← same as production
 decode_mode:           Soft        ← only difference; +19pp recall on ICRA forward
 ```
 
-#### `grid_default()`
+#### `"grid"` profile
 ```
 refinement_mode:       Erf
 enable_sharpening:     false       ← sharpening creates halos at shared borders
@@ -222,11 +222,11 @@ offsets the GN advantage.
 
 | Scenario | Preset | Key metric |
 |---|---|---|
-| **Single-tag metrology / calibration** | `high_accuracy_default()` | 0.16–0.29px RMSE, 0.32–0.58° P50 rotation |
-| **Dense multi-tag detection** | `standard_default()` | **96.2%** recall (vs 76.9% production) |
-| **Touching-tag checkerboard grids** | `grid_default()` | **91.4%** recall (vs 73.0% legacy) |
-| **Balanced production** | `standard_default()` | 100% recall + precision, fast |
-| **Low latency** | `standard_default()` | Lowest decode overhead |
+| **Single-tag metrology / calibration** | `"high_accuracy"` profile | 0.16–0.29px RMSE, 0.32–0.58° P50 rotation |
+| **Dense multi-tag detection** | `"standard"` profile | **96.2%** recall (vs 76.9% production) |
+| **Touching-tag checkerboard grids** | `"grid"` profile | **91.4%** recall (vs 73.0% legacy) |
+| **Balanced production** | `"standard"` profile | 100% recall + precision, fast |
+| **Low latency** | `"standard"` profile | Lowest decode overhead |
 
 ---
 

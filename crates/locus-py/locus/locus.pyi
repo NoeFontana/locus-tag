@@ -1,5 +1,5 @@
 import enum
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -20,7 +20,10 @@ class SegmentationConnectivity(enum.IntEnum):
     Eight = 1
 
 class CornerRefinementMode(enum.IntEnum):
-    None_ = 0
+    # The ``None`` variant matches the Rust name but shadows a Python keyword at
+    # the attribute level. Access it as ``getattr(CornerRefinementMode, "None")``
+    # or via a JSON/string spelling through ``DetectorConfig``.
+    None_ = 0  # exposed as ``None`` at runtime — name kept here so mypy can resolve it
     Edge = 1
     Erf = 2
     Gwlf = 3
@@ -36,13 +39,6 @@ class PoseEstimationMode(enum.IntEnum):
 class QuadExtractionMode(enum.IntEnum):
     ContourRdp = 0
     EdLines = 1
-
-class DetectorPreset(enum.IntEnum):
-    """Preset configurations for the detector."""
-
-    HighAccuracy = 0
-    Grid = 1
-    Standard = 2
 
 class DistortionModel(enum.IntEnum):
     """Lens distortion model tag for `CameraIntrinsics`.
@@ -114,6 +110,44 @@ class PyDetectorConfig:
     quad_max_elongation: float
     quad_min_density: float
     quad_extraction_mode: QuadExtractionMode
+    huber_delta_px: float
+    tikhonov_alpha_max: float
+    sigma_n_sq: float
+    structure_tensor_radius: int
+    def __init__(
+        self,
+        *,
+        threshold_tile_size: int,
+        threshold_min_range: int,
+        enable_sharpening: bool,
+        enable_adaptive_window: bool,
+        threshold_min_radius: int,
+        threshold_max_radius: int,
+        adaptive_threshold_constant: int,
+        adaptive_threshold_gradient_threshold: int,
+        quad_min_area: int,
+        quad_max_aspect_ratio: float,
+        quad_min_fill_ratio: float,
+        quad_max_fill_ratio: float,
+        quad_min_edge_length: float,
+        quad_min_edge_score: float,
+        subpixel_refinement_sigma: float,
+        segmentation_margin: int,
+        segmentation_connectivity: SegmentationConnectivity,
+        upscale_factor: int,
+        decoder_min_contrast: float,
+        refinement_mode: CornerRefinementMode,
+        decode_mode: DecodeMode,
+        max_hamming_error: int,
+        gwlf_transversal_alpha: float,
+        quad_max_elongation: float,
+        quad_min_density: float,
+        quad_extraction_mode: QuadExtractionMode,
+        huber_delta_px: float,
+        tikhonov_alpha_max: float,
+        sigma_n_sq: float,
+        structure_tensor_radius: int,
+    ) -> None: ...
 
 # ---------------------------------------------------------------------------
 # Result types
@@ -250,23 +284,14 @@ class CharucoRefiner:
 # ---------------------------------------------------------------------------
 
 class Detector:
-    @staticmethod
-    def standard_config() -> Detector: ...
     def __init__(
         self,
+        profile: Literal["standard", "grid", "high_accuracy"] | None = None,
+        config: Any | None = None,
+        *,
         decimation: int | None = None,
         threads: int | None = None,
         families: list[TagFamily] | None = None,
-        preset: DetectorPreset | None = None,
-        threshold_tile_size: int | None = None,
-        threshold_min_range: int | None = None,
-        adaptive_threshold_constant: int | None = None,
-        quad_min_area: int | None = None,
-        quad_min_fill_ratio: float | None = None,
-        quad_min_edge_score: float | None = None,
-        decoder_min_contrast: float | None = None,
-        max_hamming_error: int | None = None,
-        **kwargs: Any,
     ) -> None: ...
     def detect(
         self,
@@ -323,13 +348,10 @@ class DetectorBuilder:
 # Module-level functions
 # ---------------------------------------------------------------------------
 
-def create_detector(
+def _create_detector_from_config(
+    config: PyDetectorConfig,
     decimation: int | None = None,
     threads: int | None = None,
     families: list[int] = [],
-    preset: DetectorPreset | None = None,
-    **kwargs: Any,
 ) -> Detector: ...
-def production_config() -> Detector: ...
-def fast_config() -> Detector: ...
 def init_tracy() -> None: ...

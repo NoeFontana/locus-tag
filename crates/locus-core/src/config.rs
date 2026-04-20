@@ -270,88 +270,6 @@ impl DetectorConfig {
         }
         Ok(())
     }
-
-    /// High-fidelity configuration used for production accuracy evaluations.
-    ///
-    /// This matches the default settings used in the Python CLI and Regression suite:
-    /// - Corner Refinement: `Erf`
-    /// - Pre-processing: `Sharpening Enabled`
-    /// - Tile Size: `8`
-    #[must_use]
-    pub fn standard_default() -> Self {
-        Self::builder()
-            .refinement_mode(CornerRefinementMode::Erf)
-            .enable_sharpening(true)
-            .threshold_tile_size(8)
-            .quad_max_elongation(20.0)
-            .quad_min_density(0.15)
-            .build()
-    }
-
-    /// SOTA configuration for touching/adjacent tags in checkerboard grid patterns.
-    ///
-    /// Designed for scenes where tag borders share a boundary (saddle corners), such
-    /// as the ICRA 2020 `forward/checkerboard_corners_images` benchmark.
-    ///
-    /// **Non-negotiable invariants:**
-    /// - `segmentation_connectivity: Four` — 8-connectivity merges adjacent tag regions
-    ///   into one component; Four-connectivity correctly separates touching borders.
-    /// - `decoder_min_contrast: 10.0` — packed tags are low-contrast; the default 20.0
-    ///   causes the Otsu gate to reject valid tags at shared borders.
-    /// - `quad_min_edge_score: 2.0` — touching borders produce weaker edge scores;
-    ///   this relaxed threshold prevents false negatives on interior tag edges.
-    /// - `enable_sharpening: false` — Laplacian sharpening creates halos at shared
-    ///   borders, biasing the threshold and causing merged components.
-    ///
-    /// `DecodeMode::Soft` is added on top of the checkerboard invariants as it may
-    /// further improve recall for low-contrast packed tags.
-    #[must_use]
-    pub fn grid_default() -> Self {
-        Self::builder()
-            .refinement_mode(CornerRefinementMode::Erf)
-            .enable_sharpening(false)
-            .threshold_tile_size(8)
-            .quad_max_elongation(20.0)
-            .quad_min_density(0.15)
-            .segmentation_connectivity(SegmentationConnectivity::Four)
-            .decoder_min_contrast(10.0)
-            .quad_min_edge_score(2.0)
-            .decode_mode(DecodeMode::Hard)
-            .build()
-    }
-
-    /// State-of-the-art metrology configuration for maximum pose accuracy.
-    ///
-    /// Bridges the deterministic GN 2D solver directly to the probabilistic 3D solver:
-    ///
-    /// - **Phase 1 (2D Geometric Locking):** EdLines Joint Gauss-Newton solver produces
-    ///   sub-pixel corners and their per-corner 2×2 covariance matrices (from H⁻¹).
-    /// - **Phase 2 (Uncertainty Translation):** GN covariances propagate to the pose
-    ///   solver via `batch.corner_covariances`; the Structure Tensor is used as a
-    ///   fallback only if the GN solver diverges for a given corner.
-    /// - **Phase 3 (3D Metrology):** Weighted Levenberg-Marquardt minimizes Mahalanobis
-    ///   distance weighted by the GN-derived corner covariances.
-    ///
-    /// Pre-processing filters are disabled to pass the raw PSF directly to the solver.
-    /// Hard decoding is used to maintain precision; Soft decode causes a precision
-    /// collapse (~10–20%) on EdLines due to the larger number of quad candidates.
-    /// For maximum recall on multi-tag scenes use [`standard_default`].
-    /// For touching-tag checkerboard grids use [`grid_default`].
-    ///
-    /// **Pose tuning targets:** `structure_tensor_radius`, `sigma_n_sq`,
-    /// `tikhonov_alpha_max`, `huber_delta_px` — sweep these against your sensor profile.
-    #[must_use]
-    pub fn high_accuracy_default() -> Self {
-        Self::builder()
-            .quad_extraction_mode(QuadExtractionMode::EdLines)
-            .refinement_mode(CornerRefinementMode::None)
-            .enable_sharpening(false)
-            .quad_max_elongation(20.0)
-            .quad_min_density(0.15)
-            .decode_mode(DecodeMode::Hard)
-            .threshold_tile_size(8)
-            .build()
-    }
 }
 
 /// Builder for [`DetectorConfig`].
@@ -858,6 +776,269 @@ impl DetectOptionsBuilder {
     }
 }
 
+// The three shipped JSON profiles live in `crates/locus-py/locus/profiles/`
+// so both Rust (`include_str!`) and the Python wheel (`importlib.resources`)
+// read byte-for-byte the same files. If defaults here and the JSON ever
+// disagree, the JSON wins. The grouping below exists only at this serde
+// boundary — `DetectorConfig` stays flat for hot-path access.
+#[cfg(feature = "profiles")]
+mod profile_json {
+    use super::{
+        CornerRefinementMode, DecodeMode, DetectorConfig, QuadExtractionMode,
+        SegmentationConnectivity,
+    };
+    use serde::Deserialize;
+
+    #[derive(Debug, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub(super) struct ProfileJson {
+        #[allow(dead_code)]
+        #[serde(default)]
+        pub name: Option<String>,
+        #[serde(default)]
+        pub extends: Option<String>,
+        #[serde(default)]
+        pub threshold: ThresholdJson,
+        #[serde(default)]
+        pub quad: QuadJson,
+        #[serde(default)]
+        pub decoder: DecoderJson,
+        #[serde(default)]
+        pub pose: PoseJson,
+        #[serde(default)]
+        pub segmentation: SegmentationJson,
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub(super) struct ThresholdJson {
+        pub tile_size: usize,
+        pub min_range: u8,
+        pub enable_sharpening: bool,
+        pub enable_adaptive_window: bool,
+        pub min_radius: usize,
+        pub max_radius: usize,
+        pub constant: i16,
+        pub gradient_threshold: u8,
+    }
+
+    impl Default for ThresholdJson {
+        fn default() -> Self {
+            let d = DetectorConfig::default();
+            Self {
+                tile_size: d.threshold_tile_size,
+                min_range: d.threshold_min_range,
+                enable_sharpening: d.enable_sharpening,
+                enable_adaptive_window: d.enable_adaptive_window,
+                min_radius: d.threshold_min_radius,
+                max_radius: d.threshold_max_radius,
+                constant: d.adaptive_threshold_constant,
+                gradient_threshold: d.adaptive_threshold_gradient_threshold,
+            }
+        }
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub(super) struct QuadJson {
+        pub min_area: u32,
+        pub max_aspect_ratio: f32,
+        pub min_fill_ratio: f32,
+        pub max_fill_ratio: f32,
+        pub min_edge_length: f64,
+        pub min_edge_score: f64,
+        pub subpixel_refinement_sigma: f64,
+        pub upscale_factor: usize,
+        pub max_elongation: f64,
+        pub min_density: f64,
+        pub extraction_mode: QuadExtractionMode,
+    }
+
+    impl Default for QuadJson {
+        fn default() -> Self {
+            let d = DetectorConfig::default();
+            Self {
+                min_area: d.quad_min_area,
+                max_aspect_ratio: d.quad_max_aspect_ratio,
+                min_fill_ratio: d.quad_min_fill_ratio,
+                max_fill_ratio: d.quad_max_fill_ratio,
+                min_edge_length: d.quad_min_edge_length,
+                min_edge_score: d.quad_min_edge_score,
+                subpixel_refinement_sigma: d.subpixel_refinement_sigma,
+                upscale_factor: d.upscale_factor,
+                max_elongation: d.quad_max_elongation,
+                min_density: d.quad_min_density,
+                extraction_mode: d.quad_extraction_mode,
+            }
+        }
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub(super) struct DecoderJson {
+        pub min_contrast: f64,
+        pub refinement_mode: CornerRefinementMode,
+        pub decode_mode: DecodeMode,
+        pub max_hamming_error: u32,
+        pub gwlf_transversal_alpha: f64,
+    }
+
+    impl Default for DecoderJson {
+        fn default() -> Self {
+            let d = DetectorConfig::default();
+            Self {
+                min_contrast: d.decoder_min_contrast,
+                refinement_mode: d.refinement_mode,
+                decode_mode: d.decode_mode,
+                max_hamming_error: d.max_hamming_error,
+                gwlf_transversal_alpha: d.gwlf_transversal_alpha,
+            }
+        }
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub(super) struct PoseJson {
+        pub huber_delta_px: f64,
+        pub tikhonov_alpha_max: f64,
+        pub sigma_n_sq: f64,
+        pub structure_tensor_radius: u8,
+    }
+
+    impl Default for PoseJson {
+        fn default() -> Self {
+            let d = DetectorConfig::default();
+            Self {
+                huber_delta_px: d.huber_delta_px,
+                tikhonov_alpha_max: d.tikhonov_alpha_max,
+                sigma_n_sq: d.sigma_n_sq,
+                structure_tensor_radius: d.structure_tensor_radius,
+            }
+        }
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub(super) struct SegmentationJson {
+        pub connectivity: SegmentationConnectivity,
+        pub margin: i16,
+    }
+
+    impl Default for SegmentationJson {
+        fn default() -> Self {
+            let d = DetectorConfig::default();
+            Self {
+                connectivity: d.segmentation_connectivity,
+                margin: d.segmentation_margin,
+            }
+        }
+    }
+
+    impl From<ProfileJson> for DetectorConfig {
+        fn from(p: ProfileJson) -> Self {
+            // `decimation` and `nthreads` are per-call orchestration, not
+            // profile fields. Keep them at `DetectorConfig::default()`.
+            let d = DetectorConfig::default();
+            DetectorConfig {
+                threshold_tile_size: p.threshold.tile_size,
+                threshold_min_range: p.threshold.min_range,
+                enable_sharpening: p.threshold.enable_sharpening,
+                enable_adaptive_window: p.threshold.enable_adaptive_window,
+                threshold_min_radius: p.threshold.min_radius,
+                threshold_max_radius: p.threshold.max_radius,
+                adaptive_threshold_constant: p.threshold.constant,
+                adaptive_threshold_gradient_threshold: p.threshold.gradient_threshold,
+                quad_min_area: p.quad.min_area,
+                quad_max_aspect_ratio: p.quad.max_aspect_ratio,
+                quad_min_fill_ratio: p.quad.min_fill_ratio,
+                quad_max_fill_ratio: p.quad.max_fill_ratio,
+                quad_min_edge_length: p.quad.min_edge_length,
+                quad_min_edge_score: p.quad.min_edge_score,
+                subpixel_refinement_sigma: p.quad.subpixel_refinement_sigma,
+                segmentation_margin: p.segmentation.margin,
+                segmentation_connectivity: p.segmentation.connectivity,
+                upscale_factor: p.quad.upscale_factor,
+                decimation: d.decimation,
+                nthreads: d.nthreads,
+                decoder_min_contrast: p.decoder.min_contrast,
+                refinement_mode: p.decoder.refinement_mode,
+                decode_mode: p.decoder.decode_mode,
+                max_hamming_error: p.decoder.max_hamming_error,
+                huber_delta_px: p.pose.huber_delta_px,
+                tikhonov_alpha_max: p.pose.tikhonov_alpha_max,
+                sigma_n_sq: p.pose.sigma_n_sq,
+                structure_tensor_radius: p.pose.structure_tensor_radius,
+                gwlf_transversal_alpha: p.decoder.gwlf_transversal_alpha,
+                quad_max_elongation: p.quad.max_elongation,
+                quad_min_density: p.quad.min_density,
+                quad_extraction_mode: p.quad.extraction_mode,
+            }
+        }
+    }
+}
+
+#[cfg(feature = "profiles")]
+const STANDARD_JSON: &str = include_str!("../../locus-py/locus/profiles/standard.json");
+#[cfg(feature = "profiles")]
+const GRID_JSON: &str = include_str!("../../locus-py/locus/profiles/grid.json");
+#[cfg(feature = "profiles")]
+const HIGH_ACCURACY_JSON: &str = include_str!("../../locus-py/locus/profiles/high_accuracy.json");
+
+#[cfg(feature = "profiles")]
+impl DetectorConfig {
+    /// Load a user-supplied profile from a JSON string.
+    ///
+    /// Returns [`ConfigError::ProfileParse`] for malformed JSON or unknown
+    /// fields (the serde deserializer rejects unknown keys), and any
+    /// validation error from [`DetectorConfig::validate`] for configurations
+    /// that fail cross-group compatibility checks (e.g. EdLines + Erf).
+    ///
+    /// # Errors
+    ///
+    /// See above: parse failure and post-parse validation failure.
+    pub fn from_profile_json(json: &str) -> Result<Self, crate::error::ConfigError> {
+        use crate::error::ConfigError;
+        let parsed: profile_json::ProfileJson =
+            serde_json::from_str(json).map_err(|e| ConfigError::ProfileParse(e.to_string()))?;
+        if let Some(name) = parsed.extends.as_deref() {
+            return Err(ConfigError::ProfileParse(format!(
+                "profile inheritance (extends={name:?}) is declared in the schema but \
+                 not yet resolved by the Rust loader; inline the parent profile's values"
+            )));
+        }
+        let config: DetectorConfig = parsed.into();
+        config.validate()?;
+        Ok(config)
+    }
+
+    /// Load one of the three shipped profiles by name.
+    ///
+    /// Accepts `"standard"`, `"grid"`, or `"high_accuracy"`.
+    ///
+    /// # Panics
+    ///
+    /// Panics on an unknown profile name — this is a programming error
+    /// against a closed set of three compile-time-embedded profiles.
+    /// Panics on a malformed embedded JSON, which would be a build error
+    /// caught by the `profile_loading` integration test.
+    #[must_use]
+    #[allow(clippy::panic)] // Closed set of three; unknown-name is a programming error.
+    pub fn from_profile(name: &str) -> Self {
+        let json = match name {
+            "standard" => STANDARD_JSON,
+            "grid" => GRID_JSON,
+            "high_accuracy" => HIGH_ACCURACY_JSON,
+            other => panic!(
+                "Unknown shipped profile {other:?}; expected one of \
+                 [\"standard\", \"grid\", \"high_accuracy\"]"
+            ),
+        };
+        Self::from_profile_json(json).unwrap_or_else(|e| {
+            panic!("shipped profile {name:?} failed to load: {e}; this is a build bug")
+        })
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
@@ -910,12 +1091,6 @@ mod tests {
     #[test]
     fn test_default_config_is_valid() {
         let config = DetectorConfig::default();
-        assert!(config.validate().is_ok());
-    }
-
-    #[test]
-    fn test_standard_config_is_valid() {
-        let config = DetectorConfig::standard_default();
         assert!(config.validate().is_ok());
     }
 
