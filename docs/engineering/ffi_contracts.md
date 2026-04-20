@@ -45,12 +45,18 @@ This is a **latent footgun**. A1 should either:
 1. Assert `has_simd_padding()` at `prepare_image_view` and raise `PyValueError`.
 2. Copy into a padded arena buffer at the FFI boundary when the check fails.
 
-### Intrinsics ↔ image-shape coupling (not enforced)
+### Intrinsics ↔ image-shape coupling (enforced)
 
-When `intrinsics` is passed to `detect()`, no check verifies that the
-principal point `(cx, cy)` lies inside the image or that `(fx, fy)` are
-plausible for the image size. A misconfigured intrinsics object silently
-produces garbage poses. A1 should add a sanity check.
+When `intrinsics` is passed to `detect()` or `detect_concurrent()`, the
+principal point is validated against each image's dimensions:
+
+| Invariant | Enforcement point | Error type |
+| --- | --- | --- |
+| `0 <= cx < width` | `lib.rs:validate_principal_point` (called before `detach`) | `PyValueError` |
+| `0 <= cy < height` | same | `PyValueError` |
+
+`fx, fy` plausibility relative to the image size is not gated — it is a
+calibration concern, not a correctness concern.
 
 ---
 
@@ -60,13 +66,15 @@ Defined at `crates/locus-py/src/lib.rs:214-264`.
 
 | Invariant | Enforcement point | Error type |
 | --- | --- | --- |
-| `distortion_model == Pinhole` → any `dist_coeffs` length (including empty) accepted | `lib.rs:251-253` | n/a |
-| `distortion_model == BrownConrady` → `len(dist_coeffs) == 5` | `lib.rs:232-238` (feature-gated on `non_rectified`) | `PyValueError` |
-| `distortion_model == KannalaBrandt` → `len(dist_coeffs) == 4` | `lib.rs:242-248` (feature-gated on `non_rectified`) | `PyValueError` |
+| `fx, fy, cx, cy` all finite (no NaN/±inf) | `CameraIntrinsics::new` | `PyValueError` |
+| `fx > 0` and `fy > 0` | `CameraIntrinsics::new` | `PyValueError` |
+| `distortion_model == Pinhole` → any `dist_coeffs` length (including empty) accepted | `CameraIntrinsics::new` | n/a |
+| `distortion_model == BrownConrady` → `len(dist_coeffs) == 5` | `CameraIntrinsics::new` (feature-gated on `non_rectified`) | `PyValueError` |
+| `distortion_model == KannalaBrandt` → `len(dist_coeffs) == 4` | `CameraIntrinsics::new` (feature-gated on `non_rectified`) | `PyValueError` |
 | `BrownConrady` / `KannalaBrandt` available | Compile-time `#[cfg(feature = "non_rectified")]` | `AttributeError` at import time if feature off |
 
-No runtime check that `fx > 0`, `fy > 0`, or that `cx, cy` are finite.
-A1 candidate.
+Principal-point bounds `(cx, cy)` ∈ image are checked at
+`detect()`/`detect_concurrent()` — see §1 "Intrinsics ↔ image-shape coupling".
 
 ---
 
@@ -168,9 +176,9 @@ converge.
 These feed the Phase A1 test matrix:
 
 - **Image:** SIMD padding is caller-responsibility and silently unsafe. Assert
-  at `prepare_image_view`.
-- **Image:** No intrinsics↔image-shape coupling check.
-- **Intrinsics:** No finiteness or positivity check on `fx, fy, cx, cy`.
+  at `prepare_image_view`. (Deferred from A1.2: hardening this either breaks
+  every `np.zeros((H, W))` call site or requires an arena-copy path; tracked
+  separately.)
 - **Config:** ~18 Rust fields have no range validation; Pydantic validators in
   `_config.py` are bypassed when users pass kwargs directly to `Detector()`.
 - **Preset ↔ connectivity:** Grid + 8-connectivity is a soft warning. Decide

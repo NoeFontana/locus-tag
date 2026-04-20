@@ -133,41 +133,48 @@ class TestSimdPaddingGate:
 
 
 class TestIntrinsicsShapeCouplingGate:
-    """§7 follow-up: no runtime check that intrinsics are consistent with the image.
+    """A1.2 enforced gates — previously xfail placeholders from ffi_contracts.md §7.
 
-    All three cases accept silently today and silently produce garbage poses.
-    A1.2 will raise at ``Detector.detect`` when intrinsics are invalid.
+    Finiteness and positivity are validated at ``CameraIntrinsics`` construction;
+    the principal-point bounds check lives at ``Detector.detect`` /
+    ``detect_concurrent`` (it needs image dimensions).
     """
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="A1.2 will validate (cx, cy) against image bounds",
-    )
-    def test_principal_point_outside_image(self, detector: locus.Detector) -> None:
-        img = _valid_img()
+    def test_principal_point_outside_image_single(self, detector: locus.Detector) -> None:
         bad = locus.CameraIntrinsics(fx=500.0, fy=500.0, cx=5000.0, cy=5000.0)
-        with pytest.raises(ValueError, match=r"principal point|cx|cy"):
-            detector.detect(img, intrinsics=bad, tag_size=0.05)
+        with pytest.raises(ValueError, match=r"CameraIntrinsics\.cx"):
+            detector.detect(_valid_img(), intrinsics=bad, tag_size=0.05)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="A1.2 will require fx > 0 and fy > 0",
-    )
-    def test_non_positive_focal_length(self, detector: locus.Detector) -> None:
-        img = _valid_img()
-        bad = locus.CameraIntrinsics(fx=-1.0, fy=500.0, cx=32.0, cy=32.0)
-        with pytest.raises(ValueError, match=r"fx|focal"):
-            detector.detect(img, intrinsics=bad, tag_size=0.05)
+    def test_principal_point_outside_image_concurrent(self, detector: locus.Detector) -> None:
+        bad = locus.CameraIntrinsics(fx=500.0, fy=500.0, cx=5000.0, cy=5000.0)
+        with pytest.raises(ValueError, match=r"CameraIntrinsics\.cx"):
+            detector.detect_concurrent([_valid_img()], intrinsics=bad, tag_size=0.05)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="A1.2 will reject non-finite intrinsics",
+    @pytest.mark.parametrize(
+        ("fx", "fy"),
+        [(-1.0, 500.0), (0.0, 500.0), (500.0, -1.0), (500.0, 0.0)],
+        ids=["fx_negative", "fx_zero", "fy_negative", "fy_zero"],
     )
-    def test_non_finite_intrinsics(self, detector: locus.Detector) -> None:
-        img = _valid_img()
-        bad = locus.CameraIntrinsics(fx=float("nan"), fy=500.0, cx=32.0, cy=32.0)
-        with pytest.raises(ValueError, match=r"finite|nan|inf"):
-            detector.detect(img, intrinsics=bad, tag_size=0.05)
+    def test_non_positive_focal_length(self, fx: float, fy: float) -> None:
+        with pytest.raises(ValueError, match=r"CameraIntrinsics\.(fx|fy) must be > 0"):
+            locus.CameraIntrinsics(fx=fx, fy=fy, cx=32.0, cy=32.0)
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("fx", float("nan")),
+            ("fy", float("inf")),
+            ("cx", float("-inf")),
+            ("cy", float("nan")),
+        ],
+    )
+    def test_non_finite_intrinsics(self, field: str, value: float) -> None:
+        values = {"fx": 500.0, "fy": 500.0, "cx": 32.0, "cy": 32.0}
+        values[field] = value
+        with pytest.raises(ValueError, match=rf"CameraIntrinsics\.{field} must be finite"):
+            locus.CameraIntrinsics(
+                fx=values["fx"], fy=values["fy"], cx=values["cx"], cy=values["cy"]
+            )
 
 
 # ---------------------------------------------------------------------------
