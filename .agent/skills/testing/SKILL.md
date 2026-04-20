@@ -37,6 +37,16 @@ TRACY_NO_INVARIANT_CHECK=1 INSTA_UPDATE=always cargo test --release --test regre
 
 # Render-Tag suite (if applicable)
 TRACY_NO_INVARIANT_CHECK=1 LOCUS_HUB_DATASET_DIR=../../tests/data/hub_cache INSTA_UPDATE=always cargo test --release --test regression_render_tag -- --test-threads=1
+
+# Distortion-aware suite (Brown-Conrady + Kannala-Brandt)
+# One-time setup: sync the two configs into tests/data/hub_cache/ via
+#   uv run python tools/bench/sync_hub.py --configs \
+#     aprilgrid_distortion_brown_conrady_v1 aprilgrid_distortion_kannala_brandt_v1
+# If sync_hub.py fails due to upstream dataset schema drift, fall back to
+# direct parquet download via `huggingface_hub.hf_hub_download`.
+TRACY_NO_INVARIANT_CHECK=1 LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \
+  cargo insta test --release --all-features --features bench-internals \
+  --test regression_distortion_hub --review
 ```
 
 **Success Criteria:**
