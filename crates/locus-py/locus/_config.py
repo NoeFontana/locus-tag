@@ -28,6 +28,7 @@ from .locus import (
     CornerRefinementMode,
     DecodeMode,
     PoseEstimationMode,
+    PyDetectorConfig,
     QuadExtractionMode,
     SegmentationConnectivity,
     TagFamily,
@@ -248,43 +249,42 @@ class DetectorConfig(BaseModel):
         """Load a user-supplied profile from a JSON string."""
         return cls.model_validate_json(json_str)
 
-    def _to_flat_ffi_dict(self) -> dict[str, Any]:
-        # Flat dict mirroring the Rust `DetectorConfig` struct. Internal
-        # boundary between this nested Pydantic model and the PyO3 entrypoint;
-        # enum values pass through as PyO3 variants (Python-mode serialization)
-        # so the FFI can `.extract::<i32>()` them.
-        return {
-            "threshold_tile_size": self.threshold.tile_size,
-            "threshold_min_range": self.threshold.min_range,
-            "enable_sharpening": self.threshold.enable_sharpening,
-            "enable_adaptive_window": self.threshold.enable_adaptive_window,
-            "threshold_min_radius": self.threshold.min_radius,
-            "threshold_max_radius": self.threshold.max_radius,
-            "adaptive_threshold_constant": self.threshold.constant,
-            "adaptive_threshold_gradient_threshold": self.threshold.gradient_threshold,
-            "quad_min_area": self.quad.min_area,
-            "quad_max_aspect_ratio": self.quad.max_aspect_ratio,
-            "quad_min_fill_ratio": self.quad.min_fill_ratio,
-            "quad_max_fill_ratio": self.quad.max_fill_ratio,
-            "quad_min_edge_length": self.quad.min_edge_length,
-            "quad_min_edge_score": self.quad.min_edge_score,
-            "subpixel_refinement_sigma": self.quad.subpixel_refinement_sigma,
-            "upscale_factor": self.quad.upscale_factor,
-            "quad_max_elongation": self.quad.max_elongation,
-            "quad_min_density": self.quad.min_density,
-            "quad_extraction_mode": self.quad.extraction_mode,
-            "decoder_min_contrast": self.decoder.min_contrast,
-            "refinement_mode": self.decoder.refinement_mode,
-            "decode_mode": self.decoder.decode_mode,
-            "max_hamming_error": self.decoder.max_hamming_error,
-            "gwlf_transversal_alpha": self.decoder.gwlf_transversal_alpha,
-            "huber_delta_px": self.pose.huber_delta_px,
-            "tikhonov_alpha_max": self.pose.tikhonov_alpha_max,
-            "sigma_n_sq": self.pose.sigma_n_sq,
-            "structure_tensor_radius": self.pose.structure_tensor_radius,
-            "segmentation_connectivity": self.segmentation.connectivity,
-            "segmentation_margin": self.segmentation.margin,
-        }
+    def _to_ffi_config(self) -> PyDetectorConfig:
+        # Flatten the nested Pydantic groups into the typed `PyDetectorConfig`
+        # that PyO3 extracts at the FFI boundary. Cross-group validation has
+        # already fired in this Pydantic model.
+        return PyDetectorConfig(
+            threshold_tile_size=self.threshold.tile_size,
+            threshold_min_range=self.threshold.min_range,
+            enable_sharpening=self.threshold.enable_sharpening,
+            enable_adaptive_window=self.threshold.enable_adaptive_window,
+            threshold_min_radius=self.threshold.min_radius,
+            threshold_max_radius=self.threshold.max_radius,
+            adaptive_threshold_constant=self.threshold.constant,
+            adaptive_threshold_gradient_threshold=self.threshold.gradient_threshold,
+            quad_min_area=self.quad.min_area,
+            quad_max_aspect_ratio=self.quad.max_aspect_ratio,
+            quad_min_fill_ratio=self.quad.min_fill_ratio,
+            quad_max_fill_ratio=self.quad.max_fill_ratio,
+            quad_min_edge_length=self.quad.min_edge_length,
+            quad_min_edge_score=self.quad.min_edge_score,
+            subpixel_refinement_sigma=self.quad.subpixel_refinement_sigma,
+            upscale_factor=self.quad.upscale_factor,
+            quad_max_elongation=self.quad.max_elongation,
+            quad_min_density=self.quad.min_density,
+            quad_extraction_mode=self.quad.extraction_mode,
+            decoder_min_contrast=self.decoder.min_contrast,
+            refinement_mode=self.decoder.refinement_mode,
+            decode_mode=self.decoder.decode_mode,
+            max_hamming_error=self.decoder.max_hamming_error,
+            gwlf_transversal_alpha=self.decoder.gwlf_transversal_alpha,
+            huber_delta_px=self.pose.huber_delta_px,
+            tikhonov_alpha_max=self.pose.tikhonov_alpha_max,
+            sigma_n_sq=self.pose.sigma_n_sq,
+            structure_tensor_radius=self.pose.structure_tensor_radius,
+            segmentation_connectivity=self.segmentation.connectivity,
+            segmentation_margin=self.segmentation.margin,
+        )
 
 
 class DetectOptions(BaseModel):

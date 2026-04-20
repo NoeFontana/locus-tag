@@ -12,7 +12,6 @@ use numpy::{
 };
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
 
 // ============================================================================
 // Enums
@@ -332,6 +331,110 @@ pub struct PyDetectorConfig {
     pub tikhonov_alpha_max: f64,
     pub sigma_n_sq: f64,
     pub structure_tensor_radius: u8,
+}
+
+#[pymethods]
+impl PyDetectorConfig {
+    #[new]
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (
+        *,
+        threshold_tile_size,
+        threshold_min_range,
+        enable_sharpening,
+        enable_adaptive_window,
+        threshold_min_radius,
+        threshold_max_radius,
+        adaptive_threshold_constant,
+        adaptive_threshold_gradient_threshold,
+        quad_min_area,
+        quad_max_aspect_ratio,
+        quad_min_fill_ratio,
+        quad_max_fill_ratio,
+        quad_min_edge_length,
+        quad_min_edge_score,
+        subpixel_refinement_sigma,
+        segmentation_margin,
+        segmentation_connectivity,
+        upscale_factor,
+        decoder_min_contrast,
+        refinement_mode,
+        decode_mode,
+        max_hamming_error,
+        gwlf_transversal_alpha,
+        quad_max_elongation,
+        quad_min_density,
+        quad_extraction_mode,
+        huber_delta_px,
+        tikhonov_alpha_max,
+        sigma_n_sq,
+        structure_tensor_radius,
+    ))]
+    fn new(
+        threshold_tile_size: usize,
+        threshold_min_range: u8,
+        enable_sharpening: bool,
+        enable_adaptive_window: bool,
+        threshold_min_radius: usize,
+        threshold_max_radius: usize,
+        adaptive_threshold_constant: i16,
+        adaptive_threshold_gradient_threshold: u8,
+        quad_min_area: u32,
+        quad_max_aspect_ratio: f32,
+        quad_min_fill_ratio: f32,
+        quad_max_fill_ratio: f32,
+        quad_min_edge_length: f64,
+        quad_min_edge_score: f64,
+        subpixel_refinement_sigma: f64,
+        segmentation_margin: i16,
+        segmentation_connectivity: SegmentationConnectivity,
+        upscale_factor: usize,
+        decoder_min_contrast: f64,
+        refinement_mode: CornerRefinementMode,
+        decode_mode: DecodeMode,
+        max_hamming_error: u32,
+        gwlf_transversal_alpha: f64,
+        quad_max_elongation: f64,
+        quad_min_density: f64,
+        quad_extraction_mode: QuadExtractionMode,
+        huber_delta_px: f64,
+        tikhonov_alpha_max: f64,
+        sigma_n_sq: f64,
+        structure_tensor_radius: u8,
+    ) -> Self {
+        Self {
+            threshold_tile_size,
+            threshold_min_range,
+            enable_sharpening,
+            enable_adaptive_window,
+            threshold_min_radius,
+            threshold_max_radius,
+            adaptive_threshold_constant,
+            adaptive_threshold_gradient_threshold,
+            quad_min_area,
+            quad_max_aspect_ratio,
+            quad_min_fill_ratio,
+            quad_max_fill_ratio,
+            quad_min_edge_length,
+            quad_min_edge_score,
+            subpixel_refinement_sigma,
+            segmentation_margin,
+            segmentation_connectivity,
+            upscale_factor,
+            decoder_min_contrast,
+            refinement_mode,
+            decode_mode,
+            max_hamming_error,
+            gwlf_transversal_alpha,
+            quad_max_elongation,
+            quad_min_density,
+            quad_extraction_mode,
+            huber_delta_px,
+            tikhonov_alpha_max,
+            sigma_n_sq,
+            structure_tensor_radius,
+        }
+    }
 }
 
 impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
@@ -1330,69 +1433,53 @@ fn tag_family_from_i32(f: i32) -> PyResult<locus_core::TagFamily> {
     }
 }
 
-/// Build a [`DetectorConfig`] from a Python-side flat-FFI dict.
-///
-/// Python is the single validator: the caller (`_config.DetectorConfig`)
-/// has already enforced type, range, and cross-group constraints. This
-/// function is an extraction-only bridge — no validation beyond what
-/// `DetectorConfig::validate()` provides as the Rust-side safety net.
-fn config_from_flat_dict(
-    dict: &Bound<'_, PyDict>,
-) -> PyResult<locus_core::config::DetectorConfig> {
-    let get = |key: &str| -> PyResult<Bound<'_, pyo3::PyAny>> {
-        dict.get_item(key)?
-            .ok_or_else(|| PyValueError::new_err(format!("config dict missing field {key:?}")))
-    };
-    let quad_mode: QuadExtractionMode = get("quad_extraction_mode")?.extract()?;
-    let ref_mode: CornerRefinementMode = get("refinement_mode")?.extract()?;
-    let dec_mode: DecodeMode = get("decode_mode")?.extract()?;
-    let conn: SegmentationConnectivity = get("segmentation_connectivity")?.extract()?;
-    let cfg = locus_core::config::DetectorConfig {
-        threshold_tile_size: get("threshold_tile_size")?.extract()?,
-        threshold_min_range: get("threshold_min_range")?.extract()?,
-        enable_sharpening: get("enable_sharpening")?.extract()?,
-        enable_adaptive_window: get("enable_adaptive_window")?.extract()?,
-        threshold_min_radius: get("threshold_min_radius")?.extract()?,
-        threshold_max_radius: get("threshold_max_radius")?.extract()?,
-        adaptive_threshold_constant: get("adaptive_threshold_constant")?.extract()?,
-        adaptive_threshold_gradient_threshold: get("adaptive_threshold_gradient_threshold")?
-            .extract()?,
-        quad_min_area: get("quad_min_area")?.extract()?,
-        quad_max_aspect_ratio: get("quad_max_aspect_ratio")?.extract()?,
-        quad_min_fill_ratio: get("quad_min_fill_ratio")?.extract()?,
-        quad_max_fill_ratio: get("quad_max_fill_ratio")?.extract()?,
-        quad_min_edge_length: get("quad_min_edge_length")?.extract()?,
-        quad_min_edge_score: get("quad_min_edge_score")?.extract()?,
-        subpixel_refinement_sigma: get("subpixel_refinement_sigma")?.extract()?,
-        upscale_factor: get("upscale_factor")?.extract()?,
-        quad_max_elongation: get("quad_max_elongation")?.extract()?,
-        quad_min_density: get("quad_min_density")?.extract()?,
-        quad_extraction_mode: quad_mode.into(),
-        decoder_min_contrast: get("decoder_min_contrast")?.extract()?,
-        refinement_mode: ref_mode.into(),
-        decode_mode: dec_mode.into(),
-        max_hamming_error: get("max_hamming_error")?.extract()?,
-        gwlf_transversal_alpha: get("gwlf_transversal_alpha")?.extract()?,
-        huber_delta_px: get("huber_delta_px")?.extract()?,
-        tikhonov_alpha_max: get("tikhonov_alpha_max")?.extract()?,
-        sigma_n_sq: get("sigma_n_sq")?.extract()?,
-        structure_tensor_radius: get("structure_tensor_radius")?.extract()?,
-        segmentation_connectivity: conn.into(),
-        segmentation_margin: get("segmentation_margin")?.extract()?,
-        ..locus_core::config::DetectorConfig::default()
-    };
-    Ok(cfg)
+impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
+    fn from(c: PyDetectorConfig) -> Self {
+        Self {
+            threshold_tile_size: c.threshold_tile_size,
+            threshold_min_range: c.threshold_min_range,
+            enable_sharpening: c.enable_sharpening,
+            enable_adaptive_window: c.enable_adaptive_window,
+            threshold_min_radius: c.threshold_min_radius,
+            threshold_max_radius: c.threshold_max_radius,
+            adaptive_threshold_constant: c.adaptive_threshold_constant,
+            adaptive_threshold_gradient_threshold: c.adaptive_threshold_gradient_threshold,
+            quad_min_area: c.quad_min_area,
+            quad_max_aspect_ratio: c.quad_max_aspect_ratio,
+            quad_min_fill_ratio: c.quad_min_fill_ratio,
+            quad_max_fill_ratio: c.quad_max_fill_ratio,
+            quad_min_edge_length: c.quad_min_edge_length,
+            quad_min_edge_score: c.quad_min_edge_score,
+            subpixel_refinement_sigma: c.subpixel_refinement_sigma,
+            upscale_factor: c.upscale_factor,
+            quad_max_elongation: c.quad_max_elongation,
+            quad_min_density: c.quad_min_density,
+            quad_extraction_mode: c.quad_extraction_mode.into(),
+            decoder_min_contrast: c.decoder_min_contrast,
+            refinement_mode: c.refinement_mode.into(),
+            decode_mode: c.decode_mode.into(),
+            max_hamming_error: c.max_hamming_error,
+            gwlf_transversal_alpha: c.gwlf_transversal_alpha,
+            huber_delta_px: c.huber_delta_px,
+            tikhonov_alpha_max: c.tikhonov_alpha_max,
+            sigma_n_sq: c.sigma_n_sq,
+            structure_tensor_radius: c.structure_tensor_radius,
+            segmentation_connectivity: c.segmentation_connectivity.into(),
+            segmentation_margin: c.segmentation_margin,
+            ..locus_core::config::DetectorConfig::default()
+        }
+    }
 }
 
 #[pyfunction]
 #[pyo3(signature = (config, decimation=None, threads=None, families=vec![]))]
 fn _create_detector_from_config(
-    config: &Bound<'_, PyDict>,
+    config: PyDetectorConfig,
     decimation: Option<usize>,
     threads: Option<usize>,
     families: Vec<i32>,
 ) -> PyResult<Detector> {
-    let cfg = config_from_flat_dict(config)?;
+    let cfg: locus_core::config::DetectorConfig = config.into();
     let mut builder = locus_core::DetectorBuilder::new().with_config(cfg);
 
     if let Some(d) = decimation {

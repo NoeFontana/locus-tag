@@ -229,7 +229,6 @@
       "type": "object"
     }
   },
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Nested detector configuration \u2014 Python source of truth.\n\nThe three shipped profiles live in ``locus/profiles/*.json`` and ship\ninside the wheel. Load via :meth:`from_profile` for a shipped profile\nor :meth:`from_profile_json` for a user-supplied JSON string.",
   "properties": {

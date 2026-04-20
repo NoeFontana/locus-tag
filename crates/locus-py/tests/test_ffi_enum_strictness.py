@@ -5,11 +5,12 @@ from __future__ import annotations
 import pytest
 
 import locus
-from locus import _create_detector_from_config
+from locus.locus import PyDetectorConfig
 
 
-def _base_flat() -> dict:
-    return locus.DetectorConfig.from_profile("standard")._to_flat_ffi_dict()
+def _base_kwargs() -> dict:
+    cfg = locus.DetectorConfig.from_profile("standard")._to_ffi_config()
+    return {name: getattr(cfg, name) for name in dir(cfg) if not name.startswith("_")}
 
 
 @pytest.mark.parametrize(
@@ -22,21 +23,17 @@ def _base_flat() -> dict:
     ],
 )
 def test_raw_int_rejected_for_enum_fields(field: str) -> None:
-    flat = _base_flat()
-    flat[field] = 0
+    kwargs = _base_kwargs()
+    kwargs[field] = 0
     with pytest.raises((TypeError, ValueError)):
-        _create_detector_from_config(
-            config=flat,
-            decimation=None,
-            threads=None,
-            families=[int(locus.TagFamily.AprilTag36h11)],
-        )
+        PyDetectorConfig(**kwargs)
 
 
 def test_typed_enum_accepted() -> None:
-    flat = _base_flat()
-    det = _create_detector_from_config(
-        config=flat,
+    kwargs = _base_kwargs()
+    cfg = PyDetectorConfig(**kwargs)
+    det = locus._create_detector_from_config(
+        config=cfg,
         decimation=None,
         threads=None,
         families=[int(locus.TagFamily.AprilTag36h11)],

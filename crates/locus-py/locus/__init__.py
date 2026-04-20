@@ -185,7 +185,7 @@ class Detector:
             families = [TagFamily.AprilTag36h11]
 
         self._inner = _create_detector_from_config(
-            config=config._to_flat_ffi_dict(),
+            config=config._to_ffi_config(),
             decimation=decimation,
             threads=threads,
             families=[int(f) for f in families],

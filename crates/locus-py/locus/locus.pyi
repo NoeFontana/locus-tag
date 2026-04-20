@@ -114,6 +114,40 @@ class PyDetectorConfig:
     tikhonov_alpha_max: float
     sigma_n_sq: float
     structure_tensor_radius: int
+    def __init__(
+        self,
+        *,
+        threshold_tile_size: int,
+        threshold_min_range: int,
+        enable_sharpening: bool,
+        enable_adaptive_window: bool,
+        threshold_min_radius: int,
+        threshold_max_radius: int,
+        adaptive_threshold_constant: int,
+        adaptive_threshold_gradient_threshold: int,
+        quad_min_area: int,
+        quad_max_aspect_ratio: float,
+        quad_min_fill_ratio: float,
+        quad_max_fill_ratio: float,
+        quad_min_edge_length: float,
+        quad_min_edge_score: float,
+        subpixel_refinement_sigma: float,
+        segmentation_margin: int,
+        segmentation_connectivity: SegmentationConnectivity,
+        upscale_factor: int,
+        decoder_min_contrast: float,
+        refinement_mode: CornerRefinementMode,
+        decode_mode: DecodeMode,
+        max_hamming_error: int,
+        gwlf_transversal_alpha: float,
+        quad_max_elongation: float,
+        quad_min_density: float,
+        quad_extraction_mode: QuadExtractionMode,
+        huber_delta_px: float,
+        tikhonov_alpha_max: float,
+        sigma_n_sq: float,
+        structure_tensor_radius: int,
+    ) -> None: ...
 
 # ---------------------------------------------------------------------------
 # Result types
@@ -315,7 +349,7 @@ class DetectorBuilder:
 # ---------------------------------------------------------------------------
 
 def _create_detector_from_config(
-    config: dict[str, Any],
+    config: PyDetectorConfig,
     decimation: int | None = None,
     threads: int | None = None,
     families: list[int] = [],

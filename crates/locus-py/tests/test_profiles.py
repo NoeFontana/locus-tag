@@ -11,38 +11,42 @@ from __future__ import annotations
 import pytest
 
 import locus
+from locus.locus import PyDetectorConfig
 
 _SHIPPED = ["standard", "grid", "high_accuracy"]
 
 
+def _flat(cfg: PyDetectorConfig) -> dict:
+    return {name: getattr(cfg, name) for name in dir(cfg) if not name.startswith("_")}
+
+
+def _assert_configs_equal(actual: PyDetectorConfig, expected: PyDetectorConfig, label: str) -> None:
+    # f32 fields round-trip through f64 at the FFI boundary; rel/abs tolerance
+    # absorbs single-precision rounding without hiding real drift.
+    a, e = _flat(actual), _flat(expected)
+    assert set(a) == set(e)
+    for key, exp in e.items():
+        got = a[key]
+        if isinstance(exp, float):
+            assert got == pytest.approx(exp, rel=1e-6, abs=1e-7), f"{label}.{key}"
+        else:
+            assert got == exp, f"{label}.{key}: {got!r} != {exp!r}"
+
+
 @pytest.mark.parametrize("profile", _SHIPPED)
 def test_profile_builds_detector(profile: str) -> None:
-    det = locus.Detector(profile=profile)
-    # Smoke-detect a blank frame: the detector is constructible and runnable.
     import numpy as np
 
+    det = locus.Detector(profile=profile)
     batch = det.detect(np.zeros((64, 64), dtype=np.uint8))
     assert len(batch) == 0
 
 
 @pytest.mark.parametrize("profile", _SHIPPED)
 def test_config_roundtrip_matches_profile(profile: str) -> None:
-    """``Detector(profile).config()`` must match the JSON-loaded config.
-
-    A handful of fields are f32 on the Rust side and widen to f64 at the FFI
-    boundary, so numeric fields are compared with a relative tolerance that
-    absorbs a single-precision rounding trip without hiding real drift.
-    """
-    expected_flat = locus.DetectorConfig.from_profile(profile)._to_flat_ffi_dict()
-    actual_flat = locus.Detector(profile=profile).config()._to_flat_ffi_dict()
-
-    assert set(expected_flat) == set(actual_flat)
-    for key, exp in expected_flat.items():
-        got = actual_flat[key]
-        if isinstance(exp, float):
-            assert got == pytest.approx(exp, rel=1e-6, abs=1e-7), f"{profile}.{key}"
-        else:
-            assert got == exp, f"{profile}.{key}: {got!r} != {exp!r}"
+    expected = locus.DetectorConfig.from_profile(profile)._to_ffi_config()
+    actual = locus.Detector(profile=profile)._inner.config()
+    _assert_configs_equal(actual, expected, profile)
 
 
 def test_profile_and_config_mutually_exclusive() -> None:
@@ -52,12 +56,6 @@ def test_profile_and_config_mutually_exclusive() -> None:
 
 
 def test_profile_default_is_standard() -> None:
-    left = locus.Detector().config()._to_flat_ffi_dict()
-    right = locus.Detector(profile="standard").config()._to_flat_ffi_dict()
-    assert set(left) == set(right)
-    for key, exp in right.items():
-        got = left[key]
-        if isinstance(exp, float):
-            assert got == pytest.approx(exp, rel=1e-6, abs=1e-7), key
-        else:
-            assert got == exp, key
+    left = locus.Detector()._inner.config()
+    right = locus.Detector(profile="standard")._inner.config()
+    _assert_configs_equal(left, right, "default_vs_standard")
