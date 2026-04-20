@@ -1,0 +1,306 @@
+{
+  "$defs": {
+    "BaselineEntry": {
+      "additionalProperties": false,
+      "description": "One row of the baseline, keyed by (profile, dataset, stratum_id).",
+      "properties": {
+        "dataset": {
+          "minLength": 1,
+          "title": "Dataset",
+          "type": "string"
+        },
+        "metrics": {
+          "$ref": "#/$defs/MetricBlock"
+        },
+        "n_images": {
+          "minimum": 1,
+          "title": "N Images",
+          "type": "integer"
+        },
+        "n_tags": {
+          "minimum": 0,
+          "title": "N Tags",
+          "type": "integer"
+        },
+        "profile": {
+          "minLength": 1,
+          "title": "Profile",
+          "type": "string"
+        },
+        "stratum_id": {
+          "title": "Stratum Id",
+          "type": "string"
+        },
+        "tolerances": {
+          "$ref": "#/$defs/Tolerances"
+        }
+      },
+      "required": [
+        "profile",
+        "dataset",
+        "stratum_id",
+        "metrics",
+        "n_images",
+        "n_tags"
+      ],
+      "title": "BaselineEntry",
+      "type": "object"
+    },
+    "MetricBlock": {
+      "additionalProperties": false,
+      "description": "The metrics reported per (profile, dataset, stratum_id) entry.",
+      "properties": {
+        "latency_p50": {
+          "minimum": 0.0,
+          "title": "Latency P50",
+          "type": "number"
+        },
+        "latency_p95": {
+          "minimum": 0.0,
+          "title": "Latency P95",
+          "type": "number"
+        },
+        "precision": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Precision",
+          "type": "number"
+        },
+        "recall": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Recall",
+          "type": "number"
+        },
+        "repro_rmse": {
+          "minimum": 0.0,
+          "title": "Repro Rmse",
+          "type": "number"
+        },
+        "rotation_p50": {
+          "minimum": 0.0,
+          "title": "Rotation P50",
+          "type": "number"
+        },
+        "rotation_p95": {
+          "minimum": 0.0,
+          "title": "Rotation P95",
+          "type": "number"
+        },
+        "translation_p50": {
+          "minimum": 0.0,
+          "title": "Translation P50",
+          "type": "number"
+        },
+        "translation_p95": {
+          "minimum": 0.0,
+          "title": "Translation P95",
+          "type": "number"
+        }
+      },
+      "required": [
+        "recall",
+        "precision",
+        "repro_rmse",
+        "translation_p50",
+        "translation_p95",
+        "rotation_p50",
+        "rotation_p95",
+        "latency_p50",
+        "latency_p95"
+      ],
+      "title": "MetricBlock",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "description": "Build-and-host metadata captured alongside the baseline.",
+      "properties": {
+        "build_profile": {
+          "enum": [
+            "release",
+            "debug"
+          ],
+          "title": "Build Profile",
+          "type": "string"
+        },
+        "cpu_cores_logical": {
+          "minimum": 1,
+          "title": "Cpu Cores Logical",
+          "type": "integer"
+        },
+        "cpu_cores_physical": {
+          "minimum": 1,
+          "title": "Cpu Cores Physical",
+          "type": "integer"
+        },
+        "cpu_model": {
+          "minLength": 1,
+          "title": "Cpu Model",
+          "type": "string"
+        },
+        "dataset_version": {
+          "minLength": 1,
+          "title": "Dataset Version",
+          "type": "string"
+        },
+        "git_dirty": {
+          "title": "Git Dirty",
+          "type": "boolean"
+        },
+        "git_sha": {
+          "pattern": "^[0-9a-f]{40}$",
+          "title": "Git Sha",
+          "type": "string"
+        },
+        "locus_version": {
+          "minLength": 1,
+          "title": "Locus Version",
+          "type": "string"
+        },
+        "rayon_threads": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rayon Threads"
+        },
+        "timestamp_utc": {
+          "format": "date-time",
+          "title": "Timestamp Utc",
+          "type": "string"
+        }
+      },
+      "required": [
+        "git_sha",
+        "git_dirty",
+        "cpu_model",
+        "cpu_cores_physical",
+        "cpu_cores_logical",
+        "locus_version",
+        "dataset_version",
+        "build_profile",
+        "timestamp_utc"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "Tolerances": {
+      "additionalProperties": false,
+      "description": "Per-entry regression thresholds. Absent key = no gate on that metric.",
+      "properties": {
+        "latency_p95_rel": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latency P95 Rel"
+        },
+        "precision_abs": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Precision Abs"
+        },
+        "recall_abs": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recall Abs"
+        },
+        "repro_rmse_rel": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Repro Rmse Rel"
+        },
+        "rotation_p95_rel": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rotation P95 Rel"
+        },
+        "translation_p95_rel": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Translation P95 Rel"
+        }
+      },
+      "title": "Tolerances",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Top-level v2 baseline document.",
+  "properties": {
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/BaselineEntry"
+      },
+      "title": "Entries",
+      "type": "array"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "schema_version": {
+      "const": "2.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "provenance"
+  ],
+  "title": "BaselineV2",
+  "type": "object"
+}
