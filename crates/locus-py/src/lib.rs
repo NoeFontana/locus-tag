@@ -298,7 +298,7 @@ pub struct PyPose {
 }
 
 // ============================================================================
-#[pyclass(get_all, set_all, from_py_object)]
+#[pyclass(get_all, frozen, from_py_object)]
 #[derive(Clone, Copy)]
 pub struct PyDetectorConfig {
     pub threshold_tile_size: usize,

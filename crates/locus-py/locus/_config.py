@@ -250,9 +250,8 @@ class DetectorConfig(BaseModel):
         return cls.model_validate_json(json_str)
 
     def _to_ffi_config(self) -> PyDetectorConfig:
-        # Flatten the nested Pydantic groups into the typed `PyDetectorConfig`
-        # that PyO3 extracts at the FFI boundary. Cross-group validation has
-        # already fired in this Pydantic model.
+        # Cross-group validation has already fired in this Pydantic model;
+        # Rust's `DetectorConfig::validate()` remains the final gate.
         return PyDetectorConfig(
             threshold_tile_size=self.threshold.tile_size,
             threshold_min_range=self.threshold.min_range,
