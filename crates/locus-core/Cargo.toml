@@ -24,6 +24,7 @@ tracing = { version = "0.1", features = ["release_max_level_info"] }
 tracing-tracy = { version = "0.11", optional = true }
 rerun = { version = "0.20", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
+serde_json = { version = "1.0", optional = true }
 crossbeam-queue = "0.3"
 rand = { version = "0.10", optional = true }
 rand_distr = { version = "0.6", optional = true }
@@ -215,6 +216,16 @@ path = "tests/contract_detection_batch.rs"
 required-features = ["bench-internals"]
 
 [[test]]
+name = "profile_loading"
+path = "tests/profile_loading.rs"
+required-features = ["profiles"]
+
+[[test]]
+name = "profile_unknown_field"
+path = "tests/profile_unknown_field.rs"
+required-features = ["profiles"]
+
+[[test]]
 name = "negative_detection"
 path = "tests/negative_detection.rs"
 required-features = ["bench-internals"]
@@ -275,10 +286,13 @@ path = "tests/regression_straight_space.rs"
 required-features = ["non_rectified", "bench-internals"]
 
 [features]
-default = []
+default = ["profiles"]
 tracy = ["dep:tracing-tracy"]
 viz = ["dep:rerun"]
 serde = ["dep:serde", "nalgebra/serde-serialize"]
+# JSON profile loading (`DetectorConfig::from_profile` / `from_profile_json`).
+# Default-on; disable only for exotic builds that cannot pull in serde_json.
+profiles = ["serde", "dep:serde_json"]
 extended-tests = []
 extended-bench = []
 bench-internals = ["dep:rand", "dep:rand_distr"]

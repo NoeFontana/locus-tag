@@ -2,40 +2,77 @@
 
 This guide covers advanced configuration and features of the **Locus** detector.
 
-## Performance Tuning & Decimation
+## Profiles: the one knob you should reach for first
 
-For performance-critical applications, using `decimation` can significantly speed up the detection pipeline by processing a downsampled version of the image.
+Detector settings are loaded from JSON **profiles**. Three are shipped in the
+wheel: `standard`, `grid`, and `high_accuracy`.
 
 ```python
 import locus
 
-detector = locus.Detector(
-    threshold_tile_size=16, # Larger tiles are faster (8-16 is typical)
-    decimation=2,           # Process at half resolution (4x speed boost)
-)
-
-# Note: Use decimation=1 if tags are small (< 20 pixels)
+detector = locus.Detector(profile="standard")      # default; dense multi-tag
 tags = detector.detect(img)
-
-print(f"Detected {len(tags)} tags")
 ```
 
-| Parameter | Impact | Recommendation |
-| :--- | :--- | :--- |
-| `decimation` | Linear speedup in preprocessing. | Use `2` for 1080p+ images if tags are >40px. |
-| `threshold_tile_size` | Low. Affects local adaptive threshold. | Use `8` or `16`. |
+Per-call orchestration (`decimation`, `threads`, `families`) stays outside
+the profile because it describes *how* the detector is invoked, not *what*
+it detects:
+
+```python
+detector = locus.Detector(
+    profile="standard",
+    decimation=2,                                 # 4x preprocessing speedup
+    families=[locus.TagFamily.AprilTag36h11],
+)
+```
+
+## Tweaking a profile
+
+Load a shipped profile, edit the relevant nested group, then pass it back:
+
+```python
+base = locus.DetectorConfig.from_profile("standard").model_dump()
+base["threshold"]["tile_size"] = 16               # larger tiles run faster
+base["decoder"]["decode_mode"] = "Soft"           # +10-15% recall on blurry tags
+base["decoder"]["min_contrast"] = 10.0
+
+custom = locus.DetectorConfig.model_validate(base)
+detector = locus.Detector(config=custom)
+```
+
+`model_validate` runs the full invariant suite — radius ordering, fill-ratio
+ordering, and the cross-group compatibility checks (e.g. `EdLines` refuses
+`Erf` refinement or `Soft` decode) — so any inconsistency surfaces as a
+`pydantic.ValidationError` before the Rust detector is constructed.
+
+## Loading a custom profile from JSON
+
+For reproducibility, teams typically keep their tuned profile under version
+control as a JSON file and load it via `from_profile_json`:
+
+```python
+with open("my_profile.json") as f:
+    detector = locus.Detector(config=locus.DetectorConfig.from_profile_json(f.read()))
+```
+
+The shipped `standard.json` is a good starting template; copy it, edit the
+nested groups, and load the copy. The JSON Schema at
+`schemas/profile.schema.json` powers editor autocomplete.
 
 ## Soft-Decision Decoding (Maximum Recall)
 
-For challenging conditions where tags are tiny, blurry, or noisy, Locus supports **Soft-Decision Decoding**. This mode uses Log-Likelihood Ratios (LLRs) instead of hard bit-binarization, typically providing a **+10-15% recall boost** on difficult datasets.
+For challenging conditions where tags are tiny, blurry, or noisy, Locus
+supports **Soft-Decision Decoding**. This mode uses Log-Likelihood Ratios
+(LLRs) instead of hard bit-binarization, typically providing a **+10-15%
+recall boost** on difficult datasets.
 
 ```python
-# Enable Soft-Decision mode
-detector = locus.Detector(
-    decode_mode=locus.DecodeMode.Soft,
-    decoder_min_contrast=10.0 # Lower threshold to capture faint tags
-)
+# Enable Soft-Decision mode via a tweaked config.
+base = locus.DetectorConfig.from_profile("standard").model_dump()
+base["decoder"]["decode_mode"] = "Soft"
+base["decoder"]["min_contrast"] = 10.0            # capture faint tags
 
+detector = locus.Detector(config=locus.DetectorConfig.model_validate(base))
 tags = detector.detect(img)
 ```
 
@@ -46,35 +83,47 @@ tags = detector.detect(img)
 
 ## Specialized Profiles
 
-Locus includes pre-configured profiles for specific use cases.
-
 ### Checkerboard Detection
-Used for calibration patterns or densely packed tags where black squares touch. This profile uses 4-way connectivity to prevent component merging.
+Used for calibration patterns or densely packed tags where black squares
+touch. The `grid` profile uses 4-way connectivity to prevent component
+merging:
 
 ```python
-detector = locus.Detector(preset=locus.DetectorPreset.Grid)
+detector = locus.Detector(profile="grid")
+```
+
+### High-Accuracy Metrology
+For isolated-tag pose extraction at high resolution (`EdLines` + geometric
+corners + no sub-pixel refinement):
+
+```python
+detector = locus.Detector(profile="high_accuracy")
 ```
 
 ### Targeted Families
-Searching for fewer families reduces the decoding search space and improves latency.
+Searching for fewer families reduces the decoding search space and improves
+latency:
 
 ```python
 detector.set_families([
     locus.TagFamily.AprilTag36h11,
-    locus.TagFamily.ArUco4x4_50
+    locus.TagFamily.ArUco4x4_50,
 ])
 ```
 
 ## Precise Configuration
 
-The `Detector` class allows fine-tuning every stage of the pipeline via keyword arguments:
+Every detection knob lives in one of five nested groups (`threshold`,
+`quad`, `decoder`, `pose`, `segmentation`). Tweak any of them by round-
+tripping a profile through a dict:
 
 ```python
-detector = locus.Detector(
-    quad_min_area=16,           # Filter small components early
-    subpixel_refinement_sigma=0.8, # Gaussian kernel for corner refinement
-    decoder_min_contrast=10.0      # Sensitivity to bit transitions
-)
+base = locus.DetectorConfig.from_profile("standard").model_dump()
+base["quad"]["min_area"] = 16                    # filter small components
+base["quad"]["subpixel_refinement_sigma"] = 0.8  # corner-refinement kernel
+base["decoder"]["min_contrast"] = 10.0           # bit-transition sensitivity
+
+detector = locus.Detector(config=locus.DetectorConfig.model_validate(base))
 ```
 
 ## Pose Estimation

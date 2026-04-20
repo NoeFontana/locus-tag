@@ -1,0 +1,278 @@
+{
+  "$defs": {
+    "DecoderConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "decode_mode": {
+          "enum": [
+            "Hard",
+            "Soft"
+          ],
+          "title": "Decode Mode",
+          "type": "string"
+        },
+        "gwlf_transversal_alpha": {
+          "default": 0.01,
+          "minimum": 0.0,
+          "title": "Gwlf Transversal Alpha",
+          "type": "number"
+        },
+        "max_hamming_error": {
+          "default": 2,
+          "minimum": 0,
+          "title": "Max Hamming Error",
+          "type": "integer"
+        },
+        "min_contrast": {
+          "default": 20.0,
+          "minimum": 0.0,
+          "title": "Min Contrast",
+          "type": "number"
+        },
+        "refinement_mode": {
+          "enum": [
+            "Edge",
+            "Erf",
+            "Gwlf",
+            "None"
+          ],
+          "title": "Refinement Mode",
+          "type": "string"
+        }
+      },
+      "title": "DecoderConfig",
+      "type": "object"
+    },
+    "PoseConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "huber_delta_px": {
+          "default": 1.5,
+          "minimum": 0.0,
+          "title": "Huber Delta Px",
+          "type": "number"
+        },
+        "sigma_n_sq": {
+          "default": 4.0,
+          "minimum": 0.0,
+          "title": "Sigma N Sq",
+          "type": "number"
+        },
+        "structure_tensor_radius": {
+          "default": 2,
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Structure Tensor Radius",
+          "type": "integer"
+        },
+        "tikhonov_alpha_max": {
+          "default": 0.25,
+          "minimum": 0.0,
+          "title": "Tikhonov Alpha Max",
+          "type": "number"
+        }
+      },
+      "title": "PoseConfig",
+      "type": "object"
+    },
+    "QuadConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "extraction_mode": {
+          "enum": [
+            "ContourRdp",
+            "EdLines"
+          ],
+          "title": "Extraction Mode",
+          "type": "string"
+        },
+        "max_aspect_ratio": {
+          "default": 10.0,
+          "minimum": 1.0,
+          "title": "Max Aspect Ratio",
+          "type": "number"
+        },
+        "max_elongation": {
+          "default": 0.0,
+          "minimum": 0.0,
+          "title": "Max Elongation",
+          "type": "number"
+        },
+        "max_fill_ratio": {
+          "default": 0.98,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Max Fill Ratio",
+          "type": "number"
+        },
+        "min_area": {
+          "default": 16,
+          "minimum": 1,
+          "title": "Min Area",
+          "type": "integer"
+        },
+        "min_density": {
+          "default": 0.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Min Density",
+          "type": "number"
+        },
+        "min_edge_length": {
+          "default": 4.0,
+          "exclusiveMinimum": 0.0,
+          "title": "Min Edge Length",
+          "type": "number"
+        },
+        "min_edge_score": {
+          "default": 4.0,
+          "minimum": 0.0,
+          "title": "Min Edge Score",
+          "type": "number"
+        },
+        "min_fill_ratio": {
+          "default": 0.1,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Min Fill Ratio",
+          "type": "number"
+        },
+        "subpixel_refinement_sigma": {
+          "default": 0.6,
+          "minimum": 0.0,
+          "title": "Subpixel Refinement Sigma",
+          "type": "number"
+        },
+        "upscale_factor": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Upscale Factor",
+          "type": "integer"
+        }
+      },
+      "title": "QuadConfig",
+      "type": "object"
+    },
+    "SegmentationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "connectivity": {
+          "enum": [
+            "Eight",
+            "Four"
+          ],
+          "title": "Connectivity",
+          "type": "string"
+        },
+        "margin": {
+          "default": 1,
+          "title": "Margin",
+          "type": "integer"
+        }
+      },
+      "title": "SegmentationConfig",
+      "type": "object"
+    },
+    "ThresholdConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "constant": {
+          "default": 0,
+          "title": "Constant",
+          "type": "integer"
+        },
+        "enable_adaptive_window": {
+          "default": false,
+          "title": "Enable Adaptive Window",
+          "type": "boolean"
+        },
+        "enable_sharpening": {
+          "default": false,
+          "title": "Enable Sharpening",
+          "type": "boolean"
+        },
+        "gradient_threshold": {
+          "default": 10,
+          "maximum": 255,
+          "minimum": 0,
+          "title": "Gradient Threshold",
+          "type": "integer"
+        },
+        "max_radius": {
+          "default": 15,
+          "minimum": 1,
+          "title": "Max Radius",
+          "type": "integer"
+        },
+        "min_radius": {
+          "default": 2,
+          "minimum": 1,
+          "title": "Min Radius",
+          "type": "integer"
+        },
+        "min_range": {
+          "default": 10,
+          "maximum": 255,
+          "minimum": 0,
+          "title": "Min Range",
+          "type": "integer"
+        },
+        "tile_size": {
+          "default": 8,
+          "maximum": 64,
+          "minimum": 2,
+          "title": "Tile Size",
+          "type": "integer"
+        }
+      },
+      "title": "ThresholdConfig",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Nested detector configuration \u2014 Python source of truth.\n\nThe three shipped profiles live in ``locus/profiles/*.json`` and ship\ninside the wheel. Load via :meth:`from_profile` for a shipped profile\nor :meth:`from_profile_json` for a user-supplied JSON string.",
+  "properties": {
+    "decoder": {
+      "$ref": "#/$defs/DecoderConfig"
+    },
+    "extends": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Extends"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "pose": {
+      "$ref": "#/$defs/PoseConfig"
+    },
+    "quad": {
+      "$ref": "#/$defs/QuadConfig"
+    },
+    "segmentation": {
+      "$ref": "#/$defs/SegmentationConfig"
+    },
+    "threshold": {
+      "$ref": "#/$defs/ThresholdConfig"
+    }
+  },
+  "title": "DetectorConfig",
+  "type": "object"
+}

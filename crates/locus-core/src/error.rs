@@ -56,6 +56,12 @@ pub enum ConfigError {
          KannalaBrandt): use QuadExtractionMode::ContourRdp"
     )]
     EdLinesUnsupportedWithDistortion,
+    /// Profile JSON failed to parse (malformed syntax or unknown fields).
+    ///
+    /// `serde_json::Error` is not `Clone`, so its `Display` form is captured
+    /// at construction time. The wrapping `ConfigError` stays `Clone`.
+    #[error("profile JSON parse error: {0}")]
+    ProfileParse(String),
 }
 
 /// Errors that can occur during tag detection.

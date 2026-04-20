@@ -145,7 +145,7 @@ fn bench_icra_full_pipeline(bencher: divan::Bencher) {
         dataset.width,
     )
     .unwrap();
-    let config = locus_core::DetectorConfig::standard_default();
+    let config = locus_core::DetectorConfig::from_profile("standard");
     let mut detector = Detector::with_config(config);
     detector.set_families(&[TagFamily::AprilTag36h11]);
 
@@ -168,7 +168,7 @@ fn bench_icra_decoding_soa(bencher: divan::Bencher) {
     .unwrap();
     let mut batch = BenchDataset::generate_bench_batch(50, 200);
     let n = 250;
-    let config = locus_core::DetectorConfig::standard_default();
+    let config = locus_core::DetectorConfig::from_profile("standard");
     let decoders = vec![locus_core::bench_api::family_to_decoder(
         TagFamily::AprilTag36h11,
     )];

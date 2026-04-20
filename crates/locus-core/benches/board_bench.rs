@@ -145,7 +145,7 @@ fn bench_board_estimate_aprilgrid(bencher: Bencher) {
     let raw = luma.into_raw();
     let img_view = ImageView::new(&raw, w as usize, h as usize, w as usize).unwrap();
 
-    let mut detector = Detector::with_config(DetectorConfig::standard_default());
+    let mut detector = Detector::with_config(DetectorConfig::from_profile("standard"));
     detector.set_families(&[TagFamily::AprilTag36h11]);
     let _ = detector
         .detect(
@@ -190,7 +190,7 @@ fn bench_board_estimate_aprilgrid_fast(bencher: Bencher) {
     let raw = luma.into_raw();
     let img_view = ImageView::new(&raw, w as usize, h as usize, w as usize).unwrap();
 
-    let mut detector = Detector::with_config(DetectorConfig::standard_default());
+    let mut detector = Detector::with_config(DetectorConfig::from_profile("standard"));
     detector.set_families(&[TagFamily::AprilTag36h11]);
     let _ = detector
         .detect(
@@ -229,7 +229,7 @@ fn bench_board_full_pipeline_aprilgrid(bencher: Bencher) {
     let raw = luma.into_raw();
     let img_view = ImageView::new(&raw, w as usize, h as usize, w as usize).unwrap();
 
-    let mut detector = Detector::with_config(DetectorConfig::standard_default());
+    let mut detector = Detector::with_config(DetectorConfig::from_profile("standard"));
     detector.set_families(&[TagFamily::AprilTag36h11]);
 
     bencher.bench_local(|| {

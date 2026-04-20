@@ -276,26 +276,33 @@ class TestCameraIntrinsicsKannalaBrandt:
 
 
 class TestDetectorConfigValidation:
-    """A0.4 §3 — every ``ConfigError`` reachable from ``Detector(**kwargs)``.
+    """A0.4 §3 — ``DetectorConfig`` validation reachable from Python.
 
-    Two variants are NOT reachable from the Python kwargs path today —
-    ``InvalidEdgeLength`` (``quad_min_edge_length``) and
-    ``InvalidStructureTensorRadius`` (``structure_tensor_radius``) — because
-    ``create_detector`` in ``lib.rs`` doesn't forward those kwargs. They are
-    covered by the Rust-side unit tests in ``locus-core``.
+    Validation now lives in the Pydantic model (``locus._config``); invalid
+    values raise :class:`pydantic.ValidationError` before the FFI boundary.
+    Rust's ``DetectorConfig::validate`` still acts as a defence-in-depth gate
+    and is exercised by the ``locus-core`` unit tests.
     """
 
+    @staticmethod
+    def _override(group: str, field: str, value: object) -> dict:
+        base = locus.DetectorConfig.from_profile("standard").model_dump()
+        base[group][field] = value
+        return base
+
     def test_tile_size_too_small(self) -> None:
-        with pytest.raises(ValueError, match=r"threshold_tile_size must be >= 2"):
-            locus.Detector(threshold_tile_size=1)
+        bad = self._override("threshold", "tile_size", 1)
+        with pytest.raises(Exception, match=r"tile_size"):
+            locus.DetectorConfig.model_validate(bad)
 
     def test_decimation_zero(self) -> None:
-        with pytest.raises(ValueError, match=r"decimation factor must be >= 1"):
+        with pytest.raises(ValueError, match=r"decimation"):
             locus.Detector(decimation=0)
 
     def test_upscale_factor_zero(self) -> None:
-        with pytest.raises(ValueError, match=r"upscale_factor must be >= 1"):
-            locus.Detector(upscale_factor=0)
+        bad = self._override("quad", "upscale_factor", 0)
+        with pytest.raises(Exception, match=r"upscale_factor"):
+            locus.DetectorConfig.model_validate(bad)
 
     @pytest.mark.parametrize(
         "min_ratio",
@@ -303,25 +310,24 @@ class TestDetectorConfigValidation:
         ids=["below_zero", "above_default_max"],
     )
     def test_invalid_fill_ratio(self, min_ratio: float) -> None:
-        with pytest.raises(ValueError, match=r"fill ratio range invalid"):
-            locus.Detector(quad_min_fill_ratio=min_ratio)
+        bad = self._override("quad", "min_fill_ratio", min_ratio)
+        with pytest.raises(Exception, match=r"(min_fill_ratio|greater than)"):
+            locus.DetectorConfig.model_validate(bad)
 
     def test_edlines_erf_incompatible(self) -> None:
-        with pytest.raises(ValueError, match=r"EdLines \+ Erf refinement are incompatible"):
-            locus.Detector(
-                quad_extraction_mode=locus.QuadExtractionMode.EdLines,
-                refinement_mode=locus.CornerRefinementMode.Erf,
-            )
+        base = locus.DetectorConfig.from_profile("standard").model_dump()
+        base["quad"]["extraction_mode"] = "EdLines"
+        base["decoder"]["refinement_mode"] = "Erf"
+        with pytest.raises(Exception, match=r"EdLines"):
+            locus.DetectorConfig.model_validate(base)
 
     def test_edlines_soft_incompatible(self) -> None:
-        # Must also disable Erf refinement — it is the default, and EdLines+Erf
-        # is checked first, so testing Soft alone would hit the Erf gate.
-        with pytest.raises(ValueError, match=r"EdLines \+ Soft decoding are incompatible"):
-            locus.Detector(
-                quad_extraction_mode=locus.QuadExtractionMode.EdLines,
-                refinement_mode=locus.CornerRefinementMode.Gwlf,
-                decode_mode=locus.DecodeMode.Soft,
-            )
+        base = locus.DetectorConfig.from_profile("standard").model_dump()
+        base["quad"]["extraction_mode"] = "EdLines"
+        base["decoder"]["refinement_mode"] = "Gwlf"
+        base["decoder"]["decode_mode"] = "Soft"
+        with pytest.raises(Exception, match=r"EdLines"):
+            locus.DetectorConfig.model_validate(base)
 
 
 # ---------------------------------------------------------------------------
@@ -343,22 +349,6 @@ class TestTagFamilyCoercion:
         # Sanity: detector is live.
         batch = det.detect(_valid_img())
         assert hasattr(batch, "ids")
-
-
-class TestPresetConnectivity:
-    """A0.4 §4 row 2 — Grid preset + 8-connectivity is a soft warning.
-
-    This overlaps ``tests/test_presets.py::test_preset_warnings`` intentionally:
-    the FFI contract suite mirrors A0.4 in full so the matrix is
-    self-contained for future audits.
-    """
-
-    def test_grid_plus_eight_warns(self) -> None:
-        with pytest.warns(UserWarning, match=r"Grid preset relies on 4-connectivity"):
-            locus.Detector(
-                preset=locus.DetectorPreset.Grid,
-                segmentation_connectivity=locus.SegmentationConnectivity.Eight,
-            )
 
 
 # ---------------------------------------------------------------------------

@@ -125,16 +125,17 @@ Rust entry at `crates/locus-py/src/lib.rs:1314-1422`. Python wrapper at
 
 | Invariant | Enforcement point | Error type |
 | --- | --- | --- |
-| `families[i] in {0,1,2,3,4}` (valid `TagFamily` discriminant) | `lib.rs:1301-1312` (`tag_family_from_i32`) | `PyValueError` |
-| `preset == Grid and segmentation_connectivity == Eight` | `crates/locus-py/locus/__init__.py:197-205` | **Soft `warnings.warn`, not a hard gate** |
-| Final config passes `validate()` | `lib.rs:1622-1624` via `validated_build()` | `PyValueError` (wrapped from `ConfigError`) |
+| `families[i] in {0,1,2,3,4}` (valid `TagFamily` discriminant) | `tag_family_from_i32` in `crates/locus-py/src/lib.rs` | `PyValueError` |
+| Nested config invariants (radius ordering, fill-ratio ordering, cross-group compatibility) | `locus._config.DetectorConfig` model validators | `pydantic.ValidationError` |
+| Final config passes Rust `DetectorConfig::validate()` | `_create_detector_from_config` → `validated_build()` | `PyValueError` (wrapped from `ConfigError`) |
 
-### Preset ↔ connectivity is advisory only
+### Profile-level connectivity is an invariant, not advice
 
-The Grid preset internally defaults to 4-connectivity (see
-`DetectorConfig::grid_default()` at `config.rs:274-354`). If the user
-overrides it to 8-connectivity, the code emits a warning and proceeds.
-A1 should decide whether this escalates to a hard error.
+The `grid` profile JSON sets `segmentation.connectivity = "Four"`. Because
+detector settings now come from a profile file rather than from kwargs,
+mixing the `grid` profile with 8-connectivity is inexpressible — the user
+would have to hand-edit the profile first, and at that point the setting is
+theirs to own.
 
 ---
 
@@ -179,9 +180,10 @@ These feed the Phase A1 test matrix:
   at `prepare_image_view`. (Deferred from A1.2: hardening this either breaks
   every `np.zeros((H, W))` call site or requires an arena-copy path; tracked
   separately.)
-- **Config:** ~18 Rust fields have no range validation; Pydantic validators in
-  `_config.py` are bypassed when users pass kwargs directly to `Detector()`.
-- **Preset ↔ connectivity:** Grid + 8-connectivity is a soft warning. Decide
-  hard-gate vs documentation.
+- **Config:** ~18 Rust fields have no range validation. With the JSON-profile
+  refactor, Pydantic `_config.py` is the first-line gate and the
+  `Detector(**kwargs)` escape hatch is gone, so these reach Rust only through
+  user-authored `from_profile_json` payloads — lift range checks into the
+  Pydantic model where they are missing.
 - **`detect()` vs `detect_concurrent()`:** Telemetry + rejected-corner asymmetry
   is load-bearing for callers; document or converge.
