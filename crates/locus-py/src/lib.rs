@@ -226,6 +226,24 @@ impl CameraIntrinsics {
     ) -> PyResult<Self> {
         let dist_coeffs = dist_coeffs.unwrap_or_default();
 
+        for (name, value, require_positive) in [
+            ("fx", fx, true),
+            ("fy", fy, true),
+            ("cx", cx, false),
+            ("cy", cy, false),
+        ] {
+            if !value.is_finite() {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "CameraIntrinsics.{name} must be finite, got {value}"
+                )));
+            }
+            if require_positive && value <= 0.0 {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "CameraIntrinsics.{name} must be > 0, got {value}"
+                )));
+            }
+        }
+
         // Validate coefficient count for the chosen model.
         match distortion_model {
             #[cfg(feature = "non_rectified")]
@@ -1105,6 +1123,10 @@ impl Detector {
     ) -> PyResult<DetectionResult> {
         let view = prepare_image_view(&img)?;
 
+        if let Some(ref i) = intrinsics {
+            validate_principal_point(i, view.width, view.height)?;
+        }
+
         let has_intrinsics = intrinsics.is_some();
         let core_intrinsics = intrinsics.map(locus_core::CameraIntrinsics::from);
         let core_pose_mode = locus_core::config::PoseEstimationMode::from(pose_estimation_mode);
@@ -1251,6 +1273,12 @@ impl Detector {
             .iter()
             .map(prepare_image_view)
             .collect::<PyResult<_>>()?;
+
+        if let Some(ref i) = intrinsics {
+            for view in &views {
+                validate_principal_point(i, view.width, view.height)?;
+            }
+        }
 
         let has_pose = intrinsics.is_some() && tag_size.is_some();
         let core_intrinsics = intrinsics.map(locus_core::CameraIntrinsics::from);
@@ -1626,6 +1654,26 @@ impl DetectorBuilder {
             inner: Box::new(detector),
         })
     }
+}
+
+fn validate_principal_point(
+    intrinsics: &CameraIntrinsics,
+    width: usize,
+    height: usize,
+) -> PyResult<()> {
+    if intrinsics.cx < 0.0 || intrinsics.cx >= width as f64 {
+        return Err(PyValueError::new_err(format!(
+            "CameraIntrinsics.cx ({cx}) must lie in [0, {width}) for a {width}x{height} image",
+            cx = intrinsics.cx,
+        )));
+    }
+    if intrinsics.cy < 0.0 || intrinsics.cy >= height as f64 {
+        return Err(PyValueError::new_err(format!(
+            "CameraIntrinsics.cy ({cy}) must lie in [0, {height}) for a {width}x{height} image",
+            cy = intrinsics.cy,
+        )));
+    }
+    Ok(())
 }
 
 fn prepare_image_view<'a>(img: &PyReadonlyArray2<'_, u8>) -> PyResult<ImageView<'a>> {
