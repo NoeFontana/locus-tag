@@ -16,17 +16,18 @@
 - **Memory**: Uses `bumpalo` arena allocation for zero heap allocations in the detection loop.
 - **Solvers**: 6-DOF recovery using IPPE-Square or weighted Levenberg-Marquardt with corner uncertainty.
 
-## Performance Presets
+## Performance Profiles
 
-Presets are selected via the `preset` argument in the `Detector` constructor:
+Profiles are selected by name; the three shipped profiles are authored as
+JSON files and embedded in the wheel.
 
-| `DetectorPreset` | ICRA 2020 Recall | Corner RMSE | Primary Characteristics |
+| `profile` | ICRA 2020 Recall | Corner RMSE | Primary Characteristics |
 | :--- | :---: | :---: | :--- |
-| `Standard` | **96.2%** | 0.315 px | Production default; balanced recall/precision. |
-| `Grid` | **91.4%** | 0.458 px | 4-connectivity for touching tags (checkerboards). |
-| `HighAccuracy` | 46.3%* | **0.16 px** | EdLines + GN optimizer; prioritized for metrology. |
+| `"standard"` | **96.2%** | 0.315 px | Production default; balanced recall/precision. |
+| `"grid"` | **91.4%** | 0.458 px | 4-connectivity for touching tags (checkerboards). |
+| `"high_accuracy"` | 46.3%* | **0.16 px** | EdLines + GN optimizer; prioritized for metrology. |
 
-*\*HighAccuracy is optimized for high-resolution near-field images (Hugging Face Hub datasets).*
+*\*`high_accuracy` is optimized for high-resolution near-field images (Hugging Face Hub datasets).*
 
 ### Comparison (ICRA 2020 Forward - 50 images)
 
@@ -84,12 +85,15 @@ if batch.poses is not None:
 
 ### Configuration Overrides
 
+Settings are nested and validated by Pydantic. Start from a shipped profile,
+edit the group you care about, and hand it back to the detector:
+
 ```python
-detector = locus.Detector(
-    preset=locus.DetectorPreset.HighAccuracy,
-    decode_mode=locus.DecodeMode.Soft,
-    upscale_factor=2
-)
+base = locus.DetectorConfig.from_profile("high_accuracy").model_dump()
+base["decoder"]["decode_mode"] = "Soft"
+base["quad"]["upscale_factor"] = 2
+
+detector = locus.Detector(config=locus.DetectorConfig.model_validate(base))
 ```
 
 ## Visual Debugging

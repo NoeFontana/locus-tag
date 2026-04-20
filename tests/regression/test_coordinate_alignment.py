@@ -32,10 +32,13 @@ def test_decimation_mapping():
     img, gt_corners = generate_synthetic_tag(tag_size, canvas_size, start)
 
     # Use decimation=2
+    cfg = locus.DetectorConfig.from_profile("standard")
+    cfg_dict = cfg.model_dump()
+    cfg_dict["decoder"]["refinement_mode"] = "Edge"
     detector = locus.Detector(
+        config=locus.DetectorConfig.model_validate(cfg_dict),
         families=[locus.TagFamily.AprilTag36h11],
         decimation=2,
-        refinement_mode=locus.CornerRefinementMode.Edge,
     )
 
     batch = detector.detect(img)
@@ -55,8 +58,14 @@ def test_no_refine_expansion():
     start = 140
     img, gt_corners = generate_synthetic_tag(tag_size, canvas_size, start)
 
-    # Use no refinement (0)
-    detector = locus.Detector(families=[locus.TagFamily.AprilTag36h11], refinement_mode=0)
+    # Use no refinement
+    cfg = locus.DetectorConfig.from_profile("standard")
+    cfg_dict = cfg.model_dump()
+    cfg_dict["decoder"]["refinement_mode"] = "None"
+    detector = locus.Detector(
+        config=locus.DetectorConfig.model_validate(cfg_dict),
+        families=[locus.TagFamily.AprilTag36h11],
+    )
 
     batch = detector.detect(img)
     assert len(batch) == 1

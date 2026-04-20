@@ -1,7 +1,5 @@
-import enum
-import warnings
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 
@@ -17,7 +15,6 @@ from .locus import (
     DecodeMode,
     DetectionResult,
     DetectorBuilder,
-    DetectorPreset,
     PipelineTelemetryResult,
     PoseEstimationMode,
     QuadExtractionMode,
@@ -32,7 +29,7 @@ from .locus import (
     PyPose as Pose,
 )
 from .locus import (
-    create_detector as _create_detector,
+    _create_detector_from_config as _create_detector_from_config,
 )
 
 HAS_NON_RECTIFIED = hasattr(_RustDistortionModel, "BrownConrady")
@@ -157,87 +154,88 @@ class PipelineTelemetry:
 
 
 class Detector:
+    """High-level detector.
+
+    Construction:
+        ``Detector(profile="standard")`` — load a shipped JSON profile by name.
+        ``Detector(config=my_cfg)`` — use a pre-built :class:`DetectorConfig`.
+        ``Detector()`` — equivalent to ``profile="standard"``.
+
+    Per-call orchestration options (``decimation``, ``threads``, ``families``)
+    stay outside the profile because they describe *how* the detector is
+    invoked, not *what* it looks for.
+    """
+
     def __init__(
         self,
+        profile: Literal["standard", "grid", "high_accuracy"] | None = None,
+        config: DetectorConfig | None = None,
+        *,
         decimation: int | None = None,
         threads: int | None = None,
         families: list[TagFamily] | None = None,
-        preset: DetectorPreset | None = None,
-        threshold_tile_size: int | None = None,
-        threshold_min_range: int | None = None,
-        adaptive_threshold_constant: int | None = None,
-        quad_min_area: int | None = None,
-        quad_min_fill_ratio: float | None = None,
-        quad_min_edge_score: float | None = None,
-        decoder_min_contrast: float | None = None,
-        max_hamming_error: int | None = None,
-        **kwargs: Any,
-    ):
-        # Default family if none provided (legacy behavior)
+    ) -> None:
+        if profile is not None and config is not None:
+            raise ValueError("Pass either `profile` or `config`, not both.")
+
+        if config is None:
+            config = DetectorConfig.from_profile(profile or "standard")
+
         if families is None:
             families = [TagFamily.AprilTag36h11]
 
-        family_values = [int(f) for f in families]
-
-        # Collect explicit config arguments
-        config_args = {
-            "threshold_tile_size": threshold_tile_size,
-            "threshold_min_range": threshold_min_range,
-            "adaptive_threshold_constant": adaptive_threshold_constant,
-            "quad_min_area": quad_min_area,
-            "quad_min_fill_ratio": quad_min_fill_ratio,
-            "quad_min_edge_score": quad_min_edge_score,
-            "decoder_min_contrast": decoder_min_contrast,
-            "max_hamming_error": max_hamming_error,
-        }
-
-        # Merge explicit config with additional kwargs
-        merged_kwargs = {**config_args, **kwargs}
-
-        # Validate preset constraints
-        if (
-            preset == DetectorPreset.Grid
-            and merged_kwargs.get("segmentation_connectivity") == SegmentationConnectivity.Eight
-        ):
-            warnings.warn(
-                "Grid preset relies on 4-connectivity; enforcing 8-connectivity reduces touching-tag separation.",
-                stacklevel=2,
-            )
-
-        # Prepare kwargs for Rust by converting enums and filtering None
-        final_rust_kwargs: dict[str, Any] = {}
-        for k, v in merged_kwargs.items():
-            if v is None:
-                continue
-            if isinstance(v, bool):
-                final_rust_kwargs[k] = v
-            elif hasattr(v, "__int__") and not isinstance(v, (int, float)):
-                # Handle PyO3 enums and standard enums
-                final_rust_kwargs[k] = int(v)
-            elif isinstance(v, enum.Enum):
-                final_rust_kwargs[k] = v.value
-            else:
-                final_rust_kwargs[k] = v
-
-        self._inner = _create_detector(
+        self._inner = _create_detector_from_config(
+            config=config._to_flat_ffi_dict(),
             decimation=decimation,
             threads=threads,
-            families=family_values,
-            preset=preset,
-            **final_rust_kwargs,
+            families=[int(f) for f in families],
         )
 
-    @staticmethod
-    def standard_config() -> "Detector":
-        """Create a detector with high-fidelity production defaults."""
-        return Detector(preset=DetectorPreset.Standard)
-
     def config(self) -> DetectorConfig:
-        """Returns the current detector configuration."""
+        """Returns the current detector configuration as a nested model."""
         raw = self._inner.config()
-        # Create a dictionary of all fields to populate the Pydantic model
-        fields = {field: getattr(raw, field) for field in DetectorConfig.model_fields}
-        return DetectorConfig(**fields)
+        return DetectorConfig(
+            threshold={
+                "tile_size": raw.threshold_tile_size,
+                "min_range": raw.threshold_min_range,
+                "enable_sharpening": raw.enable_sharpening,
+                "enable_adaptive_window": raw.enable_adaptive_window,
+                "min_radius": raw.threshold_min_radius,
+                "max_radius": raw.threshold_max_radius,
+                "constant": raw.adaptive_threshold_constant,
+                "gradient_threshold": raw.adaptive_threshold_gradient_threshold,
+            },
+            quad={
+                "min_area": raw.quad_min_area,
+                "max_aspect_ratio": raw.quad_max_aspect_ratio,
+                "min_fill_ratio": raw.quad_min_fill_ratio,
+                "max_fill_ratio": raw.quad_max_fill_ratio,
+                "min_edge_length": raw.quad_min_edge_length,
+                "min_edge_score": raw.quad_min_edge_score,
+                "subpixel_refinement_sigma": raw.subpixel_refinement_sigma,
+                "upscale_factor": raw.upscale_factor,
+                "max_elongation": raw.quad_max_elongation,
+                "min_density": raw.quad_min_density,
+                "extraction_mode": raw.quad_extraction_mode,
+            },
+            decoder={
+                "min_contrast": raw.decoder_min_contrast,
+                "refinement_mode": raw.refinement_mode,
+                "decode_mode": raw.decode_mode,
+                "max_hamming_error": raw.max_hamming_error,
+                "gwlf_transversal_alpha": raw.gwlf_transversal_alpha,
+            },
+            pose={
+                "huber_delta_px": raw.huber_delta_px,
+                "tikhonov_alpha_max": raw.tikhonov_alpha_max,
+                "sigma_n_sq": raw.sigma_n_sq,
+                "structure_tensor_radius": raw.structure_tensor_radius,
+            },
+            segmentation={
+                "connectivity": raw.segmentation_connectivity,
+                "margin": raw.segmentation_margin,
+            },
+        )
 
     def set_families(self, families: list[TagFamily]):
         """Update the tag families to be detected."""
@@ -363,7 +361,6 @@ __all__ = [
     "Detector",
     "DetectorBuilder",
     "DetectorConfig",
-    "DetectorPreset",
     "DistortionModel",
     "LocusFeatureError",
     "PipelineTelemetryResult",

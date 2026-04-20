@@ -10,27 +10,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 // ============================================================================
-// Configuration Presets
-// ============================================================================
-
-#[derive(Clone, Copy, Debug)]
-pub enum ConfigPreset {
-    /// Optimized for isolated tags on plain backgrounds.
-    Standard,
-    /// SOTA metrology: EdLines GN + covariance propagation + Weighted LM.
-    HighAccuracy,
-}
-
-impl ConfigPreset {
-    pub fn detector_config(self) -> DetectorConfig {
-        match self {
-            Self::Standard => DetectorConfig::standard_default(),
-            Self::HighAccuracy => DetectorConfig::high_accuracy_default(),
-        }
-    }
-}
-
-// ============================================================================
 // Metrics & Reporting
 // ============================================================================
 
@@ -156,8 +135,18 @@ impl RegressionHarness {
         }
     }
 
-    pub fn with_preset(mut self, preset: ConfigPreset) -> Self {
-        self.config = preset.detector_config();
+    /// Load one of the three shipped profiles by name: `"standard"`, `"grid"`,
+    /// or `"high_accuracy"`. Panics on unknown names (closed set).
+    pub fn with_profile(mut self, name: &str) -> Self {
+        self.config = DetectorConfig::from_profile(name);
+        self
+    }
+
+    /// Load a custom profile from a JSON string (e.g. an `include_str!`'d
+    /// fixture file). Panics on parse failure, same policy as `from_profile`.
+    pub fn with_profile_json(mut self, json: &str) -> Self {
+        self.config = DetectorConfig::from_profile_json(json)
+            .expect("embedded test fixture must parse");
         self
     }
 

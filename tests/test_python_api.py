@@ -61,14 +61,21 @@ def test_config_object():
     """Test that DetectorConfig correctly validates parameters."""
     from locus import DetectorConfig
 
-    cfg = DetectorConfig(threshold_tile_size=16, quad_min_area=500)
-    assert cfg.threshold_tile_size == 16
-    assert cfg.quad_min_area == 500
+    cfg = DetectorConfig.from_profile("standard")
+    cfg_dict = cfg.model_dump()
+    cfg_dict["threshold"]["tile_size"] = 16
+    cfg_dict["quad"]["min_area"] = 500
+    overridden = DetectorConfig.model_validate(cfg_dict)
+    assert overridden.threshold.tile_size == 16
+    assert overridden.quad.min_area == 500
 
 
 def test_soft_decoding():
     """Verify that Detector can be instantiated and run with DecodeMode.Soft."""
-    detector = locus.Detector(decode_mode=locus.DecodeMode.Soft)
+    cfg = locus.DetectorConfig.from_profile("standard")
+    cfg_dict = cfg.model_dump()
+    cfg_dict["decoder"]["decode_mode"] = "Soft"
+    detector = locus.Detector(config=locus.DetectorConfig.model_validate(cfg_dict))
     assert detector is not None
 
     # Create a dummy image

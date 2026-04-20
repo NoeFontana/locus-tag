@@ -124,23 +124,6 @@ impl From<QuadExtractionMode> for locus_core::config::QuadExtractionMode {
     }
 }
 
-#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum DetectorPreset {
-    HighAccuracy = 0,
-    Grid = 1,
-    Standard = 2,
-}
-
-impl From<DetectorPreset> for locus_core::DetectorConfig {
-    fn from(p: DetectorPreset) -> Self {
-        match p {
-            DetectorPreset::HighAccuracy => locus_core::DetectorConfig::high_accuracy_default(),
-            DetectorPreset::Grid => locus_core::DetectorConfig::grid_default(),
-            DetectorPreset::Standard => locus_core::DetectorConfig::standard_default(),
-        }
-    }
-}
 
 // ============================================================================
 // Structs
@@ -345,6 +328,10 @@ pub struct PyDetectorConfig {
     pub quad_max_elongation: f64,
     pub quad_min_density: f64,
     pub quad_extraction_mode: QuadExtractionMode,
+    pub huber_delta_px: f64,
+    pub tikhonov_alpha_max: f64,
+    pub sigma_n_sq: f64,
+    pub structure_tensor_radius: u8,
 }
 
 impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
@@ -396,6 +383,10 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
                 },
                 locus_core::config::QuadExtractionMode::EdLines => QuadExtractionMode::EdLines,
             },
+            huber_delta_px: c.huber_delta_px,
+            tikhonov_alpha_max: c.tikhonov_alpha_max,
+            sigma_n_sq: c.sigma_n_sq,
+            structure_tensor_radius: c.structure_tensor_radius,
         }
     }
 }
@@ -1339,20 +1330,70 @@ fn tag_family_from_i32(f: i32) -> PyResult<locus_core::TagFamily> {
     }
 }
 
+/// Build a [`DetectorConfig`] from a Python-side flat-FFI dict.
+///
+/// Python is the single validator: the caller (`_config.DetectorConfig`)
+/// has already enforced type, range, and cross-group constraints. This
+/// function is an extraction-only bridge — no validation beyond what
+/// `DetectorConfig::validate()` provides as the Rust-side safety net.
+fn config_from_flat_dict(
+    dict: &Bound<'_, PyDict>,
+) -> PyResult<locus_core::config::DetectorConfig> {
+    let get = |key: &str| -> PyResult<Bound<'_, pyo3::PyAny>> {
+        dict.get_item(key)?
+            .ok_or_else(|| PyValueError::new_err(format!("config dict missing field {key:?}")))
+    };
+    let quad_mode: QuadExtractionMode = get("quad_extraction_mode")?.extract()?;
+    let ref_mode: CornerRefinementMode = get("refinement_mode")?.extract()?;
+    let dec_mode: DecodeMode = get("decode_mode")?.extract()?;
+    let conn: SegmentationConnectivity = get("segmentation_connectivity")?.extract()?;
+    let cfg = locus_core::config::DetectorConfig {
+        threshold_tile_size: get("threshold_tile_size")?.extract()?,
+        threshold_min_range: get("threshold_min_range")?.extract()?,
+        enable_sharpening: get("enable_sharpening")?.extract()?,
+        enable_adaptive_window: get("enable_adaptive_window")?.extract()?,
+        threshold_min_radius: get("threshold_min_radius")?.extract()?,
+        threshold_max_radius: get("threshold_max_radius")?.extract()?,
+        adaptive_threshold_constant: get("adaptive_threshold_constant")?.extract()?,
+        adaptive_threshold_gradient_threshold: get("adaptive_threshold_gradient_threshold")?
+            .extract()?,
+        quad_min_area: get("quad_min_area")?.extract()?,
+        quad_max_aspect_ratio: get("quad_max_aspect_ratio")?.extract()?,
+        quad_min_fill_ratio: get("quad_min_fill_ratio")?.extract()?,
+        quad_max_fill_ratio: get("quad_max_fill_ratio")?.extract()?,
+        quad_min_edge_length: get("quad_min_edge_length")?.extract()?,
+        quad_min_edge_score: get("quad_min_edge_score")?.extract()?,
+        subpixel_refinement_sigma: get("subpixel_refinement_sigma")?.extract()?,
+        upscale_factor: get("upscale_factor")?.extract()?,
+        quad_max_elongation: get("quad_max_elongation")?.extract()?,
+        quad_min_density: get("quad_min_density")?.extract()?,
+        quad_extraction_mode: quad_mode.into(),
+        decoder_min_contrast: get("decoder_min_contrast")?.extract()?,
+        refinement_mode: ref_mode.into(),
+        decode_mode: dec_mode.into(),
+        max_hamming_error: get("max_hamming_error")?.extract()?,
+        gwlf_transversal_alpha: get("gwlf_transversal_alpha")?.extract()?,
+        huber_delta_px: get("huber_delta_px")?.extract()?,
+        tikhonov_alpha_max: get("tikhonov_alpha_max")?.extract()?,
+        sigma_n_sq: get("sigma_n_sq")?.extract()?,
+        structure_tensor_radius: get("structure_tensor_radius")?.extract()?,
+        segmentation_connectivity: conn.into(),
+        segmentation_margin: get("segmentation_margin")?.extract()?,
+        ..locus_core::config::DetectorConfig::default()
+    };
+    Ok(cfg)
+}
+
 #[pyfunction]
-#[pyo3(signature = (decimation=None, threads=None, families=vec![], preset=None, **kwargs))]
-fn create_detector(
+#[pyo3(signature = (config, decimation=None, threads=None, families=vec![]))]
+fn _create_detector_from_config(
+    config: &Bound<'_, PyDict>,
     decimation: Option<usize>,
     threads: Option<usize>,
     families: Vec<i32>,
-    preset: Option<DetectorPreset>,
-    kwargs: Option<Bound<'_, PyDict>>,
 ) -> PyResult<Detector> {
-    let mut builder = locus_core::DetectorBuilder::new();
-
-    if let Some(p) = preset {
-        builder = builder.with_config(locus_core::config::DetectorConfig::from(p));
-    }
+    let cfg = config_from_flat_dict(config)?;
+    let mut builder = locus_core::DetectorBuilder::new().with_config(cfg);
 
     if let Some(d) = decimation {
         builder = builder.with_decimation(d);
@@ -1360,85 +1401,8 @@ fn create_detector(
     if let Some(t) = threads {
         builder = builder.with_threads(t);
     }
-
     for f in families {
         builder = builder.with_family(tag_family_from_i32(f)?);
-    }
-
-    if let Some(args) = kwargs {
-        if let Some(val) = args.get_item("enable_sharpening")? {
-            builder = builder.with_sharpening(val.extract()?);
-        }
-        if let Some(val) = args.get_item("upscale_factor")? {
-            builder = builder.with_upscale_factor(val.extract()?);
-        }
-        if let Some(val) = args.get_item("threshold_tile_size")? {
-            builder = builder.with_threshold_tile_size(val.extract()?);
-        }
-        if let Some(val) = args.get_item("threshold_min_range")? {
-            builder = builder.with_threshold_min_range(val.extract()?);
-        }
-        if let Some(val) = args.get_item("adaptive_threshold_constant")? {
-            builder = builder.with_adaptive_threshold_constant(val.extract()?);
-        }
-        if let Some(val) = args.get_item("quad_min_area")? {
-            builder = builder.with_quad_min_area(val.extract()?);
-        }
-        if let Some(val) = args.get_item("quad_min_fill_ratio")? {
-            builder = builder.with_quad_min_fill_ratio(val.extract()?);
-        }
-        if let Some(val) = args.get_item("quad_min_edge_score")? {
-            builder = builder.with_quad_min_edge_score(val.extract()?);
-        }
-        if let Some(val) = args.get_item("decoder_min_contrast")? {
-            builder = builder.with_decoder_min_contrast(val.extract()?);
-        }
-        if let Some(val) = args.get_item("max_hamming_error")? {
-            builder = builder.with_max_hamming_error(val.extract()?);
-        }
-        if let Some(val) = args.get_item("gwlf_transversal_alpha")? {
-            builder = builder.with_gwlf_transversal_alpha(val.extract()?);
-        }
-        if let Some(val) = args.get_item("quad_max_elongation")? {
-            builder = builder.with_quad_max_elongation(val.extract()?);
-        }
-        if let Some(val) = args.get_item("quad_min_density")? {
-            builder = builder.with_quad_min_density(val.extract()?);
-        }
-        if let Some(val) = args.get_item("quad_extraction_mode")? {
-            let mode = match val.extract::<i32>()? {
-                0 => locus_core::config::QuadExtractionMode::ContourRdp,
-                1 => locus_core::config::QuadExtractionMode::EdLines,
-                _ => return Err(PyValueError::new_err("Invalid quad_extraction_mode")),
-            };
-            builder = builder.with_quad_extraction_mode(mode);
-        }
-        if let Some(val) = args.get_item("refinement_mode")? {
-            let mode = match val.extract::<i32>()? {
-                0 => locus_core::config::CornerRefinementMode::None,
-                1 => locus_core::config::CornerRefinementMode::Edge,
-                2 => locus_core::config::CornerRefinementMode::Erf,
-                3 => locus_core::config::CornerRefinementMode::Gwlf,
-                _ => return Err(PyValueError::new_err("Invalid refinement_mode")),
-            };
-            builder = builder.with_corner_refinement(mode);
-        }
-        if let Some(val) = args.get_item("decode_mode")? {
-            let mode = match val.extract::<i32>()? {
-                0 => locus_core::config::DecodeMode::Hard,
-                1 => locus_core::config::DecodeMode::Soft,
-                _ => return Err(PyValueError::new_err("Invalid decode_mode")),
-            };
-            builder = builder.with_decode_mode(mode);
-        }
-        if let Some(val) = args.get_item("segmentation_connectivity")? {
-            let conn = match val.extract::<i32>()? {
-                0 => locus_core::config::SegmentationConnectivity::Four,
-                1 => locus_core::config::SegmentationConnectivity::Eight,
-                _ => return Err(PyValueError::new_err("Invalid connectivity")),
-            };
-            builder = builder.with_connectivity(conn);
-        }
     }
 
     let detector = builder
@@ -1819,7 +1783,6 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<DecodeMode>()?;
     m.add_class::<PoseEstimationMode>()?;
     m.add_class::<QuadExtractionMode>()?;
-    m.add_class::<DetectorPreset>()?;
     // Config / misc structs
     m.add_class::<DistortionModel>()?;
     m.add_class::<CameraIntrinsics>()?;
@@ -1840,7 +1803,7 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Detector>()?;
     m.add_class::<DetectorBuilder>()?;
 
-    m.add_function(wrap_pyfunction!(create_detector, m)?)?;
+    m.add_function(wrap_pyfunction!(_create_detector_from_config, m)?)?;
     m.add_function(wrap_pyfunction!(init_tracy, m)?)?;
     Ok(())
 }

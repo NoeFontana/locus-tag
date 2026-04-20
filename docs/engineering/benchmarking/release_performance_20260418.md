@@ -56,7 +56,7 @@ The `HighAccuracy` preset is optimized for maximum precision on high-quality ima
 - **EdLines sensitivity:** Empirical testing shows `EdLines` recall collapses on tags with < 1.5 PPB (reaching < 1% for < 1.2 PPB), whereas the legacy `ContourRdp` algorithm remains robust down to ~1.2 PPB.
 - **Sharpening impact:** Disabling sharpening (as in HighAccuracy mode) further degrades recall on small tags by smearing bit boundaries. Enabling sharpening recovers `EdLines` recall to 100% for tags > 2.0 PPB, but it remains ineffective for the "sub-pixel" tags prevalent in ICRA 2020.
 
-For real-world robotics tracking where high recall on distant tags is required, `standard_default` (Soft Decode + ContourRdp + Sharpening) remains the recommended configuration. HighAccuracy mode should be reserved for high-resolution near-field calibration where PPB is > 5.0.
+For real-world robotics tracking where high recall on distant tags is required, the `standard` profile (Soft Decode + ContourRdp + Sharpening) remains the recommended configuration. The `high_accuracy` profile should be reserved for high-resolution near-field calibration where PPB is > 5.0.
 
 ### Hub Regression (Rendered Tags - 1080p Tag36h11)
 | Mode | Recall | Trans P50 (mm) | Latency (ms) |

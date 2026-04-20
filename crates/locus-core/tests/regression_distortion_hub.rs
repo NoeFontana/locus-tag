@@ -20,7 +20,7 @@ use locus_core::{DetectOptions, PoseEstimationMode, TagFamily};
 mod common;
 
 use common::hub::{
-    ConfigPreset, DatasetProvider, HubEntry, HubProvider, RegressionHarness, build_intrinsics,
+    DatasetProvider, HubEntry, HubProvider, RegressionHarness, build_intrinsics,
 };
 
 // ============================================================================
@@ -83,7 +83,7 @@ fn run_distortion_hub_test(config_name: &str, family: TagFamily, mode: PoseEstim
     let snapshot = format!("hub_{}{}", provider.name(), mode_suffix);
 
     RegressionHarness::new(snapshot)
-        .with_preset(ConfigPreset::Standard)
+        .with_profile("standard")
         .with_families(vec![family])
         .with_options(options)
         .run(provider);

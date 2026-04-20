@@ -26,35 +26,9 @@ use std::path::PathBuf;
 
 mod common;
 
-// ============================================================================
-// Configuration Presets
-// ============================================================================
-
-#[derive(Clone, Copy, Debug)]
-pub enum ConfigPreset {
-    /// Optimized for isolated tags on plain backgrounds.
-    Standard,
-    /// Optimized for touching tags in checkerboard patterns.
-    Grid,
-    /// SOTA metrology: EdLines GN + covariance propagation + Weighted LM.
-    HighAccuracy,
-}
-
-impl ConfigPreset {
-    pub fn detector_config(self) -> DetectorConfig {
-        match self {
-            Self::Standard => DetectorConfig::standard_default(),
-            Self::Grid => {
-                let mut config = DetectorConfig::grid_default();
-                // ICRA 2020 Tuning: Packed tags in checkerboards need relaxation.
-                config.quad_min_edge_score = 1.0;
-                config.decoder_min_contrast = 5.0;
-                config
-            },
-            Self::HighAccuracy => DetectorConfig::high_accuracy_default(),
-        }
-    }
-}
+/// Packed checkerboards need a relaxed `quad.min_edge_score` and
+/// `decoder.min_contrast` on top of the `grid` profile.
+const ICRA_GRID_JSON: &str = include_str!("fixtures/icra_grid.json");
 
 // ============================================================================
 // Metrics & Reporting
@@ -136,8 +110,14 @@ impl RegressionHarness {
         }
     }
 
-    pub fn with_preset(mut self, preset: ConfigPreset) -> Self {
-        self.config = preset.detector_config();
+    pub fn with_profile(mut self, name: &str) -> Self {
+        self.config = DetectorConfig::from_profile(name);
+        self
+    }
+
+    pub fn with_profile_json(mut self, json: &str) -> Self {
+        self.config = DetectorConfig::from_profile_json(json)
+            .expect("embedded test fixture must parse");
         self
     }
 
@@ -539,21 +519,30 @@ impl DatasetProvider for IcraProvider {
 // Test Runners
 // ============================================================================
 
+/// Applies either a shipped profile (`"standard"` / `"high_accuracy"`) or the
+/// inlined ICRA-grid fixture (`"icra_grid"`) to a harness.
+fn apply_profile(harness: RegressionHarness, profile: &str) -> RegressionHarness {
+    match profile {
+        "icra_grid" => harness.with_profile_json(ICRA_GRID_JSON),
+        other => harness.with_profile(other),
+    }
+}
+
 macro_rules! test_icra {
-    ($name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident, $family:expr) => {
+    ($name:ident, $subfolder:expr, $img_subfolder:expr, $profile:expr, $family:expr) => {
         #[test]
         fn $name() {
             let _guard = common::telemetry::init(stringify!($name));
             if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
                 let snapshot = provider.name().to_string();
-                RegressionHarness::new(snapshot)
-                    .with_preset(ConfigPreset::$preset)
+                let harness = RegressionHarness::new(snapshot);
+                apply_profile(harness, $profile)
                     .with_families(vec![$family])
                     .run(provider);
             }
         }
     };
-    (IGNORED $name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident, $family:expr) => {
+    (IGNORED $name:ident, $subfolder:expr, $img_subfolder:expr, $profile:expr, $family:expr) => {
         #[test]
         fn $name() {
             let _guard = common::telemetry::init(stringify!($name));
@@ -566,21 +555,21 @@ macro_rules! test_icra {
             }
             if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
                 let snapshot = provider.name().to_string();
-                RegressionHarness::new(snapshot)
-                    .with_preset(ConfigPreset::$preset)
+                let harness = RegressionHarness::new(snapshot);
+                apply_profile(harness, $profile)
                     .with_families(vec![$family])
                     .run(provider);
             }
         }
     };
-    (SOFT $name:ident, $subfolder:expr, $img_subfolder:expr, $preset:ident, $family:expr) => {
+    (SOFT $name:ident, $subfolder:expr, $img_subfolder:expr, $profile:expr, $family:expr) => {
         #[test]
         fn $name() {
             let _guard = common::telemetry::init(stringify!($name));
             if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
                 let snapshot = format!("{}_soft", provider.name());
-                RegressionHarness::new(snapshot)
-                    .with_preset(ConfigPreset::$preset)
+                let harness = RegressionHarness::new(snapshot);
+                apply_profile(harness, $profile)
                     .with_families(vec![$family])
                     .with_decode_mode(locus_core::config::DecodeMode::Soft)
                     .run(provider);
@@ -594,7 +583,7 @@ fn regression_fixtures() {
     let _guard = common::telemetry::init("regression_fixtures");
     let provider = FixtureProvider::new();
     RegressionHarness::new("fixtures")
-        .with_preset(ConfigPreset::Standard)
+        .with_profile("standard")
         .with_families(vec![TagFamily::AprilTag36h11])
         .run(provider);
 }
@@ -603,21 +592,21 @@ test_icra!(
     regression_icra_forward,
     "forward",
     Some("pure_tags_images"),
-    Standard,
+    "standard",
     TagFamily::AprilTag36h11
 );
 test_icra!(
     SOFT regression_icra_forward_soft,
     "forward",
     Some("pure_tags_images"),
-    Standard,
+    "standard",
     TagFamily::AprilTag36h11
 );
 test_icra!(
     regression_icra_forward_checkerboard,
     "forward",
     Some("checkerboard_corners_images"),
-    Grid,
+    "icra_grid",
     TagFamily::AprilTag36h11
 );
 
@@ -627,9 +616,9 @@ fn regression_icra_forward_gwlf() {
     if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
         let snapshot = "icra_forward_gwlf".to_string();
         RegressionHarness::new(snapshot)
-            .with_preset(ConfigPreset::Standard)
+            .with_profile("standard")
             .with_families(vec![TagFamily::AprilTag36h11])
-            // Override preset with GWLF
+            // Override profile with GWLF
             .with_refinement_mode(locus_core::config::CornerRefinementMode::Gwlf)
             .run(provider);
     }
@@ -639,35 +628,35 @@ test_icra!(
     IGNORED regression_icra_circle,
     "circle",
     Some("pure_tags_images"),
-    Standard,
+    "standard",
     TagFamily::AprilTag36h11
 );
 test_icra!(
     IGNORED regression_icra_circle_checkerboard,
     "circle",
     Some("checkerboard_corners_images"),
-    Grid,
+    "icra_grid",
     TagFamily::AprilTag36h11
 );
 test_icra!(
     IGNORED regression_icra_random,
     "random",
     Some("pure_tags_images"),
-    Standard,
+    "standard",
     TagFamily::AprilTag36h11
 );
 test_icra!(
     IGNORED regression_icra_random_checkerboard,
     "random",
     Some("checkerboard_corners_images"),
-    Grid,
+    "icra_grid",
     TagFamily::AprilTag36h11
 );
 test_icra!(
     IGNORED regression_icra_rotation,
     "rotation",
     Some("pure_tags_images"),
-    Standard,
+    "standard",
     TagFamily::AprilTag36h11
 );
 
@@ -678,7 +667,7 @@ fn regression_fixtures_moments_culling() {
     let _guard = common::telemetry::init("regression_fixtures_moments_culling");
     let provider = FixtureProvider::new();
     RegressionHarness::new("fixtures_moments_culling")
-        .with_preset(ConfigPreset::Standard)
+        .with_profile("standard")
         .with_families(vec![TagFamily::AprilTag36h11])
         .with_moments_culling(15.0, 0.15)
         .run(provider);
@@ -689,7 +678,7 @@ fn regression_fixtures_edlines() {
     let _guard = common::telemetry::init("regression_fixtures_edlines");
     let provider = FixtureProvider::new();
     RegressionHarness::new("fixtures_edlines")
-        .with_preset(ConfigPreset::Standard)
+        .with_profile("standard")
         .with_families(vec![TagFamily::AprilTag36h11])
         .with_quad_extraction_mode(locus_core::config::QuadExtractionMode::EdLines)
         .run(provider);
@@ -700,7 +689,7 @@ fn regression_fixtures_edlines_moments() {
     let _guard = common::telemetry::init("regression_fixtures_edlines_moments");
     let provider = FixtureProvider::new();
     RegressionHarness::new("fixtures_edlines_moments")
-        .with_preset(ConfigPreset::Standard)
+        .with_profile("standard")
         .with_families(vec![TagFamily::AprilTag36h11])
         .with_quad_extraction_mode(locus_core::config::QuadExtractionMode::EdLines)
         .with_moments_culling(15.0, 0.15)
@@ -713,7 +702,7 @@ fn regression_icra_forward_moments_culling() {
     if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
         let snapshot = "icra_forward_pure_default_moments_culling".to_string();
         RegressionHarness::new(snapshot)
-            .with_preset(ConfigPreset::Standard)
+            .with_profile("standard")
             .with_families(vec![TagFamily::AprilTag36h11])
             .with_moments_culling(15.0, 0.15)
             .run(provider);
@@ -726,7 +715,7 @@ fn regression_icra_forward_edlines() {
     if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
         let snapshot = "icra_forward_pure_default_edlines".to_string();
         RegressionHarness::new(snapshot)
-            .with_preset(ConfigPreset::Standard)
+            .with_profile("standard")
             .with_families(vec![TagFamily::AprilTag36h11])
             .with_quad_extraction_mode(locus_core::config::QuadExtractionMode::EdLines)
             .run(provider);
@@ -739,7 +728,7 @@ fn regression_icra_forward_edlines_moments() {
     if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
         let snapshot = "icra_forward_pure_default_edlines_moments".to_string();
         RegressionHarness::new(snapshot)
-            .with_preset(ConfigPreset::Standard)
+            .with_profile("standard")
             .with_families(vec![TagFamily::AprilTag36h11])
             .with_quad_extraction_mode(locus_core::config::QuadExtractionMode::EdLines)
             .with_moments_culling(15.0, 0.15)
@@ -754,7 +743,7 @@ fn regression_fixtures_sota() {
     let _guard = common::telemetry::init("regression_fixtures_sota");
     let provider = FixtureProvider::new();
     RegressionHarness::new("fixtures_sota")
-        .with_preset(ConfigPreset::HighAccuracy)
+        .with_profile("high_accuracy")
         .with_families(vec![TagFamily::AprilTag36h11])
         .run(provider);
 }
@@ -765,7 +754,7 @@ fn regression_icra_forward_sota() {
     if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
         let snapshot = "icra_forward_pure_default_sota".to_string();
         RegressionHarness::new(snapshot)
-            .with_preset(ConfigPreset::HighAccuracy)
+            .with_profile("high_accuracy")
             .with_families(vec![TagFamily::AprilTag36h11])
             .run(provider);
     }
@@ -800,7 +789,7 @@ fn regression_fixtures_sota_checkerboard() {
     let _guard = common::telemetry::init("regression_fixtures_sota_checkerboard");
     let provider = FixtureProvider::new();
     RegressionHarness::new("fixtures_sota_checkerboard")
-        .with_preset(ConfigPreset::Grid)
+        .with_profile_json(ICRA_GRID_JSON)
         .with_families(vec![TagFamily::AprilTag36h11])
         .run(provider);
 }
@@ -811,7 +800,7 @@ fn regression_icra_forward_sota_checkerboard() {
     if let Some(provider) = IcraProvider::new("forward", Some("checkerboard_corners_images")) {
         let snapshot = "icra_forward_checkerboard_sota".to_string();
         RegressionHarness::new(snapshot)
-            .with_preset(ConfigPreset::Grid)
+            .with_profile_json(ICRA_GRID_JSON)
             .with_families(vec![TagFamily::AprilTag36h11])
             .run(provider);
     }
