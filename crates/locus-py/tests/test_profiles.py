@@ -10,9 +10,8 @@ from __future__ import annotations
 
 import locus
 import pytest
+from locus._config import SHIPPED_PROFILES, ProfileName
 from locus.locus import PyDetectorConfig
-
-_SHIPPED = ["standard", "grid", "high_accuracy"]
 
 
 def _flat(cfg: PyDetectorConfig) -> dict:
@@ -32,8 +31,8 @@ def _assert_configs_equal(actual: PyDetectorConfig, expected: PyDetectorConfig, 
             assert got == exp, f"{label}.{key}: {got!r} != {exp!r}"
 
 
-@pytest.mark.parametrize("profile", _SHIPPED)
-def test_profile_builds_detector(profile: str) -> None:
+@pytest.mark.parametrize("profile", SHIPPED_PROFILES)
+def test_profile_builds_detector(profile: ProfileName) -> None:
     import numpy as np
 
     det = locus.Detector(profile=profile)
@@ -41,8 +40,8 @@ def test_profile_builds_detector(profile: str) -> None:
     assert len(batch) == 0
 
 
-@pytest.mark.parametrize("profile", _SHIPPED)
-def test_config_roundtrip_matches_profile(profile: str) -> None:
+@pytest.mark.parametrize("profile", SHIPPED_PROFILES)
+def test_config_roundtrip_matches_profile(profile: ProfileName) -> None:
     expected = locus.DetectorConfig.from_profile(profile)._to_ffi_config()
     actual = locus.Detector(profile=profile)._inner.config()
     _assert_configs_equal(actual, expected, profile)

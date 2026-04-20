@@ -9,9 +9,8 @@ disagree, the JSON is authoritative.
 
 from __future__ import annotations
 
-import functools
 from importlib import resources
-from typing import Annotated, Any, Literal, TypeVar, cast
+from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias, TypeVar, cast
 
 from pydantic import (
     BaseModel,
@@ -36,14 +35,15 @@ from .locus import (
 
 _E = TypeVar("_E")
 
-SHIPPED_PROFILES: frozenset[str] = frozenset({"standard", "grid", "high_accuracy"})
+ProfileName: TypeAlias = Literal["standard", "grid", "high_accuracy"]
+SHIPPED_PROFILES: tuple[ProfileName, ...] = ("standard", "grid", "high_accuracy")
 
 
-@functools.cache
 def _enum_registry(enum_cls: type[_E]) -> tuple[dict[int, _E], dict[str, _E], dict[_E, str]]:
-    # PyO3 int-enums are not `enum.IntEnum`, so walk class attributes once to
-    # build a constructible lookup. Cached — each enum class is scanned exactly
-    # once per process.
+    # PyO3 int-enums are not `enum.IntEnum`, so walk class attributes to build
+    # a constructible lookup. Called 3x per enum at import time (once each from
+    # `_coerce`, `_serialize_name`, `_enum_field`) — cheap enough that caching
+    # is not worth the typeshed friction around `functools.cache`.
     by_int: dict[int, _E] = {}
     by_name: dict[str, _E] = {}
     to_name: dict[_E, str] = {}
@@ -108,10 +108,20 @@ def _enum_field(enum_cls: type[_E]) -> Any:
     ]
 
 
-_CornerRefinementField = _enum_field(CornerRefinementMode)
-_DecodeModeField = _enum_field(DecodeMode)
-_QuadExtractionField = _enum_field(QuadExtractionMode)
-_SegConnField = _enum_field(SegmentationConnectivity)
+if TYPE_CHECKING:
+    # mypy needs plain type aliases to accept these in field annotations.
+    # At runtime the `else` branch installs the `Annotated[...]` wrapper so
+    # Pydantic sees the validators/serializers; the two views describe the
+    # same values — see `_enum_field` for the runtime metadata shape.
+    _CornerRefinementField: TypeAlias = CornerRefinementMode
+    _DecodeModeField: TypeAlias = DecodeMode
+    _QuadExtractionField: TypeAlias = QuadExtractionMode
+    _SegConnField: TypeAlias = SegmentationConnectivity
+else:
+    _CornerRefinementField = _enum_field(CornerRefinementMode)
+    _DecodeModeField = _enum_field(DecodeMode)
+    _QuadExtractionField = _enum_field(QuadExtractionMode)
+    _SegConnField = _enum_field(SegmentationConnectivity)
 
 
 class ThresholdConfig(BaseModel):
@@ -233,7 +243,7 @@ class DetectorConfig(BaseModel):
         return self
 
     @classmethod
-    def from_profile(cls, name: Literal["standard", "grid", "high_accuracy"]) -> DetectorConfig:
+    def from_profile(cls, name: ProfileName) -> DetectorConfig:
         """Load one of the three shipped profiles by name."""
         if name not in SHIPPED_PROFILES:
             raise ValueError(
@@ -314,6 +324,7 @@ __all__ = [
     "DetectOptions",
     "DetectorConfig",
     "PoseConfig",
+    "ProfileName",
     "QuadConfig",
     "SegmentationConfig",
     "ThresholdConfig",

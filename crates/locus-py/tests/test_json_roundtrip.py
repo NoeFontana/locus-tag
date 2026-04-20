@@ -11,11 +11,11 @@ from __future__ import annotations
 import json
 
 import pytest
-from locus._config import SHIPPED_PROFILES, DetectorConfig
+from locus._config import SHIPPED_PROFILES, DetectorConfig, ProfileName
 
 
 @pytest.mark.parametrize("profile", sorted(SHIPPED_PROFILES))
-def test_roundtrip_is_semantically_lossless(profile: str) -> None:
+def test_roundtrip_is_semantically_lossless(profile: ProfileName) -> None:
     original = DetectorConfig.from_profile(profile)
     dumped = original.model_dump_json()
     reloaded = DetectorConfig.from_profile_json(dumped)
@@ -23,7 +23,7 @@ def test_roundtrip_is_semantically_lossless(profile: str) -> None:
 
 
 @pytest.mark.parametrize("profile", sorted(SHIPPED_PROFILES))
-def test_json_preserves_enum_variant_names(profile: str) -> None:
+def test_json_preserves_enum_variant_names(profile: ProfileName) -> None:
     cfg = DetectorConfig.from_profile(profile)
     parsed = json.loads(cfg.model_dump_json())
     assert isinstance(parsed["decoder"]["refinement_mode"], str)
@@ -33,7 +33,7 @@ def test_json_preserves_enum_variant_names(profile: str) -> None:
 
 
 @pytest.mark.parametrize("profile", sorted(SHIPPED_PROFILES))
-def test_shipped_json_matches_loaded_model(profile: str) -> None:
+def test_shipped_json_matches_loaded_model(profile: ProfileName) -> None:
     """The bytes on disk deserialize to a model that re-serializes to the same
     structured content (order-independent)."""
     from importlib import resources

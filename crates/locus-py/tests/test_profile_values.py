@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from locus._config import SHIPPED_PROFILES, DetectorConfig
+from locus._config import SHIPPED_PROFILES, DetectorConfig, ProfileName
 from locus.locus import (
     CornerRefinementMode,
     DecodeMode,
@@ -60,14 +60,14 @@ def _dotget(cfg: DetectorConfig, path: str):
 
 
 @pytest.mark.parametrize("profile_name", sorted(SHIPPED_PROFILES))
-def test_shipped_profile_loads(profile_name: str) -> None:
+def test_shipped_profile_loads(profile_name: ProfileName) -> None:
     cfg = DetectorConfig.from_profile(profile_name)
     assert cfg.name == profile_name
     assert cfg.extends is None
 
 
 @pytest.mark.parametrize("profile_name", sorted(SHIPPED_PROFILES))
-def test_shipped_profile_values(profile_name: str) -> None:
+def test_shipped_profile_values(profile_name: ProfileName) -> None:
     cfg = DetectorConfig.from_profile(profile_name)
     for path, expected in EXPECTED[profile_name].items():
         actual = _dotget(cfg, path)
@@ -130,7 +130,7 @@ def test_fill_ratio_ordering_enforced() -> None:
 
 
 @pytest.mark.parametrize("profile_name", sorted(SHIPPED_PROFILES))
-def test_json_roundtrip_is_lossless(profile_name: str) -> None:
+def test_json_roundtrip_is_lossless(profile_name: ProfileName) -> None:
     cfg = DetectorConfig.from_profile(profile_name)
     dumped = cfg.model_dump_json()
     roundtripped = DetectorConfig.from_profile_json(dumped)
@@ -138,7 +138,7 @@ def test_json_roundtrip_is_lossless(profile_name: str) -> None:
 
 
 @pytest.mark.parametrize("profile_name", sorted(SHIPPED_PROFILES))
-def test_json_emits_enum_names(profile_name: str) -> None:
+def test_json_emits_enum_names(profile_name: ProfileName) -> None:
     cfg = DetectorConfig.from_profile(profile_name)
     parsed = json.loads(cfg.model_dump_json())
     assert isinstance(parsed["decoder"]["refinement_mode"], str)

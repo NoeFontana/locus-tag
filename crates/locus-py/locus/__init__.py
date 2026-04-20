@@ -1,9 +1,18 @@
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 
-from ._config import DetectOptions, DetectorConfig
+from ._config import (
+    DecoderConfig,
+    DetectOptions,
+    DetectorConfig,
+    PoseConfig,
+    ProfileName,
+    QuadConfig,
+    SegmentationConfig,
+    ThresholdConfig,
+)
 from .locus import (
     AprilGrid,
     BoardEstimateResult,
@@ -168,7 +177,7 @@ class Detector:
 
     def __init__(
         self,
-        profile: Literal["standard", "grid", "high_accuracy"] | None = None,
+        profile: ProfileName | None = None,
         config: DetectorConfig | None = None,
         *,
         decimation: int | None = None,
@@ -195,46 +204,46 @@ class Detector:
         """Returns the current detector configuration as a nested model."""
         raw = self._inner.config()
         return DetectorConfig(
-            threshold={
-                "tile_size": raw.threshold_tile_size,
-                "min_range": raw.threshold_min_range,
-                "enable_sharpening": raw.enable_sharpening,
-                "enable_adaptive_window": raw.enable_adaptive_window,
-                "min_radius": raw.threshold_min_radius,
-                "max_radius": raw.threshold_max_radius,
-                "constant": raw.adaptive_threshold_constant,
-                "gradient_threshold": raw.adaptive_threshold_gradient_threshold,
-            },
-            quad={
-                "min_area": raw.quad_min_area,
-                "max_aspect_ratio": raw.quad_max_aspect_ratio,
-                "min_fill_ratio": raw.quad_min_fill_ratio,
-                "max_fill_ratio": raw.quad_max_fill_ratio,
-                "min_edge_length": raw.quad_min_edge_length,
-                "min_edge_score": raw.quad_min_edge_score,
-                "subpixel_refinement_sigma": raw.subpixel_refinement_sigma,
-                "upscale_factor": raw.upscale_factor,
-                "max_elongation": raw.quad_max_elongation,
-                "min_density": raw.quad_min_density,
-                "extraction_mode": raw.quad_extraction_mode,
-            },
-            decoder={
-                "min_contrast": raw.decoder_min_contrast,
-                "refinement_mode": raw.refinement_mode,
-                "decode_mode": raw.decode_mode,
-                "max_hamming_error": raw.max_hamming_error,
-                "gwlf_transversal_alpha": raw.gwlf_transversal_alpha,
-            },
-            pose={
-                "huber_delta_px": raw.huber_delta_px,
-                "tikhonov_alpha_max": raw.tikhonov_alpha_max,
-                "sigma_n_sq": raw.sigma_n_sq,
-                "structure_tensor_radius": raw.structure_tensor_radius,
-            },
-            segmentation={
-                "connectivity": raw.segmentation_connectivity,
-                "margin": raw.segmentation_margin,
-            },
+            threshold=ThresholdConfig(
+                tile_size=raw.threshold_tile_size,
+                min_range=raw.threshold_min_range,
+                enable_sharpening=raw.enable_sharpening,
+                enable_adaptive_window=raw.enable_adaptive_window,
+                min_radius=raw.threshold_min_radius,
+                max_radius=raw.threshold_max_radius,
+                constant=raw.adaptive_threshold_constant,
+                gradient_threshold=raw.adaptive_threshold_gradient_threshold,
+            ),
+            quad=QuadConfig(
+                min_area=raw.quad_min_area,
+                max_aspect_ratio=raw.quad_max_aspect_ratio,
+                min_fill_ratio=raw.quad_min_fill_ratio,
+                max_fill_ratio=raw.quad_max_fill_ratio,
+                min_edge_length=raw.quad_min_edge_length,
+                min_edge_score=raw.quad_min_edge_score,
+                subpixel_refinement_sigma=raw.subpixel_refinement_sigma,
+                upscale_factor=raw.upscale_factor,
+                max_elongation=raw.quad_max_elongation,
+                min_density=raw.quad_min_density,
+                extraction_mode=raw.quad_extraction_mode,
+            ),
+            decoder=DecoderConfig(
+                min_contrast=raw.decoder_min_contrast,
+                refinement_mode=raw.refinement_mode,
+                decode_mode=raw.decode_mode,
+                max_hamming_error=raw.max_hamming_error,
+                gwlf_transversal_alpha=raw.gwlf_transversal_alpha,
+            ),
+            pose=PoseConfig(
+                huber_delta_px=raw.huber_delta_px,
+                tikhonov_alpha_max=raw.tikhonov_alpha_max,
+                sigma_n_sq=raw.sigma_n_sq,
+                structure_tensor_radius=raw.structure_tensor_radius,
+            ),
+            segmentation=SegmentationConfig(
+                connectivity=raw.segmentation_connectivity,
+                margin=raw.segmentation_margin,
+            ),
         )
 
     def set_families(self, families: list[TagFamily]):
