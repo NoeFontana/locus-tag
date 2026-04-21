@@ -45,6 +45,7 @@ impl TagDictionary {
     }
 
     /// Check if dictionary is empty.
+    // Paired with `len()` to satisfy `clippy::len_without_is_empty`.
     #[must_use]
     #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {

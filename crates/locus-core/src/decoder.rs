@@ -27,9 +27,7 @@ pub struct Homography {
 ///
 /// This avoids expensive matrix multiplications by using discrete partial derivatives
 /// when stepping through a uniform grid in tag space.
-// Constructed only by `Homography::to_dda`, which is itself called from
-// target-feature-gated SIMD blocks in `sample_grid_values_dda_simd` and from
-// bench-internals tests. Appears unused in default-target builds.
+// See `Homography::to_dda` for the dead-code rationale.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub struct HomographyDda {
@@ -56,8 +54,8 @@ pub struct HomographyDda {
 impl Homography {
     /// Convert the homography into a DDA state for a grid with step size (du, dv).
     /// Initial state is computed at (u0, v0) in canonical tag space.
-    // Called from target-feature-gated SIMD blocks and bench-internals tests;
-    // appears unused in default-target builds.
+    // Dead-code lint runs without target_feature gating, so the AVX2/NEON-only
+    // consumer in `sample_grid_values_dda_simd` is invisible to it.
     #[allow(dead_code)]
     #[must_use]
     pub fn to_dda(&self, u0: f64, v0: f64, du: f64, dv: f64) -> HomographyDda {

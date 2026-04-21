@@ -1,4 +1,19 @@
 //! Python bindings for the Locus Tag library.
+//!
+//! ## NumPy allocation safety contract
+//!
+//! `PyArray::new(py, shape, false)` is `unsafe` because it returns an
+//! uninitialized buffer. We always pair it with a full overwrite before the
+//! array escapes the function. The contract relied on at every call site:
+//!
+//! - The returned `PyArrayN<T>` is freshly allocated, C-contiguous, and
+//!   exclusively owned by the GIL-bound `py` token until we hand it back.
+//! - No other Rust or Python reference observes the buffer while the
+//!   `&mut [T]` borrow from `as_slice_mut` is live, so the slice cannot
+//!   alias.
+//! - Each call site fully writes the buffer before returning the array.
+//!
+//! Call-site SAFETY comments reference this note instead of restating it.
 #![allow(
     unsafe_code,
     clippy::unused_self,
@@ -732,24 +747,12 @@ impl BoardEstimator {
         let board_pose_raw = py.detach(|| self.inner.estimate(&batch_view, &core_intr));
 
         // 3. Package detections (ids + corners).
-        // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let ids_arr = unsafe { PyArray1::<i32>::new(py, [n], false) };
-        // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let corners_arr = unsafe { PyArray3::<f32>::new(py, [n, 4, 2], false) };
 
-        // SAFETY: the array was allocated above by `PyArray::new` and is still
-        // exclusively owned by this stack frame (no Python or Rust alias
-        // exists), so the `&mut [T]` view returned by `as_slice_mut` cannot
-        // overlap with another live reference. The buffer is C-contiguous by
-        // construction, satisfying the slice-layout precondition.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let ids_slice = unsafe { ids_arr.as_slice_mut() }
             .map_err(|e| PyRuntimeError::new_err(format!("ids array layout error: {e}")))?;
 
@@ -759,11 +762,7 @@ impl BoardEstimator {
             std::slice::from_raw_parts(batch_view.ids.as_ptr().cast::<i32>(), n)
         });
 
-        // SAFETY: the array was allocated above by `PyArray::new` and is still
-        // exclusively owned by this stack frame (no Python or Rust alias
-        // exists), so the `&mut [T]` view returned by `as_slice_mut` cannot
-        // overlap with another live reference. The buffer is C-contiguous by
-        // construction, satisfying the slice-layout precondition.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let corners_slice = unsafe { corners_arr.as_slice_mut() }
             .map_err(|e| PyRuntimeError::new_err(format!("corners array layout error: {e}")))?;
 
@@ -778,15 +777,9 @@ impl BoardEstimator {
             let q = nalgebra::UnitQuaternion::from_matrix(&bp.pose.rotation);
             let t = bp.pose.translation;
 
-            // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
             let pose_arr = unsafe { PyArray1::<f64>::new(py, [7], false) };
-            // SAFETY: the array was just allocated by `PyArray::new` and is still
-            // exclusively owned by this stack frame; no aliasing reference
-            // exists, and the buffer is C-contiguous by construction.
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
             let ps = unsafe { pose_arr.as_slice_mut() }
                 .map_err(|e| PyRuntimeError::new_err(format!("pose array layout error: {e}")))?;
             ps[0] = t.x;
@@ -797,15 +790,9 @@ impl BoardEstimator {
             ps[5] = q.k;
             ps[6] = q.w;
 
-            // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
             let cov_arr = unsafe { PyArray2::<f64>::new(py, [6, 6], false) };
-            // SAFETY: the array was just allocated by `PyArray::new` and is still
-            // exclusively owned by this stack frame; no aliasing reference
-            // exists, and the buffer is C-contiguous by construction.
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
             let cs = unsafe { cov_arr.as_slice_mut() }
                 .map_err(|e| PyRuntimeError::new_err(format!("cov array layout error: {e}")))?;
             for row in 0..6 {
@@ -944,22 +931,11 @@ impl CharucoRefiner {
         let s = active_batch.count;
 
         // 3. Package ArUco detections (ids + corners).
-        // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let ids_arr = unsafe { PyArray1::<i32>::new(py, [n], false) };
-        // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let corners_arr = unsafe { PyArray3::<f32>::new(py, [n, 4, 2], false) };
-        // SAFETY: each `PyArray::new` above returned a fresh, C-contiguous,
-        // exclusively-owned buffer; the `as_slice_mut` borrows below are
-        // therefore the only live references to those buffers. The block
-        // ends before the arrays escape via the returned tuple.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         unsafe {
             let ids_slice = ids_arr
                 .as_slice_mut()
@@ -978,28 +954,13 @@ impl CharucoRefiner {
         }
 
         // 4. Package saddle-point detections.
-        // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let saddle_ids_arr = unsafe { PyArray1::<i32>::new(py, [s], false) };
-        // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let saddle_pts_arr = unsafe { PyArray2::<f32>::new(py, [s, 2], false) };
-        // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let saddle_obj_arr = unsafe { PyArray2::<f64>::new(py, [s, 3], false) };
-        // SAFETY: each `PyArray::new` above returned a fresh, C-contiguous,
-        // exclusively-owned buffer; the `as_slice_mut` borrows below are
-        // therefore the only live references to those buffers. The block
-        // ends before the arrays escape via the returned tuple.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         unsafe {
             let sid_slice = saddle_ids_arr
                 .as_slice_mut()
@@ -1040,15 +1001,9 @@ impl CharucoRefiner {
         let (board_pose, board_cov) = if let Some(bp) = board_pose_raw {
             let q = nalgebra::UnitQuaternion::from_matrix(&bp.pose.rotation);
             let t = bp.pose.translation;
-            // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
             let pose_arr = unsafe { PyArray1::<f64>::new(py, [7], false) };
-            // SAFETY: the `PyArray::new` above returned a fresh, C-contiguous,
-            // exclusively-owned buffer; the `as_slice_mut` borrow below is the
-            // only live reference until the block ends.
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
             unsafe {
                 let ps = pose_arr
                     .as_slice_mut()
@@ -1061,15 +1016,9 @@ impl CharucoRefiner {
                 ps[5] = q.k;
                 ps[6] = q.w;
             }
-            // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
             let cov_arr = unsafe { PyArray2::<f64>::new(py, [6, 6], false) };
-            // SAFETY: the `PyArray::new` above returned a fresh, C-contiguous,
-            // exclusively-owned buffer; the `as_slice_mut` borrow below is the
-            // only live reference until the block ends.
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
             unsafe {
                 let cs = cov_arr
                     .as_slice_mut()
@@ -1088,22 +1037,11 @@ impl CharucoRefiner {
         // 6. Telemetry (populated only when debug_telemetry=True and batch has telemetry).
         let telemetry = if debug_telemetry && let Some(t) = self.telem_batch.telemetry.as_ref() {
             let r = t.count;
-            // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
             let rej_pts_arr = unsafe { PyArray2::<f32>::new(py, [r, 2], false) };
-            // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
             let rej_det_arr = unsafe { PyArray1::<f32>::new(py, [r], false) };
-            // SAFETY: each `PyArray::new` above returned a fresh, C-contiguous,
-        // exclusively-owned buffer; the `as_slice_mut` borrows below are
-        // therefore the only live references to those buffers. The block
-        // ends before the arrays escape via the returned tuple.
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
             unsafe {
                 // SAFETY: Point2f is repr(C) [f32; 2]; flat reinterpretation is sound.
                 let rpts = rej_pts_arr
@@ -1178,17 +1116,9 @@ fn build_pipeline_telemetry(
     py: Python<'_>,
     telem: &locus_core::TelemetryPayload,
 ) -> PyResult<PipelineTelemetryResult> {
-    // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+    // SAFETY: see "NumPy allocation safety contract" in module docs.
     let binarized_arr = unsafe { PyArray2::<u8>::new(py, [telem.height, telem.width], false) };
-    // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+    // SAFETY: see "NumPy allocation safety contract" in module docs.
     let threshold_arr = unsafe { PyArray2::<u8>::new(py, [telem.height, telem.width], false) };
     // SAFETY: Both pointers are valid for `height * stride` bytes (guaranteed by the Rust
     // arena that owns them for the lifetime of this `detect()` call).  The destination slices
@@ -1217,15 +1147,9 @@ fn build_pipeline_telemetry(
 
     let subpixel_jitter = if !telem.subpixel_jitter_ptr.is_null() && telem.num_jitter > 0 {
         let nj = telem.num_jitter;
-        // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let arr = unsafe { PyArray3::<f32>::new(py, [nj, 4, 2], false) };
-        // SAFETY: the `PyArray::new` above returned a fresh, C-contiguous,
-            // exclusively-owned buffer; the `as_slice_mut` borrow below is the
-            // only live reference until the block ends.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         unsafe {
             arr.as_slice_mut()
                 .map_err(|e| PyRuntimeError::new_err(format!("jitter slice: {e}")))?
@@ -1242,15 +1166,9 @@ fn build_pipeline_telemetry(
     let reprojection_errors =
         if !telem.reprojection_errors_ptr.is_null() && telem.num_reprojection > 0 {
             let nr = telem.num_reprojection;
-            // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
             let arr = unsafe { PyArray1::<f32>::new(py, [nr], false) };
-            // SAFETY: the `PyArray::new` above returned a fresh, C-contiguous,
-            // exclusively-owned buffer; the `as_slice_mut` borrow below is the
-            // only live reference until the block ends.
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
             unsafe {
                 arr.as_slice_mut()
                     .map_err(|e| PyRuntimeError::new_err(format!("repro slice: {e}")))?
@@ -1335,30 +1253,15 @@ impl Detector {
         let n = detections.len();
 
         // Allocate NumPy arrays
-        // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let ids_arr = unsafe { PyArray1::<i32>::new(py, [n], false) };
-        // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let corners_arr = unsafe { PyArray3::<f32>::new(py, [n, 4, 2], false) };
-        // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let error_rates_arr = unsafe { PyArray1::<f32>::new(py, [n], false) };
 
         // Perform memory mapping
-        // SAFETY: each `PyArray::new` above returned a fresh, C-contiguous,
-        // exclusively-owned buffer; the `as_slice_mut` borrows below are
-        // therefore the only live references to those buffers. The block
-        // ends before the arrays escape via the returned tuple.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         unsafe {
             let ids_slice = ids_arr
                 .as_slice_mut()
@@ -1388,16 +1291,9 @@ impl Detector {
 
         // Rejected Quads: (M, 4, 2)
         let m = detections.rejected_corners.len();
-        // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let rejected_arr = unsafe { PyArray3::<f32>::new(py, [m, 4, 2], false) };
-        // SAFETY: each `PyArray::new` above returned a fresh, C-contiguous,
-        // exclusively-owned buffer; the `as_slice_mut` borrows below are
-        // therefore the only live references to those buffers. The block
-        // ends before the arrays escape via the returned tuple.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         unsafe {
             let rejected_slice = rejected_arr
                 .as_slice_mut()
@@ -1409,16 +1305,9 @@ impl Detector {
         }
 
         // Rejected Error Rates: (M,)
-        // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let rejected_error_rates_arr = unsafe { PyArray1::<f32>::new(py, [m], false) };
-        // SAFETY: each `PyArray::new` above returned a fresh, C-contiguous,
-        // exclusively-owned buffer; the `as_slice_mut` borrows below are
-        // therefore the only live references to those buffers. The block
-        // ends before the arrays escape via the returned tuple.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         unsafe {
             let rejected_error_rates_slice = rejected_error_rates_arr
                 .as_slice_mut()
@@ -1431,16 +1320,9 @@ impl Detector {
 
         // Poses: Vectorized (N, 7) layout: [tx, ty, tz, qx, qy, qz, qw]
         let poses = if has_intrinsics && tag_size.is_some() {
-            // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
             let poses_arr = unsafe { PyArray2::<f32>::new(py, [n, 7], false) };
-            // SAFETY: each `PyArray::new` above returned a fresh, C-contiguous,
-        // exclusively-owned buffer; the `as_slice_mut` borrows below are
-        // therefore the only live references to those buffers. The block
-        // ends before the arrays escape via the returned tuple.
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
             unsafe {
                 let poses_slice = poses_arr
                     .as_slice_mut()
@@ -1896,29 +1778,14 @@ fn build_detection_result_from_owned(
 ) -> PyResult<DetectionResult> {
     let n = detections.len();
 
-    // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+    // SAFETY: see "NumPy allocation safety contract" in module docs.
     let ids_arr = unsafe { PyArray1::<i32>::new(py, [n], false) };
-    // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+    // SAFETY: see "NumPy allocation safety contract" in module docs.
     let corners_arr = unsafe { PyArray3::<f32>::new(py, [n, 4, 2], false) };
-    // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+    // SAFETY: see "NumPy allocation safety contract" in module docs.
     let error_rates_arr = unsafe { PyArray1::<f32>::new(py, [n], false) };
 
-    // SAFETY: each `PyArray::new` above returned a fresh, C-contiguous,
-        // exclusively-owned buffer; the `as_slice_mut` borrows below are
-        // therefore the only live references to those buffers. The block
-        // ends before the arrays escape via the returned tuple.
+    // SAFETY: see "NumPy allocation safety contract" in module docs.
     unsafe {
         let ids_sl = ids_arr
             .as_slice_mut()
@@ -1944,15 +1811,9 @@ fn build_detection_result_from_owned(
     }
 
     let poses = if has_pose {
-        // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         let poses_arr = unsafe { PyArray2::<f32>::new(py, [n, 7], false) };
-        // SAFETY: the `PyArray::new` above returned a fresh, C-contiguous,
-            // exclusively-owned buffer; the `as_slice_mut` borrow below is the
-            // only live reference until the block ends.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
         unsafe {
             let poses_sl = poses_arr
                 .as_slice_mut()
@@ -1978,17 +1839,9 @@ fn build_detection_result_from_owned(
     };
 
     // Rejected corners are not available on the owned path.
-    // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+    // SAFETY: see "NumPy allocation safety contract" in module docs.
     let rejected_arr = unsafe { PyArray3::<f32>::new(py, [0, 4, 2], false) };
-    // SAFETY: `PyArray::new` returns a freshly-allocated, C-contiguous buffer
-        // owned by the GIL-bound `py` token; no other Rust or Python reference
-        // observes it until we hand it back, so calling the unsafe constructor
-        // is sound. `false` selects zeroed initialization disabled — the buffer
-        // is fully overwritten below before the array escapes this function.
+    // SAFETY: see "NumPy allocation safety contract" in module docs.
     let rejected_error_rates_arr = unsafe { PyArray1::<f32>::new(py, [0], false) };
 
     Ok(DetectionResult {
