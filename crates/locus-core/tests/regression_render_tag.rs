@@ -225,7 +225,7 @@ fn run_hub_test_tuned_r(
     }
 }
 
-fn run_hub_test_sota(config_name: &str, family: TagFamily) {
+fn run_hub_test_highaccuracy(config_name: &str, family: TagFamily) {
     if let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") {
         let root = common::resolve_hub_root(&hub_dir);
         let dataset_path = root.join(config_name);
@@ -276,7 +276,7 @@ fn run_hub_test_sota(config_name: &str, family: TagFamily) {
             }
             options.pose_estimation_mode = PoseEstimationMode::Accurate;
 
-            let snapshot = format!("hub_{}_sota", provider.name());
+            let snapshot = format!("hub_{}_highaccuracy", provider.name());
             RegressionHarness::new(snapshot)
                 .with_profile("high_accuracy")
                 .with_families(vec![family])
@@ -585,36 +585,36 @@ fn regression_hub_tag36h11_2160p_edlines_moments() {
 // ── HighAccuracy (EdLines GN + covariance propagation + Weighted LM) ───────
 
 #[test]
-fn regression_hub_tag36h11_640x480_sota() {
-    let _guard = common::telemetry::init("regression_hub_tag36h11_640x480_sota");
-    run_hub_test_sota(
+fn regression_hub_tag36h11_640x480_highaccuracy() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_640x480_highaccuracy");
+    run_hub_test_highaccuracy(
         "single_tag_locus_v1_tag36h11_640x480",
         TagFamily::AprilTag36h11,
     );
 }
 
 #[test]
-fn regression_hub_tag36h11_720p_sota() {
-    let _guard = common::telemetry::init("regression_hub_tag36h11_720p_sota");
-    run_hub_test_sota(
+fn regression_hub_tag36h11_720p_highaccuracy() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_720p_highaccuracy");
+    run_hub_test_highaccuracy(
         "single_tag_locus_v1_tag36h11_1280x720",
         TagFamily::AprilTag36h11,
     );
 }
 
 #[test]
-fn regression_hub_tag36h11_1080p_sota() {
-    let _guard = common::telemetry::init("regression_hub_tag36h11_1080p_sota");
-    run_hub_test_sota(
+fn regression_hub_tag36h11_1080p_highaccuracy() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_1080p_highaccuracy");
+    run_hub_test_highaccuracy(
         "single_tag_locus_v1_tag36h11_1920x1080",
         TagFamily::AprilTag36h11,
     );
 }
 
 #[test]
-fn regression_hub_tag36h11_2160p_sota() {
-    let _guard = common::telemetry::init("regression_hub_tag36h11_2160p_sota");
-    run_hub_test_sota(
+fn regression_hub_tag36h11_2160p_highaccuracy() {
+    let _guard = common::telemetry::init("regression_hub_tag36h11_2160p_highaccuracy");
+    run_hub_test_highaccuracy(
         "single_tag_locus_v1_tag36h11_3840x2160",
         TagFamily::AprilTag36h11,
     );
