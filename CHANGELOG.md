@@ -25,12 +25,16 @@ be batched with other breaking changes in a later cleanup PR.
 
 ### Added
 
-- Shipped JSON profiles (`crates/locus-py/locus/profiles/*.json`) — single source of truth for Rust and Python.
+- Shipped JSON profiles (`crates/locus-core/profiles/*.json`) — single source of truth for Rust and Python. Embedded into Rust via `include_str!` and re-exposed to the Python wheel through the `_shipped_profile_json` FFI hook so both readers see byte-identical input.
 - `schemas/profile.schema.json` — JSON Schema exported from the Pydantic model; CI diffs it against the runtime-generated schema to catch drift.
 - `locus._config.DetectorConfig` — nested Pydantic model with cross-group invariant checks.
 - `DetectorConfig::from_profile_json(&str)` on the Rust side for user-supplied profiles.
 - `docs/engineering/profiles.md` — rationale for the refactor.
 - `docs/migration/config-refactor.md` — before/after table for every removal.
+
+### Fixed
+
+- **Packaging**: relocated the shipped JSON profiles from `crates/locus-py/locus/profiles/` to `crates/locus-core/profiles/` so `cargo package -p locus-core` no longer fails with "couldn't read `src/../../locus-py/locus/profiles/standard.json`: No such file or directory". Python now queries the embedded bytes through a new `_shipped_profile_json` FFI hook instead of `importlib.resources`, which means the wheel ships zero profile data files of its own — deleting one is impossible by construction.
 
 ### Internal
 

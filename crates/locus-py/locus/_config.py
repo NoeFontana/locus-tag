@@ -1,15 +1,16 @@
 """Nested DetectorConfig schema and JSON profile loader.
 
 Single source of truth for the Python side of Locus detector configuration.
-The schema mirrors the grouping in ``locus/profiles/*.json``; Rust
-deserializes the same JSON files into its flat ``DetectorConfig`` via a
-serde shim (see ``crates/locus-core/src/config.rs``). If the two ever
-disagree, the JSON is authoritative.
+The schema mirrors the grouping in the canonical JSON profiles shipped
+inside ``locus-core`` (``crates/locus-core/profiles/*.json``); Rust
+deserializes those same files (via ``include_str!``) into its flat
+``DetectorConfig``, and Python reads the exact embedded bytes through
+the ``_shipped_profile_json`` FFI hook. If the two ever disagree, the
+JSON is authoritative.
 """
 
 from __future__ import annotations
 
-from importlib import resources
 from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias, TypeVar, cast
 
 from pydantic import (
@@ -31,6 +32,7 @@ from .locus import (
     QuadExtractionMode,
     SegmentationConnectivity,
     TagFamily,
+    _shipped_profile_json,
 )
 
 _E = TypeVar("_E")
@@ -204,9 +206,11 @@ class SegmentationConfig(BaseModel):
 class DetectorConfig(BaseModel):
     """Nested detector configuration — Python source of truth.
 
-    The three shipped profiles live in ``locus/profiles/*.json`` and ship
-    inside the wheel. Load via :meth:`from_profile` for a shipped profile
-    or :meth:`from_profile_json` for a user-supplied JSON string.
+    The three shipped profiles live in ``crates/locus-core/profiles/*.json``
+    and are embedded into the Rust crate at compile time; the wheel reads
+    the exact same bytes through the FFI. Load via :meth:`from_profile`
+    for a shipped profile or :meth:`from_profile_json` for a user-supplied
+    JSON string.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=False, arbitrary_types_allowed=True)
@@ -249,8 +253,7 @@ class DetectorConfig(BaseModel):
             raise ValueError(
                 f"Unknown shipped profile {name!r}; expected one of {sorted(SHIPPED_PROFILES)}"
             )
-        text = resources.files("locus.profiles").joinpath(f"{name}.json").read_text()
-        return cls.model_validate_json(text)
+        return cls.model_validate_json(_shipped_profile_json(name))
 
     @classmethod
     def from_profile_json(cls, json_str: str) -> DetectorConfig:

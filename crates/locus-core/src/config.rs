@@ -776,11 +776,12 @@ impl DetectOptionsBuilder {
     }
 }
 
-// The three shipped JSON profiles live in `crates/locus-py/locus/profiles/`
-// so both Rust (`include_str!`) and the Python wheel (`importlib.resources`)
-// read byte-for-byte the same files. If defaults here and the JSON ever
-// disagree, the JSON wins. The grouping below exists only at this serde
-// boundary — `DetectorConfig` stays flat for hot-path access.
+// The three shipped JSON profiles live in `crates/locus-core/profiles/`
+// and are embedded into Rust via `include_str!`; the Python wheel reads the
+// exact same bytes through the `_shipped_profile_json` FFI hook. If the
+// Rust defaults here and the JSON ever disagree, the JSON wins. The grouping
+// below exists only at this serde boundary — `DetectorConfig` stays flat for
+// hot-path access.
 #[cfg(feature = "profiles")]
 mod profile_json {
     use super::{
@@ -978,11 +979,25 @@ mod profile_json {
 }
 
 #[cfg(feature = "profiles")]
-const STANDARD_JSON: &str = include_str!("../../locus-py/locus/profiles/standard.json");
+const STANDARD_JSON: &str = include_str!("../profiles/standard.json");
 #[cfg(feature = "profiles")]
-const GRID_JSON: &str = include_str!("../../locus-py/locus/profiles/grid.json");
+const GRID_JSON: &str = include_str!("../profiles/grid.json");
 #[cfg(feature = "profiles")]
-const HIGH_ACCURACY_JSON: &str = include_str!("../../locus-py/locus/profiles/high_accuracy.json");
+const HIGH_ACCURACY_JSON: &str = include_str!("../profiles/high_accuracy.json");
+
+/// Return the raw embedded JSON for a shipped profile, or `None` if the name
+/// is unknown. Exposed so FFI consumers (the Python wheel) can read the exact
+/// bytes Rust embeds at compile time, keeping one source of truth.
+#[cfg(feature = "profiles")]
+#[must_use]
+pub fn shipped_profile_json(name: &str) -> Option<&'static str> {
+    match name {
+        "standard" => Some(STANDARD_JSON),
+        "grid" => Some(GRID_JSON),
+        "high_accuracy" => Some(HIGH_ACCURACY_JSON),
+        _ => None,
+    }
+}
 
 #[cfg(feature = "profiles")]
 impl DetectorConfig {

@@ -33,7 +33,7 @@ If GN diverges, `corner_covariances` is zeroed and pose falls back to the Struct
 ## 2. The Three SOTA Presets
 
 > **Status (v0.3.1, 2026-04-18):** all three shipped JSON profiles
-> (`crates/locus-py/locus/profiles/*.json`) now default to `decode_mode: Hard`
+> (`crates/locus-core/profiles/*.json`) now default to `decode_mode: Hard`
 > to guarantee 100% precision (zero false positives) across benchmarks.
 > The `Soft` decode results below remain accurate as historical
 > observations of the Mar 21 configuration but no longer reflect the

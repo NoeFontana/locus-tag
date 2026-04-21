@@ -13,10 +13,12 @@ the Rust core and the Python wrapper. This document explains why.
    Nesting exists only at two boundaries: the serde shim that accepts JSON
    input, and the Pydantic model that Python consumers edit.
 3. **Build-time embedded profiles.** The three shipped profiles
-   (`standard`, `grid`, `high_accuracy`) are `include_str!`'d into Rust and
-   packaged into the wheel at `locus/profiles/*.json`. A user cannot
-   accidentally break their detector by deleting a file — the wheel and the
-   Rust binary both carry their own copy.
+   (`standard`, `grid`, `high_accuracy`) live in
+   `crates/locus-core/profiles/*.json` and are `include_str!`'d into the
+   Rust crate at compile time. The Python wheel does not ship the JSON
+   files separately — `DetectorConfig.from_profile` reads the exact
+   embedded bytes via the `_shipped_profile_json` FFI hook, so a user
+   cannot accidentally break their detector by deleting a data file.
 4. **Custom profiles are a first-class path.** Teams with tuned
    configurations author a JSON file, version-control it, and load it via
    `DetectorConfig.from_profile_json(text)` (Python) or
@@ -54,13 +56,14 @@ caller's to handle.
 
 ## Where the files live
 
-| Purpose | Rust path | Python wheel path |
-| --- | --- | --- |
-| Source of truth | `crates/locus-py/locus/profiles/*.json` | same (packaged via `maturin`) |
-| Referee schema | `schemas/profile.schema.json` | N/A |
-| Serde shim | `crates/locus-core/src/config.rs::ProfileJson` | N/A |
-| Pydantic model | N/A | `locus._config.DetectorConfig` |
-| Flat Rust struct | `crates/locus-core/src/config.rs::DetectorConfig` | exposed via `Detector.config()` |
+| Purpose | Path |
+| --- | --- |
+| Source of truth (embedded into Rust) | `crates/locus-core/profiles/*.json` |
+| Python accessor (reads embedded bytes via FFI) | `locus._config.DetectorConfig.from_profile` |
+| Referee schema | `schemas/profile.schema.json` |
+| Serde shim | `crates/locus-core/src/config.rs::ProfileJson` |
+| Pydantic model | `locus._config.DetectorConfig` |
+| Flat Rust struct | `crates/locus-core/src/config.rs::DetectorConfig` (exposed to Python via `Detector.config()`) |
 
 ## Drift tripwires
 
