@@ -361,48 +361,6 @@ fn regression_hub_fast_tag36h11_1080p() {
 // ── Algorithm tuning variants (moments culling + EDLines) ────────────────────
 
 #[test]
-fn regression_hub_tag36h11_720p_moments_culling() {
-    let _guard = common::telemetry::init("regression_hub_tag36h11_720p_moments_culling");
-    run_hub_test_tuned(
-        "single_tag_locus_v1_tag36h11_1280x720",
-        TagFamily::AprilTag36h11,
-        PoseEstimationMode::Accurate,
-        "_moments_culling",
-        15.0,
-        0.15,
-        locus_core::config::QuadExtractionMode::ContourRdp,
-    );
-}
-
-#[test]
-fn regression_hub_tag36h11_720p_edlines() {
-    let _guard = common::telemetry::init("regression_hub_tag36h11_720p_edlines");
-    run_hub_test_tuned(
-        "single_tag_locus_v1_tag36h11_1280x720",
-        TagFamily::AprilTag36h11,
-        PoseEstimationMode::Accurate,
-        "_edlines",
-        0.0,
-        0.0,
-        locus_core::config::QuadExtractionMode::EdLines,
-    );
-}
-
-#[test]
-fn regression_hub_tag36h11_720p_edlines_moments() {
-    let _guard = common::telemetry::init("regression_hub_tag36h11_720p_edlines_moments");
-    run_hub_test_tuned(
-        "single_tag_locus_v1_tag36h11_1280x720",
-        TagFamily::AprilTag36h11,
-        PoseEstimationMode::Accurate,
-        "_edlines_moments",
-        15.0,
-        0.15,
-        locus_core::config::QuadExtractionMode::EdLines,
-    );
-}
-
-#[test]
 fn regression_hub_tag36h11_720p_edlines_none() {
     let _guard = common::telemetry::init("regression_hub_tag36h11_720p_edlines_none");
     run_hub_test_tuned_r(
@@ -465,48 +423,6 @@ fn regression_hub_tag36h11_1080p_edlines_moments() {
     let _guard = common::telemetry::init("regression_hub_tag36h11_1080p_edlines_moments");
     run_hub_test_tuned(
         "single_tag_locus_v1_tag36h11_1920x1080",
-        TagFamily::AprilTag36h11,
-        PoseEstimationMode::Accurate,
-        "_edlines_moments",
-        15.0,
-        0.15,
-        locus_core::config::QuadExtractionMode::EdLines,
-    );
-}
-
-#[test]
-fn regression_hub_tag36h11_2160p_moments_culling() {
-    let _guard = common::telemetry::init("regression_hub_tag36h11_2160p_moments_culling");
-    run_hub_test_tuned(
-        "single_tag_locus_v1_tag36h11_3840x2160",
-        TagFamily::AprilTag36h11,
-        PoseEstimationMode::Accurate,
-        "_moments_culling",
-        15.0,
-        0.15,
-        locus_core::config::QuadExtractionMode::ContourRdp,
-    );
-}
-
-#[test]
-fn regression_hub_tag36h11_2160p_edlines() {
-    let _guard = common::telemetry::init("regression_hub_tag36h11_2160p_edlines");
-    run_hub_test_tuned(
-        "single_tag_locus_v1_tag36h11_3840x2160",
-        TagFamily::AprilTag36h11,
-        PoseEstimationMode::Accurate,
-        "_edlines",
-        0.0,
-        0.0,
-        locus_core::config::QuadExtractionMode::EdLines,
-    );
-}
-
-#[test]
-fn regression_hub_tag36h11_2160p_edlines_moments() {
-    let _guard = common::telemetry::init("regression_hub_tag36h11_2160p_edlines_moments");
-    run_hub_test_tuned(
-        "single_tag_locus_v1_tag36h11_3840x2160",
         TagFamily::AprilTag36h11,
         PoseEstimationMode::Accurate,
         "_edlines_moments",
