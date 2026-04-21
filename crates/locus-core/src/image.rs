@@ -396,7 +396,7 @@ mod tests {
             let data = vec![0u8; data_len];
             let result = ImageView::new(&data, width, height, stride);
 
-            if height > 0 && !has_enough_data {
+            if height > 0 && required_size > 0 && !has_enough_data {
                 assert!(result.is_err());
             } else {
                 assert!(result.is_ok());

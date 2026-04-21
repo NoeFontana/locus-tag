@@ -1,0 +1,1 @@
+cc 40eaf41ebfc4d519e373e4ce46bf141721543a9a6d626047318adb6aaec316c6 # shrinks to width = 0, height = 1, stride_extra = 0, has_enough_data = false

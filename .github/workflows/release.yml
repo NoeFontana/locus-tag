@@ -5,20 +5,30 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   id-token: write
 
 jobs:
+  tests:
+    uses: ./.github/workflows/_tests.yml
+    with:
+      python-matrix: '["3.10", "3.11", "3.12"]'
+
   build-rust:
     name: Build & Verify Crate
+    needs: tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Package locus-core
-        run: cargo package -p locus-core --allow-dirty
+        run: cargo package -p locus-core --locked
       - name: Upload Crate Artifact
         uses: actions/upload-artifact@v7
         with:
@@ -28,17 +38,18 @@ jobs:
 
   build-wheels:
     name: Build Wheels (${{ matrix.target }})
+    needs: tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
         target: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v6
-      
+
       - name: Set up QEMU
         if: matrix.target == 'aarch64'
         uses: docker/setup-qemu-action@v4
-      
+
       - name: Build Wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -46,7 +57,7 @@ jobs:
           target: ${{ matrix.target }}-unknown-linux-gnu
           args: --out dist --release
           manylinux: 2_28
-          
+
       - name: Upload Wheels
         uses: actions/upload-artifact@v7
         with:
@@ -56,6 +67,7 @@ jobs:
 
   build-sdist:
     name: Build Source Distribution
+    needs: tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -64,10 +76,10 @@ jobs:
         with:
           python-version: '3.10'
       - run: uv sync --group dev
-      
+
       - name: Build Sdist
         run: uv build --sdist --out-dir dist
-      
+
       - name: Upload Sdist
         uses: actions/upload-artifact@v7
         with:
@@ -75,16 +87,49 @@ jobs:
           path: dist/*.tar.gz
           retention-days: 1
 
+  wheel-validate:
+    name: Smoke-test built wheel (${{ matrix.target }})
+    needs: build-wheels
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wheels-${{ matrix.target }}
+          path: dist
+
+      - name: Set up QEMU
+        if: matrix.target == 'aarch64'
+        uses: docker/setup-qemu-action@v4
+
+      - name: Smoke test (x86_64, native)
+        if: matrix.target == 'x86_64'
+        run: bash scripts/ci/install_and_smoke_wheel.sh
+
+      - name: Smoke test (aarch64, QEMU)
+        if: matrix.target == 'aarch64'
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -v "$PWD:/work" -w /work \
+            python:3.11-slim \
+            bash scripts/ci/install_and_smoke_wheel.sh
+
   publish:
     name: Unified Publish
-    needs: [build-rust, build-wheels, build-sdist]
+    needs: [build-rust, build-wheels, build-sdist, wheel-validate]
     runs-on: ubuntu-latest
     environment: release
     # Only run publish job for production tags (vX.Y.Z), skip for RCs (vX.Y.Z-rc.N)
     if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-rc.')
     steps:
       - uses: actions/checkout@v6
-      
+
       - name: Download All Artifacts
         uses: actions/download-artifact@v8
         with:
