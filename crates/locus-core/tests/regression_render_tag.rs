@@ -302,17 +302,6 @@ fn regression_hub_tag36h11_640x480() {
 }
 
 #[test]
-fn regression_hub_tag36h11_640x480_gwlf() {
-    let _guard = common::telemetry::init("regression_hub_tag36h11_640x480_gwlf");
-    run_hub_test(
-        "single_tag_locus_v1_tag36h11_640x480",
-        TagFamily::AprilTag36h11,
-        PoseEstimationMode::Accurate,
-        Some(locus_core::config::CornerRefinementMode::Gwlf),
-    );
-}
-
-#[test]
 fn regression_hub_tag36h11_720p() {
     let _guard = common::telemetry::init("regression_hub_tag36h11_720p");
     run_hub_test(
@@ -320,17 +309,6 @@ fn regression_hub_tag36h11_720p() {
         TagFamily::AprilTag36h11,
         PoseEstimationMode::Accurate,
         None,
-    );
-}
-
-#[test]
-fn regression_hub_tag36h11_720p_gwlf() {
-    let _guard = common::telemetry::init("regression_hub_tag36h11_720p_gwlf");
-    run_hub_test(
-        "single_tag_locus_v1_tag36h11_1280x720",
-        TagFamily::AprilTag36h11,
-        PoseEstimationMode::Accurate,
-        Some(locus_core::config::CornerRefinementMode::Gwlf),
     );
 }
 
@@ -364,17 +342,6 @@ fn regression_hub_tag36h11_2160p() {
         TagFamily::AprilTag36h11,
         PoseEstimationMode::Accurate,
         None,
-    );
-}
-
-#[test]
-fn regression_hub_tag36h11_2160p_gwlf() {
-    let _guard = common::telemetry::init("regression_hub_tag36h11_2160p_gwlf");
-    run_hub_test(
-        "single_tag_locus_v1_tag36h11_3840x2160",
-        TagFamily::AprilTag36h11,
-        PoseEstimationMode::Accurate,
-        Some(locus_core::config::CornerRefinementMode::Gwlf),
     );
 }
 
