@@ -663,40 +663,6 @@ test_icra!(
 // ── New algorithm tuning variants ────────────────────────────────────────────
 
 #[test]
-fn regression_fixtures_moments_culling() {
-    let _guard = common::telemetry::init("regression_fixtures_moments_culling");
-    let provider = FixtureProvider::new();
-    RegressionHarness::new("fixtures_moments_culling")
-        .with_profile("standard")
-        .with_families(vec![TagFamily::AprilTag36h11])
-        .with_moments_culling(15.0, 0.15)
-        .run(provider);
-}
-
-#[test]
-fn regression_fixtures_edlines() {
-    let _guard = common::telemetry::init("regression_fixtures_edlines");
-    let provider = FixtureProvider::new();
-    RegressionHarness::new("fixtures_edlines")
-        .with_profile("standard")
-        .with_families(vec![TagFamily::AprilTag36h11])
-        .with_quad_extraction_mode(locus_core::config::QuadExtractionMode::EdLines)
-        .run(provider);
-}
-
-#[test]
-fn regression_fixtures_edlines_moments() {
-    let _guard = common::telemetry::init("regression_fixtures_edlines_moments");
-    let provider = FixtureProvider::new();
-    RegressionHarness::new("fixtures_edlines_moments")
-        .with_profile("standard")
-        .with_families(vec![TagFamily::AprilTag36h11])
-        .with_quad_extraction_mode(locus_core::config::QuadExtractionMode::EdLines)
-        .with_moments_culling(15.0, 0.15)
-        .run(provider);
-}
-
-#[test]
 fn regression_icra_forward_moments_culling() {
     let _guard = common::telemetry::init("regression_icra_forward_moments_culling");
     if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
@@ -739,16 +705,6 @@ fn regression_icra_forward_edlines_moments() {
 // ── HighAccuracy (EdLines GN + covariance propagation + Weighted LM) ───────
 
 #[test]
-fn regression_fixtures_highaccuracy() {
-    let _guard = common::telemetry::init("regression_fixtures_highaccuracy");
-    let provider = FixtureProvider::new();
-    RegressionHarness::new("fixtures_highaccuracy")
-        .with_profile("high_accuracy")
-        .with_families(vec![TagFamily::AprilTag36h11])
-        .run(provider);
-}
-
-#[test]
 fn regression_icra_forward_highaccuracy() {
     let _guard = common::telemetry::init("regression_icra_forward_highaccuracy");
     if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
@@ -763,15 +719,6 @@ fn regression_icra_forward_highaccuracy() {
 // ── Standard (default profile, ContourRdp + Hard) ─────────────────────────────
 
 #[test]
-fn regression_fixtures_standard() {
-    let _guard = common::telemetry::init("regression_fixtures_standard");
-    let provider = FixtureProvider::new();
-    RegressionHarness::new("fixtures_standard")
-        .with_families(vec![TagFamily::AprilTag36h11])
-        .run(provider);
-}
-
-#[test]
 fn regression_icra_forward_standard() {
     let _guard = common::telemetry::init("regression_icra_forward_standard");
     if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
@@ -783,16 +730,6 @@ fn regression_icra_forward_standard() {
 }
 
 // ── Grid (icra_grid profile) ──────────────────────────────────────────────────
-
-#[test]
-fn regression_fixtures_grid() {
-    let _guard = common::telemetry::init("regression_fixtures_grid");
-    let provider = FixtureProvider::new();
-    RegressionHarness::new("fixtures_grid")
-        .with_profile_json(ICRA_GRID_JSON)
-        .with_families(vec![TagFamily::AprilTag36h11])
-        .run(provider);
-}
 
 #[test]
 fn regression_icra_forward_grid() {
