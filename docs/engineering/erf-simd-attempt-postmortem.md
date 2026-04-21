@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-19
 **Branch (dropped):** `perf/edge-refinement-simd`
-**Plan:** `/home/dev/.claude/plans/calm-zooming-volcano.md` (Phase 1.5)
+**Plan:** historical session notes, not checked in (Phase 1.5)
 
 ## Outcome
 

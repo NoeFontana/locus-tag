@@ -32,11 +32,18 @@ If GN diverges, `corner_covariances` is zeroed and pose falls back to the Struct
 
 ## 2. The Three SOTA Presets
 
+> **Status (v0.3.1, 2026-04-18):** all three shipped JSON profiles
+> (`crates/locus-py/locus/profiles/*.json`) now default to `decode_mode: Hard`
+> to guarantee 100% precision (zero false positives) across benchmarks.
+> The `Soft` decode results below remain accurate as historical
+> observations of the Mar 21 configuration but no longer reflect the
+> shipped defaults — see [release_performance_20260418.md](release_performance_20260418.md).
+
 | Preset | Target Scenario | Key Differences vs Production |
 |---|---|---|
 | `"high_accuracy"` profile | Single isolated tag, pose accuracy | EdLines + GN + None; sharpening off; Hard decode |
-| `"standard"` profile | Dense multi-tag scenes | Soft decode (+19pp recall); else identical to production |
-| `"grid"` profile | Touching tags in grid patterns | 4-connectivity; Soft decode; relaxed contrast/edge gates; sharpening off |
+| `"standard"` profile | Dense multi-tag scenes | (historically: Soft decode; ships Hard since v0.3.1) |
+| `"grid"` profile | Touching tags in grid patterns | 4-connectivity; relaxed contrast/edge gates; sharpening off; (historically: Soft decode; ships Hard since v0.3.1) |
 
 ### Why three separate presets?
 
@@ -72,7 +79,7 @@ refinement_mode:       Erf         ← same as production
 enable_sharpening:     true        ← same as production
 quad_max_elongation:   20.0        ← same as production
 quad_min_density:      0.15        ← same as production
-decode_mode:           Soft        ← only difference; +19pp recall on ICRA forward
+decode_mode:           Hard        ← shipped default (v0.3.1+); historical Soft figures below
 ```
 
 #### `"grid"` profile
@@ -84,7 +91,7 @@ decoder_min_contrast:  10.0        ← relaxed for low-contrast packed tags
 quad_min_edge_score:   2.0         ← relaxed for weaker interior-border edge scores
 quad_max_elongation:   20.0
 quad_min_density:      0.15
-decode_mode:           Soft        ← extends recall on low-contrast packed tags
+decode_mode:           Hard        ← shipped default (v0.3.1+); historical Soft figures below
 ```
 
 ---
@@ -183,7 +190,7 @@ the primary outputs.
 > **Note:** Standard and Grid were not tested on the hub dataset. Soft
 > decoding causes a precision collapse (10–22%) on EdLines due to the larger candidate set
 > from background edges. ContourRdp + Soft on single isolated hub tags would likely restore
-> precision; this can be added as `regression_hub_tag36h11_*_sota_pure_tags` if needed.
+> precision.
 
 ---
 
@@ -236,8 +243,8 @@ offsets the GN advantage.
 - **ICRA data:** ICRA 2020 `forward/pure_tags_images` (50 images), `forward/checkerboard_corners_images` (50 images).
 - **Harness:** `regression_render_tag` and `regression_icra2020`, `--release`.
 - **Snapshots:**
-  - `regression_icra2020__*_sota_pure_tags.snap`
-  - `regression_icra2020__icra_forward_checkerboard_sota.snap`
-  - `regression_render_tag__hub_*_sota.snap`
+  - `regression_icra2020__*_standard.snap` (Standard preset, ContourRdp + Soft on pure_tags)
+  - `regression_icra2020__icra_forward_checkerboard_grid.snap` (Grid preset)
+  - `regression_render_tag__hub_*_highaccuracy.snap` (HighAccuracy preset on hub single-tag)
 - **Decode investigation:** Soft on EdLines/hub → 10–22% precision (rejected for metrology).
   Soft on ContourRdp/ICRA → maintains 100% precision on both ICRA scenarios.

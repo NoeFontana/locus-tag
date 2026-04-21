@@ -739,20 +739,20 @@ fn regression_icra_forward_edlines_moments() {
 // ── HighAccuracy (EdLines GN + covariance propagation + Weighted LM) ───────
 
 #[test]
-fn regression_fixtures_sota() {
-    let _guard = common::telemetry::init("regression_fixtures_sota");
+fn regression_fixtures_highaccuracy() {
+    let _guard = common::telemetry::init("regression_fixtures_highaccuracy");
     let provider = FixtureProvider::new();
-    RegressionHarness::new("fixtures_sota")
+    RegressionHarness::new("fixtures_highaccuracy")
         .with_profile("high_accuracy")
         .with_families(vec![TagFamily::AprilTag36h11])
         .run(provider);
 }
 
 #[test]
-fn regression_icra_forward_sota() {
-    let _guard = common::telemetry::init("regression_icra_forward_sota");
+fn regression_icra_forward_highaccuracy() {
+    let _guard = common::telemetry::init("regression_icra_forward_highaccuracy");
     if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
-        let snapshot = "icra_forward_pure_default_sota".to_string();
+        let snapshot = "icra_forward_pure_default_highaccuracy".to_string();
         RegressionHarness::new(snapshot)
             .with_profile("high_accuracy")
             .with_families(vec![TagFamily::AprilTag36h11])
@@ -760,45 +760,45 @@ fn regression_icra_forward_sota() {
     }
 }
 
-// ── SOTA Pure Tags (ContourRdp + Soft, max recall on dense multi-tag) ─────────
+// ── Standard (default profile, ContourRdp + Hard) ─────────────────────────────
 
 #[test]
-fn regression_fixtures_sota_pure_tags() {
-    let _guard = common::telemetry::init("regression_fixtures_sota_pure_tags");
+fn regression_fixtures_standard() {
+    let _guard = common::telemetry::init("regression_fixtures_standard");
     let provider = FixtureProvider::new();
-    RegressionHarness::new("fixtures_sota_pure_tags")
+    RegressionHarness::new("fixtures_standard")
         .with_families(vec![TagFamily::AprilTag36h11])
         .run(provider);
 }
 
 #[test]
-fn regression_icra_forward_sota_pure_tags() {
-    let _guard = common::telemetry::init("regression_icra_forward_sota_pure_tags");
+fn regression_icra_forward_standard() {
+    let _guard = common::telemetry::init("regression_icra_forward_standard");
     if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
-        let snapshot = "icra_forward_pure_default_sota_pure_tags".to_string();
+        let snapshot = "icra_forward_pure_default_standard".to_string();
         RegressionHarness::new(snapshot)
             .with_families(vec![TagFamily::AprilTag36h11])
             .run(provider);
     }
 }
 
-// ── SOTA Grid (4-conn + relaxed contrast/edge + Soft) ─────────────────
+// ── Grid (icra_grid profile) ──────────────────────────────────────────────────
 
 #[test]
-fn regression_fixtures_sota_checkerboard() {
-    let _guard = common::telemetry::init("regression_fixtures_sota_checkerboard");
+fn regression_fixtures_grid() {
+    let _guard = common::telemetry::init("regression_fixtures_grid");
     let provider = FixtureProvider::new();
-    RegressionHarness::new("fixtures_sota_checkerboard")
+    RegressionHarness::new("fixtures_grid")
         .with_profile_json(ICRA_GRID_JSON)
         .with_families(vec![TagFamily::AprilTag36h11])
         .run(provider);
 }
 
 #[test]
-fn regression_icra_forward_sota_checkerboard() {
-    let _guard = common::telemetry::init("regression_icra_forward_sota_checkerboard");
+fn regression_icra_forward_grid() {
+    let _guard = common::telemetry::init("regression_icra_forward_grid");
     if let Some(provider) = IcraProvider::new("forward", Some("checkerboard_corners_images")) {
-        let snapshot = "icra_forward_checkerboard_sota".to_string();
+        let snapshot = "icra_forward_checkerboard_grid".to_string();
         RegressionHarness::new(snapshot)
             .with_profile_json(ICRA_GRID_JSON)
             .with_families(vec![TagFamily::AprilTag36h11])
