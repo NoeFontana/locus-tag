@@ -31,3 +31,7 @@ be batched with other breaking changes in a later cleanup PR.
 - `DetectorConfig::from_profile_json(&str)` on the Rust side for user-supplied profiles.
 - `docs/engineering/profiles.md` — rationale for the refactor.
 - `docs/migration/config-refactor.md` — before/after table for every removal.
+
+### Internal
+
+- Pre-release code cleanup: deleted orphan `crates/locus-core/src/homography.rs` (never declared in `lib.rs`; production `Homography` lives in `decoder.rs`), dropped unused `img_height` parameter from `extract_boundary_segments`, removed dead `sample_grid_generic` / `sample_grid_soa` helpers, removed unused `DecodingStrategy::distance` trait method, gated test/bench-only helpers behind `cfg(any(test, feature = "bench-internals"))` (or `cfg(feature = "bench-internals")` for items with no in-crate test consumers), tightened `unsafe` SAFETY comments across `filter.rs`, `threshold.rs`, `quad.rs`, and `locus-py` to cite concrete invariants (rayon disjointness, multiversion runtime checks, pyo3-numpy contracts), removed redundant inner `cfg(feature = "bench-internals")` blocks from tests already gated by `required-features` in `Cargo.toml`, and replaced a stream-of-consciousness comment in `threshold.rs` with a one-line invariant statement.

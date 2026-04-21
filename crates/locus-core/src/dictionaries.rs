@@ -6,6 +6,11 @@
 #![allow(clippy::unreadable_literal, clippy::too_many_lines)]
 
 /// A tag family dictionary.
+///
+/// `dimension`, `min_hamming`, and `num_codes_per_rotation` document the
+/// family's shape for downstream consumers reading `pub` fields directly; the
+/// Rust hot-path decoder uses `payload_length`, `codes`, and the MIH tables.
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct TagDictionary {
     /// Maximum number of bits (e.g., 36 for 36h11, 41 for 41h12).
@@ -40,7 +45,9 @@ impl TagDictionary {
     }
 
     /// Check if dictionary is empty.
+    // Paired with `len()` to satisfy `clippy::len_without_is_empty`.
     #[must_use]
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.codes.is_empty()
     }

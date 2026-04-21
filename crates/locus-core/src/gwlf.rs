@@ -5,6 +5,7 @@ use nalgebra::{Matrix2, Matrix3, SMatrix, Vector2, Vector3};
 
 /// Accumulator for gradient-weighted spatial moments of an edge.
 #[derive(Clone, Copy, Debug, Default)]
+#[allow(clippy::struct_field_names)]
 pub struct MomentAccumulator {
     /// Sum of weights: sum(w_i)
     pub sum_w: f64,
@@ -291,6 +292,7 @@ pub fn refine_quad_gwlf_with_cov(
 
 /// Compatibility wrapper for the existing API.
 #[must_use]
+#[cfg(feature = "bench-internals")]
 pub fn refine_quad_gwlf(
     img: &ImageView,
     coarse_corners: &[[f32; 2]; 4],

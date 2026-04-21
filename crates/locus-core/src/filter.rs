@@ -41,7 +41,12 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
 
     // Process rows in parallel
     (0..h).into_par_iter().for_each(|y| {
-        // Safety: Unique row per thread
+        // SAFETY: `into_par_iter()` over `0..h` yields each `y` exactly once
+        // across rayon workers, so the `y * w .. y * w + w` slice for each
+        // `y` is disjoint from every other worker's slice. `output` has
+        // length `h * w`, so `ptr.add(y * w)` and the resulting `w`-element
+        // slice are in-bounds. The original `output` slice is borrowed
+        // mutably for the duration of `par_iter`, so no other reader exists.
         let dst_row = unsafe {
             let ptr = output.as_ptr().cast_mut();
             std::slice::from_raw_parts_mut(ptr.add(y * w), w)
@@ -217,7 +222,12 @@ pub(crate) fn laplacian_sharpen(img: &ImageView, output: &mut [u8]) {
         let r1 = img.get_row(y1);
         let r2 = img.get_row(y2);
 
-        // Safety: Unique row per thread
+        // SAFETY: `into_par_iter()` over `0..h` yields each `y` exactly once
+        // across rayon workers, so the `y * w .. y * w + w` slice for each
+        // `y` is disjoint from every other worker's slice. `output` has
+        // length `h * w`, so `ptr.add(y * w)` and the resulting `w`-element
+        // slice are in-bounds. The original `output` slice is borrowed
+        // mutably for the duration of `par_iter`, so no other reader exists.
         let dst_row = unsafe {
             let ptr = output.as_ptr().cast_mut();
             std::slice::from_raw_parts_mut(ptr.add(y * w), w)

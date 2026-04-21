@@ -16,12 +16,6 @@ pub trait DecodingStrategy: Send + Sync + 'static {
     /// Convert intensities and thresholds into a code.
     fn from_intensities(intensities: &[f64], thresholds: &[f64]) -> Self::Code;
 
-    /// Compute the "distance" between the extracted code and a dictionary target.
-    ///
-    /// For Hard decoding, this is Hamming distance.
-    /// For Soft decoding, this is the accumulated penalty of mismatching LLRs.
-    fn distance(code: &Self::Code, target: u64) -> u32;
-
     /// Decode the code into an ID using the provided decoder.
     fn decode(
         code: &Self::Code,
@@ -49,10 +43,6 @@ impl DecodingStrategy for HardStrategy {
         bits
     }
 
-    fn distance(code: &Self::Code, target: u64) -> u32 {
-        (*code ^ target).count_ones()
-    }
-
     fn decode(
         code: &Self::Code,
         decoder: &(impl TagDecoder + ?Sized),
@@ -63,6 +53,20 @@ impl DecodingStrategy for HardStrategy {
 
     fn to_debug_bits(code: &Self::Code) -> u64 {
         *code
+    }
+}
+
+#[cfg(test)]
+impl HardStrategy {
+    fn distance(code: u64, target: u64) -> u32 {
+        (code ^ target).count_ones()
+    }
+}
+
+#[cfg(test)]
+impl SoftStrategy {
+    fn distance(code: &SoftCode, target: u64) -> u32 {
+        Self::distance_with_limit(code, target, u32::MAX)
     }
 }
 
@@ -142,10 +146,6 @@ impl DecodingStrategy for SoftStrategy {
         SoftCode { llrs, len: n }
     }
 
-    fn distance(code: &Self::Code, target: u64) -> u32 {
-        Self::distance_with_limit(code, target, u32::MAX)
-    }
-
     fn decode(
         code: &Self::Code,
         decoder: &(impl TagDecoder + ?Sized),
@@ -217,7 +217,7 @@ mod tests {
         let code = 0b1010;
         let target = 0b1100;
         // Diff: 0b0110 -> 2 bits
-        assert_eq!(HardStrategy::distance(&code, target), 2);
+        assert_eq!(HardStrategy::distance(code, target), 2);
     }
 
     #[test]

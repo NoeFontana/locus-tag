@@ -978,6 +978,12 @@ fn find_max_distance_optimized(points: &[Point], start: usize, end: usize) -> (f
 
     #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
+        // SAFETY: `multiversion::target::x86_64::avx2::get()` returned `Some`,
+        // confirming the runtime CPU supports AVX2; the AVX2 intrinsics
+        // below (`_mm256_set1_pd`, `_mm256_loadu_pd`, …) are therefore
+        // safe to invoke. `_mm256_loadu_pd` is the unaligned variant; the
+        // `points[i + 3].x` reads are bounds-checked by the surrounding
+        // `while i + 4 <= end` guard.
         unsafe {
             use std::arch::x86_64::*;
             let v_dx = _mm256_set1_pd(dx);
