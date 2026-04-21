@@ -355,3 +355,9 @@ def _create_detector_from_config(
     families: list[int] = [],
 ) -> Detector: ...
 def init_tracy() -> None: ...
+def _shipped_profile_json(name: str) -> str:
+    """Return the raw JSON text for a shipped profile, read from Rust's
+    compile-time-embedded bytes. Raises ``ValueError`` if the name is not
+    one of the shipped profiles.
+    """
+    ...

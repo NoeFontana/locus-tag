@@ -20,7 +20,8 @@ tracing-subscriber = { version = "0.3", features = ["registry", "env-filter"], o
 nalgebra = { version = "0.34", default-features = false, features = ["std"] }
 
 [features]
-default = []
+default = ["profiles"]
+profiles = ["locus-core/profiles"]
 tracy = ["locus-core/tracy", "dep:tracing-tracy", "dep:tracing-subscriber"]
 non_rectified = ["locus-core/non_rectified"]
 [lints]

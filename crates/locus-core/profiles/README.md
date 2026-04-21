@@ -2,14 +2,14 @@
 
 Three JSON files — `standard.json`, `grid.json`, `high_accuracy.json` — are
 the **single source of truth** for Locus detector configuration. They are
-embedded into both the Rust crate (via `include_str!`) and the Python
-wheel; at runtime they are read identically by `locus-core` and by
-`locus._profile.DetectorConfig`.
+embedded into the Rust crate (via `include_str!`) and re-exposed to the
+Python wheel through the `_shipped_profile_json` FFI hook, so `locus-core`
+and `locus._profile.DetectorConfig` always read identical bytes.
 
 If the Rust defaults and these JSONs ever disagree, **the JSON wins**.
 
 The JSON Schema that validates them lives at workspace root in
-[`schemas/profile.schema.json`](../../../../schemas/profile.schema.json),
+[`schemas/profile.schema.json`](../../../schemas/profile.schema.json),
 regenerated from the Pydantic model via
 `tools/export_profile_schema.py`.
 
@@ -38,7 +38,7 @@ cfg = DetectorConfig.from_profile("standard")            # shipped
 cfg = DetectorConfig.from_profile_json(path.read_text()) # user-supplied
 ```
 
-From Rust (wired up in the Step 2 shim):
+From Rust:
 
 ```rust
 let cfg = DetectorConfig::from_profile("standard");

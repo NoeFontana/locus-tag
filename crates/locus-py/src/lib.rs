@@ -1873,6 +1873,16 @@ fn init_tracy() {
     }
 }
 
+#[cfg(feature = "profiles")]
+#[pyfunction]
+fn _shipped_profile_json(name: &str) -> PyResult<&'static str> {
+    locus_core::config::shipped_profile_json(name).ok_or_else(|| {
+        PyValueError::new_err(format!(
+            "Unknown shipped profile {name:?}; expected one of ['standard', 'grid', 'high_accuracy']"
+        ))
+    })
+}
+
 #[pymodule]
 fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Enums
@@ -1904,5 +1914,7 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(_create_detector_from_config, m)?)?;
     m.add_function(wrap_pyfunction!(init_tracy, m)?)?;
+    #[cfg(feature = "profiles")]
+    m.add_function(wrap_pyfunction!(_shipped_profile_json, m)?)?;
     Ok(())
 }

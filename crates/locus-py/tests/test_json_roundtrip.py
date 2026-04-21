@@ -36,10 +36,11 @@ def test_json_preserves_enum_variant_names(profile: ProfileName) -> None:
 def test_shipped_json_matches_loaded_model(profile: ProfileName) -> None:
     """The bytes on disk deserialize to a model that re-serializes to the same
     structured content (order-independent)."""
-    from importlib import resources
+    from pathlib import Path
 
-    raw = resources.files("locus.profiles").joinpath(f"{profile}.json").read_text()
-    on_disk = json.loads(raw)
+    workspace_root = Path(__file__).resolve().parents[3]
+    profile_path = workspace_root / "crates" / "locus-core" / "profiles" / f"{profile}.json"
+    on_disk = json.loads(profile_path.read_text())
     loaded = json.loads(DetectorConfig.from_profile(profile).model_dump_json())
     # Drop the ``$schema`` pragma which is metadata-only.
     on_disk.pop("$schema", None)
