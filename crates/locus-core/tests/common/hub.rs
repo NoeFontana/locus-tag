@@ -181,6 +181,19 @@ impl RegressionHarness {
         self
     }
 
+    pub fn with_extraction_policy(
+        mut self,
+        policy: locus_core::config::QuadExtractionPolicy,
+    ) -> Self {
+        self.config.quad_extraction_policy = policy;
+        self
+    }
+
+    pub fn with_roi_rescue_enabled(mut self, enabled: bool) -> Self {
+        self.config.roi_rescue.enabled = enabled;
+        self
+    }
+
     pub fn with_decode_mode(mut self, mode: locus_core::config::DecodeMode) -> Self {
         self.config.decode_mode = mode;
         self
@@ -720,6 +733,7 @@ pub struct RenderTagOpts {
     pub refinement: Option<CornerRefinementMode>,
     pub quad_mode: Option<QuadExtractionMode>,
     pub moments_culling: Option<(f64, f64)>,
+    pub roi_rescue_enabled: bool,
 }
 
 impl Default for RenderTagOpts {
@@ -732,6 +746,7 @@ impl Default for RenderTagOpts {
             refinement: None,
             quad_mode: None,
             moments_culling: None,
+            roi_rescue_enabled: false,
         }
     }
 }
@@ -781,6 +796,9 @@ pub fn run_render_tag_test(config_name: &str, family: TagFamily, opts: RenderTag
     }
     if let Some((max_e, min_d)) = opts.moments_culling {
         harness = harness.with_moments_culling(max_e, min_d);
+    }
+    if opts.roi_rescue_enabled {
+        harness = harness.with_roi_rescue_enabled(true);
     }
     harness.run(provider);
 }

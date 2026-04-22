@@ -150,6 +150,19 @@ impl RegressionHarness {
         self
     }
 
+    pub fn with_extraction_policy(
+        mut self,
+        policy: locus_core::config::QuadExtractionPolicy,
+    ) -> Self {
+        self.config.quad_extraction_policy = policy;
+        self
+    }
+
+    pub fn with_roi_rescue_enabled(mut self, enabled: bool) -> Self {
+        self.config.roi_rescue.enabled = enabled;
+        self
+    }
+
     pub fn run(self, provider: impl DatasetProvider) {
         #[cfg(debug_assertions)]
         {
@@ -698,6 +711,46 @@ fn regression_icra_forward_edlines_moments() {
             .with_families(vec![TagFamily::AprilTag36h11])
             .with_quad_extraction_mode(locus_core::config::QuadExtractionMode::EdLines)
             .with_moments_culling(15.0, 0.15)
+            .run(provider);
+    }
+}
+
+// ── AdaptivePpb router + ROI rescue (opt-in, disabled-by-default) ────────────
+
+#[test]
+fn regression_icra_forward_adaptive() {
+    let _guard = common::telemetry::init("regression_icra_forward_adaptive");
+    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
+        let snapshot = "icra_forward_pure_default_adaptive".to_string();
+        RegressionHarness::new(snapshot)
+            .with_profile("max_recall_adaptive")
+            .with_families(vec![TagFamily::AprilTag36h11])
+            .run(provider);
+    }
+}
+
+#[test]
+fn regression_icra_forward_rescue() {
+    let _guard = common::telemetry::init("regression_icra_forward_rescue");
+    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
+        let snapshot = "icra_forward_pure_default_rescue".to_string();
+        RegressionHarness::new(snapshot)
+            .with_profile("standard")
+            .with_families(vec![TagFamily::AprilTag36h11])
+            .with_roi_rescue_enabled(true)
+            .run(provider);
+    }
+}
+
+#[test]
+fn regression_icra_forward_adaptive_rescue() {
+    let _guard = common::telemetry::init("regression_icra_forward_adaptive_rescue");
+    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
+        let snapshot = "icra_forward_pure_default_adaptive_rescue".to_string();
+        RegressionHarness::new(snapshot)
+            .with_profile("max_recall_adaptive")
+            .with_families(vec![TagFamily::AprilTag36h11])
+            .with_roi_rescue_enabled(true)
             .run(provider);
     }
 }

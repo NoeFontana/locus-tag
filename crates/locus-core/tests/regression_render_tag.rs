@@ -206,3 +206,53 @@ mod quad_extraction_variants {
         );
     }
 }
+
+mod adaptive_rescue_variants {
+    use super::common;
+    use common::hub::{RenderTagOpts, run_render_tag_test};
+    use locus_core::TagFamily;
+
+    #[test]
+    fn regression_hub_tag36h11_1080p_adaptive() {
+        let _g = common::telemetry::init("regression_hub_tag36h11_1080p_adaptive");
+        run_render_tag_test(
+            "locus_v1_tag36h11_1920x1080",
+            TagFamily::AprilTag36h11,
+            RenderTagOpts {
+                snapshot_suffix: "_adaptive",
+                profile: Some("max_recall_adaptive"),
+                ..Default::default()
+            },
+        );
+    }
+
+    #[test]
+    fn regression_hub_tag36h11_1080p_rescue() {
+        let _g = common::telemetry::init("regression_hub_tag36h11_1080p_rescue");
+        run_render_tag_test(
+            "locus_v1_tag36h11_1920x1080",
+            TagFamily::AprilTag36h11,
+            RenderTagOpts {
+                snapshot_suffix: "_rescue",
+                profile: Some("standard"),
+                roi_rescue_enabled: true,
+                ..Default::default()
+            },
+        );
+    }
+
+    #[test]
+    fn regression_hub_tag36h11_1080p_adaptive_rescue() {
+        let _g = common::telemetry::init("regression_hub_tag36h11_1080p_adaptive_rescue");
+        run_render_tag_test(
+            "locus_v1_tag36h11_1920x1080",
+            TagFamily::AprilTag36h11,
+            RenderTagOpts {
+                snapshot_suffix: "_adaptive_rescue",
+                profile: Some("max_recall_adaptive"),
+                roi_rescue_enabled: true,
+                ..Default::default()
+            },
+        );
+    }
+}
