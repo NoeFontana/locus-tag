@@ -85,6 +85,31 @@ impl<'a> RoiCache<'a> {
         }
     }
 
+    /// Borrow an already-upscaled ROI buffer as a cache.
+    ///
+    /// Unlike [`RoiCache::new`], this variant does not copy — the caller
+    /// owns the upscaled storage (typically a slice of `FrameContext::rescue_buf`
+    /// filled by [`crate::image::upscale_roi_to_buf`]). Origin is set to
+    /// `(0, 0)` because the rescue-pass homography is re-expressed in the
+    /// upscaled ROI's local frame, so callers sample in upscaled-local
+    /// coordinates. Expects the slice to be tightly packed (stride == width).
+    #[must_use]
+    pub fn from_upscaled(data: &'a [u8], width: usize, height: usize) -> Self {
+        assert!(
+            data.len() >= width * height,
+            "upscaled buffer too small: {} < {}",
+            data.len(),
+            width * height
+        );
+        RoiCache::Arena {
+            data: &data[..width * height],
+            min_x: 0,
+            min_y: 0,
+            width,
+            height,
+        }
+    }
+
     /// Get a pixel from the cache using global coordinates.
     #[must_use]
     pub fn get(&self, x: usize, y: usize) -> u8 {
@@ -149,6 +174,20 @@ mod tests {
         let cache = RoiCache::new(&img, &arena, 0, 0, 32, 32);
         assert!(matches!(cache, RoiCache::Arena { .. }));
         assert_eq!(cache.get(20, 20), 255);
+    }
+
+    #[test]
+    #[allow(clippy::cast_sign_loss)]
+    fn test_roi_cache_from_upscaled() {
+        // Caller-owned buffer; cache borrows without copying.
+        let data: Vec<u8> = (0..64u8).collect();
+        let cache = RoiCache::from_upscaled(&data, 8, 8);
+        assert!(matches!(cache, RoiCache::Arena { .. }));
+        // Origin is 0: upscaled-local coords map 1:1 onto cache indexing.
+        assert_eq!(cache.get(0, 0), 0);
+        assert_eq!(cache.get(7, 7), 63);
+        // Clamping is inherited from the Arena branch.
+        assert_eq!(cache.get(100, 100), 63);
     }
 
     #[test]
