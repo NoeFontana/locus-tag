@@ -152,9 +152,6 @@ fn run_rescue_stage(
         return;
     };
     let slot_len = out_slot_len + scratch_slot_len;
-    if slot_len == 0 {
-        return;
-    }
 
     // Arena-allocated index list of funnel-survivors that failed to decode.
     let indices = arena.alloc_slice_fill_copy(n, 0u16);
@@ -180,16 +177,21 @@ fn run_rescue_stage(
         batch.error_rates[usize::from(*a)].total_cmp(&batch.error_rates[usize::from(*b)])
     });
 
+    // `rescue_buf` is pre-sized to `slot_len * max_rescues_per_frame` by
+    // `ensure_rescue_capacity` at frame start, so the per-frame cap is the
+    // only binding constraint.
     let take = indices
         .len()
-        .min(usize::from(config.roi_rescue.max_rescues_per_frame))
-        .min(rescue_buf.len() / slot_len);
+        .min(usize::from(config.roi_rescue.max_rescues_per_frame));
+    debug_assert!(rescue_buf.len() >= take * slot_len);
 
-    for (k, &packed_idx) in indices.iter().take(take).enumerate() {
+    for (&packed_idx, slot) in indices
+        .iter()
+        .zip(rescue_buf.chunks_exact_mut(slot_len))
+        .take(take)
+    {
         let idx = usize::from(packed_idx);
-        let slot_start = k * slot_len;
-        let (out_slot, rest) =
-            rescue_buf[slot_start..slot_start + slot_len].split_at_mut(out_slot_len);
+        let (out_slot, rest) = slot.split_at_mut(out_slot_len);
         let scratch_slot = &mut rest[..scratch_slot_len];
 
         let promoted = crate::decoder::decode_with_rescue(
