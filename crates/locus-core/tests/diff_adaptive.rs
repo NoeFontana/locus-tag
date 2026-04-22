@@ -40,8 +40,7 @@ struct Sample {
 fn load_samples() -> Vec<Sample> {
     let mut samples = Vec::new();
 
-    let fixtures_dir =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/icra2020");
+    let fixtures_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/icra2020");
     append_fixture_samples(&fixtures_dir, &mut samples);
 
     if let Ok(dataset_dir) = std::env::var("LOCUS_ICRA_DATASET_DIR") {
@@ -49,8 +48,7 @@ fn load_samples() -> Vec<Sample> {
             .join("forward")
             .join("pure_tags_images");
         if forward.is_dir()
-            && let Some(gt_map) =
-                common::load_ground_truth(&PathBuf::from(&dataset_dir), "forward")
+            && let Some(gt_map) = common::load_ground_truth(&PathBuf::from(&dataset_dir), "forward")
         {
             append_icra_samples(&forward, &gt_map, &mut samples);
         }
@@ -162,9 +160,7 @@ fn detect_by_id(
 
 fn max_corner_deviation(a: &[[f64; 2]; 4], b: &[[f64; 2]; 4]) -> f64 {
     (0..4)
-        .map(|k| {
-            ((a[k][0] - b[k][0]).powi(2) + (a[k][1] - b[k][1]).powi(2)).sqrt()
-        })
+        .map(|k| ((a[k][0] - b[k][0]).powi(2) + (a[k][1] - b[k][1]).powi(2)).sqrt())
         .fold(0.0_f64, f64::max)
 }
 
@@ -175,9 +171,7 @@ fn run_diff(
     label: &str,
 ) {
     if std::env::var("LOCUS_DIFF_ADAPTIVE").is_err() {
-        println!(
-            "Skipping diff_adaptive::{label}. Set LOCUS_DIFF_ADAPTIVE=1 to run."
-        );
+        println!("Skipping diff_adaptive::{label}. Set LOCUS_DIFF_ADAPTIVE=1 to run.");
         return;
     }
 
@@ -207,20 +201,17 @@ fn run_diff(
                 Some(cand_corners) => {
                     let drift = max_corner_deviation(base_corners, cand_corners);
                     if drift > MAX_CORNER_DEVIATION_PX {
-                        corner_drift.push(format!(
-                            "{}: id={id} drift={drift:.3}px",
-                            sample.filename
-                        ));
+                        corner_drift
+                            .push(format!("{}: id={id} drift={drift:.3}px", sample.filename));
                     }
-                }
+                },
             }
         }
 
         if !allow_extras_not_in_gt {
             for id in cand_map.keys() {
                 if !base_map.contains_key(id) && !sample.gt_ids.contains(id) {
-                    illegal_extras
-                        .push(format!("{}: extra id={id} not in GT", sample.filename));
+                    illegal_extras.push(format!("{}: extra id={id} not in GT", sample.filename));
                 }
             }
         }
@@ -248,7 +239,11 @@ fn run_diff(
             illegal_extras.join("\n  ")
         ));
     }
-    assert!(failures.is_empty(), "diff_adaptive::{label} failed:\n{}", failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "diff_adaptive::{label} failed:\n{}",
+        failures.join("\n")
+    );
 }
 
 #[test]

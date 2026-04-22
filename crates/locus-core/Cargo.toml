@@ -115,6 +115,21 @@ name = "edge_refinement"
 harness = false
 required-features = ["bench-internals"]
 
+[[bench]]
+name = "adaptive_routing_bench"
+harness = false
+required-features = ["bench-internals"]
+
+[[bench]]
+name = "roi_upscale_bench"
+harness = false
+required-features = ["bench-internals"]
+
+[[bench]]
+name = "rescue_pipeline_bench"
+harness = false
+required-features = ["bench-internals"]
+
 [[test]]
 name = "regression_icra2020"
 harness = true
