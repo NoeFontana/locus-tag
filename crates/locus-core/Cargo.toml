@@ -28,6 +28,9 @@ serde_json = { version = "1.0", optional = true }
 crossbeam-queue = "0.3"
 rand = { version = "0.10", optional = true }
 rand_distr = { version = "0.6", optional = true }
+# Heap profiler. Only linked when the `dhat-heap` feature is active; gates
+# the `allocation_*` test binaries.
+dhat = { version = "0.3", optional = true }
 
 [dev-dependencies]
 divan = "0.1"
@@ -300,6 +303,16 @@ name = "regression_straight_space"
 path = "tests/regression_straight_space.rs"
 required-features = ["non_rectified", "bench-internals"]
 
+[[test]]
+name = "allocation_zero_alloc_static"
+path = "tests/allocation_zero_alloc_static.rs"
+required-features = ["dhat-heap"]
+
+[[test]]
+name = "allocation_bounded_alloc_adaptive_rescue"
+path = "tests/allocation_bounded_alloc_adaptive_rescue.rs"
+required-features = ["dhat-heap"]
+
 [features]
 default = ["profiles"]
 tracy = ["dep:tracing-tracy"]
@@ -312,6 +325,9 @@ extended-tests = []
 extended-bench = []
 bench-internals = ["dep:rand", "dep:rand_distr"]
 non_rectified = []
+# Swaps in the `dhat` heap-profiling global allocator for the
+# `allocation_*` test binaries. Not wired into the default CI path.
+dhat-heap = ["dep:dhat"]
 
 [lints]
 workspace = true
