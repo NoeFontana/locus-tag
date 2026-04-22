@@ -138,6 +138,31 @@ impl From<QuadExtractionMode> for locus_core::config::QuadExtractionMode {
     }
 }
 
+#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum RescueInterpolation {
+    Bilinear = 0,
+    Lanczos3 = 1,
+}
+
+impl From<RescueInterpolation> for locus_core::config::RescueInterpolation {
+    fn from(m: RescueInterpolation) -> Self {
+        match m {
+            RescueInterpolation::Bilinear => locus_core::config::RescueInterpolation::Bilinear,
+            RescueInterpolation::Lanczos3 => locus_core::config::RescueInterpolation::Lanczos3,
+        }
+    }
+}
+
+impl From<locus_core::config::RescueInterpolation> for RescueInterpolation {
+    fn from(m: locus_core::config::RescueInterpolation) -> Self {
+        match m {
+            locus_core::config::RescueInterpolation::Bilinear => Self::Bilinear,
+            locus_core::config::RescueInterpolation::Lanczos3 => Self::Lanczos3,
+        }
+    }
+}
+
 // ============================================================================
 // Structs
 // ============================================================================
@@ -312,6 +337,10 @@ pub struct PyPose {
 }
 
 // ============================================================================
+// PyDetectorConfig is a flat passthrough for the Python ↔ Rust config. The
+// boolean count is dictated by `DetectorConfig`; collapsing them into enums
+// here would complicate the Python surface without any clarity win.
+#[allow(clippy::struct_excessive_bools)]
 #[pyclass(get_all, frozen, from_py_object)]
 #[derive(Clone, Copy)]
 pub struct PyDetectorConfig {
@@ -351,6 +380,16 @@ pub struct PyDetectorConfig {
     pub adaptive_ppb_high_extraction: QuadExtractionMode,
     pub adaptive_ppb_low_refinement: CornerRefinementMode,
     pub adaptive_ppb_high_refinement: CornerRefinementMode,
+    // ROI super-resolution rescue — flat passthrough mirroring `RoiRescuePolicy`.
+    // When `rescue_enabled == false` the rest of the rescue_* fields are inert
+    // on the `From<PyDetectorConfig>` path (Rust keeps its default policy).
+    pub rescue_enabled: bool,
+    pub rescue_upscale_factor: u8,
+    pub rescue_max_roi_side_px: u16,
+    pub rescue_max_rescues_per_frame: u8,
+    pub rescue_max_hamming: u8,
+    pub rescue_require_first_pass_agreement: bool,
+    pub rescue_interpolation: RescueInterpolation,
     pub huber_delta_px: f64,
     pub tikhonov_alpha_max: f64,
     pub sigma_n_sq: f64,
@@ -395,11 +434,19 @@ impl PyDetectorConfig {
         adaptive_ppb_high_extraction,
         adaptive_ppb_low_refinement,
         adaptive_ppb_high_refinement,
+        rescue_enabled,
+        rescue_upscale_factor,
+        rescue_max_roi_side_px,
+        rescue_max_rescues_per_frame,
+        rescue_max_hamming,
+        rescue_require_first_pass_agreement,
+        rescue_interpolation,
         huber_delta_px,
         tikhonov_alpha_max,
         sigma_n_sq,
         structure_tensor_radius,
     ))]
+    #[allow(clippy::fn_params_excessive_bools)]
     fn new(
         threshold_tile_size: usize,
         threshold_min_range: u8,
@@ -433,6 +480,13 @@ impl PyDetectorConfig {
         adaptive_ppb_high_extraction: QuadExtractionMode,
         adaptive_ppb_low_refinement: CornerRefinementMode,
         adaptive_ppb_high_refinement: CornerRefinementMode,
+        rescue_enabled: bool,
+        rescue_upscale_factor: u8,
+        rescue_max_roi_side_px: u16,
+        rescue_max_rescues_per_frame: u8,
+        rescue_max_hamming: u8,
+        rescue_require_first_pass_agreement: bool,
+        rescue_interpolation: RescueInterpolation,
         huber_delta_px: f64,
         tikhonov_alpha_max: f64,
         sigma_n_sq: f64,
@@ -471,6 +525,13 @@ impl PyDetectorConfig {
             adaptive_ppb_high_extraction,
             adaptive_ppb_low_refinement,
             adaptive_ppb_high_refinement,
+            rescue_enabled,
+            rescue_upscale_factor,
+            rescue_max_roi_side_px,
+            rescue_max_rescues_per_frame,
+            rescue_max_hamming,
+            rescue_require_first_pass_agreement,
+            rescue_interpolation,
             huber_delta_px,
             tikhonov_alpha_max,
             sigma_n_sq,
@@ -552,6 +613,13 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             adaptive_ppb_high_extraction: adaptive_high_ext,
             adaptive_ppb_low_refinement: adaptive_low_ref,
             adaptive_ppb_high_refinement: adaptive_high_ref,
+            rescue_enabled: c.roi_rescue.enabled,
+            rescue_upscale_factor: c.roi_rescue.upscale_factor,
+            rescue_max_roi_side_px: c.roi_rescue.max_roi_side_px,
+            rescue_max_rescues_per_frame: c.roi_rescue.max_rescues_per_frame,
+            rescue_max_hamming: c.roi_rescue.rescue_max_hamming,
+            rescue_require_first_pass_agreement: c.roi_rescue.require_first_pass_agreement,
+            rescue_interpolation: c.roi_rescue.interpolation.into(),
             huber_delta_px: c.huber_delta_px,
             tikhonov_alpha_max: c.tikhonov_alpha_max,
             sigma_n_sq: c.sigma_n_sq,
@@ -1570,6 +1638,15 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
         } else {
             locus_core::config::QuadExtractionPolicy::Static
         };
+        let roi_rescue = locus_core::config::RoiRescuePolicy {
+            enabled: c.rescue_enabled,
+            upscale_factor: c.rescue_upscale_factor,
+            max_roi_side_px: c.rescue_max_roi_side_px,
+            max_rescues_per_frame: c.rescue_max_rescues_per_frame,
+            rescue_max_hamming: c.rescue_max_hamming,
+            require_first_pass_agreement: c.rescue_require_first_pass_agreement,
+            interpolation: c.rescue_interpolation.into(),
+        };
         Self {
             threshold_tile_size: c.threshold_tile_size,
             threshold_min_range: c.threshold_min_range,
@@ -1602,6 +1679,7 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             segmentation_connectivity: c.segmentation_connectivity.into(),
             segmentation_margin: c.segmentation_margin,
             quad_extraction_policy: policy,
+            roi_rescue,
             ..locus_core::config::DetectorConfig::default()
         }
     }
@@ -2016,6 +2094,7 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<DecodeMode>()?;
     m.add_class::<PoseEstimationMode>()?;
     m.add_class::<QuadExtractionMode>()?;
+    m.add_class::<RescueInterpolation>()?;
     // Config / misc structs
     m.add_class::<DistortionModel>()?;
     m.add_class::<CameraIntrinsics>()?;

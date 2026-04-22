@@ -72,6 +72,28 @@ pub enum ConfigError {
     /// high branch, `>=5.0` effectively never does.
     #[error("AdaptivePpb threshold must be in (1.0, 5.0), got {0}")]
     AdaptivePolicyThresholdOutOfRange(f32),
+    /// ROI rescue Hamming budget must be strictly tighter than the first pass.
+    ///
+    /// A rescue pass with the same (or looser) Hamming budget as the first
+    /// decode is a pure false-positive amplifier: it re-admits candidates the
+    /// primary decoder already rejected at the same confidence.
+    #[error(
+        "roi_rescue.rescue_max_hamming ({rescue}) must be strictly less than \
+         max_hamming_error ({primary})"
+    )]
+    RescueHammingTooLax {
+        /// Rescue-pass Hamming budget from the policy.
+        rescue: u8,
+        /// Primary-pass Hamming budget from `DetectorConfig::max_hamming_error`.
+        primary: u32,
+    },
+    /// ROI rescue upscale factor must be 2 or 4.
+    ///
+    /// The Lanczos-3 precomputed weight tables and bilinear sampler only
+    /// support 2× and 4× magnification; other factors would require runtime
+    /// kernel generation, which defeats the allocation-free contract.
+    #[error("roi_rescue.upscale_factor must be 2 or 4, got {0}")]
+    RescueUpscaleFactorInvalid(u8),
     /// Profile JSON failed to parse (malformed syntax or unknown fields).
     ///
     /// `serde_json::Error` is not `Clone`, so its `Display` form is captured

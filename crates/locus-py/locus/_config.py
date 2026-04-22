@@ -30,6 +30,7 @@ from .locus import (
     PoseEstimationMode,
     PyDetectorConfig,
     QuadExtractionMode,
+    RescueInterpolation,
     SegmentationConnectivity,
     TagFamily,
     _shipped_profile_json,
@@ -126,11 +127,13 @@ if TYPE_CHECKING:
     _DecodeModeField: TypeAlias = DecodeMode
     _QuadExtractionField: TypeAlias = QuadExtractionMode
     _SegConnField: TypeAlias = SegmentationConnectivity
+    _RescueInterpolationField: TypeAlias = RescueInterpolation
 else:
     _CornerRefinementField = _enum_field(CornerRefinementMode)
     _DecodeModeField = _enum_field(DecodeMode)
     _QuadExtractionField = _enum_field(QuadExtractionMode)
     _SegConnField = _enum_field(SegmentationConnectivity)
+    _RescueInterpolationField = _enum_field(RescueInterpolation)
 
 
 class ThresholdConfig(BaseModel):
@@ -251,6 +254,35 @@ class SegmentationConfig(BaseModel):
     margin: int = 1
 
 
+class RescueConfig(BaseModel):
+    """Second-chance decode for quads that pass the funnel but fail first-pass Hamming.
+
+    Mirrors `crates/locus-core/src/config.rs::RoiRescuePolicy`. When `enabled`
+    is false (the default) the rescue stage is a single boolean branch in the
+    pipeline and all other fields here are inert.
+    """
+
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+
+    enabled: bool = False
+    upscale_factor: int = Field(default=2)
+    max_roi_side_px: int = Field(default=128, ge=1, le=65535)
+    max_rescues_per_frame: int = Field(default=16, ge=0, le=255)
+    rescue_max_hamming: int = Field(default=1, ge=0, le=255)
+    require_first_pass_agreement: bool = True
+    interpolation: _RescueInterpolationField = Field(
+        default_factory=lambda: RescueInterpolation.Lanczos3
+    )
+
+    @model_validator(mode="after")
+    def _check_upscale_factor(self) -> RescueConfig:
+        if self.enabled and self.upscale_factor not in (2, 4):
+            raise ValueError(
+                f"rescue.upscale_factor must be 2 or 4 when enabled, got {self.upscale_factor}"
+            )
+        return self
+
+
 class DetectorConfig(BaseModel):
     """Nested detector configuration — Python source of truth.
 
@@ -270,6 +302,7 @@ class DetectorConfig(BaseModel):
     decoder: DecoderConfig = Field(default_factory=DecoderConfig)
     pose: PoseConfig = Field(default_factory=PoseConfig)
     segmentation: SegmentationConfig = Field(default_factory=SegmentationConfig)
+    rescue: RescueConfig = Field(default_factory=RescueConfig)
 
     @model_validator(mode="after")
     def _check_extends_unresolved(self) -> DetectorConfig:
@@ -319,6 +352,11 @@ class DetectorConfig(BaseModel):
                             "quad.extraction_policy.AdaptivePpb route uses EdLines with "
                             "decoder.decode_mode=Soft, which is incompatible"
                         )
+        if self.rescue.enabled and self.rescue.rescue_max_hamming >= self.decoder.max_hamming_error:
+            raise ValueError(
+                f"rescue.rescue_max_hamming ({self.rescue.rescue_max_hamming}) must be strictly "
+                f"less than decoder.max_hamming_error ({self.decoder.max_hamming_error})"
+            )
         return self
 
     @classmethod
@@ -335,11 +373,17 @@ class DetectorConfig(BaseModel):
                 f"Unknown shipped profile {name!r}; expected one of {sorted(SHIPPED_PROFILES)}"
             )
         cfg = cls.model_validate_json(_shipped_profile_json(name))
-        if name in _STATIC_ONLY_PROFILES and cfg.quad.extraction_policy != "Static":
-            raise ValueError(
-                f'Shipped profile {name!r} must carry quad.extraction_policy="Static"; '
-                "adaptive routing lives in opt-in profiles only"
-            )
+        if name in _STATIC_ONLY_PROFILES:
+            if cfg.quad.extraction_policy != "Static":
+                raise ValueError(
+                    f'Shipped profile {name!r} must carry quad.extraction_policy="Static"; '
+                    "adaptive routing lives in opt-in profiles only"
+                )
+            if cfg.rescue.enabled:
+                raise ValueError(
+                    f"Shipped profile {name!r} must carry rescue.enabled=false; "
+                    "ROI rescue lives in opt-in profiles only"
+                )
         return cfg
 
     @classmethod
@@ -410,6 +454,13 @@ class DetectorConfig(BaseModel):
             structure_tensor_radius=self.pose.structure_tensor_radius,
             segmentation_connectivity=self.segmentation.connectivity,
             segmentation_margin=self.segmentation.margin,
+            rescue_enabled=self.rescue.enabled,
+            rescue_upscale_factor=self.rescue.upscale_factor,
+            rescue_max_roi_side_px=self.rescue.max_roi_side_px,
+            rescue_max_rescues_per_frame=self.rescue.max_rescues_per_frame,
+            rescue_max_hamming=self.rescue.rescue_max_hamming,
+            rescue_require_first_pass_agreement=self.rescue.require_first_pass_agreement,
+            rescue_interpolation=self.rescue.interpolation,
         )
 
 
@@ -447,6 +498,8 @@ __all__ = [
     "ProfileName",
     "QuadConfig",
     "QuadExtractionPolicy",
+    "RescueConfig",
+    "RescueInterpolation",
     "SegmentationConfig",
     "ThresholdConfig",
 ]

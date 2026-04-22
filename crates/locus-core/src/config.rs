@@ -122,6 +122,67 @@ pub enum QuadExtractionPolicy {
     AdaptivePpb(AdaptivePpbConfig),
 }
 
+/// Interpolation kernel used when upscaling a failed-decode ROI for rescue.
+///
+/// `Bilinear` is the cheap path (no scratch buffer required); `Lanczos3` is
+/// the default because it preserves edge contrast that the primary decoder
+/// can re-quantize more reliably.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum RescueInterpolation {
+    /// Separable bilinear upscale.
+    Bilinear,
+    /// Separable Lanczos-3 upscale (default).
+    #[default]
+    Lanczos3,
+}
+
+/// ROI super-resolution rescue policy.
+///
+/// When a candidate passes the funnel but fails first-pass decoding with
+/// `Hamming > max_hamming_error`, the rescue stage can upscale the source
+/// ROI, re-sample, and re-decode with a strictly tighter Hamming budget.
+/// The feature is opt-in (`enabled = false` by default) and adds zero
+/// latency when disabled (single boolean branch in the hot path).
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct RoiRescuePolicy {
+    /// Master switch. `false` = stage is compiled away at runtime.
+    pub enabled: bool,
+    /// Upscale factor applied to the ROI. Must be 2 or 4 (validated).
+    pub upscale_factor: u8,
+    /// Quads whose bbox max side exceeds this cap are not rescued. Large
+    /// quads don't benefit from super-resolution and the scratch budget is
+    /// proportional to side^2.
+    pub max_roi_side_px: u16,
+    /// Upper bound on rescue attempts per frame. Caps scratch buffer sizing
+    /// and latency.
+    pub max_rescues_per_frame: u8,
+    /// Hamming budget used inside the rescue decode. Must be strictly less
+    /// than `DetectorConfig::max_hamming_error` (validator enforces).
+    pub rescue_max_hamming: u8,
+    /// Reject rescued candidates whose decoded ID does not match the
+    /// rotation-normalized first-pass payload. Strongly recommended: gives
+    /// the rescue an independent FP-suppressing check.
+    pub require_first_pass_agreement: bool,
+    /// Interpolation kernel.
+    pub interpolation: RescueInterpolation,
+}
+
+impl Default for RoiRescuePolicy {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            upscale_factor: 2,
+            max_roi_side_px: 128,
+            max_rescues_per_frame: 16,
+            rescue_max_hamming: 2,
+            require_first_pass_agreement: true,
+            interpolation: RescueInterpolation::Lanczos3,
+        }
+    }
+}
+
 /// Pipeline-level configuration for the detector.
 ///
 /// These settings affect the fundamental behavior of the detection pipeline
@@ -241,6 +302,11 @@ pub struct DetectorConfig {
     /// snapshot-review campaign: every downstream test that constructs a
     /// default config would silently exercise new code.
     pub quad_extraction_policy: QuadExtractionPolicy,
+
+    /// ROI super-resolution rescue policy. `enabled = false` by default so
+    /// the stage is compiled away at runtime (single boolean branch).
+    /// See [`RoiRescuePolicy`].
+    pub roi_rescue: RoiRescuePolicy,
 }
 
 impl Default for DetectorConfig {
@@ -280,6 +346,7 @@ impl Default for DetectorConfig {
             quad_min_density: 0.0,
             quad_extraction_mode: QuadExtractionMode::ContourRdp,
             quad_extraction_policy: QuadExtractionPolicy::Static,
+            roi_rescue: RoiRescuePolicy::default(),
         }
     }
 }
@@ -331,6 +398,18 @@ impl DetectorConfig {
             }
             if self.decode_mode == DecodeMode::Soft {
                 return Err(ConfigError::EdLinesIncompatibleWithSoftDecode);
+            }
+        }
+        if self.roi_rescue.enabled {
+            let r = &self.roi_rescue;
+            if !(r.upscale_factor == 2 || r.upscale_factor == 4) {
+                return Err(ConfigError::RescueUpscaleFactorInvalid(r.upscale_factor));
+            }
+            if u32::from(r.rescue_max_hamming) >= self.max_hamming_error {
+                return Err(ConfigError::RescueHammingTooLax {
+                    rescue: r.rescue_max_hamming,
+                    primary: self.max_hamming_error,
+                });
             }
         }
         if let QuadExtractionPolicy::AdaptivePpb(ref p) = self.quad_extraction_policy {
@@ -423,6 +502,8 @@ pub struct DetectorConfigBuilder {
     pub quad_extraction_mode: Option<QuadExtractionMode>,
     /// Quad extraction policy (Static or AdaptivePpb).
     pub quad_extraction_policy: Option<QuadExtractionPolicy>,
+    /// ROI super-resolution rescue policy (opt-in, default disabled).
+    pub roi_rescue: Option<RoiRescuePolicy>,
     /// Huber delta for LM reprojection (pixels).
     pub huber_delta_px: Option<f64>,
     /// Maximum Tikhonov regularisation alpha for Accurate mode.
@@ -588,6 +669,7 @@ impl DetectorConfigBuilder {
             quad_extraction_policy: self
                 .quad_extraction_policy
                 .unwrap_or(d.quad_extraction_policy),
+            roi_rescue: self.roi_rescue.unwrap_or(d.roi_rescue),
         }
     }
 
@@ -690,6 +772,13 @@ impl DetectorConfigBuilder {
     #[must_use]
     pub fn quad_extraction_policy(mut self, policy: QuadExtractionPolicy) -> Self {
         self.quad_extraction_policy = Some(policy);
+        self
+    }
+
+    /// Set the ROI super-resolution rescue policy.
+    #[must_use]
+    pub fn roi_rescue(mut self, policy: RoiRescuePolicy) -> Self {
+        self.roi_rescue = Some(policy);
         self
     }
 
@@ -932,6 +1021,8 @@ mod profile_json {
         pub pose: PoseJson,
         #[serde(default)]
         pub segmentation: SegmentationJson,
+        #[serde(default)]
+        pub rescue: RescueJson,
     }
 
     #[derive(Debug, Deserialize)]
@@ -1062,6 +1153,47 @@ mod profile_json {
         }
     }
 
+    #[derive(Debug, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub(super) struct RescueJson {
+        pub enabled: bool,
+        pub upscale_factor: u8,
+        pub max_roi_side_px: u16,
+        pub max_rescues_per_frame: u8,
+        pub rescue_max_hamming: u8,
+        pub require_first_pass_agreement: bool,
+        pub interpolation: super::RescueInterpolation,
+    }
+
+    impl Default for RescueJson {
+        fn default() -> Self {
+            let d = DetectorConfig::default();
+            Self {
+                enabled: d.roi_rescue.enabled,
+                upscale_factor: d.roi_rescue.upscale_factor,
+                max_roi_side_px: d.roi_rescue.max_roi_side_px,
+                max_rescues_per_frame: d.roi_rescue.max_rescues_per_frame,
+                rescue_max_hamming: d.roi_rescue.rescue_max_hamming,
+                require_first_pass_agreement: d.roi_rescue.require_first_pass_agreement,
+                interpolation: d.roi_rescue.interpolation,
+            }
+        }
+    }
+
+    impl From<RescueJson> for super::RoiRescuePolicy {
+        fn from(r: RescueJson) -> Self {
+            Self {
+                enabled: r.enabled,
+                upscale_factor: r.upscale_factor,
+                max_roi_side_px: r.max_roi_side_px,
+                max_rescues_per_frame: r.max_rescues_per_frame,
+                rescue_max_hamming: r.rescue_max_hamming,
+                require_first_pass_agreement: r.require_first_pass_agreement,
+                interpolation: r.interpolation,
+            }
+        }
+    }
+
     impl From<ProfileJson> for DetectorConfig {
         fn from(p: ProfileJson) -> Self {
             // `decimation` and `nthreads` are per-call orchestration, not
@@ -1101,6 +1233,7 @@ mod profile_json {
                 quad_min_density: p.quad.min_density,
                 quad_extraction_mode: p.quad.extraction_mode,
                 quad_extraction_policy: p.quad.extraction_policy,
+                roi_rescue: p.rescue.into(),
             }
         }
     }

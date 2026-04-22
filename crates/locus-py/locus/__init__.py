@@ -12,6 +12,8 @@ from ._config import (
     ProfileName,
     QuadConfig,
     QuadExtractionPolicy,
+    RescueConfig,
+    RescueInterpolation,
     SegmentationConfig,
     ThresholdConfig,
 )
@@ -380,6 +382,8 @@ __all__ = [
     "PoseEstimationMode",
     "QuadExtractionMode",
     "QuadExtractionPolicy",
+    "RescueConfig",
+    "RescueInterpolation",
     "SegmentationConnectivity",
     "TagFamily",
     "init_tracy",

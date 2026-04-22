@@ -217,6 +217,58 @@
       "title": "QuadConfig",
       "type": "object"
     },
+    "RescueConfig": {
+      "additionalProperties": false,
+      "description": "Second-chance decode for quads that pass the funnel but fail first-pass Hamming.\n\nMirrors `crates/locus-core/src/config.rs::RoiRescuePolicy`. When `enabled`\nis false (the default) the rescue stage is a single boolean branch in the\npipeline and all other fields here are inert.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "interpolation": {
+          "enum": [
+            "Bilinear",
+            "Lanczos3"
+          ],
+          "title": "Interpolation",
+          "type": "string"
+        },
+        "max_rescues_per_frame": {
+          "default": 16,
+          "maximum": 255,
+          "minimum": 0,
+          "title": "Max Rescues Per Frame",
+          "type": "integer"
+        },
+        "max_roi_side_px": {
+          "default": 128,
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Max Roi Side Px",
+          "type": "integer"
+        },
+        "require_first_pass_agreement": {
+          "default": true,
+          "title": "Require First Pass Agreement",
+          "type": "boolean"
+        },
+        "rescue_max_hamming": {
+          "default": 1,
+          "maximum": 255,
+          "minimum": 0,
+          "title": "Rescue Max Hamming",
+          "type": "integer"
+        },
+        "upscale_factor": {
+          "default": 2,
+          "title": "Upscale Factor",
+          "type": "integer"
+        }
+      },
+      "title": "RescueConfig",
+      "type": "object"
+    },
     "SegmentationConfig": {
       "additionalProperties": false,
       "properties": {
@@ -343,6 +395,9 @@
     },
     "quad": {
       "$ref": "#/$defs/QuadConfig"
+    },
+    "rescue": {
+      "$ref": "#/$defs/RescueConfig"
     },
     "segmentation": {
       "$ref": "#/$defs/SegmentationConfig"

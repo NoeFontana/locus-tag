@@ -40,6 +40,10 @@ class QuadExtractionMode(enum.IntEnum):
     ContourRdp = 0
     EdLines = 1
 
+class RescueInterpolation(enum.IntEnum):
+    Bilinear = 0
+    Lanczos3 = 1
+
 class DistortionModel(enum.IntEnum):
     """Lens distortion model tag for `CameraIntrinsics`.
 
@@ -120,6 +124,13 @@ class PyDetectorConfig:
     tikhonov_alpha_max: float
     sigma_n_sq: float
     structure_tensor_radius: int
+    rescue_enabled: bool
+    rescue_upscale_factor: int
+    rescue_max_roi_side_px: int
+    rescue_max_rescues_per_frame: int
+    rescue_max_hamming: int
+    rescue_require_first_pass_agreement: bool
+    rescue_interpolation: RescueInterpolation
     def __init__(
         self,
         *,
@@ -159,6 +170,13 @@ class PyDetectorConfig:
         tikhonov_alpha_max: float,
         sigma_n_sq: float,
         structure_tensor_radius: int,
+        rescue_enabled: bool,
+        rescue_upscale_factor: int,
+        rescue_max_roi_side_px: int,
+        rescue_max_rescues_per_frame: int,
+        rescue_max_hamming: int,
+        rescue_require_first_pass_agreement: bool,
+        rescue_interpolation: RescueInterpolation,
     ) -> None: ...
 
 # ---------------------------------------------------------------------------

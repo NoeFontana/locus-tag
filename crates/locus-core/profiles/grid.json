@@ -41,5 +41,14 @@
   "segmentation": {
     "connectivity": "Four",
     "margin": 1
+  },
+  "rescue": {
+    "enabled": false,
+    "upscale_factor": 2,
+    "max_roi_side_px": 128,
+    "max_rescues_per_frame": 16,
+    "rescue_max_hamming": 1,
+    "require_first_pass_agreement": true,
+    "interpolation": "Lanczos3"
   }
 }
