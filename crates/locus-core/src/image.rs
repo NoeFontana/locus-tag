@@ -5,7 +5,11 @@
 #![allow(clippy::missing_panics_doc)]
 #![allow(unsafe_code)]
 
+use std::sync::LazyLock;
+
 use rayon::prelude::*;
+
+use crate::config::RescueInterpolation;
 
 /// A view into an image buffer with explicit stride support.
 /// This allows handling NumPy arrays with padding or non-standard layouts.
@@ -347,6 +351,225 @@ impl<'a> ImageView<'a> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// ROI upscaling for super-resolution rescue decode.
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy)]
+struct LanczosPhase {
+    tap_off: [i32; 6],
+    weights: [f32; 6],
+}
+
+fn lanczos3(x: f32) -> f32 {
+    // Sampling at a tap center is a delta: avoids 0/0 in the sinc product.
+    if x == 0.0 {
+        return 1.0;
+    }
+    if x.abs() >= 3.0 {
+        return 0.0;
+    }
+    let pi_x = std::f32::consts::PI * x;
+    let pi_x_third = pi_x / 3.0;
+    (pi_x.sin() / pi_x) * (pi_x_third.sin() / pi_x_third)
+}
+
+fn build_lanczos_phase(phase: usize, factor: usize) -> LanczosPhase {
+    // Output pixel at phase `r` with q=0 maps to source position
+    // Sx = (r + 0.5)/F - 0.5. `floor(Sx) + [-2..=3]` covers the 6-tap support.
+    let sx = (phase as f32 + 0.5) / factor as f32 - 0.5;
+    let int_base = sx.floor() as i32;
+    let frac = sx - int_base as f32;
+    let mut phase_tbl = LanczosPhase {
+        tap_off: [0; 6],
+        weights: [0.0; 6],
+    };
+    let mut sum = 0.0f32;
+    for (k, off) in (-2..=3i32).enumerate() {
+        phase_tbl.tap_off[k] = int_base + off;
+        // distance from Sx to the tap at integer (int_base + off): (off - frac)
+        let w = lanczos3(off as f32 - frac);
+        phase_tbl.weights[k] = w;
+        sum += w;
+    }
+    // Normalize so a constant-valued input reproduces exactly.
+    for w in &mut phase_tbl.weights {
+        *w /= sum;
+    }
+    phase_tbl
+}
+
+static LANCZOS3_PHASES_2X: LazyLock<[LanczosPhase; 2]> =
+    LazyLock::new(|| [build_lanczos_phase(0, 2), build_lanczos_phase(1, 2)]);
+
+static LANCZOS3_PHASES_4X: LazyLock<[LanczosPhase; 4]> = LazyLock::new(|| {
+    [
+        build_lanczos_phase(0, 4),
+        build_lanczos_phase(1, 4),
+        build_lanczos_phase(2, 4),
+        build_lanczos_phase(3, 4),
+    ]
+});
+
+/// Upscale a sub-rectangle of `src` into a caller-provided output buffer.
+///
+/// Used by the ROI super-resolution rescue stage to re-sample a
+/// `FailedDecode` candidate at higher effective resolution.
+///
+/// - `bbox = (x, y, w, h)` is the source-image sub-rectangle.
+/// - `factor` must be `2` or `4`.
+/// - `out` must hold at least `w*factor * h*factor` bytes; the returned view
+///   owns the leading slice.
+/// - `scratch` is used as the horizontal-pass buffer when `kernel ==
+///   Lanczos3` (size `w*factor * h`). Pass an empty slice for `Bilinear`.
+pub fn upscale_roi_to_buf<'b>(
+    src: &ImageView<'_>,
+    bbox: (usize, usize, usize, usize),
+    out: &'b mut [u8],
+    factor: u8,
+    scratch: &mut [u8],
+    kernel: RescueInterpolation,
+) -> Result<ImageView<'b>, String> {
+    let (bx, by, bw, bh) = bbox;
+    if factor != 2 && factor != 4 {
+        return Err(format!("upscale factor must be 2 or 4, got {factor}"));
+    }
+    if bw == 0 || bh == 0 {
+        return Err("ROI bbox has zero dimension".into());
+    }
+    if bx.saturating_add(bw) > src.width || by.saturating_add(bh) > src.height {
+        return Err(format!(
+            "ROI bbox ({bx},{by},{bw},{bh}) out of bounds for {}x{} source",
+            src.width, src.height
+        ));
+    }
+    let f = factor as usize;
+    let ow = bw * f;
+    let oh = bh * f;
+    let required_out = ow * oh;
+    if out.len() < required_out {
+        return Err(format!(
+            "output buffer too small: {} < {}",
+            out.len(),
+            required_out
+        ));
+    }
+    match kernel {
+        RescueInterpolation::Bilinear => {
+            upscale_roi_bilinear(src, bbox, &mut out[..required_out], factor);
+        }
+        RescueInterpolation::Lanczos3 => {
+            let required_scratch = ow * bh;
+            if scratch.len() < required_scratch {
+                return Err(format!(
+                    "scratch buffer too small for Lanczos3: {} < {}",
+                    scratch.len(),
+                    required_scratch
+                ));
+            }
+            upscale_roi_lanczos3(
+                src,
+                bbox,
+                &mut out[..required_out],
+                &mut scratch[..required_scratch],
+                factor,
+            );
+        }
+    }
+    ImageView::new(&out[..required_out], ow, oh, ow)
+}
+
+fn upscale_roi_bilinear(
+    src: &ImageView<'_>,
+    bbox: (usize, usize, usize, usize),
+    out: &mut [u8],
+    factor: u8,
+) {
+    let (bx, by, bw, bh) = bbox;
+    let f = factor as usize;
+    let ow = bw * f;
+    let oh = bh * f;
+    let inv_f = 1.0 / f64::from(factor);
+    let half_src_px = 0.5 * inv_f;
+    for oy in 0..oh {
+        let sy = by as f64 + (oy as f64) * inv_f + half_src_px;
+        let row = &mut out[oy * ow..(oy + 1) * ow];
+        for (ox, dst) in row.iter_mut().enumerate() {
+            let sx = bx as f64 + (ox as f64) * inv_f + half_src_px;
+            let v = src.sample_bilinear(sx, sy);
+            *dst = v.clamp(0.0, 255.0).round() as u8;
+        }
+    }
+}
+
+// ROI dims are bounded by `max_roi_side_px: u16` (128 default, 65535 max) and
+// the upscale factor is 2 or 4 — i32 holds all representable values.
+#[allow(
+    clippy::cast_possible_wrap,
+    clippy::cast_possible_truncation,
+    clippy::needless_range_loop
+)]
+fn upscale_roi_lanczos3(
+    src: &ImageView<'_>,
+    bbox: (usize, usize, usize, usize),
+    out: &mut [u8],
+    scratch: &mut [u8],
+    factor: u8,
+) {
+    let (bx, by, bw, bh) = bbox;
+    let f = factor as usize;
+    let ow = bw * f;
+    let oh = bh * f;
+    let phases: &[LanczosPhase] = match factor {
+        2 => LANCZOS3_PHASES_2X.as_slice(),
+        4 => LANCZOS3_PHASES_4X.as_slice(),
+        _ => unreachable!(),
+    };
+
+    // Horizontal pass: for each source row in the ROI, produce `ow` filtered
+    // columns in `scratch`. Tap indices are clamped to the ROI extent so the
+    // caller's bbox padding (if any) is consumed but edge samples stay safe
+    // without relying on OOB pixel access.
+    let max_col = bw as i32 - 1;
+    for sy_local in 0..bh {
+        let src_row = src.get_row(by + sy_local);
+        let dst_row = &mut scratch[sy_local * ow..(sy_local + 1) * ow];
+        for (ox, dst) in dst_row.iter_mut().enumerate() {
+            let phase = ox % f;
+            let q = (ox / f) as i32;
+            let p = &phases[phase];
+            let mut acc = 0.0f32;
+            for k in 0..6 {
+                let idx = (q + p.tap_off[k]).clamp(0, max_col) as usize;
+                acc += p.weights[k] * f32::from(src_row[bx + idx]);
+            }
+            *dst = acc.clamp(0.0, 255.0).round() as u8;
+        }
+    }
+
+    // Vertical pass: for each output row, gather 6 source rows from scratch
+    // and accumulate.
+    let max_row = bh as i32 - 1;
+    for oy in 0..oh {
+        let phase = oy % f;
+        let q = (oy / f) as i32;
+        let p = &phases[phase];
+        let mut rows: [&[u8]; 6] = [&[]; 6];
+        for (k, row_slot) in rows.iter_mut().enumerate() {
+            let sy = (q + p.tap_off[k]).clamp(0, max_row) as usize;
+            *row_slot = &scratch[sy * ow..(sy + 1) * ow];
+        }
+        let dst_row = &mut out[oy * ow..(oy + 1) * ow];
+        for (x, dst) in dst_row.iter_mut().enumerate() {
+            let mut acc = 0.0f32;
+            for k in 0..6 {
+                acc += p.weights[k] * f32::from(rows[k][x]);
+            }
+            *dst = acc.clamp(0.0, 255.0).round() as u8;
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
@@ -458,5 +681,138 @@ mod tests {
                 assert!(val >= min - 1e-9 && val <= max + 1e-9, "Value {val} not in [{min}, {max}] for x={x}, y={y}");
             }
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // ROI upscaling tests.
+    // -----------------------------------------------------------------------
+
+    fn make_constant_view(w: usize, h: usize, v: u8) -> (Vec<u8>, usize, usize) {
+        (vec![v; w * h], w, h)
+    }
+
+    #[test]
+    fn test_lanczos_phase_weights_sum_to_unity() {
+        // Normalization is the "constant signal reproduces" invariant.
+        for p in &*LANCZOS3_PHASES_2X {
+            let s: f32 = p.weights.iter().sum();
+            assert!((s - 1.0).abs() < 1e-5, "2x phase weights sum {s} != 1");
+        }
+        for p in &*LANCZOS3_PHASES_4X {
+            let s: f32 = p.weights.iter().sum();
+            assert!((s - 1.0).abs() < 1e-5, "4x phase weights sum {s} != 1");
+        }
+    }
+
+    #[test]
+    fn test_upscale_roi_constant_preserved_bilinear() {
+        let (data, w, h) = make_constant_view(8, 8, 123);
+        let view = ImageView::new(&data, w, h, w).expect("view");
+        let mut out = vec![0u8; 8 * 8 * 4];
+        let mut scratch: [u8; 0] = [];
+        let up = upscale_roi_to_buf(
+            &view,
+            (0, 0, 8, 8),
+            &mut out,
+            2,
+            &mut scratch,
+            RescueInterpolation::Bilinear,
+        )
+        .expect("upscale ok");
+        assert_eq!(up.width, 16);
+        assert_eq!(up.height, 16);
+        assert!(up.data.iter().all(|&p| p == 123), "constant not preserved");
+    }
+
+    #[test]
+    fn test_upscale_roi_constant_preserved_lanczos() {
+        let (data, w, h) = make_constant_view(16, 16, 42);
+        let view = ImageView::new(&data, w, h, w).expect("view");
+        let (ow, oh) = (16 * 2, 16 * 2);
+        let mut out = vec![0u8; ow * oh];
+        let mut scratch = vec![0u8; ow * 16];
+        let up = upscale_roi_to_buf(
+            &view,
+            (0, 0, 16, 16),
+            &mut out,
+            2,
+            &mut scratch,
+            RescueInterpolation::Lanczos3,
+        )
+        .expect("upscale ok");
+        // A constant signal reproduces because phase weights sum to 1.
+        assert!(up.data.iter().all(|&p| p == 42), "Lanczos constant: leaked edge");
+    }
+
+    #[test]
+    fn test_upscale_roi_bbox_offset_lanczos() {
+        // Checker-ish pattern, rescue a sub-window with 4x factor.
+        let w = 12;
+        let h = 12;
+        let mut data = vec![0u8; w * h];
+        for y in 0..h {
+            for x in 0..w {
+                data[y * w + x] = if ((x + y) & 1) == 0 { 200 } else { 40 };
+            }
+        }
+        let view = ImageView::new(&data, w, h, w).expect("view");
+        let (bx, by, bw, bh) = (2, 2, 6, 6);
+        let f: u8 = 4;
+        let ow = bw * f as usize;
+        let oh = bh * f as usize;
+        let mut out = vec![0u8; ow * oh];
+        let mut scratch = vec![0u8; ow * bh];
+        let up = upscale_roi_to_buf(
+            &view,
+            (bx, by, bw, bh),
+            &mut out,
+            f,
+            &mut scratch,
+            RescueInterpolation::Lanczos3,
+        )
+        .expect("lanczos upscale");
+        assert_eq!(up.width, ow);
+        assert_eq!(up.height, oh);
+        // Sub-window average ≈ (200 + 40) / 2 = 120 for a balanced checker.
+        let sum: u64 = up.data.iter().map(|&b| u64::from(b)).sum();
+        let avg = sum as f64 / (ow * oh) as f64;
+        assert!(
+            (avg - 120.0).abs() < 10.0,
+            "Lanczos avg {avg} far from checker mean 120"
+        );
+    }
+
+    #[test]
+    fn test_upscale_roi_invalid_factor() {
+        let (data, w, h) = make_constant_view(4, 4, 0);
+        let view = ImageView::new(&data, w, h, w).expect("view");
+        let mut out = [0u8; 256];
+        let mut scratch: [u8; 0] = [];
+        let err = upscale_roi_to_buf(
+            &view,
+            (0, 0, 4, 4),
+            &mut out,
+            3,
+            &mut scratch,
+            RescueInterpolation::Bilinear,
+        );
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn test_upscale_roi_bbox_oob() {
+        let (data, w, h) = make_constant_view(4, 4, 0);
+        let view = ImageView::new(&data, w, h, w).expect("view");
+        let mut out = [0u8; 1024];
+        let mut scratch: [u8; 0] = [];
+        let err = upscale_roi_to_buf(
+            &view,
+            (2, 2, 4, 4), // 2 + 4 > 4
+            &mut out,
+            2,
+            &mut scratch,
+            RescueInterpolation::Bilinear,
+        );
+        assert!(err.is_err());
     }
 }
