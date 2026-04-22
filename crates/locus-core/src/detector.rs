@@ -73,13 +73,13 @@ impl FrameContext {
     }
 }
 
-/// Bytes of `rescue_buf` needed for one full frame of rescue attempts:
-/// `max_rescues_per_frame * (out_plane + scratch_plane + SIMD_PADDING)` where
-/// `out_plane = (side*factor)^2` and `scratch_plane = side*factor*side`.
-/// Returns `0` when rescue is disabled.
-pub(crate) fn rescue_buf_size(config: &DetectorConfig) -> usize {
+/// Per-slot layout of `rescue_buf`: `(out_slot_bytes, scratch_slot_bytes)`.
+/// Returns `None` when rescue is disabled. `out_slot_bytes` already includes
+/// the 3-byte SIMD padding so a single slot can be split cleanly into the
+/// `out` and `scratch` arguments of [`crate::decoder::decode_with_rescue`].
+pub(crate) fn rescue_slot_layout(config: &DetectorConfig) -> Option<(usize, usize)> {
     if !config.roi_rescue.enabled {
-        return 0;
+        return None;
     }
     let side = usize::from(config.roi_rescue.max_roi_side_px);
     let factor = usize::from(config.roi_rescue.upscale_factor);
@@ -88,9 +88,19 @@ pub(crate) fn rescue_buf_size(config: &DetectorConfig) -> usize {
         crate::config::RescueInterpolation::Bilinear => 0,
         crate::config::RescueInterpolation::Lanczos3 => (side * factor) * side,
     };
-    // +3 bytes per rescue keeps the x86_64 AVX2 gather path active in
+    // +3 bytes on the out plane keeps the x86_64 AVX2 gather path active in
     // sample_bilinear_v8 (see upscale_roi_to_buf for the padding contract).
-    (out_plane + scratch_plane + 3) * usize::from(config.roi_rescue.max_rescues_per_frame)
+    Some((out_plane + 3, scratch_plane))
+}
+
+/// Bytes of `rescue_buf` needed for one full frame of rescue attempts:
+/// `max_rescues_per_frame * (out_slot + scratch_slot)`. Returns `0` when
+/// rescue is disabled.
+pub(crate) fn rescue_buf_size(config: &DetectorConfig) -> usize {
+    let Some((out_slot, scratch_slot)) = rescue_slot_layout(config) else {
+        return 0;
+    };
+    (out_slot + scratch_slot) * usize::from(config.roi_rescue.max_rescues_per_frame)
 }
 
 /// Peak per-frame `Bump` working set. Used as the `with_capacity` seed so the
@@ -111,6 +121,97 @@ fn arena_capacity_hint(config: &DetectorConfig) -> usize {
 impl Default for FrameContext {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// ROI super-resolution rescue pass. Runs on candidates marked
+/// `FailedDecode` that passed the fast-path funnel, ordered by first-pass
+/// Hamming distance (ascending), capped by `max_rescues_per_frame`.
+///
+/// Successful promotions flip `status_mask[i]` to `Valid` so the subsequent
+/// `partition` groups rescued tags alongside first-pass valids. Telemetry
+/// columns (`rescue_attempted`, `rescue_hamming`) are written only when
+/// `debug_telemetry` is set.
+#[allow(clippy::too_many_arguments)]
+fn run_rescue_stage(
+    batch: &mut DetectionBatch,
+    arena: &Bump,
+    rescue_buf: &mut [u8],
+    n: usize,
+    config: &DetectorConfig,
+    decoders: &[Box<dyn TagDecoder + Send + Sync>],
+    refinement_img: &ImageView,
+    debug_telemetry: bool,
+) {
+    use crate::batch::{CandidateState, FunnelStatus};
+
+    if n == 0 {
+        return;
+    }
+    let Some((out_slot_len, scratch_slot_len)) = rescue_slot_layout(config) else {
+        return;
+    };
+    let slot_len = out_slot_len + scratch_slot_len;
+    if slot_len == 0 {
+        return;
+    }
+
+    // Arena-allocated index list of funnel-survivors that failed to decode.
+    let indices = arena.alloc_slice_fill_copy(n, 0u16);
+    let mut cand_count = 0usize;
+    for i in 0..n {
+        if batch.status_mask[i] == CandidateState::FailedDecode
+            && batch.funnel_status[i] == FunnelStatus::PassedContrast
+        {
+            indices[cand_count] = i as u16;
+            cand_count += 1;
+        }
+    }
+    if cand_count == 0 {
+        return;
+    }
+    let indices = &mut indices[..cand_count];
+
+    // Prioritize lowest first-pass Hamming — those are the closest to the
+    // max-hamming-error cliff, where super-resolution has the highest win
+    // rate vs false-positive cost. `error_rates` holds non-negative Hamming
+    // distances, so `total_cmp` is safe and branch-free.
+    indices.sort_unstable_by(|a, b| {
+        batch.error_rates[usize::from(*a)].total_cmp(&batch.error_rates[usize::from(*b)])
+    });
+
+    let take = indices
+        .len()
+        .min(usize::from(config.roi_rescue.max_rescues_per_frame))
+        .min(rescue_buf.len() / slot_len);
+
+    for (k, &packed_idx) in indices.iter().take(take).enumerate() {
+        let idx = usize::from(packed_idx);
+        let slot_start = k * slot_len;
+        let (out_slot, rest) =
+            rescue_buf[slot_start..slot_start + slot_len].split_at_mut(out_slot_len);
+        let scratch_slot = &mut rest[..scratch_slot_len];
+
+        let promoted = crate::decoder::decode_with_rescue(
+            batch,
+            idx,
+            refinement_img,
+            decoders,
+            config,
+            out_slot,
+            scratch_slot,
+        );
+        if debug_telemetry {
+            batch.rescue_attempted[idx] = 1;
+            if promoted {
+                // `decode_with_rescue` wrote `error_rates[idx] = hamming` on
+                // success; clamp guarantees `u8` fit regardless of
+                // `rescue_max_hamming` (which is itself a `u8`).
+                #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+                let h = batch.error_rates[idx].clamp(0.0, 255.0) as u8;
+                batch.rescue_hamming[idx] = h;
+            }
+        }
     }
 }
 
@@ -555,6 +656,24 @@ fn run_detection_pipeline<'ctx>(
                 config,
             );
         },
+    }
+
+    // 5.5 ROI Super-Resolution Rescue — opt-in second-chance pass for
+    // candidates whose first-pass decode missed by a small Hamming delta.
+    // Skipped under distortion: the rescue homography uses
+    // `Homography::square_to_quad`, which is only valid for the pinhole
+    // flow; distortion-aware sampling lives in `decode_batch_soa_with_camera`.
+    if config.roi_rescue.enabled && !has_distortion {
+        run_rescue_stage(
+            &mut state.batch,
+            &state.arena,
+            &mut state.rescue_buf,
+            n,
+            config,
+            decoders,
+            &refinement_img,
+            debug_telemetry,
+        );
     }
 
     // Partition valid candidates to the front [0..v]
@@ -1168,6 +1287,76 @@ mod rescue_buf_tests {
         assert!(first >= rescue_buf_size(&cfg));
         ctx.ensure_rescue_capacity(&cfg);
         assert_eq!(ctx.rescue_buf.len(), first, "second call is a no-op");
+    }
+
+    struct RescueHarness {
+        cfg: DetectorConfig,
+        batch: crate::batch::DetectionBatch,
+        arena: Bump,
+        rescue_buf: Vec<u8>,
+        pixels: Vec<u8>,
+        decoders: Vec<Box<dyn crate::decoder::TagDecoder + Send + Sync>>,
+    }
+
+    impl RescueHarness {
+        fn new() -> Self {
+            let mut cfg = DetectorConfig::default();
+            cfg.roi_rescue.enabled = true;
+            cfg.roi_rescue.interpolation = crate::config::RescueInterpolation::Bilinear;
+            cfg.roi_rescue.upscale_factor = 2;
+            cfg.roi_rescue.max_roi_side_px = 32;
+            cfg.roi_rescue.max_rescues_per_frame = 2;
+            let rescue_buf = vec![0u8; rescue_buf_size(&cfg)];
+            Self {
+                cfg,
+                batch: crate::batch::DetectionBatch::new(),
+                arena: Bump::new(),
+                rescue_buf,
+                pixels: vec![0u8; 64 * 64],
+                decoders: vec![],
+            }
+        }
+
+        fn run(&mut self, n: usize) {
+            let img = crate::image::ImageView::new(&self.pixels, 64, 64, 64).expect("valid view");
+            run_rescue_stage(
+                &mut self.batch,
+                &self.arena,
+                &mut self.rescue_buf,
+                n,
+                &self.cfg,
+                &self.decoders,
+                &img,
+                true,
+            );
+        }
+    }
+
+    #[test]
+    fn run_rescue_stage_no_op_when_no_candidates() {
+        // No tags in the batch → rescue is a fast-exit no-op, and it must
+        // not touch any telemetry slot.
+        let mut harness = RescueHarness::new();
+        harness.run(0);
+        assert_eq!(harness.batch.rescue_attempted[0], 0);
+    }
+
+    #[test]
+    fn run_rescue_stage_skips_when_no_funnel_survivors() {
+        // All candidates are `FailedDecode` but none passed the funnel —
+        // rescue must skip them because the funnel check would have caught
+        // the true positives.
+        use crate::batch::{CandidateState, FunnelStatus};
+
+        let mut harness = RescueHarness::new();
+        for i in 0..3 {
+            harness.batch.status_mask[i] = CandidateState::FailedDecode;
+            harness.batch.funnel_status[i] = FunnelStatus::RejectedContrast;
+        }
+        harness.run(3);
+        for i in 0..3 {
+            assert_eq!(harness.batch.rescue_attempted[i], 0);
+        }
     }
 }
 

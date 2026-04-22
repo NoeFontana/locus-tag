@@ -1558,7 +1558,6 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
 /// `RoiRescuePolicy::max_roi_side_px` so callers can pre-allocate a
 /// fixed-size budget at frame start.
 #[tracing::instrument(skip_all, name = "pipeline::rescue_decode")]
-#[allow(dead_code)] // consumed by B.6 rescue stage
 pub fn decode_with_rescue(
     batch: &mut crate::batch::DetectionBatch,
     idx: usize,
