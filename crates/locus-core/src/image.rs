@@ -418,8 +418,9 @@ static LANCZOS3_PHASES_4X: LazyLock<[LanczosPhase; 4]> = LazyLock::new(|| {
 ///
 /// - `bbox = (x, y, w, h)` is the source-image sub-rectangle.
 /// - `factor` must be `2` or `4`.
-/// - `out` must hold at least `w*factor * h*factor` bytes; the returned view
-///   owns the leading slice.
+/// - `out` must hold at least `w*factor * h*factor` bytes. If it holds at
+///   least `+3` more bytes, the returned view exposes SIMD padding so the
+///   decoder's AVX2 gather path stays on the fast path.
 /// - `scratch` is used as the horizontal-pass buffer when `kernel ==
 ///   Lanczos3` (size `w*factor * h`). Pass an empty slice for `Bilinear`.
 pub fn upscale_roi_to_buf<'b>(
@@ -457,7 +458,7 @@ pub fn upscale_roi_to_buf<'b>(
     match kernel {
         RescueInterpolation::Bilinear => {
             upscale_roi_bilinear(src, bbox, &mut out[..required_out], factor);
-        }
+        },
         RescueInterpolation::Lanczos3 => {
             let required_scratch = ow * bh;
             if scratch.len() < required_scratch {
@@ -474,9 +475,14 @@ pub fn upscale_roi_to_buf<'b>(
                 &mut scratch[..required_scratch],
                 factor,
             );
-        }
+        },
     }
-    ImageView::new(&out[..required_out], ow, oh, ow)
+    // Expose +3 bytes of SIMD padding when the caller allocated room — this
+    // keeps the x86_64 AVX2 gather path in `sample_bilinear_v8` active. The
+    // bytes after `required_out` may contain stale data; the gather only
+    // reads them as padding, never for sampled output.
+    let view_len = (required_out + 3).min(out.len()).max(required_out);
+    ImageView::new(&out[..view_len], ow, oh, ow)
 }
 
 fn upscale_roi_bilinear(
@@ -734,7 +740,10 @@ mod tests {
         )
         .expect("upscale ok");
         // A constant signal reproduces because phase weights sum to 1.
-        assert!(up.data.iter().all(|&p| p == 42), "Lanczos constant: leaked edge");
+        assert!(
+            up.data.iter().all(|&p| p == 42),
+            "Lanczos constant: leaked edge"
+        );
     }
 
     #[test]

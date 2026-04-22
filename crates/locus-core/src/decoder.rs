@@ -1492,13 +1492,16 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                             None,
                         )
                     } else {
-                        // Even on failure, return the best hamming distance found for debugging.
-                        // If no code was sampled at all, best_h will be u32::MAX.
+                        // Publish the first-pass best-seen bit pattern so the
+                        // ROI rescue pass can check first-pass agreement even
+                        // when the primary decode failed.
+                        let fallback_payload =
+                            best_overall_code.as_ref().map_or(0, S::to_debug_bits);
                         (
                             CandidateState::FailedDecode,
                             0,
                             0,
-                            0,
+                            fallback_payload,
                             if best_h == u32::MAX { 0.0 } else { best_h as f32 },
                             None,
                         )
@@ -1533,6 +1536,220 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
             }
         }
     }
+}
+
+/// Attempt a super-resolution rescue decode on a single candidate.
+///
+/// Runs on candidates that failed the primary decode pass (typically
+/// `status_mask[idx] == FailedDecode`). Upscales the source-image ROI
+/// around the candidate's quad, re-samples bit intensities against the
+/// upscaled image, and decodes with a tighter `rescue_max_hamming` budget.
+///
+/// Returns `true` when the candidate was promoted to `Valid` — the batch
+/// columns (`status_mask`, `ids`, `payloads`, `error_rates`, and rotated
+/// `corners`) are written in place. Returns `false` when the rescue was
+/// skipped (ROI too large, degenerate bbox, homography failure) or when
+/// no decoder hit; the batch is left untouched.
+///
+/// `out`/`scratch` are caller-owned sub-slices of the frame's
+/// `rescue_buf`. `out` needs `w*factor*h*factor + 3` bytes (the `+3` keeps
+/// the AVX2 gather path active); `scratch` needs `w*factor*h` bytes for
+/// `Lanczos3` and may be empty for `Bilinear`. Sizing is bounded by
+/// `RoiRescuePolicy::max_roi_side_px` so callers can pre-allocate a
+/// fixed-size budget at frame start.
+#[tracing::instrument(skip_all, name = "pipeline::rescue_decode")]
+#[allow(dead_code)] // consumed by B.6 rescue stage
+pub fn decode_with_rescue(
+    batch: &mut crate::batch::DetectionBatch,
+    idx: usize,
+    img: &crate::image::ImageView,
+    decoders: &[Box<dyn TagDecoder + Send + Sync>],
+    config: &crate::config::DetectorConfig,
+    out: &mut [u8],
+    scratch: &mut [u8],
+) -> bool {
+    match config.decode_mode {
+        crate::config::DecodeMode::Hard => {
+            decode_with_rescue_generic::<crate::strategy::HardStrategy>(
+                batch, idx, img, decoders, config, out, scratch,
+            )
+        },
+        crate::config::DecodeMode::Soft => {
+            decode_with_rescue_generic::<crate::strategy::SoftStrategy>(
+                batch, idx, img, decoders, config, out, scratch,
+            )
+        },
+    }
+}
+
+#[allow(
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    clippy::too_many_lines
+)]
+fn decode_with_rescue_generic<S: crate::strategy::DecodingStrategy>(
+    batch: &mut crate::batch::DetectionBatch,
+    idx: usize,
+    img: &crate::image::ImageView,
+    decoders: &[Box<dyn TagDecoder + Send + Sync>],
+    config: &crate::config::DetectorConfig,
+    out: &mut [u8],
+    scratch: &mut [u8],
+) -> bool {
+    use crate::batch::CandidateState;
+    use crate::image::upscale_roi_to_buf;
+
+    let policy = &config.roi_rescue;
+    let factor = policy.upscale_factor;
+    let max_side = usize::from(policy.max_roi_side_px);
+
+    let corners = batch.corners[idx];
+
+    let mut min_x = f32::MAX;
+    let mut min_y = f32::MAX;
+    let mut max_x = f32::MIN;
+    let mut max_y = f32::MIN;
+    for p in &corners {
+        min_x = min_x.min(p.x);
+        min_y = min_y.min(p.y);
+        max_x = max_x.max(p.x);
+        max_y = max_y.max(p.y);
+    }
+    if !min_x.is_finite() || !max_x.is_finite() {
+        return false;
+    }
+
+    // 2-px Lanczos context padding, clamped to the source image.
+    let pad = 2.0_f32;
+    let col_lo = (min_x - pad).floor().max(0.0);
+    let row_lo = (min_y - pad).floor().max(0.0);
+    let last_col = (img.width as f32 - 1.0).max(0.0);
+    let last_row = (img.height as f32 - 1.0).max(0.0);
+    let col_hi = (max_x + pad).ceil().min(last_col);
+    let row_hi = (max_y + pad).ceil().min(last_row);
+    if col_hi <= col_lo || row_hi <= row_lo {
+        return false;
+    }
+
+    let bx = col_lo as usize;
+    let by = row_lo as usize;
+    let bw = (col_hi as usize).saturating_sub(bx) + 1;
+    let bh = (row_hi as usize).saturating_sub(by) + 1;
+
+    // Skip super-resolution on large quads — the budget assumption behind
+    // `max_rescues_per_frame * (side*factor)^2` breaks down, and a large
+    // quad decoder failure is rarely an under-sampling problem.
+    if bw > max_side || bh > max_side {
+        return false;
+    }
+
+    let f = usize::from(factor);
+    let ow = bw * f;
+    let oh = bh * f;
+    let out_need = ow * oh;
+    let scratch_need = match policy.interpolation {
+        crate::config::RescueInterpolation::Bilinear => 0,
+        crate::config::RescueInterpolation::Lanczos3 => ow * bh,
+    };
+    if out.len() < out_need || scratch.len() < scratch_need {
+        return false;
+    }
+
+    let Ok(upscaled) = upscale_roi_to_buf(
+        img,
+        (bx, by, bw, bh),
+        out,
+        factor,
+        &mut scratch[..scratch_need],
+        policy.interpolation,
+    ) else {
+        return false;
+    };
+
+    let roi_cache = RoiCache::from_upscaled(&upscaled.data[..out_need], ow, oh);
+
+    // Homography in upscaled-local coordinates: translate corners by the
+    // ROI origin and scale by the upscale factor.
+    let f_f64 = f as f64;
+    let origin = [bx as f64, by as f64];
+    let dst = [
+        [
+            (f64::from(corners[0].x) - origin[0]) * f_f64,
+            (f64::from(corners[0].y) - origin[1]) * f_f64,
+        ],
+        [
+            (f64::from(corners[1].x) - origin[0]) * f_f64,
+            (f64::from(corners[1].y) - origin[1]) * f_f64,
+        ],
+        [
+            (f64::from(corners[2].x) - origin[0]) * f_f64,
+            (f64::from(corners[2].y) - origin[1]) * f_f64,
+        ],
+        [
+            (f64::from(corners[3].x) - origin[0]) * f_f64,
+            (f64::from(corners[3].y) - origin[1]) * f_f64,
+        ],
+    ];
+    let Some(h_new) = Homography::square_to_quad(&dst) else {
+        return false;
+    };
+    let mut h_mat = Matrix3x3 {
+        data: [0.0; 9],
+        padding: [0.0; 7],
+    };
+    for (j, val) in h_new.h.iter().enumerate() {
+        h_mat.data[j] = *val as f32;
+    }
+
+    let rescue_max = u32::from(policy.rescue_max_hamming);
+    let first_pass_payload = batch.payloads[idx];
+
+    for decoder in decoders {
+        let Some(code) =
+            sample_grid_soa_precomputed::<S>(&upscaled, &roi_cache, &h_mat, decoder.as_ref())
+        else {
+            continue;
+        };
+        let Some((id, hamming, rot)) = S::decode(&code, decoder.as_ref(), rescue_max) else {
+            continue;
+        };
+        if hamming > rescue_max {
+            continue;
+        }
+
+        if policy.require_first_pass_agreement {
+            // Agreement = first-pass bit pattern decodes to the same ID
+            // under the primary Hamming budget. `decode_full` with
+            // `first_pass_payload == 0` on genuinely unseen candidates
+            // will still reject (0 does not match a real tag except by
+            // accident within `max_hamming_error`).
+            let Some((fp_id, _, _)) =
+                decoder.decode_full(first_pass_payload, config.max_hamming_error)
+            else {
+                continue;
+            };
+            if fp_id != id {
+                continue;
+            }
+        }
+
+        batch.status_mask[idx] = CandidateState::Valid;
+        batch.ids[idx] = id;
+        batch.payloads[idx] = S::to_debug_bits(&code);
+        batch.error_rates[idx] = hamming as f32;
+
+        if rot > 0 {
+            let mut tmp = [Point2f::default(); 4];
+            for (j, slot) in tmp.iter_mut().enumerate() {
+                *slot = batch.corners[idx][(j + usize::from(rot)) % 4];
+            }
+            batch.corners[idx] = tmp;
+        }
+
+        return true;
+    }
+
+    false
 }
 
 /// A trait for decoding binary payloads from extracted tags.
@@ -2126,5 +2343,119 @@ mod tests {
             assert_eq!(hamming, 0);
             assert_eq!(rot, 0);
         }
+    }
+
+    // ========================================================================
+    // decode_with_rescue robustness
+    // ========================================================================
+
+    fn rescue_test_config() -> crate::config::DetectorConfig {
+        let mut cfg = crate::config::DetectorConfig::default();
+        cfg.roi_rescue.enabled = true;
+        cfg.roi_rescue.upscale_factor = 2;
+        cfg.roi_rescue.max_roi_side_px = 32;
+        cfg.roi_rescue.rescue_max_hamming = 1;
+        cfg.roi_rescue.require_first_pass_agreement = false;
+        cfg.roi_rescue.interpolation = crate::config::RescueInterpolation::Bilinear;
+        cfg
+    }
+
+    fn rescue_test_decoders() -> Vec<Box<dyn TagDecoder + Send + Sync>> {
+        vec![Box::new(AprilTag36h11)]
+    }
+
+    #[test]
+    fn test_decode_with_rescue_skips_oversized_bbox() {
+        let width = 80;
+        let height = 80;
+        let data = vec![128u8; width * height];
+        let img = ImageView::new(&data, width, height, width).expect("view");
+
+        let mut batch = Box::new(crate::batch::DetectionBatch::new());
+        // 64 px side > max_roi_side_px (32), must skip.
+        batch.corners[0] = [
+            Point2f { x: 8.0, y: 8.0 },
+            Point2f { x: 72.0, y: 8.0 },
+            Point2f { x: 72.0, y: 72.0 },
+            Point2f { x: 8.0, y: 72.0 },
+        ];
+        batch.status_mask[0] = crate::batch::CandidateState::FailedDecode;
+
+        let mut out = vec![0u8; 32 * 32 * 4];
+        let mut scratch = vec![0u8; 32 * 32 * 2];
+
+        let cfg = rescue_test_config();
+        let decoders = rescue_test_decoders();
+        let promoted =
+            decode_with_rescue(&mut batch, 0, &img, &decoders, &cfg, &mut out, &mut scratch);
+        assert!(!promoted, "oversized bbox must not rescue");
+        assert_eq!(
+            batch.status_mask[0],
+            crate::batch::CandidateState::FailedDecode
+        );
+    }
+
+    #[test]
+    fn test_decode_with_rescue_rejects_tiny_buffer() {
+        let width = 64;
+        let height = 64;
+        let data = vec![128u8; width * height];
+        let img = ImageView::new(&data, width, height, width).expect("view");
+
+        let mut batch = Box::new(crate::batch::DetectionBatch::new());
+        batch.corners[0] = [
+            Point2f { x: 10.0, y: 10.0 },
+            Point2f { x: 30.0, y: 10.0 },
+            Point2f { x: 30.0, y: 30.0 },
+            Point2f { x: 10.0, y: 30.0 },
+        ];
+        batch.status_mask[0] = crate::batch::CandidateState::FailedDecode;
+
+        // Undersized out buffer; must bail without touching the batch.
+        let mut out = vec![0u8; 4];
+        let mut scratch = vec![0u8; 4];
+
+        let cfg = rescue_test_config();
+        let decoders = rescue_test_decoders();
+        let promoted =
+            decode_with_rescue(&mut batch, 0, &img, &decoders, &cfg, &mut out, &mut scratch);
+        assert!(!promoted);
+        assert_eq!(
+            batch.status_mask[0],
+            crate::batch::CandidateState::FailedDecode
+        );
+    }
+
+    #[test]
+    fn test_decode_with_rescue_rejects_degenerate_bbox() {
+        let width = 64;
+        let height = 64;
+        let data = vec![128u8; width * height];
+        let img = ImageView::new(&data, width, height, width).expect("view");
+
+        let mut batch = Box::new(crate::batch::DetectionBatch::new());
+        // All four corners coincide: AABB collapses, must bail before upscale.
+        batch.corners[0] = [
+            Point2f { x: 20.0, y: 20.0 },
+            Point2f { x: 20.0, y: 20.0 },
+            Point2f { x: 20.0, y: 20.0 },
+            Point2f { x: 20.0, y: 20.0 },
+        ];
+        batch.status_mask[0] = crate::batch::CandidateState::FailedDecode;
+
+        let mut out = vec![0u8; 32 * 32 * 4];
+        let mut scratch = vec![0u8; 32 * 32 * 2];
+
+        let cfg = rescue_test_config();
+        let decoders = rescue_test_decoders();
+        let promoted =
+            decode_with_rescue(&mut batch, 0, &img, &decoders, &cfg, &mut out, &mut scratch);
+        // Degenerate AABB may produce a tiny upscaled ROI; the key invariant
+        // is that nothing panics and the candidate is not promoted.
+        assert!(!promoted);
+        assert_eq!(
+            batch.status_mask[0],
+            crate::batch::CandidateState::FailedDecode
+        );
     }
 }
