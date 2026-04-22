@@ -56,6 +56,22 @@ pub enum ConfigError {
          KannalaBrandt): use QuadExtractionMode::ContourRdp"
     )]
     EdLinesUnsupportedWithDistortion,
+    /// `AdaptivePpb` policy had `low_extraction == high_extraction`.
+    ///
+    /// A degenerate adaptive policy is a configuration mistake — both
+    /// branches would produce identical behavior. Use `Static` instead.
+    #[error(
+        "AdaptivePpb policy has identical low/high extraction modes; \
+         use QuadExtractionPolicy::Static for single-mode operation"
+    )]
+    AdaptivePolicyDegenerate,
+    /// `AdaptivePpb` policy threshold fell outside the valid open interval.
+    ///
+    /// The PPB threshold must lie strictly inside `(1.0, 5.0)`. Values at or
+    /// outside the endpoints are degenerate: `<=1.0` always routes to the
+    /// high branch, `>=5.0` effectively never does.
+    #[error("AdaptivePpb threshold must be in (1.0, 5.0), got {0}")]
+    AdaptivePolicyThresholdOutOfRange(f32),
     /// Profile JSON failed to parse (malformed syntax or unknown fields).
     ///
     /// `serde_json::Error` is not `Clone`, so its `Display` form is captured
