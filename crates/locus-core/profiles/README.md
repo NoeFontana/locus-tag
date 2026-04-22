@@ -1,11 +1,17 @@
 # Shipped detector profiles
 
-Five JSON files — `standard.json`, `grid.json`, `high_accuracy.json`,
-`render_tag_hub.json`, `general.json` — are the **single source of
-truth** for Locus detector configuration. They are
-embedded into the Rust crate (via `include_str!`) and re-exposed to the
-Python wheel through the `_shipped_profile_json` FFI hook, so `locus-core`
-and `locus._profile.DetectorConfig` always read identical bytes.
+Six JSON files — `standard.json`, `grid.json`, `high_accuracy.json`,
+`render_tag_hub.json`, `general.json`, and `max_recall_adaptive.json` —
+are the **single source of truth** for Locus detector configuration. They
+are embedded into the Rust crate (via `include_str!`) and re-exposed to
+the Python wheel through the `_shipped_profile_json` FFI hook, so
+`locus-core` and `locus._profile.DetectorConfig` always read identical
+bytes.
+
+All shipped profiles except `max_recall_adaptive` carry
+`quad.extraction_policy: "Static"`. Only `max_recall_adaptive.json` opts
+into the per-candidate `AdaptivePpb` router — it is the only shipped
+profile where that machinery runs.
 
 If the Rust defaults and these JSONs ever disagree, **the JSON wins**.
 
@@ -127,6 +133,24 @@ fixture.
 | `quad.extraction_mode` | `ContourRdp` | `EdLines` | Sub-pixel corners + per-corner covariances. |
 | `decoder.refinement_mode` | `Erf` | `None` | EdLines already yields sub-pixel corners; Erf on top is rejected by the cross-group validator. |
 | `quad.edlines_imbalance_gate` | `"Disabled"` | `"Enabled"` | AXIS→DIAG rescue for near-axis-aligned tags. **Caution:** scenes with non-trivial lens distortion should stay on `standard` (the gate can collapse legitimate distorted aprilgrid sub-tags). The upstream EdLines guard at `detector.rs:194-198` rejects EdLines under any non-trivial distortion, so this profile is only well-defined for pinhole / rectified inputs. |
+
+### `max_recall_adaptive`
+
+Opt-in profile that enables the `AdaptivePpb` per-candidate router. Each
+candidate quad is classified by a pixels-per-bit estimate (bbox short
+side / min outer tag dimension across registered families) and routed to
+one of two extraction + refinement pairings:
+
+| Route | Pixels per bit | Extraction | Refinement | Rationale |
+| --- | --- | --- | --- | --- |
+| Low | `< threshold` | `ContourRdp` | `Erf` | Robust on small / blurry tags where EdLines cannot lock. |
+| High | `≥ threshold` | `EdLines` | `None` | Metrology-grade sub-pixel corners for well-resolved tags. |
+
+The shipped `threshold` value (2.5) is a Phase 1 sentinel and will be
+tightened to the empirically derived cutoff produced by the render-tag
+`locus_ppb_sweep_v1` dataset during Phase 0. Document your application
+expectations before flipping to this profile — behaviour of existing
+frames will change relative to `standard`.
 
 ## Authoring a custom profile
 

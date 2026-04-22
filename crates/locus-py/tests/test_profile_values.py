@@ -70,6 +70,18 @@ EXPECTED = {
         "decoder.decode_mode": DecodeMode.Hard,
         "segmentation.connectivity": SegmentationConnectivity.Eight,
     },
+    "max_recall_adaptive": {
+        "threshold.enable_sharpening": True,
+        "threshold.tile_size": 8,
+        "quad.max_elongation": 20.0,
+        "quad.min_density": 0.15,
+        # Under AdaptivePpb, `quad.extraction_mode` is ignored at runtime but
+        # the field still round-trips through JSON.
+        "quad.extraction_mode": QuadExtractionMode.ContourRdp,
+        "decoder.refinement_mode": CornerRefinementMode.Erf,
+        "decoder.decode_mode": DecodeMode.Hard,
+        "segmentation.connectivity": SegmentationConnectivity.Eight,
+    },
 }
 
 

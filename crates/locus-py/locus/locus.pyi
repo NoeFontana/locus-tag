@@ -114,6 +114,12 @@ class PyDetectorConfig:
     quad_max_elongation: float
     quad_min_density: float
     quad_extraction_mode: QuadExtractionMode
+    quad_extraction_policy_is_adaptive: bool
+    adaptive_ppb_threshold: float
+    adaptive_ppb_low_extraction: QuadExtractionMode
+    adaptive_ppb_high_extraction: QuadExtractionMode
+    adaptive_ppb_low_refinement: CornerRefinementMode
+    adaptive_ppb_high_refinement: CornerRefinementMode
     huber_delta_px: float
     tikhonov_alpha_max: float
     sigma_n_sq: float
@@ -149,6 +155,12 @@ class PyDetectorConfig:
         quad_max_elongation: float,
         quad_min_density: float,
         quad_extraction_mode: QuadExtractionMode,
+        quad_extraction_policy_is_adaptive: bool,
+        adaptive_ppb_threshold: float,
+        adaptive_ppb_low_extraction: QuadExtractionMode,
+        adaptive_ppb_high_extraction: QuadExtractionMode,
+        adaptive_ppb_low_refinement: CornerRefinementMode,
+        adaptive_ppb_high_refinement: CornerRefinementMode,
         huber_delta_px: float,
         tikhonov_alpha_max: float,
         sigma_n_sq: float,
@@ -175,6 +187,10 @@ class PipelineTelemetryResult:
     def gwlf_fallback_count(self) -> int: ...
     @property
     def gwlf_avg_delta(self) -> float: ...
+    @property
+    def routed_to(self) -> npt.NDArray[np.uint8] | None: ...  # (N,) 0=low, 1=high, 255=Static
+    @property
+    def ppb_estimate(self) -> npt.NDArray[np.float32] | None: ...  # (N,)
 
 class DetectionResult:
     """Typed result from :meth:`Detector.detect`."""
@@ -294,7 +310,14 @@ class CharucoRefiner:
 class Detector:
     def __init__(
         self,
-        profile: Literal["standard", "grid", "high_accuracy", "render_tag_hub", "general"]
+        profile: Literal[
+            "standard",
+            "grid",
+            "high_accuracy",
+            "render_tag_hub",
+            "general",
+            "max_recall_adaptive",
+        ]
         | None = None,
         config: Any | None = None,
         *,

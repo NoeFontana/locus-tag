@@ -1,10 +1,10 @@
 {
-  "name": "high_accuracy",
+  "name": "max_recall_adaptive",
   "extends": null,
   "threshold": {
     "tile_size": 8,
     "min_range": 10,
-    "enable_sharpening": false,
+    "enable_sharpening": true,
     "enable_adaptive_window": false,
     "min_radius": 2,
     "max_radius": 15,
@@ -22,22 +22,29 @@
     "upscale_factor": 1,
     "max_elongation": 20.0,
     "min_density": 0.15,
-    "extraction_mode": "EdLines",
-    "edlines_imbalance_gate": "Disabled",
-    "extraction_policy": "Static"
+    "extraction_mode": "ContourRdp",
+    "extraction_policy": {
+      "AdaptivePpb": {
+        "threshold": 2.5,
+        "low_extraction": "ContourRdp",
+        "high_extraction": "EdLines",
+        "low_refinement": "Erf",
+        "high_refinement": "None"
+      }
+    }
   },
   "decoder": {
     "min_contrast": 20.0,
-    "refinement_mode": "None",
+    "refinement_mode": "Erf",
     "decode_mode": "Hard",
+    "max_hamming_error": 2,
     "gwlf_transversal_alpha": 0.01
   },
   "pose": {
     "huber_delta_px": 1.5,
     "tikhonov_alpha_max": 0.25,
     "sigma_n_sq": 4.0,
-    "structure_tensor_radius": 2,
-    "pose_consistency_fpr": 1.0e-3
+    "structure_tensor_radius": 2
   },
   "segmentation": {
     "connectivity": "Eight",

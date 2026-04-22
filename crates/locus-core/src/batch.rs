@@ -99,7 +99,19 @@ pub struct DetectionBatch {
     /// fits much better). NaN sentinel as above.
     #[cfg(feature = "bench-internals")]
     pub ippe_branch_d2_ratio: [f32; MAX_CANDIDATES],
+    /// Per-candidate `AdaptivePpb` route label. Debug-only telemetry.
+    /// `0` = low-PPB route, `1` = high-PPB route, [`ROUTED_TO_STATIC`]
+    /// for `QuadExtractionPolicy::Static` / not-routed. Populated only
+    /// when `debug_telemetry` is set.
+    pub routed_to: [u8; MAX_CANDIDATES],
+    /// Per-candidate pixels-per-bit estimate consumed by the adaptive router.
+    /// Debug-only telemetry. Zero under `Static` (no routing performed).
+    pub ppb_estimate: [f32; MAX_CANDIDATES],
 }
+
+/// Sentinel written into [`DetectionBatch::routed_to`] when the candidate
+/// was not subjected to adaptive routing (`QuadExtractionPolicy::Static`).
+pub const ROUTED_TO_STATIC: u8 = u8::MAX;
 
 impl DetectionBatch {
     /// Creates a new DetectionBatch with all fields initialized to zero (Empty state).
@@ -128,6 +140,8 @@ impl DetectionBatch {
             pose_consistency_d2_max_corner: [f32::NAN; MAX_CANDIDATES],
             #[cfg(feature = "bench-internals")]
             ippe_branch_d2_ratio: [f32::NAN; MAX_CANDIDATES],
+            routed_to: [ROUTED_TO_STATIC; MAX_CANDIDATES],
+            ppb_estimate: [0.0; MAX_CANDIDATES],
         })
     }
     /// Returns the maximum capacity of the batch.
@@ -165,6 +179,8 @@ impl DetectionBatch {
                         self.pose_consistency_d2_max_corner.swap(i, v);
                         self.ippe_branch_d2_ratio.swap(i, v);
                     }
+                    self.routed_to.swap(i, v);
+                    self.ppb_estimate.swap(i, v);
                 }
                 v += 1;
             }
@@ -264,6 +280,15 @@ pub struct TelemetryPayload {
     pub gwlf_fallback_count: usize,
     /// Average Euclidean distance (delta) of GWLF refinement (pixels).
     pub gwlf_avg_delta: f32,
+    /// Pointer to per-candidate adaptive-router route labels. Populated only
+    /// when `debug_telemetry` is set; null otherwise.
+    pub routed_to_ptr: *const u8,
+    /// Pointer to per-candidate pixels-per-bit estimates. Populated only
+    /// when `debug_telemetry` is set; null otherwise.
+    pub ppb_estimate_ptr: *const f32,
+    /// Number of candidates that the routing telemetry arrays cover (N from
+    /// Phase A, before partition). `0` when routing telemetry is disabled.
+    pub num_routed: usize,
     /// Width of the buffers.
     pub width: usize,
     /// Height of the buffers.
