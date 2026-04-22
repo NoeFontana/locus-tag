@@ -16,6 +16,10 @@ pub struct FrameContext {
     pub batch: DetectionBatch,
     /// Reusable buffer for upscaling.
     pub upscale_buf: Vec<u8>,
+    /// Reusable buffer for the ROI super-resolution rescue pass. Split per
+    /// rescue into two sub-slices: one for the upscaled output (plus SIMD
+    /// padding) and one for the Lanczos horizontal-pass scratch.
+    pub rescue_buf: Vec<u8>,
 }
 
 impl FrameContext {
@@ -26,13 +30,82 @@ impl FrameContext {
             arena: Bump::new(),
             batch: DetectionBatch::new(),
             upscale_buf: Vec::new(),
+            rescue_buf: Vec::new(),
         }
+    }
+
+    /// Create a new frame context pre-sized for the given configuration.
+    ///
+    /// When `config.roi_rescue.enabled` is set, the arena is allocated with
+    /// enough capacity to hold the expected peak working set, and
+    /// `rescue_buf` is grown to fit `max_rescues_per_frame` ROIs at the
+    /// configured `upscale_factor` / `max_roi_side_px`. Otherwise this is
+    /// byte-equivalent to [`FrameContext::new`].
+    #[must_use]
+    pub fn new_for_config(config: &DetectorConfig) -> Self {
+        let arena_hint = arena_capacity_hint(config);
+        let mut ctx = Self {
+            arena: if arena_hint > 0 {
+                Bump::with_capacity(arena_hint)
+            } else {
+                Bump::new()
+            },
+            batch: DetectionBatch::new(),
+            upscale_buf: Vec::new(),
+            rescue_buf: Vec::new(),
+        };
+        ctx.ensure_rescue_capacity(config);
+        ctx
     }
 
     /// Reset the state for a new frame.
     pub fn reset(&mut self) {
         self.arena.reset();
     }
+
+    /// Grow `rescue_buf` to fit the configured policy. No-op when rescue is
+    /// disabled or the buffer already has sufficient capacity.
+    pub(crate) fn ensure_rescue_capacity(&mut self, config: &DetectorConfig) {
+        let needed = rescue_buf_size(config);
+        if needed > self.rescue_buf.len() {
+            self.rescue_buf.resize(needed, 0);
+        }
+    }
+}
+
+/// Bytes of `rescue_buf` needed for one full frame of rescue attempts:
+/// `max_rescues_per_frame * (out_plane + scratch_plane + SIMD_PADDING)` where
+/// `out_plane = (side*factor)^2` and `scratch_plane = side*factor*side`.
+/// Returns `0` when rescue is disabled.
+pub(crate) fn rescue_buf_size(config: &DetectorConfig) -> usize {
+    if !config.roi_rescue.enabled {
+        return 0;
+    }
+    let side = usize::from(config.roi_rescue.max_roi_side_px);
+    let factor = usize::from(config.roi_rescue.upscale_factor);
+    let out_plane = (side * factor) * (side * factor);
+    let scratch_plane = match config.roi_rescue.interpolation {
+        crate::config::RescueInterpolation::Bilinear => 0,
+        crate::config::RescueInterpolation::Lanczos3 => (side * factor) * side,
+    };
+    // +3 bytes per rescue keeps the x86_64 AVX2 gather path active in
+    // sample_bilinear_v8 (see upscale_roi_to_buf for the padding contract).
+    (out_plane + scratch_plane + 3) * usize::from(config.roi_rescue.max_rescues_per_frame)
+}
+
+/// Peak per-frame `Bump` working set. Used as the `with_capacity` seed so the
+/// first frame does not trigger a chunk realloc on long-running services.
+fn arena_capacity_hint(config: &DetectorConfig) -> usize {
+    // Conservative pre-size only when rescue is enabled; otherwise keep the
+    // historical `Bump::new()` behavior.
+    if !config.roi_rescue.enabled {
+        return 0;
+    }
+    // Leave room for the existing steady-state per-frame allocations
+    // (binarized, threshold_map, sharpened, decimation/upscale buffer) plus a
+    // headroom factor for quad contour scratch. Empirically sized at
+    // 2.5 × max(1080p single-channel) = ~5 MB to cover typical HD scenes.
+    5 * 1024 * 1024
 }
 
 impl Default for FrameContext {
@@ -199,6 +272,7 @@ fn run_detection_pipeline<'ctx>(
     }
 
     ctx.reset();
+    ctx.ensure_rescue_capacity(config);
     let state = ctx;
 
     let (detection_img, _effective_scale, refinement_img) = if config.decimation > 1 {
@@ -814,10 +888,8 @@ impl DetectorBuilder {
         let pool_size = self.max_concurrent_frames.max(1);
         let decoders = self.build_decoders();
         let engine = LocusEngine::new(self.config, decoders, pool_size);
-        Detector {
-            engine,
-            ctx: FrameContext::new(),
-        }
+        let ctx = FrameContext::new_for_config(&engine.config);
+        Detector { engine, ctx }
     }
 
     /// Build the detector, validating the configuration first.
@@ -932,7 +1004,7 @@ impl LocusEngine {
         let pool = crossbeam_queue::ArrayQueue::new(capacity);
         for _ in 0..pool_size {
             // Box<FrameContext> to heap-allocate the ~200 KB DetectionBatch.
-            let _ = pool.push(Box::new(FrameContext::new()));
+            let _ = pool.push(Box::new(FrameContext::new_for_config(&config)));
         }
         let min_outer_dim = compute_min_outer_dim(&decoders);
         Self {
@@ -996,7 +1068,7 @@ impl LocusEngine {
                 let (mut ctx, to_pool) = if let Some(c) = self.pool.pop() {
                     (c, true)
                 } else {
-                    (Box::new(FrameContext::new()), false)
+                    (Box::new(FrameContext::new_for_config(&self.config)), false)
                 };
 
                 let owned = run_detection_pipeline(
@@ -1039,6 +1111,63 @@ impl LocusEngine {
     #[must_use]
     pub fn config(&self) -> DetectorConfig {
         self.config
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod rescue_buf_tests {
+    use super::*;
+
+    #[test]
+    fn rescue_buf_size_is_zero_when_disabled() {
+        let cfg = DetectorConfig::default();
+        assert!(!cfg.roi_rescue.enabled);
+        assert_eq!(rescue_buf_size(&cfg), 0);
+    }
+
+    #[test]
+    fn rescue_buf_size_bilinear_omits_scratch() {
+        let mut cfg = DetectorConfig::default();
+        cfg.roi_rescue.enabled = true;
+        cfg.roi_rescue.interpolation = crate::config::RescueInterpolation::Bilinear;
+        cfg.roi_rescue.upscale_factor = 2;
+        cfg.roi_rescue.max_roi_side_px = 32;
+        cfg.roi_rescue.max_rescues_per_frame = 4;
+        // out_plane = (32*2)^2 = 4096; scratch = 0; +3 padding; × 4 rescues.
+        let expected = (4096 + 3) * 4;
+        assert_eq!(rescue_buf_size(&cfg), expected);
+    }
+
+    #[test]
+    fn rescue_buf_size_lanczos_includes_scratch() {
+        let mut cfg = DetectorConfig::default();
+        cfg.roi_rescue.enabled = true;
+        cfg.roi_rescue.interpolation = crate::config::RescueInterpolation::Lanczos3;
+        cfg.roi_rescue.upscale_factor = 4;
+        cfg.roi_rescue.max_roi_side_px = 32;
+        cfg.roi_rescue.max_rescues_per_frame = 2;
+        // out_plane = 128^2 = 16384; scratch = 128*32 = 4096; +3 padding; × 2.
+        let expected = (16384 + 4096 + 3) * 2;
+        assert_eq!(rescue_buf_size(&cfg), expected);
+    }
+
+    #[test]
+    fn ensure_rescue_capacity_grows_then_stays() {
+        let mut cfg = DetectorConfig::default();
+        cfg.roi_rescue.enabled = true;
+        cfg.roi_rescue.interpolation = crate::config::RescueInterpolation::Bilinear;
+        cfg.roi_rescue.upscale_factor = 2;
+        cfg.roi_rescue.max_roi_side_px = 16;
+        cfg.roi_rescue.max_rescues_per_frame = 1;
+
+        let mut ctx = FrameContext::new();
+        assert_eq!(ctx.rescue_buf.len(), 0);
+        ctx.ensure_rescue_capacity(&cfg);
+        let first = ctx.rescue_buf.len();
+        assert!(first >= rescue_buf_size(&cfg));
+        ctx.ensure_rescue_capacity(&cfg);
+        assert_eq!(ctx.rescue_buf.len(), first, "second call is a no-op");
     }
 }
 
