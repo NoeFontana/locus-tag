@@ -649,6 +649,14 @@ pub struct PipelineTelemetryResult {
     /// Per-candidate pixels-per-bit estimates (`bbox.short_side / min_outer_dim`).
     /// One entry per Phase-A candidate, populated only when `debug_telemetry=True`.
     pub ppb_estimate: Option<Py<PyArray1<f32>>>,
+    /// Per-candidate flag: `1` when the ROI rescue pass attempted this
+    /// candidate, `0` otherwise. One entry per Phase-A candidate, populated
+    /// only when `debug_telemetry=True` and `roi_rescue.enabled`.
+    pub rescue_attempted: Option<Py<PyArray1<u8>>>,
+    /// Per-candidate Hamming distance from the rescue decode (`u8::MAX`
+    /// sentinel when the rescue did not produce a candidate). Populated only
+    /// when `debug_telemetry=True` and `roi_rescue.enabled`.
+    pub rescue_hamming: Option<Py<PyArray1<u8>>>,
 }
 
 /// Typed result returned by [`Detector::detect`].
@@ -1339,6 +1347,24 @@ fn build_pipeline_telemetry(
     let ppb_estimate = unsafe {
         optional_py_array1(py, telem.ppb_estimate_ptr, telem.num_routed, "ppb_estimate")?
     };
+    // SAFETY: rescue_attempted_ptr is valid for `num_rescued` u8 slots (null when rescue disabled).
+    let rescue_attempted = unsafe {
+        optional_py_array1(
+            py,
+            telem.rescue_attempted_ptr,
+            telem.num_rescued,
+            "rescue_attempted",
+        )?
+    };
+    // SAFETY: rescue_hamming_ptr is valid for `num_rescued` u8 slots; same lifetime as rescue_attempted.
+    let rescue_hamming = unsafe {
+        optional_py_array1(
+            py,
+            telem.rescue_hamming_ptr,
+            telem.num_rescued,
+            "rescue_hamming",
+        )?
+    };
 
     Ok(PipelineTelemetryResult {
         binarized: binarized_arr.unbind(),
@@ -1349,6 +1375,8 @@ fn build_pipeline_telemetry(
         gwlf_avg_delta: telem.gwlf_avg_delta,
         routed_to,
         ppb_estimate,
+        rescue_attempted,
+        rescue_hamming,
     })
 }
 

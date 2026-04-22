@@ -92,7 +92,19 @@ pub struct DetectionBatch {
     /// Per-candidate pixels-per-bit estimate consumed by the adaptive router.
     /// Debug-only telemetry. Zero under `Static` (no routing performed).
     pub ppb_estimate: [f32; MAX_CANDIDATES],
+    /// Per-candidate flag: `1` when the ROI super-resolution rescue pass
+    /// attempted this candidate, `0` otherwise. Debug-only telemetry,
+    /// populated exclusively by the rescue stage.
+    pub rescue_attempted: [u8; MAX_CANDIDATES],
+    /// Hamming distance observed during the rescue decode. `u8::MAX` when
+    /// the rescue pass did not produce a candidate for this slot (either
+    /// skipped or exhausted all decoders). Debug-only telemetry.
+    pub rescue_hamming: [u8; MAX_CANDIDATES],
 }
+
+/// Sentinel written into [`DetectionBatch::rescue_hamming`] when no rescue
+/// decode was attempted or when all decoders rejected the candidate.
+pub const RESCUE_HAMMING_NONE: u8 = u8::MAX;
 
 /// Sentinel written into [`DetectionBatch::routed_to`] when the candidate
 /// was not subjected to adaptive routing (`QuadExtractionPolicy::Static`).
@@ -121,6 +133,8 @@ impl DetectionBatch {
             corner_covariances: [[0.0; 16]; MAX_CANDIDATES],
             routed_to: [ROUTED_TO_STATIC; MAX_CANDIDATES],
             ppb_estimate: [0.0; MAX_CANDIDATES],
+            rescue_attempted: [0; MAX_CANDIDATES],
+            rescue_hamming: [RESCUE_HAMMING_NONE; MAX_CANDIDATES],
         })
     }
     /// Returns the maximum capacity of the batch.
@@ -154,6 +168,8 @@ impl DetectionBatch {
                     self.corner_covariances.swap(i, v);
                     self.routed_to.swap(i, v);
                     self.ppb_estimate.swap(i, v);
+                    self.rescue_attempted.swap(i, v);
+                    self.rescue_hamming.swap(i, v);
                 }
                 v += 1;
             }
@@ -262,6 +278,15 @@ pub struct TelemetryPayload {
     /// Number of candidates that the routing telemetry arrays cover (N from
     /// Phase A, before partition). `0` when routing telemetry is disabled.
     pub num_routed: usize,
+    /// Pointer to per-candidate rescue-attempted flags. Populated only
+    /// when `debug_telemetry` is set and `roi_rescue.enabled`; null otherwise.
+    pub rescue_attempted_ptr: *const u8,
+    /// Pointer to per-candidate rescue Hamming distances. Populated only
+    /// when `debug_telemetry` is set and `roi_rescue.enabled`; null otherwise.
+    pub rescue_hamming_ptr: *const u8,
+    /// Number of candidates that the rescue telemetry arrays cover. `0`
+    /// when rescue telemetry is disabled.
+    pub num_rescued: usize,
     /// Width of the buffers.
     pub width: usize,
     /// Height of the buffers.

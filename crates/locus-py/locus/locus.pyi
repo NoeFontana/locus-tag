@@ -201,6 +201,10 @@ class PipelineTelemetryResult:
     def routed_to(self) -> npt.NDArray[np.uint8] | None: ...  # (N,) 0=low, 1=high, 255=Static
     @property
     def ppb_estimate(self) -> npt.NDArray[np.float32] | None: ...  # (N,)
+    @property
+    def rescue_attempted(self) -> npt.NDArray[np.uint8] | None: ...  # (N,) 0=no, 1=yes
+    @property
+    def rescue_hamming(self) -> npt.NDArray[np.uint8] | None: ...  # (N,) u8::MAX=none
 
 class DetectionResult:
     """Typed result from :meth:`Detector.detect`."""

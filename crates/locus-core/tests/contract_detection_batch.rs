@@ -45,6 +45,8 @@ enum Column {
     CornerCovariances,
     RoutedTo,
     PpbEstimate,
+    RescueAttempted,
+    RescueHamming,
 }
 
 // ---------------------------------------------------------------------------
@@ -87,6 +89,12 @@ fn seed_sentinels(batch: &mut DetectionBatch) {
         // overwrite is caught.
         batch.routed_to[i] = 77;
         batch.ppb_estimate[i] = F32_SENTINEL;
+        // Rescue telemetry sentinels: `55` differs from both the
+        // `DetectionBatch::new()` default (0) and the values the rescue stage
+        // produces (0 for "not attempted", 1 for "attempted"). `66` differs
+        // from `RESCUE_HAMMING_NONE` (u8::MAX) and from any valid Hamming.
+        batch.rescue_attempted[i] = 55;
+        batch.rescue_hamming[i] = 66;
     }
 }
 
@@ -138,6 +146,12 @@ fn changed_columns(before: &DetectionBatch, after: &DetectionBatch) -> BTreeSet<
     if bytes_of(&before.ppb_estimate[..]) != bytes_of(&after.ppb_estimate[..]) {
         set.insert(Column::PpbEstimate);
     }
+    if bytes_of(&before.rescue_attempted[..]) != bytes_of(&after.rescue_attempted[..]) {
+        set.insert(Column::RescueAttempted);
+    }
+    if bytes_of(&before.rescue_hamming[..]) != bytes_of(&after.rescue_hamming[..]) {
+        set.insert(Column::RescueHamming);
+    }
     set
 }
 
@@ -156,6 +170,9 @@ fn snapshot(batch: &DetectionBatch) -> Box<DetectionBatch> {
         .copy_from_slice(&batch.corner_covariances);
     out.routed_to.copy_from_slice(&batch.routed_to);
     out.ppb_estimate.copy_from_slice(&batch.ppb_estimate);
+    out.rescue_attempted
+        .copy_from_slice(&batch.rescue_attempted);
+    out.rescue_hamming.copy_from_slice(&batch.rescue_hamming);
     out
 }
 

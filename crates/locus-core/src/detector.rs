@@ -515,6 +515,17 @@ fn run_detection_pipeline<'ctx>(
             routed_to_ptr: state.batch.routed_to.as_ptr(),
             ppb_estimate_ptr: state.batch.ppb_estimate.as_ptr(),
             num_routed: n,
+            rescue_attempted_ptr: if config.roi_rescue.enabled {
+                state.batch.rescue_attempted.as_ptr()
+            } else {
+                std::ptr::null()
+            },
+            rescue_hamming_ptr: if config.roi_rescue.enabled {
+                state.batch.rescue_hamming.as_ptr()
+            } else {
+                std::ptr::null()
+            },
+            num_rescued: if config.roi_rescue.enabled { n } else { 0 },
             width: img.width,
             height: img.height,
             stride: img.width,
