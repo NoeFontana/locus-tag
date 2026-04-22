@@ -407,7 +407,7 @@ impl DetectorConfig {
             }
             if u32::from(r.rescue_max_hamming) >= self.max_hamming_error {
                 return Err(ConfigError::RescueHammingTooLax {
-                    rescue: r.rescue_max_hamming,
+                    rescue: u32::from(r.rescue_max_hamming),
                     primary: self.max_hamming_error,
                 });
             }

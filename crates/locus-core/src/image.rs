@@ -504,11 +504,7 @@ fn upscale_roi_bilinear(
 
 // ROI dims are bounded by `max_roi_side_px: u16` (128 default, 65535 max) and
 // the upscale factor is 2 or 4 — i32 holds all representable values.
-#[allow(
-    clippy::cast_possible_wrap,
-    clippy::cast_possible_truncation,
-    clippy::needless_range_loop
-)]
+#[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
 fn upscale_roi_lanczos3(
     src: &ImageView<'_>,
     bbox: (usize, usize, usize, usize),
@@ -526,44 +522,41 @@ fn upscale_roi_lanczos3(
         _ => unreachable!(),
     };
 
-    // Horizontal pass: for each source row in the ROI, produce `ow` filtered
-    // columns in `scratch`. Tap indices are clamped to the ROI extent so the
-    // caller's bbox padding (if any) is consumed but edge samples stay safe
-    // without relying on OOB pixel access.
+    // Tap indices are clamped to the ROI extent so the caller's bbox padding
+    // (if any) is consumed but edge samples stay safe without relying on OOB
+    // pixel access.
     let max_col = bw as i32 - 1;
     for sy_local in 0..bh {
-        let src_row = src.get_row(by + sy_local);
+        let src_row = &src.get_row(by + sy_local)[bx..bx + bw];
         let dst_row = &mut scratch[sy_local * ow..(sy_local + 1) * ow];
         for (ox, dst) in dst_row.iter_mut().enumerate() {
             let phase = ox % f;
             let q = (ox / f) as i32;
             let p = &phases[phase];
             let mut acc = 0.0f32;
-            for k in 0..6 {
-                let idx = (q + p.tap_off[k]).clamp(0, max_col) as usize;
-                acc += p.weights[k] * f32::from(src_row[bx + idx]);
+            for (&off, &w) in p.tap_off.iter().zip(p.weights.iter()) {
+                let idx = (q + off).clamp(0, max_col) as usize;
+                acc += w * f32::from(src_row[idx]);
             }
             *dst = acc.clamp(0.0, 255.0).round() as u8;
         }
     }
 
-    // Vertical pass: for each output row, gather 6 source rows from scratch
-    // and accumulate.
     let max_row = bh as i32 - 1;
     for oy in 0..oh {
         let phase = oy % f;
         let q = (oy / f) as i32;
         let p = &phases[phase];
         let mut rows: [&[u8]; 6] = [&[]; 6];
-        for (k, row_slot) in rows.iter_mut().enumerate() {
-            let sy = (q + p.tap_off[k]).clamp(0, max_row) as usize;
+        for (row_slot, &off) in rows.iter_mut().zip(p.tap_off.iter()) {
+            let sy = (q + off).clamp(0, max_row) as usize;
             *row_slot = &scratch[sy * ow..(sy + 1) * ow];
         }
         let dst_row = &mut out[oy * ow..(oy + 1) * ow];
         for (x, dst) in dst_row.iter_mut().enumerate() {
             let mut acc = 0.0f32;
-            for k in 0..6 {
-                acc += p.weights[k] * f32::from(rows[k][x]);
+            for (row, &w) in rows.iter().zip(p.weights.iter()) {
+                acc += w * f32::from(row[x]);
             }
             *dst = acc.clamp(0.0, 255.0).round() as u8;
         }

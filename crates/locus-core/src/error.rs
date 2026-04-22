@@ -83,7 +83,7 @@ pub enum ConfigError {
     )]
     RescueHammingTooLax {
         /// Rescue-pass Hamming budget from the policy.
-        rescue: u8,
+        rescue: u32,
         /// Primary-pass Hamming budget from `DetectorConfig::max_hamming_error`.
         primary: u32,
     },
