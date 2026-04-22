@@ -37,8 +37,15 @@ from .locus import (
 
 _E = TypeVar("_E")
 
-ProfileName: TypeAlias = Literal["standard", "grid", "high_accuracy"]
-SHIPPED_PROFILES: tuple[ProfileName, ...] = ("standard", "grid", "high_accuracy")
+ProfileName: TypeAlias = Literal["standard", "grid", "high_accuracy", "max_recall_adaptive"]
+SHIPPED_PROFILES: tuple[ProfileName, ...] = (
+    "standard",
+    "grid",
+    "high_accuracy",
+    "max_recall_adaptive",
+)
+_ADAPTIVE_PROFILES: frozenset[ProfileName] = frozenset({"max_recall_adaptive"})
+_STATIC_ONLY_PROFILES: frozenset[ProfileName] = frozenset(SHIPPED_PROFILES) - _ADAPTIVE_PROFILES
 
 
 def _enum_registry(enum_cls: type[_E]) -> tuple[dict[int, _E], dict[str, _E], dict[_E, str]]:
@@ -148,6 +155,46 @@ class ThresholdConfig(BaseModel):
         return self
 
 
+class AdaptivePpbConfig(BaseModel):
+    """Per-candidate extraction routing based on pixels-per-bit (PPB).
+
+    Candidates with `ppb < threshold` run `low_extraction` + `low_refinement`;
+    candidates with `ppb >= threshold` run `high_extraction` + `high_refinement`.
+    At `ppb == threshold` exactly the low route wins (deterministic tie-break
+    for snapshot stability).
+    """
+
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+
+    threshold: float = Field(default=2.5, gt=1.0, lt=5.0)
+    low_extraction: _QuadExtractionField = Field(
+        default_factory=lambda: QuadExtractionMode.ContourRdp
+    )
+    high_extraction: _QuadExtractionField = Field(
+        default_factory=lambda: QuadExtractionMode.EdLines
+    )
+    low_refinement: _CornerRefinementField = Field(default_factory=lambda: CornerRefinementMode.Erf)
+    # Python reserves the bare keyword `None`, but PyO3 exposes the enum
+    # variant by its Rust name, so we reach it through `getattr`.
+    high_refinement: _CornerRefinementField = Field(
+        default_factory=lambda: getattr(CornerRefinementMode, "None")
+    )
+
+
+class _AdaptivePpbPolicy(BaseModel):
+    """Wrapper mirroring serde's externally-tagged `{"AdaptivePpb": {...}}` form."""
+
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+
+    AdaptivePpb: AdaptivePpbConfig
+
+
+# Serde's default externally-tagged enum format yields either the unit string
+# "Static" or a wrapped object `{"AdaptivePpb": {...}}`. Pydantic accepts both
+# via this union; Rust's `QuadExtractionPolicy` deserializes the same shapes.
+QuadExtractionPolicy: TypeAlias = Literal["Static"] | _AdaptivePpbPolicy
+
+
 class QuadConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
@@ -164,6 +211,7 @@ class QuadConfig(BaseModel):
     extraction_mode: _QuadExtractionField = Field(
         default_factory=lambda: QuadExtractionMode.ContourRdp
     )
+    extraction_policy: QuadExtractionPolicy = "Static"
 
     @model_validator(mode="after")
     def _check_fill_ratio_ordering(self) -> QuadConfig:
@@ -244,16 +292,55 @@ class DetectorConfig(BaseModel):
                 raise ValueError(
                     "quad.extraction_mode=EdLines is incompatible with decoder.decode_mode=Soft"
                 )
+        # Mirrors the four AdaptivePpb rules enforced in
+        # `crates/locus-core/src/config.rs::DetectorConfig::validate`.
+        if isinstance(self.quad.extraction_policy, _AdaptivePpbPolicy):
+            p = self.quad.extraction_policy.AdaptivePpb
+            if p.low_extraction == p.high_extraction:
+                raise ValueError(
+                    "quad.extraction_policy.AdaptivePpb has identical low/high extraction "
+                    'modes; use "Static" for single-mode operation'
+                )
+            # `threshold` bounds are already enforced by the Pydantic Field
+            # constraints (gt=1.0, lt=5.0) on AdaptivePpbConfig; re-checking
+            # here would duplicate the message surface.
+            for ext, refine in (
+                (p.low_extraction, p.low_refinement),
+                (p.high_extraction, p.high_refinement),
+            ):
+                if ext == QuadExtractionMode.EdLines:
+                    if refine == CornerRefinementMode.Erf:
+                        raise ValueError(
+                            "quad.extraction_policy.AdaptivePpb route uses EdLines with "
+                            "refinement_mode=Erf, which is incompatible"
+                        )
+                    if self.decoder.decode_mode == DecodeMode.Soft:
+                        raise ValueError(
+                            "quad.extraction_policy.AdaptivePpb route uses EdLines with "
+                            "decoder.decode_mode=Soft, which is incompatible"
+                        )
         return self
 
     @classmethod
     def from_profile(cls, name: ProfileName) -> DetectorConfig:
-        """Load one of the three shipped profiles by name."""
+        """Load one of the shipped profiles by name.
+
+        The general-purpose profiles (``standard``, ``grid``, ``high_accuracy``)
+        must stay on ``QuadExtractionPolicy::Static``. Adaptive routing lives
+        in explicit opt-in profiles like ``max_recall_adaptive``
+        (see `docs/how-to/max_recall.md`).
+        """
         if name not in SHIPPED_PROFILES:
             raise ValueError(
                 f"Unknown shipped profile {name!r}; expected one of {sorted(SHIPPED_PROFILES)}"
             )
-        return cls.model_validate_json(_shipped_profile_json(name))
+        cfg = cls.model_validate_json(_shipped_profile_json(name))
+        if name in _STATIC_ONLY_PROFILES and cfg.quad.extraction_policy != "Static":
+            raise ValueError(
+                f'Shipped profile {name!r} must carry quad.extraction_policy="Static"; '
+                "adaptive routing lives in opt-in profiles only"
+            )
+        return cfg
 
     @classmethod
     def from_profile_json(cls, json_str: str) -> DetectorConfig:
@@ -263,6 +350,29 @@ class DetectorConfig(BaseModel):
     def _to_ffi_config(self) -> PyDetectorConfig:
         # Cross-group validation has already fired in this Pydantic model;
         # Rust's `DetectorConfig::validate()` remains the final gate.
+        #
+        # `PyDetectorConfig` stays `Copy` on the Rust side, so the enum-shaped
+        # `quad.extraction_policy` is flattened across a boolean discriminator
+        # + five scalar fields here. Rust's `From<PyDetectorConfig>` rebuilds
+        # the enum. See `crates/locus-py/src/lib.rs` for the round-trip.
+        is_adaptive = isinstance(self.quad.extraction_policy, _AdaptivePpbPolicy)
+        if is_adaptive:
+            assert isinstance(self.quad.extraction_policy, _AdaptivePpbPolicy)
+            p = self.quad.extraction_policy.AdaptivePpb
+            ppb_threshold = p.threshold
+            ppb_low_ext = p.low_extraction
+            ppb_high_ext = p.high_extraction
+            ppb_low_ref = p.low_refinement
+            ppb_high_ref = p.high_refinement
+        else:
+            # Placeholder scalars — Rust's `From<PyDetectorConfig>` ignores
+            # them when `quad_extraction_policy_is_adaptive == False`.
+            ppb_threshold = 0.0
+            ppb_low_ext = QuadExtractionMode.ContourRdp
+            ppb_high_ext = QuadExtractionMode.EdLines
+            ppb_low_ref = CornerRefinementMode.Erf
+            ppb_high_ref = getattr(CornerRefinementMode, "None")
+
         return PyDetectorConfig(
             threshold_tile_size=self.threshold.tile_size,
             threshold_min_range=self.threshold.min_range,
@@ -283,6 +393,12 @@ class DetectorConfig(BaseModel):
             quad_max_elongation=self.quad.max_elongation,
             quad_min_density=self.quad.min_density,
             quad_extraction_mode=self.quad.extraction_mode,
+            quad_extraction_policy_is_adaptive=is_adaptive,
+            adaptive_ppb_threshold=ppb_threshold,
+            adaptive_ppb_low_extraction=ppb_low_ext,
+            adaptive_ppb_high_extraction=ppb_high_ext,
+            adaptive_ppb_low_refinement=ppb_low_ref,
+            adaptive_ppb_high_refinement=ppb_high_ref,
             decoder_min_contrast=self.decoder.min_contrast,
             refinement_mode=self.decoder.refinement_mode,
             decode_mode=self.decoder.decode_mode,
@@ -323,12 +439,14 @@ class DetectOptions(BaseModel):
 
 __all__ = [
     "SHIPPED_PROFILES",
+    "AdaptivePpbConfig",
     "DecoderConfig",
     "DetectOptions",
     "DetectorConfig",
     "PoseConfig",
     "ProfileName",
     "QuadConfig",
+    "QuadExtractionPolicy",
     "SegmentationConfig",
     "ThresholdConfig",
 ]

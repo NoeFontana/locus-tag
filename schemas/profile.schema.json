@@ -1,5 +1,56 @@
 {
   "$defs": {
+    "AdaptivePpbConfig": {
+      "additionalProperties": false,
+      "description": "Per-candidate extraction routing based on pixels-per-bit (PPB).\n\nCandidates with `ppb < threshold` run `low_extraction` + `low_refinement`;\ncandidates with `ppb >= threshold` run `high_extraction` + `high_refinement`.\nAt `ppb == threshold` exactly the low route wins (deterministic tie-break\nfor snapshot stability).",
+      "properties": {
+        "high_extraction": {
+          "enum": [
+            "ContourRdp",
+            "EdLines"
+          ],
+          "title": "High Extraction",
+          "type": "string"
+        },
+        "high_refinement": {
+          "enum": [
+            "Edge",
+            "Erf",
+            "Gwlf",
+            "None"
+          ],
+          "title": "High Refinement",
+          "type": "string"
+        },
+        "low_extraction": {
+          "enum": [
+            "ContourRdp",
+            "EdLines"
+          ],
+          "title": "Low Extraction",
+          "type": "string"
+        },
+        "low_refinement": {
+          "enum": [
+            "Edge",
+            "Erf",
+            "Gwlf",
+            "None"
+          ],
+          "title": "Low Refinement",
+          "type": "string"
+        },
+        "threshold": {
+          "default": 2.5,
+          "exclusiveMaximum": 5.0,
+          "exclusiveMinimum": 1.0,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "title": "AdaptivePpbConfig",
+      "type": "object"
+    },
     "DecoderConfig": {
       "additionalProperties": false,
       "properties": {
@@ -85,6 +136,19 @@
           ],
           "title": "Extraction Mode",
           "type": "string"
+        },
+        "extraction_policy": {
+          "anyOf": [
+            {
+              "const": "Static",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/_AdaptivePpbPolicy"
+            }
+          ],
+          "default": "Static",
+          "title": "Extraction Policy"
         },
         "max_aspect_ratio": {
           "default": 10.0,
@@ -226,6 +290,20 @@
         }
       },
       "title": "ThresholdConfig",
+      "type": "object"
+    },
+    "_AdaptivePpbPolicy": {
+      "additionalProperties": false,
+      "description": "Wrapper mirroring serde's externally-tagged `{\"AdaptivePpb\": {...}}` form.",
+      "properties": {
+        "AdaptivePpb": {
+          "$ref": "#/$defs/AdaptivePpbConfig"
+        }
+      },
+      "required": [
+        "AdaptivePpb"
+      ],
+      "title": "_AdaptivePpbPolicy",
       "type": "object"
     }
   },

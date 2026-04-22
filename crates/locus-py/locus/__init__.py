@@ -4,12 +4,14 @@ from typing import Any
 import numpy as np
 
 from ._config import (
+    AdaptivePpbConfig,
     DecoderConfig,
     DetectOptions,
     DetectorConfig,
     PoseConfig,
     ProfileName,
     QuadConfig,
+    QuadExtractionPolicy,
     SegmentationConfig,
     ThresholdConfig,
 )
@@ -354,6 +356,7 @@ class Detector:
 
 __all__ = [
     "HAS_NON_RECTIFIED",
+    "AdaptivePpbConfig",
     "AprilGrid",
     "BoardEstimateResult",
     "BoardEstimator",
@@ -376,6 +379,7 @@ __all__ = [
     "Pose",
     "PoseEstimationMode",
     "QuadExtractionMode",
+    "QuadExtractionPolicy",
     "SegmentationConnectivity",
     "TagFamily",
     "init_tracy",

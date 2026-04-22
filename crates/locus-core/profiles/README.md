@@ -1,10 +1,15 @@
 # Shipped detector profiles
 
-Three JSON files — `standard.json`, `grid.json`, `high_accuracy.json` — are
-the **single source of truth** for Locus detector configuration. They are
-embedded into the Rust crate (via `include_str!`) and re-exposed to the
-Python wheel through the `_shipped_profile_json` FFI hook, so `locus-core`
-and `locus._profile.DetectorConfig` always read identical bytes.
+Four JSON files — `standard.json`, `grid.json`, `high_accuracy.json`, and
+`max_recall_adaptive.json` — are the **single source of truth** for Locus
+detector configuration. They are embedded into the Rust crate (via
+`include_str!`) and re-exposed to the Python wheel through the
+`_shipped_profile_json` FFI hook, so `locus-core` and
+`locus._profile.DetectorConfig` always read identical bytes.
+
+The first three carry `quad.extraction_policy: "Static"`. Only
+`max_recall_adaptive.json` opts into the per-candidate `AdaptivePpb`
+router — it is the only shipped profile where that machinery runs.
 
 If the Rust defaults and these JSONs ever disagree, **the JSON wins**.
 
@@ -93,6 +98,24 @@ The pose-tuning knobs (`pose.huber_delta_px`, `pose.tikhonov_alpha_max`,
 `pose.sigma_n_sq`, `pose.structure_tensor_radius`) are held at their
 defaults in this profile; sweep them against your sensor profile for
 production metrology.
+
+### `max_recall_adaptive`
+
+Opt-in profile that enables the `AdaptivePpb` per-candidate router. Each
+candidate quad is classified by a pixels-per-bit estimate (bbox short
+side / min outer tag dimension across registered families) and routed to
+one of two extraction + refinement pairings:
+
+| Route | Pixels per bit | Extraction | Refinement | Rationale |
+| --- | --- | --- | --- | --- |
+| Low | `< threshold` | `ContourRdp` | `Erf` | Robust on small / blurry tags where EdLines cannot lock. |
+| High | `≥ threshold` | `EdLines` | `None` | Metrology-grade sub-pixel corners for well-resolved tags. |
+
+The shipped `threshold` value (2.5) is a Phase 1 sentinel and will be
+tightened to the empirically derived cutoff produced by the render-tag
+`locus_ppb_sweep_v1` dataset during Phase 0. Document your application
+expectations before flipping to this profile — behaviour of existing
+frames will change relative to `standard`.
 
 ## Authoring a custom profile
 
