@@ -67,6 +67,7 @@ nav:
       - how-to/debug_with_rerun.md
       - how-to/concurrent_detection.md
       - how-to/install-with-distortion.md
+      - how-to/max_recall.md
   - Explanation:
       - explanation/architecture.md
       - explanation/pipeline.md
