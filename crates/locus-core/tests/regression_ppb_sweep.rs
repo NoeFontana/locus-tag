@@ -126,14 +126,7 @@ fn discover_bins(sweep_root: &Path) -> Vec<PathBuf> {
     bins
 }
 
-fn evaluate_bin(bin_path: &Path, config: DetectorConfig) -> BinSummary {
-    let bin_name = bin_path
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_string();
-    let provider = HubProvider::new(bin_path).expect("bin must have images/rich_truth.json");
-
+fn evaluate_bin(bin_name: &str, provider: &HubProvider, config: DetectorConfig) -> BinSummary {
     let mut detector = Detector::with_config(config);
     detector.set_families(&[TagFamily::AprilTag36h11]);
     let options = DetectOptions::default();
@@ -261,7 +254,7 @@ fn evaluate_bin(bin_path: &Path, config: DetectorConfig) -> BinSummary {
     let n = count.max(1) as f64;
 
     BinSummary {
-        bin: bin_name,
+        bin: bin_name.to_string(),
         images: count,
         mean_recall: total_recall / n,
         mean_rmse: total_rmse / n,
@@ -295,14 +288,29 @@ fn ppb_sweep_per_scenario_curves() {
         sweep_root.display()
     );
 
+    let providers: Vec<(String, HubProvider)> = bins
+        .iter()
+        .map(|p| {
+            let name = p
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            let provider = HubProvider::new(p).expect("bin must have images/rich_truth.json");
+            (name, provider)
+        })
+        .collect();
+
     let mut per_scenario: BTreeMap<&'static str, ScenarioReport> = BTreeMap::new();
     for scenario in scenarios() {
         let mut report = ScenarioReport {
             scenario: scenario.label.to_string(),
-            bins: Vec::with_capacity(bins.len()),
+            bins: Vec::with_capacity(providers.len()),
         };
-        for bin_path in &bins {
-            report.bins.push(evaluate_bin(bin_path, scenario.config));
+        for (name, provider) in &providers {
+            report
+                .bins
+                .push(evaluate_bin(name, provider, scenario.config));
         }
         per_scenario.insert(scenario.label, report);
     }
