@@ -2,10 +2,13 @@
 # It defines execution profiles and which tests to run by default.
 
 [profile.default]
-# By default, we exclude all "regression" and "robustness" test binaries because they take a long
-# time, require specific test data to be downloaded, or demand release builds.
-# To run them explicitly, use `cargo nextest run -E 'binary(~regression) or binary(~robustness)' --release`
-default-filter = "not (binary(~regression) or binary(~robustness))"
+# By default, we exclude "regression", "robustness", and "allocation" test binaries because they
+# take a long time, require specific test data to be downloaded, or demand release builds.
+# `allocation_*` tests run under DHAT instrumentation and exceed the slow-timeout on CI hardware;
+# they have a dedicated job (`dhat-allocation` in `_tests.yml`) that runs them via `cargo test`.
+# To run them explicitly, use
+#   cargo nextest run -E 'binary(~regression) or binary(~robustness) or binary(~allocation)' --release
+default-filter = "not (binary(~regression) or binary(~robustness) or binary(~allocation))"
 
 # Display tests that take longer than 15 seconds
 slow-timeout = { period = "15s", terminate-after = 2 }
