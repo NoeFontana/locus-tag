@@ -52,7 +52,7 @@ class TestHubBenchmarkLoader(unittest.TestCase):
         # In some subsets, corners and tag_ids might be lists if there are multiple tags per image
         # But looking at the schema provided, it seems like 1 tag per row (typical for synthetic hub datasets)
         # If there are multiple tags, the schema usually reflects that.
-        # Let's assume 1 tag per row for now as per "single_tag_locus_v1_std41h12"
+        # Let's assume 1 tag per row for now as per "locus_v1_tag36h11_*"
 
         pil_img = Image.new("L", (100, 100), color=200)
         mock_dataset = [

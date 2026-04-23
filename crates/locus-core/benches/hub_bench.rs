@@ -158,6 +158,6 @@ macro_rules! hub_benchmarks {
     };
 }
 
-hub_benchmarks!(res_480p, "single_tag_locus_v1_tag36h11_640x480");
-hub_benchmarks!(res_720p, "single_tag_locus_v1_tag36h11_1280x720");
-hub_benchmarks!(res_1080p, "single_tag_locus_v1_tag36h11_1920x1080");
+hub_benchmarks!(res_480p, "locus_v1_tag36h11_640x480");
+hub_benchmarks!(res_720p, "locus_v1_tag36h11_1280x720");
+hub_benchmarks!(res_1080p, "locus_v1_tag36h11_1920x1080");

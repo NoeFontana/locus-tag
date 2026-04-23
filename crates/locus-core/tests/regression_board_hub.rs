@@ -419,7 +419,7 @@ mod tests {
 
     #[test]
     fn test_load_charuco_golden_v1_metadata() {
-        let dataset_path = common::resolve_hub_root("charuco_golden_v1");
+        let dataset_path = common::resolve_hub_root("charuco_golden_v1_1920x1080");
 
         if dataset_path.exists() {
             let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
@@ -435,7 +435,7 @@ mod tests {
 
     #[test]
     fn test_load_aprilgrid_golden_v1_metadata() {
-        let dataset_path = common::resolve_hub_root("aprilgrid_golden_v1");
+        let dataset_path = common::resolve_hub_root("aprilgrid_golden_v1_1920x1080");
 
         if dataset_path.exists() {
             let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
@@ -453,7 +453,7 @@ mod tests {
     #[test]
     #[cfg(feature = "bench-internals")]
     fn regression_board_charuco_v1_golden() {
-        let dataset_path = common::resolve_hub_root("charuco_golden_v1");
+        let dataset_path = common::resolve_hub_root("charuco_golden_v1_1920x1080");
 
         if dataset_path.exists() {
             let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
@@ -466,7 +466,7 @@ mod tests {
     #[test]
     #[cfg(feature = "bench-internals")]
     fn regression_board_aprilgrid_v1_golden() {
-        let dataset_path = common::resolve_hub_root("aprilgrid_golden_v1");
+        let dataset_path = common::resolve_hub_root("aprilgrid_golden_v1_1920x1080");
 
         if dataset_path.exists() {
             let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");

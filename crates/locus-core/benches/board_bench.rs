@@ -132,7 +132,7 @@ fn load_board_meta(dataset: &str) -> (Arc<AprilGridTopology>, CameraIntrinsics) 
 /// estimation step is measured.
 #[divan::bench]
 fn bench_board_estimate_aprilgrid(bencher: Bencher) {
-    const DATASET: &str = "aprilgrid_golden_v1";
+    const DATASET: &str = "aprilgrid_golden_v1_1920x1080";
     const IMAGE: &str = "scene_0010_cam_0000.png";
 
     let (board_config, intrinsics) = load_board_meta(DATASET);
@@ -172,7 +172,7 @@ fn bench_board_estimate_aprilgrid(bencher: Bencher) {
 /// the cost/accuracy trade-off surface.
 #[divan::bench]
 fn bench_board_estimate_aprilgrid_fast(bencher: Bencher) {
-    const DATASET: &str = "aprilgrid_golden_v1";
+    const DATASET: &str = "aprilgrid_golden_v1_1920x1080";
     const IMAGE: &str = "scene_0010_cam_0000.png";
 
     let (board_config, intrinsics) = load_board_meta(DATASET);
@@ -217,7 +217,7 @@ fn bench_board_estimate_aprilgrid_fast(bencher: Bencher) {
 /// share of total frame latency.
 #[divan::bench]
 fn bench_board_full_pipeline_aprilgrid(bencher: Bencher) {
-    const DATASET: &str = "aprilgrid_golden_v1";
+    const DATASET: &str = "aprilgrid_golden_v1_1920x1080";
     const IMAGE: &str = "scene_0010_cam_0000.png";
 
     let (board_config, intrinsics) = load_board_meta(DATASET);

@@ -56,9 +56,9 @@ uv run --group bench tools/cli.py bench real --compare
 
 # 2. Hub Dataset Evaluation — Python CLI (Recall + Pose RMSE)
 # Requires hub_cache to be populated via `bench prepare` first.
-PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config single_tag_locus_v1_std41h12_1920x1080
-PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config aprilgrid_golden_v1
-PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config charuco_golden_v1
+PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config locus_v1_tag36h11_1920x1080
+PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config aprilgrid_golden_v1_1920x1080
+PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config charuco_golden_v1_1920x1080
 
 # 3. Rust Regression Testing (Sequential for accurate latency)
 # Requires LOCUS_ICRA_DATASET_DIR to be set.
@@ -71,8 +71,8 @@ TRACY_NO_INVARIANT_CHECK=1 LOCUS_ICRA_DATASET_DIR=tests/data/icra2020 cargo test
 # resolves tests/data/hub_cache/ automatically from the workspace root.
 #
 # The distortion suite (regression_distortion_hub) additionally requires
-# syncing the `aprilgrid_distortion_brown_conrady_v1` and
-# `aprilgrid_distortion_kannala_brandt_v1` configs — see
+# syncing the `aprilgrid_distortion_brown_conrady_v1_1920x1080` and
+# `aprilgrid_distortion_kannala_brandt_v1_1920x1080` configs — see
 # `.agent/skills/testing/SKILL.md` for the one-time setup.
 TRACY_NO_INVARIANT_CHECK=1 \
 LOCUS_ICRA_DATASET_DIR=tests/data/icra2020 \
