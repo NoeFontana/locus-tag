@@ -1,5 +1,5 @@
 #![cfg(feature = "dhat-heap")]
-#![allow(clippy::expect_used, clippy::unwrap_used, dead_code, missing_docs)]
+#![allow(clippy::expect_used, clippy::unwrap_used, missing_docs)]
 //! DHAT allocation-growth gate for the default (`Static`) quad-extraction
 //! policy.
 //!

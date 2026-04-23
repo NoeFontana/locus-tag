@@ -308,6 +308,7 @@ jobs:
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
         with:
+          enable-rust-cache: 'true'
           enable-uv-cache: 'false'
 
       - name: Run allocation-drift tests
