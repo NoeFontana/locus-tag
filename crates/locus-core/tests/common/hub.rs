@@ -2,7 +2,9 @@
 //! Shared hub dataset infrastructure reused by multiple regression test files.
 
 use locus_core::{
-    CameraIntrinsics, DetectOptions, Detector, DetectorConfig, ImageView, Pose, TagFamily,
+    CameraIntrinsics, DetectOptions, Detector, DetectorConfig, ImageView, Pose, PoseEstimationMode,
+    TagFamily,
+    config::{CornerRefinementMode, QuadExtractionMode},
 };
 use nalgebra::{UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
@@ -698,6 +700,80 @@ impl HubProvider {
     pub fn fallback_tag_size(&self) -> Option<f64> {
         self.gt_map.values().next()?.tag_size
     }
+}
+
+// ============================================================================
+// Render-tag test runner
+// ============================================================================
+
+/// Optional knobs for [`run_render_tag_test`]. Defaults reproduce the
+/// Accurate-mode `"standard"`-profile baseline.
+pub struct RenderTagOpts {
+    pub mode: PoseEstimationMode,
+    pub profile: Option<&'static str>,
+    pub snapshot_suffix: &'static str,
+    pub refinement: Option<CornerRefinementMode>,
+    pub quad_mode: Option<QuadExtractionMode>,
+    pub moments_culling: Option<(f64, f64)>,
+}
+
+impl Default for RenderTagOpts {
+    fn default() -> Self {
+        Self {
+            mode: PoseEstimationMode::Accurate,
+            profile: None,
+            snapshot_suffix: "",
+            refinement: None,
+            quad_mode: None,
+            moments_culling: None,
+        }
+    }
+}
+
+/// Run a render-tag regression against a hub dataset.
+///
+/// Skips gracefully when `LOCUS_HUB_DATASET_DIR` is unset or the dataset is
+/// missing from the cache. Snapshot name is
+/// `hub_{provider.name}{mode_suffix}{snapshot_suffix}`, matching the historic
+/// naming convention for the render-tag suite.
+pub fn run_render_tag_test(config_name: &str, family: TagFamily, opts: RenderTagOpts) {
+    let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") else {
+        println!("Skipping hub tests. Set LOCUS_HUB_DATASET_DIR to run.");
+        return;
+    };
+
+    let dataset_path = super::resolve_hub_root(&hub_dir).join(config_name);
+    let Some(provider) = HubProvider::new(&dataset_path) else {
+        println!("Dataset not in cache: {config_name}. Skipping.");
+        return;
+    };
+
+    let mut options = load_detect_options(&dataset_path);
+    options.pose_estimation_mode = opts.mode;
+    options.families = vec![family];
+
+    let mode_suffix = match opts.mode {
+        PoseEstimationMode::Fast => "_fast",
+        PoseEstimationMode::Accurate => "",
+    };
+    let snapshot = format!(
+        "hub_{}{}{}",
+        provider.name, mode_suffix, opts.snapshot_suffix
+    );
+
+    let mut harness = RegressionHarness::new(snapshot)
+        .with_profile(opts.profile.unwrap_or("standard"))
+        .with_options(options);
+    if let Some(r) = opts.refinement {
+        harness = harness.with_refinement_mode(r);
+    }
+    if let Some(q) = opts.quad_mode {
+        harness = harness.with_quad_extraction_mode(q);
+    }
+    if let Some((max_e, min_d)) = opts.moments_culling {
+        harness = harness.with_moments_culling(max_e, min_d);
+    }
+    harness.run(provider);
 }
 
 impl DatasetProvider for HubProvider {

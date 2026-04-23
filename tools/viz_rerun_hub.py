@@ -22,7 +22,7 @@ def get_manifest(repo_id, subset):
 
 def main():
     parser = argparse.ArgumentParser(description="Visualize Locus Tag Hub Dataset with Rerun")
-    parser.add_argument("--subset", type=str, default="single_tag_locus_v1_tag36h11_640x480")
+    parser.add_argument("--subset", type=str, default="locus_v1_tag36h11_640x480")
     parser.add_argument("--repo-id", type=str, default="NoeFontana/locus-tag-bench")
     parser.add_argument("--max-images", type=int, default=100)
     parser.add_argument("--save", type=str, help="Save to .rrd file instead of spawning viewer")

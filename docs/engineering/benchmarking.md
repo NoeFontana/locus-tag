@@ -62,12 +62,12 @@ Locus supports running regressions against large-scale datasets hosted on the Hu
    Or sync a specific subset:
    ```bash
    uv run python tools/bench/sync_hub.py --configs \
-     single_tag_locus_v1_tag36h11_640x480 \
-     single_tag_locus_v1_tag36h11_1280x720 \
-     single_tag_locus_v1_tag36h11_1920x1080 \
-     single_tag_locus_v1_tag36h11_3840x2160 \
-     charuco_golden_v1 \
-     aprilgrid_golden_v1
+     locus_v1_tag36h11_640x480 \
+     locus_v1_tag36h11_1280x720 \
+     locus_v1_tag36h11_1920x1080 \
+     locus_v1_tag36h11_3840x2160 \
+     charuco_golden_v1_1920x1080 \
+     aprilgrid_golden_v1_1920x1080
    ```
 
 2. **Run Hub Tests**:
@@ -162,19 +162,19 @@ Evaluate against rendered Hugging Face Hub datasets. These datasets include grou
 ```bash
 # Single-tag evaluation
 PYTHONPATH=. uv run --group bench tools/cli.py bench real \
-  --hub-config single_tag_locus_v1_std41h12_1920x1080
+  --hub-config locus_v1_tag36h11_1920x1080
 
 # Board-level evaluation (AprilGrid or ChAruco)
 # The board topology is inferred automatically from the dataset's rich_truth.json.
 PYTHONPATH=. uv run --group bench tools/cli.py bench real \
-  --hub-config aprilgrid_golden_v1
+  --hub-config aprilgrid_golden_v1_1920x1080
 
 PYTHONPATH=. uv run --group bench tools/cli.py bench real \
-  --hub-config charuco_golden_v1
+  --hub-config charuco_golden_v1_1920x1080
 
 # Limit frames and use a custom cache directory
 PYTHONPATH=. uv run --group bench tools/cli.py bench real \
-  --hub-config aprilgrid_golden_v1 \
+  --hub-config aprilgrid_golden_v1_1920x1080 \
   --data-dir tests/data/hub_cache \
   --limit 50
 ```

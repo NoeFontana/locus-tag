@@ -41,7 +41,7 @@ TRACY_NO_INVARIANT_CHECK=1 LOCUS_HUB_DATASET_DIR=../../tests/data/hub_cache INST
 # Distortion-aware suite (Brown-Conrady + Kannala-Brandt)
 # One-time setup: sync the two configs into tests/data/hub_cache/ via
 #   uv run python tools/bench/sync_hub.py --configs \
-#     aprilgrid_distortion_brown_conrady_v1 aprilgrid_distortion_kannala_brandt_v1
+#     aprilgrid_distortion_brown_conrady_v1_1920x1080 aprilgrid_distortion_kannala_brandt_v1_1920x1080
 # If sync_hub.py fails due to upstream dataset schema drift, fall back to
 # direct parquet download via `huggingface_hub.hf_hub_download`.
 TRACY_NO_INVARIANT_CHECK=1 LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \

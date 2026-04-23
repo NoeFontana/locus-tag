@@ -14,7 +14,7 @@ anything: a 4% drop in the 4K stratum concealed by gains at 720p, a systematic
 loss of oblique-view tags masked by improved frontal detection, or a silent
 break on distant small tags.
 
-Concretely, the four `single_tag_locus_v1_tag36h11_{640x480, 1280x720,
+Concretely, the four `locus_v1_tag36h11_{640x480, 1280x720,
 1920x1080, 3840x2160}` hub-configs already live under
 `tests/data/hub_cache/`. Today they are reported as a single number each;
 tomorrow every metric splits further by PPM, angle of incidence, distance,
