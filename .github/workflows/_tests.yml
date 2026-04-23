@@ -298,6 +298,33 @@ jobs:
           path: "*.log"
           retention-days: 1
 
+  dhat-allocation:
+    name: DHAT Allocation Gate
+    needs: rust-checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Toolchains
+        uses: ./.github/actions/setup-toolchain
+        with:
+          enable-uv-cache: 'false'
+
+      - name: Run allocation-drift tests
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --release --features dhat-heap --test allocation_zero_alloc_static 2>&1 | tee dhat-static.log
+
+      - name: Upload Logs on Failure
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: failure-logs-dhat-allocation
+          path: "*.log"
+          retention-days: 1
+
   robustness-testing:
     name: Robustness Testing (Proptest)
     needs: rust-checks
