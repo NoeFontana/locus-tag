@@ -21,46 +21,54 @@ Latencies are `mean_total_ms` per frame as reported by the harness stdout
 (the same value that is redacted as `[DURATION]` in the YAML snapshot for
 stability). Accuracy figures come directly from the accepted `.snap` files.
 
-## 1. Accuracy Baseline — `tag36h11` across resolutions (Accurate mode)
+## 1. Accuracy Baseline — `tag36h11` across resolutions (`high_accuracy` profile)
 
 | Resolution | Images | Recall | Precision | RMSE (px) | Repro RMSE (px) | Trans P50 (m) | Rot P50 (°) | Latency (ms) |
 |---|---|---|---|---|---|---|---|---|
-| 640×480 | 50 | 100.00% | 100.00% | 1.0795 | 0.9677 | 0.0033 | 0.549 | 3.65 |
-| 1280×720 | 50 | 100.00% | 100.00% | 1.0161 | 0.8780 | 0.0024 | 0.254 | 9.28 |
-| 1920×1080 | 50 | 100.00% | 100.00% | 1.3403 | 0.9294 | 0.0036 | 0.311 | 21.45 |
-| 3840×2160 | 50 | 98.00% | 100.00% | 1.3296 | 1.0613 | 0.0068 | 0.297 | 74.08 |
+| 640×480 | 50 | 86.00% | 100.00% | 0.2449 | 0.1993 | 0.0005 | 0.119 | 2.02 |
+| 1280×720 | 50 | 90.00% | 100.00% | 0.1873 | 0.1696 | 0.0004 | 0.064 | 4.86 |
+| 1920×1080 | 50 | 94.00% | 100.00% | 0.2029 | 0.1943 | 0.0004 | 0.054 | 11.41 |
+| 3840×2160 | 50 | 94.00% | 100.00% | 0.1676 | 0.1506 | 0.0008 | 0.049 | 43.50 |
 
-Latency scales roughly linearly with pixel count (21.4 ms × 4 → 74 ms at 4K)
-as expected for a preprocessing-dominated pipeline.
+`high_accuracy` is used as the baseline because its 4-6× tighter pose
+bounds catch pose-solver regressions that `standard`'s wider thresholds
+mask. The 6-14 points of recall ceded (vs `standard`'s 100%) is the cost
+of `EdLines` + no-sharpen; small-tag recall signal is instead picked up
+by the robustness suite (§ 5), which stays on `standard`.
 
-## 2. Pose-Mode Variant — `tag36h11` 1080p, Fast
+Latency scales roughly linearly with pixel count (11.4 ms × 4 → 43.5 ms
+at 4K) as expected for a preprocessing-dominated pipeline. `high_accuracy`
+is also ~2× faster than `standard` because EdLines is cheaper than
+ContourRdp.
+
+## 2. Pose-Mode Variant — `tag36h11` 1080p, `standard` profile
 
 | Mode | Recall | RMSE (px) | Repro RMSE (px) | Trans P50 (m) | Rot P50 (°) | Latency (ms) |
 |---|---|---|---|---|---|---|
-| Accurate | 100.00% | 1.3403 | 0.9294 | 0.0036 | 0.311 | 21.45 |
 | Fast | 100.00% | 1.3403 | 4.8908 | 0.0073 | 2.002 | 18.70 |
 
-Fast mode preserves recall and pixel RMSE but its pose accuracy is
-substantially worse (5× reprojection error, 6× rotation error). The latency
-saving is modest (~13%) — consistent with the LM solver not dominating a
-50-tag 1080p frame. Fast mode is the right choice when downstream pose
-consumers tolerate coarse rotation; otherwise prefer Accurate.
+The Fast-mode test stays on `standard` so that it contrasts cleanly against
+the `standard`-profile Accurate metrics derivable from § 4 and the
+robustness baseline. Fast mode preserves recall and pixel RMSE but its
+pose accuracy is substantially worse than `standard`-Accurate (5×
+reprojection error, 6× rotation error) at only ~13% latency saving —
+consistent with the LM solver not dominating a 50-tag 1080p frame.
 
-## 3. Refinement Variants — `tag36h11` 1080p
+## 3. Refinement Variant — `tag36h11` 1080p, GWLF on `standard`
 
 | Refinement | Recall | RMSE (px) | Repro RMSE (px) | Trans P50 (m) | Rot P50 (°) | Latency (ms) |
 |---|---|---|---|---|---|---|
-| None (default) | 100.00% | 1.3403 | 0.9294 | 0.0036 | 0.311 | 21.45 |
 | GWLF | 100.00% | 0.9891 | 0.8502 | 0.0032 | 0.067 | 15.08 |
-| HighAccuracy profile | 94.00% | 0.2029 | 0.1943 | 0.0004 | 0.054 | 10.62 |
 
-GWLF improves pose quality (4.7× better rotation P50) and is, counter-
-intuitively, *faster* than the default here because the weighted LM solver
-consumes the GWLF covariances as priors and converges in fewer iterations.
-HighAccuracy is even sharper (6× better translation, 5× better rotation)
-but sheds 6 points of recall on the small-tag long tail — expected, since
-the HighAccuracy profile enables `EdLines` which is known to collapse on
-tags with < 1.5 pixels-per-bit.
+GWLF-on-`standard` is retained as a refinement variant since it's the only
+`standard`-profile configuration with tight rotation P50 — useful for
+catching regressions in the covariance-consuming weighted LM path without
+paying the `high_accuracy` recall tax. Counter-intuitively it's *faster*
+than `standard` default (15.1 ms vs 21.4 ms) because the weighted solver
+converges in fewer iterations when fed GWLF priors.
+
+The `high_accuracy`-profile 1080p test was removed from this module — it
+is now the baseline at § 1.
 
 ## 4. Quad-Extraction Variants
 
@@ -87,7 +95,8 @@ EdLines' own filtering already rejects the same candidates.
 
 Single-tag subsets stressing the detector under conditions the golden
 `tag36h11` rendering does not exercise. All at 1920×1080, Accurate mode,
-default profile.
+`standard` profile — the robustness suite stays on `standard` precisely
+because it depends on the recall path that `high_accuracy` trades away.
 
 | Subset | Family | Images | Recall | Precision | RMSE (px) | Trans P50 (m) | Rot P50 (°) | Latency (ms) |
 |---|---|---|---|---|---|---|---|---|

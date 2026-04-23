@@ -25,10 +25,25 @@
 
 mod common;
 
+/// Clean-render pose-accuracy baseline across resolutions. Uses the
+/// `high_accuracy` profile so that the snapshot bounds are tight enough to
+/// catch pose-solver regressions — the 6× tighter rotation P50 versus
+/// `standard` buys us far better signal on clean synthetic frames, where
+/// `standard`'s recall advantage is irrelevant (hub renders sit comfortably
+/// above the EdLines PPB threshold at every resolution here).
+/// Recall on small-tag robustness datasets is covered separately by
+/// `regression_render_tag_robustness.rs`, which stays on `standard`.
 mod accuracy_baseline {
     use super::common;
     use common::hub::{RenderTagOpts, run_render_tag_test};
     use locus_core::TagFamily;
+
+    fn opts() -> RenderTagOpts {
+        RenderTagOpts {
+            profile: Some("high_accuracy"),
+            ..Default::default()
+        }
+    }
 
     #[test]
     fn regression_hub_tag36h11_640x480() {
@@ -36,7 +51,7 @@ mod accuracy_baseline {
         run_render_tag_test(
             "locus_v1_tag36h11_640x480",
             TagFamily::AprilTag36h11,
-            RenderTagOpts::default(),
+            opts(),
         );
     }
 
@@ -46,7 +61,7 @@ mod accuracy_baseline {
         run_render_tag_test(
             "locus_v1_tag36h11_1280x720",
             TagFamily::AprilTag36h11,
-            RenderTagOpts::default(),
+            opts(),
         );
     }
 
@@ -56,7 +71,7 @@ mod accuracy_baseline {
         run_render_tag_test(
             "locus_v1_tag36h11_1920x1080",
             TagFamily::AprilTag36h11,
-            RenderTagOpts::default(),
+            opts(),
         );
     }
 
@@ -66,7 +81,7 @@ mod accuracy_baseline {
         run_render_tag_test(
             "locus_v1_tag36h11_3840x2160",
             TagFamily::AprilTag36h11,
-            RenderTagOpts::default(),
+            opts(),
         );
     }
 }
@@ -104,20 +119,6 @@ mod refinement_variants {
             RenderTagOpts {
                 snapshot_suffix: "_gwlf",
                 refinement: Some(CornerRefinementMode::Gwlf),
-                ..Default::default()
-            },
-        );
-    }
-
-    #[test]
-    fn regression_hub_tag36h11_1080p_highaccuracy() {
-        let _g = common::telemetry::init("regression_hub_tag36h11_1080p_highaccuracy");
-        run_render_tag_test(
-            "locus_v1_tag36h11_1920x1080",
-            TagFamily::AprilTag36h11,
-            RenderTagOpts {
-                profile: Some("high_accuracy"),
-                snapshot_suffix: "_highaccuracy",
                 ..Default::default()
             },
         );
