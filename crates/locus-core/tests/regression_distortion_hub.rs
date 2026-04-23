@@ -30,8 +30,10 @@ use common::hub::{
 /// Runs a hub distortion dataset test.
 ///
 /// Intrinsics (including distortion coefficients) are read exclusively from
-/// `rich_truth.json` — these datasets do not use `provenance.json`.
-fn run_distortion_hub_test(config_name: &str, family: TagFamily, mode: PoseEstimationMode) {
+/// `rich_truth.json` — these datasets do not use `provenance.json`. Pose-mode
+/// coverage lives in `regression_render_tag.rs::pose_mode_variants`; this
+/// suite exercises the undistortion path only, so it runs Accurate mode.
+fn run_distortion_hub_test(config_name: &str, family: TagFamily) {
     let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") else {
         println!("Skipping distortion hub tests. Set LOCUS_HUB_DATASET_DIR to run.");
         return;
@@ -53,7 +55,10 @@ fn run_distortion_hub_test(config_name: &str, family: TagFamily, mode: PoseEstim
     // Distortion datasets embed intrinsics + distortion coefficients in
     // rich_truth.json. Build a fallback for the options in case any image
     // lacks per-entry intrinsics (HubProvider already sets gt.intrinsics).
-    let mut options = DetectOptions::default();
+    let mut options = DetectOptions {
+        pose_estimation_mode: PoseEstimationMode::Accurate,
+        ..Default::default()
+    };
     if let Some(entries) = load_rich_truth_entries(&dataset_path.join("rich_truth.json")) {
         if let Some(first) = entries.first()
             && let Some(k) = first.k_matrix
@@ -71,13 +76,7 @@ fn run_distortion_hub_test(config_name: &str, family: TagFamily, mode: PoseEstim
         }
     }
 
-    options.pose_estimation_mode = mode;
-
-    let mode_suffix = match mode {
-        PoseEstimationMode::Fast => "_fast",
-        PoseEstimationMode::Accurate => "",
-    };
-    let snapshot = format!("hub_{}{}", provider.name(), mode_suffix);
+    let snapshot = format!("hub_{}", provider.name());
 
     RegressionHarness::new(snapshot)
         .with_profile("standard")
@@ -91,22 +90,11 @@ fn run_distortion_hub_test(config_name: &str, family: TagFamily, mode: PoseEstim
 // ============================================================================
 
 #[test]
-fn regression_hub_distortion_brown_conrady_accurate() {
-    let _guard = common::telemetry::init("regression_hub_distortion_brown_conrady_accurate");
+fn regression_hub_distortion_brown_conrady() {
+    let _guard = common::telemetry::init("regression_hub_distortion_brown_conrady");
     run_distortion_hub_test(
         "aprilgrid_distortion_brown_conrady_v1_1920x1080",
         TagFamily::AprilTag36h11,
-        PoseEstimationMode::Accurate,
-    );
-}
-
-#[test]
-fn regression_hub_distortion_brown_conrady_fast() {
-    let _guard = common::telemetry::init("regression_hub_distortion_brown_conrady_fast");
-    run_distortion_hub_test(
-        "aprilgrid_distortion_brown_conrady_v1_1920x1080",
-        TagFamily::AprilTag36h11,
-        PoseEstimationMode::Fast,
     );
 }
 
@@ -115,21 +103,10 @@ fn regression_hub_distortion_brown_conrady_fast() {
 // ============================================================================
 
 #[test]
-fn regression_hub_distortion_kannala_brandt_accurate() {
-    let _guard = common::telemetry::init("regression_hub_distortion_kannala_brandt_accurate");
+fn regression_hub_distortion_kannala_brandt() {
+    let _guard = common::telemetry::init("regression_hub_distortion_kannala_brandt");
     run_distortion_hub_test(
         "aprilgrid_distortion_kannala_brandt_v1_1920x1080",
         TagFamily::AprilTag36h11,
-        PoseEstimationMode::Accurate,
-    );
-}
-
-#[test]
-fn regression_hub_distortion_kannala_brandt_fast() {
-    let _guard = common::telemetry::init("regression_hub_distortion_kannala_brandt_fast");
-    run_distortion_hub_test(
-        "aprilgrid_distortion_kannala_brandt_v1_1920x1080",
-        TagFamily::AprilTag36h11,
-        PoseEstimationMode::Fast,
     );
 }
