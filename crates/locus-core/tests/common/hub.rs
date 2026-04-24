@@ -711,6 +711,11 @@ impl HubProvider {
 pub struct RenderTagOpts {
     pub mode: PoseEstimationMode,
     pub profile: Option<&'static str>,
+    /// Inline JSON profile override (e.g. `include_str!`'d fixture). When set,
+    /// takes precedence over `profile` — the harness calls `with_profile_json`
+    /// instead of `with_profile`. Used by per-subset tuning variants that
+    /// override specific knobs without shipping a new named profile.
+    pub profile_json: Option<&'static str>,
     pub snapshot_suffix: &'static str,
     pub refinement: Option<CornerRefinementMode>,
     pub quad_mode: Option<QuadExtractionMode>,
@@ -722,6 +727,7 @@ impl Default for RenderTagOpts {
         Self {
             mode: PoseEstimationMode::Accurate,
             profile: None,
+            profile_json: None,
             snapshot_suffix: "",
             refinement: None,
             quad_mode: None,
@@ -761,9 +767,12 @@ pub fn run_render_tag_test(config_name: &str, family: TagFamily, opts: RenderTag
         provider.name, mode_suffix, opts.snapshot_suffix
     );
 
-    let mut harness = RegressionHarness::new(snapshot)
-        .with_profile(opts.profile.unwrap_or("standard"))
-        .with_options(options);
+    let harness = RegressionHarness::new(snapshot);
+    let harness = match opts.profile_json {
+        Some(json) => harness.with_profile_json(json),
+        None => harness.with_profile(opts.profile.unwrap_or("standard")),
+    };
+    let mut harness = harness.with_options(options);
     if let Some(r) = opts.refinement {
         harness = harness.with_refinement_mode(r);
     }
