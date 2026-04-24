@@ -63,3 +63,49 @@ fn regression_hub_raw_pipeline_1080p() {
         RenderTagOpts::default(),
     );
 }
+
+// Tuned variants measure configuration-only KPI ceilings. Each fixture
+// inlines every `standard` value because profile JSON does not currently
+// resolve `extends` (see `crates/locus-core/src/config.rs`).
+
+#[test]
+fn regression_hub_tag16h5_1080p_tuned() {
+    let _g = common::telemetry::init("regression_hub_tag16h5_1080p_tuned");
+    run_render_tag_test(
+        "locus_v1_tag16h5_1920x1080",
+        TagFamily::AprilTag16h5,
+        RenderTagOpts {
+            profile_json: Some(include_str!("fixtures/robustness/tag16h5_tuned.json")),
+            snapshot_suffix: "_tuned",
+            ..RenderTagOpts::default()
+        },
+    );
+}
+
+#[test]
+fn regression_hub_low_key_1080p_tuned() {
+    let _g = common::telemetry::init("regression_hub_low_key_1080p_tuned");
+    run_render_tag_test(
+        "locus_v1_low_key_1920x1080",
+        TagFamily::AprilTag36h11,
+        RenderTagOpts {
+            profile_json: Some(include_str!("fixtures/robustness/low_key_tuned.json")),
+            snapshot_suffix: "_tuned",
+            ..RenderTagOpts::default()
+        },
+    );
+}
+
+#[test]
+fn regression_hub_raw_pipeline_1080p_tuned() {
+    let _g = common::telemetry::init("regression_hub_raw_pipeline_1080p_tuned");
+    run_render_tag_test(
+        "locus_v1_raw_pipeline_1920x1080",
+        TagFamily::AprilTag36h11,
+        RenderTagOpts {
+            profile_json: Some(include_str!("fixtures/robustness/raw_pipeline_tuned.json")),
+            snapshot_suffix: "_tuned",
+            ..RenderTagOpts::default()
+        },
+    );
+}

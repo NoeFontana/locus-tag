@@ -124,6 +124,50 @@ watchlist, not a regression):
   appears robust to synthetic high-noise captures (100% recall matches
   clean `tag36h11_1920x1080`).
 
+### 5.1 Configuration-only tuned variants (follow-up)
+
+Each subset above was re-run with a bespoke JSON profile (embedded at
+`crates/locus-core/tests/fixtures/robustness/<subset>_tuned.json`) to
+quantify how far the existing `DetectorConfig` knob set can move each KPI
+without algorithmic changes. The baselines are retained as the KPI
+watchlist; these rows are additive.
+
+| Subset | Baseline | Tuned | Δ | Knobs that moved the number |
+|---|---|---|---|---|
+| `tag16h5` | R 100% / P **27.64%** / 16.96 ms | R 100% / P **68.85%** / 16.78 ms | **Precision ×2.5** at zero recall cost | `decoder.max_hamming_error: 2→1`, `decoder.min_contrast: 20→30`, `quad.min_edge_score: 4→8`, `quad.min_fill_ratio: 0.10→0.18` |
+| `low_key` | R **10.00%** / P 100% / 15.24 ms | R **22.00%** / P 100% / 28.08 ms | **Recall ×2.2**, latency ×1.8 | `threshold.tile_size: 8→2`, `threshold.min_range: 10→0`, `threshold.constant: 0→-20` |
+| `raw_pipeline` | R **58.00%** / P 100% / 17.40 ms | R **60.00%** / P 100% / 19.05 ms | Recall +2 pts (marginal) | `quad.min_area: 16→8`, `quad.min_edge_length: 4→2`, `quad.min_edge_score: 4→1` |
+
+Findings:
+
+- **`tag16h5` is the clear configuration win.** Halving the allowed
+  Hamming distance is the dominant lever; raising the decoder's contrast
+  gate and the upstream quad edge-score/fill-ratio gates trim the
+  remaining false-positive pool without sacrificing a single true positive.
+  A `+41.2` precision-point lift at **zero** recall cost is the ceiling we
+  could find; pushing further (`min_edge_score: 10`, `min_fill_ratio:
+  0.22`) recovers ~3 more precision points at the cost of 1-2 recall
+  points — not a trade we took. The remaining ~31% of false positives are
+  dense structural ambiguities in the 16h5 codebook itself and are no
+  longer configuration-bound.
+- **`low_key` has a configuration ceiling at 22% recall.** A finer
+  adaptive-threshold grid (`tile_size=2`) with zero `min_range` and a
+  strongly negative `constant` unlocks the tags buried in the low-DR
+  black level. A full sweep (`tile_size ∈ {2,4,8,16}`, `min_range ∈
+  {0,2,5,10}`, `constant ∈ {0,-3,-5,-10,-15,-20,-30,-50}`, plus decoder
+  and quad-gate relaxation, plus structure-tensor radius and adaptive
+  window) converges to the same 22% ceiling. Confirms the report's
+  framing: this subset is *the* KPI for future contrast-robust threshold
+  work.
+- **`raw_pipeline` is largely config-bound at its baseline.** Threshold
+  and decoder relaxation do not move the needle; only quad-gate
+  relaxation adds a marginal +2 recall points. `EdLines` extraction gives
+  the same recall at materially better RMSE (0.33 vs 0.76 px) but we did
+  not swap the default in this batch because the suite's baseline is
+  `ContourRdp` and switching extractors is a separate regression axis.
+  The remaining 40% are likely noise-fragmented contours that would
+  require a pre-filtering pass to recover.
+
 ## 6. Distortion — AprilGrid
 
 All 1920×1080, 50 images per subset, AprilTag36h11, Accurate pose mode.
@@ -162,3 +206,9 @@ cargo test --release \
   --features bench-internals \
   -- --test-threads=1 --nocapture
 ```
+
+The `regression_render_tag_robustness` suite includes both the baseline
+watchlist runs (`regression_hub_<subset>_1080p`) and the configuration-
+tuned follow-up runs (`regression_hub_<subset>_1080p_tuned`). The tuned
+variants load their JSON profiles from
+`crates/locus-core/tests/fixtures/robustness/*_tuned.json`.
