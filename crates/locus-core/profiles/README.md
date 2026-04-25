@@ -1,7 +1,8 @@
 # Shipped detector profiles
 
-Three JSON files — `standard.json`, `grid.json`, `high_accuracy.json` — are
-the **single source of truth** for Locus detector configuration. They are
+Four JSON files — `standard.json`, `grid.json`, `high_accuracy.json`,
+`render_tag_hub.json` — are the **single source of truth** for Locus
+detector configuration. They are
 embedded into the Rust crate (via `include_str!`) and re-exposed to the
 Python wheel through the `_shipped_profile_json` FFI hook, so `locus-core`
 and `locus._profile.DetectorConfig` always read identical bytes.
@@ -93,6 +94,25 @@ The pose-tuning knobs (`pose.huber_delta_px`, `pose.tikhonov_alpha_max`,
 `pose.sigma_n_sq`, `pose.structure_tensor_radius`) are held at their
 defaults in this profile; sweep them against your sensor profile for
 production metrology.
+
+### `render_tag_hub`
+
+`high_accuracy` tuned for synthetic clean-render datasets where tags can
+appear near-axis-aligned. Adds the EdLines axis-aligned imbalance gate so
+boundary segmentations whose four arcs are severely unbalanced (one arc
+> 40 % of the boundary while another < 16 %) divert from the AXIS to the
+DIAG extremal partition — recovering tags whose adjacent corners
+collapse onto the same TRBL extremal.
+
+| Field | `high_accuracy` | `render_tag_hub` | Reason |
+| --- | --- | --- | --- |
+| `quad.edlines_imbalance_gate` | `false` | `true` | AXIS-mode rescue for near-axis-aligned tags. Off by default because lens-distorted aprilgrid sub-tags can legitimately produce min-arc < 16 %; only opt in for synthetic-render workloads. |
+
+On the `locus_v1_tag36h11_*` Hub render-tag subsets this lifts recall
+from 86/90/94/94 % → 100/100/100/94 % across 480p/720p/1080p/2160p
+without regressing pose accuracy (rotation P50 stays ≤ 0.054° at 1080p).
+See `docs/engineering/benchmarking/render_tag_sota_20260425.md` for the
+full A/B evaluation.
 
 ## Authoring a custom profile
 

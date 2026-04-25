@@ -226,6 +226,7 @@ class Detector:
                 max_elongation=raw.quad_max_elongation,
                 min_density=raw.quad_min_density,
                 extraction_mode=raw.quad_extraction_mode,
+                edlines_imbalance_gate=raw.edlines_imbalance_gate,
             ),
             decoder=DecoderConfig(
                 min_contrast=raw.decoder_min_contrast,

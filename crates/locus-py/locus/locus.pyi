@@ -114,6 +114,7 @@ class PyDetectorConfig:
     tikhonov_alpha_max: float
     sigma_n_sq: float
     structure_tensor_radius: int
+    edlines_imbalance_gate: bool
     def __init__(
         self,
         *,
@@ -147,6 +148,7 @@ class PyDetectorConfig:
         tikhonov_alpha_max: float,
         sigma_n_sq: float,
         structure_tensor_radius: int,
+        edlines_imbalance_gate: bool,
     ) -> None: ...
 
 # ---------------------------------------------------------------------------
@@ -286,7 +288,7 @@ class CharucoRefiner:
 class Detector:
     def __init__(
         self,
-        profile: Literal["standard", "grid", "high_accuracy"] | None = None,
+        profile: Literal["standard", "grid", "high_accuracy", "render_tag_hub"] | None = None,
         config: Any | None = None,
         *,
         decimation: int | None = None,

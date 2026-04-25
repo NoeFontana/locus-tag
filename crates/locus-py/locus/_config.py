@@ -37,8 +37,13 @@ from .locus import (
 
 _E = TypeVar("_E")
 
-ProfileName: TypeAlias = Literal["standard", "grid", "high_accuracy"]
-SHIPPED_PROFILES: tuple[ProfileName, ...] = ("standard", "grid", "high_accuracy")
+ProfileName: TypeAlias = Literal["standard", "grid", "high_accuracy", "render_tag_hub"]
+SHIPPED_PROFILES: tuple[ProfileName, ...] = (
+    "standard",
+    "grid",
+    "high_accuracy",
+    "render_tag_hub",
+)
 
 
 def _enum_registry(enum_cls: type[_E]) -> tuple[dict[int, _E], dict[str, _E], dict[_E, str]]:
@@ -164,6 +169,7 @@ class QuadConfig(BaseModel):
     extraction_mode: _QuadExtractionField = Field(
         default_factory=lambda: QuadExtractionMode.ContourRdp
     )
+    edlines_imbalance_gate: bool = Field(default=False)
 
     @model_validator(mode="after")
     def _check_fill_ratio_ordering(self) -> QuadConfig:
@@ -248,7 +254,7 @@ class DetectorConfig(BaseModel):
 
     @classmethod
     def from_profile(cls, name: ProfileName) -> DetectorConfig:
-        """Load one of the three shipped profiles by name."""
+        """Load a shipped profile by name."""
         if name not in SHIPPED_PROFILES:
             raise ValueError(
                 f"Unknown shipped profile {name!r}; expected one of {sorted(SHIPPED_PROFILES)}"
@@ -283,6 +289,7 @@ class DetectorConfig(BaseModel):
             quad_max_elongation=self.quad.max_elongation,
             quad_min_density=self.quad.min_density,
             quad_extraction_mode=self.quad.extraction_mode,
+            edlines_imbalance_gate=self.quad.edlines_imbalance_gate,
             decoder_min_contrast=self.decoder.min_contrast,
             refinement_mode=self.decoder.refinement_mode,
             decode_mode=self.decoder.decode_mode,

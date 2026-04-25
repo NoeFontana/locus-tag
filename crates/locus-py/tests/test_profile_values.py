@@ -44,7 +44,17 @@ EXPECTED = {
         "quad.max_elongation": 20.0,
         "quad.min_density": 0.15,
         "quad.extraction_mode": QuadExtractionMode.EdLines,
+        "quad.edlines_imbalance_gate": False,
         # `None` is a Python keyword — reach the variant via getattr.
+        "decoder.refinement_mode": getattr(CornerRefinementMode, "None"),
+        "decoder.decode_mode": DecodeMode.Hard,
+        "segmentation.connectivity": SegmentationConnectivity.Eight,
+    },
+    "render_tag_hub": {
+        "threshold.enable_sharpening": False,
+        "threshold.tile_size": 8,
+        "quad.extraction_mode": QuadExtractionMode.EdLines,
+        "quad.edlines_imbalance_gate": True,
         "decoder.refinement_mode": getattr(CornerRefinementMode, "None"),
         "decoder.decode_mode": DecodeMode.Hard,
         "segmentation.connectivity": SegmentationConnectivity.Eight,
