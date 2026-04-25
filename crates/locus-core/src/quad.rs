@@ -29,6 +29,41 @@ pub(crate) type CornerCovariances = [[f32; 4]; 4];
 // Re-export the canonical Point type from the crate root.
 pub use crate::Point;
 
+/// Top-`MAX_CANDIDATES` `(pixel_count, label_idx)` pairs, sorted descending.
+///
+/// Quad extraction writes into a fixed-capacity SoA batch (`MAX_CANDIDATES`).
+/// At 4K, the number of geometrically valid quads can exceed that ceiling, so
+/// truncation must drop the smallest blobs (noise) rather than the largest
+/// (tag candidates). When the input exceeds the ceiling we partition with
+/// `select_nth_unstable_by` (O(n)) before sorting the surviving prefix,
+/// avoiding O(n log n) work on the noise tail. The (key, index) pair is
+/// packed inline so comparators stay inside one cache-resident slice instead
+/// of double-chasing into `stats`. Allocated in the per-frame `Bump` so the
+/// hot path never touches the system allocator. Descending order — with ties
+/// broken on `label_idx` for determinism under `_unstable` sorts — is
+/// load-bearing for downstream snapshot stability: funnel/decoder dedup is
+/// processing-order-sensitive.
+#[inline]
+fn pixel_count_descending_order<'a>(
+    arena: &'a Bump,
+    stats: &[crate::segmentation::ComponentStats],
+) -> BumpVec<'a, (u32, u32)> {
+    let mut keyed = BumpVec::with_capacity_in(stats.len(), arena);
+    keyed.extend(
+        stats
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (s.pixel_count, i as u32)),
+    );
+    let cmp = |a: &(u32, u32), b: &(u32, u32)| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1));
+    if keyed.len() > MAX_CANDIDATES {
+        keyed.select_nth_unstable_by(MAX_CANDIDATES - 1, cmp);
+        keyed.truncate(MAX_CANDIDATES);
+    }
+    keyed.sort_unstable_by(cmp);
+    keyed
+}
+
 /// Fast quad extraction using bounding box stats from CCL.
 /// Only traces contours for components that pass geometric filters.
 /// Uses default configuration.
@@ -45,9 +80,10 @@ pub(crate) fn extract_quads_fast(
 ///
 /// This function populates the `corners` and `status_mask` fields of the provided `DetectionBatch`.
 /// It returns the total number of candidates found ($N$).
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 #[tracing::instrument(skip_all, name = "pipeline::quad_extraction")]
 pub fn extract_quads_soa(
+    frame_arena: &Bump,
     batch: &mut DetectionBatch,
     img: &ImageView,
     label_result: &LabelResult,
@@ -59,23 +95,20 @@ pub fn extract_quads_soa(
     use rayon::prelude::*;
 
     let stats = &label_result.component_stats;
+    let order = pixel_count_descending_order(frame_arena, stats);
 
-    // Collect into a temporary Vec to handle the MAX_CANDIDATES limit and sequential writing.
-    // In a future optimization, we could use an atomic counter to write directly into the batch.
-    let detections: Vec<([Point; 4], [Point; 4], CornerCovariances)> = stats
+    let detections: Vec<([Point; 4], [Point; 4], CornerCovariances)> = order
         .par_iter()
-        .enumerate()
-        .filter_map(|(label_idx, stat)| {
+        .filter_map(|&(_, label_idx)| {
             WORKSPACE_ARENA.with(|cell| {
                 let mut arena = cell.borrow_mut();
                 arena.reset();
-                let label = (label_idx + 1) as u32;
                 extract_single_quad(
                     &arena,
                     img,
                     label_result.labels,
-                    label,
-                    stat,
+                    label_idx + 1,
+                    &stats[label_idx as usize],
                     config,
                     decimation,
                     refinement_img,
@@ -417,6 +450,7 @@ impl ScaledIntrinsics {
 #[allow(clippy::too_many_arguments)]
 #[tracing::instrument(skip_all, name = "pipeline::quad_extraction_camera")]
 pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
+    frame_arena: &Bump,
     batch: &mut DetectionBatch,
     img: &ImageView,
     label_result: &LabelResult,
@@ -431,21 +465,20 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
 
     let stats = &label_result.component_stats;
     let scaled = ScaledIntrinsics::from_intrinsics(intrinsics, decimation);
+    let order = pixel_count_descending_order(frame_arena, stats);
 
-    let detections: Vec<([Point; 4], [Point; 4], CornerCovariances)> = stats
+    let detections: Vec<([Point; 4], [Point; 4], CornerCovariances)> = order
         .par_iter()
-        .enumerate()
-        .filter_map(|(label_idx, stat)| {
+        .filter_map(|&(_, label_idx)| {
             WORKSPACE_ARENA.with(|cell| {
                 let mut arena = cell.borrow_mut();
                 arena.reset();
-                let label = (label_idx + 1) as u32;
                 extract_single_quad_with_camera(
                     &arena,
                     img,
                     label_result.labels,
-                    label,
-                    stat,
+                    label_idx + 1,
+                    &stats[label_idx as usize],
                     config,
                     decimation,
                     refinement_img,
