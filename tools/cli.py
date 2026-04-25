@@ -361,7 +361,10 @@ def bench_real(
         LocusWrapper,
         Metrics,
         OpenCVWrapper,
+        accumulate_pose_match,
+        aggregate_pose_stats,
         build_board_refiner,
+        new_pose_stats,
     )
 
     if profile:
@@ -499,7 +502,7 @@ def bench_real(
         eval_tag_size = ds.tag_size if ds.tag_size is not None else 1.0
 
         for wrapper in wrappers:
-            stats: dict[str, Any] = {"gt": 0, "det": 0, "latency": [], "pose_err_sum": 0.0}
+            stats = new_pose_stats()
 
             for img_name in tqdm(img_names, desc=f"{wrapper.name:<10}"):
                 img_path = ds.images_dir / img_name
@@ -540,56 +543,59 @@ def bench_real(
                     board_pose = getattr(batch, "board_pose", None)
                     if batch is not None and board_pose is not None and board_gt is not None:
                         stats["det"] += 1
-                        stats["pose_err_sum"] += np.linalg.norm(board_pose[:3] - board_gt[:3])
+                        stats["total_det"] += 1
+                        stats["trans_errs"].append(
+                            float(np.linalg.norm(board_pose[:3] - board_gt[:3]))
+                        )
                 else:
                     gt_tags = ds.gt_map[img_name]["tags"]
                     stats["gt"] += len(gt_tags)
 
-                    matched_tids: set[int] = set()
+                    matched: set[int] = set()
                     if batch is not None:
                         batch_poses = getattr(batch, "poses", None)
+                        stats["total_det"] += len(batch.ids)
                         for i in range(len(batch.ids)):
-                            tid = int(batch.ids[i])
-                            if tid in gt_tags and tid not in matched_tids:
-                                matched_tids.add(tid)
-                                stats["det"] += 1
-                                gt_tag = gt_tags[tid]
-                                if "pose" in gt_tag and batch_poses is not None:
-                                    # Align center-origin GT to top-left Locus convention
-                                    t_gt_tl = Metrics.align_pose(
-                                        gt_tag["pose"][:3], gt_tag["pose"][3:], eval_tag_size
-                                    )
-                                    stats["pose_err_sum"] += np.linalg.norm(
-                                        batch_poses[i, :3] - t_gt_tl
-                                    )
+                            pose = batch_poses[i] if batch_poses is not None else None
+                            accumulate_pose_match(stats, matched, int(batch.ids[i]), gt_tags, pose)
                     elif detections is not None:
+                        stats["total_det"] += len(detections)
                         for det in detections:
-                            tid = det["id"]
-                            if tid in gt_tags and tid not in matched_tids:
-                                matched_tids.add(tid)
-                                stats["det"] += 1
-                                gt_tag = gt_tags[tid]
-                                if "pose" in gt_tag and det.get("pose") is not None:
-                                    t_gt_tl = Metrics.align_pose(
-                                        gt_tag["pose"][:3], gt_tag["pose"][3:], eval_tag_size
-                                    )
-                                    stats["pose_err_sum"] += np.linalg.norm(
-                                        np.array(det["pose"])[:3] - t_gt_tl
-                                    )
+                            accumulate_pose_match(
+                                stats, matched, int(det["id"]), gt_tags, det.get("pose")
+                            )
 
-            recall = float(stats["det"] / stats["gt"] * 100) if stats["gt"] > 0 else 0.0
-            avg_pose_err = float(stats["pose_err_sum"] / stats["det"]) if stats["det"] > 0 else 0.0
-            avg_lat = float(np.mean(stats["latency"]))
-
+            agg = aggregate_pose_stats(stats)
             current_results[hub_config][wrapper.name] = {
-                "recall": recall,
-                "pose_rmse": avg_pose_err,
-                "latency": avg_lat,
+                "recall": agg["recall"],
+                "precision": agg["precision"],
+                "pose_rmse": agg["trans_mean_m"],
+                "trans_p50": agg["trans_p50_m"],
+                "trans_p95": agg["trans_p95_m"],
+                "trans_p99": agg["trans_p99_m"],
+                "rot_mean_deg": agg["rot_mean_deg"],
+                "rot_p50_deg": agg["rot_p50_deg"],
+                "rot_p95_deg": agg["rot_p95_deg"],
+                "rot_p99_deg": agg["rot_p99_deg"],
+                "latency": agg["latency_ms"],
+                "samples": agg["samples"],
             }
             typer.echo(
-                f"  {wrapper.name:<10} | {'Board' if is_board else 'Tag'} Recall: {recall:>6.2f}%"
-                f" | Pose Err: {avg_pose_err:>6.4f} m | Latency: {avg_lat:>6.2f} ms"
+                f"  {wrapper.name:<14} | {'Board' if is_board else 'Tag'} Recall: {agg['recall']:>6.2f}%"
+                f" | Precision: {agg['precision']:>6.2f}% | Latency: {agg['latency_ms']:>6.2f} ms"
             )
+            if agg["samples"]:
+                typer.echo(
+                    f"  {'':<14} | Trans (m)  mean: {agg['trans_mean_m']:.4f}  "
+                    f"p50: {agg['trans_p50_m']:.4f}  p95: {agg['trans_p95_m']:.4f}  "
+                    f"p99: {agg['trans_p99_m']:.4f}"
+                )
+            if stats["rot_errs"]:
+                typer.echo(
+                    f"  {'':<14} | Rot (deg)  mean: {agg['rot_mean_deg']:.4f}  "
+                    f"p50: {agg['rot_p50_deg']:.4f}  p95: {agg['rot_p95_deg']:.4f}  "
+                    f"p99: {agg['rot_p99_deg']:.4f}"
+                )
 
     else:
         for scenario in scenarios:

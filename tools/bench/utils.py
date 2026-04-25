@@ -1,6 +1,8 @@
 import csv
 import json
+import math
 import tarfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -10,6 +12,7 @@ import locus
 import numpy as np
 from huggingface_hub import hf_hub_download
 from pupil_apriltags import Detector as AprilTagDetector  # type: ignore
+from tqdm import tqdm
 
 ICRA_REPO_ID = "NoeFontana/apriltag-validation-data"
 ICRA_CACHE_DIR = Path("tests/data/icra2020")
@@ -62,7 +65,9 @@ class HubDatasetLoader:
             raise FileNotFoundError(f"Metadata not found at {rich_path}")
 
         with open(rich_path) as f:
-            entries = json.load(f)
+            data = json.load(f)
+        # rich_truth.json has two on-disk shapes: v1 = bare list, v2 = {records: [...]}.
+        entries = data["records"] if isinstance(data, dict) and "records" in data else data
 
         gt_map: dict[str, Any] = {}
         board_config_entry = None
@@ -123,7 +128,7 @@ class FamilyMapper:
     """Centralized mapping for tag families across different libraries."""
 
     @staticmethod
-    def to_locus(family: int | None) -> list[locus.TagFamily] | None:
+    def to_locus(family: int | locus.TagFamily | None) -> list[locus.TagFamily] | None:
         if family is None:
             return None
         mapping = {
@@ -133,11 +138,11 @@ class FamilyMapper:
             int(locus.TagFamily.ArUco4x4_100): locus.TagFamily.ArUco4x4_100,
             int(locus.TagFamily.ArUco6x6_250): locus.TagFamily.ArUco6x6_250,
         }
-        f = mapping.get(family)
+        f = mapping.get(int(family))
         return [f] if f else None
 
     @staticmethod
-    def to_opencv(family: int | None) -> int | None:
+    def to_opencv(family: int | locus.TagFamily | None) -> int | None:
         if family is None:
             return None
         mapping = {
@@ -147,10 +152,10 @@ class FamilyMapper:
             int(locus.TagFamily.ArUco4x4_100): cv2.aruco.DICT_4X4_100,
             int(locus.TagFamily.ArUco6x6_250): cv2.aruco.DICT_6X6_250,
         }
-        return mapping.get(family)
+        return mapping.get(int(family))
 
     @staticmethod
-    def to_apriltag(family: int | None) -> str | None:
+    def to_apriltag(family: int | locus.TagFamily | None) -> str | None:
         if family is None:
             return None
         mapping = {
@@ -160,7 +165,7 @@ class FamilyMapper:
             int(locus.TagFamily.ArUco4x4_100): None,
             int(locus.TagFamily.ArUco6x6_250): None,
         }
-        return mapping.get(family)
+        return mapping.get(int(family))
 
 
 @dataclass
@@ -407,6 +412,167 @@ class HubBenchmarkLoader:
             yield image_id, img_np, gt_tags
 
 
+def _pose_from_R_t(R: np.ndarray, t: np.ndarray) -> list[float]:
+    """Pack a rotation matrix + translation into [tx, ty, tz, qx, qy, qz, qw]."""
+    qw = math.sqrt(max(0.0, 1.0 + R[0, 0] + R[1, 1] + R[2, 2])) * 0.5
+    if qw > 1e-8:
+        qx = (R[2, 1] - R[1, 2]) / (4.0 * qw)
+        qy = (R[0, 2] - R[2, 0]) / (4.0 * qw)
+        qz = (R[1, 0] - R[0, 1]) / (4.0 * qw)
+    else:
+        # Fallback for near-180° rotations: pick the largest diagonal.
+        i = int(np.argmax([R[0, 0], R[1, 1], R[2, 2]]))
+        if i == 0:
+            qx = math.sqrt(max(0.0, 1.0 + R[0, 0] - R[1, 1] - R[2, 2])) * 0.5
+            qy = (R[0, 1] + R[1, 0]) / (4.0 * qx)
+            qz = (R[0, 2] + R[2, 0]) / (4.0 * qx)
+            qw = (R[2, 1] - R[1, 2]) / (4.0 * qx)
+        elif i == 1:
+            qy = math.sqrt(max(0.0, 1.0 - R[0, 0] + R[1, 1] - R[2, 2])) * 0.5
+            qx = (R[0, 1] + R[1, 0]) / (4.0 * qy)
+            qz = (R[1, 2] + R[2, 1]) / (4.0 * qy)
+            qw = (R[0, 2] - R[2, 0]) / (4.0 * qy)
+        else:
+            qz = math.sqrt(max(0.0, 1.0 - R[0, 0] - R[1, 1] + R[2, 2])) * 0.5
+            qx = (R[0, 2] + R[2, 0]) / (4.0 * qz)
+            qy = (R[1, 2] + R[2, 1]) / (4.0 * qz)
+            qw = (R[1, 0] - R[0, 1]) / (4.0 * qz)
+    return [float(t[0]), float(t[1]), float(t[2]), float(qx), float(qy), float(qz), float(qw)]
+
+
+def _quat_to_rot(qx: float, qy: float, qz: float, qw: float) -> np.ndarray:
+    return np.array(
+        [
+            [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw)],
+            [2 * (qx * qy + qz * qw), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qx * qw)],
+            [2 * (qx * qz - qy * qw), 2 * (qy * qz + qx * qw), 1 - 2 * (qx * qx + qy * qy)],
+        ]
+    )
+
+
+def rotation_error_deg(det_pose: np.ndarray, gt_quat_xyzw: np.ndarray) -> float:
+    """Geodesic angle (degrees) between detected and GT rotations."""
+    R_det = _quat_to_rot(*[float(v) for v in det_pose[3:7]])
+    qx, qy, qz, qw = (float(v) for v in gt_quat_xyzw)
+    R_gt = _quat_to_rot(qx, qy, qz, qw)
+    cos_theta = (np.trace(R_det.T @ R_gt) - 1.0) * 0.5
+    return float(math.degrees(math.acos(max(-1.0, min(1.0, cos_theta)))))
+
+
+def accumulate_pose_match(
+    stats: dict[str, Any],
+    matched: set[int],
+    tid: int,
+    gt_tags: dict[int, Any],
+    pose: Any,
+) -> None:
+    """Mark a detection matched (id ∈ GT, first hit wins) and record pose error."""
+    if tid not in gt_tags or tid in matched:
+        return
+    matched.add(tid)
+    stats["det"] += 1
+    gt = gt_tags[tid]
+    if "pose" in gt and pose is not None:
+        det_pose = np.asarray(pose)
+        stats["trans_errs"].append(
+            float(np.linalg.norm(np.asarray(det_pose[:3]) - np.asarray(gt["pose"][:3])))
+        )
+        stats["rot_errs"].append(rotation_error_deg(det_pose, gt["pose"][3:7]))
+
+
+def new_pose_stats() -> dict[str, Any]:
+    """Empty stats dict for `accumulate_pose_match` / `aggregate_pose_stats`."""
+    return {
+        "gt": 0,
+        "det": 0,
+        "total_det": 0,
+        "latency": [],
+        "trans_errs": [],
+        "rot_errs": [],
+    }
+
+
+def evaluate_tag_pose(
+    wrapper: "LibraryWrapper",
+    ds: "HubDatasetResult",
+    eval_tag_size: float,
+    *,
+    pose_estimation_mode: Any = None,
+) -> dict[str, Any]:
+    """Run a wrapper across a Hub tag-only dataset, returning raw per-detection stats.
+
+    Locus wrappers are driven through the underlying detector to thread the
+    optional `pose_estimation_mode`; non-Locus wrappers go through `detect()`.
+    """
+    is_locus = isinstance(wrapper, LocusWrapper)
+    stats = new_pose_stats()
+
+    for img_name in tqdm(sorted(ds.gt_map.keys()), desc=f"{wrapper.name:<24}"):
+        img_path = ds.images_dir / img_name
+        if not img_path.exists():
+            continue
+        img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            continue
+
+        start = time.perf_counter()
+        if is_locus:
+            assert ds.intrinsics is not None
+            kwargs: dict[str, Any] = {"intrinsics": ds.intrinsics, "tag_size": eval_tag_size}
+            if pose_estimation_mode is not None:
+                kwargs["pose_estimation_mode"] = pose_estimation_mode
+            batch = wrapper.detector.detect(img, **kwargs)  # type: ignore[attr-defined]
+            detections = None
+        else:
+            detections, _ = wrapper.detect(img, intrinsics=ds.intrinsics, tag_size=eval_tag_size)
+            batch = None
+        stats["latency"].append((time.perf_counter() - start) * 1000.0)
+
+        gt_tags = ds.gt_map[img_name]["tags"]
+        stats["gt"] += len(gt_tags)
+        matched: set[int] = set()
+
+        if batch is not None:
+            stats["total_det"] += len(batch.ids)
+            batch_poses = getattr(batch, "poses", None)
+            for i in range(len(batch.ids)):
+                pose = batch_poses[i] if batch_poses is not None else None
+                accumulate_pose_match(stats, matched, int(batch.ids[i]), gt_tags, pose)
+        elif detections is not None:
+            stats["total_det"] += len(detections)
+            for det in detections:
+                accumulate_pose_match(stats, matched, int(det["id"]), gt_tags, det.get("pose"))
+
+    return stats
+
+
+def aggregate_pose_stats(stats: dict[str, Any]) -> dict[str, Any]:
+    """Reduce raw stats from `evaluate_tag_pose` to recall/precision/latency + percentiles."""
+    trans = np.asarray(stats["trans_errs"], dtype=np.float64)
+    rot = np.asarray(stats["rot_errs"], dtype=np.float64)
+    out: dict[str, Any] = {
+        "recall": (stats["det"] / stats["gt"] * 100) if stats["gt"] else 0.0,
+        "precision": (stats["det"] / stats["total_det"] * 100) if stats["total_det"] else 0.0,
+        "latency_ms": float(np.mean(stats["latency"])) if stats["latency"] else 0.0,
+        "samples": int(trans.size),
+    }
+    if trans.size:
+        out["trans_mean_m"] = float(np.mean(trans))
+        out["trans_p50_m"], out["trans_p95_m"], out["trans_p99_m"] = (
+            float(v) for v in np.percentile(trans, [50, 95, 99])
+        )
+    else:
+        out["trans_mean_m"] = out["trans_p50_m"] = out["trans_p95_m"] = out["trans_p99_m"] = 0.0
+    if rot.size:
+        out["rot_mean_deg"] = float(np.mean(rot))
+        out["rot_p50_deg"], out["rot_p95_deg"], out["rot_p99_deg"] = (
+            float(v) for v in np.percentile(rot, [50, 95, 99])
+        )
+    else:
+        out["rot_mean_deg"] = out["rot_p50_deg"] = out["rot_p95_deg"] = out["rot_p99_deg"] = 0.0
+    return out
+
+
 class Metrics:
     @staticmethod
     def align_pose(gt_pos: np.ndarray, gt_quat: np.ndarray, tag_size: float) -> np.ndarray:
@@ -420,34 +586,9 @@ class Metrics:
         Returns:
             shifted_pos: [x, y, z] position of the top-left corner in camera frame.
         """
-        qx, qy, qz, qw = gt_quat
-        # Convert quaternion to rotation matrix
-        r_gt = np.array(
-            [
-                [
-                    1 - 2 * (qy**2 + qz**2),
-                    2 * (qx * qy - qz * qw),
-                    2 * (qx * qz + qy * qw),
-                ],
-                [
-                    2 * (qx * qy + qz * qw),
-                    1 - 2 * (qx**2 + qz**2),
-                    2 * (qy * qz - qx * qw),
-                ],
-                [
-                    2 * (qx * qz - qy * qw),
-                    2 * (qy * qz + qx * qw),
-                    1 - 2 * (qx**2 + qy**2),
-                ],
-            ]
-        )
-
-        # Local offset in Object Frame (Y-Down, Z-In): TL is [-s/2, -s/2, 0]
+        r_gt = _quat_to_rot(*[float(v) for v in gt_quat])
         s_half = tag_size * 0.5
-        v_offset_obj = np.array([-s_half, -s_half, 0.0])
-
-        # Transform offset to Camera Frame: t_TL = t_center + R_gt * v_offset_obj
-        return gt_pos + r_gt @ v_offset_obj
+        return gt_pos + r_gt @ np.array([-s_half, -s_half, 0.0])
 
     @staticmethod
     def compute_corner_error(det_corners: np.ndarray, gt_corners: np.ndarray) -> float:
@@ -587,18 +728,50 @@ class OpenCVWrapper(LibraryWrapper):
             return [], None
         corners, ids, _ = self.detector.detectMarkers(img)
         detections = []
-        if ids is not None:
-            for i, tid in enumerate(ids):
-                c = corners[i][0]
-                detections.append(
-                    {
-                        "id": int(tid[0]),
-                        "center": np.mean(c, axis=0).tolist(),
-                        "corners": c.tolist(),
-                        "hamming": 0,
-                        "margin": 0,
-                    }
+        if ids is None:
+            return detections, None
+
+        camera_matrix = None
+        dist_coeffs = np.zeros(5, dtype=np.float64)
+        obj_pts = None
+        if intrinsics is not None and tag_size is not None:
+            camera_matrix = np.array(
+                [
+                    [intrinsics.fx, 0.0, intrinsics.cx],
+                    [0.0, intrinsics.fy, intrinsics.cy],
+                    [0.0, 0.0, 1.0],
+                ],
+                dtype=np.float64,
+            )
+            # Center-origin y-down object points (matches Locus + Hub GT convention).
+            # cv2.aruco corner order is TL,TR,BR,BL relative to the marker's canonical orientation.
+            s = tag_size * 0.5
+            obj_pts = np.array(
+                [[-s, -s, 0.0], [s, -s, 0.0], [s, s, 0.0], [-s, s, 0.0]],
+                dtype=np.float64,
+            )
+
+        for i, tid in enumerate(ids):
+            c = corners[i][0]
+            det = {
+                "id": int(tid[0]),
+                "center": np.mean(c, axis=0).tolist(),
+                "corners": c.tolist(),
+                "hamming": 0,
+                "margin": 0,
+            }
+            if camera_matrix is not None and obj_pts is not None:
+                ok, rvec, tvec = cv2.solvePnP(
+                    obj_pts,
+                    c.astype(np.float64),
+                    camera_matrix,
+                    dist_coeffs,
+                    flags=cv2.SOLVEPNP_ITERATIVE,
                 )
+                if ok:
+                    R, _ = cv2.Rodrigues(rvec)
+                    det["pose"] = _pose_from_R_t(R, tvec.flatten())
+            detections.append(det)
         return detections, None
 
 
@@ -627,18 +800,34 @@ class AprilTagWrapper(LibraryWrapper):
     ) -> tuple[list[dict[str, Any]], Any]:
         if self.detector is None:
             return [], None
-        raw_dets = self.detector.detect(img)
+        camera_params = (
+            (intrinsics.fx, intrinsics.fy, intrinsics.cx, intrinsics.cy)
+            if intrinsics is not None
+            else None
+        )
+        estimate_pose = camera_params is not None and tag_size is not None
+        raw_dets = self.detector.detect(
+            img,
+            estimate_tag_pose=estimate_pose,
+            camera_params=camera_params,
+            tag_size=tag_size,
+        )
         detections = []
         for d in raw_dets:  # type: ignore[attr-defined]
-            detections.append(
-                {
-                    "id": d.tag_id,
-                    "center": d.center.tolist(),
-                    "corners": d.corners.tolist(),
-                    "hamming": d.hamming,
-                    "margin": d.decision_margin,
-                }
-            )
+            det = {
+                "id": d.tag_id,
+                "center": d.center.tolist(),
+                "corners": d.corners.tolist(),
+                "hamming": d.hamming,
+                "margin": d.decision_margin,
+            }
+            pose_t = getattr(d, "pose_t", None)
+            pose_R = getattr(d, "pose_R", None)
+            if pose_t is not None and pose_R is not None:
+                # AprilTag-C's tag frame differs from Locus/GT by 180° about z.
+                R_corrected = np.asarray(pose_R) @ np.diag([-1.0, -1.0, 1.0])
+                det["pose"] = _pose_from_R_t(R_corrected, np.asarray(pose_t).flatten())
+            detections.append(det)
         return detections, None
 
 
