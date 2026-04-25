@@ -341,6 +341,7 @@ pub struct PyDetectorConfig {
     pub quad_max_elongation: f64,
     pub quad_min_density: f64,
     pub quad_extraction_mode: QuadExtractionMode,
+    pub edlines_imbalance_gate: bool,
     pub huber_delta_px: f64,
     pub tikhonov_alpha_max: f64,
     pub sigma_n_sq: f64,
@@ -379,6 +380,7 @@ impl PyDetectorConfig {
         quad_max_elongation,
         quad_min_density,
         quad_extraction_mode,
+        edlines_imbalance_gate,
         huber_delta_px,
         tikhonov_alpha_max,
         sigma_n_sq,
@@ -411,6 +413,7 @@ impl PyDetectorConfig {
         quad_max_elongation: f64,
         quad_min_density: f64,
         quad_extraction_mode: QuadExtractionMode,
+        edlines_imbalance_gate: bool,
         huber_delta_px: f64,
         tikhonov_alpha_max: f64,
         sigma_n_sq: f64,
@@ -443,6 +446,7 @@ impl PyDetectorConfig {
             quad_max_elongation,
             quad_min_density,
             quad_extraction_mode,
+            edlines_imbalance_gate,
             huber_delta_px,
             tikhonov_alpha_max,
             sigma_n_sq,
@@ -500,6 +504,7 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
                 },
                 locus_core::config::QuadExtractionMode::EdLines => QuadExtractionMode::EdLines,
             },
+            edlines_imbalance_gate: c.edlines_imbalance_gate,
             huber_delta_px: c.huber_delta_px,
             tikhonov_alpha_max: c.tikhonov_alpha_max,
             sigma_n_sq: c.sigma_n_sq,
@@ -1467,6 +1472,7 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             quad_max_elongation: c.quad_max_elongation,
             quad_min_density: c.quad_min_density,
             quad_extraction_mode: c.quad_extraction_mode.into(),
+            edlines_imbalance_gate: c.edlines_imbalance_gate,
             decoder_min_contrast: c.decoder_min_contrast,
             refinement_mode: c.refinement_mode.into(),
             decode_mode: c.decode_mode.into(),
@@ -1878,7 +1884,7 @@ fn init_tracy() {
 fn _shipped_profile_json(name: &str) -> PyResult<&'static str> {
     locus_core::config::shipped_profile_json(name).ok_or_else(|| {
         PyValueError::new_err(format!(
-            "Unknown shipped profile {name:?}; expected one of ['standard', 'grid', 'high_accuracy']"
+            "Unknown shipped profile {name:?}; expected one of ['standard', 'grid', 'high_accuracy', 'render_tag_hub']"
         ))
     })
 }

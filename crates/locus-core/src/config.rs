@@ -177,6 +177,17 @@ pub struct DetectorConfig {
 
     /// Quad extraction mode: legacy contour tracing (default) or EDLines.
     pub quad_extraction_mode: QuadExtractionMode,
+
+    /// EdLines: divert near-axis-aligned tags from AXIS to DIAG boundary
+    /// segmentation when the AXIS 4-arc partition is severely unbalanced
+    /// (one arc > 40 % *and* one < 16 %).  Default: false.
+    ///
+    /// The signal disambiguates "two adjacent corners collapsed onto one
+    /// TRBL extremal" from "lens-distorted tag with curved edges": the latter
+    /// keeps all arcs above ~15 % so the gate leaves them on the AXIS path.
+    /// Opt in for clean-render benchmarks (`render_tag_hub`); leave off for
+    /// distortion / aprilgrid suites.
+    pub edlines_imbalance_gate: bool,
 }
 
 impl Default for DetectorConfig {
@@ -215,6 +226,7 @@ impl Default for DetectorConfig {
             quad_max_elongation: 0.0,
             quad_min_density: 0.0,
             quad_extraction_mode: QuadExtractionMode::ContourRdp,
+            edlines_imbalance_gate: false,
         }
     }
 }
@@ -476,6 +488,7 @@ impl DetectorConfigBuilder {
             quad_max_elongation: self.quad_max_elongation.unwrap_or(d.quad_max_elongation),
             quad_min_density: self.quad_min_density.unwrap_or(d.quad_min_density),
             quad_extraction_mode: self.quad_extraction_mode.unwrap_or(d.quad_extraction_mode),
+            edlines_imbalance_gate: d.edlines_imbalance_gate,
         }
     }
 
@@ -853,6 +866,8 @@ mod profile_json {
         pub max_elongation: f64,
         pub min_density: f64,
         pub extraction_mode: QuadExtractionMode,
+        #[serde(default)]
+        pub edlines_imbalance_gate: bool,
     }
 
     impl Default for QuadJson {
@@ -870,6 +885,7 @@ mod profile_json {
                 max_elongation: d.quad_max_elongation,
                 min_density: d.quad_min_density,
                 extraction_mode: d.quad_extraction_mode,
+                edlines_imbalance_gate: d.edlines_imbalance_gate,
             }
         }
     }
@@ -973,6 +989,7 @@ mod profile_json {
                 quad_max_elongation: p.quad.max_elongation,
                 quad_min_density: p.quad.min_density,
                 quad_extraction_mode: p.quad.extraction_mode,
+                edlines_imbalance_gate: p.quad.edlines_imbalance_gate,
             }
         }
     }
@@ -984,6 +1001,8 @@ const STANDARD_JSON: &str = include_str!("../profiles/standard.json");
 const GRID_JSON: &str = include_str!("../profiles/grid.json");
 #[cfg(feature = "profiles")]
 const HIGH_ACCURACY_JSON: &str = include_str!("../profiles/high_accuracy.json");
+#[cfg(feature = "profiles")]
+const RENDER_TAG_HUB_JSON: &str = include_str!("../profiles/render_tag_hub.json");
 
 /// Return the raw embedded JSON for a shipped profile, or `None` if the name
 /// is unknown. Exposed so FFI consumers (the Python wheel) can read the exact
@@ -995,6 +1014,7 @@ pub fn shipped_profile_json(name: &str) -> Option<&'static str> {
         "standard" => Some(STANDARD_JSON),
         "grid" => Some(GRID_JSON),
         "high_accuracy" => Some(HIGH_ACCURACY_JSON),
+        "render_tag_hub" => Some(RENDER_TAG_HUB_JSON),
         _ => None,
     }
 }
@@ -1026,26 +1046,27 @@ impl DetectorConfig {
         Ok(config)
     }
 
-    /// Load one of the three shipped profiles by name.
+    /// Load a shipped profile by name.
     ///
-    /// Accepts `"standard"`, `"grid"`, or `"high_accuracy"`.
+    /// Accepts `"standard"`, `"grid"`, `"high_accuracy"`, or `"render_tag_hub"`.
     ///
     /// # Panics
     ///
     /// Panics on an unknown profile name — this is a programming error
-    /// against a closed set of three compile-time-embedded profiles.
+    /// against a closed set of compile-time-embedded profiles.
     /// Panics on a malformed embedded JSON, which would be a build error
     /// caught by the `profile_loading` integration test.
     #[must_use]
-    #[allow(clippy::panic)] // Closed set of three; unknown-name is a programming error.
+    #[allow(clippy::panic)] // Closed set; unknown-name is a programming error.
     pub fn from_profile(name: &str) -> Self {
         let json = match name {
             "standard" => STANDARD_JSON,
             "grid" => GRID_JSON,
             "high_accuracy" => HIGH_ACCURACY_JSON,
+            "render_tag_hub" => RENDER_TAG_HUB_JSON,
             other => panic!(
                 "Unknown shipped profile {other:?}; expected one of \
-                 [\"standard\", \"grid\", \"high_accuracy\"]"
+                 [\"standard\", \"grid\", \"high_accuracy\", \"render_tag_hub\"]"
             ),
         };
         Self::from_profile_json(json).unwrap_or_else(|e| {

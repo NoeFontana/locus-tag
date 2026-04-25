@@ -1,5 +1,5 @@
 {
-  "name": "high_accuracy",
+  "name": "render_tag_hub",
   "extends": null,
   "threshold": {
     "tile_size": 8,
@@ -23,7 +23,7 @@
     "max_elongation": 20.0,
     "min_density": 0.15,
     "extraction_mode": "EdLines",
-    "edlines_imbalance_gate": false
+    "edlines_imbalance_gate": true
   },
   "decoder": {
     "min_contrast": 20.0,

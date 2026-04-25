@@ -78,6 +78,11 @@
     "QuadConfig": {
       "additionalProperties": false,
       "properties": {
+        "edlines_imbalance_gate": {
+          "default": false,
+          "title": "Edlines Imbalance Gate",
+          "type": "boolean"
+        },
         "extraction_mode": {
           "enum": [
             "ContourRdp",

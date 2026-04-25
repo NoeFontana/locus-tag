@@ -22,7 +22,8 @@
     "upscale_factor": 1,
     "max_elongation": 20.0,
     "min_density": 0.15,
-    "extraction_mode": "ContourRdp"
+    "extraction_mode": "ContourRdp",
+    "edlines_imbalance_gate": false
   },
   "decoder": {
     "min_contrast": 20.0,

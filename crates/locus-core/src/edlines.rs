@@ -59,12 +59,17 @@ pub(crate) struct EdLinesConfig {
     /// Number of Joint Gauss-Newton iterations for Phase 5 corner refinement.
     /// Default: 3.  Set to 0 to disable.
     pub gn_iters: usize,
+    /// Divert near-axis-aligned tags from AXIS to DIAG when the AXIS 4-arc
+    /// partition is severely unbalanced.  See [`crate::config::DetectorConfig`]
+    /// `edlines_imbalance_gate` for rationale.
+    pub imbalance_gate: bool,
 }
 
 impl EdLinesConfig {
-    /// Construct from the detector config (hard-coded defaults pending empirical tuning).
+    /// Construct from the detector config (most fields are hard-coded pending
+    /// empirical tuning; `imbalance_gate` is plumbed through).
     #[must_use]
-    pub fn from_detector_config(_cfg: &crate::config::DetectorConfig) -> Self {
+    pub fn from_detector_config(cfg: &crate::config::DetectorConfig) -> Self {
         Self {
             huber_delta: 1.5,
             irls_iters: 3,
@@ -74,6 +79,7 @@ impl EdLinesConfig {
             grad_min_mag: 8.0,
             min_edge_pts: 5,
             gn_iters: 3,
+            imbalance_gate: cfg.edlines_imbalance_gate,
         }
     }
 }
@@ -461,6 +467,18 @@ fn refine_corners_gauss_newton(
 
 // ── Phase 1: Angular Arc Boundary ─────────────────────────────────────────────
 
+/// Extremal-pixel system used to partition the outer boundary into four arcs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SegmentationMode {
+    /// Topmost / Rightmost / Bottommost / Leftmost extremals.  Maps to the four
+    /// edge-midpoints for an axis-aligned tag, giving four clean arcs.
+    AxisAligned,
+    /// Diagonal extremals (NW=min(x+y), NE=min(y-x), SE=max(x+y), SW=max(y-x)).
+    /// Maps to the four corners for an axis-aligned tag and gracefully handles
+    /// near-axis-aligned cases where TRBL extremals collapse onto a single side.
+    Diagonal,
+}
+
 /// Extract outer boundary pixels and assign them to four edge groups using
 /// angular arc segmentation.
 ///
@@ -491,6 +509,7 @@ fn extract_boundary_segments<'a>(
     img_width: usize,
     comp_label: u32,
     stat: &ComponentStats,
+    mode: SegmentationMode,
 ) -> [BumpVec<'a, (f64, f64)>; 4] {
     // Centroid from moments accumulated during the LSL pass.
     let m00 = f64::from(stat.pixel_count).max(1.0);
@@ -797,15 +816,25 @@ fn extract_boundary_segments<'a>(
     let diag_ok =
         ne_norm >= MIN_ARC && (se_norm - ne_norm) >= MIN_ARC && (sw_norm - se_norm) >= MIN_ARC;
 
-    if !trbl_ok && !diag_ok {
-        return empty;
-    }
+    let use_diag = match mode {
+        SegmentationMode::AxisAligned => {
+            if !trbl_ok {
+                return empty;
+            }
+            false
+        },
+        SegmentationMode::Diagonal => {
+            if !diag_ok {
+                return empty;
+            }
+            true
+        },
+    };
 
-    // Prefer axis-aligned arcs; use diagonal only when axis-aligned is degenerate.
-    let (base_angle, a1, a2, a3) = if trbl_ok {
-        (t_angle, r_norm, b_norm, l_norm)
-    } else {
+    let (base_angle, a1, a2, a3) = if use_diag {
         (nw_angle, ne_norm, se_norm, sw_norm)
+    } else {
+        (t_angle, r_norm, b_norm, l_norm)
     };
 
     // Assign each outer-boundary pixel to one of four arc groups.
@@ -966,23 +995,6 @@ pub(crate) fn extract_quad_edlines(
         return None;
     }
 
-    // ── Phase 1: Angular arc boundary segmentation ────────────────────────────
-    // edges[0]: T→R arc, edges[1]: R→B arc, edges[2]: B→L arc, edges[3]: L→T arc
-    let edges = extract_boundary_segments(arena, labels, binary.width, comp_label, stat);
-
-    for e in &edges {
-        if e.len() < 2 {
-            return None;
-        }
-    }
-
-    // ── Phase 2: Huber IRLS on binary boundary points ─────────────────────────
-    let line0 = fit_line_irls(arena, edges[0].as_slice(), cfg.huber_delta, cfg.irls_iters)?;
-    let line1 = fit_line_irls(arena, edges[1].as_slice(), cfg.huber_delta, cfg.irls_iters)?;
-    let line2 = fit_line_irls(arena, edges[2].as_slice(), cfg.huber_delta, cfg.irls_iters)?;
-    let line3 = fit_line_irls(arena, edges[3].as_slice(), cfg.huber_delta, cfg.irls_iters)?;
-    let bin_lines = [line0, line1, line2, line3];
-
     // Decimation scale factor: gray-image pixels per binary-image pixel.
     // When decimation = 1, dec = 1.0 and all coordinate conversions are no-ops.
     let dec = gray.width as f64 / binary.width as f64;
@@ -992,6 +1004,104 @@ pub(crate) fn extract_quad_edlines(
     let max_x_bin = f64::from(stat.max_x) + 0.5;
     let min_y_bin = f64::from(stat.min_y) + 0.5;
     let max_y_bin = f64::from(stat.max_y) + 0.5;
+
+    // Try AXIS first; fall through to DIAG only when boundary segmentation itself
+    // rejects (no valid 4-arc partition, or the partition is severely
+    // unbalanced — see the imbalance gate in `run_pipeline_with_mode`).  We do
+    // *not* fall through on Phase 2-5 failures: rescuing those would resurrect
+    // non-tag components that baseline behaviour filters, overflowing
+    // `MAX_CANDIDATES` in dense scenes.
+    let try_pipeline = |mode| {
+        run_pipeline_with_mode(
+            arena, binary, gray, labels, comp_label, stat, cfg, mode, dec, min_x_bin, max_x_bin,
+            min_y_bin, max_y_bin,
+        )
+    };
+
+    match try_pipeline(SegmentationMode::AxisAligned) {
+        PipelineOutcome::Success(corners, covs) => Some((corners, covs)),
+        PipelineOutcome::BoundaryRejected => match try_pipeline(SegmentationMode::Diagonal) {
+            PipelineOutcome::Success(corners, covs) => Some((corners, covs)),
+            _ => None,
+        },
+        PipelineOutcome::PipelineFailed => None,
+    }
+}
+
+/// Outcome of running the EdLines pipeline for a single segmentation mode.
+///
+/// `BoundaryRejected` (boundary segmentation could not partition the outer
+/// boundary into a usable 4-arc set) and `PipelineFailed` (Phase 2-5 produced
+/// invalid corners) are kept distinct: only the former triggers the diagonal
+/// fallback at the call site.  Falling back on `PipelineFailed` would create
+/// spurious quads from non-tag components dense enough to overflow
+/// `MAX_CANDIDATES` in `extract_quads_soa`.
+enum PipelineOutcome {
+    Success([Point; 4], crate::quad::CornerCovariances),
+    BoundaryRejected,
+    PipelineFailed,
+}
+
+/// Run Phase 1-5 for a single segmentation mode.  Corners are returned in
+/// binary-image (decimated) space.
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+fn run_pipeline_with_mode(
+    arena: &Bump,
+    binary: &ImageView,
+    gray: &ImageView,
+    labels: &[u32],
+    comp_label: u32,
+    stat: &ComponentStats,
+    cfg: &EdLinesConfig,
+    mode: SegmentationMode,
+    dec: f64,
+    min_x_bin: f64,
+    max_x_bin: f64,
+    min_y_bin: f64,
+    max_y_bin: f64,
+) -> PipelineOutcome {
+    // edges[0]: T→R arc, edges[1]: R→B arc, edges[2]: B→L arc, edges[3]: L→T arc.
+    // Phase-4 corner intersection ordering depends on this index map.
+    let edges = extract_boundary_segments(arena, labels, binary.width, comp_label, stat, mode);
+
+    if edges.iter().all(BumpVec::is_empty) {
+        return PipelineOutcome::BoundaryRejected;
+    }
+    for e in &edges {
+        if e.len() < 2 {
+            return PipelineOutcome::PipelineFailed;
+        }
+    }
+
+    // Imbalance gate: for near-axis-aligned tags, two adjacent corners can
+    // collapse onto the same TRBL extremal, lumping their shared edge into one
+    // arc *and* compressing the opposite arc to near zero — Phase 2-5 then
+    // yields a wrong-but-validation-passing quad.  Distortion-suite aprilgrid
+    // sub-tags can legitimately produce min-arc < 16 %, so this is opt-in
+    // (`render_tag_hub` only).  Skipped on small components: <500 binary pixels
+    // is below the recall floor where collapse-vs-curvature is distinguishable.
+    // DIAG's degenerate case is 45° rotation, which AXIS handles, so DIAG never
+    // gates.
+    if cfg.imbalance_gate && mode == SegmentationMode::AxisAligned && stat.pixel_count >= 500 {
+        let total: usize = edges.iter().map(BumpVec::len).sum();
+        let max_edge = edges.iter().map(BumpVec::len).max().unwrap_or(0);
+        let min_edge = edges.iter().map(BumpVec::len).min().unwrap_or(0);
+        // Both signals required: max-arc > 40 % AND min-arc < 16 %.
+        if max_edge * 5 > total * 2 && min_edge * 25 < total * 4 {
+            return PipelineOutcome::BoundaryRejected;
+        }
+    }
+
+    // ── Phase 2: Huber IRLS on binary boundary points ─────────────────────────
+    let (Some(l0), Some(l1), Some(l2), Some(l3)) = (
+        fit_line_irls(arena, edges[0].as_slice(), cfg.huber_delta, cfg.irls_iters),
+        fit_line_irls(arena, edges[1].as_slice(), cfg.huber_delta, cfg.irls_iters),
+        fit_line_irls(arena, edges[2].as_slice(), cfg.huber_delta, cfg.irls_iters),
+        fit_line_irls(arena, edges[3].as_slice(), cfg.huber_delta, cfg.irls_iters),
+    ) else {
+        return PipelineOutcome::PipelineFailed;
+    };
+    let bin_lines = [l0, l1, l2, l3];
 
     // ── Phase 3: Sub-pixel refinement (results in gray-image space) ───────────
     let sp: [BumpVec<(f64, f64)>; 4] = [
@@ -1081,17 +1191,16 @@ pub(crate) fn extract_quad_edlines(
     //   corner_R = edge[0] ∩ edge[1]   (T→R arc meets R→B arc)
     //   corner_B = edge[1] ∩ edge[2]   (R→B arc meets B→L arc)
     //   corner_L = edge[2] ∩ edge[3]   (B→L arc meets L→T arc)
-    let ct = intersect_lines(&fl[3], &fl[0])?;
-    let cr = intersect_lines(&fl[0], &fl[1])?;
-    let cb = intersect_lines(&fl[1], &fl[2])?;
-    let cl = intersect_lines(&fl[2], &fl[3])?;
+    let (Some(ct), Some(cr), Some(cb), Some(cl)) = (
+        intersect_lines(&fl[3], &fl[0]),
+        intersect_lines(&fl[0], &fl[1]),
+        intersect_lines(&fl[1], &fl[2]),
+        intersect_lines(&fl[2], &fl[3]),
+    ) else {
+        return PipelineOutcome::PipelineFailed;
+    };
 
     // ── Phase 5: Joint Gauss-Newton corner refinement ─────────────────────────
-    // Jointly optimise all 8 corner DOFs by minimising the sum of squared
-    // perpendicular distances from the Phase-3 sub-pixel observations to their
-    // respective edge.  The 8×8 normal equations are solved via an unrolled
-    // Cholesky on the stack (zero allocations).  Initialised from Phase-4
-    // intersections; falls back to Phase-4 if the solver diverges.
     let sp_slices = [
         sp[0].as_slice(),
         sp[1].as_slice(),
@@ -1111,50 +1220,37 @@ pub(crate) fn extract_quad_edlines(
 
     for &(qx, qy) in &[ct, cr, cb, cl] {
         if qx < g_min_x || qx > g_max_x || qy < g_min_y || qy > g_max_y {
-            return None;
+            return PipelineOutcome::PipelineFailed;
         }
     }
 
     // Validate signed area (shoelace in gray-image space).
-    // `pixel_count` is in binary pixels; scale the threshold to gray pixels².
     let pts4 = [ct, cr, cb, cl];
     let area = shoelace_area(&pts4);
     if area.abs() < f64::from(stat.pixel_count) * dec * dec * 0.1 {
-        return None;
+        return PipelineOutcome::PipelineFailed;
     }
 
-    // ── Return corners in binary-image (decimated) space ──────────────────────
-    // The caller in `quad.rs` multiplies by `decimation as f64` to get full-res
-    // coordinates; we must undo our own `dec` scaling before returning.
     let inv_dec = 1.0 / dec;
-
-    // Arc assignment guarantees CW traversal [T, R, B, L] in y-down image coords,
-    // which gives positive shoelace area.  If unexpectedly negative, reverse to
-    // restore CW winding.
     let to_pt = |(x, y): (f64, f64)| Point {
         x: x * inv_dec,
         y: y * inv_dec,
     };
 
-    // GN covariances are in gray-image space.  Since corners are converted via
-    // inv_dec, then later multiplied by d (decimation) in quad.rs, and d × inv_dec = 1,
-    // the covariances are already in full-res pixel² units — no scaling needed.
-    // Cast f64 → f32 for batch storage.
     let covs_f32: [[f32; 4]; 4] = match gn_covs {
         Some(c) => std::array::from_fn(|i| c[i].map(|v| v as f32)),
         None => [[0.0; 4]; 4],
     };
 
-    Some(if area >= 0.0 {
-        ([to_pt(ct), to_pt(cr), to_pt(cb), to_pt(cl)], covs_f32)
+    if area >= 0.0 {
+        PipelineOutcome::Success([to_pt(ct), to_pt(cr), to_pt(cb), to_pt(cl)], covs_f32)
     } else {
-        // Reverse winding: corners go [T, L, B, R], so reorder covariances too.
-        // Original order: [T=0, R=1, B=2, L=3] → reversed: [T=0, L=3, B=2, R=1]
-        (
+        // Reverse winding: corners go [T, L, B, R]; reorder covariances.
+        PipelineOutcome::Success(
             [to_pt(ct), to_pt(cl), to_pt(cb), to_pt(cr)],
             [covs_f32[0], covs_f32[3], covs_f32[2], covs_f32[1]],
         )
-    })
+    }
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -1232,6 +1328,7 @@ mod tests {
             grad_min_mag: 4.0, // lower threshold for synthetic hard-edge image
             min_edge_pts: 5,
             gn_iters: 3,
+            imbalance_gate: false,
         };
         let arena = Bump::new();
         // Use the same image as both binary and gray (dec = 1.0).
@@ -1297,6 +1394,7 @@ mod tests {
             grad_min_mag: 8.0,
             min_edge_pts: 5,
             gn_iters: 3,
+            imbalance_gate: false,
         };
         let arena = Bump::new();
         // labels and comp_label are not accessed because the bbox guard fires first.
