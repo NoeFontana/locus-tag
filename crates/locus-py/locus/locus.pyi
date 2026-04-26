@@ -105,7 +105,7 @@ class PyDetectorConfig:
     decoder_min_contrast: float
     refinement_mode: CornerRefinementMode
     decode_mode: DecodeMode
-    max_hamming_error: int
+    max_hamming_error: int | None
     gwlf_transversal_alpha: float
     quad_max_elongation: float
     quad_min_density: float
@@ -139,7 +139,7 @@ class PyDetectorConfig:
         decoder_min_contrast: float,
         refinement_mode: CornerRefinementMode,
         decode_mode: DecodeMode,
-        max_hamming_error: int,
+        max_hamming_error: int | None,
         gwlf_transversal_alpha: float,
         quad_max_elongation: float,
         quad_min_density: float,

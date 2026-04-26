@@ -935,6 +935,21 @@ fn decode_candidate_distorted<
     let mut best_rot = 0u8;
     let mut best_bits = 0u64;
 
+    // Resolve `max_hamming_error` once per registered decoder; see the
+    // matching block in `decode_batch_soa_generic` for rationale.
+    debug_assert!(decoders.len() <= 8, "more than 8 registered decoders");
+    let mut decoder_max_h_buf = [0u32; 8];
+    for (idx, d) in decoders.iter().enumerate() {
+        decoder_max_h_buf[idx] = config
+            .max_hamming_error
+            .unwrap_or_else(|| d.default_max_hamming());
+    }
+    let frame_max_h_floor = decoder_max_h_buf[..decoders.len()]
+        .iter()
+        .copied()
+        .max()
+        .unwrap_or(0);
+
     for &scale in &[1.0f64, 0.9, 1.1] {
         let scaled: [[f64; 2]; 4] = core::array::from_fn(|j| {
             [
@@ -949,7 +964,7 @@ fn decode_candidate_distorted<
 
         let mut intensities = [0.0f64; MAX_BIT_COUNT];
 
-        for decoder in decoders {
+        for (decoder_idx, decoder) in decoders.iter().enumerate() {
             let n = decoder.bit_count();
             if !sample_grid_values_distorted::<C>(
                 img,
@@ -970,7 +985,7 @@ fn decode_candidate_distorted<
                 if hamming < best_h {
                     best_h = hamming;
                     best_bits = S::to_debug_bits(&code);
-                    if hamming <= config.max_hamming_error {
+                    if hamming <= decoder_max_h_buf[decoder_idx] {
                         best_id = id;
                         best_rot = rot;
                     }
@@ -985,7 +1000,7 @@ fn decode_candidate_distorted<
         }
     }
 
-    if best_h <= config.max_hamming_error {
+    if best_h <= frame_max_h_floor {
         (
             CandidateState::Valid,
             best_id,
@@ -1150,6 +1165,26 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
     use crate::batch::CandidateState;
     use rayon::prelude::*;
 
+    // Resolve `max_hamming_error` once per registered decoder so the
+    // inner per-scale per-decoder loop reads a plain `u32`. `None` in
+    // the config means "use family defaults"; an explicit `Some(n)`
+    // overrides every family uniformly. The fixed-size array keeps this
+    // stack-allocated; `TagFamily` has 5 variants and the detector
+    // registers at most one decoder per family.
+    debug_assert!(decoders.len() <= 8, "more than 8 registered decoders");
+    let mut decoder_max_h_buf = [0u32; 8];
+    for (idx, d) in decoders.iter().enumerate() {
+        decoder_max_h_buf[idx] = config
+            .max_hamming_error
+            .unwrap_or_else(|| d.default_max_hamming());
+    }
+    let decoder_max_h = &decoder_max_h_buf[..decoders.len()];
+    // Looser frame-level floor used by the recovery-refinement gate
+    // ("did we fail to accept anywhere?"). In single-family setups this
+    // equals the family default; in multi-family setups it preserves
+    // today's behaviour of still considering recovery.
+    let frame_max_h_floor = decoder_max_h.iter().copied().max().unwrap_or(0);
+
     // We collect results into a temporary Vec to avoid unsafe parallel writes to the batch.
     let results: Vec<_> = (0..n)
         .into_par_iter()
@@ -1272,7 +1307,7 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                                         best_overall_code = Some(code.clone());
                                     }
 
-                                    if hamming <= config.max_hamming_error
+                                    if hamming <= decoder_max_h[decoder_idx]
                                         && (best_code.is_none() || hamming < best_h_in_scale)
                                     {
                                         best_h_in_scale = hamming;
@@ -1375,7 +1410,7 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                         4
                     };
 
-                    if best_h > config.max_hamming_error
+                    if best_h > frame_max_h_floor
                         && best_h <= max_h_for_refine
                         && best_overall_code.is_some()
                     {
@@ -1432,7 +1467,9 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                                                     h_mat.data[j] = *val as f32;
                                                 }
 
-                                                for decoder in decoders {
+                                                for (decoder_idx, decoder) in
+                                                    decoders.iter().enumerate()
+                                                {
                                                     if let Some(code) =
                                                         sample_grid_soa_precomputed::<S>(
                                                             img,
@@ -1452,7 +1489,7 @@ fn decode_batch_soa_generic<S: crate::strategy::DecodingStrategy>(
                                                                 pass_improved = true;
 
                                                                 if hamming
-                                                                    <= config.max_hamming_error
+                                                                    <= decoder_max_h[decoder_idx]
                                                                 {
                                                                     best_id = id;
                                                                     best_rot = rot;
@@ -1566,6 +1603,13 @@ pub trait TagDecoder: Send + Sync {
         max_hamming: u32,
         callback: &mut dyn FnMut(u64, u16, u8),
     );
+    /// Family-specific maximum Hamming budget used when `DetectorConfig`
+    /// leaves `max_hamming_error` unset. Empirically tuned per family:
+    /// 36h11 = 2 (code distance 11), 16h5 = 0 (code distance 5; admitting
+    /// h≤1 floods the rendered tag16h5 1080p suite with false positives
+    /// at unchanged recall — see `regression_hub_tag16h5_1080p`),
+    /// ArUco4x4_* = 1 (dense codebooks), ArUco6x6_250 = 2.
+    fn default_max_hamming(&self) -> u32;
 }
 
 /// Decoder for the AprilTag 36h11 family.
@@ -1619,6 +1663,9 @@ impl TagDecoder for AprilTag36h11 {
         crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag36h11)
             .for_each_candidate_within_hamming(bits, max_hamming, callback);
     }
+    fn default_max_hamming(&self) -> u32 {
+        2
+    }
 }
 
 /// Decoder for the AprilTag 16h5 family.
@@ -1664,6 +1711,9 @@ impl TagDecoder for AprilTag16h5 {
     ) {
         crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag16h5)
             .for_each_candidate_within_hamming(bits, max_hamming, callback);
+    }
+    fn default_max_hamming(&self) -> u32 {
+        0
     }
 }
 
@@ -1717,6 +1767,9 @@ impl TagDecoder for ArUco4x4_50 {
         crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUco4x4_50)
             .for_each_candidate_within_hamming(bits, max_hamming, callback);
     }
+    fn default_max_hamming(&self) -> u32 {
+        1
+    }
 }
 
 /// Decoder for the ArUco 4x4_100 family.
@@ -1769,6 +1822,9 @@ impl TagDecoder for ArUco4x4_100 {
         crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUco4x4_100)
             .for_each_candidate_within_hamming(bits, max_hamming, callback);
     }
+    fn default_max_hamming(&self) -> u32 {
+        1
+    }
 }
 
 /// Decoder for the ArUco 6x6_250 family.
@@ -1820,6 +1876,9 @@ impl TagDecoder for ArUco6x6_250 {
     ) {
         crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUco6x6_250)
             .for_each_candidate_within_hamming(bits, max_hamming, callback);
+    }
+    fn default_max_hamming(&self) -> u32 {
+        2
     }
 }
 

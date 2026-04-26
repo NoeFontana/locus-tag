@@ -705,9 +705,14 @@ impl DetectorBuilder {
     }
 
     /// Set the maximum number of Hamming errors allowed.
+    ///
+    /// Setting this with the `Detector` builder always installs an
+    /// explicit override applied uniformly to every family. To restore
+    /// per-family defaults (`TagDecoder::default_max_hamming`), construct
+    /// the `DetectorConfig` directly and leave the field as `None`.
     #[must_use]
     pub fn with_max_hamming_error(mut self, errors: u32) -> Self {
-        self.config.max_hamming_error = errors;
+        self.config.max_hamming_error = Some(errors);
         self
     }
 

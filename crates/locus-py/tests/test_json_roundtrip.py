@@ -46,4 +46,7 @@ def test_shipped_json_matches_loaded_model(profile: ProfileName) -> None:
     on_disk.pop("$schema", None)
     # ``extends`` is optional null at rest but required-field in the model.
     on_disk.setdefault("extends", None)
+    # ``max_hamming_error`` is absent on disk (per-family default applies)
+    # but always emitted by the model — even as ``null``.
+    on_disk.get("decoder", {}).setdefault("max_hamming_error", None)
     assert on_disk == loaded

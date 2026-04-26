@@ -28,7 +28,6 @@
     "min_contrast": 30.0,
     "refinement_mode": "Erf",
     "decode_mode": "Hard",
-    "max_hamming_error": 1,
     "gwlf_transversal_alpha": 0.01
   },
   "pose": {
