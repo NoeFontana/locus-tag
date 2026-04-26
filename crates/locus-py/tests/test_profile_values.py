@@ -45,6 +45,8 @@ EXPECTED = {
         "threshold.tile_size": 8,
         "quad.max_elongation": 20.0,
         "quad.min_density": 0.15,
+        # Under AdaptivePpb, `quad.extraction_mode` is ignored at runtime but
+        # the field still round-trips through JSON.
         "quad.extraction_mode": QuadExtractionMode.EdLines,
         "quad.edlines_imbalance_gate": EdLinesImbalanceGatePolicy.Disabled,
         # `None` is a Python keyword — reach the variant via getattr.

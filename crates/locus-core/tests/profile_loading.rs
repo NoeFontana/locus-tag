@@ -100,7 +100,7 @@ fn grid_profile_matches_former_builder() {
 }
 
 #[test]
-fn high_accuracy_profile_matches_former_builder() {
+fn high_accuracy_profile_routes_low_ppb_to_contour_rdp() {
     let cfg = DetectorConfig::from_profile("high_accuracy");
 
     // High-accuracy overrides.
@@ -117,6 +117,28 @@ fn high_accuracy_profile_matches_former_builder() {
         cfg.segmentation_connectivity,
         SegmentationConnectivity::Eight
     );
+
+    match cfg.quad_extraction_policy {
+        QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
+            threshold,
+            low_extraction,
+            high_extraction,
+            low_refinement,
+            high_refinement,
+        }) => {
+            assert!(
+                threshold > 1.0 && threshold < 5.0,
+                "threshold must be in validator bounds (1,5), got {threshold}"
+            );
+            assert_eq!(low_extraction, QuadExtractionMode::ContourRdp);
+            assert_eq!(high_extraction, QuadExtractionMode::EdLines);
+            assert_eq!(low_refinement, CornerRefinementMode::Erf);
+            assert_eq!(high_refinement, CornerRefinementMode::None);
+        },
+        QuadExtractionPolicy::Static => {
+            panic!("high_accuracy profile must carry AdaptivePpb policy, got Static");
+        },
+    }
 
     assert_shared_defaults(&cfg);
     cfg.validate().expect("high_accuracy profile must validate");
