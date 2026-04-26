@@ -1,0 +1,22 @@
+---
+source: crates/locus-core/tests/regression_pose_consistency_roc.rs
+expression: report
+---
+sigma_px: 1
+n_trials: 20000
+rows:
+  - fpr: 0.1
+    n_samples: 20000
+    realized_fpr: 0.16885
+  - fpr: 0.01
+    n_samples: 20000
+    realized_fpr: 0.02775
+  - fpr: 0.001
+    n_samples: 20000
+    realized_fpr: 0.0049
+  - fpr: 0.0001
+    n_samples: 20000
+    realized_fpr: 0.0008
+  - fpr: 0.00001
+    n_samples: 20000
+    realized_fpr: 0.00005

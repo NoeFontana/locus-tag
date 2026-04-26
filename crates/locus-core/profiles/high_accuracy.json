@@ -35,7 +35,8 @@
     "huber_delta_px": 1.5,
     "tikhonov_alpha_max": 0.25,
     "sigma_n_sq": 4.0,
-    "structure_tensor_radius": 2
+    "structure_tensor_radius": 2,
+    "pose_consistency_fpr": 1.0e-3
   },
   "segmentation": {
     "connectivity": "Eight",

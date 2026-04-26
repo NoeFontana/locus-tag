@@ -84,6 +84,21 @@ pub struct DetectionBatch {
     /// Four 2x2 corner covariance matrices per quad (16 floats).
     /// Layout: [c0_xx, c0_xy, c0_yx, c0_yy, c1_xx, ...]
     pub corner_covariances: [[f32; 16]; MAX_CANDIDATES],
+    /// Aggregate Mahalanobis d² (χ²(2) statistic) from the pose-consistency
+    /// gate. NaN means the gate did not run (e.g., `pose_consistency_fpr == 0`
+    /// or pose estimation failed before the check). Only populated when the
+    /// `bench-internals` feature is enabled.
+    #[cfg(feature = "bench-internals")]
+    pub pose_consistency_d2: [f32; MAX_CANDIDATES],
+    /// Worst single-corner Mahalanobis d² (χ²(1) statistic) from the
+    /// pose-consistency gate. NaN sentinel as above.
+    #[cfg(feature = "bench-internals")]
+    pub pose_consistency_d2_max_corner: [f32; MAX_CANDIDATES],
+    /// IPPE branch ratio `alternate_d2 / primary_d2`. `1.0` ≈ ambiguous,
+    /// `≫ 1` = primary clearly wins, `≪ 1` = primary was wrong (alternate
+    /// fits much better). NaN sentinel as above.
+    #[cfg(feature = "bench-internals")]
+    pub ippe_branch_d2_ratio: [f32; MAX_CANDIDATES],
 }
 
 impl DetectionBatch {
@@ -107,6 +122,12 @@ impl DetectionBatch {
             status_mask: [CandidateState::Empty; MAX_CANDIDATES],
             funnel_status: [FunnelStatus::None; MAX_CANDIDATES],
             corner_covariances: [[0.0; 16]; MAX_CANDIDATES],
+            #[cfg(feature = "bench-internals")]
+            pose_consistency_d2: [f32::NAN; MAX_CANDIDATES],
+            #[cfg(feature = "bench-internals")]
+            pose_consistency_d2_max_corner: [f32::NAN; MAX_CANDIDATES],
+            #[cfg(feature = "bench-internals")]
+            ippe_branch_d2_ratio: [f32::NAN; MAX_CANDIDATES],
         })
     }
     /// Returns the maximum capacity of the batch.
@@ -138,6 +159,12 @@ impl DetectionBatch {
                     self.status_mask.swap(i, v);
                     self.funnel_status.swap(i, v);
                     self.corner_covariances.swap(i, v);
+                    #[cfg(feature = "bench-internals")]
+                    {
+                        self.pose_consistency_d2.swap(i, v);
+                        self.pose_consistency_d2_max_corner.swap(i, v);
+                        self.ippe_branch_d2_ratio.swap(i, v);
+                    }
                 }
                 v += 1;
             }

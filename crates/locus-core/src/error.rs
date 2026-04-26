@@ -28,6 +28,14 @@ pub enum ConfigError {
     /// Structure tensor radius must stay within the supported kernel bound.
     #[error("structure_tensor_radius must be <= 8, got {0}")]
     InvalidStructureTensorRadius(u8),
+    /// Pose consistency FPR must be in `[0.0, 1.0)`.
+    ///
+    /// `0.0` disables the gate; positive values are interpreted as a target
+    /// false-positive rate from which the chi-squared critical value is
+    /// derived. Values >= 1.0 would accept everything (degenerate gate)
+    /// and are explicitly rejected to surface configuration mistakes.
+    #[error("pose_consistency_fpr must be in [0.0, 1.0), got {0}")]
+    InvalidPoseConsistencyFpr(f64),
     /// EdLines is geometrically incompatible with Erf corner refinement.
     ///
     /// Erf performs an independent 1-D search per corner which destroys the

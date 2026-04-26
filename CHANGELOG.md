@@ -31,6 +31,10 @@ be batched with other breaking changes in a later cleanup PR.
 - `DetectorConfig::from_profile_json(&str)` on the Rust side for user-supplied profiles.
 - `docs/engineering/profiles.md` — rationale for the refactor.
 - `docs/migration/config-refactor.md` — before/after table for every removal.
+- **Pose-consistency gate** (`pose.pose_consistency_fpr`, default `0.0` = disabled): final reprojection-consistency check inside `estimate_tag_pose_with_config` using Mahalanobis distance with χ²-derived critical values. Aggregate gate at χ²(2; fpr); per-corner gate at χ²(1; fpr). Rejected poses surface as `Detection.pose = None`. Only `high_accuracy` and `render_tag_hub` opt in (both at `1.0e-3`); `standard`, `grid`, and `general` profiles are byte-identical. Mahalanobis-aware IPPE branch selection swaps to the alternate branch when its aggregate `d²` is at least 2× better AND statistically defensible — gated on `fpr > 0` so disabled profiles preserve the legacy ideal-corner Euclidean comparison.
+- `bench-internals` SoA telemetry columns: `pose_consistency_d2`, `pose_consistency_d2_max_corner`, `ippe_branch_d2_ratio`. NaN sentinel when the gate did not run.
+- `crates/locus-core/tests/regression_pose_consistency_roc.rs` — synthetic-isotropic ROC sweep with a hard `realized FPR ∈ [1e-4, 1e-2]` acceptance gate at the production `fpr = 1e-3`. Snapshot lives at `regression_pose_consistency_roc__pose_consistency_roc__synthetic_isotropic.snap`.
+- `docs/engineering/track2_precision_threshold.md` — calibration rationale, ROC harness usage, and the empirical-fallback procedure if the χ²(2) tail breaks on a future codebase change.
 
 ### Fixed
 
