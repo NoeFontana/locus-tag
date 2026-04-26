@@ -23,7 +23,8 @@
     "max_elongation": 20.0,
     "min_density": 0.15,
     "extraction_mode": "ContourRdp",
-    "edlines_imbalance_gate": "Disabled"
+    "edlines_imbalance_gate": "Disabled",
+    "extraction_policy": "Static"
   },
   "decoder": {
     "min_contrast": 10.0,

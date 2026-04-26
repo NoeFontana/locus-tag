@@ -266,3 +266,62 @@ mod render_tag_hub_profile {
         );
     }
 }
+
+/// Snapshots the `max_recall_adaptive` PPB-routed profile on the same
+/// `tag36h11` resolutions. The acceptance gate is that pose tail (rotation
+/// p99) does not regress versus the `accuracy_baseline` `high_accuracy` numbers
+/// at 1080p / 2160p — both resolutions sit comfortably above PPB ≥ 2.5 and so
+/// route to the EdLines + None high path, matching `high_accuracy`'s solver.
+mod max_recall_adaptive_profile {
+    use super::common;
+    use common::hub::{RenderTagOpts, run_render_tag_test};
+    use locus_core::TagFamily;
+
+    fn opts() -> RenderTagOpts {
+        RenderTagOpts {
+            profile: Some("max_recall_adaptive"),
+            snapshot_suffix: "_max_recall_adaptive",
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn regression_hub_tag36h11_640x480_max_recall_adaptive() {
+        let _g = common::telemetry::init("regression_hub_tag36h11_640x480_max_recall_adaptive");
+        run_render_tag_test(
+            "locus_v1_tag36h11_640x480",
+            TagFamily::AprilTag36h11,
+            opts(),
+        );
+    }
+
+    #[test]
+    fn regression_hub_tag36h11_720p_max_recall_adaptive() {
+        let _g = common::telemetry::init("regression_hub_tag36h11_720p_max_recall_adaptive");
+        run_render_tag_test(
+            "locus_v1_tag36h11_1280x720",
+            TagFamily::AprilTag36h11,
+            opts(),
+        );
+    }
+
+    #[test]
+    fn regression_hub_tag36h11_1080p_max_recall_adaptive() {
+        let _g = common::telemetry::init("regression_hub_tag36h11_1080p_max_recall_adaptive");
+        run_render_tag_test(
+            "locus_v1_tag36h11_1920x1080",
+            TagFamily::AprilTag36h11,
+            opts(),
+        );
+    }
+
+    #[test]
+    fn regression_hub_tag36h11_2160p_max_recall_adaptive() {
+        let _g = common::telemetry::init("regression_hub_tag36h11_2160p_max_recall_adaptive");
+        run_render_tag_test(
+            "locus_v1_tag36h11_3840x2160",
+            TagFamily::AprilTag36h11,
+            opts(),
+        );
+    }
+}

@@ -52,4 +52,10 @@ def test_shipped_json_matches_loaded_model(profile: ProfileName) -> None:
     # ``pose_consistency_fpr`` is absent on disk for profiles that disable
     # the gate; the model always emits its 0.0 default.
     on_disk.get("pose", {}).setdefault("pose_consistency_fpr", 0.0)
+    # ``extraction_policy`` defaults to ``"Static"`` and may be omitted by
+    # profiles that don't opt into adaptive routing.
+    on_disk.get("quad", {}).setdefault("extraction_policy", "Static")
+    # ``edlines_imbalance_gate`` defaults to ``"Disabled"`` and may be
+    # omitted by profiles that don't override it.
+    on_disk.get("quad", {}).setdefault("edlines_imbalance_gate", "Disabled")
     assert on_disk == loaded

@@ -183,6 +183,7 @@ impl Detector {
 fn run_detection_pipeline<'ctx>(
     config: &DetectorConfig,
     decoders: &[Box<dyn TagDecoder + Send + Sync>],
+    min_outer_dim: u32,
     img: &ImageView,
     ctx: &'ctx mut FrameContext,
     intrinsics: Option<&crate::pose::CameraIntrinsics>,
@@ -191,7 +192,7 @@ fn run_detection_pipeline<'ctx>(
     debug_telemetry: bool,
 ) -> Result<DetectionBatchView<'ctx>, DetectorError> {
     let has_distortion = intrinsics.is_some_and(|k| k.distortion.is_distorted());
-    if has_distortion && config.quad_extraction_mode == crate::config::QuadExtractionMode::EdLines {
+    if has_distortion && config.any_route_uses_edlines() {
         return Err(DetectorError::Config(
             crate::error::ConfigError::EdLinesUnsupportedWithDistortion,
         ));
@@ -277,6 +278,7 @@ fn run_detection_pipeline<'ctx>(
                     config,
                     config.decimation,
                     &refinement_img,
+                    min_outer_dim,
                     debug_telemetry,
                     &model,
                     k,
@@ -291,6 +293,7 @@ fn run_detection_pipeline<'ctx>(
                     config,
                     config.decimation,
                     &refinement_img,
+                    min_outer_dim,
                     debug_telemetry,
                     &model,
                     k,
@@ -303,6 +306,7 @@ fn run_detection_pipeline<'ctx>(
                 config,
                 config.decimation,
                 &refinement_img,
+                min_outer_dim,
                 debug_telemetry,
             ),
         };
@@ -314,6 +318,7 @@ fn run_detection_pipeline<'ctx>(
             config,
             config.decimation,
             &refinement_img,
+            min_outer_dim,
             debug_telemetry,
         );
 
@@ -493,6 +498,9 @@ fn run_detection_pipeline<'ctx>(
             num_reprojection: num_repro,
             gwlf_fallback_count,
             gwlf_avg_delta,
+            routed_to_ptr: state.batch.routed_to.as_ptr(),
+            ppb_estimate_ptr: state.batch.ppb_estimate.as_ptr(),
+            num_routed: n,
             width: img.width,
             height: img.height,
             stride: img.width,
@@ -747,6 +755,27 @@ impl DetectorBuilder {
         self
     }
 
+    /// Set the quad extraction policy (per-candidate dispatch).
+    ///
+    /// Under [`QuadExtractionPolicy::Static`] (the default) the detector honours
+    /// `with_quad_extraction_mode` and `with_corner_refinement` for every
+    /// candidate. Under [`QuadExtractionPolicy::AdaptivePpb`], those settings
+    /// are overridden per-candidate by the nested low/high route configuration.
+    ///
+    /// Validation runs when the final [`DetectorConfig`] is consumed by the
+    /// pipeline, so invalid combinations (e.g. EdLines paired with Erf on a
+    /// route, degenerate routes) surface as `DetectorError::Config(...)` at
+    /// `detect()` time.
+    ///
+    /// [`QuadExtractionPolicy`]: crate::config::QuadExtractionPolicy
+    /// [`QuadExtractionPolicy::Static`]: crate::config::QuadExtractionPolicy::Static
+    /// [`QuadExtractionPolicy::AdaptivePpb`]: crate::config::QuadExtractionPolicy::AdaptivePpb
+    #[must_use]
+    pub fn with_extraction_policy(mut self, policy: crate::config::QuadExtractionPolicy) -> Self {
+        self.config.quad_extraction_policy = policy;
+        self
+    }
+
     /// Enable or disable Laplacian sharpening.
     #[must_use]
     pub fn with_sharpening(mut self, enable: bool) -> Self {
@@ -848,8 +877,24 @@ impl Default for DetectorBuilder {
 pub struct LocusEngine {
     config: DetectorConfig,
     decoders: Vec<Box<dyn TagDecoder + Send + Sync>>,
+    /// Minimum outer tag dimension (data grid + 2-pixel border) across
+    /// configured decoders. Drives the per-candidate PPB estimate under
+    /// [`crate::config::QuadExtractionPolicy::AdaptivePpb`]. Cached to avoid
+    /// re-walking the decoder list on every call.
+    min_outer_dim: u32,
     /// Lock-free pool of reusable frame contexts.
     pool: crossbeam_queue::ArrayQueue<Box<FrameContext>>,
+}
+
+/// Compute the minimum outer tag dimension (grid + 2 border bits) across the
+/// decoder list. Returns a floor of `6` when the list is empty so that a
+/// mis-configured detector never divides by zero downstream.
+fn compute_min_outer_dim(decoders: &[Box<dyn TagDecoder + Send + Sync>]) -> u32 {
+    decoders
+        .iter()
+        .map(|d| d.dimension() as u32 + 2)
+        .min()
+        .unwrap_or(6)
 }
 
 impl LocusEngine {
@@ -869,9 +914,11 @@ impl LocusEngine {
             // Box<FrameContext> to heap-allocate the ~200 KB DetectionBatch.
             let _ = pool.push(Box::new(FrameContext::new()));
         }
+        let min_outer_dim = compute_min_outer_dim(&decoders);
         Self {
             config,
             decoders,
+            min_outer_dim,
             pool,
         }
     }
@@ -896,6 +943,7 @@ impl LocusEngine {
         run_detection_pipeline(
             &self.config,
             &self.decoders,
+            self.min_outer_dim,
             img,
             ctx,
             intrinsics,
@@ -934,6 +982,7 @@ impl LocusEngine {
                 let owned = run_detection_pipeline(
                     &self.config,
                     &self.decoders,
+                    self.min_outer_dim,
                     img,
                     &mut ctx,
                     intrinsics,
@@ -963,6 +1012,7 @@ impl LocusEngine {
             self.decoders
                 .push(crate::decoder::family_to_decoder(family));
         }
+        self.min_outer_dim = compute_min_outer_dim(&self.decoders);
     }
 
     /// Get the current detector configuration.

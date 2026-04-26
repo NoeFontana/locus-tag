@@ -49,6 +49,8 @@ enum Column {
     PoseConsistencyD2MaxCorner,
     #[cfg(feature = "bench-internals")]
     IppeBranchD2Ratio,
+    RoutedTo,
+    PpbEstimate,
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +93,12 @@ fn seed_sentinels(batch: &mut DetectionBatch) {
             batch.pose_consistency_d2_max_corner[i] = F32_SENTINEL;
             batch.ippe_branch_d2_ratio[i] = F32_SENTINEL;
         }
+        // Routed-to/ppb telemetry columns: distinctive sentinels that differ
+        // from both the `DetectionBatch::new()` defaults (ROUTED_TO_STATIC,
+        // 0.0) and the values a Phase A write would produce (0/1, >0). Any
+        // overwrite is caught.
+        batch.routed_to[i] = 77;
+        batch.ppb_estimate[i] = F32_SENTINEL;
     }
 }
 
@@ -150,6 +158,12 @@ fn changed_columns(before: &DetectionBatch, after: &DetectionBatch) -> BTreeSet<
             set.insert(Column::IppeBranchD2Ratio);
         }
     }
+    if bytes_of(&before.routed_to[..]) != bytes_of(&after.routed_to[..]) {
+        set.insert(Column::RoutedTo);
+    }
+    if bytes_of(&before.ppb_estimate[..]) != bytes_of(&after.ppb_estimate[..]) {
+        set.insert(Column::PpbEstimate);
+    }
     set
 }
 
@@ -175,6 +189,8 @@ fn snapshot(batch: &DetectionBatch) -> Box<DetectionBatch> {
         out.ippe_branch_d2_ratio
             .copy_from_slice(&batch.ippe_branch_d2_ratio);
     }
+    out.routed_to.copy_from_slice(&batch.routed_to);
+    out.ppb_estimate.copy_from_slice(&batch.ppb_estimate);
     out
 }
 
@@ -212,7 +228,7 @@ fn contract_phase_a_empty_label_result() {
         component_stats: Vec::new(),
     };
 
-    let (n, _) = extract_quads_soa(&mut batch, &img, &label_result, &config, 1, &img, false);
+    let (n, _) = extract_quads_soa(&mut batch, &img, &label_result, &config, 1, &img, 6, false);
 
     assert_eq!(n, 0);
     let changed = changed_columns(&before, &batch);
@@ -222,6 +238,8 @@ fn contract_phase_a_empty_label_result() {
             Column::Corners,
             Column::StatusMask,
             Column::CornerCovariances,
+            Column::RoutedTo,
+            Column::PpbEstimate,
         ],
         "A (extract_quads_soa, empty input)",
     );
@@ -259,7 +277,7 @@ fn contract_phase_a_real_tag() {
     seed_sentinels(&mut batch);
     let before = snapshot(&batch);
 
-    let (_n, _) = extract_quads_soa(&mut batch, &img, &label_result, &config, 1, &img, false);
+    let (_n, _) = extract_quads_soa(&mut batch, &img, &label_result, &config, 1, &img, 6, false);
 
     let changed = changed_columns(&before, &batch);
     assert_writes_within(
@@ -268,6 +286,8 @@ fn contract_phase_a_real_tag() {
             Column::Corners,
             Column::StatusMask,
             Column::CornerCovariances,
+            Column::RoutedTo,
+            Column::PpbEstimate,
         ],
         "A (extract_quads_soa, real tag)",
     );

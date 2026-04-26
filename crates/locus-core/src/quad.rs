@@ -26,6 +26,22 @@ use crate::workspace::WORKSPACE_ARENA;
 /// Per-corner 2×2 covariances as `[[σ_xx, σ_xy, σ_yx, σ_yy]; 4]`.
 pub(crate) type CornerCovariances = [[f32; 4]; 4];
 
+/// PPB-denom fallback used by the legacy single-quad helper. Conservative
+/// (smaller than any registered family) so AdaptivePpb routes high. Live
+/// callers go through `LocusEngine::min_outer_dim` instead.
+const MIN_OUTER_DIM_FALLBACK: u32 = 6;
+
+/// Per-candidate extraction result carried from the Rayon worker back to the
+/// collection loop in [`extract_quads_soa`]. Keeps the `collect()` type tidy.
+///
+/// Tuple fields:
+/// 1. Refined corners (subject to rotation permutation later in Phase C).
+/// 2. Pre-refinement corners (for subpixel jitter telemetry).
+/// 3. Per-corner covariances (zero for ContourRdp, populated for EdLines GN).
+/// 4. Route label — `0` low, `1` high, `ROUTED_TO_STATIC` for `Static`.
+/// 5. PPB estimate (0.0 under `Static`, else `bbox_short / min_outer_dim`).
+pub(crate) type ExtractionResult = ([Point; 4], [Point; 4], CornerCovariances, u8, f32);
+
 // Re-export the canonical Point type from the crate root.
 pub use crate::Point;
 
@@ -49,6 +65,39 @@ fn pixel_count_descending_order(stats: &[crate::segmentation::ComponentStats]) -
         pb.cmp(&pa).then(a.cmp(&b))
     });
     order
+}
+
+/// Resolves the per-candidate (extraction_mode, refinement_mode, route_label,
+/// ppb_estimate) tuple from the policy. Under `Static` the PPB div is skipped
+/// (returned as `0.0`); under `AdaptivePpb` the strict `<` tie-break at the
+/// threshold protects snapshot stability against floating-point drift.
+#[inline]
+fn resolve_route(
+    config: &crate::config::DetectorConfig,
+    bbox_short: u32,
+    min_outer_dim: u32,
+) -> (
+    crate::config::QuadExtractionMode,
+    crate::config::CornerRefinementMode,
+    u8,
+    f32,
+) {
+    match config.quad_extraction_policy {
+        crate::config::QuadExtractionPolicy::Static => (
+            config.quad_extraction_mode,
+            config.refinement_mode,
+            crate::batch::ROUTED_TO_STATIC,
+            0.0,
+        ),
+        crate::config::QuadExtractionPolicy::AdaptivePpb(cfg) => {
+            let ppb = (bbox_short as f32) / (min_outer_dim as f32);
+            if ppb < cfg.threshold {
+                (cfg.low_extraction, cfg.low_refinement, 0u8, ppb)
+            } else {
+                (cfg.high_extraction, cfg.high_refinement, 1u8, ppb)
+            }
+        },
+    }
 }
 
 /// Fast quad extraction using bounding box stats from CCL.
@@ -76,6 +125,7 @@ pub fn extract_quads_soa(
     config: &DetectorConfig,
     decimation: usize,
     refinement_img: &ImageView,
+    min_outer_dim: u32,
     debug_telemetry: bool,
 ) -> (usize, Option<Vec<[Point; 4]>>) {
     use rayon::prelude::*;
@@ -83,7 +133,7 @@ pub fn extract_quads_soa(
     let stats = &label_result.component_stats;
     let order = pixel_count_descending_order(stats);
 
-    let mut detections: Vec<([Point; 4], [Point; 4], CornerCovariances)> = order
+    let mut detections: Vec<ExtractionResult> = order
         .par_iter()
         .filter_map(|&label_idx| {
             let stat = &stats[label_idx as usize];
@@ -99,6 +149,7 @@ pub fn extract_quads_soa(
                     config,
                     decimation,
                     refinement_img,
+                    min_outer_dim,
                 )
             })
         })
@@ -116,7 +167,9 @@ pub fn extract_quads_soa(
         None
     };
 
-    for (i, (corners, unrefined_pts, covs)) in detections.into_iter().enumerate() {
+    for (i, (corners, unrefined_pts, covs, route_label, ppb_estimate)) in
+        detections.into_iter().enumerate()
+    {
         for (j, corner) in corners.iter().enumerate() {
             batch.corners[i][j] = Point2f {
                 x: corner.x as f32,
@@ -136,6 +189,13 @@ pub fn extract_quads_soa(
         }
         if let Some(ref mut u) = unrefined {
             u.push(unrefined_pts);
+        }
+        // Skip telemetry writes when disabled: the columns retain their
+        // `DetectionBatch::new()` defaults (ROUTED_TO_STATIC, 0.0), preserving
+        // Static-mode byte-identity regardless of policy.
+        if debug_telemetry {
+            batch.routed_to[i] = route_label;
+            batch.ppb_estimate[i] = ppb_estimate;
         }
         batch.status_mask[i] = CandidateState::Active;
     }
@@ -160,7 +220,8 @@ fn extract_single_quad(
     config: &DetectorConfig,
     decimation: usize,
     refinement_img: &ImageView,
-) -> Option<([Point; 4], [Point; 4], CornerCovariances)> {
+    min_outer_dim: u32,
+) -> Option<ExtractionResult> {
     let min_edge_len_sq = config.quad_min_edge_length * config.quad_min_edge_length;
     let d = decimation as f64;
 
@@ -199,11 +260,13 @@ fn extract_single_quad(
         }
     }
 
-    // Passed filters — extract rough quad corners using the configured mode.
-    // `gn_covs` carries per-corner 2×2 covariances from the EdLines GN solver;
-    // zero for ContourRdp (no covariance information available).
-    let (quad_pts_dec, gn_covs): ([Point; 4], CornerCovariances) = match config.quad_extraction_mode
-    {
+    let (route_extraction, route_refinement, route_label, ppb_estimate) =
+        resolve_route(config, bbox_w.min(bbox_h), min_outer_dim);
+
+    // `gn_covs` is non-zero only for the EdLines path (Gauss-Newton solver emits
+    // per-corner 2×2 blocks). ContourRdp returns zeros — downstream pose code
+    // treats that as "no covariance prior".
+    let (quad_pts_dec, gn_covs): ([Point; 4], CornerCovariances) = match route_extraction {
         crate::config::QuadExtractionMode::EdLines => {
             let ed_cfg = crate::edlines::EdLinesConfig::from_detector_config(config);
             crate::edlines::extract_quad_edlines(
@@ -302,7 +365,7 @@ fn extract_single_quad(
     // sub-pixel corners (from its micro-ray parabola + Gauss-Newton pass), so
     // applying the expansion would move them *away* from the true edge and force
     // the subsequent refine_corner to fight the artificial offset.
-    let quad_pts = if config.quad_extraction_mode == crate::config::QuadExtractionMode::EdLines {
+    let quad_pts = if route_extraction == crate::config::QuadExtractionMode::EdLines {
         quad_pts // corners already sub-pixel accurate; no expansion needed
     } else {
         let center_x = (quad_pts[0].x + quad_pts[1].x + quad_pts[2].x + quad_pts[3].x) * 0.25;
@@ -335,61 +398,60 @@ fn extract_single_quad(
         // is applied (Mode::None).  GWLF computes its own covariances in
         // detector.rs; ERF has none.  When refinement overwrites corners,
         // the GN covariances are no longer valid.
-        let (corners, out_covs) =
-            if config.refinement_mode == crate::config::CornerRefinementMode::None {
-                (quad_pts, gn_covs)
-            } else {
-                let use_erf = config.refinement_mode == crate::config::CornerRefinementMode::Erf;
-                (
-                    [
-                        refine_corner(
-                            arena,
-                            refinement_img,
-                            quad_pts[0],
-                            quad_pts[3],
-                            quad_pts[1],
-                            config.subpixel_refinement_sigma,
-                            decimation,
-                            use_erf,
-                        ),
-                        refine_corner(
-                            arena,
-                            refinement_img,
-                            quad_pts[1],
-                            quad_pts[0],
-                            quad_pts[2],
-                            config.subpixel_refinement_sigma,
-                            decimation,
-                            use_erf,
-                        ),
-                        refine_corner(
-                            arena,
-                            refinement_img,
-                            quad_pts[2],
-                            quad_pts[1],
-                            quad_pts[3],
-                            config.subpixel_refinement_sigma,
-                            decimation,
-                            use_erf,
-                        ),
-                        refine_corner(
-                            arena,
-                            refinement_img,
-                            quad_pts[3],
-                            quad_pts[2],
-                            quad_pts[0],
-                            config.subpixel_refinement_sigma,
-                            decimation,
-                            use_erf,
-                        ),
-                    ],
-                    [[0.0; 4]; 4],
-                )
-            };
+        let (corners, out_covs) = if route_refinement == crate::config::CornerRefinementMode::None {
+            (quad_pts, gn_covs)
+        } else {
+            let use_erf = route_refinement == crate::config::CornerRefinementMode::Erf;
+            (
+                [
+                    refine_corner(
+                        arena,
+                        refinement_img,
+                        quad_pts[0],
+                        quad_pts[3],
+                        quad_pts[1],
+                        config.subpixel_refinement_sigma,
+                        decimation,
+                        use_erf,
+                    ),
+                    refine_corner(
+                        arena,
+                        refinement_img,
+                        quad_pts[1],
+                        quad_pts[0],
+                        quad_pts[2],
+                        config.subpixel_refinement_sigma,
+                        decimation,
+                        use_erf,
+                    ),
+                    refine_corner(
+                        arena,
+                        refinement_img,
+                        quad_pts[2],
+                        quad_pts[1],
+                        quad_pts[3],
+                        config.subpixel_refinement_sigma,
+                        decimation,
+                        use_erf,
+                    ),
+                    refine_corner(
+                        arena,
+                        refinement_img,
+                        quad_pts[3],
+                        quad_pts[2],
+                        quad_pts[0],
+                        config.subpixel_refinement_sigma,
+                        decimation,
+                        use_erf,
+                    ),
+                ],
+                [[0.0; 4]; 4],
+            )
+        };
 
         let edge_score = calculate_edge_score(refinement_img, corners);
         if edge_score > config.quad_min_edge_score {
-            return Some((corners, quad_pts, out_covs));
+            return Some((corners, quad_pts, out_covs, route_label, ppb_estimate));
         }
     }
     None
@@ -448,17 +510,26 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
     config: &DetectorConfig,
     decimation: usize,
     refinement_img: &ImageView,
+    min_outer_dim: u32,
     debug_telemetry: bool,
     camera: &C,
     intrinsics: &crate::pose::CameraIntrinsics,
 ) -> (usize, Option<Vec<[Point; 4]>>) {
     use rayon::prelude::*;
 
+    // Defense-in-depth: the distortion path is ContourRdp-only. The frame-level
+    // gate in `detector.rs` rejects EdLines up-front under `any_route_uses_edlines`,
+    // so we should never reach here with an EdLines-carrying policy.
+    debug_assert!(
+        !config.any_route_uses_edlines(),
+        "extract_quads_soa_with_camera invoked with an EdLines route; upstream gate bypassed"
+    );
+
     let stats = &label_result.component_stats;
     let scaled = ScaledIntrinsics::from_intrinsics(intrinsics, decimation);
     let order = pixel_count_descending_order(stats);
 
-    let mut detections: Vec<([Point; 4], [Point; 4], CornerCovariances)> = order
+    let mut detections: Vec<ExtractionResult> = order
         .par_iter()
         .filter_map(|&label_idx| {
             let stat = &stats[label_idx as usize];
@@ -474,6 +545,7 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
                     config,
                     decimation,
                     refinement_img,
+                    min_outer_dim,
                     camera,
                     scaled,
                     intrinsics,
@@ -491,7 +563,9 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
         None
     };
 
-    for (i, (corners, unrefined_pts, covs)) in detections.into_iter().enumerate() {
+    for (i, (corners, unrefined_pts, covs, route_label, ppb_estimate)) in
+        detections.into_iter().enumerate()
+    {
         for (j, corner) in corners.iter().enumerate() {
             batch.corners[i][j] = Point2f {
                 x: corner.x as f32,
@@ -510,6 +584,10 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
         }
         if let Some(ref mut u) = unrefined {
             u.push(unrefined_pts);
+        }
+        if debug_telemetry {
+            batch.routed_to[i] = route_label;
+            batch.ppb_estimate[i] = ppb_estimate;
         }
         batch.status_mask[i] = CandidateState::Active;
     }
@@ -539,14 +617,20 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     config: &DetectorConfig,
     decimation: usize,
     refinement_img: &ImageView,
+    min_outer_dim: u32,
     camera: &C,
     scaled: ScaledIntrinsics,
     intrinsics: &crate::pose::CameraIntrinsics,
-) -> Option<([Point; 4], [Point; 4], CornerCovariances)> {
+) -> Option<ExtractionResult> {
     // EdLines is blocked upstream for distorted cameras; this path is
-    // ContourRdp-only. For pinhole the monomorphization is bit-identical
-    // to the rectified flow (IS_RECTIFIED erases the rectify steps).
-    if config.quad_extraction_mode != crate::config::QuadExtractionMode::ContourRdp {
+    // ContourRdp-only. AdaptivePpb routes are both ContourRdp by validator
+    // construction; the guard below catches a `Static` config that requested
+    // EdLines on a distorted camera.
+    if matches!(
+        config.quad_extraction_policy,
+        crate::config::QuadExtractionPolicy::Static
+    ) && config.quad_extraction_mode != crate::config::QuadExtractionMode::ContourRdp
+    {
         return None;
     }
 
@@ -710,11 +794,15 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
         y: p.y * d,
     });
 
-    let (corners, out_covs) = if config.refinement_mode == crate::config::CornerRefinementMode::None
-    {
+    // Distortion path is ContourRdp-only — the validator already asserted both
+    // routes are ContourRdp, so we only consume the route's refinement mode.
+    let (_route_extraction, route_refinement, route_label, ppb_estimate) =
+        resolve_route(config, bbox_w.min(bbox_h), min_outer_dim);
+
+    let (corners, out_covs) = if route_refinement == crate::config::CornerRefinementMode::None {
         (quad_pts, [[0.0_f32; 4]; 4])
     } else if C::IS_RECTIFIED {
-        let use_erf = config.refinement_mode == crate::config::CornerRefinementMode::Erf;
+        let use_erf = route_refinement == crate::config::CornerRefinementMode::Erf;
         (
             [
                 refine_corner(
@@ -821,7 +909,7 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
         return None;
     }
 
-    Some((corners, quad_pts, out_covs))
+    Some((corners, quad_pts, out_covs, route_label, ppb_estimate))
 }
 
 /// Quad extraction with custom configuration.
@@ -861,11 +949,10 @@ pub fn extract_quads_with_config(
                     config,
                     decimation,
                     refinement_img,
+                    MIN_OUTER_DIM_FALLBACK,
                 );
 
-                let (corners, _unrefined, _covs) = quad_result?;
-                // To keep backward compatibility, we still need to calculate some fields
-                // that aren't yet in the SoA (or are derived from it).
+                let (corners, _unrefined, _covs, _route, _ppb) = quad_result?;
                 let area = polygon_area(&corners);
 
                 Some(Detection {

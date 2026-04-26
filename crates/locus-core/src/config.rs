@@ -130,6 +130,59 @@ impl<'de> serde::Deserialize<'de> for EdLinesImbalanceGatePolicy {
     }
 }
 
+/// Per-candidate routing config for [`QuadExtractionPolicy::AdaptivePpb`].
+///
+/// A pixels-per-bit (PPB) estimate is computed per candidate from its
+/// segmentation bounding box and the minimum tag outer dimension across
+/// configured decoders. Candidates with `ppb < threshold` take the `low_*`
+/// route (typically ContourRdp + Erf for small/blurry tags); candidates with
+/// `ppb >= threshold` take the `high_*` route (typically EdLines + None/Gwlf
+/// for metrology-grade accuracy). When `ppb == threshold` exactly, the low
+/// route wins (deterministic tie-break for snapshot stability).
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct AdaptivePpbConfig {
+    /// PPB cutoff separating low and high routes. Validated to fall in `(1.0, 5.0)`.
+    pub threshold: f32,
+    /// Extraction mode applied when estimated PPB < threshold.
+    pub low_extraction: QuadExtractionMode,
+    /// Extraction mode applied when estimated PPB >= threshold.
+    pub high_extraction: QuadExtractionMode,
+    /// Corner refinement mode applied on the low route.
+    pub low_refinement: CornerRefinementMode,
+    /// Corner refinement mode applied on the high route.
+    pub high_refinement: CornerRefinementMode,
+}
+
+impl Default for AdaptivePpbConfig {
+    fn default() -> Self {
+        Self {
+            threshold: 2.5,
+            low_extraction: QuadExtractionMode::ContourRdp,
+            high_extraction: QuadExtractionMode::EdLines,
+            low_refinement: CornerRefinementMode::Erf,
+            high_refinement: CornerRefinementMode::None,
+        }
+    }
+}
+
+/// Per-frame dispatch strategy for quad extraction.
+///
+/// `Static` (default) preserves existing behavior: every candidate runs
+/// `DetectorConfig::quad_extraction_mode` + `DetectorConfig::refinement_mode`.
+/// `AdaptivePpb(...)` routes each candidate to one of two configurations
+/// based on an on-the-fly pixels-per-bit estimate.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum QuadExtractionPolicy {
+    /// Defer to `DetectorConfig::quad_extraction_mode` and
+    /// `DetectorConfig::refinement_mode` (existing, default behavior).
+    #[default]
+    Static,
+    /// Per-candidate routing based on pixels-per-bit estimate.
+    AdaptivePpb(AdaptivePpbConfig),
+}
+
 /// Pipeline-level configuration for the detector.
 ///
 /// These settings affect the fundamental behavior of the detection pipeline
@@ -265,11 +318,22 @@ pub struct DetectorConfig {
     pub quad_min_density: f64,
 
     /// Quad extraction mode: legacy contour tracing (default) or EDLines.
+    ///
+    /// Read only when `quad_extraction_policy == Static`. Under
+    /// `AdaptivePpb(...)` the policy's low/high routes override this field
+    /// on a per-candidate basis.
     pub quad_extraction_mode: QuadExtractionMode,
 
     /// EdLines AXIS→DIAG imbalance-gate policy. See
     /// [`EdLinesImbalanceGatePolicy`].
     pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
+
+    /// Per-frame extraction-routing policy.
+    ///
+    /// DO NOT change the default to `AdaptivePpb` without a planned
+    /// snapshot-review campaign: every downstream test that constructs a
+    /// default config would silently exercise new code.
+    pub quad_extraction_policy: QuadExtractionPolicy,
 }
 
 impl Default for DetectorConfig {
@@ -310,6 +374,7 @@ impl Default for DetectorConfig {
             quad_extraction_mode: QuadExtractionMode::ContourRdp,
             edlines_imbalance_gate: EdLinesImbalanceGatePolicy::Disabled,
             pose_consistency_fpr: 0.0,
+            quad_extraction_policy: QuadExtractionPolicy::Static,
         }
     }
 }
@@ -368,7 +433,49 @@ impl DetectorConfig {
                 return Err(ConfigError::EdLinesIncompatibleWithSoftDecode);
             }
         }
+        if let QuadExtractionPolicy::AdaptivePpb(ref p) = self.quad_extraction_policy {
+            if p.low_extraction == p.high_extraction {
+                return Err(ConfigError::AdaptivePolicyDegenerate);
+            }
+            if !(p.threshold > 1.0 && p.threshold < 5.0) {
+                return Err(ConfigError::AdaptivePolicyThresholdOutOfRange(p.threshold));
+            }
+            // Re-apply per-route EdLines incompatibilities.
+            for (ext, refine) in [
+                (p.low_extraction, p.low_refinement),
+                (p.high_extraction, p.high_refinement),
+            ] {
+                if ext == QuadExtractionMode::EdLines {
+                    if refine == CornerRefinementMode::Erf {
+                        return Err(ConfigError::EdLinesIncompatibleWithErf);
+                    }
+                    if self.decode_mode == DecodeMode::Soft {
+                        return Err(ConfigError::EdLinesIncompatibleWithSoftDecode);
+                    }
+                }
+            }
+        }
         Ok(())
+    }
+
+    /// Returns `true` if any active extraction path — either the static
+    /// `quad_extraction_mode` or (under `AdaptivePpb`) either of the low/high
+    /// routes — selects `EdLines`.
+    ///
+    /// Used by the distortion gate in `run_detection_pipeline` to reject
+    /// incompatible configurations once camera intrinsics carry distortion
+    /// coefficients.
+    #[must_use]
+    pub fn any_route_uses_edlines(&self) -> bool {
+        match self.quad_extraction_policy {
+            QuadExtractionPolicy::Static => {
+                self.quad_extraction_mode == QuadExtractionMode::EdLines
+            },
+            QuadExtractionPolicy::AdaptivePpb(ref p) => {
+                p.low_extraction == QuadExtractionMode::EdLines
+                    || p.high_extraction == QuadExtractionMode::EdLines
+            },
+        }
     }
 }
 
@@ -414,6 +521,8 @@ pub struct DetectorConfigBuilder {
     pub quad_min_density: Option<f64>,
     /// Quad extraction mode.
     pub quad_extraction_mode: Option<QuadExtractionMode>,
+    /// Quad extraction policy (Static or AdaptivePpb).
+    pub quad_extraction_policy: Option<QuadExtractionPolicy>,
     /// Huber delta for LM reprojection (pixels).
     pub huber_delta_px: Option<f64>,
     /// Maximum Tikhonov regularisation alpha for Accurate mode.
@@ -578,6 +687,9 @@ impl DetectorConfigBuilder {
             quad_extraction_mode: self.quad_extraction_mode.unwrap_or(d.quad_extraction_mode),
             edlines_imbalance_gate: d.edlines_imbalance_gate,
             pose_consistency_fpr: d.pose_consistency_fpr,
+            quad_extraction_policy: self
+                .quad_extraction_policy
+                .unwrap_or(d.quad_extraction_policy),
         }
     }
 
@@ -666,9 +778,20 @@ impl DetectorConfigBuilder {
     }
 
     /// Set the quad extraction mode (ContourRdp or EdLines).
+    ///
+    /// Read only when `quad_extraction_policy == Static`. Under
+    /// `AdaptivePpb(...)` this field is ignored in favor of the policy's
+    /// per-route modes.
     #[must_use]
     pub fn quad_extraction_mode(mut self, mode: QuadExtractionMode) -> Self {
         self.quad_extraction_mode = Some(mode);
+        self
+    }
+
+    /// Set the quad extraction policy (Static or AdaptivePpb).
+    #[must_use]
+    pub fn quad_extraction_policy(mut self, policy: QuadExtractionPolicy) -> Self {
+        self.quad_extraction_policy = Some(policy);
         self
     }
 
@@ -957,6 +1080,8 @@ mod profile_json {
         pub extraction_mode: QuadExtractionMode,
         #[serde(default)]
         pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
+        #[serde(default)]
+        pub extraction_policy: super::QuadExtractionPolicy,
     }
 
     impl Default for QuadJson {
@@ -975,6 +1100,7 @@ mod profile_json {
                 min_density: d.quad_min_density,
                 extraction_mode: d.quad_extraction_mode,
                 edlines_imbalance_gate: d.edlines_imbalance_gate,
+                extraction_policy: d.quad_extraction_policy,
             }
         }
     }
@@ -1087,6 +1213,7 @@ mod profile_json {
                 quad_extraction_mode: p.quad.extraction_mode,
                 edlines_imbalance_gate: p.quad.edlines_imbalance_gate,
                 pose_consistency_fpr: p.pose.pose_consistency_fpr,
+                quad_extraction_policy: p.quad.extraction_policy,
             }
         }
     }
@@ -1102,6 +1229,8 @@ const HIGH_ACCURACY_JSON: &str = include_str!("../profiles/high_accuracy.json");
 const RENDER_TAG_HUB_JSON: &str = include_str!("../profiles/render_tag_hub.json");
 #[cfg(feature = "profiles")]
 const GENERAL_JSON: &str = include_str!("../profiles/general.json");
+#[cfg(feature = "profiles")]
+const MAX_RECALL_ADAPTIVE_JSON: &str = include_str!("../profiles/max_recall_adaptive.json");
 
 /// Return the raw embedded JSON for a shipped profile, or `None` if the name
 /// is unknown. Exposed so FFI consumers (the Python wheel) can read the exact
@@ -1115,6 +1244,7 @@ pub fn shipped_profile_json(name: &str) -> Option<&'static str> {
         "high_accuracy" => Some(HIGH_ACCURACY_JSON),
         "render_tag_hub" => Some(RENDER_TAG_HUB_JSON),
         "general" => Some(GENERAL_JSON),
+        "max_recall_adaptive" => Some(MAX_RECALL_ADAPTIVE_JSON),
         _ => None,
     }
 }
@@ -1148,7 +1278,8 @@ impl DetectorConfig {
 
     /// Load a shipped profile by name.
     ///
-    /// Accepts `"standard"`, `"grid"`, `"high_accuracy"`, or `"render_tag_hub"`.
+    /// Accepts `"standard"`, `"grid"`, `"high_accuracy"`, `"render_tag_hub"`,
+    /// `"general"`, or `"max_recall_adaptive"`.
     ///
     /// # Panics
     ///
@@ -1164,9 +1295,12 @@ impl DetectorConfig {
             "grid" => GRID_JSON,
             "high_accuracy" => HIGH_ACCURACY_JSON,
             "render_tag_hub" => RENDER_TAG_HUB_JSON,
+            "general" => GENERAL_JSON,
+            "max_recall_adaptive" => MAX_RECALL_ADAPTIVE_JSON,
             other => panic!(
                 "Unknown shipped profile {other:?}; expected one of \
-                 [\"standard\", \"grid\", \"high_accuracy\", \"render_tag_hub\"]"
+                 [\"standard\", \"grid\", \"high_accuracy\", \"render_tag_hub\", \
+                 \"general\", \"max_recall_adaptive\"]"
             ),
         };
         Self::from_profile_json(json).unwrap_or_else(|e| {
@@ -1325,5 +1459,120 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_adaptive_ppb_default_valid() {
+        let config = DetectorConfig {
+            quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig::default()),
+            ..DetectorConfig::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_adaptive_ppb_rejects_degenerate() {
+        let config = DetectorConfig {
+            quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
+                low_extraction: QuadExtractionMode::ContourRdp,
+                high_extraction: QuadExtractionMode::ContourRdp,
+                ..AdaptivePpbConfig::default()
+            }),
+            ..DetectorConfig::default()
+        };
+        assert!(matches!(
+            config.validate(),
+            Err(crate::error::ConfigError::AdaptivePolicyDegenerate)
+        ));
+    }
+
+    #[test]
+    fn test_adaptive_ppb_rejects_threshold_out_of_range() {
+        for bad in [0.5_f32, 1.0, 5.0, 10.0] {
+            let config = DetectorConfig {
+                quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
+                    threshold: bad,
+                    ..AdaptivePpbConfig::default()
+                }),
+                ..DetectorConfig::default()
+            };
+            assert!(
+                matches!(
+                    config.validate(),
+                    Err(crate::error::ConfigError::AdaptivePolicyThresholdOutOfRange(_))
+                ),
+                "threshold {bad} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn test_adaptive_ppb_per_route_edlines_erf_rejected() {
+        let config = DetectorConfig {
+            quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
+                low_extraction: QuadExtractionMode::ContourRdp,
+                high_extraction: QuadExtractionMode::EdLines,
+                low_refinement: CornerRefinementMode::Edge,
+                high_refinement: CornerRefinementMode::Erf,
+                threshold: 2.5,
+            }),
+            ..DetectorConfig::default()
+        };
+        assert!(matches!(
+            config.validate(),
+            Err(crate::error::ConfigError::EdLinesIncompatibleWithErf)
+        ));
+    }
+
+    #[test]
+    fn test_adaptive_ppb_per_route_edlines_soft_rejected() {
+        let config = DetectorConfig {
+            decode_mode: DecodeMode::Soft,
+            quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
+                low_extraction: QuadExtractionMode::EdLines,
+                high_extraction: QuadExtractionMode::ContourRdp,
+                low_refinement: CornerRefinementMode::None,
+                high_refinement: CornerRefinementMode::Edge,
+                threshold: 2.5,
+            }),
+            ..DetectorConfig::default()
+        };
+        assert!(matches!(
+            config.validate(),
+            Err(crate::error::ConfigError::EdLinesIncompatibleWithSoftDecode)
+        ));
+    }
+
+    #[test]
+    fn test_any_route_uses_edlines() {
+        let base = DetectorConfig::default();
+        assert!(!base.any_route_uses_edlines());
+
+        let edlines_static = DetectorConfig {
+            quad_extraction_mode: QuadExtractionMode::EdLines,
+            refinement_mode: CornerRefinementMode::None,
+            ..DetectorConfig::default()
+        };
+        assert!(edlines_static.any_route_uses_edlines());
+
+        let adaptive_with_edlines = DetectorConfig {
+            quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig::default()),
+            ..DetectorConfig::default()
+        };
+        assert!(adaptive_with_edlines.any_route_uses_edlines());
+
+        let adaptive_no_edlines = DetectorConfig {
+            quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
+                low_extraction: QuadExtractionMode::ContourRdp,
+                high_extraction: QuadExtractionMode::ContourRdp,
+                low_refinement: CornerRefinementMode::Erf,
+                high_refinement: CornerRefinementMode::Gwlf,
+                threshold: 2.5,
+            }),
+            ..DetectorConfig::default()
+        };
+        // Degenerate policy — validate would reject, but any_route_uses_edlines
+        // is a pure accessor that doesn't validate.
+        assert!(!adaptive_no_edlines.any_route_uses_edlines());
     }
 }

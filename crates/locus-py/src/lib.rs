@@ -371,6 +371,16 @@ pub struct PyDetectorConfig {
     pub quad_min_density: f64,
     pub quad_extraction_mode: QuadExtractionMode,
     pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
+    // Quad-extraction policy passthrough — Rust's `QuadExtractionPolicy` is an
+    // enum (`Static` | `AdaptivePpb(...)`), flattened here so `PyDetectorConfig`
+    // stays `Copy`. When `quad_extraction_policy_is_adaptive == false`, the
+    // `adaptive_*` fields are ignored on the `From<PyDetectorConfig>` path.
+    pub quad_extraction_policy_is_adaptive: bool,
+    pub adaptive_ppb_threshold: f32,
+    pub adaptive_ppb_low_extraction: QuadExtractionMode,
+    pub adaptive_ppb_high_extraction: QuadExtractionMode,
+    pub adaptive_ppb_low_refinement: CornerRefinementMode,
+    pub adaptive_ppb_high_refinement: CornerRefinementMode,
     pub huber_delta_px: f64,
     pub tikhonov_alpha_max: f64,
     pub sigma_n_sq: f64,
@@ -411,6 +421,12 @@ impl PyDetectorConfig {
         quad_min_density,
         quad_extraction_mode,
         edlines_imbalance_gate,
+        quad_extraction_policy_is_adaptive,
+        adaptive_ppb_threshold,
+        adaptive_ppb_low_extraction,
+        adaptive_ppb_high_extraction,
+        adaptive_ppb_low_refinement,
+        adaptive_ppb_high_refinement,
         huber_delta_px,
         tikhonov_alpha_max,
         sigma_n_sq,
@@ -445,6 +461,12 @@ impl PyDetectorConfig {
         quad_min_density: f64,
         quad_extraction_mode: QuadExtractionMode,
         edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
+        quad_extraction_policy_is_adaptive: bool,
+        adaptive_ppb_threshold: f32,
+        adaptive_ppb_low_extraction: QuadExtractionMode,
+        adaptive_ppb_high_extraction: QuadExtractionMode,
+        adaptive_ppb_low_refinement: CornerRefinementMode,
+        adaptive_ppb_high_refinement: CornerRefinementMode,
         huber_delta_px: f64,
         tikhonov_alpha_max: f64,
         sigma_n_sq: f64,
@@ -479,6 +501,12 @@ impl PyDetectorConfig {
             quad_min_density,
             quad_extraction_mode,
             edlines_imbalance_gate,
+            quad_extraction_policy_is_adaptive,
+            adaptive_ppb_threshold,
+            adaptive_ppb_low_extraction,
+            adaptive_ppb_high_extraction,
+            adaptive_ppb_low_refinement,
+            adaptive_ppb_high_refinement,
             huber_delta_px,
             tikhonov_alpha_max,
             sigma_n_sq,
@@ -490,6 +518,34 @@ impl PyDetectorConfig {
 
 impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
     fn from(c: locus_core::config::DetectorConfig) -> Self {
+        // Flatten the policy once rather than pattern-matching it per sibling
+        // field. Defaults for the `Static` branch match the historical values
+        // exposed through the Python kwarg surface.
+        let (
+            policy_is_adaptive,
+            adaptive_threshold,
+            adaptive_low_ext,
+            adaptive_high_ext,
+            adaptive_low_ref,
+            adaptive_high_ref,
+        ) = match c.quad_extraction_policy {
+            locus_core::config::QuadExtractionPolicy::AdaptivePpb(p) => (
+                true,
+                p.threshold,
+                quad_extraction_mode_to_py(p.low_extraction),
+                quad_extraction_mode_to_py(p.high_extraction),
+                corner_refinement_mode_to_py(p.low_refinement),
+                corner_refinement_mode_to_py(p.high_refinement),
+            ),
+            locus_core::config::QuadExtractionPolicy::Static => (
+                false,
+                0.0,
+                QuadExtractionMode::ContourRdp,
+                QuadExtractionMode::EdLines,
+                CornerRefinementMode::Erf,
+                CornerRefinementMode::None,
+            ),
+        };
         Self {
             threshold_tile_size: c.threshold_tile_size,
             threshold_min_range: c.threshold_min_range,
@@ -517,12 +573,7 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             },
             upscale_factor: c.upscale_factor,
             decoder_min_contrast: c.decoder_min_contrast,
-            refinement_mode: match c.refinement_mode {
-                locus_core::config::CornerRefinementMode::None => CornerRefinementMode::None,
-                locus_core::config::CornerRefinementMode::Edge => CornerRefinementMode::Edge,
-                locus_core::config::CornerRefinementMode::Erf => CornerRefinementMode::Erf,
-                locus_core::config::CornerRefinementMode::Gwlf => CornerRefinementMode::Gwlf,
-            },
+            refinement_mode: corner_refinement_mode_to_py(c.refinement_mode),
             decode_mode: match c.decode_mode {
                 locus_core::config::DecodeMode::Hard => DecodeMode::Hard,
                 locus_core::config::DecodeMode::Soft => DecodeMode::Soft,
@@ -531,13 +582,14 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             gwlf_transversal_alpha: c.gwlf_transversal_alpha,
             quad_max_elongation: c.quad_max_elongation,
             quad_min_density: c.quad_min_density,
-            quad_extraction_mode: match c.quad_extraction_mode {
-                locus_core::config::QuadExtractionMode::ContourRdp => {
-                    QuadExtractionMode::ContourRdp
-                },
-                locus_core::config::QuadExtractionMode::EdLines => QuadExtractionMode::EdLines,
-            },
+            quad_extraction_mode: quad_extraction_mode_to_py(c.quad_extraction_mode),
             edlines_imbalance_gate: c.edlines_imbalance_gate.into(),
+            quad_extraction_policy_is_adaptive: policy_is_adaptive,
+            adaptive_ppb_threshold: adaptive_threshold,
+            adaptive_ppb_low_extraction: adaptive_low_ext,
+            adaptive_ppb_high_extraction: adaptive_high_ext,
+            adaptive_ppb_low_refinement: adaptive_low_ref,
+            adaptive_ppb_high_refinement: adaptive_high_ref,
             huber_delta_px: c.huber_delta_px,
             tikhonov_alpha_max: c.tikhonov_alpha_max,
             sigma_n_sq: c.sigma_n_sq,
@@ -560,6 +612,14 @@ pub struct PipelineTelemetryResult {
     pub reprojection_errors: Option<Py<PyArray1<f32>>>,
     pub gwlf_fallback_count: usize,
     pub gwlf_avg_delta: f32,
+    /// Per-candidate adaptive-router route labels (0 = low, 1 = high,
+    /// 255 = Static/not-routed). One entry per Phase-A candidate, populated
+    /// only when `debug_telemetry=True` and `QuadExtractionPolicy::AdaptivePpb`
+    /// is active for at least one candidate.
+    pub routed_to: Option<Py<PyArray1<u8>>>,
+    /// Per-candidate pixels-per-bit estimates (`bbox.short_side / min_outer_dim`).
+    /// One entry per Phase-A candidate, populated only when `debug_telemetry=True`.
+    pub ppb_estimate: Option<Py<PyArray1<f32>>>,
 }
 
 /// Typed result returned by [`Detector::detect`].
@@ -1151,6 +1211,37 @@ unsafe fn copy_strided_image(
     }
 }
 
+/// Copies `n` elements from `ptr` into a freshly allocated NumPy 1-D array.
+///
+/// Returns `None` when the pointer is null or the count is zero — the common
+/// shape for optional debug-telemetry columns. `label` appears in the error
+/// message if NumPy refuses a mutable slice of the allocation.
+///
+/// # Safety
+///
+/// Caller must guarantee `ptr` is valid for `n * size_of::<T>()` bytes for the
+/// duration of this function (see "NumPy allocation safety contract" in the
+/// module docs).
+unsafe fn optional_py_array1<T: numpy::Element + Copy>(
+    py: Python<'_>,
+    ptr: *const T,
+    n: usize,
+    label: &str,
+) -> PyResult<Option<Py<PyArray1<T>>>> {
+    if ptr.is_null() || n == 0 {
+        return Ok(None);
+    }
+    // SAFETY: see "NumPy allocation safety contract" in module docs.
+    let arr = unsafe { PyArray1::<T>::new(py, [n], false) };
+    // SAFETY: see caller-obligation note above.
+    unsafe {
+        arr.as_slice_mut()
+            .map_err(|e| PyRuntimeError::new_err(format!("{label} slice: {e}")))?
+            .copy_from_slice(std::slice::from_raw_parts(ptr, n));
+    }
+    Ok(Some(arr.unbind()))
+}
+
 fn build_pipeline_telemetry(
     py: Python<'_>,
     telem: &locus_core::TelemetryPayload,
@@ -1202,24 +1293,23 @@ fn build_pipeline_telemetry(
         None
     };
 
-    let reprojection_errors =
-        if !telem.reprojection_errors_ptr.is_null() && telem.num_reprojection > 0 {
-            let nr = telem.num_reprojection;
-            // SAFETY: see "NumPy allocation safety contract" in module docs.
-            let arr = unsafe { PyArray1::<f32>::new(py, [nr], false) };
-            // SAFETY: see "NumPy allocation safety contract" in module docs.
-            unsafe {
-                arr.as_slice_mut()
-                    .map_err(|e| PyRuntimeError::new_err(format!("repro slice: {e}")))?
-                    .copy_from_slice(std::slice::from_raw_parts(
-                        telem.reprojection_errors_ptr,
-                        nr,
-                    ));
-            }
-            Some(arr.unbind())
-        } else {
-            None
-        };
+    // SAFETY: telemetry pointers and counts are populated by the Rust arena
+    // that remains live for the duration of this call (see module docs).
+    let reprojection_errors = unsafe {
+        optional_py_array1(
+            py,
+            telem.reprojection_errors_ptr,
+            telem.num_reprojection,
+            "repro",
+        )?
+    };
+    // SAFETY: routed_to_ptr is valid for `num_routed` u8 slots (DetectionBatch SoA contract).
+    let routed_to =
+        unsafe { optional_py_array1(py, telem.routed_to_ptr, telem.num_routed, "routed_to")? };
+    // SAFETY: ppb_estimate_ptr is valid for `num_routed` f32 slots; same lifetime as routed_to.
+    let ppb_estimate = unsafe {
+        optional_py_array1(py, telem.ppb_estimate_ptr, telem.num_routed, "ppb_estimate")?
+    };
 
     Ok(PipelineTelemetryResult {
         binarized: binarized_arr.unbind(),
@@ -1228,6 +1318,8 @@ fn build_pipeline_telemetry(
         reprojection_errors,
         gwlf_fallback_count: telem.gwlf_fallback_count,
         gwlf_avg_delta: telem.gwlf_avg_delta,
+        routed_to,
+        ppb_estimate,
     })
 }
 
@@ -1484,8 +1576,39 @@ fn tag_family_from_i32(f: i32) -> PyResult<locus_core::TagFamily> {
     }
 }
 
+fn quad_extraction_mode_to_py(m: locus_core::config::QuadExtractionMode) -> QuadExtractionMode {
+    match m {
+        locus_core::config::QuadExtractionMode::ContourRdp => QuadExtractionMode::ContourRdp,
+        locus_core::config::QuadExtractionMode::EdLines => QuadExtractionMode::EdLines,
+    }
+}
+
+fn corner_refinement_mode_to_py(
+    m: locus_core::config::CornerRefinementMode,
+) -> CornerRefinementMode {
+    match m {
+        locus_core::config::CornerRefinementMode::None => CornerRefinementMode::None,
+        locus_core::config::CornerRefinementMode::Edge => CornerRefinementMode::Edge,
+        locus_core::config::CornerRefinementMode::Erf => CornerRefinementMode::Erf,
+        locus_core::config::CornerRefinementMode::Gwlf => CornerRefinementMode::Gwlf,
+    }
+}
+
 impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
     fn from(c: PyDetectorConfig) -> Self {
+        let policy = if c.quad_extraction_policy_is_adaptive {
+            locus_core::config::QuadExtractionPolicy::AdaptivePpb(
+                locus_core::config::AdaptivePpbConfig {
+                    threshold: c.adaptive_ppb_threshold,
+                    low_extraction: c.adaptive_ppb_low_extraction.into(),
+                    high_extraction: c.adaptive_ppb_high_extraction.into(),
+                    low_refinement: c.adaptive_ppb_low_refinement.into(),
+                    high_refinement: c.adaptive_ppb_high_refinement.into(),
+                },
+            )
+        } else {
+            locus_core::config::QuadExtractionPolicy::Static
+        };
         Self {
             threshold_tile_size: c.threshold_tile_size,
             threshold_min_range: c.threshold_min_range,
@@ -1519,6 +1642,7 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             pose_consistency_fpr: c.pose_consistency_fpr,
             segmentation_connectivity: c.segmentation_connectivity.into(),
             segmentation_margin: c.segmentation_margin,
+            quad_extraction_policy: policy,
             ..locus_core::config::DetectorConfig::default()
         }
     }
@@ -1919,7 +2043,9 @@ fn init_tracy() {
 fn _shipped_profile_json(name: &str) -> PyResult<&'static str> {
     locus_core::config::shipped_profile_json(name).ok_or_else(|| {
         PyValueError::new_err(format!(
-            "Unknown shipped profile {name:?}; expected one of ['standard', 'grid', 'high_accuracy', 'render_tag_hub']"
+            "Unknown shipped profile {name:?}; expected one of \
+             ['standard', 'grid', 'high_accuracy', 'render_tag_hub', \
+             'general', 'max_recall_adaptive']"
         ))
     })
 }

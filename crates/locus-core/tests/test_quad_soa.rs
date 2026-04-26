@@ -35,6 +35,7 @@ fn test_quad_extraction_soa_empty() {
         &config,
         1,
         &img,
+        6,
         false,
     );
 
