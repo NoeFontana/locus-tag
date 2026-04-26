@@ -456,9 +456,19 @@ struct IcraProvider {
 impl IcraProvider {
     fn new(subfolder: &str, img_subfolder: Option<&str>) -> Option<Self> {
         let root = common::resolve_dataset_root()?;
+        let env_set = std::env::var("LOCUS_ICRA_DATASET_DIR").is_ok();
 
         // 1. Load Ground Truth (Context-aware loading)
-        let gt_map = common::load_ground_truth(&root, subfolder)?;
+        let gt_map = match common::load_ground_truth(&root, subfolder) {
+            Some(gt) => gt,
+            None if env_set => panic!(
+                "ground truth not found under '{}' for subfolder '{}' \
+                 (LOCUS_ICRA_DATASET_DIR was set — refusing to silent-skip)",
+                root.display(),
+                subfolder
+            ),
+            None => return None,
+        };
 
         // 2. Locate Image Directory
         // Handle both flat and nested "pure_tags_images" structures gracefully
@@ -469,7 +479,16 @@ impl IcraProvider {
         candidates.push(root.join(subfolder).join("pure_tags_images"));
         candidates.push(root.join(subfolder));
 
-        let img_dir = candidates.iter().find(|p| p.is_dir())?;
+        let img_dir = match candidates.iter().find(|p| p.is_dir()) {
+            Some(p) => p,
+            None if env_set => panic!(
+                "no image directory found for subfolder '{}' under '{}' \
+                 (LOCUS_ICRA_DATASET_DIR was set — refusing to silent-skip)",
+                subfolder,
+                root.display()
+            ),
+            None => return None,
+        };
 
         let mut paths: Vec<_> = walkdir::WalkDir::new(img_dir)
             .into_iter()

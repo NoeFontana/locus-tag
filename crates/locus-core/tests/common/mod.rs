@@ -4,6 +4,7 @@
     clippy::expect_used,
     clippy::items_after_statements,
     clippy::must_use_candidate,
+    clippy::panic,
     clippy::return_self_not_must_use,
     clippy::similar_names,
     clippy::too_many_lines,
@@ -28,21 +29,39 @@ pub fn resolve_workspace_root() -> PathBuf {
 
 /// Resolves the root directory of the ICRA 2020 dataset.
 ///
-/// This function is "lazy": it returns the path if the directory exists,
-/// without validating specific contents. This allows it to support various
-/// dataset layouts (split CSVs, master CSVs, etc.).
+/// When `LOCUS_ICRA_DATASET_DIR` is set, the path is honoured verbatim
+/// (resolved against the workspace root if relative, mirroring
+/// `resolve_hub_root`); a non-directory value panics rather than silently
+/// falling back so an explicit user request never short-circuits to a
+/// stub fixture. When the env var is unset, the function tries the
+/// in-tree fixture and the workspace-relative dataset in turn and
+/// returns `None` if neither exists — that branch is what lets ad-hoc
+/// `cargo test` runs skip cleanly on machines without the dataset.
 pub fn resolve_dataset_root() -> Option<PathBuf> {
-    // 1. Trust the Environment Variable explicitly
     if let Ok(path_str) = env::var("LOCUS_ICRA_DATASET_DIR") {
-        let path = PathBuf::from(path_str);
-        if path.is_dir() {
-            return Some(path);
+        let raw = PathBuf::from(&path_str);
+        let resolved = if raw.is_absolute() {
+            raw
+        } else {
+            let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let from_workspace = manifest.join("../../").join(&raw);
+            if from_workspace.is_dir() {
+                std::fs::canonicalize(&from_workspace).unwrap_or(from_workspace)
+            } else {
+                raw
+            }
+        };
+        if resolved.is_dir() {
+            return Some(resolved);
         }
+        panic!(
+            "LOCUS_ICRA_DATASET_DIR='{}' is not a valid directory (resolved to '{}')",
+            path_str,
+            resolved.display()
+        );
     }
 
-    // 2. Relative path fallback (Standard Repo Layout)
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    // Try standard locations relative to crate root
     let candidates = [
         manifest_dir.join("tests/fixtures/icra2020"),
         manifest_dir.join("../../tests/data/icra2020"),
