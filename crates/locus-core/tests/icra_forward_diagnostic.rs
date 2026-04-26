@@ -33,6 +33,9 @@ const FRAMES: &[&str] = &[
     "0000.png", "0001.png", "0002.png", "0003.png", "0004.png", "0005.png",
 ];
 const PROFILES: &[&str] = &["standard", "high_accuracy"];
+/// AprilTag36h11 has a 6×6 data grid + 2-bit border = 8 cells per side.
+/// PPB = `bbox_short / OUTER_DIM` matches the Adaptive PPB router's estimator.
+const APRILTAG36H11_OUTER_DIM: f32 = 8.0;
 
 #[test]
 #[ignore = "diagnostic — run manually"]
@@ -72,11 +75,72 @@ fn diagnose_icra_forward_frames_0_5() {
             let size_hist = corner_size_histogram(det.rejected_corners);
             let hamming_hist =
                 decode_hamming_histogram(det.rejected_funnel_status, det.rejected_error_rates);
+            let valid_ppb = ppb_histogram(det.corners);
+            let rej_ppb = ppb_histogram(det.rejected_corners);
             println!(
-                "  {frame}: valid={n_valid} rejected={n_rejected}  funnel={funnel_hist}  rejected_size_hist={size_hist}  decode_hamming={hamming_hist}"
+                "  {frame}: valid={n_valid} rejected={n_rejected}  funnel={funnel_hist}  rejected_size_hist={size_hist}  decode_hamming={hamming_hist}\n         valid_ppb={valid_ppb}  rejected_ppb={rej_ppb}"
             );
         }
     }
+}
+
+/// PPB = `bbox_short / outer_dim` (matches the Adaptive PPB router).
+///
+/// Buckets pick out the boundary that separates ICRA's small/dense tags
+/// from render-tag's large well-resolved tags. The cumulative `≤t` columns
+/// let us read off a candidate threshold directly: the smallest `t` whose
+/// cumulative valid count covers the standard-vs-high_accuracy gap is the
+/// natural cutoff.
+fn ppb_histogram(corners: &[[locus_core::bench_api::Point2f; 4]]) -> String {
+    if corners.is_empty() {
+        return "n=0".to_string();
+    }
+    let mut samples: Vec<f32> = corners
+        .iter()
+        .map(|c| {
+            let xs = [c[0].x, c[1].x, c[2].x, c[3].x];
+            let ys = [c[0].y, c[1].y, c[2].y, c[3].y];
+            let dx = xs.iter().copied().fold(f32::NEG_INFINITY, f32::max)
+                - xs.iter().copied().fold(f32::INFINITY, f32::min);
+            let dy = ys.iter().copied().fold(f32::NEG_INFINITY, f32::max)
+                - ys.iter().copied().fold(f32::INFINITY, f32::min);
+            dx.min(dy) / APRILTAG36H11_OUTER_DIM
+        })
+        .collect();
+    samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let n = samples.len();
+    let p = |q: f32| -> f32 {
+        let idx = ((q * (n as f32 - 1.0)).round() as usize).min(n - 1);
+        samples[idx]
+    };
+    let edges = [1.5_f32, 2.0, 2.5, 3.0, 4.0, 6.0];
+    let mut bins = [0usize; 7];
+    for &v in &samples {
+        let mut placed = false;
+        for (i, &e) in edges.iter().enumerate() {
+            if v < e {
+                bins[i] += 1;
+                placed = true;
+                break;
+            }
+        }
+        if !placed {
+            bins[6] += 1;
+        }
+    }
+    format!(
+        "n={n} p10={:.2} p50={:.2} p90={:.2}  <1.5={} 1.5-2={} 2-2.5={} 2.5-3={} 3-4={} 4-6={} ≥6={}",
+        p(0.10),
+        p(0.50),
+        p(0.90),
+        bins[0],
+        bins[1],
+        bins[2],
+        bins[3],
+        bins[4],
+        bins[5],
+        bins[6],
+    )
 }
 
 fn histogram(states: &[FunnelStatus]) -> String {
