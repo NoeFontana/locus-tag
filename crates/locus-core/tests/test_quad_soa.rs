@@ -11,7 +11,6 @@
     dead_code,
     missing_docs
 )]
-use bumpalo::Bump;
 use locus_core::bench_api::DetectionBatch;
 use locus_core::bench_api::LabelResult;
 use locus_core::{DetectorConfig, ImageView};
@@ -29,9 +28,7 @@ fn test_quad_extraction_soa_empty() {
         component_stats: Vec::new(),
     };
 
-    let arena = Bump::new();
     let (n, _) = locus_core::bench_api::extract_quads_soa(
-        &arena,
         &mut batch,
         &img,
         &label_result,

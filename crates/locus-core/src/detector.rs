@@ -271,7 +271,6 @@ fn run_detection_pipeline<'ctx>(
             Some((k, crate::pose::DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 })) => {
                 let model = crate::camera::BrownConradyModel { k1, k2, p1, p2, k3 };
                 crate::quad::extract_quads_soa_with_camera(
-                    &state.arena,
                     &mut state.batch,
                     &sharpened_img,
                     &label_result,
@@ -286,7 +285,6 @@ fn run_detection_pipeline<'ctx>(
             Some((k, crate::pose::DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 })) => {
                 let model = crate::camera::KannalaBrandtModel { k1, k2, k3, k4 };
                 crate::quad::extract_quads_soa_with_camera(
-                    &state.arena,
                     &mut state.batch,
                     &sharpened_img,
                     &label_result,
@@ -299,7 +297,6 @@ fn run_detection_pipeline<'ctx>(
                 )
             },
             _ => crate::quad::extract_quads_soa(
-                &state.arena,
                 &mut state.batch,
                 &sharpened_img,
                 &label_result,
@@ -311,7 +308,6 @@ fn run_detection_pipeline<'ctx>(
         };
         #[cfg(not(feature = "non_rectified"))]
         let (n, unrefined) = crate::quad::extract_quads_soa(
-            &state.arena,
             &mut state.batch,
             &sharpened_img,
             &label_result,
