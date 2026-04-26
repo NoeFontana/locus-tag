@@ -87,6 +87,11 @@
           "title": "Min Contrast",
           "type": "number"
         },
+        "post_decode_refinement": {
+          "default": false,
+          "title": "Post Decode Refinement",
+          "type": "boolean"
+        },
         "refinement_mode": {
           "enum": [
             "Edge",

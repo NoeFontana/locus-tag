@@ -126,6 +126,7 @@ class PyDetectorConfig:
     structure_tensor_radius: int
     edlines_imbalance_gate: EdLinesImbalanceGatePolicy
     pose_consistency_fpr: float
+    post_decode_refinement: bool
     def __init__(
         self,
         *,
@@ -167,6 +168,7 @@ class PyDetectorConfig:
         structure_tensor_radius: int,
         edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
         pose_consistency_fpr: float,
+        post_decode_refinement: bool,
     ) -> None: ...
 
 # ---------------------------------------------------------------------------

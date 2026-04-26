@@ -269,6 +269,17 @@ class DecoderConfig(BaseModel):
     explicit integer overrides every family uniformly.
     """
     gwlf_transversal_alpha: float = Field(default=0.01, ge=0.0)
+    post_decode_refinement: bool = Field(default=False)
+    """Run an edge-fit corner re-refit after decoding (Phase C.5).
+
+    ``False`` (the default) preserves byte-identical behaviour. When
+    ``True``, each Valid candidate's four outer edges are independently
+    fitted with the shared ERF step model and intersected pairwise to
+    recover four sub-pixel corners; the homography is then re-solved.
+    Phase A's GWLF / structure-tensor covariance is preserved — the line
+    fit's Cramér-Rao bound is too optimistic for synthetic-PSF imagery
+    and would over-trust the refined corners in the weighted pose solver.
+    """
 
 
 class PoseConfig(BaseModel):
@@ -448,6 +459,7 @@ class DetectorConfig(BaseModel):
             decode_mode=self.decoder.decode_mode,
             max_hamming_error=self.decoder.max_hamming_error,
             gwlf_transversal_alpha=self.decoder.gwlf_transversal_alpha,
+            post_decode_refinement=self.decoder.post_decode_refinement,
             huber_delta_px=self.pose.huber_delta_px,
             tikhonov_alpha_max=self.pose.tikhonov_alpha_max,
             sigma_n_sq=self.pose.sigma_n_sq,
