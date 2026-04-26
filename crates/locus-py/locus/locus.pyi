@@ -40,6 +40,10 @@ class QuadExtractionMode(enum.IntEnum):
     ContourRdp = 0
     EdLines = 1
 
+class EdLinesImbalanceGatePolicy(enum.IntEnum):
+    Disabled = 0
+    Enabled = 1
+
 class DistortionModel(enum.IntEnum):
     """Lens distortion model tag for `CameraIntrinsics`.
 
@@ -114,7 +118,7 @@ class PyDetectorConfig:
     tikhonov_alpha_max: float
     sigma_n_sq: float
     structure_tensor_radius: int
-    edlines_imbalance_gate: bool
+    edlines_imbalance_gate: EdLinesImbalanceGatePolicy
     def __init__(
         self,
         *,
@@ -148,7 +152,7 @@ class PyDetectorConfig:
         tikhonov_alpha_max: float,
         sigma_n_sq: float,
         structure_tensor_radius: int,
-        edlines_imbalance_gate: bool,
+        edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
     ) -> None: ...
 
 # ---------------------------------------------------------------------------
@@ -288,7 +292,8 @@ class CharucoRefiner:
 class Detector:
     def __init__(
         self,
-        profile: Literal["standard", "grid", "high_accuracy", "render_tag_hub"] | None = None,
+        profile: Literal["standard", "grid", "high_accuracy", "render_tag_hub", "general"]
+        | None = None,
         config: Any | None = None,
         *,
         decimation: int | None = None,

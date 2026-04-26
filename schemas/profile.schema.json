@@ -86,9 +86,12 @@
       "additionalProperties": false,
       "properties": {
         "edlines_imbalance_gate": {
-          "default": false,
+          "enum": [
+            "Disabled",
+            "Enabled"
+          ],
           "title": "Edlines Imbalance Gate",
-          "type": "boolean"
+          "type": "string"
         },
         "extraction_mode": {
           "enum": [

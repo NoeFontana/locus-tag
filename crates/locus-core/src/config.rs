@@ -69,6 +69,67 @@ pub enum QuadExtractionMode {
     EdLines,
 }
 
+/// Policy controlling the EdLines AXIS→DIAG imbalance gate.
+///
+/// The gate triggers when AXIS-mode boundary segmentation produces one
+/// arc above 40 % and another below 16 % of the boundary, indicating
+/// two adjacent corners have collapsed onto a single TRBL extremal.
+/// When enabled it diverts the candidate to DIAG-mode (NW/NE/SE/SW
+/// extremals); when disabled the AXIS partition is kept (which is what
+/// distortion-suite aprilgrid sub-tags need — they can legitimately
+/// produce min-arc 8–15 % without being collapsed).
+///
+/// The legacy boolean form is still accepted on the JSON / Python
+/// boundary for backward compatibility.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub enum EdLinesImbalanceGatePolicy {
+    /// Gate is off — keep the AXIS 4-arc partition unconditionally.
+    #[default]
+    Disabled,
+    /// Gate is on — divert to DIAG-mode when the AXIS partition is severely
+    /// unbalanced.
+    Enabled,
+}
+
+impl EdLinesImbalanceGatePolicy {
+    /// Lower the policy to the boolean consumed by the EdLines extractor.
+    #[must_use]
+    #[inline]
+    pub const fn is_enabled(self) -> bool {
+        matches!(self, Self::Enabled)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for EdLinesImbalanceGatePolicy {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // Accept legacy `true` / `false` alongside the tagged-string form.
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Bool(bool),
+            Str(String),
+        }
+        match Raw::deserialize(deserializer)? {
+            Raw::Bool(true) => Ok(Self::Enabled),
+            Raw::Bool(false) => Ok(Self::Disabled),
+            Raw::Str(s) => match s.as_str() {
+                "Enabled" => Ok(Self::Enabled),
+                "Disabled" => Ok(Self::Disabled),
+                other => Err(serde::de::Error::custom(format!(
+                    "EdLinesImbalanceGatePolicy: {other:?} is not a valid \
+                     variant (allowed: \"Disabled\", \"Enabled\", or boolean \
+                     true/false)"
+                ))),
+            },
+        }
+    }
+}
+
 /// Pipeline-level configuration for the detector.
 ///
 /// These settings affect the fundamental behavior of the detection pipeline
@@ -183,16 +244,9 @@ pub struct DetectorConfig {
     /// Quad extraction mode: legacy contour tracing (default) or EDLines.
     pub quad_extraction_mode: QuadExtractionMode,
 
-    /// EdLines: divert near-axis-aligned tags from AXIS to DIAG boundary
-    /// segmentation when the AXIS 4-arc partition is severely unbalanced
-    /// (one arc > 40 % *and* one < 16 %).  Default: false.
-    ///
-    /// The signal disambiguates "two adjacent corners collapsed onto one
-    /// TRBL extremal" from "lens-distorted tag with curved edges": the latter
-    /// keeps all arcs above ~15 % so the gate leaves them on the AXIS path.
-    /// Opt in for clean-render benchmarks (`render_tag_hub`); leave off for
-    /// distortion / aprilgrid suites.
-    pub edlines_imbalance_gate: bool,
+    /// EdLines AXIS→DIAG imbalance-gate policy. See
+    /// [`EdLinesImbalanceGatePolicy`].
+    pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
 }
 
 impl Default for DetectorConfig {
@@ -231,7 +285,7 @@ impl Default for DetectorConfig {
             quad_max_elongation: 0.0,
             quad_min_density: 0.0,
             quad_extraction_mode: QuadExtractionMode::ContourRdp,
-            edlines_imbalance_gate: false,
+            edlines_imbalance_gate: EdLinesImbalanceGatePolicy::Disabled,
         }
     }
 }
@@ -803,8 +857,8 @@ impl DetectOptionsBuilder {
 #[cfg(feature = "profiles")]
 mod profile_json {
     use super::{
-        CornerRefinementMode, DecodeMode, DetectorConfig, QuadExtractionMode,
-        SegmentationConnectivity,
+        CornerRefinementMode, DecodeMode, DetectorConfig, EdLinesImbalanceGatePolicy,
+        QuadExtractionMode, SegmentationConnectivity,
     };
     use serde::Deserialize;
 
@@ -872,7 +926,7 @@ mod profile_json {
         pub min_density: f64,
         pub extraction_mode: QuadExtractionMode,
         #[serde(default)]
-        pub edlines_imbalance_gate: bool,
+        pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
     }
 
     impl Default for QuadJson {
@@ -1009,6 +1063,8 @@ const GRID_JSON: &str = include_str!("../profiles/grid.json");
 const HIGH_ACCURACY_JSON: &str = include_str!("../profiles/high_accuracy.json");
 #[cfg(feature = "profiles")]
 const RENDER_TAG_HUB_JSON: &str = include_str!("../profiles/render_tag_hub.json");
+#[cfg(feature = "profiles")]
+const GENERAL_JSON: &str = include_str!("../profiles/general.json");
 
 /// Return the raw embedded JSON for a shipped profile, or `None` if the name
 /// is unknown. Exposed so FFI consumers (the Python wheel) can read the exact
@@ -1021,6 +1077,7 @@ pub fn shipped_profile_json(name: &str) -> Option<&'static str> {
         "grid" => Some(GRID_JSON),
         "high_accuracy" => Some(HIGH_ACCURACY_JSON),
         "render_tag_hub" => Some(RENDER_TAG_HUB_JSON),
+        "general" => Some(GENERAL_JSON),
         _ => None,
     }
 }
@@ -1179,5 +1236,57 @@ mod tests {
             .threshold_tile_size(0)
             .validated_build();
         assert!(result.is_err());
+    }
+
+    #[cfg(feature = "serde")]
+    mod imbalance_gate_serde {
+        use super::super::EdLinesImbalanceGatePolicy;
+
+        #[test]
+        fn deserializes_string_variants() {
+            let enabled: EdLinesImbalanceGatePolicy = serde_json::from_str("\"Enabled\"").unwrap();
+            let disabled: EdLinesImbalanceGatePolicy =
+                serde_json::from_str("\"Disabled\"").unwrap();
+            assert_eq!(enabled, EdLinesImbalanceGatePolicy::Enabled);
+            assert_eq!(disabled, EdLinesImbalanceGatePolicy::Disabled);
+        }
+
+        #[test]
+        fn deserializes_legacy_bool_form() {
+            let enabled: EdLinesImbalanceGatePolicy = serde_json::from_str("true").unwrap();
+            let disabled: EdLinesImbalanceGatePolicy = serde_json::from_str("false").unwrap();
+            assert_eq!(enabled, EdLinesImbalanceGatePolicy::Enabled);
+            assert_eq!(disabled, EdLinesImbalanceGatePolicy::Disabled);
+        }
+
+        #[test]
+        fn rejects_unknown_string_variant() {
+            let err =
+                serde_json::from_str::<EdLinesImbalanceGatePolicy>("\"AutoMagic\"").unwrap_err();
+            let msg = err.to_string();
+            assert!(msg.contains("AutoMagic"), "error message: {msg}");
+        }
+
+        #[test]
+        fn round_trip_via_profile_json() {
+            // Patch the gate field of a shipped profile to exercise the full
+            // ProfileJson → QuadJson → DetectorConfig path.
+            let template = super::super::shipped_profile_json("general").unwrap();
+            for (input, expected) in [
+                ("\"Enabled\"", EdLinesImbalanceGatePolicy::Enabled),
+                ("\"Disabled\"", EdLinesImbalanceGatePolicy::Disabled),
+                ("true", EdLinesImbalanceGatePolicy::Enabled),
+                ("false", EdLinesImbalanceGatePolicy::Disabled),
+            ] {
+                let mut value: serde_json::Value = serde_json::from_str(template).unwrap();
+                value["quad"]["edlines_imbalance_gate"] = serde_json::from_str(input).unwrap();
+                let json = serde_json::to_string(&value).unwrap();
+                let cfg = super::super::DetectorConfig::from_profile_json(&json).unwrap();
+                assert_eq!(
+                    cfg.edlines_imbalance_gate, expected,
+                    "input {input:?} should deserialize to {expected:?}"
+                );
+            }
+        }
     }
 }
