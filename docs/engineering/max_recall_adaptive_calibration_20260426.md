@@ -1,9 +1,9 @@
 # `max_recall_adaptive` calibration & follow-ups
 
-Records the empirical calibration of the
-[`max_recall_adaptive`](../../crates/locus-core/profiles/max_recall_adaptive.json)
-profile and the deferred Phase B work that would lift its render-tag
-pose metrics back to `high_accuracy` parity.
+Records the empirical calibration of the `max_recall_adaptive`
+profile (`crates/locus-core/profiles/max_recall_adaptive.json`) and
+the deferred Phase B work that would lift its render-tag pose metrics
+back to `high_accuracy` parity.
 
 ## §1 The shipped configuration
 
