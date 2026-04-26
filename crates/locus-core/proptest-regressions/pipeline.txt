@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ce64c5edaacc63fd345fa78515f9b4ea0538dd4d1c36a7a523a11fe2530911ef # 618×307 noise, 1 false-positive detection (CI run 24965203090)
