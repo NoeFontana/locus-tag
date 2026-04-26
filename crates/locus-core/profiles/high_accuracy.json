@@ -24,7 +24,15 @@
     "min_density": 0.15,
     "extraction_mode": "EdLines",
     "edlines_imbalance_gate": "Disabled",
-    "extraction_policy": "Static"
+    "extraction_policy": {
+      "AdaptivePpb": {
+        "threshold": 2.5,
+        "low_extraction": "ContourRdp",
+        "high_extraction": "EdLines",
+        "low_refinement": "Erf",
+        "high_refinement": "None"
+      }
+    }
   },
   "decoder": {
     "min_contrast": 20.0,

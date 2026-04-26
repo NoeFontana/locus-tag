@@ -93,9 +93,10 @@ Conclusions:
   *is* its sub-degree pose tail; trading that for ICRA recall is not
   acceptable.
 
-`high_accuracy` is left at `EdLines + None` for this PR. The static
-profile cannot be fixed by knob-flipping without trading away its own
-purpose.
+At the time of writing this document, `high_accuracy` was left at the
+static `EdLines + None` pair. The static profile cannot be fixed by
+knob-flipping without trading away its own purpose — see §7 for the
+adaptive-routing follow-up that resolves this.
 
 ## §5 SOTA path forward
 
@@ -143,3 +144,67 @@ This is a one-time correction. New ICRA snapshots reflect the real
 dataset and the previous "byte-identical" claim in
 `docs/engineering/benchmarking/quad_truncation_fix_20260426.md` has
 been corrected in place.
+
+## §7 Resolution — `high_accuracy` adopts AdaptivePpb routing
+
+Path (1) of §5 has been implemented. `crates/locus-core/profiles/high_accuracy.json`
+now carries the same `quad.extraction_policy = AdaptivePpb` block as
+`max_recall_adaptive`:
+
+```
+threshold        = 2.5      (PPB = bbox_short / outer_dim)
+low_extraction   = ContourRdp
+high_extraction  = EdLines
+low_refinement   = Erf
+high_refinement  = None
+```
+
+All other knobs (`enable_sharpening: false`, `pose_consistency_fpr: 1e-3`,
+`refinement_mode: None`, `extraction_mode: EdLines` as the static
+fallback) are unchanged.
+
+### Empirical impact
+
+| Snapshot | Before | After | Delta |
+| :--- | ---: | ---: | ---: |
+| ICRA forward `mean_recall` | `0.4631` | **`0.6053`** | **+14.2 pt** |
+| ICRA forward `mean_rmse` | `0.7535` | **`0.5572`** | **−0.20 px** |
+| Render-tag tag36h11 `640 / 720 / 1080 / 2160` | snapshot | **byte-identical** | — |
+| ICRA backward / oblique / mixed | snapshot | **byte-identical** | — |
+| Distortion / board snapshots | snapshot | **byte-identical** | — |
+
+The render-tag baseline is preserved by construction: well-resolved
+render-tag tags have `PPB ≫ 2.5` and route through the `EdLines + None`
+high branch — i.e. exactly the path the static profile was using.
+Far-field ICRA tags (PPB < 2.5) instead route through `ContourRdp + Erf`,
+which recovers the candidates EdLines was culling and lands corners
+precise enough to keep Hamming distance inside the budget.
+
+This is a Pareto improvement over the prior static configuration:
+ICRA recall and RMSE both improve, render-tag pose tail is byte-identical,
+and the gate logic is no different from `max_recall_adaptive`'s — already
+shipping and exercised by the AdaptivePpb regression tests.
+
+### Why this works without a render-tag regression
+
+The §4 matrix shows that **static** `ContourRdp + Erf` destroys the
+render-tag pose tail (`0.56° → 103°`). That regression originates on
+*high-PPB* tags, where ContourRdp's polyline endpoints land off the
+true tag corner. With PPB-routing those tags never reach ContourRdp
+in the first place — they stay on the EdLines + None branch that
+produced the original `0.20 px` RMSE.
+
+The matrix's premise — *"no static pair wins both regimes"* — is
+unchanged. The adaptive router sidesteps the premise rather than
+contradicting it.
+
+### Out-of-scope, deferred
+
+- Path (2) image pyramid and path (3) per-bit gradient weighting from
+  §5 remain deferred. With PPB routing in place, the ICRA-recall
+  motivation for either is weaker; they are now precision-additive
+  follow-ups rather than recall-recovery work.
+- Lifting `high_accuracy` toward `max_recall_adaptive`'s `0.7380`
+  ICRA recall would require sharpening + post-decode refit, both of
+  which trade against `high_accuracy`'s metrology character. Not in
+  scope for this fix.
