@@ -11,6 +11,8 @@ JSON is authoritative.
 
 from __future__ import annotations
 
+import warnings
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias, TypeVar, cast
 
 from pydantic import (
@@ -27,6 +29,7 @@ from .locus import (
     CameraIntrinsics,
     CornerRefinementMode,
     DecodeMode,
+    EdLinesImbalanceGatePolicy,
     PoseEstimationMode,
     PyDetectorConfig,
     QuadExtractionMode,
@@ -37,12 +40,13 @@ from .locus import (
 
 _E = TypeVar("_E")
 
-ProfileName: TypeAlias = Literal["standard", "grid", "high_accuracy", "render_tag_hub"]
+ProfileName: TypeAlias = Literal["standard", "grid", "high_accuracy", "render_tag_hub", "general"]
 SHIPPED_PROFILES: tuple[ProfileName, ...] = (
     "standard",
     "grid",
     "high_accuracy",
     "render_tag_hub",
+    "general",
 )
 
 
@@ -102,17 +106,30 @@ def _serialize_name(enum_cls: type[_E]):
     return _inner
 
 
-def _enum_field(enum_cls: type[_E]) -> Any:
-    # String-in JSON, enum-instance in Python. Publishes the allowed variant
-    # names to JSON Schema so editor validation and `schemas/profile.schema.json`
-    # remain useful.
+def _enum_field(enum_cls: type[_E], coercer: Callable[[Any], _E] | None = None) -> Any:
+    # String-in JSON, enum-instance in Python. Pass `coercer` to extend the
+    # default int/name/instance coercion (e.g. legacy-shape acceptance).
     _, by_name, _ = _enum_registry(enum_cls)
     return Annotated[
         enum_cls,
-        BeforeValidator(_coerce(enum_cls)),
+        BeforeValidator(coercer if coercer is not None else _coerce(enum_cls)),
         PlainSerializer(_serialize_name(enum_cls), when_used="json", return_type=str),
         WithJsonSchema({"type": "string", "enum": sorted(by_name)}),
     ]
+
+
+def _coerce_imbalance_gate(value: Any) -> EdLinesImbalanceGatePolicy:
+    # `bool` is a subclass of `int`, so catch it *before* the int path.
+    if isinstance(value, bool):
+        warnings.warn(
+            "edlines_imbalance_gate: boolean values are deprecated; use "
+            'EdLinesImbalanceGatePolicy.Enabled / .Disabled (or "Enabled" / '
+            '"Disabled") instead.',
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return EdLinesImbalanceGatePolicy.Enabled if value else EdLinesImbalanceGatePolicy.Disabled
+    return _coerce(EdLinesImbalanceGatePolicy)(value)
 
 
 if TYPE_CHECKING:
@@ -124,11 +141,13 @@ if TYPE_CHECKING:
     _DecodeModeField: TypeAlias = DecodeMode
     _QuadExtractionField: TypeAlias = QuadExtractionMode
     _SegConnField: TypeAlias = SegmentationConnectivity
+    _ImbalanceGateField: TypeAlias = EdLinesImbalanceGatePolicy
 else:
     _CornerRefinementField = _enum_field(CornerRefinementMode)
     _DecodeModeField = _enum_field(DecodeMode)
     _QuadExtractionField = _enum_field(QuadExtractionMode)
     _SegConnField = _enum_field(SegmentationConnectivity)
+    _ImbalanceGateField = _enum_field(EdLinesImbalanceGatePolicy, _coerce_imbalance_gate)
 
 
 class ThresholdConfig(BaseModel):
@@ -169,7 +188,9 @@ class QuadConfig(BaseModel):
     extraction_mode: _QuadExtractionField = Field(
         default_factory=lambda: QuadExtractionMode.ContourRdp
     )
-    edlines_imbalance_gate: bool = Field(default=False)
+    edlines_imbalance_gate: _ImbalanceGateField = Field(
+        default_factory=lambda: EdLinesImbalanceGatePolicy.Disabled
+    )
 
     @model_validator(mode="after")
     def _check_fill_ratio_ordering(self) -> QuadConfig:

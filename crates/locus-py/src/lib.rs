@@ -138,6 +138,35 @@ impl From<QuadExtractionMode> for locus_core::config::QuadExtractionMode {
     }
 }
 
+#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum EdLinesImbalanceGatePolicy {
+    Disabled = 0,
+    Enabled = 1,
+}
+
+impl From<EdLinesImbalanceGatePolicy> for locus_core::config::EdLinesImbalanceGatePolicy {
+    fn from(m: EdLinesImbalanceGatePolicy) -> Self {
+        match m {
+            EdLinesImbalanceGatePolicy::Disabled => {
+                locus_core::config::EdLinesImbalanceGatePolicy::Disabled
+            },
+            EdLinesImbalanceGatePolicy::Enabled => {
+                locus_core::config::EdLinesImbalanceGatePolicy::Enabled
+            },
+        }
+    }
+}
+
+impl From<locus_core::config::EdLinesImbalanceGatePolicy> for EdLinesImbalanceGatePolicy {
+    fn from(m: locus_core::config::EdLinesImbalanceGatePolicy) -> Self {
+        match m {
+            locus_core::config::EdLinesImbalanceGatePolicy::Disabled => Self::Disabled,
+            locus_core::config::EdLinesImbalanceGatePolicy::Enabled => Self::Enabled,
+        }
+    }
+}
+
 // ============================================================================
 // Structs
 // ============================================================================
@@ -341,7 +370,7 @@ pub struct PyDetectorConfig {
     pub quad_max_elongation: f64,
     pub quad_min_density: f64,
     pub quad_extraction_mode: QuadExtractionMode,
-    pub edlines_imbalance_gate: bool,
+    pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
     pub huber_delta_px: f64,
     pub tikhonov_alpha_max: f64,
     pub sigma_n_sq: f64,
@@ -413,7 +442,7 @@ impl PyDetectorConfig {
         quad_max_elongation: f64,
         quad_min_density: f64,
         quad_extraction_mode: QuadExtractionMode,
-        edlines_imbalance_gate: bool,
+        edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
         huber_delta_px: f64,
         tikhonov_alpha_max: f64,
         sigma_n_sq: f64,
@@ -504,7 +533,7 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
                 },
                 locus_core::config::QuadExtractionMode::EdLines => QuadExtractionMode::EdLines,
             },
-            edlines_imbalance_gate: c.edlines_imbalance_gate,
+            edlines_imbalance_gate: c.edlines_imbalance_gate.into(),
             huber_delta_px: c.huber_delta_px,
             tikhonov_alpha_max: c.tikhonov_alpha_max,
             sigma_n_sq: c.sigma_n_sq,
@@ -1472,7 +1501,7 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             quad_max_elongation: c.quad_max_elongation,
             quad_min_density: c.quad_min_density,
             quad_extraction_mode: c.quad_extraction_mode.into(),
-            edlines_imbalance_gate: c.edlines_imbalance_gate,
+            edlines_imbalance_gate: c.edlines_imbalance_gate.into(),
             decoder_min_contrast: c.decoder_min_contrast,
             refinement_mode: c.refinement_mode.into(),
             decode_mode: c.decode_mode.into(),
@@ -1898,6 +1927,7 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<DecodeMode>()?;
     m.add_class::<PoseEstimationMode>()?;
     m.add_class::<QuadExtractionMode>()?;
+    m.add_class::<EdLinesImbalanceGatePolicy>()?;
     // Config / misc structs
     m.add_class::<DistortionModel>()?;
     m.add_class::<CameraIntrinsics>()?;

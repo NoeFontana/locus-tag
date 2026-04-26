@@ -79,7 +79,7 @@ impl EdLinesConfig {
             grad_min_mag: 8.0,
             min_edge_pts: 5,
             gn_iters: 3,
-            imbalance_gate: cfg.edlines_imbalance_gate,
+            imbalance_gate: cfg.edlines_imbalance_gate.is_enabled(),
         }
     }
 }

@@ -1,10 +1,10 @@
 {
-  "name": "render_tag_hub",
+  "name": "general",
   "extends": null,
   "threshold": {
     "tile_size": 8,
     "min_range": 10,
-    "enable_sharpening": false,
+    "enable_sharpening": true,
     "enable_adaptive_window": false,
     "min_radius": 2,
     "max_radius": 15,
