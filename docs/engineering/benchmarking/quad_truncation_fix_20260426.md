@@ -81,17 +81,36 @@ Same pattern in `extract_quads_soa_with_camera`.
 
 ### ICRA forward (`tests/data/icra2020`, 50 frames, AprilTag36h11)
 
-All 8 affected snapshots are byte-identical to the bless commit
-`4998607` — the desc ordering preserves every result that depended on it.
+> **Errata (2026-04-26 follow-up)**: the original PR #205 claim that "all 8
+> affected snapshots are byte-identical to bless commit `4998607`" was a
+> false positive caused by a silent-skip bug in `tests/common::resolve_dataset_root`
+> (relative `LOCUS_ICRA_DATASET_DIR` resolved against the test CWD = crate
+> root, fell through to the 1-frame stub fixture, and `IcraProvider::new`
+> returned `None` — the test body's `if let Some(provider)` then short-
+> circuited). Against the real 50-frame dataset, ICRA recall regressed by
+> **2–3 pp** across most variants. Distortion's `+6.5 pp` Brown-Conrady
+> gain still dominates in absolute tag count, but the ICRA loss is real
+> and is now the committed snapshot.
 
-| Snapshot | Bless `4998607` | This PR |
-|---|---:|---:|
-| `pure_default_standard` | 0.7517 | **0.7517** ✓ |
-| `pure_default_soft` (tags_images_soft) | 0.9623 | **0.9623** ✓ |
-| `pure_default_edlines` | 0.7113 | **0.7113** ✓ |
-| `pure_default_edlines_moments` | 0.7113 | **0.7113** ✓ |
-| `pure_default_moments_culling` | 0.7381 | **0.7381** ✓ |
-| `pure_tags_images` | 0.7381 | **0.7381** ✓ |
+| Snapshot | Bless `4998607` | This PR (real dataset) | Δ |
+|---|---:|---:|---:|
+| `pure_default_standard` | 0.7517 | **0.7236** | **−2.81 pp** |
+| `pure_default_soft` (tags_images_soft) | 0.9623 | **0.9403** | **−2.21 pp** |
+| `pure_default_edlines` | 0.7113 | **0.7113** | 0 (rmse jitter only) |
+| `pure_default_edlines_moments` | 0.7113 | **0.7113** | 0 (rmse jitter only) |
+| `pure_default_moments_culling` | 0.7687 | **0.7381** | **−3.06 pp** |
+| `pure_tags_images` | 0.7687 | **0.7381** | **−3.06 pp** |
+| `checkerboard_corners_images` | 0.7303 | **0.6994** | **−3.09 pp** |
+| `checkerboard_grid` | 0.7303 | **0.6994** | **−3.09 pp** |
+
+The mechanism: with pre-filter truncation, the top-1024 by `pixel_count`
+are large blobs that mostly fail geometric gates, leaving a small,
+clean survivor set. Without it, geometric filtering runs over thousands
+of components and feeds the post-filter dedup a different (larger,
+order-equivalent but content-different) survivor set; on crude-render
+ICRA frames where dedup is content-sensitive, that set drops a few
+tag candidates. Render-tag's PSF/Blender pipeline is content-insensitive
+(its dedup is order-only) so its snapshots are unaffected.
 
 The `high_accuracy` profile (`mean_recall = 0.4631`) is unchanged — none of
 the candidate knob-flips evaluated (sharpening, ContourRdp, Erf refinement)
