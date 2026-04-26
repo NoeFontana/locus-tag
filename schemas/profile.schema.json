@@ -59,6 +59,13 @@
           "title": "Huber Delta Px",
           "type": "number"
         },
+        "pose_consistency_fpr": {
+          "default": 0.0,
+          "exclusiveMaximum": 1.0,
+          "minimum": 0.0,
+          "title": "Pose Consistency Fpr",
+          "type": "number"
+        },
         "sigma_n_sq": {
           "default": 4.0,
           "minimum": 0.0,

@@ -43,6 +43,12 @@ enum Column {
     StatusMask,
     FunnelStatus,
     CornerCovariances,
+    #[cfg(feature = "bench-internals")]
+    PoseConsistencyD2,
+    #[cfg(feature = "bench-internals")]
+    PoseConsistencyD2MaxCorner,
+    #[cfg(feature = "bench-internals")]
+    IppeBranchD2Ratio,
 }
 
 // ---------------------------------------------------------------------------
@@ -79,6 +85,12 @@ fn seed_sentinels(batch: &mut DetectionBatch) {
         // (None, PassedContrast, RejectedContrast) differs.
         batch.funnel_status[i] = FunnelStatus::RejectedSampling;
         batch.corner_covariances[i] = [F32_SENTINEL; 16];
+        #[cfg(feature = "bench-internals")]
+        {
+            batch.pose_consistency_d2[i] = F32_SENTINEL;
+            batch.pose_consistency_d2_max_corner[i] = F32_SENTINEL;
+            batch.ippe_branch_d2_ratio[i] = F32_SENTINEL;
+        }
     }
 }
 
@@ -124,6 +136,20 @@ fn changed_columns(before: &DetectionBatch, after: &DetectionBatch) -> BTreeSet<
     if bytes_of(&before.corner_covariances[..]) != bytes_of(&after.corner_covariances[..]) {
         set.insert(Column::CornerCovariances);
     }
+    #[cfg(feature = "bench-internals")]
+    {
+        if bytes_of(&before.pose_consistency_d2[..]) != bytes_of(&after.pose_consistency_d2[..]) {
+            set.insert(Column::PoseConsistencyD2);
+        }
+        if bytes_of(&before.pose_consistency_d2_max_corner[..])
+            != bytes_of(&after.pose_consistency_d2_max_corner[..])
+        {
+            set.insert(Column::PoseConsistencyD2MaxCorner);
+        }
+        if bytes_of(&before.ippe_branch_d2_ratio[..]) != bytes_of(&after.ippe_branch_d2_ratio[..]) {
+            set.insert(Column::IppeBranchD2Ratio);
+        }
+    }
     set
 }
 
@@ -140,6 +166,15 @@ fn snapshot(batch: &DetectionBatch) -> Box<DetectionBatch> {
     out.funnel_status.copy_from_slice(&batch.funnel_status);
     out.corner_covariances
         .copy_from_slice(&batch.corner_covariances);
+    #[cfg(feature = "bench-internals")]
+    {
+        out.pose_consistency_d2
+            .copy_from_slice(&batch.pose_consistency_d2);
+        out.pose_consistency_d2_max_corner
+            .copy_from_slice(&batch.pose_consistency_d2_max_corner);
+        out.ippe_branch_d2_ratio
+            .copy_from_slice(&batch.ippe_branch_d2_ratio);
+    }
     out
 }
 
@@ -463,11 +498,22 @@ fn contract_phase_d_refine_poses_soa() {
     );
 
     let changed = changed_columns(&before, &batch);
-    assert_writes_within(
-        &changed,
-        &[Column::Poses],
-        "D (refine_poses_soa_with_config)",
-    );
+    let allowed = {
+        #[cfg(feature = "bench-internals")]
+        {
+            vec![
+                Column::Poses,
+                Column::PoseConsistencyD2,
+                Column::PoseConsistencyD2MaxCorner,
+                Column::IppeBranchD2Ratio,
+            ]
+        }
+        #[cfg(not(feature = "bench-internals"))]
+        {
+            vec![Column::Poses]
+        }
+    };
+    assert_writes_within(&changed, &allowed, "D (refine_poses_soa_with_config)");
     assert!(
         changed.contains(&Column::Poses),
         "Phase D must write a pose for a Valid candidate",

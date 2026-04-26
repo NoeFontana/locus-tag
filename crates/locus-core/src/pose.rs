@@ -363,88 +363,244 @@ pub fn estimate_tag_pose_with_config(
     config: &crate::config::DetectorConfig,
     external_covariances: Option<&[Matrix2<f64>; 4]>,
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>) {
-    // For distorted cameras, undistort the detected corners before feeding them
-    // into the homography / IPPE solver, which operates in ideal projective space.
-    // The original distorted `corners` are preserved for the LM residual step, where
-    // the distorted projection is compared against the raw observations.
+    let thresholds = ConsistencyThresholds::from_fpr(config.pose_consistency_fpr);
+    let (pose, cov, _diag) = estimate_tag_pose_with_diagnostics(
+        intrinsics,
+        corners,
+        tag_size,
+        img,
+        mode,
+        config,
+        external_covariances,
+        thresholds,
+    );
+    (pose, cov)
+}
+
+/// Diagnostics emitted by `estimate_tag_pose_with_diagnostics` alongside
+/// the refined pose. NaN sentinels mark signals that were not computed
+/// (IPPE failure, gate-disabled in non-`bench-internals` builds).
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(not(feature = "bench-internals"), allow(dead_code))]
+pub(crate) struct PoseDiagnostics {
+    pub aggregate_d2: f32,
+    pub max_corner_d2: f32,
+    pub branch_d2_ratio: f32,
+}
+
+impl PoseDiagnostics {
+    #[must_use]
+    pub(crate) fn empty() -> Self {
+        Self {
+            aggregate_d2: f32::NAN,
+            max_corner_d2: f32::NAN,
+            branch_d2_ratio: f32::NAN,
+        }
+    }
+}
+
+/// Precomputed χ² critical thresholds for one frame's worth of consistency
+/// checks. `None` ⇒ gate disabled (zero overhead path).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ConsistencyThresholds {
+    /// `χ²(2; fpr)` — aggregate gate (8 obs − 6 fitted = 2 DOF).
+    pub aggregate: f64,
+    /// `χ²(1; fpr)` — per-corner gate.
+    pub per_corner: f64,
+}
+
+impl ConsistencyThresholds {
+    /// Build from a false-positive rate. Returns `None` for `fpr ∉ (0, 1)`,
+    /// which the rest of the gate interprets as "disabled".
+    #[must_use]
+    pub(crate) fn from_fpr(fpr: f64) -> Option<Self> {
+        if fpr > 0.0 && fpr < 1.0 {
+            Some(Self {
+                aggregate: chi2_critical(fpr, 2),
+                per_corner: chi2_critical(fpr, 1),
+            })
+        } else {
+            None
+        }
+    }
+}
+
+/// Variant of [`estimate_tag_pose_with_config`] that additionally returns
+/// pose-consistency diagnostics for telemetry. `thresholds = None` means
+/// the gate is disabled — the consistency check short-circuits to "accept"
+/// and the disabled-path diagnostic d² compute is elided entirely on
+/// non-`bench-internals` builds (zero-overhead legacy path).
+#[must_use]
+#[allow(clippy::missing_panics_doc, clippy::too_many_arguments)]
+#[tracing::instrument(skip_all, name = "pipeline::estimate_tag_pose_diag")]
+pub(crate) fn estimate_tag_pose_with_diagnostics(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    tag_size: f64,
+    img: Option<&ImageView>,
+    mode: PoseEstimationMode,
+    config: &crate::config::DetectorConfig,
+    external_covariances: Option<&[Matrix2<f64>; 4]>,
+    thresholds: Option<ConsistencyThresholds>,
+) -> (Option<Pose>, Option<[[f64; 6]; 6]>, PoseDiagnostics) {
+    // For distorted cameras, IPPE runs in ideal space; LM residuals run in
+    // observed (distorted) space. Keep both forms.
     let ideal_corners: [[f64; 2]; 4] = if intrinsics.distortion == DistortionCoeffs::None {
         *corners
     } else {
         core::array::from_fn(|i| intrinsics.undistort_pixel(corners[i][0], corners[i][1]))
     };
 
-    // 1. Canonical Homography: Map canonical square [-1,1]x[-1,1] to ideal image pixels.
     let Some(h_poly) = crate::decoder::Homography::square_to_quad(&ideal_corners) else {
-        return (None, None);
+        return (None, None, PoseDiagnostics::empty());
     };
     let h_pixel = h_poly.h;
-
-    // 2. Normalize Homography: H_norm = K_inv * H_pixel
-    let k_inv = intrinsics.inv_matrix();
-    let h_norm = k_inv * h_pixel;
-
-    // 3. Scale to Physical Model (Center Origin Convention)
-    // Object points are centered: x_obj in [-s/2, s/2], y_obj in [-s/2, s/2]
-    // Canonical mapping: xc = (2/s)*x_obj, yc = (2/s)*y_obj  (no offset)
-    // P_cam = H_norm * [ (2/s)*x_obj, (2/s)*y_obj, 1 ]^T
-    // P_cam = [ (2/s)*h1, (2/s)*h2, h3 ] * [x_obj, y_obj, 1 ]^T
+    let h_norm = intrinsics.inv_matrix() * h_pixel;
     let scaler = 2.0 / tag_size;
     let mut h_metric = h_norm;
     h_metric.column_mut(0).scale_mut(scaler);
     h_metric.column_mut(1).scale_mut(scaler);
 
-    // 4. IPPE Core: Decompose Jacobian (first 2 image cols) into 2 potential poses.
     let Some(candidates) = solve_ippe_square(&h_metric) else {
-        return (None, None);
+        return (None, None, PoseDiagnostics::empty());
     };
 
-    // 5. Disambiguation: Choose the pose with lower reprojection error.
-    // Use ideal_corners because the initial poses were derived from ideal homography.
-    let best_pose = find_best_pose(intrinsics, &ideal_corners, tag_size, &candidates);
+    // Per-corner info matrices, in priority order:
+    //   GWLF external (Accurate + ext) > Structure Tensor (Accurate + img)
+    //   > Isotropic fallback (Σ⁻¹ = (1/σₙ²) I).
+    // The same Σ feeds LM (when weighted) and the Mahalanobis gate so the
+    // statistic and the solver share a noise model.
+    let (info_matrices, covariances) = build_info_matrices(
+        intrinsics,
+        config,
+        mode,
+        img,
+        &ideal_corners,
+        &h_poly,
+        external_covariances,
+    );
 
-    // 6. Refinement: Levenberg-Marquardt (LM)
-    // Pass original distorted `corners` — the LM solver applies distortion internally
-    // so its projections match the raw observations.
-    match (mode, img, external_covariances) {
-        (PoseEstimationMode::Accurate, _, Some(ext_covs)) => {
-            // Use provided covariances (e.g. from GWLF)
-            let (refined_pose, covariance) = crate::pose_weighted::refine_pose_lm_weighted(
-                intrinsics, corners, tag_size, best_pose, ext_covs,
+    let (best_pose, branch_diag) = if let Some(t) = thresholds {
+        select_ippe_branch(
+            intrinsics,
+            corners,
+            &info_matrices,
+            tag_size,
+            &candidates,
+            t,
+        )
+    } else {
+        let pose = find_best_pose(intrinsics, &ideal_corners, tag_size, &candidates);
+        let branch_diag =
+            disabled_branch_diagnostics(intrinsics, corners, &info_matrices, tag_size, &candidates);
+        (pose, branch_diag)
+    };
+
+    let (refined_pose, covariance) =
+        if let (PoseEstimationMode::Accurate, _, Some(covs)) = (mode, img, covariances) {
+            let (p, c) = crate::pose_weighted::refine_pose_lm_weighted(
+                intrinsics, corners, tag_size, best_pose, &covs,
             );
-            (Some(refined_pose), Some(covariance))
-        },
-        (PoseEstimationMode::Accurate, Some(image), None) => {
-            // Compute corner uncertainty from structure tensor (use ideal corners for h_poly)
-            let uncertainty = crate::pose_weighted::compute_framework_uncertainty(
-                image,
-                &ideal_corners,
-                &h_poly,
-                config.tikhonov_alpha_max,
-                config.sigma_n_sq,
-                config.structure_tensor_radius,
-            );
-            let (refined_pose, covariance) = crate::pose_weighted::refine_pose_lm_weighted(
+            (p, Some(c))
+        } else {
+            let p = refine_pose_lm(
                 intrinsics,
                 corners,
                 tag_size,
                 best_pose,
-                &uncertainty,
+                config.huber_delta_px,
             );
-            (Some(refined_pose), Some(covariance))
+            (p, None)
+        };
+
+    let verdict = pose_consistency_check(
+        intrinsics,
+        corners,
+        &info_matrices,
+        tag_size,
+        &refined_pose,
+        thresholds,
+    );
+
+    let diag = PoseDiagnostics {
+        aggregate_d2: verdict.aggregate_d2 as f32,
+        max_corner_d2: verdict.max_corner_d2 as f32,
+        branch_d2_ratio: branch_diag.ratio() as f32,
+    };
+
+    if verdict.accepted {
+        (Some(refined_pose), covariance, diag)
+    } else {
+        (None, None, diag)
+    }
+}
+
+#[inline]
+fn build_info_matrices(
+    intrinsics: &CameraIntrinsics,
+    config: &crate::config::DetectorConfig,
+    mode: PoseEstimationMode,
+    img: Option<&ImageView>,
+    ideal_corners: &[[f64; 2]; 4],
+    h_poly: &crate::decoder::Homography,
+    external_covariances: Option<&[Matrix2<f64>; 4]>,
+) -> ([Matrix2<f64>; 4], Option<[Matrix2<f64>; 4]>) {
+    let _ = intrinsics;
+    match (mode, img, external_covariances) {
+        (PoseEstimationMode::Accurate, _, Some(ext)) => {
+            let info =
+                core::array::from_fn(|i| ext[i].try_inverse().unwrap_or_else(Matrix2::identity));
+            (info, Some(*ext))
+        },
+        (PoseEstimationMode::Accurate, Some(image), None) => {
+            let uncertainty = crate::pose_weighted::compute_framework_uncertainty(
+                image,
+                ideal_corners,
+                h_poly,
+                config.tikhonov_alpha_max,
+                config.sigma_n_sq,
+                config.structure_tensor_radius,
+            );
+            let info = core::array::from_fn(|i| {
+                uncertainty[i]
+                    .try_inverse()
+                    .unwrap_or_else(Matrix2::identity)
+            });
+            (info, Some(uncertainty))
         },
         _ => {
-            // Fast mode (Identity weights)
-            (
-                Some(refine_pose_lm(
-                    intrinsics,
-                    corners,
-                    tag_size,
-                    best_pose,
-                    config.huber_delta_px,
-                )),
-                None,
-            )
+            let inv_var = 1.0 / config.sigma_n_sq.max(1e-6);
+            ([Matrix2::new(inv_var, 0.0, 0.0, inv_var); 4], None)
         },
+    }
+}
+
+/// Diagnostic d² compute for the disabled-gate branch. Only contributes to
+/// the `bench-internals` telemetry SoA columns; on production builds it is
+/// a no-op that returns sentinel NaNs (avoids 8 distortion projections per
+/// tag on the legacy code path).
+#[inline]
+fn disabled_branch_diagnostics(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    info_matrices: &[Matrix2<f64>; 4],
+    tag_size: f64,
+    candidates: &[Pose; 2],
+) -> BranchDiagnostics {
+    #[cfg(feature = "bench-internals")]
+    {
+        let obj_pts = centered_tag_corners(tag_size);
+        let (_, agg0) = per_corner_d2(intrinsics, corners, &obj_pts, info_matrices, &candidates[0]);
+        let (_, agg1) = per_corner_d2(intrinsics, corners, &obj_pts, info_matrices, &candidates[1]);
+        BranchDiagnostics {
+            primary_d2: agg0.min(agg1),
+            alternate_d2: agg0.max(agg1),
+        }
+    }
+    #[cfg(not(feature = "bench-internals"))]
+    {
+        let _ = (intrinsics, corners, info_matrices, tag_size, candidates);
+        BranchDiagnostics::empty()
     }
 }
 
@@ -873,6 +1029,80 @@ fn reprojection_error(
     err_sq
 }
 
+/// Squared Mahalanobis distance for a 2D residual under a 2×2 information
+/// matrix `Σ⁻¹`. Lifted from the inner LM accumulator so the consistency
+/// gate stays numerically identical to what the solver weights against.
+#[inline]
+pub(crate) fn mahalanobis_d2(residual: [f64; 2], info: &Matrix2<f64>) -> f64 {
+    let r_u = residual[0];
+    let r_v = residual[1];
+    r_u * (info[(0, 0)] * r_u + info[(0, 1)] * r_v)
+        + r_v * (info[(1, 0)] * r_u + info[(1, 1)] * r_v)
+}
+
+/// Per-corner and aggregate squared Mahalanobis distances for a candidate pose.
+///
+/// Returns `(per_corner, aggregate)` where each per-corner entry is `d²_i =
+/// rᵢᵀ Σᵢ⁻¹ rᵢ` and `aggregate = Σ d²_i`. Residuals are taken in observed
+/// (distorted) image space using `project_with_distortion` so the gate
+/// matches the same noise model the LM solver fits.
+#[inline]
+pub(crate) fn per_corner_d2(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    obj_pts: &[Vector3<f64>; 4],
+    info_matrices: &[Matrix2<f64>; 4],
+    pose: &Pose,
+) -> ([f64; 4], f64) {
+    let mut per_corner = [0.0_f64; 4];
+    let mut aggregate = 0.0_f64;
+    for i in 0..4 {
+        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
+        let p = project_with_distortion(&p_cam, intrinsics);
+        let res = [corners[i][0] - p[0], corners[i][1] - p[1]];
+        let d2 = mahalanobis_d2(res, &info_matrices[i]);
+        per_corner[i] = d2;
+        aggregate += d2;
+    }
+    (per_corner, aggregate)
+}
+
+/// Chi-squared upper-tail critical value `χ²_dof(1 - fpr)`. Only `dof ∈
+/// {1, 2}` is supported (the only values used by the consistency gate);
+/// `ConsistencyThresholds::from_fpr` already screens `fpr ∉ (0, 1)` so
+/// this assumes a valid input.
+#[inline]
+#[must_use]
+pub(crate) fn chi2_critical(fpr: f64, dof: u32) -> f64 {
+    debug_assert!(
+        0.0 < fpr && fpr < 1.0,
+        "chi2_critical: fpr must lie in (0, 1)"
+    );
+    match dof {
+        // χ²(1) ≡ Z²; Z = erfinv(1 - p) · √2.
+        1 => {
+            let z = std::f64::consts::SQRT_2 * erfinv(1.0 - fpr);
+            z * z
+        },
+        // χ²(2) survival function is exp(-x/2), so the inverse is -2 ln(fpr).
+        2 => -2.0 * fpr.ln(),
+        _ => unreachable!("chi2_critical only supports dof ∈ {{1, 2}}"),
+    }
+}
+
+/// Approximate inverse of the error function on `[-1, 1]`. Uses the
+/// Winitzki rational expansion (max abs error ≈ 1.3e-3) which is easily
+/// good enough to set χ² critical values — the gate's *threshold* is
+/// itself only meaningful to within one decade of FPR.
+#[inline]
+fn erfinv(x: f64) -> f64 {
+    let a = 0.147_f64;
+    let ln1mx2 = (1.0 - x * x).ln();
+    let term = 2.0 / (std::f64::consts::PI * a) + 0.5 * ln1mx2;
+    let inner = (term * term - ln1mx2 / a).sqrt() - term;
+    x.signum() * inner.sqrt()
+}
+
 fn find_best_pose(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
@@ -890,6 +1120,209 @@ fn find_best_pose(
     } else {
         candidates[0]
     }
+}
+
+/// Diagnostics from the Mahalanobis-aware IPPE branch selector. The
+/// `primary` branch is the lower-d² candidate; `alternate` is the other.
+/// Ratio `alternate / primary` < 1 means the primary branch was wrong.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct BranchDiagnostics {
+    pub primary_d2: f64,
+    pub alternate_d2: f64,
+}
+
+impl BranchDiagnostics {
+    /// Sentinel for paths that did not compute branch d² (IPPE failure or
+    /// non-`bench-internals` builds with the gate disabled).
+    #[inline]
+    #[must_use]
+    #[cfg_attr(feature = "bench-internals", allow(dead_code))]
+    pub(crate) fn empty() -> Self {
+        Self {
+            primary_d2: f64::NAN,
+            alternate_d2: f64::NAN,
+        }
+    }
+
+    /// `alternate_d2 / primary_d2`. Returns `1.0` when the primary is
+    /// degenerately small (avoids amplifying noise) and `NaN` when no d²
+    /// was computed.
+    #[inline]
+    #[must_use]
+    pub fn ratio(&self) -> f64 {
+        if self.primary_d2 <= 1e-12 {
+            return 1.0;
+        }
+        self.alternate_d2 / self.primary_d2
+    }
+}
+
+/// Mahalanobis-aware IPPE branch selector. Compares both candidate poses
+/// against the *observed* (distorted) corners under the supplied info
+/// matrices and swaps to the alternate branch when:
+///
+/// - `alternate.d² < primary.d² · 0.5` (alternate is ≥2× better), AND
+/// - `alternate.d² < χ²(2; fpr)` (alternate is statistically defensible).
+///
+/// Both conditions are required so we never flip toward an alternate that
+/// is merely *less bad* than a degenerate primary — that case is handled
+/// downstream by the consistency gate rejecting both branches.
+fn select_ippe_branch(
+    intrinsics: &CameraIntrinsics,
+    observed_corners: &[[f64; 2]; 4],
+    info_matrices: &[Matrix2<f64>; 4],
+    tag_size: f64,
+    candidates: &[Pose; 2],
+    thresholds: ConsistencyThresholds,
+) -> (Pose, BranchDiagnostics) {
+    let obj_pts = centered_tag_corners(tag_size);
+
+    let (_, agg0) = per_corner_d2(
+        intrinsics,
+        observed_corners,
+        &obj_pts,
+        info_matrices,
+        &candidates[0],
+    );
+    let (_, agg1) = per_corner_d2(
+        intrinsics,
+        observed_corners,
+        &obj_pts,
+        info_matrices,
+        &candidates[1],
+    );
+
+    let (primary_idx, primary_d2, alternate_d2) = if agg0 <= agg1 {
+        (0_usize, agg0, agg1)
+    } else {
+        (1_usize, agg1, agg0)
+    };
+
+    let chosen = if alternate_d2 < primary_d2 * 0.5 && alternate_d2 < thresholds.aggregate {
+        1 - primary_idx
+    } else {
+        primary_idx
+    };
+
+    (
+        candidates[chosen],
+        BranchDiagnostics {
+            primary_d2,
+            alternate_d2,
+        },
+    )
+}
+
+/// Verdict produced by the pose-consistency gate.
+///
+/// `accepted` is the only field consulted on the hot-path; the d² values
+/// are surfaced for the bench-internals telemetry columns and the ROC
+/// harness. `aggregate_d2` is the χ²(2) statistic across all four corners;
+/// `max_corner_d2` is the worst single-corner χ²(1) statistic.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ConsistencyVerdict {
+    pub accepted: bool,
+    pub aggregate_d2: f64,
+    pub max_corner_d2: f64,
+}
+
+/// Final reprojection-consistency check. Two-prong χ² gate:
+///
+/// - **Aggregate** (DOF = 8 obs − 6 fitted = 2): rejects poses whose total
+///   reprojection error is inconsistent with the noise model.
+/// - **Per-corner** (DOF = 1): catches single-corner contamination that
+///   the aggregate would average over.
+///
+/// When `thresholds = None` the gate is disabled — accepts unconditionally
+/// and skips the d² compute on production builds (NaN sentinels), keeping
+/// telemetry-only d² behind `bench-internals`.
+fn pose_consistency_check(
+    intrinsics: &CameraIntrinsics,
+    observed_corners: &[[f64; 2]; 4],
+    info_matrices: &[Matrix2<f64>; 4],
+    tag_size: f64,
+    refined_pose: &Pose,
+    thresholds: Option<ConsistencyThresholds>,
+) -> ConsistencyVerdict {
+    let Some(t) = thresholds else {
+        // Disabled gate: skip 4 distortion projections in production
+        // builds; keep them under bench-internals for telemetry.
+        #[cfg(feature = "bench-internals")]
+        {
+            let obj_pts = centered_tag_corners(tag_size);
+            let (per_corner, aggregate_d2) = per_corner_d2(
+                intrinsics,
+                observed_corners,
+                &obj_pts,
+                info_matrices,
+                refined_pose,
+            );
+            return ConsistencyVerdict {
+                accepted: true,
+                aggregate_d2,
+                max_corner_d2: per_corner.iter().copied().fold(0.0_f64, f64::max),
+            };
+        }
+        #[cfg(not(feature = "bench-internals"))]
+        {
+            let _ = (
+                intrinsics,
+                observed_corners,
+                info_matrices,
+                tag_size,
+                refined_pose,
+            );
+            return ConsistencyVerdict {
+                accepted: true,
+                aggregate_d2: f64::NAN,
+                max_corner_d2: f64::NAN,
+            };
+        }
+    };
+
+    let obj_pts = centered_tag_corners(tag_size);
+    let (per_corner, aggregate_d2) = per_corner_d2(
+        intrinsics,
+        observed_corners,
+        &obj_pts,
+        info_matrices,
+        refined_pose,
+    );
+    let max_corner_d2 = per_corner.iter().copied().fold(0.0_f64, f64::max);
+    let accepted = aggregate_d2 <= t.aggregate && max_corner_d2 <= t.per_corner;
+
+    ConsistencyVerdict {
+        accepted,
+        aggregate_d2,
+        max_corner_d2,
+    }
+}
+
+/// Bench/test hook around the private `pose_consistency_check`.
+///
+/// Returns `(accepted, aggregate_d2, max_corner_d2)`. Lets the ROC harness
+/// exercise the gate with controlled noise without going through the full
+/// pipeline, which is required for the realized-FPR acceptance assertion in
+/// `regression_pose_consistency_roc`.
+#[cfg(feature = "bench-internals")]
+#[must_use]
+pub fn bench_pose_consistency_d2(
+    intrinsics: &CameraIntrinsics,
+    observed_corners: &[[f64; 2]; 4],
+    info_matrices: &[Matrix2<f64>; 4],
+    tag_size: f64,
+    refined_pose: &Pose,
+    fpr: f64,
+) -> (bool, f64, f64) {
+    let v = pose_consistency_check(
+        intrinsics,
+        observed_corners,
+        info_matrices,
+        tag_size,
+        refined_pose,
+        ConsistencyThresholds::from_fpr(fpr),
+    );
+    (v.accepted, v.aggregate_d2, v.max_corner_d2)
 }
 
 /// Refine poses for all valid candidates in the batch using the Structure of Arrays (SoA) layout.
@@ -929,9 +1362,13 @@ pub fn refine_poses_soa_with_config(
 ) {
     use rayon::prelude::*;
 
+    // Hoist χ² thresholds out of the per-tag inner loop — they depend only
+    // on `pose_consistency_fpr` and are constant for the frame.
+    let thresholds = ConsistencyThresholds::from_fpr(config.pose_consistency_fpr);
+
     // Process valid candidates in parallel.
     // We collect into a temporary Vec to avoid unsafe parallel writes to the batch.
-    let poses: Vec<_> = (0..v)
+    let results: Vec<_> = (0..v)
         .into_par_iter()
         .map(|i| {
             let corners = [
@@ -970,7 +1407,7 @@ pub fn refine_poses_soa_with_config(
                 }
             }
 
-            let (pose_opt, _) = estimate_tag_pose_with_config(
+            let (pose_opt, _, diag) = estimate_tag_pose_with_diagnostics(
                 intrinsics,
                 &corners,
                 tag_size,
@@ -978,9 +1415,10 @@ pub fn refine_poses_soa_with_config(
                 mode,
                 config,
                 if has_ext_covs { Some(&ext_covs) } else { None },
+                thresholds,
             );
 
-            if let Some(pose) = pose_opt {
+            let pose_data = if let Some(pose) = pose_opt {
                 // `UnitQuaternion::from_matrix` delegates to `Rotation3::from_matrix_eps` with
                 // `max_iter = 0`, which nalgebra treats as usize::MAX ("loop until convergence").
                 // For degenerate IPPE outputs (near-singular homographies at extreme tag angles),
@@ -1006,19 +1444,32 @@ pub fn refine_poses_soa_with_config(
                 Some(data)
             } else {
                 None
-            }
+            };
+
+            (pose_data, diag)
         })
         .collect();
 
-    for (i, pose_data) in poses.into_iter().enumerate() {
+    for (i, (pose_data, diag)) in results.iter().enumerate() {
         if let Some(data) = pose_data {
-            batch.poses[i] = Pose6D { data, padding: 0.0 };
+            batch.poses[i] = Pose6D {
+                data: *data,
+                padding: 0.0,
+            };
         } else {
             batch.poses[i] = Pose6D {
                 data: [0.0; 7],
                 padding: 0.0,
             };
         }
+        #[cfg(feature = "bench-internals")]
+        {
+            batch.pose_consistency_d2[i] = diag.aggregate_d2;
+            batch.pose_consistency_d2_max_corner[i] = diag.max_corner_d2;
+            batch.ippe_branch_d2_ratio[i] = diag.branch_d2_ratio;
+        }
+        #[cfg(not(feature = "bench-internals"))]
+        let _ = diag;
     }
 }
 

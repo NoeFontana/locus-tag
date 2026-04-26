@@ -219,8 +219,7 @@ fn build_normal_equations(
         let res_v = corners[i][1] - v_est;
 
         let info = &info_matrices[i];
-        let s_i_sq = res_u * (info[(0, 0)] * res_u + info[(0, 1)] * res_v)
-            + res_v * (info[(1, 0)] * res_u + info[(1, 1)] * res_v);
+        let s_i_sq = crate::pose::mahalanobis_d2([res_u, res_v], info);
         let s_i = s_i_sq.sqrt();
 
         if s_i <= huber_k {

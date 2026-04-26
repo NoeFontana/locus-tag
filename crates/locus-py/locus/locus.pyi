@@ -119,6 +119,7 @@ class PyDetectorConfig:
     sigma_n_sq: float
     structure_tensor_radius: int
     edlines_imbalance_gate: EdLinesImbalanceGatePolicy
+    pose_consistency_fpr: float
     def __init__(
         self,
         *,
@@ -153,6 +154,7 @@ class PyDetectorConfig:
         sigma_n_sq: float,
         structure_tensor_radius: int,
         edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
+        pose_consistency_fpr: float,
     ) -> None: ...
 
 # ---------------------------------------------------------------------------

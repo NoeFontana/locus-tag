@@ -227,6 +227,14 @@ class PoseConfig(BaseModel):
     tikhonov_alpha_max: float = Field(default=0.25, ge=0.0)
     sigma_n_sq: float = Field(default=4.0, ge=0.0)
     structure_tensor_radius: int = Field(default=2, ge=1, le=8)
+    pose_consistency_fpr: float = Field(default=0.0, ge=0.0, lt=1.0)
+    """Target false-positive rate for the reprojection-consistency gate.
+
+    ``0.0`` (the default) disables the gate, preserving legacy behaviour.
+    Positive values are interpreted as a per-tag FPR from which a
+    chi-squared critical value is derived; rejected poses are surfaced as
+    ``Detection.pose = None``. Values >= 1.0 are rejected as degenerate.
+    """
 
 
 class SegmentationConfig(BaseModel):
@@ -326,6 +334,7 @@ class DetectorConfig(BaseModel):
             tikhonov_alpha_max=self.pose.tikhonov_alpha_max,
             sigma_n_sq=self.pose.sigma_n_sq,
             structure_tensor_radius=self.pose.structure_tensor_radius,
+            pose_consistency_fpr=self.pose.pose_consistency_fpr,
             segmentation_connectivity=self.segmentation.connectivity,
             segmentation_margin=self.segmentation.margin,
         )

@@ -221,6 +221,10 @@ pub struct DetectorConfig {
 
     /// Pixel noise variance (sigma_n^2) assumed for the Structure Tensor
     /// covariance model in Accurate mode. Typical webcams: ~4.0.
+    ///
+    /// Also serves as the isotropic noise variance for the Fast-mode pose
+    /// consistency gate (`pose_consistency_fpr`) when no per-corner covariance
+    /// is available.
     pub sigma_n_sq: f64,
 
     /// Radius (in pixels) of the window used for Structure Tensor computation
@@ -228,6 +232,25 @@ pub struct DetectorConfig {
     /// Smaller values (1) are better for small tags; larger (3-4) for noisy images.
     /// Validation caps this at 8 to keep the covariance kernel stack-only.
     pub structure_tensor_radius: u8,
+
+    /// Target false-positive rate for the pose-consistency gate.
+    ///
+    /// `0.0` (the default) disables the gate — `estimate_tag_pose` returns
+    /// the LM-refined pose unconditionally and the legacy IPPE branch
+    /// selection (lowest reprojection error in ideal corner space) is used.
+    ///
+    /// A positive value `p ∈ (0, 1)` derives a chi-squared critical value
+    /// `χ²(2)` for the aggregate Mahalanobis distance `d² = rᵀ Σ⁻¹ r` over
+    /// the four corners (8 obs − 6 DOF) and `χ²(1)` for each per-corner
+    /// residual; both must pass or the pose is rejected (`Detection.pose`
+    /// becomes `None`). Σ is sourced from GWLF covariances (when present),
+    /// the Structure Tensor (Accurate mode), or `Σ = sigma_n_sq · I` (Fast
+    /// mode, isotropic fallback). Enabling the gate also activates
+    /// observed-space Mahalanobis IPPE branch selection with branch swap.
+    ///
+    /// Recommended starting values: `1e-3` (good FPR/recall trade-off for
+    /// tag36h11 1080p), `1e-4` (stricter), `0.0` (disabled).
+    pub pose_consistency_fpr: f64,
 
     /// Alpha parameter for GWLF adaptive transversal windowing.
     /// The search band is set to +/- max(2, alpha * edge_length).
@@ -286,6 +309,7 @@ impl Default for DetectorConfig {
             quad_min_density: 0.0,
             quad_extraction_mode: QuadExtractionMode::ContourRdp,
             edlines_imbalance_gate: EdLinesImbalanceGatePolicy::Disabled,
+            pose_consistency_fpr: 0.0,
         }
     }
 }
@@ -329,6 +353,11 @@ impl DetectorConfig {
         if self.structure_tensor_radius > 8 {
             return Err(ConfigError::InvalidStructureTensorRadius(
                 self.structure_tensor_radius,
+            ));
+        }
+        if !(0.0..1.0).contains(&self.pose_consistency_fpr) || self.pose_consistency_fpr.is_nan() {
+            return Err(ConfigError::InvalidPoseConsistencyFpr(
+                self.pose_consistency_fpr,
             ));
         }
         if self.quad_extraction_mode == QuadExtractionMode::EdLines {
@@ -548,6 +577,7 @@ impl DetectorConfigBuilder {
             quad_min_density: self.quad_min_density.unwrap_or(d.quad_min_density),
             quad_extraction_mode: self.quad_extraction_mode.unwrap_or(d.quad_extraction_mode),
             edlines_imbalance_gate: d.edlines_imbalance_gate,
+            pose_consistency_fpr: d.pose_consistency_fpr,
         }
     }
 
@@ -980,6 +1010,11 @@ mod profile_json {
         pub tikhonov_alpha_max: f64,
         pub sigma_n_sq: f64,
         pub structure_tensor_radius: u8,
+        // Optional so existing profile JSONs (and any third-party files
+        // shipped before this field existed) deserialize unchanged. Missing
+        // → 0.0 → gate disabled, identical to today's behavior.
+        #[serde(default)]
+        pub pose_consistency_fpr: f64,
     }
 
     impl Default for PoseJson {
@@ -990,6 +1025,7 @@ mod profile_json {
                 tikhonov_alpha_max: d.tikhonov_alpha_max,
                 sigma_n_sq: d.sigma_n_sq,
                 structure_tensor_radius: d.structure_tensor_radius,
+                pose_consistency_fpr: d.pose_consistency_fpr,
             }
         }
     }
@@ -1050,6 +1086,7 @@ mod profile_json {
                 quad_min_density: p.quad.min_density,
                 quad_extraction_mode: p.quad.extraction_mode,
                 edlines_imbalance_gate: p.quad.edlines_imbalance_gate,
+                pose_consistency_fpr: p.pose.pose_consistency_fpr,
             }
         }
     }

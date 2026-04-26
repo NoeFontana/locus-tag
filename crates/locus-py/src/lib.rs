@@ -375,6 +375,7 @@ pub struct PyDetectorConfig {
     pub tikhonov_alpha_max: f64,
     pub sigma_n_sq: f64,
     pub structure_tensor_radius: u8,
+    pub pose_consistency_fpr: f64,
 }
 
 #[pymethods]
@@ -414,6 +415,7 @@ impl PyDetectorConfig {
         tikhonov_alpha_max,
         sigma_n_sq,
         structure_tensor_radius,
+        pose_consistency_fpr,
     ))]
     fn new(
         threshold_tile_size: usize,
@@ -447,6 +449,7 @@ impl PyDetectorConfig {
         tikhonov_alpha_max: f64,
         sigma_n_sq: f64,
         structure_tensor_radius: u8,
+        pose_consistency_fpr: f64,
     ) -> Self {
         Self {
             threshold_tile_size,
@@ -480,6 +483,7 @@ impl PyDetectorConfig {
             tikhonov_alpha_max,
             sigma_n_sq,
             structure_tensor_radius,
+            pose_consistency_fpr,
         }
     }
 }
@@ -538,6 +542,7 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             tikhonov_alpha_max: c.tikhonov_alpha_max,
             sigma_n_sq: c.sigma_n_sq,
             structure_tensor_radius: c.structure_tensor_radius,
+            pose_consistency_fpr: c.pose_consistency_fpr,
         }
     }
 }
@@ -1511,6 +1516,7 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             tikhonov_alpha_max: c.tikhonov_alpha_max,
             sigma_n_sq: c.sigma_n_sq,
             structure_tensor_radius: c.structure_tensor_radius,
+            pose_consistency_fpr: c.pose_consistency_fpr,
             segmentation_connectivity: c.segmentation_connectivity.into(),
             segmentation_margin: c.segmentation_margin,
             ..locus_core::config::DetectorConfig::default()
