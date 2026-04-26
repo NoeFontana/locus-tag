@@ -121,6 +121,11 @@ harness = true
 required-features = ["bench-internals"]
 
 [[test]]
+name = "icra_forward_diagnostic"
+path = "tests/icra_forward_diagnostic.rs"
+required-features = ["bench-internals"]
+
+[[test]]
 name = "regression_board_hub"
 path = "tests/regression_board_hub.rs"
 required-features = ["bench-internals"]

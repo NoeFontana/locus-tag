@@ -38,6 +38,7 @@ be batched with other breaking changes in a later cleanup PR.
 
 ### Fixed
 
+- **Quad-extraction truncation order**: reverted the pre-filter `pixel_count` truncation introduced in `5a2f438` that capped `component_stats` at `MAX_CANDIDATES` *before* per-component geometric filtering. On dense small-tag scenes (ICRA forward) the cap discarded tag-sized candidates in favour of large background blobs that the geometric gates would have rejected anyway. Now: filter first via `extract_single_quad`, then partition + truncate by `pixel_count` only if survivors still exceed the SoA ceiling. ICRA forward `standard` recall recovers from `0.6149` to `0.7236` (parent-commit baseline). Distortion suite improves as a side-effect — Brown–Conrady recall `0.870 → 0.935` (+6.5 pp). Render-tag SOTA results unchanged. See [docs/engineering/benchmarking/quad_truncation_fix_20260426.md](docs/engineering/benchmarking/quad_truncation_fix_20260426.md).
 - **Packaging**: relocated the shipped JSON profiles from `crates/locus-py/locus/profiles/` to `crates/locus-core/profiles/` so `cargo package -p locus-core` no longer fails with "couldn't read `src/../../locus-py/locus/profiles/standard.json`: No such file or directory". Python now queries the embedded bytes through a new `_shipped_profile_json` FFI hook instead of `importlib.resources`, which means the wheel ships zero profile data files of its own — deleting one is impossible by construction.
 
 ### Internal
