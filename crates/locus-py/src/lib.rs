@@ -343,6 +343,7 @@ pub struct PyPose {
 // ============================================================================
 #[pyclass(get_all, frozen, from_py_object)]
 #[derive(Clone, Copy)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct PyDetectorConfig {
     pub threshold_tile_size: usize,
     pub threshold_min_range: u8,
@@ -386,6 +387,7 @@ pub struct PyDetectorConfig {
     pub sigma_n_sq: f64,
     pub structure_tensor_radius: u8,
     pub pose_consistency_fpr: f64,
+    pub post_decode_refinement: bool,
 }
 
 #[pymethods]
@@ -432,7 +434,9 @@ impl PyDetectorConfig {
         sigma_n_sq,
         structure_tensor_radius,
         pose_consistency_fpr,
+        post_decode_refinement,
     ))]
+    #[allow(clippy::fn_params_excessive_bools)]
     fn new(
         threshold_tile_size: usize,
         threshold_min_range: u8,
@@ -472,6 +476,7 @@ impl PyDetectorConfig {
         sigma_n_sq: f64,
         structure_tensor_radius: u8,
         pose_consistency_fpr: f64,
+        post_decode_refinement: bool,
     ) -> Self {
         Self {
             threshold_tile_size,
@@ -512,6 +517,7 @@ impl PyDetectorConfig {
             sigma_n_sq,
             structure_tensor_radius,
             pose_consistency_fpr,
+            post_decode_refinement,
         }
     }
 }
@@ -595,6 +601,7 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             sigma_n_sq: c.sigma_n_sq,
             structure_tensor_radius: c.structure_tensor_radius,
             pose_consistency_fpr: c.pose_consistency_fpr,
+            post_decode_refinement: c.post_decode_refinement,
         }
     }
 }
@@ -1640,6 +1647,7 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             sigma_n_sq: c.sigma_n_sq,
             structure_tensor_radius: c.structure_tensor_radius,
             pose_consistency_fpr: c.pose_consistency_fpr,
+            post_decode_refinement: c.post_decode_refinement,
             segmentation_connectivity: c.segmentation_connectivity.into(),
             segmentation_margin: c.segmentation_margin,
             quad_extraction_policy: policy,

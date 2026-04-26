@@ -38,7 +38,8 @@
     "refinement_mode": "Erf",
     "decode_mode": "Hard",
     "max_hamming_error": 2,
-    "gwlf_transversal_alpha": 0.01
+    "gwlf_transversal_alpha": 0.01,
+    "post_decode_refinement": true
   },
   "pose": {
     "huber_delta_px": 1.5,

@@ -7,14 +7,14 @@ summary:
   dataset_size: 50
   mean_recall: 0.92
   mean_precision: 1
-  mean_rmse: 0.5819
-  mean_reprojection_rmse: 0.5794
+  mean_rmse: 0.5781
+  mean_reprojection_rmse: 0.5757
   p50_translation_error: 0.0033
-  p90_translation_error: 0.0081
-  p99_translation_error: 0.0199
-  p50_rotation_error: 0.154
-  p90_rotation_error: 0.3687
-  p99_rotation_error: 0.7172
+  p90_translation_error: 0.008
+  p99_translation_error: 0.0198
+  p50_rotation_error: 0.1498
+  p90_rotation_error: 0.3602
+  p99_rotation_error: 0.7229
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
   worst_offenders:

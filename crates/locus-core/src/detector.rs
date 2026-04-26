@@ -469,6 +469,15 @@ fn run_detection_pipeline<'ctx>(
         },
     }
 
+    // Phase C.5 — post-decode edge-fit corner re-refit.
+    crate::post_decode_refinement::refit_valid_corners(
+        &mut state.batch,
+        n,
+        &refinement_img,
+        config,
+        &state.arena,
+    );
+
     // Partition valid candidates to the front [0..v]
     let v = state.batch.partition(n);
 

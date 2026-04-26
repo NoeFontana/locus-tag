@@ -49,6 +49,9 @@ def test_shipped_json_matches_loaded_model(profile: ProfileName) -> None:
     # ``max_hamming_error`` is absent on disk (per-family default applies)
     # but always emitted by the model — even as ``null``.
     on_disk.get("decoder", {}).setdefault("max_hamming_error", None)
+    # ``post_decode_refinement`` defaults to ``False`` and may be omitted
+    # by profiles that don't opt in.
+    on_disk.get("decoder", {}).setdefault("post_decode_refinement", False)
     # ``pose_consistency_fpr`` is absent on disk for profiles that disable
     # the gate; the model always emits its 0.0 default.
     on_disk.get("pose", {}).setdefault("pose_consistency_fpr", 0.0)

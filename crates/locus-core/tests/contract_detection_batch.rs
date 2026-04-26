@@ -464,6 +464,78 @@ fn contract_phase_c_decode_batch_soa_active() {
 }
 
 // ---------------------------------------------------------------------------
+// Phase C.5 — Post-decode corner re-refit (refit_valid_corners)
+//   Allowed writes: corners, homographies, corner_covariances
+//     (only at indices where status_mask[i] == Valid).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn contract_phase_c5_refit_valid_corners_disabled_is_noop() {
+    let mut batch = Box::new(DetectionBatch::new());
+    seed_sentinels(&mut batch);
+    batch.status_mask[0] = CandidateState::Valid;
+    let before = snapshot(&batch);
+
+    let size = 32usize;
+    let data = vec![128u8; size * size];
+    let img = ImageView::new(&data, size, size, size).expect("valid image");
+    let config = DetectorConfig::default(); // post_decode_refinement = false
+    let arena = Bump::new();
+
+    refit_valid_corners(&mut batch, 1, &img, &config, &arena);
+
+    let changed = changed_columns(&before, &batch);
+    assert!(
+        changed.is_empty(),
+        "Phase C.5 must be a no-op when post_decode_refinement=false but mutated: {changed:?}",
+    );
+}
+
+#[test]
+fn contract_phase_c5_refit_valid_corners_active_writes() {
+    let size = 64usize;
+    let mut data = vec![200u8; size * size];
+    for y in 20..44 {
+        for x in 20..44 {
+            data[y * size + x] = 40;
+        }
+    }
+    let img = ImageView::new(&data, size, size, size).expect("valid image");
+
+    let mut batch = Box::new(DetectionBatch::new());
+    seed_sentinels(&mut batch);
+    batch.corners[0] = [
+        Point2f { x: 20.0, y: 20.0 },
+        Point2f { x: 44.0, y: 20.0 },
+        Point2f { x: 44.0, y: 44.0 },
+        Point2f { x: 20.0, y: 44.0 },
+    ];
+    batch.status_mask[0] = CandidateState::Valid;
+    batch.corner_covariances[0] = [0.0; 16];
+
+    let config = DetectorConfig {
+        post_decode_refinement: true,
+        ..Default::default()
+    };
+    let arena = Bump::new();
+
+    let before = snapshot(&batch);
+    refit_valid_corners(&mut batch, 1, &img, &config, &arena);
+
+    let changed = changed_columns(&before, &batch);
+    // The pass intentionally preserves `corner_covariances` — Phase A's
+    // GWLF / structure-tensor prior is the calibrated input to the
+    // weighted LM solver. The line fit's CRB is too tight on synthetic-
+    // PSF imagery (see `post_decode_refinement.rs` module docs), so the
+    // contract here is tighter than the SoA write-set: no covariance writes.
+    assert_writes_within(
+        &changed,
+        &[Column::Corners, Column::Homographies],
+        "C.5 (refit_valid_corners, Valid candidate)",
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Phase D — Pose Refinement (refine_poses_soa_with_config)
 //   Allowed writes: poses
 // ---------------------------------------------------------------------------
