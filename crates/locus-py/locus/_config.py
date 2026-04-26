@@ -189,7 +189,13 @@ class DecoderConfig(BaseModel):
         default_factory=lambda: CornerRefinementMode.Erf
     )
     decode_mode: _DecodeModeField = Field(default_factory=lambda: DecodeMode.Hard)
-    max_hamming_error: int = Field(default=2, ge=0)
+    max_hamming_error: int | None = Field(default=None, ge=0)
+    """Maximum Hamming errors accepted during decoding.
+
+    ``None`` (the default) defers to each registered family's tightest
+    safe budget (16h5 = 0, 4x4_* = 1, 36h11 = 2, 6x6_250 = 2). An
+    explicit integer overrides every family uniformly.
+    """
     gwlf_transversal_alpha: float = Field(default=0.01, ge=0.0)
 
 

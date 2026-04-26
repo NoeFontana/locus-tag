@@ -138,9 +138,14 @@ pub struct DetectorConfig {
     pub refinement_mode: CornerRefinementMode,
     /// Decoding mode (Hard vs Soft).
     pub decode_mode: DecodeMode,
-    /// Maximum number of Hamming errors allowed for tag decoding (default: 2).
-    /// Higher values increase recall but also increase false positive rate in noise.
-    pub max_hamming_error: u32,
+    /// Maximum number of Hamming errors allowed for tag decoding.
+    ///
+    /// `None` (the default) defers to each registered family's
+    /// `TagDecoder::default_max_hamming` — tighter on dense codebooks
+    /// (e.g. 16h5 = 1, 4x4_* = 1) and looser on sparse ones
+    /// (e.g. 36h11 = 2, 6x6_250 = 2). `Some(n)` is an explicit override
+    /// applied uniformly to every family.
+    pub max_hamming_error: Option<u32>,
 
     // Pose estimation tuning parameters
     /// Huber delta for LM reprojection (pixels) in Fast mode.
@@ -217,7 +222,7 @@ impl Default for DetectorConfig {
             decoder_min_contrast: 20.0,
             refinement_mode: CornerRefinementMode::Erf,
             decode_mode: DecodeMode::Hard,
-            max_hamming_error: 2,
+            max_hamming_error: None,
             huber_delta_px: 1.5,
             tikhonov_alpha_max: 0.25,
             sigma_n_sq: 4.0,
@@ -475,7 +480,7 @@ impl DetectorConfigBuilder {
             decoder_min_contrast: self.decoder_min_contrast.unwrap_or(d.decoder_min_contrast),
             refinement_mode: self.refinement_mode.unwrap_or(d.refinement_mode),
             decode_mode: self.decode_mode.unwrap_or(d.decode_mode),
-            max_hamming_error: self.max_hamming_error.unwrap_or(d.max_hamming_error),
+            max_hamming_error: self.max_hamming_error.or(d.max_hamming_error),
             huber_delta_px: self.huber_delta_px.unwrap_or(d.huber_delta_px),
             tikhonov_alpha_max: self.tikhonov_alpha_max.unwrap_or(d.tikhonov_alpha_max),
             sigma_n_sq: self.sigma_n_sq.unwrap_or(d.sigma_n_sq),
@@ -896,7 +901,8 @@ mod profile_json {
         pub min_contrast: f64,
         pub refinement_mode: CornerRefinementMode,
         pub decode_mode: DecodeMode,
-        pub max_hamming_error: u32,
+        #[serde(default)]
+        pub max_hamming_error: Option<u32>,
         pub gwlf_transversal_alpha: f64,
     }
 
@@ -1092,7 +1098,7 @@ mod tests {
         // Check defaults
         assert_eq!(config.threshold_min_range, 10);
         assert_eq!(config.quad_min_edge_score, 4.0);
-        assert_eq!(config.max_hamming_error, 2);
+        assert_eq!(config.max_hamming_error, None);
     }
 
     #[test]
@@ -1102,7 +1108,7 @@ mod tests {
         assert_eq!(config.threshold_tile_size, 8);
         assert_eq!(config.quad_min_area, 16);
         assert_eq!(config.quad_min_edge_length, 4.0);
-        assert_eq!(config.max_hamming_error, 2);
+        assert_eq!(config.max_hamming_error, None);
     }
 
     #[test]

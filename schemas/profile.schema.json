@@ -18,10 +18,11 @@
           "type": "number"
         },
         "max_hamming_error": {
-          "default": 2,
+          "default": null,
+          "description": "Maximum Hamming errors accepted during decoding. null defers to per-family defaults (16h5=1, 4x4_*=1, 36h11=2, 6x6_250=2); an integer overrides every family uniformly.",
           "minimum": 0,
           "title": "Max Hamming Error",
-          "type": "integer"
+          "type": ["integer", "null"]
         },
         "min_contrast": {
           "default": 20.0,
