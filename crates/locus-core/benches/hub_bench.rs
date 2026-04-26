@@ -136,7 +136,6 @@ macro_rules! hub_benchmarks {
                         &config,
                         1,
                         &img,
-                        &img,
                         6,
                         false,
                     );

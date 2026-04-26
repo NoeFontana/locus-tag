@@ -265,16 +265,6 @@ fn run_detection_pipeline<'ctx>(
             config.quad_min_area,
         );
 
-        // Dual refinement views for the adaptive policy router.
-        // Under `Static`, extract_single_quad only consults `refinement_low`
-        // (byte-identical to today's single-view behavior). Under
-        // `AdaptivePpb`, the low-PPB route reads `refinement_low` and the
-        // high-PPB (EdLines-preferred) route reads `refinement_high`, which
-        // aliases the un-sharpened source so EdLines operates on its
-        // preferred input.
-        let refinement_low = refinement_img;
-        let refinement_high = refinement_img;
-
         // 3. Quad Extraction (SoA). Distorted cameras run RDP in straight
         // space via `_with_camera`; the `_` arm is the pinhole flow.
         #[cfg(feature = "non_rectified")]
@@ -287,8 +277,7 @@ fn run_detection_pipeline<'ctx>(
                     &label_result,
                     config,
                     config.decimation,
-                    &refinement_low,
-                    &refinement_high,
+                    &refinement_img,
                     min_outer_dim,
                     debug_telemetry,
                     &model,
@@ -303,8 +292,7 @@ fn run_detection_pipeline<'ctx>(
                     &label_result,
                     config,
                     config.decimation,
-                    &refinement_low,
-                    &refinement_high,
+                    &refinement_img,
                     min_outer_dim,
                     debug_telemetry,
                     &model,
@@ -317,8 +305,7 @@ fn run_detection_pipeline<'ctx>(
                 &label_result,
                 config,
                 config.decimation,
-                &refinement_low,
-                &refinement_high,
+                &refinement_img,
                 min_outer_dim,
                 debug_telemetry,
             ),
@@ -330,8 +317,7 @@ fn run_detection_pipeline<'ctx>(
             &label_result,
             config,
             config.decimation,
-            &refinement_low,
-            &refinement_high,
+            &refinement_img,
             min_outer_dim,
             debug_telemetry,
         );

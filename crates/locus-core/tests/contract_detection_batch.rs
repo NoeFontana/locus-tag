@@ -228,17 +228,7 @@ fn contract_phase_a_empty_label_result() {
         component_stats: Vec::new(),
     };
 
-    let (n, _) = extract_quads_soa(
-        &mut batch,
-        &img,
-        &label_result,
-        &config,
-        1,
-        &img,
-        &img,
-        6,
-        false,
-    );
+    let (n, _) = extract_quads_soa(&mut batch, &img, &label_result, &config, 1, &img, 6, false);
 
     assert_eq!(n, 0);
     let changed = changed_columns(&before, &batch);
@@ -287,17 +277,7 @@ fn contract_phase_a_real_tag() {
     seed_sentinels(&mut batch);
     let before = snapshot(&batch);
 
-    let (_n, _) = extract_quads_soa(
-        &mut batch,
-        &img,
-        &label_result,
-        &config,
-        1,
-        &img,
-        &img,
-        6,
-        false,
-    );
+    let (_n, _) = extract_quads_soa(&mut batch, &img, &label_result, &config, 1, &img, 6, false);
 
     let changed = changed_columns(&before, &batch);
     assert_writes_within(

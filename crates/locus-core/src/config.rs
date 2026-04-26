@@ -1014,7 +1014,6 @@ mod profile_json {
         QuadExtractionMode, SegmentationConnectivity,
     };
     use serde::Deserialize;
-    // QuadExtractionPolicy is referenced via `super::` in the QuadJson struct.
 
     #[derive(Debug, Deserialize)]
     #[serde(deny_unknown_fields)]
