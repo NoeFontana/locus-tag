@@ -475,33 +475,25 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
         external_covariances,
     );
 
-    // Isotropic Σ⁻¹ = (1/σ²)·I for the χ² gate and the branch selector — see
-    // `DetectorConfig::pose_consistency_gate_sigma_px` for the σ-decoupling
-    // rationale.
+    // Isotropic Σ⁻¹ = (1/σ²)·I for the χ² gate and the branch selector's
+    // fallback path — see `DetectorConfig::pose_consistency_gate_sigma_px`
+    // for the σ-decoupling rationale.
     let gate_info_matrices = isotropic_info_matrices(config.pose_consistency_gate_sigma_px);
+    let selector_info = pick_selector_info(covariances.as_ref(), &gate_info_matrices);
 
     let (best_pose, branch_diag) = if let Some(t) = thresholds {
-        // The branch selector's flip safeguard compares aggregate d² against
-        // `thresholds.aggregate` (χ²(2; fpr)). Both sides must share the same
-        // noise model for the comparison to be meaningful, so feed the
-        // selector the same isotropic σ_n²·I info matrices the gate uses.
         select_ippe_branch(
             intrinsics,
             corners,
-            &gate_info_matrices,
+            &selector_info,
             tag_size,
             &candidates,
             t,
         )
     } else {
         let pose = find_best_pose(intrinsics, &ideal_corners, tag_size, &candidates);
-        let branch_diag = disabled_branch_diagnostics(
-            intrinsics,
-            corners,
-            &gate_info_matrices,
-            tag_size,
-            &candidates,
-        );
+        let branch_diag =
+            disabled_branch_diagnostics(intrinsics, corners, &selector_info, tag_size, &candidates);
         (pose, branch_diag)
     };
 
@@ -585,6 +577,62 @@ fn build_lm_covariances(
 fn isotropic_info_matrices(sigma_px: f64) -> [Matrix2<f64>; 4] {
     let inv_var = 1.0 / (sigma_px * sigma_px).max(1e-6);
     [Matrix2::new(inv_var, 0.0, 0.0, inv_var); 4]
+}
+
+/// Maximum acceptable per-corner condition number `λ_max / λ_min` for the
+/// Mahalanobis-primary branch selector. Above this, the info matrix is
+/// pathologically anisotropic and the Mahalanobis ranking becomes unreliable
+/// (residuals along strong edges get vanishing penalty), so the selector
+/// falls back to its isotropic Euclidean cousin.
+///
+/// `100.0` accepts moderately-anisotropic structure-tensor info matrices
+/// (typical for tag corners with one dominant edge) while rejecting the
+/// pathological κ > 1e3 cases that EdLines GN-residual covariances produce.
+const SELECTOR_MAX_CONDITION_NUMBER: f64 = 100.0;
+
+/// True iff every per-corner info matrix is positive-definite and the
+/// largest condition number `λ_max / λ_min` stays below
+/// [`SELECTOR_MAX_CONDITION_NUMBER`]. The `lmin > 1e-12` check covers
+/// degenerate / non-PD cases (`det <= 0` ⇒ `λ_min <= 0`).
+#[inline]
+fn info_matrices_well_conditioned(info: &[Matrix2<f64>; 4]) -> bool {
+    for m in info {
+        let trace = m[(0, 0)] + m[(1, 1)];
+        let det = m[(0, 0)] * m[(1, 1)] - m[(0, 1)] * m[(1, 0)];
+        let disc = (trace * trace - 4.0 * det).max(0.0).sqrt();
+        let lmax = 0.5 * (trace + disc);
+        let lmin = 0.5 * (trace - disc);
+        if lmin <= 1e-12 || lmax / lmin > SELECTOR_MAX_CONDITION_NUMBER {
+            return false;
+        }
+    }
+    true
+}
+
+/// Choose the info matrices the IPPE branch selector should use to rank
+/// candidates: LM info (Mahalanobis-primary) when covariances are available
+/// *and* invert to a well-conditioned info matrix; isotropic σ_gate
+/// fallback otherwise.
+///
+/// LM info gives the selector a calibrated weighting — branches whose
+/// residuals lie in low-information directions are correctly preferred.
+/// Anisotropic-info pitfalls (residuals "hidden" along degenerate edges)
+/// are guarded by the condition-number check.
+#[inline]
+fn pick_selector_info(
+    covariances: Option<&[Matrix2<f64>; 4]>,
+    fallback: &[Matrix2<f64>; 4],
+) -> [Matrix2<f64>; 4] {
+    let Some(covs) = covariances else {
+        return *fallback;
+    };
+    let info: [Matrix2<f64>; 4] =
+        core::array::from_fn(|i| covs[i].try_inverse().unwrap_or_else(Matrix2::identity));
+    if info_matrices_well_conditioned(&info) {
+        info
+    } else {
+        *fallback
+    }
 }
 
 /// Diagnostic d² compute for the disabled-gate branch. Only contributes to
@@ -1171,49 +1219,18 @@ impl BranchDiagnostics {
 
 /// IPPE branch selector with a Mahalanobis-aware safety net.
 ///
-/// Disambiguation is *primarily* by Euclidean reprojection error
-/// (`find_best_pose`), matching the legacy gate-disabled path. This is
-/// geometrically robust: the lower-residual branch is the physically
-/// correct one regardless of the per-corner information-matrix anisotropy.
+/// Ranking is by Mahalanobis aggregate d² under `info_matrices`. The caller
+/// chooses what to pass: well-conditioned LM info matrices (anisotropic
+/// Mahalanobis ranking — recovers branches whose residuals lie along
+/// low-information directions) or the isotropic σ_gate fallback (which
+/// reduces Mahalanobis to scaled Euclidean, matching the legacy
+/// `find_best_pose` behavior). [`pick_selector_info`] makes that choice.
 ///
-/// Mahalanobis d² is then used only as a *flip safeguard*: swap to the
-/// alternate branch only when its aggregate d² is at least 2× better than
-/// the Euclidean pick AND below the χ²(2; fpr) gate threshold. Both
-/// conditions are required so we never flip toward an alternate that is
-/// merely *less bad* than a degenerate primary — that case is handled
-/// downstream by the consistency gate rejecting both branches.
-///
-/// Why not Mahalanobis-primary? Anisotropic structure-tensor info matrices
-/// can make the Mahalanobis-only ranking prefer branches whose residuals
-/// lie *along* strong edges (low penalty in that direction) rather than
-/// the geometrically-correct branch.
-/// Project all four corners under `pose` once and return both metrics the
-/// branch selector needs: `(sse, aggregate_d²)` where `sse = Σ ‖r_i‖²` is the
-/// Euclidean residual SSE (primary disambiguator) and `aggregate_d² = Σ d²_i`
-/// is the Mahalanobis aggregate (flip safeguard). Sharing the projection
-/// pass between the two metrics halves the corner reprojection ops in
-/// `select_ippe_branch`'s hot path.
-#[inline]
-fn branch_metrics(
-    intrinsics: &CameraIntrinsics,
-    corners: &[[f64; 2]; 4],
-    obj_pts: &[Vector3<f64>; 4],
-    info_matrices: &[Matrix2<f64>; 4],
-    pose: &Pose,
-) -> (f64, f64) {
-    let mut sse = 0.0_f64;
-    let mut agg_d2 = 0.0_f64;
-    for i in 0..4 {
-        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
-        let p = project_with_distortion(&p_cam, intrinsics);
-        let r_u = corners[i][0] - p[0];
-        let r_v = corners[i][1] - p[1];
-        sse += r_u * r_u + r_v * r_v;
-        agg_d2 += mahalanobis_d2([r_u, r_v], &info_matrices[i]);
-    }
-    (sse, agg_d2)
-}
-
+/// The flip rule still requires the alternate branch to be ≥ 2× better
+/// AND below the χ²(2; fpr) threshold — both conditions guard against
+/// flipping toward an alternate that is merely *less bad* than a
+/// degenerate primary; that case is handled downstream by the consistency
+/// gate rejecting both.
 fn select_ippe_branch(
     intrinsics: &CameraIntrinsics,
     observed_corners: &[[f64; 2]; 4],
@@ -1224,14 +1241,14 @@ fn select_ippe_branch(
 ) -> (Pose, BranchDiagnostics) {
     let obj_pts = centered_tag_corners(tag_size);
 
-    let (sse0, agg0) = branch_metrics(
+    let (_, agg0) = per_corner_d2(
         intrinsics,
         observed_corners,
         &obj_pts,
         info_matrices,
         &candidates[0],
     );
-    let (sse1, agg1) = branch_metrics(
+    let (_, agg1) = per_corner_d2(
         intrinsics,
         observed_corners,
         &obj_pts,
@@ -1239,25 +1256,16 @@ fn select_ippe_branch(
         &candidates[1],
     );
 
-    // Primary disambiguation: Euclidean reprojection error (matches
-    // `find_best_pose`, the legacy gate-disabled path). Mahalanobis d² is
-    // used only as a flip safeguard — anisotropic info matrices can make
-    // the Mahalanobis-only ranking prefer branches whose residuals lie
-    // along strong edges rather than the geometrically-correct branch.
-    let euclidean_idx: usize = usize::from(sse1 < sse0);
-    let alternate_idx: usize = 1 - euclidean_idx;
-    let (primary_d2, alternate_d2) = if euclidean_idx == 0 {
-        (agg0, agg1)
+    let (primary_idx, primary_d2, alternate_d2) = if agg0 <= agg1 {
+        (0_usize, agg0, agg1)
     } else {
-        (agg1, agg0)
+        (1_usize, agg1, agg0)
     };
 
-    // Flip only when Mahalanobis says the alternate is much better
-    // AND below the χ² gate threshold.
     let chosen = if alternate_d2 < primary_d2 * 0.5 && alternate_d2 < thresholds.aggregate {
-        alternate_idx
+        1 - primary_idx
     } else {
-        euclidean_idx
+        primary_idx
     };
 
     (
