@@ -71,11 +71,19 @@ fn pixel_count_descending_order(stats: &[crate::segmentation::ComponentStats]) -
 /// ppb_estimate) tuple from the policy. Under `Static` the PPB div is skipped
 /// (returned as `0.0`); under `AdaptivePpb` the strict `<` tie-break at the
 /// threshold protects snapshot stability against floating-point drift.
+///
+/// `force_low_route` collapses `AdaptivePpb` to its low-PPB branch
+/// (`ContourRdp` + the low-route refinement). Used on the distortion
+/// path where EdLines is geometrically incompatible — without forcing
+/// the low route, high-PPB candidates would otherwise be paired with
+/// the high-route refinement (`None` for max_recall_adaptive), losing
+/// the Erf sub-pixel pass and dropping aprilgrid recall ~5 pp.
 #[inline]
 fn resolve_route(
     config: &crate::config::DetectorConfig,
     bbox_short: u32,
     min_outer_dim: u32,
+    force_low_route: bool,
 ) -> (
     crate::config::QuadExtractionMode,
     crate::config::CornerRefinementMode,
@@ -91,7 +99,7 @@ fn resolve_route(
         ),
         crate::config::QuadExtractionPolicy::AdaptivePpb(cfg) => {
             let ppb = (bbox_short as f32) / (min_outer_dim as f32);
-            if ppb < cfg.threshold {
+            if force_low_route || ppb < cfg.threshold {
                 (cfg.low_extraction, cfg.low_refinement, 0u8, ppb)
             } else {
                 (cfg.high_extraction, cfg.high_refinement, 1u8, ppb)
@@ -261,7 +269,7 @@ fn extract_single_quad(
     }
 
     let (route_extraction, route_refinement, route_label, ppb_estimate) =
-        resolve_route(config, bbox_w.min(bbox_h), min_outer_dim);
+        resolve_route(config, bbox_w.min(bbox_h), min_outer_dim, false);
 
     // `gn_covs` is non-zero only for the EdLines path (Gauss-Newton solver emits
     // per-corner 2×2 blocks). ContourRdp returns zeros — downstream pose code
@@ -517,12 +525,16 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
 ) -> (usize, Option<Vec<[Point; 4]>>) {
     use rayon::prelude::*;
 
-    // Defense-in-depth: the distortion path is ContourRdp-only. The frame-level
-    // gate in `detector.rs` rejects EdLines up-front under `any_route_uses_edlines`,
-    // so we should never reach here with an EdLines-carrying policy.
+    // Defense-in-depth: the distortion path is ContourRdp-only. The
+    // frame-level gate in `detector.rs` rejects `Static` `EdLines` up-front
+    // via `static_uses_edlines()`. `AdaptivePpb` policies whose high-PPB
+    // route is EdLines are allowed to reach here and gracefully degrade to
+    // ContourRdp inside `extract_single_quad_with_camera` (the route's
+    // `_route_extraction` is discarded). This assertion catches the only
+    // genuinely unrecoverable case.
     debug_assert!(
-        !config.any_route_uses_edlines(),
-        "extract_quads_soa_with_camera invoked with an EdLines route; upstream gate bypassed"
+        !config.static_uses_edlines(),
+        "extract_quads_soa_with_camera invoked with Static EdLines policy; upstream gate bypassed"
     );
 
     let stats = &label_result.component_stats;
@@ -622,10 +634,14 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     scaled: ScaledIntrinsics,
     intrinsics: &crate::pose::CameraIntrinsics,
 ) -> Option<ExtractionResult> {
-    // EdLines is blocked upstream for distorted cameras; this path is
-    // ContourRdp-only. AdaptivePpb routes are both ContourRdp by validator
-    // construction; the guard below catches a `Static` config that requested
-    // EdLines on a distorted camera.
+    // EdLines is geometrically incompatible with distorted cameras; this path
+    // is ContourRdp-only. The upstream guard in `run_detection_pipeline`
+    // already errors on `Static` `EdLines` + distortion. For `AdaptivePpb`
+    // policies whose high-PPB route is EdLines, this function silently
+    // degrades to ContourRdp by discarding the route's `_route_extraction`
+    // selection below (only `route_refinement` is consumed). The guard here
+    // is defense-in-depth for any Static-EdLines config that slips past
+    // validation.
     if matches!(
         config.quad_extraction_policy,
         crate::config::QuadExtractionPolicy::Static
@@ -794,10 +810,13 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
         y: p.y * d,
     });
 
-    // Distortion path is ContourRdp-only — the validator already asserted both
-    // routes are ContourRdp, so we only consume the route's refinement mode.
+    // Distortion path is ContourRdp-only. `force_low_route=true` collapses
+    // `AdaptivePpb` to its low-route extraction+refinement (`ContourRdp`+
+    // low_refinement). Without this, high-PPB candidates would otherwise be
+    // paired with the high-route refinement (`None` for max_recall_adaptive),
+    // skipping sub-pixel refinement on aprilgrid sub-tags.
     let (_route_extraction, route_refinement, route_label, ppb_estimate) =
-        resolve_route(config, bbox_w.min(bbox_h), min_outer_dim);
+        resolve_route(config, bbox_w.min(bbox_h), min_outer_dim, true);
 
     let (corners, out_covs) = if route_refinement == crate::config::CornerRefinementMode::None {
         (quad_pts, [[0.0_f32; 4]; 4])
