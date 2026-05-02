@@ -20,11 +20,14 @@ import json
 import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Literal
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
 from tools.bench.schema import Provenance
+
+RecordKind = Literal["matched", "missed_gt", "rejected_quad", "false_positive"]
 
 _PROVENANCE_METADATA_KEY = b"locus.bench.provenance"
 _SCHEMA_VERSION_KEY = b"locus.bench.records_schema_version"
@@ -37,7 +40,8 @@ class ObservationRecord:
 
     Float fields use ``math.nan`` (not ``None``) when N/A. Integer fields use
     ``-1`` only when domain-meaningful — ``hamming_bits`` is ``-1`` if the
-    decoder never ran. ``tag_id`` is ``None`` for unattributed rejected quads.
+    decoder never ran. ``tag_id`` is ``None`` for unattributed rejected quads
+    and false positives.
     """
 
     # Identity
@@ -46,7 +50,7 @@ class ObservationRecord:
     profile: str
     dataset: str
     image_id: str
-    record_kind: str  # "matched" | "missed_gt" | "rejected_quad"
+    record_kind: RecordKind
     tag_id: int | None
 
     # Continuous axes — raw, never bucketed. NaN = unknown.
@@ -156,7 +160,7 @@ def empty_record(
     profile: str,
     dataset: str,
     image_id: str,
-    record_kind: str,
+    record_kind: RecordKind,
     n_gt_in_frame: int,
     n_det_in_frame: int,
     frame_latency_ms: float,
