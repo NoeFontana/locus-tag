@@ -322,6 +322,27 @@ pub struct DetectorConfig {
     /// Default: 1.0 px.
     pub pose_consistency_gate_sigma_px: f64,
 
+    /// Branch-ratio escape clause for the pose-consistency gate.
+    ///
+    /// `alternate_d2 / primary_d2` from the IPPE branch selector. When
+    /// this ratio exceeds the configured value the chosen branch is
+    /// considered decisive and the χ² gate is bypassed even when the
+    /// post-LM aggregate / per-corner d² exceeds the threshold.
+    ///
+    /// The χ² gate's job is to catch IPPE branch ambiguity: cases where
+    /// the chosen branch was a coin-flip and the LM converged to a
+    /// geometrically-wrong solution. When the IPPE selector had
+    /// overwhelming evidence (alternate ≫ primary), a high post-LM
+    /// residual is more likely to reflect scene-specific noise (PSF
+    /// artefacts, lighting gradients) than a wrong branch — and the
+    /// pose should not be discarded. A spurious-corner false positive
+    /// has *both* IPPE candidates with high d² *and* similar magnitudes,
+    /// so its ratio stays near 1 and the gate still catches it.
+    ///
+    /// Default: 5.0 (alternate ≥ 5× primary). Set to `f64::INFINITY` to
+    /// disable the escape clause and use only the χ² test.
+    pub pose_consistency_min_decisive_ratio: f64,
+
     /// Alpha parameter for GWLF adaptive transversal windowing.
     /// The search band is set to +/- max(2, alpha * edge_length).
     pub gwlf_transversal_alpha: f64,
@@ -414,6 +435,7 @@ impl Default for DetectorConfig {
             edlines_imbalance_gate: EdLinesImbalanceGatePolicy::Disabled,
             pose_consistency_fpr: 0.0,
             pose_consistency_gate_sigma_px: 1.0,
+            pose_consistency_min_decisive_ratio: 5.0,
             quad_extraction_policy: QuadExtractionPolicy::Static,
             post_decode_refinement: false,
         }
@@ -464,6 +486,13 @@ impl DetectorConfig {
         if !(0.0..1.0).contains(&self.pose_consistency_fpr) || self.pose_consistency_fpr.is_nan() {
             return Err(ConfigError::InvalidPoseConsistencyFpr(
                 self.pose_consistency_fpr,
+            ));
+        }
+        if self.pose_consistency_min_decisive_ratio < 1.0
+            || self.pose_consistency_min_decisive_ratio.is_nan()
+        {
+            return Err(ConfigError::InvalidPoseConsistencyMinDecisiveRatio(
+                self.pose_consistency_min_decisive_ratio,
             ));
         }
         if self.quad_extraction_mode == QuadExtractionMode::EdLines {
@@ -729,6 +758,7 @@ impl DetectorConfigBuilder {
             edlines_imbalance_gate: d.edlines_imbalance_gate,
             pose_consistency_fpr: d.pose_consistency_fpr,
             pose_consistency_gate_sigma_px: d.pose_consistency_gate_sigma_px,
+            pose_consistency_min_decisive_ratio: d.pose_consistency_min_decisive_ratio,
             quad_extraction_policy: self
                 .quad_extraction_policy
                 .unwrap_or(d.quad_extraction_policy),
@@ -1196,10 +1226,18 @@ mod profile_json {
         // matrices). Missing → 1.0 px (default).
         #[serde(default = "default_gate_sigma_px")]
         pub pose_consistency_gate_sigma_px: f64,
+        // Branch-ratio escape clause for the χ² gate. Missing → 5.0
+        // (alternate IPPE d² ≥ 5× primary IPPE d² bypasses the gate).
+        #[serde(default = "default_min_decisive_ratio")]
+        pub pose_consistency_min_decisive_ratio: f64,
     }
 
     fn default_gate_sigma_px() -> f64 {
         1.0
+    }
+
+    fn default_min_decisive_ratio() -> f64 {
+        5.0
     }
 
     impl Default for PoseJson {
@@ -1212,6 +1250,7 @@ mod profile_json {
                 structure_tensor_radius: d.structure_tensor_radius,
                 pose_consistency_fpr: d.pose_consistency_fpr,
                 pose_consistency_gate_sigma_px: d.pose_consistency_gate_sigma_px,
+                pose_consistency_min_decisive_ratio: d.pose_consistency_min_decisive_ratio,
             }
         }
     }
@@ -1274,6 +1313,7 @@ mod profile_json {
                 edlines_imbalance_gate: p.quad.edlines_imbalance_gate,
                 pose_consistency_fpr: p.pose.pose_consistency_fpr,
                 pose_consistency_gate_sigma_px: p.pose.pose_consistency_gate_sigma_px,
+                pose_consistency_min_decisive_ratio: p.pose.pose_consistency_min_decisive_ratio,
                 quad_extraction_policy: p.quad.extraction_policy,
                 post_decode_refinement: p.decoder.post_decode_refinement,
             }

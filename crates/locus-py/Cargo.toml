@@ -24,5 +24,9 @@ default = ["profiles"]
 profiles = ["locus-core/profiles"]
 tracy = ["locus-core/tracy", "dep:tracing-tracy", "dep:tracing-subscriber"]
 non_rectified = ["locus-core/non_rectified"]
+# Phase 0 rotation-tail diagnostic harness. Exposes the `locus.bench` Python
+# sub-module: dual-branch LM, leave-one-out refit, image noise floor, and
+# per-iteration IRLS telemetry. Throwaway: revert before shipping.
+bench-internals = ["locus-core/bench-internals"]
 [lints]
 workspace = true

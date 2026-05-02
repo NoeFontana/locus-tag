@@ -363,7 +363,10 @@ pub fn estimate_tag_pose_with_config(
     config: &crate::config::DetectorConfig,
     external_covariances: Option<&[Matrix2<f64>; 4]>,
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>) {
-    let thresholds = ConsistencyThresholds::from_fpr(config.pose_consistency_fpr);
+    let thresholds = ConsistencyThresholds::from_fpr(
+        config.pose_consistency_fpr,
+        config.pose_consistency_min_decisive_ratio,
+    );
     let (pose, cov, _diag) = estimate_tag_pose_with_diagnostics(
         intrinsics,
         corners,
@@ -378,14 +381,19 @@ pub fn estimate_tag_pose_with_config(
 }
 
 /// Diagnostics emitted by `estimate_tag_pose_with_diagnostics` alongside
-/// the refined pose. NaN sentinels mark signals that were not computed
-/// (IPPE failure, gate-disabled in non-`bench-internals` builds).
+/// the refined pose. NaN / `u8::MAX` sentinels mark signals that were not
+/// computed (IPPE failure, gate-disabled in non-`bench-internals` builds).
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(not(feature = "bench-internals"), allow(dead_code))]
 pub(crate) struct PoseDiagnostics {
     pub aggregate_d2: f32,
     pub max_corner_d2: f32,
     pub branch_d2_ratio: f32,
+    /// Index (0 or 1) of the IPPE candidate the solver actually refined and
+    /// returned. Sentinel `u8::MAX` ⇒ branch selection did not run (IPPE
+    /// failure or gate disabled). Read by the bench-internals harness.
+    #[cfg_attr(feature = "bench-internals", allow(dead_code))]
+    pub branch_chosen: u8,
 }
 
 impl PoseDiagnostics {
@@ -395,6 +403,7 @@ impl PoseDiagnostics {
             aggregate_d2: f32::NAN,
             max_corner_d2: f32::NAN,
             branch_d2_ratio: f32::NAN,
+            branch_chosen: u8::MAX,
         }
     }
 }
@@ -407,17 +416,30 @@ pub(crate) struct ConsistencyThresholds {
     pub aggregate: f64,
     /// `χ²(1; fpr)` — per-corner gate.
     pub per_corner: f64,
+    /// Branch-ratio escape clause. When the IPPE branch selector
+    /// produced `alternate_d2 / primary_d2 ≥ min_decisive_ratio`, the
+    /// chosen branch is decisive and the χ² gate is bypassed even if
+    /// the post-LM aggregate / per-corner d² exceeds the threshold.
+    ///
+    /// Rationale: the gate's job is to catch IPPE branch ambiguity. A
+    /// genuine ambiguity has both candidates at similar d² (ratio ~ 1).
+    /// A scene-specific noise outlier (PSF artefact, lighting gradient)
+    /// has a clear branch winner but high absolute residual — and
+    /// nulling its pose is lossy. See PR for the rotation-tail analysis.
+    pub min_decisive_ratio: f64,
 }
 
 impl ConsistencyThresholds {
-    /// Build from a false-positive rate. Returns `None` for `fpr ∉ (0, 1)`,
-    /// which the rest of the gate interprets as "disabled".
+    /// Build from a false-positive rate and branch-ratio escape clause.
+    /// Returns `None` for `fpr ∉ (0, 1)`, which the rest of the gate
+    /// interprets as "disabled".
     #[must_use]
-    pub(crate) fn from_fpr(fpr: f64) -> Option<Self> {
+    pub(crate) fn from_fpr(fpr: f64, min_decisive_ratio: f64) -> Option<Self> {
         if fpr > 0.0 && fpr < 1.0 {
             Some(Self {
                 aggregate: chi2_critical(fpr, 2),
                 per_corner: chi2_critical(fpr, 1),
+                min_decisive_ratio,
             })
         } else {
             None
@@ -520,6 +542,7 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
         &gate_info_matrices,
         tag_size,
         &refined_pose,
+        branch_diag.ratio(),
         thresholds,
     );
 
@@ -527,6 +550,7 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
         aggregate_d2: verdict.aggregate_d2 as f32,
         max_corner_d2: verdict.max_corner_d2 as f32,
         branch_d2_ratio: branch_diag.ratio() as f32,
+        branch_chosen: branch_diag.chosen_idx,
     };
 
     if verdict.accepted {
@@ -652,9 +676,18 @@ fn disabled_branch_diagnostics(
         let obj_pts = centered_tag_corners(tag_size);
         let (_, agg0) = per_corner_d2(intrinsics, corners, &obj_pts, info_matrices, &candidates[0]);
         let (_, agg1) = per_corner_d2(intrinsics, corners, &obj_pts, info_matrices, &candidates[1]);
+        // The disabled-gate path uses lowest-reprojection-error selection
+        // (`find_best_pose`), which on this code branch is the same call site
+        // that picks `candidates[chosen_idx]`. Mirror that here so the
+        // diagnostic `chosen_idx` reflects what actually shipped.
+        let chosen_idx = u8::from(
+            reprojection_error(intrinsics, corners, &obj_pts, &candidates[1])
+                < reprojection_error(intrinsics, corners, &obj_pts, &candidates[0]),
+        );
         BranchDiagnostics {
             primary_d2: agg0.min(agg1),
             alternate_d2: agg0.max(agg1),
+            chosen_idx,
         }
     }
     #[cfg(not(feature = "bench-internals"))]
@@ -1189,6 +1222,10 @@ fn find_best_pose(
 pub(crate) struct BranchDiagnostics {
     pub primary_d2: f64,
     pub alternate_d2: f64,
+    /// Index (0 or 1) of the IPPE candidate that was *actually* refined and
+    /// returned to the caller — accounts for the alternate-branch swap rule.
+    /// Sentinel `u8::MAX` ⇒ branch selection did not run.
+    pub chosen_idx: u8,
 }
 
 impl BranchDiagnostics {
@@ -1201,6 +1238,7 @@ impl BranchDiagnostics {
         Self {
             primary_d2: f64::NAN,
             alternate_d2: f64::NAN,
+            chosen_idx: u8::MAX,
         }
     }
 
@@ -1273,6 +1311,7 @@ fn select_ippe_branch(
         BranchDiagnostics {
             primary_d2,
             alternate_d2,
+            chosen_idx: chosen as u8,
         },
     )
 }
@@ -1290,12 +1329,24 @@ pub(crate) struct ConsistencyVerdict {
     pub max_corner_d2: f64,
 }
 
-/// Final reprojection-consistency check. Two-prong χ² gate:
+/// Final reprojection-consistency check. Two-prong χ² gate with a
+/// branch-ratio escape clause:
 ///
 /// - **Aggregate** (DOF = 8 obs − 6 fitted = 2): rejects poses whose total
 ///   reprojection error is inconsistent with the noise model.
 /// - **Per-corner** (DOF = 1): catches single-corner contamination that
 ///   the aggregate would average over.
+/// - **Branch-ratio escape** (`alternate_d2 / primary_d2 ≥
+///   min_decisive_ratio`): bypasses the χ² test when the IPPE branch
+///   selector had overwhelming evidence. The gate's purpose is catching
+///   IPPE branch ambiguity (both candidates similar d²); when one branch
+///   is decisively better, a high post-LM residual is more likely scene-
+///   specific noise than a wrong branch, and nulling the pose is lossy.
+///
+/// `branch_d2_ratio` is `BranchDiagnostics::ratio()` from the IPPE branch
+/// selector. Pass `f64::NAN` or any value `< thresholds.min_decisive_ratio`
+/// when no branch context is available (e.g. the ROC test harness) to keep
+/// only the χ² test active.
 ///
 /// When `thresholds = None` the gate is disabled — accepts unconditionally
 /// and skips the d² compute on production builds (NaN sentinels), keeping
@@ -1306,6 +1357,7 @@ fn pose_consistency_check(
     info_matrices: &[Matrix2<f64>; 4],
     tag_size: f64,
     refined_pose: &Pose,
+    branch_d2_ratio: f64,
     thresholds: Option<ConsistencyThresholds>,
 ) -> ConsistencyVerdict {
     let Some(t) = thresholds else {
@@ -1353,7 +1405,13 @@ fn pose_consistency_check(
         refined_pose,
     );
     let max_corner_d2 = per_corner.iter().copied().fold(0.0_f64, f64::max);
-    let accepted = aggregate_d2 <= t.aggregate && max_corner_d2 <= t.per_corner;
+    let chi2_ok = aggregate_d2 <= t.aggregate && max_corner_d2 <= t.per_corner;
+    // Branch-ratio escape: a finite ratio above the threshold bypasses the
+    // χ² test. `is_finite()` is load-bearing: the ROC harness disables the
+    // escape via `min_decisive_ratio = +∞`, and `+∞ >= +∞` is true — so we
+    // need to filter +∞ explicitly. NaN propagates as `false` for free.
+    let branch_decisive = branch_d2_ratio.is_finite() && branch_d2_ratio >= t.min_decisive_ratio;
+    let accepted = chi2_ok || branch_decisive;
 
     ConsistencyVerdict {
         accepted,
@@ -1368,6 +1426,11 @@ fn pose_consistency_check(
 /// exercise the gate with controlled noise without going through the full
 /// pipeline, which is required for the realized-FPR acceptance assertion in
 /// `regression_pose_consistency_roc`.
+///
+/// Disables the branch-ratio escape clause (`min_decisive_ratio = +∞`) so
+/// the realized-FPR is purely a function of the χ²(2)/χ²(1) test — the
+/// branch-ratio escape is meaningful only in the IPPE-driven pipeline and
+/// would confound the ROC characterization the harness performs.
 #[cfg(feature = "bench-internals")]
 #[must_use]
 pub fn bench_pose_consistency_d2(
@@ -1384,7 +1447,8 @@ pub fn bench_pose_consistency_d2(
         info_matrices,
         tag_size,
         refined_pose,
-        ConsistencyThresholds::from_fpr(fpr),
+        f64::NAN,
+        ConsistencyThresholds::from_fpr(fpr, f64::INFINITY),
     );
     (v.accepted, v.aggregate_d2, v.max_corner_d2)
 }
@@ -1427,8 +1491,12 @@ pub fn refine_poses_soa_with_config(
     use rayon::prelude::*;
 
     // Hoist χ² thresholds out of the per-tag inner loop — they depend only
-    // on `pose_consistency_fpr` and are constant for the frame.
-    let thresholds = ConsistencyThresholds::from_fpr(config.pose_consistency_fpr);
+    // on `pose_consistency_fpr` and `pose_consistency_min_decisive_ratio`
+    // and are constant for the frame.
+    let thresholds = ConsistencyThresholds::from_fpr(
+        config.pose_consistency_fpr,
+        config.pose_consistency_min_decisive_ratio,
+    );
 
     // Process valid candidates in parallel.
     // We collect into a temporary Vec to avoid unsafe parallel writes to the batch.
@@ -1539,6 +1607,246 @@ pub fn refine_poses_soa_with_config(
         #[cfg(not(feature = "bench-internals"))]
         let _ = diag;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 0 rotation-tail diagnostic harness: bench-internals-gated entry points.
+//
+// THROWAWAY: the dual-branch LM run, leave-one-out refit, and the
+// `BenchPoseDiagnostics` surface here are exploratory instrumentation. Once
+// Phase 0 lands its memo, revert the additions in this section and the
+// matching block in `pose_weighted.rs`. The permanent foundation is the
+// `bench-internals` feature plumbing in `locus-py` and the
+// `compute_image_noise_floor` helper in `gradient.rs`.
+// ---------------------------------------------------------------------------
+
+/// Per-branch result of a dual-branch IPPE refinement run, used by the Phase 0
+/// rotation-tail diagnostic to ask "would the *other* branch have given a
+/// better rotation under the same observed corners?"
+#[cfg(feature = "bench-internals")]
+#[derive(Debug, Clone, Copy)]
+pub struct BenchBranchResult {
+    /// IPPE candidate index (0 or 1) before LM refinement.
+    pub branch_idx: u8,
+    /// IPPE pose used as the LM seed.
+    pub initial_pose: Pose,
+    /// Pose after LM convergence.
+    pub refined_pose: Pose,
+    /// `Σ d²_i` Mahalanobis aggregate at the refined pose.
+    pub aggregate_d2: f64,
+    /// Per-corner Mahalanobis d² at the refined pose.
+    pub per_corner_d2: [f64; 4],
+}
+
+/// Bench-only: surface-level diagnostics returned alongside both branches.
+/// `chosen_idx` matches what `estimate_tag_pose_with_diagnostics` would have
+/// returned, so harness scripts can compare "what we shipped" vs "what the
+/// alternate branch would have given."
+#[cfg(feature = "bench-internals")]
+#[derive(Debug, Clone, Copy)]
+pub struct BenchPoseDiagnostics {
+    /// `Σ d²_i` across all four corners (χ²(2) statistic).
+    pub aggregate_d2: f32,
+    /// Worst single-corner Mahalanobis d² (χ²(1) statistic).
+    pub max_corner_d2: f32,
+    /// `alternate_d2 / primary_d2` from the IPPE branch selector.
+    pub branch_d2_ratio: f32,
+    /// Index of the IPPE candidate that was actually refined (0 or 1).
+    pub branch_chosen: u8,
+}
+
+#[cfg(feature = "bench-internals")]
+impl From<PoseDiagnostics> for BenchPoseDiagnostics {
+    fn from(d: PoseDiagnostics) -> Self {
+        Self {
+            aggregate_d2: d.aggregate_d2,
+            max_corner_d2: d.max_corner_d2,
+            branch_d2_ratio: d.branch_d2_ratio,
+            branch_chosen: d.branch_chosen,
+        }
+    }
+}
+
+/// Bench-only: solve IPPE for a quad and run LM on **both** candidate branches,
+/// returning each branch's refined pose plus its aggregate / per-corner
+/// Mahalanobis d² under the supplied info matrices. This is the load-bearing
+/// measurement for the `branch_flip` failure-mode classifier — it answers
+/// directly whether the alternate branch was rotationally better than the one
+/// the production solver picked.
+///
+/// THROWAWAY: revert with the rest of this section after Phase 0 ships.
+#[cfg(feature = "bench-internals")]
+#[must_use]
+#[allow(clippy::missing_panics_doc, clippy::too_many_arguments)]
+pub fn bench_estimate_both_branches(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    tag_size: f64,
+    img: Option<&ImageView>,
+    mode: crate::config::PoseEstimationMode,
+    config: &crate::config::DetectorConfig,
+    external_covariances: Option<&[Matrix2<f64>; 4]>,
+) -> Option<[BenchBranchResult; 2]> {
+    let ideal_corners: [[f64; 2]; 4] = if intrinsics.distortion == DistortionCoeffs::None {
+        *corners
+    } else {
+        core::array::from_fn(|i| intrinsics.undistort_pixel(corners[i][0], corners[i][1]))
+    };
+
+    let h_poly = crate::decoder::Homography::square_to_quad(&ideal_corners)?;
+    let h_pixel = h_poly.h;
+    let h_norm = intrinsics.inv_matrix() * h_pixel;
+    let scaler = 2.0 / tag_size;
+    let mut h_metric = h_norm;
+    h_metric.column_mut(0).scale_mut(scaler);
+    h_metric.column_mut(1).scale_mut(scaler);
+
+    let candidates = solve_ippe_square(&h_metric)?;
+    let covariances = build_lm_covariances(
+        config,
+        mode,
+        img,
+        &ideal_corners,
+        &h_poly,
+        external_covariances,
+    );
+    let gate_info_matrices = isotropic_info_matrices(config.pose_consistency_gate_sigma_px);
+    let info_matrices = pick_selector_info(covariances.as_ref(), &gate_info_matrices);
+
+    let obj_pts = centered_tag_corners(tag_size);
+
+    let refine = |seed: Pose| -> Pose {
+        if let (crate::config::PoseEstimationMode::Accurate, _, Some(covs)) =
+            (mode, img, covariances)
+        {
+            crate::pose_weighted::refine_pose_lm_weighted(
+                intrinsics, corners, tag_size, seed, &covs,
+            )
+            .0
+        } else {
+            refine_pose_lm(intrinsics, corners, tag_size, seed, config.huber_delta_px)
+        }
+    };
+
+    let results: [BenchBranchResult; 2] = core::array::from_fn(|i| {
+        let initial = candidates[i];
+        let refined = refine(initial);
+        let (per_corner, aggregate) =
+            per_corner_d2(intrinsics, corners, &obj_pts, &info_matrices, &refined);
+        BenchBranchResult {
+            branch_idx: i as u8,
+            initial_pose: initial,
+            refined_pose: refined,
+            aggregate_d2: aggregate,
+            per_corner_d2: per_corner,
+        }
+    });
+
+    Some(results)
+}
+
+/// Bench-only: leave-one-out pose refinement. Drops corner `drop_idx` and
+/// re-runs LM with only 3 corners (under-determined but still
+/// well-conditioned for a planar tag). Used by the `corner_outlier`
+/// classifier to test whether removing a single high-IRLS-weight corner
+/// substantially improves rotation.
+///
+/// Implementation note: with 3 corners the homography fit is exact (no
+/// residual to minimize), so we feed all 4 corners to LM but inflate the
+/// info-matrix entry of `drop_idx` to ~zero, effectively removing its
+/// contribution to the normal equations.
+///
+/// THROWAWAY: revert with the rest of this section after Phase 0 ships.
+#[cfg(feature = "bench-internals")]
+#[must_use]
+#[allow(clippy::missing_panics_doc, clippy::too_many_arguments)]
+pub fn bench_refit_pose_drop_corner(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    tag_size: f64,
+    initial_pose: Pose,
+    drop_idx: usize,
+    img: Option<&ImageView>,
+    mode: crate::config::PoseEstimationMode,
+    config: &crate::config::DetectorConfig,
+) -> Pose {
+    debug_assert!(drop_idx < 4);
+
+    let ideal_corners: [[f64; 2]; 4] = if intrinsics.distortion == DistortionCoeffs::None {
+        *corners
+    } else {
+        core::array::from_fn(|i| intrinsics.undistort_pixel(corners[i][0], corners[i][1]))
+    };
+
+    let Some(h_poly) = crate::decoder::Homography::square_to_quad(&ideal_corners) else {
+        return initial_pose;
+    };
+    let covariances_opt = build_lm_covariances(config, mode, img, &ideal_corners, &h_poly, None);
+
+    if let (crate::config::PoseEstimationMode::Accurate, Some(mut covs)) = (mode, covariances_opt) {
+        // Inflate the dropped corner's covariance ⇒ its info matrix shrinks
+        // toward zero ⇒ no contribution to LM normal equations.
+        covs[drop_idx] = Matrix2::identity().scale(1.0e12);
+        crate::pose_weighted::refine_pose_lm_weighted(
+            intrinsics,
+            corners,
+            tag_size,
+            initial_pose,
+            &covs,
+        )
+        .0
+    } else {
+        // Fast mode has no per-corner weighting; we approximate "drop corner"
+        // by snapping the dropped pixel residual to the model prediction
+        // before running LM, so its contribution to the Huber cost is zero.
+        let p_cam = initial_pose.rotation * centered_tag_corners(tag_size)[drop_idx]
+            + initial_pose.translation;
+        let projected = project_with_distortion(&p_cam, intrinsics);
+        let mut local_corners = *corners;
+        local_corners[drop_idx] = projected;
+        refine_pose_lm(
+            intrinsics,
+            &local_corners,
+            tag_size,
+            initial_pose,
+            config.huber_delta_px,
+        )
+    }
+}
+
+/// Bench-only: run `estimate_tag_pose_with_diagnostics` and surface its
+/// `PoseDiagnostics` (incl. `branch_chosen`) as a stable public type, so the
+/// Python harness can pull diagnostics out of the same code path the
+/// production detector uses.
+///
+/// THROWAWAY: revert after Phase 0; the bench harness won't outlive it.
+#[cfg(feature = "bench-internals")]
+#[must_use]
+#[allow(clippy::missing_panics_doc, clippy::too_many_arguments)]
+pub fn bench_estimate_tag_pose(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    tag_size: f64,
+    img: Option<&ImageView>,
+    mode: crate::config::PoseEstimationMode,
+    config: &crate::config::DetectorConfig,
+    external_covariances: Option<&[Matrix2<f64>; 4]>,
+    fpr: Option<f64>,
+) -> (Option<Pose>, Option<[[f64; 6]; 6]>, BenchPoseDiagnostics) {
+    let thresholds = fpr.and_then(|f| {
+        ConsistencyThresholds::from_fpr(f, config.pose_consistency_min_decisive_ratio)
+    });
+    let (pose, cov, diag) = estimate_tag_pose_with_diagnostics(
+        intrinsics,
+        corners,
+        tag_size,
+        img,
+        mode,
+        config,
+        external_covariances,
+        thresholds,
+    );
+    (pose, cov, BenchPoseDiagnostics::from(diag))
 }
 
 #[cfg(test)]

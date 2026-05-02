@@ -458,6 +458,384 @@ pub(crate) fn refine_pose_lm_weighted(
     (pose, covariance.into())
 }
 
+// ---------------------------------------------------------------------------
+// Phase 0 rotation-tail diagnostic harness: bench-internals-gated entry points.
+//
+// THROWAWAY: the per-iteration IRLS retention exposed below is exploratory
+// instrumentation. After the Phase 0 memo lands, revert this section together
+// with the bench helpers in `pose.rs`.
+// ---------------------------------------------------------------------------
+
+/// Snapshot of one LM iteration's accepted-or-rejected step. Recorded by
+/// `bench_refine_pose_lm_weighted_with_telemetry` for the Phase 0 harness.
+#[cfg(feature = "bench-internals")]
+#[derive(Debug, Clone, Copy)]
+pub struct LmIterationTrace {
+    /// Iteration index (0-based, monotonic across both accepted and rejected steps).
+    pub iter_idx: u8,
+    /// Whether this step was accepted (Nielsen `ρ > 0`) or rolled back.
+    pub accepted: bool,
+    /// LM damping at the start of this iteration.
+    pub lambda: f64,
+    /// Huber-Mahalanobis cost at the (rebuilt) current pose.
+    pub cost: f64,
+    /// Per-corner Mahalanobis `d² = rᵢᵀ Σᵢ⁻¹ rᵢ` at this iteration.
+    pub per_corner_d2: [f64; 4],
+    /// Per-corner Huber IRLS weight applied at this iteration.
+    pub per_corner_irls_weight: [f64; 4],
+}
+
+/// Per-iteration trace + summary returned by the bench LM solver. Vec-backed
+/// — allocation is fine on the bench path.
+#[cfg(feature = "bench-internals")]
+#[derive(Debug, Clone)]
+pub struct BenchLmResult {
+    /// Final refined pose.
+    pub pose: Pose,
+    /// 6×6 pose covariance from the inverse Hessian at the converged pose.
+    pub covariance: [[f64; 6]; 6],
+    /// Number of LM iterations executed (accepted + rejected).
+    pub iterations: u8,
+    /// Termination reason: 0 = gradient, 1 = step-size, 2 = max-iter,
+    /// 3 = repeated Cholesky failure.
+    pub convergence: u8,
+    /// One entry per LM iteration (accepted and rejected steps both captured).
+    pub trace: Vec<LmIterationTrace>,
+    /// Final per-corner Mahalanobis d² at the converged pose.
+    pub final_per_corner_d2: [f64; 4],
+    /// Final per-corner Huber IRLS weight.
+    pub final_per_corner_irls_weight: [f64; 4],
+}
+
+/// Like `build_normal_equations` but additionally records per-corner
+/// Mahalanobis d² and IRLS weight. Mirrors the kernel exactly so the trace
+/// reflects what the production solver would have seen at this pose.
+#[cfg(feature = "bench-internals")]
+#[allow(clippy::too_many_arguments)]
+fn build_normal_equations_telemetry(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    obj_pts: &[Vector3<f64>; 4],
+    pose: &Pose,
+    info_matrices: &[Matrix2<f64>; 4],
+    huber_k: f64,
+) -> (Matrix6<f64>, Vector6<f64>, f64, [f64; 4], [f64; 4]) {
+    let mut jtj = Matrix6::<f64>::zeros();
+    let mut jtr = Vector6::<f64>::zeros();
+    let mut total_cost = 0.0;
+    let mut per_corner_d2 = [0.0_f64; 4];
+    let mut per_corner_w = [0.0_f64; 4];
+
+    for i in 0..4 {
+        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
+        if p_cam.z < 1e-4 {
+            total_cost += 1e6;
+            per_corner_d2[i] = 1e12;
+            per_corner_w[i] = 0.0;
+            continue;
+        }
+
+        let z_inv = 1.0 / p_cam.z;
+        let x_z = p_cam.x * z_inv;
+        let y_z = p_cam.y * z_inv;
+
+        let u_est = intrinsics.fx * x_z + intrinsics.cx;
+        let v_est = intrinsics.fy * y_z + intrinsics.cy;
+        let res_u = corners[i][0] - u_est;
+        let res_v = corners[i][1] - v_est;
+
+        let info = &info_matrices[i];
+        let s_i_sq = crate::pose::mahalanobis_d2([res_u, res_v], info);
+        let s_i = s_i_sq.sqrt();
+
+        if s_i <= huber_k {
+            total_cost += 0.5 * s_i_sq;
+        } else {
+            total_cost += huber_k * (s_i - 0.5 * huber_k);
+        }
+
+        let w = if s_i <= huber_k { 1.0 } else { huber_k / s_i };
+        per_corner_d2[i] = s_i_sq;
+        per_corner_w[i] = w;
+
+        let w00 = info[(0, 0)] * w;
+        let w01 = info[(0, 1)] * w;
+        let w10 = info[(1, 0)] * w;
+        let w11 = info[(1, 1)] * w;
+
+        let (ju0, ju2, ju3, ju4, ju5, jv1, jv2, jv3, jv4, jv5) =
+            crate::pose::projection_jacobian(x_z, y_z, z_inv, intrinsics);
+
+        let k00 = ju0 * w00;
+        let k01 = ju0 * w01;
+        let k10 = jv1 * w10;
+        let k11 = jv1 * w11;
+        let k20 = ju2 * w00 + jv2 * w10;
+        let k21 = ju2 * w01 + jv2 * w11;
+        let k30 = ju3 * w00 + jv3 * w10;
+        let k31 = ju3 * w01 + jv3 * w11;
+        let k40 = ju4 * w00 + jv4 * w10;
+        let k41 = ju4 * w01 + jv4 * w11;
+        let k50 = ju5 * w00 + jv5 * w10;
+        let k51 = ju5 * w01 + jv5 * w11;
+
+        jtr[0] += k00 * res_u + k01 * res_v;
+        jtr[1] += k10 * res_u + k11 * res_v;
+        jtr[2] += k20 * res_u + k21 * res_v;
+        jtr[3] += k30 * res_u + k31 * res_v;
+        jtr[4] += k40 * res_u + k41 * res_v;
+        jtr[5] += k50 * res_u + k51 * res_v;
+
+        jtj[(0, 0)] += k00 * ju0;
+        jtj[(0, 1)] += k01 * jv1;
+        jtj[(0, 2)] += k00 * ju2 + k01 * jv2;
+        jtj[(0, 3)] += k00 * ju3 + k01 * jv3;
+        jtj[(0, 4)] += k00 * ju4 + k01 * jv4;
+        jtj[(0, 5)] += k00 * ju5 + k01 * jv5;
+
+        jtj[(1, 1)] += k11 * jv1;
+        jtj[(1, 2)] += k10 * ju2 + k11 * jv2;
+        jtj[(1, 3)] += k10 * ju3 + k11 * jv3;
+        jtj[(1, 4)] += k10 * ju4 + k11 * jv4;
+        jtj[(1, 5)] += k10 * ju5 + k11 * jv5;
+
+        jtj[(2, 2)] += k20 * ju2 + k21 * jv2;
+        jtj[(2, 3)] += k20 * ju3 + k21 * jv3;
+        jtj[(2, 4)] += k20 * ju4 + k21 * jv4;
+        jtj[(2, 5)] += k20 * ju5 + k21 * jv5;
+
+        jtj[(3, 3)] += k30 * ju3 + k31 * jv3;
+        jtj[(3, 4)] += k30 * ju4 + k31 * jv4;
+        jtj[(3, 5)] += k30 * ju5 + k31 * jv5;
+
+        jtj[(4, 4)] += k40 * ju4 + k41 * jv4;
+        jtj[(4, 5)] += k40 * ju5 + k41 * jv5;
+
+        jtj[(5, 5)] += k50 * ju5 + k51 * jv5;
+    }
+
+    crate::pose::symmetrize_jtj6(&mut jtj);
+
+    (jtj, jtr, total_cost, per_corner_d2, per_corner_w)
+}
+
+/// Bench-only LM solver mirroring `refine_pose_lm_weighted`, additionally
+/// returning the full per-iteration trace (per-corner d² and IRLS weight) plus
+/// a summary of iteration count and termination reason.
+///
+/// THROWAWAY: revert with the rest of this section after Phase 0 ships.
+#[cfg(feature = "bench-internals")]
+#[must_use]
+#[allow(clippy::too_many_lines)]
+pub fn bench_refine_pose_lm_weighted_with_telemetry(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    tag_size: f64,
+    initial_pose: Pose,
+    corner_covariances: &[Matrix2<f64>; 4],
+) -> BenchLmResult {
+    const HUBER_K: f64 = 1.345;
+    const MAX_ITERS: usize = 20;
+
+    let mut pose = initial_pose;
+    let obj_pts = centered_tag_corners(tag_size);
+
+    let mut info_matrices = [Matrix2::<f64>::zeros(); 4];
+    for i in 0..4 {
+        info_matrices[i] = corner_covariances[i]
+            .try_inverse()
+            .unwrap_or_else(Matrix2::identity);
+    }
+
+    let mut lambda = 1e-3_f64;
+    let mut nu = 2.0_f64;
+
+    let mut current_jtj = Matrix6::<f64>::zeros();
+    let mut current_jtr = Vector6::<f64>::zeros();
+    let mut current_cost = f64::MAX;
+    let mut current_per_corner_d2 = [0.0_f64; 4];
+    let mut current_per_corner_w = [0.0_f64; 4];
+    let mut needs_rebuild = true;
+
+    let mut trace: Vec<LmIterationTrace> = Vec::with_capacity(MAX_ITERS);
+    let mut convergence: u8 = 2; // default: max-iter
+    let mut iterations: u8 = 0;
+    let mut consecutive_chol_failures: u8 = 0;
+
+    for iter in 0..MAX_ITERS {
+        if needs_rebuild {
+            let (jtj, jtr, cost, per_corner_d2, per_corner_w) = build_normal_equations_telemetry(
+                intrinsics,
+                corners,
+                &obj_pts,
+                &pose,
+                &info_matrices,
+                HUBER_K,
+            );
+            current_jtj = jtj;
+            current_jtr = jtr;
+            current_cost = cost;
+            current_per_corner_d2 = per_corner_d2;
+            current_per_corner_w = per_corner_w;
+            needs_rebuild = false;
+        }
+
+        if current_jtr.amax() < 1e-8 {
+            convergence = 0; // gradient
+            break;
+        }
+
+        let mut jtj_damped = current_jtj;
+        for k in 0..6 {
+            jtj_damped[(k, k)] += lambda * current_jtj[(k, k)].max(1e-6);
+        }
+
+        let delta = if let Some(chol) = jtj_damped.cholesky() {
+            consecutive_chol_failures = 0;
+            chol.solve(&current_jtr)
+        } else {
+            consecutive_chol_failures += 1;
+            if consecutive_chol_failures >= 3 {
+                convergence = 3; // cholesky failure
+                iterations = iter as u8 + 1;
+                break;
+            }
+            lambda *= 10.0;
+            nu = 2.0;
+            continue;
+        };
+
+        let twist = Vector3::new(delta[3], delta[4], delta[5]);
+        let trans_update = Vector3::new(delta[0], delta[1], delta[2]);
+        let rot_update = nalgebra::Rotation3::new(twist).matrix().into_owned();
+        let new_pose = Pose::new(
+            rot_update * pose.rotation,
+            rot_update * pose.translation + trans_update,
+        );
+
+        let new_cost = huber_mahalanobis_cost(
+            intrinsics,
+            corners,
+            &obj_pts,
+            &new_pose,
+            &info_matrices,
+            HUBER_K,
+        );
+
+        let predicted_reduction =
+            0.5 * delta.dot(&(lambda * delta.component_mul(&current_jtj.diagonal()) + current_jtr));
+        let actual_reduction = current_cost - new_cost;
+        let rho = if predicted_reduction > 1e-12 {
+            actual_reduction / predicted_reduction
+        } else {
+            0.0
+        };
+
+        let accepted = rho > 0.0;
+        trace.push(LmIterationTrace {
+            iter_idx: iter as u8,
+            accepted,
+            lambda,
+            cost: current_cost,
+            per_corner_d2: current_per_corner_d2,
+            per_corner_irls_weight: current_per_corner_w,
+        });
+
+        if accepted {
+            pose = new_pose;
+            current_cost = new_cost;
+            needs_rebuild = true;
+            lambda *= (1.0 - (2.0 * rho - 1.0).powi(3)).max(1.0 / 3.0);
+            nu = 2.0;
+            if delta.norm() < 1e-7 {
+                convergence = 1; // step
+                iterations = iter as u8 + 1;
+                break;
+            }
+        } else {
+            lambda *= nu;
+            nu *= 2.0;
+        }
+
+        iterations = iter as u8 + 1;
+    }
+
+    if needs_rebuild {
+        let (jtj, _, _, per_corner_d2, per_corner_w) = build_normal_equations_telemetry(
+            intrinsics,
+            corners,
+            &obj_pts,
+            &pose,
+            &info_matrices,
+            HUBER_K,
+        );
+        current_jtj = jtj;
+        current_per_corner_d2 = per_corner_d2;
+        current_per_corner_w = per_corner_w;
+    }
+
+    let covariance = current_jtj.try_inverse().unwrap_or_else(Matrix6::identity);
+
+    BenchLmResult {
+        pose,
+        covariance: covariance.into(),
+        iterations,
+        convergence,
+        trace,
+        final_per_corner_d2: current_per_corner_d2,
+        final_per_corner_irls_weight: current_per_corner_w,
+    }
+}
+
+/// Bench-only: structure-tensor eigenvalues at a corner. Returns
+/// `Some((λ_max, λ_min))` on success, `None` if the window has no support.
+/// `R = λ_min / λ_max ∈ [0, 1]` is the corner-quality anisotropy ratio that
+/// drives the `grazing_angle` failure-mode classifier.
+///
+/// THROWAWAY: revert with the rest of this section after Phase 0 ships.
+#[cfg(feature = "bench-internals")]
+#[must_use]
+pub fn bench_corner_structure_tensor_eigenvalues(
+    img: &ImageView,
+    center: [f64; 2],
+    radius: i32,
+) -> Option<(f64, f64)> {
+    if !corner_has_structure_tensor_support(img, center, radius) {
+        return None;
+    }
+
+    let cx = center[0].floor() as isize;
+    let cy = center[1].floor() as isize;
+    let w = img.width.cast_signed();
+    let h = img.height.cast_signed();
+    let stride = img.stride.cast_signed();
+    let r = radius as isize;
+    let x_start = (cx - r).max(1);
+    let x_end = (cx + r).min(w - 2);
+    let y_start = (cy - r).max(1);
+    let y_end = (cy + r).min(h - 2);
+    if x_start > x_end || y_start > y_end {
+        return None;
+    }
+
+    let sigma_sq = (f64::from(radius.max(1)) / 2.0).powi(2);
+    let (sum_gx2, sum_gy2, sum_gxgy) = accumulate_structure_tensor_sums(
+        img, center, stride, x_start, x_end, y_start, y_end, sigma_sq,
+    );
+
+    // Eigenvalues of the symmetric 2×2 [s00 s01; s01 s11] without Tikhonov
+    // (we want the raw structure-tensor eigenvalues, not the regularized
+    // ones used inside `finalize_corner_covariance`).
+    let s00 = sum_gx2;
+    let s11 = sum_gy2;
+    let s01 = sum_gxgy;
+    let trace = s00 + s11;
+    let discriminant = ((s00 - s11).powi(2) + 4.0 * s01 * s01).sqrt();
+    let lambda_max = 0.5 * (trace + discriminant);
+    let lambda_min = (0.5 * (trace - discriminant)).max(0.0);
+    Some((lambda_max, lambda_min))
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {

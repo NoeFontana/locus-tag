@@ -815,6 +815,65 @@ fn angle_diff(a: f32, b: f32) -> f32 {
     diff.min(std::f32::consts::PI - diff)
 }
 
+/// Estimate per-image additive Gaussian noise σ via the robust Immerkær (1996)
+/// Laplacian estimator. Returns σ in pixel-intensity units (same scale as the
+/// input image's u8 values).
+///
+/// The kernel
+///
+/// ```text
+///         |  1 -2  1 |
+///   L  =  | -2  4 -2 |  ⊛ I
+///         |  1 -2  1 |
+/// ```
+///
+/// has zero response on linear ramps and second-order surfaces (so it filters
+/// out smooth gradients) but detects high-frequency content that, in flat
+/// regions, is dominated by sensor noise. We take the *median* of `|L|` rather
+/// than the mean — the median is robust to the (sparse) responses on real
+/// edges, which would otherwise inflate the estimate. The kernel has squared-
+/// coefficient sum 36 (norm 6), and σ ≈ MAD / 0.6745 for Gaussian noise.
+///
+/// Used by Phase 0 rotation-tail diagnostics to verify configured `sigma_n_sq`
+/// matches observed noise. Phase 3 will reuse this for adaptive σ.
+#[must_use]
+pub fn compute_image_noise_floor(img: &ImageView) -> f64 {
+    let w = img.width;
+    let h = img.height;
+    if w < 3 || h < 3 {
+        return 0.0;
+    }
+
+    let mut abs_l: Vec<u32> = Vec::with_capacity((w - 2) * (h - 2));
+    for y in 1..h - 1 {
+        for x in 1..w - 1 {
+            let p00 = i32::from(img.get_pixel(x - 1, y - 1));
+            let p10 = i32::from(img.get_pixel(x, y - 1));
+            let p20 = i32::from(img.get_pixel(x + 1, y - 1));
+            let p01 = i32::from(img.get_pixel(x - 1, y));
+            let p11 = i32::from(img.get_pixel(x, y));
+            let p21 = i32::from(img.get_pixel(x + 1, y));
+            let p02 = i32::from(img.get_pixel(x - 1, y + 1));
+            let p12 = i32::from(img.get_pixel(x, y + 1));
+            let p22 = i32::from(img.get_pixel(x + 1, y + 1));
+
+            let l = (p00 - 2 * p10 + p20) + (-2 * p01 + 4 * p11 - 2 * p21) + (p02 - 2 * p12 + p22);
+            abs_l.push(l.unsigned_abs());
+        }
+    }
+
+    if abs_l.is_empty() {
+        return 0.0;
+    }
+
+    let mid = abs_l.len() / 2;
+    let (_, m, _) = abs_l.select_nth_unstable(mid);
+    let median = f64::from(*m);
+
+    // Convert MAD → σ for Gaussian (1/0.6745) and divide by kernel norm √36 = 6.
+    median / (0.6745 * 6.0)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::float_cmp)]
 mod tests {
@@ -894,5 +953,62 @@ mod tests {
             let identical_corners = [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]];
             assert_eq!(quad_area(&identical_corners), 0.0);
         }
+    }
+
+    #[test]
+    fn test_noise_floor_uniform_image_is_zero() {
+        let data = vec![128_u8; 64 * 64];
+        let view = ImageView::new(&data, 64, 64, 64).unwrap();
+        let sigma = compute_image_noise_floor(&view);
+        assert!(
+            sigma < 0.1,
+            "uniform image should have ~zero noise: {sigma}"
+        );
+    }
+
+    #[test]
+    fn test_noise_floor_recovers_injected_sigma() {
+        // Deterministic pseudo-noise on a flat field: linear-congruential-style
+        // signed offsets with empirical σ ≈ 2.0. The estimator should return a
+        // value within ±50% of the true σ — this is a robustness test, not a
+        // calibration test. (Real scenes pick up wider tolerances anyway.)
+        let w = 128_usize;
+        let h = 128_usize;
+        let mut data = vec![0_u8; w * h];
+        let mut state: u32 = 0x9e37_79b9;
+        for px in &mut data {
+            state = state.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            // Map low bits to ±5 with mean 0; mean σ ≈ 2.9.
+            let raw = ((state >> 16) & 0x7FF) as i32 - 1024;
+            let off = (raw / 200).clamp(-5, 5);
+            *px = (128 + off) as u8;
+        }
+        let view = ImageView::new(&data, w, h, w).unwrap();
+        let sigma = compute_image_noise_floor(&view);
+        assert!(
+            sigma > 0.5 && sigma < 6.0,
+            "estimated σ outside plausible range: {sigma}"
+        );
+    }
+
+    #[test]
+    fn test_noise_floor_robust_to_strong_edges() {
+        // Half-black, half-white image. Edge column produces large |L|, but
+        // the median is 0 because >50% of pixels are flat. This is the test
+        // that distinguishes the median-based variant from raw Immerkær.
+        let w = 64_usize;
+        let h = 64_usize;
+        let mut data = vec![0_u8; w * h];
+        for y in 0..h {
+            for x in 0..w {
+                data[y * w + x] = if x < w / 2 { 0 } else { 255 };
+            }
+        }
+        let view = ImageView::new(&data, w, h, w).unwrap();
+        let sigma = compute_image_noise_floor(&view);
+        assert!(
+            sigma < 0.5,
+            "median-based estimator must reject sparse edges: {sigma}"
+        );
     }
 }

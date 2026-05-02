@@ -306,6 +306,21 @@ class PoseConfig(BaseModel):
     (``≈ 4 px²``) so the gate catches sub-2-px false-positive residuals
     that the looser LM noise model would let through.
     """
+    pose_consistency_min_decisive_ratio: float = Field(default=5.0, ge=1.0)
+    """Branch-ratio escape clause for the χ² consistency gate.
+
+    ``alternate_d2 / primary_d2`` from the IPPE branch selector. When this
+    ratio meets or exceeds the configured value, the chosen branch is
+    considered decisive and the χ² gate is bypassed even when post-LM
+    aggregate / per-corner d² exceeds the threshold. The gate's purpose is
+    catching IPPE branch *ambiguity* (both candidates with similar d²); a
+    decisive winner with high absolute residual is more likely scene-
+    specific noise than a wrong branch, and nulling its pose is lossy.
+
+    Default ``5.0``: alternate IPPE d² must be at least 5× the primary's
+    for the escape to fire. Set to ``math.inf`` (Rust-side ``f64::INFINITY``)
+    to disable the escape and use only the χ² test.
+    """
 
 
 class SegmentationConfig(BaseModel):
@@ -475,6 +490,7 @@ class DetectorConfig(BaseModel):
             structure_tensor_radius=self.pose.structure_tensor_radius,
             pose_consistency_fpr=self.pose.pose_consistency_fpr,
             pose_consistency_gate_sigma_px=self.pose.pose_consistency_gate_sigma_px,
+            pose_consistency_min_decisive_ratio=self.pose.pose_consistency_min_decisive_ratio,
             segmentation_connectivity=self.segmentation.connectivity,
             segmentation_margin=self.segmentation.margin,
         )

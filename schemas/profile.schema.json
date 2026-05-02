@@ -128,6 +128,12 @@
           "title": "Pose Consistency Gate Sigma Px",
           "type": "number"
         },
+        "pose_consistency_min_decisive_ratio": {
+          "default": 5.0,
+          "minimum": 1.0,
+          "title": "Pose Consistency Min Decisive Ratio",
+          "type": "number"
+        },
         "sigma_n_sq": {
           "default": 4.0,
           "minimum": 0.0,

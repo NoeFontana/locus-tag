@@ -1,0 +1,2810 @@
+{
+  "schema_version": "rotation_tail_diag/v1",
+  "config_name": "locus_v1_tag36h11_1920x1080",
+  "profile": "render_tag_hub",
+  "pose_estimation_mode": "Accurate",
+  "sigma_n_sq_configured": 4.0,
+  "n_scenes": 50,
+  "scenes": [
+    {
+      "scene_id": "scene_0000_cam_0000",
+      "tag_id": 204,
+      "distance_m": 0.6099104271837653,
+      "angle_of_incidence_deg": 58.30684348831501,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.44676606556397286,
+        -0.1206587258844693,
+        -0.024871383930256605,
+        0.8861280776188257
+      ],
+      "gt_translation_xyz": [
+        -0.22009543999605516,
+        -0.0567840560817287,
+        0.5659720592118561
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.44660207629203796,
+        -0.12052737921476364,
+        -0.02476505935192108,
+        0.8862316012382507
+      ],
+      "detected_translation_xyz": [
+        -0.2200181931257248,
+        -0.056757569313049316,
+        0.5658571124076843
+      ],
+      "alternate_quaternion_xyzw": [
+        0.47722118798907576,
+        -0.3401847766551992,
+        0.19017075183755472,
+        0.7876352840064279
+      ],
+      "alternate_translation_xyz": [
+        -0.25580585068793477,
+        -0.057045548101032933,
+        0.6220629381252791
+      ],
+      "rotation_error_chosen_deg": 0.028302760899272843,
+      "rotation_error_alternate_deg": 117.19378037867541,
+      "translation_error_chosen_mm": 0.14100140311436365,
+      "translation_error_alternate_mm": 66.49427424326963,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.10968779027462006,
+      "aggregate_d2_alternate": 99380.01992680194,
+      "branch_d2_ratio": 77231.6796875,
+      "max_corner_d2": 0.04430219531059265,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 1.9767729182110207,
+      "latency_us": 26817.76089593768,
+      "ppm_estimated": 1848.500363051188
+    },
+    {
+      "scene_id": "scene_0001_cam_0000",
+      "tag_id": 122,
+      "distance_m": 0.6800526878530057,
+      "angle_of_incidence_deg": 51.63219885979417,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.2743462019839071,
+        0.34579012833461764,
+        -0.06847223520707339,
+        0.8946926294254519
+      ],
+      "gt_translation_xyz": [
+        0.15403006495140537,
+        0.12060254240152449,
+        0.6513074759981091
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.2742558717727661,
+        0.34581300616264343,
+        -0.06852307170629501,
+        0.8947076201438904
+      ],
+      "detected_translation_xyz": [
+        0.1540348380804062,
+        0.12057334929704666,
+        0.6512928009033203
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.46421154707327195,
+        -0.22341142790102664,
+        0.05467286964527521,
+        0.8553396113660436
+      ],
+      "alternate_translation_xyz": [
+        0.15254994236525524,
+        0.1190517373459083,
+        0.6571790738151847
+      ],
+      "rotation_error_chosen_deg": 0.002671951703662204,
+      "rotation_error_alternate_deg": 112.31465867804556,
+      "translation_error_chosen_mm": 0.033020880009052594,
+      "translation_error_alternate_mm": 6.250713568549047,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.018943633884191513,
+      "aggregate_d2_alternate": 29833.453770263717,
+      "branch_d2_ratio": 2274327.5,
+      "max_corner_d2": 0.012756969779729843,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 2.2238695329873983,
+      "latency_us": 11769.247939810157,
+      "ppm_estimated": 1711.1032585426065
+    },
+    {
+      "scene_id": "scene_0002_cam_0000",
+      "tag_id": 46,
+      "distance_m": 0.9675596483750329,
+      "angle_of_incidence_deg": 46.92109261833184,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.29138313322485265,
+        0.1840417136148683,
+        0.08841898899462103,
+        0.9345622504273761
+      ],
+      "gt_translation_xyz": [
+        -0.05836704052238189,
+        0.0953720533914374,
+        0.9610770690215422
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.2918495237827301,
+        0.18351009488105774,
+        0.08863846957683563,
+        0.9345004558563232
+      ],
+      "detected_translation_xyz": [
+        -0.05835969001054764,
+        0.09534573554992676,
+        0.9607856869697571
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.38173372892571045,
+        -0.28083746560326345,
+        0.07786934381803537,
+        0.8771237332368544
+      ],
+      "alternate_translation_xyz": [
+        -0.062281180216617306,
+        0.09274019714809319,
+        0.9752435090120044
+      ],
+      "rotation_error_chosen_deg": 0.08534311524846198,
+      "rotation_error_alternate_deg": 96.83538293110985,
+      "translation_error_chosen_mm": 0.2926604840229059,
+      "translation_error_alternate_mm": 14.931013992190401,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.4019252359867096,
+      "aggregate_d2_alternate": 7113.747892254277,
+      "branch_d2_ratio": 5243.90771484375,
+      "max_corner_d2": 0.21754691004753113,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 11775.156948715448,
+      "ppm_estimated": 1186.7308290906951
+    },
+    {
+      "scene_id": "scene_0003_cam_0000",
+      "tag_id": 109,
+      "distance_m": 1.0887322036484324,
+      "angle_of_incidence_deg": 56.28804888506576,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.4735952814087617,
+        0.17095765210167793,
+        -0.6740369135887715,
+        0.5405138836728787
+      ],
+      "gt_translation_xyz": [
+        -0.04652543777190042,
+        -0.06450525728137682,
+        1.0858234033584597
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.4739623963832855,
+        0.1714300811290741,
+        -0.6737544536590576,
+        0.5403945446014404
+      ],
+      "detected_translation_xyz": [
+        -0.046427737921476364,
+        -0.06440186500549316,
+        1.0839288234710693
+      ],
+      "alternate_quaternion_xyzw": [
+        0.1820172032890439,
+        0.24221334223450358,
+        -0.791964301063762,
+        0.5300895965693091
+      ],
+      "alternate_translation_xyz": [
+        -0.0642038557456508,
+        -0.09918715474169149,
+        1.536655581527844
+      ],
+      "rotation_error_chosen_deg": 0.07810190199605525,
+      "rotation_error_alternate_deg": 37.13662411285152,
+      "translation_error_chosen_mm": 1.8999126751483795,
+      "translation_error_alternate_mm": 452.5096831521441,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.06847245246171951,
+      "aggregate_d2_alternate": 48619.238145299634,
+      "branch_d2_ratio": 68610.6484375,
+      "max_corner_d2": 0.028579337522387505,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.7412898443291327,
+      "latency_us": 7106.5600495785475,
+      "ppm_estimated": 946.5819340260977
+    },
+    {
+      "scene_id": "scene_0004_cam_0000",
+      "tag_id": 519,
+      "distance_m": 0.9322261000698492,
+      "angle_of_incidence_deg": 35.90002486364012,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.011101802790663879,
+        0.27262925257729076,
+        0.8890263241652387,
+        0.36767137105567727
+      ],
+      "gt_translation_xyz": [
+        -0.14393463668225476,
+        -0.005545342981368662,
+        0.9210307047674287
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.011201826855540276,
+        0.2728704512119293,
+        0.8889459371566772,
+        0.3676838278770447
+      ],
+      "detected_translation_xyz": [
+        -0.14399822056293488,
+        -0.005565395578742027,
+        0.9214072823524475
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.1195584704719025,
+        -0.2436195955336589,
+        0.9072620206711411,
+        0.321295643696197
+      ],
+      "alternate_translation_xyz": [
+        -0.1557044238259035,
+        0.002561565277764212,
+        1.001470545954707
+      ],
+      "rotation_error_chosen_deg": 0.022457925334657482,
+      "rotation_error_alternate_deg": 61.45199791364319,
+      "translation_error_chosen_mm": 0.3824339081232146,
+      "translation_error_alternate_mm": 81.69955875745823,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.08741859346628189,
+      "aggregate_d2_alternate": 7729.980831672724,
+      "branch_d2_ratio": 5914.30029296875,
+      "max_corner_d2": 0.02658834494650364,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 7122.335024178028,
+      "ppm_estimated": 1349.882065266476
+    },
+    {
+      "scene_id": "scene_0005_cam_0000",
+      "tag_id": 34,
+      "distance_m": 3.039315019544385,
+      "angle_of_incidence_deg": 49.58680432395365,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.014717221309989065,
+        -0.4073456249992019,
+        0.6950159837727308,
+        0.5922885480935811
+      ],
+      "gt_translation_xyz": [
+        0.38371862887135577,
+        -0.2416235992917672,
+        3.0052976542869456
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.009301740676164627,
+        -0.40596437454223633,
+        0.6964246034622192,
+        0.591691792011261
+      ],
+      "detected_translation_xyz": [
+        0.380363404750824,
+        -0.23925237357616425,
+        2.9792065620422363
+      ],
+      "alternate_quaternion_xyzw": [
+        0.12821931868854056,
+        0.41353452676495467,
+        0.7254377666624219,
+        0.5350598547715666
+      ],
+      "alternate_translation_xyz": [
+        0.37971754897409604,
+        -0.23997951799888073,
+        2.9850664280796213
+      ],
+      "rotation_error_chosen_deg": 0.6640114715686148,
+      "rotation_error_alternate_deg": 98.23101388180952,
+      "translation_error_chosen_mm": 26.412598032288763,
+      "translation_error_alternate_mm": 20.688503026893976,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.13707593083381653,
+      "aggregate_d2_alternate": 41.97643840999591,
+      "branch_d2_ratio": 228.11257934570312,
+      "max_corner_d2": 0.04957754909992218,
+      "lm_iterations": 2,
+      "lm_convergence": 1,
+      "image_noise_sigma": 2.7180627625401534,
+      "latency_us": 6779.405986890197,
+      "ppm_estimated": 373.08701906033895
+    },
+    {
+      "scene_id": "scene_0006_cam_0000",
+      "tag_id": 467,
+      "distance_m": 0.5584388616131063,
+      "angle_of_incidence_deg": 43.46894585161589,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.34276401463623707,
+        -0.1714204824554047,
+        -0.23990911299971013,
+        0.891948128831005
+      ],
+      "gt_translation_xyz": [
+        -0.036531494555885516,
+        0.00954934560482909,
+        0.5571608587719509
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.3426760733127594,
+        -0.17140153050422668,
+        -0.23988066613674164,
+        0.8919932246208191
+      ],
+      "detected_translation_xyz": [
+        -0.03654405102133751,
+        0.009538969956338406,
+        0.5572152137756348
+      ],
+      "alternate_quaternion_xyzw": [
+        0.21848551285781764,
+        0.03589367714174044,
+        -0.21658262342638604,
+        0.9508247429690949
+      ],
+      "alternate_translation_xyz": [
+        -0.038507377587305956,
+        0.01574234848046599,
+        0.5759575418792254
+      ],
+      "rotation_error_chosen_deg": 0.009311223456027234,
+      "rotation_error_alternate_deg": 70.02944900507242,
+      "translation_error_chosen_mm": 0.056743152289287835,
+      "translation_error_alternate_mm": 19.889009382239298,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.015441895462572575,
+      "aggregate_d2_alternate": 35546.593023253685,
+      "branch_d2_ratio": 2628867.5,
+      "max_corner_d2": 0.010252685286104679,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 8.895478131949593,
+      "latency_us": 9426.958160474896,
+      "ppm_estimated": 2120.703286012855
+    },
+    {
+      "scene_id": "scene_0007_cam_0000",
+      "tag_id": 47,
+      "distance_m": 1.4927763218567254,
+      "angle_of_incidence_deg": 58.555625897468296,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.06716688304923807,
+        0.46998354492330163,
+        -0.37266890685703924,
+        0.7973217456509368
+      ],
+      "gt_translation_xyz": [
+        0.06386649307141366,
+        0.17369878201087463,
+        1.4812598977094258
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.06785579025745392,
+        0.4704175591468811,
+        -0.3720433712005615,
+        0.7972996234893799
+      ],
+      "detected_translation_xyz": [
+        0.0639052614569664,
+        0.1737775355577469,
+        1.4820984601974487
+      ],
+      "alternate_quaternion_xyzw": [
+        0.06785578824225637,
+        0.47041754432913635,
+        -0.37204337347549726,
+        0.7972996013057695
+      ],
+      "alternate_translation_xyz": [
+        0.06390526126293385,
+        0.17377753464212842,
+        1.4820984682800666
+      ],
+      "rotation_error_chosen_deg": 0.11664952596487975,
+      "rotation_error_alternate_deg": 0.11762647362775341,
+      "translation_error_chosen_mm": 0.8431442078212683,
+      "translation_error_alternate_mm": 0.8431521520746197,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.09705033153295517,
+      "aggregate_d2_alternate": 0.16591070482763148,
+      "branch_d2_ratio": 39898.5234375,
+      "max_corner_d2": 0.04480776563286781,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 6660.006009042263,
+      "ppm_estimated": 671.3734460414952
+    },
+    {
+      "scene_id": "scene_0008_cam_0000",
+      "tag_id": 563,
+      "distance_m": 1.3831994076443972,
+      "angle_of_incidence_deg": 28.165384170561847,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.24164272830291916,
+        0.009199679466290767,
+        -0.6590978947865116,
+        0.7121194570092354
+      ],
+      "gt_translation_xyz": [
+        0.005015750313713348,
+        -0.010950525299251154,
+        1.3831469909603995
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.2489098459482193,
+        0.007907078601419926,
+        -0.6573881506919861,
+        0.7112118005752563
+      ],
+      "detected_translation_xyz": [
+        0.004750464577227831,
+        -0.010955816134810448,
+        1.3720003366470337
+      ],
+      "alternate_quaternion_xyzw": [
+        0.1787195347467233,
+        -0.01070187787252561,
+        -0.6688146146550247,
+        0.7215482027791125
+      ],
+      "alternate_translation_xyz": [
+        0.0050657676404971454,
+        -0.01118417124995409,
+        1.3726610489669664
+      ],
+      "rotation_error_chosen_deg": 0.8742870685347056,
+      "rotation_error_alternate_deg": 48.612581397504684,
+      "translation_error_chosen_mm": 11.149811966871919,
+      "translation_error_alternate_mm": 10.48866395938503,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 62.08806228637695,
+      "aggregate_d2_alternate": 917.3268990131273,
+      "branch_d2_ratio": 62.781883239746094,
+      "max_corner_d2": 60.431583404541016,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 6503.23904119432,
+      "ppm_estimated": 928.9840531678656
+    },
+    {
+      "scene_id": "scene_0009_cam_0000",
+      "tag_id": 570,
+      "distance_m": 2.109083625712315,
+      "angle_of_incidence_deg": 14.504056295293605,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.15921021480084954,
+        0.016545454973057573,
+        0.9833828983638518,
+        0.08565296614218347
+      ],
+      "gt_translation_xyz": [
+        0.29021489450905075,
+        0.3843108031979989,
+        2.053366600537027
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.16326947510242462,
+        0.0167485773563385,
+        0.9829040169715881,
+        0.0834403857588768
+      ],
+      "detected_translation_xyz": [
+        0.28903570771217346,
+        0.38279497623443604,
+        2.0452327728271484
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.014303985234629451,
+        0.16567892008704366,
+        0.9843322135275968,
+        0.058617274391258585
+      ],
+      "alternate_translation_xyz": [
+        0.2913000952392817,
+        0.38347464649495216,
+        2.0546416406342645
+      ],
+      "rotation_error_chosen_deg": 0.5326122994274676,
+      "rotation_error_alternate_deg": 26.459551427762403,
+      "translation_error_chosen_mm": 8.357473667286,
+      "translation_error_alternate_mm": 1.871508991831871,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.010091528296470642,
+      "aggregate_d2_alternate": 27.58833995645287,
+      "branch_d2_ratio": 8562.728515625,
+      "max_corner_d2": 0.0038049218710511923,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 4.200642451198419,
+      "latency_us": 23739.560041576624,
+      "ppm_estimated": 668.087569028517
+    },
+    {
+      "scene_id": "scene_0010_cam_0000",
+      "tag_id": 200,
+      "distance_m": 0.7795681432523247,
+      "angle_of_incidence_deg": 56.63205039126474,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.39070103391694033,
+        0.17530508305495204,
+        0.42063996204692233,
+        0.7998017580886457
+      ],
+      "gt_translation_xyz": [
+        0.10485594062531432,
+        0.21843625287881596,
+        0.7409570252866748
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.3906264305114746,
+        0.1757621318101883,
+        0.4208036959171295,
+        0.7996517419815063
+      ],
+      "detected_translation_xyz": [
+        0.10487551242113113,
+        0.2184584140777588,
+        0.7409831285476685
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.5792307811215446,
+        0.12997628680591955,
+        0.5040199973239061,
+        0.6273449683922558
+      ],
+      "alternate_translation_xyz": [
+        0.11411396561188489,
+        0.22790464454290826,
+        0.761587536486393
+      ],
+      "rotation_error_chosen_deg": 0.05908934577424771,
+      "rotation_error_alternate_deg": 118.64009884473988,
+      "translation_error_chosen_mm": 0.03944051425348439,
+      "translation_error_alternate_mm": 24.514882412899993,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.23046275973320007,
+      "aggregate_d2_alternate": 24091.508587342167,
+      "branch_d2_ratio": 7955.7353515625,
+      "max_corner_d2": 0.12321734428405762,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 6856.463151052594,
+      "ppm_estimated": 1417.6581665273056
+    },
+    {
+      "scene_id": "scene_0011_cam_0000",
+      "tag_id": 497,
+      "distance_m": 0.950082292958321,
+      "angle_of_incidence_deg": 59.16327072328326,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.09239550726894458,
+        -0.4952310330473676,
+        0.13454108268419732,
+        0.8532924411131438
+      ],
+      "gt_translation_xyz": [
+        -0.023734714043689993,
+        0.00053473362567652,
+        0.9497856120329585
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.09244542568922043,
+        -0.4953169524669647,
+        0.13430042564868927,
+        0.8532750606536865
+      ],
+      "detected_translation_xyz": [
+        -0.023738158866763115,
+        0.0005655233981087804,
+        0.9491640329360962
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.010401162478593153,
+        -0.5269685919139965,
+        0.16250969869480034,
+        0.8341381880632244
+      ],
+      "alternate_translation_xyz": [
+        -0.11793392860046534,
+        -0.06778570996367675,
+        3.6477679210273406
+      ],
+      "rotation_error_chosen_deg": 0.03150426761042338,
+      "rotation_error_alternate_deg": 12.932646615806572,
+      "translation_error_chosen_mm": 0.6223507455998034,
+      "translation_error_alternate_mm": 2700.4906433242863,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.06035744026303291,
+      "aggregate_d2_alternate": 269780.26678384584,
+      "branch_d2_ratio": 188532.96875,
+      "max_corner_d2": 0.02177770994603634,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 2.4709661477637757,
+      "latency_us": 10483.504040166736,
+      "ppm_estimated": 1039.6791604440637
+    },
+    {
+      "scene_id": "scene_0012_cam_0000",
+      "tag_id": 428,
+      "distance_m": 0.7887149436341754,
+      "angle_of_incidence_deg": 42.15204053719677,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.3063100326573008,
+        -0.27068311412403434,
+        0.6502859508085258,
+        0.6403381872135488
+      ],
+      "gt_translation_xyz": [
+        -0.08777834113673696,
+        0.13728609312394852,
+        0.7716986086386369
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.30527782440185547,
+        -0.26992788910865784,
+        0.6505699753761292,
+        0.6408612132072449
+      ],
+      "detected_translation_xyz": [
+        -0.08773293346166611,
+        0.137175515294075,
+        0.7713153958320618
+      ],
+      "alternate_quaternion_xyzw": [
+        0.0598348083625087,
+        0.22881688118477017,
+        0.662795073279709,
+        0.7104683817238048
+      ],
+      "alternate_translation_xyz": [
+        -0.1073453324940883,
+        0.14756416961159782,
+        0.862544923874784
+      ],
+      "rotation_error_chosen_deg": 0.1616758805721171,
+      "rotation_error_alternate_deg": 72.64775556962691,
+      "translation_error_chosen_mm": 0.40142417532840047,
+      "translation_error_alternate_mm": 93.4963047347329,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.14824429154396057,
+      "aggregate_d2_alternate": 18106.981405568986,
+      "branch_d2_ratio": 11320.4169921875,
+      "max_corner_d2": 0.07071544229984283,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.9883864591055104,
+      "latency_us": 5525.599932298064,
+      "ppm_estimated": 1558.358646763406
+    },
+    {
+      "scene_id": "scene_0013_cam_0000",
+      "tag_id": 389,
+      "distance_m": 2.1697028738758877,
+      "angle_of_incidence_deg": 58.29183061797577,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.17001745769342252,
+        -0.4820977532304795,
+        0.8119136327596119,
+        -0.28190791353863287
+      ],
+      "gt_translation_xyz": [
+        -0.05112833761982038,
+        -0.19997443713894136,
+        2.159862703557606
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.17191925644874573,
+        -0.48223066329956055,
+        0.8114528656005859,
+        -0.2818537950515747
+      ],
+      "detected_translation_xyz": [
+        -0.051187627017498016,
+        -0.20022709667682648,
+        2.16198468208313
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.20199349457671636,
+        0.4220804980134862,
+        0.844321330760006,
+        -0.261090351734847
+      ],
+      "alternate_translation_xyz": [
+        -0.051460959643324096,
+        -0.20003230114106574,
+        2.1134186765186103
+      ],
+      "rotation_error_chosen_deg": 0.22600070126742786,
+      "rotation_error_alternate_deg": 117.16195921402952,
+      "translation_error_chosen_mm": 2.137789731836653,
+      "translation_error_alternate_mm": 46.44525415208985,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.13543567061424255,
+      "aggregate_d2_alternate": 506.3101732492132,
+      "branch_d2_ratio": 68.46263885498047,
+      "max_corner_d2": 0.0546119250357151,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 15637.675067409873,
+      "ppm_estimated": 460.4691580890784
+    },
+    {
+      "scene_id": "scene_0014_cam_0000",
+      "tag_id": 66,
+      "distance_m": 0.8063183228620561,
+      "angle_of_incidence_deg": 49.66316470114532,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.47613506045330756,
+        -0.18075733904942723,
+        0.8310402348599467,
+        -0.2235940937476926
+      ],
+      "gt_translation_xyz": [
+        0.18309190617840543,
+        0.12453203832032439,
+        0.7753182552438702
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.4758957326412201,
+        -0.1810561567544937,
+        0.8310783505439758,
+        -0.22372020781040192
+      ],
+      "detected_translation_xyz": [
+        0.18323038518428802,
+        0.1246190145611763,
+        0.7759311199188232
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.142086507039005,
+        0.2366314391091448,
+        0.899986668949747,
+        -0.33740329318980883
+      ],
+      "alternate_translation_xyz": [
+        0.18204917721480227,
+        0.12144879916568438,
+        0.7727019596865682
+      ],
+      "rotation_error_chosen_deg": 0.040893892584422296,
+      "rotation_error_alternate_deg": 89.05053480825097,
+      "translation_error_chosen_mm": 0.6343062441346792,
+      "translation_error_alternate_mm": 4.175960945626827,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.006329647731035948,
+      "aggregate_d2_alternate": 15014.714506438442,
+      "branch_d2_ratio": 4980149.0,
+      "max_corner_d2": 0.004194360226392746,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 9258.503094315529,
+      "ppm_estimated": 1461.8140530672526
+    },
+    {
+      "scene_id": "scene_0015_cam_0000",
+      "tag_id": 59,
+      "distance_m": 1.3591135495240485,
+      "angle_of_incidence_deg": 32.33099066890423,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.35811242483847816,
+        -0.05156315493171673,
+        -0.7293564265316342,
+        0.5806340627055574
+      ],
+      "gt_translation_xyz": [
+        -0.1003851010183464,
+        -0.3807660277330496,
+        1.3008189778545782
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.3588121831417084,
+        -0.04972752928733826,
+        -0.7286865711212158,
+        0.5812029838562012
+      ],
+      "detected_translation_xyz": [
+        -0.10027667135000229,
+        -0.380462646484375,
+        1.2998335361480713
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.10499178265369472,
+        0.21267118649693698,
+        -0.7115421918651615,
+        0.6614041133867447
+      ],
+      "alternate_translation_xyz": [
+        -0.10346608164335343,
+        -0.37956800631217436,
+        1.3002414921743517
+      ],
+      "rotation_error_chosen_deg": 0.246316527470023,
+      "rotation_error_alternate_deg": 62.60486483125594,
+      "translation_error_chosen_mm": 1.0367702406743098,
+      "translation_error_alternate_mm": 3.3557691588384437,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.11656574159860611,
+      "aggregate_d2_alternate": 793.6618718786293,
+      "branch_d2_ratio": 10203.48046875,
+      "max_corner_d2": 0.035761743783950806,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 5913.197062909603,
+      "ppm_estimated": 992.9407321199834
+    },
+    {
+      "scene_id": "scene_0016_cam_0000",
+      "tag_id": 489,
+      "distance_m": 1.4589788872709657,
+      "angle_of_incidence_deg": 28.48270019787489,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.18827607635253596,
+        -0.26035114912135054,
+        0.8107017720387124,
+        0.48942010125958285
+      ],
+      "gt_translation_xyz": [
+        -0.019701639955393882,
+        -0.2315197383787087,
+        1.4403575248206064
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.1887490600347519,
+        -0.2596990466117859,
+        0.8107661604881287,
+        0.4894776940345764
+      ],
+      "detected_translation_xyz": [
+        -0.01977418176829815,
+        -0.23184579610824585,
+        1.442460298538208
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.07224152202022782,
+        0.08015182682992235,
+        0.8409957656141519,
+        0.5301725845147911
+      ],
+      "alternate_translation_xyz": [
+        -0.02249033733403885,
+        -0.24652299782979892,
+        1.4996675874189644
+      ],
+      "rotation_error_chosen_deg": 0.0937562645330382,
+      "rotation_error_alternate_deg": 49.865037117187725,
+      "translation_error_chosen_mm": 2.1291390901128024,
+      "translation_error_alternate_mm": 61.241800697297734,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.06462043523788452,
+      "aggregate_d2_alternate": 1007.1848042690038,
+      "branch_d2_ratio": 21934.33984375,
+      "max_corner_d2": 0.02214546874165535,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 3.4593526068692864,
+      "latency_us": 11307.890992611647,
+      "ppm_estimated": 898.038706741526
+    },
+    {
+      "scene_id": "scene_0017_cam_0000",
+      "tag_id": 428,
+      "distance_m": 0.7642635054004491,
+      "angle_of_incidence_deg": 37.26719865872718,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.22740548744999584,
+        -0.11639788273543014,
+        0.7588547412171553,
+        0.5990640696565306
+      ],
+      "gt_translation_xyz": [
+        -0.1902013880981594,
+        -0.008407278427115923,
+        0.7401698800700486
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.22727863490581512,
+        -0.11678582429885864,
+        0.7589523196220398,
+        0.5989130735397339
+      ],
+      "detected_translation_xyz": [
+        -0.19021925330162048,
+        -0.008393519558012486,
+        0.7402393221855164
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.3558671290310794,
+        -0.04806539039791148,
+        0.6953407494846552,
+        0.6225347755966661
+      ],
+      "alternate_translation_xyz": [
+        -0.19228870845005405,
+        -0.011616067683044788,
+        0.7421858899640904
+      ],
+      "rotation_error_chosen_deg": 0.051073708853522345,
+      "rotation_error_alternate_deg": 68.76836978439934,
+      "translation_error_chosen_mm": 0.07301150165796935,
+      "translation_error_alternate_mm": 4.326376154852081,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.08835148811340332,
+      "aggregate_d2_alternate": 11872.52851599599,
+      "branch_d2_ratio": 14180.5576171875,
+      "max_corner_d2": 0.039016611874103546,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 5.1890289103039295,
+      "latency_us": 8834.822801873088,
+      "ppm_estimated": 1683.8788236860896
+    },
+    {
+      "scene_id": "scene_0018_cam_0000",
+      "tag_id": 306,
+      "distance_m": 0.8872727167982801,
+      "angle_of_incidence_deg": 13.816902153587863,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.19927638284949006,
+        0.10128620758785377,
+        0.3456832199902688,
+        0.9113359088501952
+      ],
+      "gt_translation_xyz": [
+        -0.07239762749458933,
+        0.21398712364086833,
+        0.858033196324062
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.19800257682800293,
+        0.10419748723506927,
+        0.34549152851104736,
+        0.9113580584526062
+      ],
+      "detected_translation_xyz": [
+        -0.07245340943336487,
+        0.21397195756435394,
+        0.8577385544776917
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.19800256714680092,
+        0.10419749095242438,
+        0.3454915284720259,
+        0.9113580361397815
+      ],
+      "alternate_translation_xyz": [
+        -0.07245340627333625,
+        0.21397195576242112,
+        0.8577385388764216
+      ],
+      "rotation_error_chosen_deg": 0.3646815631013187,
+      "rotation_error_alternate_deg": 0.364815852407833,
+      "translation_error_chosen_mm": 0.30025897522465117,
+      "translation_error_alternate_mm": 0.3002737886414256,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.18825764954090118,
+      "aggregate_d2_alternate": 0.341309077536052,
+      "branch_d2_ratio": 71032.7421875,
+      "max_corner_d2": 0.09145218133926392,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 4599.521867930889,
+      "ppm_estimated": 1603.739940981155
+    },
+    {
+      "scene_id": "scene_0019_cam_0000",
+      "tag_id": 319,
+      "distance_m": 1.4452612332910533,
+      "angle_of_incidence_deg": 59.19315549935735,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.43613237872691335,
+        0.3431967146145871,
+        0.02406117603214912,
+        0.8315200665710173
+      ],
+      "gt_translation_xyz": [
+        0.3140114910105049,
+        0.03502700551594495,
+        1.4103013366564645
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.4357709288597107,
+        0.3437626361846924,
+        0.024508025497198105,
+        0.8314627408981323
+      ],
+      "detected_translation_xyz": [
+        0.3138373792171478,
+        0.03506292402744293,
+        1.4095739126205444
+      ],
+      "alternate_quaternion_xyzw": [
+        0.40348863561181403,
+        -0.17285509946640534,
+        -0.05783273924939665,
+        0.8966456433795279
+      ],
+      "alternate_translation_xyz": [
+        0.31797796642430404,
+        0.03841854832763012,
+        1.433238963126225
+      ],
+      "rotation_error_chosen_deg": 0.09302621429494853,
+      "rotation_error_alternate_deg": 118.82021537304232,
+      "translation_error_chosen_mm": 0.7488329480521686,
+      "translation_error_alternate_mm": 23.523821924126693,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.2873902916908264,
+      "aggregate_d2_alternate": 938.549660662833,
+      "branch_d2_ratio": 4268.0146484375,
+      "max_corner_d2": 0.14025911688804626,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 2.2238695329873983,
+      "latency_us": 6660.716840997338,
+      "ppm_estimated": 706.6091375487055
+    },
+    {
+      "scene_id": "scene_0020_cam_0000",
+      "tag_id": 579,
+      "distance_m": 0.7385297368017029,
+      "angle_of_incidence_deg": 11.194034763045082,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.0735456741546852,
+        -0.16234921002267402,
+        0.8566102912203126,
+        0.48420303245081536
+      ],
+      "gt_translation_xyz": [
+        -0.2286638700297332,
+        -0.010471881117504023,
+        0.7021604889228702
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.073343425989151,
+        -0.16268984973430634,
+        0.856611967086792,
+        0.48411640524864197
+      ],
+      "detected_translation_xyz": [
+        -0.22878238558769226,
+        -0.010467984713613987,
+        0.7025130391120911
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.07334342322490504,
+        -0.16268985023326302,
+        0.8566119714186278,
+        0.4841163964616599
+      ],
+      "alternate_translation_xyz": [
+        -0.22878238315191463,
+        -0.010467985119554017,
+        0.702513027955546
+      ],
+      "rotation_error_chosen_deg": 0.04634243729085436,
+      "rotation_error_alternate_deg": 0.0464868411804987,
+      "translation_error_chosen_mm": 0.37195800214713765,
+      "translation_error_alternate_mm": 0.3719466473692648,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.001890990766696632,
+      "aggregate_d2_alternate": 0.0031854449772802775,
+      "branch_d2_ratio": 5353173.0,
+      "max_corner_d2": 0.0009917181450873613,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 6350.689101964235,
+      "ppm_estimated": 1985.3922431263013
+    },
+    {
+      "scene_id": "scene_0021_cam_0000",
+      "tag_id": 372,
+      "distance_m": 2.6614691661252516,
+      "angle_of_incidence_deg": 56.910585942588426,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.5720009326757654,
+        -0.1540032823553339,
+        0.6752286604449875,
+        -0.4395044632891921
+      ],
+      "gt_translation_xyz": [
+        -1.021768799253378,
+        -0.09823672171491389,
+        2.4555562074665933
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.5723649263381958,
+        -0.15324614942073822,
+        0.6741380095481873,
+        -0.4409670829772949
+      ],
+      "detected_translation_xyz": [
+        -1.0252559185028076,
+        -0.09857554733753204,
+        2.4636635780334473
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.5723633880655312,
+        -0.15324673934408628,
+        0.6741389848193953,
+        -0.4409673661726304
+      ],
+      "alternate_translation_xyz": [
+        -1.0252574117528923,
+        -0.09857564046615512,
+        2.463667124305593
+      ],
+      "rotation_error_chosen_deg": 0.22992798407853196,
+      "rotation_error_alternate_deg": 0.23018820614300106,
+      "translation_error_chosen_mm": 8.832002092989756,
+      "translation_error_alternate_mm": 8.83585055673076,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.15144795179367065,
+      "aggregate_d2_alternate": 0.26089594197810834,
+      "branch_d2_ratio": 2327.70068359375,
+      "max_corner_d2": 0.054178040474653244,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.9883864591055104,
+      "latency_us": 8901.93390659988,
+      "ppm_estimated": 428.3132643955896
+    },
+    {
+      "scene_id": "scene_0022_cam_0000",
+      "tag_id": 190,
+      "distance_m": 1.1195792845653085,
+      "angle_of_incidence_deg": 50.80202421932548,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.45185039720060377,
+        0.14752125280071499,
+        -0.1822504385917174,
+        0.8607284556483036
+      ],
+      "gt_translation_xyz": [
+        -0.27782365173211426,
+        -0.17519139602222805,
+        1.0703176330836084
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.4515101909637451,
+        0.14782869815826416,
+        -0.18227048218250275,
+        0.8608499765396118
+      ],
+      "detected_translation_xyz": [
+        -0.278239905834198,
+        -0.1754087507724762,
+        1.0717413425445557
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.19865300082195217,
+        -0.31232100782750527,
+        -0.31333928915255876,
+        0.8745347695817556
+      ],
+      "alternate_translation_xyz": [
+        -0.2767452803467836,
+        -0.17592924991561937,
+        1.0725733753125686
+      ],
+      "rotation_error_chosen_deg": 0.054858169227800804,
+      "rotation_error_alternate_deg": 95.24571092342374,
+      "translation_error_chosen_mm": 1.4991528254810287,
+      "translation_error_alternate_mm": 2.6068537005760435,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.01446946058422327,
+      "aggregate_d2_alternate": 3209.2655945920583,
+      "branch_d2_ratio": 526213.6875,
+      "max_corner_d2": 0.00942529272288084,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 1.4825796886582654,
+      "latency_us": 14499.865006655455,
+      "ppm_estimated": 1044.316483580873
+    },
+    {
+      "scene_id": "scene_0023_cam_0000",
+      "tag_id": 283,
+      "distance_m": 3.743723747228579,
+      "angle_of_incidence_deg": 51.7529402246813,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.3577574184456751,
+        0.09764200714427242,
+        0.92516148662537,
+        -0.08094375556880533
+      ],
+      "gt_translation_xyz": [
+        -0.5628918553773539,
+        -0.007856159549421926,
+        3.7011564559211734
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.35779643058776855,
+        0.09952105581760406,
+        0.9251065850257874,
+        -0.07908905297517776
+      ],
+      "detected_translation_xyz": [
+        -0.5617458820343018,
+        -0.007903489284217358,
+        3.6932966709136963
+      ],
+      "alternate_quaternion_xyzw": [
+        0.3577964115709303,
+        0.09952103623364297,
+        0.925106595294921,
+        -0.07908905458902991
+      ],
+      "alternate_translation_xyz": [
+        -0.5617459207665271,
+        -0.00790348909537295,
+        3.6932967214010928
+      ],
+      "rotation_error_chosen_deg": 0.3026846676692075,
+      "rotation_error_alternate_deg": 0.3026451923197536,
+      "translation_error_chosen_mm": 7.943029357275684,
+      "translation_error_alternate_mm": 7.942973809874817,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.07554732263088226,
+      "aggregate_d2_alternate": 0.12447767301938646,
+      "branch_d2_ratio": 483.5731201171875,
+      "max_corner_d2": 0.025332387536764145,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 5531.919887289405,
+      "ppm_estimated": 293.6806059066484
+    },
+    {
+      "scene_id": "scene_0024_cam_0000",
+      "tag_id": 211,
+      "distance_m": 1.0148693706125396,
+      "angle_of_incidence_deg": 15.02737925609309,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.16432892139532182,
+        -0.04902118125997924,
+        0.9588716688161462,
+        -0.22618145807124
+      ],
+      "gt_translation_xyz": [
+        -0.046354563726380416,
+        -0.10295059901317334,
+        1.0085694429901146
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.1627800613641739,
+        -0.04923044145107269,
+        0.9591003060340881,
+        -0.2262866199016571
+      ],
+      "detected_translation_xyz": [
+        -0.04647136107087135,
+        -0.10306988656520844,
+        1.0094772577285767
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.1627800563578798,
+        -0.04923044243130371,
+        0.9591002983361449,
+        -0.22628662028865423
+      ],
+      "alternate_translation_xyz": [
+        -0.04647136246011636,
+        -0.1030698891018358,
+        1.0094772405337364
+      ],
+      "rotation_error_chosen_deg": 0.18085627184985004,
+      "rotation_error_alternate_deg": 0.18141129007277984,
+      "translation_error_chosen_mm": 0.9230377777315113,
+      "translation_error_alternate_mm": 0.9230213700999532,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.13293145596981049,
+      "aggregate_d2_alternate": 0.2315455288369792,
+      "branch_d2_ratio": 3664.14306640625,
+      "max_corner_d2": 0.06713578850030899,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 10163.020109757781,
+      "ppm_estimated": 1340.325324728682
+    },
+    {
+      "scene_id": "scene_0025_cam_0000",
+      "tag_id": 284,
+      "distance_m": 2.914705291544857,
+      "angle_of_incidence_deg": 47.22217987690277,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.3126683723283273,
+        -0.4092629723271987,
+        -0.6798615652965905,
+        0.522044588695918
+      ],
+      "gt_translation_xyz": [
+        -0.7304629330301977,
+        0.14751159689900203,
+        2.8178308969926458
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.3134779930114746,
+        -0.4065599739551544,
+        -0.679537296295166,
+        0.5240893363952637
+      ],
+      "detected_translation_xyz": [
+        -0.7287545800209045,
+        0.14715246856212616,
+        2.8111355304718018
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.1578538301129949,
+        0.2353286752062107,
+        -0.7517763229140417,
+        0.5954283695375879
+      ],
+      "alternate_translation_xyz": [
+        -0.7216078093210283,
+        0.14554109197007684,
+        2.774949764609066
+      ],
+      "rotation_error_chosen_deg": 0.4007223198497066,
+      "rotation_error_alternate_deg": 94.89324450437329,
+      "translation_error_chosen_mm": 6.919203423454695,
+      "translation_error_alternate_mm": 43.830213552727436,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 1.1553840637207031,
+      "aggregate_d2_alternate": 63.236911267712195,
+      "branch_d2_ratio": 17.395668029785156,
+      "max_corner_d2": 0.3751436769962311,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 14929.575147107244,
+      "ppm_estimated": 410.24008277062126
+    },
+    {
+      "scene_id": "scene_0026_cam_0000",
+      "tag_id": 543,
+      "distance_m": 2.5334784985025984,
+      "angle_of_incidence_deg": 12.371688562197674,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.002059891415078188,
+        0.23617337532278712,
+        0.7545745058614478,
+        0.6122378703054963
+      ],
+      "gt_translation_xyz": [
+        0.7831691556534695,
+        0.3680975027551697,
+        2.3811055680306654
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.0019912556745111942,
+        0.23682746291160583,
+        0.7549257278442383,
+        0.6115520596504211
+      ],
+      "detected_translation_xyz": [
+        0.7821372151374817,
+        0.3676184117794037,
+        2.3781347274780273
+      ],
+      "alternate_quaternion_xyzw": [
+        0.12954043511795238,
+        0.09727484185714083,
+        0.7460640255889495,
+        0.6458679048637818
+      ],
+      "alternate_translation_xyz": [
+        0.7875740096143019,
+        0.3711393675005319,
+        2.3935259799578734
+      ],
+      "rotation_error_chosen_deg": 0.11645176318064678,
+      "rotation_error_alternate_deg": 22.000560127529315,
+      "translation_error_chosen_mm": 3.1812455077840904,
+      "translation_error_alternate_mm": 13.524877522065376,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.04827859252691269,
+      "aggregate_d2_alternate": 13.822497719161873,
+      "branch_d2_ratio": 9219.541015625,
+      "max_corner_d2": 0.018307918682694435,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 1.2354830738818878,
+      "latency_us": 7376.187946647406,
+      "ppm_estimated": 587.7869106608504
+    },
+    {
+      "scene_id": "scene_0027_cam_0000",
+      "tag_id": 537,
+      "distance_m": 0.6413541610194983,
+      "angle_of_incidence_deg": 44.93940266591736,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.290696924466667,
+        0.31639301681302207,
+        0.7804163086254131,
+        -0.45424789705975155
+      ],
+      "gt_translation_xyz": [
+        0.10163045279896316,
+        0.05140393848215227,
+        0.6311608730842423
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.29068997502326965,
+        0.3164098560810089,
+        0.7803941965103149,
+        -0.4542786180973053
+      ],
+      "detected_translation_xyz": [
+        0.10167701542377472,
+        0.05144935101270676,
+        0.6315501928329468
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.0840871838148925,
+        -0.34512124041071646,
+        0.8389228460226742,
+        -0.41234589043261366
+      ],
+      "alternate_translation_xyz": [
+        0.10848651934933261,
+        0.05636383901507301,
+        0.647222885992176
+      ],
+      "rotation_error_chosen_deg": 0.0,
+      "rotation_error_alternate_deg": 89.79372548492991,
+      "translation_error_chosen_mm": 0.39471539454653753,
+      "translation_error_alternate_mm": 18.15473823810722,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.060961637645959854,
+      "aggregate_d2_alternate": 21940.803553202884,
+      "branch_d2_ratio": 1960733.5,
+      "max_corner_d2": 0.040658511221408844,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 2.4709661477637757,
+      "latency_us": 8312.9049744457,
+      "ppm_estimated": 1859.124699084907
+    },
+    {
+      "scene_id": "scene_0028_cam_0000",
+      "tag_id": 306,
+      "distance_m": 0.7012890414006561,
+      "angle_of_incidence_deg": 38.53634987570498,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.28070047308303203,
+        -0.06088736170884534,
+        0.8540142913393638,
+        0.43377363773366395
+      ],
+      "gt_translation_xyz": [
+        -0.12353433254127191,
+        -0.08372334825200475,
+        0.6852269468704126
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.2807501256465912,
+        -0.061116889119148254,
+        0.8540077209472656,
+        0.43372219800949097
+      ],
+      "detected_translation_xyz": [
+        -0.12361812591552734,
+        -0.0837768018245697,
+        0.6856164336204529
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.40426655208432755,
+        -0.15494332604872196,
+        0.7703584783316504,
+        0.46809073419728514
+      ],
+      "alternate_translation_xyz": [
+        -0.12459124604314445,
+        -0.08746969643155296,
+        0.6884026946890129
+      ],
+      "rotation_error_chosen_deg": 0.01682767360855184,
+      "rotation_error_alternate_deg": 81.6168707242372,
+      "translation_error_chosen_mm": 0.40196833512850294,
+      "translation_error_alternate_mm": 5.023700333438413,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.0020562135614454746,
+      "aggregate_d2_alternate": 17883.067424651996,
+      "branch_d2_ratio": 1232167.125,
+      "max_corner_d2": 0.0007418028544634581,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 7380.784954875708,
+      "ppm_estimated": 1796.5501627948606
+    },
+    {
+      "scene_id": "scene_0029_cam_0000",
+      "tag_id": 2,
+      "distance_m": 0.8376470750085051,
+      "angle_of_incidence_deg": 10.585118000658818,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.01986085081786154,
+        -0.23893605536958365,
+        0.19077203795200232,
+        0.951903953688664
+      ],
+      "gt_translation_xyz": [
+        -0.30226908520804363,
+        -0.1719986823756728,
+        0.7620383753019351
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.019600944593548775,
+        -0.2388945370912552,
+        0.1908702254295349,
+        0.951900064945221
+      ],
+      "detected_translation_xyz": [
+        -0.30235445499420166,
+        -0.17204348742961884,
+        0.7622462511062622
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.01960094564011329,
+        -0.238894544935131,
+        0.19087022571986997,
+        0.95190007682734
+      ],
+      "alternate_translation_xyz": [
+        -0.3023544511006474,
+        -0.17204349033220573,
+        0.7622462647374921
+      ],
+      "rotation_error_chosen_deg": 0.03270802163040924,
+      "rotation_error_alternate_deg": 0.03220411800649812,
+      "translation_error_chosen_mm": 0.22914589953220743,
+      "translation_error_alternate_mm": 0.22915738261056315,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.0028796358965337276,
+      "aggregate_d2_alternate": 0.00526762798772332,
+      "branch_d2_ratio": 8255349.5,
+      "max_corner_d2": 0.0014767732936888933,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 2.4709661477637757,
+      "latency_us": 5390.567006543279,
+      "ppm_estimated": 1874.2373862488046
+    },
+    {
+      "scene_id": "scene_0030_cam_0000",
+      "tag_id": 274,
+      "distance_m": 0.8079067146338654,
+      "angle_of_incidence_deg": 13.646197834462953,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.03852559697529753,
+        0.11618804223437057,
+        0.9527084316552946,
+        -0.2781416207307917
+      ],
+      "gt_translation_xyz": [
+        -0.1771620196030418,
+        -0.018797997700570244,
+        0.788018794479292
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.03850607946515083,
+        0.11656223237514496,
+        0.9526726603507996,
+        -0.27811020612716675
+      ],
+      "detected_translation_xyz": [
+        -0.1771697849035263,
+        -0.01880115084350109,
+        0.7880100011825562
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.03850608001632356,
+        0.11656223583750924,
+        0.952672679451788,
+        -0.27811021700845184
+      ],
+      "alternate_translation_xyz": [
+        -0.17716978643522774,
+        -0.018801150541487295,
+        0.7880099837567057
+      ],
+      "rotation_error_chosen_deg": 0.049004386457519415,
+      "rotation_error_alternate_deg": 0.043323093352340414,
+      "translation_error_chosen_mm": 0.012147603444391579,
+      "translation_error_alternate_mm": 0.0121611233258115,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.04787092283368111,
+      "aggregate_d2_alternate": 0.08164593228814554,
+      "branch_d2_ratio": 27942.828125,
+      "max_corner_d2": 0.021230774000287056,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 5677.179899066687,
+      "ppm_estimated": 1737.576809505427
+    },
+    {
+      "scene_id": "scene_0031_cam_0000",
+      "tag_id": 160,
+      "distance_m": 1.718598013553558,
+      "angle_of_incidence_deg": 25.358587862126694,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.08651303579564511,
+        0.0815357674216945,
+        -0.16117577135509067,
+        0.9797396510842296
+      ],
+      "gt_translation_xyz": [
+        0.002135248906008247,
+        -0.4368302245723457,
+        1.6621534059103222
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.0863427221775055,
+        0.07982486486434937,
+        -0.16113334894180298,
+        0.9799025058746338
+      ],
+      "detected_translation_xyz": [
+        0.0021212503779679537,
+        -0.4365968704223633,
+        1.6612944602966309
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.0863427221816111,
+        0.07982486130445003,
+        -0.16113334483225905,
+        0.9799025313913435
+      ],
+      "alternate_translation_xyz": [
+        0.0021212503709888597,
+        -0.43659686384941937,
+        1.6612945135092438
+      ],
+      "rotation_error_chosen_deg": 0.19802965855705848,
+      "rotation_error_alternate_deg": 0.1979663552825402,
+      "translation_error_chosen_mm": 0.8901896906732704,
+      "translation_error_alternate_mm": 0.8901400691001402,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.41287916898727417,
+      "aggregate_d2_alternate": 0.6510873903868294,
+      "branch_d2_ratio": 45.562774658203125,
+      "max_corner_d2": 0.14929185807704926,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 6132.7689327299595,
+      "ppm_estimated": 798.0473715468578
+    },
+    {
+      "scene_id": "scene_0032_cam_0000",
+      "tag_id": 544,
+      "distance_m": 0.6995785429679071,
+      "angle_of_incidence_deg": 52.43261768366967,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.1963004283348854,
+        0.4125527045544042,
+        0.0024619276212991055,
+        0.8895281597746107
+      ],
+      "gt_translation_xyz": [
+        0.013658055350771817,
+        -0.026910124419684812,
+        0.6989273464789119
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.1964053511619568,
+        0.4125590920448303,
+        0.0024523045867681503,
+        0.8895020484924316
+      ],
+      "detected_translation_xyz": [
+        0.013671322725713253,
+        -0.02690868452191353,
+        0.6986894011497498
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.21442600571740697,
+        -0.35425234729732447,
+        -0.011832630075247137,
+        0.9101575420617667
+      ],
+      "alternate_translation_xyz": [
+        0.022201663900302017,
+        -0.03094469188015222,
+        0.7495134862438884
+      ],
+      "rotation_error_chosen_deg": 0.01497941883629836,
+      "rotation_error_alternate_deg": 103.17160552519967,
+      "translation_error_chosen_mm": 0.23831927369285566,
+      "translation_error_alternate_mm": 51.460941673879276,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.08882666379213333,
+      "aggregate_d2_alternate": 18376.205592973933,
+      "branch_d2_ratio": 739247.9375,
+      "max_corner_d2": 0.05447183549404144,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.7412898443291327,
+      "latency_us": 7228.394038975239,
+      "ppm_estimated": 1546.2774038947466
+    },
+    {
+      "scene_id": "scene_0033_cam_0000",
+      "tag_id": 81,
+      "distance_m": 1.8471496556848033,
+      "angle_of_incidence_deg": 28.93099546193078,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.08897718245149004,
+        -0.16743676147694442,
+        0.01983509570454806,
+        0.98165908585092
+      ],
+      "gt_translation_xyz": [
+        0.3035368349580518,
+        0.3868029616626855,
+        1.7805085344707112
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.09133583307266235,
+        -0.16609613597393036,
+        0.020130807533860207,
+        0.9816641807556152
+      ],
+      "detected_translation_xyz": [
+        0.303326278924942,
+        0.3866256773471832,
+        1.779348611831665
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.0819274976543916,
+        0.29745341890514265,
+        -0.021935791359434634,
+        0.9509617078343201
+      ],
+      "alternate_translation_xyz": [
+        0.30955744229805343,
+        0.39578983295626946,
+        1.833110510603597
+      ],
+      "rotation_error_chosen_deg": 0.3127516912132677,
+      "rotation_error_alternate_deg": 54.110043103742015,
+      "translation_error_chosen_mm": 1.19213426264574,
+      "translation_error_alternate_mm": 53.702695104385654,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.15454502403736115,
+      "aggregate_d2_alternate": 401.9851663517796,
+      "branch_d2_ratio": 755.19482421875,
+      "max_corner_d2": 0.05323946103453636,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 7200.411986559629,
+      "ppm_estimated": 735.0330918414418
+    },
+    {
+      "scene_id": "scene_0034_cam_0000",
+      "tag_id": 220,
+      "distance_m": 0.9109825499312748,
+      "angle_of_incidence_deg": 30.45056286984725,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.13876968405565557,
+        -0.23989972925080194,
+        -0.5969798349464638,
+        0.7528653072779066
+      ],
+      "gt_translation_xyz": [
+        0.1286521585184554,
+        0.10588087165077639,
+        0.8956154599244259
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.13980408012866974,
+        -0.23975040018558502,
+        -0.5968337655067444,
+        0.7528373003005981
+      ],
+      "detected_translation_xyz": [
+        0.12864360213279724,
+        0.10586530715227127,
+        0.8954290747642517
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.0587208341555464,
+        0.18613208776821596,
+        -0.629430205766195,
+        0.7521464788246018
+      ],
+      "alternate_translation_xyz": [
+        0.12838502330860618,
+        0.11318870249540501,
+        0.9275541653902126
+      ],
+      "rotation_error_chosen_deg": 0.12145829026005463,
+      "rotation_error_alternate_deg": 50.21378448291987,
+      "translation_error_chosen_mm": 0.18722952032843596,
+      "translation_error_alternate_mm": 32.76517449525212,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.005492755677551031,
+      "aggregate_d2_alternate": 3908.9003717038177,
+      "branch_d2_ratio": 117474.59375,
+      "max_corner_d2": 0.0027006075251847506,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 8058.779174461961,
+      "ppm_estimated": 1436.9762029138944
+    },
+    {
+      "scene_id": "scene_0035_cam_0000",
+      "tag_id": 123,
+      "distance_m": 0.6167134763459075,
+      "angle_of_incidence_deg": 56.80053536193724,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.2976063188718686,
+        -0.3445968653140534,
+        -0.0026497780618643667,
+        0.8903237955631771
+      ],
+      "gt_translation_xyz": [
+        0.08510787158890352,
+        0.06433883377642938,
+        0.6074148154883994
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.29753437638282776,
+        -0.3447203040122986,
+        -0.0028100963681936264,
+        0.8902995586395264
+      ],
+      "detected_translation_xyz": [
+        0.08513981848955154,
+        0.06440190970897675,
+        0.6075708270072937
+      ],
+      "alternate_quaternion_xyzw": [
+        0.29718638556290217,
+        0.4683898877620653,
+        -0.05853408457234438,
+        0.8299788709488789
+      ],
+      "alternate_translation_xyz": [
+        0.0823405739353316,
+        0.0610221382015309,
+        0.6212186311468221
+      ],
+      "rotation_error_chosen_deg": 0.02494092865195588,
+      "rotation_error_alternate_deg": 121.4167722540555,
+      "translation_error_chosen_mm": 0.17128564375174532,
+      "translation_error_alternate_mm": 14.463876816805776,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.07026070356369019,
+      "aggregate_d2_alternate": 45386.07360198862,
+      "branch_d2_ratio": 1182062.625,
+      "max_corner_d2": 0.04874197766184807,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.7412898443291327,
+      "latency_us": 6925.988011062145,
+      "ppm_estimated": 1701.9433341056506
+    },
+    {
+      "scene_id": "scene_0036_cam_0000",
+      "tag_id": 141,
+      "distance_m": 3.4493406133899818,
+      "angle_of_incidence_deg": 56.507111736964276,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.14245143100020446,
+        -0.4755464752866765,
+        0.6596684244762582,
+        0.5642701034390794
+      ],
+      "gt_translation_xyz": [
+        -1.0463107331677997,
+        0.9614211103342245,
+        3.143064337958306
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.1424855887889862,
+        -0.47583726048469543,
+        0.6594297885894775,
+        0.56429523229599
+      ],
+      "detected_translation_xyz": [
+        -1.0455513000488281,
+        0.9606714844703674,
+        3.141280174255371
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.22682574846907733,
+        0.44062127680806784,
+        0.5123852658737181,
+        0.7013303854610823
+      ],
+      "alternate_translation_xyz": [
+        -1.050086457588047,
+        0.9629693511802689,
+        3.1524493201799113
+      ],
+      "rotation_error_chosen_deg": 0.03937886278328142,
+      "rotation_error_alternate_deg": 112.36907010765809,
+      "translation_error_chosen_mm": 2.0789222488647807,
+      "translation_error_alternate_mm": 10.233818247108907,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.2895497679710388,
+      "aggregate_d2_alternate": 22.923521578897454,
+      "branch_d2_ratio": 414.5790100097656,
+      "max_corner_d2": 0.1261451542377472,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 2.2238695329873983,
+      "latency_us": 10587.431024760008,
+      "ppm_estimated": 339.68678553181746
+    },
+    {
+      "scene_id": "scene_0037_cam_0000",
+      "tag_id": 509,
+      "distance_m": 0.5874663611695132,
+      "angle_of_incidence_deg": 31.59078491996498,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.2750249565999182,
+        -0.09374778879288115,
+        0.06365854551303653,
+        0.954735678125466
+      ],
+      "gt_translation_xyz": [
+        0.09502832951487333,
+        -0.06586275075182377,
+        0.5759760911501444
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.27479231357574463,
+        -0.09407727420330048,
+        0.06363949179649353,
+        0.9547715187072754
+      ],
+      "detected_translation_xyz": [
+        0.09501323848962784,
+        -0.06584940105676651,
+        0.5759353637695312
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.008898611092313437,
+        0.13720661468850023,
+        0.1025518410583369,
+        0.9851793133749281
+      ],
+      "alternate_translation_xyz": [
+        0.0949051402837459,
+        -0.06656713207380273,
+        0.5791520142151324
+      ],
+      "rotation_error_chosen_deg": 0.046613506078113,
+      "rotation_error_alternate_deg": 42.5644156125219,
+      "translation_error_chosen_mm": 0.04543867221527771,
+      "translation_error_alternate_mm": 3.2554286888429336,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.005409240256994963,
+      "aggregate_d2_alternate": 22457.514028648984,
+      "branch_d2_ratio": 3696513.0,
+      "max_corner_d2": 0.0026087334845215082,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 6249.865982681513,
+      "ppm_estimated": 2232.1538117883483
+    },
+    {
+      "scene_id": "scene_0038_cam_0000",
+      "tag_id": 438,
+      "distance_m": 0.6122640267913028,
+      "angle_of_incidence_deg": 45.84575004683426,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.19455215922447006,
+        0.27332217336438075,
+        -0.27558535483110297,
+        0.9008313718217462
+      ],
+      "gt_translation_xyz": [
+        -0.0639346708534056,
+        -0.03182137614907892,
+        0.6080847036242282
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.19457952678203583,
+        0.2731396555900574,
+        -0.2755112946033478,
+        0.9009034633636475
+      ],
+      "detected_translation_xyz": [
+        -0.0639507845044136,
+        -0.03183479979634285,
+        0.6082398295402527
+      ],
+      "alternate_quaternion_xyzw": [
+        0.2545007030401985,
+        -0.3596732540045225,
+        -0.2629419399937689,
+        0.8583274891893864
+      ],
+      "alternate_translation_xyz": [
+        -0.06469026478954061,
+        -0.028256879731213297,
+        0.6104476112012943
+      ],
+      "rotation_error_chosen_deg": 0.02480355362568383,
+      "rotation_error_alternate_deg": 91.49032420968442,
+      "translation_error_chosen_mm": 0.15653719646498818,
+      "translation_error_alternate_mm": 4.342797384987867,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.005564427934587002,
+      "aggregate_d2_alternate": 27571.004697783257,
+      "branch_d2_ratio": 1904277.875,
+      "max_corner_d2": 0.002215280197560787,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.9883864591055104,
+      "latency_us": 7985.580014064908,
+      "ppm_estimated": 1901.2083673701006
+    },
+    {
+      "scene_id": "scene_0039_cam_0000",
+      "tag_id": 478,
+      "distance_m": 0.5816824961691899,
+      "angle_of_incidence_deg": 58.2256500990493,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.0318371169318624,
+        -0.5332697491558333,
+        -0.6213736457311586,
+        0.5731531624878223
+      ],
+      "gt_translation_xyz": [
+        -0.20471301342849124,
+        -0.09151835730471684,
+        0.5367229197976444
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.031619757413864136,
+        -0.5333835482597351,
+        -0.621330201625824,
+        0.5731064081192017
+      ],
+      "detected_translation_xyz": [
+        -0.20464099943637848,
+        -0.0914771556854248,
+        0.5365139245986938
+      ],
+      "alternate_quaternion_xyzw": [
+        0.2347185947332379,
+        0.31158067932039585,
+        -0.5076186721875496,
+        0.7682108728775217
+      ],
+      "alternate_translation_xyz": [
+        -0.24880699570671966,
+        -0.0964892427895437,
+        0.6119208609589734
+      ],
+      "rotation_error_chosen_deg": 0.032523169383826774,
+      "rotation_error_alternate_deg": 106.68366814092677,
+      "translation_error_chosen_mm": 0.22486124983351533,
+      "translation_error_alternate_mm": 87.31391258303955,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.05129319429397583,
+      "aggregate_d2_alternate": 72855.85147977815,
+      "branch_d2_ratio": 3218930.0,
+      "max_corner_d2": 0.03875671327114105,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.7412898443291327,
+      "latency_us": 7347.154896706343,
+      "ppm_estimated": 1965.8953055067475
+    },
+    {
+      "scene_id": "scene_0040_cam_0000",
+      "tag_id": 60,
+      "distance_m": 0.9821113006159812,
+      "angle_of_incidence_deg": 54.21050102905214,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.45876454505726905,
+        0.14795352973722053,
+        0.8480229223722419,
+        0.22023161623721133
+      ],
+      "gt_translation_xyz": [
+        -0.06376190230605697,
+        0.009515031841505733,
+        0.9799931830555698
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.45894089341163635,
+        0.14794832468032837,
+        0.8479747176170349,
+        0.2200533151626587
+      ],
+      "detected_translation_xyz": [
+        -0.06378480046987534,
+        0.009478496387600899,
+        0.9800501465797424
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.467180699659142,
+        0.04797977892951959,
+        0.850757950098969,
+        0.2359047371785258
+      ],
+      "alternate_translation_xyz": [
+        -0.0651849934272986,
+        0.00640433096384159,
+        1.0206926203793996
+      ],
+      "rotation_error_chosen_deg": 0.021929943324332558,
+      "rotation_error_alternate_deg": 11.645343265474898,
+      "translation_error_chosen_mm": 0.07144234307782234,
+      "translation_error_alternate_mm": 40.84294121100981,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.16645321249961853,
+      "aggregate_d2_alternate": 7691.046608155618,
+      "branch_d2_ratio": 102963.265625,
+      "max_corner_d2": 0.08281517028808594,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 2.965159377316531,
+      "latency_us": 7822.483079507947,
+      "ppm_estimated": 1075.7389276748281
+    },
+    {
+      "scene_id": "scene_0041_cam_0000",
+      "tag_id": 201,
+      "distance_m": 1.8935276365624696,
+      "angle_of_incidence_deg": 22.550652734585416,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.255850123314997,
+        -0.02152311911809296,
+        -0.3777023041084085,
+        0.8896170166733661
+      ],
+      "gt_translation_xyz": [
+        0.5472275445981297,
+        0.21487460114349705,
+        1.799949518952641
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.25424158573150635,
+        -0.022667689248919487,
+        -0.37803229689598083,
+        0.8899095058441162
+      ],
+      "detected_translation_xyz": [
+        0.5476770401000977,
+        0.21507222950458527,
+        1.8014417886734009
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.00017991715302023508,
+        0.21269964200752328,
+        -0.4373171612901692,
+        0.8737920406829063
+      ],
+      "alternate_translation_xyz": [
+        0.5551173695474905,
+        0.22059646050214896,
+        1.8266004367848292
+      ],
+      "rotation_error_chosen_deg": 0.23208796994703154,
+      "rotation_error_alternate_deg": 40.568575021236036,
+      "translation_error_chosen_mm": 1.5709780695134734,
+      "translation_error_alternate_mm": 28.377111085341106,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.07255222648382187,
+      "aggregate_d2_alternate": 173.33425949861794,
+      "branch_d2_ratio": 6278.52880859375,
+      "max_corner_d2": 0.025695081800222397,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.9883864591055104,
+      "latency_us": 8673.94101805985,
+      "ppm_estimated": 750.68082799399
+    },
+    {
+      "scene_id": "scene_0042_cam_0000",
+      "tag_id": 428,
+      "distance_m": 0.7432582469222273,
+      "angle_of_incidence_deg": 35.65133202423957,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.33448321179879287,
+        -0.0406681197011977,
+        0.6891266718288908,
+        0.6415384053839972
+      ],
+      "gt_translation_xyz": [
+        -0.0031485732669181837,
+        -0.06841825023089333,
+        0.7400958201680665
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.3347034752368927,
+        -0.04125683009624481,
+        0.6890999674797058,
+        0.6414145827293396
+      ],
+      "detected_translation_xyz": [
+        -0.0031566263642162085,
+        -0.06839073449373245,
+        0.7396392226219177
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.15305688841719176,
+        -0.004439314983112027,
+        0.7151483544859759,
+        0.6819946572125987
+      ],
+      "alternate_translation_xyz": [
+        -0.0034313052148150216,
+        -0.07000548683396111,
+        0.7409507796055086
+      ],
+      "rotation_error_chosen_deg": 0.07426977520731917,
+      "rotation_error_alternate_deg": 56.874504928153414,
+      "translation_error_chosen_mm": 0.4574967620832959,
+      "translation_error_alternate_mm": 1.8248871275097962,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.04162006080150604,
+      "aggregate_d2_alternate": 12386.176543207675,
+      "branch_d2_ratio": 397895.5625,
+      "max_corner_d2": 0.02260592021048069,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.9883864591055104,
+      "latency_us": 8844.505995512009,
+      "ppm_estimated": 1682.135300799369
+    },
+    {
+      "scene_id": "scene_0043_cam_0000",
+      "tag_id": 244,
+      "distance_m": 0.6909262037480809,
+      "angle_of_incidence_deg": 53.700532552976775,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.0029478492275460985,
+        0.48358795313025527,
+        0.826657597677115,
+        0.28769987262921853
+      ],
+      "gt_translation_xyz": [
+        -0.07961655787609695,
+        0.08672858790616708,
+        0.6808218334916837
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.002884255489334464,
+        0.48363327980041504,
+        0.8266730904579163,
+        0.28757983446121216
+      ],
+      "detected_translation_xyz": [
+        -0.07965583354234695,
+        0.08676651865243912,
+        0.6811158061027527
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.055266034511230286,
+        -0.3696233564816261,
+        0.8922359966772166,
+        0.25345446535043337
+      ],
+      "alternate_translation_xyz": [
+        -0.08294858325637947,
+        0.1045839613043942,
+        0.7740589264361002
+      ],
+      "rotation_error_chosen_deg": 0.0,
+      "rotation_error_alternate_deg": 101.66580743914953,
+      "translation_error_chosen_mm": 0.2990003604192869,
+      "translation_error_alternate_mm": 94.9898534215667,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.040131766349077225,
+      "aggregate_d2_alternate": 38523.31145746279,
+      "branch_d2_ratio": 82203.171875,
+      "max_corner_d2": 0.02169358916580677,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 7048.863219097257,
+      "ppm_estimated": 1575.7779201495819
+    },
+    {
+      "scene_id": "scene_0044_cam_0000",
+      "tag_id": 387,
+      "distance_m": 0.9856346863950489,
+      "angle_of_incidence_deg": 56.6397514038194,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        -0.1361703214509512,
+        -0.5019133630180238,
+        0.04273201226217806,
+        0.8530618940658884
+      ],
+      "gt_translation_xyz": [
+        -0.1638092371100725,
+        -0.19627235997184456,
+        0.9519030641321254
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        -0.13660748302936554,
+        -0.501481831073761,
+        0.042868420481681824,
+        0.8532389402389526
+      ],
+      "detected_translation_xyz": [
+        -0.16376323997974396,
+        -0.19631832838058472,
+        0.9523574113845825
+      ],
+      "alternate_quaternion_xyzw": [
+        0.331039090550634,
+        0.34668666931033076,
+        0.1770081035928256,
+        0.8595868804910821
+      ],
+      "alternate_translation_xyz": [
+        -0.1663994013787364,
+        -0.20044558081091732,
+        0.9577815892884004
+      ],
+      "rotation_error_chosen_deg": 0.07437004631864312,
+      "rotation_error_alternate_deg": 117.09918651255519,
+      "translation_error_chosen_mm": 0.4589774029468754,
+      "translation_error_alternate_mm": 7.660403456952638,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.16641199588775635,
+      "aggregate_d2_alternate": 4887.972291281089,
+      "branch_d2_ratio": 145717.84375,
+      "max_corner_d2": 0.10655533522367477,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.7412898443291327,
+      "latency_us": 10317.262029275298,
+      "ppm_estimated": 1092.592510624201
+    },
+    {
+      "scene_id": "scene_0045_cam_0000",
+      "tag_id": 550,
+      "distance_m": 0.5551244185628639,
+      "angle_of_incidence_deg": 53.822829442178076,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.400098947212622,
+        0.16792844316728645,
+        -0.21501937995211565,
+        0.8749214446483544
+      ],
+      "gt_translation_xyz": [
+        0.014512679907795784,
+        0.025495088146366515,
+        0.5543487013969399
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.3999570608139038,
+        0.1679251343011856,
+        -0.21495406329631805,
+        0.8750029802322388
+      ],
+      "detected_translation_xyz": [
+        0.014522475190460682,
+        0.025506338104605675,
+        0.5546637177467346
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.496244805046972,
+        -0.23764695926790644,
+        -0.20138427513166499,
+        0.8103760793263239
+      ],
+      "alternate_translation_xyz": [
+        0.010188498128874889,
+        0.024540871983503115,
+        0.5598383377565136
+      ],
+      "rotation_error_chosen_deg": 0.022800475146896447,
+      "rotation_error_alternate_deg": 118.15713031479092,
+      "translation_error_chosen_mm": 0.3153693227960535,
+      "translation_error_alternate_mm": 7.053026577503765,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.13050541281700134,
+      "aggregate_d2_alternate": 58935.42427235307,
+      "branch_d2_ratio": 425963.6875,
+      "max_corner_d2": 0.0983031839132309,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 11592.28989854455,
+      "ppm_estimated": 1925.3678834353514
+    },
+    {
+      "scene_id": "scene_0046_cam_0000",
+      "tag_id": 28,
+      "distance_m": 0.9256751999051949,
+      "angle_of_incidence_deg": 45.85947184484923,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.2630716518615559,
+        -0.2717286430584615,
+        -0.30433347850600956,
+        0.8742642520579462
+      ],
+      "gt_translation_xyz": [
+        -0.026800033867969628,
+        0.09895604639414782,
+        0.9199805563579302
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.26296526193618774,
+        -0.2716067433357239,
+        -0.30394884943962097,
+        0.8744679093360901
+      ],
+      "detected_translation_xyz": [
+        -0.026785833761096,
+        0.09891309589147568,
+        0.919455885887146
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.2850246437469461,
+        0.1705833793125276,
+        -0.3687147162921333,
+        0.86816572216879
+      ],
+      "alternate_translation_xyz": [
+        -0.04047114569349951,
+        0.10847090638211972,
+        1.012264704665566
+      ],
+      "rotation_error_chosen_deg": 0.053855158907301144,
+      "rotation_error_alternate_deg": 82.83930501817619,
+      "translation_error_chosen_mm": 0.5266170255773355,
+      "translation_error_alternate_mm": 93.7752413380129,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.06352650374174118,
+      "aggregate_d2_alternate": 10865.482811213637,
+      "branch_d2_ratio": 25127.083984375,
+      "max_corner_d2": 0.031050223857164383,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 5590.680055320263,
+      "ppm_estimated": 1253.0521530747537
+    },
+    {
+      "scene_id": "scene_0047_cam_0000",
+      "tag_id": 126,
+      "distance_m": 0.5992546772829868,
+      "angle_of_incidence_deg": 38.0190557216177,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.3092177118984413,
+        0.12043308603546435,
+        0.9033600241905673,
+        0.2717000977076375
+      ],
+      "gt_translation_xyz": [
+        0.011984357208987634,
+        -0.035340306919314834,
+        0.5980916947378045
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.30934879183769226,
+        0.12045616656541824,
+        0.9033214449882507,
+        0.27166882157325745
+      ],
+      "detected_translation_xyz": [
+        0.011989699676632881,
+        -0.0353517085313797,
+        0.5983490943908691
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.14512444299665403,
+        -0.07477822035431415,
+        0.9413015276104438,
+        0.29546327677699197
+      ],
+      "alternate_translation_xyz": [
+        0.012483784604869116,
+        -0.036765126598802995,
+        0.5979600304121652
+      ],
+      "rotation_error_chosen_deg": 0.031028021644860248,
+      "rotation_error_alternate_deg": 57.499047915652184,
+      "translation_error_chosen_mm": 0.25770743123936396,
+      "translation_error_alternate_mm": 1.5155442380411657,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.03751222789287567,
+      "aggregate_d2_alternate": 35296.37768320124,
+      "branch_d2_ratio": 599234.1875,
+      "max_corner_d2": 0.01362562645226717,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 8174.445014446974,
+      "ppm_estimated": 2049.916694187346
+    },
+    {
+      "scene_id": "scene_0048_cam_0000",
+      "tag_id": 403,
+      "distance_m": 0.6259290511368638,
+      "angle_of_incidence_deg": 31.52197770080025,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.29323693423621,
+        0.10698497181795104,
+        0.5311917077653762,
+        0.7876558173503884
+      ],
+      "gt_translation_xyz": [
+        0.12445291475909294,
+        0.052442143039111044,
+        0.6111861202322292
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.29324841499328613,
+        0.10720890760421753,
+        0.5311877727508545,
+        0.7876237034797668
+      ],
+      "detected_translation_xyz": [
+        0.12444876879453659,
+        0.05245225876569748,
+        0.611111581325531
+      ],
+      "alternate_quaternion_xyzw": [
+        -0.09438329663891833,
+        0.10089317642449276,
+        0.5799171694662311,
+        0.802875106616727
+      ],
+      "alternate_translation_xyz": [
+        0.13035973039561888,
+        0.04974066525545352,
+        0.6315587825262552
+      ],
+      "rotation_error_chosen_deg": 0.03184455331966925,
+      "rotation_error_alternate_deg": 45.097430655107964,
+      "translation_error_chosen_mm": 0.0753363495149126,
+      "translation_error_alternate_mm": 21.38302649593672,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.00809628888964653,
+      "aggregate_d2_alternate": 13150.973791492861,
+      "branch_d2_ratio": 1375720.25,
+      "max_corner_d2": 0.003112517762929201,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 1.2354830738818878,
+      "latency_us": 14612.664002925158,
+      "ppm_estimated": 2108.9138514761794
+    },
+    {
+      "scene_id": "scene_0049_cam_0000",
+      "tag_id": 124,
+      "distance_m": 0.62071526786034,
+      "angle_of_incidence_deg": 59.554780109161754,
+      "pixel_area": 0.0,
+      "occlusion_ratio": 0.0,
+      "gt_quaternion_xyzw": [
+        0.1394774843142413,
+        -0.48170414747031093,
+        0.7732660916889992,
+        -0.38802925143219197
+      ],
+      "gt_translation_xyz": [
+        0.11265095710777276,
+        0.08243471398703464,
+        0.6048154325160389
+      ],
+      "detected": true,
+      "detected_quaternion_xyzw": [
+        0.14017529785633087,
+        -0.4816306233406067,
+        0.7731783390045166,
+        -0.38804399967193604
+      ],
+      "detected_translation_xyz": [
+        0.11274135112762451,
+        0.08249127864837646,
+        0.6051710844039917
+      ],
+      "alternate_quaternion_xyzw": [
+        0.13818022510953412,
+        0.5484326548387132,
+        0.6584280593712186,
+        -0.49658870217503964
+      ],
+      "alternate_translation_xyz": [
+        0.12380081594695223,
+        0.08850804932506558,
+        0.623159956399561
+      ],
+      "rotation_error_chosen_deg": 0.0765270265553612,
+      "rotation_error_alternate_deg": 125.62269353272691,
+      "translation_error_chosen_mm": 0.37129355655880963,
+      "translation_error_alternate_mm": 22.309780607951268,
+      "branch_chosen_idx": 0,
+      "aggregate_d2_chosen": 0.30215272307395935,
+      "aggregate_d2_alternate": 51681.75003959632,
+      "branch_d2_ratio": 23421.45703125,
+      "max_corner_d2": 0.20767667889595032,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
+      "image_noise_sigma": 0.4941932295527552,
+      "latency_us": 6270.647048950195,
+      "ppm_estimated": 1655.8430710003686
+    }
+  ]
+}

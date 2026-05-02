@@ -1,0 +1,360 @@
+{
+  "schema_version": "rotation_tail_diag/v1",
+  "classifier_version": "rotation_tail_diag/v1",
+  "sigma_n_sq_configured": 4.0,
+  "population": {
+    "healthy": 50
+  },
+  "classifications": [
+    {
+      "scene_id": "scene_0000_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.028302760899272843
+      }
+    },
+    {
+      "scene_id": "scene_0001_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.002671951703662204
+      }
+    },
+    {
+      "scene_id": "scene_0002_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.08534311524846198
+      }
+    },
+    {
+      "scene_id": "scene_0003_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.07810190199605525
+      }
+    },
+    {
+      "scene_id": "scene_0004_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.022457925334657482
+      }
+    },
+    {
+      "scene_id": "scene_0005_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.6640114715686148
+      }
+    },
+    {
+      "scene_id": "scene_0006_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.009311223456027234
+      }
+    },
+    {
+      "scene_id": "scene_0007_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.11664952596487975
+      }
+    },
+    {
+      "scene_id": "scene_0008_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.8742870685347056
+      }
+    },
+    {
+      "scene_id": "scene_0009_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.5326122994274676
+      }
+    },
+    {
+      "scene_id": "scene_0010_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.05908934577424771
+      }
+    },
+    {
+      "scene_id": "scene_0011_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.03150426761042338
+      }
+    },
+    {
+      "scene_id": "scene_0012_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.1616758805721171
+      }
+    },
+    {
+      "scene_id": "scene_0013_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.22600070126742786
+      }
+    },
+    {
+      "scene_id": "scene_0014_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.040893892584422296
+      }
+    },
+    {
+      "scene_id": "scene_0015_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.246316527470023
+      }
+    },
+    {
+      "scene_id": "scene_0016_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.0937562645330382
+      }
+    },
+    {
+      "scene_id": "scene_0017_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.051073708853522345
+      }
+    },
+    {
+      "scene_id": "scene_0018_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.3646815631013187
+      }
+    },
+    {
+      "scene_id": "scene_0019_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.09302621429494853
+      }
+    },
+    {
+      "scene_id": "scene_0020_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.04634243729085436
+      }
+    },
+    {
+      "scene_id": "scene_0021_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.22992798407853196
+      }
+    },
+    {
+      "scene_id": "scene_0022_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.054858169227800804
+      }
+    },
+    {
+      "scene_id": "scene_0023_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.3026846676692075
+      }
+    },
+    {
+      "scene_id": "scene_0024_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.18085627184985004
+      }
+    },
+    {
+      "scene_id": "scene_0025_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.4007223198497066
+      }
+    },
+    {
+      "scene_id": "scene_0026_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.11645176318064678
+      }
+    },
+    {
+      "scene_id": "scene_0027_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.0
+      }
+    },
+    {
+      "scene_id": "scene_0028_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.01682767360855184
+      }
+    },
+    {
+      "scene_id": "scene_0029_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.03270802163040924
+      }
+    },
+    {
+      "scene_id": "scene_0030_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.049004386457519415
+      }
+    },
+    {
+      "scene_id": "scene_0031_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.19802965855705848
+      }
+    },
+    {
+      "scene_id": "scene_0032_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.01497941883629836
+      }
+    },
+    {
+      "scene_id": "scene_0033_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.3127516912132677
+      }
+    },
+    {
+      "scene_id": "scene_0034_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.12145829026005463
+      }
+    },
+    {
+      "scene_id": "scene_0035_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.02494092865195588
+      }
+    },
+    {
+      "scene_id": "scene_0036_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.03937886278328142
+      }
+    },
+    {
+      "scene_id": "scene_0037_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.046613506078113
+      }
+    },
+    {
+      "scene_id": "scene_0038_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.02480355362568383
+      }
+    },
+    {
+      "scene_id": "scene_0039_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.032523169383826774
+      }
+    },
+    {
+      "scene_id": "scene_0040_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.021929943324332558
+      }
+    },
+    {
+      "scene_id": "scene_0041_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.23208796994703154
+      }
+    },
+    {
+      "scene_id": "scene_0042_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.07426977520731917
+      }
+    },
+    {
+      "scene_id": "scene_0043_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.0
+      }
+    },
+    {
+      "scene_id": "scene_0044_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.07437004631864312
+      }
+    },
+    {
+      "scene_id": "scene_0045_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.022800475146896447
+      }
+    },
+    {
+      "scene_id": "scene_0046_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.053855158907301144
+      }
+    },
+    {
+      "scene_id": "scene_0047_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.031028021644860248
+      }
+    },
+    {
+      "scene_id": "scene_0048_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.03184455331966925
+      }
+    },
+    {
+      "scene_id": "scene_0049_cam_0000",
+      "mode": "healthy",
+      "evidence": {
+        "rotation_error_chosen_deg": 0.0765270265553612
+      }
+    }
+  ]
+}

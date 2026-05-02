@@ -36,6 +36,16 @@ pub enum ConfigError {
     /// and are explicitly rejected to surface configuration mistakes.
     #[error("pose_consistency_fpr must be in [0.0, 1.0), got {0}")]
     InvalidPoseConsistencyFpr(f64),
+    /// Pose consistency min decisive ratio must be `>= 1.0`.
+    ///
+    /// The IPPE branch selector enforces `alternate_d2 / primary_d2 >= 1`
+    /// by construction (the smaller of the two candidate d²s is chosen as
+    /// the primary). A value below 1.0 would let the gate accept genuine
+    /// branch ambiguities, which is the exact failure mode the gate exists
+    /// to catch. Use a large value (e.g. f64::INFINITY) to disable the
+    /// branch-ratio escape clause and keep only the χ² test.
+    #[error("pose_consistency_min_decisive_ratio must be >= 1.0, got {0}")]
+    InvalidPoseConsistencyMinDecisiveRatio(f64),
     /// EdLines is geometrically incompatible with Erf corner refinement.
     ///
     /// Erf performs an independent 1-D search per corner which destroys the
