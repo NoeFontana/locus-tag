@@ -35,7 +35,7 @@ from tools.bench.rotation_tail_diag.io_models import (
 )
 from tools.bench.utils import HubDatasetLoader, rotation_error_deg
 
-# χ² (2 DOF) gate FPR — matches what render_tag_hub ships.
+# χ² (2 DOF) gate FPR — matches what high_accuracy ships.
 DEFAULT_FPR = 1e-3
 HUBER_K = 1.345  # matches refine_pose_lm_weighted constant
 LEAVE_ONE_OUT_RUN = True
@@ -45,7 +45,7 @@ def _quat_angle_deg(q1_xyzw: tuple, q2_xyzw: tuple) -> float:
     """Geodesic angle between two scalar-last unit quaternions, in degrees.
 
     Routes through `tools.bench.utils.rotation_error_deg` so this matches the
-    published render_tag_hub baseline numbers (rotation-matrix trace formula).
+    published high_accuracy baseline numbers (rotation-matrix trace formula).
     """
     fake_pose = np.array([0.0, 0.0, 0.0, *q1_xyzw], dtype=np.float64)
     return rotation_error_deg(fake_pose, np.asarray(q2_xyzw, dtype=np.float64))
@@ -353,7 +353,7 @@ def run(
     intrinsics = ds.intrinsics
     tag_size = float(ds.tag_size)
 
-    # 2. Build production detector (matches what render_tag_hub ships)
+    # 2. Build production detector (matches what high_accuracy ships)
     cfg = DetectorConfig.from_profile(profile)  # type: ignore[arg-type]  # CLI passes str
     detector = locus.Detector(config=cfg, families=families)
     py_cfg = cfg._to_ffi_config()

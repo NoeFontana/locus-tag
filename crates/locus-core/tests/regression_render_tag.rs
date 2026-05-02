@@ -207,66 +207,6 @@ mod quad_extraction_variants {
     }
 }
 
-/// `render_tag_hub` SOTA profile across resolutions.  Identical to
-/// `accuracy_baseline` except the profile turns the EdLines axis-aligned
-/// imbalance gate on, which recovers near-axis-aligned tags missed by
-/// `high_accuracy` (scenes 0002, 0033, 0042 at 1080p).  The 2160p subset
-/// remains at 94 % — the three misses there are pre-EdLines (segmentation
-/// fragments large tags into multiple components at 2160p).
-mod render_tag_hub_profile {
-    use super::common;
-    use common::hub::{RenderTagOpts, run_render_tag_test};
-    use locus_core::TagFamily;
-
-    fn opts() -> RenderTagOpts {
-        RenderTagOpts {
-            profile: Some("render_tag_hub"),
-            snapshot_suffix: "_render_tag_hub",
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn regression_hub_tag36h11_640x480_render_tag_hub() {
-        let _g = common::telemetry::init("regression_hub_tag36h11_640x480_render_tag_hub");
-        run_render_tag_test(
-            "locus_v1_tag36h11_640x480",
-            TagFamily::AprilTag36h11,
-            opts(),
-        );
-    }
-
-    #[test]
-    fn regression_hub_tag36h11_720p_render_tag_hub() {
-        let _g = common::telemetry::init("regression_hub_tag36h11_720p_render_tag_hub");
-        run_render_tag_test(
-            "locus_v1_tag36h11_1280x720",
-            TagFamily::AprilTag36h11,
-            opts(),
-        );
-    }
-
-    #[test]
-    fn regression_hub_tag36h11_1080p_render_tag_hub() {
-        let _g = common::telemetry::init("regression_hub_tag36h11_1080p_render_tag_hub");
-        run_render_tag_test(
-            "locus_v1_tag36h11_1920x1080",
-            TagFamily::AprilTag36h11,
-            opts(),
-        );
-    }
-
-    #[test]
-    fn regression_hub_tag36h11_2160p_render_tag_hub() {
-        let _g = common::telemetry::init("regression_hub_tag36h11_2160p_render_tag_hub");
-        run_render_tag_test(
-            "locus_v1_tag36h11_3840x2160",
-            TagFamily::AprilTag36h11,
-            opts(),
-        );
-    }
-}
-
 /// Snapshots the `max_recall_adaptive` PPB-routed profile on the same
 /// `tag36h11` resolutions. The acceptance gate is that pose tail (rotation
 /// p99) does not regress versus the `accuracy_baseline` `high_accuracy` numbers

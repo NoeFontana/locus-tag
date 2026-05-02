@@ -48,17 +48,8 @@ EXPECTED = {
         # Under AdaptivePpb, `quad.extraction_mode` is ignored at runtime but
         # the field still round-trips through JSON.
         "quad.extraction_mode": QuadExtractionMode.EdLines,
-        "quad.edlines_imbalance_gate": EdLinesImbalanceGatePolicy.Disabled,
-        # `None` is a Python keyword — reach the variant via getattr.
-        "decoder.refinement_mode": getattr(CornerRefinementMode, "None"),
-        "decoder.decode_mode": DecodeMode.Hard,
-        "segmentation.connectivity": SegmentationConnectivity.Eight,
-    },
-    "render_tag_hub": {
-        "threshold.enable_sharpening": False,
-        "threshold.tile_size": 8,
-        "quad.extraction_mode": QuadExtractionMode.EdLines,
         "quad.edlines_imbalance_gate": EdLinesImbalanceGatePolicy.Enabled,
+        # `None` is a Python keyword — reach the variant via getattr.
         "decoder.refinement_mode": getattr(CornerRefinementMode, "None"),
         "decoder.decode_mode": DecodeMode.Hard,
         "segmentation.connectivity": SegmentationConnectivity.Eight,

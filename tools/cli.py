@@ -1198,9 +1198,9 @@ def bench_rotation_tail_diag(
         help="Hub dataset config name to analyse.",
     ),
     profile: str = typer.Option(
-        "render_tag_hub",
+        "high_accuracy",
         "--profile",
-        help="Detector profile (e.g. render_tag_hub, high_accuracy, standard).",
+        help="Detector profile (e.g. high_accuracy, standard).",
     ),
     pose_mode: str = typer.Option(
         "Accurate", "--pose-mode", help="Pose-estimation mode: Fast or Accurate."

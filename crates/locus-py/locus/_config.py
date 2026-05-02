@@ -44,14 +44,12 @@ ProfileName: TypeAlias = Literal[
     "standard",
     "grid",
     "high_accuracy",
-    "render_tag_hub",
     "max_recall_adaptive",
 ]
 SHIPPED_PROFILES: tuple[ProfileName, ...] = (
     "standard",
     "grid",
     "high_accuracy",
-    "render_tag_hub",
     "max_recall_adaptive",
 )
 _ADAPTIVE_PROFILES: frozenset[ProfileName] = frozenset({"high_accuracy", "max_recall_adaptive"})
