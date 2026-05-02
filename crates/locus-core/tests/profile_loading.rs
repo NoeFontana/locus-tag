@@ -61,7 +61,7 @@ fn standard_profile_matches_former_builder() {
     // Standard-specific overrides.
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, true);
-    assert_eq!(cfg.quad_min_area, 16);
+    assert_eq!(cfg.quad_min_area, 36);
     assert_eq!(cfg.quad_max_elongation, 20.0);
     assert_eq!(cfg.quad_min_density, 0.15);
     assert_eq!(cfg.quad_min_edge_score, 4.0);
@@ -85,7 +85,7 @@ fn grid_profile_matches_former_builder() {
     // Grid-specific overrides.
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, false);
-    assert_eq!(cfg.quad_min_area, 16);
+    assert_eq!(cfg.quad_min_area, 36);
     assert_eq!(cfg.quad_max_elongation, 20.0);
     assert_eq!(cfg.quad_min_density, 0.15);
     assert_eq!(cfg.quad_min_edge_score, 2.0);
