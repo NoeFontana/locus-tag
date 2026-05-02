@@ -4,6 +4,16 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'README.md'
+      - 'crates/locus-py/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/docs.yml'
   pull_request:
     branches:
       - main
@@ -15,8 +25,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  group: "pages-${{ github.ref }}"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
