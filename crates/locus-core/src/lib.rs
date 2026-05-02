@@ -79,6 +79,7 @@ pub use crate::config::{
 };
 pub use crate::detector::{Detector, DetectorBuilder, FrameContext, LocusEngine};
 pub use crate::error::{ConfigError, DetectorError};
+pub use crate::gradient::compute_image_noise_floor;
 pub use crate::image::ImageView;
 pub use crate::pose::{CameraIntrinsics, DistortionCoeffs};
 
@@ -94,7 +95,10 @@ pub mod bench_api {
     pub use crate::funnel::*;
     pub use crate::gwlf::*;
     pub use crate::pose::*;
-    pub use crate::pose_weighted::bench_compute_corner_covariance;
+    pub use crate::pose_weighted::{
+        BenchLmResult, LmIterationTrace, bench_compute_corner_covariance,
+        bench_corner_structure_tensor_eigenvalues, bench_refine_pose_lm_weighted_with_telemetry,
+    };
     pub use crate::post_decode_refinement::*;
     pub use crate::quad::*;
     pub use crate::segmentation::*;

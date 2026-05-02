@@ -2064,6 +2064,322 @@ fn _shipped_profile_json(name: &str) -> PyResult<&'static str> {
     })
 }
 
+// ============================================================================
+// Phase 0 rotation-tail diagnostic harness — bench-internals only.
+//
+// THROWAWAY: revert this entire `mod bench` together with the bench helpers in
+// `locus-core/src/pose.rs` and `locus-core/src/pose_weighted.rs` once the
+// Phase 0 memo lands. The permanent foundation that *stays* is:
+//   - the `bench-internals` feature flag
+//   - `compute_image_noise_floor` (re-used by Phase 3)
+//   - the `branch_chosen` field in `PoseDiagnostics`
+// ============================================================================
+
+#[cfg(feature = "bench-internals")]
+mod bench {
+    use super::{
+        CameraIntrinsics, PoseEstimationMode, PyDetectorConfig, prepare_image_view,
+        wrap_pyfunction,
+    };
+    use nalgebra::Matrix2;
+    use numpy::PyReadonlyArray2;
+    use pyo3::Bound;
+    use pyo3::prelude::*;
+    use pyo3::types::{PyDict, PyList, PyModule};
+
+    fn pose_to_dict<'py>(
+        py: Python<'py>,
+        pose: &locus_core::Pose,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let rot = nalgebra::Rotation3::from_matrix_unchecked(pose.rotation);
+        let q = nalgebra::UnitQuaternion::from_rotation_matrix(&rot);
+        let dict = PyDict::new(py);
+        dict.set_item(
+            "translation",
+            [pose.translation[0], pose.translation[1], pose.translation[2]],
+        )?;
+        dict.set_item(
+            "quaternion",
+            [q.coords.x, q.coords.y, q.coords.z, q.coords.w],
+        )?;
+        Ok(dict)
+    }
+
+    fn pose_from_quat_trans(quaternion: [f64; 4], translation: [f64; 3]) -> locus_core::Pose {
+        let q = nalgebra::Quaternion::new(quaternion[3], quaternion[0], quaternion[1], quaternion[2]);
+        let unit = nalgebra::UnitQuaternion::new_normalize(q);
+        let rot = unit.to_rotation_matrix().into_inner();
+        let trans = nalgebra::Vector3::new(translation[0], translation[1], translation[2]);
+        locus_core::Pose::new(rot, trans)
+    }
+
+    /// Estimate per-image additive Gaussian noise σ via the Immerkær estimator.
+    /// Returns σ in pixel-intensity units (u8 scale).
+    #[pyfunction]
+    pub fn _bench_estimate_image_noise(img: PyReadonlyArray2<'_, u8>) -> PyResult<f64> {
+        let view = prepare_image_view(&img)?;
+        Ok(locus_core::compute_image_noise_floor(&view))
+    }
+
+    /// Run IPPE for a single quad and refine LM on **both** branches.
+    /// Returns a list of two dicts (one per branch), or `None` if IPPE failed.
+    /// Each dict contains: `branch_idx`, `initial_pose`, `refined_pose`,
+    /// `aggregate_d2`, `per_corner_d2`.
+    #[pyfunction]
+    #[pyo3(signature = (intrinsics, corners, tag_size, mode, config, image=None))]
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn _bench_estimate_both_branches<'py>(
+        py: Python<'py>,
+        intrinsics: CameraIntrinsics,
+        corners: [[f64; 2]; 4],
+        tag_size: f64,
+        mode: PoseEstimationMode,
+        config: PyDetectorConfig,
+        image: Option<PyReadonlyArray2<'_, u8>>,
+    ) -> PyResult<Option<Bound<'py, PyList>>> {
+        let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
+        let core_cfg: locus_core::config::DetectorConfig = config.into();
+        let core_mode: locus_core::config::PoseEstimationMode = mode.into();
+
+        let view_opt = image.as_ref().map(prepare_image_view).transpose()?;
+
+        let result = locus_core::bench_api::bench_estimate_both_branches(
+            &core_intr,
+            &corners,
+            tag_size,
+            view_opt.as_ref(),
+            core_mode,
+            &core_cfg,
+            None,
+        );
+
+        let Some(branches) = result else {
+            return Ok(None);
+        };
+
+        let list = PyList::empty(py);
+        for b in &branches {
+            let entry = PyDict::new(py);
+            entry.set_item("branch_idx", b.branch_idx)?;
+            entry.set_item("initial_pose", pose_to_dict(py, &b.initial_pose)?)?;
+            entry.set_item("refined_pose", pose_to_dict(py, &b.refined_pose)?)?;
+            entry.set_item("aggregate_d2", b.aggregate_d2)?;
+            entry.set_item("per_corner_d2", b.per_corner_d2)?;
+            list.append(entry)?;
+        }
+        Ok(Some(list))
+    }
+
+    /// Run weighted LM with per-iteration telemetry capture.
+    /// `corner_covariances` is a list of four 2×2 matrices, each as a 4-tuple
+    /// `[c00, c01, c10, c11]` (row-major).
+    /// Returns a dict with: `pose`, `covariance` (6×6 row-major), `iterations`,
+    /// `convergence` (0=gradient, 1=step, 2=max-iter, 3=cholesky-fail),
+    /// `final_per_corner_d2`, `final_per_corner_irls_weight`, and `trace` (a
+    /// list of per-iteration dicts).
+    #[pyfunction]
+    #[pyo3(signature = (intrinsics, corners, tag_size, initial_quaternion, initial_translation, corner_covariances))]
+    pub fn _bench_refine_pose_lm_weighted_with_telemetry<'py>(
+        py: Python<'py>,
+        intrinsics: CameraIntrinsics,
+        corners: [[f64; 2]; 4],
+        tag_size: f64,
+        initial_quaternion: [f64; 4],
+        initial_translation: [f64; 3],
+        corner_covariances: [[f64; 4]; 4],
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
+        let initial = pose_from_quat_trans(initial_quaternion, initial_translation);
+        let covs: [Matrix2<f64>; 4] = core::array::from_fn(|i| {
+            Matrix2::new(
+                corner_covariances[i][0],
+                corner_covariances[i][1],
+                corner_covariances[i][2],
+                corner_covariances[i][3],
+            )
+        });
+
+        let res = locus_core::bench_api::bench_refine_pose_lm_weighted_with_telemetry(
+            &core_intr, &corners, tag_size, initial, &covs,
+        );
+
+        let out = PyDict::new(py);
+        out.set_item("pose", pose_to_dict(py, &res.pose)?)?;
+        // Flatten covariance to 36 floats row-major.
+        let mut cov_flat = [0.0_f64; 36];
+        for r in 0..6 {
+            for c in 0..6 {
+                cov_flat[r * 6 + c] = res.covariance[r][c];
+            }
+        }
+        out.set_item("covariance", cov_flat.to_vec())?;
+        out.set_item("iterations", res.iterations)?;
+        out.set_item("convergence", res.convergence)?;
+        out.set_item("final_per_corner_d2", res.final_per_corner_d2)?;
+        out.set_item("final_per_corner_irls_weight", res.final_per_corner_irls_weight)?;
+
+        let trace_list = PyList::empty(py);
+        for t in &res.trace {
+            let entry = PyDict::new(py);
+            entry.set_item("iter_idx", t.iter_idx)?;
+            entry.set_item("accepted", t.accepted)?;
+            entry.set_item("lambda", t.lambda)?;
+            entry.set_item("cost", t.cost)?;
+            entry.set_item("per_corner_d2", t.per_corner_d2)?;
+            entry.set_item("per_corner_irls_weight", t.per_corner_irls_weight)?;
+            trace_list.append(entry)?;
+        }
+        out.set_item("trace", trace_list)?;
+        Ok(out)
+    }
+
+    /// Leave-one-out pose refinement. Drops corner `drop_idx` (0..3) and
+    /// re-runs LM with that corner effectively masked. Returns the refined
+    /// pose dict.
+    #[pyfunction]
+    #[pyo3(signature = (intrinsics, corners, tag_size, initial_quaternion, initial_translation, drop_idx, mode, config, image=None))]
+    #[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
+    pub fn _bench_refit_pose_drop_corner<'py>(
+        py: Python<'py>,
+        intrinsics: CameraIntrinsics,
+        corners: [[f64; 2]; 4],
+        tag_size: f64,
+        initial_quaternion: [f64; 4],
+        initial_translation: [f64; 3],
+        drop_idx: usize,
+        mode: PoseEstimationMode,
+        config: PyDetectorConfig,
+        image: Option<PyReadonlyArray2<'_, u8>>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        if drop_idx >= 4 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "drop_idx must be in 0..4",
+            ));
+        }
+        let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
+        let core_cfg: locus_core::config::DetectorConfig = config.into();
+        let core_mode: locus_core::config::PoseEstimationMode = mode.into();
+        let initial = pose_from_quat_trans(initial_quaternion, initial_translation);
+        let view_opt = image.as_ref().map(prepare_image_view).transpose()?;
+
+        let refined = locus_core::bench_api::bench_refit_pose_drop_corner(
+            &core_intr,
+            &corners,
+            tag_size,
+            initial,
+            drop_idx,
+            view_opt.as_ref(),
+            core_mode,
+            &core_cfg,
+        );
+        pose_to_dict(py, &refined)
+    }
+
+    /// Structure-tensor eigenvalues `(λ_max, λ_min)` at a corner. Returns
+    /// `None` if the window has no support in the image.
+    /// `R = λ_min / λ_max ∈ [0, 1]` is the corner-quality anisotropy ratio.
+    #[pyfunction]
+    pub fn _bench_corner_structure_tensor_eigenvalues(
+        img: PyReadonlyArray2<'_, u8>,
+        center_x: f64,
+        center_y: f64,
+        radius: i32,
+    ) -> PyResult<Option<(f64, f64)>> {
+        let view = prepare_image_view(&img)?;
+        Ok(
+            locus_core::bench_api::bench_corner_structure_tensor_eigenvalues(
+                &view,
+                [center_x, center_y],
+                radius,
+            ),
+        )
+    }
+
+    /// Compute the 2×2 corner covariance matrix from the structure tensor at
+    /// a single corner. Returns `[c00, c01, c10, c11]` (row-major).
+    #[pyfunction]
+    pub fn _bench_compute_corner_covariance(
+        img: PyReadonlyArray2<'_, u8>,
+        center_x: f64,
+        center_y: f64,
+        alpha_max: f64,
+        sigma_n_sq: f64,
+        radius: i32,
+    ) -> PyResult<[f64; 4]> {
+        let view = prepare_image_view(&img)?;
+        let cov = locus_core::bench_api::bench_compute_corner_covariance(
+            &view,
+            [center_x, center_y],
+            alpha_max,
+            sigma_n_sq,
+            radius,
+        );
+        Ok([cov[(0, 0)], cov[(0, 1)], cov[(1, 0)], cov[(1, 1)]])
+    }
+
+    /// Run the full single-tag pose pipeline (IPPE → branch select → LM →
+    /// consistency gate) and return both the refined pose and the per-tag
+    /// diagnostics that the production detector internally computes. `fpr`
+    /// is the χ² gate false-positive rate; pass `None` to disable.
+    #[pyfunction]
+    #[pyo3(signature = (intrinsics, corners, tag_size, mode, config, image=None, fpr=None))]
+    #[allow(clippy::needless_pass_by_value, clippy::too_many_arguments)]
+    pub fn _bench_estimate_tag_pose<'py>(
+        py: Python<'py>,
+        intrinsics: CameraIntrinsics,
+        corners: [[f64; 2]; 4],
+        tag_size: f64,
+        mode: PoseEstimationMode,
+        config: PyDetectorConfig,
+        image: Option<PyReadonlyArray2<'_, u8>>,
+        fpr: Option<f64>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
+        let core_cfg: locus_core::config::DetectorConfig = config.into();
+        let core_mode: locus_core::config::PoseEstimationMode = mode.into();
+        let view_opt = image.as_ref().map(prepare_image_view).transpose()?;
+
+        let (pose_opt, _cov_opt, diag) = locus_core::bench_api::bench_estimate_tag_pose(
+            &core_intr,
+            &corners,
+            tag_size,
+            view_opt.as_ref(),
+            core_mode,
+            &core_cfg,
+            None,
+            fpr,
+        );
+
+        let out = PyDict::new(py);
+        match pose_opt {
+            Some(p) => out.set_item("pose", pose_to_dict(py, &p)?)?,
+            None => out.set_item("pose", py.None())?,
+        }
+        out.set_item("aggregate_d2", diag.aggregate_d2)?;
+        out.set_item("max_corner_d2", diag.max_corner_d2)?;
+        out.set_item("branch_d2_ratio", diag.branch_d2_ratio)?;
+        out.set_item("branch_chosen", diag.branch_chosen)?;
+        Ok(out)
+    }
+
+    pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+        m.add_function(wrap_pyfunction!(_bench_estimate_image_noise, m)?)?;
+        m.add_function(wrap_pyfunction!(_bench_estimate_both_branches, m)?)?;
+        m.add_function(wrap_pyfunction!(
+            _bench_refine_pose_lm_weighted_with_telemetry,
+            m
+        )?)?;
+        m.add_function(wrap_pyfunction!(_bench_refit_pose_drop_corner, m)?)?;
+        m.add_function(wrap_pyfunction!(
+            _bench_corner_structure_tensor_eigenvalues,
+            m
+        )?)?;
+        m.add_function(wrap_pyfunction!(_bench_compute_corner_covariance, m)?)?;
+        m.add_function(wrap_pyfunction!(_bench_estimate_tag_pose, m)?)?;
+        Ok(())
+    }
+}
+
 #[pymodule]
 fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Enums
@@ -2098,5 +2414,7 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(init_tracy, m)?)?;
     #[cfg(feature = "profiles")]
     m.add_function(wrap_pyfunction!(_shipped_profile_json, m)?)?;
+    #[cfg(feature = "bench-internals")]
+    bench::register(m)?;
     Ok(())
 }

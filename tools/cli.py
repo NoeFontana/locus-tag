@@ -1190,5 +1190,86 @@ def bench_prepare():
     typer.echo("Done.")
 
 
+@bench_app.command("rotation-tail-diag")
+def bench_rotation_tail_diag(
+    hub_config: str = typer.Option(
+        "locus_v1_tag36h11_1920x1080",
+        "--hub-config",
+        help="Hub dataset config name to analyse.",
+    ),
+    profile: str = typer.Option(
+        "render_tag_hub",
+        "--profile",
+        help="Detector profile (e.g. render_tag_hub, high_accuracy, standard).",
+    ),
+    pose_mode: str = typer.Option(
+        "Accurate", "--pose-mode", help="Pose-estimation mode: Fast or Accurate."
+    ),
+    output_dir: Path = typer.Option(
+        Path("diagnostics"),
+        "--output-dir",
+        help="Parent directory for diagnostic outputs (auto-suffixed with today's date).",
+    ),
+    memo_dir: Path = typer.Option(
+        Path("docs/engineering"),
+        "--memo-dir",
+        help="Where the markdown deliverable is written.",
+    ),
+    no_rerun: bool = typer.Option(
+        False, "--no-rerun", help="Skip per-scene .rrd recording (faster smoke runs)."
+    ),
+    skip_extract: bool = typer.Option(
+        False,
+        "--skip-extract",
+        help="Reuse existing scenes.json/corners.parquet; only re-classify and re-report.",
+    ),
+):
+    """End-to-end Phase 0 rotation-tail diagnostic harness.
+
+    Runs the three stages — extract → classify → report — and writes the memo
+    to docs/engineering/rotation_tail_diagnostic_phase0_<DATE>.md.
+    """
+    import datetime as _dt
+
+    import locus
+
+    from tools.bench.rotation_tail_diag import classify, extract, report
+
+    today = _dt.date.today().strftime("%Y%m%d")
+    diag_dir = output_dir / today.replace("-", "")
+    # Use ISO-like dir name (`2026-05-02/`) for human readability.
+    iso_dir = output_dir / _dt.date.today().isoformat()
+    diag_dir = iso_dir
+    memo_path = memo_dir / f"rotation_tail_diagnostic_phase0_{today}.md"
+
+    if not skip_extract:
+        typer.echo(f"[1/3] extract → {diag_dir}/")
+        mode_enum = (
+            locus.PoseEstimationMode.Fast
+            if pose_mode.lower() == "fast"
+            else locus.PoseEstimationMode.Accurate
+        )
+        extract.run(
+            config_name=hub_config,
+            profile=profile,
+            output_dir=diag_dir,
+            pose_estimation_mode=mode_enum,
+            enable_rerun=not no_rerun,
+            enable_corner_telemetry=True,
+        )
+    else:
+        typer.echo(f"[1/3] extract: skipped, reusing {diag_dir}/")
+
+    typer.echo("[2/3] classify → failure_modes.json")
+    classify.run(diag_dir)
+
+    typer.echo(f"[3/3] report → {memo_path}")
+    report.run(diag_dir, output_md=memo_path)
+
+    typer.echo("\nDone.")
+    typer.echo(f"  diagnostic data: {diag_dir}")
+    typer.echo(f"  memo:            {memo_path}")
+
+
 if __name__ == "__main__":
     app()
