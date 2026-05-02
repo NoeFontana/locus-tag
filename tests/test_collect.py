@@ -10,13 +10,12 @@ import pytest
 
 from tools.bench.collect import (
     Collector,
-    _quat_geodesic_deg,
     build_provenance,
     flush_collectors,
     new_run_id,
 )
 from tools.bench.records import read_records
-from tools.bench.utils import RejectedQuads, TagAxes, TagGroundTruth
+from tools.bench.utils import RejectedQuads, TagAxes, TagGroundTruth, rotation_error_deg
 
 
 def _make_gt(tag_id: int, x: float, y: float) -> TagGroundTruth:
@@ -52,22 +51,32 @@ def _make_axes(tag_id: int, **overrides: object) -> TagAxes:
     return TagAxes(**base)  # type: ignore[arg-type]
 
 
-class TestQuatGeodesic:
+class TestRotationErrorDeg:
+    """Coverage for ``tools.bench.utils.rotation_error_deg`` — used by the
+    Hub flow, rotation-tail diagnostics, and the Tier-1 collector.
+    """
+
+    @staticmethod
+    def _pose(qxyzw: list[float]) -> np.ndarray:
+        """Pack a quaternion into the 7-vector pose layout the util expects."""
+        return np.array([0.0, 0.0, 0.0, *qxyzw], dtype=np.float64)
+
     def test_identity_is_zero(self) -> None:
-        q = np.array([0.0, 0.0, 0.0, 1.0])
-        assert _quat_geodesic_deg(q, q) == pytest.approx(0.0, abs=1e-9)
+        q = [0.0, 0.0, 0.0, 1.0]
+        assert rotation_error_deg(self._pose(q), np.array(q)) == pytest.approx(0.0, abs=1e-6)
 
     def test_180_deg_about_z(self) -> None:
-        q1 = np.array([0.0, 0.0, 0.0, 1.0])
-        q2 = np.array([0.0, 0.0, 1.0, 0.0])  # 180° rotation about Z
-        assert _quat_geodesic_deg(q1, q2) == pytest.approx(180.0, abs=1e-6)
+        q_id = [0.0, 0.0, 0.0, 1.0]
+        q_180 = [0.0, 0.0, 1.0, 0.0]
+        assert rotation_error_deg(self._pose(q_id), np.array(q_180)) == pytest.approx(
+            180.0, abs=1e-4
+        )
 
     def test_sign_flip_is_zero(self) -> None:
         """Quaternions q and -q represent the same rotation."""
-        q1 = np.array([0.1, 0.2, 0.3, 0.927])
-        q1 = q1 / np.linalg.norm(q1)
-        q2 = -q1
-        assert _quat_geodesic_deg(q1, q2) == pytest.approx(0.0, abs=1e-6)
+        q = np.array([0.1, 0.2, 0.3, 0.927])
+        q = q / np.linalg.norm(q)
+        assert rotation_error_deg(self._pose(q.tolist()), -q) == pytest.approx(0.0, abs=1e-4)
 
 
 class TestCollectorObserve:

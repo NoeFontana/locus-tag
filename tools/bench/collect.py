@@ -4,13 +4,16 @@ Replaces the inline ``stats`` accumulator in ``tools/cli.py`` for callers that
 opt into ``bench real --record-out PATH``. The aggregated print output stays
 verbatim; the collector is a sidecar that emits a parquet file when enabled.
 
-Three ``record_kind`` values are produced per image:
+Four ``record_kind`` values are produced per image:
 
-- ``matched``     — detection ↔ GT pair (GT axes carried through, errors filled)
-- ``missed_gt``   — GT tag with no matching detection (errors NaN)
-- ``rejected_quad`` — Locus quad rejected by the funnel (cross-referenced to
-                      the nearest GT center; ``tag_id`` is null when no GT is
-                      within ``REJECTED_NEAREST_GT_FACTOR × max_edge_px``)
+- ``matched``        — detection ↔ GT pair (GT axes carried through, errors filled)
+- ``missed_gt``      — GT tag with no matching detection (errors NaN)
+- ``false_positive`` — detection that no GT accepted (the ``1 - precision``
+                       term; permissive nearest-GT attribution for stratum
+                       derivation only, ``tag_id`` stays null)
+- ``rejected_quad``  — Locus quad rejected by the funnel/decoder (attributed
+                       to the nearest GT when within
+                       ``REJECTED_NEAREST_GT_FACTOR × max_edge_px``)
 """
 
 from __future__ import annotations
@@ -28,9 +31,20 @@ from typing import Any
 
 import numpy as np
 
-from tools.bench.records import ObservationRecord, empty_record, write_records
+from tools.bench.records import ObservationRecord, RecordKind, empty_record, write_records
 from tools.bench.schema import Provenance
-from tools.bench.utils import RejectedQuads, TagAxes, TagGroundTruth, max_edge_px
+from tools.bench.utils import (
+    RejectedQuads,
+    TagAxes,
+    TagGroundTruth,
+    max_edge_px,
+    rotation_error_deg,
+)
+
+# Detection ↔ GT pairing threshold in pixels. Mirrors
+# ``Metrics.match_detections``' default at ``tools/bench/utils.py:704`` so the
+# collector and the headline aggregator agree on what counts as a TP.
+MATCH_DISTANCE_THRESHOLD_PX = 20.0
 
 # Center-distance threshold for attributing a rejected quad to a GT tag, as a
 # multiple of the rejected quad's longest edge. Quads further than this from
@@ -38,6 +52,13 @@ from tools.bench.utils import RejectedQuads, TagAxes, TagGroundTruth, max_edge_p
 # composition rows. 1.5 was the value the plan specified — generous enough to
 # attribute borderline fragments, tight enough to avoid pathological matches.
 REJECTED_NEAREST_GT_FACTOR = 1.5
+
+# False-positive attribution threshold as a fraction of image height. Uses a
+# permissive bound (half the height) because we attribute *for stratum
+# derivation only* — the FP keeps ``tag_id=None`` regardless. Tighter would
+# leave too many FPs in unk strata; looser would smear FPs across regimes
+# they didn't physically come from.
+FP_ATTRIBUTION_FACTOR = 0.5
 
 # Rejection-reason labels for records emitted into ``rejected_funnel_status``.
 # The Rust ``FunnelStatus`` enum only captures gates *up to* the funnel; quads
@@ -107,7 +128,7 @@ class Collector:
                 if dist < min_dist:
                     min_dist = dist
                     best_idx = idx
-            if best_idx != -1 and min_dist < 20.0:
+            if best_idx != -1 and min_dist < MATCH_DISTANCE_THRESHOLD_PX:
                 used_gt.add(best_idx)
                 matched_gt[best_idx] = det
                 matched_det.add(det_idx)
@@ -200,7 +221,7 @@ class Collector:
                 # Permissive attribution for stratum derivation only — half
                 # the image height is enough to land in the right axis bucket
                 # without claiming the FP is "near" a real tag.
-                if dists[best] <= resolution_h * 0.5:
+                if dists[best] <= resolution_h * FP_ATTRIBUTION_FACTOR:
                     attribution_axes = axes_lookup.get(gt_tags[best].tag_id)
             base = self._empty(
                 image_id, "false_positive", n_gt, n_det, frame_latency_ms, resolution_h
@@ -265,7 +286,7 @@ class Collector:
     def _empty(
         self,
         image_id: str,
-        kind: str,
+        kind: RecordKind,
         n_gt: int,
         n_det: int,
         latency_ms: float,
@@ -343,7 +364,7 @@ class Collector:
         det_pose = np.asarray(det_pose, dtype=np.float64)
         gt_pose = np.asarray(gt.pose, dtype=np.float64)
         trans_err = float(np.linalg.norm(det_pose[:3] - gt_pose[:3]))
-        rot_err = _quat_geodesic_deg(det_pose[3:7], gt_pose[3:7])
+        rot_err = rotation_error_deg(det_pose, gt_pose[3:7])
         return trans_err, rot_err, repro
 
 
@@ -355,16 +376,6 @@ def _replace(record: ObservationRecord, **kwargs: Any) -> ObservationRecord:
     import dataclasses
 
     return dataclasses.replace(record, **kwargs)
-
-
-def _quat_geodesic_deg(q1: np.ndarray, q2: np.ndarray) -> float:
-    """Geodesic angle between two unit quaternions [qx, qy, qz, qw], in degrees.
-
-    ``2·acos(|q1·q2|)`` is the rotation magnitude that takes one to the other.
-    """
-    dot = float(abs(np.dot(q1, q2)))
-    dot = min(1.0, max(-1.0, dot))
-    return float(math.degrees(2.0 * math.acos(dot)))
 
 
 # ---------------------------------------------------------------------------
