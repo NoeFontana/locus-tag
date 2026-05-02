@@ -45,7 +45,8 @@
     "tikhonov_alpha_max": 0.25,
     "sigma_n_sq": 4.0,
     "structure_tensor_radius": 2,
-    "pose_consistency_fpr": 1.0e-3
+    "pose_consistency_fpr": 1.0e-3,
+    "pose_consistency_gate_sigma_px": 0.5
   },
   "segmentation": {
     "connectivity": "Eight",
