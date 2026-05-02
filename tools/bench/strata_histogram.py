@@ -175,21 +175,37 @@ def main() -> int:
     n_p = _bucket_counts(ppm, snap_p_lo, snap_p_hi)
     print("| Axis | Slug    | Range                                | n   |")
     print("| ---- | ------- | ------------------------------------ | --- |")
-    print(f"| res  | sd      | `H ≤ 480`                            | {int((res_h <= 480).sum()):>3} |")
-    print(f"| res  | hd      | `480 < H ≤ 720`                      | {int(((res_h > 480) & (res_h <= 720)).sum()):>3} |")
-    print(f"| res  | fhd     | `720 < H ≤ 1080`                     | {int(((res_h > 720) & (res_h <= 1080)).sum()):>3} |")
-    print(f"| res  | uhd     | `1080 < H`                           | {int((res_h > 1080).sum()):>3} |")
+    print(
+        f"| res  | sd      | `H ≤ 480`                            | {int((res_h <= 480).sum()):>3} |"
+    )
+    print(
+        f"| res  | hd      | `480 < H ≤ 720`                      | {int(((res_h > 480) & (res_h <= 720)).sum()):>3} |"
+    )
+    print(
+        f"| res  | fhd     | `720 < H ≤ 1080`                     | {int(((res_h > 720) & (res_h <= 1080)).sum()):>3} |"
+    )
+    print(
+        f"| res  | uhd     | `1080 < H`                           | {int((res_h > 1080).sum()):>3} |"
+    )
     print(f"| ppm  | lo      | `ppm ≤ {snap_p_lo:>5.0f}`                       | {n_p[0]:>3} |")
-    print(f"| ppm  | mid     | `{snap_p_lo:>5.0f} < ppm ≤ {snap_p_hi:>5.0f}`              | {n_p[1]:>3} |")
+    print(
+        f"| ppm  | mid     | `{snap_p_lo:>5.0f} < ppm ≤ {snap_p_hi:>5.0f}`              | {n_p[1]:>3} |"
+    )
     print(f"| ppm  | hi      | `{snap_p_hi:>5.0f} < ppm`                        | {n_p[2]:>3} |")
     print(f"| aoi  | frontal | `angle ≤ {snap_a_lo:>4.0f}°`                     | {n_a[0]:>3} |")
-    print(f"| aoi  | oblique | `{snap_a_lo:>4.0f}° < angle ≤ {snap_a_hi:>4.0f}°`           | {n_a[1]:>3} |")
+    print(
+        f"| aoi  | oblique | `{snap_a_lo:>4.0f}° < angle ≤ {snap_a_hi:>4.0f}°`           | {n_a[1]:>3} |"
+    )
     print(f"| aoi  | grazing | `{snap_a_hi:>4.0f}° < angle`                      | {n_a[2]:>3} |")
     print(f"| dist | near    | `d ≤ {snap_d_lo:>4.1f}`                          | {n_d[0]:>3} |")
-    print(f"| dist | mid     | `{snap_d_lo:>4.1f} < d ≤ {snap_d_hi:>4.1f}`                 | {n_d[1]:>3} |")
+    print(
+        f"| dist | mid     | `{snap_d_lo:>4.1f} < d ≤ {snap_d_hi:>4.1f}`                 | {n_d[1]:>3} |"
+    )
     print(f"| dist | far     | `{snap_d_hi:>4.1f} < d`                           | {n_d[2]:>3} |")
     print(f"| mot  | static  | `‖velocity‖ ≤ 0.0` (or null)         | {n_velocity_null:>3} |")
-    print(f"| mot  | motion  | `0.0 < ‖velocity‖`                   | {len(records) - n_velocity_null:>3} |")
+    print(
+        f"| mot  | motion  | `0.0 < ‖velocity‖`                   | {len(records) - n_velocity_null:>3} |"
+    )
     print()
 
     # Snap audit: how many records change bucket vs the raw 33/66 cuts.
