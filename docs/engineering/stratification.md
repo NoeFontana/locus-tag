@@ -3,8 +3,10 @@
 > **Purpose.** Define how regression metrics are sliced along physically
 > meaningful axes so we catch regressions that averaging hides.
 >
-> **Status.** Axes are frozen for v1. **Bucket boundaries are TBD** — to be
-> filled during the perception-engineer review (see §6).
+> **Status.** Axes are frozen for v1. **Bucket boundaries are locked**
+> (see §5); they were derived by `tools/bench/strata_histogram.py` running
+> 33/66-percentile equal-frequency snapping over the four
+> `single_tag_locus_v1_tag36h11_*` corpora.
 
 ## 1. Motivation
 
@@ -109,28 +111,35 @@ res=uhd|ppm=lo|aoi=grazing|dist=far|mot=static
 res=hd|ppm=unk|aoi=unk|dist=unk|mot=unk       # ICRA 2020 record
 ```
 
-## 5. Bucket boundary table (TBD)
+## 5. Bucket boundary table
 
-The concrete cut points for each axis are chosen during the engineer review
-(§6). The table below is a skeleton; reviewers fill the numeric columns.
+Derivation: `tools/bench/strata_histogram.py` over the pooled
+`single_tag_locus_v1_tag36h11_*` corpora (n=200), 33/66 percentiles snapped
+to a human-readable grid (dist→0.1m, aoi→5°, ppm→100). The snap audit caps
+reshuffle versus raw percentiles at 15% of the pool; current snap moves
+19/200 records (≤2.5pp per axis from equal-frequency).
 
-| Axis | Slug | Range | Rationale |
-| --- | --- | --- | --- |
-| res | sd | `H ≤ ?` | |
-| res | hd | `? < H ≤ ?` | |
-| res | fhd | `? < H ≤ ?` | |
-| res | uhd | `? < H` | |
-| ppm | lo | `ppm ≤ ?` | |
-| ppm | mid | `? < ppm ≤ ?` | |
-| ppm | hi | `? < ppm` | |
-| aoi | frontal | `angle ≤ ?` | |
-| aoi | oblique | `? < angle ≤ ?` | |
-| aoi | grazing | `? < angle` | |
-| dist | near | `d ≤ ?` | |
-| dist | mid | `? < d ≤ ?` | |
-| dist | far | `? < d` | |
-| mot | static | `‖velocity‖ ≤ ?` | |
-| mot | motion | `? < ‖velocity‖` | |
+The constants below are mirrored in `tools/bench/strata.py`. Editing this
+table is a v1 *patch* bump (see §6) — re-run `strata_histogram.py` and
+update both files in lockstep.
+
+| Axis | Slug    | Range                        | n   |
+| ---- | ------- | ---------------------------- | --- |
+| res  | sd      | `H ≤ 480`                    |  50 |
+| res  | hd      | `480 < H ≤ 720`              |  50 |
+| res  | fhd     | `720 < H ≤ 1080`             |  50 |
+| res  | uhd     | `1080 < H`                   |  50 |
+| ppm  | lo      | `ppm ≤ 800`                  |  71 |
+| ppm  | mid     | `800 < ppm ≤ 1300`           |  58 |
+| ppm  | hi      | `1300 < ppm`                 |  71 |
+| aoi  | frontal | `angle ≤ 35°`                |  66 |
+| aoi  | oblique | `35° < angle ≤ 50°`          |  58 |
+| aoi  | grazing | `50° < angle`                |  76 |
+| dist | near    | `d ≤ 0.7`                    |  69 |
+| dist | mid     | `0.7 < d ≤ 1.5`              |  63 |
+| dist | far     | `1.5 < d`                    |  68 |
+| mot  | static  | `‖velocity‖ ≤ 0.0` (or null) | 200 |
+| mot  | motion  | `0.0 < ‖velocity‖`           |   0 |
 
 ## 6. Extension protocol
 

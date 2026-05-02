@@ -177,10 +177,39 @@ class TagGroundTruth:
     pose: np.ndarray | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class TagAxes:
+    """Raw stratification-axis values for one ground-truth tag.
+
+    Sibling to :class:`TagGroundTruth` rather than an extension —
+    ``Metrics.match_detections`` keys on ``TagGroundTruth`` and shouldn't
+    widen. ``DatasetLoader.load_axes`` returns these alongside ``gt_map``.
+
+    NaN means "axis not derivable from the source dataset" (e.g. ICRA has no
+    per-tag distance metadata).
+    """
+
+    tag_id: int
+    distance_m: float
+    aoi_deg: float
+    ppm: float  # derived: max_edge_px(corners) / (tag_size_mm / 1000)
+    velocity: float | None  # `None` (not NaN) means "not provided" → static
+    shutter_time_ms: float
+    resolution_h: int
+    occlusion_ratio: float
+    tag_size_mm: float
+
+
 @dataclass
 class DatasetMetadata:
     intrinsics: locus.CameraIntrinsics | None = None
     tag_size: float | None = None
+
+
+def max_edge_px(corners: np.ndarray) -> float:
+    """Longest of the four polygon edges in pixels. Used to derive PPM."""
+    rolled = np.roll(corners, -1, axis=0)
+    return float(np.max(np.linalg.norm(rolled - corners, axis=1)))
 
 
 class DatasetLoader:
@@ -327,6 +356,68 @@ class DatasetLoader:
                 meta.tag_size = first["tag_size_mm"] / 1000.0
 
         return [(scenario, images_dir, gt_map, meta)]
+
+    def load_axes(self, scenario: str) -> dict[str, dict[int, TagAxes]]:
+        """Return per-image, per-tag stratification axes for a scenario.
+
+        Lookup shape is ``axes[image_filename][tag_id]`` so callers can join by
+        ``tag_id`` rather than by list index — robust against any reordering
+        in the underlying CSV / JSON parser.
+
+        For Hub corpora (``rich_truth.json``), every axis is populated from the
+        manifest (``ppm`` is derived from corners + ``tag_size_mm``). For ICRA
+        2020 (``tags.csv``), only ``resolution_h`` is recoverable; the rest are
+        ``NaN`` per :doc:`stratification` §3.
+        """
+        # 1. Hub layout (preferred when available)
+        hub_dir = self.icra_dir / scenario
+        if not hub_dir.exists():
+            hub_dir = HUB_CACHE_DIR / scenario
+        rich_path = hub_dir / "rich_truth.json"
+        if rich_path.exists():
+            return self._load_hub_axes(rich_path)
+
+        # 2. ICRA fallback — populate `resolution_h` from image header at most;
+        # other fields collapse to NaN. Not implemented in v1 of this method
+        # because every ICRA stratum is `unk` already and the bench harness
+        # doesn't need per-tag axes there.
+        return {}
+
+    def _load_hub_axes(self, rich_path: Path) -> dict[str, dict[int, TagAxes]]:
+        with open(rich_path) as f:
+            data = json.load(f)
+        entries = data["records"] if isinstance(data, dict) and "records" in data else data
+
+        out: dict[str, dict[int, TagAxes]] = {}
+        for e in entries:
+            if e.get("record_type", "TAG") != "TAG":
+                continue
+            img_name = e.get("image_filename") or e.get("image_id")
+            if img_name is None:
+                continue
+            if not img_name.endswith(".png"):
+                img_name = f"{img_name}.png"
+
+            tag_size_mm = float(e["tag_size_mm"])
+            corners = np.asarray(e["corners"], dtype=np.float64)
+            ppm_raw = float(e.get("ppm", 0.0))
+            # `ppm == 0.0` is the manifest sentinel for "not provided" —
+            # derive from corners per stratification.md §3.
+            ppm = ppm_raw if ppm_raw > 0.0 else max_edge_px(corners) / (tag_size_mm / 1000.0)
+
+            axes = TagAxes(
+                tag_id=int(e["tag_id"]),
+                distance_m=float(e["distance"]),
+                aoi_deg=float(e["angle_of_incidence"]),
+                ppm=ppm,
+                velocity=e.get("velocity"),
+                shutter_time_ms=float(e.get("shutter_time_ms", math.nan)),
+                resolution_h=int(e["resolution"][1]),
+                occlusion_ratio=float(e.get("occlusion_ratio", 0.0)),
+                tag_size_mm=tag_size_mm,
+            )
+            out.setdefault(img_name, {})[axes.tag_id] = axes
+        return out
 
     def _parse_csv(self, csv_file: Path) -> dict[str, list[TagGroundTruth]]:
         """Parses ICRA 2020 ground truth CSV files."""
