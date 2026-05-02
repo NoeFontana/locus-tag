@@ -479,16 +479,21 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
     // fallback path — see `DetectorConfig::pose_consistency_gate_sigma_px`
     // for the σ-decoupling rationale.
     let gate_info_matrices = isotropic_info_matrices(config.pose_consistency_gate_sigma_px);
-    let mut lm_info_buf = [Matrix2::<f64>::zeros(); 4];
-    let selector_info =
-        pick_selector_info(covariances.as_ref(), &gate_info_matrices, &mut lm_info_buf);
+    let selector_info = pick_selector_info(covariances.as_ref(), &gate_info_matrices);
 
     let (best_pose, branch_diag) = if let Some(t) = thresholds {
-        select_ippe_branch(intrinsics, corners, selector_info, tag_size, &candidates, t)
+        select_ippe_branch(
+            intrinsics,
+            corners,
+            &selector_info,
+            tag_size,
+            &candidates,
+            t,
+        )
     } else {
         let pose = find_best_pose(intrinsics, &ideal_corners, tag_size, &candidates);
         let branch_diag =
-            disabled_branch_diagnostics(intrinsics, corners, selector_info, tag_size, &candidates);
+            disabled_branch_diagnostics(intrinsics, corners, &selector_info, tag_size, &candidates);
         (pose, branch_diag)
     };
 
@@ -587,15 +592,13 @@ const SELECTOR_MAX_CONDITION_NUMBER: f64 = 100.0;
 
 /// True iff every per-corner info matrix is positive-definite and the
 /// largest condition number `λ_max / λ_min` stays below
-/// [`SELECTOR_MAX_CONDITION_NUMBER`].
+/// [`SELECTOR_MAX_CONDITION_NUMBER`]. The `lmin > 1e-12` check covers
+/// degenerate / non-PD cases (`det <= 0` ⇒ `λ_min <= 0`).
 #[inline]
 fn info_matrices_well_conditioned(info: &[Matrix2<f64>; 4]) -> bool {
     for m in info {
         let trace = m[(0, 0)] + m[(1, 1)];
         let det = m[(0, 0)] * m[(1, 1)] - m[(0, 1)] * m[(1, 0)];
-        if det <= 1e-12 {
-            return false;
-        }
         let disc = (trace * trace - 4.0 * det).max(0.0).sqrt();
         let lmax = 0.5 * (trace + disc);
         let lmin = 0.5 * (trace - disc);
@@ -607,30 +610,28 @@ fn info_matrices_well_conditioned(info: &[Matrix2<f64>; 4]) -> bool {
 }
 
 /// Choose the info matrices the IPPE branch selector should use to rank
-/// candidates: LM info (Mahalanobis-primary) when both available *and*
-/// well-conditioned, isotropic σ_gate fallback otherwise.
+/// candidates: LM info (Mahalanobis-primary) when covariances are available
+/// *and* invert to a well-conditioned info matrix; isotropic σ_gate
+/// fallback otherwise.
 ///
 /// LM info gives the selector a calibrated weighting — branches whose
 /// residuals lie in low-information directions are correctly preferred.
-/// Recovers ~30 % of the p50 rotation accuracy that the always-Euclidean
-/// fallback gives up. Anisotropic-info pitfalls (residuals "hidden" along
-/// degenerate edges) are guarded by the condition-number check.
+/// Anisotropic-info pitfalls (residuals "hidden" along degenerate edges)
+/// are guarded by the condition-number check.
 #[inline]
-fn pick_selector_info<'a>(
+fn pick_selector_info(
     covariances: Option<&[Matrix2<f64>; 4]>,
-    fallback: &'a [Matrix2<f64>; 4],
-    lm_info_buf: &'a mut [Matrix2<f64>; 4],
-) -> &'a [Matrix2<f64>; 4] {
+    fallback: &[Matrix2<f64>; 4],
+) -> [Matrix2<f64>; 4] {
     let Some(covs) = covariances else {
-        return fallback;
+        return *fallback;
     };
-    for i in 0..4 {
-        lm_info_buf[i] = covs[i].try_inverse().unwrap_or_else(Matrix2::identity);
-    }
-    if info_matrices_well_conditioned(lm_info_buf) {
-        lm_info_buf
+    let info: [Matrix2<f64>; 4] =
+        core::array::from_fn(|i| covs[i].try_inverse().unwrap_or_else(Matrix2::identity));
+    if info_matrices_well_conditioned(&info) {
+        info
     } else {
-        fallback
+        *fallback
     }
 }
 
@@ -1218,45 +1219,6 @@ impl BranchDiagnostics {
 
 /// IPPE branch selector with a Mahalanobis-aware safety net.
 ///
-/// Disambiguation is *primarily* by Euclidean reprojection error
-/// (`find_best_pose`), matching the legacy gate-disabled path. This is
-/// geometrically robust: the lower-residual branch is the physically
-/// correct one regardless of the per-corner information-matrix anisotropy.
-///
-/// Mahalanobis d² is then used only as a *flip safeguard*: swap to the
-/// alternate branch only when its aggregate d² is at least 2× better than
-/// the Euclidean pick AND below the χ²(2; fpr) gate threshold. Both
-/// conditions are required so we never flip toward an alternate that is
-/// merely *less bad* than a degenerate primary — that case is handled
-/// downstream by the consistency gate rejecting both branches.
-///
-/// Why not Mahalanobis-primary? Anisotropic structure-tensor info matrices
-/// can make the Mahalanobis-only ranking prefer branches whose residuals
-/// lie *along* strong edges (low penalty in that direction) rather than
-/// the geometrically-correct branch.
-/// Aggregate squared Mahalanobis distance for `pose`'s reprojection
-/// residuals against `info_matrices`. Single-pass over all four corners.
-#[inline]
-fn branch_aggregate_d2(
-    intrinsics: &CameraIntrinsics,
-    corners: &[[f64; 2]; 4],
-    obj_pts: &[Vector3<f64>; 4],
-    info_matrices: &[Matrix2<f64>; 4],
-    pose: &Pose,
-) -> f64 {
-    let mut agg_d2 = 0.0_f64;
-    for i in 0..4 {
-        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
-        let p = project_with_distortion(&p_cam, intrinsics);
-        let r_u = corners[i][0] - p[0];
-        let r_v = corners[i][1] - p[1];
-        agg_d2 += mahalanobis_d2([r_u, r_v], &info_matrices[i]);
-    }
-    agg_d2
-}
-
-/// IPPE branch selector with a Mahalanobis-aware safety net.
-///
 /// Ranking is by Mahalanobis aggregate d² under `info_matrices`. The caller
 /// chooses what to pass: well-conditioned LM info matrices (anisotropic
 /// Mahalanobis ranking — recovers branches whose residuals lie along
@@ -1279,14 +1241,14 @@ fn select_ippe_branch(
 ) -> (Pose, BranchDiagnostics) {
     let obj_pts = centered_tag_corners(tag_size);
 
-    let agg0 = branch_aggregate_d2(
+    let (_, agg0) = per_corner_d2(
         intrinsics,
         observed_corners,
         &obj_pts,
         info_matrices,
         &candidates[0],
     );
-    let agg1 = branch_aggregate_d2(
+    let (_, agg1) = per_corner_d2(
         intrinsics,
         observed_corners,
         &obj_pts,
