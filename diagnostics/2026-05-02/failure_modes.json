@@ -3,8 +3,7 @@
   "classifier_version": "rotation_tail_diag/v1",
   "sigma_n_sq_configured": 4.0,
   "population": {
-    "healthy": 49,
-    "sigma_miscalibration": 1
+    "healthy": 50
   },
   "classifications": [
     {
@@ -65,11 +64,9 @@
     },
     {
       "scene_id": "scene_0008_cam_0000",
-      "mode": "sigma_miscalibration",
+      "mode": "healthy",
       "evidence": {
-        "image_noise_sigma_estimated": 0.4941932295527552,
-        "configured_sigma": 2.0,
-        "ratio": 0.2470966147763776
+        "rotation_error_chosen_deg": 0.8742870685347056
       }
     },
     {

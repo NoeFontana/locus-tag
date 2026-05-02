@@ -59,7 +59,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 1.9767729182110207,
-      "latency_us": 27021.466055884957,
+      "latency_us": 26817.76089593768,
       "ppm_estimated": 1848.500363051188
     },
     {
@@ -115,7 +115,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 2.2238695329873983,
-      "latency_us": 11357.866926118731,
+      "latency_us": 11769.247939810157,
       "ppm_estimated": 1711.1032585426065
     },
     {
@@ -171,7 +171,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 12395.224068313837,
+      "latency_us": 11775.156948715448,
       "ppm_estimated": 1186.7308290906951
     },
     {
@@ -227,7 +227,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.7412898443291327,
-      "latency_us": 6490.402854979038,
+      "latency_us": 7106.5600495785475,
       "ppm_estimated": 946.5819340260977
     },
     {
@@ -283,7 +283,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 6873.471895232797,
+      "latency_us": 7122.335024178028,
       "ppm_estimated": 1349.882065266476
     },
     {
@@ -339,7 +339,7 @@
       "lm_iterations": 2,
       "lm_convergence": 1,
       "image_noise_sigma": 2.7180627625401534,
-      "latency_us": 6683.685118332505,
+      "latency_us": 6779.405986890197,
       "ppm_estimated": 373.08701906033895
     },
     {
@@ -395,7 +395,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 8.895478131949593,
-      "latency_us": 10881.316848099232,
+      "latency_us": 9426.958160474896,
       "ppm_estimated": 2120.703286012855
     },
     {
@@ -451,7 +451,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 6822.51388207078,
+      "latency_us": 6660.006009042263,
       "ppm_estimated": 671.3734460414952
     },
     {
@@ -474,15 +474,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.2489098459482193,
+        0.007907078601419926,
+        -0.6573881506919861,
+        0.7112118005752563
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        0.004750464577227831,
+        -0.010955816134810448,
+        1.3720003366470337
       ],
       "alternate_quaternion_xyzw": [
         0.1787195347467233,
@@ -495,19 +495,19 @@
         -0.01118417124995409,
         1.3726610489669664
       ],
-      "rotation_error_chosen_deg": 89.18475406381914,
+      "rotation_error_chosen_deg": 0.8742870685347056,
       "rotation_error_alternate_deg": 48.612581397504684,
-      "translation_error_chosen_mm": 1383.1994326048382,
+      "translation_error_chosen_mm": 11.149811966871919,
       "translation_error_alternate_mm": 10.48866395938503,
       "branch_chosen_idx": 0,
       "aggregate_d2_chosen": 62.08806228637695,
       "aggregate_d2_alternate": 917.3268990131273,
       "branch_d2_ratio": 62.781883239746094,
       "max_corner_d2": 60.431583404541016,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 6594.449048861861,
+      "latency_us": 6503.23904119432,
       "ppm_estimated": 928.9840531678656
     },
     {
@@ -563,7 +563,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 4.200642451198419,
-      "latency_us": 22118.22010576725,
+      "latency_us": 23739.560041576624,
       "ppm_estimated": 668.087569028517
     },
     {
@@ -619,7 +619,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 6810.096092522144,
+      "latency_us": 6856.463151052594,
       "ppm_estimated": 1417.6581665273056
     },
     {
@@ -675,7 +675,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 2.4709661477637757,
-      "latency_us": 11600.79287365079,
+      "latency_us": 10483.504040166736,
       "ppm_estimated": 1039.6791604440637
     },
     {
@@ -731,7 +731,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.9883864591055104,
-      "latency_us": 6086.002103984356,
+      "latency_us": 5525.599932298064,
       "ppm_estimated": 1558.358646763406
     },
     {
@@ -787,7 +787,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 15888.59991170466,
+      "latency_us": 15637.675067409873,
       "ppm_estimated": 460.4691580890784
     },
     {
@@ -843,7 +843,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 10916.220024228096,
+      "latency_us": 9258.503094315529,
       "ppm_estimated": 1461.8140530672526
     },
     {
@@ -899,7 +899,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 5988.897057250142,
+      "latency_us": 5913.197062909603,
       "ppm_estimated": 992.9407321199834
     },
     {
@@ -955,7 +955,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 3.4593526068692864,
-      "latency_us": 11311.186011880636,
+      "latency_us": 11307.890992611647,
       "ppm_estimated": 898.038706741526
     },
     {
@@ -1011,7 +1011,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 5.1890289103039295,
-      "latency_us": 8691.669208928943,
+      "latency_us": 8834.822801873088,
       "ppm_estimated": 1683.8788236860896
     },
     {
@@ -1067,7 +1067,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 4578.226013109088,
+      "latency_us": 4599.521867930889,
       "ppm_estimated": 1603.739940981155
     },
     {
@@ -1123,7 +1123,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 2.2238695329873983,
-      "latency_us": 6980.755133554339,
+      "latency_us": 6660.716840997338,
       "ppm_estimated": 706.6091375487055
     },
     {
@@ -1179,7 +1179,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 6396.010983735323,
+      "latency_us": 6350.689101964235,
       "ppm_estimated": 1985.3922431263013
     },
     {
@@ -1235,7 +1235,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.9883864591055104,
-      "latency_us": 8652.428863570094,
+      "latency_us": 8901.93390659988,
       "ppm_estimated": 428.3132643955896
     },
     {
@@ -1291,7 +1291,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 1.4825796886582654,
-      "latency_us": 13615.856179967523,
+      "latency_us": 14499.865006655455,
       "ppm_estimated": 1044.316483580873
     },
     {
@@ -1347,7 +1347,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 5393.144907429814,
+      "latency_us": 5531.919887289405,
       "ppm_estimated": 293.6806059066484
     },
     {
@@ -1403,7 +1403,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 9422.512957826257,
+      "latency_us": 10163.020109757781,
       "ppm_estimated": 1340.325324728682
     },
     {
@@ -1459,7 +1459,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 13556.977966800332,
+      "latency_us": 14929.575147107244,
       "ppm_estimated": 410.24008277062126
     },
     {
@@ -1515,7 +1515,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 1.2354830738818878,
-      "latency_us": 6476.492853835225,
+      "latency_us": 7376.187946647406,
       "ppm_estimated": 587.7869106608504
     },
     {
@@ -1571,7 +1571,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 2.4709661477637757,
-      "latency_us": 7822.053972631693,
+      "latency_us": 8312.9049744457,
       "ppm_estimated": 1859.124699084907
     },
     {
@@ -1627,7 +1627,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 7334.880065172911,
+      "latency_us": 7380.784954875708,
       "ppm_estimated": 1796.5501627948606
     },
     {
@@ -1683,7 +1683,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 2.4709661477637757,
-      "latency_us": 5769.6260046213865,
+      "latency_us": 5390.567006543279,
       "ppm_estimated": 1874.2373862488046
     },
     {
@@ -1739,7 +1739,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 5477.864062413573,
+      "latency_us": 5677.179899066687,
       "ppm_estimated": 1737.576809505427
     },
     {
@@ -1795,7 +1795,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 6346.6159626841545,
+      "latency_us": 6132.7689327299595,
       "ppm_estimated": 798.0473715468578
     },
     {
@@ -1851,7 +1851,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.7412898443291327,
-      "latency_us": 7134.716957807541,
+      "latency_us": 7228.394038975239,
       "ppm_estimated": 1546.2774038947466
     },
     {
@@ -1907,7 +1907,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 7160.566048696637,
+      "latency_us": 7200.411986559629,
       "ppm_estimated": 735.0330918414418
     },
     {
@@ -1963,7 +1963,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 7935.927016660571,
+      "latency_us": 8058.779174461961,
       "ppm_estimated": 1436.9762029138944
     },
     {
@@ -2019,7 +2019,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.7412898443291327,
-      "latency_us": 6771.749118342996,
+      "latency_us": 6925.988011062145,
       "ppm_estimated": 1701.9433341056506
     },
     {
@@ -2075,7 +2075,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 2.2238695329873983,
-      "latency_us": 10590.266901999712,
+      "latency_us": 10587.431024760008,
       "ppm_estimated": 339.68678553181746
     },
     {
@@ -2131,7 +2131,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 6181.176984682679,
+      "latency_us": 6249.865982681513,
       "ppm_estimated": 2232.1538117883483
     },
     {
@@ -2187,7 +2187,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.9883864591055104,
-      "latency_us": 7392.204832285643,
+      "latency_us": 7985.580014064908,
       "ppm_estimated": 1901.2083673701006
     },
     {
@@ -2243,7 +2243,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.7412898443291327,
-      "latency_us": 7148.337783291936,
+      "latency_us": 7347.154896706343,
       "ppm_estimated": 1965.8953055067475
     },
     {
@@ -2299,7 +2299,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 2.965159377316531,
-      "latency_us": 8291.984908282757,
+      "latency_us": 7822.483079507947,
       "ppm_estimated": 1075.7389276748281
     },
     {
@@ -2355,7 +2355,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.9883864591055104,
-      "latency_us": 8150.963112711906,
+      "latency_us": 8673.94101805985,
       "ppm_estimated": 750.68082799399
     },
     {
@@ -2411,7 +2411,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.9883864591055104,
-      "latency_us": 7789.195980876684,
+      "latency_us": 8844.505995512009,
       "ppm_estimated": 1682.135300799369
     },
     {
@@ -2467,7 +2467,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 6568.762939423323,
+      "latency_us": 7048.863219097257,
       "ppm_estimated": 1575.7779201495819
     },
     {
@@ -2523,7 +2523,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.7412898443291327,
-      "latency_us": 9314.158000051975,
+      "latency_us": 10317.262029275298,
       "ppm_estimated": 1092.592510624201
     },
     {
@@ -2579,7 +2579,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 10319.778928533196,
+      "latency_us": 11592.28989854455,
       "ppm_estimated": 1925.3678834353514
     },
     {
@@ -2635,7 +2635,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 5781.804909929633,
+      "latency_us": 5590.680055320263,
       "ppm_estimated": 1253.0521530747537
     },
     {
@@ -2691,7 +2691,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 8183.500962331891,
+      "latency_us": 8174.445014446974,
       "ppm_estimated": 2049.916694187346
     },
     {
@@ -2747,7 +2747,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 1.2354830738818878,
-      "latency_us": 13573.59392568469,
+      "latency_us": 14612.664002925158,
       "ppm_estimated": 2108.9138514761794
     },
     {
@@ -2803,7 +2803,7 @@
       "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 5834.091920405626,
+      "latency_us": 6270.647048950195,
       "ppm_estimated": 1655.8430710003686
     }
   ]

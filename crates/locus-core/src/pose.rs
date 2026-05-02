@@ -363,7 +363,10 @@ pub fn estimate_tag_pose_with_config(
     config: &crate::config::DetectorConfig,
     external_covariances: Option<&[Matrix2<f64>; 4]>,
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>) {
-    let thresholds = ConsistencyThresholds::from_fpr(config.pose_consistency_fpr);
+    let thresholds = ConsistencyThresholds::from_fpr(
+        config.pose_consistency_fpr,
+        config.pose_consistency_min_decisive_ratio,
+    );
     let (pose, cov, _diag) = estimate_tag_pose_with_diagnostics(
         intrinsics,
         corners,
@@ -413,17 +416,30 @@ pub(crate) struct ConsistencyThresholds {
     pub aggregate: f64,
     /// `χ²(1; fpr)` — per-corner gate.
     pub per_corner: f64,
+    /// Branch-ratio escape clause. When the IPPE branch selector
+    /// produced `alternate_d2 / primary_d2 ≥ min_decisive_ratio`, the
+    /// chosen branch is decisive and the χ² gate is bypassed even if
+    /// the post-LM aggregate / per-corner d² exceeds the threshold.
+    ///
+    /// Rationale: the gate's job is to catch IPPE branch ambiguity. A
+    /// genuine ambiguity has both candidates at similar d² (ratio ~ 1).
+    /// A scene-specific noise outlier (PSF artefact, lighting gradient)
+    /// has a clear branch winner but high absolute residual — and
+    /// nulling its pose is lossy. See PR for the rotation-tail analysis.
+    pub min_decisive_ratio: f64,
 }
 
 impl ConsistencyThresholds {
-    /// Build from a false-positive rate. Returns `None` for `fpr ∉ (0, 1)`,
-    /// which the rest of the gate interprets as "disabled".
+    /// Build from a false-positive rate and branch-ratio escape clause.
+    /// Returns `None` for `fpr ∉ (0, 1)`, which the rest of the gate
+    /// interprets as "disabled".
     #[must_use]
-    pub(crate) fn from_fpr(fpr: f64) -> Option<Self> {
+    pub(crate) fn from_fpr(fpr: f64, min_decisive_ratio: f64) -> Option<Self> {
         if fpr > 0.0 && fpr < 1.0 {
             Some(Self {
                 aggregate: chi2_critical(fpr, 2),
                 per_corner: chi2_critical(fpr, 1),
+                min_decisive_ratio,
             })
         } else {
             None
@@ -526,6 +542,7 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
         &gate_info_matrices,
         tag_size,
         &refined_pose,
+        branch_diag.ratio(),
         thresholds,
     );
 
@@ -1315,12 +1332,24 @@ pub(crate) struct ConsistencyVerdict {
     pub max_corner_d2: f64,
 }
 
-/// Final reprojection-consistency check. Two-prong χ² gate:
+/// Final reprojection-consistency check. Two-prong χ² gate with a
+/// branch-ratio escape clause:
 ///
 /// - **Aggregate** (DOF = 8 obs − 6 fitted = 2): rejects poses whose total
 ///   reprojection error is inconsistent with the noise model.
 /// - **Per-corner** (DOF = 1): catches single-corner contamination that
 ///   the aggregate would average over.
+/// - **Branch-ratio escape** (`alternate_d2 / primary_d2 ≥
+///   min_decisive_ratio`): bypasses the χ² test when the IPPE branch
+///   selector had overwhelming evidence. The gate's purpose is catching
+///   IPPE branch ambiguity (both candidates similar d²); when one branch
+///   is decisively better, a high post-LM residual is more likely scene-
+///   specific noise than a wrong branch, and nulling the pose is lossy.
+///
+/// `branch_d2_ratio` is `BranchDiagnostics::ratio()` from the IPPE branch
+/// selector. Pass `f64::NAN` or any value `< thresholds.min_decisive_ratio`
+/// when no branch context is available (e.g. the ROC test harness) to keep
+/// only the χ² test active.
 ///
 /// When `thresholds = None` the gate is disabled — accepts unconditionally
 /// and skips the d² compute on production builds (NaN sentinels), keeping
@@ -1331,8 +1360,10 @@ fn pose_consistency_check(
     info_matrices: &[Matrix2<f64>; 4],
     tag_size: f64,
     refined_pose: &Pose,
+    branch_d2_ratio: f64,
     thresholds: Option<ConsistencyThresholds>,
 ) -> ConsistencyVerdict {
+    let _ = branch_d2_ratio; // consumed below only when thresholds are set
     let Some(t) = thresholds else {
         // Disabled gate: skip 4 distortion projections in production
         // builds; keep them under bench-internals for telemetry.
@@ -1378,7 +1409,11 @@ fn pose_consistency_check(
         refined_pose,
     );
     let max_corner_d2 = per_corner.iter().copied().fold(0.0_f64, f64::max);
-    let accepted = aggregate_d2 <= t.aggregate && max_corner_d2 <= t.per_corner;
+    let chi2_ok = aggregate_d2 <= t.aggregate && max_corner_d2 <= t.per_corner;
+    // Branch-ratio escape: a finite ratio above the threshold bypasses the
+    // χ² test. NaN propagates as `false` (no escape — pure χ² behavior).
+    let branch_decisive = branch_d2_ratio.is_finite() && branch_d2_ratio >= t.min_decisive_ratio;
+    let accepted = chi2_ok || branch_decisive;
 
     ConsistencyVerdict {
         accepted,
@@ -1393,6 +1428,11 @@ fn pose_consistency_check(
 /// exercise the gate with controlled noise without going through the full
 /// pipeline, which is required for the realized-FPR acceptance assertion in
 /// `regression_pose_consistency_roc`.
+///
+/// Disables the branch-ratio escape clause (`min_decisive_ratio = +∞`) so
+/// the realized-FPR is purely a function of the χ²(2)/χ²(1) test — the
+/// branch-ratio escape is meaningful only in the IPPE-driven pipeline and
+/// would confound the ROC characterization the harness performs.
 #[cfg(feature = "bench-internals")]
 #[must_use]
 pub fn bench_pose_consistency_d2(
@@ -1409,7 +1449,8 @@ pub fn bench_pose_consistency_d2(
         info_matrices,
         tag_size,
         refined_pose,
-        ConsistencyThresholds::from_fpr(fpr),
+        f64::NAN,
+        ConsistencyThresholds::from_fpr(fpr, f64::INFINITY),
     );
     (v.accepted, v.aggregate_d2, v.max_corner_d2)
 }
@@ -1452,8 +1493,12 @@ pub fn refine_poses_soa_with_config(
     use rayon::prelude::*;
 
     // Hoist χ² thresholds out of the per-tag inner loop — they depend only
-    // on `pose_consistency_fpr` and are constant for the frame.
-    let thresholds = ConsistencyThresholds::from_fpr(config.pose_consistency_fpr);
+    // on `pose_consistency_fpr` and `pose_consistency_min_decisive_ratio`
+    // and are constant for the frame.
+    let thresholds = ConsistencyThresholds::from_fpr(
+        config.pose_consistency_fpr,
+        config.pose_consistency_min_decisive_ratio,
+    );
 
     // Process valid candidates in parallel.
     // We collect into a temporary Vec to avoid unsafe parallel writes to the batch.
@@ -1798,7 +1843,8 @@ pub fn bench_estimate_tag_pose(
     external_covariances: Option<&[Matrix2<f64>; 4]>,
     fpr: Option<f64>,
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>, BenchPoseDiagnostics) {
-    let thresholds = fpr.and_then(ConsistencyThresholds::from_fpr);
+    let thresholds =
+        fpr.and_then(|f| ConsistencyThresholds::from_fpr(f, config.pose_consistency_min_decisive_ratio));
     let (pose, cov, diag) = estimate_tag_pose_with_diagnostics(
         intrinsics,
         corners,

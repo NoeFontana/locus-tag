@@ -388,6 +388,7 @@ pub struct PyDetectorConfig {
     pub structure_tensor_radius: u8,
     pub pose_consistency_fpr: f64,
     pub pose_consistency_gate_sigma_px: f64,
+    pub pose_consistency_min_decisive_ratio: f64,
     pub post_decode_refinement: bool,
 }
 
@@ -436,6 +437,7 @@ impl PyDetectorConfig {
         structure_tensor_radius,
         pose_consistency_fpr,
         pose_consistency_gate_sigma_px,
+        pose_consistency_min_decisive_ratio,
         post_decode_refinement,
     ))]
     #[allow(clippy::fn_params_excessive_bools)]
@@ -479,6 +481,7 @@ impl PyDetectorConfig {
         structure_tensor_radius: u8,
         pose_consistency_fpr: f64,
         pose_consistency_gate_sigma_px: f64,
+        pose_consistency_min_decisive_ratio: f64,
         post_decode_refinement: bool,
     ) -> Self {
         Self {
@@ -521,6 +524,7 @@ impl PyDetectorConfig {
             structure_tensor_radius,
             pose_consistency_fpr,
             pose_consistency_gate_sigma_px,
+            pose_consistency_min_decisive_ratio,
             post_decode_refinement,
         }
     }
@@ -606,6 +610,7 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             structure_tensor_radius: c.structure_tensor_radius,
             pose_consistency_fpr: c.pose_consistency_fpr,
             pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
+            pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
             post_decode_refinement: c.post_decode_refinement,
         }
     }
@@ -1653,6 +1658,7 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             structure_tensor_radius: c.structure_tensor_radius,
             pose_consistency_fpr: c.pose_consistency_fpr,
             pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
+            pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
             post_decode_refinement: c.post_decode_refinement,
             segmentation_connectivity: c.segmentation_connectivity.into(),
             segmentation_margin: c.segmentation_margin,

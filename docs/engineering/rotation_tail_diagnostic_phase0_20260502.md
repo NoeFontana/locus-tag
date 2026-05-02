@@ -7,13 +7,13 @@ Forensics of the residual rotation tail on `locus_v1_tag36h11_1920x1080` under `
 - **Dataset**: `locus_v1_tag36h11_1920x1080` — 50 scenes, single tag each, AprilTag36h11 family, 1920×1080.
 - **Profile / mode**: `render_tag_hub` + `Accurate`. σ_n² configured = 4.000 (σ ≈ 2.000px).
 - **Recall**: 50/50 scenes detected.
-- **Rotation error vs GT** (degrees, 95% bootstrap CI):  p50 = 0.057 [0.041, 0.093]  ·  p95 = 0.473 [0.275, 49.350]  ·  p99 = 45.810 [0.383, 89.185]
-- **Translation error vs GT** (mm):  p50 = 0.4  ·  p95 = 8.6  ·  p99 = 718.4
-- **Latency** (ms, production path, no diagnostics):  p50 = 7.36  ·  p99 = 24.62
+- **Rotation error vs GT** (degrees, 95% bootstrap CI):  p50 = 0.057 [0.041, 0.093]  ·  p95 = 0.473 [0.275, 0.780]  ·  p99 = 0.771 [0.383, 0.874]
+- **Translation error vs GT** (mm):  p50 = 0.4  ·  p95 = 8.6  ·  p99 = 18.9
+- **Latency** (ms, production path, no diagnostics):  p50 = 7.60  ·  p99 = 25.31
 
 ### Reproducibility cross-check
 
-The published `render_tag_hub` baseline (commit `8890efc`, 2026-04-25) reported rot p99 = 1.897° on this dataset. The current run lands at rot p50 = 0.057° / p99 = 45.810° — the bulk distribution is *better* than the published memo (the snapshot rebless after PR #212 measured all 50 scenes honestly), with a residual tail driven by a small number of outlier scenes. See §2 / §4 for the breakdown.
+The published `render_tag_hub` baseline (commit `8890efc`, 2026-04-25) reported rot p99 = 1.897° on this dataset. The current run lands at rot p50 = 0.057° / p99 = 0.771° — the bulk distribution is *better* than the published memo (the snapshot rebless after PR #212 measured all 50 scenes honestly), with a residual tail driven by a small number of outlier scenes. See §2 / §4 for the breakdown.
 
 ## §2 Failure-mode breakdown
 
@@ -21,10 +21,9 @@ Mutually-exclusive classification of the 50 scenes.
 
 | Mode | Count | % | Counterfactual rot p99 if resolved |
 | :--- | ---: | ---: | ---: |
-| `healthy` | 49 | 98.0% | — |
-| `sigma_miscalibration` | 1 | 2.0% | 0.600° |
+| `healthy` | 50 | 100.0% | — |
 
-_Counterfactual interpretation: "if all `<mode>` scenes had rotation error = 0, what would p99 become?" Current p99 = 45.810°. The mode whose counterfactual drops p99 the most is the priority fix.
+_Counterfactual interpretation: "if all `<mode>` scenes had rotation error = 0, what would p99 become?" Current p99 = 0.771°. The mode whose counterfactual drops p99 the most is the priority fix.
 
 ## §3 Stratified rotation error
 
@@ -32,7 +31,7 @@ _Counterfactual interpretation: "if all `<mode>` scenes had rotation error = 0, 
 
 | Bucket | n | rot p50 (95% CI) | rot p95 | rot p99 | rot max |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| 10.59…28.93 | 12 | 0.189 [0.071, 0.339] | 40.426 | 79.433 | 89.185 |
+| 10.59…28.93 | 12 | 0.189 [0.071, 0.339] | 0.686 | 0.837 | 0.874 |
 | 30.45…45.85 | 13 | 0.032 [0.022, 0.074] | 0.196 | 0.236 | 0.246 |
 | 45.86…54.21 | 12 | 0.047 [0.018, 0.194] | 0.519 | 0.635 | 0.664 |
 | 56.29…59.55 | 13 | 0.074 [0.033, 0.093] | 0.228 | 0.229 | 0.230 |
@@ -43,7 +42,7 @@ _Counterfactual interpretation: "if all `<mode>` scenes had rotation error = 0, 
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | 0.56…0.68 | 12 | 0.027 [0.016, 0.032] | 0.060 | 0.073 | 0.077 |
 | 0.69…0.91 | 13 | 0.049 [0.033, 0.074] | 0.243 | 0.340 | 0.365 |
-| 0.93…1.45 | 12 | 0.076 [0.043, 0.137] | 40.269 | 79.402 | 89.185 |
+| 0.93…1.45 | 12 | 0.076 [0.043, 0.137] | 0.529 | 0.805 | 0.874 |
 | 1.46…3.74 | 13 | 0.230 [0.117, 0.313] | 0.585 | 0.648 | 0.664 |
 
 ### Estimated PPM (px/m)
@@ -51,7 +50,7 @@ _Counterfactual interpretation: "if all `<mode>` scenes had rotation error = 0, 
 | Bucket | n | rot p50 (95% CI) | rot p95 | rot p99 | rot max |
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | 293.68…750.68 | 12 | 0.231 [0.117, 0.357] | 0.592 | 0.650 | 0.664 |
-| 798.05…1349.88 | 13 | 0.078 [0.054, 0.181] | 35.822 | 78.512 | 89.185 |
+| 798.05…1349.88 | 13 | 0.078 [0.054, 0.181] | 0.498 | 0.799 | 0.874 |
 | 1417.66…1711.10 | 12 | 0.055 [0.020, 0.099] | 0.253 | 0.342 | 0.365 |
 | 1737.58…2232.15 | 13 | 0.031 [0.023, 0.033] | 0.048 | 0.049 | 0.049 |
 
@@ -59,7 +58,7 @@ _Counterfactual interpretation: "if all `<mode>` scenes had rotation error = 0, 
 
 | # | scene_id | rot err (°) | trans err (mm) | branch | classification | Rerun | 
 | ---: | :--- | ---: | ---: | ---: | :--- | :--- |
-| 1 | `scene_0008_cam_0000` | 89.18 | 1383.2 | 0 | `sigma_miscalibration` | `recordings/scene_0008_cam_0000.rrd` |
+| 1 | `scene_0008_cam_0000` | 0.87 | 11.1 | 0 | `healthy` | `recordings/scene_0008_cam_0000.rrd` |
 | 2 | `scene_0005_cam_0000` | 0.66 | 26.4 | 0 | `healthy` | `recordings/scene_0005_cam_0000.rrd` |
 | 3 | `scene_0009_cam_0000` | 0.53 | 8.4 | 0 | `healthy` | `recordings/scene_0009_cam_0000.rrd` |
 | 4 | `scene_0025_cam_0000` | 0.40 | 6.9 | 0 | `healthy` | `recordings/scene_0025_cam_0000.rrd` |
@@ -106,29 +105,29 @@ Population: median σ = 0.741px, max = 8.895px. 34 of 50 scenes have σ < 1.00px
 Final per-corner Huber IRLS weights at the LM-converged pose:
 
 ```
-  0.500–0.550  │   (0)
-  0.550–0.600  │   (0)
-  0.600–0.650  │   (0)
-  0.650–0.700  │   (0)
-  0.700–0.750  │   (0)
-  0.750–0.800  │   (0)
-  0.800–0.850  │   (0)
-  0.850–0.900  │   (0)
-  0.900–0.950  │   (0)
-  0.950–1.000  │   (0)
-  1.000–1.050  │ ████████████████████████████████████████  (196)
-  1.050–1.100  │   (0)
-  1.100–1.150  │   (0)
-  1.150–1.200  │   (0)
-  1.200–1.250  │   (0)
-  1.250–1.300  │   (0)
-  1.300–1.350  │   (0)
-  1.350–1.400  │   (0)
-  1.400–1.450  │   (0)
-  1.450–1.500  │   (0)
+  0.219–0.258  │   (1)
+  0.258–0.297  │   (0)
+  0.297–0.336  │   (0)
+  0.336–0.375  │   (0)
+  0.375–0.414  │   (0)
+  0.414–0.453  │   (0)
+  0.453–0.492  │   (0)
+  0.492–0.531  │   (0)
+  0.531–0.570  │   (0)
+  0.570–0.609  │   (0)
+  0.609–0.649  │   (0)
+  0.649–0.688  │   (0)
+  0.688–0.727  │   (0)
+  0.727–0.766  │   (0)
+  0.766–0.805  │   (0)
+  0.805–0.844  │   (0)
+  0.844–0.883  │   (0)
+  0.883–0.922  │   (0)
+  0.922–0.961  │   (0)
+  0.961–1.000  │ ████████████████████████████████████████  (199)
 ```
 
-0 of 196 corners have IRLS weight < 0.3 — that's the threshold the `corner_outlier` classifier uses.
+1 of 200 corners have IRLS weight < 0.3 — that's the threshold the `corner_outlier` classifier uses.
 
 Per-scene branch-d² (chosen vs alternate, log-binned counts):
 
@@ -182,9 +181,9 @@ Per-scene branch-d² (chosen vs alternate, log-binned counts):
 
 ## §7 What this points at
 
-The dominant failure mode is **`sigma_miscalibration`** at 1 of 50 scenes — the configured `sigma_n_sq` is far from the per-image estimated noise floor (Immerkær median Laplacian, see §5). The IRLS weights the LM applies are calibrated on a wrong noise model, biasing the pose. Fix: wire `compute_image_noise_floor` into the per-frame LM info matrices.
+All 50 scenes classify as `healthy` — every rotation residual is within the per-class detector thresholds. Whatever residual tail remains in §1 is below the classifier's discriminating threshold and likely reflects sensor / render noise rather than a fixable pipeline mode. Re-tune the classifier thresholds or extend the failure-mode taxonomy before further triage.
 
-**Healthy** at 49 of 50 scenes — the bulk distribution is well-calibrated; the tail is concentrated in the 1 non-healthy scene(s) above.
+**Healthy** at 50 of 50 scenes — the bulk distribution is well-calibrated; the tail is concentrated in the 0 non-healthy scene(s) above.
 
 ## §8 Profile × mode reproducibility table
 
@@ -196,7 +195,7 @@ Captured via `tools/bench/render_tag_sota_eval.py` on the same dataset, today, f
 | `high_accuracy` | Fast | 94.0 % | 0.345° | 6.350° | 104.238° | 2210 mm | (2026-04-25 snapshot) |
 | `high_accuracy` | Accurate | 94.0 % | 62.857° | 148.239° | 154.233° | 3261 mm | (2026-04-25 snapshot, **pre-fix**; rerun via `render_tag_sota_eval.py`) |
 | `render_tag_hub` | Fast | 100.0 % | 0.363° | 6.137° | 103.402° | 2164 mm | (2026-04-25 snapshot) |
-| **`render_tag_hub`** | **Accurate** | **100.0 %** | **0.057°** | **0.473°** | **45.810°** | **718 mm** | (this run) |
+| **`render_tag_hub`** | **Accurate** | **100.0 %** | **0.057°** | **0.473°** | **0.771°** | **19 mm** | (this run) |
 
 Non-`render_tag_hub` rows above are pre-fix snapshots from 2026-04-25 (commit `8890efc`). After PR #212 the `high_accuracy` Accurate row in particular is stale — rerun `tools/bench/render_tag_sota_eval.py` for fresh numbers.
 
@@ -204,11 +203,9 @@ Non-`render_tag_hub` rows above are pre-fix snapshots from 2026-04-25 (commit `8
 
 1. **Triage the non-healthy scenes (§4 top-10).** 1 of 50 scenes carry the entire residual tail; the linked `.rrd` recordings let you see whether the remaining error is a corner-localization issue, a remaining branch-selector edge case, or sensor / render noise. Fix at this granularity rather than tuning population-level knobs.
 
-2. **Wire `compute_image_noise_floor` into the LM info matrices** to address the `sigma_miscalibration` scenes (1 of 50 here). The helper is permanent in `gradient.rs`; what's missing is a per-frame call from `refine_pose_lm_weighted`. Counterfactual p99 below this drops the residual tail substantially (see §2 table).
+3. **Reframe the SOTA gap.** With render_tag_hub at rot p50 = 0.057° / p99 = 0.771°, the bulk distribution already beats every external detector. Where external libraries still hold the rotation P95/P99 tail (per `render_tag_sota_20260425.md`) is what closing this residual tail unlocks. The next bottleneck is no longer a single regression — it is the tail of outlier scenes plus the σ calibration mismatch on Blender-rendered data.
 
-3. **Reframe the SOTA gap.** With render_tag_hub at rot p50 = 0.057° / p99 = 45.810°, the bulk distribution already beats every external detector. Where external libraries still hold the rotation P95/P99 tail (per `render_tag_sota_20260425.md`) is what closing this residual tail unlocks. The next bottleneck is no longer a single regression — it is the tail of outlier scenes plus the σ calibration mismatch on Blender-rendered data.
-
-4. **Consider extending the failure-mode taxonomy.** Healthy = 49/50 means most residual error falls below the discriminating thresholds in `classify.py`. As the tail shrinks further, the classifier should grow finer modes (e.g. grazing-angle subclass, per-corner GN-residual outlier) to keep producing actionable signal.
+4. **Consider extending the failure-mode taxonomy.** Healthy = 50/50 means most residual error falls below the discriminating thresholds in `classify.py`. As the tail shrinks further, the classifier should grow finer modes (e.g. grazing-angle subclass, per-corner GN-residual outlier) to keep producing actionable signal.
 
 ---
 
