@@ -213,6 +213,8 @@ class DetectionResult:
     @property
     def rejected_error_rates(self) -> npt.NDArray[np.float32]: ...  # (M,)
     @property
+    def rejected_funnel_status(self) -> npt.NDArray[np.uint8]: ...  # (M,) — see locus.FunnelStatus
+    @property
     def telemetry(self) -> PipelineTelemetryResult | None: ...
 
 class CharucoTelemetryResult:

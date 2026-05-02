@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import IntEnum
 from typing import Any
 
 import numpy as np
@@ -123,6 +124,27 @@ class CharucoRefiner:
         return self._inner.estimate(detector._inner, img, intrinsics, debug_telemetry)
 
 
+class FunnelStatus(IntEnum):
+    """Status of a candidate in the fast-path decoding funnel.
+
+    Mirrors the Rust ``locus_core::batch::FunnelStatus`` enum. Values match
+    the ``u8`` codes stored in :attr:`DetectionBatch.rejected_funnel_status`,
+    where only the ``Rejected*`` variants appear in practice.
+    """
+
+    NoneReason = 0
+    """Candidate had not been processed by the funnel."""
+
+    PassedContrast = 1
+    """Passed the O(1) contrast gate. Never appears in ``rejected_funnel_status``."""
+
+    RejectedContrast = 2
+    """Rejected by the O(1) contrast gate — geometry-only failure."""
+
+    RejectedSampling = 3
+    """Rejected during homography DDA / SIMD sampling / Hamming check."""
+
+
 @dataclass(frozen=True)
 class DetectionBatch:
     """
@@ -138,6 +160,8 @@ class DetectionBatch:
     telemetry: "PipelineTelemetry | None" = None
     rejected_corners: np.ndarray | None = None  # Shape: (M, 4, 2), Dtype: float32
     rejected_error_rates: np.ndarray | None = None  # Shape: (M,), Dtype: float32
+    # Shape: (M,), Dtype: uint8. Codes from `FunnelStatus`.
+    rejected_funnel_status: np.ndarray | None = None
 
     @property
     def centers(self) -> np.ndarray:
@@ -307,6 +331,7 @@ class Detector:
             poses=raw.poses,
             rejected_corners=raw.rejected_corners,
             rejected_error_rates=raw.rejected_error_rates,
+            rejected_funnel_status=raw.rejected_funnel_status,
             telemetry=telemetry,
         )
 
@@ -351,6 +376,7 @@ class Detector:
                 poses=r.poses,
                 rejected_corners=r.rejected_corners,
                 rejected_error_rates=r.rejected_error_rates,
+                rejected_funnel_status=r.rejected_funnel_status,
             )
             for r in raw_results
         ]
@@ -377,6 +403,7 @@ __all__ = [
     "DetectorConfig",
     "DistortionModel",
     "EdLinesImbalanceGatePolicy",
+    "FunnelStatus",
     "LocusFeatureError",
     "PipelineTelemetryResult",
     "Pose",

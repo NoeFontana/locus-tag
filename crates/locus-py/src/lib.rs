@@ -648,6 +648,9 @@ pub struct DetectionResult {
     pub poses: Option<Py<PyArray2<f32>>>,
     pub rejected_corners: Py<PyArray3<f32>>,
     pub rejected_error_rates: Py<PyArray1<f32>>,
+    /// Per-rejected-quad funnel status code (matches `locus.FunnelStatus`).
+    /// Shape `(M,)` — same M as `rejected_corners`.
+    pub rejected_funnel_status: Py<PyArray1<u8>>,
     pub telemetry: Option<Py<PipelineTelemetryResult>>,
 }
 
@@ -1466,6 +1469,24 @@ impl Detector {
             ));
         }
 
+        // Rejected Funnel Status: (M,) — `FunnelStatus` is `#[repr(u8)]`,
+        // so a pointer-cast reinterpret is sound and zero-copy.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
+        let rejected_funnel_status_arr = unsafe { PyArray1::<u8>::new(py, [m], false) };
+        // SAFETY: `FunnelStatus` has `#[repr(u8)]` (see `locus_core::batch::FunnelStatus`),
+        // so reading its bytes as `u8` is well-defined. The slice length matches `m` by
+        // construction in `view_with_telemetry`.
+        unsafe {
+            let rejected_funnel_status_slice =
+                rejected_funnel_status_arr.as_slice_mut().map_err(|e| {
+                    PyRuntimeError::new_err(format!("rejected funnel status slice: {e}"))
+                })?;
+            rejected_funnel_status_slice.copy_from_slice(std::slice::from_raw_parts(
+                detections.rejected_funnel_status.as_ptr().cast::<u8>(),
+                m,
+            ));
+        }
+
         // Poses: Vectorized (N, 7) layout: [tx, ty, tz, qx, qy, qz, qw]
         let poses = if has_intrinsics && tag_size.is_some() {
             // SAFETY: see "NumPy allocation safety contract" in module docs.
@@ -1501,6 +1522,7 @@ impl Detector {
             poses,
             rejected_corners: rejected_arr.unbind(),
             rejected_error_rates: rejected_error_rates_arr.unbind(),
+            rejected_funnel_status: rejected_funnel_status_arr.unbind(),
             telemetry,
         })
     }
@@ -2028,6 +2050,8 @@ fn build_detection_result_from_owned(
     let rejected_arr = unsafe { PyArray3::<f32>::new(py, [0, 4, 2], false) };
     // SAFETY: see "NumPy allocation safety contract" in module docs.
     let rejected_error_rates_arr = unsafe { PyArray1::<f32>::new(py, [0], false) };
+    // SAFETY: see "NumPy allocation safety contract" in module docs.
+    let rejected_funnel_status_arr = unsafe { PyArray1::<u8>::new(py, [0], false) };
 
     Ok(DetectionResult {
         ids: ids_arr.unbind(),
@@ -2036,6 +2060,7 @@ fn build_detection_result_from_owned(
         poses,
         rejected_corners: rejected_arr.unbind(),
         rejected_error_rates: rejected_error_rates_arr.unbind(),
+        rejected_funnel_status: rejected_funnel_status_arr.unbind(),
         telemetry: None,
     })
 }

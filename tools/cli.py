@@ -267,16 +267,25 @@ def visualize(
             if batch.rejected_corners is not None and len(batch.rejected_corners) > 0:
                 rejected = batch.rejected_corners
                 rej_errs = batch.rejected_error_rates
+                rej_status = batch.rejected_funnel_status
 
                 colors = []
                 labels = []
                 for j in range(len(rejected)):
-                    err = rej_errs[j] if rej_errs is not None and j < len(rej_errs) else 0.0
-                    if err > 0.0:
+                    err = rej_errs[j] if rej_errs is not None else 0.0
+                    code = (
+                        int(rej_status[j])
+                        if rej_status is not None
+                        else int(locus.FunnelStatus.NoneReason)
+                    )
+                    if code == locus.FunnelStatus.RejectedSampling:
                         colors.append([255, 165, 0, 128])  # Orange (Failed Decode)
                         labels.append(f"Decode Fail: {int(err)} bits")
-                    else:
+                    elif code == locus.FunnelStatus.RejectedContrast:
                         colors.append([255, 0, 0, 128])  # Red (Geometry Reject)
+                        labels.append("Rejected Quad")
+                    else:
+                        colors.append([128, 128, 128, 128])  # Grey (status not set)
                         labels.append("Rejected Quad")
 
                 strips = np.concatenate([rejected, rejected[:, :1, :]], axis=1)
