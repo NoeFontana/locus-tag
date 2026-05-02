@@ -34,7 +34,8 @@ fn assert_shared_defaults(cfg: &DetectorConfig) {
         cfg.adaptive_threshold_gradient_threshold,
         d.adaptive_threshold_gradient_threshold
     );
-    assert_eq!(cfg.quad_min_area, d.quad_min_area);
+    // `quad_min_area` is profile-specific (clean-render profiles raise it to
+    // suppress small textured-quad false positives); asserted per-profile.
     assert_eq!(cfg.quad_max_aspect_ratio, d.quad_max_aspect_ratio);
     assert_eq!(cfg.quad_min_fill_ratio, d.quad_min_fill_ratio);
     assert_eq!(cfg.quad_max_fill_ratio, d.quad_max_fill_ratio);
@@ -60,6 +61,7 @@ fn standard_profile_matches_former_builder() {
     // Standard-specific overrides.
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, true);
+    assert_eq!(cfg.quad_min_area, 16);
     assert_eq!(cfg.quad_max_elongation, 20.0);
     assert_eq!(cfg.quad_min_density, 0.15);
     assert_eq!(cfg.quad_min_edge_score, 4.0);
@@ -83,6 +85,7 @@ fn grid_profile_matches_former_builder() {
     // Grid-specific overrides.
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, false);
+    assert_eq!(cfg.quad_min_area, 16);
     assert_eq!(cfg.quad_max_elongation, 20.0);
     assert_eq!(cfg.quad_min_density, 0.15);
     assert_eq!(cfg.quad_min_edge_score, 2.0);
@@ -106,6 +109,7 @@ fn high_accuracy_profile_routes_low_ppb_to_contour_rdp() {
     // High-accuracy overrides.
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, false);
+    assert_eq!(cfg.quad_min_area, 800);
     assert_eq!(cfg.quad_max_elongation, 20.0);
     assert_eq!(cfg.quad_min_density, 0.15);
     assert_eq!(cfg.quad_min_edge_score, 4.0);
