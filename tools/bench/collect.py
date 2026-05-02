@@ -61,15 +61,21 @@ REJECTED_NEAREST_GT_FACTOR = 1.5
 FP_ATTRIBUTION_FACTOR = 0.5
 
 # Rejection-reason labels for records emitted into ``rejected_funnel_status``.
-# The Rust ``FunnelStatus`` enum only captures gates *up to* the funnel; quads
-# that pass the funnel but fail downstream (decoder/Hamming) keep
-# ``PassedContrast`` as their stored status. Since they're nonetheless in the
-# rejected list, we re-label them ``RejectedDecode`` for plot fidelity.
+# The Rust ``FunnelStatus`` enum has four variants but production code only
+# writes two: ``PassedContrast`` (``funnel.rs:57,133,137``) and
+# ``RejectedContrast`` (``funnel.rs:130``). ``RejectedSampling`` is
+# reserved/aspirational — never emitted. A quad that passes contrast and
+# then fails the decoder/Hamming check leaves ``funnel_status=PassedContrast``
+# and ``status_mask=FailedDecode`` (``decoder.rs:1013,1535``); the partition
+# at ``batch.rs:156-189`` then sends it to the rejected slice with
+# ``funnel_status`` unchanged. So in ``rejected_funnel_status``, code 1 means
+# "passed funnel, decoder-rejected" — re-labelled here as ``RejectedDecode``
+# for plot fidelity.
 _FUNNEL_STATUS_NAMES = {
-    0: "Unknown",  # funnel never ran — shouldn't appear among rejected quads
-    1: "RejectedDecode",  # passed funnel, rejected downstream (Hamming et al.)
-    2: "RejectedContrast",  # geometry-only failure
-    3: "RejectedSampling",  # sampling / homography DDA failure
+    0: "Unknown",  # funnel never ran — should not appear among rejected quads
+    1: "RejectedDecode",  # passed funnel, decoder/Hamming rejected
+    2: "RejectedContrast",  # geometry-only failure (contrast gate)
+    3: "RejectedSampling",  # reserved variant — unreachable in current pipeline
 }
 
 

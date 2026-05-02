@@ -156,15 +156,20 @@ class TestCollectorObserve:
         assert rq.rejection_reason == "RejectedContrast"
 
     def test_rejected_quad_unattributed_when_far_from_gt(self) -> None:
+        """A rejected quad whose center is far from any GT contributes to
+        the unattributed-rejection bucket (``tag_id=None``).
+        """
         c = Collector.new("run-1", "Locus", "standard", "ds")
         gt = _make_gt(tag_id=42, x=100.0, y=100.0)
         # Quad far away — center at (500, 500), > 30 px from GT center.
+        # PassedContrast (=1) is the realistic code for a quad that reached
+        # the decoder and failed Hamming — re-labelled to RejectedDecode.
         rejected = RejectedQuads(
             corners=np.array(
                 [[[495, 495], [505, 495], [505, 505], [495, 505]]],
                 dtype=np.float32,
             ),
-            funnel_status=np.array([3], dtype=np.uint8),  # RejectedSampling
+            funnel_status=np.array([1], dtype=np.uint8),
             error_rates=np.array([7.0], dtype=np.float32),
         )
         c.observe(
@@ -178,7 +183,7 @@ class TestCollectorObserve:
         )
         rq = c.records[1]
         assert rq.tag_id is None
-        assert rq.rejection_reason == "RejectedSampling"
+        assert rq.rejection_reason == "RejectedDecode"
         assert rq.hamming_bits == 7  # error_rate forwarded when decoder ran
 
     def test_false_positive_emitted_when_detection_does_not_match_gt(self) -> None:
