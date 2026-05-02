@@ -379,7 +379,14 @@ impl Default for DetectorConfig {
             threshold_max_radius: 15,
             adaptive_threshold_constant: 0,
             adaptive_threshold_gradient_threshold: 10,
-            quad_min_area: 16,
+            // 1 PPB on the smallest supported family's outer grid (6×6 cells:
+            // AprilTag16h5, ArUco4x4) — below 36 px² a quad cannot represent
+            // 1 pixel per bit on any family, so the decoder cannot succeed.
+            // 16 was a placeholder (~0.5–0.7 PPB depending on family) that
+            // never decoded anything it accepted that 36 wouldn't. Profiled
+            // recall-neutral against ICRA2020/forward (worst-case TP_min
+            // workload), tag36h11 1 PPB (= 64) costs 1 pp recall on forward.
+            quad_min_area: 36,
             quad_max_aspect_ratio: 10.0,
             quad_min_fill_ratio: 0.10,
             quad_max_fill_ratio: 0.98,
@@ -1389,7 +1396,7 @@ mod tests {
     fn test_detector_config_defaults() {
         let config = DetectorConfig::default();
         assert_eq!(config.threshold_tile_size, 8);
-        assert_eq!(config.quad_min_area, 16);
+        assert_eq!(config.quad_min_area, 36);
         assert_eq!(config.quad_min_edge_length, 4.0);
         assert_eq!(config.max_hamming_error, None);
     }
