@@ -212,6 +212,59 @@ def max_edge_px(corners: np.ndarray) -> float:
     return float(np.max(np.linalg.norm(rolled - corners, axis=1)))
 
 
+@dataclass(frozen=True, slots=True)
+class RejectedQuads:
+    """Per-frame Locus quads that were rejected before successful decode.
+
+    Returned as the second element of :meth:`LocusWrapper.detect`. ``None``
+    for non-Locus wrappers since they don't expose intermediate rejections.
+
+    All three arrays share axis-0 length M.
+    """
+
+    corners: np.ndarray  # (M, 4, 2) float32
+    funnel_status: np.ndarray  # (M,) uint8 — see locus.FunnelStatus
+    error_rates: np.ndarray  # (M,) float32
+
+    @classmethod
+    def from_batch(cls, batch: "locus.DetectionBatch") -> "RejectedQuads | None":
+        if batch.rejected_corners is None or batch.rejected_funnel_status is None:
+            return None
+        return cls(
+            corners=batch.rejected_corners,
+            funnel_status=batch.rejected_funnel_status,
+            error_rates=batch.rejected_error_rates
+            if batch.rejected_error_rates is not None
+            else np.zeros(len(batch.rejected_corners), dtype=np.float32),
+        )
+
+    def __len__(self) -> int:
+        return len(self.corners)
+
+
+def serializable_from_batch(batch: "locus.DetectionBatch") -> list[dict[str, Any]]:
+    """Convert a Locus :class:`DetectionBatch` to the wrapper-uniform dict list.
+
+    Shared between :meth:`LocusWrapper.detect` (ICRA flow) and the Hub flow at
+    ``tools/cli.py`` which calls ``wrapper.detector.detect()`` directly so it
+    can pass ``pose_estimation_mode=Accurate``.
+    """
+    out: list[dict[str, Any]] = []
+    for i in range(len(batch)):
+        corners = batch.corners[i]
+        det: dict[str, Any] = {
+            "id": int(batch.ids[i]),
+            "center": np.mean(corners, axis=0).tolist(),
+            "corners": corners.tolist(),
+            "hamming": int(batch.error_rates[i]),
+            "margin": 0.0,
+        }
+        if batch.poses is not None:
+            det["pose"] = batch.poses[i].tolist()
+        out.append(det)
+    return out
+
+
 class DatasetLoader:
     def __init__(self, icra_dir: Path = ICRA_CACHE_DIR):
         self.icra_dir = icra_dir
@@ -768,24 +821,9 @@ class LocusWrapper(LibraryWrapper):
         img: np.ndarray,
         intrinsics: locus.CameraIntrinsics | None = None,
         tag_size: float | None = None,
-    ) -> tuple[list[dict[str, Any]], Any]:
+    ) -> tuple[list[dict[str, Any]], "RejectedQuads | None"]:
         batch = self.detector.detect(img, intrinsics=intrinsics, tag_size=tag_size)
-
-        serializable = []
-        for i in range(len(batch)):
-            corners = batch.corners[i]
-            center = np.mean(corners, axis=0).tolist()
-            det = {
-                "id": int(batch.ids[i]),
-                "center": center,
-                "corners": corners.tolist(),
-                "hamming": int(batch.error_rates[i]),
-                "margin": 0.0,  # Not currently exposed
-            }
-            if batch.poses is not None:
-                det["pose"] = batch.poses[i].tolist()
-            serializable.append(det)
-        return serializable, None
+        return serializable_from_batch(batch), RejectedQuads.from_batch(batch)
 
 
 class OpenCVWrapper(LibraryWrapper):

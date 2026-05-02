@@ -353,6 +353,11 @@ def bench_real(
     min_range: int = typer.Option(10, help="Threshold min range"),
     max_hamming: int = typer.Option(2, help="Max hamming error"),
     min_edge_score: float = typer.Option(4.0, help="Min edge alignment score"),
+    record_out: Path | None = typer.Option(
+        None,
+        help="Write per-observation Tier-1 records (parquet) to this path. "
+        "When unset, no records are emitted and the run is unchanged.",
+    ),
 ):
     """Run benchmarks on real-world datasets (ICRA)."""
     import cv2
@@ -360,6 +365,12 @@ def bench_real(
     import numpy as np
     from tqdm import tqdm
 
+    from tools.bench.collect import (
+        Collector,
+        build_provenance,
+        flush_collectors,
+        new_run_id,
+    )
     from tools.bench.utils import (
         HUB_CACHE_DIR,
         ICRA_CACHE_DIR,
@@ -374,6 +385,7 @@ def bench_real(
         aggregate_pose_stats,
         build_board_refiner,
         new_pose_stats,
+        serializable_from_batch,
     )
 
     if profile:
@@ -486,6 +498,11 @@ def bench_real(
 
     current_results: dict[str, dict[str, dict[str, Any]]] = {}
 
+    # Tier-1 collector setup (no-op when --record-out is unset).
+    record_collectors: list[Collector] = []
+    record_run_id = new_run_id() if record_out else ""
+    record_profile_label = "standard"  # CLI overrides feed a single profile per run.
+
     if hub_config:
         hub_dir = data_dir if data_dir else HUB_CACHE_DIR
         ds = HubDatasetLoader(root=hub_dir).load_dataset(hub_config)
@@ -510,8 +527,19 @@ def bench_real(
 
         eval_tag_size = ds.tag_size if ds.tag_size is not None else 1.0
 
+        # Per-tag stratification axes for the Tier-1 collector. Empty {} when
+        # --record-out is unset or the corpus has no rich_truth.json.
+        hub_axes: dict[str, dict[int, Any]] = {}
+        if record_out:
+            hub_axes = DatasetLoader(icra_dir=HUB_CACHE_DIR).load_axes(hub_config)
+
         for wrapper in wrappers:
             stats = new_pose_stats()
+            collector = (
+                Collector.new(record_run_id, wrapper.name, record_profile_label, hub_config)
+                if record_out and not is_board
+                else None
+            )
 
             for img_name in tqdm(img_names, desc=f"{wrapper.name:<10}"):
                 img_path = ds.images_dir / img_name
@@ -525,7 +553,8 @@ def bench_real(
                 start = time.perf_counter()
 
                 batch: Any = None
-                detections = None
+                detections: list[dict[str, Any]] | None = None
+                rejected = None
                 if isinstance(wrapper, LocusWrapper):
                     if is_board and refiner:
                         assert ds.intrinsics is not None
@@ -540,11 +569,12 @@ def bench_real(
                         )
                 else:
                     # OpenCV/Pupil fallback: board refiner not supported
-                    detections, _ = wrapper.detect(
+                    detections, rejected = wrapper.detect(
                         img, intrinsics=ds.intrinsics, tag_size=eval_tag_size
                     )
 
-                stats["latency"].append((time.perf_counter() - start) * 1000.0)
+                latency_ms = (time.perf_counter() - start) * 1000.0
+                stats["latency"].append(latency_ms)
 
                 if is_board:
                     board_gt = ds.gt_map[img_name]["board_pose"]
@@ -573,6 +603,41 @@ def bench_real(
                             accumulate_pose_match(
                                 stats, matched, int(det["id"]), gt_tags, det.get("pose")
                             )
+
+                    if collector is not None:
+                        from tools.bench.utils import RejectedQuads, TagGroundTruth
+
+                        det_list = (
+                            serializable_from_batch(batch)
+                            if batch is not None
+                            else (detections or [])
+                        )
+                        rejected_quads = (
+                            RejectedQuads.from_batch(batch) if batch is not None else rejected
+                        )
+                        # Hub `gt_tags` is dict[tag_id, {"corners", "pose"?}];
+                        # collector wants list[TagGroundTruth].
+                        gt_list = [
+                            TagGroundTruth(
+                                tag_id=tid,
+                                corners=np.asarray(d["corners"], dtype=np.float32),
+                                pose=d.get("pose"),
+                            )
+                            for tid, d in gt_tags.items()
+                        ]
+                        collector.observe(
+                            image_id=img_name,
+                            detections=det_list,
+                            gt_tags=gt_list,
+                            axes_lookup=hub_axes.get(img_name, {}),
+                            frame_latency_ms=latency_ms,
+                            rejected=rejected_quads,
+                            resolution_h=int(img.shape[0]),
+                            intrinsics=ds.intrinsics,
+                        )
+
+            if collector is not None:
+                record_collectors.append(collector)
 
             agg = aggregate_pose_stats(stats)
             current_results[hub_config][wrapper.name] = {
@@ -628,6 +693,11 @@ def bench_real(
 
                 for wrapper in wrappers:
                     stats = {"gt": 0, "det": 0, "err_sum": 0.0, "latency": []}
+                    collector = (
+                        Collector.new(record_run_id, wrapper.name, record_profile_label, ds_name)
+                        if record_out
+                        else None
+                    )
 
                     for img_name in tqdm(img_names, desc=f"{wrapper.name:<10}"):
                         img_path = img_dir / img_name
@@ -640,15 +710,31 @@ def bench_real(
 
                         gt_tags = gt_map[img_name]
                         start = time.perf_counter()
-                        detections, _ = wrapper.detect(
+                        detections, rejected = wrapper.detect(
                             img, intrinsics=intrinsics, tag_size=tag_size
                         )
-                        stats["latency"].append((time.perf_counter() - start) * 1000.0)
+                        latency_ms = (time.perf_counter() - start) * 1000.0
+                        stats["latency"].append(latency_ms)
 
                         correct, err_sum, _ = Metrics.match_detections(detections, gt_tags)
                         stats["gt"] += len(gt_tags)
                         stats["det"] += correct
                         stats["err_sum"] += err_sum
+
+                        if collector is not None:
+                            collector.observe(
+                                image_id=img_name,
+                                detections=detections,
+                                gt_tags=gt_tags,
+                                axes_lookup={},  # ICRA → all axes NaN → unk strata
+                                frame_latency_ms=latency_ms,
+                                rejected=rejected,
+                                resolution_h=int(img.shape[0]),
+                                intrinsics=intrinsics,
+                            )
+
+                    if collector is not None:
+                        record_collectors.append(collector)
 
                     recall = (stats["det"] / stats["gt"] * 100) if stats["gt"] > 0 else 0
                     avg_err = (stats["err_sum"] / stats["det"]) if stats["det"] > 0 else 0
@@ -676,6 +762,11 @@ def bench_real(
         with open(save_baseline, "w") as f:
             json.dump(current_results, f, indent=2)
         typer.echo(f"\nSaved baseline to {save_baseline}")
+
+    if record_out and record_collectors:
+        provenance = build_provenance(dataset_version=hub_config or "icra-2020")
+        n_rows = flush_collectors(record_collectors, provenance, record_out)
+        typer.echo(f"\nWrote {n_rows} Tier-1 records (run_id={record_run_id[:8]}…) to {record_out}")
 
 
 @bench_app.command("synthetic")
