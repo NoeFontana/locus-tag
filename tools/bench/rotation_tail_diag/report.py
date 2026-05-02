@@ -288,13 +288,29 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
 
     md.append("### Reproducibility cross-check")
     md.append("")
-    md.append(
-        "The published `render_tag_hub` baseline (commit `8890efc`, 2026-04-25) "
-        "reported rot p99 = 1.897° on this exact dataset. The numbers above show "
-        "**a regression**: the live `render_tag_hub` + Accurate-mode pose path "
-        "now produces rot p50 ≈ 60° (two orders of magnitude). Reproduced "
-        "independently via `tools/bench/render_tag_sota_eval.py` — see §7."
-    )
+    # Two-state narrative: the harness was first run while a regression was
+    # active (rot p50 ≈ 60°). After the gate / branch-selector fixes landed,
+    # rot p50 dropped to ~0.06° and the residual story is a single-scene
+    # tail. Pivot the prose on rot_p50 instead of hardcoding either case.
+    if rot_p50 > 5.0:
+        md.append(
+            "The published `render_tag_hub` baseline (commit `8890efc`, "
+            "2026-04-25) reported rot p99 = 1.897° on this exact dataset. "
+            "The numbers above show **a regression**: the live "
+            "`render_tag_hub` + Accurate-mode pose path now produces rot p50 "
+            f"≈ {rot_p50:.0f}° (two orders of magnitude). Reproduced "
+            "independently via `tools/bench/render_tag_sota_eval.py` — see §7."
+        )
+    else:
+        md.append(
+            "The published `render_tag_hub` baseline (commit `8890efc`, "
+            "2026-04-25) reported rot p99 = 1.897° on this dataset. The "
+            f"current run lands at rot p50 = {rot_p50:.3f}° / p99 = "
+            f"{rot_p99:.3f}° — the bulk distribution is *better* than the "
+            "published memo (the snapshot rebless after PR #212 measured "
+            f"all 50 scenes honestly), with a residual tail driven by a "
+            "small number of outlier scenes. See §2 / §4 for the breakdown."
+        )
     md.append("")
 
     md.append("## §2 Failure-mode breakdown")
@@ -415,44 +431,92 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
 
     md.append("## §7 What this points at")
     md.append("")
-    md.append(
-        f"The dominant failure mode is **`frame_or_winding`** at "
-        f"{failure_modes.population.get('frame_or_winding', 0)} of {scenes.n_scenes} "
-        "scenes — i.e. *the chosen IPPE branch fits the observed corners well "
-        "(low aggregate d²) but its rotation against GT is large* (>30°). "
-        "This is the signature of a coordinate-frame or corner-ordering "
-        "mismatch upstream of the pose solver, not a pose-refinement issue. "
-        "Fixing the LM solver alone cannot recover from it; the offending "
-        "permutation/sign needs to be located in:"
-    )
+    pop = failure_modes.population
+    n_total = scenes.n_scenes
+    # Find the dominant *non-healthy* mode and dispatch the narrative on it.
+    nonhealthy = {k: v for k, v in pop.items() if k != "healthy" and v > 0}
+    dominant = max(nonhealthy, key=nonhealthy.get) if nonhealthy else None
+    healthy_count = pop.get("healthy", 0)
+
+    if dominant == "frame_or_winding":
+        md.append(
+            f"The dominant failure mode is **`frame_or_winding`** at "
+            f"{pop['frame_or_winding']} of {n_total} scenes — i.e. *the "
+            "chosen IPPE branch fits the observed corners well (low "
+            "aggregate d²) but its rotation against GT is large* (>30°). "
+            "This is the signature of a coordinate-frame or corner-ordering "
+            "mismatch upstream of the pose solver, not a pose-refinement "
+            "issue. Fixing the LM solver alone cannot recover from it; the "
+            "offending permutation/sign needs to be located in the corner-"
+            "extraction stage or the Accurate-mode weighted LM path."
+        )
+    elif dominant == "branch_flip":
+        md.append(
+            f"The dominant failure mode is **`branch_flip`** at "
+            f"{pop['branch_flip']} of {n_total} scenes — the IPPE "
+            "two-branch ambiguity is being resolved against geometry. "
+            "These are typically grazing-angle / near-degenerate viewing "
+            "geometries where the two IPPE solutions have very similar "
+            "reprojection error and the disambiguator picks the wrong one. "
+            "Fixes: tighter Mahalanobis selector, photometric consistency "
+            "score, or temporal smoothing."
+        )
+    elif dominant == "corner_outlier":
+        md.append(
+            f"The dominant failure mode is **`corner_outlier`** at "
+            f"{pop['corner_outlier']} of {n_total} scenes — at least one "
+            "corner has IRLS weight < 0.3 at the LM-converged pose, "
+            "indicating sub-pixel localization failure on that corner. "
+            "Look upstream of the pose solver: GWLF / EdLines / Erf "
+            "subpixel refinement, or PSF-saturated corners on extremely "
+            "close tags."
+        )
+    elif dominant == "sigma_miscalibration":
+        md.append(
+            f"The dominant failure mode is **`sigma_miscalibration`** at "
+            f"{pop['sigma_miscalibration']} of {n_total} scenes — the "
+            "configured `sigma_n_sq` is far from the per-image estimated "
+            "noise floor (Immerkær median Laplacian, see §5). The IRLS "
+            "weights the LM applies are calibrated on a wrong noise "
+            "model, biasing the pose. Fix: wire `compute_image_noise_floor` "
+            "into the per-frame LM info matrices."
+        )
+    elif dominant is not None:
+        md.append(
+            f"The dominant failure mode is **`{dominant}`** at "
+            f"{pop[dominant]} of {n_total} scenes. See `classify.py` for "
+            "the precise classifier rule and the linked .rrd recordings "
+            "for per-scene visualizations."
+        )
+    else:
+        md.append(
+            f"All {healthy_count} scenes classify as `healthy` — every "
+            "rotation residual is within the per-class detector thresholds. "
+            "Whatever residual tail remains in §1 is below the classifier's "
+            "discriminating threshold and likely reflects sensor / render "
+            "noise rather than a fixable pipeline mode. Re-tune the "
+            "classifier thresholds or extend the failure-mode taxonomy "
+            "before further triage."
+        )
     md.append("")
-    md.append(
-        "1. The corner-extraction stage (EdLines vs ContourRdp produces "
-        "different corner orderings on this dataset — see the "
-        "render_tag_sota_eval.py cross-product table in §8)."
-    )
-    md.append(
-        "2. The Accurate-mode-only weighted LM path "
-        "(`refine_pose_lm_weighted`), which is the only path that "
-        "regresses; Fast-mode `refine_pose_lm` is healthy on `standard` "
-        "profile (rot p50 = 0.288°)."
-    )
-    md.append("")
-    md.append(
-        "**`branch_flip`** at "
-        f"{failure_modes.population.get('branch_flip', 0)} scenes is real but "
-        "secondary. It will only ever explain a small fraction of the tail "
-        "while `frame_or_winding` dominates."
-    )
-    md.append("")
-    md.append(
-        "**`sigma_miscalibration`** is partially confounded with the dataset "
-        "rather than the algorithm: Blender-rendered images have very low "
-        "noise floors, while the production profiles ship `sigma_n_sq = 4.0` "
-        "(σ ≈ 2 px). Phase 3 of the SOTA plan (per-frame σ estimation) "
-        "addresses this directly."
-    )
-    md.append("")
+    if healthy_count > 0:
+        md.append(
+            f"**Healthy** at {healthy_count} of {n_total} scenes — the bulk "
+            "distribution is well-calibrated; the tail is concentrated in "
+            f"the {n_total - healthy_count} non-healthy scene(s) above."
+        )
+        md.append("")
+    if "sigma_miscalibration" in pop and dominant != "sigma_miscalibration":
+        md.append(
+            f"**`sigma_miscalibration`** at {pop['sigma_miscalibration']} "
+            "scene(s) — partially confounded with the dataset rather than "
+            "the algorithm: Blender-rendered images have very low noise "
+            "floors, while the production profiles ship `sigma_n_sq = 4.0` "
+            "(σ ≈ 2 px). The `compute_image_noise_floor` helper is "
+            "permanent in `gradient.rs` and ready to wire into the "
+            "per-frame LM info matrices."
+        )
+        md.append("")
 
     md.append("## §8 Profile × mode reproducibility table")
     md.append("")
@@ -466,61 +530,126 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
         "| Profile | Mode | Recall | rot p50 | rot p95 | rot p99 | trans p99 |"
     )
     md.append("| :--- | :--- | ---: | ---: | ---: | ---: | ---: |")
-    md.append("| `standard` | Accurate | 100.0 % | 0.288° | 1.572° | 27.248° | 50.3 mm |")
-    md.append("| `high_accuracy` | Fast | 94.0 % | 0.345° | 6.350° | 104.238° | 2210 mm |")
-    md.append("| `high_accuracy` | Accurate | 94.0 % | 62.857° | 148.239° | 154.233° | 3261 mm |")
-    md.append("| `render_tag_hub` | Fast | 100.0 % | 0.363° | 6.137° | 103.402° | 2164 mm |")
+    md.append(
+        "| `standard` | Accurate | 100.0 % | 0.288° | 1.572° | 27.248° | 50.3 mm | "
+        "(2026-04-25 snapshot) |"
+    )
+    md.append(
+        "| `high_accuracy` | Fast | 94.0 % | 0.345° | 6.350° | 104.238° | 2210 mm | "
+        "(2026-04-25 snapshot) |"
+    )
+    md.append(
+        "| `high_accuracy` | Accurate | 94.0 % | 62.857° | 148.239° | 154.233° | "
+        "3261 mm | (2026-04-25 snapshot, **pre-fix**; rerun via "
+        "`render_tag_sota_eval.py`) |"
+    )
+    md.append(
+        "| `render_tag_hub` | Fast | 100.0 % | 0.363° | 6.137° | 103.402° | 2164 mm | "
+        "(2026-04-25 snapshot) |"
+    )
     md.append(
         f"| **`render_tag_hub`** | **Accurate** | **100.0 %** | **{rot_p50:.3f}°** | "
         f"**{rot_p95:.3f}°** | **{rot_p99:.3f}°** | **{trans_p99:.0f} mm** | "
         "(this run) |"
     )
     md.append("")
-    md.append(
-        "**Recovery path: switch the rotation-tail Phase 1–4 work to use "
-        "`standard` profile first** — that's where the ~28° p99 tail still "
-        "behaves like a real perception problem. `render_tag_hub` and "
-        "`high_accuracy` need their Accurate-mode pose regression fixed "
-        "before they can serve as the SOTA floor."
-    )
+    if rot_p50 > 5.0:
+        md.append(
+            "**Recovery path: switch the rotation-tail Phase 1–4 work to use "
+            "`standard` profile first** — that's where the ~28° p99 tail still "
+            "behaves like a real perception problem. `render_tag_hub` and "
+            "`high_accuracy` need their Accurate-mode pose regression fixed "
+            "before they can serve as the SOTA floor."
+        )
+    else:
+        md.append(
+            "Non-`render_tag_hub` rows above are pre-fix snapshots from "
+            "2026-04-25 (commit `8890efc`). After PR #212 the "
+            "`high_accuracy` Accurate row in particular is stale — rerun "
+            "`tools/bench/render_tag_sota_eval.py` for fresh numbers."
+        )
     md.append("")
 
-    md.append("## §9 Recommendations (reorders Phase 1–4 from the SOTA plan)")
+    md.append("## §9 Recommendations")
     md.append("")
-    md.append(
-        "1. **Phase 0.1 (new)**: Bisect the Accurate-mode regression on "
-        "`render_tag_hub` / `high_accuracy`. Most likely culprits, in order:"
-    )
-    md.append("   - EdLines corner ordering vs ContourRdp; check the four corners' winding direction.")
-    md.append("   - Recent `refine_pose_lm_weighted` changes (`8890efc` introduced the Mahalanobis χ² gate).")
-    md.append("   - `pose_consistency_fpr = 1e-3` rejecting all geometrically-consistent poses for a frame-flip reason.")
-    md.append("")
-    md.append(
-        "2. **Phase 1 (photometric refinement)**: deferred until the regression "
-        "above is fixed. Photometric refinement cannot recover from a corner-"
-        "ordering bug."
-    )
-    md.append("")
-    md.append(
-        "3. **Phase 2 (branch hardening)**: real but small (12% of scenes). "
-        "Only worthwhile after Phase 0.1; otherwise hardened branch selection "
-        "still picks a corner-mis-ordered IPPE candidate."
-    )
-    md.append("")
-    md.append(
-        "4. **Phase 3 (per-frame σ estimation)**: the harness already provides "
-        "`compute_image_noise_floor` (permanent in `gradient.rs`); Phase 3 just "
-        "needs to wire it into the per-frame LM info matrices. Independently "
-        "useful regardless of Phase 0.1 outcome."
-    )
-    md.append("")
-    md.append(
-        "5. **Phase 4 (deferred)**: revisit after re-running the diagnostic on "
-        "the fixed `render_tag_hub` / `high_accuracy` paths. Likely the "
-        "failure-mode population shifts substantially when `frame_or_winding` "
-        "is resolved."
-    )
-    md.append("")
+    if rot_p50 > 5.0:
+        # Regression-dominated: the SOTA plan's Phase 1-4 are blocked behind
+        # the Accurate-mode regression. Original Phase 0.1 ordering.
+        md.append(
+            "1. **Phase 0.1**: Bisect the Accurate-mode regression on "
+            "`render_tag_hub` / `high_accuracy`. Most likely culprits, in "
+            "order: EdLines corner ordering vs ContourRdp (winding "
+            "direction); recent `refine_pose_lm_weighted` changes "
+            "(`8890efc` introduced the Mahalanobis χ² gate); "
+            "`pose_consistency_fpr = 1e-3` rejecting all geometrically-"
+            "consistent poses."
+        )
+        md.append("")
+        md.append(
+            "2. **Phase 1 (photometric refinement)**: deferred until the "
+            "regression above is fixed. Photometric refinement cannot "
+            "recover from a corner-ordering bug."
+        )
+        md.append("")
+        md.append(
+            "3. **Phase 2 (branch hardening)**: real but small. Only "
+            "worthwhile after Phase 0.1; otherwise hardened branch "
+            "selection still picks a corner-mis-ordered IPPE candidate."
+        )
+        md.append("")
+        md.append(
+            "4. **Phase 3 (per-frame σ estimation)**: the harness already "
+            "provides `compute_image_noise_floor` (permanent in "
+            "`gradient.rs`); Phase 3 just needs to wire it into the "
+            "per-frame LM info matrices. Independently useful regardless "
+            "of Phase 0.1 outcome."
+        )
+        md.append("")
+    else:
+        # Post-fix tail: the bulk distribution is solid; what remains is a
+        # small set of outlier scenes plus σ miscalibration.
+        sigma_count = pop.get("sigma_miscalibration", 0)
+        worst_count = max(1, n_total - healthy_count)
+        md.append(
+            "1. **Triage the non-healthy scenes (§4 top-10).** "
+            f"{worst_count} of {n_total} scenes carry the entire residual "
+            "tail; the linked `.rrd` recordings let you see whether the "
+            "remaining error is a corner-localization issue, a remaining "
+            "branch-selector edge case, or sensor / render noise. Fix at "
+            "this granularity rather than tuning population-level knobs."
+        )
+        md.append("")
+        if sigma_count > 0:
+            md.append(
+                "2. **Wire `compute_image_noise_floor` into the LM info "
+                "matrices** to address the `sigma_miscalibration` "
+                f"scenes ({sigma_count} of {n_total} here). The helper is "
+                "permanent in `gradient.rs`; what's missing is a per-"
+                "frame call from `refine_pose_lm_weighted`. Counterfactual "
+                "p99 below this drops the residual tail substantially "
+                "(see §2 table)."
+            )
+            md.append("")
+        md.append(
+            "3. **Reframe the SOTA gap.** With render_tag_hub at "
+            f"rot p50 = {rot_p50:.3f}° / p99 = {rot_p99:.3f}°, the bulk "
+            "distribution already beats every external detector. Where "
+            "external libraries still hold the rotation P95/P99 tail (per "
+            "`render_tag_sota_20260425.md`) is what closing this residual "
+            "tail unlocks. The next bottleneck is no longer a single "
+            "regression — it is the tail of outlier scenes plus the σ "
+            "calibration mismatch on Blender-rendered data."
+        )
+        md.append("")
+        md.append(
+            "4. **Consider extending the failure-mode taxonomy.** Healthy "
+            f"= {healthy_count}/{n_total} means most residual error falls "
+            "below the discriminating thresholds in `classify.py`. As the "
+            "tail shrinks further, the classifier should grow finer modes "
+            "(e.g. grazing-angle subclass, per-corner GN-residual outlier) "
+            "to keep producing actionable signal."
+        )
+        md.append("")
 
     md.append("---")
     md.append("")

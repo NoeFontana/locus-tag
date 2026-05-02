@@ -1659,8 +1659,7 @@ pub fn bench_estimate_both_branches(
     h_metric.column_mut(1).scale_mut(scaler);
 
     let candidates = solve_ippe_square(&h_metric)?;
-    let (info_matrices, covariances) = build_info_matrices(
-        intrinsics,
+    let covariances = build_lm_covariances(
         config,
         mode,
         img,
@@ -1668,6 +1667,8 @@ pub fn bench_estimate_both_branches(
         &h_poly,
         external_covariances,
     );
+    let gate_info_matrices = isotropic_info_matrices(config.pose_consistency_gate_sigma_px);
+    let info_matrices = pick_selector_info(covariances.as_ref(), &gate_info_matrices);
 
     let obj_pts = centered_tag_corners(tag_size);
 
@@ -1735,8 +1736,7 @@ pub fn bench_refit_pose_drop_corner(
     let Some(h_poly) = crate::decoder::Homography::square_to_quad(&ideal_corners) else {
         return initial_pose;
     };
-    let (_info, covariances_opt) = build_info_matrices(
-        intrinsics,
+    let covariances_opt = build_lm_covariances(
         config,
         mode,
         img,

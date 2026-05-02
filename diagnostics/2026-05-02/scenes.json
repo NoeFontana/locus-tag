@@ -26,15 +26,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.44660207629203796,
+        -0.12052737921476364,
+        -0.02476505935192108,
+        0.8862316012382507
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.2200181931257248,
+        -0.056757569313049316,
+        0.5658571124076843
       ],
       "alternate_quaternion_xyzw": [
         0.47722118798907576,
@@ -47,19 +47,19 @@
         -0.057045548101032933,
         0.6220629381252791
       ],
-      "rotation_error_chosen_deg": 55.218671806807244,
+      "rotation_error_chosen_deg": 0.028302760899272843,
       "rotation_error_alternate_deg": 117.19378037867541,
-      "translation_error_chosen_mm": 609.9104881379388,
+      "translation_error_chosen_mm": 0.14100140311436365,
       "translation_error_alternate_mm": 66.49427424326963,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.15679772198200226,
+      "aggregate_d2_chosen": 0.10968779027462006,
       "aggregate_d2_alternate": 99380.01992680194,
       "branch_d2_ratio": 77231.6796875,
-      "max_corner_d2": 0.061243169009685516,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.04430219531059265,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 1.9767729182110207,
-      "latency_us": 41151.65886469185,
+      "latency_us": 27021.466055884957,
       "ppm_estimated": 1848.500363051188
     },
     {
@@ -82,15 +82,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.27425912022590637,
-        0.34579890966415405,
-        -0.06851094216108322,
-        0.8947129845619202
+        0.2742558717727661,
+        0.34581300616264343,
+        -0.06852307170629501,
+        0.8947076201438904
       ],
       "detected_translation_xyz": [
-        0.15403984487056732,
-        0.12057773023843765,
-        0.6513075232505798
+        0.1540348380804062,
+        0.12057334929704666,
+        0.6512928009033203
       ],
       "alternate_quaternion_xyzw": [
         -0.46421154707327195,
@@ -103,19 +103,19 @@
         0.1190517373459083,
         0.6571790738151847
       ],
-      "rotation_error_chosen_deg": 0.007854630039379066,
+      "rotation_error_chosen_deg": 0.002671951703662204,
       "rotation_error_alternate_deg": 112.31465867804556,
-      "translation_error_chosen_mm": 0.026670067278844165,
+      "translation_error_chosen_mm": 0.033020880009052594,
       "translation_error_alternate_mm": 6.250713568549047,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.026631580665707588,
+      "aggregate_d2_chosen": 0.018943633884191513,
       "aggregate_d2_alternate": 29833.453770263717,
       "branch_d2_ratio": 2274327.5,
-      "max_corner_d2": 0.015242194756865501,
-      "lm_iterations": 4,
+      "max_corner_d2": 0.012756969779729843,
+      "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 2.2238695329873983,
-      "latency_us": 11176.436906680465,
+      "latency_us": 11357.866926118731,
       "ppm_estimated": 1711.1032585426065
     },
     {
@@ -138,15 +138,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.2918495237827301,
+        0.18351009488105774,
+        0.08863846957683563,
+        0.9345004558563232
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.05835969001054764,
+        0.09534573554992676,
+        0.9607856869697571
       ],
       "alternate_quaternion_xyzw": [
         -0.38173372892571045,
@@ -159,19 +159,19 @@
         0.09274019714809319,
         0.9752435090120044
       ],
-      "rotation_error_chosen_deg": 41.68492368271127,
+      "rotation_error_chosen_deg": 0.08534311524846198,
       "rotation_error_alternate_deg": 96.83538293110985,
-      "translation_error_chosen_mm": 967.5596480767886,
+      "translation_error_chosen_mm": 0.2926604840229059,
       "translation_error_alternate_mm": 14.931013992190401,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.6218906044960022,
+      "aggregate_d2_chosen": 0.4019252359867096,
       "aggregate_d2_alternate": 7113.747892254277,
       "branch_d2_ratio": 5243.90771484375,
-      "max_corner_d2": 0.2860352694988251,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.21754691004753113,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 13701.010961085558,
+      "latency_us": 12395.224068313837,
       "ppm_estimated": 1186.7308290906951
     },
     {
@@ -194,15 +194,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.4739623963832855,
+        0.1714300811290741,
+        -0.6737544536590576,
+        0.5403945446014404
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.046427737921476364,
+        -0.06440186500549316,
+        1.0839288234710693
       ],
       "alternate_quaternion_xyzw": [
         0.1820172032890439,
@@ -215,19 +215,19 @@
         -0.09918715474169149,
         1.536655581527844
       ],
-      "rotation_error_chosen_deg": 114.56274764107891,
+      "rotation_error_chosen_deg": 0.07810190199605525,
       "rotation_error_alternate_deg": 37.13662411285152,
-      "translation_error_chosen_mm": 1088.7322939353603,
+      "translation_error_chosen_mm": 1.8999126751483795,
       "translation_error_alternate_mm": 452.5096831521441,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.10584090650081635,
+      "aggregate_d2_chosen": 0.06847245246171951,
       "aggregate_d2_alternate": 48619.238145299634,
       "branch_d2_ratio": 68610.6484375,
-      "max_corner_d2": 0.03637626767158508,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.028579337522387505,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.7412898443291327,
-      "latency_us": 15462.15289272368,
+      "latency_us": 6490.402854979038,
       "ppm_estimated": 946.5819340260977
     },
     {
@@ -250,15 +250,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.011201826855540276,
+        0.2728704512119293,
+        0.8889459371566772,
+        0.3676838278770447
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.14399822056293488,
+        -0.005565395578742027,
+        0.9214072823524475
       ],
       "alternate_quaternion_xyzw": [
         -0.1195584704719025,
@@ -271,19 +271,19 @@
         0.002561565277764212,
         1.001470545954707
       ],
-      "rotation_error_chosen_deg": 136.855847853943,
+      "rotation_error_chosen_deg": 0.022457925334657482,
       "rotation_error_alternate_deg": 61.45199791364319,
-      "translation_error_chosen_mm": 932.2260936006994,
+      "translation_error_chosen_mm": 0.3824339081232146,
       "translation_error_alternate_mm": 81.69955875745823,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.15740129351615906,
+      "aggregate_d2_chosen": 0.08741859346628189,
       "aggregate_d2_alternate": 7729.980831672724,
       "branch_d2_ratio": 5914.30029296875,
-      "max_corner_d2": 0.0435628704726696,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.02658834494650364,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 12518.855044618249,
+      "latency_us": 6873.471895232797,
       "ppm_estimated": 1349.882065266476
     },
     {
@@ -306,15 +306,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.009301740676164627,
+        -0.40596437454223633,
+        0.6964246034622192,
+        0.591691792011261
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        0.380363404750824,
+        -0.23925237357616425,
+        2.9792065620422363
       ],
       "alternate_quaternion_xyzw": [
         0.12821931868854056,
@@ -327,19 +327,19 @@
         -0.23997951799888073,
         2.9850664280796213
       ],
-      "rotation_error_chosen_deg": 107.3608410857059,
+      "rotation_error_chosen_deg": 0.6640114715686148,
       "rotation_error_alternate_deg": 98.23101388180952,
-      "translation_error_chosen_mm": 3039.3150446671766,
+      "translation_error_chosen_mm": 26.412598032288763,
       "translation_error_alternate_mm": 20.688503026893976,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.201795294880867,
+      "aggregate_d2_chosen": 0.13707593083381653,
       "aggregate_d2_alternate": 41.97643840999591,
       "branch_d2_ratio": 228.11257934570312,
-      "max_corner_d2": 0.06279554963111877,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.04957754909992218,
+      "lm_iterations": 2,
+      "lm_convergence": 1,
       "image_noise_sigma": 2.7180627625401534,
-      "latency_us": 6940.155988559127,
+      "latency_us": 6683.685118332505,
       "ppm_estimated": 373.08701906033895
     },
     {
@@ -362,15 +362,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        -0.34268659353256226,
-        -0.171397402882576,
-        -0.23987646400928497,
-        0.8919910788536072
+        -0.3426760733127594,
+        -0.17140153050422668,
+        -0.23988066613674164,
+        0.8919932246208191
       ],
       "detected_translation_xyz": [
-        -0.036543719470500946,
-        0.009538473561406136,
-        0.5571955442428589
+        -0.03654405102133751,
+        0.009538969956338406,
+        0.5572152137756348
       ],
       "alternate_quaternion_xyzw": [
         0.21848551285781764,
@@ -383,19 +383,19 @@
         0.01574234848046599,
         0.5759575418792254
       ],
-      "rotation_error_chosen_deg": 0.014071471778236724,
+      "rotation_error_chosen_deg": 0.009311223456027234,
       "rotation_error_alternate_deg": 70.02944900507242,
-      "translation_error_chosen_mm": 0.03835012069936452,
+      "translation_error_chosen_mm": 0.056743152289287835,
       "translation_error_alternate_mm": 19.889009382239298,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.02488665282726288,
+      "aggregate_d2_chosen": 0.015441895462572575,
       "aggregate_d2_alternate": 35546.593023253685,
       "branch_d2_ratio": 2628867.5,
-      "max_corner_d2": 0.01387353241443634,
-      "lm_iterations": 4,
+      "max_corner_d2": 0.010252685286104679,
+      "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 8.895478131949593,
-      "latency_us": 25095.186894759536,
+      "latency_us": 10881.316848099232,
       "ppm_estimated": 2120.703286012855
     },
     {
@@ -418,15 +418,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.06785579025745392,
+        0.4704175591468811,
+        -0.3720433712005615,
+        0.7972996234893799
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        0.0639052614569664,
+        0.1737775355577469,
+        1.4820984601974487
       ],
       "alternate_quaternion_xyzw": [
         0.06785578824225637,
@@ -439,19 +439,19 @@
         0.17377753464212842,
         1.4820984682800666
       ],
-      "rotation_error_chosen_deg": 74.249793040626,
+      "rotation_error_chosen_deg": 0.11664952596487975,
       "rotation_error_alternate_deg": 0.11762647362775341,
-      "translation_error_chosen_mm": 1492.7762995075452,
+      "translation_error_chosen_mm": 0.8431442078212683,
       "translation_error_alternate_mm": 0.8431521520746197,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.16591070592403412,
+      "aggregate_d2_chosen": 0.09705033153295517,
       "aggregate_d2_alternate": 0.16591070482763148,
       "branch_d2_ratio": 39898.5234375,
-      "max_corner_d2": 0.06468590348958969,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.04480776563286781,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 9029.692970216274,
+      "latency_us": 6822.51388207078,
       "ppm_estimated": 671.3734460414952
     },
     {
@@ -500,14 +500,14 @@
       "translation_error_chosen_mm": 1383.1994326048382,
       "translation_error_alternate_mm": 10.48866395938503,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 40.177669525146484,
+      "aggregate_d2_chosen": 62.08806228637695,
       "aggregate_d2_alternate": 917.3268990131273,
       "branch_d2_ratio": 62.781883239746094,
-      "max_corner_d2": 37.727943420410156,
+      "max_corner_d2": 60.431583404541016,
       "lm_iterations": 3,
       "lm_convergence": 3,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 9466.883027926087,
+      "latency_us": 6594.449048861861,
       "ppm_estimated": 928.9840531678656
     },
     {
@@ -530,15 +530,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.1632867008447647,
-        0.016696995124220848,
-        0.9829007387161255,
-        0.0834551677107811
+        0.16326947510242462,
+        0.0167485773563385,
+        0.9829040169715881,
+        0.0834403857588768
       ],
       "detected_translation_xyz": [
-        0.2890307903289795,
-        0.3827894330024719,
-        2.045199394226074
+        0.28903570771217346,
+        0.38279497623443604,
+        2.0452327728271484
       ],
       "alternate_quaternion_xyzw": [
         -0.014303985234629451,
@@ -551,19 +551,19 @@
         0.38347464649495216,
         2.0546416406342645
       ],
-      "rotation_error_chosen_deg": 0.5342939342973302,
+      "rotation_error_chosen_deg": 0.5326122994274676,
       "rotation_error_alternate_deg": 26.459551427762403,
-      "translation_error_chosen_mm": 8.391658293017153,
+      "translation_error_chosen_mm": 8.357473667286,
       "translation_error_alternate_mm": 1.871508991831871,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.015034583397209644,
+      "aggregate_d2_chosen": 0.010091528296470642,
       "aggregate_d2_alternate": 27.58833995645287,
       "branch_d2_ratio": 8562.728515625,
-      "max_corner_d2": 0.005365240853279829,
-      "lm_iterations": 20,
-      "lm_convergence": 2,
+      "max_corner_d2": 0.0038049218710511923,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 4.200642451198419,
-      "latency_us": 27817.901922389865,
+      "latency_us": 22118.22010576725,
       "ppm_estimated": 668.087569028517
     },
     {
@@ -586,15 +586,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.3906264305114746,
+        0.1757621318101883,
+        0.4208036959171295,
+        0.7996517419815063
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        0.10487551242113113,
+        0.2184584140777588,
+        0.7409831285476685
       ],
       "alternate_quaternion_xyzw": [
         -0.5792307811215446,
@@ -607,19 +607,19 @@
         0.22790464454290826,
         0.761587536486393
       ],
-      "rotation_error_chosen_deg": 73.77764836787267,
+      "rotation_error_chosen_deg": 0.05908934577424771,
       "rotation_error_alternate_deg": 118.64009884473988,
-      "translation_error_chosen_mm": 779.5681356865708,
+      "translation_error_chosen_mm": 0.03944051425348439,
       "translation_error_alternate_mm": 24.514882412899993,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.33859944343566895,
+      "aggregate_d2_chosen": 0.23046275973320007,
       "aggregate_d2_alternate": 24091.508587342167,
       "branch_d2_ratio": 7955.7353515625,
-      "max_corner_d2": 0.14305619895458221,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.12321734428405762,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 8684.45192463696,
+      "latency_us": 6810.096092522144,
       "ppm_estimated": 1417.6581665273056
     },
     {
@@ -642,15 +642,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.09244542568922043,
+        -0.4953169524669647,
+        0.13430042564868927,
+        0.8532750606536865
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.023738158866763115,
+        0.0005655233981087804,
+        0.9491640329360962
       ],
       "alternate_quaternion_xyzw": [
         -0.010401162478593153,
@@ -663,19 +663,19 @@
         -0.06778570996367675,
         3.6477679210273406
       ],
-      "rotation_error_chosen_deg": 62.85679999345932,
+      "rotation_error_chosen_deg": 0.03150426761042338,
       "rotation_error_alternate_deg": 12.932646615806572,
-      "translation_error_chosen_mm": 950.0822761296033,
+      "translation_error_chosen_mm": 0.6223507455998034,
       "translation_error_alternate_mm": 2700.4906433242863,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.09666040539741516,
+      "aggregate_d2_chosen": 0.06035744026303291,
       "aggregate_d2_alternate": 269780.26678384584,
       "branch_d2_ratio": 188532.96875,
-      "max_corner_d2": 0.033104296773672104,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.02177770994603634,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 2.4709661477637757,
-      "latency_us": 11946.029961109161,
+      "latency_us": 11600.79287365079,
       "ppm_estimated": 1039.6791604440637
     },
     {
@@ -698,15 +698,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.30527782440185547,
+        -0.26992788910865784,
+        0.6505699753761292,
+        0.6408612132072449
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.08773293346166611,
+        0.137175515294075,
+        0.7713153958320618
       ],
       "alternate_quaternion_xyzw": [
         0.0598348083625087,
@@ -719,19 +719,19 @@
         0.14756416961159782,
         0.862544923874784
       ],
-      "rotation_error_chosen_deg": 100.36591577295385,
+      "rotation_error_chosen_deg": 0.1616758805721171,
       "rotation_error_alternate_deg": 72.64775556962691,
-      "translation_error_chosen_mm": 788.7149365345904,
+      "translation_error_chosen_mm": 0.40142417532840047,
       "translation_error_alternate_mm": 93.4963047347329,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.21599969267845154,
+      "aggregate_d2_chosen": 0.14824429154396057,
       "aggregate_d2_alternate": 18106.981405568986,
       "branch_d2_ratio": 11320.4169921875,
-      "max_corner_d2": 0.09226655215024948,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.07071544229984283,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.9883864591055104,
-      "latency_us": 7601.225050166249,
+      "latency_us": 6086.002103984356,
       "ppm_estimated": 1558.358646763406
     },
     {
@@ -754,15 +754,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.17191925644874573,
+        -0.48223066329956055,
+        0.8114528656005859,
+        -0.2818537950515747
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.051187627017498016,
+        -0.20022709667682648,
+        2.16198468208313
       ],
       "alternate_quaternion_xyzw": [
         -0.20199349457671636,
@@ -775,19 +775,19 @@
         -0.20003230114106574,
         2.1134186765186103
       ],
-      "rotation_error_chosen_deg": 147.2517836399091,
+      "rotation_error_chosen_deg": 0.22600070126742786,
       "rotation_error_alternate_deg": 117.16195921402952,
-      "translation_error_chosen_mm": 2169.702924512011,
+      "translation_error_chosen_mm": 2.137789731836653,
       "translation_error_alternate_mm": 46.44525415208985,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.2212955355644226,
+      "aggregate_d2_chosen": 0.13543567061424255,
       "aggregate_d2_alternate": 506.3101732492132,
       "branch_d2_ratio": 68.46263885498047,
-      "max_corner_d2": 0.07676183432340622,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.0546119250357151,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 18701.47790759802,
+      "latency_us": 15888.59991170466,
       "ppm_estimated": 460.4691580890784
     },
     {
@@ -810,15 +810,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.475895494222641,
-        -0.181074857711792,
-        0.8310727477073669,
-        -0.22372636198997498
+        0.4758957326412201,
+        -0.1810561567544937,
+        0.8310783505439758,
+        -0.22372020781040192
       ],
       "detected_translation_xyz": [
-        0.18322625756263733,
-        0.1246127337217331,
-        0.7759162783622742
+        0.18323038518428802,
+        0.1246190145611763,
+        0.7759311199188232
       ],
       "alternate_quaternion_xyzw": [
         -0.142086507039005,
@@ -831,19 +831,19 @@
         0.12144879916568438,
         0.7727019596865682
       ],
-      "rotation_error_chosen_deg": 0.04486956923457374,
+      "rotation_error_chosen_deg": 0.040893892584422296,
       "rotation_error_alternate_deg": 89.05053480825097,
-      "translation_error_chosen_mm": 0.6182181592278992,
+      "translation_error_chosen_mm": 0.6343062441346792,
       "translation_error_alternate_mm": 4.175960945626827,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.009517188183963299,
+      "aggregate_d2_chosen": 0.006329647731035948,
       "aggregate_d2_alternate": 15014.714506438442,
       "branch_d2_ratio": 4980149.0,
-      "max_corner_d2": 0.005336698144674301,
-      "lm_iterations": 5,
+      "max_corner_d2": 0.004194360226392746,
+      "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 16212.206101045012,
+      "latency_us": 10916.220024228096,
       "ppm_estimated": 1461.8140530672526
     },
     {
@@ -866,15 +866,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.3588121831417084,
+        -0.04972752928733826,
+        -0.7286865711212158,
+        0.5812029838562012
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.10027667135000229,
+        -0.380462646484375,
+        1.2998335361480713
       ],
       "alternate_quaternion_xyzw": [
         -0.10499178265369472,
@@ -887,19 +887,19 @@
         -0.37956800631217436,
         1.3002414921743517
       ],
-      "rotation_error_chosen_deg": 109.0096943154388,
+      "rotation_error_chosen_deg": 0.246316527470023,
       "rotation_error_alternate_deg": 62.60486483125594,
-      "translation_error_chosen_mm": 1359.1136632116898,
+      "translation_error_chosen_mm": 1.0367702406743098,
       "translation_error_alternate_mm": 3.3557691588384437,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.18045547604560852,
+      "aggregate_d2_chosen": 0.11656574159860611,
       "aggregate_d2_alternate": 793.6618718786293,
       "branch_d2_ratio": 10203.48046875,
-      "max_corner_d2": 0.04906763508915901,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.035761743783950806,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 7593.414047732949,
+      "latency_us": 5988.897057250142,
       "ppm_estimated": 992.9407321199834
     },
     {
@@ -922,15 +922,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.1887490600347519,
+        -0.2596990466117859,
+        0.8107661604881287,
+        0.4894776940345764
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.01977418176829815,
+        -0.23184579610824585,
+        1.442460298538208
       ],
       "alternate_quaternion_xyzw": [
         -0.07224152202022782,
@@ -943,19 +943,19 @@
         -0.24652299782979892,
         1.4996675874189644
       ],
-      "rotation_error_chosen_deg": 121.39505278716177,
+      "rotation_error_chosen_deg": 0.0937562645330382,
       "rotation_error_alternate_deg": 49.865037117187725,
-      "translation_error_chosen_mm": 1458.9788700263007,
+      "translation_error_chosen_mm": 2.1291390901128024,
       "translation_error_alternate_mm": 61.241800697297734,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.11941194534301758,
+      "aggregate_d2_chosen": 0.06462043523788452,
       "aggregate_d2_alternate": 1007.1848042690038,
       "branch_d2_ratio": 21934.33984375,
-      "max_corner_d2": 0.03642212972044945,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.02214546874165535,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 3.4593526068692864,
-      "latency_us": 25865.73106236756,
+      "latency_us": 11311.186011880636,
       "ppm_estimated": 898.038706741526
     },
     {
@@ -978,15 +978,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.22727863490581512,
+        -0.11678582429885864,
+        0.7589523196220398,
+        0.5989130735397339
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.19021925330162048,
+        -0.008393519558012486,
+        0.7402393221855164
       ],
       "alternate_quaternion_xyzw": [
         -0.3558671290310794,
@@ -999,19 +999,19 @@
         -0.011616067683044788,
         0.7421858899640904
       ],
-      "rotation_error_chosen_deg": 106.3942081989969,
+      "rotation_error_chosen_deg": 0.051073708853522345,
       "rotation_error_alternate_deg": 68.76836978439934,
-      "translation_error_chosen_mm": 764.2635028103383,
+      "translation_error_chosen_mm": 0.07301150165796935,
       "translation_error_alternate_mm": 4.326376154852081,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.13590840995311737,
+      "aggregate_d2_chosen": 0.08835148811340332,
       "aggregate_d2_alternate": 11872.52851599599,
       "branch_d2_ratio": 14180.5576171875,
-      "max_corner_d2": 0.0554281622171402,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.039016611874103546,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 5.1890289103039295,
-      "latency_us": 9489.087155088782,
+      "latency_us": 8691.669208928943,
       "ppm_estimated": 1683.8788236860896
     },
     {
@@ -1034,15 +1034,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.19800257682800293,
+        0.10419748723506927,
+        0.34549152851104736,
+        0.9113580584526062
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.07245340943336487,
+        0.21397195756435394,
+        0.8577385544776917
       ],
       "alternate_quaternion_xyzw": [
         -0.19800256714680092,
@@ -1055,19 +1055,19 @@
         0.21397195576242112,
         0.8577385388764216
       ],
-      "rotation_error_chosen_deg": 48.61875603464338,
+      "rotation_error_chosen_deg": 0.3646815631013187,
       "rotation_error_alternate_deg": 0.364815852407833,
-      "translation_error_chosen_mm": 887.2727154291538,
+      "translation_error_chosen_mm": 0.30025897522465117,
       "translation_error_alternate_mm": 0.3002737886414256,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.3413090705871582,
+      "aggregate_d2_chosen": 0.18825764954090118,
       "aggregate_d2_alternate": 0.341309077536052,
       "branch_d2_ratio": 71032.7421875,
-      "max_corner_d2": 0.15973617136478424,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.09145218133926392,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 4930.560011416674,
+      "latency_us": 4578.226013109088,
       "ppm_estimated": 1603.739940981155
     },
     {
@@ -1090,15 +1090,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.4357709288597107,
+        0.3437626361846924,
+        0.024508025497198105,
+        0.8314627408981323
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        0.3138373792171478,
+        0.03506292402744293,
+        1.4095739126205444
       ],
       "alternate_quaternion_xyzw": [
         0.40348863561181403,
@@ -1111,19 +1111,19 @@
         0.03841854832763012,
         1.433238963126225
       ],
-      "rotation_error_chosen_deg": 67.48959237944462,
+      "rotation_error_chosen_deg": 0.09302621429494853,
       "rotation_error_alternate_deg": 118.82021537304232,
-      "translation_error_chosen_mm": 1445.261210915544,
+      "translation_error_chosen_mm": 0.7488329480521686,
       "translation_error_alternate_mm": 23.523821924126693,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.41903313994407654,
+      "aggregate_d2_chosen": 0.2873902916908264,
       "aggregate_d2_alternate": 938.549660662833,
       "branch_d2_ratio": 4268.0146484375,
-      "max_corner_d2": 0.1741577684879303,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.14025911688804626,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 2.2238695329873983,
-      "latency_us": 7601.265097036958,
+      "latency_us": 6980.755133554339,
       "ppm_estimated": 706.6091375487055
     },
     {
@@ -1146,14 +1146,14 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        -0.0733497142791748,
-        -0.16268669068813324,
-        0.8566116690635681,
-        0.4841170608997345
+        -0.073343425989151,
+        -0.16268984973430634,
+        0.856611967086792,
+        0.48411640524864197
       ],
       "detected_translation_xyz": [
-        -0.2287822961807251,
-        -0.010468079708516598,
+        -0.22878238558769226,
+        -0.010467984713613987,
         0.7025130391120911
       ],
       "alternate_quaternion_xyzw": [
@@ -1167,19 +1167,19 @@
         -0.010467985119554017,
         0.702513027955546
       ],
-      "rotation_error_chosen_deg": 0.04354307553618788,
+      "rotation_error_chosen_deg": 0.04634243729085436,
       "rotation_error_alternate_deg": 0.0464868411804987,
-      "translation_error_chosen_mm": 0.37192854134727776,
+      "translation_error_chosen_mm": 0.37195800214713765,
       "translation_error_alternate_mm": 0.3719466473692648,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.003185444977134466,
+      "aggregate_d2_chosen": 0.001890990766696632,
       "aggregate_d2_alternate": 0.0031854449772802775,
       "branch_d2_ratio": 5353173.0,
-      "max_corner_d2": 0.001667448435910046,
-      "lm_iterations": 6,
+      "max_corner_d2": 0.0009917181450873613,
+      "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 10680.57888187468,
+      "latency_us": 6396.010983735323,
       "ppm_estimated": 1985.3922431263013
     },
     {
@@ -1202,15 +1202,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.5723649263381958,
+        -0.15324614942073822,
+        0.6741380095481873,
+        -0.4409670829772949
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -1.0252559185028076,
+        -0.09857554733753204,
+        2.4636635780334473
       ],
       "alternate_quaternion_xyzw": [
         -0.5723633880655312,
@@ -1223,19 +1223,19 @@
         -0.09857564046615512,
         2.463667124305593
       ],
-      "rotation_error_chosen_deg": 127.85546284124034,
+      "rotation_error_chosen_deg": 0.22992798407853196,
       "rotation_error_alternate_deg": 0.23018820614300106,
-      "translation_error_chosen_mm": 2661.469184613773,
+      "translation_error_chosen_mm": 8.832002092989756,
       "translation_error_alternate_mm": 8.83585055673076,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.26089543104171753,
+      "aggregate_d2_chosen": 0.15144795179367065,
       "aggregate_d2_alternate": 0.26089594197810834,
       "branch_d2_ratio": 2327.70068359375,
-      "max_corner_d2": 0.08582723885774612,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.054178040474653244,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.9883864591055104,
-      "latency_us": 21753.008011728525,
+      "latency_us": 8652.428863570094,
       "ppm_estimated": 428.3132643955896
     },
     {
@@ -1258,15 +1258,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.4514952600002289,
-        0.14785236120224,
-        -0.18228012323379517,
-        0.8608517050743103
+        0.4515101909637451,
+        0.14782869815826416,
+        -0.18227048218250275,
+        0.8608499765396118
       ],
       "detected_translation_xyz": [
-        -0.278231680393219,
-        -0.17540660500526428,
-        1.071740984916687
+        -0.278239905834198,
+        -0.1754087507724762,
+        1.0717413425445557
       ],
       "alternate_quaternion_xyzw": [
         -0.19865300082195217,
@@ -1279,19 +1279,19 @@
         -0.17592924991561937,
         1.0725733753125686
       ],
-      "rotation_error_chosen_deg": 0.057794544812334016,
+      "rotation_error_chosen_deg": 0.054858169227800804,
       "rotation_error_alternate_deg": 95.24571092342374,
-      "translation_error_chosen_mm": 1.4962395314222536,
+      "translation_error_chosen_mm": 1.4991528254810287,
       "translation_error_alternate_mm": 2.6068537005760435,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.02124585025012493,
+      "aggregate_d2_chosen": 0.01446946058422327,
       "aggregate_d2_alternate": 3209.2655945920583,
       "branch_d2_ratio": 526213.6875,
-      "max_corner_d2": 0.011226746253669262,
-      "lm_iterations": 5,
+      "max_corner_d2": 0.00942529272288084,
+      "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 1.4825796886582654,
-      "latency_us": 32946.61198742688,
+      "latency_us": 13615.856179967523,
       "ppm_estimated": 1044.316483580873
     },
     {
@@ -1314,15 +1314,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.3576846122741699,
-        0.09950107336044312,
-        0.9251471757888794,
-        -0.0791453942656517
+        0.35779643058776855,
+        0.09952105581760406,
+        0.9251065850257874,
+        -0.07908905297517776
       ],
       "detected_translation_xyz": [
-        -0.5617268681526184,
-        -0.00790565088391304,
-        3.6931681632995605
+        -0.5617458820343018,
+        -0.007903489284217358,
+        3.6932966709136963
       ],
       "alternate_quaternion_xyzw": [
         0.3577964115709303,
@@ -1335,19 +1335,19 @@
         -0.00790348909537295,
         3.6932967214010928
       ],
-      "rotation_error_chosen_deg": 0.29573281578424737,
+      "rotation_error_chosen_deg": 0.3026846676692075,
       "rotation_error_alternate_deg": 0.3026451923197536,
-      "translation_error_chosen_mm": 8.072946403544398,
+      "translation_error_chosen_mm": 7.943029357275684,
       "translation_error_alternate_mm": 7.942973809874817,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.12447766959667206,
+      "aggregate_d2_chosen": 0.07554732263088226,
       "aggregate_d2_alternate": 0.12447767301938646,
       "branch_d2_ratio": 483.5731201171875,
-      "max_corner_d2": 0.03632916882634163,
-      "lm_iterations": 20,
-      "lm_convergence": 2,
+      "max_corner_d2": 0.025332387536764145,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 6429.214030504227,
+      "latency_us": 5393.144907429814,
       "ppm_estimated": 293.6806059066484
     },
     {
@@ -1370,15 +1370,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.1627800613641739,
+        -0.04923044145107269,
+        0.9591003060340881,
+        -0.2262866199016571
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.04647136107087135,
+        -0.10306988656520844,
+        1.0094772577285767
       ],
       "alternate_quaternion_xyzw": [
         -0.1627800563578798,
@@ -1391,19 +1391,19 @@
         -0.1030698891018358,
         1.0094772405337364
       ],
-      "rotation_error_chosen_deg": 153.85527622462513,
+      "rotation_error_chosen_deg": 0.18085627184985004,
       "rotation_error_alternate_deg": 0.18141129007277984,
-      "translation_error_chosen_mm": 1014.8693968924398,
+      "translation_error_chosen_mm": 0.9230377777315113,
       "translation_error_alternate_mm": 0.9230213700999532,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.23154552280902863,
+      "aggregate_d2_chosen": 0.13293145596981049,
       "aggregate_d2_alternate": 0.2315455288369792,
       "branch_d2_ratio": 3664.14306640625,
-      "max_corner_d2": 0.1094900593161583,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.06713578850030899,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 14741.913881152868,
+      "latency_us": 9422.512957826257,
       "ppm_estimated": 1340.325324728682
     },
     {
@@ -1426,15 +1426,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.3134779930114746,
+        -0.4065599739551544,
+        -0.679537296295166,
+        0.5240893363952637
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.7287545800209045,
+        0.14715246856212616,
+        2.8111355304718018
       ],
       "alternate_quaternion_xyzw": [
         -0.1578538301129949,
@@ -1447,19 +1447,19 @@
         0.14554109197007684,
         2.774949764609066
       ],
-      "rotation_error_chosen_deg": 117.06100167069961,
+      "rotation_error_chosen_deg": 0.4007223198497066,
       "rotation_error_alternate_deg": 94.89324450437329,
-      "translation_error_chosen_mm": 2914.7052564191035,
+      "translation_error_chosen_mm": 6.919203423454695,
       "translation_error_alternate_mm": 43.830213552727436,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 1.8803960084915161,
+      "aggregate_d2_chosen": 1.1553840637207031,
       "aggregate_d2_alternate": 63.236911267712195,
       "branch_d2_ratio": 17.395668029785156,
-      "max_corner_d2": 0.5587102174758911,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.3751436769962311,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 24992.241989821196,
+      "latency_us": 13556.977966800332,
       "ppm_estimated": 410.24008277062126
     },
     {
@@ -1482,15 +1482,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0028194293845444918,
-        0.23667451739311218,
-        0.7548354268074036,
-        0.6117194890975952
+        0.0019912556745111942,
+        0.23682746291160583,
+        0.7549257278442383,
+        0.6115520596504211
       ],
       "detected_translation_xyz": [
-        0.7821158170700073,
-        0.3676266372203827,
-        2.3780834674835205
+        0.7821372151374817,
+        0.3676184117794037,
+        2.3781347274780273
       ],
       "alternate_quaternion_xyzw": [
         0.12954043511795238,
@@ -1503,19 +1503,19 @@
         0.3711393675005319,
         2.3935259799578734
       ],
-      "rotation_error_chosen_deg": 0.1225971644659058,
+      "rotation_error_chosen_deg": 0.11645176318064678,
       "rotation_error_alternate_deg": 22.000560127529315,
-      "translation_error_chosen_mm": 3.2348613942971127,
+      "translation_error_chosen_mm": 3.1812455077840904,
       "translation_error_alternate_mm": 13.524877522065376,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.07749956846237183,
+      "aggregate_d2_chosen": 0.04827859252691269,
       "aggregate_d2_alternate": 13.822497719161873,
       "branch_d2_ratio": 9219.541015625,
-      "max_corner_d2": 0.027739424258470535,
-      "lm_iterations": 20,
-      "lm_convergence": 2,
+      "max_corner_d2": 0.018307918682694435,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 1.2354830738818878,
-      "latency_us": 16785.220941528678,
+      "latency_us": 6476.492853835225,
       "ppm_estimated": 587.7869106608504
     },
     {
@@ -1538,15 +1538,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.29068997502326965,
+        0.3164098560810089,
+        0.7803941965103149,
+        -0.4542786180973053
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        0.10167701542377472,
+        0.05144935101270676,
+        0.6315501928329468
       ],
       "alternate_quaternion_xyzw": [
         -0.0840871838148925,
@@ -1559,19 +1559,19 @@
         0.05636383901507301,
         0.647222885992176
       ],
-      "rotation_error_chosen_deg": 125.96689529993421,
+      "rotation_error_chosen_deg": 0.0,
       "rotation_error_alternate_deg": 89.79372548492991,
-      "translation_error_chosen_mm": 641.3541623315953,
+      "translation_error_chosen_mm": 0.39471539454653753,
       "translation_error_alternate_mm": 18.15473823810722,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.09840503334999084,
+      "aggregate_d2_chosen": 0.060961637645959854,
       "aggregate_d2_alternate": 21940.803553202884,
       "branch_d2_ratio": 1960733.5,
-      "max_corner_d2": 0.055416107177734375,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.040658511221408844,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 2.4709661477637757,
-      "latency_us": 8708.128007128835,
+      "latency_us": 7822.053972631693,
       "ppm_estimated": 1859.124699084907
     },
     {
@@ -1594,15 +1594,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.28074875473976135,
-        -0.06110670790076256,
-        0.8540088534355164,
-        0.43372225761413574
+        0.2807501256465912,
+        -0.061116889119148254,
+        0.8540077209472656,
+        0.43372219800949097
       ],
       "detected_translation_xyz": [
-        -0.12361657619476318,
-        -0.08377691358327866,
-        0.6856142282485962
+        -0.12361812591552734,
+        -0.0837768018245697,
+        0.6856164336204529
       ],
       "alternate_quaternion_xyzw": [
         -0.40426655208432755,
@@ -1615,19 +1615,19 @@
         -0.08746969643155296,
         0.6884026946890129
       ],
-      "rotation_error_chosen_deg": 0.022827039083796838,
+      "rotation_error_chosen_deg": 0.01682767360855184,
       "rotation_error_alternate_deg": 81.6168707242372,
-      "translation_error_chosen_mm": 0.39952487925263247,
+      "translation_error_chosen_mm": 0.40196833512850294,
       "translation_error_alternate_mm": 5.023700333438413,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.003364990931004286,
+      "aggregate_d2_chosen": 0.0020562135614454746,
       "aggregate_d2_alternate": 17883.067424651996,
       "branch_d2_ratio": 1232167.125,
-      "max_corner_d2": 0.0011112866923213005,
-      "lm_iterations": 5,
+      "max_corner_d2": 0.0007418028544634581,
+      "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 13518.455205485225,
+      "latency_us": 7334.880065172911,
       "ppm_estimated": 1796.5501627948606
     },
     {
@@ -1650,15 +1650,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        -0.019599534571170807,
-        -0.23888948559761047,
-        0.1908745914697647,
-        0.9519004821777344
+        -0.019600944593548775,
+        -0.2388945370912552,
+        0.1908702254295349,
+        0.951900064945221
       ],
       "detected_translation_xyz": [
-        -0.3023543953895569,
-        -0.17204353213310242,
-        0.7622470259666443
+        -0.30235445499420166,
+        -0.17204348742961884,
+        0.7622462511062622
       ],
       "alternate_quaternion_xyzw": [
         -0.01960094564011329,
@@ -1671,19 +1671,19 @@
         -0.17204349033220573,
         0.7622462647374921
       ],
-      "rotation_error_chosen_deg": 0.03326165526466931,
+      "rotation_error_chosen_deg": 0.03270802163040924,
       "rotation_error_alternate_deg": 0.03220411800649812,
-      "translation_error_chosen_mm": 0.22983565366346773,
+      "translation_error_chosen_mm": 0.22914589953220743,
       "translation_error_alternate_mm": 0.22915738261056315,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.005267628002911806,
+      "aggregate_d2_chosen": 0.0028796358965337276,
       "aggregate_d2_alternate": 0.00526762798772332,
       "branch_d2_ratio": 8255349.5,
-      "max_corner_d2": 0.0025748624466359615,
-      "lm_iterations": 20,
-      "lm_convergence": 2,
+      "max_corner_d2": 0.0014767732936888933,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 2.4709661477637757,
-      "latency_us": 15309.453010559082,
+      "latency_us": 5769.6260046213865,
       "ppm_estimated": 1874.2373862488046
     },
     {
@@ -1706,15 +1706,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.03850607946515083,
+        0.11656223237514496,
+        0.9526726603507996,
+        -0.27811020612716675
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.1771697849035263,
+        -0.01880115084350109,
+        0.7880100011825562
       ],
       "alternate_quaternion_xyzw": [
         -0.03850608001632356,
@@ -1727,19 +1727,19 @@
         -0.018801150541487295,
         0.7880099837567057
       ],
-      "rotation_error_chosen_deg": 147.7013557568378,
+      "rotation_error_chosen_deg": 0.049004386457519415,
       "rotation_error_alternate_deg": 0.043323093352340414,
-      "translation_error_chosen_mm": 807.9067807364758,
+      "translation_error_chosen_mm": 0.012147603444391579,
       "translation_error_alternate_mm": 0.0121611233258115,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.08164593577384949,
+      "aggregate_d2_chosen": 0.04787092283368111,
       "aggregate_d2_alternate": 0.08164593228814554,
       "branch_d2_ratio": 27942.828125,
-      "max_corner_d2": 0.03792661055922508,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.021230774000287056,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 6310.935132205486,
+      "latency_us": 5477.864062413573,
       "ppm_estimated": 1737.576809505427
     },
     {
@@ -1762,15 +1762,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.0863427221775055,
+        0.07982486486434937,
+        -0.16113334894180298,
+        0.9799025058746338
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        0.0021212503779679537,
+        -0.4365968704223633,
+        1.6612944602966309
       ],
       "alternate_quaternion_xyzw": [
         -0.0863427221816111,
@@ -1783,19 +1783,19 @@
         -0.43659686384941937,
         1.6612945135092438
       ],
-      "rotation_error_chosen_deg": 23.106122471194606,
+      "rotation_error_chosen_deg": 0.19802965855705848,
       "rotation_error_alternate_deg": 0.1979663552825402,
-      "translation_error_chosen_mm": 1718.5980184927193,
+      "translation_error_chosen_mm": 0.8901896906732704,
       "translation_error_alternate_mm": 0.8901400691001402,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.6510874032974243,
+      "aggregate_d2_chosen": 0.41287916898727417,
       "aggregate_d2_alternate": 0.6510873903868294,
       "branch_d2_ratio": 45.562774658203125,
-      "max_corner_d2": 0.2132362276315689,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.14929185807704926,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 12651.1559356004,
+      "latency_us": 6346.6159626841545,
       "ppm_estimated": 798.0473715468578
     },
     {
@@ -1818,15 +1818,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.1964053511619568,
+        0.4125590920448303,
+        0.0024523045867681503,
+        0.8895020484924316
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        0.013671322725713253,
+        -0.02690868452191353,
+        0.6986894011497498
       ],
       "alternate_quaternion_xyzw": [
         -0.21442600571740697,
@@ -1839,19 +1839,19 @@
         -0.03094469188015222,
         0.7495134862438884
       ],
-      "rotation_error_chosen_deg": 54.37196920953002,
+      "rotation_error_chosen_deg": 0.01497941883629836,
       "rotation_error_alternate_deg": 103.17160552519967,
-      "translation_error_chosen_mm": 699.5785394995337,
+      "translation_error_chosen_mm": 0.23831927369285566,
       "translation_error_alternate_mm": 51.460941673879276,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.13056185841560364,
+      "aggregate_d2_chosen": 0.08882666379213333,
       "aggregate_d2_alternate": 18376.205592973933,
       "branch_d2_ratio": 739247.9375,
-      "max_corner_d2": 0.06787309795618057,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.05447183549404144,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.7412898443291327,
-      "latency_us": 11604.42503169179,
+      "latency_us": 7134.716957807541,
       "ppm_estimated": 1546.2774038947466
     },
     {
@@ -1874,15 +1874,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.09133583307266235,
+        -0.16609613597393036,
+        0.020130807533860207,
+        0.9816641807556152
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        0.303326278924942,
+        0.3866256773471832,
+        1.779348611831665
       ],
       "alternate_quaternion_xyzw": [
         -0.0819274976543916,
@@ -1895,19 +1895,19 @@
         0.39578983295626946,
         1.833110510603597
       ],
-      "rotation_error_chosen_deg": 21.98083254475299,
+      "rotation_error_chosen_deg": 0.3127516912132677,
       "rotation_error_alternate_deg": 54.110043103742015,
-      "translation_error_chosen_mm": 1847.1496373197315,
+      "translation_error_chosen_mm": 1.19213426264574,
       "translation_error_alternate_mm": 53.702695104385654,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.24247197806835175,
+      "aggregate_d2_chosen": 0.15454502403736115,
       "aggregate_d2_alternate": 401.9851663517796,
       "branch_d2_ratio": 755.19482421875,
-      "max_corner_d2": 0.07993865758180618,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.05323946103453636,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 13166.444841772318,
+      "latency_us": 7160.566048696637,
       "ppm_estimated": 735.0330918414418
     },
     {
@@ -1930,15 +1930,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        -0.139781653881073,
-        -0.23975512385368347,
-        -0.596835196018219,
-        0.7528388500213623
+        -0.13980408012866974,
+        -0.23975040018558502,
+        -0.5968337655067444,
+        0.7528373003005981
       ],
       "detected_translation_xyz": [
-        0.128641277551651,
-        0.10586190223693848,
-        0.895415186882019
+        0.12864360213279724,
+        0.10586530715227127,
+        0.8954290747642517
       ],
       "alternate_quaternion_xyzw": [
         -0.0587208341555464,
@@ -1951,19 +1951,19 @@
         0.11318870249540501,
         0.9275541653902126
       ],
-      "rotation_error_chosen_deg": 0.11798506698251232,
+      "rotation_error_chosen_deg": 0.12145829026005463,
       "rotation_error_alternate_deg": 50.21378448291987,
-      "translation_error_chosen_mm": 0.20146345975104862,
+      "translation_error_chosen_mm": 0.18722952032843596,
       "translation_error_alternate_mm": 32.76517449525212,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.008668995462357998,
+      "aggregate_d2_chosen": 0.005492755677551031,
       "aggregate_d2_alternate": 3908.9003717038177,
       "branch_d2_ratio": 117474.59375,
-      "max_corner_d2": 0.0036886471789330244,
-      "lm_iterations": 20,
-      "lm_convergence": 2,
+      "max_corner_d2": 0.0027006075251847506,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 13506.46698847413,
+      "latency_us": 7935.927016660571,
       "ppm_estimated": 1436.9762029138944
     },
     {
@@ -1986,15 +1986,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.29753437638282776,
+        -0.3447203040122986,
+        -0.0028100963681936264,
+        0.8902995586395264
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        0.08513981848955154,
+        0.06440190970897675,
+        0.6075708270072937
       ],
       "alternate_quaternion_xyzw": [
         0.29718638556290217,
@@ -2007,19 +2007,19 @@
         0.0610221382015309,
         0.6212186311468221
       ],
-      "rotation_error_chosen_deg": 54.172074169712445,
+      "rotation_error_chosen_deg": 0.02494092865195588,
       "rotation_error_alternate_deg": 121.4167722540555,
-      "translation_error_chosen_mm": 616.7135424270417,
+      "translation_error_chosen_mm": 0.17128564375174532,
       "translation_error_alternate_mm": 14.463876816805776,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.09804040938615799,
+      "aggregate_d2_chosen": 0.07026070356369019,
       "aggregate_d2_alternate": 45386.07360198862,
       "branch_d2_ratio": 1182062.625,
-      "max_corner_d2": 0.05737072229385376,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.04874197766184807,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.7412898443291327,
-      "latency_us": 8402.375970035791,
+      "latency_us": 6771.749118342996,
       "ppm_estimated": 1701.9433341056506
     },
     {
@@ -2042,15 +2042,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.1424855887889862,
+        -0.47583726048469543,
+        0.6594297885894775,
+        0.56429523229599
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -1.0455513000488281,
+        0.9606714844703674,
+        3.141280174255371
       ],
       "alternate_quaternion_xyzw": [
         -0.22682574846907733,
@@ -2063,19 +2063,19 @@
         0.9629693511802689,
         3.1524493201799113
       ],
-      "rotation_error_chosen_deg": 111.29676228827415,
+      "rotation_error_chosen_deg": 0.03937886278328142,
       "rotation_error_alternate_deg": 112.36907010765809,
-      "translation_error_chosen_mm": 3449.340536143643,
+      "translation_error_chosen_mm": 2.0789222488647807,
       "translation_error_alternate_mm": 10.233818247108907,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.41348880529403687,
+      "aggregate_d2_chosen": 0.2895497679710388,
       "aggregate_d2_alternate": 22.923521578897454,
       "branch_d2_ratio": 414.5790100097656,
-      "max_corner_d2": 0.150973379611969,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.1261451542377472,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 2.2238695329873983,
-      "latency_us": 15599.631005898118,
+      "latency_us": 10590.266901999712,
       "ppm_estimated": 339.68678553181746
     },
     {
@@ -2098,15 +2098,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.27480214834213257,
-        -0.09408070892095566,
-        0.0636405497789383,
-        0.9547683000564575
+        0.27479231357574463,
+        -0.09407727420330048,
+        0.06363949179649353,
+        0.9547715187072754
       ],
       "detected_translation_xyz": [
-        0.09501281380653381,
-        -0.06584899127483368,
-        0.575932502746582
+        0.09501323848962784,
+        -0.06584940105676651,
+        0.5759353637695312
       ],
       "alternate_quaternion_xyzw": [
         -0.008898611092313437,
@@ -2119,19 +2119,19 @@
         -0.06656713207380273,
         0.5791520142151324
       ],
-      "rotation_error_chosen_deg": 0.04576118957470241,
+      "rotation_error_chosen_deg": 0.046613506078113,
       "rotation_error_alternate_deg": 42.5644156125219,
-      "translation_error_chosen_mm": 0.048270170265192355,
+      "translation_error_chosen_mm": 0.04543867221527771,
       "translation_error_alternate_mm": 3.2554286888429336,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.008661387488245964,
+      "aggregate_d2_chosen": 0.005409240256994963,
       "aggregate_d2_alternate": 22457.514028648984,
       "branch_d2_ratio": 3696513.0,
-      "max_corner_d2": 0.003685515373945236,
-      "lm_iterations": 20,
-      "lm_convergence": 2,
+      "max_corner_d2": 0.0026087334845215082,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 10430.669877678156,
+      "latency_us": 6181.176984682679,
       "ppm_estimated": 2232.1538117883483
     },
     {
@@ -2154,15 +2154,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        -0.19458448886871338,
-        0.2731294631958008,
-        -0.27551373839378357,
-        0.9009047150611877
+        -0.19457952678203583,
+        0.2731396555900574,
+        -0.2755112946033478,
+        0.9009034633636475
       ],
       "detected_translation_xyz": [
-        -0.06395325064659119,
-        -0.03183530271053314,
-        0.6082449555397034
+        -0.0639507845044136,
+        -0.03183479979634285,
+        0.6082398295402527
       ],
       "alternate_quaternion_xyzw": [
         0.2545007030401985,
@@ -2175,19 +2175,19 @@
         -0.028256879731213297,
         0.6104476112012943
       ],
-      "rotation_error_chosen_deg": 0.027444872508200758,
+      "rotation_error_chosen_deg": 0.02480355362568383,
       "rotation_error_alternate_deg": 91.49032420968442,
-      "translation_error_chosen_mm": 0.16192539715012846,
+      "translation_error_chosen_mm": 0.15653719646498818,
       "translation_error_alternate_mm": 4.342797384987867,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.009372632950544357,
+      "aggregate_d2_chosen": 0.005564427934587002,
       "aggregate_d2_alternate": 27571.004697783257,
       "branch_d2_ratio": 1904277.875,
-      "max_corner_d2": 0.0030674654990434647,
-      "lm_iterations": 4,
+      "max_corner_d2": 0.002215280197560787,
+      "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.9883864591055104,
-      "latency_us": 13196.018990129232,
+      "latency_us": 7392.204832285643,
       "ppm_estimated": 1901.2083673701006
     },
     {
@@ -2210,15 +2210,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.031619757413864136,
+        -0.5333835482597351,
+        -0.621330201625824,
+        0.5731064081192017
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.20464099943637848,
+        -0.0914771556854248,
+        0.5365139245986938
       ],
       "alternate_quaternion_xyzw": [
         0.2347185947332379,
@@ -2231,19 +2231,19 @@
         -0.0964892427895437,
         0.6119208609589734
       ],
-      "rotation_error_chosen_deg": 110.05919915598867,
+      "rotation_error_chosen_deg": 0.032523169383826774,
       "rotation_error_alternate_deg": 106.68366814092677,
-      "translation_error_chosen_mm": 581.6824909061954,
+      "translation_error_chosen_mm": 0.22486124983351533,
       "translation_error_alternate_mm": 87.31391258303955,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.06910715252161026,
+      "aggregate_d2_chosen": 0.05129319429397583,
       "aggregate_d2_alternate": 72855.85147977815,
       "branch_d2_ratio": 3218930.0,
-      "max_corner_d2": 0.044268738478422165,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.03875671327114105,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.7412898443291327,
-      "latency_us": 7907.478138804436,
+      "latency_us": 7148.337783291936,
       "ppm_estimated": 1965.8953055067475
     },
     {
@@ -2266,15 +2266,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.45894089341163635,
+        0.14794832468032837,
+        0.8479747176170349,
+        0.2200533151626587
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.06378480046987534,
+        0.009478496387600899,
+        0.9800501465797424
       ],
       "alternate_quaternion_xyzw": [
         -0.467180699659142,
@@ -2287,19 +2287,19 @@
         0.00640433096384159,
         1.0206926203793996
       ],
-      "rotation_error_chosen_deg": 154.55472446649267,
+      "rotation_error_chosen_deg": 0.021929943324332558,
       "rotation_error_alternate_deg": 11.645343265474898,
-      "translation_error_chosen_mm": 982.111375991552,
+      "translation_error_chosen_mm": 0.07144234307782234,
       "translation_error_alternate_mm": 40.84294121100981,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.27774131298065186,
+      "aggregate_d2_chosen": 0.16645321249961853,
       "aggregate_d2_alternate": 7691.046608155618,
       "branch_d2_ratio": 102963.265625,
-      "max_corner_d2": 0.11562030017375946,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.08281517028808594,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 2.965159377316531,
-      "latency_us": 8224.116871133447,
+      "latency_us": 8291.984908282757,
       "ppm_estimated": 1075.7389276748281
     },
     {
@@ -2322,15 +2322,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.25424158573150635,
+        -0.022667689248919487,
+        -0.37803229689598083,
+        0.8899095058441162
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        0.5476770401000977,
+        0.21507222950458527,
+        1.8014417886734009
       ],
       "alternate_quaternion_xyzw": [
         -0.00017991715302023508,
@@ -2343,19 +2343,19 @@
         0.22059646050214896,
         1.8266004367848292
       ],
-      "rotation_error_chosen_deg": 54.34967806925241,
+      "rotation_error_chosen_deg": 0.23208796994703154,
       "rotation_error_alternate_deg": 40.568575021236036,
-      "translation_error_chosen_mm": 1893.527752783497,
+      "translation_error_chosen_mm": 1.5709780695134734,
       "translation_error_alternate_mm": 28.377111085341106,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.13178770244121552,
+      "aggregate_d2_chosen": 0.07255222648382187,
       "aggregate_d2_alternate": 173.33425949861794,
       "branch_d2_ratio": 6278.52880859375,
-      "max_corner_d2": 0.04188058525323868,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.025695081800222397,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.9883864591055104,
-      "latency_us": 13674.150919541717,
+      "latency_us": 8150.963112711906,
       "ppm_estimated": 750.68082799399
     },
     {
@@ -2378,15 +2378,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.3347034752368927,
+        -0.04125683009624481,
+        0.6890999674797058,
+        0.6414145827293396
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.0031566263642162085,
+        -0.06839073449373245,
+        0.7396392226219177
       ],
       "alternate_quaternion_xyzw": [
         -0.15305688841719176,
@@ -2399,19 +2399,19 @@
         -0.07000548683396111,
         0.7409507796055086
       ],
-      "rotation_error_chosen_deg": 100.18674040639618,
+      "rotation_error_chosen_deg": 0.07426977520731917,
       "rotation_error_alternate_deg": 56.874504928153414,
-      "translation_error_chosen_mm": 743.2582280126587,
+      "translation_error_chosen_mm": 0.4574967620832959,
       "translation_error_alternate_mm": 1.8248871275097962,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.06224575266242027,
+      "aggregate_d2_chosen": 0.04162006080150604,
       "aggregate_d2_alternate": 12386.176543207675,
       "branch_d2_ratio": 397895.5625,
-      "max_corner_d2": 0.029929790645837784,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.02260592021048069,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.9883864591055104,
-      "latency_us": 12556.43111653626,
+      "latency_us": 7789.195980876684,
       "ppm_estimated": 1682.135300799369
     },
     {
@@ -2434,15 +2434,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.002847911324352026,
-        0.48362085223197937,
-        0.8266739845275879,
-        0.28759852051734924
+        0.002884255489334464,
+        0.48363327980041504,
+        0.8266730904579163,
+        0.28757983446121216
       ],
       "detected_translation_xyz": [
-        -0.07965999841690063,
-        0.08676771074533463,
-        0.681122362613678
+        -0.07965583354234695,
+        0.08676651865243912,
+        0.6811158061027527
       ],
       "alternate_quaternion_xyzw": [
         -0.055266034511230286,
@@ -2457,17 +2457,17 @@
       ],
       "rotation_error_chosen_deg": 0.0,
       "rotation_error_alternate_deg": 101.66580743914953,
-      "translation_error_chosen_mm": 0.30616242469726657,
+      "translation_error_chosen_mm": 0.2990003604192869,
       "translation_error_alternate_mm": 94.9898534215667,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.06478691101074219,
+      "aggregate_d2_chosen": 0.040131766349077225,
       "aggregate_d2_alternate": 38523.31145746279,
       "branch_d2_ratio": 82203.171875,
-      "max_corner_d2": 0.03092915192246437,
-      "lm_iterations": 4,
+      "max_corner_d2": 0.02169358916580677,
+      "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 10608.9289765805,
+      "latency_us": 6568.762939423323,
       "ppm_estimated": 1575.7779201495819
     },
     {
@@ -2490,15 +2490,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        -0.13660748302936554,
+        -0.501481831073761,
+        0.042868420481681824,
+        0.8532389402389526
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.16376323997974396,
+        -0.19631832838058472,
+        0.9523574113845825
       ],
       "alternate_quaternion_xyzw": [
         0.331039090550634,
@@ -2511,19 +2511,19 @@
         -0.20044558081091732,
         0.9577815892884004
       ],
-      "rotation_error_chosen_deg": 62.907447569899574,
+      "rotation_error_chosen_deg": 0.07437004631864312,
       "rotation_error_alternate_deg": 117.09918651255519,
-      "translation_error_chosen_mm": 985.6346934618477,
+      "translation_error_chosen_mm": 0.4589774029468754,
       "translation_error_alternate_mm": 7.660403456952638,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.22136563062667847,
+      "aggregate_d2_chosen": 0.16641199588775635,
       "aggregate_d2_alternate": 4887.972291281089,
       "branch_d2_ratio": 145717.84375,
-      "max_corner_d2": 0.11791467666625977,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.10655533522367477,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.7412898443291327,
-      "latency_us": 15040.885889902711,
+      "latency_us": 9314.158000051975,
       "ppm_estimated": 1092.592510624201
     },
     {
@@ -2546,15 +2546,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.3999570608139038,
+        0.1679251343011856,
+        -0.21495406329631805,
+        0.8750029802322388
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        0.014522475190460682,
+        0.025506338104605675,
+        0.5546637177467346
       ],
       "alternate_quaternion_xyzw": [
         -0.496244805046972,
@@ -2567,19 +2567,19 @@
         0.024540871983503115,
         0.5598383377565136
       ],
-      "rotation_error_chosen_deg": 57.92863969693926,
+      "rotation_error_chosen_deg": 0.022800475146896447,
       "rotation_error_alternate_deg": 118.15713031479092,
-      "translation_error_chosen_mm": 555.124400596993,
+      "translation_error_chosen_mm": 0.3153693227960535,
       "translation_error_alternate_mm": 7.053026577503765,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.176883265376091,
+      "aggregate_d2_chosen": 0.13050541281700134,
       "aggregate_d2_alternate": 58935.42427235307,
       "branch_d2_ratio": 425963.6875,
-      "max_corner_d2": 0.11306992173194885,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.0983031839132309,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 16331.074992194772,
+      "latency_us": 10319.778928533196,
       "ppm_estimated": 1925.3678834353514
     },
     {
@@ -2602,15 +2602,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.26296526193618774,
+        -0.2716067433357239,
+        -0.30394884943962097,
+        0.8744679093360901
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        -0.026785833761096,
+        0.09891309589147568,
+        0.919455885887146
       ],
       "alternate_quaternion_xyzw": [
         -0.2850246437469461,
@@ -2623,19 +2623,19 @@
         0.10847090638211972,
         1.012264704665566
       ],
-      "rotation_error_chosen_deg": 58.08396104944787,
+      "rotation_error_chosen_deg": 0.053855158907301144,
       "rotation_error_alternate_deg": 82.83930501817619,
-      "translation_error_chosen_mm": 925.6753021496966,
+      "translation_error_chosen_mm": 0.5266170255773355,
       "translation_error_alternate_mm": 93.7752413380129,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.10379299521446228,
+      "aggregate_d2_chosen": 0.06352650374174118,
       "aggregate_d2_alternate": 10865.482811213637,
       "branch_d2_ratio": 25127.083984375,
-      "max_corner_d2": 0.0445345975458622,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.031050223857164383,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 8266.811026260257,
+      "latency_us": 5781.804909929633,
       "ppm_estimated": 1253.0521530747537
     },
     {
@@ -2658,15 +2658,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.30934879183769226,
+        0.12045616656541824,
+        0.9033214449882507,
+        0.27166882157325745
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        0.011989699676632881,
+        -0.0353517085313797,
+        0.5983490943908691
       ],
       "alternate_quaternion_xyzw": [
         -0.14512444299665403,
@@ -2679,19 +2679,19 @@
         -0.036765126598802995,
         0.5979600304121652
       ],
-      "rotation_error_chosen_deg": 148.4690842630958,
+      "rotation_error_chosen_deg": 0.031028021644860248,
       "rotation_error_alternate_deg": 57.499047915652184,
-      "translation_error_chosen_mm": 599.254735004408,
+      "translation_error_chosen_mm": 0.25770743123936396,
       "translation_error_alternate_mm": 1.5155442380411657,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.06521596014499664,
+      "aggregate_d2_chosen": 0.03751222789287567,
       "aggregate_d2_alternate": 35296.37768320124,
       "branch_d2_ratio": 599234.1875,
-      "max_corner_d2": 0.02088477835059166,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.01362562645226717,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 12018.330162391067,
+      "latency_us": 8183.500962331891,
       "ppm_estimated": 2049.916694187346
     },
     {
@@ -2714,15 +2714,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.2932153344154358,
-        0.107199527323246,
-        0.5311864018440247,
-        0.787638247013092
+        0.29324841499328613,
+        0.10720890760421753,
+        0.5311877727508545,
+        0.7876237034797668
       ],
       "detected_translation_xyz": [
-        0.12445276975631714,
-        0.05245679244399071,
-        0.6111268401145935
+        0.12444876879453659,
+        0.05245225876569748,
+        0.611111581325531
       ],
       "alternate_quaternion_xyzw": [
         -0.09438329663891833,
@@ -2735,19 +2735,19 @@
         0.04974066525545352,
         0.6315587825262552
       ],
-      "rotation_error_chosen_deg": 0.02733757233272073,
+      "rotation_error_chosen_deg": 0.03184455331966925,
       "rotation_error_alternate_deg": 45.097430655107964,
-      "translation_error_chosen_mm": 0.06106356062360446,
+      "translation_error_chosen_mm": 0.0753363495149126,
       "translation_error_alternate_mm": 21.38302649593672,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.013544722460210323,
+      "aggregate_d2_chosen": 0.00809628888964653,
       "aggregate_d2_alternate": 13150.973791492861,
       "branch_d2_ratio": 1375720.25,
-      "max_corner_d2": 0.004474182613193989,
-      "lm_iterations": 5,
+      "max_corner_d2": 0.003112517762929201,
+      "lm_iterations": 1,
       "lm_convergence": 1,
       "image_noise_sigma": 1.2354830738818878,
-      "latency_us": 16255.891881883144,
+      "latency_us": 13573.59392568469,
       "ppm_estimated": 2108.9138514761794
     },
     {
@@ -2770,15 +2770,15 @@
       ],
       "detected": true,
       "detected_quaternion_xyzw": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.14017529785633087,
+        -0.4816306233406067,
+        0.7731783390045166,
+        -0.38804399967193604
       ],
       "detected_translation_xyz": [
-        0.0,
-        0.0,
-        0.0
+        0.11274135112762451,
+        0.08249127864837646,
+        0.6051710844039917
       ],
       "alternate_quaternion_xyzw": [
         0.13818022510953412,
@@ -2791,19 +2791,19 @@
         0.08850804932506558,
         0.623159956399561
       ],
-      "rotation_error_chosen_deg": 134.3361422040447,
+      "rotation_error_chosen_deg": 0.0765270265553612,
       "rotation_error_alternate_deg": 125.62269353272691,
-      "translation_error_chosen_mm": 620.7152548608618,
+      "translation_error_chosen_mm": 0.37129355655880963,
       "translation_error_alternate_mm": 22.309780607951268,
       "branch_chosen_idx": 0,
-      "aggregate_d2_chosen": 0.4146530330181122,
+      "aggregate_d2_chosen": 0.30215272307395935,
       "aggregate_d2_alternate": 51681.75003959632,
       "branch_d2_ratio": 23421.45703125,
-      "max_corner_d2": 0.2347251921892166,
-      "lm_iterations": 3,
-      "lm_convergence": 3,
+      "max_corner_d2": 0.20767667889595032,
+      "lm_iterations": 1,
+      "lm_convergence": 1,
       "image_noise_sigma": 0.4941932295527552,
-      "latency_us": 9282.565908506513,
+      "latency_us": 5834.091920405626,
       "ppm_estimated": 1655.8430710003686
     }
   ]

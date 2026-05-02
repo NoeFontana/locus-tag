@@ -3,80 +3,64 @@
   "classifier_version": "rotation_tail_diag/v1",
   "sigma_n_sq_configured": 4.0,
   "population": {
-    "frame_or_winding": 27,
-    "healthy": 15,
-    "branch_flip": 6,
-    "sigma_miscalibration": 2
+    "healthy": 49,
+    "sigma_miscalibration": 1
   },
   "classifications": [
     {
       "scene_id": "scene_0000_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 55.218671806807244,
-        "aggregate_d2_chosen": 0.15679772198200226,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.028302760899272843
       }
     },
     {
       "scene_id": "scene_0001_cam_0000",
       "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 0.007854630039379066
+        "rotation_error_chosen_deg": 0.002671951703662204
       }
     },
     {
       "scene_id": "scene_0002_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 41.68492368271127,
-        "aggregate_d2_chosen": 0.6218906044960022,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.08534311524846198
       }
     },
     {
       "scene_id": "scene_0003_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 114.56274764107891,
-        "aggregate_d2_chosen": 0.10584090650081635,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.07810190199605525
       }
     },
     {
       "scene_id": "scene_0004_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 136.855847853943,
-        "aggregate_d2_chosen": 0.15740129351615906,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.022457925334657482
       }
     },
     {
       "scene_id": "scene_0005_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 107.3608410857059,
-        "aggregate_d2_chosen": 0.201795294880867,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.6640114715686148
       }
     },
     {
       "scene_id": "scene_0006_cam_0000",
       "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 0.014071471778236724
+        "rotation_error_chosen_deg": 0.009311223456027234
       }
     },
     {
       "scene_id": "scene_0007_cam_0000",
-      "mode": "branch_flip",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 74.249793040626,
-        "rotation_error_alternate_deg": 0.11762647362775341,
-        "aggregate_d2_chosen": 0.16591070592403412,
-        "aggregate_d2_alternate": 0.16591070482763148,
-        "rel_d2_gap": 6.608389912159902e-9
+        "rotation_error_chosen_deg": 0.11664952596487975
       }
     },
     {
@@ -92,294 +76,238 @@
       "scene_id": "scene_0009_cam_0000",
       "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 0.5342939342973302
+        "rotation_error_chosen_deg": 0.5326122994274676
       }
     },
     {
       "scene_id": "scene_0010_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 73.77764836787267,
-        "aggregate_d2_chosen": 0.33859944343566895,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.05908934577424771
       }
     },
     {
       "scene_id": "scene_0011_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 62.85679999345932,
-        "aggregate_d2_chosen": 0.09666040539741516,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.03150426761042338
       }
     },
     {
       "scene_id": "scene_0012_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 100.36591577295385,
-        "aggregate_d2_chosen": 0.21599969267845154,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.1616758805721171
       }
     },
     {
       "scene_id": "scene_0013_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 147.2517836399091,
-        "aggregate_d2_chosen": 0.2212955355644226,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.22600070126742786
       }
     },
     {
       "scene_id": "scene_0014_cam_0000",
       "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 0.04486956923457374
+        "rotation_error_chosen_deg": 0.040893892584422296
       }
     },
     {
       "scene_id": "scene_0015_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 109.0096943154388,
-        "aggregate_d2_chosen": 0.18045547604560852,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.246316527470023
       }
     },
     {
       "scene_id": "scene_0016_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 121.39505278716177,
-        "aggregate_d2_chosen": 0.11941194534301758,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.0937562645330382
       }
     },
     {
       "scene_id": "scene_0017_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 106.3942081989969,
-        "aggregate_d2_chosen": 0.13590840995311737,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.051073708853522345
       }
     },
     {
       "scene_id": "scene_0018_cam_0000",
-      "mode": "branch_flip",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 48.61875603464338,
-        "rotation_error_alternate_deg": 0.364815852407833,
-        "aggregate_d2_chosen": 0.3413090705871582,
-        "aggregate_d2_alternate": 0.341309077536052,
-        "rel_d2_gap": 2.0359534073565118e-8
+        "rotation_error_chosen_deg": 0.3646815631013187
       }
     },
     {
       "scene_id": "scene_0019_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 67.48959237944462,
-        "aggregate_d2_chosen": 0.41903313994407654,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.09302621429494853
       }
     },
     {
       "scene_id": "scene_0020_cam_0000",
       "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 0.04354307553618788
+        "rotation_error_chosen_deg": 0.04634243729085436
       }
     },
     {
       "scene_id": "scene_0021_cam_0000",
-      "mode": "branch_flip",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 127.85546284124034,
-        "rotation_error_alternate_deg": 0.23018820614300106,
-        "aggregate_d2_chosen": 0.26089543104171753,
-        "aggregate_d2_alternate": 0.26089594197810834,
-        "rel_d2_gap": 1.958391483337908e-6
+        "rotation_error_chosen_deg": 0.22992798407853196
       }
     },
     {
       "scene_id": "scene_0022_cam_0000",
       "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 0.057794544812334016
+        "rotation_error_chosen_deg": 0.054858169227800804
       }
     },
     {
       "scene_id": "scene_0023_cam_0000",
       "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 0.29573281578424737
+        "rotation_error_chosen_deg": 0.3026846676692075
       }
     },
     {
       "scene_id": "scene_0024_cam_0000",
-      "mode": "branch_flip",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 153.85527622462513,
-        "rotation_error_alternate_deg": 0.18141129007277984,
-        "aggregate_d2_chosen": 0.23154552280902863,
-        "aggregate_d2_alternate": 0.2315455288369792,
-        "rel_d2_gap": 2.603354343920749e-8
+        "rotation_error_chosen_deg": 0.18085627184985004
       }
     },
     {
       "scene_id": "scene_0025_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 117.06100167069961,
-        "aggregate_d2_chosen": 1.8803960084915161,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.4007223198497066
       }
     },
     {
       "scene_id": "scene_0026_cam_0000",
       "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 0.1225971644659058
+        "rotation_error_chosen_deg": 0.11645176318064678
       }
     },
     {
       "scene_id": "scene_0027_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 125.96689529993421,
-        "aggregate_d2_chosen": 0.09840503334999084,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.0
       }
     },
     {
       "scene_id": "scene_0028_cam_0000",
       "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 0.022827039083796838
+        "rotation_error_chosen_deg": 0.01682767360855184
       }
     },
     {
       "scene_id": "scene_0029_cam_0000",
       "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 0.03326165526466931
+        "rotation_error_chosen_deg": 0.03270802163040924
       }
     },
     {
       "scene_id": "scene_0030_cam_0000",
-      "mode": "branch_flip",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 147.7013557568378,
-        "rotation_error_alternate_deg": 0.043323093352340414,
-        "aggregate_d2_chosen": 0.08164593577384949,
-        "aggregate_d2_alternate": 0.08164593228814554,
-        "rel_d2_gap": 4.269292665538463e-8
+        "rotation_error_chosen_deg": 0.049004386457519415
       }
     },
     {
       "scene_id": "scene_0031_cam_0000",
-      "mode": "branch_flip",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 23.106122471194606,
-        "rotation_error_alternate_deg": 0.1979663552825402,
-        "aggregate_d2_chosen": 0.6510874032974243,
-        "aggregate_d2_alternate": 0.6510873903868294,
-        "rel_d2_gap": 1.9829280771043195e-8
+        "rotation_error_chosen_deg": 0.19802965855705848
       }
     },
     {
       "scene_id": "scene_0032_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 54.37196920953002,
-        "aggregate_d2_chosen": 0.13056185841560364,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.01497941883629836
       }
     },
     {
       "scene_id": "scene_0033_cam_0000",
-      "mode": "sigma_miscalibration",
+      "mode": "healthy",
       "evidence": {
-        "image_noise_sigma_estimated": 0.4941932295527552,
-        "configured_sigma": 2.0,
-        "ratio": 0.2470966147763776
+        "rotation_error_chosen_deg": 0.3127516912132677
       }
     },
     {
       "scene_id": "scene_0034_cam_0000",
       "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 0.11798506698251232
+        "rotation_error_chosen_deg": 0.12145829026005463
       }
     },
     {
       "scene_id": "scene_0035_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 54.172074169712445,
-        "aggregate_d2_chosen": 0.09804040938615799,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.02494092865195588
       }
     },
     {
       "scene_id": "scene_0036_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 111.29676228827415,
-        "aggregate_d2_chosen": 0.41348880529403687,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.03937886278328142
       }
     },
     {
       "scene_id": "scene_0037_cam_0000",
       "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 0.04576118957470241
+        "rotation_error_chosen_deg": 0.046613506078113
       }
     },
     {
       "scene_id": "scene_0038_cam_0000",
       "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 0.027444872508200758
+        "rotation_error_chosen_deg": 0.02480355362568383
       }
     },
     {
       "scene_id": "scene_0039_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 110.05919915598867,
-        "aggregate_d2_chosen": 0.06910715252161026,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.032523169383826774
       }
     },
     {
       "scene_id": "scene_0040_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 154.55472446649267,
-        "aggregate_d2_chosen": 0.27774131298065186,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.021929943324332558
       }
     },
     {
       "scene_id": "scene_0041_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 54.34967806925241,
-        "aggregate_d2_chosen": 0.13178770244121552,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.23208796994703154
       }
     },
     {
       "scene_id": "scene_0042_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 100.18674040639618,
-        "aggregate_d2_chosen": 0.06224575266242027,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.07426977520731917
       }
     },
     {
@@ -391,54 +319,44 @@
     },
     {
       "scene_id": "scene_0044_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 62.907447569899574,
-        "aggregate_d2_chosen": 0.22136563062667847,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.07437004631864312
       }
     },
     {
       "scene_id": "scene_0045_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 57.92863969693926,
-        "aggregate_d2_chosen": 0.176883265376091,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.022800475146896447
       }
     },
     {
       "scene_id": "scene_0046_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 58.08396104944787,
-        "aggregate_d2_chosen": 0.10379299521446228,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.053855158907301144
       }
     },
     {
       "scene_id": "scene_0047_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 148.4690842630958,
-        "aggregate_d2_chosen": 0.06521596014499664,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.031028021644860248
       }
     },
     {
       "scene_id": "scene_0048_cam_0000",
       "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 0.02733757233272073
+        "rotation_error_chosen_deg": 0.03184455331966925
       }
     },
     {
       "scene_id": "scene_0049_cam_0000",
-      "mode": "frame_or_winding",
+      "mode": "healthy",
       "evidence": {
-        "rotation_error_chosen_deg": 134.3361422040447,
-        "aggregate_d2_chosen": 0.4146530330181122,
-        "branch_chosen_idx": 0
+        "rotation_error_chosen_deg": 0.0765270265553612
       }
     }
   ]

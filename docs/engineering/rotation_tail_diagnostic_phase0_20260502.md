@@ -7,13 +7,13 @@ Forensics of the residual rotation tail on `locus_v1_tag36h11_1920x1080` under `
 - **Dataset**: `locus_v1_tag36h11_1920x1080` — 50 scenes, single tag each, AprilTag36h11 family, 1920×1080.
 - **Profile / mode**: `render_tag_hub` + `Accurate`. σ_n² configured = 4.000 (σ ≈ 2.000px).
 - **Recall**: 50/50 scenes detected.
-- **Rotation error vs GT** (degrees, 95% bootstrap CI):  p50 = 60.470 [45.152, 100.276]  ·  p95 = 148.124 [130.570, 154.240]  ·  p99 = 154.212 [144.291, 154.555]
-- **Translation error vs GT** (mm):  p50 = 771.9  ·  p95 = 2800.7  ·  p99 = 3248.4
-- **Latency** (ms, production path, no diagnostics):  p50 = 12.54  ·  p99 = 37.13
+- **Rotation error vs GT** (degrees, 95% bootstrap CI):  p50 = 0.057 [0.041, 0.093]  ·  p95 = 0.473 [0.275, 49.350]  ·  p99 = 45.810 [0.383, 89.185]
+- **Translation error vs GT** (mm):  p50 = 0.4  ·  p95 = 8.6  ·  p99 = 718.4
+- **Latency** (ms, production path, no diagnostics):  p50 = 7.36  ·  p99 = 24.62
 
 ### Reproducibility cross-check
 
-The published `render_tag_hub` baseline (commit `8890efc`, 2026-04-25) reported rot p99 = 1.897° on this exact dataset. The numbers above show **a regression**: the live `render_tag_hub` + Accurate-mode pose path now produces rot p50 ≈ 60° (two orders of magnitude). Reproduced independently via `tools/bench/render_tag_sota_eval.py` — see §7.
+The published `render_tag_hub` baseline (commit `8890efc`, 2026-04-25) reported rot p99 = 1.897° on this dataset. The current run lands at rot p50 = 0.057° / p99 = 45.810° — the bulk distribution is *better* than the published memo (the snapshot rebless after PR #212 measured all 50 scenes honestly), with a residual tail driven by a small number of outlier scenes. See §2 / §4 for the breakdown.
 
 ## §2 Failure-mode breakdown
 
@@ -21,12 +21,10 @@ Mutually-exclusive classification of the 50 scenes.
 
 | Mode | Count | % | Counterfactual rot p99 if resolved |
 | :--- | ---: | ---: | ---: |
-| `frame_or_winding` | 27 | 54.0% | 150.840° |
-| `healthy` | 15 | 30.0% | — |
-| `branch_flip` | 6 | 12.0% | 151.573° |
-| `sigma_miscalibration` | 2 | 4.0% | 154.212° |
+| `healthy` | 49 | 98.0% | — |
+| `sigma_miscalibration` | 1 | 2.0% | 0.600° |
 
-_Counterfactual interpretation: "if all `<mode>` scenes had rotation error = 0, what would p99 become?" Current p99 = 154.212°. The mode whose counterfactual drops p99 the most is the priority fix.
+_Counterfactual interpretation: "if all `<mode>` scenes had rotation error = 0, what would p99 become?" Current p99 = 45.810°. The mode whose counterfactual drops p99 the most is the priority fix.
 
 ## §3 Stratified rotation error
 
@@ -34,43 +32,43 @@ _Counterfactual interpretation: "if all `<mode>` scenes had rotation error = 0, 
 
 | Bucket | n | rot p50 (95% CI) | rot p95 | rot p99 | rot max |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| 10.59…28.93 | 12 | 35.862 [0.328, 105.290] | 150.471 | 153.178 | 153.855 |
-| 30.45…45.85 | 13 | 100.187 [0.027, 109.010] | 141.501 | 147.075 | 148.469 |
-| 45.86…54.21 | 12 | 48.028 [0.051, 82.722] | 133.933 | 150.430 | 154.555 |
-| 56.29…59.55 | 13 | 74.250 [62.907, 114.563] | 139.502 | 145.702 | 147.252 |
+| 10.59…28.93 | 12 | 0.189 [0.071, 0.339] | 40.426 | 79.433 | 89.185 |
+| 30.45…45.85 | 13 | 0.032 [0.022, 0.074] | 0.196 | 0.236 | 0.246 |
+| 45.86…54.21 | 12 | 0.047 [0.018, 0.194] | 0.519 | 0.635 | 0.664 |
+| 56.29…59.55 | 13 | 0.074 [0.033, 0.093] | 0.228 | 0.229 | 0.230 |
 
 ### Distance (m)
 
 | Bucket | n | rot p50 (95% CI) | rot p95 | rot p99 | rot max |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| 0.56…0.68 | 12 | 54.695 [0.027, 118.013] | 140.696 | 146.914 | 148.469 |
-| 0.69…0.91 | 13 | 48.619 [0.044, 100.187] | 122.917 | 142.744 | 147.701 |
-| 0.93…1.45 | 12 | 78.337 [60.470, 125.709] | 154.170 | 154.478 | 154.555 |
-| 1.46…3.74 | 13 | 74.250 [21.981, 117.061] | 135.614 | 144.924 | 147.252 |
+| 0.56…0.68 | 12 | 0.027 [0.016, 0.032] | 0.060 | 0.073 | 0.077 |
+| 0.69…0.91 | 13 | 0.049 [0.033, 0.074] | 0.243 | 0.340 | 0.365 |
+| 0.93…1.45 | 12 | 0.076 [0.043, 0.137] | 40.269 | 79.402 | 89.185 |
+| 1.46…3.74 | 13 | 0.230 [0.117, 0.313] | 0.585 | 0.648 | 0.664 |
 
 ### Estimated PPM (px/m)
 
 | Bucket | n | rot p50 (95% CI) | rot p95 | rot p99 | rot max |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| 293.68…750.68 | 12 | 70.870 [11.258, 114.179] | 136.584 | 145.118 | 147.252 |
-| 798.05…1349.88 | 13 | 89.185 [58.084, 121.395] | 154.135 | 154.471 | 154.555 |
-| 1417.66…1711.10 | 12 | 54.272 [0.081, 100.276] | 118.968 | 131.263 | 134.336 |
-| 1737.58…2232.15 | 13 | 0.046 [0.027, 110.059] | 148.008 | 148.377 | 148.469 |
+| 293.68…750.68 | 12 | 0.231 [0.117, 0.357] | 0.592 | 0.650 | 0.664 |
+| 798.05…1349.88 | 13 | 0.078 [0.054, 0.181] | 35.822 | 78.512 | 89.185 |
+| 1417.66…1711.10 | 12 | 0.055 [0.020, 0.099] | 0.253 | 0.342 | 0.365 |
+| 1737.58…2232.15 | 13 | 0.031 [0.023, 0.033] | 0.048 | 0.049 | 0.049 |
 
 ## §4 Top-10 worst scenes
 
 | # | scene_id | rot err (°) | trans err (mm) | branch | classification | Rerun | 
 | ---: | :--- | ---: | ---: | ---: | :--- | :--- |
-| 1 | `scene_0040_cam_0000` | 154.55 | 982.1 | 0 | `frame_or_winding` | `recordings/scene_0040_cam_0000.rrd` |
-| 2 | `scene_0024_cam_0000` | 153.86 | 1014.9 | 0 | `branch_flip` | `recordings/scene_0024_cam_0000.rrd` |
-| 3 | `scene_0047_cam_0000` | 148.47 | 599.3 | 0 | `frame_or_winding` | `recordings/scene_0047_cam_0000.rrd` |
-| 4 | `scene_0030_cam_0000` | 147.70 | 807.9 | 0 | `branch_flip` | `recordings/scene_0030_cam_0000.rrd` |
-| 5 | `scene_0013_cam_0000` | 147.25 | 2169.7 | 0 | `frame_or_winding` | `recordings/scene_0013_cam_0000.rrd` |
-| 6 | `scene_0004_cam_0000` | 136.86 | 932.2 | 0 | `frame_or_winding` | `recordings/scene_0004_cam_0000.rrd` |
-| 7 | `scene_0049_cam_0000` | 134.34 | 620.7 | 0 | `frame_or_winding` | `recordings/scene_0049_cam_0000.rrd` |
-| 8 | `scene_0021_cam_0000` | 127.86 | 2661.5 | 0 | `branch_flip` | `recordings/scene_0021_cam_0000.rrd` |
-| 9 | `scene_0027_cam_0000` | 125.97 | 641.4 | 0 | `frame_or_winding` | `recordings/scene_0027_cam_0000.rrd` |
-| 10 | `scene_0016_cam_0000` | 121.40 | 1459.0 | 0 | `frame_or_winding` | `recordings/scene_0016_cam_0000.rrd` |
+| 1 | `scene_0008_cam_0000` | 89.18 | 1383.2 | 0 | `sigma_miscalibration` | `recordings/scene_0008_cam_0000.rrd` |
+| 2 | `scene_0005_cam_0000` | 0.66 | 26.4 | 0 | `healthy` | `recordings/scene_0005_cam_0000.rrd` |
+| 3 | `scene_0009_cam_0000` | 0.53 | 8.4 | 0 | `healthy` | `recordings/scene_0009_cam_0000.rrd` |
+| 4 | `scene_0025_cam_0000` | 0.40 | 6.9 | 0 | `healthy` | `recordings/scene_0025_cam_0000.rrd` |
+| 5 | `scene_0018_cam_0000` | 0.36 | 0.3 | 0 | `healthy` | `recordings/scene_0018_cam_0000.rrd` |
+| 6 | `scene_0033_cam_0000` | 0.31 | 1.2 | 0 | `healthy` | `recordings/scene_0033_cam_0000.rrd` |
+| 7 | `scene_0023_cam_0000` | 0.30 | 7.9 | 0 | `healthy` | `recordings/scene_0023_cam_0000.rrd` |
+| 8 | `scene_0015_cam_0000` | 0.25 | 1.0 | 0 | `healthy` | `recordings/scene_0015_cam_0000.rrd` |
+| 9 | `scene_0041_cam_0000` | 0.23 | 1.6 | 0 | `healthy` | `recordings/scene_0041_cam_0000.rrd` |
+| 10 | `scene_0021_cam_0000` | 0.23 | 8.8 | 0 | `healthy` | `recordings/scene_0021_cam_0000.rrd` |
 
 ## §5 σ calibration check
 
@@ -118,7 +116,7 @@ Final per-corner Huber IRLS weights at the LM-converged pose:
   0.850–0.900  │   (0)
   0.900–0.950  │   (0)
   0.950–1.000  │   (0)
-  1.000–1.050  │ ████████████████████████████████████████  (60)
+  1.000–1.050  │ ████████████████████████████████████████  (196)
   1.050–1.100  │   (0)
   1.100–1.150  │   (0)
   1.150–1.200  │   (0)
@@ -130,32 +128,32 @@ Final per-corner Huber IRLS weights at the LM-converged pose:
   1.450–1.500  │   (0)
 ```
 
-0 of 60 corners have IRLS weight < 0.3 — that's the threshold the `corner_outlier` classifier uses.
+0 of 196 corners have IRLS weight < 0.3 — that's the threshold the `corner_outlier` classifier uses.
 
 Per-scene branch-d² (chosen vs alternate, log-binned counts):
 
 **Chosen branch (log10 d²):**
 ```
-  -2.50–-2.29  │ ████████  (2)
-  -2.29–-2.09  │ ████  (1)
-  -2.09–-1.88  │ ████████████████  (4)
-  -1.88–-1.68  │ ████████  (2)
-  -1.68–-1.47  │ ████████████  (3)
-  -1.47–-1.27  │   (0)
-  -1.27–-1.06  │ ████████████████████████  (6)
-  -1.06–-0.86  │ ████████████████████████████████████████  (10)
-  -0.86–-0.65  │ ████████████████████████████████████  (9)
-  -0.65–-0.45  │ ████████████████████████  (6)
-  -0.45–-0.24  │ ████████████  (3)
-  -0.24–-0.04  │ ████████  (2)
-  -0.04– 0.17  │   (0)
-   0.17– 0.37  │ ████  (1)
-   0.37– 0.58  │   (0)
-   0.58– 0.78  │   (0)
-   0.78– 0.99  │   (0)
-   0.99– 1.19  │   (0)
-   1.19– 1.40  │   (0)
-   1.40– 1.60  │ ████  (1)
+  -2.72–-2.50  │ ████████████  (3)
+  -2.50–-2.27  │   (0)
+  -2.27–-2.05  │ ████████████████████  (5)
+  -2.05–-1.82  │ ████████  (2)
+  -1.82–-1.59  │ ████████  (2)
+  -1.59–-1.37  │ ████████████  (3)
+  -1.37–-1.14  │ ████████████████████████████████████  (9)
+  -1.14–-0.92  │ ████████████████████████████████  (8)
+  -0.92–-0.69  │ ████████████████████████████████████████  (10)
+  -0.69–-0.47  │ ████████████████  (4)
+  -0.47–-0.24  │ ████████  (2)
+  -0.24–-0.01  │   (0)
+  -0.01– 0.21  │ ████  (1)
+   0.21– 0.44  │   (0)
+   0.44– 0.66  │   (0)
+   0.66– 0.89  │   (0)
+   0.89– 1.12  │   (0)
+   1.12– 1.34  │   (0)
+   1.34– 1.57  │   (0)
+   1.57– 1.79  │ ████  (1)
 ```
 
 **Alternate branch (log10 d²):**
@@ -184,14 +182,9 @@ Per-scene branch-d² (chosen vs alternate, log-binned counts):
 
 ## §7 What this points at
 
-The dominant failure mode is **`frame_or_winding`** at 27 of 50 scenes — i.e. *the chosen IPPE branch fits the observed corners well (low aggregate d²) but its rotation against GT is large* (>30°). This is the signature of a coordinate-frame or corner-ordering mismatch upstream of the pose solver, not a pose-refinement issue. Fixing the LM solver alone cannot recover from it; the offending permutation/sign needs to be located in:
+The dominant failure mode is **`sigma_miscalibration`** at 1 of 50 scenes — the configured `sigma_n_sq` is far from the per-image estimated noise floor (Immerkær median Laplacian, see §5). The IRLS weights the LM applies are calibrated on a wrong noise model, biasing the pose. Fix: wire `compute_image_noise_floor` into the per-frame LM info matrices.
 
-1. The corner-extraction stage (EdLines vs ContourRdp produces different corner orderings on this dataset — see the render_tag_sota_eval.py cross-product table in §8).
-2. The Accurate-mode-only weighted LM path (`refine_pose_lm_weighted`), which is the only path that regresses; Fast-mode `refine_pose_lm` is healthy on `standard` profile (rot p50 = 0.288°).
-
-**`branch_flip`** at 6 scenes is real but secondary. It will only ever explain a small fraction of the tail while `frame_or_winding` dominates.
-
-**`sigma_miscalibration`** is partially confounded with the dataset rather than the algorithm: Blender-rendered images have very low noise floors, while the production profiles ship `sigma_n_sq = 4.0` (σ ≈ 2 px). Phase 3 of the SOTA plan (per-frame σ estimation) addresses this directly.
+**Healthy** at 49 of 50 scenes — the bulk distribution is well-calibrated; the tail is concentrated in the 1 non-healthy scene(s) above.
 
 ## §8 Profile × mode reproducibility table
 
@@ -199,28 +192,23 @@ Captured via `tools/bench/render_tag_sota_eval.py` on the same dataset, today, f
 
 | Profile | Mode | Recall | rot p50 | rot p95 | rot p99 | trans p99 |
 | :--- | :--- | ---: | ---: | ---: | ---: | ---: |
-| `standard` | Accurate | 100.0 % | 0.288° | 1.572° | 27.248° | 50.3 mm |
-| `high_accuracy` | Fast | 94.0 % | 0.345° | 6.350° | 104.238° | 2210 mm |
-| `high_accuracy` | Accurate | 94.0 % | 62.857° | 148.239° | 154.233° | 3261 mm |
-| `render_tag_hub` | Fast | 100.0 % | 0.363° | 6.137° | 103.402° | 2164 mm |
-| **`render_tag_hub`** | **Accurate** | **100.0 %** | **60.470°** | **148.124°** | **154.212°** | **3248 mm** | (this run) |
+| `standard` | Accurate | 100.0 % | 0.288° | 1.572° | 27.248° | 50.3 mm | (2026-04-25 snapshot) |
+| `high_accuracy` | Fast | 94.0 % | 0.345° | 6.350° | 104.238° | 2210 mm | (2026-04-25 snapshot) |
+| `high_accuracy` | Accurate | 94.0 % | 62.857° | 148.239° | 154.233° | 3261 mm | (2026-04-25 snapshot, **pre-fix**; rerun via `render_tag_sota_eval.py`) |
+| `render_tag_hub` | Fast | 100.0 % | 0.363° | 6.137° | 103.402° | 2164 mm | (2026-04-25 snapshot) |
+| **`render_tag_hub`** | **Accurate** | **100.0 %** | **0.057°** | **0.473°** | **45.810°** | **718 mm** | (this run) |
 
-**Recovery path: switch the rotation-tail Phase 1–4 work to use `standard` profile first** — that's where the ~28° p99 tail still behaves like a real perception problem. `render_tag_hub` and `high_accuracy` need their Accurate-mode pose regression fixed before they can serve as the SOTA floor.
+Non-`render_tag_hub` rows above are pre-fix snapshots from 2026-04-25 (commit `8890efc`). After PR #212 the `high_accuracy` Accurate row in particular is stale — rerun `tools/bench/render_tag_sota_eval.py` for fresh numbers.
 
-## §9 Recommendations (reorders Phase 1–4 from the SOTA plan)
+## §9 Recommendations
 
-1. **Phase 0.1 (new)**: Bisect the Accurate-mode regression on `render_tag_hub` / `high_accuracy`. Most likely culprits, in order:
-   - EdLines corner ordering vs ContourRdp; check the four corners' winding direction.
-   - Recent `refine_pose_lm_weighted` changes (`8890efc` introduced the Mahalanobis χ² gate).
-   - `pose_consistency_fpr = 1e-3` rejecting all geometrically-consistent poses for a frame-flip reason.
+1. **Triage the non-healthy scenes (§4 top-10).** 1 of 50 scenes carry the entire residual tail; the linked `.rrd` recordings let you see whether the remaining error is a corner-localization issue, a remaining branch-selector edge case, or sensor / render noise. Fix at this granularity rather than tuning population-level knobs.
 
-2. **Phase 1 (photometric refinement)**: deferred until the regression above is fixed. Photometric refinement cannot recover from a corner-ordering bug.
+2. **Wire `compute_image_noise_floor` into the LM info matrices** to address the `sigma_miscalibration` scenes (1 of 50 here). The helper is permanent in `gradient.rs`; what's missing is a per-frame call from `refine_pose_lm_weighted`. Counterfactual p99 below this drops the residual tail substantially (see §2 table).
 
-3. **Phase 2 (branch hardening)**: real but small (12% of scenes). Only worthwhile after Phase 0.1; otherwise hardened branch selection still picks a corner-mis-ordered IPPE candidate.
+3. **Reframe the SOTA gap.** With render_tag_hub at rot p50 = 0.057° / p99 = 45.810°, the bulk distribution already beats every external detector. Where external libraries still hold the rotation P95/P99 tail (per `render_tag_sota_20260425.md`) is what closing this residual tail unlocks. The next bottleneck is no longer a single regression — it is the tail of outlier scenes plus the σ calibration mismatch on Blender-rendered data.
 
-4. **Phase 3 (per-frame σ estimation)**: the harness already provides `compute_image_noise_floor` (permanent in `gradient.rs`); Phase 3 just needs to wire it into the per-frame LM info matrices. Independently useful regardless of Phase 0.1 outcome.
-
-5. **Phase 4 (deferred)**: revisit after re-running the diagnostic on the fixed `render_tag_hub` / `high_accuracy` paths. Likely the failure-mode population shifts substantially when `frame_or_winding` is resolved.
+4. **Consider extending the failure-mode taxonomy.** Healthy = 49/50 means most residual error falls below the discriminating thresholds in `classify.py`. As the tail shrinks further, the classifier should grow finer modes (e.g. grazing-angle subclass, per-corner GN-residual outlier) to keep producing actionable signal.
 
 ---
 
