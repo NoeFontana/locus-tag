@@ -118,17 +118,16 @@ TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features b
 
 ## Performance Reports
 
-### Current
-- [Release Performance Report (2026-04-18)](benchmarking/release_performance_20260418.md)
-- [SOTA Presets + GN Covariance (2026-03-21)](benchmarking/sota_metrology_20260321.md)
-- [EDLines + Joint Gauss-Newton (2026-03-21)](benchmarking/edlines_gauss_newton_20260321.md)
-- [SIMD CCL Fusion (2026-03-19)](benchmarking/simd_ccl_fusion_20260319.md)
-- [Current Micro-Benchmark Baseline (2026-03-19)](benchmarking/baseline_micro_20260319.md)
-- [Micro-Benchmarking Guide](benchmarking/micro-benchmarking-guide.md)
+### Methodology & durable learnings
+- [Benchmarking Lessons](benchmarking/lessons.md) — consolidated timeline + architecture/profile/algorithm tradeoffs that should inform future work
+- [Micro-Benchmarking Guide](benchmarking/micro-benchmarking-guide.md) — 3-tier validation loop
 
-### Historical
-- [Release Performance Report (2026-03-22)](benchmarking/release_performance_20260322.md)
-- [Performance Evolution (Mar 2–16)](benchmarking/historical_evolution.md) — consolidated timeline of superseded reports
+### Recent point-in-time reports
+- [Quad-extraction truncation fix (2026-04-26)](benchmarking/quad_truncation_fix_20260426.md)
+- [Render-tag 2160p recall lift (2026-04-25)](benchmarking/render_tag_2160p_20260425.md)
+- [Render-tag 1080p SOTA pursuit (2026-04-25)](benchmarking/render_tag_sota_20260425.md)
+- [Hub Regression Performance (2026-04-23)](benchmarking/hub_regression_20260423.md)
+- [Release Performance Report (2026-04-18)](benchmarking/release_performance_20260418.md)
 
 ---
 

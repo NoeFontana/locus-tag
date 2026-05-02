@@ -88,9 +88,10 @@ nav:
       - engineering/general-style.md
       - Benchmarking:
           - engineering/benchmarking.md
+          - engineering/benchmarking/lessons.md
           - engineering/benchmarking/micro-benchmarking-guide.md
-          - engineering/benchmarking/baseline_micro_20260319.md
-          - engineering/benchmarking/simd_ccl_fusion_20260319.md
-          - engineering/benchmarking/edlines_gauss_newton_20260321.md
-          - engineering/benchmarking/sota_metrology_20260321.md
-          - engineering/benchmarking/historical_evolution.md
+          - engineering/benchmarking/release_performance_20260418.md
+          - engineering/benchmarking/hub_regression_20260423.md
+          - engineering/benchmarking/render_tag_sota_20260425.md
+          - engineering/benchmarking/render_tag_2160p_20260425.md
+          - engineering/benchmarking/quad_truncation_fix_20260426.md
