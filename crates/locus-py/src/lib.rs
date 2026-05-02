@@ -387,6 +387,7 @@ pub struct PyDetectorConfig {
     pub sigma_n_sq: f64,
     pub structure_tensor_radius: u8,
     pub pose_consistency_fpr: f64,
+    pub pose_consistency_gate_sigma_px: f64,
     pub post_decode_refinement: bool,
 }
 
@@ -434,6 +435,7 @@ impl PyDetectorConfig {
         sigma_n_sq,
         structure_tensor_radius,
         pose_consistency_fpr,
+        pose_consistency_gate_sigma_px,
         post_decode_refinement,
     ))]
     #[allow(clippy::fn_params_excessive_bools)]
@@ -476,6 +478,7 @@ impl PyDetectorConfig {
         sigma_n_sq: f64,
         structure_tensor_radius: u8,
         pose_consistency_fpr: f64,
+        pose_consistency_gate_sigma_px: f64,
         post_decode_refinement: bool,
     ) -> Self {
         Self {
@@ -517,6 +520,7 @@ impl PyDetectorConfig {
             sigma_n_sq,
             structure_tensor_radius,
             pose_consistency_fpr,
+            pose_consistency_gate_sigma_px,
             post_decode_refinement,
         }
     }
@@ -601,6 +605,7 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             sigma_n_sq: c.sigma_n_sq,
             structure_tensor_radius: c.structure_tensor_radius,
             pose_consistency_fpr: c.pose_consistency_fpr,
+            pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
             post_decode_refinement: c.post_decode_refinement,
         }
     }
@@ -1647,6 +1652,7 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             sigma_n_sq: c.sigma_n_sq,
             structure_tensor_radius: c.structure_tensor_radius,
             pose_consistency_fpr: c.pose_consistency_fpr,
+            pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
             post_decode_refinement: c.post_decode_refinement,
             segmentation_connectivity: c.segmentation_connectivity.into(),
             segmentation_margin: c.segmentation_margin,

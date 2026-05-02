@@ -122,6 +122,12 @@
           "title": "Pose Consistency Fpr",
           "type": "number"
         },
+        "pose_consistency_gate_sigma_px": {
+          "default": 1.0,
+          "exclusiveMinimum": 0.0,
+          "title": "Pose Consistency Gate Sigma Px",
+          "type": "number"
+        },
         "sigma_n_sq": {
           "default": 4.0,
           "minimum": 0.0,
