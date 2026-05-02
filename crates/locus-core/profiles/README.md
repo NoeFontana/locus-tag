@@ -1,9 +1,9 @@
 # Shipped detector profiles
 
-Six JSON files — `standard.json`, `grid.json`, `high_accuracy.json`,
-`render_tag_hub.json`, `general.json`, and `max_recall_adaptive.json` —
-are the **single source of truth** for Locus detector configuration. They
-are embedded into the Rust crate (via `include_str!`) and re-exposed to
+Five JSON files — `standard.json`, `grid.json`, `high_accuracy.json`,
+`render_tag_hub.json`, and `max_recall_adaptive.json` — are the
+**single source of truth** for Locus detector configuration. They are
+embedded into the Rust crate (via `include_str!`) and re-exposed to
 the Python wheel through the `_shipped_profile_json` FFI hook, so
 `locus-core` and `locus._profile.DetectorConfig` always read identical
 bytes.
@@ -119,20 +119,6 @@ from 86/90/94/94 % → 100/100/100/94 % across 480p/720p/1080p/2160p
 without regressing pose accuracy (rotation P50 stays ≤ 0.054° at 1080p).
 See `docs/engineering/benchmarking/render_tag_sota_20260425.md` for the
 full A/B evaluation.
-
-### `general`
-
-Recall-tuned EdLines profile for clean (non-distorted) imagery. Combines
-`standard`'s sharpening and moments gates with EdLines extraction and
-the imbalance gate from `render_tag_hub`. Use this when you want SOTA
-clean-render recall without committing to the `render_tag_hub` test
-fixture.
-
-| Field | `standard` | `general` | Reason |
-| --- | --- | --- | --- |
-| `quad.extraction_mode` | `ContourRdp` | `EdLines` | Sub-pixel corners + per-corner covariances. |
-| `decoder.refinement_mode` | `Erf` | `None` | EdLines already yields sub-pixel corners; Erf on top is rejected by the cross-group validator. |
-| `quad.edlines_imbalance_gate` | `"Disabled"` | `"Enabled"` | AXIS→DIAG rescue for near-axis-aligned tags. **Caution:** scenes with non-trivial lens distortion should stay on `standard` (the gate can collapse legitimate distorted aprilgrid sub-tags). The upstream EdLines guard at `detector.rs:194-198` rejects EdLines under any non-trivial distortion, so this profile is only well-defined for pinhole / rectified inputs. |
 
 ### `max_recall_adaptive`
 

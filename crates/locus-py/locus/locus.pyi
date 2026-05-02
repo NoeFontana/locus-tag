@@ -321,7 +321,6 @@ class Detector:
             "grid",
             "high_accuracy",
             "render_tag_hub",
-            "general",
             "max_recall_adaptive",
         ]
         | None = None,

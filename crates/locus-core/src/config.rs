@@ -1330,8 +1330,6 @@ const HIGH_ACCURACY_JSON: &str = include_str!("../profiles/high_accuracy.json");
 #[cfg(feature = "profiles")]
 const RENDER_TAG_HUB_JSON: &str = include_str!("../profiles/render_tag_hub.json");
 #[cfg(feature = "profiles")]
-const GENERAL_JSON: &str = include_str!("../profiles/general.json");
-#[cfg(feature = "profiles")]
 const MAX_RECALL_ADAPTIVE_JSON: &str = include_str!("../profiles/max_recall_adaptive.json");
 
 /// Return the raw embedded JSON for a shipped profile, or `None` if the name
@@ -1345,7 +1343,6 @@ pub fn shipped_profile_json(name: &str) -> Option<&'static str> {
         "grid" => Some(GRID_JSON),
         "high_accuracy" => Some(HIGH_ACCURACY_JSON),
         "render_tag_hub" => Some(RENDER_TAG_HUB_JSON),
-        "general" => Some(GENERAL_JSON),
         "max_recall_adaptive" => Some(MAX_RECALL_ADAPTIVE_JSON),
         _ => None,
     }
@@ -1381,7 +1378,7 @@ impl DetectorConfig {
     /// Load a shipped profile by name.
     ///
     /// Accepts `"standard"`, `"grid"`, `"high_accuracy"`, `"render_tag_hub"`,
-    /// `"general"`, or `"max_recall_adaptive"`.
+    /// or `"max_recall_adaptive"`.
     ///
     /// # Panics
     ///
@@ -1397,12 +1394,11 @@ impl DetectorConfig {
             "grid" => GRID_JSON,
             "high_accuracy" => HIGH_ACCURACY_JSON,
             "render_tag_hub" => RENDER_TAG_HUB_JSON,
-            "general" => GENERAL_JSON,
             "max_recall_adaptive" => MAX_RECALL_ADAPTIVE_JSON,
             other => panic!(
                 "Unknown shipped profile {other:?}; expected one of \
                  [\"standard\", \"grid\", \"high_accuracy\", \"render_tag_hub\", \
-                 \"general\", \"max_recall_adaptive\"]"
+                 \"max_recall_adaptive\"]"
             ),
         };
         Self::from_profile_json(json).unwrap_or_else(|e| {
@@ -1544,7 +1540,7 @@ mod tests {
         fn round_trip_via_profile_json() {
             // Patch the gate field of a shipped profile to exercise the full
             // ProfileJson → QuadJson → DetectorConfig path.
-            let template = super::super::shipped_profile_json("general").unwrap();
+            let template = super::super::shipped_profile_json("high_accuracy").unwrap();
             for (input, expected) in [
                 ("\"Enabled\"", EdLinesImbalanceGatePolicy::Enabled),
                 ("\"Disabled\"", EdLinesImbalanceGatePolicy::Disabled),

@@ -63,15 +63,6 @@ EXPECTED = {
         "decoder.decode_mode": DecodeMode.Hard,
         "segmentation.connectivity": SegmentationConnectivity.Eight,
     },
-    "general": {
-        "threshold.enable_sharpening": True,
-        "threshold.tile_size": 8,
-        "quad.extraction_mode": QuadExtractionMode.EdLines,
-        "quad.edlines_imbalance_gate": EdLinesImbalanceGatePolicy.Enabled,
-        "decoder.refinement_mode": getattr(CornerRefinementMode, "None"),
-        "decoder.decode_mode": DecodeMode.Hard,
-        "segmentation.connectivity": SegmentationConnectivity.Eight,
-    },
     "max_recall_adaptive": {
         "threshold.enable_sharpening": True,
         "threshold.tile_size": 8,
