@@ -1,10 +1,10 @@
 """Capture the SOTA pose-precision table for the 1080p render-tag subset.
 
 Runs OpenCV `cv2.aruco`, AprilTag-C (`pupil_apriltags`), and Locus across the
-three profiles relevant to render-tag evaluation (`standard`, `high_accuracy`,
-`render_tag_hub`) on `locus_v1_tag36h11_1920x1080`. For each detector reports
-recall, precision, translation error mean/p50/p95/p99, rotation error
-mean/p50/p95/p99, and mean latency.
+two profiles relevant to render-tag evaluation (`standard`, `high_accuracy`)
+on `locus_v1_tag36h11_1920x1080`. For each detector reports recall, precision,
+translation error mean/p50/p95/p99, rotation error mean/p50/p95/p99, and mean
+latency.
 
 Usage:
     PYTHONPATH=. LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \\
@@ -31,7 +31,7 @@ from tools.bench.utils import (
 )
 
 HUB_CONFIG = "locus_v1_tag36h11_1920x1080"
-LOCUS_PROFILES: tuple[ProfileName, ...] = ("standard", "high_accuracy", "render_tag_hub")
+LOCUS_PROFILES: tuple[ProfileName, ...] = ("standard", "high_accuracy")
 
 
 def main() -> None:

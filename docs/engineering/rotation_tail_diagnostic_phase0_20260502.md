@@ -1,19 +1,19 @@
 # Rotation-Tail Diagnostic — Phase 0 (20260502)
 
-Forensics of the residual rotation tail on `locus_v1_tag36h11_1920x1080` under `render_tag_hub` + Accurate-mode pose. Output of the Phase 0 diagnostic harness (`tools/bench/rotation_tail_diag/`).
+Forensics of the residual rotation tail on `locus_v1_tag36h11_1920x1080` under `high_accuracy` + Accurate-mode pose. Output of the Phase 0 diagnostic harness (`tools/bench/rotation_tail_diag/`).
 
 ## §1 TL;DR
 
 - **Dataset**: `locus_v1_tag36h11_1920x1080` — 50 scenes, single tag each, AprilTag36h11 family, 1920×1080.
-- **Profile / mode**: `render_tag_hub` + `Accurate`. σ_n² configured = 4.000 (σ ≈ 2.000px).
+- **Profile / mode**: `high_accuracy` + `Accurate`. σ_n² configured = 4.000 (σ ≈ 2.000px).
 - **Recall**: 50/50 scenes detected.
 - **Rotation error vs GT** (degrees, 95% bootstrap CI):  p50 = 0.057 [0.041, 0.093]  ·  p95 = 0.473 [0.275, 0.780]  ·  p99 = 0.771 [0.383, 0.874]
 - **Translation error vs GT** (mm):  p50 = 0.4  ·  p95 = 8.6  ·  p99 = 18.9
-- **Latency** (ms, production path, no diagnostics):  p50 = 7.60  ·  p99 = 25.31
+- **Latency** (ms, production path, no diagnostics):  p50 = 8.26  ·  p99 = 25.45
 
 ### Reproducibility cross-check
 
-The published `render_tag_hub` baseline (commit `8890efc`, 2026-04-25) reported rot p99 = 1.897° on this dataset. The current run lands at rot p50 = 0.057° / p99 = 0.771° — the bulk distribution is *better* than the published memo (the snapshot rebless after PR #212 measured all 50 scenes honestly), with a residual tail driven by a small number of outlier scenes. See §2 / §4 for the breakdown.
+The published `high_accuracy` baseline (commit `8890efc`, 2026-04-25) reported rot p99 = 1.897° on this dataset. The current run lands at rot p50 = 0.057° / p99 = 0.771° — the bulk distribution is *better* than the published memo (the snapshot rebless after PR #212 measured all 50 scenes honestly), with a residual tail driven by a small number of outlier scenes. See §2 / §4 for the breakdown.
 
 ## §2 Failure-mode breakdown
 
@@ -71,7 +71,7 @@ _Counterfactual interpretation: "if all `<mode>` scenes had rotation error = 0, 
 
 ## §5 σ calibration check
 
-Configured σ in `render_tag_hub.json`: σ = √4.000 ≈ 2.000px.
+Configured σ in `high_accuracy.json`: σ = √4.000 ≈ 2.000px.
 
 Per-image estimated σ (Immerkær median Laplacian):
 
@@ -194,16 +194,16 @@ Captured via `tools/bench/render_tag_sota_eval.py` on the same dataset, today, f
 | `standard` | Accurate | 100.0 % | 0.288° | 1.572° | 27.248° | 50.3 mm | (2026-04-25 snapshot) |
 | `high_accuracy` | Fast | 94.0 % | 0.345° | 6.350° | 104.238° | 2210 mm | (2026-04-25 snapshot) |
 | `high_accuracy` | Accurate | 94.0 % | 62.857° | 148.239° | 154.233° | 3261 mm | (2026-04-25 snapshot, **pre-fix**; rerun via `render_tag_sota_eval.py`) |
-| `render_tag_hub` | Fast | 100.0 % | 0.363° | 6.137° | 103.402° | 2164 mm | (2026-04-25 snapshot) |
-| **`render_tag_hub`** | **Accurate** | **100.0 %** | **0.057°** | **0.473°** | **0.771°** | **19 mm** | (this run) |
+| `high_accuracy` | Fast | 100.0 % | 0.363° | 6.137° | 103.402° | 2164 mm | (2026-04-25 snapshot) |
+| **`high_accuracy`** | **Accurate** | **100.0 %** | **0.057°** | **0.473°** | **0.771°** | **19 mm** | (this run) |
 
-Non-`render_tag_hub` rows above are pre-fix snapshots from 2026-04-25 (commit `8890efc`). After PR #212 the `high_accuracy` Accurate row in particular is stale — rerun `tools/bench/render_tag_sota_eval.py` for fresh numbers.
+Non-`high_accuracy` rows above are pre-fix snapshots from 2026-04-25 (commit `8890efc`). After PR #212 the `high_accuracy` Accurate row in particular is stale — rerun `tools/bench/render_tag_sota_eval.py` for fresh numbers.
 
 ## §9 Recommendations
 
 1. **Triage the non-healthy scenes (§4 top-10).** 1 of 50 scenes carry the entire residual tail; the linked `.rrd` recordings let you see whether the remaining error is a corner-localization issue, a remaining branch-selector edge case, or sensor / render noise. Fix at this granularity rather than tuning population-level knobs.
 
-3. **Reframe the SOTA gap.** With render_tag_hub at rot p50 = 0.057° / p99 = 0.771°, the bulk distribution already beats every external detector. Where external libraries still hold the rotation P95/P99 tail (per `render_tag_sota_20260425.md`) is what closing this residual tail unlocks. The next bottleneck is no longer a single regression — it is the tail of outlier scenes plus the σ calibration mismatch on Blender-rendered data.
+3. **Reframe the SOTA gap.** With high_accuracy at rot p50 = 0.057° / p99 = 0.771°, the bulk distribution already beats every external detector. Where external libraries still hold the rotation P95/P99 tail (per `render_tag_sota_20260425.md`) is what closing this residual tail unlocks. The next bottleneck is no longer a single regression — it is the tail of outlier scenes plus the σ calibration mismatch on Blender-rendered data.
 
 4. **Consider extending the failure-mode taxonomy.** Healthy = 50/50 means most residual error falls below the discriminating thresholds in `classify.py`. As the tail shrinks further, the classifier should grow finer modes (e.g. grazing-angle subclass, per-corner GN-residual outlier) to keep producing actionable signal.
 

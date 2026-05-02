@@ -1077,8 +1077,11 @@ fn run_pipeline_with_mode(
     // collapse onto the same TRBL extremal, lumping their shared edge into one
     // arc *and* compressing the opposite arc to near zero — Phase 2-5 then
     // yields a wrong-but-validation-passing quad.  Distortion-suite aprilgrid
-    // sub-tags can legitimately produce min-arc < 16 %, so this is opt-in
-    // (`render_tag_hub` only).  Skipped on small components: <500 binary pixels
+    // sub-tags can legitimately produce min-arc < 16 %, but the upstream guard
+    // at `detector.rs:194-198` rejects EdLines under any non-trivial distortion,
+    // so the gate is unreachable on the inputs where it would have collapsed
+    // legitimate detections — `high_accuracy` ships it on for axis-aligned
+    // synthetic rescue.  Skipped on small components: <500 binary pixels
     // is below the recall floor where collapse-vs-curvature is distinguishable.
     // DIAG's degenerate case is 45° rotation, which AXIS handles, so DIAG never
     // gates.

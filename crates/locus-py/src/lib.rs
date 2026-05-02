@@ -2064,8 +2064,7 @@ fn _shipped_profile_json(name: &str) -> PyResult<&'static str> {
     locus_core::config::shipped_profile_json(name).ok_or_else(|| {
         PyValueError::new_err(format!(
             "Unknown shipped profile {name:?}; expected one of \
-             ['standard', 'grid', 'high_accuracy', 'render_tag_hub', \
-             'general', 'max_recall_adaptive']"
+             ['standard', 'grid', 'high_accuracy', 'max_recall_adaptive']"
         ))
     })
 }

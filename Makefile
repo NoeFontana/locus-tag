@@ -21,5 +21,5 @@ help:
 diagnostics-rotation-tail-phase0:
 	PYTHONPATH=. uv run --group bench tools/cli.py bench rotation-tail-diag \
 		--hub-config locus_v1_tag36h11_1920x1080 \
-		--profile render_tag_hub \
+		--profile high_accuracy \
 		--pose-mode Accurate

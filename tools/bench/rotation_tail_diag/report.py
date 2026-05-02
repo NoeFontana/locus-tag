@@ -212,7 +212,7 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
     md.append("")
     md.append(
         "Forensics of the residual rotation tail on `locus_v1_tag36h11_1920x1080` "
-        "under `render_tag_hub` + Accurate-mode pose. Output of the Phase 0 "
+        "under `high_accuracy` + Accurate-mode pose. Output of the Phase 0 "
         "diagnostic harness (`tools/bench/rotation_tail_diag/`)."
     )
     md.append("")
@@ -253,16 +253,16 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
     # tail. Pivot the prose on rot_p50 instead of hardcoding either case.
     if rot_p50 > 5.0:
         md.append(
-            "The published `render_tag_hub` baseline (commit `8890efc`, "
+            "The published `high_accuracy` baseline (commit `8890efc`, "
             "2026-04-25) reported rot p99 = 1.897° on this exact dataset. "
             "The numbers above show **a regression**: the live "
-            "`render_tag_hub` + Accurate-mode pose path now produces rot p50 "
+            "`high_accuracy` + Accurate-mode pose path now produces rot p50 "
             f"≈ {rot_p50:.0f}° (two orders of magnitude). Reproduced "
             "independently via `tools/bench/render_tag_sota_eval.py` — see §7."
         )
     else:
         md.append(
-            "The published `render_tag_hub` baseline (commit `8890efc`, "
+            "The published `high_accuracy` baseline (commit `8890efc`, "
             "2026-04-25) reported rot p99 = 1.897° on this dataset. The "
             f"current run lands at rot p50 = {rot_p50:.3f}° / p99 = "
             f"{rot_p99:.3f}° — the bulk distribution is *better* than the "
@@ -497,11 +497,11 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
         "`render_tag_sota_eval.py`) |"
     )
     md.append(
-        "| `render_tag_hub` | Fast | 100.0 % | 0.363° | 6.137° | 103.402° | 2164 mm | "
+        "| `high_accuracy` | Fast | 100.0 % | 0.363° | 6.137° | 103.402° | 2164 mm | "
         "(2026-04-25 snapshot) |"
     )
     md.append(
-        f"| **`render_tag_hub`** | **Accurate** | **100.0 %** | **{rot_p50:.3f}°** | "
+        f"| **`high_accuracy`** | **Accurate** | **100.0 %** | **{rot_p50:.3f}°** | "
         f"**{rot_p95:.3f}°** | **{rot_p99:.3f}°** | **{trans_p99:.0f} mm** | "
         "(this run) |"
     )
@@ -510,13 +510,13 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
         md.append(
             "**Recovery path: switch the rotation-tail Phase 1–4 work to use "
             "`standard` profile first** — that's where the ~28° p99 tail still "
-            "behaves like a real perception problem. `render_tag_hub` and "
+            "behaves like a real perception problem. `high_accuracy` and "
             "`high_accuracy` need their Accurate-mode pose regression fixed "
             "before they can serve as the SOTA floor."
         )
     else:
         md.append(
-            "Non-`render_tag_hub` rows above are pre-fix snapshots from "
+            "Non-`high_accuracy` rows above are pre-fix snapshots from "
             "2026-04-25 (commit `8890efc`). After PR #212 the "
             "`high_accuracy` Accurate row in particular is stale — rerun "
             "`tools/bench/render_tag_sota_eval.py` for fresh numbers."
@@ -530,7 +530,7 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
         # the Accurate-mode regression. Original Phase 0.1 ordering.
         md.append(
             "1. **Phase 0.1**: Bisect the Accurate-mode regression on "
-            "`render_tag_hub` / `high_accuracy`. Most likely culprits, in "
+            "`high_accuracy` / `high_accuracy`. Most likely culprits, in "
             "order: EdLines corner ordering vs ContourRdp (winding "
             "direction); recent `refine_pose_lm_weighted` changes "
             "(`8890efc` introduced the Mahalanobis χ² gate); "
@@ -584,7 +584,7 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
             )
             md.append("")
         md.append(
-            "3. **Reframe the SOTA gap.** With render_tag_hub at "
+            "3. **Reframe the SOTA gap.** With high_accuracy at "
             f"rot p50 = {rot_p50:.3f}° / p99 = {rot_p99:.3f}°, the bulk "
             "distribution already beats every external detector. Where "
             "external libraries still hold the rotation P95/P99 tail (per "

@@ -6,7 +6,7 @@
     clippy::missing_panics_doc,
     clippy::panic
 )]
-//! Pins the `render_tag_hub` 2160p contract on the three scenes (0006, 0026,
+//! Pins the `high_accuracy` 2160p contract on the three scenes (0006, 0026,
 //! 0033) that previously missed: the largest GT-overlapping CCL component
 //! must pass the production geometric gates, *and* the detector must return
 //! at least one decoded tag. Together these guard against an upstream
@@ -37,7 +37,7 @@ mod render_tag_2160p {
     ];
 
     #[test]
-    fn render_tag_hub_2160p_decodes_largest_components() {
+    fn high_accuracy_2160p_decodes_largest_components() {
         let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") else {
             println!("Skipping: LOCUS_HUB_DATASET_DIR is unset.");
             return;
@@ -51,7 +51,7 @@ mod render_tag_2160p {
         let provider = HubProvider::new(&dataset_path)
             .expect("hub provider should construct from a populated dataset directory");
 
-        let config = DetectorConfig::from_profile("render_tag_hub");
+        let config = DetectorConfig::from_profile("high_accuracy");
         let mut options = load_detect_options(&dataset_path);
         options.families = vec![TagFamily::AprilTag36h11];
         let mut detector = Detector::with_config(config);

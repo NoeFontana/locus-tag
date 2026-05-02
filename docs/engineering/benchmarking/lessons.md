@@ -116,17 +116,18 @@ The four presets target mutually incompatible scenarios:
 
 | Profile | Target | Quad extract | Refinement | Sharpen | Decode | Notes |
 |---|---|---|---|---|---|---|
-| `high_accuracy` | Single-tag metrology, calibration | EdLines + GN | None | off | Hard | GN corners are sub-pixel — never post-process them |
-| `standard` | Dense multi-tag scenes | ContourRdp | Erf | on | Hard | v0.3.1+ ships Hard for 100 % precision (was Soft Mar 21) |
+| `high_accuracy` | Pose-precision SOTA (synthetic + lab metrology) | AdaptivePpb (ContourRdp+Erf low / EdLines+None high) + axis-imbalance gate | None on EdLines route | off | Hard | Beats AprilTag-C on every translation percentile; subsumes the former `render_tag_hub` profile (PR #2xx) |
+| `standard` | Dense multi-tag production tracking | ContourRdp | Erf | on | Hard | v0.3.1+ ships Hard for 100 % precision (was Soft Mar 21) |
 | `grid` | Touching-tag checkerboard | ContourRdp + 4-conn | Erf | off | Hard | 4-connectivity separates touching borders; sharpening creates halos |
-| `render_tag_hub` | Synthetic Blender PSF | EdLines + GN + axis-imbalance gate | None | on | Hard | Beats AprilTag-C on every translation percentile |
+| `max_recall_adaptive` | Production tracking with per-candidate PPB routing | AdaptivePpb (ContourRdp+Erf low / EdLines+None high) | Erf on low / None on high | on | Hard | Adds `max_hamming_error=2` and `post_decode_refinement=true` for blurry / distant tags |
 
-### §3.1 Why three (now four) and not one
+### §3.1 Why four and not one
 
 - **HighAccuracy** needs the lowest corner RMSE. EdLines + GN gives
-  it (0.16–0.29 px on hub vs 0.99–1.15 px for production), but the
-  missing sharpening and `None` refinement crater recall on small
-  tags (< 1.5 PPB).
+  it (0.16–0.29 px on hub vs 0.99–1.15 px for production); AdaptivePpb
+  routing falls back to ContourRdp+Erf for tags below ~2.5 PPB so
+  ICRA-class data doesn't collapse inside EdLines, and the
+  axis-imbalance gate rescues near-axis-aligned synthetic tags.
 - **Standard** needs maximum recall without losing precision.
   ContourRdp + sharpening keeps recall at 100 % on dense scenes.
   Soft decode would add +19 pp recall on ICRA but causes a 10–22 %
@@ -135,10 +136,10 @@ The four presets target mutually incompatible scenarios:
 - **Grid** has non-negotiable topological constraints
   (4-connectivity, relaxed contrast / edge-score gates) that hurt
   isolated-tag performance.
-- **render_tag_hub** is the production-relevant profile for
-  Blender-rendered PSF data. It's `high_accuracy` plus
-  `enable_sharpening` plus the opt-in `edlines_imbalance_gate`
-  (see §4.3).
+- **MaxRecallAdaptive** trades the two specialty pose-tail knobs
+  (χ² gate, σ_gate=0.5) for `max_hamming_error=2` and
+  `post_decode_refinement=true` to recover blurry / distant tags
+  in real-camera tracking.
 
 ### §3.2 Decode mode is profile-bound, not user-tunable
 
@@ -180,7 +181,7 @@ better P90 rotation**. Geometrically consistent corners → better
 poses, even if individual pixel positions move slightly from their
 locally-optimal locations.
 
-### §4.3 EdLines axis-aligned imbalance gate (opt-in)
+### §4.3 EdLines axis-aligned imbalance gate
 
 EdLines's Phase 1 partitions the boundary at the topmost / rightmost
 / bottommost / leftmost extremals (TRBL). On a near-axis-aligned tag,
@@ -190,15 +191,19 @@ to near-zero. Phases 2–5 fit a wrong-but-validation-passing quad and
 the decoder rejects it on Hamming margin.
 
 The fix:
-`DetectorConfig.edlines_imbalance_gate: bool` (default **false**).
-When enabled, AXIS-mode arcs that hit > 40 % / < 16 % imbalance
-divert to DIAG-mode (NW/NE/SE/SW extremals) which gives clean four-
-way partitioning on axis-aligned tags.
+`DetectorConfig.edlines_imbalance_gate: EdLinesImbalanceGatePolicy`
+(default **Disabled**). When `Enabled`, AXIS-mode arcs that hit > 40 % / < 16 %
+imbalance divert to DIAG-mode (NW/NE/SE/SW extremals) which gives
+clean four-way partitioning on axis-aligned tags.
 
-**Why opt-in.** A global gate regresses Brown–Conrady recall
-(0.929 → 0.869) because legitimate aprilgrid sub-tags under
-distortion live in the 8–15 % min-arc band. Only `render_tag_hub`
-(synthetic axis-aligned scenes) can safely turn the gate on.
+**Why the `high_accuracy` profile can leave the gate on.** The
+upstream guard at `crates/locus-core/src/detector.rs:194-198`
+rejects EdLines under any non-trivial distortion, routing distorted
+inputs through ContourRdp. So the gate is unreachable on the
+distortion-bearing inputs (Brown–Conrady aprilgrid sub-tags in the
+8–15 % min-arc band) where it would have collapsed legitimate
+detections. The previous "opt-in" reasoning predates that guard;
+post-guard, the gate is safe wherever EdLines runs.
 
 ### §4.4 PPB (pixels per bit) sets the recall floor
 
@@ -310,6 +315,8 @@ regression.
   dictionary itself, not detector bugs).
 - **`raw_pipeline` recall at 58 %.** Pre-filtering pass for noise-
   fragmented contours.
-- **Rotation-tail SOTA on 1080p hub.** OpenCV holds the rotation P95/P99
-  on `render_tag_hub`; we hold every other axis. EdLines pose
-  ambiguity on grazing-angle synthetic renders is the underlying issue.
+- **Rotation-tail residual on 1080p hub.** Post PR #216 we lead OpenCV
+  on rotation p99 (0.77° vs 1.23°). The remaining residual is EdLines
+  pose ambiguity on grazing-angle synthetic renders; further headroom
+  comes from the diagnostic-driven Phase 1 work (corner outlier /
+  branch-flip dominance analysis).

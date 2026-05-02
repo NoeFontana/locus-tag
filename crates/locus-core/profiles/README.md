@@ -1,9 +1,9 @@
 # Shipped detector profiles
 
-Six JSON files — `standard.json`, `grid.json`, `high_accuracy.json`,
-`render_tag_hub.json`, `general.json`, and `max_recall_adaptive.json` —
-are the **single source of truth** for Locus detector configuration. They
-are embedded into the Rust crate (via `include_str!`) and re-exposed to
+Four JSON files — `standard.json`, `grid.json`, `high_accuracy.json`,
+and `max_recall_adaptive.json` — are the **single source of truth**
+for Locus detector configuration. They are
+embedded into the Rust crate (via `include_str!`) and re-exposed to
 the Python wheel through the `_shipped_profile_json` FFI hook, so
 `locus-core` and `locus._profile.DetectorConfig` always read identical
 bytes.
@@ -84,55 +84,30 @@ Non-negotiable invariants that make this profile work:
 
 ### `high_accuracy`
 
-State-of-the-art metrology configuration. Bridges the deterministic
-EdLines 2D solver to the probabilistic weighted-LM 3D solver for maximum
-pose accuracy on well-isolated tags. Trades recall on packed/small tags
-for precision.
+State-of-the-art pose-precision configuration. Bridges the
+deterministic EdLines 2D solver to the probabilistic weighted-LM 3D
+solver via per-corner GN covariance propagation, with the EdLines
+axis-aligned imbalance gate enabled to recover near-axis-aligned tags
+and `AdaptivePpb` routing so tags below ~2.5 PPB fall back to
+`ContourRdp + Erf` instead of failing inside EdLines. Beats AprilTag-C
+on every translation percentile on `locus_v1_tag36h11_1920x1080`
+(rot p99 = 0.77° vs 65°, trans p99 = 19 mm vs 54 mm).
 
 | Field | Default | `high_accuracy` | Reason |
 | --- | --- | --- | --- |
-| `quad.extraction_mode` | `ContourRdp` | `EdLines` | EdLines produces per-corner 2×2 covariances used by the weighted pose solver. |
-| `decoder.refinement_mode` | `Erf` | `None` | EdLines already yields sub-pixel corners; Erf on top degrades precision. Also: EdLines + Erf is incompatible (validator enforces). |
+| `quad.extraction_policy` | `Static` | `AdaptivePpb(2.5, ContourRdp+Erf, EdLines+None)` | Per-candidate routing: small tags use ContourRdp/Erf (where EdLines collapses), large tags use EdLines/None (metrology-grade sub-pixel corners). |
+| `quad.edlines_imbalance_gate` | `"Disabled"` | `"Enabled"` | AXIS→DIAG rescue: when one boundary arc is > 40 % and another < 16 % (the signature of two corners collapsing onto the same TRBL extremal on near-axis-aligned tags) divert to NW/NE/SE/SW partition. Safe to leave on because the upstream guard at `detector.rs:194-198` rejects EdLines under any non-trivial distortion — so the gate is unreachable on distorted inputs where it would have collapsed legitimate aprilgrid sub-tags. |
+| `quad.min_area` | `36` | `800` | Tag16h5's dense codebook produces small textured-quad false positives (TP_min ≈ 1329 px² vs FP_max ≈ 1158 px² per PR #214). 800 sits cleanly between, killing the FP class without losing any tag36h11 TP. |
+| `decoder.refinement_mode` | `Erf` | `None` | EdLines already yields sub-pixel corners; Erf on top degrades precision (validator-enforced incompatibility on the EdLines route). |
 | `threshold.enable_sharpening` | `false` | `false` | Raw PSF is passed to the solver unfiltered. |
-| `quad.max_elongation`, `quad.min_density` | `0.0` | `20.0`, `0.15` | Same moments gate as `standard`. |
+| `pose.pose_consistency_fpr` | `0.0` (off) | `0.001` | χ² gate active to catch IPPE branch ambiguity, with branch-ratio escape (`min_decisive_ratio = 5.0`) so single-scene noise outliers aren't lossily nulled. |
+| `pose.pose_consistency_gate_sigma_px` | `1.0` | `0.5` | Tighter gate σ for clean-render PPB > 2.5 corner residuals. |
 
-The pose-tuning knobs (`pose.huber_delta_px`, `pose.tikhonov_alpha_max`,
-`pose.sigma_n_sq`, `pose.structure_tensor_radius`) are held at their
-defaults in this profile; sweep them against your sensor profile for
-production metrology.
-
-### `render_tag_hub`
-
-`high_accuracy` tuned for synthetic clean-render datasets where tags can
-appear near-axis-aligned. Adds the EdLines axis-aligned imbalance gate so
-boundary segmentations whose four arcs are severely unbalanced (one arc
-> 40 % of the boundary while another < 16 %) divert from the AXIS to the
-DIAG extremal partition — recovering tags whose adjacent corners
-collapse onto the same TRBL extremal.
-
-| Field | `high_accuracy` | `render_tag_hub` | Reason |
-| --- | --- | --- | --- |
-| `quad.edlines_imbalance_gate` | `"Disabled"` | `"Enabled"` | AXIS-mode rescue for near-axis-aligned tags. Off by default because lens-distorted aprilgrid sub-tags can legitimately produce min-arc < 16 %; only opt in for synthetic-render workloads. The legacy boolean form (`false` / `true`) is still accepted on the JSON / Python boundary but emits a `DeprecationWarning` from the Python loader. |
-
-On the `locus_v1_tag36h11_*` Hub render-tag subsets this lifts recall
-from 86/90/94/94 % → 100/100/100/94 % across 480p/720p/1080p/2160p
-without regressing pose accuracy (rotation P50 stays ≤ 0.054° at 1080p).
-See `docs/engineering/benchmarking/render_tag_sota_20260425.md` for the
+On the `locus_v1_tag36h11_*` Hub render-tag subsets this delivers
+100 % recall across 480p / 720p / 1080p (2160p stays at 94 % due to
+upstream segmentation fragmentation, unrelated to pose). See
+`docs/engineering/benchmarking/render_tag_sota_20260425.md` for the
 full A/B evaluation.
-
-### `general`
-
-Recall-tuned EdLines profile for clean (non-distorted) imagery. Combines
-`standard`'s sharpening and moments gates with EdLines extraction and
-the imbalance gate from `render_tag_hub`. Use this when you want SOTA
-clean-render recall without committing to the `render_tag_hub` test
-fixture.
-
-| Field | `standard` | `general` | Reason |
-| --- | --- | --- | --- |
-| `quad.extraction_mode` | `ContourRdp` | `EdLines` | Sub-pixel corners + per-corner covariances. |
-| `decoder.refinement_mode` | `Erf` | `None` | EdLines already yields sub-pixel corners; Erf on top is rejected by the cross-group validator. |
-| `quad.edlines_imbalance_gate` | `"Disabled"` | `"Enabled"` | AXIS→DIAG rescue for near-axis-aligned tags. **Caution:** scenes with non-trivial lens distortion should stay on `standard` (the gate can collapse legitimate distorted aprilgrid sub-tags). The upstream EdLines guard at `detector.rs:194-198` rejects EdLines under any non-trivial distortion, so this profile is only well-defined for pinhole / rectified inputs. |
 
 ### `max_recall_adaptive`
 
