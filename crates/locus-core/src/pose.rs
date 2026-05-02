@@ -1363,7 +1363,6 @@ fn pose_consistency_check(
     branch_d2_ratio: f64,
     thresholds: Option<ConsistencyThresholds>,
 ) -> ConsistencyVerdict {
-    let _ = branch_d2_ratio; // consumed below only when thresholds are set
     let Some(t) = thresholds else {
         // Disabled gate: skip 4 distortion projections in production
         // builds; keep them under bench-internals for telemetry.
@@ -1411,7 +1410,9 @@ fn pose_consistency_check(
     let max_corner_d2 = per_corner.iter().copied().fold(0.0_f64, f64::max);
     let chi2_ok = aggregate_d2 <= t.aggregate && max_corner_d2 <= t.per_corner;
     // Branch-ratio escape: a finite ratio above the threshold bypasses the
-    // χ² test. NaN propagates as `false` (no escape — pure χ² behavior).
+    // χ² test. `is_finite()` is load-bearing: the ROC harness disables the
+    // escape via `min_decisive_ratio = +∞`, and `+∞ >= +∞` is true — so we
+    // need to filter +∞ explicitly. NaN propagates as `false` for free.
     let branch_decisive = branch_d2_ratio.is_finite() && branch_d2_ratio >= t.min_decisive_ratio;
     let accepted = chi2_ok || branch_decisive;
 

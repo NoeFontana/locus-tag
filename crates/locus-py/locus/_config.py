@@ -318,8 +318,8 @@ class PoseConfig(BaseModel):
     specific noise than a wrong branch, and nulling its pose is lossy.
 
     Default ``5.0``: alternate IPPE d² must be at least 5× the primary's
-    for the escape to fire. Set to a very large value (e.g. ``1e30``) to
-    disable the escape and use only the χ² test.
+    for the escape to fire. Set to ``math.inf`` (Rust-side ``f64::INFINITY``)
+    to disable the escape and use only the χ² test.
     """
 
 
