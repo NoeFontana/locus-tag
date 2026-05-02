@@ -5,7 +5,7 @@ expression: report
 summary:
   dataset_size: 100
   mean_recall: 1
-  mean_precision: 0.9683333333333334
+  mean_precision: 0.9161666666666668
   mean_rmse: 1.0799
   mean_reprojection_rmse: 0.8908
   p50_translation_error: 0.0057
@@ -21,19 +21,19 @@ summary:
       missed: 0
       extra: 2
       rmse: 1.754
-    - filename: scene_0084_cam_0000.png
+    - filename: scene_0016_cam_0000.png
+      missed: 0
+      extra: 2
+      rmse: 0.9085
+    - filename: scene_0085_cam_0000.png
+      missed: 0
+      extra: 2
+      rmse: 0.7324
+    - filename: scene_0074_cam_0000.png
       missed: 0
       extra: 1
-      rmse: 1.6205
-    - filename: scene_0080_cam_0000.png
+      rmse: 2.5388
+    - filename: scene_0092_cam_0000.png
       missed: 0
       extra: 1
-      rmse: 1.4629
-    - filename: scene_0024_cam_0000.png
-      missed: 0
-      extra: 1
-      rmse: 0.9238
-    - filename: scene_0014_cam_0000.png
-      missed: 0
-      extra: 1
-      rmse: 0.8694
+      rmse: 1.727

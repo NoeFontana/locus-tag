@@ -465,13 +465,8 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
         return (None, None, PoseDiagnostics::empty());
     };
 
-    // Per-corner info matrices, in priority order:
-    //   GWLF external (Accurate + ext) > Structure Tensor (Accurate + img)
-    //   > Isotropic fallback (Σ⁻¹ = (1/σₙ²) I).
-    // The same Σ feeds LM (when weighted) and the Mahalanobis gate so the
-    // statistic and the solver share a noise model.
-    let (info_matrices, covariances) = build_info_matrices(
-        intrinsics,
+    // LM weighting (Some when Accurate-mode + GWLF/structure-tensor input).
+    let covariances = build_lm_covariances(
         config,
         mode,
         img,
@@ -480,19 +475,33 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
         external_covariances,
     );
 
+    // Isotropic Σ⁻¹ = (1/σ²)·I for the χ² gate and the branch selector — see
+    // `DetectorConfig::pose_consistency_gate_sigma_px` for the σ-decoupling
+    // rationale.
+    let gate_info_matrices = isotropic_info_matrices(config.pose_consistency_gate_sigma_px);
+
     let (best_pose, branch_diag) = if let Some(t) = thresholds {
+        // The branch selector's flip safeguard compares aggregate d² against
+        // `thresholds.aggregate` (χ²(2; fpr)). Both sides must share the same
+        // noise model for the comparison to be meaningful, so feed the
+        // selector the same isotropic σ_n²·I info matrices the gate uses.
         select_ippe_branch(
             intrinsics,
             corners,
-            &info_matrices,
+            &gate_info_matrices,
             tag_size,
             &candidates,
             t,
         )
     } else {
         let pose = find_best_pose(intrinsics, &ideal_corners, tag_size, &candidates);
-        let branch_diag =
-            disabled_branch_diagnostics(intrinsics, corners, &info_matrices, tag_size, &candidates);
+        let branch_diag = disabled_branch_diagnostics(
+            intrinsics,
+            corners,
+            &gate_info_matrices,
+            tag_size,
+            &candidates,
+        );
         (pose, branch_diag)
     };
 
@@ -516,7 +525,7 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
     let verdict = pose_consistency_check(
         intrinsics,
         corners,
-        &info_matrices,
+        &gate_info_matrices,
         tag_size,
         &refined_pose,
         thresholds,
@@ -535,44 +544,47 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
     }
 }
 
+/// Per-corner covariances for the weighted LM solver.
+///
+/// Priority: GWLF external (Accurate + ext) > Structure Tensor (Accurate +
+/// img) > `None` (Fast mode or no image — LM falls back to unweighted Huber).
+/// Returns covariances directly; the χ² gate and IPPE branch selector use
+/// their own isotropic info matrices ([`isotropic_info_matrices`]) so we no
+/// longer materialize an inverted info-matrix array on the hot path.
 #[inline]
-fn build_info_matrices(
-    intrinsics: &CameraIntrinsics,
+fn build_lm_covariances(
     config: &crate::config::DetectorConfig,
     mode: PoseEstimationMode,
     img: Option<&ImageView>,
     ideal_corners: &[[f64; 2]; 4],
     h_poly: &crate::decoder::Homography,
     external_covariances: Option<&[Matrix2<f64>; 4]>,
-) -> ([Matrix2<f64>; 4], Option<[Matrix2<f64>; 4]>) {
-    let _ = intrinsics;
-    match (mode, img, external_covariances) {
-        (PoseEstimationMode::Accurate, _, Some(ext)) => {
-            let info =
-                core::array::from_fn(|i| ext[i].try_inverse().unwrap_or_else(Matrix2::identity));
-            (info, Some(*ext))
-        },
-        (PoseEstimationMode::Accurate, Some(image), None) => {
-            let uncertainty = crate::pose_weighted::compute_framework_uncertainty(
-                image,
-                ideal_corners,
-                h_poly,
-                config.tikhonov_alpha_max,
-                config.sigma_n_sq,
-                config.structure_tensor_radius,
-            );
-            let info = core::array::from_fn(|i| {
-                uncertainty[i]
-                    .try_inverse()
-                    .unwrap_or_else(Matrix2::identity)
-            });
-            (info, Some(uncertainty))
-        },
-        _ => {
-            let inv_var = 1.0 / config.sigma_n_sq.max(1e-6);
-            ([Matrix2::new(inv_var, 0.0, 0.0, inv_var); 4], None)
-        },
+) -> Option<[Matrix2<f64>; 4]> {
+    if mode != PoseEstimationMode::Accurate {
+        return None;
     }
+    if let Some(ext) = external_covariances {
+        return Some(*ext);
+    }
+    let image = img?;
+    Some(crate::pose_weighted::compute_framework_uncertainty(
+        image,
+        ideal_corners,
+        h_poly,
+        config.tikhonov_alpha_max,
+        config.sigma_n_sq,
+        config.structure_tensor_radius,
+    ))
+}
+
+/// Build a per-corner isotropic info matrix `Σ⁻¹ = (1/σ²)·I`. Used by the
+/// χ² consistency gate and the IPPE branch selector, which need a noise
+/// model that's independent of the LM's per-corner weighting so the
+/// gate's χ²(2) calibration stays meaningful.
+#[inline]
+fn isotropic_info_matrices(sigma_px: f64) -> [Matrix2<f64>; 4] {
+    let inv_var = 1.0 / (sigma_px * sigma_px).max(1e-6);
+    [Matrix2::new(inv_var, 0.0, 0.0, inv_var); 4]
 }
 
 /// Diagnostic d² compute for the disabled-gate branch. Only contributes to
@@ -1157,16 +1169,51 @@ impl BranchDiagnostics {
     }
 }
 
-/// Mahalanobis-aware IPPE branch selector. Compares both candidate poses
-/// against the *observed* (distorted) corners under the supplied info
-/// matrices and swaps to the alternate branch when:
+/// IPPE branch selector with a Mahalanobis-aware safety net.
 ///
-/// - `alternate.d² < primary.d² · 0.5` (alternate is ≥2× better), AND
-/// - `alternate.d² < χ²(2; fpr)` (alternate is statistically defensible).
+/// Disambiguation is *primarily* by Euclidean reprojection error
+/// (`find_best_pose`), matching the legacy gate-disabled path. This is
+/// geometrically robust: the lower-residual branch is the physically
+/// correct one regardless of the per-corner information-matrix anisotropy.
 ///
-/// Both conditions are required so we never flip toward an alternate that
-/// is merely *less bad* than a degenerate primary — that case is handled
+/// Mahalanobis d² is then used only as a *flip safeguard*: swap to the
+/// alternate branch only when its aggregate d² is at least 2× better than
+/// the Euclidean pick AND below the χ²(2; fpr) gate threshold. Both
+/// conditions are required so we never flip toward an alternate that is
+/// merely *less bad* than a degenerate primary — that case is handled
 /// downstream by the consistency gate rejecting both branches.
+///
+/// Why not Mahalanobis-primary? Anisotropic structure-tensor info matrices
+/// can make the Mahalanobis-only ranking prefer branches whose residuals
+/// lie *along* strong edges (low penalty in that direction) rather than
+/// the geometrically-correct branch.
+/// Project all four corners under `pose` once and return both metrics the
+/// branch selector needs: `(sse, aggregate_d²)` where `sse = Σ ‖r_i‖²` is the
+/// Euclidean residual SSE (primary disambiguator) and `aggregate_d² = Σ d²_i`
+/// is the Mahalanobis aggregate (flip safeguard). Sharing the projection
+/// pass between the two metrics halves the corner reprojection ops in
+/// `select_ippe_branch`'s hot path.
+#[inline]
+fn branch_metrics(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    obj_pts: &[Vector3<f64>; 4],
+    info_matrices: &[Matrix2<f64>; 4],
+    pose: &Pose,
+) -> (f64, f64) {
+    let mut sse = 0.0_f64;
+    let mut agg_d2 = 0.0_f64;
+    for i in 0..4 {
+        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
+        let p = project_with_distortion(&p_cam, intrinsics);
+        let r_u = corners[i][0] - p[0];
+        let r_v = corners[i][1] - p[1];
+        sse += r_u * r_u + r_v * r_v;
+        agg_d2 += mahalanobis_d2([r_u, r_v], &info_matrices[i]);
+    }
+    (sse, agg_d2)
+}
+
 fn select_ippe_branch(
     intrinsics: &CameraIntrinsics,
     observed_corners: &[[f64; 2]; 4],
@@ -1177,14 +1224,14 @@ fn select_ippe_branch(
 ) -> (Pose, BranchDiagnostics) {
     let obj_pts = centered_tag_corners(tag_size);
 
-    let (_, agg0) = per_corner_d2(
+    let (sse0, agg0) = branch_metrics(
         intrinsics,
         observed_corners,
         &obj_pts,
         info_matrices,
         &candidates[0],
     );
-    let (_, agg1) = per_corner_d2(
+    let (sse1, agg1) = branch_metrics(
         intrinsics,
         observed_corners,
         &obj_pts,
@@ -1192,16 +1239,25 @@ fn select_ippe_branch(
         &candidates[1],
     );
 
-    let (primary_idx, primary_d2, alternate_d2) = if agg0 <= agg1 {
-        (0_usize, agg0, agg1)
+    // Primary disambiguation: Euclidean reprojection error (matches
+    // `find_best_pose`, the legacy gate-disabled path). Mahalanobis d² is
+    // used only as a flip safeguard — anisotropic info matrices can make
+    // the Mahalanobis-only ranking prefer branches whose residuals lie
+    // along strong edges rather than the geometrically-correct branch.
+    let euclidean_idx: usize = usize::from(sse1 < sse0);
+    let alternate_idx: usize = 1 - euclidean_idx;
+    let (primary_d2, alternate_d2) = if euclidean_idx == 0 {
+        (agg0, agg1)
     } else {
-        (1_usize, agg1, agg0)
+        (agg1, agg0)
     };
 
+    // Flip only when Mahalanobis says the alternate is much better
+    // AND below the χ² gate threshold.
     let chosen = if alternate_d2 < primary_d2 * 0.5 && alternate_d2 < thresholds.aggregate {
-        1 - primary_idx
+        alternate_idx
     } else {
-        primary_idx
+        euclidean_idx
     };
 
     (
@@ -1390,22 +1446,26 @@ pub fn refine_poses_soa_with_config(
                 ],
             ];
 
-            // If GWLF is enabled, we should have corner covariances in the batch.
-            // Check if any covariance is non-zero.
-            let mut ext_covs = [Matrix2::zeros(); 4];
-            let mut has_ext_covs = false;
-            #[allow(clippy::needless_range_loop)]
-            for j in 0..4 {
-                ext_covs[j] = Matrix2::new(
-                    f64::from(batch.corner_covariances[i][j * 4]),
-                    f64::from(batch.corner_covariances[i][j * 4 + 1]),
-                    f64::from(batch.corner_covariances[i][j * 4 + 2]),
-                    f64::from(batch.corner_covariances[i][j * 4 + 3]),
-                );
-                if ext_covs[j].norm_squared() > 1e-12 {
-                    has_ext_covs = true;
-                }
-            }
+            // Only GWLF writes covariances calibrated as image-noise
+            // variances; other extractors (EdLines, Erf) leave per-corner
+            // GN-residual uncertainties in `batch.corner_covariances` that
+            // are far tighter than σ_n and would mis-feed the LM solver.
+            let ext_covs_opt: Option<[Matrix2<f64>; 4]> =
+                if config.refinement_mode == crate::config::CornerRefinementMode::Gwlf {
+                    let covs: [Matrix2<f64>; 4] = core::array::from_fn(|j| {
+                        Matrix2::new(
+                            f64::from(batch.corner_covariances[i][j * 4]),
+                            f64::from(batch.corner_covariances[i][j * 4 + 1]),
+                            f64::from(batch.corner_covariances[i][j * 4 + 2]),
+                            f64::from(batch.corner_covariances[i][j * 4 + 3]),
+                        )
+                    });
+                    covs.iter()
+                        .any(|c| c.norm_squared() > 1e-12)
+                        .then_some(covs)
+                } else {
+                    None
+                };
 
             let (pose_opt, _, diag) = estimate_tag_pose_with_diagnostics(
                 intrinsics,
@@ -1414,7 +1474,7 @@ pub fn refine_poses_soa_with_config(
                 img,
                 mode,
                 config,
-                if has_ext_covs { Some(&ext_covs) } else { None },
+                ext_covs_opt.as_ref(),
                 thresholds,
             );
 

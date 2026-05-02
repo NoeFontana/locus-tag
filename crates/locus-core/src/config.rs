@@ -305,6 +305,23 @@ pub struct DetectorConfig {
     /// tag36h11 1080p), `1e-4` (stricter), `0.0` (disabled).
     pub pose_consistency_fpr: f64,
 
+    /// Pixel σ assumed by the pose-consistency χ² gate.
+    ///
+    /// The gate's null distribution is χ²(2) under the assumption that
+    /// post-LM residuals are 2-D Gaussian with covariance σ²·I. To keep
+    /// that calibration valid, the gate uses isotropic info matrices
+    /// `Σ⁻¹ = (1/σ²)·I` independent of the LM's per-corner weighting
+    /// (which can be anisotropic / structure-tensor / GWLF-derived).
+    ///
+    /// Decoupled from `sigma_n_sq` because the LM and the gate serve
+    /// different roles: the LM weights real Gaussian sensor noise (σ_n
+    /// is typically 1–2 px on real cameras); the gate rejects
+    /// geometrically-impossible residuals — values of 0.5–1 px give
+    /// the gate enough resolution to catch sub-2-px false-positive
+    /// residuals that the looser LM noise model would let through.
+    /// Default: 1.0 px.
+    pub pose_consistency_gate_sigma_px: f64,
+
     /// Alpha parameter for GWLF adaptive transversal windowing.
     /// The search band is set to +/- max(2, alpha * edge_length).
     pub gwlf_transversal_alpha: f64,
@@ -389,6 +406,7 @@ impl Default for DetectorConfig {
             quad_extraction_mode: QuadExtractionMode::ContourRdp,
             edlines_imbalance_gate: EdLinesImbalanceGatePolicy::Disabled,
             pose_consistency_fpr: 0.0,
+            pose_consistency_gate_sigma_px: 1.0,
             quad_extraction_policy: QuadExtractionPolicy::Static,
             post_decode_refinement: false,
         }
@@ -703,6 +721,7 @@ impl DetectorConfigBuilder {
             quad_extraction_mode: self.quad_extraction_mode.unwrap_or(d.quad_extraction_mode),
             edlines_imbalance_gate: d.edlines_imbalance_gate,
             pose_consistency_fpr: d.pose_consistency_fpr,
+            pose_consistency_gate_sigma_px: d.pose_consistency_gate_sigma_px,
             quad_extraction_policy: self
                 .quad_extraction_policy
                 .unwrap_or(d.quad_extraction_policy),
@@ -1164,6 +1183,16 @@ mod profile_json {
         // → 0.0 → gate disabled, identical to today's behavior.
         #[serde(default)]
         pub pose_consistency_fpr: f64,
+        // Optional pixel σ for the χ² consistency gate (independent of
+        // `sigma_n_sq` so the gate's null distribution stays calibrated
+        // against Gaussian noise even when LM uses anisotropic info
+        // matrices). Missing → 1.0 px (default).
+        #[serde(default = "default_gate_sigma_px")]
+        pub pose_consistency_gate_sigma_px: f64,
+    }
+
+    fn default_gate_sigma_px() -> f64 {
+        1.0
     }
 
     impl Default for PoseJson {
@@ -1175,6 +1204,7 @@ mod profile_json {
                 sigma_n_sq: d.sigma_n_sq,
                 structure_tensor_radius: d.structure_tensor_radius,
                 pose_consistency_fpr: d.pose_consistency_fpr,
+                pose_consistency_gate_sigma_px: d.pose_consistency_gate_sigma_px,
             }
         }
     }
@@ -1236,6 +1266,7 @@ mod profile_json {
                 quad_extraction_mode: p.quad.extraction_mode,
                 edlines_imbalance_gate: p.quad.edlines_imbalance_gate,
                 pose_consistency_fpr: p.pose.pose_consistency_fpr,
+                pose_consistency_gate_sigma_px: p.pose.pose_consistency_gate_sigma_px,
                 quad_extraction_policy: p.quad.extraction_policy,
                 post_decode_refinement: p.decoder.post_decode_refinement,
             }

@@ -297,6 +297,15 @@ class PoseConfig(BaseModel):
     chi-squared critical value is derived; rejected poses are surfaced as
     ``Detection.pose = None``. Values >= 1.0 are rejected as degenerate.
     """
+    pose_consistency_gate_sigma_px: float = Field(default=1.0, gt=0.0)
+    """Pixel σ assumed by the χ² consistency gate's null distribution.
+
+    Independent of ``sigma_n_sq`` so the gate's calibration stays valid
+    even when the LM weights residuals with anisotropic structure-tensor
+    or GWLF info matrices. Default ``1.0 px`` — tighter than ``sigma_n_sq``
+    (``≈ 4 px²``) so the gate catches sub-2-px false-positive residuals
+    that the looser LM noise model would let through.
+    """
 
 
 class SegmentationConfig(BaseModel):
@@ -465,6 +474,7 @@ class DetectorConfig(BaseModel):
             sigma_n_sq=self.pose.sigma_n_sq,
             structure_tensor_radius=self.pose.structure_tensor_radius,
             pose_consistency_fpr=self.pose.pose_consistency_fpr,
+            pose_consistency_gate_sigma_px=self.pose.pose_consistency_gate_sigma_px,
             segmentation_connectivity=self.segmentation.connectivity,
             segmentation_margin=self.segmentation.margin,
         )
