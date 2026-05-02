@@ -95,15 +95,11 @@ def _classify_one(
             )
 
     # 2. corner_outlier: ≥1 corner with low IRLS weight AND LOO refit drops rot >30%.
-    irls_weights = [
-        c.get("final_irls_weight")
-        for c in corners
-        if c.get("final_irls_weight") is not None
+    irls_weights: list[float] = [
+        float(w) for c in corners if (w := c.get("final_irls_weight")) is not None
     ]
-    loo_drops = [
-        c.get("leave_one_out_rotation_err_drop_pct")
-        for c in corners
-        if c.get("leave_one_out_rotation_err_drop_pct") is not None
+    loo_drops: list[float] = [
+        float(d) for c in corners if (d := c.get("leave_one_out_rotation_err_drop_pct")) is not None
     ]
     if irls_weights and loo_drops:
         bad_weights = [w for w in irls_weights if w < CORNER_OUTLIER_WEIGHT_THRESHOLD]
@@ -113,26 +109,24 @@ def _classify_one(
                 scene_id=sid,
                 mode="corner_outlier",
                 evidence={
-                    "min_irls_weight": float(min(irls_weights)),
-                    "max_loo_rotation_drop_pct": float(max_loo_drop),
+                    "min_irls_weight": min(irls_weights),
+                    "max_loo_rotation_drop_pct": max_loo_drop,
                     "n_corners_below_weight_threshold": len(bad_weights),
                 },
             )
 
     # 3. grazing_angle: high AoI AND degenerate structure tensor.
     if aoi is not None and aoi > GRAZING_AOI_DEG:
-        Rs = [
-            c.get("structure_tensor_R")
-            for c in corners
-            if c.get("structure_tensor_R") is not None
+        rs: list[float] = [
+            float(r) for c in corners if (r := c.get("structure_tensor_R")) is not None
         ]
-        if Rs and min(Rs) < GRAZING_R_THRESHOLD:
+        if rs and min(rs) < GRAZING_R_THRESHOLD:
             return FailureMode(
                 scene_id=sid,
                 mode="grazing_angle",
                 evidence={
                     "angle_of_incidence_deg": float(aoi),
-                    "min_structure_tensor_R": float(min(Rs)),
+                    "min_structure_tensor_R": min(rs),
                 },
             )
 
@@ -179,12 +173,8 @@ def _classify_one(
         scene_id=sid,
         mode="other",
         evidence={
-            "rotation_error_chosen_deg": (
-                float(rot_chosen) if rot_chosen is not None else None
-            ),
-            "aggregate_d2_chosen": (
-                float(d2_chosen) if d2_chosen is not None else None
-            ),
+            "rotation_error_chosen_deg": (float(rot_chosen) if rot_chosen is not None else None),
+            "aggregate_d2_chosen": (float(d2_chosen) if d2_chosen is not None else None),
         },
     )
 
@@ -197,9 +187,7 @@ def run(diagnostic_dir: Path) -> Path:
 
     raw = json.loads(scenes_path.read_text())
     scenes = ScenesFile.model_validate(raw)
-    corners_by_scene = (
-        _aggregate_corner_records(corners_path) if corners_path.exists() else {}
-    )
+    corners_by_scene = _aggregate_corner_records(corners_path) if corners_path.exists() else {}
 
     classifications = []
     for scene in scenes.scenes:
@@ -214,9 +202,7 @@ def run(diagnostic_dir: Path) -> Path:
             )
             continue
         corners = corners_by_scene.get(scene.scene_id, [])
-        classifications.append(
-            _classify_one(scene_dict, corners, scenes.sigma_n_sq_configured)
-        )
+        classifications.append(_classify_one(scene_dict, corners, scenes.sigma_n_sq_configured))
 
     population = Counter(c.mode for c in classifications)
     out = FailureModesFile(

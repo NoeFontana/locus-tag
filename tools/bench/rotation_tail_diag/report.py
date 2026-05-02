@@ -11,7 +11,6 @@ for reproducibility.
 
 from __future__ import annotations
 
-import json
 import statistics
 from pathlib import Path
 from typing import Any
@@ -82,13 +81,9 @@ def _stratify_by_quartiles(
     scenes_data: list[dict],
     field: str,
     metric: str,
-) -> list[tuple[str, int, dict[str, float | tuple[float, float]]]]:
+) -> list[tuple[str, int, dict[str, float]]]:
     """Bucket scenes into 4 quantiles by `field` and report metric percentiles."""
-    rows = [
-        s
-        for s in scenes_data
-        if s.get(field) is not None and s.get(metric) is not None
-    ]
+    rows = [s for s in scenes_data if s.get(field) is not None and s.get(metric) is not None]
     if not rows:
         return []
     rows.sort(key=lambda s: float(s[field]))
@@ -123,23 +118,6 @@ def _stratify_by_quartiles(
     return out
 
 
-def _counterfactual_p99_drop(
-    rot_errs: list[float],
-    classifications: list[dict],
-    target_mode: str,
-) -> float:
-    """If we 'fixed' all scenes labelled ``target_mode`` (set their rotation error
-    to 0), what's the resulting p99? Returns the new p99 in degrees."""
-    if not rot_errs:
-        return float("nan")
-    sid_to_mode = {c["scene_id"]: c["mode"] for c in classifications}
-    fixed = []
-    for s in rot_errs:
-        # ``rot_errs`` here is parallel to scenes; we need scene_id zipping.
-        pass
-    return float("nan")  # implemented in run() with explicit zipping
-
-
 def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
     scenes_path = diagnostic_dir / "scenes.json"
     corners_path = diagnostic_dir / "corners.parquet"
@@ -147,14 +125,9 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
 
     scenes = ScenesFile.model_validate_json(scenes_path.read_text())
     failure_modes = FailureModesFile.model_validate_json(fm_path.read_text())
-    corners_tbl = (
-        pq.read_table(corners_path).to_pylist() if corners_path.exists() else []
-    )
+    corners_tbl = pq.read_table(corners_path).to_pylist() if corners_path.exists() else []
 
     sid_to_mode = {c.scene_id: c.mode for c in failure_modes.classifications}
-    sid_to_evidence = {
-        c.scene_id: c.evidence for c in failure_modes.classifications
-    }
 
     # Headline numbers
     detected_scenes = [s for s in scenes.scenes if s.detected]
@@ -189,9 +162,7 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
     for mode in failure_modes.population:
         if mode in {"healthy", "production_miss"}:
             continue
-        synthetic = [
-            (0.0 if sid_to_mode.get(sid) == mode else err) for sid, err in rot_with_sid
-        ]
+        synthetic = [(0.0 if sid_to_mode.get(sid) == mode else err) for sid, err in rot_with_sid]
         counterfactuals[mode] = {
             "p50": _percentile(synthetic, 0.50),
             "p95": _percentile(synthetic, 0.95),
@@ -215,21 +186,15 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
 
     # IRLS weight histogram (only corners with non-null final weights)
     weights = [
-        c["final_irls_weight"]
-        for c in corners_tbl
-        if c.get("final_irls_weight") is not None
+        c["final_irls_weight"] for c in corners_tbl if c.get("final_irls_weight") is not None
     ]
 
     # Branch-d² scatter as bucketed counts
     d2_chosen_arr = [
-        s.aggregate_d2_chosen
-        for s in detected_scenes
-        if not np.isnan(s.aggregate_d2_chosen)
+        s.aggregate_d2_chosen for s in detected_scenes if not np.isnan(s.aggregate_d2_chosen)
     ]
     d2_alt_arr = [
-        s.aggregate_d2_alternate
-        for s in detected_scenes
-        if not np.isnan(s.aggregate_d2_alternate)
+        s.aggregate_d2_alternate for s in detected_scenes if not np.isnan(s.aggregate_d2_alternate)
     ]
 
     # AoI / distance / PPM stratified tables (rotation error)
@@ -237,12 +202,8 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
     strat_aoi = _stratify_by_quartiles(
         detected_dicts, "angle_of_incidence_deg", "rotation_error_chosen_deg"
     )
-    strat_dist = _stratify_by_quartiles(
-        detected_dicts, "distance_m", "rotation_error_chosen_deg"
-    )
-    strat_ppm = _stratify_by_quartiles(
-        detected_dicts, "ppm_estimated", "rotation_error_chosen_deg"
-    )
+    strat_dist = _stratify_by_quartiles(detected_dicts, "distance_m", "rotation_error_chosen_deg")
+    strat_ppm = _stratify_by_quartiles(detected_dicts, "ppm_estimated", "rotation_error_chosen_deg")
 
     # ---------- Render markdown ----------
     md = []
@@ -267,9 +228,7 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
         f"σ_n² configured = {scenes.sigma_n_sq_configured:.3f} (σ ≈ "
         f"{configured_sigma:.3f}px)."
     )
-    md.append(
-        f"- **Recall**: {len(detected_scenes)}/{scenes.n_scenes} scenes detected."
-    )
+    md.append(f"- **Recall**: {len(detected_scenes)}/{scenes.n_scenes} scenes detected.")
     md.append(
         f"- **Rotation error vs GT** (degrees, 95% bootstrap CI):  "
         f"p50 = {rot_p50:.3f} [{rot_p50_lo:.3f}, {rot_p50_hi:.3f}]  ·  "
@@ -319,17 +278,15 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
     md.append("")
     md.append("| Mode | Count | % | Counterfactual rot p99 if resolved |")
     md.append("| :--- | ---: | ---: | ---: |")
-    for mode, count in sorted(
-        failure_modes.population.items(), key=lambda kv: -kv[1]
-    ):
+    for mode, count in sorted(failure_modes.population.items(), key=lambda kv: -kv[1]):
         pct = 100.0 * count / max(scenes.n_scenes, 1)
         cf = counterfactuals.get(mode)
         cf_str = f"{cf['p99']:.3f}°" if cf else "—"
         md.append(f"| `{mode}` | {count} | {pct:.1f}% | {cf_str} |")
     md.append("")
     md.append(
-        f"_Counterfactual interpretation: \"if all `<mode>` scenes had rotation "
-        f"error = 0, what would p99 become?\" Current p99 = {rot_p99:.3f}°. "
+        f'_Counterfactual interpretation: "if all `<mode>` scenes had rotation '
+        f'error = 0, what would p99 become?" Current p99 = {rot_p99:.3f}°. '
         "The mode whose counterfactual drops p99 the most is the priority fix."
     )
     md.append("")
@@ -355,9 +312,7 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
 
     md.append("## §4 Top-10 worst scenes")
     md.append("")
-    md.append(
-        "| # | scene_id | rot err (°) | trans err (mm) | branch | classification | Rerun | "
-    )
+    md.append("| # | scene_id | rot err (°) | trans err (mm) | branch | classification | Rerun | ")
     md.append("| ---: | :--- | ---: | ---: | ---: | :--- | :--- |")
     for rank, (sid, rot, scene) in enumerate(worst, 1):
         trans_mm = (
@@ -435,7 +390,7 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
     n_total = scenes.n_scenes
     # Find the dominant *non-healthy* mode and dispatch the narrative on it.
     nonhealthy = {k: v for k, v in pop.items() if k != "healthy" and v > 0}
-    dominant = max(nonhealthy, key=nonhealthy.get) if nonhealthy else None
+    dominant = max(nonhealthy, key=lambda k: nonhealthy[k]) if nonhealthy else None
     healthy_count = pop.get("healthy", 0)
 
     if dominant == "frame_or_winding":
@@ -526,9 +481,7 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
         "after running the eval tool.)"
     )
     md.append("")
-    md.append(
-        "| Profile | Mode | Recall | rot p50 | rot p95 | rot p99 | trans p99 |"
-    )
+    md.append("| Profile | Mode | Recall | rot p50 | rot p95 | rot p99 | trans p99 |")
     md.append("| :--- | :--- | ---: | ---: | ---: | ---: | ---: |")
     md.append(
         "| `standard` | Accurate | 100.0 % | 0.288° | 1.572° | 27.248° | 50.3 mm | "

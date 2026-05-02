@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -27,18 +25,18 @@ class SceneRecord(BaseModel):
 
     # Detected pose (production-equivalent path). None if production missed.
     detected: bool
-    detected_quaternion_xyzw: Optional[tuple[float, float, float, float]] = None
-    detected_translation_xyz: Optional[tuple[float, float, float]] = None
+    detected_quaternion_xyzw: tuple[float, float, float, float] | None = None
+    detected_translation_xyz: tuple[float, float, float] | None = None
 
     # Alternate IPPE branch (LM-refined).
-    alternate_quaternion_xyzw: Optional[tuple[float, float, float, float]] = None
-    alternate_translation_xyz: Optional[tuple[float, float, float]] = None
+    alternate_quaternion_xyzw: tuple[float, float, float, float] | None = None
+    alternate_translation_xyz: tuple[float, float, float] | None = None
 
     # Errors against GT — degrees and millimetres.
-    rotation_error_chosen_deg: Optional[float] = None
-    rotation_error_alternate_deg: Optional[float] = None
-    translation_error_chosen_mm: Optional[float] = None
-    translation_error_alternate_mm: Optional[float] = None
+    rotation_error_chosen_deg: float | None = None
+    rotation_error_alternate_deg: float | None = None
+    translation_error_chosen_mm: float | None = None
+    translation_error_alternate_mm: float | None = None
 
     # Diagnostic d² values.
     branch_chosen_idx: int  # 0/1; 255 sentinel = no branch selected.
@@ -48,8 +46,8 @@ class SceneRecord(BaseModel):
     max_corner_d2: float = float("nan")
 
     # LM telemetry (from per-iteration retention; None if call skipped).
-    lm_iterations: Optional[int] = None
-    lm_convergence: Optional[int] = None  # 0=grad, 1=step, 2=max-iter, 3=chol-fail
+    lm_iterations: int | None = None
+    lm_convergence: int | None = None  # 0=grad, 1=step, 2=max-iter, 3=chol-fail
 
     # Per-image noise floor σ.
     image_noise_sigma: float
@@ -71,22 +69,22 @@ class CornerRecord(BaseModel):
 
     gt_corner_x: float
     gt_corner_y: float
-    detected_corner_x: Optional[float] = None
-    detected_corner_y: Optional[float] = None
-    residual_norm_px: Optional[float] = None
+    detected_corner_x: float | None = None
+    detected_corner_y: float | None = None
+    residual_norm_px: float | None = None
 
     # Mahalanobis d² and Huber IRLS weight at the LM-converged pose.
-    final_mahalanobis_d2: Optional[float] = None
-    final_irls_weight: Optional[float] = None
+    final_mahalanobis_d2: float | None = None
+    final_irls_weight: float | None = None
 
     # Structure-tensor anisotropy.
-    structure_tensor_lambda_max: Optional[float] = None
-    structure_tensor_lambda_min: Optional[float] = None
-    structure_tensor_R: Optional[float] = None  # λ_min / λ_max ∈ [0, 1]
+    structure_tensor_lambda_max: float | None = None
+    structure_tensor_lambda_min: float | None = None
+    structure_tensor_R: float | None = None  # λ_min / λ_max ∈ [0, 1]
 
     # Leave-one-out: fraction of rotation error reduction when this corner
     # is dropped from LM. Positive ⇒ this corner is hurting the fit.
-    leave_one_out_rotation_err_drop_pct: Optional[float] = None
+    leave_one_out_rotation_err_drop_pct: float | None = None
 
 
 class ScenesFile(BaseModel):

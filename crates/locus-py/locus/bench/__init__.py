@@ -33,17 +33,16 @@ if _missing:
         f"Missing symbols: {_missing}"
     )
 
-estimate_image_noise = _native._bench_estimate_image_noise
-estimate_both_branches = _native._bench_estimate_both_branches
-refine_pose_lm_weighted_with_telemetry = (
-    _native._bench_refine_pose_lm_weighted_with_telemetry
-)
-refit_pose_drop_corner = _native._bench_refit_pose_drop_corner
-corner_structure_tensor_eigenvalues = (
-    _native._bench_corner_structure_tensor_eigenvalues
-)
-compute_corner_covariance = _native._bench_compute_corner_covariance
-estimate_tag_pose = _native._bench_estimate_tag_pose
+# `bench-internals` symbols are conditionally compiled, so mypy can't see
+# them on the static module — the runtime guard above raises ImportError
+# before any of these assignments execute when the feature is off.
+estimate_image_noise = _native._bench_estimate_image_noise  # type: ignore[attr-defined]
+estimate_both_branches = _native._bench_estimate_both_branches  # type: ignore[attr-defined]
+refine_pose_lm_weighted_with_telemetry = _native._bench_refine_pose_lm_weighted_with_telemetry  # type: ignore[attr-defined]
+refit_pose_drop_corner = _native._bench_refit_pose_drop_corner  # type: ignore[attr-defined]
+corner_structure_tensor_eigenvalues = _native._bench_corner_structure_tensor_eigenvalues  # type: ignore[attr-defined]
+compute_corner_covariance = _native._bench_compute_corner_covariance  # type: ignore[attr-defined]
+estimate_tag_pose = _native._bench_estimate_tag_pose  # type: ignore[attr-defined]
 
 __all__ = [
     "compute_corner_covariance",

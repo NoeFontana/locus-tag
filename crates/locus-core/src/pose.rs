@@ -680,13 +680,10 @@ fn disabled_branch_diagnostics(
         // (`find_best_pose`), which on this code branch is the same call site
         // that picks `candidates[chosen_idx]`. Mirror that here so the
         // diagnostic `chosen_idx` reflects what actually shipped.
-        let chosen_idx = if reprojection_error(intrinsics, corners, &obj_pts, &candidates[1])
-            < reprojection_error(intrinsics, corners, &obj_pts, &candidates[0])
-        {
-            1_u8
-        } else {
-            0_u8
-        };
+        let chosen_idx = u8::from(
+            reprojection_error(intrinsics, corners, &obj_pts, &candidates[1])
+                < reprojection_error(intrinsics, corners, &obj_pts, &candidates[0]),
+        );
         BranchDiagnostics {
             primary_d2: agg0.min(agg1),
             alternate_d2: agg0.max(agg1),
@@ -1722,8 +1719,10 @@ pub fn bench_estimate_both_branches(
         if let (crate::config::PoseEstimationMode::Accurate, _, Some(covs)) =
             (mode, img, covariances)
         {
-            crate::pose_weighted::refine_pose_lm_weighted(intrinsics, corners, tag_size, seed, &covs)
-                .0
+            crate::pose_weighted::refine_pose_lm_weighted(
+                intrinsics, corners, tag_size, seed, &covs,
+            )
+            .0
         } else {
             refine_pose_lm(intrinsics, corners, tag_size, seed, config.huber_delta_px)
         }
@@ -1782,18 +1781,9 @@ pub fn bench_refit_pose_drop_corner(
     let Some(h_poly) = crate::decoder::Homography::square_to_quad(&ideal_corners) else {
         return initial_pose;
     };
-    let covariances_opt = build_lm_covariances(
-        config,
-        mode,
-        img,
-        &ideal_corners,
-        &h_poly,
-        None,
-    );
+    let covariances_opt = build_lm_covariances(config, mode, img, &ideal_corners, &h_poly, None);
 
-    if let (crate::config::PoseEstimationMode::Accurate, Some(mut covs)) =
-        (mode, covariances_opt)
-    {
+    if let (crate::config::PoseEstimationMode::Accurate, Some(mut covs)) = (mode, covariances_opt) {
         // Inflate the dropped corner's covariance ⇒ its info matrix shrinks
         // toward zero ⇒ no contribution to LM normal equations.
         covs[drop_idx] = Matrix2::identity().scale(1.0e12);
@@ -1809,8 +1799,7 @@ pub fn bench_refit_pose_drop_corner(
         // Fast mode has no per-corner weighting; we approximate "drop corner"
         // by snapping the dropped pixel residual to the model prediction
         // before running LM, so its contribution to the Huber cost is zero.
-        let p_cam = initial_pose.rotation
-            * centered_tag_corners(tag_size)[drop_idx]
+        let p_cam = initial_pose.rotation * centered_tag_corners(tag_size)[drop_idx]
             + initial_pose.translation;
         let projected = project_with_distortion(&p_cam, intrinsics);
         let mut local_corners = *corners;
@@ -1844,8 +1833,9 @@ pub fn bench_estimate_tag_pose(
     external_covariances: Option<&[Matrix2<f64>; 4]>,
     fpr: Option<f64>,
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>, BenchPoseDiagnostics) {
-    let thresholds =
-        fpr.and_then(|f| ConsistencyThresholds::from_fpr(f, config.pose_consistency_min_decisive_ratio));
+    let thresholds = fpr.and_then(|f| {
+        ConsistencyThresholds::from_fpr(f, config.pose_consistency_min_decisive_ratio)
+    });
     let (pose, cov, diag) = estimate_tag_pose_with_diagnostics(
         intrinsics,
         corners,

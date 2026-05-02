@@ -2084,8 +2084,7 @@ fn _shipped_profile_json(name: &str) -> PyResult<&'static str> {
 #[cfg(feature = "bench-internals")]
 mod bench {
     use super::{
-        CameraIntrinsics, PoseEstimationMode, PyDetectorConfig, prepare_image_view,
-        wrap_pyfunction,
+        CameraIntrinsics, PoseEstimationMode, PyDetectorConfig, prepare_image_view, wrap_pyfunction,
     };
     use nalgebra::Matrix2;
     use numpy::PyReadonlyArray2;
@@ -2093,16 +2092,17 @@ mod bench {
     use pyo3::prelude::*;
     use pyo3::types::{PyDict, PyList, PyModule};
 
-    fn pose_to_dict<'py>(
-        py: Python<'py>,
-        pose: &locus_core::Pose,
-    ) -> PyResult<Bound<'py, PyDict>> {
+    fn pose_to_dict<'py>(py: Python<'py>, pose: &locus_core::Pose) -> PyResult<Bound<'py, PyDict>> {
         let rot = nalgebra::Rotation3::from_matrix_unchecked(pose.rotation);
         let q = nalgebra::UnitQuaternion::from_rotation_matrix(&rot);
         let dict = PyDict::new(py);
         dict.set_item(
             "translation",
-            [pose.translation[0], pose.translation[1], pose.translation[2]],
+            [
+                pose.translation[0],
+                pose.translation[1],
+                pose.translation[2],
+            ],
         )?;
         dict.set_item(
             "quaternion",
@@ -2112,7 +2112,8 @@ mod bench {
     }
 
     fn pose_from_quat_trans(quaternion: [f64; 4], translation: [f64; 3]) -> locus_core::Pose {
-        let q = nalgebra::Quaternion::new(quaternion[3], quaternion[0], quaternion[1], quaternion[2]);
+        let q =
+            nalgebra::Quaternion::new(quaternion[3], quaternion[0], quaternion[1], quaternion[2]);
         let unit = nalgebra::UnitQuaternion::new_normalize(q);
         let rot = unit.to_rotation_matrix().into_inner();
         let trans = nalgebra::Vector3::new(translation[0], translation[1], translation[2]);
@@ -2122,6 +2123,7 @@ mod bench {
     /// Estimate per-image additive Gaussian noise σ via the Immerkær estimator.
     /// Returns σ in pixel-intensity units (u8 scale).
     #[pyfunction]
+    #[allow(clippy::needless_pass_by_value)] // pyo3 #[pyfunction] requires owned PyReadonlyArray2
     pub fn _bench_estimate_image_noise(img: PyReadonlyArray2<'_, u8>) -> PyResult<f64> {
         let view = prepare_image_view(&img)?;
         Ok(locus_core::compute_image_noise_floor(&view))
@@ -2185,15 +2187,15 @@ mod bench {
     /// list of per-iteration dicts).
     #[pyfunction]
     #[pyo3(signature = (intrinsics, corners, tag_size, initial_quaternion, initial_translation, corner_covariances))]
-    pub fn _bench_refine_pose_lm_weighted_with_telemetry<'py>(
-        py: Python<'py>,
+    pub fn _bench_refine_pose_lm_weighted_with_telemetry(
+        py: Python<'_>,
         intrinsics: CameraIntrinsics,
         corners: [[f64; 2]; 4],
         tag_size: f64,
         initial_quaternion: [f64; 4],
         initial_translation: [f64; 3],
         corner_covariances: [[f64; 4]; 4],
-    ) -> PyResult<Bound<'py, PyDict>> {
+    ) -> PyResult<Bound<'_, PyDict>> {
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
         let initial = pose_from_quat_trans(initial_quaternion, initial_translation);
         let covs: [Matrix2<f64>; 4] = core::array::from_fn(|i| {
@@ -2222,7 +2224,10 @@ mod bench {
         out.set_item("iterations", res.iterations)?;
         out.set_item("convergence", res.convergence)?;
         out.set_item("final_per_corner_d2", res.final_per_corner_d2)?;
-        out.set_item("final_per_corner_irls_weight", res.final_per_corner_irls_weight)?;
+        out.set_item(
+            "final_per_corner_irls_weight",
+            res.final_per_corner_irls_weight,
+        )?;
 
         let trace_list = PyList::empty(py);
         for t in &res.trace {
@@ -2285,6 +2290,7 @@ mod bench {
     /// `None` if the window has no support in the image.
     /// `R = λ_min / λ_max ∈ [0, 1]` is the corner-quality anisotropy ratio.
     #[pyfunction]
+    #[allow(clippy::needless_pass_by_value)] // pyo3 #[pyfunction] requires owned PyReadonlyArray2
     pub fn _bench_corner_structure_tensor_eigenvalues(
         img: PyReadonlyArray2<'_, u8>,
         center_x: f64,
@@ -2304,6 +2310,7 @@ mod bench {
     /// Compute the 2×2 corner covariance matrix from the structure tensor at
     /// a single corner. Returns `[c00, c01, c10, c11]` (row-major).
     #[pyfunction]
+    #[allow(clippy::needless_pass_by_value)] // pyo3 #[pyfunction] requires owned PyReadonlyArray2
     pub fn _bench_compute_corner_covariance(
         img: PyReadonlyArray2<'_, u8>,
         center_x: f64,

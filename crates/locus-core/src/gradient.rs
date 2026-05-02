@@ -857,9 +857,7 @@ pub fn compute_image_noise_floor(img: &ImageView) -> f64 {
             let p12 = i32::from(img.get_pixel(x, y + 1));
             let p22 = i32::from(img.get_pixel(x + 1, y + 1));
 
-            let l = (p00 - 2 * p10 + p20)
-                + (-2 * p01 + 4 * p11 - 2 * p21)
-                + (p02 - 2 * p12 + p22);
+            let l = (p00 - 2 * p10 + p20) + (-2 * p01 + 4 * p11 - 2 * p21) + (p02 - 2 * p12 + p22);
             abs_l.push(l.unsigned_abs());
         }
     }
@@ -962,7 +960,10 @@ mod tests {
         let data = vec![128_u8; 64 * 64];
         let view = ImageView::new(&data, 64, 64, 64).unwrap();
         let sigma = compute_image_noise_floor(&view);
-        assert!(sigma < 0.1, "uniform image should have ~zero noise: {sigma}");
+        assert!(
+            sigma < 0.1,
+            "uniform image should have ~zero noise: {sigma}"
+        );
     }
 
     #[test]
