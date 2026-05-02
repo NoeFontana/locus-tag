@@ -400,9 +400,7 @@ class TestRejectedFunnelStatus:
         assert batch.rejected_funnel_status.dtype == np.uint8
         assert batch.rejected_funnel_status.shape == (batch.rejected_corners.shape[0],)
 
-    def test_shape_matches_rejected_corners_concurrent(
-        self, detector: locus.Detector
-    ) -> None:
+    def test_shape_matches_rejected_corners_concurrent(self, detector: locus.Detector) -> None:
         batches = detector.detect_concurrent([_valid_img(), _valid_img()])
         assert len(batches) == 2
         for b in batches:
