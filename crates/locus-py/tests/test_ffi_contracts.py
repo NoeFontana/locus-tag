@@ -383,3 +383,52 @@ class TestDetectVsConcurrentSymmetry:
         batch = detector.detect_concurrent([img])
         assert len(batch) == 1
         assert batch[0].telemetry is None  # documented invariant
+
+
+class TestRejectedFunnelStatus:
+    """Per-rejected-quad funnel status crosses the FFI as a uint8 array
+    aligned with ``rejected_corners`` along axis 0. Codes are defined by
+    :class:`locus.FunnelStatus`.
+    """
+
+    _VALID_CODES = {int(r) for r in locus.FunnelStatus}
+
+    def test_shape_matches_rejected_corners_single(self, detector: locus.Detector) -> None:
+        batch = detector.detect(_valid_img())
+        assert batch.rejected_corners is not None
+        assert batch.rejected_funnel_status is not None
+        assert batch.rejected_funnel_status.dtype == np.uint8
+        assert batch.rejected_funnel_status.shape == (batch.rejected_corners.shape[0],)
+
+    def test_shape_matches_rejected_corners_concurrent(
+        self, detector: locus.Detector
+    ) -> None:
+        batches = detector.detect_concurrent([_valid_img(), _valid_img()])
+        assert len(batches) == 2
+        for b in batches:
+            assert b.rejected_funnel_status is not None
+            assert b.rejected_funnel_status.dtype == np.uint8
+            assert b.rejected_corners is not None
+            assert b.rejected_funnel_status.shape == (b.rejected_corners.shape[0],)
+
+    def test_codes_are_in_enum_range(self, detector: locus.Detector) -> None:
+        """Every emitted code maps to a known ``FunnelStatus`` variant.
+
+        The fixture (random noise on a 64×64 image) is not guaranteed to
+        produce any rejections — the assertion is then vacuously true. The
+        defense fires when a future Rust variant is added without a Python
+        mirror, in which case an unknown code would surface here.
+        """
+        rng = np.random.default_rng(0)
+        img = rng.integers(0, 255, size=_VALID_SHAPE, dtype=np.uint8)
+        batch = detector.detect(img)
+        assert batch.rejected_funnel_status is not None
+        for code in batch.rejected_funnel_status.tolist():
+            assert code in self._VALID_CODES, f"unknown funnel status code: {code}"
+
+    def test_enum_values_match_rust(self) -> None:
+        """Numeric values must match ``locus_core::batch::FunnelStatus`` (#[repr(u8)])."""
+        assert int(locus.FunnelStatus.NoneReason) == 0
+        assert int(locus.FunnelStatus.PassedContrast) == 1
+        assert int(locus.FunnelStatus.RejectedContrast) == 2
+        assert int(locus.FunnelStatus.RejectedSampling) == 3
