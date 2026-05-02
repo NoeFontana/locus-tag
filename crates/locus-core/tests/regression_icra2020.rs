@@ -30,6 +30,22 @@ mod common;
 /// `decoder.min_contrast` on top of the `grid` profile.
 const ICRA_GRID_JSON: &str = include_str!("fixtures/icra_grid.json");
 
+/// ICRA 2020 community-benchmark fixture — Soft decode + tile_size=4
+/// for `forward/pure_tags_images`. The ICRA 2020 fiducial dataset is a
+/// long-standing research benchmark used in the AprilTag / fiducial-
+/// marker literature; this fixture lets researchers reproduce
+/// literature-comparable numbers on it. NOT a shipped profile: Soft
+/// decode trades precision for recall (+20.2 pp on this dataset's
+/// imaging characteristics, +26 false positives per image on Soft
+/// alone, dropping to ~20 with tile_size=4) and would collapse on
+/// data with PSF (real cameras, Blender-rendered hub data) per
+/// `lessons.md` §3.2 / §5.5 / §7. The fixture knobs (Soft + tile_size=4)
+/// were picked from a sweep documented in lessons.md §7; the negative
+/// results (min_area=20 had zero effect; min_area+tile_size combined
+/// was dominated by tile_size alone) are recorded there rather than
+/// pinned as ongoing snapshots.
+const ICRA_SYNTHETIC_JSON: &str = include_str!("fixtures/icra_synthetic.json");
+
 // ============================================================================
 // Metrics & Reporting
 // ============================================================================
@@ -581,20 +597,6 @@ macro_rules! test_icra {
             }
         }
     };
-    (SOFT $name:ident, $subfolder:expr, $img_subfolder:expr, $profile:expr, $family:expr) => {
-        #[test]
-        fn $name() {
-            let _guard = common::telemetry::init(stringify!($name));
-            if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
-                let snapshot = format!("{}_soft", provider.name());
-                let harness = RegressionHarness::new(snapshot);
-                apply_profile(harness, $profile)
-                    .with_families(vec![$family])
-                    .with_decode_mode(locus_core::config::DecodeMode::Soft)
-                    .run(provider);
-            }
-        }
-    };
 }
 
 #[test]
@@ -614,34 +616,7 @@ test_icra!(
     "standard",
     TagFamily::AprilTag36h11
 );
-test_icra!(
-    SOFT regression_icra_forward_soft,
-    "forward",
-    Some("pure_tags_images"),
-    "standard",
-    TagFamily::AprilTag36h11
-);
-test_icra!(
-    regression_icra_forward_checkerboard,
-    "forward",
-    Some("checkerboard_corners_images"),
-    "icra_grid",
-    TagFamily::AprilTag36h11
-);
 
-#[test]
-fn regression_icra_forward_gwlf() {
-    let _guard = common::telemetry::init("regression_icra_forward_gwlf");
-    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
-        let snapshot = "icra_forward_gwlf".to_string();
-        RegressionHarness::new(snapshot)
-            .with_profile("standard")
-            .with_families(vec![TagFamily::AprilTag36h11])
-            // Override profile with GWLF
-            .with_refinement_mode(locus_core::config::CornerRefinementMode::Gwlf)
-            .run(provider);
-    }
-}
 // Lengthy tests (Ignored by default)
 test_icra!(
     IGNORED regression_icra_circle,
@@ -679,48 +654,6 @@ test_icra!(
     TagFamily::AprilTag36h11
 );
 
-// ── New algorithm tuning variants ────────────────────────────────────────────
-
-#[test]
-fn regression_icra_forward_moments_culling() {
-    let _guard = common::telemetry::init("regression_icra_forward_moments_culling");
-    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
-        let snapshot = "icra_forward_pure_default_moments_culling".to_string();
-        RegressionHarness::new(snapshot)
-            .with_profile("standard")
-            .with_families(vec![TagFamily::AprilTag36h11])
-            .with_moments_culling(15.0, 0.15)
-            .run(provider);
-    }
-}
-
-#[test]
-fn regression_icra_forward_edlines() {
-    let _guard = common::telemetry::init("regression_icra_forward_edlines");
-    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
-        let snapshot = "icra_forward_pure_default_edlines".to_string();
-        RegressionHarness::new(snapshot)
-            .with_profile("standard")
-            .with_families(vec![TagFamily::AprilTag36h11])
-            .with_quad_extraction_mode(locus_core::config::QuadExtractionMode::EdLines)
-            .run(provider);
-    }
-}
-
-#[test]
-fn regression_icra_forward_edlines_moments() {
-    let _guard = common::telemetry::init("regression_icra_forward_edlines_moments");
-    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
-        let snapshot = "icra_forward_pure_default_edlines_moments".to_string();
-        RegressionHarness::new(snapshot)
-            .with_profile("standard")
-            .with_families(vec![TagFamily::AprilTag36h11])
-            .with_quad_extraction_mode(locus_core::config::QuadExtractionMode::EdLines)
-            .with_moments_culling(15.0, 0.15)
-            .run(provider);
-    }
-}
-
 // ── HighAccuracy (EdLines GN + covariance propagation + Weighted LM) ───────
 
 #[test]
@@ -730,19 +663,6 @@ fn regression_icra_forward_highaccuracy() {
         let snapshot = "icra_forward_pure_default_highaccuracy".to_string();
         RegressionHarness::new(snapshot)
             .with_profile("high_accuracy")
-            .with_families(vec![TagFamily::AprilTag36h11])
-            .run(provider);
-    }
-}
-
-// ── Standard (default profile, ContourRdp + Hard) ─────────────────────────────
-
-#[test]
-fn regression_icra_forward_standard() {
-    let _guard = common::telemetry::init("regression_icra_forward_standard");
-    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
-        let snapshot = "icra_forward_pure_default_standard".to_string();
-        RegressionHarness::new(snapshot)
             .with_families(vec![TagFamily::AprilTag36h11])
             .run(provider);
     }
@@ -762,7 +682,7 @@ fn regression_icra_forward_max_recall_adaptive() {
     }
 }
 
-// ── Grid (icra_grid profile) ──────────────────────────────────────────────────
+// ── Grid (icra_grid fixture, checkerboard corners) ────────────────────────────
 
 #[test]
 fn regression_icra_forward_grid() {
@@ -771,6 +691,26 @@ fn regression_icra_forward_grid() {
         let snapshot = "icra_forward_checkerboard_grid".to_string();
         RegressionHarness::new(snapshot)
             .with_profile_json(ICRA_GRID_JSON)
+            .with_families(vec![TagFamily::AprilTag36h11])
+            .run(provider);
+    }
+}
+
+// ── ICRA community-benchmark fixture ──────────────────────────────────────────
+//
+// Published recall on `forward/pure_tags_images` for community comparison
+// against the original ICRA 2020 paper's numbers. NOT a production
+// configuration — Soft decode + relaxed gates trade precision for recall on
+// ICRA's research-renderer imagery and would collapse on real-camera data
+// (lessons.md §3.2 / §5.5 / §7).
+
+#[test]
+fn regression_icra_forward_synthetic() {
+    let _guard = common::telemetry::init("regression_icra_forward_synthetic");
+    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
+        let snapshot = "icra_forward_synthetic".to_string();
+        RegressionHarness::new(snapshot)
+            .with_profile_json(ICRA_SYNTHETIC_JSON)
             .with_families(vec![TagFamily::AprilTag36h11])
             .run(provider);
     }

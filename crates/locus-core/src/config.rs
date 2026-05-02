@@ -528,24 +528,18 @@ impl DetectorConfig {
         Ok(())
     }
 
-    /// Returns `true` if any active extraction path — either the static
-    /// `quad_extraction_mode` or (under `AdaptivePpb`) either of the low/high
-    /// routes — selects `EdLines`.
+    /// Returns `true` if the **static** extraction mode selects `EdLines`.
     ///
     /// Used by the distortion gate in `run_detection_pipeline` to reject
-    /// incompatible configurations once camera intrinsics carry distortion
-    /// coefficients.
+    /// only the `Static` `EdLines` configuration on distorted intrinsics
+    /// (the user-explicit misconfiguration case). `AdaptivePpb` policies
+    /// gracefully degrade to `ContourRdp` on the distortion path inside
+    /// [`crate::quad::extract_single_quad_with_camera`], so they don't
+    /// trip the gate even when one of their routes is `EdLines`.
     #[must_use]
-    pub fn any_route_uses_edlines(&self) -> bool {
-        match self.quad_extraction_policy {
-            QuadExtractionPolicy::Static => {
-                self.quad_extraction_mode == QuadExtractionMode::EdLines
-            },
-            QuadExtractionPolicy::AdaptivePpb(ref p) => {
-                p.low_extraction == QuadExtractionMode::EdLines
-                    || p.high_extraction == QuadExtractionMode::EdLines
-            },
-        }
+    pub fn static_uses_edlines(&self) -> bool {
+        matches!(self.quad_extraction_policy, QuadExtractionPolicy::Static)
+            && self.quad_extraction_mode == QuadExtractionMode::EdLines
     }
 }
 
@@ -1638,35 +1632,24 @@ mod tests {
     }
 
     #[test]
-    fn test_any_route_uses_edlines() {
+    fn test_static_uses_edlines() {
         let base = DetectorConfig::default();
-        assert!(!base.any_route_uses_edlines());
+        assert!(!base.static_uses_edlines());
 
         let edlines_static = DetectorConfig {
             quad_extraction_mode: QuadExtractionMode::EdLines,
             refinement_mode: CornerRefinementMode::None,
             ..DetectorConfig::default()
         };
-        assert!(edlines_static.any_route_uses_edlines());
+        assert!(edlines_static.static_uses_edlines());
 
+        // AdaptivePpb with EdLines on a route is NOT a static-EdLines config —
+        // the distortion gate doesn't fire on it because the AdaptivePpb path
+        // gracefully degrades to ContourRdp on distorted frames.
         let adaptive_with_edlines = DetectorConfig {
             quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig::default()),
             ..DetectorConfig::default()
         };
-        assert!(adaptive_with_edlines.any_route_uses_edlines());
-
-        let adaptive_no_edlines = DetectorConfig {
-            quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
-                low_extraction: QuadExtractionMode::ContourRdp,
-                high_extraction: QuadExtractionMode::ContourRdp,
-                low_refinement: CornerRefinementMode::Erf,
-                high_refinement: CornerRefinementMode::Gwlf,
-                threshold: 2.5,
-            }),
-            ..DetectorConfig::default()
-        };
-        // Degenerate policy — validate would reject, but any_route_uses_edlines
-        // is a pure accessor that doesn't validate.
-        assert!(!adaptive_no_edlines.any_route_uses_edlines());
+        assert!(!adaptive_with_edlines.static_uses_edlines());
     }
 }

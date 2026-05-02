@@ -233,6 +233,30 @@ not `high_accuracy`.**
   recall — the gap was the SoA truncation bug, not segmentation.
   Documented in `render_tag_2160p_20260425.md` §2.
 
+### §4.6 AdaptivePpb gracefully falls back on distortion
+
+EdLines is geometrically incompatible with distorted intrinsics
+(Huber IRLS line fit + GN solver assume Euclidean pixel geometry). Two
+guards work together to keep this safe:
+
+1. **Static `EdLines` + distortion**: the run-pipeline guard at
+   `detector.rs:194-198` errors with `EdLinesUnsupportedWithDistortion`.
+   This is the user-explicit-misconfiguration signal — they asked for
+   EdLines on a distorted frame, we tell them.
+2. **AdaptivePpb with `EdLines` high route + distortion**: the per-tag
+   distortion extraction path (`extract_single_quad_with_camera`)
+   silently degrades to ContourRdp, paired with the **low-route's
+   refinement** (typically Erf) rather than the high-route's
+   refinement. The high-PPB route's `None` refinement would skip
+   sub-pixel refinement entirely on aprilgrid sub-tags, costing
+   ~5 pp recall on the Brown-Conrady regression suite.
+
+The graceful-fallback for AdaptivePpb means a single profile (e.g.
+`max_recall_adaptive`, currently bound to rectified-only tests) can
+load on either rectified or distorted frames without per-camera
+profile switching. Static EdLines stays explicit-error so the
+misconfiguration doesn't silently degrade.
+
 ## §5 Benchmark methodology traps
 
 Things that look like algorithmic regressions but aren't:
@@ -263,9 +287,10 @@ relative to a wrong CWD — masking a real 2–3 pp regression.
    ground truth.
 2. **distortion** (Brown–Conrady, Kannala–Brandt) — production-relevant
    for non-pinhole optics.
-3. **ICRA forward / checkerboard** — useful regression signal but
-   crude synthetic renders; **never** trade render-tag pose tail or
-   mean RMSE for ICRA recall gains.
+3. **ICRA forward / checkerboard** — community research benchmark;
+   useful regression signal, but its synthetic imaging differs from
+   real cameras (no PSF, hard pixel edges), so **never** trade
+   render-tag pose tail or mean RMSE for ICRA recall gains.
 4. **robustness** (tag16h5, low_key, high_iso, raw_pipeline) — KPI
    watchlist, not a regression bar.
 
@@ -303,7 +328,62 @@ Movement on `tag16h5` precision (up = win, down = regression) and
 either direction. Movement on the others toward the baseline is a
 regression.
 
-## §7 Where to look next
+## §7 ICRA 2020 community-benchmark fixture
+
+The ICRA 2020 fiducial-tag benchmark is a long-standing research
+dataset used widely in the AprilTag / fiducial-marker literature. Its
+synthesis pipeline produces hard pixel edges and no PSF (different
+imaging characteristics from real-camera and Blender-rendered data),
+which is fine for the role it plays — head-to-head detector
+comparison on a shared, reproducible reference. Its
+`forward/pure_tags_images` subset has ~18 % of tags below 1.2 PPB
+(sub-pixel bit boundaries), so the production-default recall on this
+subset is ~74 % — the rest are structurally unrecoverable on Hard
+decode without changing the decoder's noise model.
+
+Soft decode bridges the gap on this dataset's imaging characteristics
+specifically: it treats each bit as an LLR and accepts ambiguous
+decodes that Hard would reject. The trade-off (precision falls on
+real-camera data with PSF) is documented in §3.2 / §5.5, so the
+tuning lives in a test-only fixture at
+`crates/locus-core/tests/fixtures/icra_synthetic.json` rather than as
+a shipped profile. Production users get Hard decode by default;
+researchers reproducing literature numbers on ICRA 2020 can opt into
+the fixture-driven Soft pathway.
+
+The `regression_icra_forward_synthetic` test records the published
+recall using the winning combination from the original sweep:
+**Soft decode + threshold `tile_size=4`**. Recall = 0.9403, with
+~6 fewer false positives per worst-case scene than Soft alone.
+
+**Sweep findings (from the original 4-variant exploration, kept here as
+documentation rather than as a permanent matrix of fixtures):**
+
+1. **Soft decode is the only recall lever.** ContourRdp + Hard sits at
+   0.738 on `forward/pure_tags_images`; Soft lifts it to 0.940 (+20.2
+   pp). The remaining ~6 pp miss is structural — those tags are below
+   1.2 PPB and decode-failed at the bit level.
+2. **`min_area=20` has zero ICRA effect.** Neither recall nor FP rate
+   changed in the sweep. Negative result: this knob is not a useful
+   ICRA lever.
+3. **`tile_size=4` is a precision win on top of Soft.** Same recall as
+   Soft alone, but ~6 fewer FPs per worst-case scene. Finer threshold
+   tiles let the gate reject background-edge candidates that Soft's
+   probabilistic decode would otherwise call. **This is what the
+   shipped fixture uses.**
+4. **The published number for community comparison** is recall = 0.9403
+   from `regression_icra_forward_synthetic`.
+
+**Why this fixture is not a shipped profile.** Soft decode causes a
+10-22 % precision collapse on data with PSF (real cameras, Blender-
+rendered hub data) per §5.5. ICRA 2020's imaging characteristics don't
+trigger that collapse because there's no PSF to amplify the LLR's
+spurious-decode candidates — but production users almost always have
+PSF and would lose precision. Keep the fixture in `tests/fixtures/`
+so researchers can opt in for community comparison; never promote it
+to `crates/locus-core/profiles/`.
+
+## §8 Where to look next
 
 - **Preprocessing dominates above 720p.** Thresholding + integral
   image is the next micro-optimization target.

@@ -191,8 +191,17 @@ fn run_detection_pipeline<'ctx>(
     pose_mode: crate::config::PoseEstimationMode,
     debug_telemetry: bool,
 ) -> Result<DetectionBatchView<'ctx>, DetectorError> {
+    // Static EdLines is geometrically incompatible with distorted intrinsics
+    // (Huber IRLS line fit + GN solver assume Euclidean pixel geometry). For
+    // user-explicit `Static` `EdLines` configs we error eagerly so the
+    // misconfiguration is visible. For `AdaptivePpb` policies that happen to
+    // route to EdLines on the high-PPB branch, the distorted-camera extraction
+    // path (`extract_single_quad_with_camera`) silently degrades to ContourRdp
+    // — there's no error to surface, just a graceful fallback. This lets the
+    // single `max_recall_adaptive` profile work across rectified and distorted
+    // datasets without per-frame profile switching.
     let has_distortion = intrinsics.is_some_and(|k| k.distortion.is_distorted());
-    if has_distortion && config.any_route_uses_edlines() {
+    if has_distortion && config.static_uses_edlines() {
         return Err(DetectorError::Config(
             crate::error::ConfigError::EdLinesUnsupportedWithDistortion,
         ));
