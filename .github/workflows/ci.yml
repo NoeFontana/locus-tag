@@ -6,11 +6,12 @@ on:
     paths-ignore:
       - '**.md'
       - 'docs/**'
+      - 'conductor/**'
+      - 'LICENSE*'
+      - '.gitignore'
+      - 'mkdocs.yml'
   pull_request:
     branches: [ main ]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
   workflow_dispatch:
 
 concurrency:
