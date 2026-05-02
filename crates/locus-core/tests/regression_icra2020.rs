@@ -30,6 +30,22 @@ mod common;
 /// `decoder.min_contrast` on top of the `grid` profile.
 const ICRA_GRID_JSON: &str = include_str!("fixtures/icra_grid.json");
 
+/// ICRA 2020 community-benchmark fixtures — Soft decode + tuned gates
+/// for `forward/pure_tags_images`. The ICRA 2020 fiducial dataset is a
+/// long-standing research benchmark used in the AprilTag / fiducial-
+/// marker literature; these fixtures let researchers reproduce
+/// literature-comparable numbers on it. NOT shipped profiles: Soft
+/// decode trades precision for recall (+20.2 pp on this dataset's
+/// imaging characteristics, +26 false positives per image) and would
+/// collapse on data with PSF (real cameras, Blender-rendered hub
+/// data) per `lessons.md` §3.2 / §5.5 / §7. Used only by the
+/// `regression_icra_forward_synthetic_*` sweep variants below.
+const ICRA_SYNTHETIC_SOFT_JSON: &str = include_str!("fixtures/icra_synthetic_soft.json");
+const ICRA_SYNTHETIC_MIN_AREA_JSON: &str = include_str!("fixtures/icra_synthetic_min_area.json");
+const ICRA_SYNTHETIC_TILE_SIZE_JSON: &str = include_str!("fixtures/icra_synthetic_tile_size.json");
+const ICRA_SYNTHETIC_AGGRESSIVE_JSON: &str =
+    include_str!("fixtures/icra_synthetic_aggressive.json");
+
 // ============================================================================
 // Metrics & Reporting
 // ============================================================================
@@ -771,6 +787,63 @@ fn regression_icra_forward_grid() {
         let snapshot = "icra_forward_checkerboard_grid".to_string();
         RegressionHarness::new(snapshot)
             .with_profile_json(ICRA_GRID_JSON)
+            .with_families(vec![TagFamily::AprilTag36h11])
+            .run(provider);
+    }
+}
+
+// ── ICRA community-benchmark sweep ────────────────────────────────────────────
+//
+// Published recall on `forward/pure_tags_images` for community comparison
+// against the original ICRA 2020 paper's numbers. NOT a production
+// configuration — Soft decode + relaxed gates trade precision for recall on
+// the crude-renderer ICRA forward dataset and would collapse on real-camera
+// data (lessons.md §3.2 / §5.5). Each variant snapshots its own recall so
+// future maintainers can see what each tuning lever buys.
+
+#[test]
+fn regression_icra_forward_synthetic_soft() {
+    let _guard = common::telemetry::init("regression_icra_forward_synthetic_soft");
+    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
+        let snapshot = "icra_forward_synthetic_soft".to_string();
+        RegressionHarness::new(snapshot)
+            .with_profile_json(ICRA_SYNTHETIC_SOFT_JSON)
+            .with_families(vec![TagFamily::AprilTag36h11])
+            .run(provider);
+    }
+}
+
+#[test]
+fn regression_icra_forward_synthetic_min_area() {
+    let _guard = common::telemetry::init("regression_icra_forward_synthetic_min_area");
+    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
+        let snapshot = "icra_forward_synthetic_min_area".to_string();
+        RegressionHarness::new(snapshot)
+            .with_profile_json(ICRA_SYNTHETIC_MIN_AREA_JSON)
+            .with_families(vec![TagFamily::AprilTag36h11])
+            .run(provider);
+    }
+}
+
+#[test]
+fn regression_icra_forward_synthetic_tile_size() {
+    let _guard = common::telemetry::init("regression_icra_forward_synthetic_tile_size");
+    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
+        let snapshot = "icra_forward_synthetic_tile_size".to_string();
+        RegressionHarness::new(snapshot)
+            .with_profile_json(ICRA_SYNTHETIC_TILE_SIZE_JSON)
+            .with_families(vec![TagFamily::AprilTag36h11])
+            .run(provider);
+    }
+}
+
+#[test]
+fn regression_icra_forward_synthetic_aggressive() {
+    let _guard = common::telemetry::init("regression_icra_forward_synthetic_aggressive");
+    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
+        let snapshot = "icra_forward_synthetic_aggressive".to_string();
+        RegressionHarness::new(snapshot)
+            .with_profile_json(ICRA_SYNTHETIC_AGGRESSIVE_JSON)
             .with_families(vec![TagFamily::AprilTag36h11])
             .run(provider);
     }
