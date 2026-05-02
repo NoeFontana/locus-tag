@@ -345,45 +345,42 @@ Soft decode bridges the gap on this dataset's imaging characteristics
 specifically: it treats each bit as an LLR and accepts ambiguous
 decodes that Hard would reject. The trade-off (precision falls on
 real-camera data with PSF) is documented in §3.2 / §5.5, so the
-tuning lives in test-only fixtures at
-`crates/locus-core/tests/fixtures/icra_synthetic_*.json` rather than
-as shipped profiles. Production users get Hard decode by default;
+tuning lives in a test-only fixture at
+`crates/locus-core/tests/fixtures/icra_synthetic.json` rather than as
+a shipped profile. Production users get Hard decode by default;
 researchers reproducing literature numbers on ICRA 2020 can opt into
 the fixture-driven Soft pathway.
 
-The `regression_icra_forward_synthetic_*` test variants record published
-recall numbers across a small sweep:
+The `regression_icra_forward_synthetic` test records the published
+recall using the winning combination from the original sweep:
+**Soft decode + threshold `tile_size=4`**. Recall = 0.9403, with
+~6 fewer false positives per worst-case scene than Soft alone.
 
-| Fixture | recall | mean_rmse | FPs (top-3 worst scenes) | Δ vs Soft baseline |
-|---|---:|---:|---|---|
-| `icra_synthetic_soft` (Soft only) | **0.9403** | 0.3447 | 26 / 26 / 24 | baseline |
-| `icra_synthetic_min_area` (Soft + min_area 36→20) | 0.9403 | 0.3447 | 26 / 26 / 24 | no change |
-| **`icra_synthetic_tile_size`** (Soft + tile_size 8→4) | **0.9403** | 0.3447 | **20 / 19 / 16** | **~6 fewer FPs/image** |
-| `icra_synthetic_aggressive` (both) | 0.9403 | 0.3447 | 22 / 21 / 18 | tile_size dominates |
-
-**Findings:**
+**Sweep findings (from the original 4-variant exploration, kept here as
+documentation rather than as a permanent matrix of fixtures):**
 
 1. **Soft decode is the only recall lever.** ContourRdp + Hard sits at
    0.738 on `forward/pure_tags_images`; Soft lifts it to 0.940 (+20.2
    pp). The remaining ~6 pp miss is structural — those tags are below
    1.2 PPB and decode-failed at the bit level.
 2. **`min_area=20` has zero ICRA effect.** Neither recall nor FP rate
-   changes. Listed in the sweep as a negative result: this knob is not
-   a useful ICRA lever.
+   changed in the sweep. Negative result: this knob is not a useful
+   ICRA lever.
 3. **`tile_size=4` is a precision win on top of Soft.** Same recall as
    Soft alone, but ~6 fewer FPs per worst-case scene. Finer threshold
    tiles let the gate reject background-edge candidates that Soft's
-   probabilistic decode would otherwise call.
-4. **The published number for community comparison** is `synthetic_tile_size`'s
-   recall = 0.9403 — best precision/recall trade-off across the sweep.
+   probabilistic decode would otherwise call. **This is what the
+   shipped fixture uses.**
+4. **The published number for community comparison** is recall = 0.9403
+   from `regression_icra_forward_synthetic`.
 
-**Why these fixtures are not shipped profiles.** Soft decode causes a
+**Why this fixture is not a shipped profile.** Soft decode causes a
 10-22 % precision collapse on data with PSF (real cameras, Blender-
 rendered hub data) per §5.5. ICRA 2020's imaging characteristics don't
 trigger that collapse because there's no PSF to amplify the LLR's
 spurious-decode candidates — but production users almost always have
-PSF and would lose precision. Keep the fixtures in `tests/fixtures/`
-so researchers can opt in for community comparison; never promote them
+PSF and would lose precision. Keep the fixture in `tests/fixtures/`
+so researchers can opt in for community comparison; never promote it
 to `crates/locus-core/profiles/`.
 
 ## §8 Where to look next
