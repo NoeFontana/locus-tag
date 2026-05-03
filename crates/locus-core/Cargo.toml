@@ -5,9 +5,13 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "A high-performance fiducial marker detector for robotics."
 readme = "README.md"
+repository = "https://github.com/NoeFontana/locus-tag"
+homepage = "https://github.com/NoeFontana/locus-tag"
+documentation = "https://noefontana.github.io/locus-tag"
+keywords = ["apriltag", "aruco", "fiducial", "marker", "robotics"]
+categories = ["computer-vision", "science::robotics"]
 include = ["src/**/*", "build.rs", "data/dictionaries/**/*", "profiles/**/*.json", "templates/**/*", "README.md"]
 build = "build.rs"
-# No lints here
 
 [build-dependencies]
 askama = "0.15"

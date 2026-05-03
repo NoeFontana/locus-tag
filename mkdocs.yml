@@ -81,6 +81,7 @@ nav:
       - engineering/detection-batch-contract.md
       - engineering/constraints.md
       - engineering/ffi_contracts.md
+      - engineering/profiles.md
       - engineering/stratification.md
       - engineering/quality-gates.md
       - engineering/rust-style.md
