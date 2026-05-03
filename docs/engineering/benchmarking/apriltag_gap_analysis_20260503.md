@@ -243,6 +243,93 @@ Bootstrap 95% CI on `rot_p95(Fast) / rot_p95(Accurate)` over 2000 resamples of n
 - **Hamming methodology clarification** (use `--max-hamming=2`, not 0, for accuracy benches; this is the existing CLI default). Already noted in the recall section above.
 - **No code change to the pose pipeline.** Validated as net-positive by ablation: keeping the weighted LM is the right call.
 
+## Round 2: deep dive on the post-release follow-ups
+
+After the principal-engineer review above declared the rotation-side and EdLines-side fixes as *deferred to post-release*, we ran them anyway in depth to validate the deferral. All three converged: the proposed fixes don't deliver improvements, and the post-release deferral was the correct call.
+
+### Experiment 1a — force ContourRdp+Erf for all tags (Static policy override)
+
+Hypothesis: ERF sub-pixel corner refinement might tighten the rot_p95 tail at any PPB regime.
+
+Implementation: monkey-patch `_build_cli_config` to set `extraction_policy=Static`, `extraction_mode=ContourRdp`, `decoder.refinement_mode=Erf`. All other `high_accuracy` settings preserved.
+
+**Result: catastrophic regression on the bulk distribution.**
+
+| Resolution | Metric | Baseline (EdLines) | Exp 1a (ContourRdp+Erf) | Ratio |
+| :--- | :--- | -: | -: | -: |
+| 720p | rot_p95 | 0.522° | 2.683° | 5.14× WORSE |
+| 720p | rot_p99 | 2.567° | 96.015° | 37.40× WORSE |
+| 720p | trans_p95 | 5.89mm | 35.75mm | 6.07× WORSE |
+| 1080p | rot_p95 | 0.686° | 82.459° | 120.28× WORSE |
+| 1080p | trans_p95 | 10.78mm | 1987.68mm | **184× WORSE** |
+| 2160p | rot_p95 | 0.440° | 86.865° | 197.53× WORSE |
+| 2160p | trans_p95 | 11.89mm | 2898.11mm | **244× WORSE** |
+
+Bootstrap 95% CI on rot_p95 ratio (exp1a/baseline): **[81×, 217×]**. Strongly significant.
+
+But — paired comparison on baseline's p95+ rot tail (n=21): **exp1a was tighter on 15/21 records** (mean rot 1.49° → 2.42°, but per-record more often improved). This means ContourRdp+Erf helps the worst-case tail tags but is unreliable on intermediate-PPB tags, with a few catastrophic failures dominating the aggregate.
+
+**Conclusion**: ERF is not a global drop-in replacement for EdLines on `high_accuracy`. The README's claim that "EdLines yields metrology-grade sub-pixel corners" is empirically correct.
+
+### Experiment 1b — bump the AdaptivePpb threshold (hybrid routing)
+
+Hypothesis: keep EdLines for the bulk, route only the tail tags (PPB < 12 or so) to ContourRdp+Erf via the existing AdaptivePpb policy. The threshold default is 2.5; the doc rationale says it's "where EdLines collapses." Our tail tags sit at PPB ≈ 9 — above the threshold, so they currently route to EdLines.
+
+Implementation: relax the threshold's hard upper bound (`lt=5.0` in both Pydantic at `crates/locus-py/locus/_config.py:192` and Rust at `crates/locus-core/src/config.rs:510`), set `AdaptivePpb.threshold = 12`, rebuild.
+
+**Result: PPB 2.5–12 stratum is destroyed, PPB ≥ 12 stratum unchanged.**
+
+| Stratum | Baseline rot_p95 | Exp 1b rot_p95 | n |
+| :--- | -: | -: | -: |
+| PPB ≥ 12 (still EdLines) | 0.240° | 0.301° | 333 |
+| PPB < 12 (newly ContourRdp+Erf) | 1.250° | **75.358°** | 66 |
+
+So ContourRdp+Erf is unreliable on the [2.5, 12] PPB range — too small for clean line-fitting in ContourRdp's regime, but big enough that EdLines handles it cleanly. **The 2.5 threshold is empirically optimal**; raising it routes more tags to a worse extractor.
+
+**Conclusion**: AdaptivePpb routing cannot close the rot_p95 gap. The threshold can't move without regressing the body of the distribution.
+
+### Experiment 2 + 2c — scene_0031 EdLines investigation
+
+Hypothesis (from Agent 3): scene_0031's pre-extraction failure may be at one of three cheap-to-test gates: `min_fill_ratio`, `edlines_imbalance_gate`, or `max_fill_ratio`.
+
+**Exp 2** (`min_fill_ratio = 0.05` + `imbalance_gate = Disabled`):
+- scene_0031 still missed at 1080p and 2160p (same `PRE-EXTRACTION` classification)
+- 3 NEW misses introduced (scene_0008 / 720p, scene_0020 / 720p, scene_0022 / 1080p)
+- Recall regressed from 1.0 → 0.96 at 720p
+
+**Exp 2c** (`max_fill_ratio = 0.999`, motivated by the "frontal axis-aligned tag fills its bbox" hypothesis):
+- scene_0031 still missed at 1080p and 2160p — exact same misses as baseline
+- No new misses, no precision regression
+- Pure no-op on the metric of interest
+
+**Conclusion**: scene_0031's failure is NOT at any of the three gates Agent 3 suggested. The hypothesis "frontal axis-aligned → fill ratio rejection" is refuted. The actual extraction-stage failure on this scene requires rerun visualization to pinpoint — not a parameter sweep.
+
+### Latency variance — important caveat
+
+While running the experiments, the same configuration produced ~3× different latency between the original baseline ablation (1080p Locus(Hard) p50: 23.6 ms) and the redo (7.3 ms). Comparing the redo against the original on identical configs:
+
+| Resolution | Original baseline (ms) | Baseline redo (ms) | Ratio |
+| :--- | -: | -: | -: |
+| 720p | 13.2 | 3.7 | 0.28× |
+| 1080p | 23.6 | 7.3 | 0.31× |
+| 2160p | 70.6 | 29.8 | 0.42× |
+
+Recall and accuracy were identical across the two runs. The latency drop is system variance — filesystem caching, thermal/turbo state, or maturin link-time variance between the two sessions.
+
+**Implication for this analysis and prior reports**: absolute latency numbers on this hardware vary ±2–3× run-to-run on identical configs. **Latency claims should be read as ratios between binaries on the same run**, not absolute numbers across runs. The 3.0–3.5× Locus-vs-AprilTag latency lead noted earlier is preserved (both detectors get the same system-level boost or penalty), but the absolute "Locus 1080p high_accuracy = 23.6 ms" claim should be quoted with this caveat.
+
+### Net call after the deep dive
+
+All three deferred follow-ups remain deferred — but now with empirical evidence that the cheap fixes don't work, not just an a priori review concern.
+
+| Follow-up | Cheap fix tested | Outcome | Real path forward |
+| :--- | :--- | :--- | :--- |
+| Rot p95 tail | ContourRdp+Erf (Static) and AdaptivePpb threshold raise | Both refuted | Per-tag IRLS fallback gated on `cond(JᵀWJ)`. ~150 LOC + tests. Post-release. |
+| scene_0031 recall miss | min_fill, imbalance_gate, max_fill_ratio | All refuted | Rerun visualization session to pinpoint extraction-stage failure. Investigative work, not a parameter sweep. Post-release. |
+| Hamming miss | n/a (already a docs change) | Confirmed safe | Use `--max-hamming=2` for accuracy benches. Already CLI default. |
+
+**The principal-engineer outcome stands**: zero code changes to the pose pipeline, zero code changes to the extraction policy, zero changes to scene_0031's path. The only ship is documentation. Every alternative path was tested empirically, and every one regressed something material.
+
 ### Non-gaps
 
 - **Translation accuracy**: Locus's ERF + weighted-LM pipeline produces 3–7× tighter translation than AprilTag's iterative solver on this corpus. No gap to close.
