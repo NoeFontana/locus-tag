@@ -274,7 +274,13 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
 
     md.append("## §2 Failure-mode breakdown")
     md.append("")
-    md.append("Mutually-exclusive classification of the 50 scenes.")
+    md.append(
+        f"Mutually-exclusive classification of the {scenes.n_scenes} scenes. "
+        "The `healthy` bucket is **corpus-relative**: a scene is healthy iff "
+        "its rotation error is below the 85th percentile of the population. "
+        "This keeps the bucket size bounded as absolute residuals shrink and "
+        "preserves the discriminating power of the counterfactual table."
+    )
     md.append("")
     md.append("| Mode | Count | % | Counterfactual rot p99 if resolved |")
     md.append("| :--- | ---: | ---: | ---: |")
@@ -389,8 +395,19 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
     pop = failure_modes.population
     n_total = scenes.n_scenes
     # Find the dominant *non-healthy* mode and dispatch the narrative on it.
+    # Healthy is corpus-relative (P85 of rotation_error_chosen_deg) so the
+    # bucket size is bounded; non-healthy modes always carry the tail.
     nonhealthy = {k: v for k, v in pop.items() if k != "healthy" and v > 0}
-    dominant = max(nonhealthy, key=lambda k: nonhealthy[k]) if nonhealthy else None
+    # Prefer the mode whose counterfactual drops p99 the most — that's the
+    # priority fix per the §2 narrative. Tiebreak on count.
+    dominant: str | None = None
+    if nonhealthy:
+        # Lower counterfactual p99 = larger drop = higher priority.
+        def _priority_key(mode: str) -> tuple[float, int]:
+            cf = counterfactuals.get(mode, {})
+            return (cf.get("p99", float("inf")), -nonhealthy[mode])
+
+        dominant = min(nonhealthy, key=_priority_key)
     healthy_count = pop.get("healthy", 0)
 
     if dominant == "frame_or_winding":
@@ -416,6 +433,18 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
             "Fixes: tighter Mahalanobis selector, photometric consistency "
             "score, or temporal smoothing."
         )
+    elif dominant == "corner_geometry_outlier":
+        md.append(
+            f"The dominant failure mode is **`corner_geometry_outlier`** at "
+            f"{pop['corner_geometry_outlier']} of {n_total} scenes — at "
+            "least one corner has Mahalanobis d² above the χ²(1) cutoff at "
+            "α=1e-4 (≈15.137), i.e. it lives in the extreme tail of the "
+            "noise model. This is a strict super-set of the IRLS-weight "
+            "gate, so look upstream of the pose solver — sub-pixel "
+            "localization on the offending corner is the primary suspect "
+            "(GWLF, EdLines, ERF refinement, or saturated PSF on a close "
+            "tag)."
+        )
     elif dominant == "corner_outlier":
         md.append(
             f"The dominant failure mode is **`corner_outlier`** at "
@@ -425,6 +454,28 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
             "Look upstream of the pose solver: GWLF / EdLines / Erf "
             "subpixel refinement, or PSF-saturated corners on extremely "
             "close tags."
+        )
+    elif dominant in {"grazing_extreme", "grazing_moderate"}:
+        aoi_band = "AoI ≥ 75°" if dominant == "grazing_extreme" else "60° ≤ AoI < 75°"
+        md.append(
+            f"The dominant failure mode is **`{dominant}`** at "
+            f"{pop[dominant]} of {n_total} scenes ({aoi_band} with min "
+            "structure-tensor R < 0.10). The corner sub-pixel fit is "
+            "anisotropic-degenerate along the foreshortened axis. "
+            "Mitigations: anisotropic ERF refinement, larger gradient "
+            "windows on the long edges, or a perspective-aware corner "
+            "search."
+        )
+    elif dominant == "ppm_starved":
+        md.append(
+            f"The dominant failure mode is **`ppm_starved`** at "
+            f"{pop['ppm_starved']} of {n_total} scenes — the tag is in the "
+            "bottom-quartile of pixels-per-meter and the rotation residual "
+            "sits in the population tail (≥ P85). The angular leverage of "
+            "the four corners has collapsed to the point where sub-pixel "
+            "noise dominates. Mitigations: super-resolution upscaling, "
+            "early-rejection of low-PPM detections from accuracy-critical "
+            "consumers, or temporal smoothing in the application layer."
         )
     elif dominant == "sigma_miscalibration":
         md.append(
