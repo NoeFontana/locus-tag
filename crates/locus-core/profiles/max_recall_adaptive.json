@@ -36,7 +36,6 @@
   "decoder": {
     "min_contrast": 20.0,
     "refinement_mode": "Erf",
-    "decode_mode": "Hard",
     "max_hamming_error": 2,
     "gwlf_transversal_alpha": 0.01,
     "post_decode_refinement": true

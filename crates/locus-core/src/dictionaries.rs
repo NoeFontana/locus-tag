@@ -157,45 +157,6 @@ impl TagDictionary {
         };
         ((bits >> start) & ((1u64 << len) - 1)) as u16
     }
-
-    /// Executes a callback for each candidate in the dictionary within a given Hamming distance.
-    pub fn for_each_candidate_within_hamming<F>(&self, bits: u64, max_hamming: u32, mut f: F)
-    where
-        F: FnMut(u64, u16, u8),
-    {
-        if max_hamming > 4 {
-            for (idx, &code) in self.codes.iter().enumerate() {
-                let hamming = (bits ^ code).count_ones();
-                if hamming <= max_hamming {
-                    f(code, (idx / 4) as u16, (idx % 4) as u8);
-                }
-            }
-            return;
-        }
-
-        let mut visited = [0u64; 160];
-        for c in 0..self.mih_chunks {
-            let chunk = self.extract_mih_chunk(bits, c) as usize;
-            let bucket_idx = c * self.mih_buckets + chunk;
-            let offset_start = self.mih_offsets[bucket_idx];
-            let offset_end = self.mih_offsets[bucket_idx + 1];
-
-            for i in offset_start..offset_end {
-                let packed = self.mih_data[i];
-                let v_idx = packed as usize / 64;
-                let v_bit = 1u64 << (packed % 64);
-                if visited[v_idx] & v_bit == 0 {
-                    visited[v_idx] |= v_bit;
-                    if let Some(&target_code) = self.codes.get(packed as usize) {
-                        let hamming = (bits ^ target_code).count_ones();
-                        if hamming <= max_hamming {
-                            f(target_code, (packed >> 2) as u16, (packed & 0x3) as u8);
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 // Generate all static datasets using build.rs macro inclusion

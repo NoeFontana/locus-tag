@@ -14,7 +14,6 @@ detector = locus.Detector(
     families=[locus.TagFamily.AprilTag36h11, locus.TagFamily.ArUco4x4_50],
     decimation=2,
     threads=4,
-    decode_mode=locus.DecodeMode.Soft,
 )
 
 batch = detector.detect(img)
@@ -55,7 +54,6 @@ detector = (
 | `with_decimation(n)` | Spatial decimation factor (default 1). |
 | `with_threads(n)` | Rayon intra-frame thread count (0 = all cores). |
 | `with_corner_refinement(mode)` | `CornerRefinementMode` for subpixel accuracy. |
-| `with_decode_mode(mode)` | `DecodeMode.Hard` or `DecodeMode.Soft`. |
 | `with_max_concurrent_frames(n)` | Pool size for `detect_concurrent` (default 1 = sequential). |
 | `build()` | Build the `Detector`. |
 
@@ -186,10 +184,6 @@ result: BoardEstimateResult = estimator.estimate(
 ## Enumerations
 
 ::: locus.TagFamily
-    options:
-        heading_level: 3
-
-::: locus.DecodeMode
     options:
         heading_level: 3
 

@@ -92,22 +92,6 @@ impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
 
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum DecodeMode {
-    Hard = 0,
-    Soft = 1,
-}
-
-impl From<DecodeMode> for locus_core::config::DecodeMode {
-    fn from(m: DecodeMode) -> Self {
-        match m {
-            DecodeMode::Hard => locus_core::config::DecodeMode::Hard,
-            DecodeMode::Soft => locus_core::config::DecodeMode::Soft,
-        }
-    }
-}
-
-#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum PoseEstimationMode {
     Fast = 0,
     Accurate = 1,
@@ -365,7 +349,6 @@ pub struct PyDetectorConfig {
     pub upscale_factor: usize,
     pub decoder_min_contrast: f64,
     pub refinement_mode: CornerRefinementMode,
-    pub decode_mode: DecodeMode,
     pub max_hamming_error: Option<u32>,
     pub gwlf_transversal_alpha: f64,
     pub quad_max_elongation: f64,
@@ -418,7 +401,6 @@ impl PyDetectorConfig {
         upscale_factor,
         decoder_min_contrast,
         refinement_mode,
-        decode_mode,
         max_hamming_error,
         gwlf_transversal_alpha,
         quad_max_elongation,
@@ -462,7 +444,6 @@ impl PyDetectorConfig {
         upscale_factor: usize,
         decoder_min_contrast: f64,
         refinement_mode: CornerRefinementMode,
-        decode_mode: DecodeMode,
         max_hamming_error: Option<u32>,
         gwlf_transversal_alpha: f64,
         quad_max_elongation: f64,
@@ -505,7 +486,6 @@ impl PyDetectorConfig {
             upscale_factor,
             decoder_min_contrast,
             refinement_mode,
-            decode_mode,
             max_hamming_error,
             gwlf_transversal_alpha,
             quad_max_elongation,
@@ -588,10 +568,6 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             upscale_factor: c.upscale_factor,
             decoder_min_contrast: c.decoder_min_contrast,
             refinement_mode: corner_refinement_mode_to_py(c.refinement_mode),
-            decode_mode: match c.decode_mode {
-                locus_core::config::DecodeMode::Hard => DecodeMode::Hard,
-                locus_core::config::DecodeMode::Soft => DecodeMode::Soft,
-            },
             max_hamming_error: c.max_hamming_error,
             gwlf_transversal_alpha: c.gwlf_transversal_alpha,
             quad_max_elongation: c.quad_max_elongation,
@@ -1671,7 +1647,6 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             edlines_imbalance_gate: c.edlines_imbalance_gate.into(),
             decoder_min_contrast: c.decoder_min_contrast,
             refinement_mode: c.refinement_mode.into(),
-            decode_mode: c.decode_mode.into(),
             max_hamming_error: c.max_hamming_error,
             gwlf_transversal_alpha: c.gwlf_transversal_alpha,
             huber_delta_px: c.huber_delta_px,
@@ -1787,12 +1762,6 @@ impl DetectorBuilder {
         mode: CornerRefinementMode,
     ) -> PyResult<Py<Self>> {
         let b = Self::take_inner(&slf, py)?.with_corner_refinement(mode.into());
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_decode_mode(slf: Py<Self>, py: Python<'_>, mode: DecodeMode) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_decode_mode(mode.into());
         slf.borrow_mut(py).inner = Some(b);
         Ok(slf)
     }
@@ -2423,7 +2392,6 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TagFamily>()?;
     m.add_class::<SegmentationConnectivity>()?;
     m.add_class::<CornerRefinementMode>()?;
-    m.add_class::<DecodeMode>()?;
     m.add_class::<PoseEstimationMode>()?;
     m.add_class::<QuadExtractionMode>()?;
     m.add_class::<EdLinesImbalanceGatePolicy>()?;

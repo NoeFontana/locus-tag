@@ -9,7 +9,6 @@ import pytest
 from locus._config import SHIPPED_PROFILES, DetectorConfig, ProfileName
 from locus.locus import (
     CornerRefinementMode,
-    DecodeMode,
     EdLinesImbalanceGatePolicy,
     QuadExtractionMode,
     SegmentationConnectivity,
@@ -25,7 +24,6 @@ EXPECTED = {
         "quad.extraction_mode": QuadExtractionMode.ContourRdp,
         "decoder.refinement_mode": CornerRefinementMode.Erf,
         "decoder.min_contrast": 20.0,
-        "decoder.decode_mode": DecodeMode.Hard,
         "segmentation.connectivity": SegmentationConnectivity.Eight,
     },
     "grid": {
@@ -37,7 +35,6 @@ EXPECTED = {
         "quad.extraction_mode": QuadExtractionMode.ContourRdp,
         "decoder.min_contrast": 10.0,
         "decoder.refinement_mode": CornerRefinementMode.Erf,
-        "decoder.decode_mode": DecodeMode.Hard,
         "segmentation.connectivity": SegmentationConnectivity.Four,
     },
     "high_accuracy": {
@@ -51,7 +48,6 @@ EXPECTED = {
         "quad.edlines_imbalance_gate": EdLinesImbalanceGatePolicy.Enabled,
         # `None` is a Python keyword — reach the variant via getattr.
         "decoder.refinement_mode": getattr(CornerRefinementMode, "None"),
-        "decoder.decode_mode": DecodeMode.Hard,
         "segmentation.connectivity": SegmentationConnectivity.Eight,
     },
     "max_recall_adaptive": {
@@ -63,7 +59,6 @@ EXPECTED = {
         # the field still round-trips through JSON.
         "quad.extraction_mode": QuadExtractionMode.ContourRdp,
         "decoder.refinement_mode": CornerRefinementMode.Erf,
-        "decoder.decode_mode": DecodeMode.Hard,
         "segmentation.connectivity": SegmentationConnectivity.Eight,
     },
 }
@@ -122,18 +117,6 @@ def test_edlines_rejects_erf_refinement() -> None:
         DetectorConfig.from_profile_json(bad)
 
 
-def test_edlines_rejects_soft_decode() -> None:
-    bad = json.dumps(
-        {
-            "name": "x",
-            "quad": {"extraction_mode": "EdLines"},
-            "decoder": {"refinement_mode": "None", "decode_mode": "Soft"},
-        }
-    )
-    with pytest.raises(ValidationError, match="EdLines"):
-        DetectorConfig.from_profile_json(bad)
-
-
 def test_threshold_radius_ordering_enforced() -> None:
     bad = json.dumps({"threshold": {"min_radius": 10, "max_radius": 5}})
     with pytest.raises(ValidationError, match="min_radius"):
@@ -159,7 +142,6 @@ def test_json_emits_enum_names(profile_name: ProfileName) -> None:
     cfg = DetectorConfig.from_profile(profile_name)
     parsed = json.loads(cfg.model_dump_json())
     assert isinstance(parsed["decoder"]["refinement_mode"], str)
-    assert isinstance(parsed["decoder"]["decode_mode"], str)
     assert isinstance(parsed["quad"]["extraction_mode"], str)
     assert isinstance(parsed["segmentation"]["connectivity"], str)
 

@@ -27,7 +27,6 @@ def test_json_preserves_enum_variant_names(profile: ProfileName) -> None:
     cfg = DetectorConfig.from_profile(profile)
     parsed = json.loads(cfg.model_dump_json())
     assert isinstance(parsed["decoder"]["refinement_mode"], str)
-    assert isinstance(parsed["decoder"]["decode_mode"], str)
     assert isinstance(parsed["quad"]["extraction_mode"], str)
     assert isinstance(parsed["segmentation"]["connectivity"], str)
 

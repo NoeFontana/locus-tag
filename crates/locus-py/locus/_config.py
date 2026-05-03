@@ -28,7 +28,6 @@ from pydantic import (
 from .locus import (
     CameraIntrinsics,
     CornerRefinementMode,
-    DecodeMode,
     EdLinesImbalanceGatePolicy,
     PoseEstimationMode,
     PyDetectorConfig,
@@ -144,13 +143,11 @@ if TYPE_CHECKING:
     # Pydantic sees the validators/serializers; the two views describe the
     # same values — see `_enum_field` for the runtime metadata shape.
     _CornerRefinementField: TypeAlias = CornerRefinementMode
-    _DecodeModeField: TypeAlias = DecodeMode
     _QuadExtractionField: TypeAlias = QuadExtractionMode
     _SegConnField: TypeAlias = SegmentationConnectivity
     _ImbalanceGateField: TypeAlias = EdLinesImbalanceGatePolicy
 else:
     _CornerRefinementField = _enum_field(CornerRefinementMode)
-    _DecodeModeField = _enum_field(DecodeMode)
     _QuadExtractionField = _enum_field(QuadExtractionMode)
     _SegConnField = _enum_field(SegmentationConnectivity)
     _ImbalanceGateField = _enum_field(EdLinesImbalanceGatePolicy, _coerce_imbalance_gate)
@@ -256,7 +253,6 @@ class DecoderConfig(BaseModel):
     refinement_mode: _CornerRefinementField = Field(
         default_factory=lambda: CornerRefinementMode.Erf
     )
-    decode_mode: _DecodeModeField = Field(default_factory=lambda: DecodeMode.Hard)
     max_hamming_error: int | None = Field(default=None, ge=0)
     """Maximum Hamming errors accepted during decoding.
 
@@ -358,17 +354,14 @@ class DetectorConfig(BaseModel):
 
     @model_validator(mode="after")
     def _check_cross_group_compat(self) -> DetectorConfig:
-        if self.quad.extraction_mode == QuadExtractionMode.EdLines:
-            if self.decoder.refinement_mode == CornerRefinementMode.Erf:
-                raise ValueError(
-                    "quad.extraction_mode=EdLines is incompatible with decoder.refinement_mode=Erf"
-                )
-            if self.decoder.decode_mode == DecodeMode.Soft:
-                raise ValueError(
-                    "quad.extraction_mode=EdLines is incompatible with decoder.decode_mode=Soft"
-                )
-        # Mirrors the four AdaptivePpb rules enforced in
-        # `crates/locus-core/src/config.rs::DetectorConfig::validate`.
+        if (
+            self.quad.extraction_mode == QuadExtractionMode.EdLines
+            and self.decoder.refinement_mode == CornerRefinementMode.Erf
+        ):
+            raise ValueError(
+                "quad.extraction_mode=EdLines is incompatible with decoder.refinement_mode=Erf"
+            )
+        # Mirrors `DetectorConfig::validate` in `crates/locus-core/src/config.rs`.
         if isinstance(self.quad.extraction_policy, _AdaptivePpbPolicy):
             p = self.quad.extraction_policy.AdaptivePpb
             if p.low_extraction == p.high_extraction:
@@ -383,17 +376,11 @@ class DetectorConfig(BaseModel):
                 (p.low_extraction, p.low_refinement),
                 (p.high_extraction, p.high_refinement),
             ):
-                if ext == QuadExtractionMode.EdLines:
-                    if refine == CornerRefinementMode.Erf:
-                        raise ValueError(
-                            "quad.extraction_policy.AdaptivePpb route uses EdLines with "
-                            "refinement_mode=Erf, which is incompatible"
-                        )
-                    if self.decoder.decode_mode == DecodeMode.Soft:
-                        raise ValueError(
-                            "quad.extraction_policy.AdaptivePpb route uses EdLines with "
-                            "decoder.decode_mode=Soft, which is incompatible"
-                        )
+                if ext == QuadExtractionMode.EdLines and refine == CornerRefinementMode.Erf:
+                    raise ValueError(
+                        "quad.extraction_policy.AdaptivePpb route uses EdLines with "
+                        "refinement_mode=Erf, which is incompatible"
+                    )
         return self
 
     @classmethod
@@ -476,7 +463,6 @@ class DetectorConfig(BaseModel):
             adaptive_ppb_high_refinement=ppb_high_ref,
             decoder_min_contrast=self.decoder.min_contrast,
             refinement_mode=self.decoder.refinement_mode,
-            decode_mode=self.decoder.decode_mode,
             max_hamming_error=self.decoder.max_hamming_error,
             gwlf_transversal_alpha=self.decoder.gwlf_transversal_alpha,
             post_decode_refinement=self.decoder.post_decode_refinement,

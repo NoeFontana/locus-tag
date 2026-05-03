@@ -181,11 +181,6 @@ impl RegressionHarness {
         self
     }
 
-    pub fn with_decode_mode(mut self, mode: locus_core::config::DecodeMode) -> Self {
-        self.config.decode_mode = mode;
-        self
-    }
-
     pub fn run(self, provider: impl DatasetProvider) {
         let mut detector = Detector::with_config(self.config);
         if !self.options.families.is_empty() {

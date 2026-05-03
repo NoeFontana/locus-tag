@@ -90,8 +90,8 @@ edit the group you care about, and hand it back to the detector:
 
 ```python
 base = locus.DetectorConfig.from_profile("high_accuracy").model_dump()
-base["decoder"]["decode_mode"] = "Soft"
 base["quad"]["upscale_factor"] = 2
+base["decoder"]["max_hamming_error"] = 1
 
 detector = locus.Detector(config=locus.DetectorConfig.model_validate(base))
 ```
