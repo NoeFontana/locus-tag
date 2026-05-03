@@ -13,6 +13,7 @@ ContinuousAxis = Literal["distance_m", "aoi_deg", "ppm"]
 
 Metric = Literal[
     "recall",
+    "precision",
     "trans_err_p50_m",
     "rot_err_p50_deg",
     "repro_err_p50_px",

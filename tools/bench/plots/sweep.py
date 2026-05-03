@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from tools.bench.metrics import compute_recall
+from tools.bench.metrics import compute_precision, compute_recall
 from tools.bench.plots._types import ContinuousAxis, Metric
 
 _AXIS_LABELS = {
@@ -28,11 +28,15 @@ _AXIS_LABELS = {
 
 _METRIC_LABELS = {
     "recall": "Recall (%)",
+    "precision": "Precision (%)",
     "trans_err_p50_m": "Translation error p50 (m)",
     "rot_err_p50_deg": "Rotation error p50 (°)",
     "repro_err_p50_px": "Reprojection error p50 (px)",
     "latency_p50_ms": "Frame latency p50 (ms)",
 }
+
+# Proportion-style metrics rendered on a 0–100% Y axis.
+_PERCENT_METRICS: frozenset[Metric] = frozenset({"recall", "precision"})
 
 # Metrics that aggregate over matched records (need pose/error fields).
 _MATCHED_METRICS: dict[Metric, str] = {
@@ -54,6 +58,12 @@ def _binned_metric(
 ) -> pd.DataFrame:
     if metric == "recall":
         sub = df[df["record_kind"].isin(["matched", "missed_gt"])].copy()
+    elif metric == "precision":
+        # Precision needs the FP partner of TP. false_positive rows without
+        # a nearest-GT attribution carry NaN axes and are excluded by the
+        # dropna below — those FPs only show up in the global Pareto, not
+        # in per-bin curves.
+        sub = df[df["record_kind"].isin(["matched", "false_positive"])].copy()
     else:
         sub = df[df["record_kind"] == "matched"].copy()
     sub = sub.dropna(subset=[axis])
@@ -78,6 +88,11 @@ def _binned_metric(
             n = len(grp)
             n_match = int((grp["record_kind"] == "matched").sum())
             value = compute_recall(n_match, n - n_match) * 100.0
+        elif metric == "precision":
+            n_match = int((grp["record_kind"] == "matched").sum())
+            n_fp = int((grp["record_kind"] == "false_positive").sum())
+            n = n_match + n_fp
+            value = compute_precision(n_match, n_fp) * 100.0
         else:
             field = _MATCHED_METRICS[metric]
             vals = grp[field].dropna()
@@ -137,7 +152,7 @@ def plot(
         ax.set_xlabel(_AXIS_LABELS[axis])
         ax.set_title(f"resolution_h = {res}")
         ax.grid(True, alpha=0.3)
-        if metric == "recall":
+        if metric in _PERCENT_METRICS:
             ax.set_ylim(-5, 105)
         if ax_idx == 0:
             ax.set_ylabel(_METRIC_LABELS[metric])

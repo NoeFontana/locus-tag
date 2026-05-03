@@ -84,16 +84,38 @@ def generate(
     written: dict[str, Path] = {}
     sections: list[str] = []
 
+    # Two Pareto views: the unfiltered plot is informational (any low-precision
+    # configuration shows up); the operating plot enforces a precision floor so
+    # recall-only configurations (e.g., over-permissive Soft decoders running
+    # at single-digit precision) cannot sit on the frontier on recall alone.
     written["pareto"] = pareto.plot(df, out_dir / "pareto.png")
     sections.append(
         _SECTION_TEMPLATE.format(
-            title="Pareto: recall vs latency",
+            title="Pareto: recall vs latency (informational)",
             caption=(
-                "One point per (binary, resolution). Filled markers are on the "
-                "Pareto frontier — no other point combines lower latency with "
-                "higher recall."
+                "One point per (binary, resolution). Annotated with global "
+                "precision (P=…). Filled markers are on the Pareto frontier — "
+                "no other point combines lower latency with higher recall. "
+                "<strong>Read with care:</strong> a point on this frontier with "
+                "very low precision is not an operating point — see the "
+                "<em>operating Pareto</em> below for the precision-gated view."
             ),
             filename="pareto.png",
+        )
+    )
+
+    written["pareto_operating"] = pareto.plot(
+        df, out_dir / "pareto_operating.png", min_precision=0.5
+    )
+    sections.append(
+        _SECTION_TEMPLATE.format(
+            title="Pareto: recall vs latency (operating, P ≥ 50%)",
+            caption=(
+                "Same axes, but configurations with global precision below "
+                "50% are excluded from the frontier. This is the plot to use "
+                "when picking a deployment configuration."
+            ),
+            filename="pareto_operating.png",
         )
     )
 
@@ -108,6 +130,9 @@ def generate(
         SweepSpec("recall", "distance_m", "Recall vs distance"),
         SweepSpec("recall", "ppm", "Recall vs PPM"),
         SweepSpec("recall", "aoi_deg", "Recall vs angle of incidence"),
+        SweepSpec("precision", "distance_m", "Precision vs distance"),
+        SweepSpec("precision", "ppm", "Precision vs PPM"),
+        SweepSpec("precision", "aoi_deg", "Precision vs angle of incidence"),
         SweepSpec("trans_err_p50_m", "distance_m", "Translation error (p50) vs distance"),
         SweepSpec("trans_err_p50_m", "aoi_deg", "Translation error (p50) vs angle of incidence"),
         SweepSpec("rot_err_p50_deg", "distance_m", "Rotation error (p50) vs distance"),
