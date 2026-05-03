@@ -88,6 +88,7 @@ pub fn process_row_scalar(
 /// Performs Light-Speed Labeling (LSL) / Run-based Union-Find on the extracted RLE segments.
 /// Fully resolves equivalences and outputs the 2D label map expected by the rest of the pipeline.
 #[allow(clippy::too_many_lines)]
+#[tracing::instrument(skip_all, name = "pipeline::segmentation")]
 pub fn label_components_lsl<'a>(
     arena: &'a Bump,
     img: &ImageView,
