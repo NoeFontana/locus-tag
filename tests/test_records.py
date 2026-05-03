@@ -6,6 +6,7 @@ import dataclasses
 import math
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import pyarrow.parquet as pq
 import pytest
@@ -34,7 +35,7 @@ def _make_provenance() -> Provenance:
     )
 
 
-def _make_record(**overrides: object) -> ObservationRecord:
+def _make_record(**overrides: Any) -> ObservationRecord:
     base = empty_record(
         run_id="run-1",
         binary="locus",
