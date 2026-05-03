@@ -10,14 +10,30 @@ readme = "README.md"
 authors = [{name = "Noé Fontana"}]
 requires-python = ">=3.10"
 license = {text = "MIT OR Apache-2.0"}
+keywords = ["apriltag", "aruco", "fiducial", "marker", "detection", "robotics", "computer-vision"]
 classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "License :: OSI Approved :: Apache Software License",
-    "Typing :: Typed",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Typing :: Typed",
 ]
 dependencies = ["numpy>=2.0", "pydantic>=2.0"]
- 
+
+[project.urls]
+Homepage = "https://github.com/NoeFontana/locus-tag"
+Source = "https://github.com/NoeFontana/locus-tag"
+Documentation = "https://noefontana.github.io/locus-tag"
+Issues = "https://github.com/NoeFontana/locus-tag/issues"
+Changelog = "https://github.com/NoeFontana/locus-tag/blob/main/CHANGELOG.md"
+
 [tool.maturin]
 features = ["pyo3/extension-module"]
 module-name = "locus"
