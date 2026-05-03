@@ -13,6 +13,20 @@ tail). Note that `pipeline::*` spans only cover a subset of these:
 segmentation (`label_components_lsl`) is not instrumented at the time
 of writing, so a "Segmentation" line is reported as
 `uninstrumented` for transparency.
+
+Quad-extraction route attribution. When the V2-FU2 instrumentation is
+compiled in (a `pipeline::quad_route_summary` event per frame, present
+whenever the `bench-internals` Cargo feature is enabled and erased to a
+no-op otherwise), this script also reports a sub-stage table breaking
+down the `Quad Extraction` total into:
+
+  * EdLines vs ContourRdp survivor / attempt counts.
+  * RDP iteration totals & maxima.
+  * Refinement-mode call counts (Erf vs None).
+
+These are diagnostic counters, never used for latency timing on their
+own — they are emitted as `tracing::info!` events at frame end and
+parsed by name (`fields.message`) here.
 """
 
 from __future__ import annotations
@@ -51,6 +65,25 @@ STAGE_ORDER: list[str] = [
     "Pose Refinement",
     "Telemetry / Tail",
 ]
+
+# Quad-extraction route attribution: counter fields written by
+# `emit_quad_route_summary` in `crates/locus-core/src/quad.rs`. Each entry
+# maps a counter name to the column header used in the per-route report.
+QUAD_ROUTE_COUNTER_FIELDS: list[tuple[str, str]] = [
+    ("edlines_attempts", "EdLines att"),
+    ("edlines_survivors", "EdLines surv"),
+    ("contour_rdp_attempts", "RDP att"),
+    ("contour_rdp_survivors", "RDP surv"),
+    ("rdp_iterations_total", "RDP iters tot"),
+    ("rdp_iterations_max", "RDP iters max"),
+    ("refine_erf_calls", "Refine Erf"),
+    ("refine_none_calls", "Refine None"),
+]
+
+# Marker string emitted by Rust as `fields.message` for the per-frame
+# route summary `tracing::info!` event. The aggregator filters on this
+# exact string to avoid colliding with other future `info!` events.
+QUAD_ROUTE_SUMMARY_MESSAGE = "pipeline::quad_route_summary"
 
 DURATION_RE = re.compile(r"^(?P<value>[0-9.]+)(?P<unit>ns|µs|us|ms|s)$")
 UNIT_TO_MS: dict[str, float] = {
@@ -111,6 +144,45 @@ def iter_close_events(path: Path) -> Iterable[tuple[str, float, bool]]:
                 )
 
 
+def iter_quad_route_summaries(path: Path) -> Iterable[dict[str, int]]:
+    """Yield per-frame quad-route counter dicts.
+
+    The Rust side emits one event per frame when built with the
+    `bench-internals` Cargo feature; `fields.message ==
+    "pipeline::quad_route_summary"` is the marker. Each event carries the
+    eight `QUAD_ROUTE_COUNTER_FIELDS` as integer fields.
+
+    Frames without the event (older builds, telemetry off) are simply
+    skipped — the rest of the report is unaffected.
+    """
+    with path.open() as fh:
+        for line_no, raw in enumerate(fh, start=1):
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                event = json.loads(raw)
+            except json.JSONDecodeError:
+                # Already warned about in `iter_close_events`; skip silently.
+                continue
+            fields = event.get("fields", {})
+            if fields.get("message") != QUAD_ROUTE_SUMMARY_MESSAGE:
+                continue
+            counters: dict[str, int] = {}
+            for key, _label in QUAD_ROUTE_COUNTER_FIELDS:
+                if key in fields:
+                    try:
+                        counters[key] = int(fields[key])
+                    except (TypeError, ValueError):
+                        print(
+                            f"warning: {path.name}:{line_no} non-integer "
+                            f"{key!r}: {fields[key]!r}; skipping field",
+                            file=sys.stderr,
+                        )
+            if counters:
+                yield counters
+
+
 def percentile(values: list[float], pct: float) -> float:
     """Linear-interpolated percentile (0 < pct < 100). Empty -> NaN."""
     if not values:
@@ -166,6 +238,27 @@ def aggregate(profiling_dir: Path) -> dict[str, dict[str, list[float]]]:
     return out
 
 
+def aggregate_quad_routes(
+    profiling_dir: Path,
+) -> dict[str, dict[str, list[int]]]:
+    """Return `{file_stem: {counter: [per_frame_value, ...]}}` for each
+    JSON dump that contains `pipeline::quad_route_summary` events.
+
+    Files without route-summary events are simply absent from the output;
+    the main `aggregate()` call covers them anyway.
+    """
+    files = sorted(profiling_dir.glob("*_events.json"))
+    out: dict[str, dict[str, list[int]]] = {}
+    for path in files:
+        per_counter: dict[str, list[int]] = defaultdict(list)
+        for counters in iter_quad_route_summaries(path):
+            for key, value in counters.items():
+                per_counter[key].append(value)
+        if per_counter:
+            out[path.stem.replace("_events", "")] = dict(per_counter)
+    return out
+
+
 def report(per_file: dict[str, dict[str, list[float]]]) -> None:
     for stem, stages in per_file.items():
         n_frames = max(
@@ -199,6 +292,38 @@ def report(per_file: dict[str, dict[str, list[float]]]) -> None:
             )
 
 
+def report_quad_routes(per_file: dict[str, dict[str, list[int]]]) -> None:
+    if not per_file:
+        return
+    print("\n## Quad-extraction route attribution (per-frame counters)")
+    print("(emitted only when the `bench-internals` Cargo feature is enabled)")
+    header = f"{'File':<48s} {'frames':>7s} " + " ".join(
+        f"{label:>14s}" for _, label in QUAD_ROUTE_COUNTER_FIELDS
+    )
+    print(header)
+    print("-" * len(header))
+    for stem, counters in per_file.items():
+        any_key = next(iter(counters))
+        n_frames = len(counters[any_key])
+        # Report sums (totals across the run) and means (per-frame averages),
+        # which together tell the reader both the absolute volume and the
+        # per-frame distribution. Max for the iteration counters is already
+        # exposed as a separate field by the Rust side, so we skip showing
+        # extra percentiles here to keep the table readable.
+        print(f"{stem + ' (sum)':<48s} {n_frames:>7d} ", end="")
+        for key, _ in QUAD_ROUTE_COUNTER_FIELDS:
+            vals = counters.get(key, [])
+            total = sum(vals) if vals else 0
+            print(f"{total:>14d} ", end="")
+        print()
+        print(f"{stem + ' (mean/frame)':<48s} {n_frames:>7d} ", end="")
+        for key, _ in QUAD_ROUTE_COUNTER_FIELDS:
+            vals = counters.get(key, [])
+            mean = (sum(vals) / len(vals)) if vals else 0.0
+            print(f"{mean:>14.1f} ", end="")
+        print()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -212,6 +337,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     per_file = aggregate(args.profiling_dir)
     report(per_file)
+    routes = aggregate_quad_routes(args.profiling_dir)
+    report_quad_routes(routes)
     return 0
 
 

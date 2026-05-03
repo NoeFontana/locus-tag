@@ -20,6 +20,8 @@ use crate::segmentation::LabelResult;
 use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
 use multiversion::multiversion;
+#[cfg(feature = "bench-internals")]
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::workspace::WORKSPACE_ARENA;
 
@@ -65,6 +67,137 @@ fn pixel_count_descending_order(stats: &[crate::segmentation::ComponentStats]) -
         pb.cmp(&pa).then(a.cmp(&b))
     });
     order
+}
+
+/// Per-frame counters attributing the quad-extraction tail across the two
+/// possible routes (EdLines vs ContourRdp), the RDP simplification iteration
+/// budget, and the post-route corner refinement variant (Erf vs None).
+///
+/// **Compile-time erasure.** Under the production build (no `bench-internals`
+/// feature), every method is a no-op: the struct holds zero state, every
+/// `record_*`/`observe_*` call boils down to nothing, and the frame-end
+/// `emit()` does not fire any tracing event. This gives byte-identical
+/// production binaries. Under `bench-internals`, atomics are written from
+/// the Rayon parallel iterator with `Relaxed` ordering and the totals are
+/// emitted as a single `tracing::info!` event at frame end
+/// (`pipeline::quad_route_summary`) for the JSON aggregator to attribute
+/// the per-stage tail.
+#[cfg(feature = "bench-internals")]
+#[derive(Default)]
+pub(crate) struct QuadRouteCounters {
+    /// Candidates that entered the EdLines extractor (`extract_quad_edlines`).
+    pub edlines_attempts: AtomicU32,
+    /// Candidates whose EdLines extraction returned `Some` (passed the
+    /// internal Gauss-Newton / line-fitting gates).
+    pub edlines_survivors: AtomicU32,
+    /// Candidates that entered the ContourRdp extractor.
+    pub contour_rdp_attempts: AtomicU32,
+    /// Candidates whose ContourRdp chain produced a 4-point quad that
+    /// passed the area / compactness gates and reached corner refinement.
+    pub contour_rdp_survivors: AtomicU32,
+    /// Sum of RDP iteration counts across all `douglas_peucker_counted`
+    /// invocations inside `extract_single_quad`. Divide by
+    /// `contour_rdp_attempts` for the mean iterations per call.
+    pub rdp_iterations_total: AtomicU32,
+    /// Maximum RDP iteration count observed in the frame. Tracked via a CAS
+    /// loop so the per-component branch can compute the new max without
+    /// blocking other workers.
+    pub rdp_iterations_max: AtomicU32,
+    /// Candidates that received Erf-based corner refinement (`refine_corner`
+    /// with `use_erf == true`, plus `refine_corner_with_camera` on the
+    /// distortion path — both treated as "with refinement").
+    pub refine_erf_calls: AtomicU32,
+    /// Candidates that bypassed corner refinement (`CornerRefinementMode::None`).
+    pub refine_none_calls: AtomicU32,
+}
+
+/// Production no-op variant. Zero-sized; every method is a no-op. The
+/// `bench-internals` cfg above provides the real counter struct.
+#[cfg(not(feature = "bench-internals"))]
+#[derive(Default)]
+pub(crate) struct QuadRouteCounters;
+
+#[cfg(feature = "bench-internals")]
+impl QuadRouteCounters {
+    #[inline]
+    fn record_edlines_attempt(&self) {
+        self.edlines_attempts.fetch_add(1, Ordering::Relaxed);
+    }
+    #[inline]
+    fn record_edlines_survivor(&self) {
+        self.edlines_survivors.fetch_add(1, Ordering::Relaxed);
+    }
+    #[inline]
+    fn record_contour_rdp_attempt(&self) {
+        self.contour_rdp_attempts.fetch_add(1, Ordering::Relaxed);
+    }
+    #[inline]
+    fn record_contour_rdp_survivor(&self) {
+        self.contour_rdp_survivors.fetch_add(1, Ordering::Relaxed);
+    }
+    #[inline]
+    fn record_refine_erf(&self) {
+        self.refine_erf_calls.fetch_add(1, Ordering::Relaxed);
+    }
+    #[inline]
+    fn record_refine_none(&self) {
+        self.refine_none_calls.fetch_add(1, Ordering::Relaxed);
+    }
+    /// Atomically lift `rdp_iterations_max` to the maximum of its current
+    /// value and `iters`. Uses Relaxed ordering — readers only consume
+    /// these values at frame end, after the Rayon collect() join.
+    #[inline]
+    fn observe_rdp_iterations(&self, iters: u32) {
+        self.rdp_iterations_total
+            .fetch_add(iters, Ordering::Relaxed);
+        let mut prev = self.rdp_iterations_max.load(Ordering::Relaxed);
+        while iters > prev {
+            match self.rdp_iterations_max.compare_exchange_weak(
+                prev,
+                iters,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(actual) => prev = actual,
+            }
+        }
+    }
+    #[inline]
+    fn emit(&self) {
+        tracing::info!(
+            target: "locus_core::quad",
+            edlines_attempts = self.edlines_attempts.load(Ordering::Relaxed),
+            edlines_survivors = self.edlines_survivors.load(Ordering::Relaxed),
+            contour_rdp_attempts = self.contour_rdp_attempts.load(Ordering::Relaxed),
+            contour_rdp_survivors = self.contour_rdp_survivors.load(Ordering::Relaxed),
+            rdp_iterations_total = self.rdp_iterations_total.load(Ordering::Relaxed),
+            rdp_iterations_max = self.rdp_iterations_max.load(Ordering::Relaxed),
+            refine_erf_calls = self.refine_erf_calls.load(Ordering::Relaxed),
+            refine_none_calls = self.refine_none_calls.load(Ordering::Relaxed),
+            "pipeline::quad_route_summary"
+        );
+    }
+}
+
+#[cfg(not(feature = "bench-internals"))]
+impl QuadRouteCounters {
+    #[inline]
+    fn record_edlines_attempt(&self) {}
+    #[inline]
+    fn record_edlines_survivor(&self) {}
+    #[inline]
+    fn record_contour_rdp_attempt(&self) {}
+    #[inline]
+    fn record_contour_rdp_survivor(&self) {}
+    #[inline]
+    fn record_refine_erf(&self) {}
+    #[inline]
+    fn record_refine_none(&self) {}
+    #[inline]
+    fn observe_rdp_iterations(&self, _iters: u32) {}
+    #[inline]
+    fn emit(&self) {}
 }
 
 /// Resolves the per-candidate (extraction_mode, refinement_mode, route_label,
@@ -141,6 +274,11 @@ pub fn extract_quads_soa(
     let stats = &label_result.component_stats;
     let order = pixel_count_descending_order(stats);
 
+    // Stack-allocated per-frame route counters. Atomics are written from the
+    // Rayon parallel iterator below with `Relaxed` ordering — observability
+    // only, never gating production behaviour.
+    let counters = QuadRouteCounters::default();
+
     let mut detections: Vec<ExtractionResult> = order
         .par_iter()
         .filter_map(|&label_idx| {
@@ -158,6 +296,7 @@ pub fn extract_quads_soa(
                     decimation,
                     refinement_img,
                     min_outer_dim,
+                    &counters,
                 )
             })
         })
@@ -213,6 +352,12 @@ pub fn extract_quads_soa(
         batch.status_mask[i] = CandidateState::Empty;
     }
 
+    // Per-frame route attribution. Under `bench-internals`, this emits a
+    // single `info!` event so the JSON aggregator can sub-divide the
+    // `pipeline::quad_extraction` span by route. Without that feature, this
+    // is a compile-time no-op and there is no telemetry-related side effect.
+    counters.emit();
+
     (n, unrefined)
 }
 
@@ -229,6 +374,7 @@ fn extract_single_quad(
     decimation: usize,
     refinement_img: &ImageView,
     min_outer_dim: u32,
+    counters: &QuadRouteCounters,
 ) -> Option<ExtractionResult> {
     let min_edge_len_sq = config.quad_min_edge_length * config.quad_min_edge_length;
     let d = decimation as f64;
@@ -276,8 +422,9 @@ fn extract_single_quad(
     // treats that as "no covariance prior".
     let (quad_pts_dec, gn_covs): ([Point; 4], CornerCovariances) = match route_extraction {
         crate::config::QuadExtractionMode::EdLines => {
+            counters.record_edlines_attempt();
             let ed_cfg = crate::edlines::EdLinesConfig::from_detector_config(config);
-            crate::edlines::extract_quad_edlines(
+            let result = crate::edlines::extract_quad_edlines(
                 arena,
                 img,
                 refinement_img,
@@ -285,9 +432,12 @@ fn extract_single_quad(
                 label,
                 stat,
                 &ed_cfg,
-            )?
+            )?;
+            counters.record_edlines_survivor();
+            result
         },
         crate::config::QuadExtractionMode::ContourRdp => {
+            counters.record_contour_rdp_attempt();
             let sx = stat.first_pixel_x as usize;
             let sy = stat.first_pixel_y as usize;
 
@@ -300,7 +450,8 @@ fn extract_single_quad(
             let simple_contour = chain_approximation(arena, &contour);
             let perimeter = contour.len() as f64;
             let epsilon = (perimeter * 0.02).max(1.0);
-            let simplified = douglas_peucker(arena, &simple_contour, epsilon);
+            let (simplified, rdp_iters) = douglas_peucker_counted(arena, &simple_contour, epsilon);
+            counters.observe_rdp_iterations(rdp_iters);
 
             if simplified.len() < 4 || simplified.len() > 11 {
                 return None;
@@ -330,6 +481,8 @@ fn extract_single_quad(
             if area.abs() <= f64::from(config.quad_min_area) || compactness <= 0.1 {
                 return None;
             }
+
+            counters.record_contour_rdp_survivor();
 
             // Standardize to CW for consistency
             if area > 0.0 {
@@ -407,9 +560,13 @@ fn extract_single_quad(
         // detector.rs; ERF has none.  When refinement overwrites corners,
         // the GN covariances are no longer valid.
         let (corners, out_covs) = if route_refinement == crate::config::CornerRefinementMode::None {
+            counters.record_refine_none();
             (quad_pts, gn_covs)
         } else {
             let use_erf = route_refinement == crate::config::CornerRefinementMode::Erf;
+            if use_erf {
+                counters.record_refine_erf();
+            }
             (
                 [
                     refine_corner(
@@ -541,6 +698,9 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
     let scaled = ScaledIntrinsics::from_intrinsics(intrinsics, decimation);
     let order = pixel_count_descending_order(stats);
 
+    // See `extract_quads_soa` for the off-path byte-identity rationale.
+    let counters = QuadRouteCounters::default();
+
     let mut detections: Vec<ExtractionResult> = order
         .par_iter()
         .filter_map(|&label_idx| {
@@ -561,6 +721,7 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
                     camera,
                     scaled,
                     intrinsics,
+                    &counters,
                 )
             })
         })
@@ -608,6 +769,8 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
         batch.status_mask[i] = CandidateState::Empty;
     }
 
+    counters.emit();
+
     (n, unrefined)
 }
 
@@ -633,6 +796,7 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     camera: &C,
     scaled: ScaledIntrinsics,
     intrinsics: &crate::pose::CameraIntrinsics,
+    counters: &QuadRouteCounters,
 ) -> Option<ExtractionResult> {
     // EdLines is geometrically incompatible with distorted cameras; this path
     // is ContourRdp-only. The upstream guard in `run_detection_pipeline`
@@ -682,6 +846,8 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
         }
     }
 
+    counters.record_contour_rdp_attempt();
+
     let sx = stat.first_pixel_x as usize;
     let sy = stat.first_pixel_y as usize;
     let contour = trace_boundary(arena, labels, img.width, img.height, sx, sy, label);
@@ -719,7 +885,8 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     let simple_contour = chain_approximation(arena, &rectified);
     let perimeter = rectified.len() as f64;
     let epsilon = (perimeter * 0.02).max(1.0);
-    let simplified = douglas_peucker(arena, &simple_contour, epsilon);
+    let (simplified, rdp_iters) = douglas_peucker_counted(arena, &simple_contour, epsilon);
+    counters.observe_rdp_iterations(rdp_iters);
 
     if simplified.len() < 4 || simplified.len() > 11 {
         return None;
@@ -749,6 +916,8 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     if area.abs() <= f64::from(config.quad_min_area) || compactness <= 0.1 {
         return None;
     }
+
+    counters.record_contour_rdp_survivor();
 
     // Standardize to CW in rectified space.
     let quad_rect: [Point; 4] = if area > 0.0 {
@@ -819,9 +988,13 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
         resolve_route(config, bbox_w.min(bbox_h), min_outer_dim, true);
 
     let (corners, out_covs) = if route_refinement == crate::config::CornerRefinementMode::None {
+        counters.record_refine_none();
         (quad_pts, [[0.0_f32; 4]; 4])
     } else if C::IS_RECTIFIED {
         let use_erf = route_refinement == crate::config::CornerRefinementMode::Erf;
+        if use_erf {
+            counters.record_refine_erf();
+        }
         (
             [
                 refine_corner(
@@ -868,6 +1041,10 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
             [[0.0_f32; 4]; 4],
         )
     } else {
+        // Camera-aware refinement (`refine_corner_with_camera`) counted under
+        // `refine_erf_calls` so the `refine_*` totals account for every
+        // candidate that received a sub-pixel pass.
+        counters.record_refine_erf();
         (
             [
                 refine_corner_with_camera(
@@ -949,6 +1126,10 @@ pub fn extract_quads_with_config(
     let stats = &label_result.component_stats;
     let d = decimation as f64;
 
+    // Legacy fast path discards the route counters — `extract_quads_soa` is
+    // the production entry point and owns the diagnostic emission.
+    let counters = QuadRouteCounters::default();
+
     // Process components in parallel, each with its own thread-local arena
     stats
         .par_iter()
@@ -969,6 +1150,7 @@ pub fn extract_quads_with_config(
                     decimation,
                     refinement_img,
                     MIN_OUTER_DIM_FALLBACK,
+                    &counters,
                 );
 
                 let (corners, _unrefined, _covs, _route, _ppb) = quad_result?;
@@ -1209,10 +1391,22 @@ pub(crate) fn douglas_peucker<'a>(
     points: &[Point],
     epsilon: f64,
 ) -> BumpVec<'a, Point> {
+    douglas_peucker_counted(arena, points, epsilon).0
+}
+
+/// Identical to [`douglas_peucker`] but additionally returns the number of
+/// stack-pop iterations consumed during simplification. Used by
+/// `extract_single_quad` for tail-attribution telemetry. The simplification
+/// output equals `douglas_peucker(...)` for any inputs.
+pub(crate) fn douglas_peucker_counted<'a>(
+    arena: &'a Bump,
+    points: &[Point],
+    epsilon: f64,
+) -> (BumpVec<'a, Point>, u32) {
     if points.len() < 3 {
         let mut v = BumpVec::new_in(arena);
         v.extend_from_slice(points);
-        return v;
+        return (v, 0);
     }
 
     let n = points.len();
@@ -1223,7 +1417,17 @@ pub(crate) fn douglas_peucker<'a>(
     let mut stack = BumpVec::new_in(arena);
     stack.push((0, n - 1));
 
+    #[cfg_attr(not(feature = "bench-internals"), allow(unused_mut))]
+    let mut iterations: u32 = 0;
     while let Some((start, end)) = stack.pop() {
+        // Counted only under `bench-internals` so the production hot loop
+        // is byte-identical with the pre-instrumentation version. Under
+        // `bench-internals`, `iterations` is consumed by
+        // `QuadRouteCounters::observe_rdp_iterations`.
+        #[cfg(feature = "bench-internals")]
+        {
+            iterations = iterations.saturating_add(1);
+        }
         if end - start < 2 {
             continue;
         }
@@ -1243,7 +1447,7 @@ pub(crate) fn douglas_peucker<'a>(
             simplified.push(points[i]);
         }
     }
-    simplified
+    (simplified, iterations)
 }
 
 fn perpendicular_distance(p: Point, a: Point, b: Point) -> f64 {
