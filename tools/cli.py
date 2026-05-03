@@ -351,7 +351,15 @@ def bench_real(
     constant: int = typer.Option(0, help="Adaptive threshold constant"),
     min_fill: float = typer.Option(0.10, help="Min quad fill ratio"),
     min_range: int = typer.Option(10, help="Threshold min range"),
-    max_hamming: int = typer.Option(2, help="Max hamming error"),
+    max_hamming: int = typer.Option(
+        2,
+        help=(
+            "Max hamming error. Hard mode is functionally insensitive on the "
+            "corpora we test (100%% precision at every value). Soft mode is "
+            "structurally over-permissive at every value — see "
+            "docs/engineering/benchmarking/soft_decode_limits_20260503.md."
+        ),
+    ),
     min_edge_score: float = typer.Option(4.0, help="Min edge alignment score"),
     record_out: Path | None = typer.Option(
         None,
