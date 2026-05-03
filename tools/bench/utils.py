@@ -11,7 +11,7 @@ import cv2
 import locus
 import numpy as np
 from huggingface_hub import hf_hub_download
-from pupil_apriltags import Detector as AprilTagDetector  # type: ignore
+from pupil_apriltags import Detector as AprilTagDetector
 from tqdm import tqdm
 
 ICRA_REPO_ID = "NoeFontana/apriltag-validation-data"
@@ -665,7 +665,7 @@ def evaluate_tag_pose(
             kwargs: dict[str, Any] = {"intrinsics": ds.intrinsics, "tag_size": eval_tag_size}
             if pose_estimation_mode is not None:
                 kwargs["pose_estimation_mode"] = pose_estimation_mode
-            batch = wrapper.detector.detect(img, **kwargs)  # type: ignore[attr-defined]
+            batch = wrapper.detector.detect(img, **kwargs)
             detections = None
         else:
             detections, _ = wrapper.detect(img, intrinsics=ds.intrinsics, tag_size=eval_tag_size)
@@ -942,7 +942,7 @@ class AprilTagWrapper(LibraryWrapper):
             tag_size=tag_size,
         )
         detections = []
-        for d in raw_dets:  # type: ignore[attr-defined]
+        for d in raw_dets:  # pyright: ignore[reportGeneralTypeIssues]  # pupil_apriltags stub types Detector.detect as Detection (single), runtime returns list
             det = {
                 "id": d.tag_id,
                 "center": d.center.tolist(),

@@ -57,7 +57,8 @@ def main():
             print(f"Loaded tag size: {tag_size}m")
 
     detector = locus.Detector(
-        families=[locus.TagFamily.AprilTag36h11], refinement_mode=locus.CornerRefinementMode.Erf
+        families=[locus.TagFamily.AprilTag36h11],
+        refinement_mode=locus.CornerRefinementMode.Erf,  # pyright: ignore[reportCallIssue]
     )
 
     if intrinsics:

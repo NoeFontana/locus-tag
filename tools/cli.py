@@ -26,6 +26,7 @@ def validate_dicts(
     Validate dictionary JSON files against a schema.
     """
     import jsonschema
+    import jsonschema.exceptions
 
     try:
         with open(schema) as f:

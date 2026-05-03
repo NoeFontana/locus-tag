@@ -138,7 +138,7 @@ def _coerce_imbalance_gate(value: Any) -> EdLinesImbalanceGatePolicy:
 
 
 if TYPE_CHECKING:
-    # mypy needs plain type aliases to accept these in field annotations.
+    # The static type checker needs plain type aliases to accept these in field annotations.
     # At runtime the `else` branch installs the `Annotated[...]` wrapper so
     # Pydantic sees the validators/serializers; the two views describe the
     # same values — see `_enum_field` for the runtime metadata shape.

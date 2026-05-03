@@ -93,7 +93,7 @@ uv run ruff check . --fix
 uv run ruff format .
 
 # 3. Python Type Checking
-uv run mypy .
+uv run --group types --group bench --group etl basedpyright
 
 # 4. Run tests
 # Nextest is preferred for parallel execution of unit tests.
@@ -140,7 +140,7 @@ We use `uv` and PEP 735 dependency groups to isolate development tools. When run
 
 - `dev`: Core development tools (`maturin`, `pytest`, `pytest-cov`)
 - `lint`: Code formatting and analysis (`ruff`)
-- `types`: Type stubs (`mypy`, `pandas-stubs`, `types-tqdm`)
+- `types`: Type checker and stubs (`basedpyright`, `pandas-stubs`, `types-tqdm`)
 - `bench`: Benchmarking and visualization (`opencv-python-headless`, `rerun-sdk`, `datasets[vision]`, `pupil-apriltags`)
 - `docs`: Documentation generation (`mkdocs`, `mkdocstrings`)
 - `etl`: Data tools (`huggingface-hub`, `tqdm`)

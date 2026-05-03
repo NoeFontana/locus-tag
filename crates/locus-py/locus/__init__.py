@@ -62,7 +62,7 @@ _DISTORTION_REMEDIATION = (
 
 
 if HAS_NON_RECTIFIED:
-    DistortionModel = _RustDistortionModel
+    DistortionModel = _RustDistortionModel  # pyright: ignore[reportAssignmentType]
 else:
 
     class _LeanDistortionModelMeta(type):
@@ -75,7 +75,7 @@ else:
                 )
             raise AttributeError(name)
 
-    class DistortionModel(metaclass=_LeanDistortionModelMeta):  # type: ignore[no-redef]
+    class DistortionModel(metaclass=_LeanDistortionModelMeta):
         """Lean-build placeholder for the compiled `DistortionModel` enum.
 
         Exposes only the variants compiled into this wheel. Accessing a variant

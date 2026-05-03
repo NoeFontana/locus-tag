@@ -49,7 +49,7 @@ def _make_axes(tag_id: int, **overrides: Any) -> TagAxes:
         tag_size_mm=160.0,
     )
     base.update(overrides)
-    return TagAxes(**base)  # type: ignore[arg-type]
+    return TagAxes(**base)  # pyright: ignore[reportArgumentType]
 
 
 class TestRotationErrorDeg:

@@ -32,7 +32,7 @@ def _record(binary: str, res: int, image_id: str, **overrides: object) -> Observ
         frame_latency_ms=5.0 if binary == "Locus" else 15.0,
         resolution_h=res,
     )
-    return dataclasses.replace(base, **overrides)  # type: ignore[arg-type]
+    return dataclasses.replace(base, **overrides)
 
 
 def _synthetic_records() -> list[ObservationRecord]:

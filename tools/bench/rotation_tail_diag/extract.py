@@ -354,7 +354,7 @@ def run(
     tag_size = float(ds.tag_size)
 
     # 2. Build production detector (matches what high_accuracy ships)
-    cfg = DetectorConfig.from_profile(profile)  # type: ignore[arg-type]  # CLI passes str
+    cfg = DetectorConfig.from_profile(profile)  # pyright: ignore[reportArgumentType]  # CLI passes str
     detector = locus.Detector(config=cfg, families=families)
     py_cfg = cfg._to_ffi_config()
     sigma_n_sq = float(cfg.pose.sigma_n_sq)

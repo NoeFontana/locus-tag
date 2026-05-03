@@ -7,7 +7,7 @@ When modifying Python code in `crates/locus-py` or `scripts/`, the focus must be
 * **Contiguous Memory:** Ensure image data passed to Rust is contiguous. Rely on Rust's `PyReadonlyArray2<u8>` to interpret the buffer securely.
 
 ## 2. Typing & API Surface
-* **Strict Typing:** All Python code must be fully type-hinted. We rely on `mypy` (via the `types` dependency group) to enforce static typing.
+* **Strict Typing:** All Python code must be fully type-hinted. We rely on `basedpyright` (via the `types` dependency group) to enforce static typing.
 * **Stub Synchronization:** If the PyO3 Rust interface changes, you MUST update the corresponding `locus/locus.pyi` type stubs to match perfectly.
 
 ## 3. Environment & Orchestration
@@ -17,5 +17,5 @@ When modifying Python code in `crates/locus-py` or `scripts/`, the focus must be
 ## 4. Quality Gates
 * **Linting:** `uv run ruff check . --fix`
 * **Formatting:** `uv run ruff format .`
-* **Type Checking:** `uv run mypy .`
+* **Type Checking:** `uv run --group types --group bench --group etl basedpyright`
 * **Testing:** `uv run pytest`
