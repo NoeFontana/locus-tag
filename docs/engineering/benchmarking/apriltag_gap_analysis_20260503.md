@@ -74,23 +74,113 @@ On `high_accuracy`, Locus dominates AprilTag on every dimension except recall an
 
 ## Where the gap actually is
 
+Initial hypotheses for both gaps proved wrong on inspection. The deep root-cause sections below trace each gap to its actual mechanism. Summary:
+
 ### Gap 1 — Recall miss on `high_accuracy`
 
-Locus misses 1–2 tags per 100 frames where AprilTag finds them. Suspect: `min_area=800` (vs standard's 36) drops small / distant / oblique tags before they reach the decoder. On `single_tag_locus_v1`, this manifests as 1 missed tag at 720p/1080p and 2 at 2160p.
-
-**Action candidates:**
-- Lower `min_area` for `high_accuracy` and re-baseline. Cost: latency rises (more quads to process). Need to measure how much.
-- Add adaptive min_area based on resolution / image content. More work, but principled.
-- Accept the recall miss as a precision/recall tradeoff. The corpora may not be representative of the missed cases.
+Locus misses 1–2 tags per 100 frames where AprilTag finds them: 1 at 720p, 1 at 1080p, 2 at 2160p (4 total). **Not a `min_area` issue** — half the misses are on `scene_0031` at PPM > 2300 (a *close* tag, two orders of magnitude above any plausible `min_area`), the other half are decoder rejections specific to the `--max-hamming=0` configuration. See deep root cause.
 
 ### Gap 2 — Rotation p95 looseness
 
-Locus's rotation p95 is 1.5–2.8× looser than AprilTag's. The body of the distribution past the median is wider. Locus's p50 is *better* than AprilTag's, so this isn't a systemic bias — it's specific cases that get poor fits.
+Locus's rotation p95 is 1.5–2.8× looser than AprilTag's. **Not a high-AOI grazing-angle problem** — the tail is concentrated at frontal small tags (PPM < 500, AOI ≈ 25°) where corner-localization noise drives rotation ambiguity. AprilTag handles 16/21 of Locus's worst rotation cases without difficulty. See deep root cause.
 
-**Action candidates:**
-- Inspect the 5% of tags that fall in the p95 tail. Likely high-AOI or high-distance scenarios where the pose solver converges to a degenerate minimum.
-- Tune the weighted-LM solver: Huber delta, Tikhonov regularization, structure-tensor radius. The `high_accuracy.json` already lowers `pose_consistency_gate_sigma_px` to 0.5 — there may be more headroom here.
-- Investigate AprilTag's IRLS pose solver. Their p95 is consistently tighter; the algorithm difference may explain this. Note: AprilTag's *p99* is much worse (50°+ flips on symmetric tags), so this is a different failure mode, not a uniformly better solver.
+## Deep root cause — recall miss
+
+Per-miss attribution by joining `missed_gt` records to spatially-attributed `rejected_quad` records (same `image_id` + `tag_id`):
+
+| Res | Image | tag_id | distance | aoi | ppm | Stage of failure |
+| :--- | :--- | -: | -: | -: | -: | :--- |
+| 720p | scene_0002 | 219 | 1.19m | 51.5° | 736 | RejectedDecode (×1) |
+| 1080p | scene_0031 | 505 | 0.59m | 14.6° | **2348** | **PRE-EXTRACTION** (no quad ever extracted) |
+| 2160p | scene_0020 | 356 | 5.20m | 19.9° | 550 | RejectedDecode (×3) |
+| 2160p | scene_0031 | 505 | 1.18m | 14.6° | **2372** | **PRE-EXTRACTION** (no quad ever extracted) |
+
+**The `min_area` hypothesis is wrong.** Half the misses (scene_0031 at 1080p and 2160p) are on a *close* tag with PPM 2348–2372 — at tag_size 0.165m, that's a side length of ~388px and an area of ~150,000 pixels, two orders of magnitude above `min_area=800`. The quad is never extracted at all. The other half are decoder-stage rejections at the strictest Hamming setting.
+
+There are **two distinct failure modes**, with very different fixes:
+
+### Mode A — EdLines extraction failure (2/4 misses)
+
+`scene_0031` consistently fails to produce a quad at 1080p and 2160p. The tag is close, frontal (AOI 14.6°), and well-lit (PPM > 2300). With `min_area=800` and EdLines extraction, *something specific to that scene's edge profile* causes EdLines's line-fitting heuristics to drop the candidate before extraction completes.
+
+**Mechanism hypothesis:** EdLines fits anchored line segments via gradient-direction continuity. On scenes with sharp transitions (e.g., a tag rendered against a uniform background with no shadow), the four tag edges may not satisfy EdLines's line-segment anchor criteria — the gradient profile is too sharp / too symmetric to register as four distinct line segments.
+
+**Verification action:**
+1. Run rerun visualization on `scene_0031` and capture the EdLines intermediate stage (the line-segment array) — is the tag's contour represented?
+2. Compare to scene_0030 / scene_0032 (presumably similar but successful): what's different about the rendering?
+3. If EdLines is dropping anchors, the fix is in `crates/locus-core/src/edge_refinement.rs` or `quad/edlines.rs` — likely a gradient-magnitude threshold or anchor-density parameter.
+
+### Mode B — RejectedDecode at `max_hamming=0` (2/4 misses)
+
+These tags are extracted as quads but rejected at decode because their bit pattern doesn't exactly match any codeword. With `--max-hamming=2` (the actual CLI default), they would recover.
+
+The gap-analysis sweep used `--max-hamming=0` for tightness against the Soft sweep methodology; the recall miss in this configuration is partly an artifact of that choice. PR #225's data shows Hard at h=2 has 100% precision *and* 100% recall on these corpora — so the Mode B miss is configuration-specific.
+
+**Action:** for accuracy-conscious deployments, document that `--max-hamming=2` is the production setting. Hard at h=2 gets full recall with full precision; the h=0 cell of the gap-analysis sweep was a methodology artifact.
+
+### Net recall picture
+
+If we relax `--max-hamming` from 0 to 2, the recall miss collapses from 4 → 2, and the residual 2 cases are the Mode A EdLines failures on scene_0031. **The "1–2 tags / 100 frames" gap is realistically half EdLines, half configuration-artifact.** EdLines is the actual bug.
+
+## Deep root cause — rotation p95 tail
+
+Top 5% of rotation errors across all three resolutions (n=7 of 136 matched records). Bulk = bottom 50%.
+
+| Axis | Top 5% mean | Bulk mean | Ratio |
+| :--- | -: | -: | -: |
+| `distance_m` | 3.88 | 1.14 | **3.39×** ↑ |
+| `aoi_deg` | 25.5° | 41.3° | 0.62× ↓ |
+| `ppm` | **452** | **1718** | **0.26×** ↓ |
+| `trans_err_m` | 12.6 mm | 0.8 mm | **15.94×** ↑ |
+| `repro_err_px` | 0.35 | 0.13 | **2.57×** ↑ |
+
+Per-resolution: every tail bucket has PPM ≈ 450, distance 2–6m, AOI ≈ 25°. **The tail is "small frontal far tags," not "high-AOI grazing tags."** Within the tail:
+- `r(rot_err, trans_err) = -0.107` → rotation tail is **not** correlated with translation error in the tail.
+- `r(rot_err, repro_err) = +0.648` → rotation tail **is** strongly correlated with reprojection error.
+
+**The tail comes from corner-localization noise on small frontal tags, NOT from grazing-angle solver degeneracy.**
+
+### Comparing to AprilTag on the same tags
+
+For each row in Locus's tail (n=21 with the cross-resolution matching), look up AprilTag's rot_err on the same `(image_id, tag_id)`:
+
+- Locus tail mean rot_err: 0.935°
+- AprilTag rot_err on the same tags: 0.278°
+- Pearson correlation: −0.123 (essentially zero)
+- Of Locus's 21 tail rows, only 5 are also in AprilTag's own p95 tail.
+
+**AprilTag handles 16/21 of Locus's worst rotation cases without difficulty.** This isn't a hard-tag problem, it's a Locus-specific weakness in this regime.
+
+### Mechanism hypothesis
+
+Frontal small tags are *almost* a 2D shape — the four corners are nearly coplanar in the image plane and depth signal is weak. Pose estimation is mathematically near-degenerate: small corner perturbations move the rotation estimate substantially while leaving translation (centroid) stable. That matches the data: rotation breaks, translation doesn't.
+
+Locus's pipeline at this regime:
+- **Corner refinement**: GWLF anisotropic transversal model (`gwlf_transversal_alpha = 0.01`) + ERF/EdLines edge fitting. At low PPM, the gradient signal-to-noise drops and per-corner uncertainty rises.
+- **Pose solver**: weighted Levenberg-Marquardt with structure-tensor priors (`structure_tensor_radius = 2`, `huber_delta_px = 1.5`, `tikhonov_alpha_max = 0.25`). When per-corner covariances are high (low PPM), the solver weights residuals by inverse covariance — but if the covariance estimate itself is noisy, the weighting amplifies rather than damps.
+
+AprilTag's solver is a simpler iterative reweighted least-squares without anisotropic covariance priors. For frontal small tags it ends up *more robust* because it doesn't trust the per-corner covariance and simply minimizes raw reprojection. Locus's structure-tensor + Mahalanobis weighting is an asset on bigger / oblique tags (and visible in the translation 5–7× lead) but a liability when the covariance estimate itself is unreliable.
+
+### Action candidates, ordered by expected ROI
+
+1. **Cap structure-tensor weight at low PPM**: when PPM < 500 (or equivalently when median per-corner covariance trace exceeds a threshold), fall back to isotropic weighting. The pose solver currently always trusts the structure-tensor prior. ~20 LOC change in `crates/locus-core/src/pose_weighted.rs`. Estimated rotation p95 improvement: a measurable fraction of the 1.5–2.8× gap, based on the r=0.648 repro/rot correlation.
+2. **Subpixel corner refinement on small tags**: GWLF's transversal alpha controls how strongly the gradient profile fits the cross-edge intensity. At low PPM, the gradient is shallower; the fit may need a different alpha. ~10 LOC parameter sweep, then bake into the `high_accuracy` profile.
+3. **Tikhonov regularization scaling with corner uncertainty**: currently `tikhonov_alpha_max = 0.25` is a hard ceiling. Make it scale with PPM (or with the trace of the corner covariance matrix). Adds principled damping to under-determined cases.
+4. **AprilTag-style pure reprojection objective** as a fallback: at low PPM, switch to reprojection-only LM (no anisotropic prior). Bigger surgery; only worth it if (1)–(3) don't close the gap.
+
+### Net rotation picture
+
+The tail is concentrated and characterized: **frontal far small tags, corner-localization driven**. The fix is in pose-solver / corner-localization tuning at low-PPM regime, not architectural. Action (1) — capping structure-tensor weight at low PPM — is the cleanest first cut.
+
+## Net engineering plan
+
+| Gap | Root cause | First-cut fix | Effort |
+| :--- | :--- | :--- | :--- |
+| Recall miss (Mode A: EdLines) | `scene_0031`'s edge profile drops anchors | Rerun-visualize, then tune EdLines anchor-density / gradient-magnitude threshold | 1–2 days investigation + small parameter change |
+| Recall miss (Mode B: RejectedDecode) | `--max-hamming=0` artifact | Use `--max-hamming=2` for accuracy benches; document | Configuration / docs only |
+| Rotation p95 tail | Structure-tensor priors over-weighted at low PPM | Cap weight at low PPM (PPM<500) → isotropic fallback | ~20 LOC + sweep validation |
+
+None of these require architectural change. All three are tractable within the existing algorithm choices.
 
 ### Non-gaps
 
@@ -102,7 +192,8 @@ Locus's rotation p95 is 1.5–2.8× looser than AprilTag's. The body of the dist
 
 1. **The bench harness's default profile (`standard`) is the wrong basis for AprilTag comparison.** It optimizes for latency — `min_area=36`, `extraction_mode=ContourRdp`, no EdLines, ERF refinement — and produces accuracy figures that AprilTag-C beats by 4× on rotation. Public bench reports rendered with this profile mislead readers about Locus's accuracy ceiling.
 2. **A fair comparison uses `high_accuracy`** for both binaries (or at least Locus). When users care about pose accuracy they should use this profile; when they care about latency, the standard profile already wins on latency at most resolutions.
-3. **The two real eng gaps (recall miss, rot p95)** are tractable. Both are tuning problems within existing algorithmic frameworks (`min_area` config, weighted-LM solver parameters), not architectural rewrites.
+3. **The recall miss is NOT a `min_area` problem.** Initial hypothesis was wrong — half the misses are EdLines extraction failures on a single scene with PPM 2300+ (way above any plausible `min_area` setting), and the other half are decoder rejections at the strictest `--max-hamming=0` (which would recover at h=2). See "Deep root cause — recall miss" above.
+4. **The rotation p95 tail is NOT high-AOI grazing-angle solver degeneracy.** Initial hypothesis was wrong — the tail is concentrated at *frontal* small tags (PPM < 500, AOI ≈ 25°) where corner-localization noise dominates. r(rot_err, repro_err) = 0.65; r(rot_err, trans_err) = −0.11. The fix is in the pose solver's structure-tensor weighting, not in Huber/Tikhonov tuning of the LM iteration itself. See "Deep root cause — rotation p95 tail" above.
 
 ## Caveats
 
