@@ -52,14 +52,6 @@ reportMissingImports = "error"
 # Selective strictness ramp — high-value reports beyond `standard` defaults.
 reportUnnecessaryTypeIgnoreComment = "warning"
 reportUnusedImport = "warning"
-# Categories pyright's `standard` mode flags by default that mypy did not.
-# Demoted to warnings to keep the migration at parity (zero new errors); the
-# strict-mode follow-up PR will fix the underlying issues.
-reportPossiblyUnbound = "warning"
-reportPossiblyUnboundVariable = "warning"
-reportOptionalMemberAccess = "warning"
-reportOptionalSubscript = "warning"
-reportPrivateImportUsage = "warning"
 
 [dependency-groups]
 dev = [

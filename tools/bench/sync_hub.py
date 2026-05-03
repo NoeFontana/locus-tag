@@ -13,7 +13,7 @@ from typing import Final
 
 import datasets
 from huggingface_hub import HfApi, hf_hub_download
-from huggingface_hub.utils import EntryNotFoundError
+from huggingface_hub.errors import EntryNotFoundError
 from PIL import Image
 from tqdm import tqdm
 

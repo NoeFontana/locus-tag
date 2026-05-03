@@ -38,22 +38,26 @@ def main():
     ds = datasets.load_dataset(args.repo_id, args.subset, split="train", streaming=True)
 
     manifest = get_manifest(args.repo_id, args.subset)
-    intrinsics = None
+    intrinsics: locus.CameraIntrinsics | None = None
+    intrinsics_resolution: tuple[int, int] = (640, 480)
     tag_size = 0.16
 
     if manifest:
-        if "camera_intrinsics" in manifest:
+        cam = manifest.get("camera_intrinsics")
+        if cam is not None:
             intrinsics = locus.CameraIntrinsics(
-                fx=manifest["camera_intrinsics"]["fx"],
-                fy=manifest["camera_intrinsics"]["fy"],
-                cx=manifest["camera_intrinsics"]["cx"],
-                cy=manifest["camera_intrinsics"]["cy"],
+                fx=cam["fx"],
+                fy=cam["fy"],
+                cx=cam["cx"],
+                cy=cam["cy"],
             )
+            intrinsics_resolution = (cam.get("width", 640), cam.get("height", 480))
             print(
                 f"Loaded intrinsics: fx={intrinsics.fx}, fy={intrinsics.fy}, cx={intrinsics.cx}, cy={intrinsics.cy}"
             )
-        if "tag_specification" in manifest:
-            tag_size = manifest["tag_specification"]["tag_size_m"]
+        tag_spec = manifest.get("tag_specification")
+        if tag_spec is not None:
+            tag_size = tag_spec["tag_size_m"]
             print(f"Loaded tag size: {tag_size}m")
 
     detector = locus.Detector(
@@ -61,15 +65,13 @@ def main():
         refinement_mode=locus.CornerRefinementMode.Erf,  # pyright: ignore[reportCallIssue]
     )
 
-    if intrinsics:
-        width = manifest["camera_intrinsics"].get("width", 640)
-        height = manifest["camera_intrinsics"].get("height", 480)
+    if intrinsics is not None:
         rr.log(
             "world/camera",
             rr.Pinhole(
                 focal_length=[intrinsics.fx, intrinsics.fy],
                 principal_point=[intrinsics.cx, intrinsics.cy],
-                resolution=[width, height],
+                resolution=list(intrinsics_resolution),
             ),
             static=True,
         )
@@ -154,9 +156,10 @@ def main():
                 ),
             )
 
+        poses = batch.poses
         for i in range(len(batch)):
             tid = batch.ids[i]
-            pose = batch.poses[i]
+            pose = poses[i] if poses is not None else None
             if pose is not None:
                 # pose is a numpy array of shape (7,) tx, ty, tz, qx, qy, qz, qw
                 tx, ty, tz, qx, qy, qz, qw = pose
@@ -189,13 +192,10 @@ def main():
 
                 rr.log(f"metrics/tag_{det_id}/corner_rmse", rr.Scalars([min_err]))
 
-                if (
-                    positions is not None
-                    and positions[gt_idx] is not None
-                    and batch.poses[i] is not None
-                ):
+                det_pose = poses[i] if poses is not None else None
+                if positions is not None and positions[gt_idx] is not None and det_pose is not None:
                     gt_pos = np.array(positions[gt_idx])
-                    det_pos = np.array(batch.poses[i][:3])
+                    det_pos = np.array(det_pose[:3])
                     t_err = np.linalg.norm(det_pos - gt_pos)
                     rr.log(f"metrics/tag_{det_id}/pose_translation_err", rr.Scalars([float(t_err)]))
 

@@ -12,6 +12,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.lines import Line2D
 
 from tools.bench.metrics import compute_precision, compute_recall
 
@@ -128,7 +129,7 @@ def plot(
         )
 
     handles = [
-        plt.Line2D(
+        Line2D(
             [0], [0], marker="o", color="w", markerfacecolor=color_for[b], markersize=10, label=b
         )
         for b in binaries
