@@ -109,6 +109,54 @@ def _rot_log(rot: np.ndarray) -> np.ndarray:
     return np.array([skew[2, 1], skew[0, 2], skew[1, 0]], dtype=np.float64)
 
 
+def _quat_xyzw_to_rotation(q_xyzw: np.ndarray) -> np.ndarray:
+    """Convert an xyzw quaternion to a 3×3 rotation matrix."""
+    qx, qy, qz, qw = q_xyzw
+    n = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+    qx, qy, qz, qw = qx / n, qy / n, qz / n, qw / n
+    return np.array(
+        [
+            [1.0 - 2.0 * (qy * qy + qz * qz), 2.0 * (qx * qy - qw * qz), 2.0 * (qx * qz + qw * qy)],
+            [2.0 * (qx * qy + qw * qz), 1.0 - 2.0 * (qx * qx + qz * qz), 2.0 * (qy * qz - qw * qx)],
+            [2.0 * (qx * qz - qw * qy), 2.0 * (qy * qz + qw * qx), 1.0 - 2.0 * (qx * qx + qy * qy)],
+        ],
+        dtype=np.float64,
+    )
+
+
+def _project_canonical_tag_corners(
+    intrinsics: Any,  # locus.CameraIntrinsics
+    gt_trans: np.ndarray,
+    gt_quat_xyzw: np.ndarray,
+    tag_size: float,
+) -> np.ndarray:
+    """Project the canonical centred tag corners through (R, t, K).
+
+    Canonical corners (matches `centered_tag_corners` in pose_weighted.rs):
+        (-s/2, -s/2, 0), (s/2, -s/2, 0), (s/2, s/2, 0), (-s/2, s/2, 0)
+    Returns a (4, 2) array of pixel coordinates.
+
+    Pinhole only: distortion is intentionally not applied here. Hub
+    `locus_v1_tag36h11_*` configs are rectified; this is the same projection
+    used by the LM's reprojection step.
+    """
+    s = float(tag_size) / 2.0
+    obj_pts = np.array(
+        [[-s, -s, 0.0], [s, -s, 0.0], [s, s, 0.0], [-s, s, 0.0]],
+        dtype=np.float64,
+    )
+    rot = _quat_xyzw_to_rotation(gt_quat_xyzw)
+    world = obj_pts @ rot.T + gt_trans  # (4, 3)
+    z = world[:, 2]
+    proj = world[:, :2] / z[:, None]  # (4, 2) normalised image coords
+    fx, fy = float(intrinsics.fx), float(intrinsics.fy)
+    cx, cy = float(intrinsics.cx), float(intrinsics.cy)
+    image_pts = np.empty((4, 2), dtype=np.float64)
+    image_pts[:, 0] = proj[:, 0] * fx + cx
+    image_pts[:, 1] = proj[:, 1] * fy + cy
+    return image_pts
+
+
 def _se3_residual(
     det_trans: np.ndarray,
     det_quat_xyzw: np.ndarray,
@@ -340,6 +388,16 @@ class SceneSample:
     d2_per_axis: list[float]  # 6 floats
     convergence: int
     iterations: int
+    final_per_corner_d2: list[float]  # 4 floats (per-corner Mahalanobis at convergence)
+    final_per_corner_irls_weight: list[float]  # 4 floats (Huber weights at convergence)
+    # Path B follow-up — GT-corner residual analysis (added 2026-05-03).
+    gt_corners_px: list[list[float]]  # 4 × 2 (GT 3D corners projected via intrinsics)
+    corner_residuals_px: list[list[float]]  # 4 × 2 (det − gt, per-corner)
+    corner_residual_norms_px: list[float]  # 4 floats (‖det − gt‖ per corner)
+    # Counterfactual: re-run weighted LM with GT corners as inputs. If `d²_gt`
+    # collapses while `d²_total` is large, the miscalibration is in the corner
+    # fitter (or upstream of the LM); otherwise it sits in the LM / model.
+    d2_gt_corners: float
 
 
 def _select_detection(batch: locus.DetectionBatch, gt_tag_id: int) -> int | None:
@@ -462,6 +520,50 @@ def run_audit(
         diag = np.diag(cov6)
         d2_axis = (delta * delta) / np.where(diag > 1e-30, diag, 1e-30)
 
+        # GT-corner residual analysis (Path B follow-up).
+        gt_trans = np.asarray(gt_pose[0:3], dtype=np.float64)
+        gt_quat = np.asarray(gt_pose[3:7], dtype=np.float64)
+        gt_corners = _project_canonical_tag_corners(
+            intrinsics, gt_trans, gt_quat, tag_size
+        )
+        corner_residuals = det_corners - gt_corners  # (4, 2)
+        corner_residual_norms = np.linalg.norm(corner_residuals, axis=1)  # (4,)
+
+        # Counterfactual LM with GT corners as inputs. Σ_corner is recomputed at
+        # GT pixel locations (they are sub-pixel so the structure tensor still
+        # samples the same neighbourhood, modulo bilinear smoothing). Initial
+        # pose seeded from GT to remove init-bias from the comparison.
+        gt_covs = []
+        for c in gt_corners:
+            cov_gt = lb.compute_corner_covariance(
+                img,
+                float(c[0]),
+                float(c[1]),
+                tikhonov_alpha_max,
+                sigma_n_sq,
+                structure_tensor_radius,
+            )
+            gt_covs.append(list(cov_gt))
+        telem_gt = lb.refine_pose_lm_weighted_with_telemetry(
+            intrinsics,
+            gt_corners.tolist(),
+            tag_size,
+            list(gt_quat.astype(float)),
+            list(gt_trans.astype(float)),
+            gt_covs,
+        )
+        cov_gt_flat = np.asarray(telem_gt["covariance"], dtype=np.float64)
+        cov_gt6 = cov_gt_flat.reshape(6, 6)
+        ref_gt = telem_gt["pose"]
+        ref_gt_trans = np.asarray(ref_gt["translation"], dtype=np.float64)
+        ref_gt_quat = np.asarray(ref_gt["quaternion"], dtype=np.float64)
+        delta_gt = _se3_residual(ref_gt_trans, ref_gt_quat, gt_trans, gt_quat)
+        try:
+            cov_gt_inv = np.linalg.inv(cov_gt6)
+            d2_gt = float(delta_gt @ cov_gt_inv @ delta_gt)
+        except np.linalg.LinAlgError:
+            d2_gt = float("nan")
+
         samples.append(
             SceneSample(
                 scene_id=img_name.removesuffix(".png"),
@@ -472,6 +574,14 @@ def run_audit(
                 d2_per_axis=d2_axis.tolist(),
                 convergence=int(telem["convergence"]),
                 iterations=int(telem["iterations"]),
+                final_per_corner_d2=list(map(float, telem["final_per_corner_d2"])),
+                final_per_corner_irls_weight=list(
+                    map(float, telem["final_per_corner_irls_weight"])
+                ),
+                gt_corners_px=gt_corners.tolist(),
+                corner_residuals_px=corner_residuals.tolist(),
+                corner_residual_norms_px=corner_residual_norms.tolist(),
+                d2_gt_corners=d2_gt,
             )
         )
 
@@ -598,6 +708,12 @@ def run_audit(
             "d2_per_axis": s.d2_per_axis,
             "convergence": s.convergence,
             "iterations": s.iterations,
+            "final_per_corner_d2": s.final_per_corner_d2,
+            "final_per_corner_irls_weight": s.final_per_corner_irls_weight,
+            "gt_corners_px": s.gt_corners_px,
+            "corner_residuals_px": s.corner_residuals_px,
+            "corner_residual_norms_px": s.corner_residual_norms_px,
+            "d2_gt_corners": s.d2_gt_corners,
         }
         for s in samples
     ]
