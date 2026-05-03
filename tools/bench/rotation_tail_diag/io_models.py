@@ -107,7 +107,11 @@ class FailureMode(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scene_id: str
-    mode: str  # branch_flip / corner_outlier / grazing_angle / sigma_miscalibration / other
+    # See classify.py for the full taxonomy. Current set:
+    #   healthy / branch_flip / corner_geometry_outlier / corner_outlier /
+    #   grazing_extreme / grazing_moderate / frame_or_winding /
+    #   sigma_miscalibration / ppm_starved / other / production_miss.
+    mode: str
     evidence: dict[str, float | int | str | None | list[float]]
 
 
