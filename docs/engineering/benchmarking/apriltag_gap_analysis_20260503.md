@@ -178,9 +178,70 @@ The tail is concentrated and characterized: **frontal far small tags, corner-loc
 | :--- | :--- | :--- | :--- |
 | Recall miss (Mode A: EdLines) | `scene_0031`'s edge profile drops anchors | Rerun-visualize, then tune EdLines anchor-density / gradient-magnitude threshold | 1–2 days investigation + small parameter change |
 | Recall miss (Mode B: RejectedDecode) | `--max-hamming=0` artifact | Use `--max-hamming=2` for accuracy benches; document | Configuration / docs only |
-| Rotation p95 tail | Structure-tensor priors over-weighted at low PPM | Cap weight at low PPM (PPM<500) → isotropic fallback | ~20 LOC + sweep validation |
+| Rotation p95 tail | ~~Structure-tensor priors over-weighted at low PPM~~ — **REFUTED, see Principal-engineer review** | ~~Cap weight at low PPM (PPM<500) → isotropic fallback~~ | ~~~20 LOC~~ — **do not ship** |
 
-None of these require architectural change. All three are tractable within the existing algorithm choices.
+The first two survive review. The third does not — see below.
+
+## Principal-engineer review (added after independent critiques + ablation)
+
+Three parallel independent reviews scrutinized the analysis above (algorithmic, statistical, engineering). They converged on three concerns: the rot-p95 mechanism was mislabeled, the n=7 statistics were too thin to support causal claims, and the proposed "cap at PPM<500" fix was underspecified by ~30 LOC of signature-plumbing it didn't account for. To resolve the open question — *is the weighted LM solver actually the problem at low PPM?* — we ran a decisive ablation.
+
+### Ablation: weighted-LM (`Accurate`) vs IPPE-only (`Fast`)
+
+Same corpora, same `--max-hamming=2` for parity. `tools/bench/utils.py` always passes `pose_estimation_mode=Accurate` for Locus through `bench real`; we monkey-patched line 568 to `Fast` for the second leg, then reverted.
+
+| Resolution | Metric | Accurate (current) | Fast (proposed alternative) | Ratio (Fast/Accurate) |
+| :--- | :--- | -: | -: | -: |
+| 720p | trans_p50 (mm) | 0.56 | 0.80 | 1.43× worse |
+| 720p | trans_p95 (mm) | 5.89 | 28.73 | **4.88× worse** |
+| 720p | rot_p50 (°) | 0.063 | 0.279 | 4.43× worse |
+| 720p | rot_p95 (°) | 0.522 | 5.868 | **11.24× worse** |
+| 720p | rot_p99 (°) | 2.567 | 23.695 | 9.23× worse |
+| 720p | latency (ms) | 13.2 | 8.7 | 0.66× (faster) |
+| 1080p | trans_p50 (mm) | 0.83 | 2.01 | 2.42× worse |
+| 1080p | trans_p95 (mm) | 10.78 | 131.56 | **12.21× worse** |
+| 1080p | rot_p50 (°) | 0.070 | 0.401 | 5.76× worse |
+| 1080p | rot_p95 (°) | 0.686 | 4.853 | **7.08× worse** |
+| 1080p | rot_p99 (°) | 1.341 | 7.456 | 5.56× worse |
+| 2160p | trans_p50 (mm) | 1.46 | 4.83 | 3.31× worse |
+| 2160p | trans_p95 (mm) | 11.89 | 311.93 | **26.23× worse** |
+| 2160p | rot_p50 (°) | 0.060 | 0.701 | 11.63× worse |
+| 2160p | rot_p95 (°) | 0.440 | 11.746 | **26.71× worse** |
+| 2160p | rot_p99 (°) | 1.014 | 18.429 | 18.18× worse |
+
+Bootstrap 95% CI on `rot_p95(Fast) / rot_p95(Accurate)` over 2000 resamples of n=397 paired records: **[7.4×, 22.2×]** — strongly significant.
+
+**Per-record paired comparison on Accurate's p95+ tail (n=20):** Fast produces a tighter rotation on **only 1 of 20 records**. The pose-mode swap is uniformly worse, not just on the tail.
+
+### What the ablation tells us
+
+1. **The "weighted LM is hurting at low PPM" hypothesis is REFUTED.** Fast (IPPE-only) is uniformly worse — by 5–25× on rotation p95 and 5–26× on translation p95. The weighted LM solver is doing real work *across the entire distribution*, including at low PPM. Removing it would be catastrophic.
+2. **The proposed fix ("cap structure-tensor weight at PPM<500 → isotropic fallback") is in the wrong direction.** Capping the weight is moving toward the Fast regime; the data says Locus's accuracy lead over AprilTag is a direct consequence of that weight, not a side effect. Shipping that change would regress translation by 4–26× and rotation by 7–27×.
+3. **The rot_p95 tail is the residual cost of the difficult cases on a solver that is otherwise *crushing* AprilTag.** AprilTag's IRLS-style solver gets a tighter p95 (1.5–2.8×) on small frontal far tags specifically, but pays for that flexibility with a vastly looser p99 (50–60× worse: catastrophic 50° pose flips that Locus does not exhibit) and 5–7× looser translation across the full distribution.
+
+### What the original "deep root cause" got right and wrong
+
+| Claim | Status after ablation |
+| :--- | :--- |
+| The tail is at low PPM, frontal small far tags | ✓ Holds (geometrically descriptive) |
+| The tail correlates with reprojection error (r=0.65) | ~ Holds **as a description**; statistically fragile (95% CI [−0.55, 0.96] per Agent 2's bootstrap), and the *causal* implication ("noisy corners drive the tail") doesn't survive — Fast also degrades on the same corners and gets *worse* rotation, so the corners aren't the binding constraint here |
+| Structure-tensor priors are amplifying noise at low PPM | ✗ **Refuted** by ablation. Without the prior (Fast), every metric is worse at low PPM, not better |
+| "Cap structure-tensor weight at PPM<500" is the right fix | ✗ **Refuted**. This change moves toward the Fast regime, which the data shows is uniformly worse |
+
+### Principal-engineer net call
+
+**Drop the rotation-side code work entirely from the pre-release surface.** The proposed fix would regress production accuracy across the board. Without strong evidence that a *different* fix (e.g., improving corner localization on small tags via a re-enabled ERF refinement, or AprilTag-style IRLS as a per-tag fallback only on the 5% hardest cases) would help, no rotation-side change ships. The hypotheses for both alternatives are reasonable but unvalidated.
+
+**The post-release follow-ups, in priority order:**
+1. **Investigate the rot_p95 tail at the corner-localization level** (not the solver level). The hypothesis is that pre-pose sub-pixel corner accuracy is the limiting factor on small tags. Test: enable `decoder.refinement_mode=Erf` in `high_accuracy.json` (currently `None`) and re-run. If `rot_p95` tightens, ERF earns its keep on this regime; ship the profile change. If not, the cause is elsewhere and we have a follow-up scope.
+2. **Investigate EdLines failure on `scene_0031`.** Use rerun visualization. Per Agent 3, before tuning `grad_min_mag` (the doc's first guess), test `--imbalance-gate disabled` and `min_fill_ratio=0.05` — both are cheaper to try and may turn out to be the real knob. Only ~50% of the recall miss is EdLines (the other 50% is the `--max-hamming=0` methodology artifact), so the leverage is bounded.
+3. **AprilTag IRLS as a per-tag fallback** (only if (1) doesn't close the gap). The principle: when the weighted-LM converges to a poor minimum (detect via condition-number probe of `JᵀWJ`), retry with AprilTag-style IRLS on those specific tags. This preserves the wins on the bulk distribution while addressing the tail. Real engineering scope (~150 LOC + tests). Don't pursue without (1)'s data.
+
+### What ships pre-release
+
+- **This document** (corrected mechanism, ablation result, refuted fix, deferred follow-ups). Durable record so a future engineer doesn't repeat the proposed `Fast`-fallback as "the obvious fix" — it isn't.
+- **Hamming methodology clarification** (use `--max-hamming=2`, not 0, for accuracy benches; this is the existing CLI default). Already noted in the recall section above.
+- **No code change to the pose pipeline.** Validated as net-positive by ablation: keeping the weighted LM is the right call.
 
 ### Non-gaps
 
