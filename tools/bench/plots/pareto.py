@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from tools.bench.metrics import compute_precision, compute_recall
+
 
 def _pareto_mask(latencies: np.ndarray, recalls: np.ndarray) -> np.ndarray:
     """Boolean mask of Pareto-optimal points.
@@ -41,8 +43,8 @@ def _aggregate(df: pd.DataFrame) -> pd.DataFrame:
         tp = int((grp["record_kind"] == "matched").sum())
         fn = int((grp["record_kind"] == "missed_gt").sum())
         fp = int((grp["record_kind"] == "false_positive").sum())
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = compute_recall(tp, fn)
+        precision = compute_precision(tp, fp)
         # Per-frame latency: take from any one row per (binary, image) to
         # avoid double-counting the replicated frame_latency_ms column.
         per_frame = grp.drop_duplicates(subset=["image_id"])["frame_latency_ms"]

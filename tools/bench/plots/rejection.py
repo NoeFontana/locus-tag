@@ -14,14 +14,17 @@ Locus-only — other libraries don't expose intermediate rejections. Answers
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
 
 import matplotlib.pyplot as plt
 import pandas as pd
 
-GroupBy = Literal["stratum_id", "resolution_h"]
+from tools.bench.plots._types import GroupBy
 
 # Stable colour mapping so the same reason gets the same shade across plots.
+# ``Unknown`` is defensive padding: ``collect.py:_FUNNEL_STATUS_NAMES`` maps
+# ``code=0`` (NoneReason) to ``"Unknown"`` for an outcome that should never
+# appear among rejected quads. Kept here so a contract drift surfaces as a
+# grey segment instead of a missing colour.
 _REASON_COLORS = {
     "RejectedDecode": "#fb9a29",  # decoder/Hamming failure
     "RejectedContrast": "#cb181d",  # geometry-only

@@ -8,106 +8,92 @@ in axis handling, error paths, and the orchestrator wiring.
 
 from __future__ import annotations
 
-import math
+import dataclasses
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from tools.bench.plots import pareto, rejection, sweep
+from tools.bench.records import ObservationRecord, empty_record
 
 
-def _synthetic_df() -> pd.DataFrame:
+def _record(binary: str, res: int, image_id: str, **overrides: object) -> ObservationRecord:
+    """Build an ``ObservationRecord`` with the run/profile/dataset frozen."""
+    base = empty_record(
+        run_id="run-1",
+        binary=binary,
+        profile="standard",
+        dataset="synthetic",
+        image_id=image_id,
+        record_kind="matched",
+        n_gt_in_frame=1,
+        n_det_in_frame=1,
+        frame_latency_ms=5.0 if binary == "Locus" else 15.0,
+        resolution_h=res,
+    )
+    return dataclasses.replace(base, **overrides)  # type: ignore[arg-type]
+
+
+def _synthetic_records() -> list[ObservationRecord]:
     """Two binaries × two resolutions × a few records of each kind."""
-    rows = []
+    records: list[ObservationRecord] = []
     for binary in ("Locus", "OpenCV"):
         for res in (720, 1080):
             for i in range(5):
-                rows.append(
-                    {
-                        "run_id": "run-1",
-                        "binary": binary,
-                        "profile": "standard",
-                        "dataset": "synthetic",
-                        "image_id": f"img_{i}",
-                        "record_kind": "matched",
-                        "tag_id": i,
-                        "distance_m": 0.5 + 0.5 * i,
-                        "aoi_deg": 10.0 + 10.0 * i,
-                        "ppm": 500.0 + 200.0 * i,
-                        "occlusion_ratio": 0.0,
-                        "blur_px": math.nan,
-                        "iso": math.nan,
-                        "resolution_h": res,
-                        "matched": True,
-                        "trans_err_m": 0.001 + 0.001 * i,
-                        "rot_err_deg": 0.1 + 0.05 * i,
-                        "repro_err_px": 0.5,
-                        "hamming_bits": 0,
-                        "rejection_reason": "",
-                        "frame_latency_ms": 5.0 if binary == "Locus" else 15.0,
-                        "n_gt_in_frame": 1,
-                        "n_det_in_frame": 1,
-                    }
+                records.append(
+                    _record(
+                        binary,
+                        res,
+                        f"img_{i}",
+                        tag_id=i,
+                        distance_m=0.5 + 0.5 * i,
+                        aoi_deg=10.0 + 10.0 * i,
+                        ppm=500.0 + 200.0 * i,
+                        occlusion_ratio=0.0,
+                        matched=True,
+                        trans_err_m=0.001 + 0.001 * i,
+                        rot_err_deg=0.1 + 0.05 * i,
+                        repro_err_px=0.5,
+                        hamming_bits=0,
+                    )
                 )
             # one missed_gt per (binary, res) so recall != 100% for the test
-            rows.append(
-                {
-                    "run_id": "run-1",
-                    "binary": binary,
-                    "profile": "standard",
-                    "dataset": "synthetic",
-                    "image_id": "img_5",
-                    "record_kind": "missed_gt",
-                    "tag_id": 5,
-                    "distance_m": 3.0,
-                    "aoi_deg": 60.0,
-                    "ppm": 300.0,
-                    "occlusion_ratio": 0.0,
-                    "blur_px": math.nan,
-                    "iso": math.nan,
-                    "resolution_h": res,
-                    "matched": False,
-                    "trans_err_m": math.nan,
-                    "rot_err_deg": math.nan,
-                    "repro_err_px": math.nan,
-                    "hamming_bits": -1,
-                    "rejection_reason": "",
-                    "frame_latency_ms": 5.0 if binary == "Locus" else 15.0,
-                    "n_gt_in_frame": 1,
-                    "n_det_in_frame": 0,
-                }
+            records.append(
+                _record(
+                    binary,
+                    res,
+                    "img_5",
+                    record_kind="missed_gt",
+                    tag_id=5,
+                    distance_m=3.0,
+                    aoi_deg=60.0,
+                    ppm=300.0,
+                    occlusion_ratio=0.0,
+                    n_det_in_frame=0,
+                )
             )
     # rejected_quad rows for Locus only (other libraries don't expose rejections)
     for res in (720, 1080):
-        rows.append(
-            {
-                "run_id": "run-1",
-                "binary": "Locus",
-                "profile": "standard",
-                "dataset": "synthetic",
-                "image_id": "img_0",
-                "record_kind": "rejected_quad",
-                "tag_id": None,
-                "distance_m": 1.0,
-                "aoi_deg": 20.0,
-                "ppm": 800.0,
-                "occlusion_ratio": 0.0,
-                "blur_px": math.nan,
-                "iso": math.nan,
-                "resolution_h": res,
-                "matched": False,
-                "trans_err_m": math.nan,
-                "rot_err_deg": math.nan,
-                "repro_err_px": math.nan,
-                "hamming_bits": 5,
-                "rejection_reason": "RejectedDecode",
-                "frame_latency_ms": 5.0,
-                "n_gt_in_frame": 1,
-                "n_det_in_frame": 1,
-            }
+        records.append(
+            _record(
+                "Locus",
+                res,
+                "img_0",
+                record_kind="rejected_quad",
+                distance_m=1.0,
+                aoi_deg=20.0,
+                ppm=800.0,
+                occlusion_ratio=0.0,
+                hamming_bits=5,
+                rejection_reason="RejectedDecode",
+            )
         )
-    return pd.DataFrame(rows)
+    return records
+
+
+def _synthetic_df() -> pd.DataFrame:
+    return pd.DataFrame([dataclasses.asdict(r) for r in _synthetic_records()])
 
 
 def test_pareto_plot_writes_png(tmp_path: Path) -> None:
@@ -157,39 +143,10 @@ def test_report_generate_produces_index_html(tmp_path: Path) -> None:
     """End-to-end: write a parquet, run the orchestrator, verify outputs."""
     from datetime import datetime, timezone
 
-    from tools.bench.records import ObservationRecord, write_records
+    from tools.bench.records import write_records
     from tools.bench.report import generate
     from tools.bench.schema import Provenance
 
-    df = _synthetic_df()
-    records = [
-        ObservationRecord(
-            run_id=str(r["run_id"]),
-            binary=str(r["binary"]),
-            profile=str(r["profile"]),
-            dataset=str(r["dataset"]),
-            image_id=str(r["image_id"]),
-            record_kind=r["record_kind"],
-            tag_id=None if pd.isna(r["tag_id"]) else int(r["tag_id"]),
-            distance_m=float(r["distance_m"]),
-            aoi_deg=float(r["aoi_deg"]),
-            ppm=float(r["ppm"]),
-            occlusion_ratio=float(r["occlusion_ratio"]),
-            blur_px=float(r["blur_px"]),
-            iso=float(r["iso"]),
-            resolution_h=int(r["resolution_h"]),
-            matched=bool(r["matched"]),
-            trans_err_m=float(r["trans_err_m"]),
-            rot_err_deg=float(r["rot_err_deg"]),
-            repro_err_px=float(r["repro_err_px"]),
-            hamming_bits=int(r["hamming_bits"]),
-            rejection_reason=str(r["rejection_reason"]),
-            frame_latency_ms=float(r["frame_latency_ms"]),
-            n_gt_in_frame=int(r["n_gt_in_frame"]),
-            n_det_in_frame=int(r["n_det_in_frame"]),
-        )
-        for _, r in df.iterrows()
-    ]
     prov = Provenance(
         git_sha="0" * 40,
         git_dirty=False,
@@ -203,7 +160,7 @@ def test_report_generate_produces_index_html(tmp_path: Path) -> None:
         timestamp_utc=datetime(2026, 5, 2, tzinfo=timezone.utc),
     )
     parquet = tmp_path / "run.parquet"
-    write_records(records, prov, parquet)
+    write_records(_synthetic_records(), prov, parquet)
 
     out_dir = tmp_path / "report"
     generate([parquet], out_dir, title="test")

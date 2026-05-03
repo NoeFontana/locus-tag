@@ -13,11 +13,25 @@ Usage:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
+from typing import NamedTuple
 
 import typer
 
-from tools.bench.plots import load_records_df, pareto, rejection, sweep
+from tools.bench.plots import (
+    ContinuousAxis,
+    Metric,
+    load_records_df,
+    pareto,
+    rejection,
+    sweep,
+)
+
+
+class SweepSpec(NamedTuple):
+    metric: Metric
+    axis: ContinuousAxis
+    title: str
+
 
 app = typer.Typer(help="Generate the Tier-1 plot bundle")
 
@@ -90,32 +104,29 @@ def generate(
     # canonical orientation that doesn't match the GT corner indexing, so
     # per-corner RMSE picks up tag-diagonal-sized "errors" that are actually
     # just a cyclic shift. Re-enable once the wrapper is canonicalized.
-    sweep_specs: list[tuple[str, str, str]] = [
-        ("recall", "distance_m", "Recall vs distance"),
-        ("recall", "ppm", "Recall vs PPM"),
-        ("recall", "aoi_deg", "Recall vs angle of incidence"),
-        ("trans_err_p50_m", "distance_m", "Translation error (p50) vs distance"),
-        ("trans_err_p50_m", "aoi_deg", "Translation error (p50) vs angle of incidence"),
-        ("rot_err_p50_deg", "distance_m", "Rotation error (p50) vs distance"),
-        ("rot_err_p50_deg", "aoi_deg", "Rotation error (p50) vs angle of incidence"),
-        ("latency_p50_ms", "ppm", "Latency (p50) vs PPM"),
-        ("latency_p50_ms", "distance_m", "Latency (p50) vs distance"),
+    sweep_specs: list[SweepSpec] = [
+        SweepSpec("recall", "distance_m", "Recall vs distance"),
+        SweepSpec("recall", "ppm", "Recall vs PPM"),
+        SweepSpec("recall", "aoi_deg", "Recall vs angle of incidence"),
+        SweepSpec("trans_err_p50_m", "distance_m", "Translation error (p50) vs distance"),
+        SweepSpec("trans_err_p50_m", "aoi_deg", "Translation error (p50) vs angle of incidence"),
+        SweepSpec("rot_err_p50_deg", "distance_m", "Rotation error (p50) vs distance"),
+        SweepSpec("rot_err_p50_deg", "aoi_deg", "Rotation error (p50) vs angle of incidence"),
+        SweepSpec("latency_p50_ms", "ppm", "Latency (p50) vs PPM"),
+        SweepSpec("latency_p50_ms", "distance_m", "Latency (p50) vs distance"),
     ]
-    for metric, axis, sweep_title in sweep_specs:
-        slug = f"sweep_{metric}_vs_{axis}"
+    for spec in sweep_specs:
+        slug = f"sweep_{spec.metric}_vs_{spec.axis}"
         try:
             written[slug] = sweep.plot(
-                df,
-                out_dir / f"{slug}.png",
-                axis=cast(sweep.ContinuousAxis, axis),
-                metric=cast(sweep.Metric, metric),
+                df, out_dir / f"{slug}.png", axis=spec.axis, metric=spec.metric
             )
         except ValueError as e:
             sections.append(f"<section><p><em>{slug} skipped: {e}</em></p></section>")
             continue
         sections.append(
             _SECTION_TEMPLATE.format(
-                title=sweep_title,
+                title=spec.title,
                 caption=(
                     "One curve per binary, faceted by resolution. Each marker "
                     "is a quantile bin on the x-axis."

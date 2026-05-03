@@ -12,20 +12,13 @@ records in that bin (recall = proportion; *_p50 = median).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-ContinuousAxis = Literal["distance_m", "aoi_deg", "ppm"]
-Metric = Literal[
-    "recall",
-    "trans_err_p50_m",
-    "rot_err_p50_deg",
-    "repro_err_p50_px",
-    "latency_p50_ms",
-]
+from tools.bench.metrics import compute_recall
+from tools.bench.plots._types import ContinuousAxis, Metric
 
 _AXIS_LABELS = {
     "distance_m": "Distance (m)",
@@ -84,7 +77,7 @@ def _binned_metric(
         if metric == "recall":
             n = len(grp)
             n_match = int((grp["record_kind"] == "matched").sum())
-            value = (n_match / n * 100.0) if n > 0 else 0.0
+            value = compute_recall(n_match, n - n_match) * 100.0
         else:
             field = _MATCHED_METRICS[metric]
             vals = grp[field].dropna()
