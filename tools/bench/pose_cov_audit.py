@@ -523,9 +523,7 @@ def run_audit(
         # GT-corner residual analysis (Path B follow-up).
         gt_trans = np.asarray(gt_pose[0:3], dtype=np.float64)
         gt_quat = np.asarray(gt_pose[3:7], dtype=np.float64)
-        gt_corners = _project_canonical_tag_corners(
-            intrinsics, gt_trans, gt_quat, tag_size
-        )
+        gt_corners = _project_canonical_tag_corners(intrinsics, gt_trans, gt_quat, tag_size)
         corner_residuals = det_corners - gt_corners  # (4, 2)
         corner_residual_norms = np.linalg.norm(corner_residuals, axis=1)  # (4,)
 
