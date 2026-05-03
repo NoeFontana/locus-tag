@@ -16,17 +16,28 @@ import pandas as pd
 from tools.bench.metrics import compute_precision, compute_recall
 
 
-def _pareto_mask(latencies: np.ndarray, recalls: np.ndarray) -> np.ndarray:
+def _pareto_mask(
+    latencies: np.ndarray,
+    recalls: np.ndarray,
+    precisions: np.ndarray,
+    min_precision: float,
+) -> np.ndarray:
     """Boolean mask of Pareto-optimal points.
 
     A point is on the frontier if no other point has *both* lower latency and
     higher recall. Ties (equal latency or equal recall) keep both points.
+    Points with precision below ``min_precision`` are excluded both as
+    candidates and as dominators — the use case is "exclude the 1%-precision
+    Soft point from the operating frontier so it can't dominate anything."
     """
     n = len(latencies)
     optimal = np.ones(n, dtype=bool)
     for i in range(n):
+        if precisions[i] < min_precision:
+            optimal[i] = False
+            continue
         for j in range(n):
-            if i == j:
+            if i == j or precisions[j] < min_precision:
                 continue
             if latencies[j] < latencies[i] and recalls[j] > recalls[i]:
                 optimal[i] = False
@@ -65,8 +76,17 @@ def _aggregate(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def plot(df: pd.DataFrame, out_path: Path | str) -> Path:
+def plot(
+    df: pd.DataFrame,
+    out_path: Path | str,
+    min_precision: float = 0.0,
+) -> Path:
     """Render the Pareto plot and save to ``out_path`` (PNG).
+
+    ``min_precision`` (default 0.0 — no filter) excludes points with global
+    precision below the threshold from the frontier. Use 0.5+ for an
+    "operating Pareto" that hides recall-only configurations like Locus
+    (Soft) from sitting on the frontier on the strength of recall alone.
 
     Returns the resolved path written.
     """
@@ -79,7 +99,12 @@ def plot(df: pd.DataFrame, out_path: Path | str) -> Path:
     cmap = plt.get_cmap("tab10")
     color_for = {b: cmap(i % 10) for i, b in enumerate(binaries)}
 
-    pareto = _pareto_mask(agg["latency_p50_ms"].to_numpy(), agg["recall"].to_numpy())
+    pareto = _pareto_mask(
+        agg["latency_p50_ms"].to_numpy(),
+        agg["recall"].to_numpy(),
+        agg["precision"].to_numpy(),
+        min_precision=min_precision,
+    )
 
     for i, row in agg.iterrows():
         is_pareto = bool(pareto[i])  # type: ignore[call-overload]
@@ -94,7 +119,7 @@ def plot(df: pd.DataFrame, out_path: Path | str) -> Path:
             zorder=3 if is_pareto else 2,
         )
         ax.annotate(
-            f"{row['resolution_h']}p",
+            f"{row['resolution_h']}p · P={row['precision']:.0%}",
             (row["latency_p50_ms"], row["recall"] * 100.0),
             xytext=(5, 5),
             textcoords="offset points",
@@ -111,7 +136,8 @@ def plot(df: pd.DataFrame, out_path: Path | str) -> Path:
     ax.legend(handles=handles, loc="lower right", title="Binary")
     ax.set_xlabel("Median per-frame latency (ms)")
     ax.set_ylabel("Recall (%)")
-    ax.set_title("Pareto: recall vs latency  (filled = Pareto-optimal)")
+    title_suffix = f"  (operating: P ≥ {min_precision:.0%})" if min_precision > 0 else ""
+    ax.set_title(f"Pareto: recall vs latency  (filled = Pareto-optimal){title_suffix}")
     ax.grid(True, alpha=0.3)
     ax.set_ylim(-5, 105)
 

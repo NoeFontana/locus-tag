@@ -89,6 +89,29 @@ def _synthetic_records() -> list[ObservationRecord]:
                 rejection_reason="RejectedDecode",
             )
         )
+    # A handful of false_positive rows per (binary, resolution) so the
+    # precision pathway is non-degenerate. These are GT-attributed (axes
+    # populated) so they bin into sweep curves; an FP-without-attribution
+    # case is exercised at the global Pareto level by leaving precision
+    # < 100%.
+    for binary in ("Locus", "OpenCV"):
+        for res in (720, 1080):
+            for i in range(2):
+                records.append(
+                    _record(
+                        binary,
+                        res,
+                        f"img_fp_{i}",
+                        record_kind="false_positive",
+                        tag_id=100 + i,
+                        distance_m=1.0 + 0.5 * i,
+                        aoi_deg=20.0 + 5.0 * i,
+                        ppm=600.0,
+                        occlusion_ratio=0.0,
+                        n_gt_in_frame=0,
+                        n_det_in_frame=1,
+                    )
+                )
     return records
 
 
@@ -106,6 +129,13 @@ def test_pareto_plot_writes_png(tmp_path: Path) -> None:
 def test_sweep_recall_writes_png(tmp_path: Path) -> None:
     df = _synthetic_df()
     out = sweep.plot(df, tmp_path / "sweep.png", axis="distance_m", metric="recall")
+    assert out.exists()
+    assert out.stat().st_size > 1024
+
+
+def test_sweep_precision_writes_png(tmp_path: Path) -> None:
+    df = _synthetic_df()
+    out = sweep.plot(df, tmp_path / "sweep.png", axis="distance_m", metric="precision")
     assert out.exists()
     assert out.stat().st_size > 1024
 
@@ -167,9 +197,11 @@ def test_report_generate_produces_index_html(tmp_path: Path) -> None:
 
     assert (out_dir / "index.html").exists()
     assert (out_dir / "pareto.png").exists()
-    # At least one sweep + the rejection plot
+    assert (out_dir / "pareto_operating.png").exists()
+    # At least one sweep of each headline metric + the rejection plot
     sweep_pngs = list(out_dir.glob("sweep_*.png"))
     assert len(sweep_pngs) >= 1
+    assert any("precision" in p.name for p in sweep_pngs)
     assert (out_dir / "rejection_by_resolution.png").exists()
     # Confirm index references at least one PNG
     html = (out_dir / "index.html").read_text()
