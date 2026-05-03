@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -35,7 +36,7 @@ def _make_gt(tag_id: int, x: float, y: float) -> TagGroundTruth:
     )
 
 
-def _make_axes(tag_id: int, **overrides: object) -> TagAxes:
+def _make_axes(tag_id: int, **overrides: Any) -> TagAxes:
     base = dict(
         tag_id=tag_id,
         distance_m=1.5,
