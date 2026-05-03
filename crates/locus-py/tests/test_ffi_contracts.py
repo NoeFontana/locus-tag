@@ -334,7 +334,7 @@ class TestTagFamilyCoercion:
     def test_invalid_discriminant_rejected(self, bad: int) -> None:
         # Intentionally bypassing the enum to exercise the i32-coercion gate.
         with pytest.raises(ValueError, match=r"Invalid TagFamily value"):
-            locus.Detector(families=[bad])  # type: ignore[list-item]
+            locus.Detector(families=[bad])  # pyright: ignore[reportArgumentType]
 
     def test_valid_enum_accepted(self) -> None:
         det = locus.Detector(families=[locus.TagFamily.AprilTag36h11])

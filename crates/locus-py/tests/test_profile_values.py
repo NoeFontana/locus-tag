@@ -90,7 +90,7 @@ def test_shipped_profile_values(profile_name: ProfileName) -> None:
 
 def test_unknown_shipped_profile_name_rejected() -> None:
     with pytest.raises(ValueError, match="Unknown shipped profile"):
-        DetectorConfig.from_profile("does_not_exist")  # type: ignore[arg-type]
+        DetectorConfig.from_profile("does_not_exist")  # pyright: ignore[reportArgumentType]
 
 
 def test_unknown_json_field_rejected() -> None:

@@ -52,31 +52,22 @@ target-version = "py310"
 select = ["E", "F", "B", "UP", "SIM", "I"] # Pyflakes, pycodestyle, bugbear, pyupgrade, simplify, isort
 ignore = ["E501", "B006", "B008"] # Line length handled by formatter
 
-[tool.mypy]
-python_version = "3.10"
-warn_unused_configs = true
-show_error_codes = true
-ignore_missing_imports = false
-
-[[tool.mypy.overrides]]
-module = "datasets.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "rerun.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "cv2.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "pupil_apriltags.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "pyarrow.*"
-ignore_missing_imports = true
+[tool.pyright]
+pythonVersion = "3.10"
+include = ["crates/locus-py", "tools", "tests", "scripts", "examples"]
+exclude = ["**/.venv", "**/target", "**/__pycache__", "**/.mypy_cache", "**/site"]
+extraPaths = ["crates/locus-py"]
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "standard"
+# Unstubbed third-party deps (datasets, rerun, cv2, pupil_apriltags, pyarrow):
+# pyright has no per-module-glob equivalent of mypy's [[overrides]], so we
+# silence missing-stub noise globally while keeping import-resolution errors on.
+reportMissingTypeStubs = "none"
+reportMissingImports = "error"
+# Selective strictness ramp — high-value reports beyond `standard` defaults.
+reportUnnecessaryTypeIgnoreComment = "warning"
+reportUnusedImport = "warning"
 
 [dependency-groups]
 dev = [
@@ -90,7 +81,7 @@ lint = [
     "ruff>=0.14.14",
 ]
 types = [
-    "mypy>=1.0.0",
+    "basedpyright>=1.20",
     "pandas-stubs>=2.0.0",
     "types-tqdm>=4.0.0",
     "types-jsonschema",

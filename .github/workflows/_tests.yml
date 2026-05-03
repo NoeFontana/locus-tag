@@ -52,6 +52,36 @@ jobs:
           path: "*.log"
           retention-days: 1
 
+  type-check-python:
+    name: Type Check Python (basedpyright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Toolchains
+        uses: ./.github/actions/setup-toolchain
+        with:
+          python-version: '3.11'
+          enable-rust-cache: 'false'
+
+      - name: Install Python deps
+        run: uv sync --frozen --group types --group bench --group etl --group docs
+
+      - name: Run basedpyright
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run --frozen basedpyright 2>&1 | tee basedpyright.log
+
+      - name: Upload Logs on Failure
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: failure-logs-type-check
+          path: "*.log"
+          retention-days: 1
+
   rust-checks:
     name: Rust Lint & Test
     runs-on: ubuntu-latest

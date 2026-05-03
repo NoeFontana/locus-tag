@@ -12,6 +12,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.lines import Line2D
 
 from tools.bench.metrics import compute_precision, compute_recall
 
@@ -50,7 +51,7 @@ def _aggregate(df: pd.DataFrame) -> pd.DataFrame:
     g = df.groupby(["binary", "resolution_h"])
     rows: list[dict[str, float | int | str]] = []
     for key, grp in g:
-        binary, res = key  # type: ignore[misc]
+        binary, res = key
         tp = int((grp["record_kind"] == "matched").sum())
         fn = int((grp["record_kind"] == "missed_gt").sum())
         fp = int((grp["record_kind"] == "false_positive").sum())
@@ -63,7 +64,7 @@ def _aggregate(df: pd.DataFrame) -> pd.DataFrame:
         rows.append(
             {
                 "binary": str(binary),
-                "resolution_h": int(res),  # type: ignore[call-overload]
+                "resolution_h": int(res),  # pyright: ignore[reportArgumentType]
                 "tp": tp,
                 "fp": fp,
                 "fn": fn,
@@ -107,7 +108,7 @@ def plot(
     )
 
     for i, row in agg.iterrows():
-        is_pareto = bool(pareto[i])  # type: ignore[call-overload]
+        is_pareto = bool(pareto[i])  # pyright: ignore[reportCallIssue, reportArgumentType]
         ax.scatter(
             row["latency_p50_ms"],
             row["recall"] * 100.0,
@@ -128,7 +129,7 @@ def plot(
         )
 
     handles = [
-        plt.Line2D(
+        Line2D(
             [0], [0], marker="o", color="w", markerfacecolor=color_for[b], markersize=10, label=b
         )
         for b in binaries

@@ -406,7 +406,7 @@ def build_provenance(
         locus_version=_locus_version(),
         dataset_version=dataset_version,
         rayon_threads=_rayon_threads(),
-        build_profile=build_profile,  # type: ignore[arg-type]
+        build_profile=build_profile,  # pyright: ignore[reportArgumentType]
         timestamp_utc=datetime.now(timezone.utc),
     )
 

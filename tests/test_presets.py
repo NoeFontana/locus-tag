@@ -22,7 +22,7 @@ def test_profile_and_config_mutually_exclusive():
 
 def test_unknown_profile_rejected():
     with pytest.raises(Exception):  # noqa: B017 — Pydantic ValidationError / FileNotFoundError path
-        locus.Detector(profile="does_not_exist")  # type: ignore[arg-type]
+        locus.Detector(profile="does_not_exist")  # pyright: ignore[reportArgumentType]
 
 
 def test_config_overrides_via_pydantic():

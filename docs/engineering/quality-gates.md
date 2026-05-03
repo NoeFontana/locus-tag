@@ -16,7 +16,7 @@ uv run ruff check . --fix
 uv run ruff format .
 
 # 3. Static Type Checking (Python)
-uv run mypy .
+uv run --group types --group bench --group etl basedpyright
 
 # 4. Unit Testing
 # We use cargo-nextest for fast, concurrent test execution.

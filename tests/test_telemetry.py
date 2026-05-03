@@ -34,6 +34,7 @@ def test_telemetry_extraction():
     # Even though data is copied, the memory allocator in Locus resets.
     # We test that multiple frames can be processed without crashing or leaking memory.
     res2 = detector.detect(img, debug_telemetry=True)
+    assert res2.telemetry is not None
 
     # Assert they are distinct memory addresses now that we are using block copies
     ptr_bin_1 = res.telemetry.binarized.ctypes.data
@@ -48,6 +49,7 @@ def test_telemetry_content():
     img[::2, ::2] = 255
 
     res = detector.detect(img, debug_telemetry=True)
+    assert res.telemetry is not None
     bin_img = res.telemetry.binarized
 
     # Basic sanity check on content

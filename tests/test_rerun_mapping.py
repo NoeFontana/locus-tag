@@ -20,8 +20,9 @@ class TestRerunMapping(unittest.TestCase):
 
             importlib.reload(tools.cli)
 
-            # Force RERUN_AVAILABLE to True for the test
-            tools.cli.RERUN_AVAILABLE = True
+            # After reload with `rerun` mocked in sys.modules, tools.cli.rr is
+            # the mock (not None) so the `--no-rerun` / install-hint guards
+            # in `visualize` fall through to the real path under test.
 
             from typer.testing import CliRunner
 

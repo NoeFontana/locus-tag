@@ -33,16 +33,16 @@ if _missing:
         f"Missing symbols: {_missing}"
     )
 
-# `bench-internals` symbols are conditionally compiled, so mypy can't see
-# them on the static module — the runtime guard above raises ImportError
-# before any of these assignments execute when the feature is off.
-estimate_image_noise = _native._bench_estimate_image_noise  # type: ignore[attr-defined]
-estimate_both_branches = _native._bench_estimate_both_branches  # type: ignore[attr-defined]
-refine_pose_lm_weighted_with_telemetry = _native._bench_refine_pose_lm_weighted_with_telemetry  # type: ignore[attr-defined]
-refit_pose_drop_corner = _native._bench_refit_pose_drop_corner  # type: ignore[attr-defined]
-corner_structure_tensor_eigenvalues = _native._bench_corner_structure_tensor_eigenvalues  # type: ignore[attr-defined]
-compute_corner_covariance = _native._bench_compute_corner_covariance  # type: ignore[attr-defined]
-estimate_tag_pose = _native._bench_estimate_tag_pose  # type: ignore[attr-defined]
+# `bench-internals` symbols are conditionally compiled, so the static type
+# checker can't see them on the module — the runtime guard above raises
+# ImportError before any of these assignments execute when the feature is off.
+estimate_image_noise = _native._bench_estimate_image_noise  # pyright: ignore[reportAttributeAccessIssue]
+estimate_both_branches = _native._bench_estimate_both_branches  # pyright: ignore[reportAttributeAccessIssue]
+refine_pose_lm_weighted_with_telemetry = _native._bench_refine_pose_lm_weighted_with_telemetry  # pyright: ignore[reportAttributeAccessIssue]
+refit_pose_drop_corner = _native._bench_refit_pose_drop_corner  # pyright: ignore[reportAttributeAccessIssue]
+corner_structure_tensor_eigenvalues = _native._bench_corner_structure_tensor_eigenvalues  # pyright: ignore[reportAttributeAccessIssue]
+compute_corner_covariance = _native._bench_compute_corner_covariance  # pyright: ignore[reportAttributeAccessIssue]
+estimate_tag_pose = _native._bench_estimate_tag_pose  # pyright: ignore[reportAttributeAccessIssue]
 
 __all__ = [
     "compute_corner_covariance",

@@ -7,10 +7,12 @@ import typer
 
 try:
     import rerun as rr
-
-    RERUN_AVAILABLE = True
 except ImportError:
-    RERUN_AVAILABLE = False
+    rr = None  # set when the optional `bench`/`rerun-sdk` extra is not installed
+
+_RERUN_INSTALL_HINT = (
+    "Rerun SDK not installed. Run `uv add rerun-sdk` or install with the `bench` group."
+)
 
 app = typer.Typer(help="Locus Developer CLI")
 bench_app = typer.Typer(help="Locus Unified Benchmarking")
@@ -26,6 +28,7 @@ def validate_dicts(
     Validate dictionary JSON files against a schema.
     """
     import jsonschema
+    import jsonschema.exceptions
 
     try:
         with open(schema) as f:
@@ -75,7 +78,7 @@ def visualize(
     ctx: typer.Context,
     limit: int | None = typer.Option(10, help="Limit number of images"),
     scenario: str = typer.Option("forward", help="Scenario to visualize"),
-    data_dir: Path = typer.Option(None, help="Custom data directory"),
+    data_dir: Path | None = typer.Option(None, help="Custom data directory"),
     tile_size: int = typer.Option(8, help="Threshold tile size"),
     min_area: int = typer.Option(16, help="Min quad area"),
     upscale: int = typer.Option(1, help="Upscale factor"),
@@ -93,26 +96,28 @@ def visualize(
 
     from tools.bench.utils import DatasetLoader
 
-    if rerun and not RERUN_AVAILABLE:
+    if not rerun:
         typer.echo(
-            "Error: Rerun SDK not installed. Run 'uv add rerun-sdk' or install with [bench] group.",
+            "Error: --no-rerun is not supported by `visualize` (Rerun is the visualization backend).",
             err=True,
         )
         raise typer.Exit(code=1)
+    if rr is None:
+        typer.echo(f"Error: {_RERUN_INSTALL_HINT}", err=True)
+        raise typer.Exit(code=1)
 
-    if rerun:
-        # Initialize Rerun with remote support (0.30.0 API)
-        rr.init("locus_debug_pipeline")
-        if rerun_serve:
-            rr.serve_web_viewer()
-        else:
-            # Ensure address has a scheme and /proxy pathname
-            url = rerun_addr
-            if "://" not in url:
-                url = f"rerun+http://{url}"
-            if not url.endswith("/proxy"):
-                url = url.rstrip("/") + "/proxy"
-            rr.connect_grpc(url)
+    # Initialize Rerun with remote support (0.30.0 API)
+    rr.init("locus_debug_pipeline")
+    if rerun_serve:
+        rr.serve_web_viewer()
+    else:
+        # Ensure address has a scheme and /proxy pathname
+        url = rerun_addr
+        if "://" not in url:
+            url = f"rerun+http://{url}"
+        if not url.endswith("/proxy"):
+            url = url.rstrip("/") + "/proxy"
+        rr.connect_grpc(url)
 
     # Use custom data dir or default cache
     from tools.bench.utils import ICRA_CACHE_DIR
@@ -165,9 +170,9 @@ def visualize(
             rr.log("pipeline/0_input", rr.Image(img))
 
             gt_tags = gt_map.get(img_name, [])
+            gt_strips: list[np.ndarray] = []
+            gt_labels: list[str] = []
             if gt_tags:
-                gt_strips = []
-                gt_labels = []
                 for gt in gt_tags:
                     c = np.vstack([gt.corners, gt.corners[0]])
                     gt_strips.append(c)
@@ -333,7 +338,7 @@ def visualize(
 def bench_real(
     scenarios: list[str] = typer.Option(["forward"], help="Scenarios to run"),
     hub_config: str | None = typer.Option(None, help="Hugging Face Hub configuration to run"),
-    data_dir: Path = typer.Option(None, help="Custom data directory"),
+    data_dir: Path | None = typer.Option(None, help="Custom data directory"),
     types: list[str] = typer.Option(["tags"], help="Dataset types (tags, checkerboard)"),
     limit: int | None = typer.Option(None, help="Limit number of images"),
     skip: int = typer.Option(0, help="Skip first N images"),
@@ -392,11 +397,8 @@ def bench_real(
         locus.init_tracy()
 
     if rerun:
-        if not RERUN_AVAILABLE:
-            typer.echo(
-                "Error: Rerun SDK not installed. Run 'uv add rerun-sdk' or install with [bench] group.",
-                err=True,
-            )
+        if rr is None:
+            typer.echo(f"Error: {_RERUN_INSTALL_HINT}", err=True)
             raise typer.Exit(code=1)
 
         rr.init("locus_bench_real")

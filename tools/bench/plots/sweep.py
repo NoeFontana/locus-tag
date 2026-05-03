@@ -73,13 +73,17 @@ def _binned_metric(
     edges = _quantile_bins(sub[axis].to_numpy(), n_bins)
     if len(edges) < 3:
         return pd.DataFrame()
-    sub["bin_idx"] = pd.cut(  # type: ignore[call-overload]
-        sub[axis], bins=edges, include_lowest=True, labels=False, duplicates="drop"
+    sub["bin_idx"] = pd.cut(  # pyright: ignore[reportCallIssue]
+        sub[axis],
+        bins=edges,  # pyright: ignore[reportArgumentType]
+        include_lowest=True,
+        labels=False,
+        duplicates="drop",
     )
 
     rows = []
     for key, grp in sub.groupby(["binary", "resolution_h", "bin_idx"]):
-        binary, res, bin_idx = key  # type: ignore[misc]
+        binary, res, bin_idx = key
         if pd.isna(bin_idx):
             continue
         bin_idx = int(bin_idx)
@@ -137,7 +141,7 @@ def plot(
         ax = axes[0][ax_idx]
         for binary in binaries:
             sub = binned[(binned["resolution_h"] == res) & (binned["binary"] == binary)]
-            sub = sub.sort_values("bin_mid")
+            sub = sub.sort_values("bin_mid")  # pyright: ignore[reportCallIssue]
             if sub.empty:
                 continue
             ax.plot(
