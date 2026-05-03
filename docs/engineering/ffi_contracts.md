@@ -94,7 +94,6 @@ All configuration validation happens in `DetectorConfig::validate()` at
 | `quad_min_edge_length > 0.0` | `config.rs:255-257` | `InvalidEdgeLength` |
 | `structure_tensor_radius <= 8` | `config.rs:258-262` | `InvalidStructureTensorRadius` |
 | `quad_extraction_mode == EdLines` ⇒ `refinement_mode != Erf` | `config.rs:263-266` | `EdLinesIncompatibleWithErf` |
-| `quad_extraction_mode == EdLines` ⇒ `decode_mode != Soft` | `config.rs:267-269` | `EdLinesIncompatibleWithSoftDecode` |
 
 ### Fields with **no** runtime validation
 

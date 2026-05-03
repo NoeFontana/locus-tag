@@ -71,7 +71,7 @@ fn edlines_with_erf_rejected_by_validate() {
         },
         "decoder": {
             "min_contrast": 20.0, "refinement_mode": "Erf",
-            "decode_mode": "Hard", "max_hamming_error": 2,
+            "max_hamming_error": 2,
             "gwlf_transversal_alpha": 0.01
         }
     }"#;

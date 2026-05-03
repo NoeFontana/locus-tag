@@ -57,7 +57,7 @@ pub(crate) mod segmentation;
 pub(crate) mod simd;
 /// SIMD-Accelerated Connected Components Labeling (CCL).
 pub(crate) mod simd_ccl_fusion;
-/// Decoding strategies (Hard vs Soft).
+/// Hard-decision Hamming decoding.
 pub(crate) mod strategy;
 /// Utilities for testing and synthetic data generation.
 #[cfg(any(test, feature = "bench-internals"))]
@@ -74,8 +74,8 @@ pub use crate::board::{AprilGridTopology, BoardConfigError, CharucoTopology};
 pub use crate::camera::{BrownConradyModel, KannalaBrandtModel};
 pub use crate::camera::{CameraModel, PinholeModel};
 pub use crate::config::{
-    CornerRefinementMode, DecodeMode, DetectOptions, DetectorConfig, PoseEstimationMode,
-    QuadExtractionMode, TagFamily,
+    CornerRefinementMode, DetectOptions, DetectorConfig, PoseEstimationMode, QuadExtractionMode,
+    TagFamily,
 };
 pub use crate::detector::{Detector, DetectorBuilder, FrameContext, LocusEngine};
 pub use crate::error::{ConfigError, DetectorError};

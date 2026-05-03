@@ -56,13 +56,6 @@ pub enum ConfigError {
          CornerRefinementMode::Gwlf with EdLines"
     )]
     EdLinesIncompatibleWithErf,
-    /// EdLines is statistically incompatible with Soft (LLR) decoding.
-    ///
-    /// EdLines produces a large number of background line-segment candidates.
-    /// Soft decoding forces deep probabilistic evaluation of all of them,
-    /// causing a 10–22% precision collapse compared to Hard decoding.
-    #[error("EdLines + Soft decoding are incompatible: use DecodeMode::Hard with EdLines")]
-    EdLinesIncompatibleWithSoftDecode,
     /// EdLines is geometrically incompatible with distorted cameras.
     ///
     /// EdLines' Huber IRLS line fit, micro-ray parabola, and GN refinement all

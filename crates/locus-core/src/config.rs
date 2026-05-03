@@ -34,16 +34,6 @@ pub enum CornerRefinementMode {
     Gwlf,
 }
 
-/// Mode for decoding strategy.
-#[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum DecodeMode {
-    /// Hard-decision decoding using Hamming distance (fastest).
-    Hard,
-    /// Soft-decision decoding using Log-Likelihood Ratios (better for noise/blur).
-    Soft,
-}
-
 /// Mode for 3D pose estimation quality.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -250,8 +240,6 @@ pub struct DetectorConfig {
     pub decoder_min_contrast: f64,
     /// Strategy for refining corner positions (default: Edge).
     pub refinement_mode: CornerRefinementMode,
-    /// Decoding mode (Hard vs Soft).
-    pub decode_mode: DecodeMode,
     /// Maximum number of Hamming errors allowed for tag decoding.
     ///
     /// `None` (the default) defers to each registered family's
@@ -422,7 +410,6 @@ impl Default for DetectorConfig {
             nthreads: 0,
             decoder_min_contrast: 20.0,
             refinement_mode: CornerRefinementMode::Erf,
-            decode_mode: DecodeMode::Hard,
             max_hamming_error: None,
             huber_delta_px: 1.5,
             tikhonov_alpha_max: 0.25,
@@ -495,13 +482,10 @@ impl DetectorConfig {
                 self.pose_consistency_min_decisive_ratio,
             ));
         }
-        if self.quad_extraction_mode == QuadExtractionMode::EdLines {
-            if self.refinement_mode == CornerRefinementMode::Erf {
-                return Err(ConfigError::EdLinesIncompatibleWithErf);
-            }
-            if self.decode_mode == DecodeMode::Soft {
-                return Err(ConfigError::EdLinesIncompatibleWithSoftDecode);
-            }
+        if self.quad_extraction_mode == QuadExtractionMode::EdLines
+            && self.refinement_mode == CornerRefinementMode::Erf
+        {
+            return Err(ConfigError::EdLinesIncompatibleWithErf);
         }
         if let QuadExtractionPolicy::AdaptivePpb(ref p) = self.quad_extraction_policy {
             if p.low_extraction == p.high_extraction {
@@ -510,18 +494,12 @@ impl DetectorConfig {
             if !(p.threshold > 1.0 && p.threshold < 5.0) {
                 return Err(ConfigError::AdaptivePolicyThresholdOutOfRange(p.threshold));
             }
-            // Re-apply per-route EdLines incompatibilities.
             for (ext, refine) in [
                 (p.low_extraction, p.low_refinement),
                 (p.high_extraction, p.high_refinement),
             ] {
-                if ext == QuadExtractionMode::EdLines {
-                    if refine == CornerRefinementMode::Erf {
-                        return Err(ConfigError::EdLinesIncompatibleWithErf);
-                    }
-                    if self.decode_mode == DecodeMode::Soft {
-                        return Err(ConfigError::EdLinesIncompatibleWithSoftDecode);
-                    }
+                if ext == QuadExtractionMode::EdLines && refine == CornerRefinementMode::Erf {
+                    return Err(ConfigError::EdLinesIncompatibleWithErf);
                 }
             }
         }
@@ -573,8 +551,6 @@ pub struct DetectorConfigBuilder {
     pub decoder_min_contrast: Option<f64>,
     /// Refinement mode.
     pub refinement_mode: Option<CornerRefinementMode>,
-    /// Decoding mode.
-    pub decode_mode: Option<DecodeMode>,
     /// Maximum Hamming errors.
     pub max_hamming_error: Option<u32>,
     /// GWLF transversal alpha.
@@ -735,7 +711,6 @@ impl DetectorConfigBuilder {
             nthreads: 0,   // Default to 0
             decoder_min_contrast: self.decoder_min_contrast.unwrap_or(d.decoder_min_contrast),
             refinement_mode: self.refinement_mode.unwrap_or(d.refinement_mode),
-            decode_mode: self.decode_mode.unwrap_or(d.decode_mode),
             max_hamming_error: self.max_hamming_error.or(d.max_hamming_error),
             huber_delta_px: self.huber_delta_px.unwrap_or(d.huber_delta_px),
             tikhonov_alpha_max: self.tikhonov_alpha_max.unwrap_or(d.tikhonov_alpha_max),
@@ -804,13 +779,6 @@ impl DetectorConfigBuilder {
     #[must_use]
     pub fn refinement_mode(mut self, mode: CornerRefinementMode) -> Self {
         self.refinement_mode = Some(mode);
-        self
-    }
-
-    /// Set the decoding mode (Hard or Soft).
-    #[must_use]
-    pub fn decode_mode(mut self, mode: DecodeMode) -> Self {
-        self.decode_mode = Some(mode);
         self
     }
 
@@ -1077,8 +1045,8 @@ impl DetectOptionsBuilder {
 #[cfg(feature = "profiles")]
 mod profile_json {
     use super::{
-        CornerRefinementMode, DecodeMode, DetectorConfig, EdLinesImbalanceGatePolicy,
-        QuadExtractionMode, SegmentationConnectivity,
+        CornerRefinementMode, DetectorConfig, EdLinesImbalanceGatePolicy, QuadExtractionMode,
+        SegmentationConnectivity,
     };
     use serde::Deserialize;
 
@@ -1177,7 +1145,6 @@ mod profile_json {
     pub(super) struct DecoderJson {
         pub min_contrast: f64,
         pub refinement_mode: CornerRefinementMode,
-        pub decode_mode: DecodeMode,
         #[serde(default)]
         pub max_hamming_error: Option<u32>,
         pub gwlf_transversal_alpha: f64,
@@ -1194,7 +1161,6 @@ mod profile_json {
             Self {
                 min_contrast: d.decoder_min_contrast,
                 refinement_mode: d.refinement_mode,
-                decode_mode: d.decode_mode,
                 max_hamming_error: d.max_hamming_error,
                 gwlf_transversal_alpha: d.gwlf_transversal_alpha,
                 post_decode_refinement: d.post_decode_refinement,
@@ -1294,7 +1260,6 @@ mod profile_json {
                 nthreads: d.nthreads,
                 decoder_min_contrast: p.decoder.min_contrast,
                 refinement_mode: p.decoder.refinement_mode,
-                decode_mode: p.decoder.decode_mode,
                 max_hamming_error: p.decoder.max_hamming_error,
                 huber_delta_px: p.pose.huber_delta_px,
                 tikhonov_alpha_max: p.pose.tikhonov_alpha_max,
@@ -1609,25 +1574,6 @@ mod tests {
         assert!(matches!(
             config.validate(),
             Err(crate::error::ConfigError::EdLinesIncompatibleWithErf)
-        ));
-    }
-
-    #[test]
-    fn test_adaptive_ppb_per_route_edlines_soft_rejected() {
-        let config = DetectorConfig {
-            decode_mode: DecodeMode::Soft,
-            quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
-                low_extraction: QuadExtractionMode::EdLines,
-                high_extraction: QuadExtractionMode::ContourRdp,
-                low_refinement: CornerRefinementMode::None,
-                high_refinement: CornerRefinementMode::Edge,
-                threshold: 2.5,
-            }),
-            ..DetectorConfig::default()
-        };
-        assert!(matches!(
-            config.validate(),
-            Err(crate::error::ConfigError::EdLinesIncompatibleWithSoftDecode)
         ));
     }
 

@@ -26,7 +26,7 @@ def test_compute_recall(tp: int, fn: int, expected: float) -> None:
         (0, 0, 0.0),  # vacuous: no detections → 0
         (5, 0, 1.0),  # perfect precision
         (0, 5, 0.0),  # all false positives
-        (1, 99, 0.01),  # the canonical "Locus Soft" pattern
+        (1, 99, 0.01),  # mostly false positives
     ],
 )
 def test_compute_precision(tp: int, fp: int, expected: float) -> None:

@@ -443,42 +443,25 @@ def bench_real(
     loader = DatasetLoader(icra_dir=icra_dir)
     wrappers: list[LibraryWrapper] = []
 
-    # Common detector config — derived from the shipped `standard` profile
-    # with CLI-level overrides applied at the nested-group level. Enum values
-    # round-trip through Pydantic as PyO3 variant instances.
-    def _build_cli_config(decode_mode: locus.DecodeMode) -> locus.DetectorConfig:
-        base = locus.DetectorConfig.from_profile("standard").model_dump()
-        base["threshold"]["tile_size"] = tile_size
-        base["threshold"]["constant"] = constant
-        base["threshold"]["min_range"] = min_range
-        base["quad"]["min_fill_ratio"] = min_fill
-        base["quad"]["min_edge_score"] = min_edge_score
-        base["decoder"]["max_hamming_error"] = max_hamming
-        base["decoder"]["refinement_mode"] = refinement_mode
-        base["decoder"]["decode_mode"] = decode_mode
-        return locus.DetectorConfig.model_validate(base)
-
-    # Soft mode
-    soft_detector = locus.Detector(
-        config=_build_cli_config(locus.DecodeMode.Soft), families=[tag_family_int]
+    # Derived from the shipped `standard` profile, with CLI-level overrides
+    # applied at the nested-group level. Enum values round-trip through
+    # Pydantic as PyO3 variant instances.
+    base = locus.DetectorConfig.from_profile("standard").model_dump()
+    base["threshold"]["tile_size"] = tile_size
+    base["threshold"]["constant"] = constant
+    base["threshold"]["min_range"] = min_range
+    base["quad"]["min_fill_ratio"] = min_fill
+    base["quad"]["min_edge_score"] = min_edge_score
+    base["decoder"]["max_hamming_error"] = max_hamming
+    base["decoder"]["refinement_mode"] = refinement_mode
+    detector = locus.Detector(
+        config=locus.DetectorConfig.model_validate(base),
+        families=[tag_family_int],
     )
     wrappers.append(
         LocusWrapper(
-            name="Locus (Soft)",
-            detector=soft_detector,
-            decimation=decimation,
-            family=tag_family_int,
-        )
-    )
-
-    # Hard mode
-    hard_detector = locus.Detector(
-        config=_build_cli_config(locus.DecodeMode.Hard), families=[tag_family_int]
-    )
-    wrappers.append(
-        LocusWrapper(
-            name="Locus (Hard)",
-            detector=hard_detector,
+            name="Locus",
+            detector=detector,
             decimation=decimation,
             family=tag_family_int,
         )

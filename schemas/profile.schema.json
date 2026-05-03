@@ -54,14 +54,6 @@
     "DecoderConfig": {
       "additionalProperties": false,
       "properties": {
-        "decode_mode": {
-          "enum": [
-            "Hard",
-            "Soft"
-          ],
-          "title": "Decode Mode",
-          "type": "string"
-        },
         "gwlf_transversal_alpha": {
           "default": 0.01,
           "minimum": 0.0,

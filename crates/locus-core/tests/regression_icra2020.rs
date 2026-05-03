@@ -30,22 +30,6 @@ mod common;
 /// `decoder.min_contrast` on top of the `grid` profile.
 const ICRA_GRID_JSON: &str = include_str!("fixtures/icra_grid.json");
 
-/// ICRA 2020 community-benchmark fixture — Soft decode + tile_size=4
-/// for `forward/pure_tags_images`. The ICRA 2020 fiducial dataset is a
-/// long-standing research benchmark used in the AprilTag / fiducial-
-/// marker literature; this fixture lets researchers reproduce
-/// literature-comparable numbers on it. NOT a shipped profile: Soft
-/// decode trades precision for recall (+20.2 pp on this dataset's
-/// imaging characteristics, +26 false positives per image on Soft
-/// alone, dropping to ~20 with tile_size=4) and would collapse on
-/// data with PSF (real cameras, Blender-rendered hub data) per
-/// `lessons.md` §3.2 / §5.5 / §7. The fixture knobs (Soft + tile_size=4)
-/// were picked from a sweep documented in lessons.md §7; the negative
-/// results (min_area=20 had zero effect; min_area+tile_size combined
-/// was dominated by tile_size alone) are recorded there rather than
-/// pinned as ongoing snapshots.
-const ICRA_SYNTHETIC_JSON: &str = include_str!("fixtures/icra_synthetic.json");
-
 // ============================================================================
 // Metrics & Reporting
 // ============================================================================
@@ -134,11 +118,6 @@ impl RegressionHarness {
     pub fn with_profile_json(mut self, json: &str) -> Self {
         self.config =
             DetectorConfig::from_profile_json(json).expect("embedded test fixture must parse");
-        self
-    }
-
-    pub fn with_decode_mode(mut self, mode: locus_core::config::DecodeMode) -> Self {
-        self.config.decode_mode = mode;
         self
     }
 
@@ -691,26 +670,6 @@ fn regression_icra_forward_grid() {
         let snapshot = "icra_forward_checkerboard_grid".to_string();
         RegressionHarness::new(snapshot)
             .with_profile_json(ICRA_GRID_JSON)
-            .with_families(vec![TagFamily::AprilTag36h11])
-            .run(provider);
-    }
-}
-
-// ── ICRA community-benchmark fixture ──────────────────────────────────────────
-//
-// Published recall on `forward/pure_tags_images` for community comparison
-// against the original ICRA 2020 paper's numbers. NOT a production
-// configuration — Soft decode + relaxed gates trade precision for recall on
-// ICRA's research-renderer imagery and would collapse on real-camera data
-// (lessons.md §3.2 / §5.5 / §7).
-
-#[test]
-fn regression_icra_forward_synthetic() {
-    let _guard = common::telemetry::init("regression_icra_forward_synthetic");
-    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
-        let snapshot = "icra_forward_synthetic".to_string();
-        RegressionHarness::new(snapshot)
-            .with_profile_json(ICRA_SYNTHETIC_JSON)
             .with_families(vec![TagFamily::AprilTag36h11])
             .run(provider);
     }

@@ -70,24 +70,6 @@ def test_config_object():
     assert overridden.quad.min_area == 500
 
 
-def test_soft_decoding():
-    """Verify that Detector can be instantiated and run with DecodeMode.Soft."""
-    cfg = locus.DetectorConfig.from_profile("standard")
-    cfg_dict = cfg.model_dump()
-    cfg_dict["decoder"]["decode_mode"] = "Soft"
-    detector = locus.Detector(config=locus.DetectorConfig.model_validate(cfg_dict))
-    assert detector is not None
-
-    # Create a dummy image
-    img = np.zeros((100, 100), dtype=np.uint8)
-    img[20:80, 20:80] = 255
-    img[30:70, 30:70] = 0
-
-    # Run detection
-    batch = detector.detect(img)
-    assert isinstance(batch, locus.DetectionBatch)
-
-
 def test_vectorized_poses():
     """Verify that 3D poses are returned in the compact (N, 7) format."""
     # Create an ArUco tag

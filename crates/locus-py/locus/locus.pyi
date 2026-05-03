@@ -28,10 +28,6 @@ class CornerRefinementMode(enum.IntEnum):
     Erf = 2
     Gwlf = 3
 
-class DecodeMode(enum.IntEnum):
-    Hard = 0
-    Soft = 1
-
 class PoseEstimationMode(enum.IntEnum):
     Fast = 0
     Accurate = 1
@@ -108,7 +104,6 @@ class PyDetectorConfig:
     upscale_factor: int
     decoder_min_contrast: float
     refinement_mode: CornerRefinementMode
-    decode_mode: DecodeMode
     max_hamming_error: int | None
     gwlf_transversal_alpha: float
     quad_max_elongation: float
@@ -152,7 +147,6 @@ class PyDetectorConfig:
         upscale_factor: int,
         decoder_min_contrast: float,
         refinement_mode: CornerRefinementMode,
-        decode_mode: DecodeMode,
         max_hamming_error: int | None,
         gwlf_transversal_alpha: float,
         quad_max_elongation: float,
@@ -364,7 +358,6 @@ class DetectorBuilder:
     def with_family(self, family: TagFamily) -> DetectorBuilder: ...
     def with_upscale_factor(self, factor: int) -> DetectorBuilder: ...
     def with_corner_refinement(self, mode: CornerRefinementMode) -> DetectorBuilder: ...
-    def with_decode_mode(self, mode: DecodeMode) -> DetectorBuilder: ...
     def with_connectivity(self, connectivity: SegmentationConnectivity) -> DetectorBuilder: ...
     def with_threshold_tile_size(self, size: int) -> DetectorBuilder: ...
     def with_threshold_min_range(self, range: int) -> DetectorBuilder: ...

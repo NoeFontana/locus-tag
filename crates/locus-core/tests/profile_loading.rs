@@ -15,7 +15,7 @@
 )]
 
 use locus_core::config::{
-    AdaptivePpbConfig, CornerRefinementMode, DecodeMode, DetectorConfig, QuadExtractionMode,
+    AdaptivePpbConfig, CornerRefinementMode, DetectorConfig, QuadExtractionMode,
     QuadExtractionPolicy, SegmentationConnectivity,
 };
 
@@ -67,7 +67,6 @@ fn standard_profile_matches_former_builder() {
     assert_eq!(cfg.quad_min_edge_score, 4.0);
     assert_eq!(cfg.refinement_mode, CornerRefinementMode::Erf);
     assert_eq!(cfg.decoder_min_contrast, 20.0);
-    assert_eq!(cfg.decode_mode, DecodeMode::Hard);
     assert_eq!(cfg.quad_extraction_mode, QuadExtractionMode::ContourRdp);
     assert_eq!(
         cfg.segmentation_connectivity,
@@ -91,7 +90,6 @@ fn grid_profile_matches_former_builder() {
     assert_eq!(cfg.quad_min_edge_score, 2.0);
     assert_eq!(cfg.refinement_mode, CornerRefinementMode::Erf);
     assert_eq!(cfg.decoder_min_contrast, 10.0);
-    assert_eq!(cfg.decode_mode, DecodeMode::Hard);
     assert_eq!(cfg.quad_extraction_mode, QuadExtractionMode::ContourRdp);
     assert_eq!(
         cfg.segmentation_connectivity,
@@ -115,7 +113,6 @@ fn high_accuracy_profile_routes_low_ppb_to_contour_rdp() {
     assert_eq!(cfg.quad_min_edge_score, 4.0);
     assert_eq!(cfg.refinement_mode, CornerRefinementMode::None);
     assert_eq!(cfg.decoder_min_contrast, 20.0);
-    assert_eq!(cfg.decode_mode, DecodeMode::Hard);
     assert_eq!(cfg.quad_extraction_mode, QuadExtractionMode::EdLines);
     assert_eq!(
         cfg.segmentation_connectivity,
@@ -177,7 +174,6 @@ fn max_recall_adaptive_profile_enables_adaptive_router() {
     // Runtime-overridden fields still round-trip (readable via debug tools).
     assert_eq!(cfg.quad_extraction_mode, QuadExtractionMode::ContourRdp);
     assert_eq!(cfg.refinement_mode, CornerRefinementMode::Erf);
-    assert_eq!(cfg.decode_mode, DecodeMode::Hard);
     assert_eq!(
         cfg.segmentation_connectivity,
         SegmentationConnectivity::Eight

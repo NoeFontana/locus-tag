@@ -7,6 +7,11 @@ optimization (Mar–Apr 2026). It supersedes
 reports — what survives below is the part that should still inform
 future work even after the surrounding numbers go stale.
 
+> **Note (2026-05-03):** Soft decode (`DecodeMode::Soft`) was removed
+> from the codebase entirely. The Soft-vs-Hard analysis below is kept
+> as historical context — the lesson is preserved so the rationale for
+> rejecting LLR-based decoding on real-camera data isn't relearned.
+
 For current numbers, see `release_performance_20260418.md`,
 `hub_regression_20260423.md`, `render_tag_sota_20260425.md`,
 `render_tag_2160p_20260425.md`, and `quad_truncation_fix_20260426.md`.

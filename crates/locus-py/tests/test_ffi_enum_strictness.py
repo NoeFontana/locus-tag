@@ -17,7 +17,6 @@ def _base_kwargs() -> dict:
     [
         "quad_extraction_mode",
         "refinement_mode",
-        "decode_mode",
         "segmentation_connectivity",
     ],
 )

@@ -24,7 +24,6 @@ from .locus import (
     CharucoEstimateResult,
     CharucoTelemetryResult,
     CornerRefinementMode,
-    DecodeMode,
     DetectionResult,
     DetectorBuilder,
     EdLinesImbalanceGatePolicy,
@@ -258,7 +257,6 @@ class Detector:
             decoder=DecoderConfig(
                 min_contrast=raw.decoder_min_contrast,
                 refinement_mode=raw.refinement_mode,
-                decode_mode=raw.decode_mode,
                 max_hamming_error=raw.max_hamming_error,
                 gwlf_transversal_alpha=raw.gwlf_transversal_alpha,
             ),
@@ -394,7 +392,6 @@ __all__ = [
     "CharucoRefiner",
     "CharucoTelemetryResult",
     "CornerRefinementMode",
-    "DecodeMode",
     "DetectOptions",
     "DetectionBatch",
     "DetectionResult",

@@ -33,7 +33,6 @@ Load a shipped profile, edit the relevant nested group, then pass it back:
 ```python
 base = locus.DetectorConfig.from_profile("standard").model_dump()
 base["threshold"]["tile_size"] = 16               # larger tiles run faster
-base["decoder"]["decode_mode"] = "Soft"           # +10-15% recall on blurry tags
 base["decoder"]["min_contrast"] = 10.0
 
 custom = locus.DetectorConfig.model_validate(base)
@@ -42,7 +41,7 @@ detector = locus.Detector(config=custom)
 
 `model_validate` runs the full invariant suite — radius ordering, fill-ratio
 ordering, and the cross-group compatibility checks (e.g. `EdLines` refuses
-`Erf` refinement or `Soft` decode) — so any inconsistency surfaces as a
+`Erf` refinement) — so any inconsistency surfaces as a
 `pydantic.ValidationError` before the Rust detector is constructed.
 
 ## Loading a custom profile from JSON
@@ -58,28 +57,6 @@ with open("my_profile.json") as f:
 The shipped `standard.json` is a good starting template; copy it, edit the
 nested groups, and load the copy. The JSON Schema at
 `schemas/profile.schema.json` powers editor autocomplete.
-
-## Soft-Decision Decoding (Maximum Recall)
-
-For challenging conditions where tags are tiny, blurry, or noisy, Locus
-supports **Soft-Decision Decoding**. This mode uses Log-Likelihood Ratios
-(LLRs) instead of hard bit-binarization, typically providing a **+10-15%
-recall boost** on difficult datasets.
-
-```python
-# Enable Soft-Decision mode via a tweaked config.
-base = locus.DetectorConfig.from_profile("standard").model_dump()
-base["decoder"]["decode_mode"] = "Soft"
-base["decoder"]["min_contrast"] = 10.0            # capture faint tags
-
-detector = locus.Detector(config=locus.DetectorConfig.model_validate(base))
-tags = detector.detect(img)
-```
-
-| Mode | Use Case | Latency |
-| :--- | :--- | :--- |
-| `Hard` (Default) | High Resolution / Clean Imagery. | Minimum latency. |
-| `Soft` | Small / Blurry / Noisy Tags. | ~20% overhead. |
 
 ## Specialized Profiles
 

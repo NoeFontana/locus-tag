@@ -66,11 +66,6 @@ harness = false
 required-features = ["bench-internals"]
 
 [[bench]]
-name = "soft_decoding_bench"
-harness = false
-required-features = ["bench-internals"]
-
-[[bench]]
 name = "segmentation_bench"
 harness = false
 required-features = ["bench-internals"]

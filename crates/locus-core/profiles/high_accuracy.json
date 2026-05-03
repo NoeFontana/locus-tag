@@ -37,7 +37,6 @@
   "decoder": {
     "min_contrast": 20.0,
     "refinement_mode": "None",
-    "decode_mode": "Hard",
     "gwlf_transversal_alpha": 0.01
   },
   "pose": {

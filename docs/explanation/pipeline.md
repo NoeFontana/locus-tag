@@ -121,12 +121,7 @@ Before expensive bit sampling, an $O(1)$ contrast gate rejects candidates lackin
 
 ### 4c. Bit Sampling & Decoding
 
-For surviving candidates, the homography DDA incrementally generates sample coordinates in image space. Two strategies are available:
-
-| Strategy | Mechanism | Module |
-| :--- | :--- | :--- |
-| **Hard-Decision** | Direct intensity thresholding. $O(1)$ dictionary lookup via precomputed tables. | `decoder.rs`, `strategy.rs` |
-| **Soft-Decision** | Log-Likelihood Ratio (LLR) extraction with Maximum Likelihood search via Multi-Index Hashing (MIH). Sub-linear dictionary search. | `decoder.rs`, `strategy.rs` |
+For surviving candidates, the homography DDA incrementally generates sample coordinates in image space. Decoding uses **Hard-Decision** thresholding: direct intensity comparison against the local threshold, then $O(1)$ dictionary lookup via precomputed tables (`decoder.rs`, `strategy.rs`).
 
 Sampling uses SIMD-accelerated bilinear interpolation with hardware reciprocal approximation (`rcp_nr`) and vectorized FMA. The ROI caching system copies small-tag regions to contiguous stack buffers (or arena buffers for large tags) to minimize L1 cache misses.
 
@@ -222,7 +217,7 @@ sequenceDiagram
     loop For each surviving candidate
         Decode->>Geom: DDA Coordinate Generation
         Geom-->>Decode: Sample Coordinates
-        Decode->>Decode: Bit/LLR Extraction + Error Correction
+        Decode->>Decode: Bit Extraction + Hamming Error Correction
     end
 
     opt If Intrinsics Provided

@@ -29,7 +29,6 @@
   "decoder": {
     "min_contrast": 10.0,
     "refinement_mode": "Erf",
-    "decode_mode": "Hard",
     "gwlf_transversal_alpha": 0.01
   },
   "pose": {

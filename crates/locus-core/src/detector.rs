@@ -667,13 +667,6 @@ impl DetectorBuilder {
         self
     }
 
-    /// Set the decoding mode (Hard vs Soft).
-    #[must_use]
-    pub fn with_decode_mode(mut self, mode: crate::config::DecodeMode) -> Self {
-        self.config.decode_mode = mode;
-        self
-    }
-
     /// Set the segmentation connectivity (4-way or 8-way).
     #[must_use]
     pub fn with_connectivity(
@@ -823,7 +816,7 @@ impl DetectorBuilder {
     /// # Errors
     ///
     /// Returns [`ConfigError`] if the configuration is invalid (e.g., incompatible
-    /// `quad_extraction_mode` + `refinement_mode` or `decode_mode` combination).
+    /// `quad_extraction_mode` + `refinement_mode` combination).
     pub fn validated_build(self) -> Result<Detector, crate::error::ConfigError> {
         self.config.validate()?;
         Ok(self.build())
@@ -1044,7 +1037,7 @@ impl LocusEngine {
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::config::{CornerRefinementMode, DecodeMode, PoseEstimationMode, QuadExtractionMode};
+    use crate::config::{CornerRefinementMode, PoseEstimationMode, QuadExtractionMode};
     use crate::error::ConfigError;
     use crate::pose::CameraIntrinsics;
 
@@ -1053,7 +1046,6 @@ mod tests {
         let config = DetectorConfig::builder()
             .quad_extraction_mode(QuadExtractionMode::EdLines)
             .refinement_mode(CornerRefinementMode::None)
-            .decode_mode(DecodeMode::Hard)
             .build();
 
         let mut detector = Detector::with_config(config);
@@ -1087,7 +1079,6 @@ mod tests {
         let config = DetectorConfig::builder()
             .quad_extraction_mode(QuadExtractionMode::EdLines)
             .refinement_mode(CornerRefinementMode::None)
-            .decode_mode(DecodeMode::Hard)
             .build();
 
         let mut detector = Detector::with_config(config);

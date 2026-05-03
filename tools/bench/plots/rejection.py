@@ -41,7 +41,7 @@ def plot(
 ) -> Path:
     """Render the rejection-composition plot to ``out_path``.
 
-    If ``binary`` is given, restrict to that wrapper (e.g. ``"Locus (Hard)"``).
+    If ``binary`` is given, restrict to that wrapper (e.g. ``"Locus"``).
     Otherwise pool all binaries that produced rejected_quad records.
     """
     sub = df[df["record_kind"] == "rejected_quad"].copy()

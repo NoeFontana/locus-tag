@@ -321,14 +321,6 @@ class TestDetectorConfigValidation:
         with pytest.raises(Exception, match=r"EdLines"):
             locus.DetectorConfig.model_validate(base)
 
-    def test_edlines_soft_incompatible(self) -> None:
-        base = locus.DetectorConfig.from_profile("standard").model_dump()
-        base["quad"]["extraction_mode"] = "EdLines"
-        base["decoder"]["refinement_mode"] = "Gwlf"
-        base["decoder"]["decode_mode"] = "Soft"
-        with pytest.raises(Exception, match=r"EdLines"):
-            locus.DetectorConfig.model_validate(base)
-
 
 # ---------------------------------------------------------------------------
 # §4 Detector constructor

@@ -320,19 +320,7 @@ This encodes the full translational and rotational uncertainty and is returned a
 
 **Module:** `decoder.rs`, `strategy.rs`
 
-### 6.1 Hard-Decision
-
 Each bit cell is sampled at its grid center via the homography DDA. The sampled intensity is compared against the local adaptive threshold to produce a binary code. Dictionary lookup is $O(1)$ via precomputed Hamming distance tables.
-
-### 6.2 Soft-Decision (LLR + MIH)
-
-Instead of binarizing, each bit's **Log-Likelihood Ratio** is computed:
-
-$$\text{LLR}_j = \log \frac{P(\text{bit}_j = 1 \mid I_j)}{P(\text{bit}_j = 0 \mid I_j)}$$
-
-The Maximum Likelihood codeword is found via **Multi-Index Hashing (MIH)**: the code is split into $k$ substrings, each indexing into a hash table of dictionary entries. Candidates from matching substrings are scored using the full LLR vector. This achieves sub-linear search over the dictionary with early-exit pruning.
-
-The implementation is zero-allocation (stack-allocated `SoftCode`) and uses `SmallVec`-style fixed buffers.
 
 ---
 
