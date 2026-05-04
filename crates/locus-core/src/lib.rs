@@ -51,6 +51,8 @@ pub(crate) mod pose_weighted;
 pub(crate) mod post_decode_refinement;
 /// Quad extraction and geometric primitives.
 pub(crate) mod quad;
+/// S3 — gradient-anchor walk Phase 1-5 replacement for EdLines (opt-in).
+pub(crate) mod s3_anchor_walk;
 /// Connected components labeling using Union-Find.
 pub(crate) mod segmentation;
 /// SIMD optimized mathematical kernels.

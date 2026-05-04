@@ -351,6 +351,113 @@ def fit_segment_subpixel(
 
 
 # ---------------------------------------------------------------------------
+# Stage G — Phase-3-style perpendicular refinement of Stage E lines
+# ---------------------------------------------------------------------------
+
+
+def perpendicular_refinement(
+    gray: np.ndarray,
+    line: tuple[float, float, float, float, float, float],
+    seg_xy: np.ndarray,
+    bbox: tuple[int, int, int, int],
+    sample_step: float = 1.0,
+    search_half_width: float = 2.5,
+    grad_min_mag: float = 8.0,
+) -> tuple[float, float, float, float, float, float]:
+    """Sweep along Stage E's line tangent at `sample_step` spacing; at each
+    probe, fit a 3-point parabola to |∇y I| values along the line *normal*
+    within ±search_half_width pixels; refit the line to all dense sub-pixel
+    points.
+
+    The tangent extent is the projection of the bbox corners onto the line
+    tangent (so we walk the FULL edge span, not just the chain-segment span
+    — segments may be fragmented per the day-2 telemetry).
+    """
+    nx, ny, _d, _cx, _cy, _rms = line
+    # Tangent = perpendicular to normal.
+    tx, ty = -ny, nx
+    # Project bbox corners onto tangent for the full edge span.
+    x_min, y_min, x_max, y_max = bbox
+    bbox_corners = np.array(
+        [
+            [x_min, y_min],
+            [x_max, y_min],
+            [x_max, y_max],
+            [x_min, y_max],
+        ],
+        dtype=np.float64,
+    )
+    bbox_t = (bbox_corners[:, 0] - _cx) * tx + (bbox_corners[:, 1] - _cy) * ty
+    t_min = float(bbox_t.min())
+    t_max = float(bbox_t.max())
+
+    h, w = gray.shape
+    sub_pts: list[tuple[float, float]] = []
+    t = t_min
+    # Wider intensity window: k ∈ [-K..K] where K = ceil(search_half_width)+1.
+    # Gradient is computed at k ∈ [-K+1..K-1] via central differences;
+    # peak argmax searched in the GRADIENT domain, then 3-pt parabolic vertex
+    # centered on the argmax.
+    K = int(np.ceil(search_half_width)) + 1
+    while t <= t_max:
+        px = _cx + t * tx
+        py = _cy + t * ty
+        intensities = np.zeros(2 * K + 1, dtype=np.float64)
+        all_in_bounds = True
+        for ki in range(2 * K + 1):
+            k = ki - K
+            sx = px + k * nx
+            sy = py + k * ny
+            if sx < 0.5 or sy < 0.5 or sx >= w - 0.5 or sy >= h - 0.5:
+                all_in_bounds = False
+                break
+            xi = int(np.floor(sx))
+            yi = int(np.floor(sy))
+            ax = sx - xi
+            ay = sy - yi
+            i00 = float(gray[yi, xi])
+            i10 = float(gray[yi, xi + 1])
+            i01 = float(gray[yi + 1, xi])
+            i11 = float(gray[yi + 1, xi + 1])
+            intensities[ki] = (
+                (1 - ax) * (1 - ay) * i00
+                + ax * (1 - ay) * i10
+                + (1 - ax) * ay * i01
+                + ax * ay * i11
+            )
+        if all_in_bounds:
+            grads = np.zeros(2 * K - 1, dtype=np.float64)
+            for ki in range(2 * K - 1):
+                grads[ki] = (intensities[ki + 2] - intensities[ki]) * 0.5
+            abs_grads = np.abs(grads)
+            argmax = int(np.argmax(abs_grads))
+            if abs_grads[argmax] >= grad_min_mag and 0 < argmax < len(grads) - 1:
+                # 3-point parabolic vertex centered on argmax (in gradient-domain k).
+                g_m = abs_grads[argmax - 1]
+                g_0 = abs_grads[argmax]
+                g_p = abs_grads[argmax + 1]
+                denom = g_p + g_m - 2.0 * g_0
+                if abs(denom) > 1e-6:
+                    delta = (g_m - g_p) / (2.0 * denom)
+                    delta = max(-0.5, min(0.5, delta))
+                else:
+                    delta = 0.0
+                # Map gradient-index → k value: gradient index `argmax`
+                # corresponds to intensity index argmax+1, which corresponds
+                # to k = (argmax + 1) - K. Add the parabolic delta.
+                k_star = (argmax + 1) - K + delta
+                # Clamp to user-requested half-width.
+                k_star = max(-search_half_width, min(search_half_width, k_star))
+                sub_pts.append((px + k_star * nx, py + k_star * ny))
+        t += sample_step
+
+    if len(sub_pts) < 4:
+        return line  # Not enough points; fall back to Stage E line.
+    pts_arr = np.asarray(sub_pts, dtype=np.float64)
+    return fit_line_tls(pts_arr)
+
+
+# ---------------------------------------------------------------------------
 # Stage F — corner extraction
 # ---------------------------------------------------------------------------
 
@@ -584,6 +691,33 @@ def main() -> None:
             f"angle={angle:.1f}°, sub-pixel RMS={rms:.4f} px"
         )
         fitted_lines.append(line)
+
+    # ===================================================================
+    # Stage G — perpendicular refinement (Phase-3-style dense sweep)
+    # Iterate twice with widening search window so the line can converge
+    # even when Stage E's intercept is ~1 px off (which we observed for
+    # scene_0008's right edge).
+    # ===================================================================
+    print(f"\nStage G — perpendicular refinement of Stage E lines (2 iters):")
+    refined_lines = list(fitted_lines)
+    for iter_idx in range(2):
+        next_lines = []
+        for i, (line, (sxy, _)) in enumerate(zip(refined_lines, top4, strict=True)):
+            refined = perpendicular_refinement(
+                img_f, line, sxy, bbox, sample_step=1.0, search_half_width=5.0
+            )
+            next_lines.append(refined)
+        refined_lines = next_lines
+        # Print last iter only.
+        if iter_idx == 1:
+            for i, line in enumerate(refined_lines):
+                nx, ny, d, cx, cy, rms = line
+                angle = (np.degrees(np.arctan2(-nx, ny)) + 180.0) % 180.0
+                print(
+                    f"  line {i}: nx={nx:+.4f}, ny={ny:+.4f}, d={d:+.3f}, "
+                    f"angle={angle:.1f}°, dense-sub-pixel RMS={rms:.4f} px"
+                )
+    fitted_lines = refined_lines  # Use refined lines for corner extraction.
 
     # ===================================================================
     # Stage F — corner extraction
