@@ -14,7 +14,7 @@ include = ["src/**/*", "build.rs", "data/dictionaries/**/*", "profiles/**/*.json
 build = "build.rs"
 
 [build-dependencies]
-askama = "0.15"
+askama = "0.16"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
