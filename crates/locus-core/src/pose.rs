@@ -522,7 +522,12 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
     let (refined_pose, covariance) =
         if let (PoseEstimationMode::Accurate, _, Some(covs)) = (mode, img, covariances) {
             let (p, c) = crate::pose_weighted::refine_pose_lm_weighted(
-                intrinsics, corners, tag_size, best_pose, &covs,
+                intrinsics,
+                corners,
+                tag_size,
+                best_pose,
+                &covs,
+                config.corner_d2_gate_threshold,
             );
             (p, Some(c))
         } else {
@@ -1720,7 +1725,12 @@ pub fn bench_estimate_both_branches(
             (mode, img, covariances)
         {
             crate::pose_weighted::refine_pose_lm_weighted(
-                intrinsics, corners, tag_size, seed, &covs,
+                intrinsics,
+                corners,
+                tag_size,
+                seed,
+                &covs,
+                config.corner_d2_gate_threshold,
             )
             .0
         } else {
@@ -1793,6 +1803,7 @@ pub fn bench_refit_pose_drop_corner(
             tag_size,
             initial_pose,
             &covs,
+            config.corner_d2_gate_threshold,
         )
         .0
     } else {
