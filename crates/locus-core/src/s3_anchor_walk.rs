@@ -117,12 +117,15 @@ fn extract_anchors<'a>(
     let mut out = BumpVec::new_in(arena);
     let w = gray.width as i32;
     let h = gray.height as i32;
-    // Pad by 2 px so Sobel + NMS stays in-bounds.
+    // Bounds: anchor at (x, y) requires Sobel at (x, y) AND at (x ± dx, y ± dy)
+    // for the NMS neighbours.  Sobel itself reads (·-1..=·+1).  So an anchor
+    // at (x, y) with NMS step (dx, dy) ∈ {0, ±1}² needs in-bounds reads at
+    // (x ± dx ± 1, y ± dy ± 1) → effective lower bound 2, upper bound w-3 / h-3.
     let pad = 2_i32;
-    let x_lo = (i32::from(stat.min_x) - pad).max(1);
-    let y_lo = (i32::from(stat.min_y) - pad).max(1);
-    let x_hi = (i32::from(stat.max_x) + pad).min(w - 2);
-    let y_hi = (i32::from(stat.max_y) + pad).min(h - 2);
+    let x_lo = (i32::from(stat.min_x) - pad).max(2);
+    let y_lo = (i32::from(stat.min_y) - pad).max(2);
+    let x_hi = (i32::from(stat.max_x) + pad).min(w - 3);
+    let y_hi = (i32::from(stat.max_y) + pad).min(h - 3);
     if x_lo >= x_hi || y_lo >= y_hi {
         return out;
     }

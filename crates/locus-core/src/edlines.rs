@@ -63,11 +63,17 @@ pub(crate) struct EdLinesConfig {
     /// partition is severely unbalanced.  See [`crate::config::DetectorConfig`]
     /// `edlines_imbalance_gate` for rationale.
     pub imbalance_gate: bool,
+    /// Use the S3 gradient-anchor-walk pipeline (Phase 1-5 replacement)
+    /// instead of the binary-tracer + IRLS path.  Default false (off,
+    /// byte-identical).  See
+    /// `docs/engineering/edlines_s3_anchor_walk_design_2026-05-04.md`.
+    pub use_anchor_walk: bool,
 }
 
 impl EdLinesConfig {
     /// Construct from the detector config (most fields are hard-coded pending
-    /// empirical tuning; `imbalance_gate` is plumbed through).
+    /// empirical tuning; `imbalance_gate` and `use_anchor_walk` are plumbed
+    /// through).
     #[must_use]
     pub fn from_detector_config(cfg: &crate::config::DetectorConfig) -> Self {
         Self {
@@ -80,6 +86,7 @@ impl EdLinesConfig {
             min_edge_pts: 5,
             gn_iters: 3,
             imbalance_gate: cfg.edlines_imbalance_gate.is_enabled(),
+            use_anchor_walk: cfg.edlines_use_anchor_walk,
         }
     }
 }
@@ -995,6 +1002,20 @@ pub(crate) fn extract_quad_edlines(
         return None;
     }
 
+    // S3 (gradient-anchor walk) — opt-in, complete Phase 1-5 replacement.
+    // Operates on the gray image directly; bypasses the binary-tracer
+    // rounding floor characterised in
+    // `docs/engineering/edlines_s3_anchor_walk_design_2026-05-04.md`.
+    if cfg.use_anchor_walk {
+        let s3_cfg = crate::s3_anchor_walk::S3Config::defaults();
+        if let Some((corners, covs)) =
+            crate::s3_anchor_walk::run_anchor_walk(arena, gray, stat, &s3_cfg)
+        {
+            return Some((corners, covs));
+        }
+        return None;
+    }
+
     // Decimation scale factor: gray-image pixels per binary-image pixel.
     // When decimation = 1, dec = 1.0 and all coordinate conversions are no-ops.
     let dec = gray.width as f64 / binary.width as f64;
@@ -1332,6 +1353,7 @@ mod tests {
             min_edge_pts: 5,
             gn_iters: 3,
             imbalance_gate: false,
+            use_anchor_walk: false,
         };
         let arena = Bump::new();
         // Use the same image as both binary and gray (dec = 1.0).
@@ -1398,6 +1420,7 @@ mod tests {
             min_edge_pts: 5,
             gn_iters: 3,
             imbalance_gate: false,
+            use_anchor_walk: false,
         };
         let arena = Bump::new();
         // labels and comp_label are not accessed because the bbox guard fires first.

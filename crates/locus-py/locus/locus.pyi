@@ -120,6 +120,7 @@ class PyDetectorConfig:
     sigma_n_sq: float
     structure_tensor_radius: int
     edlines_imbalance_gate: EdLinesImbalanceGatePolicy
+    edlines_use_anchor_walk: bool
     pose_consistency_fpr: float
     pose_consistency_gate_sigma_px: float
     pose_consistency_min_decisive_ratio: float
@@ -163,6 +164,7 @@ class PyDetectorConfig:
         sigma_n_sq: float,
         structure_tensor_radius: int,
         edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
+        edlines_use_anchor_walk: bool,
         pose_consistency_fpr: float,
         pose_consistency_gate_sigma_px: float,
         pose_consistency_min_decisive_ratio: float,

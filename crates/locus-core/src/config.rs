@@ -354,6 +354,11 @@ pub struct DetectorConfig {
     /// [`EdLinesImbalanceGatePolicy`].
     pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
 
+    /// Use the S3 (gradient-anchor walk) Phase 1-5 replacement in EdLines.
+    /// Default `false` (off, byte-identical).  See
+    /// `docs/engineering/edlines_s3_anchor_walk_design_2026-05-04.md`.
+    pub edlines_use_anchor_walk: bool,
+
     /// Per-frame extraction-routing policy.
     ///
     /// DO NOT change the default to `AdaptivePpb` without a planned
@@ -420,6 +425,7 @@ impl Default for DetectorConfig {
             quad_min_density: 0.0,
             quad_extraction_mode: QuadExtractionMode::ContourRdp,
             edlines_imbalance_gate: EdLinesImbalanceGatePolicy::Disabled,
+            edlines_use_anchor_walk: false,
             pose_consistency_fpr: 0.0,
             pose_consistency_gate_sigma_px: 1.0,
             pose_consistency_min_decisive_ratio: 5.0,
@@ -725,6 +731,7 @@ impl DetectorConfigBuilder {
             quad_min_density: self.quad_min_density.unwrap_or(d.quad_min_density),
             quad_extraction_mode: self.quad_extraction_mode.unwrap_or(d.quad_extraction_mode),
             edlines_imbalance_gate: d.edlines_imbalance_gate,
+            edlines_use_anchor_walk: d.edlines_use_anchor_walk,
             pose_consistency_fpr: d.pose_consistency_fpr,
             pose_consistency_gate_sigma_px: d.pose_consistency_gate_sigma_px,
             pose_consistency_min_decisive_ratio: d.pose_consistency_min_decisive_ratio,
@@ -1270,6 +1277,7 @@ mod profile_json {
                 quad_min_density: p.quad.min_density,
                 quad_extraction_mode: p.quad.extraction_mode,
                 edlines_imbalance_gate: p.quad.edlines_imbalance_gate,
+                edlines_use_anchor_walk: d.edlines_use_anchor_walk,
                 pose_consistency_fpr: p.pose.pose_consistency_fpr,
                 pose_consistency_gate_sigma_px: p.pose.pose_consistency_gate_sigma_px,
                 pose_consistency_min_decisive_ratio: p.pose.pose_consistency_min_decisive_ratio,

@@ -66,4 +66,7 @@ def test_shipped_json_matches_loaded_model(profile: ProfileName) -> None:
     # ``edlines_imbalance_gate`` defaults to ``"Disabled"`` and may be
     # omitted by profiles that don't override it.
     on_disk.get("quad", {}).setdefault("edlines_imbalance_gate", "Disabled")
+    # ``edlines_use_anchor_walk`` defaults to ``False`` and may be omitted
+    # by profiles that don't opt in.
+    on_disk.get("quad", {}).setdefault("edlines_use_anchor_walk", False)
     assert on_disk == loaded

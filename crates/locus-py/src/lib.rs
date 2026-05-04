@@ -355,6 +355,7 @@ pub struct PyDetectorConfig {
     pub quad_min_density: f64,
     pub quad_extraction_mode: QuadExtractionMode,
     pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
+    pub edlines_use_anchor_walk: bool,
     // Quad-extraction policy passthrough — Rust's `QuadExtractionPolicy` is an
     // enum (`Static` | `AdaptivePpb(...)`), flattened here so `PyDetectorConfig`
     // stays `Copy`. When `quad_extraction_policy_is_adaptive == false`, the
@@ -407,6 +408,7 @@ impl PyDetectorConfig {
         quad_min_density,
         quad_extraction_mode,
         edlines_imbalance_gate,
+        edlines_use_anchor_walk,
         quad_extraction_policy_is_adaptive,
         adaptive_ppb_threshold,
         adaptive_ppb_low_extraction,
@@ -450,6 +452,7 @@ impl PyDetectorConfig {
         quad_min_density: f64,
         quad_extraction_mode: QuadExtractionMode,
         edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
+        edlines_use_anchor_walk: bool,
         quad_extraction_policy_is_adaptive: bool,
         adaptive_ppb_threshold: f32,
         adaptive_ppb_low_extraction: QuadExtractionMode,
@@ -492,6 +495,7 @@ impl PyDetectorConfig {
             quad_min_density,
             quad_extraction_mode,
             edlines_imbalance_gate,
+            edlines_use_anchor_walk,
             quad_extraction_policy_is_adaptive,
             adaptive_ppb_threshold,
             adaptive_ppb_low_extraction,
@@ -574,6 +578,7 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             quad_min_density: c.quad_min_density,
             quad_extraction_mode: quad_extraction_mode_to_py(c.quad_extraction_mode),
             edlines_imbalance_gate: c.edlines_imbalance_gate.into(),
+            edlines_use_anchor_walk: c.edlines_use_anchor_walk,
             quad_extraction_policy_is_adaptive: policy_is_adaptive,
             adaptive_ppb_threshold: adaptive_threshold,
             adaptive_ppb_low_extraction: adaptive_low_ext,
@@ -1645,6 +1650,7 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             quad_min_density: c.quad_min_density,
             quad_extraction_mode: c.quad_extraction_mode.into(),
             edlines_imbalance_gate: c.edlines_imbalance_gate.into(),
+            edlines_use_anchor_walk: c.edlines_use_anchor_walk,
             decoder_min_contrast: c.decoder_min_contrast,
             refinement_mode: c.refinement_mode.into(),
             max_hamming_error: c.max_hamming_error,

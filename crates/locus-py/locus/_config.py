@@ -234,6 +234,12 @@ class QuadConfig(BaseModel):
     edlines_imbalance_gate: _ImbalanceGateField = Field(
         default_factory=lambda: EdLinesImbalanceGatePolicy.Disabled
     )
+    edlines_use_anchor_walk: bool = Field(default=False)
+    """Use the S3 (gradient-anchor walk) Phase 1-5 replacement in EdLines.
+
+    Default ``False`` (off, byte-identical).  See
+    ``docs/engineering/edlines_s3_anchor_walk_design_2026-05-04.md``.
+    """
     extraction_policy: QuadExtractionPolicy = "Static"
 
     @model_validator(mode="after")
@@ -455,6 +461,7 @@ class DetectorConfig(BaseModel):
             quad_min_density=self.quad.min_density,
             quad_extraction_mode=self.quad.extraction_mode,
             edlines_imbalance_gate=self.quad.edlines_imbalance_gate,
+            edlines_use_anchor_walk=self.quad.edlines_use_anchor_walk,
             quad_extraction_policy_is_adaptive=is_adaptive,
             adaptive_ppb_threshold=ppb_threshold,
             adaptive_ppb_low_extraction=ppb_low_ext,
