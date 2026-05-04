@@ -222,6 +222,167 @@ fn sobel_grad(data: &[u8], stride: i32, x: i32, y: i32) -> (f64, f64) {
     (gx as f64, gy as f64)
 }
 
+// ── Stage B — gradient-direction chain walking ────────────────────────────────
+
+/// Walk anchors into chains following the edge tangent direction.
+///
+/// Smart-routing per Akinlar/Topal: from each anchor (sorted by `|∇|`
+/// descending), step along the tangent (perpendicular to gradient).  At each
+/// step, three candidates are considered (ahead, ahead-left, ahead-right);
+/// the highest-`|∇|` candidate that is also an anchor with a coherent
+/// gradient orientation (`cos(angle) ≥ coherence_min`) is appended.
+///
+/// Returns a list of chains; each chain is a list of indices into the
+/// `anchors` slice.
+fn walk_chains<'a>(
+    arena: &'a Bump,
+    anchors: &[Anchor],
+    gray_w: usize,
+    gray_h: usize,
+    cfg: &S3Config,
+) -> BumpVec<'a, BumpVec<'a, u32>> {
+    let n = anchors.len();
+    // Spatial index: (x, y) → anchor index.  Use a flat BumpVec mapped over
+    // the gray-image extent for O(1) lookup; fits in arena.
+    let map_size = gray_w * gray_h;
+    let mut pos_to_idx: BumpVec<'a, i32> = BumpVec::with_capacity_in(map_size, arena);
+    pos_to_idx.resize(map_size, -1_i32);
+    for (i, a) in anchors.iter().enumerate() {
+        let idx = a.y as usize * gray_w + a.x as usize;
+        pos_to_idx[idx] = i as i32;
+    }
+
+    let mut consumed: BumpVec<'a, bool> = BumpVec::with_capacity_in(n, arena);
+    consumed.resize(n, false);
+
+    // Sort anchor indices by |∇| descending.  Use a separate index vector.
+    let mut order: BumpVec<'a, u32> = BumpVec::with_capacity_in(n, arena);
+    order.extend((0..n as u32).collect::<Vec<_>>());
+    order.sort_by(|&a, &b| anchors[b as usize].mag.partial_cmp(&anchors[a as usize].mag).unwrap());
+
+    // 8-connected step directions in CCW order.
+    const DIRS: [(i32, i32); 8] = [
+        (1, 0),
+        (1, 1),
+        (0, 1),
+        (-1, 1),
+        (-1, 0),
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+    ];
+
+    fn dir_index(dx: i32, dy: i32) -> usize {
+        DIRS.iter().position(|&d| d == (dx, dy)).unwrap_or(0)
+    }
+    fn rotate_45(dx: i32, dy: i32, sign: i32) -> (i32, i32) {
+        let i = dir_index(dx, dy) as i32;
+        let new_i = ((i + sign).rem_euclid(8)) as usize;
+        DIRS[new_i]
+    }
+    fn quantised_tangent(gx: f64, gy: f64, sign: i32) -> (i32, i32) {
+        // Tangent = (-gy, gx)/|g| × sign.
+        let tx = -gy * sign as f64;
+        let ty = gx * sign as f64;
+        let ax = tx.abs();
+        let ay = ty.abs();
+        if ax > 2.0 * ay {
+            (if tx > 0.0 { 1 } else { -1 }, 0)
+        } else if ay > 2.0 * ax {
+            (0, if ty > 0.0 { 1 } else { -1 })
+        } else {
+            (
+                if tx > 0.0 { 1 } else { -1 },
+                if ty > 0.0 { 1 } else { -1 },
+            )
+        }
+    }
+
+    let coh_min = cfg.coherence_min;
+    let max_chain_len = anchors.len(); // hard cap
+
+    let mut chains: BumpVec<'a, BumpVec<'a, u32>> = BumpVec::new_in(arena);
+
+    for &start_u32 in order.iter() {
+        let start = start_u32 as usize;
+        if consumed[start] {
+            continue;
+        }
+        consumed[start] = true;
+        let mut chain: BumpVec<'a, u32> = BumpVec::with_capacity_in(64, arena);
+        chain.push(start_u32);
+
+        for direction_sign in [1_i32, -1_i32] {
+            let mut cursor = start;
+            let mut step = quantised_tangent(anchors[start].gx, anchors[start].gy, direction_sign);
+            for _ in 0..max_chain_len {
+                let cur = anchors[cursor];
+                let cx = cur.x;
+                let cy = cur.y;
+                let candidates = [
+                    (cx + step.0, cy + step.1),
+                    {
+                        let r = rotate_45(step.0, step.1, 1);
+                        (cx + r.0, cy + r.1)
+                    },
+                    {
+                        let r = rotate_45(step.0, step.1, -1);
+                        (cx + r.0, cy + r.1)
+                    },
+                ];
+                let cur_g_norm = (cur.gx * cur.gx + cur.gy * cur.gy).sqrt();
+                let mut best_idx: i32 = -1;
+                let mut best_score = -1.0_f64;
+                let mut best_step = (0_i32, 0_i32);
+                for c in candidates {
+                    if c.0 < 0 || c.1 < 0 || c.0 >= gray_w as i32 || c.1 >= gray_h as i32 {
+                        continue;
+                    }
+                    let map_i = (c.1 as usize) * gray_w + c.0 as usize;
+                    let idx = pos_to_idx[map_i];
+                    if idx < 0 {
+                        continue;
+                    }
+                    let ci = idx as usize;
+                    if consumed[ci] {
+                        continue;
+                    }
+                    let cand = anchors[ci];
+                    let cand_g_norm = (cand.gx * cand.gx + cand.gy * cand.gy).sqrt();
+                    if cand_g_norm < 1e-9 || cur_g_norm < 1e-9 {
+                        continue;
+                    }
+                    let cos_sim = (cur.gx * cand.gx + cur.gy * cand.gy).abs()
+                        / (cur_g_norm * cand_g_norm);
+                    if cos_sim < coh_min {
+                        continue;
+                    }
+                    let score = cand.mag * cos_sim;
+                    if score > best_score {
+                        best_score = score;
+                        best_idx = idx;
+                        best_step = (c.0 - cx, c.1 - cy);
+                    }
+                }
+                if best_idx < 0 {
+                    break;
+                }
+                let bi = best_idx as usize;
+                consumed[bi] = true;
+                if direction_sign > 0 {
+                    chain.push(best_idx as u32);
+                } else {
+                    chain.insert(0, best_idx as u32);
+                }
+                cursor = bi;
+                step = best_step;
+            }
+        }
+        chains.push(chain);
+    }
+    chains
+}
+
 // ── Top-level entry ───────────────────────────────────────────────────────────
 
 /// Top-level S3 pipeline.  Returns `None` on any per-stage failure (caller
@@ -236,9 +397,9 @@ pub(crate) fn run_anchor_walk(
     if anchors.len() < 32 {
         return None;
     }
-    // Stages B-G live in subsequent commits; for now this returns None so
-    // off-path callers still fall through to the existing EdLines pipeline.
-    let _ = anchors;
+    let chains = walk_chains(arena, anchors.as_slice(), gray.width, gray.height, cfg);
+    let _ = chains;
+    // Stages C-G live in subsequent commits.
     None
 }
 
@@ -273,6 +434,34 @@ mod tests {
             m20: 0,
             m02: 0,
             m11: 0,
+        }
+    }
+
+    #[test]
+    fn chain_walking_produces_4_dominant_chains_on_square() {
+        let canvas = 100;
+        let x0 = 30;
+        let y0 = 30;
+        let size = 40;
+        let pixels = make_synthetic_square(canvas, x0, y0, size);
+        let img = ImageView::new(&pixels, canvas, canvas, canvas).unwrap();
+        let stats = stats_for_square(x0 as u16, y0 as u16, size as u16);
+        let arena = Bump::new();
+        let cfg = S3Config::defaults();
+        let anchors = extract_anchors(&arena, &img, &stats, &cfg);
+        let chains = walk_chains(&arena, anchors.as_slice(), img.width, img.height, &cfg);
+        // Sort chains by length, take top 4.
+        let mut lens: Vec<usize> = chains.iter().map(BumpVec::len).collect();
+        lens.sort_unstable_by(|a, b| b.cmp(a));
+        // The 4 longest chains should each cover roughly one edge (~size
+        // anchors per edge). Allow wide tolerance for synthetic boundary
+        // effects.
+        assert!(lens.len() >= 4, "fewer than 4 chains, got {}", lens.len());
+        for &l in &lens[..4] {
+            assert!(
+                l >= 20,
+                "expected each top-4 chain ≥ 20 anchors on synthetic square, got {l}"
+            );
         }
     }
 
