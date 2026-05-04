@@ -84,6 +84,67 @@ impl EdLinesConfig {
     }
 }
 
+/// True iff `LOCUS_DUMP_EDLINES_PHASE1=1` is set in the environment.  Cached.
+///
+/// Diagnostic-only hook used to investigate Phase 1-2 partition / IRLS-fit
+/// behaviour against ground-truth corners (see
+/// `docs/engineering/edlines_s1_corner_exclusion_2026-05-04.md`).  Default off;
+/// no production code path reads it.
+fn phase1_dump_enabled() -> bool {
+    use std::sync::OnceLock;
+    static CACHED: OnceLock<bool> = OnceLock::new();
+    *CACHED.get_or_init(|| {
+        std::env::var("LOCUS_DUMP_EDLINES_PHASE1")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+    })
+}
+
+/// Emit one structured line per `run_pipeline_with_mode` call describing the
+/// Phase-1 partition and Phase-2 IRLS lines.  Output goes to stderr with a
+/// `EDLINES_PHASE1` prefix so it can be grep'd from a benchmark log and
+/// post-filtered by component bbox to find a specific tag (e.g. scene_0008).
+///
+/// Format (single line):
+/// `EDLINES_PHASE1 bbox=<minx,miny,maxx,maxy> mode=<axis|diag> arc_pts=<n0,n1,n2,n3> line0=<nx,ny,d,cx,cy> line1=... line2=... line3=...`
+fn dump_phase1(
+    stat: &ComponentStats,
+    mode: SegmentationMode,
+    edges: &[BumpVec<(f64, f64)>; 4],
+    lines: &[Line; 4],
+) {
+    let mode_s = match mode {
+        SegmentationMode::AxisAligned => "axis",
+        SegmentationMode::Diagonal => "diag",
+    };
+    let n0 = edges[0].len();
+    let n1 = edges[1].len();
+    let n2 = edges[2].len();
+    let n3 = edges[3].len();
+    let fmt_line = |l: &Line| {
+        format!(
+            "{:.6},{:.6},{:.6},{:.4},{:.4}",
+            l.nx, l.ny, l.d, l.cx, l.cy
+        )
+    };
+    eprintln!(
+        "EDLINES_PHASE1 bbox={},{},{},{} mode={} arc_pts={},{},{},{} line0={} line1={} line2={} line3={}",
+        stat.min_x,
+        stat.min_y,
+        stat.max_x,
+        stat.max_y,
+        mode_s,
+        n0,
+        n1,
+        n2,
+        n3,
+        fmt_line(&lines[0]),
+        fmt_line(&lines[1]),
+        fmt_line(&lines[2]),
+        fmt_line(&lines[3]),
+    );
+}
+
 // ── Internal types ─────────────────────────────────────────────────────────────
 
 /// A homogeneous line `nx·x + ny·y + d = 0` together with its weighted centroid.
@@ -1105,6 +1166,10 @@ fn run_pipeline_with_mode(
         return PipelineOutcome::PipelineFailed;
     };
     let bin_lines = [l0, l1, l2, l3];
+
+    if phase1_dump_enabled() {
+        dump_phase1(stat, mode, &edges, &bin_lines);
+    }
 
     // ── Phase 3: Sub-pixel refinement (results in gray-image space) ───────────
     let sp: [BumpVec<(f64, f64)>; 4] = [
