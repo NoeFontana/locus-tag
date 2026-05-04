@@ -415,6 +415,7 @@ def run_audit(
     profile: str,
     output_dir: Path,
     rayon_threads: str | None,
+    use_anchor_walk: bool = False,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -427,6 +428,8 @@ def run_audit(
     tag_size = float(ds.tag_size)
 
     cfg = DetectorConfig.from_profile(profile)  # pyright: ignore[reportArgumentType]
+    if use_anchor_walk:
+        cfg.quad.edlines_use_anchor_walk = True
     detector = locus.Detector(config=cfg, families=[locus.TagFamily.AprilTag36h11])
     sigma_n_sq = float(cfg.pose.sigma_n_sq)
     tikhonov_alpha_max = float(cfg.pose.tikhonov_alpha_max)
@@ -746,6 +749,11 @@ def main() -> None:
         default=None,
         help="Value of RAYON_NUM_THREADS during the run (logged into the report).",
     )
+    parser.add_argument(
+        "--use-anchor-walk",
+        action="store_true",
+        help="Enable EdLines S3 (gradient-anchor walk) Phase 1-5 replacement.",
+    )
     args = parser.parse_args()
 
     today = dt.date.today().isoformat()
@@ -756,6 +764,7 @@ def main() -> None:
         profile=args.profile,
         output_dir=output_dir,
         rayon_threads=args.rayon_threads,
+        use_anchor_walk=args.use_anchor_walk,
     )
 
     g = report["global_d2"]

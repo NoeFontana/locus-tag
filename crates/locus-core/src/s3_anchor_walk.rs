@@ -642,7 +642,8 @@ fn fit_segment_subpixel<'a>(
 fn bilinear_sample(gray: &ImageView, sx: f64, sy: f64) -> Option<f64> {
     let w = gray.width;
     let h = gray.height;
-    if sx < 0.5 || sy < 0.5 || sx >= (w as f64 - 0.5) || sy >= (h as f64 - 0.5) {
+    // Need yi+1 ∈ [0, h) and xi+1 ∈ [0, w) → tighten upper bound to (size - 1).
+    if sx < 0.0 || sy < 0.0 || sx > (w as f64 - 1.0) || sy > (h as f64 - 1.0) {
         return None;
     }
     let xi = sx.floor() as usize;
@@ -650,6 +651,9 @@ fn bilinear_sample(gray: &ImageView, sx: f64, sy: f64) -> Option<f64> {
     let ax = sx - xi as f64;
     let ay = sy - yi as f64;
     let stride = gray.stride;
+    if xi + 1 >= w || yi + 1 >= h {
+        return None;
+    }
     let i00 = f64::from(gray.data[yi * stride + xi]);
     let i10 = f64::from(gray.data[yi * stride + xi + 1]);
     let i01 = f64::from(gray.data[(yi + 1) * stride + xi]);
