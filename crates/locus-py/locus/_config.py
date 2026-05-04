@@ -313,6 +313,22 @@ class PoseConfig(BaseModel):
     for the escape to fire. Set to ``math.inf`` (Rust-side ``f64::INFINITY``)
     to disable the escape and use only the χ² test.
     """
+    corner_d2_gate_threshold: float = Field(default=0.0, ge=0.0)
+    """Corner-geometry-outlier gate — Σ_pose inflation threshold (d² units).
+
+    When any single corner's converged Mahalanobis d² (post-LM) exceeds
+    this threshold, Σ_pose is scaled by ``κ = max(d²) / threshold ≥ 1`` so
+    downstream consumers (Kalman, factor graph) see honest covariance for
+    scenes where the corner fitter produced a mathematically-inconsistent
+    geometry. The pose itself is unchanged.
+
+    Default ``0.0`` disables the gate (byte-identical). Recommended:
+    ``20.1 = (huber_k / 0.3)²``, matching Track A's
+    ``CORNER_OUTLIER_WEIGHT_THRESHOLD`` (``tools/bench/rotation_tail_diag/
+    classify.py``) — fires exactly when the LM's converged Huber weight
+    drops below ``0.3``. See
+    ``docs/engineering/runtime_gate_corner_geometry_outlier_*``.
+    """
 
 
 class SegmentationConfig(BaseModel):
@@ -473,6 +489,7 @@ class DetectorConfig(BaseModel):
             pose_consistency_fpr=self.pose.pose_consistency_fpr,
             pose_consistency_gate_sigma_px=self.pose.pose_consistency_gate_sigma_px,
             pose_consistency_min_decisive_ratio=self.pose.pose_consistency_min_decisive_ratio,
+            corner_d2_gate_threshold=self.pose.corner_d2_gate_threshold,
             segmentation_connectivity=self.segmentation.connectivity,
             segmentation_margin=self.segmentation.margin,
         )

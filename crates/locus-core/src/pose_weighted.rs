@@ -332,13 +332,21 @@ fn huber_mahalanobis_cost(
 }
 
 /// Refine the pose by minimizing a Huber-robust Mahalanobis objective.
+///
+/// `corner_d2_gate_threshold` is the corner-geometry-outlier gate threshold
+/// (per `docs/engineering/runtime_gate_*`).  Pass 0.0 to disable (byte-identical).
+/// Pass `> 0.0` to inflate the returned 6×6 Σ_pose by `κ = max(d²) / threshold`
+/// when any corner's converged Mahalanobis d² exceeds the threshold; the pose
+/// itself is not modified.
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub(crate) fn refine_pose_lm_weighted(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
     tag_size: f64,
     initial_pose: Pose,
     corner_covariances: &[Matrix2<f64>; 4],
+    corner_d2_gate_threshold: f64,
 ) -> (Pose, [[f64; 6]; 6]) {
     const HUBER_K: f64 = 1.345;
     const MAX_ITERS: usize = 20;
@@ -453,9 +461,56 @@ pub(crate) fn refine_pose_lm_weighted(
         );
         current_jtj = jtj;
     }
-    let covariance = current_jtj.try_inverse().unwrap_or_else(Matrix6::identity);
+    let mut covariance = current_jtj.try_inverse().unwrap_or_else(Matrix6::identity);
+
+    // Corner-geometry-outlier gate: when any single corner's converged
+    // Mahalanobis d² exceeds the threshold, the residual at that corner is
+    // larger than what the noise model predicts — Σ_pose is too tight.  Scale
+    // it by κ = max(d²) / threshold so downstream consumers see honest
+    // covariance.  Pose unchanged.  See
+    // `docs/engineering/runtime_gate_corner_geometry_outlier_*`.
+    if corner_d2_gate_threshold > 0.0 {
+        let max_d2 = max_per_corner_d2(intrinsics, corners, &obj_pts, &pose, &info_matrices);
+        if max_d2 > corner_d2_gate_threshold {
+            let kappa = max_d2 / corner_d2_gate_threshold;
+            covariance *= kappa;
+        }
+    }
 
     (pose, covariance.into())
+}
+
+/// Compute per-corner Mahalanobis d² at the given pose and return the maximum.
+///
+/// Used by the corner-geometry-outlier gate after LM convergence.  Mirrors the
+/// d² accumulation in `build_normal_equations` exactly so the gate sees what
+/// the solver saw at the converged pose.  Returns 0.0 if all corners project
+/// behind the camera (treated as gate-not-fired so the caller's `> threshold`
+/// check stays correct).
+fn max_per_corner_d2(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    obj_pts: &[Vector3<f64>; 4],
+    pose: &Pose,
+    info_matrices: &[Matrix2<f64>; 4],
+) -> f64 {
+    let mut max_d2 = 0.0_f64;
+    for i in 0..4 {
+        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
+        if p_cam.z < 1e-4 {
+            continue;
+        }
+        let z_inv = 1.0 / p_cam.z;
+        let u_est = intrinsics.fx * p_cam.x * z_inv + intrinsics.cx;
+        let v_est = intrinsics.fy * p_cam.y * z_inv + intrinsics.cy;
+        let res_u = corners[i][0] - u_est;
+        let res_v = corners[i][1] - v_est;
+        let d2 = crate::pose::mahalanobis_d2([res_u, res_v], &info_matrices[i]);
+        if d2 > max_d2 {
+            max_d2 = d2;
+        }
+    }
+    max_d2
 }
 
 // ---------------------------------------------------------------------------
@@ -633,6 +688,7 @@ pub fn bench_refine_pose_lm_weighted_with_telemetry(
     tag_size: f64,
     initial_pose: Pose,
     corner_covariances: &[Matrix2<f64>; 4],
+    corner_d2_gate_threshold: f64,
 ) -> BenchLmResult {
     const HUBER_K: f64 = 1.345;
     const MAX_ITERS: usize = 20;
@@ -774,7 +830,21 @@ pub fn bench_refine_pose_lm_weighted_with_telemetry(
         current_per_corner_w = per_corner_w;
     }
 
-    let covariance = current_jtj.try_inverse().unwrap_or_else(Matrix6::identity);
+    let mut covariance = current_jtj.try_inverse().unwrap_or_else(Matrix6::identity);
+
+    // Apply the corner-geometry-outlier gate: scale Σ_pose by κ when the
+    // largest converged per-corner d² exceeds the threshold.  Mirrors
+    // `refine_pose_lm_weighted` exactly.
+    if corner_d2_gate_threshold > 0.0 {
+        let max_d2 = current_per_corner_d2
+            .iter()
+            .copied()
+            .fold(0.0_f64, f64::max);
+        if max_d2 > corner_d2_gate_threshold {
+            let kappa = max_d2 / corner_d2_gate_threshold;
+            covariance *= kappa;
+        }
+    }
 
     BenchLmResult {
         pose,
@@ -903,7 +973,7 @@ mod tests {
         let identity_covs = [Matrix2::<f64>::identity(); 4];
 
         let (result, _cov) =
-            refine_pose_lm_weighted(&intrinsics, &corners, s, init_pose, &identity_covs);
+            refine_pose_lm_weighted(&intrinsics, &corners, s, init_pose, &identity_covs, 0.0);
 
         let t_err = (result.translation - gt_t).norm() * 1000.0; // mm
         let q_gt = nalgebra::UnitQuaternion::from_matrix(&gt_rot);

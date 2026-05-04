@@ -415,6 +415,7 @@ def run_audit(
     profile: str,
     output_dir: Path,
     rayon_threads: str | None,
+    corner_d2_gate_threshold: float | None = None,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -427,6 +428,8 @@ def run_audit(
     tag_size = float(ds.tag_size)
 
     cfg = DetectorConfig.from_profile(profile)  # pyright: ignore[reportArgumentType]
+    if corner_d2_gate_threshold is not None:
+        cfg.pose.corner_d2_gate_threshold = corner_d2_gate_threshold
     detector = locus.Detector(config=cfg, families=[locus.TagFamily.AprilTag36h11])
     sigma_n_sq = float(cfg.pose.sigma_n_sq)
     tikhonov_alpha_max = float(cfg.pose.tikhonov_alpha_max)
@@ -491,6 +494,7 @@ def run_audit(
             det_quat,
             det_trans,
             covs,
+            corner_d2_gate_threshold=float(cfg.pose.corner_d2_gate_threshold),
         )
 
         cov_flat = np.asarray(telem["covariance"], dtype=np.float64)
@@ -549,6 +553,7 @@ def run_audit(
             list(gt_quat.astype(float)),
             list(gt_trans.astype(float)),
             gt_covs,
+            corner_d2_gate_threshold=float(cfg.pose.corner_d2_gate_threshold),
         )
         cov_gt_flat = np.asarray(telem_gt["covariance"], dtype=np.float64)
         cov_gt6 = cov_gt_flat.reshape(6, 6)
@@ -746,6 +751,15 @@ def main() -> None:
         default=None,
         help="Value of RAYON_NUM_THREADS during the run (logged into the report).",
     )
+    parser.add_argument(
+        "--corner-d2-gate-threshold",
+        type=float,
+        default=None,
+        help=(
+            "Override the profile's corner-geometry-outlier gate threshold "
+            "(d² units). Default: use the profile value as-loaded."
+        ),
+    )
     args = parser.parse_args()
 
     today = dt.date.today().isoformat()
@@ -756,6 +770,7 @@ def main() -> None:
         profile=args.profile,
         output_dir=output_dir,
         rayon_threads=args.rayon_threads,
+        corner_d2_gate_threshold=args.corner_d2_gate_threshold,
     )
 
     g = report["global_d2"]

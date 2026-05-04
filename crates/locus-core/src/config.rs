@@ -361,6 +361,19 @@ pub struct DetectorConfig {
     /// default config would silently exercise new code.
     pub quad_extraction_policy: QuadExtractionPolicy,
 
+    /// Corner-geometry-outlier gate: when any single corner's converged
+    /// Mahalanobis d² (post-LM) exceeds this threshold, scale Σ_pose by
+    /// `κ = max(d²) / threshold` so downstream consumers see honest
+    /// covariance.  Pose itself is unchanged.
+    ///
+    /// `0.0` (the default) disables the gate (byte-identical).
+    /// Recommended: `20.1 = (huber_k / 0.3)²`, matching Track A's
+    /// `CORNER_OUTLIER_WEIGHT_THRESHOLD` (`tools/bench/rotation_tail_diag/
+    /// classify.py`) — fires exactly when the LM's converged Huber weight
+    /// drops below 0.3.  See
+    /// `docs/engineering/runtime_gate_corner_geometry_outlier_*`.
+    pub corner_d2_gate_threshold: f64,
+
     /// Run an edge-fit corner re-refit after decoding (Phase C.5).
     ///
     /// When `true`, each Valid candidate's 4 outer edges are independently
@@ -424,6 +437,7 @@ impl Default for DetectorConfig {
             pose_consistency_gate_sigma_px: 1.0,
             pose_consistency_min_decisive_ratio: 5.0,
             quad_extraction_policy: QuadExtractionPolicy::Static,
+            corner_d2_gate_threshold: 0.0,
             post_decode_refinement: false,
         }
     }
@@ -731,6 +745,7 @@ impl DetectorConfigBuilder {
             quad_extraction_policy: self
                 .quad_extraction_policy
                 .unwrap_or(d.quad_extraction_policy),
+            corner_d2_gate_threshold: d.corner_d2_gate_threshold,
             post_decode_refinement: d.post_decode_refinement,
         }
     }
@@ -1190,6 +1205,10 @@ mod profile_json {
         // (alternate IPPE d² ≥ 5× primary IPPE d² bypasses the gate).
         #[serde(default = "default_min_decisive_ratio")]
         pub pose_consistency_min_decisive_ratio: f64,
+        // Corner-geometry-outlier gate threshold. Missing → 0.0 → gate
+        // disabled, byte-identical to today's behaviour.
+        #[serde(default)]
+        pub corner_d2_gate_threshold: f64,
     }
 
     fn default_gate_sigma_px() -> f64 {
@@ -1211,6 +1230,7 @@ mod profile_json {
                 pose_consistency_fpr: d.pose_consistency_fpr,
                 pose_consistency_gate_sigma_px: d.pose_consistency_gate_sigma_px,
                 pose_consistency_min_decisive_ratio: d.pose_consistency_min_decisive_ratio,
+                corner_d2_gate_threshold: d.corner_d2_gate_threshold,
             }
         }
     }
@@ -1274,6 +1294,7 @@ mod profile_json {
                 pose_consistency_gate_sigma_px: p.pose.pose_consistency_gate_sigma_px,
                 pose_consistency_min_decisive_ratio: p.pose.pose_consistency_min_decisive_ratio,
                 quad_extraction_policy: p.quad.extraction_policy,
+                corner_d2_gate_threshold: p.pose.corner_d2_gate_threshold,
                 post_decode_refinement: p.decoder.post_decode_refinement,
             }
         }

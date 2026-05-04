@@ -372,6 +372,7 @@ pub struct PyDetectorConfig {
     pub pose_consistency_fpr: f64,
     pub pose_consistency_gate_sigma_px: f64,
     pub pose_consistency_min_decisive_ratio: f64,
+    pub corner_d2_gate_threshold: f64,
     pub post_decode_refinement: bool,
 }
 
@@ -420,6 +421,7 @@ impl PyDetectorConfig {
         pose_consistency_fpr,
         pose_consistency_gate_sigma_px,
         pose_consistency_min_decisive_ratio,
+        corner_d2_gate_threshold,
         post_decode_refinement,
     ))]
     #[allow(clippy::fn_params_excessive_bools)]
@@ -463,6 +465,7 @@ impl PyDetectorConfig {
         pose_consistency_fpr: f64,
         pose_consistency_gate_sigma_px: f64,
         pose_consistency_min_decisive_ratio: f64,
+        corner_d2_gate_threshold: f64,
         post_decode_refinement: bool,
     ) -> Self {
         Self {
@@ -505,6 +508,7 @@ impl PyDetectorConfig {
             pose_consistency_fpr,
             pose_consistency_gate_sigma_px,
             pose_consistency_min_decisive_ratio,
+            corner_d2_gate_threshold,
             post_decode_refinement,
         }
     }
@@ -587,6 +591,7 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             pose_consistency_fpr: c.pose_consistency_fpr,
             pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
             pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
+            corner_d2_gate_threshold: c.corner_d2_gate_threshold,
             post_decode_refinement: c.post_decode_refinement,
         }
     }
@@ -1656,6 +1661,7 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             pose_consistency_fpr: c.pose_consistency_fpr,
             pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
             pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
+            corner_d2_gate_threshold: c.corner_d2_gate_threshold,
             post_decode_refinement: c.post_decode_refinement,
             segmentation_connectivity: c.segmentation_connectivity.into(),
             segmentation_margin: c.segmentation_margin,
@@ -2179,7 +2185,16 @@ mod bench {
     /// `final_per_corner_d2`, `final_per_corner_irls_weight`, and `trace` (a
     /// list of per-iteration dicts).
     #[pyfunction]
-    #[pyo3(signature = (intrinsics, corners, tag_size, initial_quaternion, initial_translation, corner_covariances))]
+    #[pyo3(signature = (
+        intrinsics,
+        corners,
+        tag_size,
+        initial_quaternion,
+        initial_translation,
+        corner_covariances,
+        corner_d2_gate_threshold = 0.0,
+    ))]
+    #[allow(clippy::too_many_arguments)]
     pub fn _bench_refine_pose_lm_weighted_with_telemetry(
         py: Python<'_>,
         intrinsics: CameraIntrinsics,
@@ -2188,6 +2203,7 @@ mod bench {
         initial_quaternion: [f64; 4],
         initial_translation: [f64; 3],
         corner_covariances: [[f64; 4]; 4],
+        corner_d2_gate_threshold: f64,
     ) -> PyResult<Bound<'_, PyDict>> {
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
         let initial = pose_from_quat_trans(initial_quaternion, initial_translation);
@@ -2201,7 +2217,12 @@ mod bench {
         });
 
         let res = locus_core::bench_api::bench_refine_pose_lm_weighted_with_telemetry(
-            &core_intr, &corners, tag_size, initial, &covs,
+            &core_intr,
+            &corners,
+            tag_size,
+            initial,
+            &covs,
+            corner_d2_gate_threshold,
         );
 
         let out = PyDict::new(py);
