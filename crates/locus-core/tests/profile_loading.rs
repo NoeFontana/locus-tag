@@ -36,12 +36,13 @@ fn assert_shared_defaults(cfg: &DetectorConfig) {
     );
     // `quad_min_area` is profile-specific (clean-render profiles raise it to
     // suppress small textured-quad false positives); asserted per-profile.
+    // `max_hamming_error` is profile-specific (high_accuracy tightens to 1 to
+    // close the synthetic-corpus FP at hamming=2); asserted per-profile.
     assert_eq!(cfg.quad_max_aspect_ratio, d.quad_max_aspect_ratio);
     assert_eq!(cfg.quad_min_fill_ratio, d.quad_min_fill_ratio);
     assert_eq!(cfg.quad_max_fill_ratio, d.quad_max_fill_ratio);
     assert_eq!(cfg.quad_min_edge_length, d.quad_min_edge_length);
     assert_eq!(cfg.subpixel_refinement_sigma, d.subpixel_refinement_sigma);
-    assert_eq!(cfg.max_hamming_error, d.max_hamming_error);
     assert_eq!(cfg.gwlf_transversal_alpha, d.gwlf_transversal_alpha);
     assert_eq!(cfg.huber_delta_px, d.huber_delta_px);
     assert_eq!(cfg.tikhonov_alpha_max, d.tikhonov_alpha_max);
@@ -68,6 +69,7 @@ fn standard_profile_matches_former_builder() {
     assert_eq!(cfg.refinement_mode, CornerRefinementMode::Erf);
     assert_eq!(cfg.decoder_min_contrast, 20.0);
     assert_eq!(cfg.quad_extraction_mode, QuadExtractionMode::ContourRdp);
+    assert_eq!(cfg.max_hamming_error, None);
     assert_eq!(
         cfg.segmentation_connectivity,
         SegmentationConnectivity::Eight
@@ -91,6 +93,7 @@ fn grid_profile_matches_former_builder() {
     assert_eq!(cfg.refinement_mode, CornerRefinementMode::Erf);
     assert_eq!(cfg.decoder_min_contrast, 10.0);
     assert_eq!(cfg.quad_extraction_mode, QuadExtractionMode::ContourRdp);
+    assert_eq!(cfg.max_hamming_error, None);
     assert_eq!(
         cfg.segmentation_connectivity,
         SegmentationConnectivity::Four
@@ -113,6 +116,7 @@ fn high_accuracy_profile_routes_low_ppb_to_contour_rdp() {
     assert_eq!(cfg.quad_min_edge_score, 4.0);
     assert_eq!(cfg.refinement_mode, CornerRefinementMode::None);
     assert_eq!(cfg.decoder_min_contrast, 20.0);
+    assert_eq!(cfg.max_hamming_error, Some(1));
     assert_eq!(cfg.quad_extraction_mode, QuadExtractionMode::EdLines);
     assert_eq!(
         cfg.segmentation_connectivity,

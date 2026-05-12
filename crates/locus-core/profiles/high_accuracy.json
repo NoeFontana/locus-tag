@@ -36,6 +36,7 @@
   },
   "decoder": {
     "min_contrast": 20.0,
+    "max_hamming_error": 1,
     "refinement_mode": "None",
     "gwlf_transversal_alpha": 0.01
   },
