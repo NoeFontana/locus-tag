@@ -488,7 +488,7 @@ class DetectOptions(BaseModel):
     intrinsics: tuple[float, float, float, float] | CameraIntrinsics | None = Field(default=None)
     tag_size: float | None = Field(default=None, ge=0.0)
     pose_estimation_mode: PoseEstimationMode = Field(
-        default_factory=lambda: PoseEstimationMode.Fast
+        default_factory=lambda: PoseEstimationMode.Accurate
     )
 
     @classmethod

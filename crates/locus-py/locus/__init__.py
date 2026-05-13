@@ -282,7 +282,7 @@ class Detector:
         img: np.ndarray,
         intrinsics: CameraIntrinsics | None = None,
         tag_size: float | None = None,
-        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
+        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Accurate,
         debug_telemetry: bool = False,
         **kwargs,
     ) -> DetectionBatch:
@@ -338,7 +338,7 @@ class Detector:
         frames: list[np.ndarray],
         intrinsics: CameraIntrinsics | None = None,
         tag_size: float | None = None,
-        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Fast,
+        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Accurate,
     ) -> list[DetectionBatch]:
         """
         Detect tags in multiple frames concurrently.

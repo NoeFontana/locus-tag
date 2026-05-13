@@ -1342,7 +1342,7 @@ pub struct Detector {
 #[pymethods]
 impl Detector {
     /// Detect tags and return a typed [`DetectionResult`] containing NumPy arrays.
-    #[pyo3(signature = (img, intrinsics=None, tag_size=None, pose_estimation_mode=PoseEstimationMode::Fast, debug_telemetry=false))]
+    #[pyo3(signature = (img, intrinsics=None, tag_size=None, pose_estimation_mode=PoseEstimationMode::Accurate, debug_telemetry=false))]
     #[allow(clippy::needless_pass_by_value)]
     #[allow(clippy::too_many_lines)]
     fn detect(
@@ -1510,7 +1510,7 @@ impl Detector {
     /// was set via `max_concurrent_frames` at construction time.
     ///
     /// Telemetry and rejected-corner data are not available via this method.
-    #[pyo3(signature = (frames, intrinsics=None, tag_size=None, pose_estimation_mode=PoseEstimationMode::Fast))]
+    #[pyo3(signature = (frames, intrinsics=None, tag_size=None, pose_estimation_mode=PoseEstimationMode::Accurate))]
     #[allow(clippy::needless_pass_by_value)]
     fn detect_concurrent(
         &self,

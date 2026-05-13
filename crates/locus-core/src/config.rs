@@ -930,7 +930,7 @@ impl Default for DetectOptions {
             intrinsics: None,
             tag_size: None,
             decimation: 1,
-            pose_estimation_mode: PoseEstimationMode::Fast,
+            pose_estimation_mode: PoseEstimationMode::Accurate,
         }
     }
 }
@@ -949,7 +949,7 @@ impl DetectOptions {
             intrinsics: None,
             tag_size: None,
             decimation: 1,
-            pose_estimation_mode: PoseEstimationMode::Fast,
+            pose_estimation_mode: PoseEstimationMode::Accurate,
         }
     }
 
@@ -961,7 +961,7 @@ impl DetectOptions {
             intrinsics: None,
             tag_size: None,
             decimation: 1,
-            pose_estimation_mode: PoseEstimationMode::Fast,
+            pose_estimation_mode: PoseEstimationMode::Accurate,
         }
     }
 }
@@ -982,7 +982,7 @@ impl Default for DetectOptionsBuilder {
             intrinsics: None,
             tag_size: None,
             decimation: 1,
-            pose_estimation_mode: PoseEstimationMode::Fast,
+            pose_estimation_mode: PoseEstimationMode::Accurate,
         }
     }
 }
