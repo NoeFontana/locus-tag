@@ -160,6 +160,14 @@
           "title": "Edlines Imbalance Gate",
           "type": "string"
         },
+        "edlines_phase3_erf": {
+          "enum": [
+            "Disabled",
+            "Enabled"
+          ],
+          "title": "Edlines Phase3 Erf",
+          "type": "string"
+        },
         "extraction_mode": {
           "enum": [
             "ContourRdp",
