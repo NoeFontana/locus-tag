@@ -27,6 +27,7 @@ from .locus import (
     DetectionResult,
     DetectorBuilder,
     EdLinesImbalanceGatePolicy,
+    EdLinesPhase3ErfPolicy,
     PipelineTelemetryResult,
     PoseEstimationMode,
     QuadExtractionMode,
@@ -253,6 +254,7 @@ class Detector:
                 min_density=raw.quad_min_density,
                 extraction_mode=raw.quad_extraction_mode,
                 edlines_imbalance_gate=raw.edlines_imbalance_gate,
+                edlines_phase3_erf=raw.edlines_phase3_erf,
             ),
             decoder=DecoderConfig(
                 min_contrast=raw.decoder_min_contrast,
@@ -400,6 +402,7 @@ __all__ = [
     "DetectorConfig",
     "DistortionModel",
     "EdLinesImbalanceGatePolicy",
+    "EdLinesPhase3ErfPolicy",
     "FunnelStatus",
     "LocusFeatureError",
     "PipelineTelemetryResult",

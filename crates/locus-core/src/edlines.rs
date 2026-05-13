@@ -63,6 +63,10 @@ pub(crate) struct EdLinesConfig {
     /// partition is severely unbalanced.  See [`crate::config::DetectorConfig`]
     /// `edlines_imbalance_gate` for rationale.
     pub imbalance_gate: bool,
+    /// Replace Phase 3's 3-point parabolic peak finder with a PSF-blurred
+    /// erf-step Gauss-Newton fit per micro-ray. See
+    /// [`crate::config::DetectorConfig`] `edlines_phase3_erf` for rationale.
+    pub phase3_erf: bool,
 }
 
 impl EdLinesConfig {
@@ -80,6 +84,7 @@ impl EdLinesConfig {
             min_edge_pts: 5,
             gn_iters: 3,
             imbalance_gate: cfg.edlines_imbalance_gate.is_enabled(),
+            phase3_erf: cfg.edlines_phase3_erf.is_enabled(),
         }
     }
 }
@@ -866,6 +871,120 @@ fn extract_boundary_segments<'a>(
 
 // ── Phase 3: Micro-Ray Parabolic Sub-Pixel Refinement ─────────────────────────
 
+/// Fit a PSF-blurred step model `I(k) = (A+B)/2 + (B-A)/2 · erf((k-μ)/σ)` to 5
+/// intensity samples at `k ∈ {-2..+2}`.
+///
+/// Returns `Some(μ)` on convergence or `None` on degeneracy (low contrast,
+/// singular GN system, runaway). The caller is expected to fall back to the
+/// parabolic vertex on `None` to preserve sample density downstream.
+///
+/// Implementation: separable nonlinear least squares. Each iteration:
+///
+/// 1. Hold (μ, σ) fixed → solve (A, B) by 2-DOF linear LS (closed form).
+/// 2. Hold (A, B) fixed → take one 2-DOF Gauss-Newton step on (μ, σ).
+///
+/// This is mathematically equivalent to a 4-DOF joint GN on (μ, σ, A, B) but
+/// numerically stabler with only 5 data points.
+#[allow(clippy::many_single_char_names)]
+fn fit_erf_step_lm(
+    intensities: &[f64; 5],
+    mu_init: f64,
+    sigma_init: f64,
+    max_iters: usize,
+) -> Option<f64> {
+    use std::f64::consts::PI;
+
+    // Low-contrast early exit.
+    let i_min = intensities.iter().copied().fold(f64::INFINITY, f64::min);
+    let i_max = intensities
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    if (i_max - i_min) < 4.0 {
+        return None;
+    }
+
+    let mu_bound = 2.5_f64;
+    let sigma_floor = 0.3_f64;
+    let sqrt_pi = PI.sqrt();
+
+    let mut mu = mu_init.clamp(-mu_bound, mu_bound);
+    let mut sigma = sigma_init.max(sigma_floor);
+
+    for _ in 0..max_iters {
+        // --- Linear sub-problem: solve (A, B) given (μ, σ) -------------------
+        let inv_sigma = 1.0 / sigma;
+        let mut phi = [0.0_f64; 5];
+        for (i, p) in phi.iter_mut().enumerate() {
+            let k = i as f64 - 2.0;
+            let s = (k - mu) * inv_sigma;
+            *p = 0.5 * (1.0 + crate::simd::math::erf_approx(s));
+        }
+
+        let (mut m11, mut m12, mut m22) = (0.0_f64, 0.0_f64, 0.0_f64);
+        let (mut v1, mut v2) = (0.0_f64, 0.0_f64);
+        for (i, &phi_i) in phi.iter().enumerate() {
+            let one_minus_phi = 1.0 - phi_i;
+            m11 += one_minus_phi * one_minus_phi;
+            m12 += one_minus_phi * phi_i;
+            m22 += phi_i * phi_i;
+            v1 += one_minus_phi * intensities[i];
+            v2 += phi_i * intensities[i];
+        }
+        let det_ab = m11 * m22 - m12 * m12;
+        if det_ab < 1e-12 {
+            return None;
+        }
+        let a = (m22 * v1 - m12 * v2) / det_ab;
+        let b = (m11 * v2 - m12 * v1) / det_ab;
+        if (b - a).abs() < 4.0 {
+            return None;
+        }
+
+        // --- Nonlinear sub-problem: one GN step on (μ, σ) given (A, B) -------
+        // r_i = y_i - I(k_i),  I(k_i) = A·(1-φ_i) + B·φ_i  (since erf = 2φ-1)
+        // ∂I/∂μ = -(B-A)/(√π·σ) · exp(-s²)
+        // ∂I/∂σ = -(B-A)·s/(√π·σ) · exp(-s²)
+        let amp = (b - a) * inv_sigma / sqrt_pi;
+        let (mut h11, mut h12, mut h22) = (0.0_f64, 0.0_f64, 0.0_f64);
+        let (mut g1, mut g2) = (0.0_f64, 0.0_f64);
+        for (i, &intensity) in intensities.iter().enumerate() {
+            let k = i as f64 - 2.0;
+            let s = (k - mu) * inv_sigma;
+            let exp_s2 = (-s * s).exp();
+            let jac_mu = -amp * exp_s2;
+            let jac_sigma = -amp * exp_s2 * s;
+            let model = a * (1.0 - phi[i]) + b * phi[i];
+            let res = intensity - model;
+            h11 += jac_mu * jac_mu;
+            h12 += jac_mu * jac_sigma;
+            h22 += jac_sigma * jac_sigma;
+            g1 += jac_mu * res;
+            g2 += jac_sigma * res;
+        }
+
+        // Levenberg-Marquardt-style diagonal damping for conditioning.
+        h11 += 1e-6;
+        h22 += 1e-6;
+        let det_h = h11 * h22 - h12 * h12;
+        if det_h < 1e-12 {
+            break;
+        }
+        let d_mu = ((h22 * g1 - h12 * g2) / det_h).clamp(-0.5, 0.5);
+        let d_sigma = ((h11 * g2 - h12 * g1) / det_h).clamp(-0.3, 0.3);
+
+        mu = (mu + d_mu).clamp(-mu_bound, mu_bound);
+        sigma = (sigma + d_sigma).max(sigma_floor);
+
+        if d_mu.abs() < 1e-4 && d_sigma.abs() < 1e-4 {
+            break;
+        }
+    }
+
+    // Runaway guard: only accept μ inside the trust region of the 5-sample window.
+    if mu.abs() <= 2.0 { Some(mu) } else { None }
+}
+
 /// For each probe point along the IRLS line (in binary-image space), cast a
 /// short ray (±2 integer steps) along the normal in *gray-image space*, fit a
 /// parabola to the 1-D gradient profile, and collect the sub-pixel edge
@@ -885,6 +1004,7 @@ fn refine_edge_subpixel<'a>(
     max_y_bin: f64,
     sample_step: f64,
     grad_min_mag: f64,
+    use_erf: bool,
 ) -> BumpVec<'a, (f64, f64)> {
     let mut result: BumpVec<(f64, f64)> = BumpVec::new_in(arena);
 
@@ -951,10 +1071,26 @@ fn refine_edge_subpixel<'a>(
                 // f(k) = a·k² + b·k + c fitted to (g_neg1, g_0, g_pos1) at k = (-1,0,1).
                 // Vertex at k* = -b/(2a) = -(g_pos1 - g_neg1) / (g_pos1 + g_neg1 - 2·g_0).
                 let denom = g_pos1 + g_neg1 - 2.0 * g_0;
-                let k_star = if denom.abs() > 1e-6 {
+                let k_star_parabolic = if denom.abs() > 1e-6 {
                     (-(g_pos1 - g_neg1) / denom).clamp(-1.5, 1.5)
                 } else {
                     0.0 // gradient nearly linear; no clear peak — stay at centre
+                };
+
+                // Optional: replace the parabolic peak with a PSF-blurred
+                // erf-step Gauss-Newton fit over the same 5 intensity samples.
+                // On any guard failure (low contrast, singular GN, μ runaway)
+                // fall back to the parabolic vertex to preserve sample density.
+                // 6 iterations is the empirically validated minimum on
+                // multi-tag render data: dropping to 3 regressed aprilgrid
+                // trans_p99 ~18× because the cases erf wins biggest on are
+                // exactly the long-step-clamp cases that take the full GN
+                // budget to converge. 0.7 is the project's default PSF σ.
+                let k_star = if use_erf {
+                    fit_erf_step_lm(&intensities, k_star_parabolic, 0.7, 6)
+                        .unwrap_or(k_star_parabolic)
+                } else {
+                    k_star_parabolic
                 };
 
                 // Sub-pixel edge location in gray-image space.
@@ -1119,6 +1255,7 @@ fn run_pipeline_with_mode(
             max_y_bin,
             cfg.sample_step,
             cfg.grad_min_mag,
+            cfg.phase3_erf,
         ),
         refine_edge_subpixel(
             arena,
@@ -1131,6 +1268,7 @@ fn run_pipeline_with_mode(
             max_y_bin,
             cfg.sample_step,
             cfg.grad_min_mag,
+            cfg.phase3_erf,
         ),
         refine_edge_subpixel(
             arena,
@@ -1143,6 +1281,7 @@ fn run_pipeline_with_mode(
             max_y_bin,
             cfg.sample_step,
             cfg.grad_min_mag,
+            cfg.phase3_erf,
         ),
         refine_edge_subpixel(
             arena,
@@ -1155,6 +1294,7 @@ fn run_pipeline_with_mode(
             max_y_bin,
             cfg.sample_step,
             cfg.grad_min_mag,
+            cfg.phase3_erf,
         ),
     ];
 
@@ -1332,6 +1472,7 @@ mod tests {
             min_edge_pts: 5,
             gn_iters: 3,
             imbalance_gate: false,
+            phase3_erf: false,
         };
         let arena = Bump::new();
         // Use the same image as both binary and gray (dec = 1.0).
@@ -1398,6 +1539,7 @@ mod tests {
             min_edge_pts: 5,
             gn_iters: 3,
             imbalance_gate: false,
+            phase3_erf: false,
         };
         let arena = Bump::new();
         // labels and comp_label are not accessed because the bbox guard fires first.
@@ -1513,5 +1655,80 @@ mod tests {
             trace_noisy > trace_clean,
             "Noisy observations should yield larger covariances: clean={trace_clean:.6}, noisy={trace_noisy:.6}"
         );
+    }
+
+    /// Generate 5 ideal samples of the PSF-blurred step `I(k)` at integer `k ∈ {-2..2}`.
+    #[allow(clippy::many_single_char_names)]
+    fn erf_step_samples(mu: f64, sigma: f64, a: f64, b: f64) -> [f64; 5] {
+        let mut out = [0.0_f64; 5];
+        for (i, slot) in out.iter_mut().enumerate() {
+            let k_i = i as f64 - 2.0;
+            let z = (k_i - mu) / sigma;
+            *slot = 0.5 * (a + b) + 0.5 * (b - a) * crate::simd::math::erf_approx(z);
+        }
+        out
+    }
+
+    #[test]
+    fn fit_erf_step_recovers_centered_edge() {
+        // Edge exactly at the probe centre.
+        let s = erf_step_samples(0.0, 0.8, 30.0, 220.0);
+        let mu = super::fit_erf_step_lm(&s, 0.0, 0.7, 6).expect("converges");
+        assert!(mu.abs() < 0.01, "μ should be near 0, got {mu}");
+    }
+
+    #[test]
+    fn fit_erf_step_recovers_subpixel_offset() {
+        // The IRLS line tracks the edge to ±1 px in practice, so the realistic
+        // input range is μ ∈ [-1, +1]. At μ → ±2 only a single sample sits past
+        // the step, so conditioning degrades and tolerance must widen.
+        for &mu_gt in &[-0.7_f64, -0.3, 0.0, 0.3, 0.7] {
+            let s = erf_step_samples(mu_gt, 0.8, 30.0, 220.0);
+            let mu = super::fit_erf_step_lm(&s, 0.0, 0.7, 8).expect("converges");
+            assert!(
+                (mu - mu_gt).abs() < 0.02,
+                "μ_gt={mu_gt}, recovered={mu}, error={:.4}",
+                mu - mu_gt
+            );
+        }
+        // Wider trust-region case: |μ| > 1 is still recoverable, just looser.
+        for &mu_gt in &[-1.2_f64, 1.2] {
+            let s = erf_step_samples(mu_gt, 0.8, 30.0, 220.0);
+            let mu = super::fit_erf_step_lm(&s, 0.0, 0.7, 12).expect("converges");
+            assert!(
+                (mu - mu_gt).abs() < 0.06,
+                "μ_gt={mu_gt}, recovered={mu}, error={:.4}",
+                mu - mu_gt
+            );
+        }
+    }
+
+    #[test]
+    fn fit_erf_step_rejects_low_contrast() {
+        // Δ = 3 (below the 4-intensity-unit floor).
+        let s = [100.0, 100.5, 101.0, 102.5, 103.0];
+        assert!(super::fit_erf_step_lm(&s, 0.0, 0.7, 6).is_none());
+    }
+
+    #[test]
+    fn fit_erf_step_robust_to_initial_guess() {
+        let s = erf_step_samples(0.4, 0.8, 30.0, 220.0);
+        // Worst-case initial guess inside the trust region.
+        let mu = super::fit_erf_step_lm(&s, -1.5, 0.7, 10).expect("converges");
+        assert!((mu - 0.4).abs() < 0.05, "μ should be near 0.4, got {mu}");
+    }
+
+    #[test]
+    fn fit_erf_step_handles_variable_sigma() {
+        // Sharper PSF (σ=0.4) and broader PSF (σ=1.2). Initial guess σ=0.7
+        // is the project default; the fitter should recover μ in both cases.
+        for &sigma_gt in &[0.4_f64, 1.2] {
+            let s = erf_step_samples(0.0, sigma_gt, 30.0, 220.0);
+            let mu = super::fit_erf_step_lm(&s, 0.0, 0.7, 8).expect("converges");
+            assert!(
+                mu.abs() < 0.05,
+                "σ_gt={sigma_gt}: μ should be near 0, got {mu}"
+            );
+        }
     }
 }

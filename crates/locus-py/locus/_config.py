@@ -29,6 +29,7 @@ from .locus import (
     CameraIntrinsics,
     CornerRefinementMode,
     EdLinesImbalanceGatePolicy,
+    EdLinesPhase3ErfPolicy,
     PoseEstimationMode,
     PyDetectorConfig,
     QuadExtractionMode,
@@ -137,6 +138,19 @@ def _coerce_imbalance_gate(value: Any) -> EdLinesImbalanceGatePolicy:
     return _coerce(EdLinesImbalanceGatePolicy)(value)
 
 
+def _coerce_phase3_erf(value: Any) -> EdLinesPhase3ErfPolicy:
+    if isinstance(value, bool):
+        warnings.warn(
+            "edlines_phase3_erf: boolean values are deprecated; use "
+            'EdLinesPhase3ErfPolicy.Enabled / .Disabled (or "Enabled" / '
+            '"Disabled") instead.',
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return EdLinesPhase3ErfPolicy.Enabled if value else EdLinesPhase3ErfPolicy.Disabled
+    return _coerce(EdLinesPhase3ErfPolicy)(value)
+
+
 if TYPE_CHECKING:
     # The static type checker needs plain type aliases to accept these in field annotations.
     # At runtime the `else` branch installs the `Annotated[...]` wrapper so
@@ -146,11 +160,13 @@ if TYPE_CHECKING:
     _QuadExtractionField: TypeAlias = QuadExtractionMode
     _SegConnField: TypeAlias = SegmentationConnectivity
     _ImbalanceGateField: TypeAlias = EdLinesImbalanceGatePolicy
+    _Phase3ErfField: TypeAlias = EdLinesPhase3ErfPolicy
 else:
     _CornerRefinementField = _enum_field(CornerRefinementMode)
     _QuadExtractionField = _enum_field(QuadExtractionMode)
     _SegConnField = _enum_field(SegmentationConnectivity)
     _ImbalanceGateField = _enum_field(EdLinesImbalanceGatePolicy, _coerce_imbalance_gate)
+    _Phase3ErfField = _enum_field(EdLinesPhase3ErfPolicy, _coerce_phase3_erf)
 
 
 class ThresholdConfig(BaseModel):
@@ -233,6 +249,9 @@ class QuadConfig(BaseModel):
     )
     edlines_imbalance_gate: _ImbalanceGateField = Field(
         default_factory=lambda: EdLinesImbalanceGatePolicy.Disabled
+    )
+    edlines_phase3_erf: _Phase3ErfField = Field(
+        default_factory=lambda: EdLinesPhase3ErfPolicy.Disabled
     )
     extraction_policy: QuadExtractionPolicy = "Static"
 
@@ -455,6 +474,7 @@ class DetectorConfig(BaseModel):
             quad_min_density=self.quad.min_density,
             quad_extraction_mode=self.quad.extraction_mode,
             edlines_imbalance_gate=self.quad.edlines_imbalance_gate,
+            edlines_phase3_erf=self.quad.edlines_phase3_erf,
             quad_extraction_policy_is_adaptive=is_adaptive,
             adaptive_ppb_threshold=ppb_threshold,
             adaptive_ppb_low_extraction=ppb_low_ext,
@@ -488,7 +508,7 @@ class DetectOptions(BaseModel):
     intrinsics: tuple[float, float, float, float] | CameraIntrinsics | None = Field(default=None)
     tag_size: float | None = Field(default=None, ge=0.0)
     pose_estimation_mode: PoseEstimationMode = Field(
-        default_factory=lambda: PoseEstimationMode.Accurate
+        default_factory=lambda: PoseEstimationMode.Fast
     )
 
     @classmethod
