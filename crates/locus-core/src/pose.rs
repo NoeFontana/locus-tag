@@ -702,7 +702,16 @@ fn disabled_branch_diagnostics(
 ///
 /// This uses an analytical approach derived from the homography Jacobian's SVD.
 /// The second solution handles the "Necker reversal" ambiguity inherent in planar pose estimation.
-fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
+///
+/// **Input convention**: `h` is a *metric* homography that maps the canonical unit-square
+/// source `(-1, -1), (1, -1), (1, 1), (-1, 1)` (scaled by `tag_size / 2` to physical
+/// metres centred at the tag origin) to normalised image coordinates `[x_n, y_n, 1]^T`
+/// (i.e. `K^{-1} · H_pixel · diag(2/L, 2/L, 1)` where `L = tag_size`).
+///
+/// **Output convention**: both returned [`Pose`]s are in the *camera-from-tag* frame
+/// (tag plane at z=0, centred at origin, +x right / +y down for typical AprilTag /
+/// ArUco corner orderings `[TL, TR, BR, BL]`).
+pub(crate) fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
     // IpPE-Square Analytical Solution (Zero Alloc)
     // Jacobian J = [h1, h2]
     let h1 = h.column(0);
