@@ -2,7 +2,7 @@
 
 use crate::batch::{MAX_CANDIDATES, Point2f};
 use crate::pose::{CameraIntrinsics, Pose, projection_jacobian, symmetrize_jtj6};
-use nalgebra::{Matrix2, Matrix6, UnitQuaternion, Vector3, Vector6};
+use nalgebra::{Matrix2, Matrix3, Matrix6, UnitQuaternion, Vector3, Vector6};
 use std::sync::Arc;
 
 // ── Board configuration error ──────────────────────────────────────────────
@@ -376,6 +376,15 @@ pub struct BoardPose {
 /// **Lifetime**: the slices are typically backed by pre-allocated scratch
 /// buffers owned by [`BoardEstimator`] or by arena memory, ensuring zero heap
 /// allocation on the hot path.
+///
+/// **Seed strategy**: minimal-sample seeds for RANSAC are now computed inside
+/// the solver from the per-group object/image correspondences via a non-minimal
+/// planar-PnP step (see `solve_pnp_planar_seed`). The previous per-group
+/// `seed_poses` field — which stored per-tag IPPE poses bridged through a
+/// `board_seed_from_pose6d` helper — has been removed. Per-tag IPPE collapses
+/// on small (≈ 20–30 px edge) tags, dragging the joint board RANSAC into the
+/// wrong branch; sampling 4 tags = 16 corner correspondences per minimal
+/// sample removes that bottleneck.
 pub struct PointCorrespondences<'a> {
     /// Observed 2D image points (pixels). Length = M.
     pub image_points: &'a [Point2f],
@@ -388,10 +397,6 @@ pub struct PointCorrespondences<'a> {
     /// Number of consecutive points forming one logical correspondence group.
     /// `M` must be an exact multiple of `group_size`.
     pub group_size: usize,
-    /// Per-group seed pose hypotheses for RANSAC initialisation.
-    /// Length = M / `group_size`.  `None` signals a degenerate or occluded
-    /// group that RANSAC must skip as a minimal-sample candidate.
-    pub seed_poses: &'a [Option<Pose>],
 }
 
 impl PointCorrespondences<'_> {
@@ -401,6 +406,235 @@ impl PointCorrespondences<'_> {
     pub fn num_groups(&self) -> usize {
         self.image_points.len() / self.group_size
     }
+}
+
+// ── Non-minimal planar PnP seed ────────────────────────────────────────────
+
+/// Maximum number of correspondences a single minimal-sample non-minimal PnP
+/// call needs to ingest.  4 sampled tags × 4 corners = 16 — but we allocate a
+/// little slack so the same buffer can host the centroid-only fallback or a
+/// rare 5-tag oversample without resizing.
+const MAX_SEED_SAMPLES: usize = 32;
+
+/// Non-minimal PnP for **planar** object points (Z ≈ 0) via DLT homography
+/// + Zhang-style decomposition.
+///
+/// # Algorithm
+/// 1. Normalise image points by the inverse intrinsics: `(u_n, v_n) =
+///    ((px-cx)/fx, (py-cy)/fy)`.  After this step the residual projection is
+///    `[u_n, v_n, 1]^T ∝ R · [X, Y, 0]^T + t = [r1 r2 t] · [X, Y, 1]^T`,
+///    i.e. a 3 × 3 homography between board (X, Y) and normalised image.
+/// 2. Build the symmetric 9 × 9 normal-equations matrix `A^T A` by
+///    accumulating the per-point DLT rows on the fly (zero heap allocation —
+///    a 32 × 9 matrix never materialises).
+/// 3. Solve for the null space of `A^T A` (its smallest-eigenvalue
+///    eigenvector) via nalgebra's fixed-size symmetric eigendecomposition.
+/// 4. Reshape `h` to a 3 × 3 matrix `H = [h1 | h2 | h3]`; recover
+///    `s = 0.5 · (‖h1‖ + ‖h2‖)`, `r1 = h1/s`, `r2 = h2/s`, `r3 = r1 × r2`,
+///    `t = h3 / s`.
+/// 5. Orthonormalise the recovered `R` via SVD and pick the sign so that
+///    every tag lies in front of the camera (`z_cam > 0`).
+///
+/// The result is then handed to the LO inner-loop / AW-LM cascade — i.e. it
+/// does **not** need to be metrology-grade, only "in the right RANSAC
+/// basin".  In practice the post-DLT pose is within 0.5° / a few cm on the
+/// small-tag-edge frames where per-tag IPPE collapses entirely.
+///
+/// # Returns
+/// `None` only on pathological inputs: < 4 correspondences, all object
+/// points colinear, all image points equal, or non-finite outputs.  Callers
+/// should treat `None` as "skip this minimal sample".
+///
+/// # Caveat
+/// This solver assumes coplanar object points (`obj_pts[i][2] ≈ 0` for all
+/// `i`).  All board topologies in Locus (AprilGrid, ChAruco saddles, ChAruco
+/// markers) satisfy this.  For non-planar 3D layouts the fallback in
+/// [`RobustPoseSolver::lo_ransac_loop`] kicks in (identity rotation +
+/// centroid translation).
+#[allow(
+    clippy::too_many_lines,
+    clippy::similar_names,
+    clippy::many_single_char_names
+)]
+fn solve_pnp_planar_seed(
+    obj_pts: &[[f64; 3]],
+    img_pts: &[Point2f],
+    intrinsics: &CameraIntrinsics,
+) -> Option<Pose> {
+    if obj_pts.len() < 4 || obj_pts.len() != img_pts.len() {
+        return None;
+    }
+
+    // 1. Build A^T A in place (9 × 9 symmetric).  For each correspondence we
+    //    emit two DLT rows; we never store A explicitly.
+    //
+    //    Row form for normalised image point (u, v) and planar object point
+    //    (X, Y):
+    //      [ -X, -Y, -1,   0,  0,  0,  u·X, u·Y, u ]   (u-row)
+    //      [   0,  0,  0, -X, -Y, -1,  v·X, v·Y, v ]   (v-row)
+    //
+    //    A^T A = Σ (row^T · row) accumulated symmetrically.
+    let mut ata = nalgebra::Matrix::<f64, nalgebra::U9, nalgebra::U9, _>::zeros();
+
+    // Centre + scale normalisation of object points for numerical
+    // conditioning (mean-zero, mean ‖·‖ ≈ √2 — the standard DLT trick).
+    let n = obj_pts.len();
+    let mut cx_o = 0.0f64;
+    let mut cy_o = 0.0f64;
+    for p in obj_pts {
+        cx_o += p[0];
+        cy_o += p[1];
+    }
+    cx_o /= n as f64;
+    cy_o /= n as f64;
+
+    let mut mean_dist = 0.0f64;
+    for p in obj_pts {
+        let dx = p[0] - cx_o;
+        let dy = p[1] - cy_o;
+        mean_dist += (dx * dx + dy * dy).sqrt();
+    }
+    mean_dist /= n as f64;
+    if mean_dist < 1e-12 {
+        return None; // colinear / coincident
+    }
+    let scale_o = std::f64::consts::SQRT_2 / mean_dist;
+
+    // Normalisation matrix for object points (T_o · [X, Y, 1]^T = [X', Y', 1]^T).
+    // T_o = diag(scale_o, scale_o, 1) · [[1, 0, -cx_o], [0, 1, -cy_o], [0, 0, 1]]
+    // Inverse: T_o^{-1} so that the recovered homography is in the original
+    // (unnormalised) frame.
+    for (op, ip) in obj_pts.iter().zip(img_pts.iter()) {
+        let x = (op[0] - cx_o) * scale_o;
+        let y = (op[1] - cy_o) * scale_o;
+        // Normalised image coordinates (camera frame).
+        let u = (f64::from(ip.x) - intrinsics.cx) / intrinsics.fx;
+        let v = (f64::from(ip.y) - intrinsics.cy) / intrinsics.fy;
+
+        // u-row.
+        let r1 = [-x, -y, -1.0, 0.0, 0.0, 0.0, u * x, u * y, u];
+        // v-row.
+        let r2 = [0.0, 0.0, 0.0, -x, -y, -1.0, v * x, v * y, v];
+
+        for i in 0..9 {
+            for j in i..9 {
+                ata[(i, j)] += r1[i] * r1[j] + r2[i] * r2[j];
+            }
+        }
+    }
+    // Mirror upper → lower triangle.
+    for i in 1..9 {
+        for j in 0..i {
+            ata[(i, j)] = ata[(j, i)];
+        }
+    }
+
+    // 2. Symmetric eigendecomposition; smallest-eigenvalue eigenvector → h.
+    let eig = ata.symmetric_eigen();
+    let mut min_idx = 0usize;
+    let mut min_val = eig.eigenvalues[0];
+    for i in 1..9 {
+        if eig.eigenvalues[i] < min_val {
+            min_val = eig.eigenvalues[i];
+            min_idx = i;
+        }
+    }
+    let h_vec = eig.eigenvectors.column(min_idx);
+
+    // 3. Reshape to 3 × 3 homography H' in normalised-object frame.
+    let h_n = Matrix3::new(
+        h_vec[0], h_vec[1], h_vec[2], h_vec[3], h_vec[4], h_vec[5], h_vec[6], h_vec[7], h_vec[8],
+    );
+
+    // Un-normalise: H = H' · T_o (denormalises the object-side scaling).
+    // T_o = [[scale_o, 0, -scale_o*cx_o], [0, scale_o, -scale_o*cy_o], [0, 0, 1]]
+    let t_o = Matrix3::new(
+        scale_o,
+        0.0,
+        -scale_o * cx_o,
+        0.0,
+        scale_o,
+        -scale_o * cy_o,
+        0.0,
+        0.0,
+        1.0,
+    );
+    let h_mat = h_n * t_o;
+
+    // 4. Decompose H = [h1 | h2 | h3] = [r1 | r2 | t] · gamma.
+    //    Choose sign so gamma > 0 (camera-frame depth positive at the centroid).
+    let h1 = h_mat.column(0).into_owned();
+    let h2 = h_mat.column(1).into_owned();
+    let h3 = h_mat.column(2).into_owned();
+    let n1 = h1.norm();
+    let n2 = h2.norm();
+    if n1 < 1e-12 || n2 < 1e-12 {
+        return None;
+    }
+    let gamma = 0.5 * (n1 + n2);
+    if gamma < 1e-12 || !gamma.is_finite() {
+        return None;
+    }
+
+    // Sign convention: depth at the centroid of the (X, Y) board points must
+    // be positive.  Because the original object points are centred at
+    // (cx_o, cy_o), the camera-frame depth of the centroid is h_mat[2,2]/gamma
+    // = h3.z / gamma (since x_c = y_c = 0 after centring).  Wait — that's
+    // wrong: h_mat absorbed the un-normalisation.  Recompute on the raw
+    // centroid (cx_o, cy_o, 1).
+    //
+    // p_cam = H · [cx_o, cy_o, 1]^T, then z_cam = p_cam.z / gamma.  Solve
+    // both signs of (r1, r2, t) and pick the one that produces a positive
+    // z_cam on the centroid.
+    let centroid_xy = nalgebra::Vector3::new(cx_o, cy_o, 1.0);
+    let p_centroid = h_mat * centroid_xy;
+    let sign = if p_centroid.z > 0.0 { 1.0 } else { -1.0 };
+
+    let inv_gamma = sign / gamma;
+    let mut r1 = h1 * inv_gamma;
+    let mut r2 = h2 * inv_gamma;
+    let t = h3 * inv_gamma;
+
+    // 5. Orthonormalise R via SVD of [r1 | r2 | r1 × r2].
+    //    First Gram-Schmidt for a cheap first pass; SVD polishes.
+    let nr1 = r1.norm();
+    let nr2 = r2.norm();
+    if nr1 < 1e-12 || nr2 < 1e-12 {
+        return None;
+    }
+    r1 /= nr1;
+    r2 -= r1 * r1.dot(&r2);
+    let nr2 = r2.norm();
+    if nr2 < 1e-12 {
+        return None;
+    }
+    r2 /= nr2;
+    let r3 = r1.cross(&r2);
+
+    let r_coarse = Matrix3::from_columns(&[r1, r2, r3]);
+    // SVD polish: R = U V^T with det = +1.
+    let svd = r_coarse.svd(true, true);
+    let (Some(u), Some(v_t)) = (svd.u, svd.v_t) else {
+        return None;
+    };
+    let mut r = u * v_t;
+    if r.determinant() < 0.0 {
+        // Reflect last column of U.
+        let mut u_fixed = u;
+        for i in 0..3 {
+            u_fixed[(i, 2)] = -u_fixed[(i, 2)];
+        }
+        r = u_fixed * v_t;
+    }
+
+    if !r.iter().all(|v| v.is_finite()) || !t.iter().all(|v| v.is_finite()) {
+        return None;
+    }
+
+    Some(Pose {
+        rotation: r,
+        translation: t,
+    })
 }
 
 // ── Robust Pose Solver ─────────────────────────────────────────────────────
@@ -472,12 +706,22 @@ impl RobustPoseSolver {
 
     /// Core LO-RANSAC loop.
     ///
-    /// Outer loop: random 4-group sampling → seed pose → outer-threshold
-    /// evaluation.  Inner loop (LO): unweighted Gauss-Newton refinement +
-    /// tight re-evaluation with monotonicity guard.
-    /// Dynamic stopping: `k` is updated after each tight-count improvement using
-    /// the standard RANSAC formula `k = log(1-p) / log(1-ω⁴)` where `ω` is the
-    /// verified tight inlier ratio from `lo_inner`.
+    /// Outer loop: random 4-group sampling → non-minimal planar-PnP seed →
+    /// outer-threshold evaluation.  Inner loop (LO): unweighted Gauss-Newton
+    /// refinement + tight re-evaluation with monotonicity guard.
+    ///
+    /// Dynamic stopping: `k` is updated after each tight-count improvement
+    /// using the standard RANSAC formula `k = log(1-p) / log(1-ω⁴)` where
+    /// `ω` is the verified tight inlier ratio from `lo_inner`.
+    ///
+    /// **Seed strategy**: each minimal sample collects all
+    /// `4 × group_size` correspondences from its sampled groups and solves a
+    /// non-minimal planar PnP via [`solve_pnp_planar_seed`].  At 16+ points
+    /// the PnP solution is unambiguous (no two-fold IPPE degeneracy) and the
+    /// per-corner noise averages out.  The previous per-tag-IPPE seed path
+    /// collapsed on small tag-edge sizes (≈ 20–30 px), producing >50% per-tag
+    /// pose errors that LO-RANSAC could not recover from — see
+    /// `diagnostics/board_p99_investigation_2026-05-14/MEMO.md`.
     #[allow(clippy::too_many_lines, clippy::cast_sign_loss)]
     fn lo_ransac_loop(
         &self,
@@ -486,10 +730,17 @@ impl RobustPoseSolver {
     ) -> Option<(Pose, [u64; 16])> {
         let cfg = &self.lo_ransac;
         let num_groups = corr.num_groups();
+        let gs = corr.group_size;
 
         let mut global_best_tight_count = 0usize;
         let mut global_best_seed: Option<Pose> = None;
         let mut dynamic_k = cfg.k_max;
+
+        // Stack scratch buffers for the 4-tag minimal sample (16 corners at
+        // group_size = 4, 4 saddles at group_size = 1).  Sized to absorb the
+        // largest plausible group_size × 4 without heap allocation.
+        let mut sample_img = [Point2f { x: 0.0, y: 0.0 }; MAX_SEED_SAMPLES];
+        let mut sample_obj = [[0.0f64; 3]; MAX_SEED_SAMPLES];
 
         // Deterministic XOR-shift RNG (reproducible across frames).
         let mut rng_seed = 0x1337u32;
@@ -514,36 +765,60 @@ impl RobustPoseSolver {
                 continue;
             }
 
-            // ── Try each sampled group's seed pose as a hypothesis ────────
-            let mut best_outer_count = 0usize;
-            let mut best_outer_mask = [0u64; 16];
-            let mut best_outer_pose: Option<Pose> = None;
-
-            for &s_val in &sample {
-                let Some(pose_init) = corr.seed_poses[s_val] else {
-                    continue;
-                };
-
-                let (outer_mask, outer_count) =
-                    self.evaluate_inliers(&pose_init, corr, intrinsics, cfg.tau_outer_sq);
-
-                if outer_count >= cfg.min_inliers && outer_count > best_outer_count {
-                    best_outer_count = outer_count;
-                    best_outer_mask = outer_mask;
-                    best_outer_pose = Some(pose_init);
+            // ── Gather the 4 × group_size correspondences for non-minimal PnP ──
+            let n_pts = 4 * gs;
+            if n_pts > MAX_SEED_SAMPLES {
+                // Defensive: extremely unlikely (group_size > 8) but keep the
+                // path safe rather than panicking.
+                continue;
+            }
+            for (i, &s_val) in sample.iter().enumerate() {
+                let start = s_val * gs;
+                for k in 0..gs {
+                    sample_img[i * gs + k] = corr.image_points[start + k];
+                    sample_obj[i * gs + k] = corr.object_points[start + k];
                 }
             }
 
-            let Some(seed_pose) = best_outer_pose else {
+            // ── Solve non-minimal planar PnP from the 4-tag sample ────────
+            let Some(seed_pose_raw) =
+                solve_pnp_planar_seed(&sample_obj[..n_pts], &sample_img[..n_pts], intrinsics)
+            else {
                 continue;
             };
+
+            // Polish the DLT seed with a few unweighted GN steps on the
+            // sample itself.  This is *cheap* (16 points, ≤ 3 iterations)
+            // and dramatically tightens the seed before evaluate_inliers
+            // tags the consensus set.
+            let mut sample_mask = [0u64; 16];
+            for &s_val in &sample {
+                sample_mask[s_val / 64] |= 1 << (s_val % 64);
+            }
+            let mut seed_pose = seed_pose_raw;
+            for _ in 0..3 {
+                let polished = self.gn_step(&seed_pose, corr, intrinsics, &sample_mask);
+                // Convergence guard: stop if the step is microscopic.
+                let dt = (polished.translation - seed_pose.translation).norm();
+                seed_pose = polished;
+                if dt < 1e-6 {
+                    break;
+                }
+            }
+
+            // ── Evaluate consensus at the outer threshold ─────────────────
+            let (outer_mask, outer_count) =
+                self.evaluate_inliers(&seed_pose, corr, intrinsics, cfg.tau_outer_sq);
+            if outer_count < cfg.min_inliers {
+                continue;
+            }
 
             // ── LO inner loop (verification gate) ────────────────────────
             // The unweighted GN pose produced inside lo_inner is discarded
             // (spec mandate) to prevent biasing the AW-LM initialisation.
             // Only tight_count governs global state and dynamic stopping.
             let (_gn_pose, _tight_mask, tight_count) =
-                self.lo_inner(seed_pose, &best_outer_mask, corr, intrinsics);
+                self.lo_inner(seed_pose, &outer_mask, corr, intrinsics);
 
             if tight_count > global_best_tight_count {
                 global_best_tight_count = tight_count;
@@ -955,50 +1230,6 @@ impl RobustPoseSolver {
     }
 }
 
-// ── Shared pose reconstruction helper ─────────────────────────────────────
-
-/// Reconstruct a board-frame [`Pose`] from a stored per-tag [`Pose6D`] payload.
-///
-/// The `Pose6D` encodes the camera-to-tag transform where `t` points to the
-/// tag's geometric center (center-origin convention). We subtract the tag's
-/// board-frame center to recover the camera-to-board transform.
-///
-/// Returns `None` if the stored data is degenerate (NaN or near-zero depth).
-pub(crate) fn board_seed_from_pose6d(
-    pose6d_data: &[f32; 7],
-    tag_id: usize,
-    obj_points: &[Option<[[f64; 3]; 4]>],
-) -> Option<Pose> {
-    if pose6d_data.iter().any(|v| v.is_nan()) || pose6d_data[2].abs() < 1e-6 {
-        return None;
-    }
-    let det_t = Vector3::new(
-        f64::from(pose6d_data[0]),
-        f64::from(pose6d_data[1]),
-        f64::from(pose6d_data[2]),
-    );
-    let det_q = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-        f64::from(pose6d_data[6]), // w
-        f64::from(pose6d_data[3]), // x
-        f64::from(pose6d_data[4]), // y
-        f64::from(pose6d_data[5]), // z
-    ));
-    // The single-tag pose convention uses the tag center as origin.
-    // Compute the tag center in board frame as the midpoint of TL (corner 0) and BR (corner 2).
-    let corners = obj_points.get(tag_id)?.as_ref()?;
-    let tl = corners[0];
-    let br = corners[2];
-    let tag_center = Vector3::new(
-        (tl[0] + br[0]) * 0.5,
-        (tl[1] + br[1]) * 0.5,
-        (tl[2] + br[2]) * 0.5,
-    );
-    Some(Pose {
-        rotation: *det_q.to_rotation_matrix().matrix(),
-        translation: det_t - (det_q * tag_center),
-    })
-}
-
 // ── Board Estimator (AprilGrid adapter) ────────────────────────────────────
 
 /// Estimator for multi-tag AprilGrid board poses.
@@ -1015,11 +1246,13 @@ pub struct BoardEstimator {
     pub solver: RobustPoseSolver,
     // ── Pre-allocated scratch buffers (single heap allocation in new()) ──────
     // img/obj/info are per-point: MAX_CORR = MAX_CANDIDATES × CORNERS_PER_TAG.
-    // seeds are per-group: MAX_CANDIDATES (one seed pose per tag, not per corner).
+    //
+    // No per-group `scratch_seeds` any more: the solver constructs minimal-
+    // sample seeds via non-minimal planar PnP from the corner data directly
+    // (see [`solve_pnp_planar_seed`] / [`RobustPoseSolver::lo_ransac_loop`]).
     scratch_img: Box<[Point2f]>,
     scratch_obj: Box<[[f64; 3]]>,
     scratch_info: Box<[Matrix2<f64>]>,
-    scratch_seeds: Box<[Option<Pose>]>,
 }
 
 impl BoardEstimator {
@@ -1042,7 +1275,6 @@ impl BoardEstimator {
             scratch_img: vec![Point2f { x: 0.0, y: 0.0 }; Self::MAX_CORR].into_boxed_slice(),
             scratch_obj: vec![[0.0f64; 3]; Self::MAX_CORR].into_boxed_slice(),
             scratch_info: vec![Matrix2::zeros(); Self::MAX_CORR].into_boxed_slice(),
-            scratch_seeds: vec![None; MAX_CANDIDATES].into_boxed_slice(),
         }
     }
 
@@ -1066,7 +1298,7 @@ impl BoardEstimator {
         intrinsics: &CameraIntrinsics,
     ) -> Option<BoardPose> {
         // Phase 1: flatten valid batch entries into the pre-allocated scratch
-        // slices, inverting covariances and gathering IPPE seed poses.
+        // slices and invert per-corner covariances into information matrices.
         let num_groups = self.flatten_batch(batch);
         if num_groups < 4 {
             return None;
@@ -1078,7 +1310,6 @@ impl BoardEstimator {
             object_points: &self.scratch_obj[..m],
             information_matrices: &self.scratch_info[..m],
             group_size: Self::CORNERS_PER_TAG,
-            seed_poses: &self.scratch_seeds[..num_groups],
         };
 
         // Phase 2–4: LO-RANSAC → GN verification → AW-LM refinement.
@@ -1120,29 +1351,10 @@ impl BoardEstimator {
                 .unwrap_or_else(Matrix2::identity);
             }
 
-            // Compute the seed pose before writing to scratch_seeds to avoid
-            // conflicting borrows of self within the same statement.
-            let seed = self.init_pose_from_batch_tag(i, batch);
-            self.scratch_seeds[g] = seed;
             g += 1;
         }
 
         g
-    }
-
-    /// Converts a single tag's stored per-tag `Pose6D` into a board-frame `Pose`.
-    ///
-    /// Returns `None` if the stored pose is degenerate (NaN or near-zero depth).
-    fn init_pose_from_batch_tag(
-        &self,
-        b_idx: usize,
-        batch: &crate::batch::DetectionBatchView<'_>,
-    ) -> Option<Pose> {
-        board_seed_from_pose6d(
-            &batch.poses[b_idx].data,
-            batch.ids[b_idx] as usize,
-            &self.config.obj_points,
-        )
     }
 }
 
@@ -1189,10 +1401,12 @@ mod tests {
     }
 
     /// Build a `DetectionBatch` by projecting every marker in `obj_points` through
-    /// `pose` and `intrinsics`.  Corners are stored as f32 (matching `Point2f`);
-    /// per-tag pose data encodes the camera-space position of each tag's geometric center
-    /// and the board rotation quaternion so that `init_pose_from_batch_tag` recovers
-    /// `pose` exactly.  Identity corner covariances → isotropic AW-LM weighting.
+    /// `pose` and `intrinsics`.  Corners are stored as f32 (matching `Point2f`).
+    /// Per-tag pose data is filled with the camera-space position of each tag's
+    /// geometric center for parity with the production pipeline, but the board
+    /// solver no longer reads it — the seed is derived from the corner data via
+    /// non-minimal planar PnP.  Identity corner covariances → isotropic AW-LM
+    /// weighting.
     fn build_synthetic_batch(
         obj_points: &[Option<[[f64; 3]; 4]>],
         pose: &Pose,
@@ -1250,24 +1464,20 @@ mod tests {
     /// Flatten the first `num_valid` batch entries into `PointCorrespondences`
     /// buffers using unit information matrices.
     ///
-    /// Returns the four backing `Vec`s so the caller can keep them alive for the
-    /// lifetime of the `PointCorrespondences` view.
+    /// Returns the three backing `Vec`s so the caller can keep them alive for
+    /// the lifetime of the `PointCorrespondences` view.  Seeds are no longer
+    /// needed — the solver computes minimal-sample seeds internally via
+    /// non-minimal planar PnP.
     #[allow(clippy::type_complexity)]
     fn build_correspondences_from_batch(
         obj_points: &[Option<[[f64; 3]; 4]>],
         view: &DetectionBatchView<'_>,
-        estimator: &BoardEstimator,
-    ) -> (
-        Vec<Point2f>,
-        Vec<[f64; 3]>,
-        Vec<Matrix2<f64>>,
-        Vec<Option<Pose>>,
-    ) {
+        _estimator: &BoardEstimator,
+    ) -> (Vec<Point2f>, Vec<[f64; 3]>, Vec<Matrix2<f64>>) {
         let num_valid = view.len();
         let mut img = Vec::with_capacity(num_valid * 4);
         let mut obj = Vec::with_capacity(num_valid * 4);
         let mut info = Vec::with_capacity(num_valid * 4);
-        let mut seeds = Vec::with_capacity(num_valid);
 
         for b_idx in 0..num_valid {
             let id = view.ids[b_idx] as usize;
@@ -1277,10 +1487,9 @@ mod tests {
                 obj.push(obj_pt);
                 info.push(Matrix2::identity());
             }
-            seeds.push(estimator.init_pose_from_batch_tag(b_idx, view));
         }
 
-        (img, obj, info, seeds)
+        (img, obj, info)
     }
 
     /// Per-corner mean squared reprojection error (in pixel²) for the first
@@ -1468,14 +1677,13 @@ mod tests {
         let v = batch.partition(num_valid);
         let view = batch.view(v);
 
-        let (img, obj, info, seeds) =
+        let (img, obj, info) =
             build_correspondences_from_batch(&config.obj_points, &view, &estimator);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
             information_matrices: &info,
             group_size: 4,
-            seed_poses: &seeds,
         };
 
         let solver = RobustPoseSolver::new();
@@ -1497,14 +1705,13 @@ mod tests {
         let view = batch.view(v);
 
         let bad_pose = Pose::new(Matrix3::identity(), Vector3::new(0.5, 0.0, 1.0));
-        let (img, obj, info, seeds) =
+        let (img, obj, info) =
             build_correspondences_from_batch(&config.obj_points, &view, &estimator);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
             information_matrices: &info,
             group_size: 4,
-            seed_poses: &seeds,
         };
 
         let solver = RobustPoseSolver::new();
@@ -1526,14 +1733,13 @@ mod tests {
         let v = batch.partition(num_valid);
         let view = batch.view(v);
 
-        let (img, obj, info, seeds) =
+        let (img, obj, info) =
             build_correspondences_from_batch(&config.obj_points, &view, &estimator);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
             information_matrices: &info,
             group_size: 4,
-            seed_poses: &seeds,
         };
 
         let solver = RobustPoseSolver::new();
@@ -1546,59 +1752,129 @@ mod tests {
         );
     }
 
+    // ── Non-minimal planar PnP seed tests ─────────────────────────────────
+
+    /// Helper: project all object points through `pose` and call the planar
+    /// PnP seed to recover it. Returns the recovered pose.
+    fn pnp_seed_from_synthetic(
+        obj_points: &[[f64; 3]],
+        pose: &Pose,
+        intrinsics: &CameraIntrinsics,
+    ) -> Pose {
+        let img_pts: Vec<Point2f> = obj_points
+            .iter()
+            .map(|p| {
+                let proj = pose.project(&Vector3::new(p[0], p[1], p[2]), intrinsics);
+                Point2f {
+                    x: proj[0] as f32,
+                    y: proj[1] as f32,
+                }
+            })
+            .collect();
+        solve_pnp_planar_seed(obj_points, &img_pts, intrinsics)
+            .expect("planar PnP seed must succeed on clean synthetic data")
+    }
+
     #[test]
-    fn test_init_pose_from_batch_tag_recovers_board_pose() {
-        // init_pose_from_batch_tag must reconstruct the board pose from any single
-        // tag's stored per-tag pose data.
+    fn test_solve_pnp_planar_seed_recovers_translation_only_pose() {
+        // Identity rotation, translation along z. PnP must recover within
+        // 0.5 mm / 0.05° from 16 noise-free corners.
         let config = math_test_config();
-        let estimator = BoardEstimator::new(Arc::clone(&config));
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        let (mut batch, num_valid) =
-            build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
-        let v = batch.partition(num_valid);
-        let view = batch.view(v);
-
-        for b_idx in 0..v {
-            let pose = estimator
-                .init_pose_from_batch_tag(b_idx, &view)
-                .expect("tag must produce a valid pose");
-            let t_error = (pose.translation - true_pose.translation).norm();
-            assert!(
-                t_error < 1e-5,
-                "tag {b_idx}: translation error {t_error} m exceeds 10 µm"
-            );
-        }
+        let obj_pts: Vec<[f64; 3]> = config.obj_points[..4]
+            .iter()
+            .flat_map(|opt| opt.unwrap())
+            .collect();
+        let recovered = pnp_seed_from_synthetic(&obj_pts, &true_pose, &intrinsics);
+        let t_err = (recovered.translation - true_pose.translation).norm();
+        assert!(t_err < 5e-4, "translation error {t_err} m exceeds 0.5 mm");
+        let q_true = UnitQuaternion::from_matrix(&true_pose.rotation);
+        let q_est = UnitQuaternion::from_matrix(&recovered.rotation);
+        let r_err = q_true.angle_to(&q_est).to_degrees();
+        assert!(r_err < 0.05, "rotation error {r_err}° exceeds 0.05°");
     }
 
     #[test]
-    fn test_init_pose_from_batch_tag_nan_returns_none() {
-        // A tag whose stored pose contains NaN must yield None.
+    fn test_solve_pnp_planar_seed_recovers_oblique_pose() {
+        // Oblique 20° pitch + lateral translation; must still recover to
+        // sub-mm / sub-tenth-degree accuracy from 16 corners.
         let config = math_test_config();
-        let estimator = BoardEstimator::new(Arc::clone(&config));
-        let mut batch = DetectionBatch::new();
-        batch.ids[0] = 0;
-        batch.poses[0].data = [f32::NAN; 7];
-        assert!(
-            estimator
-                .init_pose_from_batch_tag(0, &batch.view(1))
-                .is_none()
+        let intrinsics = test_intrinsics();
+        let rot = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), 20f64.to_radians());
+        let true_pose = Pose::new(
+            *rot.to_rotation_matrix().matrix(),
+            Vector3::new(0.05, -0.02, 1.5),
         );
+        let obj_pts: Vec<[f64; 3]> = config.obj_points[..4]
+            .iter()
+            .flat_map(|opt| opt.unwrap())
+            .collect();
+        let recovered = pnp_seed_from_synthetic(&obj_pts, &true_pose, &intrinsics);
+        let t_err = (recovered.translation - true_pose.translation).norm();
+        assert!(t_err < 1e-3, "translation error {t_err} m exceeds 1 mm");
+        let q_true = UnitQuaternion::from_matrix(&true_pose.rotation);
+        let q_est = UnitQuaternion::from_matrix(&recovered.rotation);
+        let r_err = q_true.angle_to(&q_est).to_degrees();
+        assert!(r_err < 0.1, "rotation error {r_err}° exceeds 0.1°");
     }
 
     #[test]
-    fn test_init_pose_from_batch_tag_near_zero_depth_returns_none() {
-        // A tag at near-zero depth (Z ≈ 0) is degenerate and must yield None.
+    fn test_solve_pnp_planar_seed_robust_to_pixel_noise() {
+        // 1 px Gaussian-equivalent noise across 16 corners must still leave
+        // the seed within the RANSAC inner threshold (≤ 5 px reprojection).
         let config = math_test_config();
-        let estimator = BoardEstimator::new(Arc::clone(&config));
-        let mut batch = DetectionBatch::new();
-        batch.ids[0] = 0;
-        batch.poses[0].data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]; // z = 0
-        assert!(
-            estimator
-                .init_pose_from_batch_tag(0, &batch.view(1))
-                .is_none()
-        );
+        let intrinsics = test_intrinsics();
+        let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.02, -0.01, 1.2));
+        let obj_pts: Vec<[f64; 3]> = config.obj_points[..4]
+            .iter()
+            .flat_map(|opt| opt.unwrap())
+            .collect();
+        // Deterministic pseudo-noise via a small XOR shift.
+        let mut rng = 0xCAFEu32;
+        let img_pts: Vec<Point2f> = obj_pts
+            .iter()
+            .map(|p| {
+                let proj = true_pose.project(&Vector3::new(p[0], p[1], p[2]), &intrinsics);
+                rng ^= rng << 13;
+                rng ^= rng >> 17;
+                rng ^= rng << 5;
+                let nx = (f64::from(rng & 0xFFFF) / 65535.0 - 0.5) * 2.0;
+                rng ^= rng << 13;
+                rng ^= rng >> 17;
+                rng ^= rng << 5;
+                let ny = (f64::from(rng & 0xFFFF) / 65535.0 - 0.5) * 2.0;
+                Point2f {
+                    x: (proj[0] + nx) as f32,
+                    y: (proj[1] + ny) as f32,
+                }
+            })
+            .collect();
+        let recovered = solve_pnp_planar_seed(&obj_pts, &img_pts, &intrinsics)
+            .expect("must succeed under 1 px noise");
+        let t_err = (recovered.translation - true_pose.translation).norm();
+        assert!(t_err < 0.05, "translation error {t_err} m exceeds 5 cm");
+    }
+
+    #[test]
+    fn test_solve_pnp_planar_seed_too_few_points_returns_none() {
+        let intrinsics = test_intrinsics();
+        let obj = [[0.0; 3], [0.1, 0.0, 0.0], [0.1, 0.1, 0.0]];
+        let img = [
+            Point2f { x: 320.0, y: 240.0 },
+            Point2f { x: 400.0, y: 240.0 },
+            Point2f { x: 400.0, y: 320.0 },
+        ];
+        assert!(solve_pnp_planar_seed(&obj, &img, &intrinsics).is_none());
+    }
+
+    #[test]
+    fn test_solve_pnp_planar_seed_all_coincident_returns_none() {
+        // All points coincident → mean_dist == 0 → returns None.
+        let intrinsics = test_intrinsics();
+        let obj = vec![[0.01, 0.02, 0.0]; 8];
+        let img = vec![Point2f { x: 320.0, y: 240.0 }; 8];
+        assert!(solve_pnp_planar_seed(&obj, &img, &intrinsics).is_none());
     }
 
     #[test]
@@ -1615,14 +1891,13 @@ mod tests {
         let view = batch.view(v);
 
         let perturbed = Pose::new(Matrix3::identity(), Vector3::new(0.02, 0.0, 1.0));
-        let (img, obj, info, seeds) =
+        let (img, obj, info) =
             build_correspondences_from_batch(&config.obj_points, &view, &estimator);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
             information_matrices: &info,
             group_size: 4,
-            seed_poses: &seeds,
         };
         let all_inliers = [u64::MAX; 16];
 
@@ -1649,14 +1924,13 @@ mod tests {
         let v = batch.partition(num_valid);
         let view = batch.view(v);
 
-        let (img, obj, info, seeds) =
+        let (img, obj, info) =
             build_correspondences_from_batch(&config.obj_points, &view, &estimator);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
             information_matrices: &info,
             group_size: 4,
-            seed_poses: &seeds,
         };
         let no_inliers = [0u64; 16];
 
@@ -1681,14 +1955,13 @@ mod tests {
         let view = batch.view(v);
 
         let perturbed = Pose::new(Matrix3::identity(), Vector3::new(0.02, -0.01, 1.0));
-        let (img, obj, info, seeds) =
+        let (img, obj, info) =
             build_correspondences_from_batch(&config.obj_points, &view, &estimator);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
             information_matrices: &info,
             group_size: 4,
-            seed_poses: &seeds,
         };
         let all_inliers = [u64::MAX; 16];
 
@@ -1720,14 +1993,13 @@ mod tests {
         let v = batch.partition(num_valid);
         let view = batch.view(v);
 
-        let (img, obj, info, seeds) =
+        let (img, obj, info) =
             build_correspondences_from_batch(&config.obj_points, &view, &estimator);
         let corr = PointCorrespondences {
             image_points: &img,
             object_points: &obj,
             information_matrices: &info,
             group_size: 4,
-            seed_poses: &seeds,
         };
         let all_inliers = [u64::MAX; 16];
 

@@ -27,7 +27,7 @@ use crate::board::{
     BoardPose, CharucoTopology, LoRansacConfig, PointCorrespondences, RobustPoseSolver,
 };
 use crate::image::ImageView;
-use crate::pose::{CameraIntrinsics, Pose};
+use crate::pose::CameraIntrinsics;
 use crate::pose_weighted::compute_corner_covariance;
 use nalgebra::Matrix2;
 use std::sync::Arc;
@@ -165,10 +165,13 @@ pub struct CharucoRefiner {
     /// Underlying robust pose solver (LO-RANSAC + AW-LM).
     pub solver: RobustPoseSolver,
     // Pre-allocated scratch (one-time Box allocations in new()):
+    //
+    // No per-group seed buffer: the solver constructs minimal-sample seeds
+    // via non-minimal planar PnP from the saddle correspondences directly
+    // (see `crate::board::solve_pnp_planar_seed`).
     scratch_img: Box<[Point2f]>,
     scratch_obj: Box<[[f64; 3]]>,
     scratch_info: Box<[Matrix2<f64>]>,
-    scratch_seeds: Box<[Option<Pose>]>,
     /// `scratch_seen[id]` is `true` when saddle `id` has already been claimed
     /// by a tag in the current frame.  Reset selectively each frame.
     scratch_seen: Box<[bool]>,
@@ -225,7 +228,6 @@ impl CharucoRefiner {
             scratch_img: vec![Point2f { x: 0.0, y: 0.0 }; n].into_boxed_slice(),
             scratch_obj: vec![[0.0f64; 3]; n].into_boxed_slice(),
             scratch_info: vec![Matrix2::identity(); n].into_boxed_slice(),
-            scratch_seeds: vec![None; n].into_boxed_slice(),
             scratch_seen: vec![false; n].into_boxed_slice(),
             scratch_saddle_ids: vec![0usize; n].into_boxed_slice(),
             scratch_touched: vec![0usize; n].into_boxed_slice(),
@@ -365,11 +367,6 @@ impl CharucoRefiner {
                     Self::ST_RADIUS as i32,
                 );
                 self.scratch_info[num_accepted] = cov.try_inverse().unwrap_or(Matrix2::identity());
-                self.scratch_seeds[num_accepted] = crate::board::board_seed_from_pose6d(
-                    &view.poses[tag_i].data,
-                    tag_id,
-                    &self.config.obj_points,
-                );
                 num_accepted += 1;
             }
         }
@@ -386,7 +383,6 @@ impl CharucoRefiner {
                 object_points: &self.scratch_obj[..num_accepted],
                 information_matrices: &self.scratch_info[..num_accepted],
                 group_size: 1,
-                seed_poses: &self.scratch_seeds[..num_accepted],
             };
             self.solver.estimate(&corr, intrinsics)
         } else {
