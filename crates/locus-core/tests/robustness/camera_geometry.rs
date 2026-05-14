@@ -146,9 +146,15 @@ proptest! {
         }
 
         let r = pearson(&xs, &ys).abs();
-        // 1-r should be dominated by floating-point + undistort residual noise.
+        // 1-r should be dominated by floating-point + 5-iter fixed-point
+        // undistort residual. At the envelope boundary (|k1| → 0.3) on lines
+        // that cross the principal point, the 5-iter solve leaves ≈ 1.4e-6
+        // of Pearson slack — well below the production-path
+        // `MAX_UNDISTORT_RESIDUAL` re-distort gate in `extract_quads_soa_with_camera`,
+        // but above a strict 1e-6 bound. 5e-6 covers the floating-point tail
+        // without masking real regressions.
         prop_assert!(
-            r >= 1.0 - 1e-6 || (dx_line.abs() < 1e-6) || (dy_line.abs() < 1e-6),
+            r >= 1.0 - 5e-6 || (dx_line.abs() < 1e-6) || (dy_line.abs() < 1e-6),
             "BC collinearity violated: Pearson={r}"
         );
     }
