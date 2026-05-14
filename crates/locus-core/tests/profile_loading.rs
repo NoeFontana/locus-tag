@@ -110,7 +110,7 @@ fn high_accuracy_profile_routes_low_ppb_to_contour_rdp() {
     // High-accuracy overrides.
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, false);
-    assert_eq!(cfg.quad_min_area, 800);
+    assert_eq!(cfg.quad_min_area, 400);
     assert_eq!(cfg.quad_max_elongation, 20.0);
     assert_eq!(cfg.quad_min_density, 0.15);
     assert_eq!(cfg.quad_min_edge_score, 4.0);

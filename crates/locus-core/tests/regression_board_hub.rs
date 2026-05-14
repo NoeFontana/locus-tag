@@ -281,6 +281,11 @@ impl BoardRegressionHarness {
         }
     }
 
+    pub fn with_profile(mut self, profile: &str) -> Self {
+        self.config = DetectorConfig::from_profile(profile);
+        self
+    }
+
     pub fn with_families(mut self, families: Vec<TagFamily>) -> Self {
         self.families = families;
         self
@@ -511,6 +516,32 @@ mod tests {
         let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
         BoardRegressionHarness::new("board_aprilgrid_v1_golden")
             .with_families(vec![TagFamily::AprilTag36h11])
+            .run(&provider);
+    }
+
+    #[test]
+    #[cfg(feature = "bench-internals")]
+    fn regression_board_aprilgrid_v1_golden_high_accuracy() {
+        let Some(dataset_path) = resolve_hub_dataset("aprilgrid_golden_v1_1920x1080") else {
+            return;
+        };
+        let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
+        BoardRegressionHarness::new("board_aprilgrid_v1_golden_high_accuracy")
+            .with_profile("high_accuracy")
+            .with_families(vec![TagFamily::AprilTag36h11])
+            .run(&provider);
+    }
+
+    #[test]
+    #[cfg(feature = "bench-internals")]
+    fn regression_board_charuco_v1_golden_high_accuracy() {
+        let Some(dataset_path) = resolve_hub_dataset("charuco_golden_v1_1920x1080") else {
+            return;
+        };
+        let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
+        BoardRegressionHarness::new("board_charuco_v1_golden_high_accuracy")
+            .with_profile("high_accuracy")
+            .with_families(vec![TagFamily::ArUco6x6_250])
             .run(&provider);
     }
 }
