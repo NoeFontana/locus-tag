@@ -226,3 +226,17 @@ while preserving the empirical robustness.
   `charuco.rs`, the two board snapshots, and this diagnostics dir.
 - LO-RANSAC thresholds (`tau_outer_sq`, `tau_inner_sq`, etc.) untouched.
 - Schemas / Python bindings unchanged (board.rs is a pure Rust internal).
+
+## Follow-up — Pool A + Pool B falsified (2026-05-14)
+
+The static-reasoning claim in this memo that *"Pool B is retained
+because on clean frames it is sometimes a tighter seed than Pool C"* was
+contradicted by an empirical ablation on both standard and
+`high_accuracy` profiles across both board corpora: every tail metric
+(p95, p99) is byte-identical between the 3-pool ensemble and Pool C
+alone, and mean rotation drifts by ≤ 0.0015°.  Pool A (`R = I` centroid)
+was already documented as decorative here; Pool B turns out to be too.
+The cleanup PR layered on top of this one drops both pools and reduces
+per-minimal-sample seed work by ~70 %.
+
+See `diagnostics/pool_c_only_seed_2026-05-14/MEMO.md`.
