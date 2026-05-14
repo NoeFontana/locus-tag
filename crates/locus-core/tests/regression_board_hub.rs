@@ -24,6 +24,17 @@ mod common;
 // Data Provider
 // ============================================================================
 
+/// Top-level wrapper introduced with rich_truth.json v2.0.
+///
+/// The legacy on-disk format was a bare `[RichTruthEntry, ...]`; v2.0 wraps
+/// it in `{"version", "evaluation_context", "records": [...]}`. The harness
+/// only cares about `records`.
+#[derive(Deserialize)]
+struct RichTruthFile {
+    #[serde(default)]
+    records: Vec<RichTruthEntry>,
+}
+
 #[derive(Deserialize, Clone)]
 struct RichTruthEntry {
     image_id: String,
@@ -96,7 +107,16 @@ impl BoardHubProvider {
         }
 
         let file = std::fs::File::open(&rich_truth_path).ok()?;
-        let raw_entries: Vec<RichTruthEntry> = serde_json::from_reader(file).ok()?;
+        // v2.0 wraps records in {"version", "evaluation_context", "records": [...]}.
+        // Fall back to the legacy bare-array form for older fixtures.
+        let raw_entries: Vec<RichTruthEntry> = if let Ok(wrapped) =
+            serde_json::from_reader::<_, RichTruthFile>(std::io::BufReader::new(&file))
+        {
+            wrapped.records
+        } else {
+            let file = std::fs::File::open(&rich_truth_path).ok()?;
+            serde_json::from_reader(file).ok()?
+        };
 
         let mut board_config_entry = None;
         let mut intrinsics = None;
@@ -214,8 +234,12 @@ struct BoardSummaryMetrics {
     frames_with_board: usize,
     mean_board_translation_error_m: f64,
     p50_board_translation_error_m: f64,
+    p95_board_translation_error_m: f64,
+    p99_board_translation_error_m: f64,
     mean_board_rotation_error_deg: f64,
     p50_board_rotation_error_deg: f64,
+    p95_board_rotation_error_deg: f64,
+    p99_board_rotation_error_deg: f64,
     mean_board_translation_std_m: f64,
     mean_board_rotation_std_deg: f64,
     mean_tag_coverage: f64,
@@ -385,12 +409,16 @@ impl BoardRegressionHarness {
                 0.0
             },
             p50_board_translation_error_m: calculate_percentile(&mut t_errors, 0.5),
+            p95_board_translation_error_m: calculate_percentile(&mut t_errors, 0.95),
+            p99_board_translation_error_m: calculate_percentile(&mut t_errors, 0.99),
             mean_board_rotation_error_deg: if count > 0.0 {
                 r_errors.iter().sum::<f64>() / count
             } else {
                 0.0
             },
             p50_board_rotation_error_deg: calculate_percentile(&mut r_errors, 0.5),
+            p95_board_rotation_error_deg: calculate_percentile(&mut r_errors, 0.95),
+            p99_board_rotation_error_deg: calculate_percentile(&mut r_errors, 0.99),
             mean_board_translation_std_m: if count > 0.0 {
                 t_stds.iter().sum::<f64>() / count
             } else {
@@ -450,29 +478,39 @@ mod tests {
         }
     }
 
-    #[test]
-    #[cfg(feature = "bench-internals")]
-    fn regression_board_charuco_v1_golden() {
-        let dataset_path = common::resolve_hub_root("charuco_golden_v1_1920x1080");
-
+    fn resolve_hub_dataset(config_name: &str) -> Option<std::path::PathBuf> {
+        let hub_dir = std::env::var("LOCUS_HUB_DATASET_DIR")
+            .unwrap_or_else(|_| "tests/data/hub_cache".to_string());
+        let dataset_path = common::resolve_hub_root(&hub_dir).join(config_name);
         if dataset_path.exists() {
-            let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
-            BoardRegressionHarness::new("board_charuco_v1_golden")
-                .with_families(vec![TagFamily::ArUco6x6_250])
-                .run(&provider);
+            Some(dataset_path)
+        } else {
+            println!("Skipping {config_name}: dataset not found at {dataset_path:?}");
+            None
         }
     }
 
     #[test]
     #[cfg(feature = "bench-internals")]
-    fn regression_board_aprilgrid_v1_golden() {
-        let dataset_path = common::resolve_hub_root("aprilgrid_golden_v1_1920x1080");
+    fn regression_board_charuco_v1_golden() {
+        let Some(dataset_path) = resolve_hub_dataset("charuco_golden_v1_1920x1080") else {
+            return;
+        };
+        let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
+        BoardRegressionHarness::new("board_charuco_v1_golden")
+            .with_families(vec![TagFamily::ArUco6x6_250])
+            .run(&provider);
+    }
 
-        if dataset_path.exists() {
-            let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
-            BoardRegressionHarness::new("board_aprilgrid_v1_golden")
-                .with_families(vec![TagFamily::AprilTag36h11])
-                .run(&provider);
-        }
+    #[test]
+    #[cfg(feature = "bench-internals")]
+    fn regression_board_aprilgrid_v1_golden() {
+        let Some(dataset_path) = resolve_hub_dataset("aprilgrid_golden_v1_1920x1080") else {
+            return;
+        };
+        let provider = BoardHubProvider::new(&dataset_path).expect("failed to load provider");
+        BoardRegressionHarness::new("board_aprilgrid_v1_golden")
+            .with_families(vec![TagFamily::AprilTag36h11])
+            .run(&provider);
     }
 }
