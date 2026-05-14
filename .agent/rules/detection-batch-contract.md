@@ -1,1 +1,0 @@
-../../docs/engineering/detection-batch-contract.md

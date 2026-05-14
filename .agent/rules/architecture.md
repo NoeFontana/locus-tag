@@ -1,1 +1,0 @@
-../../docs/explanation/architecture.md

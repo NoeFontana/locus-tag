@@ -1,32 +1,42 @@
 # Locus — Claude Code Instructions
 
-> **Single source of truth:** This file delegates to the shared `.agent/` directory.
-> Do NOT duplicate rules here. Update the canonical files instead.
+## Fallback meta-rule (strict)
+NEVER hallucinate project constraints, architecture, or engineering rules.
+If a rule isn't in the files referenced below, stop and ask the engineer
+rather than assume an industry-standard practice.
 
-## Meta-Rules & Context Routing
+## Project identity
+- **Name**: Locus (`locus-tag`).
+- **Mission**: production-grade, memory-safe, high-performance fiducial-marker
+  detector for robotics, AV, and perception engineers.
+- **Single source of truth**: canonical docs live under `docs/`. The `.agent/`
+  tree contains skills only.
 
-@GEMINI.md
+## Always loaded (every session)
+@docs/engineering/core.md
 
-## Engineering Rules
+@docs/engineering/constraints.md
 
-@.agent/rules/core.md
+## Load on demand
+Read the relevant file when the task touches its area.
 
-@.agent/rules/architecture.md
+| Topic | File |
+| :--- | :--- |
+| System architecture, pipeline stages, component diagrams | `docs/explanation/architecture.md` |
+| `DetectionBatch` SoA contract, phase R/W privileges | `docs/engineering/detection-batch-contract.md` |
+| Pre-commit / pre-PR commands, regression suites, snapshot flow | `docs/engineering/quality-gates.md` |
+| Rust style | `docs/engineering/rust-style.md` |
+| Python style | `docs/engineering/python-style.md` |
+| General style | `docs/engineering/general-style.md` |
+| Coordinates & math conventions | `docs/explanation/coordinates.md` |
+| Memory model (SoA / arena / FFI) | `docs/explanation/memory_model.md` |
+| Workflow (branching, testing requirements) | `docs/engineering/workflow.md` |
 
-@.agent/rules/constraints.md
-
-@.agent/rules/detection-batch-contract.md
-
-@.agent/rules/quality-gates.md
-
-## Skills (Slash Commands)
-
-The following skills are available via `/skill-name`:
-
+## Skills (slash commands)
 | Command | Description |
 | :--- | :--- |
-| `/testing` | Run and evaluate the full test suite (Rust + Python). |
-| `/performance_benchmark` | Run and analyse performance benchmarks. |
-| `/release` | Manage the end-to-end release lifecycle. |
+| `/testing` | Run and evaluate the full test suite (Rust + Python) |
+| `/performance_benchmark` | Run and analyse performance benchmarks |
+| `/release` | Manage the end-to-end release lifecycle |
 
 Skill definitions live in `.agent/skills/<name>/SKILL.md`.

@@ -1,1 +1,0 @@
-../../docs/engineering/quality-gates.md
