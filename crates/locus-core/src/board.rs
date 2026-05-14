@@ -1,7 +1,6 @@
 //! Board-level configuration and layout utilities.
 
 use crate::batch::{MAX_CANDIDATES, Point2f};
-use crate::decoder::Homography;
 use crate::pose::{
     CameraIntrinsics, Pose, projection_jacobian, solve_ippe_square, symmetrize_jtj6,
 };
@@ -381,14 +380,12 @@ pub struct BoardPose {
 /// allocation on the hot path.
 ///
 /// **Seed strategy**: minimal-sample seeds for RANSAC are computed inside the
-/// solver from each tag's 4 corners via IPPE-Square branch enumeration (see
-/// [`solve_seed_from_ippe_enumeration`]).  For each sampled tag (`group_size
-/// == 4`) both Necker branches are converted to a board-frame pose, and the
-/// 8-candidate set is scored by joint reprojection over the full minimal
-/// sample (16 correspondences) — the joint score disambiguates which branch
-/// is correct per tag.  For `group_size != 4` (e.g. ChAruco saddle path) a
-/// centroid-translation seed is used as a coarse initialiser for the LO
-/// inner-loop GN polish.
+/// solver by fitting a single DLT homography over all `4 × group_size` sample
+/// correspondences and decomposing it with IPPE-Square (see
+/// [`solve_seed_from_sample_homography`]).  Both Necker branches of the
+/// metric homography are polished by Gauss-Newton and the lower-reprojection
+/// branch wins — works uniformly for `group_size == 4` (per-tag corners) and
+/// `group_size == 1` (ChAruco saddle points).
 pub struct PointCorrespondences<'a> {
     /// Observed 2D image points (pixels). Length = M.
     pub image_points: &'a [Point2f],
@@ -412,70 +409,7 @@ impl PointCorrespondences<'_> {
     }
 }
 
-// ── Multi-IPPE-Square RANSAC seed ─────────────────────────────────────────
-
-/// Square-tag side-length tolerance (relative) — used to detect that a 4-point
-/// correspondence group is actually a planar square (TL, TR, BR, BL ordering).
-/// Aprilgrid / ArUco boards always satisfy this exactly; the looser tolerance
-/// absorbs the f64 round-off introduced when board origin is at the geometric
-/// centre.
-const IPPE_SEED_SQUARE_REL_TOL: f64 = 1e-3;
-/// Minimum side length of a square tag for IPPE seeding to be meaningful (metres).
-/// Smaller sides almost certainly indicate a degenerate group (collapsed corners).
-const IPPE_SEED_MIN_SIDE_M: f64 = 1e-4;
-
-/// Inspect a group of 4 board-frame object points and, if they form an
-/// axis-aligned square in the `(x, y)` plane (the AprilGrid / ChAruco-marker
-/// convention), return `(tag_center_in_board, tag_side_length)`.
-///
-/// Returns `None` when the 4 points are not a recognisable axis-aligned square
-/// (e.g. ChAruco saddle group_size = 1 won't even reach this path; degenerate
-/// or skewed groups are filtered).  This keeps IPPE-Square seeding confined to
-/// the cases where its planar-pose-from-square specialisation is mathematically
-/// valid.
-fn classify_square_tag(obj_pts: &[[f64; 3]; 4]) -> Option<([f64; 3], f64)> {
-    let [tl, tr, br, bl] = *obj_pts;
-
-    // All four points must be coplanar at z ≈ 0 (board plane).
-    if tl[2].abs() > IPPE_SEED_MIN_SIDE_M
-        || tr[2].abs() > IPPE_SEED_MIN_SIDE_M
-        || br[2].abs() > IPPE_SEED_MIN_SIDE_M
-        || bl[2].abs() > IPPE_SEED_MIN_SIDE_M
-    {
-        return None;
-    }
-
-    // Side lengths.  For an axis-aligned square in the board frame:
-    //   TR - TL = (L, 0)
-    //   BL - TL = (0, L)
-    //   BR - TR = (0, L)
-    //   BR - BL = (L, 0)
-    let s_tr = (tr[0] - tl[0]).hypot(tr[1] - tl[1]);
-    let s_bl = (bl[0] - tl[0]).hypot(bl[1] - tl[1]);
-    let s_br_tr = (br[0] - tr[0]).hypot(br[1] - tr[1]);
-    let s_br_bl = (br[0] - bl[0]).hypot(br[1] - bl[1]);
-
-    let side = 0.25 * (s_tr + s_bl + s_br_tr + s_br_bl);
-    if side < IPPE_SEED_MIN_SIDE_M {
-        return None;
-    }
-    let tol = IPPE_SEED_SQUARE_REL_TOL * side;
-    if (s_tr - side).abs() > tol
-        || (s_bl - side).abs() > tol
-        || (s_br_tr - side).abs() > tol
-        || (s_br_bl - side).abs() > tol
-    {
-        return None;
-    }
-
-    // Centre is midpoint of TL and BR.
-    let centre = [
-        (tl[0] + br[0]) * 0.5,
-        (tl[1] + br[1]) * 0.5,
-        (tl[2] + br[2]) * 0.5,
-    ];
-    Some((centre, side))
-}
+// ── Sample-homography IPPE-Square RANSAC seed ─────────────────────────────
 
 /// Joint reprojection RMSE (squared mean) of `pose` against the 4 × `group_size`
 /// correspondences listed by `sample`.  Used to score IPPE-Square candidates
@@ -523,7 +457,7 @@ fn sample_reprojection_score(
 /// by `sample` (≤ 4 × `group_size` correspondences).
 ///
 /// This is a sample-restricted variant of [`RobustPoseSolver::gn_step`] — used
-/// inside [`solve_seed_from_ippe_enumeration`] to polish each IPPE-Square
+/// inside [`solve_seed_from_sample_homography`] to polish each IPPE-Square
 /// branch into its local minimum BEFORE scoring.  Polishing equalises the
 /// noise floor across the 8 candidates so the joint-reprojection score
 /// reliably separates the correct Necker branch from the wrong one.
@@ -618,7 +552,7 @@ fn gn_step_on_sample(
 /// `solve_ippe_square`.
 ///
 /// Returns both `(camera-from-board)` branches (in the sample-centroid-shifted
-/// frame, which is later un-shifted by [`solve_seed_from_ippe_enumeration`]),
+/// frame, which is later un-shifted by [`solve_seed_from_sample_homography`]),
 /// the centroid offset that the caller must apply, or `None` on pathological
 /// inputs (colinear points, singular `A^T A`).
 ///
@@ -741,145 +675,65 @@ fn ippe_branches_from_sample_homography(
     Some(([pose_a, pose_b], centroid_offset))
 }
 
-/// Build a per-tag IPPE-Square minimal sample for a 4-corner group of the
-/// correspondence set and return both Necker branches (in camera-from-board
-/// frame) — or `None` if the group does not form a recognisable square or
-/// IPPE refuses to converge.
-#[allow(clippy::similar_names)]
-fn ippe_branches_for_group(
-    group_idx: usize,
-    corr: &PointCorrespondences<'_>,
-    intrinsics: &CameraIntrinsics,
-) -> Option<[Pose; 2]> {
-    let gs = corr.group_size;
-    if gs != 4 {
-        return None;
-    }
-    let base = group_idx * gs;
-
-    // Extract the 4 corners — both board-frame (object) and pixel-frame (image).
-    let obj_pts: [[f64; 3]; 4] = [
-        corr.object_points[base],
-        corr.object_points[base + 1],
-        corr.object_points[base + 2],
-        corr.object_points[base + 3],
-    ];
-
-    let (centre_in_board, tag_size) = classify_square_tag(&obj_pts)?;
-
-    // IPPE-Square expects pixel corners; build them as [TL, TR, BR, BL] f64.
-    let img_pts_pixel: [[f64; 2]; 4] = [
-        [
-            f64::from(corr.image_points[base].x),
-            f64::from(corr.image_points[base].y),
-        ],
-        [
-            f64::from(corr.image_points[base + 1].x),
-            f64::from(corr.image_points[base + 1].y),
-        ],
-        [
-            f64::from(corr.image_points[base + 2].x),
-            f64::from(corr.image_points[base + 2].y),
-        ],
-        [
-            f64::from(corr.image_points[base + 3].x),
-            f64::from(corr.image_points[base + 3].y),
-        ],
-    ];
-
-    // Pixel-space homography from unit-square src to the 4 image corners.
-    let h_poly = Homography::square_to_quad(&img_pts_pixel)?;
-    let h_pixel = h_poly.h;
-
-    // Convert to the "metric" homography expected by solve_ippe_square:
-    //   K^{-1} · H_pixel · diag(2/L, 2/L, 1)
-    let h_norm = intrinsics.inv_matrix() * h_pixel;
-    let scaler = 2.0 / tag_size;
-    let mut h_metric = h_norm;
-    h_metric.column_mut(0).scale_mut(scaler);
-    h_metric.column_mut(1).scale_mut(scaler);
-
-    let [pose_a_tag, pose_b_tag] = solve_ippe_square(&h_metric)?;
-
-    // Each per-tag pose maps a centred-origin tag point `p_tag` to
-    // camera-frame: `p_cam = R · p_tag + t`.  For the corresponding board
-    // point `p_board = p_tag + c_b` (since the tag's x/y axes coincide with
-    // the board's for axis-aligned square markers), we have
-    //   p_cam = R · (p_board - c_b) + t = R · p_board + (t - R · c_b).
-    // Hence: R_board = R,   t_board = t - R · c_b.
-    let c_b = Vector3::new(centre_in_board[0], centre_in_board[1], centre_in_board[2]);
-    let pose_a_board = Pose {
-        rotation: pose_a_tag.rotation,
-        translation: pose_a_tag.translation - pose_a_tag.rotation * c_b,
-    };
-    let pose_b_board = Pose {
-        rotation: pose_b_tag.rotation,
-        translation: pose_b_tag.translation - pose_b_tag.rotation * c_b,
-    };
-
-    if !pose_a_board
-        .rotation
-        .iter()
-        .chain(pose_a_board.translation.iter())
-        .chain(pose_b_board.rotation.iter())
-        .chain(pose_b_board.translation.iter())
-        .all(|v| v.is_finite())
-    {
-        return None;
-    }
-
-    Some([pose_a_board, pose_b_board])
-}
-
-/// Multi-IPPE-Square branch-enumeration seed for a minimal RANSAC sample.
+/// Sample-homography IPPE-Square seed for a minimal RANSAC sample.
 ///
-/// For each of the 4 sampled tags, run `solve_ippe_square` independently to
-/// obtain 2 candidate camera-from-tag poses per tag → 8 candidate
-/// camera-from-board poses for the minimal sample.  Score each candidate by
-/// joint reprojection RMSE over all 16 sample correspondences and return the
-/// one with the lowest score.
+/// Fits a planar homography from board-frame `(X, Y)` to normalised image
+/// coordinates via DLT over all `4 × group_size` sample correspondences, then
+/// decomposes the homography with `solve_ippe_square` to obtain both Necker
+/// branches.  Each branch is polished with 3 unweighted Gauss-Newton steps
+/// over the same correspondences and scored by joint reprojection RMSE; the
+/// lower-scoring branch wins.
 ///
-/// The Necker (planar-pose) ambiguity is disambiguated *jointly*: the correct
-/// branch per tag is the one that agrees with the correct branches of the
-/// other 3 tags on a single global board pose.  Wrong branches disagree and
-/// produce a large joint reprojection.
+/// The Necker (planar-pose) ambiguity is disambiguated *jointly*: the wrong
+/// branch produces a higher reprojection score over the full sample, so the
+/// scoring step selects the correct global pose without per-tag voting.
+///
+/// **Why DLT over all 4 × group_size points (not per-tag IPPE)**: per-tag
+/// IPPE-Square on 4 noisy corners (≈ 20-30 px tag edges) can produce a pose
+/// biased by 50°+ — both branches end up wrong-sided.  Fitting a single DLT
+/// homography over ALL sample correspondences averages corner noise across
+/// the 4 sampled tags / 16 saddle points and yields a much tighter homography
+/// estimate; running IPPE-Square on it preserves the two-branch
+/// disambiguation without losing the noise-averaging benefit.  See
+/// `diagnostics/board_p99_investigation_2026-05-14/MEMO.md` for the
+/// catastrophic-per-tag-collapse frames this rescues, and
+/// `diagnostics/multi_ippe_seed_2026-05-14/MEMO.md` for the algorithm rationale.
 ///
 /// **Why this replaces DLT + Zhang homography decomposition**: DLT minimises
-/// algebraic error rather than geometric reprojection, and the Zhang
-/// decomposition `R = SO(3)-project(K^{-1} · H)` collapses the planar Necker
-/// ambiguity at the SVD step — producing one branch unconditionally.  Multi-
-/// IPPE-Square enumerates both branches per tag, scoring them jointly so the
-/// correct global solution wins.  See `pose.rs::solve_ippe_square` for the
-/// underlying analytical per-tag solver.
-///
-/// **Fallback** (`group_size != 4`, e.g. ChAruco saddle path): no square is
-/// available per group, so we cannot run IPPE-Square.  In that case we return
-/// a coarse centroid-translation seed (`R = I`, `t = (0, 0, z_est)`) with
-/// `z_est` chosen so that the centroid of the 4 sampled object points
-/// projects to the centroid of the 4 image points.  The LO inner-loop's
-/// unweighted GN refinement then polishes the seed.  Saddle paths are not the
-/// focus of this seed strategy; their primary use case is calibration-grade
-/// pose post-tag-detection.
+/// algebraic error rather than geometric reprojection, but that's fine here
+/// because IPPE-Square performs a geometric re-projection check.  The Zhang
+/// decomposition `R = SO(3)-project(K^{-1} · H)` would have collapsed the
+/// planar Necker ambiguity at the SVD step — producing one branch
+/// unconditionally; IPPE-Square enumerates both branches and lets the joint
+/// reprojection score pick the winner.
 ///
 /// Returns `None` only on pathological inputs (NaN intrinsics, degenerate
 /// sample) — callers should treat `None` as "skip this minimal sample".
 #[allow(clippy::similar_names)]
-fn solve_seed_from_ippe_enumeration(
+fn solve_seed_from_sample_homography(
     sample: &[usize; 4],
     corr: &PointCorrespondences<'_>,
     intrinsics: &CameraIntrinsics,
 ) -> Option<Pose> {
+    let (pose_branches, centroid) = ippe_branches_from_sample_homography(sample, corr, intrinsics)?;
+
     let mut best_pose: Option<Pose> = None;
     let mut best_score = f64::INFINITY;
 
-    // Helper: polish a candidate with 3 unweighted GN steps over the 16
-    // sample correspondences (matches the polish depth originally used by
-    // the PR #255 DLT seed; basin-convergent in 1-3 steps for both Necker
-    // branches) and update best_{pose,score} if it wins.
-    let consider = |raw: Pose,
-                    best_pose: &mut Option<Pose>,
-                    best_score: &mut f64,
-                    corr: &PointCorrespondences<'_>| {
+    for pose_centred in pose_branches {
+        // IPPE-Square returns poses in the centroid-shifted board frame
+        // (origin = (cx_o, cy_o, 0)).  Un-shift to the original board frame:
+        //   t_board = t_centred − R · centroid.
+        let raw = Pose {
+            rotation: pose_centred.rotation,
+            translation: pose_centred.translation - pose_centred.rotation * centroid,
+        };
+
+        // Polish each branch with 3 unweighted GN steps over the
+        // 4 × group_size sample correspondences (basin-convergent in 1-3
+        // iterations).  Polishing equalises the noise floor between the two
+        // branches so the joint-reprojection score reliably separates the
+        // correct Necker branch.
         let mut polished = raw;
         for _ in 0..3 {
             let next = gn_step_on_sample(&polished, sample, corr, intrinsics);
@@ -889,118 +743,15 @@ fn solve_seed_from_ippe_enumeration(
                 break;
             }
         }
+
         let score = sample_reprojection_score(&polished, sample, corr, intrinsics);
-        if score < *best_score && score.is_finite() {
-            *best_score = score;
-            *best_pose = Some(polished);
+        if score < best_score && score.is_finite() {
+            best_score = score;
+            best_pose = Some(polished);
         }
-    };
-
-    // ── Candidate pool 1: centroid + identity rotation ────────────────────
-    //
-    // A coarse rescue seed for frames where IPPE collapses entirely.  When
-    // polished it can land in a different local minimum than the wrong-
-    // branch IPPE candidates.
-    if let Some(p) = compute_centroid_translation_seed(sample, corr, intrinsics) {
-        consider(p, &mut best_pose, &mut best_score, corr);
-    }
-
-    // ── Candidate pool 2: per-tag IPPE-Square branch enumeration ─────────
-    //
-    // For each of the 4 sampled tags, run `solve_ippe_square` on its 4
-    // corners independently → 2 candidate camera-from-tag poses per tag → 8
-    // candidate camera-from-board poses for the minimal sample.  The Necker
-    // ambiguity is disambiguated jointly by reprojection scoring after each
-    // candidate is polished against all 16 sample correspondences.
-    if corr.group_size == 4 {
-        for &g in sample {
-            if let Some([pose_a, pose_b]) = ippe_branches_for_group(g, corr, intrinsics) {
-                consider(pose_a, &mut best_pose, &mut best_score, corr);
-                consider(pose_b, &mut best_pose, &mut best_score, corr);
-            }
-        }
-    }
-
-    // ── Candidate pool 3: 16-point DLT-homography + IPPE-Square decomp ──
-    //
-    // Per-tag IPPE-Square on 4 corners is *brittle* under heavy corner noise
-    // (small tag edges, ≈ 20-30 px) — both Necker branches may be biased to
-    // the wrong-sided rotation.  Fitting a DLT homography over ALL 16 sample
-    // correspondences averages the per-corner noise, and decomposing that
-    // single homography with IPPE-Square recovers two well-conditioned
-    // branches.  This is the rescue path for the "catastrophic per-tag-
-    // collapse" frames identified in
-    // `diagnostics/board_p99_investigation_2026-05-14/MEMO.md`.
-    if let Some(([pose_a_c, pose_b_c], centroid)) =
-        ippe_branches_from_sample_homography(sample, corr, intrinsics)
-    {
-        // IPPE-Square returns poses in the *centroid-shifted* board frame
-        // (origin = (cx_o, cy_o, 0)).  Un-shift to the original board frame:
-        //   t_board = t_centred - R · centroid
-        let pose_a = Pose {
-            rotation: pose_a_c.rotation,
-            translation: pose_a_c.translation - pose_a_c.rotation * centroid,
-        };
-        let pose_b = Pose {
-            rotation: pose_b_c.rotation,
-            translation: pose_b_c.translation - pose_b_c.rotation * centroid,
-        };
-        consider(pose_a, &mut best_pose, &mut best_score, corr);
-        consider(pose_b, &mut best_pose, &mut best_score, corr);
     }
 
     best_pose
-}
-
-/// Coarse seed: identity rotation + translation chosen so the centroid of the
-/// sampled object points projects to the centroid of the sampled image points
-/// at depth `z = 1 m`.
-///
-/// This is the rescue fallback when IPPE-Square collapses on small / noisy
-/// tags (every per-tag pose lands in roughly the same wrong branch).  After
-/// the LO inner-loop GN polish, an identity-rotation seed can land in a
-/// different local minimum than the wrong-branch IPPE candidates — sometimes
-/// recovering the correct board pose.
-#[allow(clippy::similar_names)]
-fn compute_centroid_translation_seed(
-    sample: &[usize; 4],
-    corr: &PointCorrespondences<'_>,
-    intrinsics: &CameraIntrinsics,
-) -> Option<Pose> {
-    let gs = corr.group_size;
-    let n = 4 * gs;
-    let mut cx_obj = 0.0f64;
-    let mut cy_obj = 0.0f64;
-    let mut cz_obj = 0.0f64;
-    let mut cu_norm = 0.0f64;
-    let mut cv_norm = 0.0f64;
-    for &s_val in sample {
-        let start = s_val * gs;
-        for k in start..(start + gs) {
-            cx_obj += corr.object_points[k][0];
-            cy_obj += corr.object_points[k][1];
-            cz_obj += corr.object_points[k][2];
-            cu_norm += (f64::from(corr.image_points[k].x) - intrinsics.cx) / intrinsics.fx;
-            cv_norm += (f64::from(corr.image_points[k].y) - intrinsics.cy) / intrinsics.fy;
-        }
-    }
-    let inv_n = 1.0 / n as f64;
-    cx_obj *= inv_n;
-    cy_obj *= inv_n;
-    cz_obj *= inv_n;
-    cu_norm *= inv_n;
-    cv_norm *= inv_n;
-
-    let t_z = 1.0_f64;
-    let t = Vector3::new(cu_norm * t_z - cx_obj, cv_norm * t_z - cy_obj, t_z - cz_obj);
-    if !t.iter().all(|v| v.is_finite()) {
-        return None;
-    }
-
-    Some(Pose {
-        rotation: Matrix3::identity(),
-        translation: t,
-    })
 }
 
 // ── Robust Pose Solver ─────────────────────────────────────────────────────
@@ -1072,21 +823,21 @@ impl RobustPoseSolver {
 
     /// Core LO-RANSAC loop.
     ///
-    /// Outer loop: random 4-group sampling → multi-IPPE-Square branch-
-    /// enumeration seed → outer-threshold evaluation.  Inner loop (LO):
-    /// unweighted Gauss-Newton refinement + tight re-evaluation with
-    /// monotonicity guard.  Dynamic stopping: `k` is updated after each
-    /// tight-count improvement using the standard RANSAC formula
+    /// Outer loop: random 4-group sampling → DLT-homography + IPPE-Square
+    /// seed → outer-threshold evaluation.  Inner loop (LO): unweighted
+    /// Gauss-Newton refinement + tight re-evaluation with monotonicity
+    /// guard.  Dynamic stopping: `k` is updated after each tight-count
+    /// improvement using the standard RANSAC formula
     /// `k = log(1-p) / log(1-ω⁴)` where `ω` is the verified tight inlier
     /// ratio from `lo_inner`.
     ///
     /// **Seed strategy**: each 4-group sample is fed to
-    /// [`solve_seed_from_ippe_enumeration`] which runs the analytical IPPE-
-    /// Square solver per tag, enumerates both Necker branches (8 candidates
-    /// total for a 4-tag sample), and picks the candidate with the lowest
-    /// joint-reprojection RMSE across all 16 sample correspondences.  Joint-
-    /// reprojection scoring disambiguates the planar pose ambiguity that
-    /// per-tag IPPE alone cannot resolve.
+    /// [`solve_seed_from_sample_homography`] which fits a DLT homography over
+    /// the `4 × group_size` correspondences, decomposes it with IPPE-Square
+    /// to obtain both Necker branches, polishes each by Gauss-Newton, and
+    /// returns the lower-joint-reprojection branch.  IPPE-Square's two-branch
+    /// enumeration disambiguates the planar pose ambiguity that a Zhang
+    /// `R = SO(3)-project(K⁻¹H)` decomposition would silently collapse.
     #[allow(clippy::too_many_lines, clippy::cast_sign_loss)]
     fn lo_ransac_loop(
         &self,
@@ -1123,11 +874,12 @@ impl RobustPoseSolver {
                 continue;
             }
 
-            // ── Multi-IPPE-Square branch-enumeration seed ─────────────────
-            // 4 tags × 2 Necker branches = 8 candidate board poses; pick
-            // the lowest joint-reprojection RMSE across all 16 sample
-            // correspondences (or fall back to centroid for non-square groups).
-            let Some(seed_pose) = solve_seed_from_ippe_enumeration(&sample, corr, intrinsics)
+            // ── DLT-homography + IPPE-Square branch-enumeration seed ─────
+            // Fit one homography from all 4 × group_size sample
+            // correspondences, decompose with IPPE-Square (both Necker
+            // branches), pick the lower joint-reprojection branch after a
+            // 3-step GN polish.
+            let Some(seed_pose) = solve_seed_from_sample_homography(&sample, corr, intrinsics)
             else {
                 continue;
             };
@@ -1576,7 +1328,7 @@ pub struct BoardEstimator {
     // No per-group seed buffer: the solver constructs minimal-sample seeds
     // by enumerating both Necker branches of IPPE-Square for each tag in the
     // 4-tag minimal sample and scoring them by joint reprojection (see
-    // [`solve_seed_from_ippe_enumeration`] / [`RobustPoseSolver::lo_ransac_loop`]).
+    // [`solve_seed_from_sample_homography`] / [`RobustPoseSolver::lo_ransac_loop`]).
     scratch_img: Box<[Point2f]>,
     scratch_obj: Box<[[f64; 3]]>,
     scratch_info: Box<[Matrix2<f64>]>,
@@ -2372,7 +2124,7 @@ mod tests {
         assert_eq!(TagFamily::ArUco4x4_100.max_id_count(), 100);
     }
 
-    // ── Multi-IPPE-Square seed tests ──────────────────────────────────────
+    // ── Sample-homography + IPPE-Square seed tests ───────────────────────
 
     /// Helper: builds a noise-free correspondence set for the first 4 tags of
     /// `obj_points`, projected through `pose`, and returns the backing Vecs.
@@ -2401,38 +2153,7 @@ mod tests {
     }
 
     #[test]
-    fn test_classify_square_tag_recognises_aligned_square() {
-        // Axis-aligned square in board frame is the canonical AprilGrid layout.
-        let l = 0.1_f64;
-        let sq = [[0.0, 0.0, 0.0], [l, 0.0, 0.0], [l, l, 0.0], [0.0, l, 0.0]];
-        let (centre, side) = classify_square_tag(&sq).expect("axis-aligned square must classify");
-        assert!((centre[0] - l * 0.5).abs() < 1e-12);
-        assert!((centre[1] - l * 0.5).abs() < 1e-12);
-        assert!(centre[2].abs() < 1e-12);
-        assert!((side - l).abs() < 1e-12);
-    }
-
-    #[test]
-    fn test_classify_square_tag_rejects_non_square() {
-        // A rectangular (non-square) group must be rejected.
-        let rect = [
-            [0.0, 0.0, 0.0],
-            [0.2, 0.0, 0.0],
-            [0.2, 0.1, 0.0],
-            [0.0, 0.1, 0.0],
-        ];
-        assert!(classify_square_tag(&rect).is_none());
-    }
-
-    #[test]
-    fn test_classify_square_tag_rejects_collapsed() {
-        // All four points coincident → must be rejected.
-        let coincident = [[0.05, 0.05, 0.0]; 4];
-        assert!(classify_square_tag(&coincident).is_none());
-    }
-
-    #[test]
-    fn test_solve_seed_from_ippe_enumeration_recovers_identity_pose() {
+    fn test_solve_seed_from_sample_homography_recovers_identity_pose() {
         // Identity rotation, translation along z = 1 m → seed must recover the
         // pose within a sub-degree / sub-cm tolerance (RANSAC inner threshold).
         let config = math_test_config();
@@ -2446,7 +2167,7 @@ mod tests {
             group_size: 4,
         };
         let sample = [0usize, 1, 2, 3];
-        let seed = solve_seed_from_ippe_enumeration(&sample, &corr, &intrinsics)
+        let seed = solve_seed_from_sample_homography(&sample, &corr, &intrinsics)
             .expect("clean synthetic correspondences must produce a seed");
         let t_err = (seed.translation - true_pose.translation).norm();
         assert!(
@@ -2463,7 +2184,7 @@ mod tests {
     }
 
     #[test]
-    fn test_solve_seed_from_ippe_enumeration_recovers_oblique_pose() {
+    fn test_solve_seed_from_sample_homography_recovers_oblique_pose() {
         // Oblique 20° pitch + lateral translation; the joint-reprojection score
         // must pick the correct Necker branch per tag.
         let config = math_test_config();
@@ -2481,7 +2202,7 @@ mod tests {
             group_size: 4,
         };
         let sample = [0usize, 1, 2, 3];
-        let seed = solve_seed_from_ippe_enumeration(&sample, &corr, &intrinsics)
+        let seed = solve_seed_from_sample_homography(&sample, &corr, &intrinsics)
             .expect("oblique noise-free correspondences must produce a seed");
         let t_err = (seed.translation - true_pose.translation).norm();
         assert!(
@@ -2498,7 +2219,7 @@ mod tests {
     }
 
     #[test]
-    fn test_solve_seed_from_ippe_enumeration_pixel_noise_robust() {
+    fn test_solve_seed_from_sample_homography_pixel_noise_robust() {
         // 0.5 px Gaussian-equivalent pixel noise: the seed must still land
         // within the RANSAC outer threshold (tau_outer = 5 px ≈ 25 px²) so
         // that LO inner-loop GN can polish to the AW-LM basin.
@@ -2529,7 +2250,7 @@ mod tests {
             group_size: 4,
         };
         let sample = [0usize, 1, 2, 3];
-        let seed = solve_seed_from_ippe_enumeration(&sample, &corr, &intrinsics)
+        let seed = solve_seed_from_sample_homography(&sample, &corr, &intrinsics)
             .expect("0.5 px noise must not break IPPE seeding");
         let t_err = (seed.translation - true_pose.translation).norm();
         assert!(
@@ -2539,13 +2260,13 @@ mod tests {
     }
 
     #[test]
-    fn test_solve_seed_from_ippe_enumeration_fallback_when_not_square() {
-        // group_size = 1 (ChAruco saddle path): the function must fall back to
-        // a centroid translation seed (R = I, sensible t) so the LO inner loop
-        // can polish from a reasonable starting point.
+    fn test_solve_seed_from_sample_homography_saddle_path() {
+        // group_size = 1 (ChAruco saddle path): the seed function must produce
+        // a pose from 4 coplanar saddle correspondences via the DLT+IPPE-Square
+        // path — the only candidate pool — so the LO inner loop has a
+        // sub-degree starting point.
         let intrinsics = test_intrinsics();
         let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
-        // Four arbitrary planar saddle points at z = 0.
         let obj_pts: [[f64; 3]; 4] = [
             [-0.05, -0.05, 0.0],
             [0.05, -0.05, 0.0],
@@ -2570,14 +2291,12 @@ mod tests {
             group_size: 1,
         };
         let sample = [0usize, 1, 2, 3];
-        let seed = solve_seed_from_ippe_enumeration(&sample, &corr, &intrinsics)
-            .expect("centroid fallback must always succeed on a valid sample");
-        // Centroid seed at z ≈ 1 m must land within ~1 m of the truth; the GN
-        // polish in lo_inner takes it from there.
+        let seed = solve_seed_from_sample_homography(&sample, &corr, &intrinsics)
+            .expect("clean saddle-path correspondences must produce a seed");
         let t_err = (seed.translation - true_pose.translation).norm();
         assert!(
-            t_err < 0.5,
-            "centroid fallback translation must be within 50 cm, got {t_err} m"
+            t_err < 1e-3,
+            "saddle-path translation error {t_err} m exceeds 1 mm on noise-free input"
         );
     }
 }
