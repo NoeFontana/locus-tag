@@ -7,7 +7,7 @@
 **Locus** detects AprilTag and ArUco markers using a Rust core with zero-copy Python bindings. It implements sub-pixel corner refinement, releases the GIL during detection, and returns results as vectorized NumPy arrays.
 
 > [!WARNING]
-> **Experimental Status**: API is subject to breaking changes. Not recommended for production safety-critical systems.
+> **Experimental Status**: API is subject to breaking changes. Not recommended for production systems before 1.0.0 ships.
 
 ## Technical Capabilities
 
