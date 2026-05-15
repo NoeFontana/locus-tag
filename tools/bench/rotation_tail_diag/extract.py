@@ -207,7 +207,6 @@ def _compute_corner_diagnostics(
                     list(det_quat_t),
                     list(det_trans_t),
                     i,
-                    locus.PoseEstimationMode.Accurate,
                     config._to_ffi_config(),
                     img,
                 )
@@ -331,7 +330,6 @@ def run(
     profile: str,
     output_dir: Path,
     *,
-    pose_estimation_mode: locus.PoseEstimationMode = locus.PoseEstimationMode.Accurate,
     enable_rerun: bool = True,
     enable_corner_telemetry: bool = True,
     fpr: float = DEFAULT_FPR,
@@ -408,7 +406,6 @@ def run(
             img,
             intrinsics=intrinsics,
             tag_size=tag_size,
-            pose_estimation_mode=pose_estimation_mode,
         )
         latency_us = (time.perf_counter() - t0) * 1e6
 
@@ -444,7 +441,6 @@ def run(
             intrinsics,
             det_corners.tolist(),
             tag_size,
-            pose_estimation_mode,
             py_cfg,
             img,
             fpr,
@@ -470,7 +466,6 @@ def run(
             intrinsics,
             det_corners.tolist(),
             tag_size,
-            pose_estimation_mode,
             py_cfg,
             img,
         )
@@ -595,7 +590,6 @@ def run(
     scenes_out = ScenesFile(
         config_name=config_name,
         profile=profile,
-        pose_estimation_mode=str(pose_estimation_mode).split(".")[-1],
         sigma_n_sq_configured=sigma_n_sq,
         n_scenes=len(scene_records),
         scenes=scene_records,

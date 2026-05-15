@@ -20,13 +20,7 @@ fn test_capture_invalid_quads() {
         .with_family(TagFamily::AprilTag36h11)
         .build();
     let batch = detector
-        .detect(
-            &img,
-            None,
-            None,
-            locus_core::config::PoseEstimationMode::Fast,
-            true,
-        )
+        .detect(&img, None, None, true)
         .expect("detection failed");
 
     assert_eq!(batch.len(), 0);
@@ -49,13 +43,7 @@ fn test_subpixel_jitter_telemetry() {
         .with_family(TagFamily::AprilTag36h11)
         .build();
     let batch = detector
-        .detect(
-            &img,
-            None,
-            None,
-            locus_core::config::PoseEstimationMode::Fast,
-            true,
-        )
+        .detect(&img, None, None, true)
         .expect("detection failed");
 
     assert!(!batch.is_empty());
@@ -80,13 +68,7 @@ fn test_failed_decode_telemetry() {
         .with_family(TagFamily::AprilTag36h11)
         .build();
     let batch = detector
-        .detect(
-            &img,
-            None,
-            None,
-            locus_core::config::PoseEstimationMode::Fast,
-            true,
-        )
+        .detect(&img, None, None, true)
         .expect("detection failed");
 
     assert_eq!(batch.len(), 0);
@@ -108,13 +90,7 @@ fn test_reprojection_error_telemetry() {
     let tag_size = 0.16;
 
     let batch = detector
-        .detect(
-            &img,
-            Some(&intrinsics),
-            Some(tag_size),
-            locus_core::config::PoseEstimationMode::Fast,
-            true,
-        )
+        .detect(&img, Some(&intrinsics), Some(tag_size), true)
         .expect("detection failed");
 
     assert!(!batch.is_empty());

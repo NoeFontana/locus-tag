@@ -95,7 +95,6 @@ class ScenesFile(BaseModel):
     schema_version: str = Field(default="rotation_tail_diag/v1")
     config_name: str
     profile: str
-    pose_estimation_mode: str
     sigma_n_sq_configured: float
     n_scenes: int
     scenes: list[SceneRecord]

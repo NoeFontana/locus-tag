@@ -246,8 +246,7 @@ def serializable_from_batch(batch: "locus.DetectionBatch") -> list[dict[str, Any
     """Convert a Locus :class:`DetectionBatch` to the wrapper-uniform dict list.
 
     Shared between :meth:`LocusWrapper.detect` (ICRA flow) and the Hub flow at
-    ``tools/cli.py`` which calls ``wrapper.detector.detect()`` directly so it
-    can pass ``pose_estimation_mode=Accurate``.
+    ``tools/cli.py`` which calls ``wrapper.detector.detect()`` directly.
     """
     out: list[dict[str, Any]] = []
     for i in range(len(batch)):
@@ -640,13 +639,11 @@ def evaluate_tag_pose(
     wrapper: "LibraryWrapper",
     ds: "HubDatasetResult",
     eval_tag_size: float,
-    *,
-    pose_estimation_mode: Any = None,
 ) -> dict[str, Any]:
     """Run a wrapper across a Hub tag-only dataset, returning raw per-detection stats.
 
-    Locus wrappers are driven through the underlying detector to thread the
-    optional `pose_estimation_mode`; non-Locus wrappers go through `detect()`.
+    Locus wrappers are driven through the underlying detector for parity with
+    the Hub flow; non-Locus wrappers go through `detect()`.
     """
     is_locus = isinstance(wrapper, LocusWrapper)
     stats = new_pose_stats()
@@ -662,10 +659,9 @@ def evaluate_tag_pose(
         start = time.perf_counter()
         if is_locus:
             assert ds.intrinsics is not None
-            kwargs: dict[str, Any] = {"intrinsics": ds.intrinsics, "tag_size": eval_tag_size}
-            if pose_estimation_mode is not None:
-                kwargs["pose_estimation_mode"] = pose_estimation_mode
-            batch = wrapper.detector.detect(img, **kwargs)
+            batch = wrapper.detector.detect(
+                img, intrinsics=ds.intrinsics, tag_size=eval_tag_size
+            )
             detections = None
         else:
             detections, _ = wrapper.detect(img, intrinsics=ds.intrinsics, tag_size=eval_tag_size)

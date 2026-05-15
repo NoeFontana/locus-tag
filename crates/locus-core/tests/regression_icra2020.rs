@@ -175,7 +175,6 @@ impl RegressionHarness {
                         &img,
                         self.options.intrinsics.as_ref(),
                         self.options.tag_size,
-                        self.options.pose_estimation_mode,
                         false,
                     )
                     .expect("detection failed");

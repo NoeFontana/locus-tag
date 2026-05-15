@@ -12,7 +12,7 @@
     missing_docs
 )]
 use locus_core::bench_api::*;
-use locus_core::{DetectorBuilder, ImageView, PoseEstimationMode, TagFamily};
+use locus_core::{DetectorBuilder, ImageView, TagFamily};
 
 #[test]
 fn test_decimation_accuracy() {
@@ -32,7 +32,7 @@ fn test_decimation_accuracy() {
         .build();
 
     let detections = detector
-        .detect(&img, None, None, PoseEstimationMode::Fast, false)
+        .detect(&img, None, None, false)
         .expect("detection failed");
     assert!(!detections.is_empty());
     let corners1 = [
@@ -62,7 +62,7 @@ fn test_decimation_accuracy() {
         .build();
 
     let detections2 = detector2
-        .detect(&img, None, None, PoseEstimationMode::Fast, false)
+        .detect(&img, None, None, false)
         .expect("detection failed");
     assert!(!detections2.is_empty());
     let corners2 = [

@@ -12,7 +12,7 @@
     missing_docs
 )]
 use locus_core::bench_api::*;
-use locus_core::{DetectorBuilder, ImageView, PoseEstimationMode, TagFamily};
+use locus_core::{DetectorBuilder, ImageView, TagFamily};
 
 #[test]
 fn test_accuracy_synthetic() {
@@ -30,7 +30,7 @@ fn test_accuracy_synthetic() {
 
         let mut detector = DetectorBuilder::new().with_family(family).build();
         let detections = detector
-            .detect(&img, None, None, PoseEstimationMode::Fast, false)
+            .detect(&img, None, None, false)
             .expect("detection failed");
 
         assert!(!detections.is_empty());
@@ -72,7 +72,7 @@ fn test_pose_accuracy() {
 
     let mut detector = DetectorBuilder::new().with_family(family).build();
     let detections = detector
-        .detect(&img, None, None, PoseEstimationMode::Fast, false)
+        .detect(&img, None, None, false)
         .expect("detection failed");
 
     assert!(!detections.is_empty());
@@ -97,13 +97,7 @@ fn test_pose_accuracy() {
     ];
 
     let intrinsics = locus_core::CameraIntrinsics::new(800.0, 800.0, 320.0, 240.0);
-    let (pose, _) = estimate_tag_pose(
-        &intrinsics,
-        &corners,
-        tag_size_m,
-        Some(&img),
-        locus_core::config::PoseEstimationMode::Fast,
-    );
+    let (pose, _) = estimate_tag_pose(&intrinsics, &corners, tag_size_m, Some(&img));
 
     assert!(pose.is_some());
     assert!(pose.unwrap().translation.z > 0.0);

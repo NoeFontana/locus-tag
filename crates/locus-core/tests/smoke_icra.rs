@@ -12,7 +12,7 @@
     missing_docs
 )]
 //! Smoke tests for ICRA dataset loading and detection.
-use locus_core::{Detector, ImageView, PoseEstimationMode};
+use locus_core::{Detector, ImageView};
 
 #[cfg(feature = "bench-internals")]
 mod common;
@@ -24,7 +24,7 @@ fn test_smoke_icra_dataset() {
     let input_view = ImageView::new(&img_data, 640, 480, 640).expect("valid image");
 
     let _res = detector
-        .detect(&input_view, None, None, PoseEstimationMode::Fast, false)
+        .detect(&input_view, None, None, false)
         .expect("detection failed");
 
     // Smoke test: should not crash

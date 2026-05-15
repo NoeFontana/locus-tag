@@ -28,7 +28,7 @@
 
 use locus_core::bench_api::generate_synthetic_test_image;
 use locus_core::camera::{BrownConradyModel, CameraModel, KannalaBrandtModel};
-use locus_core::config::{PoseEstimationMode, TagFamily};
+use locus_core::config::TagFamily;
 use locus_core::{CameraIntrinsics, DetectorBuilder, ImageView};
 
 const CANVAS: usize = 512;
@@ -172,13 +172,7 @@ fn kannala_brandt_recovers_tag_corners() {
         .with_family(TagFamily::AprilTag36h11)
         .build();
     let batch = detector
-        .detect(
-            &view,
-            Some(&intrinsics),
-            None,
-            PoseEstimationMode::Fast,
-            false,
-        )
+        .detect(&view, Some(&intrinsics), None, false)
         .expect("detect should not error");
     let valid = batch.len();
     assert!(
@@ -239,13 +233,7 @@ fn brown_conrady_recovers_tag_corners() {
         .with_family(TagFamily::AprilTag36h11)
         .build();
     let batch = detector
-        .detect(
-            &view,
-            Some(&intrinsics),
-            None,
-            PoseEstimationMode::Fast,
-            false,
-        )
+        .detect(&view, Some(&intrinsics), None, false)
         .expect("detect should not error");
     let valid = batch.len();
     assert!(valid >= 1, "BC detection recovered no tags ({valid} valid)");
@@ -306,13 +294,7 @@ fn extreme_kannala_brandt_degrades_gracefully() {
             .with_family(TagFamily::AprilTag36h11)
             .build();
         detector
-            .detect(
-                &view,
-                Some(&intrinsics),
-                None,
-                PoseEstimationMode::Fast,
-                false,
-            )
+            .detect(&view, Some(&intrinsics), None, false)
             .map(|b| b.len())
     });
     assert!(

@@ -28,10 +28,6 @@ class CornerRefinementMode(enum.IntEnum):
     Erf = 2
     Gwlf = 3
 
-class PoseEstimationMode(enum.IntEnum):
-    Fast = 0
-    Accurate = 1
-
 class QuadExtractionMode(enum.IntEnum):
     ContourRdp = 0
     EdLines = 1
@@ -336,7 +332,6 @@ class Detector:
         img: npt.NDArray[np.uint8],
         intrinsics: CameraIntrinsics | None = None,
         tag_size: float | None = None,
-        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Accurate,
         debug_telemetry: bool = False,
     ) -> DetectionResult: ...
     def detect_concurrent(
@@ -344,7 +339,6 @@ class Detector:
         frames: list[npt.NDArray[np.uint8]],
         intrinsics: CameraIntrinsics | None = None,
         tag_size: float | None = None,
-        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Accurate,
     ) -> list[DetectionResult]:
         """Detect tags in multiple frames concurrently using Rayon.
 

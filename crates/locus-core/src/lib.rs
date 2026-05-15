@@ -74,8 +74,7 @@ pub use crate::board::{AprilGridTopology, BoardConfigError, CharucoTopology};
 pub use crate::camera::{BrownConradyModel, KannalaBrandtModel};
 pub use crate::camera::{CameraModel, PinholeModel};
 pub use crate::config::{
-    CornerRefinementMode, DetectOptions, DetectorConfig, PoseEstimationMode, QuadExtractionMode,
-    TagFamily,
+    CornerRefinementMode, DetectOptions, DetectorConfig, QuadExtractionMode, TagFamily,
 };
 pub use crate::detector::{Detector, DetectorBuilder, FrameContext, LocusEngine};
 pub use crate::error::{ConfigError, DetectorError};

@@ -20,7 +20,7 @@
 //! Distortion coefficients and intrinsics are read from `rich_truth.json`
 //! (`distortion_model` + `dist_coeffs` fields) stored alongside the dataset.
 
-use locus_core::{DetectOptions, PoseEstimationMode, TagFamily};
+use locus_core::{DetectOptions, TagFamily};
 
 mod common;
 
@@ -42,9 +42,8 @@ use locus_core::{
 /// Runs a hub distortion dataset test.
 ///
 /// Intrinsics (including distortion coefficients) are read exclusively from
-/// `rich_truth.json` — these datasets do not use `provenance.json`. Pose-mode
-/// coverage lives in `regression_render_tag.rs::pose_mode_variants`; this
-/// suite exercises the undistortion path only, so it runs Accurate mode.
+/// `rich_truth.json` — these datasets do not use `provenance.json`. This
+/// suite exercises the undistortion path only.
 fn run_distortion_hub_test(config_name: &str, family: TagFamily) {
     let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") else {
         println!("Skipping distortion hub tests. Set LOCUS_HUB_DATASET_DIR to run.");
@@ -67,10 +66,7 @@ fn run_distortion_hub_test(config_name: &str, family: TagFamily) {
     // Distortion datasets embed intrinsics + distortion coefficients in
     // rich_truth.json. Build a fallback for the options in case any image
     // lacks per-entry intrinsics (HubProvider already sets gt.intrinsics).
-    let mut options = DetectOptions {
-        pose_estimation_mode: PoseEstimationMode::Accurate,
-        ..Default::default()
-    };
+    let mut options = DetectOptions::default();
     if let Some(entries) = load_rich_truth_entries(&dataset_path.join("rich_truth.json")) {
         if let Some(first) = entries.first()
             && let Some(k) = first.k_matrix
@@ -221,7 +217,6 @@ fn test_max_recall_adaptive_falls_back_under_distortion() {
             &img,
             Some(&intrinsics),
             tag_size,
-            PoseEstimationMode::Accurate,
             true, // debug_telemetry: required to populate routed_to telemetry
         )
         .unwrap_or_else(|e| panic!("detection failed under distortion: {e:?}"));
@@ -326,13 +321,7 @@ fn test_static_edlines_errors_under_distortion() {
         "test precondition: intrinsics must report distortion"
     );
 
-    let result = detector.detect(
-        &img,
-        Some(&intrinsics),
-        None,
-        PoseEstimationMode::Fast,
-        false,
-    );
+    let result = detector.detect(&img, Some(&intrinsics), None, false);
 
     let err = match result {
         Err(e) => e,

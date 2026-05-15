@@ -38,7 +38,6 @@ fn bench_decoding_only_real(bencher: divan::Bencher) {
             &img,
             None,
             None,
-            locus_core::PoseEstimationMode::Fast,
             false,
         )
         .unwrap();

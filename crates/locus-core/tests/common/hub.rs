@@ -2,7 +2,7 @@
 //! Shared hub dataset infrastructure reused by multiple regression test files.
 
 use locus_core::{
-    CameraIntrinsics, DetectOptions, Detector, DetectorConfig, ImageView, Pose, PoseEstimationMode,
+    CameraIntrinsics, DetectOptions, Detector, DetectorConfig, ImageView, Pose,
     TagFamily,
     config::{CornerRefinementMode, QuadExtractionMode},
 };
@@ -207,13 +207,7 @@ impl RegressionHarness {
 
             let start = std::time::Instant::now();
             let detections = detector
-                .detect(
-                    &img,
-                    intrinsics.as_ref(),
-                    tag_size,
-                    self.options.pose_estimation_mode,
-                    false,
-                )
+                .detect(&img, intrinsics.as_ref(), tag_size, false)
                 .expect("detection failed");
             let total_ms = start.elapsed().as_secs_f64() * 1000.0;
 
@@ -702,9 +696,9 @@ impl HubProvider {
 // ============================================================================
 
 /// Optional knobs for [`run_render_tag_test`]. Defaults reproduce the
-/// Accurate-mode `"standard"`-profile baseline.
+/// `"standard"`-profile baseline.
+#[derive(Default)]
 pub struct RenderTagOpts {
-    pub mode: PoseEstimationMode,
     pub profile: Option<&'static str>,
     /// Inline JSON profile override (e.g. `include_str!`'d fixture). When set,
     /// takes precedence over `profile` — the harness calls `with_profile_json`
@@ -717,26 +711,10 @@ pub struct RenderTagOpts {
     pub moments_culling: Option<(f64, f64)>,
 }
 
-impl Default for RenderTagOpts {
-    fn default() -> Self {
-        Self {
-            mode: PoseEstimationMode::Accurate,
-            profile: None,
-            profile_json: None,
-            snapshot_suffix: "",
-            refinement: None,
-            quad_mode: None,
-            moments_culling: None,
-        }
-    }
-}
-
 /// Run a render-tag regression against a hub dataset.
 ///
 /// Skips gracefully when `LOCUS_HUB_DATASET_DIR` is unset or the dataset is
-/// missing from the cache. Snapshot name is
-/// `hub_{provider.name}{mode_suffix}{snapshot_suffix}`, matching the historic
-/// naming convention for the render-tag suite.
+/// missing from the cache. Snapshot name: `hub_{provider.name}{snapshot_suffix}`.
 pub fn run_render_tag_test(config_name: &str, family: TagFamily, opts: RenderTagOpts) {
     let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") else {
         println!("Skipping hub tests. Set LOCUS_HUB_DATASET_DIR to run.");
@@ -750,17 +728,9 @@ pub fn run_render_tag_test(config_name: &str, family: TagFamily, opts: RenderTag
     };
 
     let mut options = load_detect_options(&dataset_path);
-    options.pose_estimation_mode = opts.mode;
     options.families = vec![family];
 
-    let mode_suffix = match opts.mode {
-        PoseEstimationMode::Fast => "_fast",
-        PoseEstimationMode::Accurate => "",
-    };
-    let snapshot = format!(
-        "hub_{}{}{}",
-        provider.name, mode_suffix, opts.snapshot_suffix
-    );
+    let snapshot = format!("hub_{}{}", provider.name, opts.snapshot_suffix);
 
     let harness = RegressionHarness::new(snapshot);
     let harness = match opts.profile_json {

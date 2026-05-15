@@ -1,14 +1,13 @@
 //! 3D Pose Estimation (PnP) for fiducial markers.
 //!
-//! This module recovers the 6-DOF transformation between the camera and the tag.
-//! It supports:
-//! - **Fast Mode (IPPE)**: Infinitesimal Plane-Based Pose Estimation for low latency.
-//! - **Accurate Mode (Weighted LM)**: Iterative refinement weighted by sub-pixel uncertainty.
+//! IPPE-Square seed → Levenberg-Marquardt refinement. The LM cost surface
+//! (weighted Mahalanobis or unweighted Huber) is selected automatically by
+//! per-corner covariance availability; see [`estimate_tag_pose_with_diagnostics`].
 
 #![allow(clippy::many_single_char_names, clippy::similar_names)]
 use crate::batch::{DetectionBatch, Pose6D};
-use crate::config::PoseEstimationMode;
 use crate::image::ImageView;
+
 use nalgebra::{Matrix2, Matrix3, Matrix6, Rotation3, UnitQuaternion, Vector3, Vector6};
 
 // ---------------------------------------------------------------------------
@@ -319,13 +318,14 @@ pub(crate) fn projection_jacobian(
 /// * `intrinsics` - Camera intrinsics.
 /// * `corners` - Detected corners in image coordinates [[x, y]; 4].
 /// * `tag_size` - Physical size of the tag in world units (e.g., meters).
-/// * `img` - Optional image view (required for Accurate mode).
-/// * `mode` - Pose estimation mode (Fast vs Accurate).
+/// * `img` - Optional image view. Without it the solver falls back to
+///   unweighted Huber LM unless external covariances are supplied.
 ///
 /// # Returns
 /// A tuple containing:
 /// * `Option<Pose>`: The estimated pose (if successful).
-/// * `Option<[[f64; 6]; 6]>`: The estimated covariance matrix (if Accurate mode enabled).
+/// * `Option<[[f64; 6]; 6]>`: The estimated covariance matrix (only when
+///   weighted LM ran — i.e. covariances were available).
 ///
 /// # Panics
 /// Panics if SVD decomposition fails during orthogonalization (extremely rare).
@@ -337,14 +337,12 @@ pub fn estimate_tag_pose(
     corners: &[[f64; 2]; 4],
     tag_size: f64,
     img: Option<&ImageView>,
-    mode: PoseEstimationMode,
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>) {
     estimate_tag_pose_with_config(
         intrinsics,
         corners,
         tag_size,
         img,
-        mode,
         &crate::config::DetectorConfig::default(),
         None,
     )
@@ -359,7 +357,6 @@ pub fn estimate_tag_pose_with_config(
     corners: &[[f64; 2]; 4],
     tag_size: f64,
     img: Option<&ImageView>,
-    mode: PoseEstimationMode,
     config: &crate::config::DetectorConfig,
     external_covariances: Option<&[Matrix2<f64>; 4]>,
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>) {
@@ -372,7 +369,6 @@ pub fn estimate_tag_pose_with_config(
         corners,
         tag_size,
         img,
-        mode,
         config,
         external_covariances,
         thresholds,
@@ -460,7 +456,6 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
     corners: &[[f64; 2]; 4],
     tag_size: f64,
     img: Option<&ImageView>,
-    mode: PoseEstimationMode,
     config: &crate::config::DetectorConfig,
     external_covariances: Option<&[Matrix2<f64>; 4]>,
     thresholds: Option<ConsistencyThresholds>,
@@ -487,10 +482,9 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
         return (None, None, PoseDiagnostics::empty());
     };
 
-    // LM weighting (Some when Accurate-mode + GWLF/structure-tensor input).
+    // LM weighting (Some when GWLF/structure-tensor input is available).
     let covariances = build_lm_covariances(
         config,
-        mode,
         img,
         &ideal_corners,
         &h_poly,
@@ -519,22 +513,21 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
         (pose, branch_diag)
     };
 
-    let (refined_pose, covariance) =
-        if let (PoseEstimationMode::Accurate, _, Some(covs)) = (mode, img, covariances) {
-            let (p, c) = crate::pose_weighted::refine_pose_lm_weighted(
-                intrinsics, corners, tag_size, best_pose, &covs,
-            );
-            (p, Some(c))
-        } else {
-            let p = refine_pose_lm(
-                intrinsics,
-                corners,
-                tag_size,
-                best_pose,
-                config.huber_delta_px,
-            );
-            (p, None)
-        };
+    let (refined_pose, covariance) = if let Some(covs) = covariances {
+        let (p, c) = crate::pose_weighted::refine_pose_lm_weighted(
+            intrinsics, corners, tag_size, best_pose, &covs,
+        );
+        (p, Some(c))
+    } else {
+        let p = refine_pose_lm(
+            intrinsics,
+            corners,
+            tag_size,
+            best_pose,
+            config.huber_delta_px,
+        );
+        (p, None)
+    };
 
     let verdict = pose_consistency_check(
         intrinsics,
@@ -560,25 +553,19 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
     }
 }
 
-/// Per-corner covariances for the weighted LM solver.
-///
-/// Priority: GWLF external (Accurate + ext) > Structure Tensor (Accurate +
-/// img) > `None` (Fast mode or no image — LM falls back to unweighted Huber).
-/// Returns covariances directly; the χ² gate and IPPE branch selector use
-/// their own isotropic info matrices ([`isotropic_info_matrices`]) so we no
-/// longer materialize an inverted info-matrix array on the hot path.
+/// Per-corner covariances for the weighted LM solver. Priority: external
+/// (GWLF) → image-derived structure tensor → `None`. The χ² gate and IPPE
+/// branch selector use their own isotropic info matrices
+/// ([`isotropic_info_matrices`]) so we don't materialize an inverted
+/// info-matrix array on the hot path.
 #[inline]
 fn build_lm_covariances(
     config: &crate::config::DetectorConfig,
-    mode: PoseEstimationMode,
     img: Option<&ImageView>,
     ideal_corners: &[[f64; 2]; 4],
     h_poly: &crate::decoder::Homography,
     external_covariances: Option<&[Matrix2<f64>; 4]>,
 ) -> Option<[Matrix2<f64>; 4]> {
-    if mode != PoseEstimationMode::Accurate {
-        return None;
-    }
     if let Some(ext) = external_covariances {
         return Some(*ext);
     }
@@ -1473,7 +1460,6 @@ pub fn refine_poses_soa(
     intrinsics: &CameraIntrinsics,
     tag_size: f64,
     img: Option<&ImageView>,
-    mode: PoseEstimationMode,
 ) {
     refine_poses_soa_with_config(
         batch,
@@ -1481,7 +1467,6 @@ pub fn refine_poses_soa(
         intrinsics,
         tag_size,
         img,
-        mode,
         &crate::config::DetectorConfig::default(),
     );
 }
@@ -1494,7 +1479,6 @@ pub fn refine_poses_soa_with_config(
     intrinsics: &CameraIntrinsics,
     tag_size: f64,
     img: Option<&ImageView>,
-    mode: PoseEstimationMode,
     config: &crate::config::DetectorConfig,
 ) {
     use rayon::prelude::*;
@@ -1557,7 +1541,6 @@ pub fn refine_poses_soa_with_config(
                 &corners,
                 tag_size,
                 img,
-                mode,
                 config,
                 ext_covs_opt.as_ref(),
                 thresholds,
@@ -1692,7 +1675,6 @@ pub fn bench_estimate_both_branches(
     corners: &[[f64; 2]; 4],
     tag_size: f64,
     img: Option<&ImageView>,
-    mode: crate::config::PoseEstimationMode,
     config: &crate::config::DetectorConfig,
     external_covariances: Option<&[Matrix2<f64>; 4]>,
 ) -> Option<[BenchBranchResult; 2]> {
@@ -1713,7 +1695,6 @@ pub fn bench_estimate_both_branches(
     let candidates = solve_ippe_square(&h_metric)?;
     let covariances = build_lm_covariances(
         config,
-        mode,
         img,
         &ideal_corners,
         &h_poly,
@@ -1725,9 +1706,7 @@ pub fn bench_estimate_both_branches(
     let obj_pts = centered_tag_corners(tag_size);
 
     let refine = |seed: Pose| -> Pose {
-        if let (crate::config::PoseEstimationMode::Accurate, _, Some(covs)) =
-            (mode, img, covariances)
-        {
+        if let Some(covs) = covariances {
             crate::pose_weighted::refine_pose_lm_weighted(
                 intrinsics, corners, tag_size, seed, &covs,
             )
@@ -1776,7 +1755,6 @@ pub fn bench_refit_pose_drop_corner(
     initial_pose: Pose,
     drop_idx: usize,
     img: Option<&ImageView>,
-    mode: crate::config::PoseEstimationMode,
     config: &crate::config::DetectorConfig,
 ) -> Pose {
     debug_assert!(drop_idx < 4);
@@ -1790,9 +1768,9 @@ pub fn bench_refit_pose_drop_corner(
     let Some(h_poly) = crate::decoder::Homography::square_to_quad(&ideal_corners) else {
         return initial_pose;
     };
-    let covariances_opt = build_lm_covariances(config, mode, img, &ideal_corners, &h_poly, None);
+    let covariances_opt = build_lm_covariances(config, img, &ideal_corners, &h_poly, None);
 
-    if let (crate::config::PoseEstimationMode::Accurate, Some(mut covs)) = (mode, covariances_opt) {
+    if let Some(mut covs) = covariances_opt {
         // Inflate the dropped corner's covariance ⇒ its info matrix shrinks
         // toward zero ⇒ no contribution to LM normal equations.
         covs[drop_idx] = Matrix2::identity().scale(1.0e12);
@@ -1805,9 +1783,10 @@ pub fn bench_refit_pose_drop_corner(
         )
         .0
     } else {
-        // Fast mode has no per-corner weighting; we approximate "drop corner"
-        // by snapping the dropped pixel residual to the model prediction
-        // before running LM, so its contribution to the Huber cost is zero.
+        // Unweighted fallback has no per-corner weighting; approximate
+        // "drop corner" by snapping the dropped pixel residual to the model
+        // prediction before running LM, so its contribution to the Huber
+        // cost is zero.
         let p_cam = initial_pose.rotation * centered_tag_corners(tag_size)[drop_idx]
             + initial_pose.translation;
         let projected = project_with_distortion(&p_cam, intrinsics);
@@ -1837,7 +1816,6 @@ pub fn bench_estimate_tag_pose(
     corners: &[[f64; 2]; 4],
     tag_size: f64,
     img: Option<&ImageView>,
-    mode: crate::config::PoseEstimationMode,
     config: &crate::config::DetectorConfig,
     external_covariances: Option<&[Matrix2<f64>; 4]>,
     fpr: Option<f64>,
@@ -1850,7 +1828,6 @@ pub fn bench_estimate_tag_pose(
         corners,
         tag_size,
         img,
-        mode,
         config,
         external_covariances,
         thresholds,
@@ -1895,13 +1872,7 @@ mod tests {
             img_pts[i] = gt_pose.project(&obj_pts[i], &intrinsics);
         }
 
-        let (est_pose, _) = estimate_tag_pose(
-            &intrinsics,
-            &img_pts,
-            tag_size,
-            None,
-            PoseEstimationMode::Fast,
-        );
+        let (est_pose, _) = estimate_tag_pose(&intrinsics, &img_pts, tag_size, None);
         let est_pose = est_pose.expect("Pose estimation failed");
 
         // Check translation
@@ -1963,7 +1934,7 @@ mod tests {
                 img_pts[i] = [p[0] + noise, p[1] + noise];
             }
 
-            if let (Some(est_pose), _) = estimate_tag_pose(&intrinsics, &img_pts, tag_size, None, PoseEstimationMode::Fast) {
+            if let (Some(est_pose), _) = estimate_tag_pose(&intrinsics, &img_pts, tag_size, None) {
                 // Check if recovered pose is reasonably close
                 // Note: noise decreases accuracy, so we use a loose threshold
                 let t_err = (est_pose.translation - translation).norm();

@@ -1,6 +1,6 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Robustness tests for the end-to-end perception pipeline.
-use locus_core::{DetectorBuilder, ImageView, PoseEstimationMode};
+use locus_core::{DetectorBuilder, ImageView};
 use proptest::prelude::*;
 
 /// Pure noise should not trigger a *flood* of detections. The detector is not
@@ -29,7 +29,7 @@ proptest! {
         // It shouldn't panic, but should return 0 detections or gracefully handle it.
         // To make the test fail initially, we can add an intentional assert that will fail on some noise.
         let image = ImageView::new(&data, width, height, width).expect("ImageView creation should succeed with generated data");
-        let detections = detector.detect(&image, None, None, PoseEstimationMode::Fast, false).expect("detection failed");
+        let detections = detector.detect(&image, None, None, false).expect("detection failed");
 
         prop_assert!(
             detections.len() <= NOISE_FALSE_POSITIVE_CEILING,

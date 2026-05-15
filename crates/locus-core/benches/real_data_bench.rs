@@ -14,7 +14,6 @@
 use bumpalo::Bump;
 use divan::bench;
 use locus_core::ImageView;
-use locus_core::PoseEstimationMode;
 use locus_core::config::CornerRefinementMode;
 use std::path::Path;
 
@@ -126,7 +125,7 @@ fn bench_full_pipeline_real(bencher: divan::Bencher) {
 
     bencher.bench_local(move || {
         let _detections = detector
-            .detect(&img, None, None, PoseEstimationMode::Fast, false)
+            .detect(&img, None, None, false)
             .unwrap();
     });
 }
@@ -142,7 +141,7 @@ fn bench_full_pipeline_gwlf_real(bencher: divan::Bencher) {
 
     bencher.bench_local(move || {
         let _detections = detector
-            .detect(&img, None, None, PoseEstimationMode::Fast, false)
+            .detect(&img, None, None, false)
             .unwrap();
     });
 }

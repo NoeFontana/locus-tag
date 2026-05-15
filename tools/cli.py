@@ -550,7 +550,6 @@ def bench_real(
                             img,
                             intrinsics=ds.intrinsics,
                             tag_size=eval_tag_size,
-                            pose_estimation_mode=locus.PoseEstimationMode.Accurate,
                         )
                 else:
                     # OpenCV/Pupil fallback: board refiner not supported
@@ -1287,9 +1286,6 @@ def bench_rotation_tail_diag(
         "--profile",
         help="Detector profile (e.g. high_accuracy, standard).",
     ),
-    pose_mode: str = typer.Option(
-        "Accurate", "--pose-mode", help="Pose-estimation mode: Fast or Accurate."
-    ),
     output_dir: Path = typer.Option(
         Path("diagnostics"),
         "--output-dir",
@@ -1316,8 +1312,6 @@ def bench_rotation_tail_diag(
     """
     import datetime as _dt
 
-    import locus
-
     from tools.bench.rotation_tail_diag import classify, extract, report
 
     today = _dt.date.today().strftime("%Y%m%d")
@@ -1329,16 +1323,10 @@ def bench_rotation_tail_diag(
 
     if not skip_extract:
         typer.echo(f"[1/3] extract → {diag_dir}/")
-        mode_enum = (
-            locus.PoseEstimationMode.Fast
-            if pose_mode.lower() == "fast"
-            else locus.PoseEstimationMode.Accurate
-        )
         extract.run(
             config_name=hub_config,
             profile=profile,
             output_dir=diag_dir,
-            pose_estimation_mode=mode_enum,
             enable_rerun=not no_rerun,
             enable_corner_telemetry=True,
         )

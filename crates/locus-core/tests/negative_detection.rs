@@ -17,7 +17,7 @@
 //! outside the arena": a `#[global_allocator]` counting allocator is out of
 //! scope because the bumpalo contract is already enforced structurally.
 
-use locus_core::{DetectorBuilder, ImageView, PoseEstimationMode};
+use locus_core::{DetectorBuilder, ImageView};
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -56,7 +56,7 @@ fn run_and_assert_empty(data: &[u8], label: &str) {
     let image =
         ImageView::new(data, WIDTH, HEIGHT, WIDTH).expect("ImageView construction must succeed");
     let detections = detector
-        .detect(&image, None, None, PoseEstimationMode::Fast, false)
+        .detect(&image, None, None, false)
         .unwrap_or_else(|e| panic!("detect() failed on {label}: {e:?}"));
     assert!(
         detections.is_empty(),
@@ -154,14 +154,14 @@ fn negative_repeated_detection_no_buffer_growth() {
     // Warm-up: upscale_buf is sized on the first call; we then assert that
     // subsequent calls do not grow it. Proxy for zero arena-external allocs.
     let first = detector
-        .detect(&image, None, None, PoseEstimationMode::Fast, false)
+        .detect(&image, None, None, false)
         .expect("first detection must succeed");
     assert!(first.is_empty());
     let baseline_cap = detector.state().upscale_buf.capacity();
 
     for iter in 1..100 {
         let detections = detector
-            .detect(&image, None, None, PoseEstimationMode::Fast, false)
+            .detect(&image, None, None, false)
             .expect("repeated detection must succeed");
         assert!(detections.is_empty(), "iter {iter}: unexpected detections");
         let cap = detector.state().upscale_buf.capacity();

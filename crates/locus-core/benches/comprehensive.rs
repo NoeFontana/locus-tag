@@ -20,7 +20,6 @@ use bumpalo::Bump;
 use divan::bench;
 use locus_core::Detector;
 use locus_core::ImageView;
-use locus_core::PoseEstimationMode;
 use locus_core::TagFamily;
 use locus_core::bench_api::ThresholdEngine;
 
@@ -151,7 +150,7 @@ fn bench_icra_full_pipeline(bencher: divan::Bencher) {
 
     bencher.bench_local(move || {
         let _ = detector
-            .detect(&img, None, None, PoseEstimationMode::Fast, false)
+            .detect(&img, None, None, false)
             .unwrap();
     });
 }
@@ -212,7 +211,7 @@ fn bench_mixed_scene_multiple_tags(bencher: divan::Bencher) {
 
     bencher.bench_local(move || {
         let _ = detector
-            .detect(&img, None, None, PoseEstimationMode::Fast, false)
+            .detect(&img, None, None, false)
             .unwrap();
     });
 }
@@ -241,7 +240,7 @@ fn bench_dense_scene_20_tags(bencher: divan::Bencher) {
 
     bencher.bench_local(move || {
         let _ = detector
-            .detect(&img, None, None, PoseEstimationMode::Fast, false)
+            .detect(&img, None, None, false)
             .unwrap();
     });
 }
@@ -266,7 +265,7 @@ fn bench_noisy_scene(bencher: divan::Bencher) {
 
     bencher.bench_local(move || {
         let _ = detector
-            .detect(&img, None, None, PoseEstimationMode::Fast, false)
+            .detect(&img, None, None, false)
             .unwrap();
     });
 }

@@ -92,22 +92,6 @@ impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
 
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum PoseEstimationMode {
-    Fast = 0,
-    Accurate = 1,
-}
-
-impl From<PoseEstimationMode> for locus_core::config::PoseEstimationMode {
-    fn from(m: PoseEstimationMode) -> Self {
-        match m {
-            PoseEstimationMode::Fast => locus_core::config::PoseEstimationMode::Fast,
-            PoseEstimationMode::Accurate => locus_core::config::PoseEstimationMode::Accurate,
-        }
-    }
-}
-
-#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum QuadExtractionMode {
     ContourRdp = 0,
     EdLines = 1,
@@ -862,7 +846,6 @@ impl BoardEstimator {
                     &view,
                     Some(&core_intr),
                     Some(tag_size),
-                    locus_core::config::PoseEstimationMode::Accurate,
                     false,
                 )
             })
@@ -1026,7 +1009,6 @@ impl CharucoRefiner {
                     &view,
                     Some(&core_intr),
                     Some(tag_size),
-                    locus_core::config::PoseEstimationMode::Accurate,
                     false,
                 )
             })
@@ -1374,7 +1356,7 @@ pub struct Detector {
 #[pymethods]
 impl Detector {
     /// Detect tags and return a typed [`DetectionResult`] containing NumPy arrays.
-    #[pyo3(signature = (img, intrinsics=None, tag_size=None, pose_estimation_mode=PoseEstimationMode::Accurate, debug_telemetry=false))]
+    #[pyo3(signature = (img, intrinsics=None, tag_size=None, debug_telemetry=false))]
     #[allow(clippy::needless_pass_by_value)]
     #[allow(clippy::too_many_lines)]
     fn detect(
@@ -1383,7 +1365,6 @@ impl Detector {
         img: PyReadonlyArray2<'_, u8>,
         intrinsics: Option<CameraIntrinsics>,
         tag_size: Option<f64>,
-        pose_estimation_mode: PoseEstimationMode,
         debug_telemetry: bool,
     ) -> PyResult<DetectionResult> {
         let view = prepare_image_view(&img)?;
@@ -1394,7 +1375,6 @@ impl Detector {
 
         let has_intrinsics = intrinsics.is_some();
         let core_intrinsics = intrinsics.map(locus_core::CameraIntrinsics::from);
-        let core_pose_mode = locus_core::config::PoseEstimationMode::from(pose_estimation_mode);
 
         // 1. Run core pipeline
         let detections = py
@@ -1403,7 +1383,6 @@ impl Detector {
                     &view,
                     core_intrinsics.as_ref(),
                     tag_size,
-                    core_pose_mode,
                     debug_telemetry,
                 )
             })
@@ -1542,7 +1521,7 @@ impl Detector {
     /// was set via `max_concurrent_frames` at construction time.
     ///
     /// Telemetry and rejected-corner data are not available via this method.
-    #[pyo3(signature = (frames, intrinsics=None, tag_size=None, pose_estimation_mode=PoseEstimationMode::Accurate))]
+    #[pyo3(signature = (frames, intrinsics=None, tag_size=None))]
     #[allow(clippy::needless_pass_by_value)]
     fn detect_concurrent(
         &self,
@@ -1550,7 +1529,6 @@ impl Detector {
         frames: Vec<PyReadonlyArray2<'_, u8>>,
         intrinsics: Option<CameraIntrinsics>,
         tag_size: Option<f64>,
-        pose_estimation_mode: PoseEstimationMode,
     ) -> PyResult<Vec<DetectionResult>> {
         // Prepare image views while GIL is held (PyReadonlyArray2 is GIL-bound).
         let views: Vec<ImageView<'_>> = frames
@@ -1566,7 +1544,6 @@ impl Detector {
 
         let has_pose = intrinsics.is_some() && tag_size.is_some();
         let core_intrinsics = intrinsics.map(locus_core::CameraIntrinsics::from);
-        let core_pose_mode = locus_core::config::PoseEstimationMode::from(pose_estimation_mode);
 
         // Extract a raw pointer to the engine (which is Send+Sync) before releasing
         // the GIL. `self.inner` is pinned on the heap (Box) and kept alive by `self`.
@@ -1582,7 +1559,7 @@ impl Detector {
             .detach(move || {
                 // SAFETY: LocusEngine is thread-safe (Send+Sync) and kept alive by the Detector.
                 let engine = unsafe { &*(ptr.0 as *const locus_core::LocusEngine) };
-                engine.detect_concurrent(&views, core_intrinsics.as_ref(), tag_size, core_pose_mode)
+                engine.detect_concurrent(&views, core_intrinsics.as_ref(), tag_size)
             });
 
         results
@@ -2110,7 +2087,7 @@ fn _shipped_profile_json(name: &str) -> PyResult<&'static str> {
 #[cfg(feature = "bench-internals")]
 mod bench {
     use super::{
-        CameraIntrinsics, PoseEstimationMode, PyDetectorConfig, prepare_image_view, wrap_pyfunction,
+        CameraIntrinsics, PyDetectorConfig, prepare_image_view, wrap_pyfunction,
     };
     use nalgebra::Matrix2;
     use numpy::PyReadonlyArray2;
@@ -2160,20 +2137,18 @@ mod bench {
     /// Each dict contains: `branch_idx`, `initial_pose`, `refined_pose`,
     /// `aggregate_d2`, `per_corner_d2`.
     #[pyfunction]
-    #[pyo3(signature = (intrinsics, corners, tag_size, mode, config, image=None))]
+    #[pyo3(signature = (intrinsics, corners, tag_size, config, image=None))]
     #[allow(clippy::needless_pass_by_value)]
     pub fn _bench_estimate_both_branches<'py>(
         py: Python<'py>,
         intrinsics: CameraIntrinsics,
         corners: [[f64; 2]; 4],
         tag_size: f64,
-        mode: PoseEstimationMode,
         config: PyDetectorConfig,
         image: Option<PyReadonlyArray2<'_, u8>>,
     ) -> PyResult<Option<Bound<'py, PyList>>> {
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
         let core_cfg: locus_core::config::DetectorConfig = config.into();
-        let core_mode: locus_core::config::PoseEstimationMode = mode.into();
 
         let view_opt = image.as_ref().map(prepare_image_view).transpose()?;
 
@@ -2182,7 +2157,6 @@ mod bench {
             &corners,
             tag_size,
             view_opt.as_ref(),
-            core_mode,
             &core_cfg,
             None,
         );
@@ -2274,7 +2248,7 @@ mod bench {
     /// re-runs LM with that corner effectively masked. Returns the refined
     /// pose dict.
     #[pyfunction]
-    #[pyo3(signature = (intrinsics, corners, tag_size, initial_quaternion, initial_translation, drop_idx, mode, config, image=None))]
+    #[pyo3(signature = (intrinsics, corners, tag_size, initial_quaternion, initial_translation, drop_idx, config, image=None))]
     #[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
     pub fn _bench_refit_pose_drop_corner<'py>(
         py: Python<'py>,
@@ -2284,7 +2258,6 @@ mod bench {
         initial_quaternion: [f64; 4],
         initial_translation: [f64; 3],
         drop_idx: usize,
-        mode: PoseEstimationMode,
         config: PyDetectorConfig,
         image: Option<PyReadonlyArray2<'_, u8>>,
     ) -> PyResult<Bound<'py, PyDict>> {
@@ -2295,7 +2268,6 @@ mod bench {
         }
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
         let core_cfg: locus_core::config::DetectorConfig = config.into();
-        let core_mode: locus_core::config::PoseEstimationMode = mode.into();
         let initial = pose_from_quat_trans(initial_quaternion, initial_translation);
         let view_opt = image.as_ref().map(prepare_image_view).transpose()?;
 
@@ -2306,7 +2278,6 @@ mod bench {
             initial,
             drop_idx,
             view_opt.as_ref(),
-            core_mode,
             &core_cfg,
         );
         pose_to_dict(py, &refined)
@@ -2361,21 +2332,19 @@ mod bench {
     /// diagnostics that the production detector internally computes. `fpr`
     /// is the χ² gate false-positive rate; pass `None` to disable.
     #[pyfunction]
-    #[pyo3(signature = (intrinsics, corners, tag_size, mode, config, image=None, fpr=None))]
+    #[pyo3(signature = (intrinsics, corners, tag_size, config, image=None, fpr=None))]
     #[allow(clippy::needless_pass_by_value, clippy::too_many_arguments)]
     pub fn _bench_estimate_tag_pose<'py>(
         py: Python<'py>,
         intrinsics: CameraIntrinsics,
         corners: [[f64; 2]; 4],
         tag_size: f64,
-        mode: PoseEstimationMode,
         config: PyDetectorConfig,
         image: Option<PyReadonlyArray2<'_, u8>>,
         fpr: Option<f64>,
     ) -> PyResult<Bound<'py, PyDict>> {
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
         let core_cfg: locus_core::config::DetectorConfig = config.into();
-        let core_mode: locus_core::config::PoseEstimationMode = mode.into();
         let view_opt = image.as_ref().map(prepare_image_view).transpose()?;
 
         let (pose_opt, _cov_opt, diag) = locus_core::bench_api::bench_estimate_tag_pose(
@@ -2383,7 +2352,6 @@ mod bench {
             &corners,
             tag_size,
             view_opt.as_ref(),
-            core_mode,
             &core_cfg,
             None,
             fpr,
@@ -2425,7 +2393,6 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TagFamily>()?;
     m.add_class::<SegmentationConnectivity>()?;
     m.add_class::<CornerRefinementMode>()?;
-    m.add_class::<PoseEstimationMode>()?;
     m.add_class::<QuadExtractionMode>()?;
     m.add_class::<EdLinesImbalanceGatePolicy>()?;
     m.add_class::<EdLinesPhase3ErfPolicy>()?;

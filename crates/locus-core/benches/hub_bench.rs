@@ -155,7 +155,6 @@ macro_rules! hub_benchmarks {
                             &img,
                             None,
                             None,
-                            locus_core::PoseEstimationMode::Fast,
                             false,
                         )
                         .unwrap();

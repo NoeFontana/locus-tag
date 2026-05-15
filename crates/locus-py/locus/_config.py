@@ -30,7 +30,6 @@ from .locus import (
     CornerRefinementMode,
     EdLinesImbalanceGatePolicy,
     EdLinesPhase3ErfPolicy,
-    PoseEstimationMode,
     PyDetectorConfig,
     QuadExtractionMode,
     SegmentationConnectivity,
@@ -507,9 +506,6 @@ class DetectOptions(BaseModel):
     decimation: int = Field(default=1, ge=1)
     intrinsics: tuple[float, float, float, float] | CameraIntrinsics | None = Field(default=None)
     tag_size: float | None = Field(default=None, ge=0.0)
-    pose_estimation_mode: PoseEstimationMode = Field(
-        default_factory=lambda: PoseEstimationMode.Fast
-    )
 
     @classmethod
     def all(cls) -> DetectOptions:

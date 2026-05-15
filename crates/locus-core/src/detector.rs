@@ -102,17 +102,10 @@ impl Detector {
         img: &ImageView,
         intrinsics: Option<&crate::pose::CameraIntrinsics>,
         tag_size: Option<f64>,
-        pose_mode: crate::config::PoseEstimationMode,
         debug_telemetry: bool,
     ) -> Result<DetectionBatchView<'_>, DetectorError> {
-        self.engine.detect_with_context(
-            img,
-            &mut self.ctx,
-            intrinsics,
-            tag_size,
-            pose_mode,
-            debug_telemetry,
-        )
+        self.engine
+            .detect_with_context(img, &mut self.ctx, intrinsics, tag_size, debug_telemetry)
     }
 
     /// Detect tags in multiple frames concurrently using Rayon.
@@ -126,10 +119,8 @@ impl Detector {
         frames: &[ImageView<'_>],
         intrinsics: Option<&crate::pose::CameraIntrinsics>,
         tag_size: Option<f64>,
-        pose_mode: crate::config::PoseEstimationMode,
     ) -> Vec<Result<Vec<crate::Detection>, DetectorError>> {
-        self.engine
-            .detect_concurrent(frames, intrinsics, tag_size, pose_mode)
+        self.engine.detect_concurrent(frames, intrinsics, tag_size)
     }
 
     /// Clear all decoders and set new ones based on tag families.
@@ -188,7 +179,6 @@ fn run_detection_pipeline<'ctx>(
     ctx: &'ctx mut FrameContext,
     intrinsics: Option<&crate::pose::CameraIntrinsics>,
     tag_size: Option<f64>,
-    pose_mode: crate::config::PoseEstimationMode,
     debug_telemetry: bool,
 ) -> Result<DetectionBatchView<'ctx>, DetectorError> {
     // Static EdLines is geometrically incompatible with distorted intrinsics
@@ -498,7 +488,6 @@ fn run_detection_pipeline<'ctx>(
         intrinsics,
         tag_size,
         &refinement_img,
-        pose_mode,
         config,
         debug_telemetry,
     );
@@ -541,7 +530,6 @@ fn run_pose_refinement(
     intrinsics: Option<&crate::pose::CameraIntrinsics>,
     tag_size: Option<f64>,
     refinement_img: &ImageView,
-    pose_mode: crate::config::PoseEstimationMode,
     config: &DetectorConfig,
     debug_telemetry: bool,
 ) -> (*const f32, usize) {
@@ -555,7 +543,6 @@ fn run_pose_refinement(
             intr,
             size,
             Some(refinement_img),
-            pose_mode,
             config,
         );
 
@@ -948,7 +935,6 @@ impl LocusEngine {
         ctx: &'ctx mut FrameContext,
         intrinsics: Option<&crate::pose::CameraIntrinsics>,
         tag_size: Option<f64>,
-        pose_mode: crate::config::PoseEstimationMode,
         debug_telemetry: bool,
     ) -> Result<DetectionBatchView<'ctx>, DetectorError> {
         run_detection_pipeline(
@@ -959,7 +945,6 @@ impl LocusEngine {
             ctx,
             intrinsics,
             tag_size,
-            pose_mode,
             debug_telemetry,
         )
     }
@@ -977,7 +962,6 @@ impl LocusEngine {
         frames: &[ImageView<'_>],
         intrinsics: Option<&crate::pose::CameraIntrinsics>,
         tag_size: Option<f64>,
-        pose_mode: crate::config::PoseEstimationMode,
     ) -> Vec<Result<Vec<crate::Detection>, DetectorError>> {
         use rayon::prelude::*;
         frames
@@ -998,7 +982,6 @@ impl LocusEngine {
                     &mut ctx,
                     intrinsics,
                     tag_size,
-                    pose_mode,
                     false, // telemetry disabled: arena pointers would not survive pool return
                 )
                 .map(|view| {
@@ -1037,7 +1020,7 @@ impl LocusEngine {
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::config::{CornerRefinementMode, PoseEstimationMode, QuadExtractionMode};
+    use crate::config::{CornerRefinementMode, QuadExtractionMode};
     use crate::error::ConfigError;
     use crate::pose::CameraIntrinsics;
 
@@ -1056,13 +1039,7 @@ mod tests {
         );
 
         let err = detector
-            .detect(
-                &img,
-                Some(&intrinsics),
-                None,
-                PoseEstimationMode::Fast,
-                false,
-            )
+            .detect(&img, Some(&intrinsics), None, false)
             .expect_err("distorted EdLines must fail");
 
         assert!(
@@ -1087,13 +1064,7 @@ mod tests {
         let intrinsics = CameraIntrinsics::new(800.0, 800.0, 32.0, 32.0);
 
         detector
-            .detect(
-                &img,
-                Some(&intrinsics),
-                None,
-                PoseEstimationMode::Fast,
-                false,
-            )
+            .detect(&img, Some(&intrinsics), None, false)
             .expect("edlines with pinhole intrinsics must succeed");
     }
 }

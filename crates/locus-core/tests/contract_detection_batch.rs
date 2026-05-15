@@ -24,7 +24,6 @@
 
 use bumpalo::Bump;
 use locus_core::bench_api::*;
-use locus_core::config::PoseEstimationMode;
 use locus_core::{DetectorConfig, ImageView, TagFamily};
 use std::collections::BTreeSet;
 
@@ -560,15 +559,7 @@ fn contract_phase_d_refine_poses_soa() {
     let config = DetectorConfig::default();
     let before = snapshot(&batch);
 
-    refine_poses_soa_with_config(
-        &mut batch,
-        1,
-        &intrinsics,
-        0.1,
-        None,
-        PoseEstimationMode::Fast,
-        &config,
-    );
+    refine_poses_soa_with_config(&mut batch, 1, &intrinsics, 0.1, None, &config);
 
     let changed = changed_columns(&before, &batch);
     let allowed = {

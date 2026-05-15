@@ -27,7 +27,7 @@
 mod common;
 
 use locus_core::bench_api::FunnelStatus;
-use locus_core::{Detector, DetectorConfig, ImageView, PoseEstimationMode};
+use locus_core::{Detector, DetectorConfig, ImageView};
 
 const FRAMES: &[&str] = &[
     "0000.png", "0001.png", "0002.png", "0003.png", "0004.png", "0005.png",
@@ -67,7 +67,7 @@ fn diagnose_icra_forward_frames_0_5() {
             let view = ImageView::new(&bytes, w as usize, h as usize, w as usize)
                 .expect("valid image view");
             let det = detector
-                .detect(&view, None, None, PoseEstimationMode::Fast, true)
+                .detect(&view, None, None, true)
                 .expect("detect ok");
             let n_valid = det.len();
             let n_rejected = det.rejected_corners.len();

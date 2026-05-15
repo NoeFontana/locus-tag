@@ -15,7 +15,6 @@
 mod utils;
 
 use divan::bench;
-use locus_core::PoseEstimationMode;
 use locus_core::bench_api::{CameraIntrinsics, refine_poses_soa, refine_poses_soa_with_config};
 use locus_core::config::DetectorConfig;
 use utils::BenchDataset;
@@ -27,24 +26,6 @@ fn main() {
         .build_global();
 
     divan::Divan::from_args().threads([1]).run_benches();
-}
-
-#[bench(args = [10, 50])]
-fn bench_pose_fast(bencher: divan::Bencher, &v: &usize) {
-    let intrinsics = CameraIntrinsics::new(800.0, 800.0, 400.0, 300.0);
-    let tag_size = 0.16;
-    let mut batch = BenchDataset::generate_bench_batch(v, 0);
-
-    bencher.bench_local(move || {
-        refine_poses_soa(
-            &mut batch,
-            v,
-            &intrinsics,
-            tag_size,
-            None,
-            PoseEstimationMode::Fast,
-        );
-    });
 }
 
 #[bench(args = [10, 50])]
@@ -68,7 +49,6 @@ fn bench_pose_accurate(bencher: divan::Bencher, &v: &usize) {
             &intrinsics,
             tag_size,
             Some(&img),
-            PoseEstimationMode::Accurate,
         );
     });
 }
@@ -77,7 +57,8 @@ fn bench_pose_accurate(bencher: divan::Bencher, &v: &usize) {
 // Pose-consistency gate latency matrix.
 //
 // Four cells:
-//   - pinhole         × gate disabled (baseline; identical to bench_pose_fast)
+//   - pinhole         × gate disabled (baseline; unweighted-LM fallback path
+//                                       — no image, no external covariances)
 //   - pinhole         × gate enabled at fpr = 1e-3
 //   - Brown-Conrady   × gate disabled
 //   - Brown-Conrady   × gate enabled at fpr = 1e-3
@@ -113,7 +94,6 @@ fn bench_pose_gate_pinhole_off(bencher: divan::Bencher, &v: &usize) {
             &intrinsics,
             tag_size,
             None,
-            PoseEstimationMode::Fast,
             &cfg,
         );
     });
@@ -133,7 +113,6 @@ fn bench_pose_gate_pinhole_on(bencher: divan::Bencher, &v: &usize) {
             &intrinsics,
             tag_size,
             None,
-            PoseEstimationMode::Fast,
             &cfg,
         );
     });
@@ -154,7 +133,6 @@ fn bench_pose_gate_brown_conrady_off(bencher: divan::Bencher, &v: &usize) {
             &intrinsics,
             tag_size,
             None,
-            PoseEstimationMode::Fast,
             &cfg,
         );
     });
@@ -175,7 +153,6 @@ fn bench_pose_gate_brown_conrady_on(bencher: divan::Bencher, &v: &usize) {
             &intrinsics,
             tag_size,
             None,
-            PoseEstimationMode::Fast,
             &cfg,
         );
     });

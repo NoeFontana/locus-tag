@@ -19,7 +19,7 @@
 //! enough to catch a genuine corner-ordering bug.
 
 use locus_core::bench_api::family_to_decoder;
-use locus_core::{DetectorBuilder, ImageView, PoseEstimationMode, TagFamily};
+use locus_core::{DetectorBuilder, ImageView, TagFamily};
 use proptest::prelude::*;
 
 const CANVAS: usize = 256;
@@ -84,7 +84,7 @@ fn detect_single(data: &[u8], canvas: usize) -> Option<[[f64; 2]; 4]> {
         .build();
     let image = ImageView::new(data, canvas, canvas, canvas).ok()?;
     let view = detector
-        .detect(&image, None, None, PoseEstimationMode::Fast, false)
+        .detect(&image, None, None, false)
         .ok()?;
     if view.len() != 1 {
         return None;

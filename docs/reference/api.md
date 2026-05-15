@@ -57,7 +57,7 @@ detector = (
 | `with_max_concurrent_frames(n)` | Pool size for `detect_concurrent` (default 1 = sequential). |
 | `build()` | Build the `Detector`. |
 
-**`detect_concurrent(frames, *, intrinsics=None, tag_size=None, pose_estimation_mode=PoseEstimationMode.Fast) -> list[DetectionResult]`**
+**`detect_concurrent(frames, *, intrinsics=None, tag_size=None) -> list[DetectionResult]`**
 
 Detect tags in multiple frames concurrently using Rayon. Releases the GIL for the entire parallel section. Pool contexts are managed internally. Rejected-corner data and telemetry are not available via this method.
 
@@ -66,7 +66,6 @@ Detect tags in multiple frames concurrently using Rayon. Releases the GIL for th
 | `frames` | `list[np.ndarray]` | List of (H, W) uint8 grayscale frames. |
 | `intrinsics` | `CameraIntrinsics \| None` | Camera intrinsics for 3D pose estimation. |
 | `tag_size` | `float \| None` | Physical tag side length in metres. |
-| `pose_estimation_mode` | `PoseEstimationMode` | `Fast` or `Accurate`. |
 
 ## Configuration
 
@@ -184,10 +183,6 @@ result: BoardEstimateResult = estimator.estimate(
 ## Enumerations
 
 ::: locus.TagFamily
-    options:
-        heading_level: 3
-
-::: locus.PoseEstimationMode
     options:
         heading_level: 3
 

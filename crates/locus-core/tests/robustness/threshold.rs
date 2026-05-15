@@ -36,7 +36,7 @@ proptest! {
 
         // Processing should not panic on arbitrary parameters
         // Note: intentional assert added initially for TDD Red Phase.
-        let detections = detector.detect(&image, None, None, locus_core::PoseEstimationMode::Fast, false).expect("detection failed");
+        let detections = detector.detect(&image, None, None, false).expect("detection failed");
 
         // We expect it not to find anything in noise and not to crash.
         // It's technically possible but extremely unlikely to find a valid tag in random noise.
