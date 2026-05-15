@@ -368,7 +368,6 @@ fn run_detection_pipeline<'ctx>(
 
     // Optional: GWLF Refinement
     let (gwlf_fallback_count, gwlf_avg_delta) = match crate::refinement::apply_detector_gwlf(
-        &state.arena,
         &mut state.batch,
         n,
         &refinement_img,

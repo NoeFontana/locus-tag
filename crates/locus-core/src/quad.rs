@@ -414,6 +414,7 @@ fn extract_single_quad(
             refinement_img,
             quad_pts,
             gn_covs,
+            route_extraction,
             route_refinement,
             config.subpixel_refinement_sigma,
             decimation,

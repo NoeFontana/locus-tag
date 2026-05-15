@@ -6,14 +6,14 @@ summary:
   dataset_size: 50
   mean_recall: 0.9
   mean_precision: 1
-  mean_rmse: 0.5794
-  mean_reprojection_rmse: 0.5804
-  p50_translation_error: 0.0022
-  p90_translation_error: 0.0192
-  p99_translation_error: 0.0533
-  p50_rotation_error: 0.0771
-  p90_rotation_error: 0.2179
-  p99_rotation_error: 0.3986
+  mean_rmse: 0.5634
+  mean_reprojection_rmse: 0.5638
+  p50_translation_error: 0.0021
+  p90_translation_error: 0.0187
+  p99_translation_error: 0.0447
+  p50_rotation_error: 0.0636
+  p90_rotation_error: 0.1719
+  p99_rotation_error: 0.3375
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
   worst_offenders:

@@ -169,16 +169,17 @@ collapse is well-characterized and will recur if anyone re-enables it.
 
 ## §4 Algorithm tradeoffs that should inform future tuning
 
-### §4.1 Refinement modes (with EdLines)
+### §4.1 Refinement modes
 
-GN corners from EdLines Phase 5 are already sub-pixel. The post-
-refinement stage is *counter-productive* for raw RMSE:
+GN corners from EdLines Phase 5 are already sub-pixel. With EdLines as
+the extractor, the post-refinement stage is *counter-productive* for
+raw RMSE:
 
-| Refinement (720p hub) | Corner RMSE | Repro RMSE | Rot P50 | Use case |
+| EdLines + refinement (720p hub) | Corner RMSE | Repro RMSE | Rot P50 | Use case |
 |---|---:|---:|---:|---|
 | `None` (GN direct) | **0.166 px** | **0.541** | 0.27° | Best for metrology |
 | `Erf` | 0.592 px | 0.848 | 0.28° | (don't — degrades GN) |
-| `Gwlf` | 0.621 px | 0.656 | **0.16°** | Best rotation stability |
+| `Gwlf` | 0.563 px | 0.564 | **0.06°** | Best rotation stability |
 
 **Rule:** with `QuadExtractionMode::EdLines`, default to
 `CornerRefinementMode::None`. Use `Gwlf` only when angular stability
@@ -186,7 +187,21 @@ matters more than per-corner pixel error.
 
 ERF was designed for integer ContourRdp corners — it expects to push
 them to sub-pixel positions. Applied to already-sub-pixel GN
-corners, it just adds noise.
+corners, it just adds noise. The `Gwlf` row improved over earlier
+numbers (was 0.621 / 0.656 / 0.16°) once the quad-stage refit was
+removed from the EdLines + Gwlf path: the gradient-peak refit between
+EdLines GN and the detector-level GWLF pass was degrading the
+initialization GWLF received.
+
+**Warm-start matters for ContourRdp + Gwlf — the opposite call.**
+ContourRdp's coarse corners are integer-precision midpoints. Without a
+quad-stage warm-start, the detector-level GWLF pass converges to a
+worse minimum and regresses mean RMSE by ~15 % and p90 rotation by
+~210 % on the 1080p render-tag hub. Resolution:
+`refine_quad_corners` in `crates/locus-core/src/refinement.rs` splits
+on `(extraction, refinement)` and runs a gradient-peak warm-start only
+on `ContourRdp + Gwlf`; EdLines + Gwlf passes through unrefined. The split is empirical, not symmetric, and codifies the
+trade-off this section describes.
 
 ### §4.2 GN trades corner RMSE for pose precision
 
