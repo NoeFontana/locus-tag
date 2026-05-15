@@ -35,17 +35,14 @@ pub(crate) fn refine_quad_corners(
     sigma: f64,
     decimation: usize,
 ) -> ([Point; 4], CornerCovariances) {
-    if matches!(
-        route_refinement,
-        CornerRefinementMode::None | CornerRefinementMode::Gwlf
-    ) {
-        return (quad_pts, gn_covs);
+    match route_refinement {
+        CornerRefinementMode::None | CornerRefinementMode::Gwlf => (quad_pts, gn_covs),
+        CornerRefinementMode::Erf => {
+            let corners =
+                refine_all_quad_corners(arena, refinement_img, quad_pts, sigma, decimation, true);
+            (corners, [[0.0; 4]; 4])
+        },
     }
-
-    debug_assert_eq!(route_refinement, CornerRefinementMode::Erf);
-    let corners = refine_all_quad_corners(arena, refinement_img, quad_pts, sigma, decimation, true);
-
-    (corners, [[0.0; 4]; 4])
 }
 
 /// Refine each of a quad's four corners using its two cyclic
