@@ -15,8 +15,7 @@ use locus_core::{Detector, ImageView, TagFamily};
 
 fn detect_and_read_gwlf_telemetry(config: DetectorConfig) -> (usize, usize, f32) {
     let canvas = 400;
-    let (data, _gt) =
-        generate_synthetic_test_image(TagFamily::AprilTag36h11, 42, 200, canvas, 0.0);
+    let (data, _gt) = generate_synthetic_test_image(TagFamily::AprilTag36h11, 42, 200, canvas, 0.0);
     let img = ImageView::new(&data, canvas, canvas, canvas).expect("valid image");
     let mut detector = Detector::with_config(config);
     let batch = detector

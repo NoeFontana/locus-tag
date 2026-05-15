@@ -43,14 +43,8 @@ pub(crate) fn refine_quad_corners(
     }
 
     let use_erf = route_refinement == CornerRefinementMode::Erf;
-    let corners = refine_all_quad_corners(
-        arena,
-        refinement_img,
-        quad_pts,
-        sigma,
-        decimation,
-        use_erf,
-    );
+    let corners =
+        refine_all_quad_corners(arena, refinement_img, quad_pts, sigma, decimation, use_erf);
 
     (corners, [[0.0; 4]; 4])
 }
@@ -70,10 +64,18 @@ pub(crate) fn refine_all_quad_corners(
     use_erf: bool,
 ) -> [Point; 4] {
     [
-        refine_corner(arena, img, pts[0], pts[3], pts[1], sigma, decimation, use_erf),
-        refine_corner(arena, img, pts[1], pts[0], pts[2], sigma, decimation, use_erf),
-        refine_corner(arena, img, pts[2], pts[1], pts[3], sigma, decimation, use_erf),
-        refine_corner(arena, img, pts[3], pts[2], pts[0], sigma, decimation, use_erf),
+        refine_corner(
+            arena, img, pts[0], pts[3], pts[1], sigma, decimation, use_erf,
+        ),
+        refine_corner(
+            arena, img, pts[1], pts[0], pts[2], sigma, decimation, use_erf,
+        ),
+        refine_corner(
+            arena, img, pts[2], pts[1], pts[3], sigma, decimation, use_erf,
+        ),
+        refine_corner(
+            arena, img, pts[3], pts[2], pts[0], sigma, decimation, use_erf,
+        ),
     ]
 }
 
