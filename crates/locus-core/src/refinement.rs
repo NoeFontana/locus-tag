@@ -38,6 +38,7 @@ use crate::quad::{CornerCovariances, fit_edge_line, refine_edge_erf};
 /// hub). EdLines' Gauss-Newton corners are already sub-pixel and a
 /// gradient-peak refit only degrades them.
 #[allow(clippy::too_many_arguments)]
+#[inline]
 pub(crate) fn refine_quad_corners(
     arena: &Bump,
     refinement_img: &ImageView,
@@ -153,7 +154,14 @@ pub(crate) fn refine_corner(
 #[inline]
 fn resolve_route_refinement(config: &DetectorConfig, route_label: u8) -> CornerRefinementMode {
     match config.quad_extraction_policy {
-        QuadExtractionPolicy::Static => config.refinement_mode,
+        QuadExtractionPolicy::Static => {
+            debug_assert_eq!(
+                route_label,
+                crate::batch::ROUTED_TO_STATIC,
+                "Static policy candidates must carry the ROUTED_TO_STATIC label",
+            );
+            config.refinement_mode
+        },
         QuadExtractionPolicy::AdaptivePpb(cfg) => {
             if route_label == ROUTED_TO_HIGH {
                 cfg.high_refinement
