@@ -1,9 +1,9 @@
 # Config refactor — migration notes
 
 This document covers the breaking changes in the current `Unreleased`
-section of [`CHANGELOG.md`](../../CHANGELOG.md). Each removal lists the
-before/after spelling so consumers can mechanically port their call
-sites.
+section of the project `CHANGELOG.md` (at the repository root). Each
+removal lists the before/after spelling so consumers can mechanically
+port their call sites.
 
 ## `DetectorPreset` enum → `profile=` string
 
