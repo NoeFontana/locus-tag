@@ -367,53 +367,24 @@ fn run_detection_pipeline<'ctx>(
     );
 
     // Optional: GWLF Refinement
-    let mut gwlf_fallback_count = 0;
-    let mut gwlf_avg_delta = 0.0f32;
-    if config.refinement_mode == crate::config::CornerRefinementMode::Gwlf {
-        let mut total_delta = 0.0f32;
-        let mut count = 0;
-        for i in 0..n {
-            let coarse = [
-                [state.batch.corners[i][0].x, state.batch.corners[i][0].y],
-                [state.batch.corners[i][1].x, state.batch.corners[i][1].y],
-                [state.batch.corners[i][2].x, state.batch.corners[i][2].y],
-                [state.batch.corners[i][3].x, state.batch.corners[i][3].y],
-            ];
-            if let Some((refined, covs)) = crate::gwlf::refine_quad_gwlf_with_cov(
-                &refinement_img,
-                &coarse,
-                config.gwlf_transversal_alpha,
-            ) {
-                for j in 0..4 {
-                    let dx = refined[j][0] - coarse[j][0];
-                    let dy = refined[j][1] - coarse[j][1];
-                    total_delta += (dx * dx + dy * dy).sqrt();
-                    count += 1;
-
-                    state.batch.corners[i][j].x = refined[j][0];
-                    state.batch.corners[i][j].y = refined[j][1];
-
-                    // Store 2x2 covariance (4 floats) for each corner
-                    state.batch.corner_covariances[i][j * 4] = covs[j][(0, 0)] as f32;
-                    state.batch.corner_covariances[i][j * 4 + 1] = covs[j][(0, 1)] as f32;
-                    state.batch.corner_covariances[i][j * 4 + 2] = covs[j][(1, 0)] as f32;
-                    state.batch.corner_covariances[i][j * 4 + 3] = covs[j][(1, 1)] as f32;
-                }
-            } else {
-                gwlf_fallback_count += 1;
-            }
-        }
-        if count > 0 {
-            gwlf_avg_delta = total_delta / count as f32;
-        }
-
-        // Recompute homographies after refinement
-        crate::decoder::compute_homographies_soa(
-            &state.batch.corners[0..n],
-            &state.batch.status_mask[0..n],
-            &mut state.batch.homographies[0..n],
-        );
-    }
+    let (gwlf_fallback_count, gwlf_avg_delta) = match crate::refinement::apply_detector_gwlf(
+        &state.arena,
+        &mut state.batch,
+        n,
+        &refinement_img,
+        config,
+    ) {
+        Some(telemetry) => {
+            // Recompute homographies after the GWLF pass moved corners.
+            crate::decoder::compute_homographies_soa(
+                &state.batch.corners[0..n],
+                &state.batch.status_mask[0..n],
+                &mut state.batch.homographies[0..n],
+            );
+            telemetry
+        },
+        None => (0, 0.0f32),
+    };
 
     // 5. Decoding Pass (SoA) — dispatch on distortion model
     // For rectified cameras (PinholeModel or no intrinsics), the compiler eliminates

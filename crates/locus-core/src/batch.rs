@@ -100,9 +100,9 @@ pub struct DetectionBatch {
     #[cfg(feature = "bench-internals")]
     pub ippe_branch_d2_ratio: [f32; MAX_CANDIDATES],
     /// Per-candidate `AdaptivePpb` route label. Debug-only telemetry.
-    /// `0` = low-PPB route, `1` = high-PPB route, [`ROUTED_TO_STATIC`]
-    /// for `QuadExtractionPolicy::Static` / not-routed. Populated only
-    /// when `debug_telemetry` is set.
+    /// [`ROUTED_TO_LOW`] = low-PPB route, [`ROUTED_TO_HIGH`] = high-PPB
+    /// route, [`ROUTED_TO_STATIC`] for `QuadExtractionPolicy::Static` /
+    /// not-routed. Populated only when `debug_telemetry` is set.
     pub routed_to: [u8; MAX_CANDIDATES],
     /// Per-candidate pixels-per-bit estimate consumed by the adaptive router.
     /// Debug-only telemetry. Zero under `Static` (no routing performed).
@@ -112,6 +112,12 @@ pub struct DetectionBatch {
 /// Sentinel written into [`DetectionBatch::routed_to`] when the candidate
 /// was not subjected to adaptive routing (`QuadExtractionPolicy::Static`).
 pub const ROUTED_TO_STATIC: u8 = u8::MAX;
+
+/// `AdaptivePpb` low-PPB route label written into [`DetectionBatch::routed_to`].
+pub const ROUTED_TO_LOW: u8 = 0;
+
+/// `AdaptivePpb` high-PPB route label written into [`DetectionBatch::routed_to`].
+pub const ROUTED_TO_HIGH: u8 = 1;
 
 impl DetectionBatch {
     /// Creates a new DetectionBatch with all fields initialized to zero (Empty state).
