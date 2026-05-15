@@ -85,6 +85,7 @@ pub(crate) fn refine_all_quad_corners(
 /// `use_erf = true` runs the PSF-blurred Gauss-Newton fit and falls
 /// back to the gradient-peak fit on sample shortfall. `use_erf = false`
 /// runs only the gradient-peak fit.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn refine_corner(
     arena: &Bump,
     img: &ImageView,
@@ -288,9 +289,9 @@ fn apply_gwlf_failure_fallback(
                 },
             ];
             let refined = refine_all_quad_corners(arena, refinement_img, pts, sigma, 1, true);
-            for j in 0..4 {
-                batch.corners[i][j].x = refined[j].x as f32;
-                batch.corners[i][j].y = refined[j].y as f32;
+            for (j, p) in refined.iter().enumerate() {
+                batch.corners[i][j].x = p.x as f32;
+                batch.corners[i][j].y = p.y as f32;
                 for k in 0..4 {
                     batch.corner_covariances[i][j * 4 + k] = 0.0;
                 }

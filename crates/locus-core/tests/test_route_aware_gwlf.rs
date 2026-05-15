@@ -4,7 +4,12 @@
 //! invariant — they used to fail because the pass was gated on the
 //! static field alone, which silently dropped `AdaptivePpb` routes.
 
-#![allow(clippy::expect_used, clippy::unwrap_used, missing_docs)]
+#![allow(
+    clippy::expect_used,
+    clippy::float_cmp,
+    clippy::unwrap_used,
+    missing_docs
+)]
 
 use locus_core::bench_api::generate_synthetic_test_image;
 use locus_core::config::{
