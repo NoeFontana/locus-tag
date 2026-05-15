@@ -24,13 +24,17 @@ pub enum SegmentationConnectivity {
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum CornerRefinementMode {
-    /// No subpixel refinement (integer pixel precision).
+    /// Trust the extractor's native corners. With `EdLines` these are
+    /// the Gauss-Newton sub-pixel corners (metrology-grade per
+    /// `docs/engineering/benchmarking/lessons.md §4.1`); with
+    /// `ContourRdp` these are integer-precision midpoints.
     None,
-    /// Edge-based refinement using gradient maxima (Default).
-    Edge,
-    /// Erf: Fits a Gaussian to the gradient profile for sub-pixel edge alignment.
+    /// PSF-blurred step function fit via Gauss-Newton on the gradient
+    /// profile. Default for `ContourRdp`.
     Erf,
-    /// Gwlf: Gradient-Weighted Line Fitting (PCA on gradients).
+    /// Gradient-Weighted Line Fitting: fit each edge as a 3-DoF
+    /// projective line under gradient-magnitude weights, then
+    /// intersect. Produces calibrated 2×2 corner covariances.
     Gwlf,
 }
 
@@ -1610,7 +1614,7 @@ mod tests {
             quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
                 low_extraction: QuadExtractionMode::ContourRdp,
                 high_extraction: QuadExtractionMode::EdLines,
-                low_refinement: CornerRefinementMode::Edge,
+                low_refinement: CornerRefinementMode::None,
                 high_refinement: CornerRefinementMode::Erf,
                 threshold: 2.5,
             }),

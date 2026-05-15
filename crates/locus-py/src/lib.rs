@@ -74,16 +74,14 @@ impl From<SegmentationConnectivity> for locus_core::config::SegmentationConnecti
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum CornerRefinementMode {
     None = 0,
-    Edge = 1,
-    Erf = 2,
-    Gwlf = 3,
+    Erf = 1,
+    Gwlf = 2,
 }
 
 impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
     fn from(m: CornerRefinementMode) -> Self {
         match m {
             CornerRefinementMode::None => locus_core::config::CornerRefinementMode::None,
-            CornerRefinementMode::Edge => locus_core::config::CornerRefinementMode::Edge,
             CornerRefinementMode::Erf => locus_core::config::CornerRefinementMode::Erf,
             CornerRefinementMode::Gwlf => locus_core::config::CornerRefinementMode::Gwlf,
         }
@@ -1602,7 +1600,6 @@ fn corner_refinement_mode_to_py(
 ) -> CornerRefinementMode {
     match m {
         locus_core::config::CornerRefinementMode::None => CornerRefinementMode::None,
-        locus_core::config::CornerRefinementMode::Edge => CornerRefinementMode::Edge,
         locus_core::config::CornerRefinementMode::Erf => CornerRefinementMode::Erf,
         locus_core::config::CornerRefinementMode::Gwlf => CornerRefinementMode::Gwlf,
     }

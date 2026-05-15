@@ -1385,8 +1385,7 @@ fn decode_batch_soa_generic(
                         | crate::config::CornerRefinementMode::Gwlf => {
                             // Gwlf not ported to SoA yet.
                         },
-                        crate::config::CornerRefinementMode::Edge
-                        | crate::config::CornerRefinementMode::Erf => {
+                        crate::config::CornerRefinementMode::Erf => {
                             let nudge = 0.2;
                             let mut current_corners = [Point2f::default(); 4];
                             current_corners.copy_from_slice(corners);

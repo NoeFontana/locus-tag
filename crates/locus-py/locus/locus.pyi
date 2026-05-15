@@ -24,9 +24,8 @@ class CornerRefinementMode(enum.IntEnum):
     # the attribute level. Access it as ``getattr(CornerRefinementMode, "None")``
     # or via a JSON/string spelling through ``DetectorConfig``.
     None_ = 0  # exposed as ``None`` at runtime — name kept here so mypy can resolve it
-    Edge = 1
-    Erf = 2
-    Gwlf = 3
+    Erf = 1
+    Gwlf = 2
 
 class QuadExtractionMode(enum.IntEnum):
     ContourRdp = 0

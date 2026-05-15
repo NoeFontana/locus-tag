@@ -434,11 +434,10 @@ def bench_real(
 
     refinement_mapping = {
         "None": getattr(locus.CornerRefinementMode, "None"),
-        "Edge": locus.CornerRefinementMode.Edge,
         "Erf": locus.CornerRefinementMode.Erf,
         "Gwlf": locus.CornerRefinementMode.Gwlf,
     }
-    refinement_mode = refinement_mapping.get(refinement, locus.CornerRefinementMode.Edge)
+    refinement_mode = refinement_mapping.get(refinement, locus.CornerRefinementMode.Erf)
 
     # Use custom data dir or default cache
     icra_dir = data_dir if data_dir else ICRA_CACHE_DIR
@@ -1118,7 +1117,7 @@ def debug_report(
     images_dir.mkdir(exist_ok=True)
 
     loader = LocalHubLoader()
-    if refinement_mode not in {"None", "Edge", "Erf"}:
+    if refinement_mode not in {"None", "Erf", "Gwlf"}:
         refinement_mode = "Erf"
 
     _cfg_dict = locus.DetectorConfig.from_profile("standard").model_dump()
