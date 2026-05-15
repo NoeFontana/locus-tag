@@ -51,6 +51,8 @@ pub(crate) mod pose_weighted;
 pub(crate) mod post_decode_refinement;
 /// Quad extraction and geometric primitives.
 pub(crate) mod quad;
+/// Corner refinement dispatch (per-candidate + detector-level GWLF).
+pub(crate) mod refinement;
 /// Connected components labeling using Union-Find.
 pub(crate) mod segmentation;
 /// SIMD optimized mathematical kernels.

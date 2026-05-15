@@ -16,6 +16,8 @@ use crate::batch::{CandidateState, DetectionBatch, MAX_CANDIDATES, Point2f};
 use crate::config::DetectorConfig;
 use crate::edge_refinement::{ErfEdgeFitter, RefineConfig, SampleConfig};
 use crate::image::ImageView;
+#[cfg(feature = "non_rectified")]
+use crate::refinement::refine_all_quad_corners;
 use crate::segmentation::LabelResult;
 use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
@@ -100,9 +102,19 @@ fn resolve_route(
         crate::config::QuadExtractionPolicy::AdaptivePpb(cfg) => {
             let ppb = (bbox_short as f32) / (min_outer_dim as f32);
             if force_low_route || ppb < cfg.threshold {
-                (cfg.low_extraction, cfg.low_refinement, 0u8, ppb)
+                (
+                    cfg.low_extraction,
+                    cfg.low_refinement,
+                    crate::batch::ROUTED_TO_LOW,
+                    ppb,
+                )
             } else {
-                (cfg.high_extraction, cfg.high_refinement, 1u8, ppb)
+                (
+                    cfg.high_extraction,
+                    cfg.high_refinement,
+                    crate::batch::ROUTED_TO_HIGH,
+                    ppb,
+                )
             }
         },
     }
@@ -397,65 +409,15 @@ fn extract_single_quad(
     }
 
     if ok {
-        // `CornerRefinementMode::None` passes the quad corners through untouched.
-        // This is appropriate for EdLines, which handles sub-pixel refinement
-        // internally; it is also an explicit opt-out for benchmarking.
-        // All other modes call `refine_corner`.
-        //
-        // Covariances: only propagate GN covariances when no further refinement
-        // is applied (Mode::None).  GWLF computes its own covariances in
-        // detector.rs; ERF has none.  When refinement overwrites corners,
-        // the GN covariances are no longer valid.
-        let (corners, out_covs) = if route_refinement == crate::config::CornerRefinementMode::None {
-            (quad_pts, gn_covs)
-        } else {
-            let use_erf = route_refinement == crate::config::CornerRefinementMode::Erf;
-            (
-                [
-                    refine_corner(
-                        arena,
-                        refinement_img,
-                        quad_pts[0],
-                        quad_pts[3],
-                        quad_pts[1],
-                        config.subpixel_refinement_sigma,
-                        decimation,
-                        use_erf,
-                    ),
-                    refine_corner(
-                        arena,
-                        refinement_img,
-                        quad_pts[1],
-                        quad_pts[0],
-                        quad_pts[2],
-                        config.subpixel_refinement_sigma,
-                        decimation,
-                        use_erf,
-                    ),
-                    refine_corner(
-                        arena,
-                        refinement_img,
-                        quad_pts[2],
-                        quad_pts[1],
-                        quad_pts[3],
-                        config.subpixel_refinement_sigma,
-                        decimation,
-                        use_erf,
-                    ),
-                    refine_corner(
-                        arena,
-                        refinement_img,
-                        quad_pts[3],
-                        quad_pts[2],
-                        quad_pts[0],
-                        config.subpixel_refinement_sigma,
-                        decimation,
-                        use_erf,
-                    ),
-                ],
-                [[0.0; 4]; 4],
-            )
-        };
+        let (corners, out_covs) = crate::refinement::refine_quad_corners(
+            arena,
+            refinement_img,
+            quad_pts,
+            gn_covs,
+            route_refinement,
+            config.subpixel_refinement_sigma,
+            decimation,
+        );
 
         let edge_score = calculate_edge_score(refinement_img, corners);
         if edge_score > config.quad_min_edge_score {
@@ -823,48 +785,14 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     } else if C::IS_RECTIFIED {
         let use_erf = route_refinement == crate::config::CornerRefinementMode::Erf;
         (
-            [
-                refine_corner(
-                    arena,
-                    refinement_img,
-                    quad_pts[0],
-                    quad_pts[3],
-                    quad_pts[1],
-                    config.subpixel_refinement_sigma,
-                    decimation,
-                    use_erf,
-                ),
-                refine_corner(
-                    arena,
-                    refinement_img,
-                    quad_pts[1],
-                    quad_pts[0],
-                    quad_pts[2],
-                    config.subpixel_refinement_sigma,
-                    decimation,
-                    use_erf,
-                ),
-                refine_corner(
-                    arena,
-                    refinement_img,
-                    quad_pts[2],
-                    quad_pts[1],
-                    quad_pts[3],
-                    config.subpixel_refinement_sigma,
-                    decimation,
-                    use_erf,
-                ),
-                refine_corner(
-                    arena,
-                    refinement_img,
-                    quad_pts[3],
-                    quad_pts[2],
-                    quad_pts[0],
-                    config.subpixel_refinement_sigma,
-                    decimation,
-                    use_erf,
-                ),
-            ],
+            refine_all_quad_corners(
+                arena,
+                refinement_img,
+                quad_pts,
+                config.subpixel_refinement_sigma,
+                decimation,
+                use_erf,
+            ),
             [[0.0_f32; 4]; 4],
         )
     } else {
@@ -1276,63 +1204,8 @@ fn polygon_center(points: &[Point]) -> [f64; 2] {
     [cx / n as f64, cy / n as f64]
 }
 
-/// Refine corners to sub-pixel accuracy using intensity-based optimization.
-///
-/// Fits lines to the two edges meeting at a corner using PSF-blurred step function
-/// model and Gauss-Newton optimization, then computes their intersection.
-/// Achieves ~0.02px accuracy vs ~0.2px for gradient-peak methods.
-#[must_use]
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn refine_corner(
-    arena: &Bump,
-    img: &ImageView,
-    p: Point,
-    p_prev: Point,
-    p_next: Point,
-    sigma: f64,
-    decimation: usize,
-    use_erf: bool,
-) -> Point {
-    // Intensity-based refinement (ERF fit) is much more accurate but slower.
-    let line1 = if use_erf {
-        refine_edge_erf(arena, img, p_prev, p, sigma, decimation)
-            .or_else(|| fit_edge_line(img, p_prev, p, decimation))
-    } else {
-        fit_edge_line(img, p_prev, p, decimation)
-    };
-
-    let line2 = if use_erf {
-        refine_edge_erf(arena, img, p, p_next, sigma, decimation)
-            .or_else(|| fit_edge_line(img, p, p_next, decimation))
-    } else {
-        fit_edge_line(img, p, p_next, decimation)
-    };
-
-    if let (Some(l1), Some(l2)) = (line1, line2) {
-        // Intersect lines: a1*x + b1*y + c1 = 0 and a2*x + b2*y + c2 = 0
-        let det = l1.0 * l2.1 - l2.0 * l1.1;
-        if det.abs() > 1e-6 {
-            let x = (l1.1 * l2.2 - l2.1 * l1.2) / det;
-            let y = (l2.0 * l1.2 - l1.0 * l2.2) / det;
-
-            // Sanity check: intersection must be near original point
-            let dist_sq = (x - p.x).powi(2) + (y - p.y).powi(2);
-            let max_dist = if decimation > 1 {
-                (decimation as f64) + 2.0
-            } else {
-                2.0
-            };
-            if dist_sq < max_dist * max_dist {
-                return Point { x, y };
-            }
-        }
-    }
-
-    p
-}
-
 /// Fit a line (a*x + b*y + c = 0) to an edge by sampling gradient peaks.
-fn fit_edge_line(
+pub(crate) fn fit_edge_line(
     img: &ImageView,
     p1: Point,
     p2: Point,
@@ -1423,7 +1296,7 @@ fn fit_edge_line(
 /// `fit()` may return false on sample shortfall or low contrast; in that case
 /// `line_params()` still holds the geometric normal of p1→p2, which is a
 /// safer fallback than `fit_edge_line`'s gradient-peak search.
-fn refine_edge_erf(
+pub(crate) fn refine_edge_erf(
     arena: &Bump,
     img: &ImageView,
     p1: Point,
@@ -1771,6 +1644,7 @@ fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
 #[allow(clippy::expect_used, clippy::float_cmp, clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::refinement::refine_corner;
     use bumpalo::Bump;
     use proptest::prelude::*;
 
