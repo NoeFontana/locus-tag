@@ -10,7 +10,7 @@
 //! Regression tests for board-level pose estimation using hub datasets.
 
 use locus_core::{
-    CameraIntrinsics, Detector, DetectorConfig, PoseEstimationMode, TagFamily,
+    CameraIntrinsics, Detector, DetectorConfig, TagFamily,
     board::{AprilGridTopology, BoardEstimator, CharucoTopology},
 };
 use nalgebra::{UnitQuaternion, Vector3};
@@ -323,7 +323,6 @@ impl BoardRegressionHarness {
                     &img_view,
                     Some(&provider.camera_intrinsics),
                     Some(provider.board_config.marker_length),
-                    PoseEstimationMode::Accurate,
                     false,
                 )
                 .unwrap();

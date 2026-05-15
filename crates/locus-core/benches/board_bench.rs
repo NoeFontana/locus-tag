@@ -23,8 +23,7 @@
 
 use divan::Bencher;
 use locus_core::{
-    AprilGridTopology, CameraIntrinsics, Detector, DetectorConfig, ImageView, PoseEstimationMode,
-    TagFamily,
+    AprilGridTopology, CameraIntrinsics, Detector, DetectorConfig, ImageView, TagFamily,
     board::{BoardEstimator, LoRansacConfig},
 };
 use std::path::PathBuf;
@@ -152,7 +151,6 @@ fn bench_board_estimate_aprilgrid(bencher: Bencher) {
             &img_view,
             Some(&intrinsics),
             Some(board_config.marker_length),
-            PoseEstimationMode::Accurate,
             false,
         )
         .unwrap();
@@ -197,7 +195,6 @@ fn bench_board_estimate_aprilgrid_fast(bencher: Bencher) {
             &img_view,
             Some(&intrinsics),
             Some(board_config.marker_length),
-            PoseEstimationMode::Accurate,
             false,
         )
         .unwrap();
@@ -238,7 +235,6 @@ fn bench_board_full_pipeline_aprilgrid(bencher: Bencher) {
                 &img_view,
                 Some(&intrinsics),
                 Some(board_config.marker_length),
-                PoseEstimationMode::Accurate,
                 false,
             )
             .unwrap();

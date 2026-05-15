@@ -86,25 +86,6 @@ mod accuracy_baseline {
     }
 }
 
-mod pose_mode_variants {
-    use super::common;
-    use common::hub::{RenderTagOpts, run_render_tag_test};
-    use locus_core::{PoseEstimationMode, TagFamily};
-
-    #[test]
-    fn regression_hub_fast_tag36h11_1080p() {
-        let _g = common::telemetry::init("regression_hub_fast_tag36h11_1080p");
-        run_render_tag_test(
-            "locus_v1_tag36h11_1920x1080",
-            TagFamily::AprilTag36h11,
-            RenderTagOpts {
-                mode: PoseEstimationMode::Fast,
-                ..Default::default()
-            },
-        );
-    }
-}
-
 mod refinement_variants {
     use super::common;
     use common::hub::{RenderTagOpts, run_render_tag_test};

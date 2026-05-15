@@ -198,7 +198,16 @@ ensuring $\det(\mathbf{R}) = +1$.
 
 ## 5. Levenberg-Marquardt Pose Refinement
 
-### 5.1 Fast Mode (Geometric Error)
+The LM stage selects its cost surface from the availability of per-corner
+covariances — *not* a user mode flag. When covariances are present (image
+view supplied to the detector, or external GWLF covariances threaded in),
+the weighted-Mahalanobis path (§5.2) runs and returns a 6×6 pose
+covariance. When the caller skips both (e.g. a pure pose-only refit from
+pre-extracted corners), the LM falls back to the unweighted Huber path
+(§5.1) and reports no covariance. Both paths share the same IPPE-Square
+seed and the same Marquardt / Nielsen trust-region machinery.
+
+### 5.1 Unweighted Huber LM (fallback when covariances unavailable)
 
 **Module:** `pose.rs` | **Function:** `refine_pose_lm`
 
@@ -255,7 +264,7 @@ The rotation update uses `UnitQuaternion::from_scaled_axis` for numerically stab
 
 ---
 
-### 5.2 Accurate Mode (Mahalanobis Distance)
+### 5.2 Weighted LM (Mahalanobis Distance)
 
 **Module:** `pose_weighted.rs` | **Function:** `refine_pose_lm_weighted`
 

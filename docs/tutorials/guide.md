@@ -126,15 +126,18 @@ for t in tags:
         print(f"Rotation: {t.pose.rotation}")       # 3x3 Matrix
 ```
 
-### High-Precision (Probabilistic) Mode
-When `PoseEstimationMode.Accurate` is selected, Locus computes the **Structure Tensor** for each corner to estimate position uncertainty, then performs an **Anisotropic Weighted Levenberg-Marquardt** refinement.
+### Per-tag Covariance
+When the call supplies an `img` view (and tag-size + intrinsics), Locus
+computes the **Structure Tensor** at each corner to estimate position
+uncertainty and runs **Anisotropic Weighted Levenberg-Marquardt** refinement.
+The returned pose carries a 6×6 covariance matrix. Pose-only refits that
+skip the image fall back to unweighted Huber LM and report no covariance.
 
 ```python
 tags = detector.detect(
     img,
     intrinsics=intrinsics,
     tag_size=0.16,
-    pose_estimation_mode=locus.PoseEstimationMode.Accurate
 )
 
 for t in tags:

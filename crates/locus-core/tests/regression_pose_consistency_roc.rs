@@ -1,3 +1,4 @@
+#![cfg(feature = "bench-internals")]
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
@@ -25,7 +26,6 @@
 //! `regression_distortion_hub` snapshots; adding them here would just
 //! duplicate that work without exercising the gate's noise model.
 
-use locus_core::PoseEstimationMode;
 use locus_core::bench_api::{CameraIntrinsics, Pose, bench_pose_consistency_d2, estimate_tag_pose};
 use nalgebra::{Matrix2, Matrix3, Vector3};
 
@@ -97,13 +97,7 @@ fn one_trial(
     }
 
     // LM-refit before measuring d² so the χ²(2) DOF assumption holds.
-    let (fitted, _) = estimate_tag_pose(
-        intrinsics,
-        &observed,
-        tag_size,
-        None,
-        PoseEstimationMode::Fast,
-    );
+    let (fitted, _) = estimate_tag_pose(intrinsics, &observed, tag_size, None);
     let fitted = fitted?;
 
     // Isotropic information matrix matching the noise model.

@@ -29,7 +29,6 @@ from .locus import (
     EdLinesImbalanceGatePolicy,
     EdLinesPhase3ErfPolicy,
     PipelineTelemetryResult,
-    PoseEstimationMode,
     QuadExtractionMode,
     SegmentationConnectivity,
     TagFamily,
@@ -284,7 +283,6 @@ class Detector:
         img: np.ndarray,
         intrinsics: CameraIntrinsics | None = None,
         tag_size: float | None = None,
-        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Accurate,
         debug_telemetry: bool = False,
         **kwargs,
     ) -> DetectionBatch:
@@ -295,7 +293,6 @@ class Detector:
             img: Input grayscale image (np.uint8).
             intrinsics: Optional CameraIntrinsics for 3D pose estimation.
             tag_size: Optional physical tag size (meters).
-            pose_estimation_mode: Fast or Accurate.
 
         Returns:
             A vectorized DetectionBatch object.
@@ -307,7 +304,6 @@ class Detector:
             img,
             intrinsics=intrinsics,
             tag_size=tag_size,
-            pose_estimation_mode=pose_estimation_mode,
             debug_telemetry=debug_telemetry,
             **kwargs,
         )
@@ -340,7 +336,6 @@ class Detector:
         frames: list[np.ndarray],
         intrinsics: CameraIntrinsics | None = None,
         tag_size: float | None = None,
-        pose_estimation_mode: PoseEstimationMode = PoseEstimationMode.Accurate,
     ) -> list[DetectionBatch]:
         """
         Detect tags in multiple frames concurrently.
@@ -352,7 +347,6 @@ class Detector:
             frames: List of grayscale uint8 images.
             intrinsics: Optional CameraIntrinsics for 3D pose estimation.
             tag_size: Optional physical tag size (meters).
-            pose_estimation_mode: Fast or Accurate.
 
         Returns:
             A list of DetectionBatch, one per input frame, in the same order.
@@ -365,7 +359,6 @@ class Detector:
             frames,
             intrinsics=intrinsics,
             tag_size=tag_size,
-            pose_estimation_mode=pose_estimation_mode,
         )
 
         return [
@@ -407,7 +400,6 @@ __all__ = [
     "LocusFeatureError",
     "PipelineTelemetryResult",
     "Pose",
-    "PoseEstimationMode",
     "QuadExtractionMode",
     "QuadExtractionPolicy",
     "SegmentationConnectivity",

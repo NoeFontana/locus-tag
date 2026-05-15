@@ -150,15 +150,7 @@ macro_rules! hub_benchmarks {
                 detector.set_families(&[locus_core::TagFamily::AprilTag36h11]);
 
                 bencher.bench_local(move || {
-                    let _detections = detector
-                        .detect(
-                            &img,
-                            None,
-                            None,
-                            locus_core::PoseEstimationMode::Fast,
-                            false,
-                        )
-                        .unwrap();
+                    let _detections = detector.detect(&img, None, None, false).unwrap();
                 });
             }
         }

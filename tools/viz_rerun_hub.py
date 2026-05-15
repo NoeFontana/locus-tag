@@ -140,7 +140,6 @@ def main():
             img_np,
             intrinsics=intrinsics,
             tag_size=tag_size,
-            pose_estimation_mode=locus.PoseEstimationMode.Fast,
         )
 
         pred_corner_strips = []

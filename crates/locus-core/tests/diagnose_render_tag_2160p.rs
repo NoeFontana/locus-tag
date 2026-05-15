@@ -76,13 +76,7 @@ mod render_tag_2160p {
 
             let report = inspect_largest_component(&config, &view, gt_corners);
             let detections = detector
-                .detect(
-                    &view,
-                    options.intrinsics.as_ref(),
-                    options.tag_size,
-                    options.pose_estimation_mode,
-                    false,
-                )
+                .detect(&view, options.intrinsics.as_ref(), options.tag_size, false)
                 .expect("detector should not error on a valid image");
 
             println!(

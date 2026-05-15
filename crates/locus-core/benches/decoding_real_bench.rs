@@ -33,15 +33,7 @@ fn bench_decoding_only_real(bencher: divan::Bencher) {
     let mut detector = locus_core::Detector::with_config(config);
 
     // Warm up to get the batch populated with candidates
-    let _ = detector
-        .detect(
-            &img,
-            None,
-            None,
-            locus_core::PoseEstimationMode::Fast,
-            false,
-        )
-        .unwrap();
+    let _ = detector.detect(&img, None, None, false).unwrap();
 
     // Capture the state
     let mut batch = detector.bench_api_get_batch_cloned();

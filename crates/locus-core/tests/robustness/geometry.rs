@@ -1,8 +1,8 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Robustness tests for geometry solvers and pose estimation.
+use locus_core::CameraIntrinsics;
 use locus_core::bench_api::Homography;
 use locus_core::pose::estimate_tag_pose;
-use locus_core::{CameraIntrinsics, PoseEstimationMode};
 use proptest::prelude::*;
 
 proptest! {
@@ -34,7 +34,6 @@ proptest! {
             (-10000.0_f64..10000.0_f64, -10000.0_f64..10000.0_f64)
         ),
         tag_size in 0.0_f64..10.0_f64,
-        mode in prop_oneof![Just(PoseEstimationMode::Fast), Just(PoseEstimationMode::Accurate)]
     ) {
         let corners = [
             [pts[0].0, pts[0].1],
@@ -52,7 +51,7 @@ proptest! {
         };
 
         // The estimation can return None, but it shouldn't panic on collinear/degenerate points.
-        let _pose = estimate_tag_pose(&intrinsics, &corners, tag_size, None, mode);
+        let _pose = estimate_tag_pose(&intrinsics, &corners, tag_size, None);
 
         // Assert survival
         prop_assert!(true);

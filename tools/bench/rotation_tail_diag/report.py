@@ -224,7 +224,7 @@ def run(diagnostic_dir: Path, *, output_md: Path) -> Path:
         f"single tag each, AprilTag36h11 family, 1920×1080."
     )
     md.append(
-        f"- **Profile / mode**: `{scenes.profile}` + `{scenes.pose_estimation_mode}`. "
+        f"- **Profile**: `{scenes.profile}`. "
         f"σ_n² configured = {scenes.sigma_n_sq_configured:.3f} (σ ≈ "
         f"{configured_sigma:.3f}px)."
     )

@@ -456,7 +456,6 @@ def run_audit(
             img,
             intrinsics=intrinsics,
             tag_size=tag_size,
-            pose_estimation_mode=locus.PoseEstimationMode.Accurate,
         )
         det_idx = _select_detection(batch, int(gt_tag_id))
         if det_idx is None:

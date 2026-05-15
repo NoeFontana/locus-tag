@@ -66,17 +66,16 @@ print(f"Corners: {batch.corners.shape}") # (N, 4, 2)
 ### 6-DOF Pose Estimation
 
 ```python
-from locus import Detector, CameraIntrinsics, PoseEstimationMode
+from locus import Detector, CameraIntrinsics
 
 # fx, fy, cx, cy
 intrinsics = CameraIntrinsics(fx=800.0, fy=800.0, cx=640.0, cy=360.0)
 
 # Returns [tx, ty, tz, qx, qy, qz, qw] for each tag
 batch = detector.detect(
-    img, 
-    intrinsics=intrinsics, 
-    tag_size=0.10, # physical side length in meters
-    pose_estimation_mode=PoseEstimationMode.Accurate
+    img,
+    intrinsics=intrinsics,
+    tag_size=0.10,  # physical side length in meters
 )
 
 if batch.poses is not None:

@@ -44,9 +44,7 @@ def main() -> None:
         cfg = locus.DetectorConfig.from_profile(profile)
         detector = locus.Detector(config=cfg, families=[family])
         wrapper = LocusWrapper(name=f"Locus ({profile})", detector=detector, family=int(family))
-        stats = evaluate_tag_pose(
-            wrapper, ds, eval_tag_size, pose_estimation_mode=locus.PoseEstimationMode.Accurate
-        )
+        stats = evaluate_tag_pose(wrapper, ds, eval_tag_size)
         results[wrapper.name] = aggregate_pose_stats(stats)
 
     cv_wrap = OpenCVWrapper(family=int(family))

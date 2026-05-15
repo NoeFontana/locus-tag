@@ -11,6 +11,17 @@ future work even after the surrounding numbers go stale.
 > from the codebase entirely. The Soft-vs-Hard analysis below is kept
 > as historical context — the lesson is preserved so the rationale for
 > rejecting LLR-based decoding on real-camera data isn't relearned.
+>
+> **Note (2026-05-15):** `PoseEstimationMode` (the `Fast` / `Accurate`
+> toggle) was removed in the same spirit. Fast was latency-neutral on
+> `high_accuracy`, ≤ 13 % faster on `standard`, and 5–6× worse pose
+> RMSE on every measured workload. The kwarg existed because a
+> Fast / Accurate toggle felt like API "completeness" — but its only
+> effect at the default value was to make pose worse. The underlying
+> unweighted Huber LM still survives as an internal fallback when
+> callers skip both the image view and external covariances (e.g.
+> pure pose-only refits). Default-value artifacts of this kind get
+> deleted, not preserved as configuration knobs.
 
 For current numbers, see `release_performance_20260418.md`,
 `hub_regression_20260423.md`, `render_tag_sota_20260425.md`,

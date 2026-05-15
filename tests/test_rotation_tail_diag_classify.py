@@ -217,7 +217,6 @@ def test_run_uses_corpus_relative_cutoffs(tmp_path: Path) -> None:
     scenes = ScenesFile(
         config_name="synthetic",
         profile="high_accuracy",
-        pose_estimation_mode="Accurate",
         sigma_n_sq_configured=4.0,
         n_scenes=20,
         scenes=[
@@ -249,7 +248,6 @@ def test_run_handles_undetected_scenes(tmp_path: Path) -> None:
     scenes = ScenesFile(
         config_name="synthetic",
         profile="high_accuracy",
-        pose_estimation_mode="Accurate",
         sigma_n_sq_configured=4.0,
         n_scenes=2,
         scenes=[
@@ -277,7 +275,6 @@ def test_failure_modes_json_round_trip(tmp_path: Path) -> None:
     scenes = ScenesFile(
         config_name="synthetic",
         profile="high_accuracy",
-        pose_estimation_mode="Accurate",
         sigma_n_sq_configured=4.0,
         n_scenes=10,
         scenes=[_make_scene(scene_id=f"s{i:02d}", rot_err=i * 0.1) for i in range(10)],
