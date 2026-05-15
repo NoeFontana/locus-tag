@@ -34,7 +34,7 @@ def test_decimation_mapping():
     # Use decimation=2
     cfg = locus.DetectorConfig.from_profile("standard")
     cfg_dict = cfg.model_dump()
-    cfg_dict["decoder"]["refinement_mode"] = "Edge"
+    cfg_dict["decoder"]["refinement_mode"] = "Erf"
     detector = locus.Detector(
         config=locus.DetectorConfig.model_validate(cfg_dict),
         families=[locus.TagFamily.AprilTag36h11],

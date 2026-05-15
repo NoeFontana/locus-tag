@@ -14,7 +14,6 @@
         },
         "high_refinement": {
           "enum": [
-            "Edge",
             "Erf",
             "Gwlf",
             "None"
@@ -32,7 +31,6 @@
         },
         "low_refinement": {
           "enum": [
-            "Edge",
             "Erf",
             "Gwlf",
             "None"
@@ -86,7 +84,6 @@
         },
         "refinement_mode": {
           "enum": [
-            "Edge",
             "Erf",
             "Gwlf",
             "None"

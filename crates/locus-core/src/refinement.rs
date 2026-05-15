@@ -24,8 +24,8 @@ use crate::quad::{CornerCovariances, fit_edge_line, refine_edge_erf};
 /// `route_refinement` comes from [`crate::quad::resolve_route`]. `None`
 /// and `Gwlf` both pass corners through and propagate any GN
 /// covariances; `Gwlf`'s actual refinement happens later in
-/// [`apply_detector_gwlf`]. `Erf` and `Edge` overwrite corners (and
-/// invalidate the GN covariances).
+/// [`apply_detector_gwlf`]. `Erf` overwrites corners (and invalidates
+/// the GN covariances) with the PSF-blurred Gauss-Newton fit.
 pub(crate) fn refine_quad_corners(
     arena: &Bump,
     refinement_img: &ImageView,
@@ -42,9 +42,8 @@ pub(crate) fn refine_quad_corners(
         return (quad_pts, gn_covs);
     }
 
-    let use_erf = route_refinement == CornerRefinementMode::Erf;
-    let corners =
-        refine_all_quad_corners(arena, refinement_img, quad_pts, sigma, decimation, use_erf);
+    debug_assert_eq!(route_refinement, CornerRefinementMode::Erf);
+    let corners = refine_all_quad_corners(arena, refinement_img, quad_pts, sigma, decimation, true);
 
     (corners, [[0.0; 4]; 4])
 }
