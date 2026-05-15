@@ -659,9 +659,7 @@ def evaluate_tag_pose(
         start = time.perf_counter()
         if is_locus:
             assert ds.intrinsics is not None
-            batch = wrapper.detector.detect(
-                img, intrinsics=ds.intrinsics, tag_size=eval_tag_size
-            )
+            batch = wrapper.detector.detect(img, intrinsics=ds.intrinsics, tag_size=eval_tag_size)
             detections = None
         else:
             detections, _ = wrapper.detect(img, intrinsics=ds.intrinsics, tag_size=eval_tag_size)

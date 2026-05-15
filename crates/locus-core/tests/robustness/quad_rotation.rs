@@ -83,9 +83,7 @@ fn detect_single(data: &[u8], canvas: usize) -> Option<[[f64; 2]; 4]> {
         .with_family(TagFamily::AprilTag36h11)
         .build();
     let image = ImageView::new(data, canvas, canvas, canvas).ok()?;
-    let view = detector
-        .detect(&image, None, None, false)
-        .ok()?;
+    let view = detector.detect(&image, None, None, false).ok()?;
     if view.len() != 1 {
         return None;
     }

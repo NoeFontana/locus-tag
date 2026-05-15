@@ -124,9 +124,7 @@ fn bench_full_pipeline_real(bencher: divan::Bencher) {
     let mut detector = locus_core::Detector::with_config(config);
 
     bencher.bench_local(move || {
-        let _detections = detector
-            .detect(&img, None, None, false)
-            .unwrap();
+        let _detections = detector.detect(&img, None, None, false).unwrap();
     });
 }
 
@@ -140,8 +138,6 @@ fn bench_full_pipeline_gwlf_real(bencher: divan::Bencher) {
     let mut detector = locus_core::Detector::with_config(config);
 
     bencher.bench_local(move || {
-        let _detections = detector
-            .detect(&img, None, None, false)
-            .unwrap();
+        let _detections = detector.detect(&img, None, None, false).unwrap();
     });
 }

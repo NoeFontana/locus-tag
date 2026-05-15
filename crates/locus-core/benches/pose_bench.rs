@@ -43,13 +43,7 @@ fn bench_pose_accurate(bencher: divan::Bencher, &v: &usize) {
     let mut batch = BenchDataset::generate_bench_batch(v, 0);
 
     bencher.bench_local(move || {
-        refine_poses_soa(
-            &mut batch,
-            v,
-            &intrinsics,
-            tag_size,
-            Some(&img),
-        );
+        refine_poses_soa(&mut batch, v, &intrinsics, tag_size, Some(&img));
     });
 }
 
@@ -88,14 +82,7 @@ fn bench_pose_gate_pinhole_off(bencher: divan::Bencher, &v: &usize) {
     let mut batch = BenchDataset::generate_bench_batch(v, 0);
 
     bencher.bench_local(move || {
-        refine_poses_soa_with_config(
-            &mut batch,
-            v,
-            &intrinsics,
-            tag_size,
-            None,
-            &cfg,
-        );
+        refine_poses_soa_with_config(&mut batch, v, &intrinsics, tag_size, None, &cfg);
     });
 }
 
@@ -107,14 +94,7 @@ fn bench_pose_gate_pinhole_on(bencher: divan::Bencher, &v: &usize) {
     let mut batch = BenchDataset::generate_bench_batch(v, 0);
 
     bencher.bench_local(move || {
-        refine_poses_soa_with_config(
-            &mut batch,
-            v,
-            &intrinsics,
-            tag_size,
-            None,
-            &cfg,
-        );
+        refine_poses_soa_with_config(&mut batch, v, &intrinsics, tag_size, None, &cfg);
     });
 }
 
@@ -127,14 +107,7 @@ fn bench_pose_gate_brown_conrady_off(bencher: divan::Bencher, &v: &usize) {
     let mut batch = BenchDataset::generate_bench_batch(v, 0);
 
     bencher.bench_local(move || {
-        refine_poses_soa_with_config(
-            &mut batch,
-            v,
-            &intrinsics,
-            tag_size,
-            None,
-            &cfg,
-        );
+        refine_poses_soa_with_config(&mut batch, v, &intrinsics, tag_size, None, &cfg);
     });
 }
 
@@ -147,13 +120,6 @@ fn bench_pose_gate_brown_conrady_on(bencher: divan::Bencher, &v: &usize) {
     let mut batch = BenchDataset::generate_bench_batch(v, 0);
 
     bencher.bench_local(move || {
-        refine_poses_soa_with_config(
-            &mut batch,
-            v,
-            &intrinsics,
-            tag_size,
-            None,
-            &cfg,
-        );
+        refine_poses_soa_with_config(&mut batch, v, &intrinsics, tag_size, None, &cfg);
     });
 }

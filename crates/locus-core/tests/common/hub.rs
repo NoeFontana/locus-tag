@@ -2,8 +2,7 @@
 //! Shared hub dataset infrastructure reused by multiple regression test files.
 
 use locus_core::{
-    CameraIntrinsics, DetectOptions, Detector, DetectorConfig, ImageView, Pose,
-    TagFamily,
+    CameraIntrinsics, DetectOptions, Detector, DetectorConfig, ImageView, Pose, TagFamily,
     config::{CornerRefinementMode, QuadExtractionMode},
 };
 use nalgebra::{UnitQuaternion, Vector3};

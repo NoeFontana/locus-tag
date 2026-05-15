@@ -483,13 +483,8 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
     };
 
     // LM weighting (Some when GWLF/structure-tensor input is available).
-    let covariances = build_lm_covariances(
-        config,
-        img,
-        &ideal_corners,
-        &h_poly,
-        external_covariances,
-    );
+    let covariances =
+        build_lm_covariances(config, img, &ideal_corners, &h_poly, external_covariances);
 
     // Isotropic Σ⁻¹ = (1/σ²)·I for the χ² gate and the branch selector's
     // fallback path — see `DetectorConfig::pose_consistency_gate_sigma_px`
@@ -1693,13 +1688,8 @@ pub fn bench_estimate_both_branches(
     h_metric.column_mut(1).scale_mut(scaler);
 
     let candidates = solve_ippe_square(&h_metric)?;
-    let covariances = build_lm_covariances(
-        config,
-        img,
-        &ideal_corners,
-        &h_poly,
-        external_covariances,
-    );
+    let covariances =
+        build_lm_covariances(config, img, &ideal_corners, &h_poly, external_covariances);
     let gate_info_matrices = isotropic_info_matrices(config.pose_consistency_gate_sigma_px);
     let info_matrices = pick_selector_info(covariances.as_ref(), &gate_info_matrices);
 

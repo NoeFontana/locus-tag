@@ -66,9 +66,7 @@ fn diagnose_icra_forward_frames_0_5() {
             let bytes = raw.into_raw();
             let view = ImageView::new(&bytes, w as usize, h as usize, w as usize)
                 .expect("valid image view");
-            let det = detector
-                .detect(&view, None, None, true)
-                .expect("detect ok");
+            let det = detector.detect(&view, None, None, true).expect("detect ok");
             let n_valid = det.len();
             let n_rejected = det.rejected_corners.len();
             let funnel_hist = histogram(det.rejected_funnel_status);

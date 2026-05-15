@@ -842,12 +842,9 @@ impl BoardEstimator {
         // Board estimation requires per-tag poses as RANSAC seeds.
         let batch_view = py
             .detach(|| {
-                detector.inner.detect(
-                    &view,
-                    Some(&core_intr),
-                    Some(tag_size),
-                    false,
-                )
+                detector
+                    .inner
+                    .detect(&view, Some(&core_intr), Some(tag_size), false)
             })
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
@@ -1005,12 +1002,9 @@ impl CharucoRefiner {
         // Board estimation requires per-tag poses as RANSAC seeds.
         let batch_view = py
             .detach(|| {
-                detector.inner.detect(
-                    &view,
-                    Some(&core_intr),
-                    Some(tag_size),
-                    false,
-                )
+                detector
+                    .inner
+                    .detect(&view, Some(&core_intr), Some(tag_size), false)
             })
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
@@ -1379,12 +1373,8 @@ impl Detector {
         // 1. Run core pipeline
         let detections = py
             .detach(|| {
-                self.inner.detect(
-                    &view,
-                    core_intrinsics.as_ref(),
-                    tag_size,
-                    debug_telemetry,
-                )
+                self.inner
+                    .detect(&view, core_intrinsics.as_ref(), tag_size, debug_telemetry)
             })
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
@@ -2086,9 +2076,7 @@ fn _shipped_profile_json(name: &str) -> PyResult<&'static str> {
 
 #[cfg(feature = "bench-internals")]
 mod bench {
-    use super::{
-        CameraIntrinsics, PyDetectorConfig, prepare_image_view, wrap_pyfunction,
-    };
+    use super::{CameraIntrinsics, PyDetectorConfig, prepare_image_view, wrap_pyfunction};
     use nalgebra::Matrix2;
     use numpy::PyReadonlyArray2;
     use pyo3::Bound;

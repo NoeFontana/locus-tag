@@ -149,9 +149,7 @@ fn bench_icra_full_pipeline(bencher: divan::Bencher) {
     detector.set_families(&[TagFamily::AprilTag36h11]);
 
     bencher.bench_local(move || {
-        let _ = detector
-            .detect(&img, None, None, false)
-            .unwrap();
+        let _ = detector.detect(&img, None, None, false).unwrap();
     });
 }
 
@@ -210,9 +208,7 @@ fn bench_mixed_scene_multiple_tags(bencher: divan::Bencher) {
     ]);
 
     bencher.bench_local(move || {
-        let _ = detector
-            .detect(&img, None, None, false)
-            .unwrap();
+        let _ = detector.detect(&img, None, None, false).unwrap();
     });
 }
 
@@ -239,9 +235,7 @@ fn bench_dense_scene_20_tags(bencher: divan::Bencher) {
     detector.set_families(&[TagFamily::AprilTag36h11]);
 
     bencher.bench_local(move || {
-        let _ = detector
-            .detect(&img, None, None, false)
-            .unwrap();
+        let _ = detector.detect(&img, None, None, false).unwrap();
     });
 }
 
@@ -264,8 +258,6 @@ fn bench_noisy_scene(bencher: divan::Bencher) {
     detector.set_families(&[TagFamily::ArUco4x4_50]);
 
     bencher.bench_local(move || {
-        let _ = detector
-            .detect(&img, None, None, false)
-            .unwrap();
+        let _ = detector.detect(&img, None, None, false).unwrap();
     });
 }
