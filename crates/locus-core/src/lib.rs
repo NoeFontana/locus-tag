@@ -89,6 +89,7 @@ pub mod bench_api {
     //! Internal API exposed exclusively for benchmarking and integration testing.
     pub use crate::batch::*;
     pub use crate::camera::*;
+    pub use crate::charuco::{CharucoBatch, CharucoRefiner, CharucoTelemetry};
     pub use crate::decoder::*;
     pub use crate::dictionaries::*;
     pub use crate::edge_refinement::*;

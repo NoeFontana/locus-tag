@@ -1066,6 +1066,28 @@ fn decode_batch_soa_with_camera_inner<C: crate::camera::CameraModel>(
                 *item = batch.corners[i][src];
             }
             batch.corners[i] = tmp;
+
+            // Recompute the homography for the rotated corners. The
+            // pre-decoding homography mapped canonical (-1,-1) → old
+            // corners[0]; after the rotation, that point now lives at
+            // new corners[(4 - rot) % 4]. Downstream consumers
+            // (e.g. `CharucoRefiner` projecting saddle predictions
+            // through this homography) require it to remain aligned with
+            // the canonical TL/TR/BR/BL convention of `corners[]`.
+            // Without this recompute, `H(canonical_TL)` lands at the
+            // wrong image corner and any extrapolated point (saddle,
+            // bit-grid sample, etc.) lands at a rotated image position.
+            let dst = [
+                [f64::from(tmp[0].x), f64::from(tmp[0].y)],
+                [f64::from(tmp[1].x), f64::from(tmp[1].y)],
+                [f64::from(tmp[2].x), f64::from(tmp[2].y)],
+                [f64::from(tmp[3].x), f64::from(tmp[3].y)],
+            ];
+            if let Some(h_new) = Homography::square_to_quad(&dst) {
+                for (j, val) in h_new.h.iter().enumerate() {
+                    batch.homographies[i].data[j] = *val as f32;
+                }
+            }
         }
     }
 }
@@ -1529,6 +1551,20 @@ fn decode_batch_soa_generic(
             }
             for (j, item) in temp_corners.iter().enumerate() {
                 batch.corners[i][j] = *item;
+            }
+
+            // Recompute the homography for the rotated corners — see the
+            // matching block in `decode_batch_soa` for the rationale.
+            let dst = [
+                [f64::from(temp_corners[0].x), f64::from(temp_corners[0].y)],
+                [f64::from(temp_corners[1].x), f64::from(temp_corners[1].y)],
+                [f64::from(temp_corners[2].x), f64::from(temp_corners[2].y)],
+                [f64::from(temp_corners[3].x), f64::from(temp_corners[3].y)],
+            ];
+            if let Some(h_new) = Homography::square_to_quad(&dst) {
+                for (j, val) in h_new.h.iter().enumerate() {
+                    batch.homographies[i].data[j] = *val as f32;
+                }
             }
         }
     }
