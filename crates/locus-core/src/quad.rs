@@ -1306,8 +1306,15 @@ pub(crate) fn refine_edge_erf(
     decimation: usize,
 ) -> Option<(f64, f64, f64)> {
     let mut fitter = ErfEdgeFitter::new(img, [p1.x, p1.y], [p2.x, p2.y], true)?;
-    let sample_cfg = SampleConfig::for_quad(fitter.edge_len(), decimation);
+    // The 2-DOF + Tukey IRLS path geometrically excludes adjacent-edge /
+    // bit-boundary samples via the narrow sample band; 1-DOF uses the
+    // original wide band where its sample budget needs every pixel.
     let refine_cfg = RefineConfig::quad_style(sigma);
+    let sample_cfg = if refine_cfg.mode.is_two_dof() {
+        SampleConfig::for_quad_narrow(fitter.edge_len(), decimation)
+    } else {
+        SampleConfig::for_quad(fitter.edge_len(), decimation)
+    };
     fitter.fit(arena, &sample_cfg, &refine_cfg);
     Some(fitter.line_params())
 }

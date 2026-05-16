@@ -5,6 +5,11 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Changed
+
+- **`ErfEdgeFitter::quad_style` lifted to 2-DOF `(θ, ρ)` Tukey IRLS** at the quad-extraction corner-refinement site (`crates/locus-core/src/edge_refinement.rs`). Production path is now: graduated narrow `SampleConfig::for_quad_narrow` (window 1.5/2.0 by edge length, `t_range` tightened on long edges) + slim residual-only pre-pass each iter for σ̂ + Tukey-biweight (`c = 4.685`) weighted Gauss-Newton step with σ̂ floored at `0.01·|B−A|`. Centered parameterization (`n·(p − p_c) + ρ = 0`); θ clamp `0.05 rad`; gradient-weighted tangential-variance observability guard at `1.0 px²`. SIMD via `#[multiversion]` (AVX2/FMA, AVX-512, NEON). The `refinement::refine_corner` `max_dist` sanity check is bumped `2.0 → 3.0 px` to admit legitimate 2-DOF rotations from Douglas–Peucker midpoint seeds.
+- **Quantitative result**: P99 rotation `−50 % to −99 %` on most render-tag corpora (`moments_culling` 27.77° → 1.20°, `high_iso` 104.1° → 1.19°, `raw_pipeline` 119.5° → 27.1°, `tag16h5` 31.2° → 3.3°); ICRA fixtures `−37.6 %` RMSE; mean RMSE `−13 % to −93 %` on most corpora. Cost: `4–27 %` recall drops on noisy/small-tag corpora (`low_key_tuned`, `raw_pipeline`, `tag16h5_tuned`); `board_charuco` board-pose P99 `+83 %` (indirect — refined AprilTag corners shift homography-predicted ChArUco saddle positions). Strict-Pareto bar **not met** — shipped on the basis of disproportionate accuracy wins. Full per-corpus table and root-cause attribution: `docs/explanation/edge_refinement_2dof_failure_analysis.md`.
+
 ### BREAKING CHANGES
 
 Detector configuration has been unified around JSON profiles. Four
