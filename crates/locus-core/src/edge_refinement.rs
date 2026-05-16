@@ -63,10 +63,56 @@ impl SampleConfig {
         }
     }
 
+    /// Narrow variant of [`Self::for_quad`] for the 2-DOF IRLS path.
+    /// Excludes adjacent-edge / bit-boundary samples geometrically (long
+    /// edges have the budget to spare). Short edges keep the wide band —
+    /// narrowing further starves the GN below the 10-sample floor.
+    #[must_use]
+    pub fn for_quad_narrow(edge_len: f64, decimation: usize) -> Self {
+        let mut cfg = Self::for_quad(edge_len, decimation);
+        if decimation > 1 {
+            return cfg;
+        }
+        if edge_len >= 60.0 {
+            cfg.window = 1.5;
+            cfg.t_range = (0.05, 0.95);
+        } else if edge_len >= 30.0 {
+            cfg.window = 2.0;
+            cfg.t_range = (0.0, 1.0);
+        }
+        cfg
+    }
+
     /// Sampling config for the decoder ERF path (same as [`SampleConfig::default`]).
     #[must_use]
     pub fn for_decoder() -> Self {
         Self::default()
+    }
+}
+
+/// Gauss-Newton refinement mode.
+///
+/// `TwoDofTukey` is the production path for quad-extraction: 2-DOF `(θ, ρ)`
+/// GN with Tukey IRLS and a per-iter unweighted σ̂ pre-pass. `TwoDof` (no
+/// IRLS) is exercised by unit tests of the conditioning guard.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum RefineMode {
+    /// Solve only the perpendicular offset; freeze the seed normal.
+    #[default]
+    OneDof,
+    /// Unweighted 2-DOF `(θ, ρ)` GN — test-only.
+    #[allow(dead_code)]
+    TwoDof,
+    /// 2-DOF GN with Tukey IRLS and same-iter σ̂ pre-pass — the production
+    /// quad-extraction path. See
+    /// `docs/explanation/edge_refinement_2dof_failure_analysis.md`.
+    TwoDofTukey,
+}
+
+impl RefineMode {
+    #[inline]
+    pub(crate) fn is_two_dof(self) -> bool {
+        !matches!(self, RefineMode::OneDof)
     }
 }
 
@@ -81,8 +127,6 @@ pub struct RefineConfig {
     /// If false, estimate A/B once before the GN loop (quad style).
     pub re_estimate_ab: bool,
     /// If true, pre-scan initial `d` by maximizing gradient alignment before GN.
-    /// Decoder-style priors warrant this; quad-style priors already sit within the
-    /// 2 px sanity gate and scanning risks pushing refined corners past the gate.
     pub scan_initial: bool,
     /// Convergence threshold: stop if |step| < this value.
     pub convergence_threshold: f64,
@@ -92,7 +136,25 @@ pub struct RefineConfig {
     pub step_clamp: f64,
     /// Minimum |B - A| contrast; break early if below this.
     pub min_contrast: f64,
+    pub(crate) mode: RefineMode,
 }
+
+/// Gradient-weighted tangential variance (px²) below which the 2-DOF solver
+/// falls back to a 1-DOF ρ-only step for that iteration — calibrated so
+/// edges with < ~1 px effective tangential lever arm don't rotate on noise.
+const THETA_OBSERVABILITY_FLOOR_PX2: f64 = 1.0;
+
+/// Per-iteration rotation clamp (radians). `0.05 rad ≈ 2.86°` sits inside
+/// typical seed-misalignment range and below ERF Jacobian linearization
+/// breakdown.
+const THETA_CLAMP_RAD: f64 = 0.05;
+
+/// Tukey biweight tuning constant — 95 % Gaussian efficiency.
+const TUKEY_C: f64 = 4.685;
+
+/// Floor on σ̂ as a fraction of `|B − A|`. Protects perfect-fit edges from
+/// σ̂ → 0 driving every weight to zero.
+const ROBUST_SIGMA_FLOOR_KAPPA: f64 = 0.01;
 
 impl RefineConfig {
     /// One-shot A/B estimation, no minimum contrast check, no initial `d` scan.
@@ -100,6 +162,13 @@ impl RefineConfig {
     #[inline]
     #[must_use]
     pub fn quad_style(sigma: f64) -> Self {
+        // 2-DOF + Tukey IRLS + same-iter σ̂ + narrow sample band. Pairs
+        // with `refinement::refine_corner`'s 3.0 px displacement gate.
+        // Strict Pareto is not met (4–27 % recall regression on noisy
+        // corpora; board_charuco P99 ~+83 %), but mean and tail accuracy
+        // wins (P99 rotation −40–99 %, ICRA RMSE −38 %) ship the
+        // configuration. See
+        // `docs/explanation/edge_refinement_2dof_failure_analysis.md`.
         Self {
             sigma,
             max_iterations: 15,
@@ -109,6 +178,7 @@ impl RefineConfig {
             singular_threshold: 1e-10,
             step_clamp: 0.5,
             min_contrast: 0.0,
+            mode: RefineMode::TwoDofTukey,
         }
     }
 
@@ -126,6 +196,7 @@ impl RefineConfig {
             singular_threshold: 1e-6,
             step_clamp: 0.5,
             min_contrast: 5.0,
+            mode: RefineMode::OneDof,
         }
     }
 
@@ -164,6 +235,12 @@ pub struct ErfEdgeFitter<'a> {
     ny: f64,
     d: f64,
     last_jtj: f64,
+    /// True when the 2-DOF conditioning guard fell back to a 1-DOF step
+    /// during the most recent [`Self::refine`] call. Test telemetry.
+    last_guard_fired: bool,
+    /// IRLS scale estimate `σ̂` from the final 2-DOF iteration. `NaN` when
+    /// IRLS was not run. Test telemetry.
+    last_sigma_hat: f64,
 }
 
 impl<'a> ErfEdgeFitter<'a> {
@@ -211,6 +288,8 @@ impl<'a> ErfEdgeFitter<'a> {
             ny,
             d,
             last_jtj: 0.0,
+            last_guard_fired: false,
+            last_sigma_hat: f64::NAN,
         })
     }
 
@@ -299,24 +378,41 @@ impl<'a> ErfEdgeFitter<'a> {
     /// Updates `self.d` in place to minimize the residual between observed
     /// intensities and the ERF model.
     pub fn refine(&mut self, samples: &[(f64, f64, f64)], config: &RefineConfig) {
+        self.last_guard_fired = false;
+        self.last_sigma_hat = f64::NAN;
         if samples.len() < 10 {
             return;
         }
 
         let inv_sigma = 1.0 / config.sigma;
 
-        // Initial A/B estimation
-        let (mut a, mut b) = if config.re_estimate_ab {
+        let (a, b) = if config.re_estimate_ab {
             (128.0, 128.0)
         } else {
             estimate_ab_oneshot(samples, self.nx, self.ny, self.d)
         };
 
-        // Early exit if one-shot A/B estimation fails
         if !config.re_estimate_ab && (b - a).abs() < 1.0 {
             return;
         }
 
+        match config.mode {
+            RefineMode::OneDof => self.refine_one_dof(samples, config, inv_sigma, a, b),
+            RefineMode::TwoDof | RefineMode::TwoDofTukey => {
+                let use_tukey = matches!(config.mode, RefineMode::TwoDofTukey);
+                self.refine_two_dof(samples, config, inv_sigma, a, b, use_tukey);
+            },
+        }
+    }
+
+    fn refine_one_dof(
+        &mut self,
+        samples: &[(f64, f64, f64)],
+        config: &RefineConfig,
+        inv_sigma: f64,
+        mut a: f64,
+        mut b: f64,
+    ) {
         for _ in 0..config.max_iterations {
             // Per-iteration A/B refinement (decoder style).
             // Preserve previous (a, b) on zero-weight iterations, matching legacy.
@@ -347,6 +443,123 @@ impl<'a> ErfEdgeFitter<'a> {
                 break;
             }
         }
+    }
+
+    /// 2-DOF Gauss-Newton over `(θ, ρ)` centered at the edge midpoint.
+    ///
+    /// `use_tukey = true` enables IRLS Tukey reweighting with a same-iter
+    /// σ̂ pre-pass: each iter computes σ̂ from an unweighted residuals-
+    /// only pass at the current line params, then re-accumulates with the
+    /// Tukey weights derived from that σ̂. This eliminates the iter-0
+    /// unweighted GN step that breaks `moments_culling`. Falls back to a
+    /// 1-DOF ρ-only step whenever the conditioning guard fires.
+    fn refine_two_dof(
+        &mut self,
+        samples: &[(f64, f64, f64)],
+        config: &RefineConfig,
+        inv_sigma: f64,
+        mut a: f64,
+        mut b: f64,
+        use_tukey: bool,
+    ) {
+        // Centered parameterization (`p_c` = edge midpoint) keeps
+        // `mean(t_i) ≈ 0` so the JᵀJ cross-term shrinks and the
+        // conditioning guard's variance estimate is meaningful.
+        let pcx = self.p1[0] + 0.5 * self.dx;
+        let pcy = self.p1[1] + 0.5 * self.dy;
+        let mut rho = self.nx * pcx + self.ny * pcy + self.d;
+
+        let sigma_floor = ROBUST_SIGMA_FLOOR_KAPPA * (b - a).abs();
+        let mut sigma_hat = f64::NAN;
+
+        for _ in 0..config.max_iterations {
+            if config.re_estimate_ab {
+                let d_cur = rho - self.nx * pcx - self.ny * pcy;
+                if let Some((new_a, new_b)) =
+                    estimate_ab_per_iter(self.img, samples, self.nx, self.ny, d_cur)
+                {
+                    a = new_a;
+                    b = new_b;
+                }
+            }
+
+            if config.min_contrast > 0.0 && (b - a).abs() < config.min_contrast {
+                break;
+            }
+
+            let accum = if use_tukey {
+                // Pre-pass: σ̂ from unweighted residuals at the current
+                // line params, then weighted accumulator with Tukey
+                // weights computed from that σ̂. Prevents the iter-0
+                // unweighted rotation that contaminates IRLS.
+                let s = sigma_at(samples, self.nx, self.ny, rho, pcx, pcy, a, b, inv_sigma)
+                    .max(sigma_floor);
+                sigma_hat = s;
+                refine_accumulate_optimized_2dof_tukey(
+                    samples,
+                    self.nx,
+                    self.ny,
+                    rho,
+                    pcx,
+                    pcy,
+                    a,
+                    b,
+                    inv_sigma,
+                    1.0 / (TUKEY_C * s),
+                )
+            } else {
+                refine_accumulate_optimized_2dof(
+                    samples, self.nx, self.ny, rho, pcx, pcy, a, b, inv_sigma,
+                )
+            };
+            self.last_jtj = accum.jtj_rr;
+
+            if accum.jtj_rr < config.singular_threshold {
+                break;
+            }
+
+            let det = accum.jtj_rr * accum.jtj_tt - accum.jtj_rt * accum.jtj_rt;
+            let inv_rr = 1.0 / accum.jtj_rr;
+            let mean_t = accum.jtj_rt * inv_rr;
+            let var_t = accum.jtj_tt * inv_rr - mean_t * mean_t;
+
+            let well_conditioned =
+                var_t >= THETA_OBSERVABILITY_FLOOR_PX2 && det >= config.singular_threshold;
+
+            let (delta_rho, delta_theta) = if well_conditioned {
+                let inv_det = 1.0 / det;
+                (
+                    (accum.jtj_tt * accum.jtr_r - accum.jtj_rt * accum.jtr_t) * inv_det,
+                    (-accum.jtj_rt * accum.jtr_r + accum.jtj_rr * accum.jtr_t) * inv_det,
+                )
+            } else {
+                self.last_guard_fired = true;
+                (accum.jtr_r * inv_rr, 0.0)
+            };
+
+            let drho = delta_rho.clamp(-config.step_clamp, config.step_clamp);
+            let dtheta = delta_theta.clamp(-THETA_CLAMP_RAD, THETA_CLAMP_RAD);
+
+            rho += drho;
+            if dtheta != 0.0 {
+                let (sin_t, cos_t) = dtheta.sin_cos();
+                let rotated = [
+                    self.nx * cos_t - self.ny * sin_t,
+                    self.nx * sin_t + self.ny * cos_t,
+                ];
+                self.nx = rotated[0];
+                self.ny = rotated[1];
+            }
+
+            if drho.abs() < config.convergence_threshold
+                && dtheta.abs() < config.convergence_threshold
+            {
+                break;
+            }
+        }
+
+        self.d = rho - self.nx * pcx - self.ny * pcy;
+        self.last_sigma_hat = sigma_hat;
     }
 
     /// End-to-end fit: optional initial-`d` scan, sample collection, and GN refinement.
@@ -393,6 +606,23 @@ impl<'a> ErfEdgeFitter<'a> {
     #[must_use]
     pub fn line_jtj(&self) -> f64 {
         self.last_jtj
+    }
+
+    /// `true` if the 2-DOF conditioning guard tripped at least once during
+    /// the last [`Self::refine`] call (θ too weakly observed, step fell back
+    /// to a 1-DOF ρ update). Always `false` in 1-DOF mode. Test-only.
+    #[cfg(test)]
+    #[inline]
+    pub(crate) fn last_guard_fired(&self) -> bool {
+        self.last_guard_fired
+    }
+
+    /// IRLS scale estimate `σ̂` from the final 2-DOF iteration. `NaN` if
+    /// 2-DOF was not run or `robust_loss == None`. Test-only.
+    #[cfg(test)]
+    #[inline]
+    pub(crate) fn last_sigma_hat(&self) -> f64 {
+        self.last_sigma_hat
     }
 
     #[inline]
@@ -605,6 +835,431 @@ fn refine_accumulate_optimized(
     }
 
     (sum_jtj, sum_jt_res)
+}
+
+/// 2-DOF accumulator: 2×2 symmetric `JᵀJ` plus 2-vector `Jᵀr`.
+/// `_rr` / `_rt` / `_tt` are the ρρ, ρθ, θθ entries of `JᵀJ`; `r` / `t`
+/// are the ρ and θ entries of `Jᵀr`.
+#[derive(Clone, Copy, Debug, Default)]
+struct GnAccum2 {
+    jtj_rr: f64,
+    jtj_rt: f64,
+    jtj_tt: f64,
+    jtr_r: f64,
+    jtr_t: f64,
+}
+
+/// Accumulate the 2×2 `JᵀJ` and 2-vector `Jᵀr` for the centered `(θ, ρ)` GN step.
+///
+/// Jacobian columns (per sample):
+///     `∂r/∂ρ = jac`            (same as the 1-DOF column)
+///     `∂r/∂θ = jac · t`        with `t = -ny·xc + nx·yc` (tangent ⟂ normal)
+/// where `(xc, yc) = (x - p_c.x, y - p_c.y)`. Centering on `p_c` keeps
+/// `mean(t) ≈ 0` for symmetric sample bands so the ρθ cross-term stays small
+/// and the conditioning guard's variance estimate is meaningful.
+///
+/// Mirrors the 1-DOF accumulator's SIMD shape: AVX2/FMA hot path on x86_64,
+/// `aarch64+neon` and `avx512f` variants via `#[multiversion]`, scalar tail
+/// for the remainder. Kept separate from [`refine_accumulate_optimized`] so
+/// 1-DOF callers (`decoder_style`, `post_decode_style`) don't pay the 2-DOF
+/// arithmetic — three extra FMAs and two `_mm256_sub_pd` per 4-lane block.
+#[multiversion(targets(
+    "x86_64+avx2+fma+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+#[allow(clippy::too_many_arguments, clippy::similar_names)]
+fn refine_accumulate_optimized_2dof(
+    samples: &[(f64, f64, f64)],
+    nx: f64,
+    ny: f64,
+    rho: f64,
+    pcx: f64,
+    pcy: f64,
+    a: f64,
+    b: f64,
+    inv_sigma: f64,
+) -> GnAccum2 {
+    let mut acc = GnAccum2::default();
+    let k = (b - a) * inv_sigma * INV_SQRT_PI;
+
+    let mut i = 0;
+
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
+        // SAFETY: All AVX2/FMA intrinsics are guarded by cfg and runtime dispatch.
+        unsafe {
+            use std::arch::x86_64::*;
+            let v_nx = _mm256_set1_pd(nx);
+            let v_ny = _mm256_set1_pd(ny);
+            let v_rho = _mm256_set1_pd(rho);
+            let v_pcx = _mm256_set1_pd(pcx);
+            let v_pcy = _mm256_set1_pd(pcy);
+            let v_a = _mm256_set1_pd(a);
+            let v_b = _mm256_set1_pd(b);
+            let v_inv_sigma = _mm256_set1_pd(inv_sigma);
+            let v_k = _mm256_set1_pd(k);
+            let v_half = _mm256_set1_pd(0.5);
+            let v_abs_mask = _mm256_set1_pd(-0.0);
+
+            let mut v_sum_jtj_rr = _mm256_setzero_pd();
+            let mut v_sum_jtj_rt = _mm256_setzero_pd();
+            let mut v_sum_jtj_tt = _mm256_setzero_pd();
+            let mut v_sum_jtr_r = _mm256_setzero_pd();
+            let mut v_sum_jtr_t = _mm256_setzero_pd();
+
+            while i + 4 <= samples.len() {
+                let s0 = samples[i];
+                let s1 = samples[i + 1];
+                let s2 = samples[i + 2];
+                let s3 = samples[i + 3];
+
+                let v_x = _mm256_set_pd(s3.0, s2.0, s1.0, s0.0);
+                let v_y = _mm256_set_pd(s3.1, s2.1, s1.1, s0.1);
+                let v_img_val = _mm256_set_pd(s3.2, s2.2, s1.2, s0.2);
+
+                let v_xc = _mm256_sub_pd(v_x, v_pcx);
+                let v_yc = _mm256_sub_pd(v_y, v_pcy);
+
+                let v_dist = _mm256_add_pd(
+                    _mm256_add_pd(_mm256_mul_pd(v_nx, v_xc), _mm256_mul_pd(v_ny, v_yc)),
+                    v_rho,
+                );
+                let v_s = _mm256_mul_pd(v_dist, v_inv_sigma);
+
+                let v_abs_s = _mm256_andnot_pd(v_abs_mask, v_s);
+                let v_range_mask = _mm256_cmp_pd(v_abs_s, _mm256_set1_pd(3.0), _CMP_LE_OQ);
+
+                if _mm256_movemask_pd(v_range_mask) != 0 {
+                    // SAFETY: erf_approx_v4 requires AVX2+FMA, guaranteed by multiversion target.
+                    let v_erf = crate::simd::math::erf_approx_v4(v_s);
+
+                    let v_ab_half = _mm256_mul_pd(_mm256_add_pd(v_a, v_b), v_half);
+                    let v_ba_half = _mm256_mul_pd(_mm256_sub_pd(v_b, v_a), v_half);
+                    let v_model = _mm256_fmadd_pd(v_ba_half, v_erf, v_ab_half);
+
+                    let v_residual = _mm256_sub_pd(v_img_val, v_model);
+
+                    // SAFETY: transmute is safe for same-size SIMD ↔ array conversions.
+                    let v_neg_s2 = _mm256_mul_pd(v_s, v_s);
+                    let v_neg_s2 = _mm256_xor_pd(v_neg_s2, v_abs_mask);
+                    let ns2: [f64; 4] = std::mem::transmute(v_neg_s2);
+                    let v_exp =
+                        _mm256_set_pd(ns2[3].exp(), ns2[2].exp(), ns2[1].exp(), ns2[0].exp());
+                    let v_jac = _mm256_mul_pd(v_k, v_exp);
+
+                    // Tangential coordinate t = -ny·xc + nx·yc.
+                    let v_t = _mm256_sub_pd(_mm256_mul_pd(v_nx, v_yc), _mm256_mul_pd(v_ny, v_xc));
+
+                    let v_jac_m = _mm256_and_pd(v_jac, v_range_mask);
+                    let v_res_m = _mm256_and_pd(v_residual, v_range_mask);
+                    let v_jact = _mm256_mul_pd(v_jac_m, v_t);
+
+                    v_sum_jtj_rr = _mm256_fmadd_pd(v_jac_m, v_jac_m, v_sum_jtj_rr);
+                    v_sum_jtj_rt = _mm256_fmadd_pd(v_jac_m, v_jact, v_sum_jtj_rt);
+                    v_sum_jtj_tt = _mm256_fmadd_pd(v_jact, v_jact, v_sum_jtj_tt);
+                    v_sum_jtr_r = _mm256_fmadd_pd(v_jac_m, v_res_m, v_sum_jtr_r);
+                    v_sum_jtr_t = _mm256_fmadd_pd(v_jact, v_res_m, v_sum_jtr_t);
+                }
+                i += 4;
+            }
+
+            // Horizontal reductions.
+            // SAFETY: transmute is safe for same-size SIMD ↔ array conversions.
+            let rr: [f64; 4] = std::mem::transmute(v_sum_jtj_rr);
+            let rt: [f64; 4] = std::mem::transmute(v_sum_jtj_rt);
+            let tt: [f64; 4] = std::mem::transmute(v_sum_jtj_tt);
+            let gr: [f64; 4] = std::mem::transmute(v_sum_jtr_r);
+            let gt: [f64; 4] = std::mem::transmute(v_sum_jtr_t);
+            acc.jtj_rr += rr[0] + rr[1] + rr[2] + rr[3];
+            acc.jtj_rt += rt[0] + rt[1] + rt[2] + rt[3];
+            acc.jtj_tt += tt[0] + tt[1] + tt[2] + tt[3];
+            acc.jtr_r += gr[0] + gr[1] + gr[2] + gr[3];
+            acc.jtr_t += gt[0] + gt[1] + gt[2] + gt[3];
+        }
+    }
+
+    // Scalar tail
+    while i < samples.len() {
+        let (x, y, img_val) = samples[i];
+        let xc = x - pcx;
+        let yc = y - pcy;
+        let dist = nx * xc + ny * yc + rho;
+        let s = dist * inv_sigma;
+        if s.abs() <= 3.0 {
+            let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::simd::math::erf_approx(s);
+            let residual = img_val - model;
+            let jac = k * (-s * s).exp();
+            let t = -ny * xc + nx * yc;
+            let jact = jac * t;
+            acc.jtj_rr += jac * jac;
+            acc.jtj_rt += jac * jact;
+            acc.jtj_tt += jact * jact;
+            acc.jtr_r += jac * residual;
+            acc.jtr_t += jact * residual;
+        }
+        i += 1;
+    }
+
+    acc
+}
+
+/// Tukey-weighted 2-DOF accumulator. `inv_c_sigma = 1 / (c · σ̂)` controls
+/// the rejection cutoff; weights are `w_i = (1 − (r_i · inv_c_sigma)²)²`
+/// when in range, else `0`. Mirrors [`refine_accumulate_optimized_2dof`]
+/// with the addition of per-sample weighting in the FMA chain.
+#[multiversion(targets(
+    "x86_64+avx2+fma+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+#[allow(clippy::too_many_arguments, clippy::similar_names)]
+fn refine_accumulate_optimized_2dof_tukey(
+    samples: &[(f64, f64, f64)],
+    nx: f64,
+    ny: f64,
+    rho: f64,
+    pcx: f64,
+    pcy: f64,
+    a: f64,
+    b: f64,
+    inv_sigma: f64,
+    inv_c_sigma: f64,
+) -> GnAccum2 {
+    let mut acc = GnAccum2::default();
+    let k = (b - a) * inv_sigma * INV_SQRT_PI;
+    let mut i = 0;
+
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
+        // SAFETY: AVX2/FMA intrinsics guarded by cfg and runtime dispatch.
+        unsafe {
+            use std::arch::x86_64::*;
+            let v_nx = _mm256_set1_pd(nx);
+            let v_ny = _mm256_set1_pd(ny);
+            let v_rho = _mm256_set1_pd(rho);
+            let v_pcx = _mm256_set1_pd(pcx);
+            let v_pcy = _mm256_set1_pd(pcy);
+            let v_a = _mm256_set1_pd(a);
+            let v_b = _mm256_set1_pd(b);
+            let v_inv_sigma = _mm256_set1_pd(inv_sigma);
+            let v_k = _mm256_set1_pd(k);
+            let v_half = _mm256_set1_pd(0.5);
+            let v_abs_mask = _mm256_set1_pd(-0.0);
+            let v_one = _mm256_set1_pd(1.0);
+            let v_inv_c_sigma = _mm256_set1_pd(inv_c_sigma);
+
+            let mut v_sum_jtj_rr = _mm256_setzero_pd();
+            let mut v_sum_jtj_rt = _mm256_setzero_pd();
+            let mut v_sum_jtj_tt = _mm256_setzero_pd();
+            let mut v_sum_jtr_r = _mm256_setzero_pd();
+            let mut v_sum_jtr_t = _mm256_setzero_pd();
+
+            while i + 4 <= samples.len() {
+                let s0 = samples[i];
+                let s1 = samples[i + 1];
+                let s2 = samples[i + 2];
+                let s3 = samples[i + 3];
+
+                let v_x = _mm256_set_pd(s3.0, s2.0, s1.0, s0.0);
+                let v_y = _mm256_set_pd(s3.1, s2.1, s1.1, s0.1);
+                let v_img_val = _mm256_set_pd(s3.2, s2.2, s1.2, s0.2);
+
+                let v_xc = _mm256_sub_pd(v_x, v_pcx);
+                let v_yc = _mm256_sub_pd(v_y, v_pcy);
+
+                let v_dist = _mm256_add_pd(
+                    _mm256_add_pd(_mm256_mul_pd(v_nx, v_xc), _mm256_mul_pd(v_ny, v_yc)),
+                    v_rho,
+                );
+                let v_s = _mm256_mul_pd(v_dist, v_inv_sigma);
+
+                let v_abs_s = _mm256_andnot_pd(v_abs_mask, v_s);
+                let v_range_mask = _mm256_cmp_pd(v_abs_s, _mm256_set1_pd(3.0), _CMP_LE_OQ);
+
+                if _mm256_movemask_pd(v_range_mask) != 0 {
+                    // SAFETY: erf_approx_v4 requires AVX2+FMA, guaranteed by multiversion target.
+                    let v_erf = crate::simd::math::erf_approx_v4(v_s);
+
+                    let v_ab_half = _mm256_mul_pd(_mm256_add_pd(v_a, v_b), v_half);
+                    let v_ba_half = _mm256_mul_pd(_mm256_sub_pd(v_b, v_a), v_half);
+                    let v_model = _mm256_fmadd_pd(v_ba_half, v_erf, v_ab_half);
+                    let v_residual = _mm256_sub_pd(v_img_val, v_model);
+
+                    // SAFETY: transmute is safe for same-size SIMD ↔ array conversions.
+                    let v_neg_s2 = _mm256_mul_pd(v_s, v_s);
+                    let v_neg_s2 = _mm256_xor_pd(v_neg_s2, v_abs_mask);
+                    let ns2: [f64; 4] = std::mem::transmute(v_neg_s2);
+                    let v_exp =
+                        _mm256_set_pd(ns2[3].exp(), ns2[2].exp(), ns2[1].exp(), ns2[0].exp());
+                    let v_jac = _mm256_mul_pd(v_k, v_exp);
+
+                    let v_t = _mm256_sub_pd(_mm256_mul_pd(v_nx, v_yc), _mm256_mul_pd(v_ny, v_xc));
+                    let v_jac_m = _mm256_and_pd(v_jac, v_range_mask);
+                    let v_res_m = _mm256_and_pd(v_residual, v_range_mask);
+
+                    // Tukey: w = (1 − u²)² when u² < 1, else 0; u = r · inv_c_sigma.
+                    let v_u = _mm256_mul_pd(v_res_m, v_inv_c_sigma);
+                    let v_u2 = _mm256_mul_pd(v_u, v_u);
+                    let v_in = _mm256_cmp_pd(v_u2, v_one, _CMP_LT_OQ);
+                    let v_one_minus_u2 = _mm256_sub_pd(v_one, v_u2);
+                    let v_w_sq = _mm256_mul_pd(v_one_minus_u2, v_one_minus_u2);
+                    let v_w = _mm256_and_pd(_mm256_and_pd(v_w_sq, v_in), v_range_mask);
+
+                    let v_jac_w = _mm256_mul_pd(v_jac_m, v_w);
+                    let v_jact = _mm256_mul_pd(v_jac_m, v_t);
+                    let v_jact_w = _mm256_mul_pd(v_jac_w, v_t);
+
+                    v_sum_jtj_rr = _mm256_fmadd_pd(v_jac_w, v_jac_m, v_sum_jtj_rr);
+                    v_sum_jtj_rt = _mm256_fmadd_pd(v_jac_w, v_jact, v_sum_jtj_rt);
+                    v_sum_jtj_tt = _mm256_fmadd_pd(v_jact_w, v_jact, v_sum_jtj_tt);
+                    v_sum_jtr_r = _mm256_fmadd_pd(v_jac_w, v_res_m, v_sum_jtr_r);
+                    v_sum_jtr_t = _mm256_fmadd_pd(v_jact_w, v_res_m, v_sum_jtr_t);
+                }
+                i += 4;
+            }
+
+            // SAFETY: transmute is safe for same-size SIMD ↔ array conversions.
+            let rr: [f64; 4] = std::mem::transmute(v_sum_jtj_rr);
+            let rt: [f64; 4] = std::mem::transmute(v_sum_jtj_rt);
+            let tt: [f64; 4] = std::mem::transmute(v_sum_jtj_tt);
+            let gr: [f64; 4] = std::mem::transmute(v_sum_jtr_r);
+            let gt: [f64; 4] = std::mem::transmute(v_sum_jtr_t);
+            acc.jtj_rr += rr[0] + rr[1] + rr[2] + rr[3];
+            acc.jtj_rt += rt[0] + rt[1] + rt[2] + rt[3];
+            acc.jtj_tt += tt[0] + tt[1] + tt[2] + tt[3];
+            acc.jtr_r += gr[0] + gr[1] + gr[2] + gr[3];
+            acc.jtr_t += gt[0] + gt[1] + gt[2] + gt[3];
+        }
+    }
+
+    while i < samples.len() {
+        let (x, y, img_val) = samples[i];
+        let xc = x - pcx;
+        let yc = y - pcy;
+        let dist = nx * xc + ny * yc + rho;
+        let s = dist * inv_sigma;
+        if s.abs() <= 3.0 {
+            let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::simd::math::erf_approx(s);
+            let residual = img_val - model;
+            let jac = k * (-s * s).exp();
+            let t = -ny * xc + nx * yc;
+            let jact = jac * t;
+            let u = residual * inv_c_sigma;
+            let u2 = u * u;
+            let w = if u2 < 1.0 { (1.0 - u2).powi(2) } else { 0.0 };
+            acc.jtj_rr += w * jac * jac;
+            acc.jtj_rt += w * jac * jact;
+            acc.jtj_tt += w * jact * jact;
+            acc.jtr_r += w * jac * residual;
+            acc.jtr_t += w * jact * residual;
+        }
+        i += 1;
+    }
+
+    acc
+}
+
+/// Robust scale `σ̂ = sqrt(Σ r² / N)` at the current `(nx, ny, rho)` line
+/// params. Used for the pre-pass that initialises Tukey weights before the
+/// weighted GN accumulator runs. Returns 0.0 when no in-range samples exist.
+#[multiversion(targets(
+    "x86_64+avx2+fma+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+))]
+#[allow(clippy::too_many_arguments)]
+fn sigma_at(
+    samples: &[(f64, f64, f64)],
+    nx: f64,
+    ny: f64,
+    rho: f64,
+    pcx: f64,
+    pcy: f64,
+    a: f64,
+    b: f64,
+    inv_sigma: f64,
+) -> f64 {
+    let mut sum_r2 = 0.0_f64;
+    let mut n: u32 = 0;
+    let mut i = 0;
+
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
+        // SAFETY: AVX2/FMA intrinsics guarded by cfg and runtime dispatch.
+        unsafe {
+            use std::arch::x86_64::*;
+            let v_nx = _mm256_set1_pd(nx);
+            let v_ny = _mm256_set1_pd(ny);
+            let v_rho = _mm256_set1_pd(rho);
+            let v_pcx = _mm256_set1_pd(pcx);
+            let v_pcy = _mm256_set1_pd(pcy);
+            let v_a = _mm256_set1_pd(a);
+            let v_b = _mm256_set1_pd(b);
+            let v_inv_sigma = _mm256_set1_pd(inv_sigma);
+            let v_half = _mm256_set1_pd(0.5);
+            let v_abs_mask = _mm256_set1_pd(-0.0);
+            let mut v_sum_r2 = _mm256_setzero_pd();
+
+            while i + 4 <= samples.len() {
+                let s0 = samples[i];
+                let s1 = samples[i + 1];
+                let s2 = samples[i + 2];
+                let s3 = samples[i + 3];
+                let v_x = _mm256_set_pd(s3.0, s2.0, s1.0, s0.0);
+                let v_y = _mm256_set_pd(s3.1, s2.1, s1.1, s0.1);
+                let v_img_val = _mm256_set_pd(s3.2, s2.2, s1.2, s0.2);
+                let v_xc = _mm256_sub_pd(v_x, v_pcx);
+                let v_yc = _mm256_sub_pd(v_y, v_pcy);
+                let v_dist = _mm256_add_pd(
+                    _mm256_add_pd(_mm256_mul_pd(v_nx, v_xc), _mm256_mul_pd(v_ny, v_yc)),
+                    v_rho,
+                );
+                let v_s = _mm256_mul_pd(v_dist, v_inv_sigma);
+                let v_abs_s = _mm256_andnot_pd(v_abs_mask, v_s);
+                let v_range_mask = _mm256_cmp_pd(v_abs_s, _mm256_set1_pd(3.0), _CMP_LE_OQ);
+                let mask_bits = _mm256_movemask_pd(v_range_mask);
+                if mask_bits != 0 {
+                    // SAFETY: erf_approx_v4 requires AVX2+FMA.
+                    let v_erf = crate::simd::math::erf_approx_v4(v_s);
+                    let v_ab_half = _mm256_mul_pd(_mm256_add_pd(v_a, v_b), v_half);
+                    let v_ba_half = _mm256_mul_pd(_mm256_sub_pd(v_b, v_a), v_half);
+                    let v_model = _mm256_fmadd_pd(v_ba_half, v_erf, v_ab_half);
+                    let v_residual = _mm256_sub_pd(v_img_val, v_model);
+                    let v_res_m = _mm256_and_pd(v_residual, v_range_mask);
+                    v_sum_r2 = _mm256_fmadd_pd(v_res_m, v_res_m, v_sum_r2);
+                    #[allow(clippy::cast_sign_loss)]
+                    {
+                        n += (mask_bits as u32).count_ones();
+                    }
+                }
+                i += 4;
+            }
+            // SAFETY: transmute is safe for same-size SIMD ↔ array conversions.
+            let r2: [f64; 4] = std::mem::transmute(v_sum_r2);
+            sum_r2 += r2[0] + r2[1] + r2[2] + r2[3];
+        }
+    }
+
+    while i < samples.len() {
+        let (x, y, img_val) = samples[i];
+        let xc = x - pcx;
+        let yc = y - pcy;
+        let dist = nx * xc + ny * yc + rho;
+        let s = dist * inv_sigma;
+        if s.abs() <= 3.0 {
+            let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::simd::math::erf_approx(s);
+            let residual = img_val - model;
+            sum_r2 += residual * residual;
+            n += 1;
+        }
+        i += 1;
+    }
+
+    if n == 0 {
+        0.0
+    } else {
+        (sum_r2 / f64::from(n)).sqrt()
+    }
 }
 
 // ── SIMD-Accelerated Sample Collection ───────────────────────────────────────
@@ -952,6 +1607,276 @@ mod tests {
         assert!(
             error < 0.05,
             "perturbed seed recovered={x_recovered} error={error}"
+        );
+    }
+
+    #[test]
+    #[allow(clippy::similar_names)]
+    fn two_dof_recovers_mis_angled_seed() {
+        // 30° true edge, ~92 px long; seed endpoints rotated +1.5° about their
+        // midpoint, so the seed normal is exactly 1.5° off truth. 1-DOF cannot
+        // rotate the line — its (nx, ny) is frozen at seed — and must end at
+        // ~1.5° error. 2-DOF lifts (θ, ρ) and recovers true direction.
+        let width = 160;
+        let height = 160;
+        let sigma = 0.6;
+        let renderer = SubpixelEdgeRenderer::new(width, height)
+            .with_intensities(20.0, 230.0)
+            .with_sigma(sigma);
+
+        let p1_gt = [40.0, 60.0];
+        let p2_gt = [120.0, 60.0 + 80.0 * 30f64.to_radians().tan()];
+        let line_gt = Line::from_points_cw(p1_gt, p2_gt);
+        let data = renderer.render_edge_u8(&line_gt);
+        let img = ImageView::new(&data, width, height, width).expect("invalid image view");
+
+        let perturb_rad = 1.5_f64.to_radians();
+        let (sp, cp) = perturb_rad.sin_cos();
+        let mid = [(p1_gt[0] + p2_gt[0]) * 0.5, (p1_gt[1] + p2_gt[1]) * 0.5];
+        let rotate = |p: [f64; 2]| -> [f64; 2] {
+            let dx = p[0] - mid[0];
+            let dy = p[1] - mid[1];
+            [mid[0] + dx * cp - dy * sp, mid[1] + dx * sp + dy * cp]
+        };
+        let p1 = rotate(p1_gt);
+        let p2 = rotate(p2_gt);
+
+        let true_dx = p2_gt[0] - p1_gt[0];
+        let true_dy = p2_gt[1] - p1_gt[1];
+        let true_len = (true_dx * true_dx + true_dy * true_dy).sqrt();
+        let nx_true = -true_dy / true_len;
+        let ny_true = true_dx / true_len;
+
+        let angle_err = |nx: f64, ny: f64| -> f64 {
+            (nx * nx_true + ny * ny_true)
+                .abs()
+                .clamp(0.0, 1.0)
+                .acos()
+                .to_degrees()
+        };
+
+        let sample_cfg = SampleConfig::for_quad(true_len, 1);
+
+        // 1-DOF — must remain near the seed perturbation. Force OneDof
+        // explicitly so the test is independent of `quad_style`'s current
+        // production default.
+        let arena_1 = Bump::new();
+        let mut fitter_1 = ErfEdgeFitter::new(&img, p1, p2, true).expect("edge length too short");
+        let cfg_1 = RefineConfig {
+            mode: RefineMode::OneDof,
+            ..RefineConfig::quad_style(sigma)
+        };
+        assert!(fitter_1.fit(&arena_1, &sample_cfg, &cfg_1));
+        let (nx_1, ny_1, _) = fitter_1.line_params();
+        let err_1 = angle_err(nx_1, ny_1);
+
+        // 2-DOF (no robust loss) — must recover true rotation on this
+        // clean fixture (no outliers — IRLS is not needed).
+        let arena_2 = Bump::new();
+        let mut fitter_2 = ErfEdgeFitter::new(&img, p1, p2, true).expect("edge length too short");
+        let cfg_2 = RefineConfig {
+            mode: RefineMode::TwoDof,
+            ..RefineConfig::quad_style(sigma)
+        };
+        assert!(fitter_2.fit(&arena_2, &sample_cfg, &cfg_2));
+        let (nx_2, ny_2, _) = fitter_2.line_params();
+        let err_2 = angle_err(nx_2, ny_2);
+
+        assert!(err_2 < 0.5, "2-DOF angle err = {err_2}°, expected < 0.5°");
+        assert!(
+            err_1 > 1.0,
+            "1-DOF angle err = {err_1}°, expected > 1.0° (1-DOF cannot rotate)"
+        );
+        assert!(
+            !fitter_2.last_guard_fired(),
+            "guard fired on long well-conditioned edge"
+        );
+    }
+
+    #[test]
+    fn two_dof_conditioning_guard_fires_on_concentrated_samples() {
+        // Long edge, but tangential sample band is narrowed to ~2% of the edge
+        // parametric range — samples cluster near p_c, gradient-weighted Var(t)
+        // falls below THETA_OBSERVABILITY_FLOOR_PX2, and θ is no longer
+        // observable from the noise. The guard must catch this every iteration
+        // and fall back to a 1-DOF ρ-only step; (nx, ny) must remain at seed.
+        let width = 120;
+        let height = 120;
+        let sigma = 0.6;
+        let x_gt = 60.25;
+
+        let renderer = SubpixelEdgeRenderer::new(width, height)
+            .with_intensities(20.0, 230.0)
+            .with_sigma(sigma);
+        let line_gt = Line::from_points_cw([x_gt, 20.0], [x_gt, 100.0]);
+        let data = renderer.render_edge_u8(&line_gt);
+        let img = ImageView::new(&data, width, height, width).expect("invalid image view");
+
+        let p1 = [x_gt, 20.0];
+        let p2 = [x_gt, 100.0];
+        let arena = Bump::new();
+        let mut fitter = ErfEdgeFitter::new(&img, p1, p2, true).expect("edge length too short");
+
+        let sample_cfg = SampleConfig {
+            window: 2.5,
+            stride: 1,
+            t_range: (0.49, 0.51),
+        };
+        let cfg = RefineConfig {
+            mode: RefineMode::TwoDof,
+            ..RefineConfig::quad_style(sigma)
+        };
+        assert!(fitter.fit(&arena, &sample_cfg, &cfg));
+
+        let (nx, ny, d) = fitter.line_params();
+        assert!(
+            fitter.last_guard_fired(),
+            "guard expected to fire on concentrated samples"
+        );
+        assert!(
+            (nx + 1.0).abs() < 1e-6 && ny.abs() < 1e-6,
+            "normal drifted from seed: ({nx}, {ny})"
+        );
+        let x_recovered = d;
+        assert!(
+            (x_recovered - x_gt).abs() < 0.15,
+            "x_recovered = {x_recovered}, expected {x_gt}"
+        );
+    }
+
+    /// Adjacent-edge outlier injection: flips the intensity of every
+    /// third light-side sample close to the edge transition (high
+    /// Jacobian, large residual). Mirrors the production failure mode
+    /// where bit-boundary samples pulled the 2-DOF normal off-truth.
+    fn inject_adjacent_edge_outliers(
+        clean: &[(f64, f64, f64)],
+        nx: f64,
+        ny: f64,
+        d: f64,
+        dark_intensity: f64,
+    ) -> Vec<(f64, f64, f64)> {
+        let mut out: Vec<(f64, f64, f64)> = clean.to_vec();
+        let mut count = 0_usize;
+        for sample in &mut out {
+            let signed_dist = nx * sample.0 + ny * sample.1 + d;
+            if signed_dist > 0.2 && signed_dist < 1.8 {
+                if count.is_multiple_of(3) {
+                    sample.2 = dark_intensity;
+                }
+                count += 1;
+            }
+        }
+        out
+    }
+
+    /// Tukey IRLS recovers the true edge direction under adjacent-edge
+    /// contamination — the failure mode that blocked plain 2-DOF.
+    #[test]
+    #[allow(clippy::similar_names)]
+    fn tukey_recovers_under_adjacent_edge_outliers() {
+        let width = 160;
+        let height = 160;
+        let sigma = 0.6;
+        let dark = 20.0_f64;
+        let light = 230.0_f64;
+        let renderer = SubpixelEdgeRenderer::new(width, height)
+            .with_intensities(dark, light)
+            .with_sigma(sigma);
+
+        let p1_gt = [40.0, 60.0];
+        let p2_gt = [120.0, 60.0 + 80.0 * 30f64.to_radians().tan()];
+        let line_gt = Line::from_points_cw(p1_gt, p2_gt);
+        let data = renderer.render_edge_u8(&line_gt);
+        let img = ImageView::new(&data, width, height, width).expect("invalid image view");
+
+        // Seed: GT endpoints rotated +1.5° about their midpoint.
+        let perturb = 1.5_f64.to_radians();
+        let (sp, cp) = perturb.sin_cos();
+        let mid = [(p1_gt[0] + p2_gt[0]) * 0.5, (p1_gt[1] + p2_gt[1]) * 0.5];
+        let rotate = |p: [f64; 2]| -> [f64; 2] {
+            let dx = p[0] - mid[0];
+            let dy = p[1] - mid[1];
+            [mid[0] + dx * cp - dy * sp, mid[1] + dx * sp + dy * cp]
+        };
+        let p1 = rotate(p1_gt);
+        let p2 = rotate(p2_gt);
+
+        let true_len = ((p2_gt[0] - p1_gt[0]).hypot(p2_gt[1] - p1_gt[1])).max(1e-12);
+        let nx_true = -(p2_gt[1] - p1_gt[1]) / true_len;
+        let ny_true = (p2_gt[0] - p1_gt[0]) / true_len;
+        let angle_err = |nx: f64, ny: f64| {
+            (nx * nx_true + ny * ny_true)
+                .abs()
+                .clamp(0.0, 1.0)
+                .acos()
+                .to_degrees()
+        };
+
+        let arena = Bump::new();
+        let fitter_seed = ErfEdgeFitter::new(&img, p1, p2, true).expect("edge length too short");
+        let sample_cfg = SampleConfig::for_quad(true_len, 1);
+        let clean: Vec<(f64, f64, f64)> = fitter_seed
+            .collect_samples(&arena, &sample_cfg)
+            .iter()
+            .copied()
+            .collect();
+        let (seed_nx, seed_ny, seed_d) = fitter_seed.line_params();
+        let corrupted = inject_adjacent_edge_outliers(&clean, seed_nx, seed_ny, seed_d, dark);
+
+        let mut fitter_off = ErfEdgeFitter::new(&img, p1, p2, true).expect("edge length too short");
+        let cfg_off = RefineConfig {
+            mode: RefineMode::TwoDof,
+            ..RefineConfig::quad_style(sigma)
+        };
+        fitter_off.refine(&corrupted, &cfg_off);
+        let (nx_off, ny_off, _) = fitter_off.line_params();
+        let err_off = angle_err(nx_off, ny_off);
+
+        let mut fitter_t = ErfEdgeFitter::new(&img, p1, p2, true).expect("edge length too short");
+        fitter_t.refine(&corrupted, &RefineConfig::quad_style(sigma));
+        let (nx_t, ny_t, _) = fitter_t.line_params();
+        let err_t = angle_err(nx_t, ny_t);
+
+        assert!(
+            err_t < 0.5,
+            "Tukey angle err = {err_t}° (unweighted = {err_off}°)"
+        );
+        assert!(
+            err_t <= err_off + 0.02,
+            "Tukey ({err_t}°) regressed vs unweighted ({err_off}°)"
+        );
+        assert!(fitter_t.last_sigma_hat().is_finite());
+    }
+
+    /// Clean edge, no outliers — σ̂ would collapse without the floor and
+    /// drive every weight to zero. The σ̂-floor keeps weights finite.
+    #[test]
+    fn tukey_sigma_floor_protects_perfect_fit() {
+        let width = 120;
+        let height = 120;
+        let sigma = 0.6;
+        let x_gt = 60.25;
+
+        let renderer = SubpixelEdgeRenderer::new(width, height)
+            .with_intensities(20.0, 230.0)
+            .with_sigma(sigma);
+        let line_gt = Line::from_points_cw([x_gt, 20.0], [x_gt, 100.0]);
+        let data = renderer.render_edge_u8(&line_gt);
+        let img = ImageView::new(&data, width, height, width).expect("invalid image view");
+
+        let p1 = [x_gt, 20.0];
+        let p2 = [x_gt, 100.0];
+        let arena = Bump::new();
+        let mut fitter = ErfEdgeFitter::new(&img, p1, p2, true).expect("edge length too short");
+        let sample_cfg = SampleConfig::for_quad(80.0, 1);
+        assert!(fitter.fit(&arena, &sample_cfg, &RefineConfig::quad_style(sigma)));
+        let (nx, _ny, d) = fitter.line_params();
+        assert!((nx + 1.0).abs() < 1e-5, "nx drifted: {nx}");
+        assert!((d - x_gt).abs() < 0.05, "x_recovered={d}, gt={x_gt}");
+        let sigma_hat = fitter.last_sigma_hat();
+        assert!(
+            sigma_hat.is_finite() && sigma_hat > 0.0,
+            "σ̂ collapsed: {sigma_hat}"
         );
     }
 

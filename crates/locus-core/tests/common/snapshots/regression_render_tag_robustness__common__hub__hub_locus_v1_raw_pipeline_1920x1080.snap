@@ -4,16 +4,16 @@ expression: report
 ---
 summary:
   dataset_size: 50
-  mean_recall: 0.58
+  mean_recall: 0.52
   mean_precision: 1
-  mean_rmse: 0.7594
-  mean_reprojection_rmse: 0.8548
-  p50_translation_error: 0.0013
-  p90_translation_error: 0.0151
-  p99_translation_error: 0.071
-  p50_rotation_error: 0.3893
-  p90_rotation_error: 1.7008
-  p99_rotation_error: 119.4709
+  mean_rmse: 0.2959
+  mean_reprojection_rmse: 0.2872
+  p50_translation_error: 0.0012
+  p90_translation_error: 0.0153
+  p99_translation_error: 0.1099
+  p50_rotation_error: 0.0447
+  p90_rotation_error: 0.475
+  p99_rotation_error: 27.1458
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
   worst_offenders:
