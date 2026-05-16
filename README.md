@@ -4,7 +4,7 @@
 [![Docs](https://github.com/NoeFontana/locus-tag/actions/workflows/docs.yml/badge.svg)](https://noefontana.github.io/locus-tag/)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-**Locus** detects AprilTag and ArUco markers using a Rust core with zero-copy Python bindings. It implements sub-pixel corner refinement, releases the GIL during detection, and returns results as vectorized NumPy arrays.
+**Locus** detects AprilTag and ArUco markers as well as AprilGrid and ChArUco boards. The library is implemented in Rust and provides zero-copy Python bindings.
 
 > [!WARNING]
 > **Experimental Status**: API is subject to breaking changes until 1.0.0 ships. The main workstreams towards 1.0.0 are reducing the API surface and validating against non-synthetic data. Until then, this library isn't recommended for production systems. The support for distortion models is experimental and requires a ground-up redesign. Addition of default tag families may happen on request, the current defaults were chosen to be minimal and support most commonly used tags.
