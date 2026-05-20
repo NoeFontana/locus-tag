@@ -35,6 +35,10 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF#refs/tags/v}"
+          # Strip -rc.N suffix so RC dry-run tags (v0.5.0-rc.1) compare equal
+          # to the manifest version (0.5.0). The publish gate below uses the
+          # full ref to decide whether to actually publish.
+          tag="${tag%-rc.*}"
           core_version="$(cargo metadata --format-version 1 --no-deps \
             | python3 -c "import json,sys; m=json.load(sys.stdin); print(next(p['version'] for p in m['packages'] if p['name']=='locus-core'))")"
           py_version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
