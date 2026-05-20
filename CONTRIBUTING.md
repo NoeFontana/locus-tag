@@ -4,11 +4,18 @@ Thank you for your interest in contributing to Locus! This guide covers the key 
 
 ## 🏗️ Development Setup
 
+Locus uses [just](https://github.com/casey/just) as a task runner — every CI
+job has a 1:1 local recipe so `just <recipe>` reproduces exactly what runs
+in CI.
+
 ```bash
-# Install dependencies and build Python bindings
-uv sync
-maturin develop --release --manifest-path crates/locus-py/Cargo.toml
+# Install just (once): `cargo install just` or `brew install just`.
+
+# Install dependencies and build Python bindings (debug-or-release as needed).
+just bootstrap
 ```
+
+See `just --list` for the full recipe surface.
 
 ## 📐 The Zero-Allocation Rule
 
@@ -79,35 +86,26 @@ TRACY_NO_INVARIANT_CHECK=1 cargo insta test --release --all-features --features 
 
 Always document why snapshots changed in your PR description.
 
-## ✅ Pre-Commit Checklist
+## ✅ Pre-PR Checklist
 
-Before submitting a PR:
+Before submitting a PR, run the full local gate:
 
 ```bash
-# 1. Rust Formatting & Linting
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo fmt --all
-
-# 2. Python Formatting & Linting
-uv run ruff check . --fix
-uv run ruff format .
-
-# 3. Python Type Checking
-uv run --group types --group bench --group etl basedpyright
-
-# 4. Run tests
-# Nextest is preferred for parallel execution of unit tests.
-cargo nextest run --release --all-features
-
-# 5. Snapshot Check (Ensure no accidental output drift)
-TRACY_NO_INVARIANT_CHECK=1 cargo insta test --release --all-features --features bench-internals --check
-
-# 6. Verify Rust doctests
-cargo test --doc -p locus-core
-
-# 7. Python unit tests
-uv run pytest
+just pre-pr     # lint + audit + test + schema-check
 ```
+
+This expands to `just lint` + `just audit` (cargo-deny) + `just test` (Rust
+nextest, Python pytest, Rust doctests, insta snapshot parity) + `just
+schema-check`. Each recipe maps 1:1 to a CI job, so a green `just pre-pr`
+mirrors a green PR gate.
+
+To auto-fix formatting:
+
+```bash
+just fmt        # cargo fmt + ruff format + ruff check --fix
+```
+
+Individual recipes are also available — see `just --list`.
 
 ## 📁 Project Structure
 

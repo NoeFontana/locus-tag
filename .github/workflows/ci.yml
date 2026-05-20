@@ -1,7 +1,11 @@
 name: CI
 
+# PR is the gate: every change reaches main via a PR, and the PR CI tests
+# that exact merge commit. Re-running on push to main would just duplicate
+# work. `release.yml` covers tag-time release builds; manual replays go
+# through `workflow_dispatch`.
 on:
-  push:
+  pull_request:
     branches: [ main ]
     paths-ignore:
       - '**.md'
@@ -10,9 +14,12 @@ on:
       - 'LICENSE*'
       - '.gitignore'
       - 'mkdocs.yml'
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
+    inputs:
+      python-matrix:
+        description: 'JSON array of Python versions to test (e.g. ["3.10","3.11","3.12","3.13"])'
+        required: false
+        default: '["3.11"]'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -22,4 +29,4 @@ jobs:
   tests:
     uses: ./.github/workflows/_tests.yml
     with:
-      python-matrix: ${{ github.event_name == 'pull_request' && '["3.11"]' || '["3.10", "3.11", "3.12"]' }}
+      python-matrix: ${{ github.event_name == 'workflow_dispatch' && inputs.python-matrix || '["3.11"]' }}

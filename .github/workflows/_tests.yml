@@ -9,7 +9,11 @@ on:
         default: '["3.11"]'
 
 env:
+  # Single bump point for the non-matrix Python version used by every
+  # ancillary job (lint, type-check, build-wheel, schema-parity, sdist).
+  DEFAULT_PYTHON: '3.11'
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
   UV_SYSTEM_PYTHON: 0
   TRACY_NO_INVARIANT_CHECK: "1"
 
@@ -23,7 +27,7 @@ jobs:
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
         with:
-          python-version: '3.11'
+          python-version: ${{ env.DEFAULT_PYTHON }}
           enable-rust-cache: 'false'
 
       - name: Check uv.lock
@@ -36,21 +40,10 @@ jobs:
             crates/locus-core/data/dictionaries/*.json
 
       - name: Ruff Check & Format
-        shell: bash
         run: |
-          set -o pipefail
           uv sync --frozen --only-group lint
-          uv run ruff check . 2>&1 | tee ruff-check.log
-          uv run ruff format --check . 2>&1 | tee ruff-format.log
-
-      - name: Upload Logs on Failure
-        if: failure()
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
-        with:
-          name: failure-logs-validate
-          path: "*.log"
-          retention-days: 1
+          uv run ruff check .
+          uv run ruff format --check .
 
   type-check-python:
     name: Type Check Python (basedpyright)
@@ -61,26 +54,14 @@ jobs:
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
         with:
-          python-version: '3.11'
+          python-version: ${{ env.DEFAULT_PYTHON }}
           enable-rust-cache: 'false'
 
       - name: Install Python deps
         run: uv sync --frozen --group types --group bench --group etl --group docs
 
       - name: Run basedpyright
-        shell: bash
-        run: |
-          set -o pipefail
-          uv run --frozen basedpyright 2>&1 | tee basedpyright.log
-
-      - name: Upload Logs on Failure
-        if: failure()
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
-        with:
-          name: failure-logs-type-check
-          path: "*.log"
-          retention-days: 1
+        run: uv run --frozen basedpyright
 
   rust-checks:
     name: Rust Lint & Test
@@ -91,8 +72,8 @@ jobs:
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
         with:
-          rust-components: rustfmt, clippy
           enable-uv-cache: 'false'
+          cache-key: rust-checks
 
       - name: Install Tools (Nextest, Insta)
         uses: taiki-e/install-action@v2
@@ -100,66 +81,101 @@ jobs:
           tool: nextest,cargo-insta
 
       - name: Check Formatting
-        shell: bash
-        run: |
-          set -o pipefail
-          cargo fmt --all -- --check 2>&1 | tee rust-fmt.log
+        run: cargo fmt --all -- --check
 
       - name: Clippy
-        shell: bash
-        run: |
-          set -o pipefail
-          cargo clippy --all-targets --all-features -- -D warnings 2>&1 | tee rust-clippy.log
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-      - name: Check lean feature-set compiles
-        shell: bash
-        run: |
-          set -o pipefail
-          cargo check --workspace 2>&1 | tee rust-check-lean.log
+      # Supply-chain audit: license allowlist, advisories, multiple-versions
+      # policy, sources allowlist. Inlined here to reuse the toolchain
+      # cache rather than spinning up a dedicated runner.
+      # `arguments: ''` overrides the action's default `--all-features`,
+      # which would otherwise pull in optional `viz`/`bench-internals`
+      # deps and contradict the `[graph]` scope in deny.toml.
+      - name: cargo deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          arguments: ''
 
       - name: Verify locus-core packages cleanly
-        shell: bash
-        run: |
-          set -o pipefail
-          cargo package -p locus-core --locked --no-verify 2>&1 | tee rust-package.log
+        run: cargo package -p locus-core --locked --no-verify
+
+      - name: Run Tests (Nextest)
+        run: cargo nextest run --profile ci --all-features
+
+      - name: Run Doc Tests
+        run: cargo test --doc --all-features
+
+      - name: Verify Snapshot Parity
+        run: cargo insta test --release --all-features --features bench-internals --check
+
+  # Independent of the host test build — split out so it runs in parallel
+  # with `rust-checks` rather than extending its serial chain. Both legs
+  # need a Rust toolchain but compile with different feature/target sets,
+  # so cache sharing would be a wash.
+  rust-extras:
+    name: Rust Cross-compile & Rustdoc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Toolchains
+        uses: ./.github/actions/setup-toolchain
+        with:
+          enable-uv-cache: 'false'
+          cache-key: rust-extras
+
+      # `gcc-aarch64-linux-gnu` is large enough (~150 MB extracted) that
+      # caching the .deb archives saves ~30-40s per run vs. re-fetching
+      # from apt every time.
+      - name: Cache apt packages (aarch64 toolchain)
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          version: 1.0
 
       - name: Check aarch64 compilation
-        shell: bash
         run: |
-          sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
           rustup target add aarch64-unknown-linux-gnu
           cargo check --target aarch64-unknown-linux-gnu --all-features
 
-      - name: Run Tests (Nextest)
-        shell: bash
-        run: |
-          set -o pipefail
-          cargo nextest run --profile ci --all-features 2>&1 | tee test-rust.log
+      # Catches catastrophic doc failures (private/missing item refs,
+      # syntax errors). The strict `RUSTDOCFLAGS=-D warnings` gate is the
+      # long-term target — see the doc-rust justfile recipe to reproduce.
+      - name: Build rustdoc (smoke)
+        run: cargo doc --workspace --no-deps --all-features
 
-      - name: Run Doc Tests
-        shell: bash
-        run: |
-          set -o pipefail
-          cargo test --doc --all-features 2>&1 | tee test-rust-doc.log
+  # Build the abi3 wheel ONCE. pyo3 is pinned to abi3-py310 in
+  # crates/locus-py/Cargo.toml, so a single wheel installs into 3.10+
+  # without rebuild. Downstream Python jobs consume this artifact instead
+  # of running their own `maturin develop` per matrix leg.
+  build-wheel:
+    name: Build wheel (abi3)
+    needs: validate-project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
 
-      - name: Verify Snapshot Parity
-        shell: bash
-        run: |
-          set -o pipefail
-          TRACY_NO_INVARIANT_CHECK=1 cargo insta test --release --all-features --features bench-internals --check 2>&1 | tee test-rust-insta.log
-
-      - name: Upload Logs on Failure
-        if: failure()
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
+      - name: Setup Toolchains
+        uses: ./.github/actions/setup-toolchain
         with:
-          name: failure-logs-rust-checks
-          path: "*.log"
+          python-version: ${{ env.DEFAULT_PYTHON }}
+          cache-key: build-wheel
+
+      - name: Build wheel
+        run: |
+          uv sync --frozen --group dev
+          uv run maturin build --release --manifest-path crates/locus-py/Cargo.toml --out dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheel-abi3
+          path: dist/*.whl
           retention-days: 1
 
   test-python:
     name: Test Python (${{ matrix.python-version }})
-    needs: [validate-project, rust-checks]
+    needs: [build-wheel, rust-checks]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -172,27 +188,22 @@ jobs:
         uses: ./.github/actions/setup-toolchain
         with:
           python-version: ${{ matrix.python-version }}
+          enable-rust-cache: 'false'
 
-      - name: Setup dynamic environment
-        run: uv sync --frozen --group dev --group bench
+      - name: Install Python test deps (no rust build)
+        run: uv sync --frozen --group dev --group bench --no-install-project
 
-      - name: Build bridge (maturin develop)
-        run: uv run maturin develop --release --manifest-path crates/locus-py/Cargo.toml
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wheel-abi3
+          path: dist
+
+      - name: Install built wheel
+        run: uv pip install --python ${{ matrix.python-version }} dist/locus_tag-*.whl
 
       - name: Run tests
-        shell: bash
-        run: |
-          set -o pipefail
-          uv run pytest 2>&1 | tee test-python-${{ matrix.python-version }}.log
-
-      - name: Upload Logs on Failure
-        if: failure()
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
-        with:
-          name: failure-logs-test-python-${{ matrix.python-version }}
-          path: "*.log"
-          retention-days: 1
+        run: uv run --no-sync pytest
 
   source-build-unrectified:
     name: Source Install (non_rectified)
@@ -204,30 +215,25 @@ jobs:
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
         with:
-          python-version: '3.11'
+          python-version: ${{ env.DEFAULT_PYTHON }}
+          cache-key: source-build-unrectified
 
       - name: Build sdist
-        shell: bash
         run: |
-          set -o pipefail
           uv sync --frozen --group dev
-          uv build --sdist --out-dir dist 2>&1 | tee build-sdist.log
+          uv build --sdist --out-dir dist
 
       - name: Install sdist with non_rectified feature
-        shell: bash
         env:
           MATURIN_PEP517_ARGS: "--features locus-py/non_rectified"
         run: |
-          set -o pipefail
           SDIST=$(ls dist/locus_tag-*.tar.gz)
           test -n "$SDIST" || { echo "no sdist found in dist/" >&2; exit 1; }
-          uv pip install --no-binary=:all: "$SDIST" 2>&1 | tee install-unrectified.log
+          uv pip install --no-binary=:all: "$SDIST"
 
       - name: Smoke-test distortion API
-        shell: bash
         run: |
-          set -o pipefail
-          uv run --no-sync python - <<'PY' 2>&1 | tee smoke-unrectified.log
+          uv run --no-sync python - <<'PY'
           import locus
 
           assert locus.HAS_NON_RECTIFIED, "HAS_NON_RECTIFIED must be True on the unrectified build"
@@ -252,18 +258,9 @@ jobs:
           print("unrectified source install OK")
           PY
 
-      - name: Upload Logs on Failure
-        if: failure()
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
-        with:
-          name: failure-logs-source-build-unrectified
-          path: "*.log"
-          retention-days: 1
-
   schema-parity:
     name: Profile Schema Parity
-    needs: validate-project
+    needs: [validate-project, build-wheel]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -271,62 +268,39 @@ jobs:
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
         with:
-          python-version: '3.11'
+          python-version: ${{ env.DEFAULT_PYTHON }}
           enable-rust-cache: 'false'
 
-      - name: Install Python deps and build bridge
-        run: |
-          uv sync --frozen --group dev
-          uv run maturin develop --release --manifest-path crates/locus-py/Cargo.toml
+      - name: Install Python deps (no rust build)
+        run: uv sync --frozen --group dev --no-install-project
+
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wheel-abi3
+          path: dist
+
+      - name: Install built wheel
+        run: uv pip install --python ${{ env.DEFAULT_PYTHON }} dist/locus_tag-*.whl
 
       - name: Check schema is up to date
-        shell: bash
-        run: |
-          set -o pipefail
-          uv run python tools/export_profile_schema.py --check 2>&1 | tee schema-parity.log
-
-      - name: Upload Logs on Failure
-        if: failure()
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
-        with:
-          name: failure-logs-schema-parity
-          path: "*.log"
-          retention-days: 1
+        run: uv run --no-sync python tools/export_profile_schema.py --check
 
   wheel-smoke:
     name: Wheel Install Smoke Test
-    needs: [validate-project, rust-checks]
+    needs: build-wheel
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup Toolchains
-        uses: ./.github/actions/setup-toolchain
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v8
         with:
-          python-version: '3.11'
-
-      - name: Build wheel
-        shell: bash
-        run: |
-          set -o pipefail
-          uv sync --frozen --group dev
-          uv run maturin build --release --manifest-path crates/locus-py/Cargo.toml --out dist 2>&1 | tee build-wheel.log
+          name: wheel-abi3
+          path: dist
 
       - name: Smoke test each shipped profile
-        shell: bash
-        run: |
-          set -o pipefail
-          bash scripts/ci/install_and_smoke_wheel.sh 2>&1 | tee smoke-wheel.log
-
-      - name: Upload Logs on Failure
-        if: failure()
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
-        with:
-          name: failure-logs-wheel-smoke
-          path: "*.log"
-          retention-days: 1
+        run: bash scripts/ci/install_and_smoke_wheel.sh
 
   robustness-testing:
     name: Robustness Testing (Proptest)
@@ -340,11 +314,10 @@ jobs:
         uses: ./.github/actions/setup-toolchain
         with:
           enable-uv-cache: 'false'
+          cache-key: robustness
 
       - name: Run Robustness Suite
-        shell: bash
         run: |
-          set -o pipefail
           cargo test --test robustness_pipeline --all-features
           cargo test --test robustness_threshold --all-features
           cargo test --test robustness_geometry --all-features
@@ -352,12 +325,3 @@ jobs:
           cargo test --test robustness_concurrency --all-features
           cargo test --test robustness_memory --all-features
           cargo test --test robustness_api --all-features
-
-      - name: Upload Logs on Failure
-        if: failure()
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
-        with:
-          name: failure-logs-robustness
-          path: "*.log"
-          retention-days: 1
