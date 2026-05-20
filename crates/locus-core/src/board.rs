@@ -147,7 +147,7 @@ impl AprilGridTopology {
     /// Build an AprilGrid topology, validating marker count against `max_tag_id`.
     ///
     /// `max_tag_id` is the number of unique IDs the target dictionary provides
-    /// (obtain via [`TagFamily::max_id_count`]).  Pass `usize::MAX` to skip the
+    /// (obtain via [`crate::TagFamily::max_id_count`]).  Pass `usize::MAX` to skip the
     /// check (e.g. in tests).
     ///
     /// The origin `(0,0,0)` is at the geometric centre of the board.
@@ -246,7 +246,7 @@ impl CharucoTopology {
     /// Build a ChAruco topology, validating marker count against `max_tag_id`.
     ///
     /// `max_tag_id` is the number of unique IDs the target dictionary provides
-    /// (obtain via [`TagFamily::max_id_count`]).  Pass `usize::MAX` to skip the
+    /// (obtain via [`crate::TagFamily::max_id_count`]).  Pass `usize::MAX` to skip the
     /// check (e.g. in tests).
     ///
     /// The origin `(0,0,0)` is at the geometric centre of the board.
@@ -382,7 +382,7 @@ pub struct BoardPose {
 /// **Seed strategy**: minimal-sample seeds for RANSAC are computed inside the
 /// solver by fitting a single DLT homography over all `4 × group_size` sample
 /// correspondences and decomposing it with IPPE-Square (see
-/// [`solve_seed_from_sample_homography`]).  Both Necker branches of the
+/// `solve_seed_from_sample_homography`).  Both Necker branches of the
 /// metric homography are polished by Gauss-Newton and the lower-reprojection
 /// branch wins — works uniformly for `group_size == 4` (per-tag corners) and
 /// `group_size == 1` (ChAruco saddle points).
@@ -759,7 +759,7 @@ fn solve_seed_from_sample_homography(
 /// Pure mathematical engine for robust, multi-correspondence board pose
 /// estimation.
 ///
-/// Completely decoupled from [`DetectionBatch`] and tag layout.  Accepts flat
+/// Completely decoupled from [`crate::batch::DetectionBatch`] and tag layout.  Accepts flat
 /// [`PointCorrespondences`] slices and returns a verified [`BoardPose`].
 ///
 /// **Algorithm**: LO-RANSAC (outer) → unweighted Gauss-Newton verification
@@ -1312,7 +1312,7 @@ impl RobustPoseSolver {
 
 /// Estimator for multi-tag AprilGrid board poses.
 ///
-/// Bridges the [`DetectionBatch`] SoA layout and [`AprilGridTopology`] marker
+/// Bridges the [`crate::batch::DetectionBatch`] SoA layout and [`AprilGridTopology`] marker
 /// geometry with the tag-layout-agnostic [`RobustPoseSolver`].  All heavy pose
 /// mathematics lives in the solver; this struct is responsible only for
 /// constructing the flat [`PointCorrespondences`] view and retaining the

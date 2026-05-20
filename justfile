@@ -87,10 +87,9 @@ schema-check:
 audit:
     cargo deny check
 
-# Build the rustdoc site (mirrors the CI rust-extras smoke step).
+# Build the rustdoc site under -D warnings (mirrors the CI rust-extras step).
 doc-rust:
-    # To check warnings strictly: RUSTDOCFLAGS="-D warnings" just doc-rust
-    cargo doc --workspace --no-deps --all-features
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
 
 # Build the MkDocs site into site/ (strict — mirrors CI).
 build-docs:

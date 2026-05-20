@@ -2,7 +2,7 @@
 //!
 //! IPPE-Square seed → Levenberg-Marquardt refinement. The LM cost surface
 //! (weighted Mahalanobis or unweighted Huber) is selected automatically by
-//! per-corner covariance availability; see [`estimate_tag_pose_with_diagnostics`].
+//! per-corner covariance availability; see `estimate_tag_pose_with_diagnostics`.
 
 #![allow(clippy::many_single_char_names, clippy::similar_names)]
 use crate::batch::{DetectionBatch, Pose6D};

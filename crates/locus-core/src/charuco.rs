@@ -3,7 +3,7 @@
 //! After ArUco tags have been decoded by the main pipeline, this module
 //! leverages the decoded tags as geometric priors to locate checkerboard
 //! interior corners (saddle points) with sub-pixel precision and then
-//! estimates the board pose via the generic [`RobustPoseSolver`].
+//! estimates the board pose via the generic [`crate::board::RobustPoseSolver`].
 //!
 //! # Algorithm
 //!
@@ -17,8 +17,8 @@
 //!    estimate to the true saddle position.
 //! 4. **Covariance estimation** — call `compute_corner_covariance` at the
 //!    refined position to get the Fisher information matrix for AW-LM.
-//! 5. **Pose estimation** — build a [`PointCorrespondences`] view
-//!    (`group_size = 1`) and delegate to [`RobustPoseSolver`].
+//! 5. **Pose estimation** — build a [`crate::board::PointCorrespondences`] view
+//!    (`group_size = 1`) and delegate to [`crate::board::RobustPoseSolver`].
 
 #![allow(clippy::similar_names)]
 

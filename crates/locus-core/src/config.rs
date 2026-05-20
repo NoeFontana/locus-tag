@@ -499,7 +499,7 @@ impl DetectorConfig {
     ///
     /// # Errors
     ///
-    /// Returns [`ConfigError`] if any parameter violates its constraints.
+    /// Returns [`crate::error::ConfigError`] if any parameter violates its constraints.
     pub fn validate(&self) -> Result<(), crate::error::ConfigError> {
         use crate::error::ConfigError;
 
@@ -571,7 +571,7 @@ impl DetectorConfig {
     /// only the `Static` `EdLines` configuration on distorted intrinsics
     /// (the user-explicit misconfiguration case). `AdaptivePpb` policies
     /// gracefully degrade to `ContourRdp` on the distortion path inside
-    /// [`crate::quad::extract_single_quad_with_camera`], so they don't
+    /// `extract_single_quad_with_camera` (in `crate::quad`), so they don't
     /// trip the gate even when one of their routes is `EdLines`.
     #[must_use]
     pub fn static_uses_edlines(&self) -> bool {
@@ -799,7 +799,7 @@ impl DetectorConfigBuilder {
     ///
     /// # Errors
     ///
-    /// Returns [`ConfigError`] if any parameter is out of its valid range.
+    /// Returns [`crate::error::ConfigError`] if any parameter is out of its valid range.
     pub fn validated_build(self) -> Result<DetectorConfig, crate::error::ConfigError> {
         let config = self.build();
         config.validate()?;
@@ -1357,7 +1357,7 @@ pub fn shipped_profile_json(name: &str) -> Option<&'static str> {
 impl DetectorConfig {
     /// Load a user-supplied profile from a JSON string.
     ///
-    /// Returns [`ConfigError::ProfileParse`] for malformed JSON or unknown
+    /// Returns [`crate::error::ConfigError::ProfileParse`] for malformed JSON or unknown
     /// fields (the serde deserializer rejects unknown keys), and any
     /// validation error from [`DetectorConfig::validate`] for configurations
     /// that fail cross-group compatibility checks (e.g. EdLines + Erf).

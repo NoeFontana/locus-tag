@@ -772,7 +772,7 @@ impl DetectorBuilder {
     ///
     /// # Errors
     ///
-    /// Returns [`ConfigError`] if the configuration is invalid (e.g., incompatible
+    /// Returns [`crate::error::ConfigError`] if the configuration is invalid (e.g., incompatible
     /// `quad_extraction_mode` + `refinement_mode` combination).
     pub fn validated_build(self) -> Result<Detector, crate::error::ConfigError> {
         self.config.validate()?;

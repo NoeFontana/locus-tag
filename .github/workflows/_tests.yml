@@ -139,10 +139,11 @@ jobs:
           rustup target add aarch64-unknown-linux-gnu
           cargo check --target aarch64-unknown-linux-gnu --all-features
 
-      # Catches catastrophic doc failures (private/missing item refs,
-      # syntax errors). The strict `RUSTDOCFLAGS=-D warnings` gate is the
-      # long-term target — see the doc-rust justfile recipe to reproduce.
-      - name: Build rustdoc (smoke)
+      # Strict rustdoc gate: any broken intra-doc link, unresolved item,
+      # or syntax error fails the job. Mirrors `just doc-rust`.
+      - name: Build rustdoc (-D warnings)
+        env:
+          RUSTDOCFLAGS: "-D warnings"
         run: cargo doc --workspace --no-deps --all-features
 
   # Build the abi3 wheel ONCE. pyo3 is pinned to abi3-py310 in

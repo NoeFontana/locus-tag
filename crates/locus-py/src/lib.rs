@@ -629,7 +629,7 @@ pub struct PipelineTelemetryResult {
     pub ppb_estimate: Option<Py<PyArray1<f32>>>,
 }
 
-/// Typed result returned by [`Detector::detect`].
+/// Typed result returned by `Detector.detect` (Python).
 #[pyclass(get_all, frozen)]
 pub struct DetectionResult {
     pub ids: Py<PyArray1<i32>>,
@@ -644,14 +644,14 @@ pub struct DetectionResult {
     pub telemetry: Option<Py<PipelineTelemetryResult>>,
 }
 
-/// Telemetry from [`CharucoRefiner::estimate`], populated when `debug_telemetry=True`.
+/// Telemetry from `CharucoRefiner.estimate` (Python), populated when `debug_telemetry=True`.
 #[pyclass(get_all, frozen)]
 pub struct CharucoTelemetryResult {
     pub rejected_saddles: Py<PyArray2<f32>>,
     pub rejected_determinants: Py<PyArray1<f32>>,
 }
 
-/// Typed result returned by [`CharucoRefiner::estimate`].
+/// Typed result returned by `CharucoRefiner.estimate` (Python).
 #[pyclass(get_all, frozen)]
 pub struct CharucoEstimateResult {
     pub ids: Py<PyArray1<i32>>,
@@ -919,7 +919,7 @@ impl BoardEstimator {
     }
 }
 
-/// Typed result returned by [`BoardEstimator::estimate`].
+/// Typed result returned by `BoardEstimator.estimate` (Python).
 #[pyclass(get_all, frozen)]
 pub struct BoardEstimateResult {
     pub ids: Py<PyArray1<i32>>,
