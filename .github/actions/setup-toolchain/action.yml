@@ -1,43 +1,40 @@
 name: 'Setup CI Toolchains'
-description: 'Installs Rust, Python (via uv), and configures caching'
+description: 'Installs Rust (per rust-toolchain.toml), Python (via uv), and configures caching'
 
 inputs:
   python-version:
-    description: 'The Python version to install'
+    description: 'Python version to install via uv'
     required: false
     default: '3.11'
-  rust-toolchain:
-    description: 'The Rust toolchain to install'
-    required: false
-    default: '1.92.0'
-  rust-components:
-    description: 'Comma-separated list of Rust components to install'
-    required: false
-    default: ''
   enable-rust-cache:
-    description: 'Whether to enable the Rust cache'
+    description: 'Whether to enable the Rust target cache'
     required: false
     default: 'true'
   enable-uv-cache:
     description: 'Whether to enable the uv cache'
     required: false
     default: 'true'
+  cache-key:
+    description: 'Optional job-scoped suffix appended to the Rust cache key to prevent cross-job poisoning'
+    required: false
+    default: ''
 
 runs:
   using: "composite"
   steps:
     - name: Install uv
-      uses: astral-sh/setup-uv@v5
+      uses: astral-sh/setup-uv@v8
       with:
         enable-cache: ${{ inputs.enable-uv-cache == 'true' }}
         python-version: ${{ inputs.python-version }}
-        
+
+    # Channel / components / profile come from rust-toolchain.toml — single
+    # source of truth for the workspace.
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: ${{ inputs.rust-toolchain }}
-        components: ${{ inputs.rust-components }}
-        
+      uses: dtolnay/rust-toolchain@stable
+
     - name: Rust Cache
       if: inputs.enable-rust-cache == 'true'
       uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ inputs.cache-key }}

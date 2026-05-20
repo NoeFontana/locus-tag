@@ -30,16 +30,14 @@ concurrency:
 
 jobs:
   build:
+    name: mkdocs build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-
-      - uses: astral-sh/setup-uv@v7
+      - uses: ./.github/actions/setup-toolchain
         with:
           python-version: '3.10'
+          cache-key: docs
 
       - name: Install dependencies
         run: uv sync --group docs --group dev
@@ -55,8 +53,22 @@ jobs:
         with:
           path: 'site'
 
+  spell:
+    name: codespell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8
+        with:
+          python-version: '3.10'
+      - name: Install docs deps
+        run: uv sync --group docs --no-install-project
+      - name: Spell-check user-facing docs
+        # engineering/ uses domain notation and is excluded from the site
+        run: uv run --no-sync codespell docs/ --skip "docs/engineering"
+
   deploy:
-    needs: build
+    needs: [build, spell]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment:
       name: github-pages

@@ -1,0 +1,56 @@
+# cargo-deny configuration. Run with `just audit` or `cargo deny check`.
+# Docs: https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+# Audit the production graph (default feature set per crate). The optional
+# `viz` feature pulls in `rerun`, which transitively brings ~dozens of
+# advisories we cannot patch upstream; `bench-internals` pulls in
+# `rand`/`rand_distr` which are dev/bench-only by design (see
+# `docs/engineering/constraints.md` §5). Neither ships in the production
+# wheel — so scope deny to what users actually consume.
+all-features = false
+no-default-features = false
+exclude-dev = true
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = [
+    # `paste` is archived/unmaintained, pulled transitively by `nalgebra ->
+    # simba`. No safe upgrade is available; revisit when nalgebra/simba
+    # migrate to `pastey` or an equivalent successor.
+    { id = "RUSTSEC-2024-0436", reason = "transitive via nalgebra/simba; no fix upstream" },
+]
+
+[licenses]
+version = 2
+# Allowlist. Any dependency under an unlisted license fails the build; add
+# entries here only after a deliberate review.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "Zlib",
+    "MPL-2.0",
+    "CC0-1.0",
+]
+confidence-threshold = 0.93
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# `path = "../locus-core"` is a workspace-internal path dep, not a true
+# wildcard version constraint. Permit it.
+allow-wildcard-paths = true
+deny = []
+skip = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

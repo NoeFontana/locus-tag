@@ -11,22 +11,59 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
-  tests:
-    uses: ./.github/workflows/_tests.yml
-    with:
-      python-matrix: '["3.10", "3.11", "3.12"]'
+  # Tag-gated guard: refuse to release a `vX.Y.Z` tag that doesn't match the
+  # on-disk versions in both `crates/locus-core/Cargo.toml` and
+  # `pyproject.toml`. Catches a forgotten bump before either registry has a
+  # chance to accept the upload — neither PyPI nor crates.io permits
+  # re-uploading the same version, so a mismatch caught post-publish costs a
+  # patch bump.
+  verify-tag:
+    name: Verify tag matches on-disk versions
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.gate.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Assert tag == locus-core Cargo.toml == pyproject.toml
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF#refs/tags/v}"
+          core_version="$(cargo metadata --format-version 1 --no-deps \
+            | python3 -c "import json,sys; m=json.load(sys.stdin); print(next(p['version'] for p in m['packages'] if p['name']=='locus-core'))")"
+          py_version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          echo "tag=${tag}  locus-core=${core_version}  pyproject=${py_version}"
+          if [[ "$tag" != "$core_version" || "$tag" != "$py_version" ]]; then
+            echo "::error::tag v${tag} does not match locus-core=${core_version} / pyproject=${py_version}" >&2
+            exit 1
+          fi
+      # Single source of truth for "should this tag publish?". Both
+      # publish-pypi and publish-crates-io read `needs.verify-tag.outputs.publish`.
+      - name: Compute publish gate (skip RC tags)
+        id: gate
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* && "${GITHUB_REF}" != *-rc.* ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
 
   build-rust:
     name: Build & Verify Crate
-    needs: tests
+    needs: verify-tag
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-build-rust
       - name: Package locus-core
         run: cargo package -p locus-core --locked
       - name: Upload Crate Artifact
@@ -38,7 +75,7 @@ jobs:
 
   build-wheels:
     name: Build Wheels (${{ matrix.target }})
-    needs: tests
+    needs: verify-tag
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -50,12 +87,14 @@ jobs:
         if: matrix.target == 'aarch64'
         uses: docker/setup-qemu-action@v4
 
+      # pyo3 is pinned to abi3-py310 in crates/locus-py/Cargo.toml, so a
+      # single wheel per target covers Python 3.10+ — no per-Py matrix.
       - name: Build Wheels
         uses: PyO3/maturin-action@v1
         with:
           command: build
           target: ${{ matrix.target }}-unknown-linux-gnu
-          args: --out dist --release
+          args: --out dist --release --manifest-path crates/locus-py/Cargo.toml
           manylinux: 2_28
 
       - name: Upload Wheels
@@ -67,14 +106,14 @@ jobs:
 
   build-sdist:
     name: Build Source Distribution
-    needs: tests
+    needs: verify-tag
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: astral-sh/setup-uv@v7
+      - uses: ./.github/actions/setup-toolchain
         with:
           python-version: '3.10'
+          cache-key: release-build-sdist
       - run: uv sync --group dev
 
       - name: Build Sdist
@@ -120,33 +159,60 @@ jobs:
             python:3.11-slim \
             bash scripts/ci/install_and_smoke_wheel.sh
 
-  publish:
-    name: Unified Publish
-    needs: [build-rust, build-wheels, build-sdist, wheel-validate]
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [verify-tag, build-wheels, build-sdist, wheel-validate]
     runs-on: ubuntu-latest
     environment: release
-    # Only run publish job for production tags (vX.Y.Z), skip for RCs (vX.Y.Z-rc.N)
-    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-rc.')
+    if: needs.verify-tag.outputs.publish == 'true'
+    permissions:
+      id-token: write   # OIDC for PyPI Trusted Publisher
     steps:
       - uses: actions/checkout@v6
 
-      - name: Download All Artifacts
+      - name: Download wheels + sdist
         uses: actions/download-artifact@v8
         with:
           path: dist
-          pattern: '*'
+          pattern: 'wheels-*'
           merge-multiple: true
 
-      - name: Setup Python
-        uses: astral-sh/setup-uv@v7
+      - name: Download sdist
+        uses: actions/download-artifact@v8
+        with:
+          name: sdist
+          path: dist
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v8
         with:
           python-version: '3.10'
 
-      - name: Publish Python Distributions to PyPI
-        run: uv publish dist/* --trusted-publishing automatic
+      - name: Publish to PyPI (Trusted Publisher)
+        run: uv publish dist/*.whl dist/*.tar.gz --trusted-publishing automatic
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+  publish-crates-io:
+    name: Publish to crates.io
+    needs: [verify-tag, build-rust, wheel-validate]
+    runs-on: ubuntu-latest
+    environment: release
+    if: needs.verify-tag.outputs.publish == 'true'
+    permissions:
+      id-token: write   # OIDC for rust-lang/crates-io-auth-action
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Publish locus-core to Crates.io
-        run: cargo publish -p locus-core --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      # Trusted Publisher (OIDC) — replaces the long-lived
+      # CARGO_REGISTRY_TOKEN secret. Requires one-time setup at
+      # https://crates.io/me/trusted-publishers for `locus-core` pointing at
+      # `.github/workflows/release.yml`.
+      - name: Mint short-lived crates.io token
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+
+      - name: cargo publish locus-core
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish -p locus-core
