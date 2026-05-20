@@ -5,13 +5,13 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## [0.5.0] - 2026-05-20
+
 ### BREAKING CHANGES
 
 Detector configuration has been unified around JSON profiles. Four
 overlapping config paths have been collapsed into one; migration is
 documented in [docs/migration/config-refactor.md](docs/migration/config-refactor.md).
-The public version number is not bumped in this release — the bump will
-be batched with other breaking changes in a later cleanup PR.
 
 - **Removed** `DetectorPreset` enum; pass `profile="standard" | "grid" | "high_accuracy"` as a string.
 - **Removed** flat detector kwargs on `Detector.__init__` (`threshold_tile_size`, `quad_min_edge_score`, `refinement_mode`, etc.). Use `locus.DetectorConfig.from_profile(...)` and edit the nested model.
