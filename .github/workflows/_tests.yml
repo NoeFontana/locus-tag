@@ -89,8 +89,13 @@ jobs:
       # Supply-chain audit: license allowlist, advisories, multiple-versions
       # policy, sources allowlist. Inlined here to reuse the toolchain
       # cache rather than spinning up a dedicated runner.
+      # `arguments: ''` overrides the action's default `--all-features`,
+      # which would otherwise pull in optional `viz`/`bench-internals`
+      # deps and contradict the `[graph]` scope in deny.toml.
       - name: cargo deny
         uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          arguments: ''
 
       - name: Verify locus-core packages cleanly
         run: cargo package -p locus-core --locked --no-verify
