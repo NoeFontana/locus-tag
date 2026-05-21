@@ -541,6 +541,32 @@ fn record_rejection(telemetry: &mut Option<Box<CharucoTelemetry>>, px: f64, py: 
 /// Returns `(Some((refined_x, refined_y, det_S)), det_S)` on convergence.
 /// On failure returns `(None, last_det)` where `last_det` is the structure
 /// tensor determinant at the rejection point (0.0 if iteration never started).
+///
+/// # Note — Newton step quenching (latent issue)
+///
+/// The Newton step `-S⁻¹·∇I_centre` is quenched by structure-tensor scaling:
+/// `|step| ~ |∇I| / det(S) ~ 1e-5 px` for typical contrast, and the
+/// squared-norm convergence threshold `1e-10` trips on iteration 1. The
+/// function effectively returns its homography-projected input unchanged.
+/// The gradient sample is also taken at the integer floor of the seed only,
+/// so sub-pixel perturbations of the seed are preserved verbatim.
+///
+/// Prior to the 2026-05-16 homography fix in `decoder.rs`, this masked a
+/// catastrophic mismatch between `batch.corners[]` (post-rotation) and
+/// `batch.homographies[]` (pre-rotation): saddles were projected through a
+/// stale homography, producing 81° p99 rotation error and 35 % no-estimate
+/// frames. After the homography fix, `CharucoRefiner` correctly projects
+/// saddle predictions, and the Newton no-op merely returns those (correct)
+/// predictions unchanged — yielding ~1.8° mean rot error against ground
+/// truth, still ~17× worse than `BoardEstimator` but no longer catastrophic.
+///
+/// The principled replacement is the direct Förstner formula
+/// `saddle = (Σ ∇I·∇Iᵀ)⁻¹ · (Σ ∇I·∇Iᵀ · pᵢ)` — single 2×2 linear solve,
+/// sub-pixel by construction. Reference implementation in
+/// `tests/regression_board_hub.rs::forstner_saddle`. Empirically, applying
+/// Förstner to ArUco-on-chessboard corners REGRESSES pose by 350 % at p99
+/// due to bit-pattern PSF leakage — see `project_aprilgrid_saddle_refinement_negative.md`
+/// and `project_refine_saddle_noop.md` before touching this function.
 fn refine_saddle(
     img: &ImageView,
     mut px: f64,
