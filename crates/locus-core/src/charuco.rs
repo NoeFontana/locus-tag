@@ -361,11 +361,15 @@ impl CharucoRefiner {
                 self.scratch_obj[num_accepted] = sp;
                 // Information matrix = covariance^{-1}.
                 #[allow(clippy::cast_possible_truncation)]
+                // Charuco saddle refinement has no ERF MSE source — pass
+                // `empirical_n_sq = 0.0` to recover the pre-Phase-4
+                // structure-tensor-only covariance formula.
                 let cov = compute_corner_covariance(
                     img,
                     [refined_px, refined_py],
                     0.1,
                     2.0,
+                    0.0,
                     Self::ST_RADIUS as i32,
                 );
                 self.scratch_info[num_accepted] = cov.try_inverse().unwrap_or(Matrix2::identity());

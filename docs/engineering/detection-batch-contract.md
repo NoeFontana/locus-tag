@@ -22,13 +22,14 @@ The DetectionBatch struct encapsulates the following parallel arrays (slices):
 *   `status_mask`: `[CandidateState; MAX_CANDIDATES]` (A dense byte-array tracking the lifecycle. e.g., Empty, Active, FailedDecode, Valid).
 *   `funnel_status`: `[FunnelStatus; MAX_CANDIDATES]` (Detailed status from the fast-path funnel for rejected quads).
 *   `corner_covariances`: `[[f32; 16]; MAX_CANDIDATES]` (Four 2×2 per-corner covariance matrices, packed row-major as 16 floats; populated by GWLF refinement and consumed by the weighted pose solver).
+*   `corner_empirical_noise`: `[[f32; 4]; MAX_CANDIDATES]` (Phase 4 per-corner empirical noise variance σ_n² in px², drawn from the ERF edge-fit residual MSE; **Phase-D internal input**, inert when `pose.use_empirical_corner_noise = false`. `0.0` sentinel means "no ERF measurement on either adjacent edge" and reduces to today's behaviour. See `docs/engineering/pose_covariance_followup_2026-05-22.md` §4).
 
 ## 4. Phase-Isolated Execution Privileges
 To prevent data contention and enable lock-free parallelization (Rayon), engineers must adhere to strict Read/Write privileges for each phase of the pipeline. These privileges are enforced by the `contract_detection_batch` integration test (see `crates/locus-core/tests/contract_detection_batch.rs`), which seeds every column with sentinel values and asserts that a single phase only mutates its declared write set.
 
 ### Phase A: Contour Extraction
-*   **Privileges**: Write to `corners`, `status_mask`, and `corner_covariances`.
-*   **Contract**: The extractor sequentially writes quad vertices into memory, zeroes the covariance blocks (or fills them with Structure-Tensor estimates when GWLF is enabled), and marks each populated slot `Active`. It returns a single integer N representing the total active candidates found in the frame.
+*   **Privileges**: Write to `corners`, `status_mask`, `corner_covariances`, and `corner_empirical_noise`.
+*   **Contract**: The extractor sequentially writes quad vertices into memory, zeroes the covariance blocks (or fills them with Structure-Tensor estimates when GWLF is enabled), populates `corner_empirical_noise` with per-corner ERF residual MSEs (or the `0.0` sentinel when the route does not run ERF), and marks each populated slot `Active`. It returns a single integer N representing the total active candidates found in the frame.
 
 ### Phase B: Homography Computation
 *   **Privileges**: Read-Only on `corners[0..N]` and `status_mask[0..N]`; Write-Only on `homographies[0..N]`.
@@ -43,8 +44,8 @@ To prevent data contention and enable lock-free parallelization (Rayon), enginee
 *   **Contract**: This phase executes the SIMD bilinear interpolation. If a candidate fails the Hamming distance check, its `status_mask` at index i is flipped to `FailedDecode`. On successful decode with non-zero rotation, the four corners are cyclically permuted in place to match the decoded rotation so that downstream consumers see canonical orientation. When soft-decoding / ERF refinement is active, refined sub-pixel corners are also written back. This is the single exception to the "corners is read-only after Phase A" principle: the rotation permutation preserves the identity invariant (index `i` still refers to the same marker) but renames the four corner slots.
 
 ### Phase D: Pose Refinement
-*   **Privileges**: Read-Only on `corners`, `status_mask`, and `corner_covariances`. Write-Only on `poses`.
-*   **Contract**: Before this phase runs, the arrays must be Partitioned. Candidates marked Valid are swapped to the front of the arrays `[0..V]`. The heavy Anisotropic Levenberg-Marquardt solver then strictly iterates over `[0..V]`, calculating 6D poses only for mathematically verified markers. When `corner_covariances` contains non-zero entries from GWLF, the weighted path consumes them as Fisher-information priors.
+*   **Privileges**: Read-Only on `corners`, `status_mask`, `corner_covariances`, and `corner_empirical_noise`. Write-Only on `poses`.
+*   **Contract**: Before this phase runs, the arrays must be Partitioned. Candidates marked Valid are swapped to the front of the arrays `[0..V]`. The heavy Anisotropic Levenberg-Marquardt solver then strictly iterates over `[0..V]`, calculating 6D poses only for mathematically verified markers. When `corner_covariances` contains non-zero entries from GWLF, the weighted path consumes them as Fisher-information priors. When `pose.use_empirical_corner_noise = true`, `corner_empirical_noise[i]` inflates the per-corner structure-tensor variance via `max(σ_n², min(empirical, 16·σ_n²))` (Phase 4 — `docs/engineering/pose_covariance_followup_2026-05-22.md` §4).
 
 ## 5. The FFI Boundary (Object Reassembly)
 The Python environment and downstream consumers expect discrete objects. The SoA architecture must not leak across the FFI boundary.
