@@ -364,6 +364,10 @@ pub fn estimate_tag_pose_with_config(
         config.pose_consistency_fpr,
         config.pose_consistency_min_decisive_ratio,
     );
+    // This public single-call entrypoint has no access to the per-corner
+    // SoA column produced by Phase A; callers that want Phase 4
+    // empirical-noise inflation must go through the SoA batch path
+    // (`pipeline::run_detection_pipeline`).
     let (pose, cov, _diag) = estimate_tag_pose_with_diagnostics(
         intrinsics,
         corners,
@@ -371,6 +375,7 @@ pub fn estimate_tag_pose_with_config(
         img,
         config,
         external_covariances,
+        None,
         thresholds,
     );
     (pose, cov)
@@ -458,6 +463,7 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
     img: Option<&ImageView>,
     config: &crate::config::DetectorConfig,
     external_covariances: Option<&[Matrix2<f64>; 4]>,
+    external_empirical_noise: Option<&[f32; 4]>,
     thresholds: Option<ConsistencyThresholds>,
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>, PoseDiagnostics) {
     // For distorted cameras, IPPE runs in ideal space; LM residuals run in
@@ -483,8 +489,14 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
     };
 
     // LM weighting (Some when GWLF/structure-tensor input is available).
-    let covariances =
-        build_lm_covariances(config, img, &ideal_corners, &h_poly, external_covariances);
+    let covariances = build_lm_covariances(
+        config,
+        img,
+        &ideal_corners,
+        &h_poly,
+        external_covariances,
+        external_empirical_noise,
+    );
 
     // Isotropic Σ⁻¹ = (1/σ²)·I for the χ² gate and the branch selector's
     // fallback path — see `DetectorConfig::pose_consistency_gate_sigma_px`
@@ -560,17 +572,29 @@ fn build_lm_covariances(
     ideal_corners: &[[f64; 2]; 4],
     h_poly: &crate::decoder::Homography,
     external_covariances: Option<&[Matrix2<f64>; 4]>,
+    external_empirical_noise: Option<&[f32; 4]>,
 ) -> Option<[Matrix2<f64>; 4]> {
     if let Some(ext) = external_covariances {
         return Some(*ext);
     }
     let image = img?;
+    // Phase 4: only thread the per-corner empirical noise into the
+    // structure-tensor inflation when the profile opts in. Gating here
+    // (rather than at every call site) keeps the LM path byte-identical
+    // for profiles that have not yet been re-blessed for the new
+    // covariance shape.
+    let empirical = if config.use_empirical_corner_noise {
+        external_empirical_noise
+    } else {
+        None
+    };
     Some(crate::pose_weighted::compute_framework_uncertainty(
         image,
         ideal_corners,
         h_poly,
         config.tikhonov_alpha_max,
         config.sigma_n_sq,
+        empirical,
         config.structure_tensor_radius,
     ))
 }
@@ -1531,6 +1555,12 @@ pub fn refine_poses_soa_with_config(
                     None
                 };
 
+            // Phase 4 — per-corner ERF residual MSE. `build_lm_covariances`
+            // ignores this slice when `config.use_empirical_corner_noise`
+            // is `false`, so passing it unconditionally is a no-op for
+            // profiles that haven't opted in.
+            let ext_empirical = &batch.corner_empirical_noise[i];
+
             let (pose_opt, _, diag) = estimate_tag_pose_with_diagnostics(
                 intrinsics,
                 &corners,
@@ -1538,6 +1568,7 @@ pub fn refine_poses_soa_with_config(
                 img,
                 config,
                 ext_covs_opt.as_ref(),
+                Some(ext_empirical),
                 thresholds,
             );
 
@@ -1688,8 +1719,18 @@ pub fn bench_estimate_both_branches(
     h_metric.column_mut(1).scale_mut(scaler);
 
     let candidates = solve_ippe_square(&h_metric)?;
-    let covariances =
-        build_lm_covariances(config, img, &ideal_corners, &h_poly, external_covariances);
+    // Bench branch helper does not have access to the SoA empirical-noise
+    // column; pass `None` to preserve pre-Phase-4 behaviour. Use the
+    // batch-aware pipeline (`refine_poses_soa_with_config`) for Phase 4
+    // coverage during regression.
+    let covariances = build_lm_covariances(
+        config,
+        img,
+        &ideal_corners,
+        &h_poly,
+        external_covariances,
+        None,
+    );
     let gate_info_matrices = isotropic_info_matrices(config.pose_consistency_gate_sigma_px);
     let info_matrices = pick_selector_info(covariances.as_ref(), &gate_info_matrices);
 
@@ -1758,7 +1799,8 @@ pub fn bench_refit_pose_drop_corner(
     let Some(h_poly) = crate::decoder::Homography::square_to_quad(&ideal_corners) else {
         return initial_pose;
     };
-    let covariances_opt = build_lm_covariances(config, img, &ideal_corners, &h_poly, None);
+    let covariances_opt =
+        build_lm_covariances(config, img, &ideal_corners, &h_poly, None, None);
 
     if let Some(mut covs) = covariances_opt {
         // Inflate the dropped corner's covariance ⇒ its info matrix shrinks
@@ -1808,6 +1850,7 @@ pub fn bench_estimate_tag_pose(
     img: Option<&ImageView>,
     config: &crate::config::DetectorConfig,
     external_covariances: Option<&[Matrix2<f64>; 4]>,
+    external_empirical_noise: Option<&[f32; 4]>,
     fpr: Option<f64>,
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>, BenchPoseDiagnostics) {
     let thresholds = fpr.and_then(|f| {
@@ -1820,6 +1863,7 @@ pub fn bench_estimate_tag_pose(
         img,
         config,
         external_covariances,
+        external_empirical_noise,
         thresholds,
     );
     (pose, cov, BenchPoseDiagnostics::from(diag))

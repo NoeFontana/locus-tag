@@ -42,7 +42,17 @@ const MIN_OUTER_DIM_FALLBACK: u32 = 6;
 /// 3. Per-corner covariances (zero for ContourRdp, populated for EdLines GN).
 /// 4. Route label — `0` low, `1` high, `ROUTED_TO_STATIC` for `Static`.
 /// 5. PPB estimate (0.0 under `Static`, else `bbox_short / min_outer_dim`).
-pub(crate) type ExtractionResult = ([Point; 4], [Point; 4], CornerCovariances, u8, f32);
+/// 6. Per-corner empirical σ_n² (px², from ERF residual MSE; `[0.0; 4]`
+///    sentinel when no ERF measurement is available — see
+///    [`crate::refinement::CornerEmpiricalNoise`]).
+pub(crate) type ExtractionResult = (
+    [Point; 4],
+    [Point; 4],
+    CornerCovariances,
+    u8,
+    f32,
+    crate::refinement::CornerEmpiricalNoise,
+);
 
 // Re-export the canonical Point type from the crate root.
 pub use crate::Point;
@@ -187,7 +197,7 @@ pub fn extract_quads_soa(
         None
     };
 
-    for (i, (corners, unrefined_pts, covs, route_label, ppb_estimate)) in
+    for (i, (corners, unrefined_pts, covs, route_label, ppb_estimate, empirical_noise)) in
         detections.into_iter().enumerate()
     {
         for (j, corner) in corners.iter().enumerate() {
@@ -207,6 +217,10 @@ pub fn extract_quads_soa(
                 chunk.copy_from_slice(cov);
             }
         }
+        // Write per-corner empirical σ_n² (4 floats per candidate). `0.0`
+        // sentinel for corners that didn't traverse ERF; the pose stage
+        // falls back to constant `σ_n²` for those via `max(σ_n², empirical)`.
+        batch.corner_empirical_noise[i] = empirical_noise;
         if let Some(ref mut u) = unrefined {
             u.push(unrefined_pts);
         }
@@ -409,7 +423,7 @@ fn extract_single_quad(
     }
 
     if ok {
-        let (corners, out_covs) = crate::refinement::refine_quad_corners(
+        let (corners, out_covs, empirical_noise) = crate::refinement::refine_quad_corners(
             arena,
             refinement_img,
             quad_pts,
@@ -422,7 +436,14 @@ fn extract_single_quad(
 
         let edge_score = calculate_edge_score(refinement_img, corners);
         if edge_score > config.quad_min_edge_score {
-            return Some((corners, quad_pts, out_covs, route_label, ppb_estimate));
+            return Some((
+                corners,
+                quad_pts,
+                out_covs,
+                route_label,
+                ppb_estimate,
+                empirical_noise,
+            ));
         }
     }
     None
@@ -538,7 +559,7 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
         None
     };
 
-    for (i, (corners, unrefined_pts, covs, route_label, ppb_estimate)) in
+    for (i, (corners, unrefined_pts, covs, route_label, ppb_estimate, empirical_noise)) in
         detections.into_iter().enumerate()
     {
         for (j, corner) in corners.iter().enumerate() {
@@ -557,6 +578,7 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
                 chunk.copy_from_slice(cov);
             }
         }
+        batch.corner_empirical_noise[i] = empirical_noise;
         if let Some(ref mut u) = unrefined {
             u.push(unrefined_pts);
         }
@@ -781,68 +803,78 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     let (_route_extraction, route_refinement, route_label, ppb_estimate) =
         resolve_route(config, bbox_w.min(bbox_h), min_outer_dim, true);
 
-    let (corners, out_covs) = if route_refinement == crate::config::CornerRefinementMode::None {
-        (quad_pts, [[0.0_f32; 4]; 4])
-    } else if C::IS_RECTIFIED {
-        let use_erf = route_refinement == crate::config::CornerRefinementMode::Erf;
-        (
-            refine_all_quad_corners(
+    let (corners, out_covs, out_empirical_noise) =
+        if route_refinement == crate::config::CornerRefinementMode::None {
+            (
+                quad_pts,
+                [[0.0_f32; 4]; 4],
+                crate::refinement::NO_EMPIRICAL_NOISE_SENTINEL,
+            )
+        } else if C::IS_RECTIFIED {
+            // Pinhole camera path — share the rectified-pipeline refiner,
+            // which produces per-corner ERF MSE when `use_erf=true`.
+            let use_erf = route_refinement == crate::config::CornerRefinementMode::Erf;
+            let (refined, empirical) = refine_all_quad_corners(
                 arena,
                 refinement_img,
                 quad_pts,
                 config.subpixel_refinement_sigma,
                 decimation,
                 use_erf,
-            ),
-            [[0.0_f32; 4]; 4],
-        )
-    } else {
-        (
-            [
-                refine_corner_with_camera(
-                    refinement_img,
-                    quad_rect_full[0],
-                    quad_rect_full[3],
-                    quad_rect_full[1],
-                    quad_pts[0],
-                    decimation,
-                    intrinsics,
-                    camera,
-                ),
-                refine_corner_with_camera(
-                    refinement_img,
-                    quad_rect_full[1],
-                    quad_rect_full[0],
-                    quad_rect_full[2],
-                    quad_pts[1],
-                    decimation,
-                    intrinsics,
-                    camera,
-                ),
-                refine_corner_with_camera(
-                    refinement_img,
-                    quad_rect_full[2],
-                    quad_rect_full[1],
-                    quad_rect_full[3],
-                    quad_pts[2],
-                    decimation,
-                    intrinsics,
-                    camera,
-                ),
-                refine_corner_with_camera(
-                    refinement_img,
-                    quad_rect_full[3],
-                    quad_rect_full[2],
-                    quad_rect_full[0],
-                    quad_pts[3],
-                    decimation,
-                    intrinsics,
-                    camera,
-                ),
-            ],
-            [[0.0_f32; 4]; 4],
-        )
-    };
+            );
+            (refined, [[0.0_f32; 4]; 4], empirical)
+        } else {
+            // Distorted-camera path uses `refine_corner_with_camera`
+            // (gradient-peak fits in rectified space). No ERF MSE is
+            // produced — sentinel keeps Phase D on its constant-σ_n²
+            // fallback.
+            (
+                [
+                    refine_corner_with_camera(
+                        refinement_img,
+                        quad_rect_full[0],
+                        quad_rect_full[3],
+                        quad_rect_full[1],
+                        quad_pts[0],
+                        decimation,
+                        intrinsics,
+                        camera,
+                    ),
+                    refine_corner_with_camera(
+                        refinement_img,
+                        quad_rect_full[1],
+                        quad_rect_full[0],
+                        quad_rect_full[2],
+                        quad_pts[1],
+                        decimation,
+                        intrinsics,
+                        camera,
+                    ),
+                    refine_corner_with_camera(
+                        refinement_img,
+                        quad_rect_full[2],
+                        quad_rect_full[1],
+                        quad_rect_full[3],
+                        quad_pts[2],
+                        decimation,
+                        intrinsics,
+                        camera,
+                    ),
+                    refine_corner_with_camera(
+                        refinement_img,
+                        quad_rect_full[3],
+                        quad_rect_full[2],
+                        quad_rect_full[0],
+                        quad_pts[3],
+                        decimation,
+                        intrinsics,
+                        camera,
+                    ),
+                ],
+                [[0.0_f32; 4]; 4],
+                crate::refinement::NO_EMPIRICAL_NOISE_SENTINEL,
+            )
+        };
 
     // Edges between distorted corners are *curved* in the image, so a
     // straight-line edge score would sample the tag interior and spuriously
@@ -857,7 +889,16 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
         return None;
     }
 
-    Some((corners, quad_pts, out_covs, route_label, ppb_estimate))
+    // Empirical noise is non-sentinel only on the rectified+ERF sub-path
+    // (see the `if/else` above); the distorted path uses the sentinel.
+    Some((
+        corners,
+        quad_pts,
+        out_covs,
+        route_label,
+        ppb_estimate,
+        out_empirical_noise,
+    ))
 }
 
 /// Quad extraction with custom configuration.
@@ -900,7 +941,7 @@ pub fn extract_quads_with_config(
                     MIN_OUTER_DIM_FALLBACK,
                 );
 
-                let (corners, _unrefined, _covs, _route, _ppb) = quad_result?;
+                let (corners, _unrefined, _covs, _route, _ppb, _empirical) = quad_result?;
                 let area = polygon_area(&corners);
 
                 Some(Detection {
@@ -1287,16 +1328,21 @@ pub(crate) fn fit_edge_line(
     Some((nx, ny, sum_d / f64::from(count)))
 }
 
-/// Refine edge position using the unified ERF intensity model and return
-/// the line coefficients `(nx, ny, d)` for downstream intersection in
-/// `refine_corner`.
+/// Refine edge position using the unified ERF intensity model.
+///
+/// Returns the line coefficients `(nx, ny, d)` alongside the final
+/// per-sample residual MSE from the converged Gauss-Newton fit. The MSE
+/// is NaN if the fitter could not run an iteration (sample shortfall);
+/// callers use that as the "no empirical noise estimate" signal.
 ///
 /// The fitter uses a left-hand normal convention; `refine_corner`'s
-/// intersection math is sign-invariant because both sibling lines flip together.
+/// intersection math is sign-invariant because both sibling lines flip
+/// together.
 ///
-/// `fit()` may return false on sample shortfall or low contrast; in that case
-/// `line_params()` still holds the geometric normal of p1→p2, which is a
-/// safer fallback than `fit_edge_line`'s gradient-peak search.
+/// `fit()` may return false on sample shortfall or low contrast; in
+/// that case `line_params()` still holds the geometric normal of
+/// p1→p2 (a safer fallback than `fit_edge_line`'s gradient-peak
+/// search), and `last_residual_mse()` is NaN.
 pub(crate) fn refine_edge_erf(
     arena: &Bump,
     img: &ImageView,
@@ -1304,12 +1350,12 @@ pub(crate) fn refine_edge_erf(
     p2: Point,
     sigma: f64,
     decimation: usize,
-) -> Option<(f64, f64, f64)> {
+) -> Option<((f64, f64, f64), f64)> {
     let mut fitter = ErfEdgeFitter::new(img, [p1.x, p1.y], [p2.x, p2.y], true)?;
     let sample_cfg = SampleConfig::for_quad(fitter.edge_len(), decimation);
     let refine_cfg = RefineConfig::quad_style(sigma);
     fitter.fit(arena, &sample_cfg, &refine_cfg);
-    Some(fitter.line_params())
+    Some((fitter.line_params(), fitter.last_residual_mse()))
 }
 
 /// Camera-aware corner refinement for the straight-space extractor.
@@ -2062,7 +2108,8 @@ mod tests {
                 y: true_y.round(),
             };
 
-            let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1, true);
+            let (refined, _empirical) =
+                refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1, true);
 
             let error_x = (refined.x - true_x).abs();
             let error_y = (refined.y - true_y).abs();
@@ -2111,7 +2158,8 @@ mod tests {
             y: corner_y,
         };
 
-        let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1, true);
+        let (refined, _empirical) =
+            refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1, true);
 
         // The x-coordinate should be refined to near the true edge position
         // y-coordinate depends on the horizontal edge (which doesn't exist in this test)

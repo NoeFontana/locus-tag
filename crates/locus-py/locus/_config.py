@@ -298,6 +298,21 @@ class PoseConfig(BaseModel):
     huber_delta_px: float = Field(default=1.5, ge=0.0)
     tikhonov_alpha_max: float = Field(default=0.25, ge=0.0)
     sigma_n_sq: float = Field(default=4.0, ge=0.0)
+    use_empirical_corner_noise: bool = Field(default=False)
+    """Phase 4 — inflate per-corner structure-tensor covariance with the
+    empirical ERF edge-fit residual MSE.
+
+    When ``True``, ``finalize_corner_covariance`` replaces the constant
+    ``sigma_n_sq`` with ``max(sigma_n_sq, empirical_n²)`` per corner
+    (clamped at ``16·sigma_n_sq``). Corners that did not traverse ERF
+    carry a ``0.0`` sentinel and reduce to today's behaviour.
+
+    Default ``False`` preserves byte-identity for the three profiles
+    (``standard``, ``grid``, ``max_recall_adaptive``) whose decoder routes
+    through ERF — re-blessing them is tracked as Phase 4 follow-ups in
+    ``docs/engineering/pose_covariance_followup_2026-05-22.md``.
+    ``high_accuracy`` opts in.
+    """
     structure_tensor_radius: int = Field(default=2, ge=1, le=8)
     pose_consistency_fpr: float = Field(default=0.0, ge=0.0, lt=1.0)
     """Target false-positive rate for the reprojection-consistency gate.
@@ -488,6 +503,7 @@ class DetectorConfig(BaseModel):
             huber_delta_px=self.pose.huber_delta_px,
             tikhonov_alpha_max=self.pose.tikhonov_alpha_max,
             sigma_n_sq=self.pose.sigma_n_sq,
+            use_empirical_corner_noise=self.pose.use_empirical_corner_noise,
             structure_tensor_radius=self.pose.structure_tensor_radius,
             pose_consistency_fpr=self.pose.pose_consistency_fpr,
             pose_consistency_gate_sigma_px=self.pose.pose_consistency_gate_sigma_px,

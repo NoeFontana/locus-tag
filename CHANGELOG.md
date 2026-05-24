@@ -5,6 +5,14 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Added
+
+- **Phase 4 — per-corner ERF empirical noise inflation** (`pose.use_empirical_corner_noise`, default `false`): per-corner empirical σ_n² drawn from the ERF edge-fit residual MSE inflates the structure-tensor corner covariance via `max(σ_n², min(empirical, 16·σ_n²))` inside `finalize_corner_covariance`. The ceiling clamp bounds the Phase-2 tail-cliff failure mode. Only `high_accuracy` opts in this PR; `standard`, `grid`, `max_recall_adaptive` stay default-off pending per-profile audit re-runs. Mechanism documented in `docs/engineering/pose_covariance_followup_2026-05-22.md` §4.
+- `DetectionBatch::corner_empirical_noise: [[f32; 4]; MAX_CANDIDATES]` SoA column populated by Phase A (Erf route) and consumed by Phase D. `0.0` sentinel preserves pre-Phase-4 behaviour for corners that did not traverse ERF. Documented in `docs/engineering/detection-batch-contract.md`.
+- `ErfEdgeFitter::last_residual_mse()` accessor surfacing the converged per-sample residual MSE from the Gauss-Newton fit, used to build the per-corner empirical noise estimate.
+- `_bench_compute_corner_covariance(...)` (Python FFI) and `bench_compute_corner_covariance(...)` (Rust bench API) gain an `empirical_n_sq` argument; defaults to `0.0` (no inflation) for callers that omit it.
+- SIMD parity test pinning the 4-tuple return of `refine_accumulate_optimized` (incl. the new `sum_res_sq` + `sample_count` accumulators) against a scalar reference; `refinement::combine_edge_mses` and `pose_weighted::effective_sigma_n_sq` unit tests.
+
 ## [0.5.0] - 2026-05-20
 
 ### BREAKING CHANGES
