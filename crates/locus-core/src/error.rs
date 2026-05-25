@@ -46,6 +46,14 @@ pub enum ConfigError {
     /// branch-ratio escape clause and keep only the χ² test.
     #[error("pose_consistency_min_decisive_ratio must be >= 1.0, got {0}")]
     InvalidPoseConsistencyMinDecisiveRatio(f64),
+    /// Outlier-drop d² threshold must be `>= 0.0` and finite.
+    ///
+    /// `0.0` disables the mechanism. Positive finite values are interpreted
+    /// as the squared-Mahalanobis trigger above which the worst corner is
+    /// masked and the LM is re-run. Negative or non-finite values are
+    /// rejected to surface configuration mistakes.
+    #[error("outlier_drop_d2_threshold must be finite and >= 0.0, got {0}")]
+    InvalidOutlierDropD2Threshold(f64),
     /// EdLines is geometrically incompatible with Erf corner refinement.
     ///
     /// Erf performs an independent 1-D search per corner which destroys the

@@ -331,6 +331,22 @@ class PoseConfig(BaseModel):
     for the escape to fire. Set to ``math.inf`` (Rust-side ``f64::INFINITY``)
     to disable the escape and use only the χ² test.
     """
+    outlier_drop_d2_threshold: float = Field(default=0.0, ge=0.0)
+    """Outlier-aware corner-drop trigger threshold (squared Mahalanobis).
+
+    After the weighted LM converges, if any corner's reprojection
+    ``d²_i = rᵢᵀ Σᵢ⁻¹ rᵢ`` exceeds this threshold *and* dominates the
+    second-worst corner by ≥ 2×, Phase D masks that corner (zeroes its
+    info matrix), re-runs the LM warm-started, and keeps the 3-corner
+    pose iff its aggregate d² over the **three kept corners** is strictly
+    lower than the 4-corner pose's aggregate d² over those same three
+    corners (self-rejection invariant).
+
+    ``0.0`` (the default) disables the mechanism, preserving byte-identity
+    for profiles that have not opted in. Recommended value: ``25.0``
+    (≈ 5σ², χ²(1; 1.5e-6)) — only fires on genuinely catastrophic
+    outliers driving the rotation p99 tail. ``high_accuracy`` opts in.
+    """
 
 
 class SegmentationConfig(BaseModel):
@@ -492,6 +508,7 @@ class DetectorConfig(BaseModel):
             pose_consistency_fpr=self.pose.pose_consistency_fpr,
             pose_consistency_gate_sigma_px=self.pose.pose_consistency_gate_sigma_px,
             pose_consistency_min_decisive_ratio=self.pose.pose_consistency_min_decisive_ratio,
+            outlier_drop_d2_threshold=self.pose.outlier_drop_d2_threshold,
             segmentation_connectivity=self.segmentation.connectivity,
             segmentation_margin=self.segmentation.margin,
         )

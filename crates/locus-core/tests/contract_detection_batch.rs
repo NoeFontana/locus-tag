@@ -48,6 +48,8 @@ enum Column {
     PoseConsistencyD2MaxCorner,
     #[cfg(feature = "bench-internals")]
     IppeBranchD2Ratio,
+    #[cfg(feature = "bench-internals")]
+    OutlierCornerIdx,
     RoutedTo,
     PpbEstimate,
 }
@@ -91,6 +93,9 @@ fn seed_sentinels(batch: &mut DetectionBatch) {
             batch.pose_consistency_d2[i] = F32_SENTINEL;
             batch.pose_consistency_d2_max_corner[i] = F32_SENTINEL;
             batch.ippe_branch_d2_ratio[i] = F32_SENTINEL;
+            // 222 differs from the production sentinel (u8::MAX) and from the
+            // valid drop indices (0..=3), so any Phase D write is caught.
+            batch.outlier_corner_idx[i] = 222;
         }
         // Routed-to/ppb telemetry columns: distinctive sentinels that differ
         // from both the `DetectionBatch::new()` defaults (ROUTED_TO_STATIC,
@@ -156,6 +161,9 @@ fn changed_columns(before: &DetectionBatch, after: &DetectionBatch) -> BTreeSet<
         if bytes_of(&before.ippe_branch_d2_ratio[..]) != bytes_of(&after.ippe_branch_d2_ratio[..]) {
             set.insert(Column::IppeBranchD2Ratio);
         }
+        if bytes_of(&before.outlier_corner_idx[..]) != bytes_of(&after.outlier_corner_idx[..]) {
+            set.insert(Column::OutlierCornerIdx);
+        }
     }
     if bytes_of(&before.routed_to[..]) != bytes_of(&after.routed_to[..]) {
         set.insert(Column::RoutedTo);
@@ -187,6 +195,8 @@ fn snapshot(batch: &DetectionBatch) -> Box<DetectionBatch> {
             .copy_from_slice(&batch.pose_consistency_d2_max_corner);
         out.ippe_branch_d2_ratio
             .copy_from_slice(&batch.ippe_branch_d2_ratio);
+        out.outlier_corner_idx
+            .copy_from_slice(&batch.outlier_corner_idx);
     }
     out.routed_to.copy_from_slice(&batch.routed_to);
     out.ppb_estimate.copy_from_slice(&batch.ppb_estimate);
@@ -570,6 +580,7 @@ fn contract_phase_d_refine_poses_soa() {
                 Column::PoseConsistencyD2,
                 Column::PoseConsistencyD2MaxCorner,
                 Column::IppeBranchD2Ratio,
+                Column::OutlierCornerIdx,
             ]
         }
         #[cfg(not(feature = "bench-internals"))]

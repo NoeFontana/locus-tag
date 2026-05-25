@@ -99,6 +99,17 @@ pub struct DetectionBatch {
     /// fits much better). NaN sentinel as above.
     #[cfg(feature = "bench-internals")]
     pub ippe_branch_d2_ratio: [f32; MAX_CANDIDATES],
+    /// Outlier-aware corner-drop telemetry. `u8::MAX` ⇒ no corner was
+    /// dropped for this candidate (either the trigger didn't fire or the
+    /// 3-corner self-rejection kept the 4-corner pose). Values `0..=3`
+    /// identify which corner was masked when the 3-corner pose was kept;
+    /// in that case the stored pose covariance reflects 6 observations
+    /// instead of 8.
+    ///
+    /// Phase-D telemetry — inert in profiles where
+    /// `pose.outlier_drop_d2_threshold = 0.0`.
+    #[cfg(feature = "bench-internals")]
+    pub outlier_corner_idx: [u8; MAX_CANDIDATES],
     /// Per-candidate `AdaptivePpb` route label. Debug-only telemetry.
     /// [`ROUTED_TO_LOW`] = low-PPB route, [`ROUTED_TO_HIGH`] = high-PPB
     /// route, [`ROUTED_TO_STATIC`] for `QuadExtractionPolicy::Static` /
@@ -146,6 +157,8 @@ impl DetectionBatch {
             pose_consistency_d2_max_corner: [f32::NAN; MAX_CANDIDATES],
             #[cfg(feature = "bench-internals")]
             ippe_branch_d2_ratio: [f32::NAN; MAX_CANDIDATES],
+            #[cfg(feature = "bench-internals")]
+            outlier_corner_idx: [u8::MAX; MAX_CANDIDATES],
             routed_to: [ROUTED_TO_STATIC; MAX_CANDIDATES],
             ppb_estimate: [0.0; MAX_CANDIDATES],
         })
@@ -184,6 +197,7 @@ impl DetectionBatch {
                         self.pose_consistency_d2.swap(i, v);
                         self.pose_consistency_d2_max_corner.swap(i, v);
                         self.ippe_branch_d2_ratio.swap(i, v);
+                        self.outlier_corner_idx.swap(i, v);
                     }
                     self.routed_to.swap(i, v);
                     self.ppb_estimate.swap(i, v);

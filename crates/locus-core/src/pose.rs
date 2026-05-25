@@ -390,6 +390,12 @@ pub(crate) struct PoseDiagnostics {
     /// failure or gate disabled). Read by the bench-internals harness.
     #[cfg_attr(feature = "bench-internals", allow(dead_code))]
     pub branch_chosen: u8,
+    /// Index (0..=3) of the corner the outlier-aware LM masked and dropped
+    /// in the 3-corner re-solve. Sentinel `u8::MAX` ⇒ no drop fired (trigger
+    /// gate, dominance check, or aggregate-on-4 self-rejection kept the
+    /// 4-corner pose). When `outlier_corner_idx != u8::MAX`, the stored
+    /// pose covariance reflects 6 observations instead of 8.
+    pub outlier_corner_idx: u8,
 }
 
 impl PoseDiagnostics {
@@ -400,6 +406,7 @@ impl PoseDiagnostics {
             max_corner_d2: f32::NAN,
             branch_d2_ratio: f32::NAN,
             branch_chosen: u8::MAX,
+            outlier_corner_idx: u8::MAX,
         }
     }
 }
@@ -508,7 +515,7 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
         (pose, branch_diag)
     };
 
-    let (refined_pose, covariance) = if let Some(covs) = covariances {
+    let (mut refined_pose, mut covariance) = if let Some(covs) = covariances {
         let (p, c) = crate::pose_weighted::refine_pose_lm_weighted(
             intrinsics, corners, tag_size, best_pose, &covs,
         );
@@ -522,6 +529,36 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
             config.huber_delta_px,
         );
         (p, None)
+    };
+
+    // Outlier-aware corner drop: catastrophic per-corner outliers that
+    // survive Huber attenuation bias the rotation tail. Gated on (a) the
+    // weighted-LM path (we need Σ_c to compute per-corner d² and mask
+    // one corner) and (b) the per-profile threshold opt-in.
+    let outlier_corner_idx = match (covariances.as_ref(), config.outlier_drop_d2_threshold) {
+        (Some(covs), threshold) if threshold > 0.0 => {
+            let info_matrices: [Matrix2<f64>; 4] = core::array::from_fn(|i| {
+                covs[i]
+                    .try_inverse()
+                    .unwrap_or_else(Matrix2::identity)
+            });
+            match maybe_drop_outlier_corner(
+                intrinsics,
+                corners,
+                tag_size,
+                &info_matrices,
+                refined_pose,
+                threshold,
+            ) {
+                Some((idx, pose_3, cov_3)) => {
+                    refined_pose = pose_3;
+                    covariance = Some(cov_3);
+                    idx
+                },
+                None => u8::MAX,
+            }
+        },
+        _ => u8::MAX,
     };
 
     let verdict = pose_consistency_check(
@@ -539,12 +576,116 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
         max_corner_d2: verdict.max_corner_d2 as f32,
         branch_d2_ratio: branch_diag.ratio() as f32,
         branch_chosen: branch_diag.chosen_idx,
+        outlier_corner_idx,
     };
 
     if verdict.accepted {
         (Some(refined_pose), covariance, diag)
     } else {
         (None, None, diag)
+    }
+}
+
+/// Worst corner must dominate the second-worst by at least this factor
+/// before the outlier-aware LM masks it. Suppresses arbitrary single-drop
+/// picks when two corners are similarly noisy (the typical pattern when
+/// the *quad* — not one corner — is the failure mode).
+const OUTLIER_DROP_DOMINANCE_RATIO: f64 = 2.0;
+
+/// Try to identify and drop a single catastrophically bad corner, re-running
+/// the weighted LM and keeping the 3-corner pose iff its aggregate d² over
+/// the **three kept corners** is strictly lower than the 4-corner pose's
+/// aggregate d² over those same three corners.
+///
+/// `Some((idx, pose_3, cov_3))` ⇒ corner `idx` was dropped and the
+/// returned pose / covariance reflect 6 observations.
+/// `None` ⇒ no drop (trigger not exceeded, dominance failed, or self-
+/// rejection kept the 4-corner pose).
+///
+/// The self-rejection metric — d² aggregate over the kept corners — is
+/// what makes the mechanism safe. It asks "did dropping this corner
+/// improve the fit on the others?" rather than "did dropping reduce raw
+/// reprojection on all 4". The latter is provably violated under isotropic
+/// Σ_c (the unmasked LM IS the 4-corner agg minimum by definition), but
+/// the former is well-posed: if the 3-corner LM moved to a meaningfully
+/// different pose, the kept corners' Huber-weighted residuals should
+/// shrink — they were already small at pose_4 unless the LM was biased by
+/// the outlier.
+///
+/// Masking is done by zeroing the dropped corner's info matrix, not by
+/// inflating its covariance to a large finite value. Both are
+/// mathematically equivalent on the LM cost, but zero info matches the
+/// "skip this corner" semantics literally — and lets the LM share the
+/// already-computed info matrices instead of inverting again.
+fn maybe_drop_outlier_corner(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    tag_size: f64,
+    info_matrices: &[Matrix2<f64>; 4],
+    refined_pose: Pose,
+    threshold: f64,
+) -> Option<(u8, Pose, [[f64; 6]; 6])> {
+    let obj_pts = centered_tag_corners(tag_size);
+    let (per_corner_4, _) = per_corner_d2(
+        intrinsics,
+        corners,
+        &obj_pts,
+        info_matrices,
+        &refined_pose,
+    );
+
+    let (i_worst, d2_worst) =
+        per_corner_4
+            .iter()
+            .enumerate()
+            .fold((0_usize, 0.0_f64), |(idx, best), (i, &d2)| {
+                if d2 > best { (i, d2) } else { (idx, best) }
+            });
+    if d2_worst <= threshold {
+        return None;
+    }
+
+    let d2_second = per_corner_4
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| *i != i_worst)
+        .map(|(_, &d)| d)
+        .fold(0.0_f64, f64::max);
+    if d2_worst < OUTLIER_DROP_DOMINANCE_RATIO * d2_second {
+        return None;
+    }
+
+    let mut masked_info = *info_matrices;
+    masked_info[i_worst] = Matrix2::zeros();
+    let (pose_3, cov_3) = crate::pose_weighted::refine_pose_lm_weighted_with_info(
+        intrinsics,
+        corners,
+        tag_size,
+        refined_pose,
+        &masked_info,
+    );
+
+    // Self-rejection over the 3 kept corners (using the original,
+    // un-masked info matrices so the comparison metric matches the
+    // trigger's).
+    let (per_corner_3, _) = per_corner_d2(
+        intrinsics,
+        corners,
+        &obj_pts,
+        info_matrices,
+        &pose_3,
+    );
+    let kept_sum = |per_corner: &[f64; 4]| -> f64 {
+        per_corner
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &d)| (i != i_worst).then_some(d))
+            .sum()
+    };
+    if kept_sum(&per_corner_3) < kept_sum(&per_corner_4) {
+        Some((i_worst as u8, pose_3, cov_3))
+    } else {
+        None
     }
 }
 
@@ -1590,6 +1731,7 @@ pub fn refine_poses_soa_with_config(
             batch.pose_consistency_d2[i] = diag.aggregate_d2;
             batch.pose_consistency_d2_max_corner[i] = diag.max_corner_d2;
             batch.ippe_branch_d2_ratio[i] = diag.branch_d2_ratio;
+            batch.outlier_corner_idx[i] = diag.outlier_corner_idx;
         }
         #[cfg(not(feature = "bench-internals"))]
         let _ = diag;
@@ -1934,5 +2076,127 @@ mod tests {
                 prop_assert!(r_err < 0.1 + noise * 0.1, "Rotation error {} too high for noise {}", r_err, noise);
             }
         }
+    }
+
+    // ---------- Outlier-aware corner-drop policy ----------
+
+    /// Project the centred tag corners under a known pose with no noise.
+    /// Tests then perturb individual corners to drive the outlier-drop policy.
+    fn synthetic_scene() -> (CameraIntrinsics, Pose, f64, [[f64; 2]; 4]) {
+        let intrinsics = CameraIntrinsics::new(800.0, 800.0, 400.0, 300.0);
+        let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.5));
+        let tag_size = 0.16;
+        let obj_pts = centered_tag_corners(tag_size);
+        let mut corners = [[0.0_f64; 2]; 4];
+        for i in 0..4 {
+            corners[i] = pose.project(&obj_pts[i], &intrinsics);
+        }
+        (intrinsics, pose, tag_size, corners)
+    }
+
+    /// `Σ_c⁻¹ = σ⁻²·I` for all four corners — the info matrices the
+    /// outlier helper consumes directly.
+    fn isotropic_info(sigma_sq: f64) -> [Matrix2<f64>; 4] {
+        let inv = 1.0 / sigma_sq;
+        let m = Matrix2::new(inv, 0.0, 0.0, inv);
+        [m, m, m, m]
+    }
+
+    /// Converge the 4-corner weighted LM seeded at GT pose. Shared by all
+    /// outlier-drop tests; the helper then runs on this output.
+    fn seed_with_lm(
+        intrinsics: &CameraIntrinsics,
+        corners: &[[f64; 2]; 4],
+        tag_size: f64,
+        gt_pose: Pose,
+        info: &[Matrix2<f64>; 4],
+    ) -> Pose {
+        let (pose, _) = crate::pose_weighted::refine_pose_lm_weighted_with_info(
+            intrinsics, corners, tag_size, gt_pose, info,
+        );
+        pose
+    }
+
+    #[test]
+    fn outlier_drop_fires_on_single_dominant_outlier() {
+        let (intrinsics, gt_pose, tag_size, mut corners) = synthetic_scene();
+        // +25 px outlier on corner 0. The Huber kernel attenuates the LM
+        // pull (weight ≈ k/s = 1.345/12.5 ≈ 0.11), so post-LM corner 0's
+        // residual stays large enough that d²_0 ≫ 25 with σ²=4.
+        corners[0][0] += 25.0;
+        let info = isotropic_info(4.0);
+        let pose_4 = seed_with_lm(&intrinsics, &corners, tag_size, gt_pose, &info);
+
+        let dropped =
+            maybe_drop_outlier_corner(&intrinsics, &corners, tag_size, &info, pose_4, 25.0);
+
+        let (idx, pose_3, _cov_3) = dropped.expect("drop should fire on +25 px outlier");
+        assert_eq!(idx, 0, "expected to drop corner 0");
+        let err_dropped = (pose_3.translation - gt_pose.translation).norm();
+        let err_full = (pose_4.translation - gt_pose.translation).norm();
+        assert!(
+            err_dropped < err_full,
+            "drop should improve translation error: dropped={err_dropped} full={err_full}",
+        );
+    }
+
+    #[test]
+    fn outlier_drop_skips_clean_corners() {
+        let (intrinsics, gt_pose, tag_size, mut corners) = synthetic_scene();
+        // Sub-pixel noise on all four — no corner should trigger 5σ² = 25.
+        let noise = [(0.3, -0.2), (-0.15, 0.25), (0.1, -0.05), (-0.2, 0.18)];
+        for i in 0..4 {
+            corners[i][0] += noise[i].0;
+            corners[i][1] += noise[i].1;
+        }
+        let info = isotropic_info(4.0);
+        let pose_4 = seed_with_lm(&intrinsics, &corners, tag_size, gt_pose, &info);
+
+        let dropped =
+            maybe_drop_outlier_corner(&intrinsics, &corners, tag_size, &info, pose_4, 25.0);
+
+        assert!(dropped.is_none(), "no outlier should be dropped on sub-pixel noise");
+    }
+
+    #[test]
+    fn outlier_drop_dominance_check_rejects_two_outliers() {
+        let (intrinsics, gt_pose, tag_size, mut corners) = synthetic_scene();
+        // Two comparable +10 px outliers — neither dominates the other by 2×.
+        corners[0][0] += 10.0;
+        corners[1][0] += 10.0;
+        let info = isotropic_info(4.0);
+        let pose_4 = seed_with_lm(&intrinsics, &corners, tag_size, gt_pose, &info);
+
+        let dropped =
+            maybe_drop_outlier_corner(&intrinsics, &corners, tag_size, &info, pose_4, 25.0);
+
+        assert!(dropped.is_none(), "two correlated outliers must fail dominance check");
+    }
+
+    #[test]
+    fn refine_pose_lm_with_info_handles_zero_info_on_one_corner() {
+        // Locks the masking contract: a zero info matrix on one corner
+        // makes its contribution to JᵀWJ, JᵀWr, and the Huber cost
+        // identically zero, so the LM converges as if that corner were
+        // absent — even when its residual would otherwise dominate.
+        let (intrinsics, gt_pose, tag_size, mut corners) = synthetic_scene();
+        corners[0][0] += 50.0;
+
+        let mut info = isotropic_info(4.0);
+        info[0] = Matrix2::zeros();
+
+        let (pose, _) = crate::pose_weighted::refine_pose_lm_weighted_with_info(
+            &intrinsics,
+            &corners,
+            tag_size,
+            gt_pose,
+            &info,
+        );
+
+        let err = (pose.translation - gt_pose.translation).norm();
+        assert!(
+            err < 1e-3,
+            "masked LM should ignore corner 0 outlier; translation error {err}",
+        );
     }
 }
