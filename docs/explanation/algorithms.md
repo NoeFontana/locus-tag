@@ -388,20 +388,15 @@ The predicted image coordinates are:
 
 $$\begin{bmatrix} x_h \\ y_h \\ w_h \end{bmatrix} = \mathbf{H} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix}, \qquad (p_x, p_y) = (x_h / w_h, \; y_h / w_h)$$
 
-#### Gauss-Newton Saddle Refinement
+#### Structure-Tensor Gate (saddle iteration deliberately omitted)
 
-Starting from the predicted position, a Gauss-Newton iteration drives the gradient to zero using the structure tensor as a surrogate Hessian. This is the standard sub-pixel saddle localization technique (Harris/Shi-Tomasi variant):
+Sub-pixel refinement of the homography-predicted saddle was tried (Gauss-Newton on the structure-tensor / gradient pair, Förstner direct-solve) and **empirically falsified on this corpus** — the Newton step is quenched by structure-tensor scaling (`|step| ~ |∇I|/det(S) ~ 10⁻⁵ px`, below `f32` precision after the downstream cast), and applying Förstner regresses pose by ~4.5× on the `regression_board_hub::board_charuco_v1_golden_forstner` snapshot. The principled finding (see `memory/project_refine_saddle_noop.md` and `memory/project_aprilgrid_saddle_refinement_negative.md`) is that the homography projection of step (1) is already as good as it gets on this dataset.
 
-$$\mathbf{p}^{(k+1)} = \mathbf{p}^{(k)} - \mathbf{S}^{-1}(\mathbf{p}^{(k)}) \, \nabla I(\mathbf{p}^{(k)})$$
+What survives is a determinant-based rejection of degenerate windows. The structure tensor $\mathbf{S}$ is accumulated over a $(2r+1) \times (2r+1)$ window using 3×3 Sobel kernels:
 
-where the structure tensor $\mathbf{S}$ is accumulated over a $\text{radius} \times \text{radius}$ window using 3×3 Sobel kernels:
+$$\mathbf{S} = \sum_{\mathbf{q} \in \mathcal{W}} \begin{bmatrix} g_x^2 & g_x g_y \\ g_x g_y & g_y^2 \end{bmatrix}\bigg|_\mathbf{q}, \qquad \det(\mathbf{S} + \mathbf{I}) < 10^{-3} \Rightarrow \text{reject}$$
 
-$$\mathbf{S} = \sum_{\mathbf{q} \in \mathcal{W}} \begin{bmatrix} g_x^2 & g_x g_y \\ g_x g_y & g_y^2 \end{bmatrix}\bigg|_\mathbf{q}$$
-
-Convergence is declared after at most 5 iterations. A saddle is rejected if:
-
-- $\|\mathbf{p}^{(k+1)} - \mathbf{p}^{(0)}\| > \text{max\_drift\_px}$ (default 5.0 px), or
-- $\det(\mathbf{S}) < 10^{-3}$ (degenerate, non-corner region).
+The Tikhonov-regularised determinant $\det(\mathbf{S} + \mathbf{I})$ catches flat or low-conditioning neighborhoods (corners obscured by occlusion, motion blur, or grazing-angle foreshortening) before they reach the LO-RANSAC stage.
 
 #### LO-RANSAC + AW-LM
 

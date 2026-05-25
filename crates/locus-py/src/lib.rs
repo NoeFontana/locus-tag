@@ -840,6 +840,9 @@ impl BoardEstimator {
         let view = prepare_image_view(&img)?;
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
         let tag_size = self.inner.config.marker_length;
+        // Read the detector's outlier-drop opt-in BEFORE the detect call —
+        // `detect` borrows `detector` mutably until `batch_view` is dropped.
+        let outlier_drop_d2_threshold = detector.inner.config().outlier_drop_d2_threshold;
 
         // 1. Run tag detection (releases GIL; populates detector's internal batch).
         // Board estimation requires per-tag poses as RANSAC seeds.
@@ -853,8 +856,12 @@ impl BoardEstimator {
 
         let n = batch_view.len();
 
-        // 2. Run board pose estimation.
-        let board_pose_raw = py.detach(|| self.inner.estimate(&batch_view, &core_intr));
+        // 2. Run board pose estimation, applying the detector's per-profile
+        // outlier-drop policy to the joint LM.
+        let board_pose_raw = py.detach(|| {
+            self.inner
+                .estimate(&batch_view, &core_intr, outlier_drop_d2_threshold)
+        });
 
         // 3. Package detections (ids + corners).
         // SAFETY: see "NumPy allocation safety contract" in module docs.
@@ -1000,6 +1007,9 @@ impl CharucoRefiner {
         let view = prepare_image_view(&img)?;
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
         let tag_size = self.inner.config.marker_length;
+        // Read the detector's outlier-drop opt-in BEFORE the detect call —
+        // `detect` borrows `detector` mutably until `batch_view` is dropped.
+        let outlier_drop_d2_threshold = detector.inner.config().outlier_drop_d2_threshold;
 
         // 1. Run ArUco detection (releases GIL; populates detector's internal batch).
         // Board estimation requires per-tag poses as RANSAC seeds.
@@ -1013,7 +1023,8 @@ impl CharucoRefiner {
 
         let n = batch_view.len();
 
-        // 2. Run ChAruco saddle extraction + board pose estimation.
+        // 2. Run ChAruco saddle extraction + board pose estimation, applying
+        // the detector's per-profile outlier-drop policy to the joint LM.
         if debug_telemetry {
             py.detach(|| {
                 self.inner.estimate_with_telemetry(
@@ -1021,12 +1032,18 @@ impl CharucoRefiner {
                     &view,
                     &core_intr,
                     &mut self.telem_batch,
+                    outlier_drop_d2_threshold,
                 );
             });
         } else {
             py.detach(|| {
-                self.inner
-                    .estimate(&batch_view, &view, &core_intr, &mut self.batch);
+                self.inner.estimate(
+                    &batch_view,
+                    &view,
+                    &core_intr,
+                    &mut self.batch,
+                    outlier_drop_d2_threshold,
+                );
             });
         }
         let active_batch = if debug_telemetry {

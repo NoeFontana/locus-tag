@@ -293,8 +293,9 @@ fn calculate_percentile(values: &mut [f64], percentile: f64) -> f64 {
 /// before it is passed to `BoardEstimator`. The default `None` reproduces the
 /// historical harness behaviour. `ForstnerSaddle` replaces every detector
 /// corner with the direct Förstner saddle solution over a structure-tensor
-/// window; this is the principled sub-pixel saddle refinement the broken
-/// Newton in `charuco.rs:refine_saddle` was supposed to deliver.
+/// window. It is kept as a research anchor: applying Förstner to ChArUco
+/// saddles regresses pose by 4.5× on `board_charuco_v1_golden_forstner` vs
+/// the homography-projection-only path that `CharucoRefiner` now ships.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum RefinementStrategy {
     #[default]
@@ -336,6 +337,7 @@ impl BoardRegressionHarness {
 
     pub fn run(self, provider: &BoardHubProvider) {
         let mut estimator = BoardEstimator::new(Arc::clone(&provider.board_config));
+        let outlier_drop_d2_threshold = self.config.outlier_drop_d2_threshold;
         let mut detector = Detector::with_config(self.config);
         if !self.families.is_empty() {
             detector.set_families(&self.families);
@@ -407,8 +409,11 @@ impl BoardRegressionHarness {
 
                 let board_start = std::time::Instant::now();
                 let v = batch_cloned.partition(batch_cloned.capacity());
-                let board_pose =
-                    estimator.estimate(&batch_cloned.view(v), &provider.camera_intrinsics);
+                let board_pose = estimator.estimate(
+                    &batch_cloned.view(v),
+                    &provider.camera_intrinsics,
+                    outlier_drop_d2_threshold,
+                );
                 let board_ms = board_start.elapsed().as_secs_f64() * 1000.0;
                 total_time += detect_ms + board_ms;
 
@@ -501,10 +506,14 @@ impl BoardRegressionHarness {
 /// analytic minimiser of the gradient-projection residual, or `None` when S
 /// is singular (flat window) or the window touches an image boundary.
 ///
-/// This is the formulation `charuco.rs:refine_saddle` was meant to provide.
-/// The current Newton-on-surrogate-Hessian formulation there has a step-size
-/// pathology that makes it functionally a no-op; see
-/// `memory/project_refine_saddle_noop.md`.
+/// Research anchor for the saddle-refinement question. The Newton-on-
+/// surrogate-Hessian formulation that `charuco.rs` previously shipped was
+/// empirically inert (step magnitude ~1e-5 px below the downstream f32
+/// cast); it was deleted in favour of the homography-projection-only
+/// path. Applying this Förstner solver instead regresses pose by 4.5× on
+/// `regression_board_hub::board_charuco_v1_golden_forstner` — kept as a
+/// guard against future "let's add Newton/Förstner back" proposals. See
+/// `memory/project_refine_saddle_noop.md` for the full record.
 #[cfg(feature = "bench-internals")]
 fn forstner_saddle(
     img: &locus_core::ImageView,
@@ -733,11 +742,12 @@ mod tests {
     // tests above exercise `BoardEstimator` (the tag-corner path) — even on
     // the ChArUco dataset.
     //
-    // `CharucoRefiner` internally calls `refine_saddle` in `charuco.rs`, which
-    // is functionally a no-op due to a Newton step-size pathology (see
-    // `memory/project_refine_saddle_noop.md`). This test anchors the actual
-    // production behaviour so future fixes to `refine_saddle` have a baseline
-    // to compare against — and so silently-broken changes are caught.
+    // `CharucoRefiner` now ships the homography-projection-only saddle path
+    // (the iterative Newton refinement was deleted after `regression_board_hub::
+    // board_charuco_v1_golden_forstner` falsified the principled Förstner
+    // replacement at 4.5× pose regression; see `memory/project_refine_saddle_noop.md`).
+    // This test anchors the production behaviour so silently-broken changes
+    // to the saddle path are caught against a known baseline.
 
     /// Per-frame diagnostic for the CharucoRefiner. Prints accepted-saddle
     /// counts, rejection telemetry, and the homography-vs-detected-corner
@@ -849,6 +859,7 @@ mod tests {
                 &img_view,
                 &provider.camera_intrinsics,
                 &mut out_batch,
+                0.0,
             );
 
             println!("\nframe {i} ({}):", entry.filename);
@@ -984,6 +995,7 @@ mod tests {
                 &img_view,
                 &provider.camera_intrinsics,
                 &mut out_batch,
+                0.0,
             );
             let refine_ms = refine_start.elapsed().as_secs_f64() * 1000.0;
             total_time += detect_ms + refine_ms;

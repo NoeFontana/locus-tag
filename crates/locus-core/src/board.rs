@@ -790,11 +790,19 @@ impl RobustPoseSolver {
     ///
     /// Returns `None` if fewer than 4 groups are present, or if LO-RANSAC
     /// cannot find a consensus set.
+    ///
+    /// When `outlier_drop_d2_threshold > 0.0`, the outlier-aware drop step
+    /// runs on the final AW-LM output: if a single observation's d²
+    /// exceeds the threshold and dominates the second-worst by ≥ 2×, the
+    /// containing group is masked, the LM is re-run, and the new pose is
+    /// kept iff its kept-group d² sum is strictly lower than the
+    /// original's. Pass `0.0` to disable.
     #[must_use]
     pub fn estimate(
         &self,
         corr: &PointCorrespondences<'_>,
         intrinsics: &CameraIntrinsics,
+        outlier_drop_d2_threshold: f64,
     ) -> Option<BoardPose> {
         if corr.num_groups() < 4 {
             return None;
@@ -813,9 +821,22 @@ impl RobustPoseSolver {
         let (refined_pose, covariance) =
             self.refine_aw_lm(&best_pose, corr, intrinsics, &aw_lm_mask);
 
+        // Opt-in: outlier-aware drop on the AW-LM result (N-observation
+        // form of the per-tag mechanism).
+        let (final_pose, final_cov) = match self.apply_outlier_drop_to_board_lm(
+            &refined_pose,
+            corr,
+            intrinsics,
+            &aw_lm_mask,
+            outlier_drop_d2_threshold,
+        ) {
+            Some((pose_3, cov_3, _g_dropped)) => (pose_3, cov_3),
+            None => (refined_pose, covariance),
+        };
+
         Some(BoardPose {
-            pose: refined_pose,
-            covariance,
+            pose: final_pose,
+            covariance: final_cov,
         })
     }
 
@@ -1132,6 +1153,173 @@ impl RobustPoseSolver {
         }
     }
 
+    /// Per-observation Mahalanobis d² under `corr.information_matrices`.
+    /// Returns `None` for observations behind the camera (`z < 1e-4`); the
+    /// caller treats those as having zero contribution (matches the
+    /// [`Self::refine_aw_lm`] residual block, which `continue`s on the
+    /// same condition).
+    #[inline]
+    fn observation_d2(
+        pose: &Pose,
+        corr: &PointCorrespondences<'_>,
+        intrinsics: &CameraIntrinsics,
+        k: usize,
+    ) -> Option<f64> {
+        let obj = corr.object_points[k];
+        let p_cam = pose.rotation * Vector3::new(obj[0], obj[1], obj[2]) + pose.translation;
+        if p_cam.z < 1e-4 {
+            return None;
+        }
+        let z_inv = 1.0 / p_cam.z;
+        let u = intrinsics.fx * (p_cam.x * z_inv) + intrinsics.cx;
+        let v = intrinsics.fy * (p_cam.y * z_inv) + intrinsics.cy;
+        let res_u = f64::from(corr.image_points[k].x) - u;
+        let res_v = f64::from(corr.image_points[k].y) - v;
+        let info = corr.information_matrices[k];
+        Some(
+            res_u * (info[(0, 0)] * res_u + info[(0, 1)] * res_v)
+                + res_v * (info[(1, 0)] * res_u + info[(1, 1)] * res_v),
+        )
+    }
+
+    /// Walks the active groups in `inlier_mask` and returns the top-two
+    /// per-observation d² values at `pose`, along with the global
+    /// observation index of the maximum. Sentinel `(usize::MAX, 0.0, 0.0)`
+    /// ⇒ no active observations.
+    #[inline]
+    fn top_two_observation_d2(
+        pose: &Pose,
+        corr: &PointCorrespondences<'_>,
+        intrinsics: &CameraIntrinsics,
+        inlier_mask: &[u64; 16],
+    ) -> (usize, f64, f64) {
+        let gs = corr.group_size;
+        let num_groups = corr.num_groups();
+
+        let mut k_worst = usize::MAX;
+        let mut d2_worst = 0.0_f64;
+        let mut d2_second = 0.0_f64;
+
+        for g in 0..num_groups {
+            if (inlier_mask[g / 64] & (1 << (g % 64))) == 0 {
+                continue;
+            }
+            let start = g * gs;
+            for k in start..(start + gs) {
+                let Some(d2) = Self::observation_d2(pose, corr, intrinsics, k) else {
+                    continue;
+                };
+                if d2 > d2_worst {
+                    d2_second = d2_worst;
+                    d2_worst = d2;
+                    k_worst = k;
+                } else if d2 > d2_second {
+                    d2_second = d2;
+                }
+            }
+        }
+        (k_worst, d2_worst, d2_second)
+    }
+
+    /// Sum of per-observation d² at two candidate poses over the same active
+    /// groups in `inlier_mask`, *excluding* `skip_group`. Fused into a
+    /// single traversal so the projection-residual block runs once per
+    /// observation instead of twice — the self-rejection comparison in
+    /// [`Self::apply_outlier_drop_to_board_lm`] needs both sums under the
+    /// identical mask, so this is a free win when the drop fires.
+    fn kept_group_d2_sums(
+        pose_a: &Pose,
+        pose_b: &Pose,
+        corr: &PointCorrespondences<'_>,
+        intrinsics: &CameraIntrinsics,
+        inlier_mask: &[u64; 16],
+        skip_group: usize,
+    ) -> (f64, f64) {
+        let gs = corr.group_size;
+        let num_groups = corr.num_groups();
+        let mut sum_a = 0.0_f64;
+        let mut sum_b = 0.0_f64;
+
+        for g in 0..num_groups {
+            if g == skip_group {
+                continue;
+            }
+            if (inlier_mask[g / 64] & (1 << (g % 64))) == 0 {
+                continue;
+            }
+            let start = g * gs;
+            for k in start..(start + gs) {
+                if let Some(d2) = Self::observation_d2(pose_a, corr, intrinsics, k) {
+                    sum_a += d2;
+                }
+                if let Some(d2) = Self::observation_d2(pose_b, corr, intrinsics, k) {
+                    sum_b += d2;
+                }
+            }
+        }
+        (sum_a, sum_b)
+    }
+
+    /// After [`Self::refine_aw_lm`] converges, identify the worst observation
+    /// (per-observation Mahalanobis d² under the LM's info matrices), and if
+    /// it both exceeds `threshold` and dominates the second-worst by ≥ 2×,
+    /// mask the *group* containing it, re-run the LM warm-started from the
+    /// 4-pose seed, and keep the masked pose iff its kept-group d² sum is
+    /// strictly lower than the original pose's.
+    ///
+    /// Self-rejection compares d² over the *kept* groups (not all
+    /// observations): under both isotropic and anisotropic Σ_c the LM
+    /// minimises the same weighted residual, so a drop that genuinely
+    /// improves the fit on the kept set is safe to commit.
+    ///
+    /// `threshold ≤ 0.0` short-circuits and returns `None`.
+    #[inline]
+    fn apply_outlier_drop_to_board_lm(
+        &self,
+        pose_4: &Pose,
+        corr: &PointCorrespondences<'_>,
+        intrinsics: &CameraIntrinsics,
+        inlier_mask: &[u64; 16],
+        threshold: f64,
+    ) -> Option<(Pose, Matrix6<f64>, usize)> {
+        const DOMINANCE_RATIO: f64 = 2.0;
+
+        if threshold <= 0.0 {
+            return None;
+        }
+
+        let (k_worst, d2_worst, d2_second) =
+            Self::top_two_observation_d2(pose_4, corr, intrinsics, inlier_mask);
+
+        if k_worst == usize::MAX || d2_worst <= threshold {
+            return None;
+        }
+        if d2_worst < DOMINANCE_RATIO * d2_second {
+            return None;
+        }
+
+        // The dropped unit is the *group* containing the worst observation.
+        // For AprilGrid (gs=4) this masks an entire tag; for ChAruco saddles
+        // (gs=1) it is a single saddle point.
+        let g_worst = k_worst / corr.group_size;
+        let mut masked_mask = *inlier_mask;
+        masked_mask[g_worst / 64] &= !(1u64 << (g_worst % 64));
+
+        let (pose_3, cov_3) = self.refine_aw_lm(pose_4, corr, intrinsics, &masked_mask);
+
+        // Self-rejection over the kept groups under the original
+        // (unmasked) info matrices. Both sums are computed in a single
+        // traversal — same active mask and skip_group for both poses.
+        let (kept_4, kept_3) =
+            Self::kept_group_d2_sums(pose_4, &pose_3, corr, intrinsics, inlier_mask, g_worst);
+
+        if kept_3 < kept_4 {
+            Some((pose_3, cov_3, g_worst))
+        } else {
+            None
+        }
+    }
+
     /// Final refinement: Anisotropic Weighted Levenberg-Marquardt over the
     /// verified inlier set.
     ///
@@ -1370,11 +1558,17 @@ impl BoardEstimator {
     ///
     /// Returns `None` if fewer than 4 valid tags match the board layout or if
     /// LO-RANSAC cannot find a consensus set.
+    ///
+    /// `outlier_drop_d2_threshold > 0.0` enables the post-LM outlier-aware
+    /// drop step on the AW-LM result. Pass `0.0` to disable. Should be
+    /// sourced from `DetectorConfig::outlier_drop_d2_threshold` so the
+    /// profile-level opt-in stays consistent with the per-tag pose path.
     #[must_use]
     pub fn estimate(
         &mut self,
         batch: &crate::batch::DetectionBatchView<'_>,
         intrinsics: &CameraIntrinsics,
+        outlier_drop_d2_threshold: f64,
     ) -> Option<BoardPose> {
         // Phase 1: flatten valid batch entries into the pre-allocated scratch
         // slices and invert per-corner covariances into information matrices.
@@ -1391,8 +1585,10 @@ impl BoardEstimator {
             group_size: Self::CORNERS_PER_TAG,
         };
 
-        // Phase 2–4: LO-RANSAC → GN verification → AW-LM refinement.
-        self.solver.estimate(&corr, intrinsics)
+        // Phase 2–4: LO-RANSAC → GN verification → AW-LM refinement
+        // (+ optional outlier-aware drop when threshold > 0.0).
+        self.solver
+            .estimate(&corr, intrinsics, outlier_drop_d2_threshold)
     }
 
     // ── Private helpers ──────────────────────────────────────────────────
@@ -1984,7 +2180,9 @@ mod tests {
             }
             let v = batch.partition(n_valid);
             assert!(
-                estimator.estimate(&batch.view(v), &intrinsics).is_none(),
+                estimator
+                    .estimate(&batch.view(v), &intrinsics, 0.0)
+                    .is_none(),
                 "expected None with {n_valid} valid tags"
             );
         }
@@ -2001,7 +2199,7 @@ mod tests {
         let (mut batch, n) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
         let v = batch.partition(n);
 
-        let result = estimator.estimate(&batch.view(v), &intrinsics);
+        let result = estimator.estimate(&batch.view(v), &intrinsics, 0.0);
         assert!(
             result.is_some(),
             "estimate() must succeed with all tags visible"
@@ -2027,13 +2225,139 @@ mod tests {
         let (mut batch, n) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
         let v = batch.partition(n);
 
-        let result = estimator.estimate(&batch.view(v), &intrinsics).unwrap();
+        let result = estimator
+            .estimate(&batch.view(v), &intrinsics, 0.0)
+            .unwrap();
         for i in 0..6 {
             assert!(
                 result.covariance[(i, i)] > 0.0,
                 "covariance diagonal [{i},{i}] must be positive"
             );
         }
+    }
+
+    // ── Outlier-aware drop tests ──────────────────────────────────────────────
+
+    /// Single-tag catastrophic outlier on a clean board: the drop should fire,
+    /// mask the bad tag, and bring the pose closer to ground truth than the
+    /// 4-corner LM that includes the outlier.
+    ///
+    /// The injected outlier magnitude is bracketed by two thresholds:
+    ///   - [`LoRansacConfig::default`]'s `tau_aw_lm_sq` (per-group sum_sq
+    ///     gate, multiplied by `group_size = 4` ⇒ 400 px²) — must NOT
+    ///     exceed, or the bad tag is filtered before reaching the LM.
+    ///   - The outlier-drop d² threshold (5σ² = 25.0 under the identity
+    ///     info matrices `build_synthetic_batch` writes) — must exceed,
+    ///     so the post-LM trigger fires.
+    ///
+    /// Both ends are derived constants so the test can't silently degrade
+    /// if `LoRansacConfig` evolves.
+    #[test]
+    fn outlier_drop_fires_on_single_dominant_board_outlier() {
+        // Derived from `LoRansacConfig::default().tau_aw_lm_sq` × `gs=4`.
+        let inlier_group_threshold = LoRansacConfig::default().tau_aw_lm_sq * 4.0;
+        const DROP_TRIGGER_D2: f64 = 25.0;
+        // Pick an outlier magnitude squarely between the two gates.
+        let outlier_px = (DROP_TRIGGER_D2.sqrt() + inlier_group_threshold.sqrt()) * 0.5;
+        let outlier_d2 = outlier_px * outlier_px;
+        assert!(
+            outlier_d2 > DROP_TRIGGER_D2 && outlier_d2 < inlier_group_threshold,
+            "test invariant: outlier must trigger drop yet survive inlier gate",
+        );
+
+        let config = math_test_config();
+        let mut estimator = BoardEstimator::new(Arc::clone(&config));
+        let intrinsics = test_intrinsics();
+        let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.05, -0.03, 1.5));
+        let (mut batch, n) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+
+        let outlier_tag = 0usize;
+        assert!(batch.status_mask[outlier_tag] == CandidateState::Valid);
+        batch.corners[outlier_tag][0].x += outlier_px as f32;
+
+        let v = batch.partition(n);
+
+        // Baseline (no outlier drop): the LM keeps the bad corner and biases
+        // the pose. Threshold = 0.0 short-circuits the mechanism.
+        let baseline = estimator
+            .estimate(&batch.view(v), &intrinsics, 0.0)
+            .expect("baseline pose must converge");
+
+        // With outlier drop enabled, the mechanism should mask the bad
+        // tag and the resulting pose should be closer to ground truth.
+        let mut estimator2 = BoardEstimator::new(Arc::clone(&config));
+        let dropped = estimator2
+            .estimate(&batch.view(v), &intrinsics, DROP_TRIGGER_D2)
+            .expect("outlier-drop pose must converge");
+
+        let baseline_err = (baseline.pose.translation - true_pose.translation).norm();
+        let dropped_err = (dropped.pose.translation - true_pose.translation).norm();
+        assert!(
+            dropped_err < baseline_err,
+            "outlier drop must improve translation error: dropped={dropped_err}, baseline={baseline_err}",
+        );
+    }
+
+    /// Clean observations (no outliers): drop must not fire, pose must be
+    /// byte-identical to the threshold=0.0 baseline.
+    #[test]
+    fn outlier_drop_skips_clean_board() {
+        let config = math_test_config();
+        let mut estimator = BoardEstimator::new(Arc::clone(&config));
+        let intrinsics = test_intrinsics();
+        let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.5));
+        let (mut batch, n) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
+        let v = batch.partition(n);
+
+        let baseline = estimator
+            .estimate(&batch.view(v), &intrinsics, 0.0)
+            .expect("baseline pose must converge");
+
+        let mut estimator2 = BoardEstimator::new(Arc::clone(&config));
+        let with_drop = estimator2
+            .estimate(&batch.view(v), &intrinsics, 25.0)
+            .expect("pose must converge");
+
+        // On a noise-free synthetic board the drop trigger should not fire.
+        assert!(
+            (baseline.pose.translation - with_drop.pose.translation).norm() < 1e-12,
+            "drop must not fire on clean observations",
+        );
+    }
+
+    /// Two comparable outliers fail the dominance check (worst < 2× second-worst)
+    /// — drop is suppressed, pose matches the threshold=0.0 baseline.
+    #[test]
+    fn outlier_drop_dominance_rejects_two_outliers() {
+        let config = math_test_config();
+        let mut estimator = BoardEstimator::new(Arc::clone(&config));
+        let intrinsics = test_intrinsics();
+        let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.5));
+        let (mut batch, n) = build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+
+        // Inject two comparable +20 px outliers on two different tags.
+        // worst d² and second-worst d² are now of similar magnitude — the
+        // 2× dominance ratio should reject the drop.
+        batch.corners[0][0].x += 20.0;
+        batch.corners[1][0].x += 20.0;
+
+        let v = batch.partition(n);
+
+        let baseline = estimator
+            .estimate(&batch.view(v), &intrinsics, 0.0)
+            .expect("baseline pose must converge");
+
+        let mut estimator2 = BoardEstimator::new(Arc::clone(&config));
+        let with_drop = estimator2
+            .estimate(&batch.view(v), &intrinsics, 25.0)
+            .expect("pose must converge");
+
+        // With two comparable outliers and the 2× dominance gate, the drop
+        // must NOT fire — pose must equal the baseline.
+        assert!(
+            (baseline.pose.translation - with_drop.pose.translation).norm() < 1e-12,
+            "dominance check must reject ambiguous-outlier drops",
+        );
     }
 
     // ── ChAruco saddle topology tests ─────────────────────────────────────────
