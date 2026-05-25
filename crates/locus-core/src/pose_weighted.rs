@@ -332,6 +332,14 @@ fn huber_mahalanobis_cost(
 }
 
 /// Refine the pose by minimizing a Huber-robust Mahalanobis objective.
+///
+/// Thin wrapper that inverts the per-corner covariances and delegates to
+/// [`refine_pose_lm_weighted_with_info`]. Callers holding pre-computed
+/// info matrices (e.g. the outlier-aware drop path, which inverts once
+/// for the trigger d²) should call the info-direct variant to skip the
+/// redundant inversion. A zero info matrix on corner `i` is treated as
+/// "skip this corner": its contribution to `JᵀWJ`, `JᵀWr`, and the
+/// Huber cost is identically zero.
 #[must_use]
 pub(crate) fn refine_pose_lm_weighted(
     intrinsics: &CameraIntrinsics,
@@ -340,18 +348,32 @@ pub(crate) fn refine_pose_lm_weighted(
     initial_pose: Pose,
     corner_covariances: &[Matrix2<f64>; 4],
 ) -> (Pose, [[f64; 6]; 6]) {
+    let info_matrices: [Matrix2<f64>; 4] = core::array::from_fn(|i| {
+        corner_covariances[i]
+            .try_inverse()
+            .unwrap_or_else(Matrix2::identity)
+    });
+    refine_pose_lm_weighted_with_info(intrinsics, corners, tag_size, initial_pose, &info_matrices)
+}
+
+/// Info-matrix-direct variant of [`refine_pose_lm_weighted`]. Pre-inverted
+/// `Σ_c⁻¹` skips the 4 `try_inverse` calls — useful for the outlier-aware
+/// drop path, which inverts once to compute per-corner d² and then masks
+/// one corner by zeroing its info matrix.
+#[must_use]
+pub(crate) fn refine_pose_lm_weighted_with_info(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    tag_size: f64,
+    initial_pose: Pose,
+    info_matrices: &[Matrix2<f64>; 4],
+) -> (Pose, [[f64; 6]; 6]) {
     const HUBER_K: f64 = 1.345;
     const MAX_ITERS: usize = 20;
 
     let mut pose = initial_pose;
     let obj_pts = centered_tag_corners(tag_size);
-
-    let mut info_matrices = [Matrix2::<f64>::zeros(); 4];
-    for i in 0..4 {
-        info_matrices[i] = corner_covariances[i]
-            .try_inverse()
-            .unwrap_or_else(Matrix2::identity);
-    }
+    let info_matrices = *info_matrices;
 
     let mut lambda = 1e-3_f64;
     let mut nu = 2.0_f64;

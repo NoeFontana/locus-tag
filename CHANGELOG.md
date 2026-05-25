@@ -5,6 +5,12 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Added
+
+- **Outlier-aware pose LM** (`pose.outlier_drop_d2_threshold`, default `0.0`): after the weighted LM converges, if any corner's reprojection d² = rᵢᵀ Σᵢ⁻¹ rᵢ exceeds the threshold *and* dominates the second-worst corner by ≥ 2×, the worst corner's info matrix is zeroed and the LM is re-run warm-started. The 3-corner pose is kept only when its aggregate d² over the kept corners is strictly lower than the 4-corner pose's — a self-rejection invariant that catches false-positive drops. Only `high_accuracy` opts in (threshold `25.0` ≡ 5σ²). Closes the only published SOTA gap on render-tag-hub (rotation p99 `0.8613° → 0.5607°`, −35 %) while preserving mean recall, mean corner RMSE, and translation p99.
+- New `refine_pose_lm_weighted_with_info` — info-matrix-direct variant of `refine_pose_lm_weighted` that skips the 4 `Σ_c⁻¹` inversions for callers that already hold pre-inverted info. The existing `refine_pose_lm_weighted` becomes a thin wrapper that inverts and delegates.
+- `DetectionBatch::outlier_corner_idx: [u8; MAX_CANDIDATES]` SoA column (`bench-internals`-gated) records which corner Phase D masked during outlier-aware refinement; sentinel `u8::MAX` ⇒ no drop. When `idx != u8::MAX` the stored pose covariance reflects 6 observations instead of 8. Documented in `docs/engineering/detection-batch-contract.md`.
+
 ## [0.5.0] - 2026-05-20
 
 ### BREAKING CHANGES

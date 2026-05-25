@@ -384,6 +384,26 @@ pub struct DetectorConfig {
     /// disable the escape clause and use only the χ² test.
     pub pose_consistency_min_decisive_ratio: f64,
 
+    /// Outlier-aware corner-drop trigger threshold (squared Mahalanobis).
+    ///
+    /// After the weighted LM converges, if any corner's reprojection
+    /// d²_i = rᵢᵀ Σᵢ⁻¹ rᵢ exceeds this threshold *and* dominates the
+    /// second-worst corner by a factor ≥ 2, the solver masks that
+    /// corner (zeroes its info matrix), re-runs the LM warm-started,
+    /// and keeps the 3-corner pose iff its aggregate d² over the
+    /// **three kept corners** is strictly lower than the 4-corner pose's
+    /// aggregate d² over those same three corners. This self-rejection
+    /// invariant catches catastrophic per-corner outliers (PSF artefacts,
+    /// motion-blur spikes, lens vignette edges) that survive the Huber
+    /// kernel's down-weighting but bias the rotation tail.
+    ///
+    /// `0.0` (the default) disables the mechanism — production binaries
+    /// stay byte-identical for profiles that have not opted in.
+    /// Recommended value: `25.0` (≡ 5σ², `χ²(1; 1.5e-6)`) — only triggers
+    /// on the genuinely catastrophic single-corner outliers driving the
+    /// rotation p99 tail.
+    pub outlier_drop_d2_threshold: f64,
+
     /// Alpha parameter for GWLF adaptive transversal windowing.
     /// The search band is set to +/- max(2, alpha * edge_length).
     pub gwlf_transversal_alpha: f64,
@@ -482,6 +502,7 @@ impl Default for DetectorConfig {
             pose_consistency_fpr: 0.0,
             pose_consistency_gate_sigma_px: 1.0,
             pose_consistency_min_decisive_ratio: 5.0,
+            outlier_drop_d2_threshold: 0.0,
             quad_extraction_policy: QuadExtractionPolicy::Static,
             post_decode_refinement: false,
         }
@@ -539,6 +560,11 @@ impl DetectorConfig {
         {
             return Err(ConfigError::InvalidPoseConsistencyMinDecisiveRatio(
                 self.pose_consistency_min_decisive_ratio,
+            ));
+        }
+        if !self.outlier_drop_d2_threshold.is_finite() || self.outlier_drop_d2_threshold < 0.0 {
+            return Err(ConfigError::InvalidOutlierDropD2Threshold(
+                self.outlier_drop_d2_threshold,
             ));
         }
         if self.quad_extraction_mode == QuadExtractionMode::EdLines
@@ -788,6 +814,7 @@ impl DetectorConfigBuilder {
             pose_consistency_fpr: d.pose_consistency_fpr,
             pose_consistency_gate_sigma_px: d.pose_consistency_gate_sigma_px,
             pose_consistency_min_decisive_ratio: d.pose_consistency_min_decisive_ratio,
+            outlier_drop_d2_threshold: d.outlier_drop_d2_threshold,
             quad_extraction_policy: self
                 .quad_extraction_policy
                 .unwrap_or(d.quad_extraction_policy),
@@ -1238,6 +1265,11 @@ mod profile_json {
         // (alternate IPPE d² ≥ 5× primary IPPE d² bypasses the gate).
         #[serde(default = "default_min_decisive_ratio")]
         pub pose_consistency_min_decisive_ratio: f64,
+        // Outlier-aware corner-drop trigger threshold. Missing → 0.0
+        // (disabled), preserving byte-identity for profiles that have not
+        // opted in.
+        #[serde(default)]
+        pub outlier_drop_d2_threshold: f64,
     }
 
     fn default_gate_sigma_px() -> f64 {
@@ -1259,6 +1291,7 @@ mod profile_json {
                 pose_consistency_fpr: d.pose_consistency_fpr,
                 pose_consistency_gate_sigma_px: d.pose_consistency_gate_sigma_px,
                 pose_consistency_min_decisive_ratio: d.pose_consistency_min_decisive_ratio,
+                outlier_drop_d2_threshold: d.outlier_drop_d2_threshold,
             }
         }
     }
@@ -1322,6 +1355,7 @@ mod profile_json {
                 pose_consistency_fpr: p.pose.pose_consistency_fpr,
                 pose_consistency_gate_sigma_px: p.pose.pose_consistency_gate_sigma_px,
                 pose_consistency_min_decisive_ratio: p.pose.pose_consistency_min_decisive_ratio,
+                outlier_drop_d2_threshold: p.pose.outlier_drop_d2_threshold,
                 quad_extraction_policy: p.quad.extraction_policy,
                 post_decode_refinement: p.decoder.post_decode_refinement,
             }

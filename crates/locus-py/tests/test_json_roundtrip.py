@@ -60,6 +60,10 @@ def test_shipped_json_matches_loaded_model(profile: ProfileName) -> None:
     # ``pose_consistency_min_decisive_ratio`` is absent on disk for profiles
     # that don't override it; the model always emits its 5.0 default.
     on_disk.get("pose", {}).setdefault("pose_consistency_min_decisive_ratio", 5.0)
+    # ``outlier_drop_d2_threshold`` is absent on disk for profiles that
+    # don't opt into outlier-aware corner-drop; the model always emits its
+    # 0.0 default.
+    on_disk.get("pose", {}).setdefault("outlier_drop_d2_threshold", 0.0)
     # ``extraction_policy`` defaults to ``"Static"`` and may be omitted by
     # profiles that don't opt into adaptive routing.
     on_disk.get("quad", {}).setdefault("extraction_policy", "Static")

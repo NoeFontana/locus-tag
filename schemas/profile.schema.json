@@ -104,6 +104,12 @@
           "title": "Huber Delta Px",
           "type": "number"
         },
+        "outlier_drop_d2_threshold": {
+          "default": 0.0,
+          "minimum": 0.0,
+          "title": "Outlier Drop D2 Threshold",
+          "type": "number"
+        },
         "pose_consistency_fpr": {
           "default": 0.0,
           "exclusiveMaximum": 1.0,
