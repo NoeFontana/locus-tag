@@ -5,6 +5,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Documentation
+
+- **EdLines SOTA follow-up postmortem** (`docs/engineering/edlines_sota_followup_postmortem_2026-05-25.md`): records two empirical falsifications of EdLines-architecture changes attempted on 2026-05-25 — a continuous arc-balance Phase-1 mode selector (replacing the static `>40 %/<16 %` axis-imbalance gate) and the design memo's Improvement #2 (Phase-5 8-DoF line parameterisation). Both reverted on the same day after `regression_render_tag` rejected them. The postmortem catalogues the failure mechanisms (decoder-rejection invisibility for the selector; variance amplification through the line-intersection Jacobian for Phase 5) and the re-attempt conditions that would have to be resolved before either bet is worth re-opening. `edlines_sota_design_2026-05-03.md` amended with status notes on F4, F6, and Improvement #2.
+
 ### Added
 
 - **Outlier-aware drop on the joint board-pose LM**: `RobustPoseSolver::estimate` now applies the same per-observation outlier-drop policy used in the per-tag pose path. The dominant outlier's *group* (one tag for AprilGrid, one saddle for ChAruco) is masked, the LM re-runs warm-started, and the masked pose is kept iff its kept-group d² sum strictly improves. `BoardEstimator::estimate`, `CharucoRefiner::estimate`, and the Python `BoardEstimator` / `CharucoRefiner` FFI all gain a threshold argument sourced from `DetectorConfig::outlier_drop_d2_threshold`. Safe but rarely triggered on curated data: AprilGrid `high_accuracy` `mean_rotation_error_deg` improves ~0.2 %, p99 unchanged (the LO-RANSAC inlier gate already filters single-corner outliers before they reach the LM).
