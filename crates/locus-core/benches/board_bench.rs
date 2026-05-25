@@ -24,6 +24,7 @@
 use divan::Bencher;
 use locus_core::{
     AprilGridTopology, CameraIntrinsics, Detector, DetectorConfig, ImageView, TagFamily,
+    bench_api::DetectionBatch,
     board::{BoardEstimator, LoRansacConfig},
 };
 use std::path::PathBuf;
@@ -124,20 +125,16 @@ fn load_board_meta(dataset: &str) -> (Arc<AprilGridTopology>, CameraIntrinsics) 
 
 // ── Benchmark: isolated estimate() ──────────────────────────────────────────
 
-/// Benchmarks `BoardEstimator::estimate()` in isolation using a real detection
-/// batch captured from a representative AprilGrid Golden v1 frame.
-///
-/// The detection pipeline runs once in setup (not timed); only the board pose
-/// estimation step is measured.
-#[divan::bench]
-fn bench_board_estimate_aprilgrid(bencher: Bencher) {
+/// Captures a real `DetectionBatch` from the AprilGrid Golden v1 frame
+/// `scene_0010_cam_0000.png`. The detection pipeline runs once here (NOT
+/// timed by the caller's `bencher.bench_local`).
+fn setup_aprilgrid_estimator() -> (BoardEstimator, CameraIntrinsics, DetectionBatch, usize) {
     const DATASET: &str = "aprilgrid_golden_v1_1920x1080";
     const IMAGE: &str = "scene_0010_cam_0000.png";
 
     let (board_config, intrinsics) = load_board_meta(DATASET);
-    let mut estimator = BoardEstimator::new(Arc::clone(&board_config));
+    let estimator = BoardEstimator::new(Arc::clone(&board_config));
 
-    // Run detector once to get a realistic batch — NOT timed.
     let img_path = hub_dir().join(DATASET).join("images").join(IMAGE);
     let luma = image::open(img_path).unwrap().to_luma8();
     let (w, h) = luma.dimensions();
@@ -157,12 +154,29 @@ fn bench_board_estimate_aprilgrid(bencher: Bencher) {
 
     let mut batch = detector.bench_api_get_batch_cloned();
     let v = batch.partition(batch.capacity());
+    (estimator, intrinsics, batch, v)
+}
 
+/// Baseline: outlier-drop disabled (matches `standard` / `grid` /
+/// `max_recall_adaptive` profiles).
+#[divan::bench]
+fn bench_board_estimate_aprilgrid(bencher: Bencher) {
+    let (mut estimator, intrinsics, batch, v) = setup_aprilgrid_estimator();
     println!("\n  [setup] valid tags in batch: {v}");
-
-    // MEASUREMENT: only estimate() is timed.
     bencher.bench_local(|| {
-        let _ = estimator.estimate(&batch.view(v), &intrinsics);
+        let _ = estimator.estimate(&batch.view(v), &intrinsics, 0.0);
+    });
+}
+
+/// `high_accuracy` outlier-drop policy active (threshold = 5σ²). The
+/// delta against `bench_board_estimate_aprilgrid` is the per-frame cost
+/// of the post-LM trigger pass on clean data — the actual drop rarely
+/// fires, so this measures the disabled-trigger overhead.
+#[divan::bench]
+fn bench_board_estimate_aprilgrid_outlier_drop(bencher: Bencher) {
+    let (mut estimator, intrinsics, batch, v) = setup_aprilgrid_estimator();
+    bencher.bench_local(|| {
+        let _ = estimator.estimate(&batch.view(v), &intrinsics, 25.0);
     });
 }
 
@@ -203,7 +217,7 @@ fn bench_board_estimate_aprilgrid_fast(bencher: Bencher) {
     let v = batch.partition(batch.capacity());
 
     bencher.bench_local(|| {
-        let _ = estimator.estimate(&batch.view(v), &intrinsics);
+        let _ = estimator.estimate(&batch.view(v), &intrinsics, 0.0);
     });
 }
 
@@ -240,6 +254,6 @@ fn bench_board_full_pipeline_aprilgrid(bencher: Bencher) {
             .unwrap();
         let mut batch = detector.bench_api_get_batch_cloned();
         let v = batch.partition(batch.capacity());
-        let _ = estimator.estimate(&batch.view(v), &intrinsics);
+        let _ = estimator.estimate(&batch.view(v), &intrinsics, 0.0);
     });
 }

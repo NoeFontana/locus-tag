@@ -168,9 +168,7 @@ Uses the *interior checkerboard corners* (saddle points) rather than tag corners
 
 1. **Saddle prediction via homography extrapolation** — For each visible tag, look up its adjacent saddle IDs from `CharucoTopology::tag_cell_corners`. Each saddle lies at the outer corner of the tag's *enclosing square*, beyond the tag boundary by the padding margin `(square_length − marker_length) / 2`. The tag's stored homography is applied to canonical coordinates with `|u| > 1` or `|v| > 1` (intentional extrapolation) to predict the saddle's image location.
 2. **Deduplication** — Saddles shared by adjacent tags are deduplicated in O(V) using a pre-allocated boolean scratch array.
-3. **Gauss-Newton saddle refinement** — Each predicted saddle is refined with up to 5 Newton steps using the structure tensor as a surrogate Hessian:
-$$\delta\mathbf{p} = -\mathbf{S}^{-1} \nabla I(\mathbf{p}), \qquad \mathbf{S} = \sum_{\mathcal{W}} \nabla I \nabla I^T$$
-   Saddles that drift more than `max_drift_px` from the prediction, or where $\det(\mathbf{S}) < 10^{-3}$, are rejected.
+3. **Structure-tensor gate** — The homography prediction (step 1) is sub-pixel by construction; iterative refinement is empirically inert on this corpus (Newton step quenched by structure-tensor scaling; the principled Förstner replacement regresses pose by 4.5× on `regression_board_hub::board_charuco_v1_golden_forstner`). What is retained is the structure-tensor determinant — saddles with $\det(\mathbf{S}) < 10^{-3}$ over the $(2r+1)^2$ window (flat / low-conditioning neighborhoods) are rejected.
 4. **LO-RANSAC + AW-LM** — `RobustPoseSolver` runs over the accepted saddles with `group_size=1` (each saddle is an independent point), yielding the board pose and covariance.
 
 **Module:** `charuco.rs` | **Struct:** `CharucoRefiner` | **Complexity:** $O(V + S_\text{accepted})$ | **Allocations:** zero inside `estimate()`

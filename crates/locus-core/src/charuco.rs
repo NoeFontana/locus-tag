@@ -184,11 +184,7 @@ pub struct CharucoRefiner {
 }
 
 impl CharucoRefiner {
-    /// Gauss-Newton iteration limit for saddle refinement.
-    const MAX_ITERS: u32 = 5;
-    /// Maximum allowed drift (pixels) between the predicted and refined position.
-    const MAX_DRIFT_PX: f64 = 5.0;
-    /// Minimum structure tensor determinant to accept a refined saddle.
+    /// Minimum structure tensor determinant to accept a saddle candidate.
     const MIN_DET: f64 = 1e-3;
     /// Structure tensor window radius (pixels).
     const ST_RADIUS: isize = 3;
@@ -253,8 +249,9 @@ impl CharucoRefiner {
         img: &ImageView,
         intrinsics: &CameraIntrinsics,
         batch: &mut CharucoBatch,
+        outlier_drop_d2_threshold: f64,
     ) {
-        self.estimate_impl::<false>(view, img, intrinsics, batch);
+        self.estimate_impl::<false>(view, img, intrinsics, batch, outlier_drop_d2_threshold);
     }
 
     /// Debug path — same as [`estimate`](Self::estimate) but also records
@@ -269,8 +266,9 @@ impl CharucoRefiner {
         img: &ImageView,
         intrinsics: &CameraIntrinsics,
         batch: &mut CharucoBatch,
+        outlier_drop_d2_threshold: f64,
     ) {
-        self.estimate_impl::<true>(view, img, intrinsics, batch);
+        self.estimate_impl::<true>(view, img, intrinsics, batch, outlier_drop_d2_threshold);
     }
 
     /// Core implementation — monomorphised at compile time via `TELEMETRY`.
@@ -278,12 +276,17 @@ impl CharucoRefiner {
     /// When `TELEMETRY = false` every `if TELEMETRY { }` block is statically
     /// dead code and is fully stripped by LLVM, leaving zero overhead in the
     /// production binary.
+    ///
+    /// `outlier_drop_d2_threshold > 0.0` enables the post-LM outlier-aware
+    /// drop step on the joint board pose. Sourced from
+    /// `DetectorConfig::outlier_drop_d2_threshold` by callers.
     fn estimate_impl<const TELEMETRY: bool>(
         &mut self,
         view: &DetectionBatchView<'_>,
         img: &ImageView,
         intrinsics: &CameraIntrinsics,
         batch: &mut CharucoBatch,
+        outlier_drop_d2_threshold: f64,
     ) {
         let mut num_touched = 0usize;
         let mut num_accepted = 0usize;
@@ -334,20 +337,21 @@ impl CharucoRefiner {
                     continue;
                 }
 
-                // ── Step C: Gauss-Newton refinement ───────────────────────
-                let (maybe_refined, last_det) =
-                    refine_saddle(img, px, py, Self::MAX_ITERS, Self::ST_RADIUS);
-                let Some((refined_px, refined_py, final_s)) = maybe_refined else {
+                // ── Step C: structure-tensor gate ─────────────────────────
+                // Newton refinement on this corpus is empirically inert —
+                // the step magnitude ~|∇I|/det(S) ~ 1e-5 px falls below f32
+                // precision after the downstream cast, so the predicted
+                // homography-projected coords ARE the refined coords. The
+                // principled Förstner replacement regresses pose by 4.5×
+                // on the ChArUco-golden corpus (see
+                // `regression_board_hub::board_charuco_v1_golden_forstner`
+                // and `memory/project_refine_saddle_noop.md`). What
+                // survives — and matters — is the determinant-based
+                // rejection of flat / low-conditioning windows.
+                let det_s = compute_structure_tensor_det(img, px, py, Self::ST_RADIUS);
+                if det_s < Self::MIN_DET {
                     if TELEMETRY {
-                        record_rejection(&mut batch.telemetry, px, py, last_det);
-                    }
-                    continue;
-                };
-
-                let drift = ((refined_px - px).powi(2) + (refined_py - py).powi(2)).sqrt();
-                if drift > Self::MAX_DRIFT_PX || final_s < Self::MIN_DET {
-                    if TELEMETRY {
-                        record_rejection(&mut batch.telemetry, px, py, final_s);
+                        record_rejection(&mut batch.telemetry, px, py, det_s);
                     }
                     continue;
                 }
@@ -355,19 +359,14 @@ impl CharucoRefiner {
                 // ── Step D: build correspondence ──────────────────────────
                 self.scratch_saddle_ids[num_accepted] = saddle_id;
                 self.scratch_img[num_accepted] = Point2f {
-                    x: refined_px as f32,
-                    y: refined_py as f32,
+                    x: px as f32,
+                    y: py as f32,
                 };
                 self.scratch_obj[num_accepted] = sp;
                 // Information matrix = covariance^{-1}.
                 #[allow(clippy::cast_possible_truncation)]
-                let cov = compute_corner_covariance(
-                    img,
-                    [refined_px, refined_py],
-                    0.1,
-                    2.0,
-                    Self::ST_RADIUS as i32,
-                );
+                let cov =
+                    compute_corner_covariance(img, [px, py], 0.1, 2.0, Self::ST_RADIUS as i32);
                 self.scratch_info[num_accepted] = cov.try_inverse().unwrap_or(Matrix2::identity());
                 num_accepted += 1;
             }
@@ -386,7 +385,8 @@ impl CharucoRefiner {
                 information_matrices: &self.scratch_info[..num_accepted],
                 group_size: 1,
             };
-            self.solver.estimate(&corr, intrinsics)
+            self.solver
+                .estimate(&corr, intrinsics, outlier_drop_d2_threshold)
         } else {
             None
         };
@@ -443,12 +443,11 @@ fn apply_homography_col_major(data: &[f32; 9], u: f64, v: f64) -> [f64; 2] {
 ///
 /// Returns `(S, grad)` where `S` is the 2×2 raw structure tensor (without
 /// regularisation) and `grad` is the Sobel gradient at the centre pixel.
-fn compute_structure_tensor_and_gradient(
-    img: &ImageView,
-    cx: f64,
-    cy: f64,
-    radius: isize,
-) -> (Matrix2<f64>, [f64; 2]) {
+/// Tikhonov-regularised structure-tensor determinant over a `(2·radius+1)²`
+/// window. Used as a flat-window rejection gate (`det < MIN_DET` ⇒ reject).
+/// Iterative saddle refinement on this corpus is empirically falsified;
+/// see `memory/project_refine_saddle_noop.md`.
+fn compute_structure_tensor_det(img: &ImageView, cx: f64, cy: f64, radius: isize) -> f64 {
     let cxi = cx.floor() as isize;
     let cyi = cy.floor() as isize;
     let w = img.width.cast_signed();
@@ -468,10 +467,6 @@ fn compute_structure_tensor_and_gradient(
     let mut sum_gx2 = 0.0_f64;
     let mut sum_gy2 = 0.0_f64;
     let mut sum_gxgy = 0.0_f64;
-
-    // Centre pixel gradient for the Newton step.
-    let mut centre_gx = 0.0_f64;
-    let mut centre_gy = 0.0_f64;
 
     for py in y_start..=y_end {
         let off = (py * stride).cast_unsigned();
@@ -499,19 +494,16 @@ fn compute_structure_tensor_and_gradient(
             sum_gx2 += gx * gx;
             sum_gy2 += gy * gy;
             sum_gxgy += gx * gy;
-
-            // Collect the gradient at the centre pixel.
-            let px_abs = x_start + k.cast_signed();
-            let py_abs = py;
-            if px_abs == cxi && py_abs == cyi {
-                centre_gx = gx;
-                centre_gy = gy;
-            }
         }
     }
 
-    let s = Matrix2::new(sum_gx2, sum_gxgy, sum_gxgy, sum_gy2);
-    (s, [centre_gx, centre_gy])
+    // Tikhonov regularisation (ε = 1.0) on the structure tensor before
+    // taking the determinant. Matches the prior `refine_saddle`
+    // formulation so rejection thresholds carry over unchanged.
+    let s00 = sum_gx2 + 1.0;
+    let s11 = sum_gy2 + 1.0;
+    let s01 = sum_gxgy;
+    s00 * s11 - s01 * s01
 }
 
 /// Record a rejected saddle prediction into the telemetry buffer (no-op when
@@ -533,86 +525,6 @@ fn record_rejection(telemetry: &mut Option<Box<CharucoTelemetry>>, px: f64, py: 
             t.count += 1;
         }
     }
-}
-
-/// Iteratively refine a saddle-point estimate using Newton's method with the
-/// structure tensor as the surrogate Hessian.
-///
-/// Returns `(Some((refined_x, refined_y, det_S)), det_S)` on convergence.
-/// On failure returns `(None, last_det)` where `last_det` is the structure
-/// tensor determinant at the rejection point (0.0 if iteration never started).
-///
-/// # Note — Newton step quenching (latent issue)
-///
-/// The Newton step `-S⁻¹·∇I_centre` is quenched by structure-tensor scaling:
-/// `|step| ~ |∇I| / det(S) ~ 1e-5 px` for typical contrast, and the
-/// squared-norm convergence threshold `1e-10` trips on iteration 1. The
-/// function effectively returns its homography-projected input unchanged.
-/// The gradient sample is also taken at the integer floor of the seed only,
-/// so sub-pixel perturbations of the seed are preserved verbatim.
-///
-/// Prior to the 2026-05-16 homography fix in `decoder.rs`, this masked a
-/// catastrophic mismatch between `batch.corners[]` (post-rotation) and
-/// `batch.homographies[]` (pre-rotation): saddles were projected through a
-/// stale homography, producing 81° p99 rotation error and 35 % no-estimate
-/// frames. After the homography fix, `CharucoRefiner` correctly projects
-/// saddle predictions, and the Newton no-op merely returns those (correct)
-/// predictions unchanged — yielding ~1.8° mean rot error against ground
-/// truth, still ~17× worse than `BoardEstimator` but no longer catastrophic.
-///
-/// The principled replacement is the direct Förstner formula
-/// `saddle = (Σ ∇I·∇Iᵀ)⁻¹ · (Σ ∇I·∇Iᵀ · pᵢ)` — single 2×2 linear solve,
-/// sub-pixel by construction. Reference implementation in
-/// `tests/regression_board_hub.rs::forstner_saddle`. Empirically, applying
-/// Förstner to ArUco-on-chessboard corners REGRESSES pose by 350 % at p99
-/// due to bit-pattern PSF leakage — see `project_aprilgrid_saddle_refinement_negative.md`
-/// and `project_refine_saddle_noop.md` before touching this function.
-fn refine_saddle(
-    img: &ImageView,
-    mut px: f64,
-    mut py: f64,
-    max_iters: u32,
-    radius: isize,
-) -> (Option<(f64, f64, f64)>, f64) {
-    let w = img.width as f64;
-    let h = img.height as f64;
-
-    let mut final_det = 0.0_f64;
-
-    for _ in 0..max_iters {
-        let (s_mat, grad) = compute_structure_tensor_and_gradient(img, px, py, radius);
-
-        // Regularised inversion: S + ε·I to handle near-flat windows.
-        let s00 = s_mat[(0, 0)] + 1.0;
-        let s11 = s_mat[(1, 1)] + 1.0;
-        let s01 = s_mat[(0, 1)];
-
-        let det = s00 * s11 - s01 * s01;
-        if det < 1e-6 {
-            // Flat window — return the failing determinant for diagnostics.
-            return (None, det);
-        }
-        final_det = det;
-
-        let inv_det = 1.0 / det;
-        // δp = −S⁻¹ · grad
-        let dx = -(s11 * grad[0] - s01 * grad[1]) * inv_det;
-        let dy = -(-s01 * grad[0] + s00 * grad[1]) * inv_det;
-
-        px += dx;
-        py += dy;
-
-        if px < 1.0 || py < 1.0 || px > w - 2.0 || py > h - 2.0 {
-            // Drifted out of bounds — return last good determinant.
-            return (None, final_det);
-        }
-
-        if dx * dx + dy * dy < 1e-10 {
-            break;
-        }
-    }
-
-    (Some((px, py, final_det)), final_det)
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -646,29 +558,23 @@ mod tests {
     }
 
     #[test]
-    fn test_gauss_newton_convergence_on_checkerboard() {
-        // A synthetic hard-threshold checkerboard with 16-pixel squares.
-        // The saddle at pixel (32, 32) — the intersection of 4 squares — is
-        // tested with a small initial offset (< 1 px) so the GN centre pixel
-        // falls exactly on the corner.  Hard-threshold images have no optical
-        // blurring, so we only assert that the function converges (returns
-        // Some) with a well-conditioned structure tensor and stays within 1 px.
+    fn structure_tensor_det_passes_gate_on_clean_saddle() {
+        // Synthetic hard-threshold checkerboard with 16-px squares. The
+        // saddle at pixel (32, 32) — intersection of four squares — must
+        // produce a well-conditioned structure tensor (Tikhonov-regularised
+        // determinant well above `MIN_DET = 1e-3`).
         let sq = 16usize;
         let buf = checkerboard_buf(128, 128, sq);
         let img = ImageView::new(&buf, 128, 128, 128).unwrap();
 
-        let true_x = 32.0_f64;
-        let true_y = 32.0_f64;
-        // Start with a 0.5-px offset so floor() gives the corner pixel (32, 32).
-        let init_x = true_x + 0.5;
-        let init_y = true_y + 0.5;
+        // 0.5-px offset places `.floor()` on the corner pixel (32, 32).
+        let cx = 32.5_f64;
+        let cy = 32.5_f64;
 
-        let (result, _last_det) = refine_saddle(&img, init_x, init_y, 10, 3);
-        assert!(result.is_some(), "refinement must return Some");
-        let (_rx, _ry, det) = result.unwrap();
+        let det = compute_structure_tensor_det(&img, cx, cy, 3);
         assert!(
             det > 1e-3,
-            "structure tensor det must exceed threshold (well-conditioned corner), got {det}"
+            "structure tensor det must exceed gate threshold on a clean saddle, got {det}",
         );
     }
 
@@ -685,7 +591,7 @@ mod tests {
         let intrinsics = CameraIntrinsics::new(500.0, 500.0, 128.0, 128.0);
 
         let mut out = refiner.new_batch();
-        refiner.estimate(&view, &img, &intrinsics, &mut out);
+        refiner.estimate(&view, &img, &intrinsics, &mut out, 0.0);
         assert_eq!(out.count, 0);
         assert!(
             refiner.scratch_seen.iter().all(|&b| !b),
@@ -706,7 +612,7 @@ mod tests {
         let intrinsics = CameraIntrinsics::new(500.0, 500.0, 128.0, 128.0);
 
         let mut out = refiner.new_batch();
-        refiner.estimate(&view, &img, &intrinsics, &mut out);
+        refiner.estimate(&view, &img, &intrinsics, &mut out, 0.0);
         assert!(out.board_pose.is_none());
     }
 
