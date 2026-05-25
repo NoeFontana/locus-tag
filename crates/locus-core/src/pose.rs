@@ -537,11 +537,8 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
     // one corner) and (b) the per-profile threshold opt-in.
     let outlier_corner_idx = match (covariances.as_ref(), config.outlier_drop_d2_threshold) {
         (Some(covs), threshold) if threshold > 0.0 => {
-            let info_matrices: [Matrix2<f64>; 4] = core::array::from_fn(|i| {
-                covs[i]
-                    .try_inverse()
-                    .unwrap_or_else(Matrix2::identity)
-            });
+            let info_matrices: [Matrix2<f64>; 4] =
+                core::array::from_fn(|i| covs[i].try_inverse().unwrap_or_else(Matrix2::identity));
             match maybe_drop_outlier_corner(
                 intrinsics,
                 corners,
@@ -626,13 +623,8 @@ fn maybe_drop_outlier_corner(
     threshold: f64,
 ) -> Option<(u8, Pose, [[f64; 6]; 6])> {
     let obj_pts = centered_tag_corners(tag_size);
-    let (per_corner_4, _) = per_corner_d2(
-        intrinsics,
-        corners,
-        &obj_pts,
-        info_matrices,
-        &refined_pose,
-    );
+    let (per_corner_4, _) =
+        per_corner_d2(intrinsics, corners, &obj_pts, info_matrices, &refined_pose);
 
     let (i_worst, d2_worst) =
         per_corner_4
@@ -668,13 +660,7 @@ fn maybe_drop_outlier_corner(
     // Self-rejection over the 3 kept corners (using the original,
     // un-masked info matrices so the comparison metric matches the
     // trigger's).
-    let (per_corner_3, _) = per_corner_d2(
-        intrinsics,
-        corners,
-        &obj_pts,
-        info_matrices,
-        &pose_3,
-    );
+    let (per_corner_3, _) = per_corner_d2(intrinsics, corners, &obj_pts, info_matrices, &pose_3);
     let kept_sum = |per_corner: &[f64; 4]| -> f64 {
         per_corner
             .iter()
@@ -2155,7 +2141,10 @@ mod tests {
         let dropped =
             maybe_drop_outlier_corner(&intrinsics, &corners, tag_size, &info, pose_4, 25.0);
 
-        assert!(dropped.is_none(), "no outlier should be dropped on sub-pixel noise");
+        assert!(
+            dropped.is_none(),
+            "no outlier should be dropped on sub-pixel noise"
+        );
     }
 
     #[test]
@@ -2170,7 +2159,10 @@ mod tests {
         let dropped =
             maybe_drop_outlier_corner(&intrinsics, &corners, tag_size, &info, pose_4, 25.0);
 
-        assert!(dropped.is_none(), "two correlated outliers must fail dominance check");
+        assert!(
+            dropped.is_none(),
+            "two correlated outliers must fail dominance check"
+        );
     }
 
     #[test]
