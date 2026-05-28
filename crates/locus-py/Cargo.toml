@@ -18,7 +18,7 @@ bumpalo = "3.20"
 tracing = { version = "0.1", features = ["release_max_level_info"] }
 tracing-tracy = { version = "0.11", optional = true }
 tracing-subscriber = { version = "0.3", features = ["registry", "env-filter"], optional = true }
-nalgebra = { version = "0.34", default-features = false, features = ["std"] }
+nalgebra = { version = "0.35", default-features = false, features = ["std"] }
 
 [features]
 default = ["profiles"]
