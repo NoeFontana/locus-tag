@@ -5,6 +5,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Changed
+
+- Centralised SO(3) → quaternion conversion through `quat_from_so3` helper, eliminating the latent `UnitQuaternion::from_matrix` Müller-iteration hang risk on near-singular rotations across `board.rs`, `pose.rs`, and the PyO3 board-pose copy.
+
 ### Added
 
 - **Outlier-aware drop on the joint board-pose LM**: `RobustPoseSolver::estimate` now applies the same per-observation outlier-drop policy used in the per-tag pose path. The dominant outlier's *group* (one tag for AprilGrid, one saddle for ChAruco) is masked, the LM re-runs warm-started, and the masked pose is kept iff its kept-group d² sum strictly improves. `BoardEstimator::estimate`, `CharucoRefiner::estimate`, and the Python `BoardEstimator` / `CharucoRefiner` FFI all gain a threshold argument sourced from `DetectorConfig::outlier_drop_d2_threshold`. Safe but rarely triggered on curated data: AprilGrid `high_accuracy` `mean_rotation_error_deg` improves ~0.2 %, p99 unchanged (the LO-RANSAC inlier gate already filters single-corner outliers before they reach the LM).

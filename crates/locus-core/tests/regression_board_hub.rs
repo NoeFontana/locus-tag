@@ -18,6 +18,7 @@
 use locus_core::{
     CameraIntrinsics, Detector, DetectorConfig, TagFamily,
     board::{AprilGridTopology, BoardEstimator, CharucoTopology},
+    pose::quat_from_so3,
 };
 use nalgebra::{UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
@@ -434,7 +435,7 @@ impl BoardRegressionHarness {
 
                     t_errors.push((est.pose.translation - gt_t).norm());
                     r_errors.push(
-                        UnitQuaternion::from_matrix(&est.pose.rotation)
+                        quat_from_so3(est.pose.rotation)
                             .angle_to(&gt_q)
                             .to_degrees(),
                     );
@@ -888,7 +889,7 @@ mod tests {
             }
             if let Some(pose) = &out_batch.board_pose {
                 let t = pose.pose.translation;
-                let q = nalgebra::UnitQuaternion::from_matrix(&pose.pose.rotation);
+                let q = quat_from_so3(pose.pose.rotation);
                 let gt_t = nalgebra::Vector3::new(
                     entry.board_pose.translation[0],
                     entry.board_pose.translation[1],
@@ -1017,7 +1018,7 @@ mod tests {
 
                 t_errors.push((est.pose.translation - gt_t).norm());
                 r_errors.push(
-                    UnitQuaternion::from_matrix(&est.pose.rotation)
+                    quat_from_so3(est.pose.rotation)
                         .angle_to(&gt_q)
                         .to_degrees(),
                 );

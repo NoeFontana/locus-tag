@@ -2,7 +2,7 @@
 
 use crate::batch::{MAX_CANDIDATES, Point2f};
 use crate::pose::{
-    CameraIntrinsics, Pose, projection_jacobian, solve_ippe_square, symmetrize_jtj6,
+    CameraIntrinsics, Pose, projection_jacobian, quat_from_so3, solve_ippe_square, symmetrize_jtj6,
 };
 use nalgebra::{Matrix2, Matrix3, Matrix6, UnitQuaternion, Vector3, Vector6};
 use std::sync::Arc;
@@ -535,7 +535,7 @@ fn gn_step_on_sample(
         let twist = Vector3::new(delta[3], delta[4], delta[5]);
         let dq = UnitQuaternion::from_scaled_axis(twist);
         Pose {
-            rotation: (dq * UnitQuaternion::from_matrix(&pose.rotation))
+            rotation: (dq * quat_from_so3(pose.rotation))
                 .to_rotation_matrix()
                 .into_inner(),
             translation: pose.translation + Vector3::new(delta[0], delta[1], delta[2]),
@@ -1143,7 +1143,7 @@ impl RobustPoseSolver {
             let twist = Vector3::new(delta[3], delta[4], delta[5]);
             let dq = UnitQuaternion::from_scaled_axis(twist);
             Pose {
-                rotation: (dq * UnitQuaternion::from_matrix(&pose.rotation))
+                rotation: (dq * quat_from_so3(pose.rotation))
                     .to_rotation_matrix()
                     .into_inner(),
                 translation: pose.translation + Vector3::new(delta[0], delta[1], delta[2]),
@@ -1462,7 +1462,7 @@ impl RobustPoseSolver {
                 let twist = Vector3::new(delta[3], delta[4], delta[5]);
                 let dq = UnitQuaternion::from_scaled_axis(twist);
                 let new_pose = Pose {
-                    rotation: (dq * UnitQuaternion::from_matrix(&pose.rotation))
+                    rotation: (dq * quat_from_so3(pose.rotation))
                         .to_rotation_matrix()
                         .into_inner(),
                     translation: pose.translation + Vector3::new(delta[0], delta[1], delta[2]),
@@ -1689,7 +1689,7 @@ mod tests {
         let mut batch = DetectionBatch::new();
         let mut n = 0usize;
 
-        let q = UnitQuaternion::from_matrix(&pose.rotation);
+        let q = quat_from_so3(pose.rotation);
 
         for (tag_id, opt_pts) in obj_points.iter().enumerate() {
             let Some(obj) = opt_pts else { continue };
@@ -2209,8 +2209,8 @@ mod tests {
         let t_error = (board_pose.pose.translation - true_pose.translation).norm();
         assert!(t_error < 1e-3, "translation error {t_error} m exceeds 1 mm");
 
-        let est_q = UnitQuaternion::from_matrix(&board_pose.pose.rotation);
-        let true_q = UnitQuaternion::from_matrix(&true_pose.rotation);
+        let est_q = quat_from_so3(board_pose.pose.rotation);
+        let true_q = quat_from_so3(true_pose.rotation);
         let r_error = est_q.angle_to(&true_q).to_degrees();
         assert!(r_error < 0.1, "rotation error {r_error}° exceeds 0.1°");
     }
@@ -2498,8 +2498,8 @@ mod tests {
             t_err < 1e-3,
             "translation error {t_err} m exceeds 1 mm on noise-free input"
         );
-        let q_true = UnitQuaternion::from_matrix(&true_pose.rotation);
-        let q_est = UnitQuaternion::from_matrix(&seed.rotation);
+        let q_true = quat_from_so3(true_pose.rotation);
+        let q_est = quat_from_so3(seed.rotation);
         let r_err = q_true.angle_to(&q_est).to_degrees();
         assert!(
             r_err < 0.5,
@@ -2533,8 +2533,8 @@ mod tests {
             t_err < 5e-3,
             "translation error {t_err} m exceeds 5 mm on oblique input"
         );
-        let q_true = UnitQuaternion::from_matrix(&true_pose.rotation);
-        let q_est = UnitQuaternion::from_matrix(&seed.rotation);
+        let q_true = quat_from_so3(true_pose.rotation);
+        let q_est = quat_from_so3(seed.rotation);
         let r_err = q_true.angle_to(&q_est).to_degrees();
         assert!(
             r_err < 1.0,
