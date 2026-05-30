@@ -389,6 +389,13 @@ impl DatasetProvider for FixtureProvider {
     fn iter(&self) -> Box<dyn Iterator<Item = DatasetItem> + '_> {
         // Find pairs of .png and .json
         let walker = walkdir::WalkDir::new(&self.fixtures_dir).sort_by_file_name();
+        // When LOCUS_STRICT_FIXTURE_CHECK=1, a .png without a sibling .json is
+        // a fail-fast condition (closes the same silent-skip footgun as
+        // PR #252). Unset: warn + skip per file so ad-hoc `cargo test` runs on
+        // partially-populated fixture trees still work.
+        let strict_check = std::env::var("LOCUS_STRICT_FIXTURE_CHECK")
+            .map(|v| v == "1")
+            .unwrap_or(false);
 
         let iter = walker
             .into_iter()
@@ -401,6 +408,17 @@ impl DatasetProvider for FixtureProvider {
 
                 let json_path = path.with_extension("json");
                 if !json_path.exists() {
+                    assert!(
+                        !strict_check,
+                        "fixture .json not found for '{}' \
+                         (LOCUS_STRICT_FIXTURE_CHECK=1 — refusing to silent-skip; \
+                         re-run `tools/cli.py bench prepare` to refresh the cache)",
+                        path.display()
+                    );
+                    eprintln!(
+                        "warning: fixture .json not found for '{}'; skipping (set LOCUS_STRICT_FIXTURE_CHECK=1 to fail)",
+                        path.display()
+                    );
                     return None;
                 }
 

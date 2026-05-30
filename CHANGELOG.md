@@ -5,6 +5,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Changed
+
+- Regression tests against the hub dataset cache now panic instead of silently skipping when `LOCUS_HUB_DATASET_DIR` is set but the expected subdir is missing (closes the same footgun as PR #252).
+
 ### Added
 
 - **Outlier-aware drop on the joint board-pose LM**: `RobustPoseSolver::estimate` now applies the same per-observation outlier-drop policy used in the per-tag pose path. The dominant outlier's *group* (one tag for AprilGrid, one saddle for ChAruco) is masked, the LM re-runs warm-started, and the masked pose is kept iff its kept-group d² sum strictly improves. `BoardEstimator::estimate`, `CharucoRefiner::estimate`, and the Python `BoardEstimator` / `CharucoRefiner` FFI all gain a threshold argument sourced from `DetectorConfig::outlier_drop_d2_threshold`. Safe but rarely triggered on curated data: AprilGrid `high_accuracy` `mean_rotation_error_deg` improves ~0.2 %, p99 unchanged (the LO-RANSAC inlier gate already filters single-corner outliers before they reach the LM).
