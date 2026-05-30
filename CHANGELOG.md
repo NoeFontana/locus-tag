@@ -5,6 +5,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Changed
+
+- `decoder.rs` SIMD gather blocks now carry full SAFETY justification including the 3-byte SIMD-gather padding contract (`crates/locus-core/src/decoder.rs` AVX2 + NEON paths in `sample_grid_values_simd`).
+
 ### Added
 
 - **Outlier-aware drop on the joint board-pose LM**: `RobustPoseSolver::estimate` now applies the same per-observation outlier-drop policy used in the per-tag pose path. The dominant outlier's *group* (one tag for AprilGrid, one saddle for ChAruco) is masked, the LM re-runs warm-started, and the masked pose is kept iff its kept-group d² sum strictly improves. `BoardEstimator::estimate`, `CharucoRefiner::estimate`, and the Python `BoardEstimator` / `CharucoRefiner` FFI all gain a threshold argument sourced from `DetectorConfig::outlier_drop_d2_threshold`. Safe but rarely triggered on curated data: AprilGrid `high_accuracy` `mean_rotation_error_deg` improves ~0.2 %, p99 unchanged (the LO-RANSAC inlier gate already filters single-corner outliers before they reach the LM).
