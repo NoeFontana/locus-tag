@@ -2009,7 +2009,7 @@ impl FfiImageBuffer<'_> {
                     height: *height,
                     stride: *stride,
                 }
-            }
+            },
             FfiImageBuffer::Padded {
                 storage,
                 width,
@@ -2024,14 +2024,12 @@ impl FfiImageBuffer<'_> {
                     height: *height,
                     stride: *width,
                 }
-            }
+            },
         }
     }
 }
 
-fn prepare_image_view<'py>(
-    img: &'py PyReadonlyArray2<'_, u8>,
-) -> PyResult<FfiImageBuffer<'py>> {
+fn prepare_image_view<'py>(img: &'py PyReadonlyArray2<'_, u8>) -> PyResult<FfiImageBuffer<'py>> {
     let shape = img.shape();
     let height = shape[0];
     let width = shape[1];
@@ -2125,14 +2123,10 @@ fn prepare_image_view<'py>(
     // downstream cache access more predictable and the source stride
     // information is irrelevant once we own the bytes.
     let logical = width.checked_mul(height).ok_or_else(|| {
-        PyValueError::new_err(format!(
-            "Image dimensions {width}x{height} overflow usize",
-        ))
+        PyValueError::new_err(format!("Image dimensions {width}x{height} overflow usize",))
     })?;
     let storage_len = logical.checked_add(3).ok_or_else(|| {
-        PyValueError::new_err(format!(
-            "Image dimensions {width}x{height} overflow usize",
-        ))
+        PyValueError::new_err(format!("Image dimensions {width}x{height} overflow usize",))
     })?;
     let mut storage = vec![0u8; storage_len];
     // Copy row by row to handle source `stride_y >= width` correctly. The
