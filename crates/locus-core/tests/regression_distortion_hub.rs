@@ -9,6 +9,7 @@
     clippy::naive_bytecount,
     clippy::panic,
     clippy::single_match_else,
+    clippy::too_many_lines,
     clippy::unwrap_used,
     dead_code,
     missing_docs,
@@ -53,10 +54,14 @@ fn run_distortion_hub_test(config_name: &str, family: TagFamily) {
     let root = common::resolve_hub_root(&hub_dir);
     let dataset_path = root.join(config_name);
 
-    if !dataset_path.exists() {
-        println!("Dataset not found in cache: {config_name}. Skipping.");
-        return;
-    }
+    assert!(
+        dataset_path.exists(),
+        "hub dataset subdir '{}' not found under '{}' \
+         (LOCUS_HUB_DATASET_DIR was set — refusing to silent-skip; \
+         re-run `tools/cli.py bench prepare` to refresh the cache)",
+        config_name,
+        root.display()
+    );
 
     let Some(provider) = HubProvider::new(&dataset_path) else {
         println!("Failed to load dataset: {config_name}. Skipping.");
@@ -153,12 +158,17 @@ fn test_max_recall_adaptive_falls_back_under_distortion() {
         return;
     };
 
-    let dataset_path =
-        common::resolve_hub_root(&hub_dir).join("aprilgrid_distortion_brown_conrady_v1_1920x1080");
-    if !dataset_path.exists() {
-        println!("Dataset not found in cache. Skipping.");
-        return;
-    }
+    let config_name = "aprilgrid_distortion_brown_conrady_v1_1920x1080";
+    let root = common::resolve_hub_root(&hub_dir);
+    let dataset_path = root.join(config_name);
+    assert!(
+        dataset_path.exists(),
+        "hub dataset subdir '{}' not found under '{}' \
+         (LOCUS_HUB_DATASET_DIR was set — refusing to silent-skip; \
+         re-run `tools/cli.py bench prepare` to refresh the cache)",
+        config_name,
+        root.display()
+    );
 
     let Some(provider) = HubProvider::new(&dataset_path) else {
         println!("Failed to load dataset. Skipping.");

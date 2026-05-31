@@ -281,6 +281,28 @@ pub(crate) fn symmetrize_jtj6(jtj: &mut Matrix6<f64>) {
     }
 }
 
+/// Convert a near-orthogonal rotation matrix to a unit quaternion without the
+/// Müller iterative algorithm (which can hang on degenerate input).
+///
+/// `UnitQuaternion::from_matrix` delegates to `Rotation3::from_matrix_eps` with
+/// `max_iter = 0`, which nalgebra treats as `usize::MAX` ("loop until
+/// convergence"). For degenerate inputs (e.g. near-singular IPPE outputs at
+/// extreme tag angles), the Müller iterative algorithm never converges —
+/// infinite loop.
+///
+/// This helper uses the closed-form Shepperd method instead: wrap the matrix
+/// as a `Rotation3` (no orthogonalization) then extract the quaternion
+/// analytically. All current callers feed SO(3)-by-construction matrices (LM
+/// exp-map output, ground-truth `UnitQuaternion::to_rotation_matrix`), so the
+/// hang is unreachable today — but this helper makes the safety property
+/// explicit and immune to future refactors.
+#[inline]
+#[must_use]
+pub fn quat_from_so3(r: Matrix3<f64>) -> UnitQuaternion<f64> {
+    let rot = Rotation3::from_matrix_unchecked(r);
+    UnitQuaternion::from_rotation_matrix(&rot)
+}
+
 /// Computes the 10 non-zero scalar entries of the 2×6 left-perturbation SE(3) Jacobian
 /// for a calibrated projection.
 ///
@@ -1669,17 +1691,7 @@ pub fn refine_poses_soa_with_config(
             );
 
             let pose_data = if let Some(pose) = pose_opt {
-                // `UnitQuaternion::from_matrix` delegates to `Rotation3::from_matrix_eps` with
-                // `max_iter = 0`, which nalgebra treats as usize::MAX ("loop until convergence").
-                // For degenerate IPPE outputs (near-singular homographies at extreme tag angles),
-                // the Müller iterative algorithm never converges — infinite loop.
-                //
-                // Use the closed-form Shepperd method instead: wrap the matrix as a `Rotation3`
-                // (no orthogonalization) then extract the quaternion analytically. The LM solver
-                // maintains pose on SO(3) via the exponential map, so `pose.rotation` is always
-                // sufficiently close to orthogonal for this to be accurate.
-                let rot = Rotation3::from_matrix_unchecked(pose.rotation);
-                let q = UnitQuaternion::from_rotation_matrix(&rot);
+                let q = quat_from_so3(pose.rotation);
                 let t = pose.translation;
 
                 // Data layout: [tx, ty, tz, qx, qy, qz, qw]
@@ -1973,6 +1985,39 @@ mod tests {
         // y = (0.1 / 2.0) * 500 + 240 = 265
         assert!((p_img[0] - 345.0).abs() < 1e-6);
         assert!((p_img[1] - 265.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn quaternion_extraction_does_not_hang_on_near_singular_input() {
+        // Regression for the latent `UnitQuaternion::from_matrix` Müller-iteration hang.
+        // That function delegates to `Rotation3::from_matrix_eps` with `max_iter = 0`,
+        // which nalgebra treats as `usize::MAX` ("loop until convergence"). On a
+        // matrix that is one cosmic-ray bit off SO(3), the iteration can fail to
+        // converge — wedging the thread. `quat_from_so3` uses the closed-form
+        // analytic extraction instead and must return promptly with a unit-norm
+        // quaternion on the same input.
+        let mut r = Matrix3::<f64>::identity();
+        // Perturb off-diagonal entries by 1e-12 — orders of magnitude below the
+        // floating-point round-off floor for `R R^T - I` produced by any LM
+        // exp-map step, yet representative of "near-orthogonal but not exact".
+        r[(0, 1)] = 1e-12;
+        r[(1, 0)] = -1e-12;
+        r[(0, 2)] = 1e-12;
+        r[(2, 0)] = -1e-12;
+
+        let start = std::time::Instant::now();
+        let q = quat_from_so3(r);
+        let elapsed = start.elapsed();
+
+        assert!(
+            elapsed < std::time::Duration::from_millis(1),
+            "quat_from_so3 took {elapsed:?} — expected sub-millisecond closed-form extraction",
+        );
+        assert!(
+            (q.norm() - 1.0).abs() < 1e-9,
+            "quat_from_so3 result is not unit-norm: |q| = {}",
+            q.norm(),
+        );
     }
 
     #[test]
