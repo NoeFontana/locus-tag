@@ -928,8 +928,8 @@ mod tests {
             refine_pose_lm_weighted(&intrinsics, &corners, s, init_pose, &identity_covs);
 
         let t_err = (result.translation - gt_t).norm() * 1000.0; // mm
-        let q_gt = nalgebra::UnitQuaternion::from_matrix(&gt_rot);
-        let q_est = nalgebra::UnitQuaternion::from_matrix(&result.rotation);
+        let q_gt = crate::pose::quat_from_so3(gt_rot);
+        let q_est = crate::pose::quat_from_so3(result.rotation);
         let r_err_deg = q_gt.angle_to(&q_est).to_degrees();
 
         assert!(t_err < 0.01, "translation error too large: {t_err:.4} mm");
