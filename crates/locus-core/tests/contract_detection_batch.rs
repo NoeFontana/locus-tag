@@ -42,6 +42,7 @@ enum Column {
     StatusMask,
     FunnelStatus,
     CornerCovariances,
+    CornerEmpiricalNoise,
     #[cfg(feature = "bench-internals")]
     PoseConsistencyD2,
     #[cfg(feature = "bench-internals")]
@@ -88,6 +89,8 @@ fn seed_sentinels(batch: &mut DetectionBatch) {
         // (None, PassedContrast, RejectedContrast) differs.
         batch.funnel_status[i] = FunnelStatus::RejectedSampling;
         batch.corner_covariances[i] = [F32_SENTINEL; 16];
+        // Phase 4 per-corner empirical noise (Erf route writes; Phase D reads).
+        batch.corner_empirical_noise[i] = [F32_SENTINEL; 4];
         #[cfg(feature = "bench-internals")]
         {
             batch.pose_consistency_d2[i] = F32_SENTINEL;
@@ -148,6 +151,9 @@ fn changed_columns(before: &DetectionBatch, after: &DetectionBatch) -> BTreeSet<
     if bytes_of(&before.corner_covariances[..]) != bytes_of(&after.corner_covariances[..]) {
         set.insert(Column::CornerCovariances);
     }
+    if bytes_of(&before.corner_empirical_noise[..]) != bytes_of(&after.corner_empirical_noise[..]) {
+        set.insert(Column::CornerEmpiricalNoise);
+    }
     #[cfg(feature = "bench-internals")]
     {
         if bytes_of(&before.pose_consistency_d2[..]) != bytes_of(&after.pose_consistency_d2[..]) {
@@ -187,6 +193,8 @@ fn snapshot(batch: &DetectionBatch) -> Box<DetectionBatch> {
     out.funnel_status.copy_from_slice(&batch.funnel_status);
     out.corner_covariances
         .copy_from_slice(&batch.corner_covariances);
+    out.corner_empirical_noise
+        .copy_from_slice(&batch.corner_empirical_noise);
     #[cfg(feature = "bench-internals")]
     {
         out.pose_consistency_d2
@@ -247,6 +255,7 @@ fn contract_phase_a_empty_label_result() {
             Column::Corners,
             Column::StatusMask,
             Column::CornerCovariances,
+            Column::CornerEmpiricalNoise,
             Column::RoutedTo,
             Column::PpbEstimate,
         ],
@@ -295,6 +304,7 @@ fn contract_phase_a_real_tag() {
             Column::Corners,
             Column::StatusMask,
             Column::CornerCovariances,
+            Column::CornerEmpiricalNoise,
             Column::RoutedTo,
             Column::PpbEstimate,
         ],

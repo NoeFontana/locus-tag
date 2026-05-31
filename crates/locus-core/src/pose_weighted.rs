@@ -21,8 +21,12 @@ fn corner_has_structure_tensor_support(img: &ImageView, center: [f64; 2], radius
 /// Compute the covariance of the corner position estimation error based on the Structure Tensor.
 ///
 /// The covariance $\Sigma_c$ is approximated as the inverse of the Structure Tensor $S$:
-/// $$ \Sigma_c \approx \sigma_n^2 S^{-1} $$
-/// where $\sigma_n^2$ is the pixel noise variance (assumed around 2.0 for typical webcams).
+/// $$ \Sigma_c \approx \sigma_{\text{eff}}^2 S^{-1} + \alpha I $$
+/// where $\sigma_{\text{eff}}^2 = \max(\sigma_n^2, \min(\sigma_{\text{emp}}^2,\, 16 \sigma_n^2))$
+/// folds in the per-corner empirical noise estimate (Phase 4 — see
+/// `docs/engineering/pose_covariance_followup_2026-05-22.md` §4). Pass
+/// `empirical_n_sq = 0.0` to recover the classical structure-tensor-only
+/// formula `Σ_c ≈ σ_n² S⁻¹` (pre-Phase-4 behaviour).
 ///
 /// The Structure Tensor is computed over a small window around the corner.
 pub(crate) fn compute_corner_covariance(
@@ -30,6 +34,7 @@ pub(crate) fn compute_corner_covariance(
     center: [f64; 2],
     alpha_max: f64,
     sigma_n_sq: f64,
+    empirical_n_sq: f64,
     radius: i32,
 ) -> Matrix2<f64> {
     let cx = center[0].floor() as isize;
@@ -52,7 +57,34 @@ pub(crate) fn compute_corner_covariance(
         img, center, stride, x_start, x_end, y_start, y_end, sigma_sq,
     );
 
-    finalize_corner_covariance(sum_gx2, sum_gy2, sum_gxgy, alpha_max, sigma_n_sq)
+    finalize_corner_covariance(
+        sum_gx2,
+        sum_gy2,
+        sum_gxgy,
+        alpha_max,
+        sigma_n_sq,
+        empirical_n_sq,
+    )
+}
+
+/// Phase 4 empirical-noise inflation rule. Effective σ_n² used by
+/// [`finalize_corner_covariance`].
+///
+/// `empirical_n_sq` is the per-corner empirical noise estimate drawn from
+/// the ERF edge-fit residual MSE (`refinement::combine_edge_mses`).
+/// `0.0` (the sentinel) means "no ERF measurement", recovering the
+/// classical structure-tensor `σ_n²` floor. Positive values inflate the
+/// covariance for that corner — but only up to `16·σ_n²`, a ceiling that
+/// bounds the Phase-2 tail-cliff failure mode (uniform-scalar inflation
+/// at `m=250` regressed render-tag p99 rotation 0.86° → 1.90°; see
+/// followup memo §2.2 and §3 design table).
+#[inline]
+fn effective_sigma_n_sq(sigma_n_sq: f64, empirical_n_sq: f64) -> f64 {
+    const EMPIRICAL_CEILING_MULTIPLIER: f64 = 16.0;
+    let clamped = empirical_n_sq
+        .max(0.0)
+        .min(EMPIRICAL_CEILING_MULTIPLIER * sigma_n_sq);
+    sigma_n_sq.max(clamped)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -130,6 +162,7 @@ fn finalize_corner_covariance(
     sum_gxgy: f64,
     alpha_max: f64,
     sigma_n_sq: f64,
+    empirical_n_sq: f64,
 ) -> Matrix2<f64> {
     // Tikhonov regularization on the structure tensor (ε=1.0)
     let s00 = sum_gx2 + 1.0;
@@ -151,23 +184,35 @@ fn finalize_corner_covariance(
     let r = ((trace - discriminant) / (trace + discriminant)).max(0.0);
     let alpha = alpha_max * (1.0 - r).powi(2);
 
-    s_inv.scale(sigma_n_sq) + Matrix2::identity().scale(alpha)
+    let eff_sigma_n_sq = effective_sigma_n_sq(sigma_n_sq, empirical_n_sq);
+    s_inv.scale(eff_sigma_n_sq) + Matrix2::identity().scale(alpha)
 }
 
 #[cfg(feature = "bench-internals")]
 #[must_use]
 /// Bench-only wrapper for the production corner-covariance kernel.
+///
+/// `empirical_n_sq` is the per-corner empirical noise variance from
+/// Phase 4. Pass `0.0` to recover the pre-Phase-4 structure-tensor-only
+/// formula.
 pub fn bench_compute_corner_covariance(
     img: &ImageView,
     center: [f64; 2],
     alpha_max: f64,
     sigma_n_sq: f64,
+    empirical_n_sq: f64,
     radius: i32,
 ) -> Matrix2<f64> {
-    compute_corner_covariance(img, center, alpha_max, sigma_n_sq, radius)
+    compute_corner_covariance(img, center, alpha_max, sigma_n_sq, empirical_n_sq, radius)
 }
 
 /// Compute framework uncertainty for all 4 corners.
+///
+/// `empirical_n_sq` is the per-corner empirical noise variance (Phase 4).
+/// `None` recovers the pre-Phase-4 behaviour (no inflation); `Some(arr)`
+/// inflates each corner via `max(σ_n², min(arr[i], 16·σ_n²))`. Sentinel
+/// `0.0` entries in `arr` also recover the pre-Phase-4 behaviour for
+/// that corner (e.g. corners that did not traverse ERF).
 #[must_use]
 pub(crate) fn compute_framework_uncertainty(
     img: &ImageView,
@@ -175,13 +220,22 @@ pub(crate) fn compute_framework_uncertainty(
     _h_poly: &crate::decoder::Homography,
     tikhonov_alpha_max: f64,
     sigma_n_sq: f64,
+    empirical_n_sq: Option<&[f32; 4]>,
     structure_tensor_radius: u8,
 ) -> [Matrix2<f64>; 4] {
     let mut covariances = [Matrix2::zeros(); 4];
     let radius = i32::from(structure_tensor_radius);
     for i in 0..4 {
+        let emp_i = empirical_n_sq.map_or(0.0, |arr| f64::from(arr[i]));
         covariances[i] = if corner_has_structure_tensor_support(img, corners[i], radius) {
-            compute_corner_covariance(img, corners[i], tikhonov_alpha_max, sigma_n_sq, radius)
+            compute_corner_covariance(
+                img,
+                corners[i],
+                tikhonov_alpha_max,
+                sigma_n_sq,
+                emp_i,
+                radius,
+            )
         } else {
             Matrix2::identity().scale(OFF_IMAGE_CORNER_VARIANCE)
         };
@@ -1056,6 +1110,116 @@ mod tests {
         )
     }
 
+    /// Phase 4 inflation rule — `effective_sigma_n_sq` should:
+    /// (a) recover `σ_n²` exactly when `empirical_n_sq = 0` (sentinel),
+    /// (b) cap at `16·σ_n²` even for arbitrarily large empirical noise,
+    /// (c) return the empirical noise when it sits in `(σ_n², 16·σ_n²]`,
+    /// (d) clamp negative empirical noise to 0 (defensive).
+    #[test]
+    fn effective_sigma_n_sq_inflation_rule() {
+        let sigma = 4.0;
+        // (a) sentinel → no inflation
+        assert_eq!(effective_sigma_n_sq(sigma, 0.0), sigma);
+        // (b) ceiling clamp at 16·σ_n² = 64 (the Phase-2 tail-cliff
+        // insurance: any inflation beyond this risks the render-tag
+        // p99 rotation regression observed at m=250).
+        assert_eq!(effective_sigma_n_sq(sigma, 1000.0), 64.0);
+        assert_eq!(effective_sigma_n_sq(sigma, f64::INFINITY), 64.0);
+        // (c) empirical above floor, under ceiling → use it directly.
+        assert_eq!(effective_sigma_n_sq(sigma, 10.0), 10.0);
+        assert_eq!(effective_sigma_n_sq(sigma, 64.0), 64.0);
+        // empirical below floor → keep floor (no deflation).
+        assert_eq!(effective_sigma_n_sq(sigma, 2.0), 4.0);
+        // (d) negative empirical (defensive — should never happen but
+        // catches a future sign bug in the combine step).
+        assert_eq!(effective_sigma_n_sq(sigma, -5.0), 4.0);
+    }
+
+    /// Plumbing integration: with `empirical_n_sq = 0` the new
+    /// `finalize_corner_covariance` must produce a Σ_c byte-identical
+    /// to the pre-Phase-4 formula, so profiles that did not opt in are
+    /// unaffected. With a positive empirical value the inflation kicks
+    /// in proportionally on the structure-tensor scale factor.
+    #[test]
+    fn finalize_corner_covariance_zero_empirical_matches_baseline() {
+        let sum_gx2 = 1000.0;
+        let sum_gy2 = 1000.0;
+        let sum_gxgy = 0.0;
+        let alpha_max = 0.25;
+        let sigma_n_sq = 4.0;
+
+        // Sentinel `0.0` ⇒ no inflation ⇒ identical to pre-Phase-4.
+        let baseline =
+            finalize_corner_covariance(sum_gx2, sum_gy2, sum_gxgy, alpha_max, sigma_n_sq, 0.0);
+
+        // Recompute the pre-Phase-4 formula by hand: Σ = σ_n²·S⁻¹ + α·I.
+        let s00 = sum_gx2 + 1.0;
+        let s11 = sum_gy2 + 1.0;
+        let det = s00 * s11;
+        let s_inv = Matrix2::new(s11, 0.0, 0.0, s00).scale(1.0 / det);
+        let trace = s00 + s11;
+        let disc = ((s00 - s11).powi(2)).sqrt();
+        let r = ((trace - disc) / (trace + disc)).max(0.0);
+        let alpha = alpha_max * (1.0 - r).powi(2);
+        let expected = s_inv.scale(sigma_n_sq) + Matrix2::identity().scale(alpha);
+
+        assert!(
+            (baseline - expected).norm() < 1e-12,
+            "Phase-4 sentinel path drifted from baseline: got {baseline} expected {expected}"
+        );
+
+        // Now inflate: empirical 16.0 > σ_n²=4.0 ⇒ effective σ_n² = 16.0
+        // (under the ceiling 64.0). Σ_c's structure-tensor scale should
+        // grow 4× and the Tikhonov diagonal should stay put.
+        let inflated =
+            finalize_corner_covariance(sum_gx2, sum_gy2, sum_gxgy, alpha_max, sigma_n_sq, 16.0);
+        let expected_inflated = s_inv.scale(16.0) + Matrix2::identity().scale(alpha);
+        assert!(
+            (inflated - expected_inflated).norm() < 1e-12,
+            "Phase-4 inflation path: got {inflated} expected {expected_inflated}"
+        );
+
+        // Sanity: the inflated Σ_c must dominate the baseline (all
+        // eigenvalues at least as large) — the LM's job is to weight
+        // less-trusted corners less, not more.
+        assert!(inflated.norm() > baseline.norm());
+    }
+
+    /// Phase 4 plumbing: when `compute_framework_uncertainty` is called
+    /// with `None` for empirical noise, output must match the
+    /// element-wise output of calling it with `Some([0.0; 4])` — the
+    /// two are semantically equivalent and the gating in
+    /// `build_lm_covariances` relies on that equivalence.
+    #[test]
+    fn compute_framework_uncertainty_none_equals_zero_sentinels() {
+        let mut pixels = vec![0_u8; 9 * 9];
+        for y in 0..9 {
+            for x in 0..9 {
+                pixels[y * 9 + x] = match (x >= 4, y >= 4) {
+                    (false, false) | (true, true) => 0,
+                    (true, false) | (false, true) => 255,
+                };
+            }
+        }
+        let img = ImageView::new(&pixels, 9, 9, 9).expect("valid test image");
+        let corners = [[4.0, 4.0], [4.0, 4.0], [4.0, 4.0], [4.0, 4.0]];
+        let h = Homography {
+            h: nalgebra::Matrix3::identity(),
+        };
+
+        let without = compute_framework_uncertainty(&img, &corners, &h, 0.1, 2.0, None, 2);
+        let with_zero =
+            compute_framework_uncertainty(&img, &corners, &h, 0.1, 2.0, Some(&[0.0; 4]), 2);
+        for i in 0..4 {
+            assert!(
+                (without[i] - with_zero[i]).norm() < 1e-15,
+                "corner {i}: None vs Some([0;4]) diverged: {} vs {}",
+                without[i],
+                with_zero[i]
+            );
+        }
+    }
+
     #[test]
     fn test_framework_uncertainty_culls_off_image_corners() {
         let mut pixels = vec![0_u8; 9 * 9];
@@ -1073,7 +1237,7 @@ mod tests {
             h: nalgebra::Matrix3::identity(),
         };
 
-        let covariances = compute_framework_uncertainty(&img, &corners, &h, 0.1, 2.0, 2);
+        let covariances = compute_framework_uncertainty(&img, &corners, &h, 0.1, 2.0, None, 2);
 
         assert_ne!(
             covariances[0],

@@ -321,6 +321,25 @@ pub struct DetectorConfig {
     /// is available.
     pub sigma_n_sq: f64,
 
+    /// Inflate the per-corner structure-tensor covariance with the empirical
+    /// ERF edge-fit residual MSE (Phase 4).
+    ///
+    /// When `true`, `finalize_corner_covariance` replaces the constant
+    /// `sigma_n_sq` with `max(sigma_n_sq, empirical_n²)` per corner, where
+    /// `empirical_n²` is the arithmetic mean of the two adjacent ERF edges'
+    /// residual MSE (clamped at `16·sigma_n_sq` to bound the Phase-2
+    /// tail-cliff failure mode). Corners that did not traverse ERF carry a
+    /// `0.0` sentinel and reduce to today's behaviour.
+    ///
+    /// Default `false` preserves byte-identity for the three profiles
+    /// (`standard`, `grid`, `max_recall_adaptive`) whose decoder routes
+    /// through ERF — re-blessing them requires per-profile audit reruns,
+    /// tracked as Phase 4 follow-ups in
+    /// `docs/engineering/pose_covariance_followup_2026-05-22.md`.
+    /// `high_accuracy` opts in (one profile audited under the 2026-05-22
+    /// memo's hub corpus).
+    pub use_empirical_corner_noise: bool,
+
     /// Radius (in pixels) of the window used for Structure Tensor computation
     /// in Accurate mode. A radius of 2 yields a 5x5 window.
     /// Smaller values (1) are better for small tags; larger (3-4) for noisy images.
@@ -492,6 +511,7 @@ impl Default for DetectorConfig {
             huber_delta_px: 1.5,
             tikhonov_alpha_max: 0.25,
             sigma_n_sq: 4.0,
+            use_empirical_corner_noise: false,
             structure_tensor_radius: 2,
             gwlf_transversal_alpha: 0.01,
             quad_max_elongation: 0.0,
@@ -800,6 +820,7 @@ impl DetectorConfigBuilder {
             huber_delta_px: self.huber_delta_px.unwrap_or(d.huber_delta_px),
             tikhonov_alpha_max: self.tikhonov_alpha_max.unwrap_or(d.tikhonov_alpha_max),
             sigma_n_sq: self.sigma_n_sq.unwrap_or(d.sigma_n_sq),
+            use_empirical_corner_noise: d.use_empirical_corner_noise,
             structure_tensor_radius: self
                 .structure_tensor_radius
                 .unwrap_or(d.structure_tensor_radius),
@@ -1270,6 +1291,11 @@ mod profile_json {
         // opted in.
         #[serde(default)]
         pub outlier_drop_d2_threshold: f64,
+        // Phase 4 — per-corner empirical noise inflation. Missing → false,
+        // preserving byte-identity for profiles shipped before this field
+        // existed.
+        #[serde(default)]
+        pub use_empirical_corner_noise: bool,
     }
 
     fn default_gate_sigma_px() -> f64 {
@@ -1292,6 +1318,7 @@ mod profile_json {
                 pose_consistency_gate_sigma_px: d.pose_consistency_gate_sigma_px,
                 pose_consistency_min_decisive_ratio: d.pose_consistency_min_decisive_ratio,
                 outlier_drop_d2_threshold: d.outlier_drop_d2_threshold,
+                use_empirical_corner_noise: d.use_empirical_corner_noise,
             }
         }
     }
@@ -1345,6 +1372,7 @@ mod profile_json {
                 huber_delta_px: p.pose.huber_delta_px,
                 tikhonov_alpha_max: p.pose.tikhonov_alpha_max,
                 sigma_n_sq: p.pose.sigma_n_sq,
+                use_empirical_corner_noise: p.pose.use_empirical_corner_noise,
                 structure_tensor_radius: p.pose.structure_tensor_radius,
                 gwlf_transversal_alpha: p.decoder.gwlf_transversal_alpha,
                 quad_max_elongation: p.quad.max_elongation,

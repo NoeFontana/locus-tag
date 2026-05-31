@@ -378,6 +378,7 @@ pub struct PyDetectorConfig {
     pub huber_delta_px: f64,
     pub tikhonov_alpha_max: f64,
     pub sigma_n_sq: f64,
+    pub use_empirical_corner_noise: bool,
     pub structure_tensor_radius: u8,
     pub pose_consistency_fpr: f64,
     pub pose_consistency_gate_sigma_px: f64,
@@ -428,6 +429,7 @@ impl PyDetectorConfig {
         huber_delta_px,
         tikhonov_alpha_max,
         sigma_n_sq,
+        use_empirical_corner_noise,
         structure_tensor_radius,
         pose_consistency_fpr,
         pose_consistency_gate_sigma_px,
@@ -473,6 +475,7 @@ impl PyDetectorConfig {
         huber_delta_px: f64,
         tikhonov_alpha_max: f64,
         sigma_n_sq: f64,
+        use_empirical_corner_noise: bool,
         structure_tensor_radius: u8,
         pose_consistency_fpr: f64,
         pose_consistency_gate_sigma_px: f64,
@@ -517,6 +520,7 @@ impl PyDetectorConfig {
             huber_delta_px,
             tikhonov_alpha_max,
             sigma_n_sq,
+            use_empirical_corner_noise,
             structure_tensor_radius,
             pose_consistency_fpr,
             pose_consistency_gate_sigma_px,
@@ -601,6 +605,7 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             huber_delta_px: c.huber_delta_px,
             tikhonov_alpha_max: c.tikhonov_alpha_max,
             sigma_n_sq: c.sigma_n_sq,
+            use_empirical_corner_noise: c.use_empirical_corner_noise,
             structure_tensor_radius: c.structure_tensor_radius,
             pose_consistency_fpr: c.pose_consistency_fpr,
             pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
@@ -1728,6 +1733,7 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             huber_delta_px: c.huber_delta_px,
             tikhonov_alpha_max: c.tikhonov_alpha_max,
             sigma_n_sq: c.sigma_n_sq,
+            use_empirical_corner_noise: c.use_empirical_corner_noise,
             structure_tensor_radius: c.structure_tensor_radius,
             pose_consistency_fpr: c.pose_consistency_fpr,
             pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
@@ -2564,8 +2570,13 @@ mod bench {
 
     /// Compute the 2×2 corner covariance matrix from the structure tensor at
     /// a single corner. Returns `[c00, c01, c10, c11]` (row-major).
+    ///
+    /// `empirical_n_sq` defaults to `0.0` (no Phase-4 empirical inflation)
+    /// — set positive to inflate the per-corner noise floor via
+    /// `max(sigma_n_sq, min(empirical_n_sq, 16·sigma_n_sq))`.
     #[pyfunction]
-    #[allow(clippy::needless_pass_by_value)] // pyo3 #[pyfunction] requires owned PyReadonlyArray2
+    #[pyo3(signature = (img, center_x, center_y, alpha_max, sigma_n_sq, radius, empirical_n_sq=0.0))]
+    #[allow(clippy::needless_pass_by_value, clippy::too_many_arguments)] // pyo3 #[pyfunction] requires owned PyReadonlyArray2
     pub fn _bench_compute_corner_covariance(
         img: PyReadonlyArray2<'_, u8>,
         center_x: f64,
@@ -2573,6 +2584,7 @@ mod bench {
         alpha_max: f64,
         sigma_n_sq: f64,
         radius: i32,
+        empirical_n_sq: f64,
     ) -> PyResult<[f64; 4]> {
         let buffer = prepare_image_view(&img)?;
         let view = buffer.view();
@@ -2581,6 +2593,7 @@ mod bench {
             [center_x, center_y],
             alpha_max,
             sigma_n_sq,
+            empirical_n_sq,
             radius,
         );
         Ok([cov[(0, 0)], cov[(0, 1)], cov[(1, 0)], cov[(1, 1)]])
@@ -2590,8 +2603,13 @@ mod bench {
     /// consistency gate) and return both the refined pose and the per-tag
     /// diagnostics that the production detector internally computes. `fpr`
     /// is the χ² gate false-positive rate; pass `None` to disable.
+    ///
+    /// `empirical_n_sq` is the per-corner Phase-4 empirical noise variance
+    /// (px²) drawn from the ERF edge-fit residual MSE; defaults to `None`
+    /// (no inflation). Only honoured when the `config`'s
+    /// `use_empirical_corner_noise` flag is `true`.
     #[pyfunction]
-    #[pyo3(signature = (intrinsics, corners, tag_size, config, image=None, fpr=None))]
+    #[pyo3(signature = (intrinsics, corners, tag_size, config, image=None, fpr=None, empirical_n_sq=None))]
     #[allow(clippy::needless_pass_by_value, clippy::too_many_arguments)]
     pub fn _bench_estimate_tag_pose<'py>(
         py: Python<'py>,
@@ -2601,6 +2619,7 @@ mod bench {
         config: PyDetectorConfig,
         image: Option<PyReadonlyArray2<'_, u8>>,
         fpr: Option<f64>,
+        empirical_n_sq: Option<[f32; 4]>,
     ) -> PyResult<Bound<'py, PyDict>> {
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
         let core_cfg: locus_core::config::DetectorConfig = config.into();
@@ -2614,6 +2633,7 @@ mod bench {
             view_opt.as_ref(),
             &core_cfg,
             None,
+            empirical_n_sq.as_ref(),
             fpr,
         );
 

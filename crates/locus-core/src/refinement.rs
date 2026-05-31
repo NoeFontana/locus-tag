@@ -19,6 +19,37 @@ use crate::config::{
 use crate::image::ImageView;
 use crate::quad::{CornerCovariances, fit_edge_line, refine_edge_erf};
 
+/// Per-corner empirical noise estimate (σ² in px²) drawn from the ERF
+/// edge-fit residual MSE, indexed by quad corner (`[c0, c1, c2, c3]`).
+/// `0.0` sentinel means "no ERF measurement on either adjacent edge"
+/// (e.g. ContourRdp+Gwlf route, or both ERF fits failed) — downstream
+/// `finalize_corner_covariance` falls back to the constant `σ_n²`.
+/// See `docs/engineering/pose_covariance_followup_2026-05-22.md` §4.
+pub(crate) type CornerEmpiricalNoise = [f32; 4];
+
+/// "No empirical noise available" sentinel — Phase D's
+/// `finalize_corner_covariance` treats this as `max(σ_n², 0) = σ_n²`,
+/// preserving today's structure-tensor-only behaviour.
+pub(crate) const NO_EMPIRICAL_NOISE_SENTINEL: CornerEmpiricalNoise = [0.0; 4];
+
+/// Combine the two adjacent edges' MSEs into a single per-corner σ_n².
+/// Arithmetic mean when both fits produced finite residuals; falls back
+/// to the single available estimate if only one edge ran ERF; returns
+/// `0.0` (the "no empirical evidence" sentinel) when neither did.
+///
+/// No ceiling clamp here — the pose-stage finalizer applies the
+/// `min(empirical, 16·σ_n²)` cap where `σ_n²` is naturally in scope.
+#[inline]
+fn combine_edge_mses(mse_e1: f64, mse_e2: f64) -> f32 {
+    let m1 = if mse_e1.is_finite() { Some(mse_e1) } else { None };
+    let m2 = if mse_e2.is_finite() { Some(mse_e2) } else { None };
+    match (m1, m2) {
+        (Some(a), Some(b)) => (0.5 * (a + b)) as f32,
+        (Some(a), None) | (None, Some(a)) => a as f32,
+        (None, None) => 0.0,
+    }
+}
+
 /// Per-candidate corner refinement dispatch.
 ///
 /// `route_extraction` and `route_refinement` come from
@@ -48,19 +79,24 @@ pub(crate) fn refine_quad_corners(
     route_refinement: CornerRefinementMode,
     sigma: f64,
     decimation: usize,
-) -> ([Point; 4], CornerCovariances) {
+) -> ([Point; 4], CornerCovariances, CornerEmpiricalNoise) {
     match (route_extraction, route_refinement) {
         (_, CornerRefinementMode::None)
-        | (QuadExtractionMode::EdLines, CornerRefinementMode::Gwlf) => (quad_pts, gn_covs),
+        | (QuadExtractionMode::EdLines, CornerRefinementMode::Gwlf) => {
+            (quad_pts, gn_covs, NO_EMPIRICAL_NOISE_SENTINEL)
+        },
         (_, CornerRefinementMode::Erf) => {
-            let corners =
+            let (corners, empirical) =
                 refine_all_quad_corners(arena, refinement_img, quad_pts, sigma, decimation, true);
-            (corners, [[0.0; 4]; 4])
+            (corners, [[0.0; 4]; 4], empirical)
         },
         (QuadExtractionMode::ContourRdp, CornerRefinementMode::Gwlf) => {
-            let corners =
+            // GWLF route uses gradient-peak edge fits (use_erf=false); no
+            // ERF MSE is produced. Empirical noise stays at the sentinel
+            // so Phase D falls back to constant σ_n².
+            let (corners, _) =
                 refine_all_quad_corners(arena, refinement_img, quad_pts, sigma, decimation, false);
-            (corners, [[0.0; 4]; 4])
+            (corners, [[0.0; 4]; 4], NO_EMPIRICAL_NOISE_SENTINEL)
         },
     }
 }
@@ -71,6 +107,10 @@ pub(crate) fn refine_quad_corners(
 /// Indices: corner `i` is refined using `(i-1, i, i+1)` mod 4. With
 /// CW-ordered corners this gives the conventional `(prev, current,
 /// next)` triplet that [`refine_corner`] expects.
+///
+/// Returns the four refined points alongside the per-corner empirical
+/// noise estimate (`0.0` sentinel when `use_erf=false` — ERF didn't
+/// run, no MSE to draw from).
 pub(crate) fn refine_all_quad_corners(
     arena: &Bump,
     img: &ImageView,
@@ -78,21 +118,20 @@ pub(crate) fn refine_all_quad_corners(
     sigma: f64,
     decimation: usize,
     use_erf: bool,
-) -> [Point; 4] {
-    [
-        refine_corner(
-            arena, img, pts[0], pts[3], pts[1], sigma, decimation, use_erf,
-        ),
-        refine_corner(
-            arena, img, pts[1], pts[0], pts[2], sigma, decimation, use_erf,
-        ),
-        refine_corner(
-            arena, img, pts[2], pts[1], pts[3], sigma, decimation, use_erf,
-        ),
-        refine_corner(
-            arena, img, pts[3], pts[2], pts[0], sigma, decimation, use_erf,
-        ),
-    ]
+) -> ([Point; 4], CornerEmpiricalNoise) {
+    let (p0, n0) = refine_corner(
+        arena, img, pts[0], pts[3], pts[1], sigma, decimation, use_erf,
+    );
+    let (p1, n1) = refine_corner(
+        arena, img, pts[1], pts[0], pts[2], sigma, decimation, use_erf,
+    );
+    let (p2, n2) = refine_corner(
+        arena, img, pts[2], pts[1], pts[3], sigma, decimation, use_erf,
+    );
+    let (p3, n3) = refine_corner(
+        arena, img, pts[3], pts[2], pts[0], sigma, decimation, use_erf,
+    );
+    ([p0, p1, p2, p3], [n0, n1, n2, n3])
 }
 
 /// Single-corner refinement: intersect two edge-line fits at point `p`,
@@ -101,6 +140,12 @@ pub(crate) fn refine_all_quad_corners(
 /// `use_erf = true` runs the PSF-blurred Gauss-Newton fit and falls
 /// back to the gradient-peak fit on sample shortfall. `use_erf = false`
 /// runs only the gradient-peak fit.
+///
+/// Returns the refined point alongside the per-corner empirical σ_n²
+/// drawn from the two adjacent ERF edges' residual MSEs. Sentinel `0.0`
+/// when `use_erf=false` or both ERF fits fell through to the
+/// gradient-peak fallback (no MSE produced) — downstream
+/// `finalize_corner_covariance` then falls back to constant `σ_n²`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn refine_corner(
     arena: &Bump,
@@ -111,20 +156,26 @@ pub(crate) fn refine_corner(
     sigma: f64,
     decimation: usize,
     use_erf: bool,
-) -> Point {
-    let line1 = if use_erf {
-        refine_edge_erf(arena, img, p_prev, p, sigma, decimation)
-            .or_else(|| fit_edge_line(img, p_prev, p, decimation))
+) -> (Point, f32) {
+    let (line1, mse1) = if use_erf {
+        match refine_edge_erf(arena, img, p_prev, p, sigma, decimation) {
+            Some((line, mse)) => (Some(line), mse),
+            None => (fit_edge_line(img, p_prev, p, decimation), f64::NAN),
+        }
     } else {
-        fit_edge_line(img, p_prev, p, decimation)
+        (fit_edge_line(img, p_prev, p, decimation), f64::NAN)
     };
 
-    let line2 = if use_erf {
-        refine_edge_erf(arena, img, p, p_next, sigma, decimation)
-            .or_else(|| fit_edge_line(img, p, p_next, decimation))
+    let (line2, mse2) = if use_erf {
+        match refine_edge_erf(arena, img, p, p_next, sigma, decimation) {
+            Some((line, mse)) => (Some(line), mse),
+            None => (fit_edge_line(img, p, p_next, decimation), f64::NAN),
+        }
     } else {
-        fit_edge_line(img, p, p_next, decimation)
+        (fit_edge_line(img, p, p_next, decimation), f64::NAN)
     };
+
+    let empirical_sigma_sq = combine_edge_mses(mse1, mse2);
 
     if let (Some(l1), Some(l2)) = (line1, line2) {
         let det = l1.0 * l2.1 - l2.0 * l1.1;
@@ -139,12 +190,17 @@ pub(crate) fn refine_corner(
                 2.0
             };
             if dist_sq < max_dist * max_dist {
-                return Point { x, y };
+                return (Point { x, y }, empirical_sigma_sq);
             }
         }
     }
 
-    p
+    // Intersection rejected (degenerate / outside sanity radius) — keep
+    // the coarse point. Empirical noise is still meaningful: it reflects
+    // the edge fits' agreement with the image, not the intersection's
+    // success. But on this fallback path the corner's σ² should be the
+    // sentinel — we have no evidence the kept point is well localised.
+    (p, 0.0)
 }
 
 /// Resolves the per-candidate refinement mode from the persisted
@@ -262,4 +318,46 @@ pub(crate) fn apply_detector_gwlf(
     };
 
     Some((gwlf_fallback_count, gwlf_avg_delta))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Phase 4 combination formula: both edges contributed a finite MSE.
+    /// Equal-weight arithmetic mean, no clamp at this stage (clamp lives
+    /// in `pose_weighted::effective_sigma_n_sq`).
+    #[test]
+    fn combine_edge_mses_both_finite_averages() {
+        assert_eq!(combine_edge_mses(4.0, 16.0), 10.0);
+        assert_eq!(combine_edge_mses(0.0, 8.0), 4.0);
+        // Symmetry: combine is commutative.
+        assert_eq!(combine_edge_mses(1.5, 7.5), combine_edge_mses(7.5, 1.5));
+    }
+
+    /// Degenerate case: one edge skipped ERF (NaN sentinel — e.g. its
+    /// `ErfEdgeFitter::new` returned `None` and we fell back to
+    /// `fit_edge_line`'s gradient-peak fit). The other edge's MSE
+    /// should pass through unchanged — discarding the single available
+    /// measurement just because its sibling is missing would be lossy.
+    #[test]
+    fn combine_edge_mses_one_nan_passes_through_finite() {
+        assert_eq!(combine_edge_mses(8.0, f64::NAN), 8.0);
+        assert_eq!(combine_edge_mses(f64::NAN, 8.0), 8.0);
+        // `0.0` MSE is a valid measurement (perfect fit), distinct from
+        // NaN ("no measurement"): it should still feed the average.
+        assert_eq!(combine_edge_mses(0.0, f64::NAN), 0.0);
+    }
+
+    /// Both edges' MSE is NaN ⇒ "no empirical evidence" sentinel `0.0`,
+    /// which the pose-stage finalizer treats as `max(σ_n², 0) = σ_n²`
+    /// (i.e. recovers today's structure-tensor-only behaviour).
+    #[test]
+    fn combine_edge_mses_all_nan_emits_zero_sentinel() {
+        assert_eq!(combine_edge_mses(f64::NAN, f64::NAN), 0.0);
+        // Infinity (an ill-conditioned fit) is also rejected and treated
+        // as "no measurement" — defensive, since infinity would defeat
+        // the ceiling clamp in `effective_sigma_n_sq` if it leaked.
+        assert_eq!(combine_edge_mses(f64::INFINITY, f64::NAN), 0.0);
+    }
 }

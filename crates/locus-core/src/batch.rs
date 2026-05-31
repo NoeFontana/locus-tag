@@ -84,6 +84,15 @@ pub struct DetectionBatch {
     /// Four 2x2 corner covariance matrices per quad (16 floats).
     /// Layout: [c0_xx, c0_xy, c0_yx, c0_yy, c1_xx, ...]
     pub corner_covariances: [[f32; 16]; MAX_CANDIDATES],
+    /// Per-corner empirical noise variance σ_n² (px²) drawn from the
+    /// ERF edge-fit residual MSE. `0.0` sentinel means the corner did
+    /// not traverse ERF refinement (e.g. ContourRdp+Gwlf route, or both
+    /// adjacent ERF fits failed) — Phase D's `finalize_corner_covariance`
+    /// then falls back to constant `σ_n²` via `max(σ_n², empirical)`.
+    /// Phase-D internal input — inert when `pose.use_empirical_corner_noise`
+    /// is `false` (the default). See
+    /// `docs/engineering/pose_covariance_followup_2026-05-22.md` §4.
+    pub corner_empirical_noise: [[f32; 4]; MAX_CANDIDATES],
     /// Aggregate Mahalanobis d² (χ²(2) statistic) from the pose-consistency
     /// gate. NaN means the gate did not run (e.g., `pose_consistency_fpr == 0`
     /// or pose estimation failed before the check). Only populated when the
@@ -151,6 +160,7 @@ impl DetectionBatch {
             status_mask: [CandidateState::Empty; MAX_CANDIDATES],
             funnel_status: [FunnelStatus::None; MAX_CANDIDATES],
             corner_covariances: [[0.0; 16]; MAX_CANDIDATES],
+            corner_empirical_noise: [[0.0; 4]; MAX_CANDIDATES],
             #[cfg(feature = "bench-internals")]
             pose_consistency_d2: [f32::NAN; MAX_CANDIDATES],
             #[cfg(feature = "bench-internals")]
@@ -192,6 +202,7 @@ impl DetectionBatch {
                     self.status_mask.swap(i, v);
                     self.funnel_status.swap(i, v);
                     self.corner_covariances.swap(i, v);
+                    self.corner_empirical_noise.swap(i, v);
                     #[cfg(feature = "bench-internals")]
                     {
                         self.pose_consistency_d2.swap(i, v);

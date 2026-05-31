@@ -422,9 +422,18 @@ impl CharucoRefiner {
                 // `rejected_reasons` discriminator buffer (NOT via a NaN
                 // determinant marker, which would silently poison any
                 // aggregate over `rejected_determinants`).
+                // Charuco saddle refinement has no ERF MSE source — pass
+                // `empirical_n_sq = 0.0` to recover the pre-Phase-4
+                // structure-tensor-only covariance formula.
                 #[allow(clippy::cast_possible_truncation)]
-                let cov =
-                    compute_corner_covariance(img, [px, py], 0.1, 2.0, Self::ST_RADIUS as i32);
+                let cov = compute_corner_covariance(
+                    img,
+                    [px, py],
+                    0.1,
+                    2.0,
+                    0.0,
+                    Self::ST_RADIUS as i32,
+                );
                 debug_assert!(
                     cov.try_inverse().is_some(),
                     "Tikhonov invariant violated: compute_corner_covariance produced \
