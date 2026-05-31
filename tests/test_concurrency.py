@@ -17,10 +17,7 @@ def test_gil_release_concurrency():
     """
     # 1. Setup
     height, width = 1080, 1920
-    # Allocate with 3 trailing bytes per row so the FFI SIMD-padding gate
-    # accepts the input via the column-prefix view pattern.
-    _parent = np.random.randint(0, 256, (height, width + 3), dtype=np.uint8)
-    img = _parent[:, :width]
+    img = np.random.randint(0, 256, (height, width), dtype=np.uint8)
     detector = locus.Detector()
 
     # Warmup

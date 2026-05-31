@@ -20,20 +20,15 @@ import pytest
 # sizing assumptions without doing real work — SIMD kernels still sweep, but
 # there are no contours so decoding short-circuits.
 _VALID_SHAPE = (64, 64)
-# Trailing slack required by SIMD gather kernels (AVX2 `sample_bilinear_v8`
-# loads 32-bit words on 8-bit data — see `prepare_image_view`).
-_SIMD_PAD = 3
 
 
 def _valid_img() -> np.ndarray:
-    """A ``(H, W)`` zero image with ``_SIMD_PAD`` trailing bytes per row, so it
-    passes the FFI's SIMD-padding gate. Materialised as a column-prefix slice
-    of a wider parent allocation. Callers that need a tightly packed buffer
-    (to exercise the gate's negative path) should wrap with
-    :func:`np.ascontiguousarray`.
+    """A tightly-packed ``(H, W)`` zero image. The FFI silently copies into a
+    padded scratch buffer when the input lacks the 3 trailing bytes that SIMD
+    gather kernels need — see ``prepare_image_view`` and
+    ``docs/engineering/ffi_contracts.md`` §1.
     """
-    parent = np.zeros((_VALID_SHAPE[0], _VALID_SHAPE[1] + _SIMD_PAD), dtype=np.uint8)
-    return parent[:, : _VALID_SHAPE[1]]
+    return np.zeros(_VALID_SHAPE, dtype=np.uint8)
 
 
 @pytest.fixture
@@ -122,20 +117,38 @@ class TestImageBuffer:
 
 
 class TestSimdPaddingGate:
-    """A1.2 enforced gate: ``prepare_image_view`` asserts ``has_simd_padding()``.
+    """A1.2 — copy-into-padded-arena fallback: tightly-packed inputs are NOT
+    rejected at the FFI; ``prepare_image_view`` transparently copies into a
+    padded scratch buffer.
 
     AVX2 ``sample_bilinear_v8`` (and the NEON fallback) loads 32-bit words on
     8-bit data and may read up to 3 bytes past the last logical pixel. NumPy
     gives no padding guarantee for a tightly packed ``(H, W)`` ``uint8``
-    buffer, so the FFI rejects under-padded inputs and points the caller at
-    ``np.pad(img, ((0, 0), (0, 3)))[:, :W]`` (which is what :func:`_valid_img`
-    materialises today).
+    buffer. The FFI used to reject such inputs (PR #287 PR-A initial design)
+    but PR #287 switched to a copy fallback so the natural
+    ``np.zeros((H, W), dtype=np.uint8)`` idiom keeps working out of the box.
+
+    This xfail placeholder remains as a TODO-style marker: it asserts the
+    *reject* behaviour, so it would flip to passing the day a future variant
+    re-enables the strict gate. With the current copy fallback the FFI
+    accepts the buffer and no ``ValueError`` is raised — the test stays red
+    (expected fail), and ``strict=True`` guarantees the suite flags any
+    unexpected pass.
     """
 
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "A1.2 chose the copy-into-padded-arena fallback over the strict "
+            "reject; under-padded inputs are silently copied, so this gate is "
+            "intentionally not enforced."
+        ),
+    )
     def test_missing_padding_is_rejected(self, detector: locus.Detector) -> None:
-        # ``np.ascontiguousarray`` strips the padded view's slack, materialising
-        # a tight (H, W) allocation with stride == width — the failure case.
-        img = np.ascontiguousarray(_valid_img())
+        # Tightly-packed (H, W) buffer with stride == width — the case the
+        # initial PR-A reject design caught and the current copy fallback
+        # silently handles.
+        img = _valid_img()
         with pytest.raises(ValueError, match=r"padding"):
             detector.detect(img)
 
@@ -152,10 +165,10 @@ class TestNegativeStrideRejection:
     """
 
     def test_reverse_row_axis_is_rejected(self, detector: locus.Detector) -> None:
-        # Build a tight C-contiguous buffer, then reverse rows. The reverse
-        # view has the same shape and `stride_x == 1`, but `strides[0]` flips
+        # Build a C-contiguous buffer, then reverse rows. The reverse view
+        # has the same shape and `stride_x == 1`, but `strides[0]` flips
         # negative.
-        tight = np.ascontiguousarray(_valid_img())
+        tight = _valid_img()
         img = tight[::-1, :]
         assert img.strides[0] < 0, "fixture invariant: row stride must be negative"
         assert img.strides[1] == 1, "fixture invariant: column stride must be 1"
@@ -163,7 +176,7 @@ class TestNegativeStrideRejection:
             detector.detect(img)
 
     def test_reverse_row_axis_is_rejected_concurrent(self, detector: locus.Detector) -> None:
-        tight = np.ascontiguousarray(_valid_img())
+        tight = _valid_img()
         img = tight[::-1, :]
         assert img.strides[0] < 0
         with pytest.raises(ValueError, match=r"stride|C-contiguous"):
@@ -448,11 +461,7 @@ class TestRejectedFunnelStatus:
         mirror, in which case an unknown code would surface here.
         """
         rng = np.random.default_rng(0)
-        # Pad the parent for the FFI SIMD-padding gate; view exposes (H, W).
-        parent = rng.integers(
-            0, 255, size=(_VALID_SHAPE[0], _VALID_SHAPE[1] + _SIMD_PAD), dtype=np.uint8
-        )
-        img = parent[:, : _VALID_SHAPE[1]]
+        img = rng.integers(0, 255, size=_VALID_SHAPE, dtype=np.uint8)
         batch = detector.detect(img)
         assert batch.rejected_funnel_status is not None
         for code in batch.rejected_funnel_status.tolist():
