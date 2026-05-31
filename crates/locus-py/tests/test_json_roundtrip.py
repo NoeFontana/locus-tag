@@ -64,6 +64,10 @@ def test_shipped_json_matches_loaded_model(profile: ProfileName) -> None:
     # don't opt into outlier-aware corner-drop; the model always emits its
     # 0.0 default.
     on_disk.get("pose", {}).setdefault("outlier_drop_d2_threshold", 0.0)
+    # ``use_empirical_corner_noise`` is absent on disk for profiles that
+    # don't opt into Phase 4 per-corner ERF inflation; the model always
+    # emits its ``False`` default.
+    on_disk.get("pose", {}).setdefault("use_empirical_corner_noise", False)
     # ``extraction_policy`` defaults to ``"Static"`` and may be omitted by
     # profiles that don't opt into adaptive routing.
     on_disk.get("quad", {}).setdefault("extraction_policy", "Static")
