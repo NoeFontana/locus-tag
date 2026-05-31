@@ -844,7 +844,7 @@ impl RobustPoseSolver {
                     // pose_3 wins on fit, cov_4 wins on definedness.
                     (pose_3, covariance)
                 }
-            }
+            },
             None => (refined_pose, covariance),
         };
 

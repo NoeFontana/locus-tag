@@ -1210,13 +1210,8 @@ mod tests {
 
         // Identity COVARIANCES (inverted internally → identity info).
         let covs = [Matrix2::<f64>::identity(); 4];
-        let res = bench_refine_pose_lm_weighted_with_telemetry(
-            &intrinsics,
-            &corners,
-            s,
-            gt_pose,
-            &covs,
-        );
+        let res =
+            bench_refine_pose_lm_weighted_with_telemetry(&intrinsics, &corners, s, gt_pose, &covs);
 
         let any_non_finite = res.covariance.iter().flatten().any(|v| !v.is_finite());
         assert!(

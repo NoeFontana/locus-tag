@@ -928,9 +928,8 @@ impl BoardEstimator {
                 // SAFETY: see "NumPy allocation safety contract" in module docs.
                 let cov_arr = unsafe { PyArray2::<f64>::new(py, [6, 6], false) };
                 // SAFETY: see "NumPy allocation safety contract" in module docs.
-                let cs = unsafe { cov_arr.as_slice_mut() }.map_err(|e| {
-                    PyRuntimeError::new_err(format!("cov array layout error: {e}"))
-                })?;
+                let cs = unsafe { cov_arr.as_slice_mut() }
+                    .map_err(|e| PyRuntimeError::new_err(format!("cov array layout error: {e}")))?;
                 for row in 0..6 {
                     for col in 0..6 {
                         cs[row * 6 + col] = bp.covariance[(row, col)];
