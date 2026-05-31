@@ -19,6 +19,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - New `refine_pose_lm_weighted_with_info` — info-matrix-direct variant of `refine_pose_lm_weighted` that skips the 4 `Σ_c⁻¹` inversions for callers that already hold pre-inverted info. The existing `refine_pose_lm_weighted` becomes a thin wrapper that inverts and delegates.
 - `DetectionBatch::outlier_corner_idx: [u8; MAX_CANDIDATES]` SoA column (`bench-internals`-gated) records which corner Phase D masked during outlier-aware refinement; sentinel `u8::MAX` ⇒ no drop. When `idx != u8::MAX` the stored pose covariance reflects 6 observations instead of 8. Documented in `docs/engineering/detection-batch-contract.md`.
 
+### Performance
+
+- `decode_batch_soa_generic`, `decode_batch_soa_with_camera_inner`, and `refine_poses_soa_with_config` now write SoA columns directly from rayon workers via `par_iter_mut().zip(...)`, eliminating a per-frame `Vec<TupleN>` heap allocation outside the workspace arena. New `bench-internals`-gated `contract_decode_hot_loop_zero_alloc` integration test (custom counting `GlobalAlloc`) locks the byte-delta to exactly zero on warm steady-state calls. `decoding_bench::bench_decoding_soa_realistic` median latency drops from 21.25 µs → 6.60 µs (−69 %) on AMD EPYC-Milan; pose-bench medians are within ±5 % of baseline (microbench noise floor).
+
 ## [0.5.0] - 2026-05-20
 
 ### BREAKING CHANGES

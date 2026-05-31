@@ -220,6 +220,11 @@ path = "tests/contract_detection_batch.rs"
 required-features = ["bench-internals"]
 
 [[test]]
+name = "contract_decode_hot_loop_zero_alloc"
+path = "tests/contract_decode_hot_loop_zero_alloc.rs"
+required-features = ["bench-internals"]
+
+[[test]]
 name = "profile_loading"
 path = "tests/profile_loading.rs"
 required-features = ["profiles"]
