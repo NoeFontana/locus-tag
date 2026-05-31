@@ -891,7 +891,7 @@ impl BoardEstimator {
 
         // 4. Board pose and covariance.
         let (board_pose, board_cov) = if let Some(bp) = board_pose_raw {
-            let q = nalgebra::UnitQuaternion::from_matrix(&bp.pose.rotation);
+            let q = locus_core::pose::quat_from_so3(bp.pose.rotation);
             let t = bp.pose.translation;
 
             // SAFETY: see "NumPy allocation safety contract" in module docs.
@@ -1122,7 +1122,7 @@ impl CharucoRefiner {
             self.batch.board_pose.take()
         };
         let (board_pose, board_cov) = if let Some(bp) = board_pose_raw {
-            let q = nalgebra::UnitQuaternion::from_matrix(&bp.pose.rotation);
+            let q = locus_core::pose::quat_from_so3(bp.pose.rotation);
             let t = bp.pose.translation;
             // SAFETY: see "NumPy allocation safety contract" in module docs.
             let pose_arr = unsafe { PyArray1::<f64>::new(py, [7], false) };

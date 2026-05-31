@@ -5,7 +5,13 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
-### Fixed
+### Changed
+
+- `decoder.rs` SIMD gather blocks now carry full SAFETY justification including the 3-byte SIMD-gather padding contract (`crates/locus-core/src/decoder.rs` AVX2 + NEON paths in `sample_grid_values_simd`).
+- Regression tests against the hub dataset cache now panic instead of silently skipping when `LOCUS_HUB_DATASET_DIR` is set but the expected subdir is missing (closes the same footgun as PR #252).
+- Centralised SO(3) → quaternion conversion through `quat_from_so3` helper, eliminating the latent `UnitQuaternion::from_matrix` Müller-iteration hang risk on near-singular rotations across `board.rs`, `pose.rs`, and the PyO3 board-pose copy.
+
+### Added
 
 - **`prepare_image_view` soundness gaps (F1/F2/F3)**: closed the three latent UB / lifetime issues at the Python FFI image-ingestion boundary (`crates/locus-py/src/lib.rs`). F1 — `ImageView::has_simd_padding()` is now asserted at the boundary so AVX2 `sample_bilinear_v8`'s 32-bit gather on 8-bit data can no longer read past the NumPy buffer; tightly-packed `(H, W) uint8` inputs are rejected with a `PyValueError` directing callers to `np.pad(img, ((0, 0), (0, 3)))[:, :W]`. F2 — negative `strides[0]` (e.g. from reverse-row views like `arr[::-1, :]`) is rejected before the unsigned cast that previously wrapped to a huge `usize` and built a multi-gigabyte slice in `std::slice::from_raw_parts`. F3 — the function signature now ties the returned `ImageView<'py>` lifetime to the input `&'py PyReadonlyArray2<'_, u8>`, replacing the unconstrained `'a` that decoupled the borrow from the NumPy buffer; the call-site SAFETY comment cites the explicit tie. Resolves the Phase A1 follow-up listed at `docs/engineering/ffi_contracts.md` §1 (SIMD padding) and §7 — the `TestSimdPaddingGate.test_missing_padding_is_rejected` xfail flips to passing, and a new `TestNegativeStrideRejection` class covers the reverse-row path on both `detect()` and `detect_concurrent()`.
 
