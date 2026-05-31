@@ -5,7 +5,7 @@
 //! per-corner covariance availability; see `estimate_tag_pose_with_diagnostics`.
 
 #![allow(clippy::many_single_char_names, clippy::similar_names)]
-use crate::batch::{DetectionBatch, Pose6D};
+use crate::batch::{DetectionBatch, Point2f, Pose6D};
 use crate::image::ImageView;
 
 use nalgebra::{Matrix2, Matrix3, Matrix6, Rotation3, UnitQuaternion, Vector3, Vector6};
@@ -1616,6 +1616,7 @@ pub fn refine_poses_soa(
 }
 
 /// Refine poses for all valid candidates with explicit config for tuning parameters.
+#[allow(clippy::too_many_lines)]
 #[tracing::instrument(skip_all, name = "pipeline::pose_refinement")]
 pub fn refine_poses_soa_with_config(
     batch: &mut DetectionBatch,
@@ -1635,104 +1636,171 @@ pub fn refine_poses_soa_with_config(
         config.pose_consistency_min_decisive_ratio,
     );
 
-    // Process valid candidates in parallel.
-    // We collect into a temporary Vec to avoid unsafe parallel writes to the batch.
-    let results: Vec<_> = (0..v)
-        .into_par_iter()
-        .map(|i| {
-            let corners = [
-                [
-                    f64::from(batch.corners[i][0].x),
-                    f64::from(batch.corners[i][0].y),
-                ],
-                [
-                    f64::from(batch.corners[i][1].x),
-                    f64::from(batch.corners[i][1].y),
-                ],
-                [
-                    f64::from(batch.corners[i][2].x),
-                    f64::from(batch.corners[i][2].y),
-                ],
-                [
-                    f64::from(batch.corners[i][3].x),
-                    f64::from(batch.corners[i][3].y),
-                ],
-            ];
+    // Per-candidate work; takes plain references and returns a Copy tuple
+    // so the rayon closure can write the SoA cells directly without
+    // materialising a per-frame `Vec<TupleN>` outside the workspace arena.
+    // Marked `#[inline]` so the call through the `for_each` closure stays
+    // a direct call after monomorphisation — a closure-binding form was
+    // opaque to LLVM and added measurable per-candidate overhead in the
+    // pose microbenches.
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    fn compute_one(
+        intrinsics: &CameraIntrinsics,
+        tag_size: f64,
+        img: Option<&ImageView>,
+        config: &crate::config::DetectorConfig,
+        thresholds: Option<ConsistencyThresholds>,
+        corners_row: &[Point2f; 4],
+        covs_row: &[f32; 16],
+    ) -> (Option<[f32; 7]>, PoseDiagnostics) {
+        let corners = [
+            [f64::from(corners_row[0].x), f64::from(corners_row[0].y)],
+            [f64::from(corners_row[1].x), f64::from(corners_row[1].y)],
+            [f64::from(corners_row[2].x), f64::from(corners_row[2].y)],
+            [f64::from(corners_row[3].x), f64::from(corners_row[3].y)],
+        ];
 
-            // Only GWLF writes covariances calibrated as image-noise
-            // variances; other extractors (EdLines, Erf) leave per-corner
-            // GN-residual uncertainties in `batch.corner_covariances` that
-            // are far tighter than σ_n and would mis-feed the LM solver.
-            let ext_covs_opt: Option<[Matrix2<f64>; 4]> =
-                if config.refinement_mode == crate::config::CornerRefinementMode::Gwlf {
-                    let covs: [Matrix2<f64>; 4] = core::array::from_fn(|j| {
-                        Matrix2::new(
-                            f64::from(batch.corner_covariances[i][j * 4]),
-                            f64::from(batch.corner_covariances[i][j * 4 + 1]),
-                            f64::from(batch.corner_covariances[i][j * 4 + 2]),
-                            f64::from(batch.corner_covariances[i][j * 4 + 3]),
-                        )
-                    });
-                    covs.iter()
-                        .any(|c| c.norm_squared() > 1e-12)
-                        .then_some(covs)
-                } else {
-                    None
-                };
-
-            let (pose_opt, _, diag) = estimate_tag_pose_with_diagnostics(
-                intrinsics,
-                &corners,
-                tag_size,
-                img,
-                config,
-                ext_covs_opt.as_ref(),
-                thresholds,
-            );
-
-            let pose_data = if let Some(pose) = pose_opt {
-                let q = quat_from_so3(pose.rotation);
-                let t = pose.translation;
-
-                // Data layout: [tx, ty, tz, qx, qy, qz, qw]
-                let mut data = [0.0f32; 7];
-                data[0] = t.x as f32;
-                data[1] = t.y as f32;
-                data[2] = t.z as f32;
-                data[3] = q.coords.x as f32;
-                data[4] = q.coords.y as f32;
-                data[5] = q.coords.z as f32;
-                data[6] = q.coords.w as f32;
-                Some(data)
+        // Only GWLF writes covariances calibrated as image-noise
+        // variances; other extractors (EdLines, Erf) leave per-corner
+        // GN-residual uncertainties in `batch.corner_covariances` that
+        // are far tighter than σ_n and would mis-feed the LM solver.
+        let ext_covs_opt: Option<[Matrix2<f64>; 4]> =
+            if config.refinement_mode == crate::config::CornerRefinementMode::Gwlf {
+                let covs: [Matrix2<f64>; 4] = core::array::from_fn(|j| {
+                    Matrix2::new(
+                        f64::from(covs_row[j * 4]),
+                        f64::from(covs_row[j * 4 + 1]),
+                        f64::from(covs_row[j * 4 + 2]),
+                        f64::from(covs_row[j * 4 + 3]),
+                    )
+                });
+                covs.iter()
+                    .any(|c| c.norm_squared() > 1e-12)
+                    .then_some(covs)
             } else {
                 None
             };
 
-            (pose_data, diag)
-        })
-        .collect();
+        let (pose_opt, _, diag) = estimate_tag_pose_with_diagnostics(
+            intrinsics,
+            &corners,
+            tag_size,
+            img,
+            config,
+            ext_covs_opt.as_ref(),
+            thresholds,
+        );
 
-    for (i, (pose_data, diag)) in results.iter().enumerate() {
-        if let Some(data) = pose_data {
-            batch.poses[i] = Pose6D {
-                data: *data,
-                padding: 0.0,
-            };
+        let pose_data = if let Some(pose) = pose_opt {
+            let q = quat_from_so3(pose.rotation);
+            let t = pose.translation;
+
+            // Data layout: [tx, ty, tz, qx, qy, qz, qw]
+            let mut data = [0.0f32; 7];
+            data[0] = t.x as f32;
+            data[1] = t.y as f32;
+            data[2] = t.z as f32;
+            data[3] = q.coords.x as f32;
+            data[4] = q.coords.y as f32;
+            data[5] = q.coords.z as f32;
+            data[6] = q.coords.w as f32;
+            Some(data)
         } else {
-            batch.poses[i] = Pose6D {
-                data: [0.0; 7],
-                padding: 0.0,
-            };
-        }
-        #[cfg(feature = "bench-internals")]
-        {
-            batch.pose_consistency_d2[i] = diag.aggregate_d2;
-            batch.pose_consistency_d2_max_corner[i] = diag.max_corner_d2;
-            batch.ippe_branch_d2_ratio[i] = diag.branch_d2_ratio;
-            batch.outlier_corner_idx[i] = diag.outlier_corner_idx;
-        }
-        #[cfg(not(feature = "bench-internals"))]
-        let _ = diag;
+            None
+        };
+
+        (pose_data, diag)
+    }
+
+    // Split the batch into disjoint per-column slices so each rayon worker
+    // can write its target SoA cells directly (rayon's `Zip` proves the
+    // per-index disjointness statically), eliminating the previous
+    // per-frame `Vec<TupleN>` heap allocation that was drained sequentially
+    // after the parallel map. Read-only inputs (`corners`,
+    // `corner_covariances`) and write-only outputs (`poses`, bench
+    // diagnostics) live on disjoint fields of `DetectionBatch`, so the
+    // simultaneous shared/mutable borrows are sound under Rust's
+    // disjoint-field rule.
+    let corners_in = &batch.corners[..v];
+    let covs_in = &batch.corner_covariances[..v];
+    let poses_out = &mut batch.poses[..v];
+    #[cfg(feature = "bench-internals")]
+    let d2_out = &mut batch.pose_consistency_d2[..v];
+    #[cfg(feature = "bench-internals")]
+    let d2_max_out = &mut batch.pose_consistency_d2_max_corner[..v];
+    #[cfg(feature = "bench-internals")]
+    let branch_ratio_out = &mut batch.ippe_branch_d2_ratio[..v];
+    #[cfg(feature = "bench-internals")]
+    let outlier_idx_out = &mut batch.outlier_corner_idx[..v];
+
+    // Rayon's `Zip` on `IndexedParallelIterator`s silently truncates to the
+    // shortest input. A future off-by-one fix on any of these slices would
+    // drop the last candidate's pose with no panic, so guard the contract
+    // explicitly. Cheap: a few `debug_assert_eq!`s, only in debug builds.
+    debug_assert_eq!(poses_out.len(), v);
+    debug_assert_eq!(corners_in.len(), v);
+    debug_assert_eq!(covs_in.len(), v);
+    #[cfg(feature = "bench-internals")]
+    {
+        debug_assert_eq!(d2_out.len(), v);
+        debug_assert_eq!(d2_max_out.len(), v);
+        debug_assert_eq!(branch_ratio_out.len(), v);
+        debug_assert_eq!(outlier_idx_out.len(), v);
+    }
+
+    #[cfg(feature = "bench-internals")]
+    {
+        poses_out
+            .par_iter_mut()
+            .zip(d2_out.par_iter_mut())
+            .zip(d2_max_out.par_iter_mut())
+            .zip(branch_ratio_out.par_iter_mut())
+            .zip(outlier_idx_out.par_iter_mut())
+            .zip(corners_in.par_iter())
+            .zip(covs_in.par_iter())
+            .for_each(
+                |(
+                    (((((pose_slot, d2_slot), d2_max_slot), branch_slot), outlier_slot), c_row),
+                    cov_row,
+                )| {
+                    let (pose_data, diag) = compute_one(
+                        intrinsics, tag_size, img, config, thresholds, c_row, cov_row,
+                    );
+                    *pose_slot = if let Some(data) = pose_data {
+                        Pose6D { data, padding: 0.0 }
+                    } else {
+                        Pose6D {
+                            data: [0.0; 7],
+                            padding: 0.0,
+                        }
+                    };
+                    *d2_slot = diag.aggregate_d2;
+                    *d2_max_slot = diag.max_corner_d2;
+                    *branch_slot = diag.branch_d2_ratio;
+                    *outlier_slot = diag.outlier_corner_idx;
+                },
+            );
+    }
+    #[cfg(not(feature = "bench-internals"))]
+    {
+        poses_out
+            .par_iter_mut()
+            .zip(corners_in.par_iter())
+            .zip(covs_in.par_iter())
+            .for_each(|((pose_slot, c_row), cov_row)| {
+                let (pose_data, _diag) = compute_one(
+                    intrinsics, tag_size, img, config, thresholds, c_row, cov_row,
+                );
+                *pose_slot = if let Some(data) = pose_data {
+                    Pose6D { data, padding: 0.0 }
+                } else {
+                    Pose6D {
+                        data: [0.0; 7],
+                        padding: 0.0,
+                    }
+                };
+            });
     }
 }
 

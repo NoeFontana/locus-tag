@@ -1081,62 +1081,95 @@ fn decode_batch_soa_with_camera_inner<C: crate::camera::CameraModel>(
     use crate::batch::CandidateState;
     use rayon::prelude::*;
 
-    let results: Vec<_> = (0..n)
-        .into_par_iter()
-        .map(|i| {
-            if batch.status_mask[i] != CandidateState::Active {
-                return (batch.status_mask[i], 0u32, 0u8, 0u64, batch.error_rates[i]);
-            }
-            let (state, id, rot, bits, err) = decode_candidate_distorted::<C>(
-                img,
-                &batch.corners[i],
-                decoders,
-                config,
-                intrinsics,
-                model,
-            );
-            (state, id, rot, bits, err)
-        })
-        .collect();
+    // Split the batch into disjoint per-column mutable slices so each rayon
+    // worker can write its target SoA cells directly, eliminating the
+    // per-frame `Vec<TupleN>` heap allocation that the previous
+    // collect-then-drain pattern paid outside the arena every frame.
+    // Each worker owns its index slot via rayon's `Zip`; reads from
+    // `corners_slot` happen before writes within a single closure body.
+    let status_out = &mut batch.status_mask[..n];
+    let ids_out = &mut batch.ids[..n];
+    let payloads_out = &mut batch.payloads[..n];
+    let error_rates_out = &mut batch.error_rates[..n];
+    let corners_out = &mut batch.corners[..n];
+    let homographies_out = &mut batch.homographies[..n];
 
-    for (i, (state, id, rot, payload, error_rate)) in results.into_iter().enumerate() {
-        batch.status_mask[i] = state;
-        batch.ids[i] = id;
-        batch.payloads[i] = payload;
-        batch.error_rates[i] = error_rate;
+    // Rayon `Zip` truncates to the shortest input; guard the disjoint-slice
+    // contract so a future off-by-one fix on any column fails loudly in
+    // debug rather than silently dropping the last candidate.
+    debug_assert_eq!(status_out.len(), n);
+    debug_assert_eq!(ids_out.len(), n);
+    debug_assert_eq!(payloads_out.len(), n);
+    debug_assert_eq!(error_rates_out.len(), n);
+    debug_assert_eq!(corners_out.len(), n);
+    debug_assert_eq!(homographies_out.len(), n);
 
-        // Reorder corners based on the decoded rotation (same convention as the SIMD path).
-        if state == CandidateState::Valid && rot > 0 {
-            let mut tmp = [Point2f::default(); 4];
-            for (j, item) in tmp.iter_mut().enumerate() {
-                let src = (j + usize::from(rot)) % 4;
-                *item = batch.corners[i][src];
-            }
-            batch.corners[i] = tmp;
-
-            // Recompute the homography for the rotated corners. The
-            // pre-decoding homography mapped canonical (-1,-1) → old
-            // corners[0]; after the rotation, that point now lives at
-            // new corners[(4 - rot) % 4]. Downstream consumers
-            // (e.g. `CharucoRefiner` projecting saddle predictions
-            // through this homography) require it to remain aligned with
-            // the canonical TL/TR/BR/BL convention of `corners[]`.
-            // Without this recompute, `H(canonical_TL)` lands at the
-            // wrong image corner and any extrapolated point (saddle,
-            // bit-grid sample, etc.) lands at a rotated image position.
-            let dst = [
-                [f64::from(tmp[0].x), f64::from(tmp[0].y)],
-                [f64::from(tmp[1].x), f64::from(tmp[1].y)],
-                [f64::from(tmp[2].x), f64::from(tmp[2].y)],
-                [f64::from(tmp[3].x), f64::from(tmp[3].y)],
-            ];
-            if let Some(h_new) = Homography::square_to_quad(&dst) {
-                for (j, val) in h_new.h.iter().enumerate() {
-                    batch.homographies[i].data[j] = *val as f32;
+    status_out
+        .par_iter_mut()
+        .zip(ids_out.par_iter_mut())
+        .zip(payloads_out.par_iter_mut())
+        .zip(error_rates_out.par_iter_mut())
+        .zip(corners_out.par_iter_mut())
+        .zip(homographies_out.par_iter_mut())
+        .for_each(
+            |(((((status_slot, id_slot), payload_slot), err_slot), corners_slot), h_slot)| {
+                if *status_slot != CandidateState::Active {
+                    // Bypass: preserve status_mask and error_rates (no-op
+                    // writes in the original drain); zero ids/payloads to
+                    // match the `(state, 0, 0, 0, error_rates)` tuple the
+                    // original closure returned.
+                    *id_slot = 0;
+                    *payload_slot = 0;
+                    return;
                 }
-            }
-        }
-    }
+
+                let (state, id, rot, bits, err) = decode_candidate_distorted::<C>(
+                    img,
+                    corners_slot,
+                    decoders,
+                    config,
+                    intrinsics,
+                    model,
+                );
+
+                *status_slot = state;
+                *id_slot = id;
+                *payload_slot = bits;
+                *err_slot = err;
+
+                // Reorder corners based on the decoded rotation (same convention as the SIMD path).
+                if state == CandidateState::Valid && rot > 0 {
+                    let mut tmp = [Point2f::default(); 4];
+                    for (j, item) in tmp.iter_mut().enumerate() {
+                        let src = (j + usize::from(rot)) % 4;
+                        *item = corners_slot[src];
+                    }
+                    *corners_slot = tmp;
+
+                    // Recompute the homography for the rotated corners. The
+                    // pre-decoding homography mapped canonical (-1,-1) → old
+                    // corners[0]; after the rotation, that point now lives at
+                    // new corners[(4 - rot) % 4]. Downstream consumers
+                    // (e.g. `CharucoRefiner` projecting saddle predictions
+                    // through this homography) require it to remain aligned with
+                    // the canonical TL/TR/BR/BL convention of `corners[]`.
+                    // Without this recompute, `H(canonical_TL)` lands at the
+                    // wrong image corner and any extrapolated point (saddle,
+                    // bit-grid sample, etc.) lands at a rotated image position.
+                    let dst = [
+                        [f64::from(tmp[0].x), f64::from(tmp[0].y)],
+                        [f64::from(tmp[1].x), f64::from(tmp[1].y)],
+                        [f64::from(tmp[2].x), f64::from(tmp[2].y)],
+                        [f64::from(tmp[3].x), f64::from(tmp[3].y)],
+                    ];
+                    if let Some(h_new) = Homography::square_to_quad(&dst) {
+                        for (j, val) in h_new.h.iter().enumerate() {
+                            h_slot.data[j] = *val as f32;
+                        }
+                    }
+                }
+            },
+        );
 }
 
 /// Decode all active candidates in the batch using the Structure of Arrays (SoA) layout.
@@ -1226,395 +1259,467 @@ fn decode_batch_soa_generic(
     // today's behaviour of still considering recovery.
     let frame_max_h_floor = decoder_max_h.iter().copied().max().unwrap_or(0);
 
-    // We collect results into a temporary Vec to avoid unsafe parallel writes to the batch.
-    let results: Vec<_> = (0..n)
-        .into_par_iter()
-        .map(|i| {
-            if batch.status_mask[i] != CandidateState::Active {
-                return (batch.status_mask[i], 0, 0, 0, batch.error_rates[i], None);
-            }
+    // Split the batch into disjoint per-column mutable slices so each
+    // rayon worker can write its target SoA cells directly, eliminating
+    // the per-frame `Vec<TupleN>` heap allocation that the previous
+    // collect-then-drain pattern paid outside the arena every frame. The
+    // closure snapshots `corners_slot` / `h_slot` into stack-allocated
+    // locals before performing any work, so the eventual writes back to
+    // those slots at end-of-closure preserve the original sequential
+    // semantics (refined-corners overwrite first, then optional rotation
+    // permutation + homography recompute).
+    let status_out = &mut batch.status_mask[..n];
+    let ids_out = &mut batch.ids[..n];
+    let payloads_out = &mut batch.payloads[..n];
+    let error_rates_out = &mut batch.error_rates[..n];
+    let corners_out = &mut batch.corners[..n];
+    let homographies_out = &mut batch.homographies[..n];
 
-            WORKSPACE_ARENA.with_borrow_mut(|arena| {
-                arena.reset();
+    // Rayon `Zip` truncates to the shortest input; guard the disjoint-slice
+    // contract so a future off-by-one fix on any column fails loudly in
+    // debug rather than silently dropping the last candidate.
+    debug_assert_eq!(status_out.len(), n);
+    debug_assert_eq!(ids_out.len(), n);
+    debug_assert_eq!(payloads_out.len(), n);
+    debug_assert_eq!(error_rates_out.len(), n);
+    debug_assert_eq!(corners_out.len(), n);
+    debug_assert_eq!(homographies_out.len(), n);
 
-                let corners = &batch.corners[i];
-                let homography = &batch.homographies[i];
-
-                // Compute AABB for RoiCache ONCE per candidate.
-                // We expand it slightly (10%) to ensure scaled versions (0.9, 1.1) still fit.
-                let mut min_x = f32::MAX;
-                let mut min_y = f32::MAX;
-                let mut max_x = f32::MIN;
-                let mut max_y = f32::MIN;
-                for p in corners {
-                    min_x = min_x.min(p.x);
-                    min_y = min_y.min(p.y);
-                    max_x = max_x.max(p.x);
-                    max_y = max_y.max(p.y);
+    status_out
+        .par_iter_mut()
+        .zip(ids_out.par_iter_mut())
+        .zip(payloads_out.par_iter_mut())
+        .zip(error_rates_out.par_iter_mut())
+        .zip(corners_out.par_iter_mut())
+        .zip(homographies_out.par_iter_mut())
+        .for_each(
+            |(((((status_slot, id_slot), payload_slot), err_slot), corners_slot), h_slot)| {
+                if *status_slot != CandidateState::Active {
+                    // Bypass: preserve status_mask and error_rates (no-op
+                    // writes in the original drain); zero ids/payloads to
+                    // match the `(state, 0, 0, 0, error_rates, None)` tuple
+                    // the original closure returned.
+                    *id_slot = 0;
+                    *payload_slot = 0;
+                    return;
                 }
-                let w_aabb = max_x - min_x;
-                let h_aabb = max_y - min_y;
-                let roi = RoiCache::new(
-                    img,
-                    arena,
-                    ((min_x - w_aabb * 0.1).floor() as i32).max(0) as usize,
-                    ((min_y - h_aabb * 0.1).floor() as i32).max(0) as usize,
-                    (((max_x + w_aabb * 0.1).ceil() as i32).min(img.width as i32 - 1)).max(0)
-                        as usize,
-                    (((max_y + h_aabb * 0.1).ceil() as i32).min(img.height as i32 - 1)).max(0)
-                        as usize,
-                );
 
-                let mut best_h = u32::MAX;
-                let mut best_code = None;
-                let mut best_id = 0;
-                let mut best_rot = 0;
-                let mut best_overall_code = None;
+                // Snapshot the input corners and homography into locals so
+                // they cannot alias the later write-backs to the same SoA
+                // slots. The original sequential closure read `&batch.corners[i]`
+                // / `&batch.homographies[i]` throughout, untouched until the
+                // post-collect drain wrote the refined/rotated values back.
+                let input_corners: [Point2f; 4] = *corners_slot;
+                let input_homography: Matrix3x3 = *h_slot;
 
-                let scales = [1.0, 0.9, 1.1];
-                let center = [
-                    (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4.0,
-                    (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4.0,
-                ];
+                let (state, id, rot, payload, error_rate, refined_corners) = WORKSPACE_ARENA
+                    .with_borrow_mut(|arena| {
+                        arena.reset();
 
-                for scale in scales {
-                    let mut scaled_corners = [Point2f::default(); 4];
-                    let mut scaled_h_mat = Matrix3x3 {
-                        data: [0.0; 9],
-                        padding: [0.0; 7],
-                    };
+                        let corners = &input_corners;
+                        let homography = &input_homography;
 
-                    let current_homography: &Matrix3x3;
-
-                    let mut best_h_in_scale = u32::MAX;
-                    let mut best_match_in_scale: Option<(u32, u32, u8, u64, usize)> = None;
-
-                    if (scale - 1.0f32).abs() > 1e-4 {
-                        for j in 0..4 {
-                            scaled_corners[j].x = center[0] + (corners[j].x - center[0]) * scale;
-                            scaled_corners[j].y = center[1] + (corners[j].y - center[1]) * scale;
+                        // Compute AABB for RoiCache ONCE per candidate.
+                        // We expand it slightly (10%) to ensure scaled versions (0.9, 1.1) still fit.
+                        let mut min_x = f32::MAX;
+                        let mut min_y = f32::MAX;
+                        let mut max_x = f32::MIN;
+                        let mut max_y = f32::MIN;
+                        for p in corners {
+                            min_x = min_x.min(p.x);
+                            min_y = min_y.min(p.y);
+                            max_x = max_x.max(p.x);
+                            max_y = max_y.max(p.y);
                         }
+                        let w_aabb = max_x - min_x;
+                        let h_aabb = max_y - min_y;
+                        let roi = RoiCache::new(
+                            img,
+                            arena,
+                            ((min_x - w_aabb * 0.1).floor() as i32).max(0) as usize,
+                            ((min_y - h_aabb * 0.1).floor() as i32).max(0) as usize,
+                            (((max_x + w_aabb * 0.1).ceil() as i32).min(img.width as i32 - 1))
+                                .max(0) as usize,
+                            (((max_y + h_aabb * 0.1).ceil() as i32).min(img.height as i32 - 1))
+                                .max(0) as usize,
+                        );
 
-                        // Must recompute homography for scaled corners
-                        let dst = [
-                            [
-                                f64::from(scaled_corners[0].x),
-                                f64::from(scaled_corners[0].y),
-                            ],
-                            [
-                                f64::from(scaled_corners[1].x),
-                                f64::from(scaled_corners[1].y),
-                            ],
-                            [
-                                f64::from(scaled_corners[2].x),
-                                f64::from(scaled_corners[2].y),
-                            ],
-                            [
-                                f64::from(scaled_corners[3].x),
-                                f64::from(scaled_corners[3].y),
-                            ],
+                        let mut best_h = u32::MAX;
+                        let mut best_code = None;
+                        let mut best_id = 0;
+                        let mut best_rot = 0;
+                        let mut best_overall_code = None;
+
+                        let scales = [1.0, 0.9, 1.1];
+                        let center = [
+                            (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4.0,
+                            (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4.0,
                         ];
 
-                        if let Some(h_new) = Homography::square_to_quad(&dst) {
-                            for (j, val) in h_new.h.iter().enumerate() {
-                                scaled_h_mat.data[j] = *val as f32;
-                            }
-                            current_homography = &scaled_h_mat;
-                        } else {
-                            // Degenerate scale, skip
-                            continue;
-                        }
-                    } else {
-                        scaled_corners.copy_from_slice(&corners[..4]);
-                        current_homography = homography;
-                    }
-
-                    for (decoder_idx, decoder) in decoders.iter().enumerate() {
-                        if let Some(code) = sample_grid_soa_precomputed(
-                            img,
-                            &roi,
-                            current_homography,
-                            decoder.as_ref(),
-                        ) {
-                            if let Some((id, hamming, rot)) = decoder.decode_full(code, 255) {
-                                if hamming < best_h {
-                                    best_h = hamming;
-                                    best_overall_code = Some(code);
-                                }
-
-                                if hamming <= decoder_max_h[decoder_idx]
-                                    && (best_code.is_none() || hamming < best_h_in_scale)
-                                {
-                                    best_h_in_scale = hamming;
-                                    best_match_in_scale =
-                                        Some((id, hamming, rot, code, decoder_idx));
-                                }
-                            }
-                        }
-                    }
-                    if let Some((id, hamming, rot, code, decoder_idx)) = best_match_in_scale {
-                        best_id = id;
-                        best_rot = rot;
-                        best_code = Some(code);
-                        let decoder = decoders[decoder_idx].as_ref();
-
-                        // Always perform ERF refinement for finalists if requested
-                        if config.refinement_mode == crate::config::CornerRefinementMode::Erf {
-                            // Reassemble corners for ERF (it uses [f64; 2])
-                            let mut current_corners = [[0.0f64; 2]; 4];
-                            for j in 0..4 {
-                                current_corners[j] =
-                                    [f64::from(corners[j].x), f64::from(corners[j].y)];
-                            }
-
-                            let refined_corners = refine_corners_erf(
-                                arena,
-                                img,
-                                &current_corners,
-                                config.subpixel_refinement_sigma,
-                            );
-
-                            // Verify that refined corners still yield a valid decode
-                            let mut refined_corners_f32 = [Point2f::default(); 4];
-                            for j in 0..4 {
-                                refined_corners_f32[j] = Point2f {
-                                    x: refined_corners[j][0] as f32,
-                                    y: refined_corners[j][1] as f32,
-                                };
-                            }
-
-                            // Must recompute homography for refined corners
-                            let mut ref_h_mat = Matrix3x3 {
+                        for scale in scales {
+                            let mut scaled_corners = [Point2f::default(); 4];
+                            let mut scaled_h_mat = Matrix3x3 {
                                 data: [0.0; 9],
                                 padding: [0.0; 7],
                             };
-                            if let Some(h_new) = Homography::square_to_quad(&refined_corners) {
-                                for (j, val) in h_new.h.iter().enumerate() {
-                                    ref_h_mat.data[j] = *val as f32;
+
+                            let current_homography: &Matrix3x3;
+
+                            let mut best_h_in_scale = u32::MAX;
+                            let mut best_match_in_scale: Option<(u32, u32, u8, u64, usize)> = None;
+
+                            if (scale - 1.0f32).abs() > 1e-4 {
+                                for j in 0..4 {
+                                    scaled_corners[j].x =
+                                        center[0] + (corners[j].x - center[0]) * scale;
+                                    scaled_corners[j].y =
+                                        center[1] + (corners[j].y - center[1]) * scale;
+                                }
+
+                                // Must recompute homography for scaled corners
+                                let dst = [
+                                    [
+                                        f64::from(scaled_corners[0].x),
+                                        f64::from(scaled_corners[0].y),
+                                    ],
+                                    [
+                                        f64::from(scaled_corners[1].x),
+                                        f64::from(scaled_corners[1].y),
+                                    ],
+                                    [
+                                        f64::from(scaled_corners[2].x),
+                                        f64::from(scaled_corners[2].y),
+                                    ],
+                                    [
+                                        f64::from(scaled_corners[3].x),
+                                        f64::from(scaled_corners[3].y),
+                                    ],
+                                ];
+
+                                if let Some(h_new) = Homography::square_to_quad(&dst) {
+                                    for (j, val) in h_new.h.iter().enumerate() {
+                                        scaled_h_mat.data[j] = *val as f32;
+                                    }
+                                    current_homography = &scaled_h_mat;
+                                } else {
+                                    // Degenerate scale, skip
+                                    continue;
                                 }
                             } else {
-                                // Degenerate refinement, reject
-                                continue;
+                                scaled_corners.copy_from_slice(&corners[..4]);
+                                current_homography = homography;
                             }
 
-                            if let Some(code_ref) =
-                                sample_grid_soa_precomputed(img, &roi, &ref_h_mat, decoder)
-                            {
-                                if let Some((id_ref, hamming_ref, _)) =
-                                    decoder.decode_full(code_ref, 255)
-                                {
-                                    // Only keep if it's the same tag and hamming is not worse
-                                    if id_ref == id && hamming_ref <= hamming {
-                                        best_h = hamming_ref;
-                                        best_code = Some(code_ref);
-                                        // Update the actual corners in the batch!
-                                        if let Some(&code_inner) = best_code.as_ref() {
-                                            return (
-                                                CandidateState::Valid,
-                                                best_id,
-                                                best_rot,
-                                                code_inner,
-                                                best_h as f32,
-                                                Some(refined_corners_f32),
-                                            );
+                            for (decoder_idx, decoder) in decoders.iter().enumerate() {
+                                if let Some(code) = sample_grid_soa_precomputed(
+                                    img,
+                                    &roi,
+                                    current_homography,
+                                    decoder.as_ref(),
+                                ) {
+                                    if let Some((id, hamming, rot)) = decoder.decode_full(code, 255)
+                                    {
+                                        if hamming < best_h {
+                                            best_h = hamming;
+                                            best_overall_code = Some(code);
+                                        }
+
+                                        if hamming <= decoder_max_h[decoder_idx]
+                                            && (best_code.is_none() || hamming < best_h_in_scale)
+                                        {
+                                            best_h_in_scale = hamming;
+                                            best_match_in_scale =
+                                                Some((id, hamming, rot, code, decoder_idx));
                                         }
                                     }
                                 }
                             }
+                            if let Some((id, hamming, rot, code, decoder_idx)) = best_match_in_scale
+                            {
+                                best_id = id;
+                                best_rot = rot;
+                                best_code = Some(code);
+                                let decoder = decoders[decoder_idx].as_ref();
+
+                                // Always perform ERF refinement for finalists if requested
+                                if config.refinement_mode
+                                    == crate::config::CornerRefinementMode::Erf
+                                {
+                                    // Reassemble corners for ERF (it uses [f64; 2])
+                                    let mut current_corners = [[0.0f64; 2]; 4];
+                                    for j in 0..4 {
+                                        current_corners[j] =
+                                            [f64::from(corners[j].x), f64::from(corners[j].y)];
+                                    }
+
+                                    let refined_corners = refine_corners_erf(
+                                        arena,
+                                        img,
+                                        &current_corners,
+                                        config.subpixel_refinement_sigma,
+                                    );
+
+                                    // Verify that refined corners still yield a valid decode
+                                    let mut refined_corners_f32 = [Point2f::default(); 4];
+                                    for j in 0..4 {
+                                        refined_corners_f32[j] = Point2f {
+                                            x: refined_corners[j][0] as f32,
+                                            y: refined_corners[j][1] as f32,
+                                        };
+                                    }
+
+                                    // Must recompute homography for refined corners
+                                    let mut ref_h_mat = Matrix3x3 {
+                                        data: [0.0; 9],
+                                        padding: [0.0; 7],
+                                    };
+                                    if let Some(h_new) =
+                                        Homography::square_to_quad(&refined_corners)
+                                    {
+                                        for (j, val) in h_new.h.iter().enumerate() {
+                                            ref_h_mat.data[j] = *val as f32;
+                                        }
+                                    } else {
+                                        // Degenerate refinement, reject
+                                        continue;
+                                    }
+
+                                    if let Some(code_ref) =
+                                        sample_grid_soa_precomputed(img, &roi, &ref_h_mat, decoder)
+                                    {
+                                        if let Some((id_ref, hamming_ref, _)) =
+                                            decoder.decode_full(code_ref, 255)
+                                        {
+                                            // Only keep if it's the same tag and hamming is not worse
+                                            if id_ref == id && hamming_ref <= hamming {
+                                                best_h = hamming_ref;
+                                                best_code = Some(code_ref);
+                                                // Update the actual corners in the batch!
+                                                if let Some(&code_inner) = best_code.as_ref() {
+                                                    return (
+                                                        CandidateState::Valid,
+                                                        best_id,
+                                                        best_rot,
+                                                        code_inner,
+                                                        best_h as f32,
+                                                        Some(refined_corners_f32),
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                return (
+                                    CandidateState::Valid,
+                                    best_id,
+                                    best_rot,
+                                    code,
+                                    hamming as f32,
+                                    None,
+                                );
+                            }
+
+                            if best_h == 0 {
+                                break;
+                            }
                         }
 
-                        return (
-                            CandidateState::Valid,
-                            best_id,
-                            best_rot,
-                            code,
-                            hamming as f32,
-                            None,
-                        );
-                    }
+                        // Stage 2: Configurable Corner Refinement (Recovery for near-misses)
+                        let max_h_for_refine = if decoders.iter().any(|d| d.name() == "36h11") {
+                            10
+                        } else {
+                            4
+                        };
 
-                    if best_h == 0 {
-                        break;
-                    }
-                }
+                        if best_h > frame_max_h_floor
+                            && best_h <= max_h_for_refine
+                            && best_overall_code.is_some()
+                        {
+                            match config.refinement_mode {
+                                crate::config::CornerRefinementMode::None
+                                | crate::config::CornerRefinementMode::Gwlf => {
+                                    // Gwlf not ported to SoA yet.
+                                },
+                                crate::config::CornerRefinementMode::Erf => {
+                                    let nudge = 0.2;
+                                    let mut current_corners = [Point2f::default(); 4];
+                                    current_corners.copy_from_slice(corners);
 
-                // Stage 2: Configurable Corner Refinement (Recovery for near-misses)
-                let max_h_for_refine = if decoders.iter().any(|d| d.name() == "36h11") {
-                    10
-                } else {
-                    4
-                };
+                                    for _pass in 0..2 {
+                                        let mut pass_improved = false;
+                                        for c_idx in 0..4 {
+                                            for (dx, dy) in [
+                                                (nudge, 0.0),
+                                                (-nudge, 0.0),
+                                                (0.0, nudge),
+                                                (0.0, -nudge),
+                                            ] {
+                                                let mut test_corners = current_corners;
+                                                test_corners[c_idx].x += dx;
+                                                test_corners[c_idx].y += dy;
 
-                if best_h > frame_max_h_floor
-                    && best_h <= max_h_for_refine
-                    && best_overall_code.is_some()
-                {
-                    match config.refinement_mode {
-                        crate::config::CornerRefinementMode::None
-                        | crate::config::CornerRefinementMode::Gwlf => {
-                            // Gwlf not ported to SoA yet.
-                        },
-                        crate::config::CornerRefinementMode::Erf => {
-                            let nudge = 0.2;
-                            let mut current_corners = [Point2f::default(); 4];
-                            current_corners.copy_from_slice(corners);
+                                                // Must recompute homography for the nudged corners
+                                                let dst = [
+                                                    [
+                                                        f64::from(test_corners[0].x),
+                                                        f64::from(test_corners[0].y),
+                                                    ],
+                                                    [
+                                                        f64::from(test_corners[1].x),
+                                                        f64::from(test_corners[1].y),
+                                                    ],
+                                                    [
+                                                        f64::from(test_corners[2].x),
+                                                        f64::from(test_corners[2].y),
+                                                    ],
+                                                    [
+                                                        f64::from(test_corners[3].x),
+                                                        f64::from(test_corners[3].y),
+                                                    ],
+                                                ];
 
-                            for _pass in 0..2 {
-                                let mut pass_improved = false;
-                                for c_idx in 0..4 {
-                                    for (dx, dy) in
-                                        [(nudge, 0.0), (-nudge, 0.0), (0.0, nudge), (0.0, -nudge)]
-                                    {
-                                        let mut test_corners = current_corners;
-                                        test_corners[c_idx].x += dx;
-                                        test_corners[c_idx].y += dy;
+                                                if let Some(h_new) =
+                                                    Homography::square_to_quad(&dst)
+                                                {
+                                                    let mut h_mat = Matrix3x3 {
+                                                        data: [0.0; 9],
+                                                        padding: [0.0; 7],
+                                                    };
+                                                    for (j, val) in h_new.h.iter().enumerate() {
+                                                        h_mat.data[j] = *val as f32;
+                                                    }
 
-                                        // Must recompute homography for the nudged corners
-                                        let dst = [
-                                            [
-                                                f64::from(test_corners[0].x),
-                                                f64::from(test_corners[0].y),
-                                            ],
-                                            [
-                                                f64::from(test_corners[1].x),
-                                                f64::from(test_corners[1].y),
-                                            ],
-                                            [
-                                                f64::from(test_corners[2].x),
-                                                f64::from(test_corners[2].y),
-                                            ],
-                                            [
-                                                f64::from(test_corners[3].x),
-                                                f64::from(test_corners[3].y),
-                                            ],
-                                        ];
-
-                                        if let Some(h_new) = Homography::square_to_quad(&dst) {
-                                            let mut h_mat = Matrix3x3 {
-                                                data: [0.0; 9],
-                                                padding: [0.0; 7],
-                                            };
-                                            for (j, val) in h_new.h.iter().enumerate() {
-                                                h_mat.data[j] = *val as f32;
-                                            }
-
-                                            for (decoder_idx, decoder) in
-                                                decoders.iter().enumerate()
-                                            {
-                                                if let Some(code) = sample_grid_soa_precomputed(
-                                                    img,
-                                                    &roi,
-                                                    &h_mat,
-                                                    decoder.as_ref(),
-                                                ) {
-                                                    if let Some((id, hamming, rot)) =
-                                                        decoder.decode_full(code, 255)
+                                                    for (decoder_idx, decoder) in
+                                                        decoders.iter().enumerate()
                                                     {
-                                                        if hamming < best_h {
-                                                            best_h = hamming;
-                                                            best_overall_code = Some(code);
-                                                            current_corners = test_corners;
-                                                            pass_improved = true;
-
-                                                            if hamming <= decoder_max_h[decoder_idx]
+                                                        if let Some(code) =
+                                                            sample_grid_soa_precomputed(
+                                                                img,
+                                                                &roi,
+                                                                &h_mat,
+                                                                decoder.as_ref(),
+                                                            )
+                                                        {
+                                                            if let Some((id, hamming, rot)) =
+                                                                decoder.decode_full(code, 255)
                                                             {
-                                                                best_id = id;
-                                                                best_rot = rot;
-                                                                best_code = Some(code);
+                                                                if hamming < best_h {
+                                                                    best_h = hamming;
+                                                                    best_overall_code = Some(code);
+                                                                    current_corners = test_corners;
+                                                                    pass_improved = true;
 
-                                                                return (
-                                                                    CandidateState::Valid,
-                                                                    best_id,
-                                                                    best_rot,
-                                                                    code,
-                                                                    best_h as f32,
-                                                                    Some(current_corners),
-                                                                );
+                                                                    if hamming
+                                                                        <= decoder_max_h
+                                                                            [decoder_idx]
+                                                                    {
+                                                                        best_id = id;
+                                                                        best_rot = rot;
+                                                                        best_code = Some(code);
+
+                                                                        return (
+                                                                            CandidateState::Valid,
+                                                                            best_id,
+                                                                            best_rot,
+                                                                            code,
+                                                                            best_h as f32,
+                                                                            Some(current_corners),
+                                                                        );
+                                                                    }
+                                                                }
                                                             }
                                                         }
                                                     }
                                                 }
                                             }
                                         }
+                                        if !pass_improved {
+                                            break;
+                                        }
                                     }
-                                }
-                                if !pass_improved {
-                                    break;
-                                }
+                                },
                             }
-                        },
+                        }
+
+                        if let Some(code) = best_code {
+                            (
+                                CandidateState::Valid,
+                                best_id,
+                                best_rot,
+                                code,
+                                best_h as f32,
+                                None,
+                            )
+                        } else {
+                            // Even on failure, return the best hamming distance found for debugging.
+                            // If no code was sampled at all, best_h will be u32::MAX.
+                            (
+                                CandidateState::FailedDecode,
+                                0,
+                                0,
+                                0,
+                                if best_h == u32::MAX {
+                                    0.0
+                                } else {
+                                    best_h as f32
+                                },
+                                None,
+                            )
+                        }
+                    });
+
+                *status_slot = state;
+                *id_slot = id;
+                *payload_slot = payload;
+                *err_slot = error_rate;
+
+                let refined = refined_corners.is_some();
+                if let Some(refined) = refined_corners {
+                    for (j, corner) in refined.iter().enumerate() {
+                        corners_slot[j] = *corner;
                     }
                 }
 
-                if let Some(code) = best_code {
-                    (
-                        CandidateState::Valid,
-                        best_id,
-                        best_rot,
-                        code,
-                        best_h as f32,
-                        None,
-                    )
-                } else {
-                    // Even on failure, return the best hamming distance found for debugging.
-                    // If no code was sampled at all, best_h will be u32::MAX.
-                    (
-                        CandidateState::FailedDecode,
-                        0,
-                        0,
-                        0,
-                        if best_h == u32::MAX {
-                            0.0
-                        } else {
-                            best_h as f32
-                        },
-                        None,
-                    )
+                // Apply rotation reorder, if any.
+                if state == CandidateState::Valid && rot > 0 {
+                    let mut temp_corners = [Point2f::default(); 4];
+                    for (j, item) in temp_corners.iter_mut().enumerate() {
+                        let src_idx = (j + usize::from(rot)) % 4;
+                        *item = corners_slot[src_idx];
+                    }
+                    *corners_slot = temp_corners;
                 }
-            })
-        })
-        .collect();
 
-    for (i, (state, id, rot, payload, error_rate, refined_corners)) in
-        results.into_iter().enumerate()
-    {
-        batch.status_mask[i] = state;
-        batch.ids[i] = id;
-        batch.payloads[i] = payload;
-        batch.error_rates[i] = error_rate;
-
-        if let Some(refined) = refined_corners {
-            for (j, corner) in refined.iter().enumerate() {
-                batch.corners[i][j] = *corner;
-            }
-        }
-
-        if state == CandidateState::Valid && rot > 0 {
-            // Reorder corners based on rotation
-            let mut temp_corners = [Point2f::default(); 4];
-            for (j, item) in temp_corners.iter_mut().enumerate() {
-                let src_idx = (j + usize::from(rot)) % 4;
-                *item = batch.corners[i][src_idx];
-            }
-            for (j, item) in temp_corners.iter().enumerate() {
-                batch.corners[i][j] = *item;
-            }
-
-            // Recompute the homography for the rotated corners — see the
-            // matching block in `decode_batch_soa` for the rationale.
-            let dst = [
-                [f64::from(temp_corners[0].x), f64::from(temp_corners[0].y)],
-                [f64::from(temp_corners[1].x), f64::from(temp_corners[1].y)],
-                [f64::from(temp_corners[2].x), f64::from(temp_corners[2].y)],
-                [f64::from(temp_corners[3].x), f64::from(temp_corners[3].y)],
-            ];
-            if let Some(h_new) = Homography::square_to_quad(&dst) {
-                for (j, val) in h_new.h.iter().enumerate() {
-                    batch.homographies[i].data[j] = *val as f32;
+                // Recompute the homography whenever corners changed — ERF
+                // refinement *or* rotation. Without the ERF branch, a
+                // canonical-orientation refined candidate (`rot == 0`,
+                // `refined_corners.is_some()`) would carry the pre-refinement
+                // homography forward into Phase D and `CharucoRefiner`, which
+                // projects saddle predictions through `batch.homographies[i]`.
+                // The stale-`h_slot` failure mode is the same class as
+                // `memory/project_refine_saddle_noop.md`.
+                if state == CandidateState::Valid && (refined || rot > 0) {
+                    let dst = [
+                        [f64::from(corners_slot[0].x), f64::from(corners_slot[0].y)],
+                        [f64::from(corners_slot[1].x), f64::from(corners_slot[1].y)],
+                        [f64::from(corners_slot[2].x), f64::from(corners_slot[2].y)],
+                        [f64::from(corners_slot[3].x), f64::from(corners_slot[3].y)],
+                    ];
+                    if let Some(h_new) = Homography::square_to_quad(&dst) {
+                        for (j, val) in h_new.h.iter().enumerate() {
+                            h_slot.data[j] = *val as f32;
+                        }
+                    }
+                    // If `square_to_quad` returns None the quad is degenerate
+                    // (zero area, collinear after rotation). `h_slot` retains
+                    // the previous homography, mirroring pre-existing
+                    // best-effort behaviour. A stricter design would downgrade
+                    // to `FailedDecode` here — left for a follow-up that can
+                    // weigh the recall trade-off against benchmarks.
                 }
-            }
-        }
-    }
+            },
+        );
 }
 
 /// A trait for decoding binary payloads from extracted tags.
