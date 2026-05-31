@@ -1094,6 +1094,16 @@ fn decode_batch_soa_with_camera_inner<C: crate::camera::CameraModel>(
     let corners_out = &mut batch.corners[..n];
     let homographies_out = &mut batch.homographies[..n];
 
+    // Rayon `Zip` truncates to the shortest input; guard the disjoint-slice
+    // contract so a future off-by-one fix on any column fails loudly in
+    // debug rather than silently dropping the last candidate.
+    debug_assert_eq!(status_out.len(), n);
+    debug_assert_eq!(ids_out.len(), n);
+    debug_assert_eq!(payloads_out.len(), n);
+    debug_assert_eq!(error_rates_out.len(), n);
+    debug_assert_eq!(corners_out.len(), n);
+    debug_assert_eq!(homographies_out.len(), n);
+
     status_out
         .par_iter_mut()
         .zip(ids_out.par_iter_mut())
@@ -1264,6 +1274,16 @@ fn decode_batch_soa_generic(
     let error_rates_out = &mut batch.error_rates[..n];
     let corners_out = &mut batch.corners[..n];
     let homographies_out = &mut batch.homographies[..n];
+
+    // Rayon `Zip` truncates to the shortest input; guard the disjoint-slice
+    // contract so a future off-by-one fix on any column fails loudly in
+    // debug rather than silently dropping the last candidate.
+    debug_assert_eq!(status_out.len(), n);
+    debug_assert_eq!(ids_out.len(), n);
+    debug_assert_eq!(payloads_out.len(), n);
+    debug_assert_eq!(error_rates_out.len(), n);
+    debug_assert_eq!(corners_out.len(), n);
+    debug_assert_eq!(homographies_out.len(), n);
 
     status_out
         .par_iter_mut()
@@ -1654,36 +1674,49 @@ fn decode_batch_soa_generic(
                 *payload_slot = payload;
                 *err_slot = error_rate;
 
+                let refined = refined_corners.is_some();
                 if let Some(refined) = refined_corners {
                     for (j, corner) in refined.iter().enumerate() {
                         corners_slot[j] = *corner;
                     }
                 }
 
+                // Apply rotation reorder, if any.
                 if state == CandidateState::Valid && rot > 0 {
-                    // Reorder corners based on rotation
                     let mut temp_corners = [Point2f::default(); 4];
                     for (j, item) in temp_corners.iter_mut().enumerate() {
                         let src_idx = (j + usize::from(rot)) % 4;
                         *item = corners_slot[src_idx];
                     }
-                    for (j, item) in temp_corners.iter().enumerate() {
-                        corners_slot[j] = *item;
-                    }
+                    *corners_slot = temp_corners;
+                }
 
-                    // Recompute the homography for the rotated corners — see the
-                    // matching block in `decode_batch_soa` for the rationale.
+                // Recompute the homography whenever corners changed — ERF
+                // refinement *or* rotation. Without the ERF branch, a
+                // canonical-orientation refined candidate (`rot == 0`,
+                // `refined_corners.is_some()`) would carry the pre-refinement
+                // homography forward into Phase D and `CharucoRefiner`, which
+                // projects saddle predictions through `batch.homographies[i]`.
+                // The stale-`h_slot` failure mode is the same class as
+                // `memory/project_refine_saddle_noop.md`.
+                if state == CandidateState::Valid && (refined || rot > 0) {
                     let dst = [
-                        [f64::from(temp_corners[0].x), f64::from(temp_corners[0].y)],
-                        [f64::from(temp_corners[1].x), f64::from(temp_corners[1].y)],
-                        [f64::from(temp_corners[2].x), f64::from(temp_corners[2].y)],
-                        [f64::from(temp_corners[3].x), f64::from(temp_corners[3].y)],
+                        [f64::from(corners_slot[0].x), f64::from(corners_slot[0].y)],
+                        [f64::from(corners_slot[1].x), f64::from(corners_slot[1].y)],
+                        [f64::from(corners_slot[2].x), f64::from(corners_slot[2].y)],
+                        [f64::from(corners_slot[3].x), f64::from(corners_slot[3].y)],
                     ];
                     if let Some(h_new) = Homography::square_to_quad(&dst) {
                         for (j, val) in h_new.h.iter().enumerate() {
                             h_slot.data[j] = *val as f32;
                         }
                     }
+                    // If `square_to_quad` returns None the quad is degenerate
+                    // (zero area, collinear after rotation). `h_slot` retains
+                    // the previous homography, mirroring pre-existing
+                    // best-effort behaviour. A stricter design would downgrade
+                    // to `FailedDecode` here — left for a follow-up that can
+                    // weigh the recall trade-off against benchmarks.
                 }
             },
         );

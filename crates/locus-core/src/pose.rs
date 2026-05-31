@@ -1734,6 +1734,21 @@ pub fn refine_poses_soa_with_config(
     #[cfg(feature = "bench-internals")]
     let outlier_idx_out = &mut batch.outlier_corner_idx[..v];
 
+    // Rayon's `Zip` on `IndexedParallelIterator`s silently truncates to the
+    // shortest input. A future off-by-one fix on any of these slices would
+    // drop the last candidate's pose with no panic, so guard the contract
+    // explicitly. Cheap: a few `debug_assert_eq!`s, only in debug builds.
+    debug_assert_eq!(poses_out.len(), v);
+    debug_assert_eq!(corners_in.len(), v);
+    debug_assert_eq!(covs_in.len(), v);
+    #[cfg(feature = "bench-internals")]
+    {
+        debug_assert_eq!(d2_out.len(), v);
+        debug_assert_eq!(d2_max_out.len(), v);
+        debug_assert_eq!(branch_ratio_out.len(), v);
+        debug_assert_eq!(outlier_idx_out.len(), v);
+    }
+
     #[cfg(feature = "bench-internals")]
     {
         poses_out
