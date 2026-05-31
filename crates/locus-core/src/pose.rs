@@ -2040,8 +2040,7 @@ pub fn bench_refit_pose_drop_corner(
     let Some(h_poly) = crate::decoder::Homography::square_to_quad(&ideal_corners) else {
         return initial_pose;
     };
-    let covariances_opt =
-        build_lm_covariances(config, img, &ideal_corners, &h_poly, None, None);
+    let covariances_opt = build_lm_covariances(config, img, &ideal_corners, &h_poly, None, None);
 
     if let Some(mut covs) = covariances_opt {
         // Inflate the dropped corner's covariance ⇒ its info matrix shrinks

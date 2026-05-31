@@ -41,8 +41,16 @@ pub(crate) const NO_EMPIRICAL_NOISE_SENTINEL: CornerEmpiricalNoise = [0.0; 4];
 /// `min(empirical, 16·σ_n²)` cap where `σ_n²` is naturally in scope.
 #[inline]
 fn combine_edge_mses(mse_e1: f64, mse_e2: f64) -> f32 {
-    let m1 = if mse_e1.is_finite() { Some(mse_e1) } else { None };
-    let m2 = if mse_e2.is_finite() { Some(mse_e2) } else { None };
+    let m1 = if mse_e1.is_finite() {
+        Some(mse_e1)
+    } else {
+        None
+    };
+    let m2 = if mse_e2.is_finite() {
+        Some(mse_e2)
+    } else {
+        None
+    };
     match (m1, m2) {
         (Some(a), Some(b)) => (0.5 * (a + b)) as f32,
         (Some(a), None) | (None, Some(a)) => a as f32,

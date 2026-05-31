@@ -922,8 +922,7 @@ mod tests {
             let dist = nx * x + ny * y + d;
             let s = dist * inv_sigma;
             if s.abs() <= 3.0 {
-                let model =
-                    (a + b) * 0.5 + (b - a) * 0.5 * crate::simd::math::erf_approx(s);
+                let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::simd::math::erf_approx(s);
                 let residual = img_val - model;
                 let jac = k * (-s * s).exp();
                 sum_jtj += jac * jac;
@@ -969,8 +968,8 @@ mod tests {
             (16.0, 5.0, 200.0),
             (17.0, 5.0, 205.0),
             (18.0, 5.0, 210.0),
-            (50.0, 5.0, 200.0),   // far out-of-window
-            (-50.0, 5.0, 30.0),   // far out-of-window (other side)
+            (50.0, 5.0, 200.0), // far out-of-window
+            (-50.0, 5.0, 30.0), // far out-of-window (other side)
         ];
 
         let (jtj_opt, jtr_opt, rss_opt, n_opt) =
@@ -1011,7 +1010,10 @@ mod tests {
 
         let mut fitter = ErfEdgeFitter::new(&img, [50.0, 10.0], [50.0, 90.0], true)
             .expect("edge length too short");
-        assert!(fitter.last_residual_mse().is_nan(), "MSE pre-fit must be NaN");
+        assert!(
+            fitter.last_residual_mse().is_nan(),
+            "MSE pre-fit must be NaN"
+        );
 
         let sample_cfg = SampleConfig::for_quad(fitter.edge_len(), 1);
         let refine_cfg = RefineConfig::quad_style(sigma);
