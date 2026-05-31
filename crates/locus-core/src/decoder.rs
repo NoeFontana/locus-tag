@@ -438,6 +438,28 @@ fn sample_grid_values_dda_simd(
         target_feature = "avx2",
         target_feature = "fma"
     ))]
+    // SAFETY:
+    // 1. AVX2 + FMA intrinsics (`_mm256_*`, `_mm256_fmadd_ps`) are sound on
+    //    x86_64 because the enclosing `#[cfg(all(target_arch = "x86_64",
+    //    target_feature = "avx2", target_feature = "fma"))]` gate above
+    //    guarantees both features are available at compile time.
+    // 2. The per-chunk early-out at `(mask & ((1 << count) - 1)) != ((1 << count) - 1)`
+    //    (computed from `mask_x` ∧ `mask_y`, which require
+    //    `0 <= img_x < width - 1` and `0 <= img_y < height - 1`) returns `false`
+    //    if any of the `count` active lanes lie outside the safe 2×2 bilinear
+    //    neighbourhood. `sample_bilinear_v8` is therefore only invoked when
+    //    every active lane's gather offset `(viy * stride + vix)` is guaranteed
+    //    in-range for the 4 pixels of the bilinear footprint.
+    // 3. `sample_bilinear_v8` uses `_mm256_i32gather_epi32` to fetch 8-bit
+    //    pixels via 32-bit loads, which can read up to 3 bytes past the last
+    //    pixel of the underlying buffer. The required ≥3-byte SIMD-gather
+    //    padding contract is documented in `docs/engineering/constraints.md`
+    //    §2 and `docs/engineering/ffi_contracts.md` §1, and is the
+    //    caller-side responsibility of the FFI buffer-preparation layer
+    //    (`prepare_image_view` in `crates/locus-py/src/lib.rs`).
+    //    `sample_bilinear_v8` additionally guards its gather path with
+    //    `ImageView::has_simd_padding()` and falls back to scalar sampling
+    //    when the contract is not met.
     unsafe {
         use crate::simd::math::rcp_nr_v8;
         use crate::simd::sampler::sample_bilinear_v8;
@@ -530,7 +552,32 @@ fn sample_grid_values_dda_simd(
 
     #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
     #[allow(unsafe_code)]
-    // SAFETY: NEON intrinsics are safe on aarch64 with neon feature.
+    // SAFETY:
+    // 1. NEON intrinsics (`vfmaq_f32`, `vrecpeq_f32`, `vld1q_f32`,
+    //    `vst1q_f32`, etc.) are sound on aarch64 because the enclosing
+    //    `#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]`
+    //    gate above guarantees the NEON feature is available at compile
+    //    time.
+    // 2. Per-lane bounds for the sampled coordinates are enforced inside
+    //    `sample_bilinear_v8`'s NEON branch (`crates/locus-core/src/simd/
+    //    sampler.rs`), which clamps each (x, y) to `[0, width - 2] ×
+    //    [0, height - 2]` via `vmaxq_f32`/`vminq_f32` before truncating to
+    //    `i32` and computing the 2×2 footprint offsets. This guarantees the
+    //    four scalar pixel loads (`img.data[base]`, `+1`, `+stride`,
+    //    `+stride + 1`) are in-range. Unlike the AVX2 path above, no
+    //    early-out is needed here because the NEON sampler does not use a
+    //    SIMD gather instruction — it uses bounds-clamped scalar loads.
+    // 3. `sample_bilinear_v8` is shared between the AVX2 and NEON paths
+    //    and documents a ≥3-byte SIMD-gather padding contract for its AVX2
+    //    branch (caller responsibility, enforced upstream at
+    //    `prepare_image_view` in `crates/locus-py/src/lib.rs`; see
+    //    `docs/engineering/constraints.md` §2 and
+    //    `docs/engineering/ffi_contracts.md` §1). The NEON branch uses
+    //    bounds-clamped scalar loads rather than a 32-bit gather of 8-bit
+    //    pixels, so the 3-byte slack is not strictly required on aarch64;
+    //    nevertheless the contract is enforced at the FFI boundary
+    //    irrespective of the target architecture, which keeps a future
+    //    aarch64 gather variant sound by construction.
     unsafe {
         use crate::simd::sampler::sample_bilinear_v8;
         use std::arch::aarch64::*;

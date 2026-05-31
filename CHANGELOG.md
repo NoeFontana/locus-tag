@@ -7,6 +7,7 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- `decoder.rs` SIMD gather blocks now carry full SAFETY justification including the 3-byte SIMD-gather padding contract (`crates/locus-core/src/decoder.rs` AVX2 + NEON paths in `sample_grid_values_simd`).
 - Regression tests against the hub dataset cache now panic instead of silently skipping when `LOCUS_HUB_DATASET_DIR` is set but the expected subdir is missing (closes the same footgun as PR #252).
 - Centralised SO(3) → quaternion conversion through `quat_from_so3` helper, eliminating the latent `UnitQuaternion::from_matrix` Müller-iteration hang risk on near-singular rotations across `board.rs`, `pose.rs`, and the PyO3 board-pose copy.
 
