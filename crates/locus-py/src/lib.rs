@@ -1935,29 +1935,86 @@ fn validate_principal_point(
     Ok(())
 }
 
-fn prepare_image_view<'a>(img: &PyReadonlyArray2<'_, u8>) -> PyResult<ImageView<'a>> {
+fn prepare_image_view<'py>(img: &'py PyReadonlyArray2<'_, u8>) -> PyResult<ImageView<'py>> {
     let shape = img.shape();
     let height = shape[0];
     let width = shape[1];
     let strides = img.strides();
-    let stride_y = strides[0].cast_unsigned();
     let stride_x = strides[1];
 
-    if stride_x == 1 {
-        let required_size = if height > 0 && width > 0 {
-            (height - 1) * stride_y + width
-        } else {
-            0
-        };
-        // SAFETY: img is a NumPy array whose lifetime is tied to the call.
-        let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
-        ImageView::new(data, width, height, stride_y)
-            .map_err(|e| PyRuntimeError::new_err(e.clone()))
-    } else {
-        Err(PyValueError::new_err(
+    if stride_x != 1 {
+        return Err(PyValueError::new_err(
             "Array must be C-contiguous. Call np.ascontiguousarray(image) first.",
-        ))
+        ));
     }
+
+    // Reject negative or otherwise-invalid row strides before the unsigned cast.
+    // NumPy yields `strides[0] < 0` for reverse-axis views (e.g. `arr[::-1, :]`);
+    // `.cast_unsigned()` would wrap to a huge value and the subsequent
+    // `from_raw_parts` would build a giant slice → UB. `stride < width` is
+    // independently caught by `ImageView::new`, but we surface a typed
+    // `PyValueError` at the FFI boundary instead of a wrapped `PyRuntimeError`.
+    #[allow(clippy::cast_possible_wrap)]
+    let width_isize = width as isize;
+    if strides[0] < width_isize {
+        return Err(PyValueError::new_err(format!(
+            "Array row stride ({stride}) must be >= width ({width}); negative \
+             strides (e.g. from `arr[::-1, :]`) are not C-contiguous. Call \
+             np.ascontiguousarray(image) first.",
+            stride = strides[0],
+        )));
+    }
+
+    let stride_y = strides[0].cast_unsigned();
+    // Slice extent: cover the full row pitch `(H * stride_y)` rather than the
+    // tight logical extent `required_size = (H-1)*stride_y + W`. When
+    // `stride_y > width` (e.g. a `parent[:, :W]` slice from a wider parent
+    // allocation), this exposes the trailing `stride_y - width` bytes of each
+    // row's pad, giving the SIMD `has_simd_padding()` check a chance to pass
+    // on padded views without forcing every caller into a copy. When
+    // `stride_y == width` (tightly-packed `np.zeros((H, W))`), the extent
+    // collapses to `required_size` and `has_simd_padding()` rejects below.
+    let slice_len = if height > 0 && width > 0 {
+        height * stride_y
+    } else {
+        0
+    };
+    // SAFETY: The returned `ImageView<'py>` borrows from `img` via the explicit
+    // `'py` lifetime tie on the signature, so the slice cannot outlive the
+    // NumPy buffer. We expose `height * stride_y` bytes from `img.data()`.
+    //   * `stride_y` is validated above to be `>= width` (and was originally a
+    //     non-negative `isize` from NumPy, so the unsigned cast is exact).
+    //   * For C-contiguous arrays (`stride_y == width`), the slice length
+    //     equals `(H-1)*stride_y + W = H*W`, which is the full allocation.
+    //   * For strided views from a wider parent (the common
+    //     `np.pad(...)[:, :W]` pattern), `arr.data() == parent.data()` and
+    //     the parent has at least `H * stride_y` bytes — the slice stays
+    //     within the parent allocation.
+    //   * A user creating a column-offset view (`parent[:, c:c+W]` with
+    //     `c > 0`) would have `arr.data() == parent.data() + c`, making the
+    //     last `c` bytes of the slice unsafe. The FFI contract documented in
+    //     `docs/engineering/ffi_contracts.md` §1 forbids such views — callers
+    //     should pad with `np.pad(img, ((0, 0), (0, 3)))[:, :W]` instead.
+    let data = unsafe { std::slice::from_raw_parts(img.data(), slice_len) };
+    let view = ImageView::new(data, width, height, stride_y)
+        .map_err(|e| PyRuntimeError::new_err(e.clone()))?;
+
+    // Several SIMD kernels (e.g. AVX2 `sample_bilinear_v8` in `decoder.rs`)
+    // perform 32-bit gathers on 8-bit data and may read up to 3 bytes past the
+    // last logical pixel. NumPy gives no padding guarantee for a tightly-packed
+    // `(H, W)` `uint8` buffer, so we reject under-padded buffers at the FFI
+    // boundary. Callers can pad via `np.pad(img, ((0, 0), (0, 3)))[:, :W]` or
+    // copy into an over-allocated arena.
+    if !view.has_simd_padding() {
+        return Err(PyValueError::new_err(format!(
+            "Image buffer must have at least 3 bytes of trailing padding for \
+             SIMD-vectorized sampling (got tightly-packed {width}x{height} \
+             buffer). Pad with `np.pad(img, ((0, 0), (0, 3)))[:, :{width}]` \
+             before passing to `detect()`.",
+        )));
+    }
+
+    Ok(view)
 }
 
 /// Convert an owned [`Vec<locus_core::Detection>`] to a [`DetectionResult`] with NumPy arrays.

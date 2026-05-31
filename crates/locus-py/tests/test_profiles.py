@@ -36,7 +36,9 @@ def test_profile_builds_detector(profile: ProfileName) -> None:
     import numpy as np
 
     det = locus.Detector(profile=profile)
-    batch = det.detect(np.zeros((64, 64), dtype=np.uint8))
+    # Pad the parent to give the FFI SIMD-padding gate its 3 trailing bytes.
+    parent = np.zeros((64, 67), dtype=np.uint8)
+    batch = det.detect(parent[:, :64])
     assert len(batch) == 0
 
 

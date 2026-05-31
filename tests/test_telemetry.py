@@ -5,8 +5,10 @@ from locus import Detector
 
 def test_telemetry_extraction():
     detector = Detector()
-    # Create a synthetic image with some features
-    img = np.zeros((100, 100), dtype=np.uint8)
+    # Create a synthetic image with some features. The (100, 103) parent gives
+    # us the 3 trailing bytes the SIMD-padding gate at the FFI expects.
+    parent = np.zeros((100, 103), dtype=np.uint8)
+    img = parent[:, :100]
     img[20:80, 20:80] = 255  # A big white square
 
     # 1. Test disabled by default
@@ -44,7 +46,9 @@ def test_telemetry_extraction():
 
 def test_telemetry_content():
     detector = Detector()
-    img = np.zeros((100, 100), dtype=np.uint8)
+    # SIMD-padded parent → (H, W) view.
+    parent = np.zeros((100, 103), dtype=np.uint8)
+    img = parent[:, :100]
     # A checkerboard pattern to ensure thresholding does something
     img[::2, ::2] = 255
 

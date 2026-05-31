@@ -20,10 +20,22 @@ import pytest
 # sizing assumptions without doing real work — SIMD kernels still sweep, but
 # there are no contours so decoding short-circuits.
 _VALID_SHAPE = (64, 64)
+# Trailing slack required by SIMD gather kernels (AVX2 `sample_bilinear_v8`
+# loads 32-bit words on 8-bit data — see `prepare_image_view`).
+_SIMD_PAD = 3
 
 
 def _valid_img() -> np.ndarray:
-    return np.zeros(_VALID_SHAPE, dtype=np.uint8)
+    """A ``(H, W)`` zero image with ``_SIMD_PAD`` trailing bytes per row, so it
+    passes the FFI's SIMD-padding gate. Materialised as a column-prefix slice
+    of a wider parent allocation. Callers that need a tightly packed buffer
+    (to exercise the gate's negative path) should wrap with
+    :func:`np.ascontiguousarray`.
+    """
+    parent = np.zeros(
+        (_VALID_SHAPE[0], _VALID_SHAPE[1] + _SIMD_PAD), dtype=np.uint8
+    )
+    return parent[:, : _VALID_SHAPE[1]]
 
 
 @pytest.fixture
@@ -112,24 +124,54 @@ class TestImageBuffer:
 
 
 class TestSimdPaddingGate:
-    """§7 follow-up: ``has_simd_padding()`` is not asserted at ``prepare_image_view``.
+    """A1.2 enforced gate: ``prepare_image_view`` asserts ``has_simd_padding()``.
 
-    ``prepare_image_view`` constructs a slice of exactly ``required_size``
-    bytes — by construction ``ImageView::has_simd_padding()`` returns false
-    for every caller today. SIMD kernels nonetheless run and may read up to
-    3 bytes past the end via raw-pointer arithmetic on the underlying NumPy
-    buffer. A1.2 will either reject or copy-into-padded-arena; this test
-    flips to passing when that gate lands.
+    AVX2 ``sample_bilinear_v8`` (and the NEON fallback) loads 32-bit words on
+    8-bit data and may read up to 3 bytes past the last logical pixel. NumPy
+    gives no padding guarantee for a tightly packed ``(H, W)`` ``uint8``
+    buffer, so the FFI rejects under-padded inputs and points the caller at
+    ``np.pad(img, ((0, 0), (0, 3)))[:, :W]`` (which is what :func:`_valid_img`
+    materialises today).
     """
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="A1.2 will assert has_simd_padding() at prepare_image_view",
-    )
     def test_missing_padding_is_rejected(self, detector: locus.Detector) -> None:
+        # ``np.ascontiguousarray`` strips the padded view's slack, materialising
+        # a tight (H, W) allocation with stride == width — the failure case.
         img = np.ascontiguousarray(_valid_img())
         with pytest.raises(ValueError, match=r"padding"):
             detector.detect(img)
+
+
+class TestNegativeStrideRejection:
+    """A1.2 enforced gate: ``prepare_image_view`` rejects negative row strides.
+
+    ``np.ascontiguousarray(...)[::-1, :]`` is a reverse-axis view whose
+    ``strides[0]`` is negative. Before the fix, ``isize::cast_unsigned()``
+    wrapped to a huge ``usize`` and ``std::slice::from_raw_parts`` built a
+    multi-gigabyte slice over uninitialised memory — undefined behaviour at
+    the FFI boundary. The gate now surfaces the issue as a typed
+    :class:`ValueError`.
+    """
+
+    def test_reverse_row_axis_is_rejected(self, detector: locus.Detector) -> None:
+        # Build a tight C-contiguous buffer, then reverse rows. The reverse
+        # view has the same shape and `stride_x == 1`, but `strides[0]` flips
+        # negative.
+        tight = np.ascontiguousarray(_valid_img())
+        img = tight[::-1, :]
+        assert img.strides[0] < 0, "fixture invariant: row stride must be negative"
+        assert img.strides[1] == 1, "fixture invariant: column stride must be 1"
+        with pytest.raises(ValueError, match=r"stride|C-contiguous"):
+            detector.detect(img)
+
+    def test_reverse_row_axis_is_rejected_concurrent(
+        self, detector: locus.Detector
+    ) -> None:
+        tight = np.ascontiguousarray(_valid_img())
+        img = tight[::-1, :]
+        assert img.strides[0] < 0
+        with pytest.raises(ValueError, match=r"stride|C-contiguous"):
+            detector.detect_concurrent([img])
 
 
 class TestIntrinsicsShapeCouplingGate:
@@ -410,7 +452,11 @@ class TestRejectedFunnelStatus:
         mirror, in which case an unknown code would surface here.
         """
         rng = np.random.default_rng(0)
-        img = rng.integers(0, 255, size=_VALID_SHAPE, dtype=np.uint8)
+        # Pad the parent for the FFI SIMD-padding gate; view exposes (H, W).
+        parent = rng.integers(
+            0, 255, size=(_VALID_SHAPE[0], _VALID_SHAPE[1] + _SIMD_PAD), dtype=np.uint8
+        )
+        img = parent[:, : _VALID_SHAPE[1]]
         batch = detector.detect(img)
         assert batch.rejected_funnel_status is not None
         for code in batch.rejected_funnel_status.tolist():
