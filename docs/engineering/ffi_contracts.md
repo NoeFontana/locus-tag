@@ -28,22 +28,52 @@ through `prepare_image_view` at `crates/locus-py/src/lib.rs:1631`.
 | `dtype == np.uint8` (single-frame) | `crates/locus-py/locus/__init__.py:268` | `ValueError` (Python-side) |
 | `dtype == np.uint8` (per frame in concurrent path) | `crates/locus-py/locus/__init__.py:325` | `ValueError` (Python-side) |
 | Shape is 2-D `(H, W)` | `PyReadonlyArray2<'_, u8>` signature at `lib.rs:593` (`BoardEstimator::estimate`), `lib.rs:758` (`CharucoRefiner::estimate`), `lib.rs:1097` (`Detector::detect`) | `TypeError` (PyO3 built-in) |
-| `stride_x == 1` (row-major, C-contiguous along the last axis) | `lib.rs:1639-1653` in `prepare_image_view` | `PyValueError` — `"Array must be C-contiguous. Call np.ascontiguousarray(image) first."` |
+| `stride_x == 1` (row-major, C-contiguous along the last axis) | `lib.rs` in `prepare_image_view` | `PyValueError` — `"Array must be C-contiguous. Call np.ascontiguousarray(image) first."` |
+| `strides[0] >= width` (rejects reverse-axis views with negative row stride) | `lib.rs` in `prepare_image_view` | `PyValueError` — `"Array row stride (<value>) must be >= width (<value>); negative strides…"` |
 | `stride_y >= width` and buffer length fits `(height - 1) * stride + width` | `crates/locus-core/src/image.rs:26-46` (`ImageView::new`) | `PyRuntimeError` (wrapped from `String`) |
+| `has_simd_padding()` — ≥3 trailing bytes past the last logical pixel | `lib.rs` in `prepare_image_view` (silently satisfied via internal copy fallback when missing) | n/a — accepted via copy into padded scratch |
 
-### SIMD padding (caller responsibility — not enforced)
+### SIMD padding (A1.2 — enforced via internal copy fallback)
 
 `ImageView::has_simd_padding()` at `image.rs:55-67` returns whether the buffer
-has ≥3 bytes past the last pixel — the slack that AVX2 `gather` instructions
-may touch. **It is only called by SIMD kernels internally; it is not asserted
-at the FFI boundary.** Callers must ensure their NumPy arrays have at least 3
-bytes of trailing slack (typical with `np.ascontiguousarray` on any buffer
-whose stride exceeds its row width, but not guaranteed for tightly packed
-minimal buffers).
+has ≥3 bytes past the last logical pixel — the slack that AVX2 `gather`
+instructions (e.g. `sample_bilinear_v8` in `decoder.rs`) may touch when
+loading 32-bit words on 8-bit data. **`prepare_image_view` is responsible for
+this gate at every entry path**, but it satisfies it transparently rather
+than rejecting under-padded inputs:
 
-This is a **latent footgun**. A1 should either:
-1. Assert `has_simd_padding()` at `prepare_image_view` and raise `PyValueError`.
-2. Copy into a padded arena buffer at the FFI boundary when the check fails.
+* If the incoming NumPy buffer already exposes ≥3 trailing bytes per row
+  (`stride_y >= width + 3`, e.g. a `parent[:, :W]` slice from a wider
+  parent allocation), the function returns a zero-copy `FfiImageBuffer::Borrowed`
+  variant — the `ImageView` borrows directly from the NumPy data.
+* Otherwise (e.g. a tightly-packed `np.zeros((H, W), dtype=np.uint8)`),
+  the function copies the image into an over-allocated scratch
+  `Vec<u8>` of length `H * W + 3` (the trailing 3 bytes are zero-padded
+  guard bytes) and returns an `FfiImageBuffer::Padded` variant. The
+  scratch buffer lives for the lifetime of the `detect()` call and is
+  dropped afterwards.
+
+The fallback violates the otherwise-strict "no copies at the FFI" rule in
+`docs/engineering/constraints.md` §2. It is a deliberate trade-off —
+PR #287 PR-A initially rejected under-padded inputs and broke every
+`np.zeros((H, W))` call site in the public API; the redesign restored
+backwards-compatibility at the cost of one `H × W`-byte allocation + copy
+per `detect()` call for the tightly-packed path. PRs that touch this
+fallback should re-evaluate the trade-off if frame copy becomes a
+measurable cost.
+
+To take the zero-copy fast path explicitly, allocate a wider parent and
+view a column prefix:
+
+```python
+parent = np.pad(img, ((0, 0), (0, 3)))  # or `np.zeros((H, W + 3), ...)`
+view = parent[:, : img.shape[1]]
+detector.detect(view)  # FfiImageBuffer::Borrowed — zero-copy
+```
+
+Note that `view` is non-C-contiguous (`stride_y > width`) by design — the
+`stride_x == 1` gate is what defines "C-contiguous along the last axis" at
+this boundary, not NumPy's stricter `flags['C_CONTIGUOUS']`.
 
 ### Intrinsics ↔ image-shape coupling (enforced)
 
@@ -175,10 +205,17 @@ converge.
 
 These feed the Phase A1 test matrix:
 
-- **Image:** SIMD padding is caller-responsibility and silently unsafe. Assert
-  at `prepare_image_view`. (Deferred from A1.2: hardening this either breaks
-  every `np.zeros((H, W))` call site or requires an arena-copy path; tracked
-  separately.)
+- **Image:** SIMD padding is now satisfied transparently at
+  `prepare_image_view` via a copy-into-padded-scratch fallback (A1.2 —
+  shipped 2026-05-30 alongside the negative-stride and lifetime-tie fixes).
+  Tightly packed `np.zeros((H, W))` buffers are accepted at the FFI: the
+  function returns a `Borrowed` zero-copy view when the input already has
+  ≥3 trailing bytes per row, or a `Padded` owned scratch otherwise (see §1
+  SIMD-padding block). The public Python API is unchanged from pre-PR #287.
+  Test fixtures in `tests/` and `crates/locus-py/tests/` were briefly
+  flipped to the column-prefix-view pattern by PR #287 PR-A's reject
+  design and then reverted to the original tight-buffer pattern when the
+  copy fallback shipped.
 - **Config:** ~18 Rust fields have no range validation. With the JSON-profile
   refactor, Pydantic `_config.py` is the first-line gate and the
   `Detector(**kwargs)` escape hatch is gone, so these reach Rust only through

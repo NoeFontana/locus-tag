@@ -23,6 +23,11 @@ _VALID_SHAPE = (64, 64)
 
 
 def _valid_img() -> np.ndarray:
+    """A tightly-packed ``(H, W)`` zero image. The FFI silently copies into a
+    padded scratch buffer when the input lacks the 3 trailing bytes that SIMD
+    gather kernels need — see ``prepare_image_view`` and
+    ``docs/engineering/ffi_contracts.md`` §1.
+    """
     return np.zeros(_VALID_SHAPE, dtype=np.uint8)
 
 
@@ -112,24 +117,70 @@ class TestImageBuffer:
 
 
 class TestSimdPaddingGate:
-    """§7 follow-up: ``has_simd_padding()`` is not asserted at ``prepare_image_view``.
+    """A1.2 — copy-into-padded-arena fallback: tightly-packed inputs are NOT
+    rejected at the FFI; ``prepare_image_view`` transparently copies into a
+    padded scratch buffer.
 
-    ``prepare_image_view`` constructs a slice of exactly ``required_size``
-    bytes — by construction ``ImageView::has_simd_padding()`` returns false
-    for every caller today. SIMD kernels nonetheless run and may read up to
-    3 bytes past the end via raw-pointer arithmetic on the underlying NumPy
-    buffer. A1.2 will either reject or copy-into-padded-arena; this test
-    flips to passing when that gate lands.
+    AVX2 ``sample_bilinear_v8`` (and the NEON fallback) loads 32-bit words on
+    8-bit data and may read up to 3 bytes past the last logical pixel. NumPy
+    gives no padding guarantee for a tightly packed ``(H, W)`` ``uint8``
+    buffer. The FFI used to reject such inputs (PR #287 PR-A initial design)
+    but PR #287 switched to a copy fallback so the natural
+    ``np.zeros((H, W), dtype=np.uint8)`` idiom keeps working out of the box.
+
+    This xfail placeholder remains as a TODO-style marker: it asserts the
+    *reject* behaviour, so it would flip to passing the day a future variant
+    re-enables the strict gate. With the current copy fallback the FFI
+    accepts the buffer and no ``ValueError`` is raised — the test stays red
+    (expected fail), and ``strict=True`` guarantees the suite flags any
+    unexpected pass.
     """
 
     @pytest.mark.xfail(
         strict=True,
-        reason="A1.2 will assert has_simd_padding() at prepare_image_view",
+        reason=(
+            "A1.2 chose the copy-into-padded-arena fallback over the strict "
+            "reject; under-padded inputs are silently copied, so this gate is "
+            "intentionally not enforced."
+        ),
     )
     def test_missing_padding_is_rejected(self, detector: locus.Detector) -> None:
-        img = np.ascontiguousarray(_valid_img())
+        # Tightly-packed (H, W) buffer with stride == width — the case the
+        # initial PR-A reject design caught and the current copy fallback
+        # silently handles.
+        img = _valid_img()
         with pytest.raises(ValueError, match=r"padding"):
             detector.detect(img)
+
+
+class TestNegativeStrideRejection:
+    """A1.2 enforced gate: ``prepare_image_view`` rejects negative row strides.
+
+    ``np.ascontiguousarray(...)[::-1, :]`` is a reverse-axis view whose
+    ``strides[0]`` is negative. Before the fix, ``isize::cast_unsigned()``
+    wrapped to a huge ``usize`` and ``std::slice::from_raw_parts`` built a
+    multi-gigabyte slice over uninitialised memory — undefined behaviour at
+    the FFI boundary. The gate now surfaces the issue as a typed
+    :class:`ValueError`.
+    """
+
+    def test_reverse_row_axis_is_rejected(self, detector: locus.Detector) -> None:
+        # Build a C-contiguous buffer, then reverse rows. The reverse view
+        # has the same shape and `stride_x == 1`, but `strides[0]` flips
+        # negative.
+        tight = _valid_img()
+        img = tight[::-1, :]
+        assert img.strides[0] < 0, "fixture invariant: row stride must be negative"
+        assert img.strides[1] == 1, "fixture invariant: column stride must be 1"
+        with pytest.raises(ValueError, match=r"stride|C-contiguous"):
+            detector.detect(img)
+
+    def test_reverse_row_axis_is_rejected_concurrent(self, detector: locus.Detector) -> None:
+        tight = _valid_img()
+        img = tight[::-1, :]
+        assert img.strides[0] < 0
+        with pytest.raises(ValueError, match=r"stride|C-contiguous"):
+            detector.detect_concurrent([img])
 
 
 class TestIntrinsicsShapeCouplingGate:

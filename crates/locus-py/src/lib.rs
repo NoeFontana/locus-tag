@@ -837,7 +837,8 @@ impl BoardEstimator {
         img: PyReadonlyArray2<'_, u8>,
         intrinsics: CameraIntrinsics,
     ) -> PyResult<BoardEstimateResult> {
-        let view = prepare_image_view(&img)?;
+        let buffer = prepare_image_view(&img)?;
+        let view = buffer.view();
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
         let tag_size = self.inner.config.marker_length;
         // Read the detector's outlier-drop opt-in BEFORE the detect call —
@@ -1004,7 +1005,8 @@ impl CharucoRefiner {
         intrinsics: CameraIntrinsics,
         debug_telemetry: bool,
     ) -> PyResult<CharucoEstimateResult> {
-        let view = prepare_image_view(&img)?;
+        let buffer = prepare_image_view(&img)?;
+        let view = buffer.view();
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
         let tag_size = self.inner.config.marker_length;
         // Read the detector's outlier-drop opt-in BEFORE the detect call —
@@ -1381,7 +1383,8 @@ impl Detector {
         tag_size: Option<f64>,
         debug_telemetry: bool,
     ) -> PyResult<DetectionResult> {
-        let view = prepare_image_view(&img)?;
+        let buffer = prepare_image_view(&img)?;
+        let view = buffer.view();
 
         if let Some(ref i) = intrinsics {
             validate_principal_point(i, view.width, view.height)?;
@@ -1540,11 +1543,18 @@ impl Detector {
         intrinsics: Option<CameraIntrinsics>,
         tag_size: Option<f64>,
     ) -> PyResult<Vec<DetectionResult>> {
-        // Prepare image views while GIL is held (PyReadonlyArray2 is GIL-bound).
-        let views: Vec<ImageView<'_>> = frames
+        // Prepare image buffers while GIL is held (PyReadonlyArray2 is GIL-bound).
+        // Each `FfiImageBuffer` is either a zero-copy borrow of the NumPy
+        // buffer (fast path, when stride_y > width + 3) or an owned padded
+        // copy (fallback for tightly-packed inputs — see `prepare_image_view`).
+        let buffers: Vec<FfiImageBuffer<'_>> = frames
             .iter()
             .map(prepare_image_view)
             .collect::<PyResult<_>>()?;
+        // `views` borrows from `buffers`; `buffers` must outlive the detach
+        // call below. The compiler already enforces this — leaving the
+        // comment as a reminder for the next reader.
+        let views: Vec<ImageView<'_>> = buffers.iter().map(FfiImageBuffer::view).collect();
 
         if let Some(ref i) = intrinsics {
             for view in &views {
@@ -1935,29 +1945,206 @@ fn validate_principal_point(
     Ok(())
 }
 
-fn prepare_image_view<'a>(img: &PyReadonlyArray2<'_, u8>) -> PyResult<ImageView<'a>> {
+/// FFI-layer image buffer that hides whether `detect()` borrows zero-copy
+/// from the NumPy buffer or has materialised a padded copy.
+///
+/// Why this exists: AVX2 `sample_bilinear_v8` (and its NEON fallback) issues
+/// 32-bit gathers on 8-bit data and may read up to 3 bytes past the last
+/// logical pixel — see the SAFETY block at `crates/locus-core/src/decoder.rs`
+/// and the runtime gate in `crates/locus-core/src/simd/sampler.rs`. A
+/// tightly-packed `np.zeros((H, W), dtype=np.uint8)` NumPy buffer carries no
+/// such trailing slack, so the FFI either:
+///   * takes the **fast path** (`Borrowed`) when the input already exposes
+///     ≥3 trailing bytes (e.g. a column-prefix view from a wider parent
+///     allocation), or
+///   * takes the **fallback path** (`Padded`) by copying `H × W` bytes into
+///     a tightly-packed scratch `Vec<u8>` over-allocated by 3 trailing
+///     guard bytes.
+///
+/// The fallback violates the otherwise-strict "no copies at the FFI" rule
+/// from `docs/engineering/constraints.md` §2, but it is a one-shot
+/// per-`detect()` cost that preserves the pre-PR-#287 public API (every
+/// `np.zeros((H, W))` call site continues to work transparently). PRs that
+/// touched this fallback should reconsider the trade-off if frame copy
+/// becomes a measurable cost.
+enum FfiImageBuffer<'py> {
+    /// Zero-copy view over the NumPy buffer. Used when the input has
+    /// stride_y > width (≥3 trailing pad bytes per row).
+    Borrowed {
+        data: &'py [u8],
+        width: usize,
+        height: usize,
+        stride: usize,
+    },
+    /// Owned padded scratch. The `storage` is a tightly-packed
+    /// `width × height + 3` buffer; the leading `width × height` bytes hold
+    /// the row-by-row copy of the input, the trailing 3 bytes are guard
+    /// padding for SIMD gather.
+    Padded {
+        storage: Vec<u8>,
+        width: usize,
+        height: usize,
+    },
+}
+
+impl FfiImageBuffer<'_> {
+    /// Build an `ImageView` that borrows from `self`. The lifetime of the
+    /// returned view is tied to `&self`, so callers must keep the buffer
+    /// alive for as long as the view is used.
+    fn view(&self) -> ImageView<'_> {
+        match self {
+            FfiImageBuffer::Borrowed {
+                data,
+                width,
+                height,
+                stride,
+            } => {
+                // SAFETY-equivalent: `data` was validated by `prepare_image_view`
+                // (stride >= width, length >= height * stride). `ImageView::new`
+                // re-validates the size invariants; on the borrowed path we
+                // could even call `new_unchecked`, but we keep this honest.
+                ImageView {
+                    data,
+                    width: *width,
+                    height: *height,
+                    stride: *stride,
+                }
+            },
+            FfiImageBuffer::Padded {
+                storage,
+                width,
+                height,
+            } => {
+                // For the copy path the layout is tightly packed with
+                // `stride == width`, plus 3 trailing guard bytes in `storage`
+                // that satisfy `ImageView::has_simd_padding()`.
+                ImageView {
+                    data: storage,
+                    width: *width,
+                    height: *height,
+                    stride: *width,
+                }
+            },
+        }
+    }
+}
+
+fn prepare_image_view<'py>(img: &'py PyReadonlyArray2<'_, u8>) -> PyResult<FfiImageBuffer<'py>> {
     let shape = img.shape();
     let height = shape[0];
     let width = shape[1];
     let strides = img.strides();
-    let stride_y = strides[0].cast_unsigned();
     let stride_x = strides[1];
 
-    if stride_x == 1 {
-        let required_size = if height > 0 && width > 0 {
-            (height - 1) * stride_y + width
-        } else {
-            0
-        };
-        // SAFETY: img is a NumPy array whose lifetime is tied to the call.
-        let data = unsafe { std::slice::from_raw_parts(img.data(), required_size) };
-        ImageView::new(data, width, height, stride_y)
-            .map_err(|e| PyRuntimeError::new_err(e.clone()))
-    } else {
-        Err(PyValueError::new_err(
+    if stride_x != 1 {
+        return Err(PyValueError::new_err(
             "Array must be C-contiguous. Call np.ascontiguousarray(image) first.",
-        ))
+        ));
     }
+
+    // F2 (kept): reject negative or otherwise-invalid row strides before the
+    // unsigned cast. NumPy yields `strides[0] < 0` for reverse-axis views
+    // (e.g. `arr[::-1, :]`); `.cast_unsigned()` would wrap to a huge value
+    // and the subsequent `from_raw_parts` would build a giant slice → UB.
+    // `stride < width` is independently caught by `ImageView::new`, but we
+    // surface a typed `PyValueError` at the FFI boundary instead of a
+    // wrapped `PyRuntimeError`.
+    #[allow(clippy::cast_possible_wrap)]
+    let width_isize = width as isize;
+    if strides[0] < width_isize {
+        return Err(PyValueError::new_err(format!(
+            "Array row stride ({stride}) must be >= width ({width}); negative \
+             strides (e.g. from `arr[::-1, :]`) are not C-contiguous. Call \
+             np.ascontiguousarray(image) first.",
+            stride = strides[0],
+        )));
+    }
+
+    let stride_y = strides[0].cast_unsigned();
+
+    // Fast-path detection. Cover the full row pitch `(H * stride_y)` so that
+    // when `stride_y > width` (e.g. a `parent[:, :W]` slice from a wider
+    // parent allocation), the trailing `(stride_y - width)` bytes of pad per
+    // row are exposed and `ImageView::has_simd_padding()` can pass without
+    // forcing a copy.
+    let slice_len = if height > 0 && width > 0 {
+        height * stride_y
+    } else {
+        0
+    };
+    // SAFETY: The returned `FfiImageBuffer<'py>::Borrowed` (and its
+    // `view()`) borrow from `img` via the explicit `'py` lifetime tie on
+    // the signature, so the slice cannot outlive the NumPy buffer. We
+    // expose at most `height * stride_y` bytes from `img.data()`:
+    //   * `stride_y` is validated above to be `>= width` (and was originally
+    //     a non-negative `isize` from NumPy, so the unsigned cast is exact).
+    //   * For C-contiguous arrays (`stride_y == width`), the slice length
+    //     equals `(H-1)*stride_y + W = H*W`, which is the full allocation.
+    //   * For strided views from a wider parent (the common
+    //     `np.pad(...)[:, :W]` pattern), `arr.data() == parent.data()` and
+    //     the parent has at least `H * stride_y` bytes — the slice stays
+    //     within the parent allocation.
+    //   * A user creating a column-offset view (`parent[:, c:c+W]` with
+    //     `c > 0`) would have `arr.data() == parent.data() + c`, making the
+    //     last `c` bytes of the slice unsafe. The FFI contract documented in
+    //     `docs/engineering/ffi_contracts.md` §1 forbids such views — callers
+    //     should pad with `np.pad(img, ((0, 0), (0, 3)))[:, :W]` instead.
+    let data = unsafe { std::slice::from_raw_parts(img.data(), slice_len) };
+    let view = ImageView::new(data, width, height, stride_y)
+        .map_err(|e| PyRuntimeError::new_err(e.clone()))?;
+
+    // F1 (redesigned): SIMD kernels (e.g. AVX2 `sample_bilinear_v8` in
+    // `decoder.rs`) issue 32-bit gathers on 8-bit data and may read up to
+    // 3 bytes past the last logical pixel. If the input has ≥3 trailing
+    // bytes of slack (`has_simd_padding()`), return the zero-copy borrow.
+    // Otherwise, transparently copy into a padded scratch — this preserves
+    // the pre-PR public API for the natural NumPy idiom
+    // `np.zeros((H, W), dtype=np.uint8)`, at the cost of one `H * W`-byte
+    // allocation + copy per `detect()` call.
+    //
+    // Design rationale: PR #287's initial design rejected under-padded
+    // buffers with a `PyValueError`. The project owner chose the copy
+    // fallback over the reject after the xfail-comment menu at
+    // `tests/test_ffi_contracts.py:115-122` was reconsidered. See the
+    // CHANGELOG entry and `docs/engineering/ffi_contracts.md` §1 for the
+    // full record.
+    if view.has_simd_padding() {
+        return Ok(FfiImageBuffer::Borrowed {
+            data,
+            width,
+            height,
+            stride: stride_y,
+        });
+    }
+
+    // Copy path. Repack into a tight (stride == width) buffer with 3
+    // trailing guard bytes that satisfy `has_simd_padding()`. We do not
+    // try to preserve the source `stride_y` because the tight layout makes
+    // downstream cache access more predictable and the source stride
+    // information is irrelevant once we own the bytes.
+    let logical = width.checked_mul(height).ok_or_else(|| {
+        PyValueError::new_err(format!("Image dimensions {width}x{height} overflow usize",))
+    })?;
+    let storage_len = logical.checked_add(3).ok_or_else(|| {
+        PyValueError::new_err(format!("Image dimensions {width}x{height} overflow usize",))
+    })?;
+    let mut storage = vec![0u8; storage_len];
+    // Copy row by row to handle source `stride_y >= width` correctly. The
+    // `Borrowed` fast path already covered `stride_y >= width + 3`; this
+    // branch only fires for `stride_y ∈ {width, width + 1, width + 2}`.
+    for y in 0..height {
+        let src_row = view.get_row(y);
+        let dst_off = y * width;
+        storage[dst_off..dst_off + width].copy_from_slice(src_row);
+    }
+    // The trailing 3 bytes of `storage` are already zeroed by `vec![0u8; …]`,
+    // which is what `has_simd_padding()` checks.
+
+    Ok(FfiImageBuffer::Padded {
+        storage,
+        width,
+        height,
+    })
 }
 
 /// Convert an owned [`Vec<locus_core::Detection>`] to a [`DetectionResult`] with NumPy arrays.
@@ -2096,7 +2283,9 @@ fn _shipped_profile_json(name: &str) -> PyResult<&'static str> {
 
 #[cfg(feature = "bench-internals")]
 mod bench {
-    use super::{CameraIntrinsics, PyDetectorConfig, prepare_image_view, wrap_pyfunction};
+    use super::{
+        CameraIntrinsics, FfiImageBuffer, PyDetectorConfig, prepare_image_view, wrap_pyfunction,
+    };
     use nalgebra::Matrix2;
     use numpy::PyReadonlyArray2;
     use pyo3::Bound;
@@ -2136,7 +2325,8 @@ mod bench {
     #[pyfunction]
     #[allow(clippy::needless_pass_by_value)] // pyo3 #[pyfunction] requires owned PyReadonlyArray2
     pub fn _bench_estimate_image_noise(img: PyReadonlyArray2<'_, u8>) -> PyResult<f64> {
-        let view = prepare_image_view(&img)?;
+        let buffer = prepare_image_view(&img)?;
+        let view = buffer.view();
         Ok(locus_core::compute_image_noise_floor(&view))
     }
 
@@ -2158,7 +2348,8 @@ mod bench {
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
         let core_cfg: locus_core::config::DetectorConfig = config.into();
 
-        let view_opt = image.as_ref().map(prepare_image_view).transpose()?;
+        let buffer_opt = image.as_ref().map(prepare_image_view).transpose()?;
+        let view_opt = buffer_opt.as_ref().map(FfiImageBuffer::view);
 
         let result = locus_core::bench_api::bench_estimate_both_branches(
             &core_intr,
@@ -2277,7 +2468,8 @@ mod bench {
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
         let core_cfg: locus_core::config::DetectorConfig = config.into();
         let initial = pose_from_quat_trans(initial_quaternion, initial_translation);
-        let view_opt = image.as_ref().map(prepare_image_view).transpose()?;
+        let buffer_opt = image.as_ref().map(prepare_image_view).transpose()?;
+        let view_opt = buffer_opt.as_ref().map(FfiImageBuffer::view);
 
         let refined = locus_core::bench_api::bench_refit_pose_drop_corner(
             &core_intr,
@@ -2302,7 +2494,8 @@ mod bench {
         center_y: f64,
         radius: i32,
     ) -> PyResult<Option<(f64, f64)>> {
-        let view = prepare_image_view(&img)?;
+        let buffer = prepare_image_view(&img)?;
+        let view = buffer.view();
         Ok(
             locus_core::bench_api::bench_corner_structure_tensor_eigenvalues(
                 &view,
@@ -2324,7 +2517,8 @@ mod bench {
         sigma_n_sq: f64,
         radius: i32,
     ) -> PyResult<[f64; 4]> {
-        let view = prepare_image_view(&img)?;
+        let buffer = prepare_image_view(&img)?;
+        let view = buffer.view();
         let cov = locus_core::bench_api::bench_compute_corner_covariance(
             &view,
             [center_x, center_y],
@@ -2353,7 +2547,8 @@ mod bench {
     ) -> PyResult<Bound<'py, PyDict>> {
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
         let core_cfg: locus_core::config::DetectorConfig = config.into();
-        let view_opt = image.as_ref().map(prepare_image_view).transpose()?;
+        let buffer_opt = image.as_ref().map(prepare_image_view).transpose()?;
+        let view_opt = buffer_opt.as_ref().map(FfiImageBuffer::view);
 
         let (pose_opt, _cov_opt, diag) = locus_core::bench_api::bench_estimate_tag_pose(
             &core_intr,
