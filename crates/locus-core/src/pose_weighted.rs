@@ -1096,9 +1096,8 @@ mod tests {
         // All-zero info ⇒ zero `JᵀWJ` ⇒ rank-0 / singular.
         let info = [Matrix2::<f64>::zeros(); 4];
 
-        let (_pose, cov) = refine_pose_lm_weighted_with_info(
-            &intrinsics, &corners, s, gt_pose, &info,
-        );
+        let (_pose, cov) =
+            refine_pose_lm_weighted_with_info(&intrinsics, &corners, s, gt_pose, &info);
 
         // Per the NaN-sentinel contract: any NaN on the diagonal is a
         // sufficient signal for downstream consumers.
