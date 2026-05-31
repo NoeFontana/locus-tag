@@ -65,7 +65,11 @@ fn bench_corner_covariance(bencher: divan::Bencher, &radius: &i32) {
     bencher.bench_local(move || {
         let mut acc = 0.0;
         for &center in &centers {
-            let cov = bench_compute_corner_covariance(&img, center, ALPHA_MAX, SIGMA_N_SQ, radius);
+            // Phase 4: pass `empirical_n_sq = 0.0` so the bench reflects the
+            // pre-Phase-4 structure-tensor-only cost (microbenchmark targets
+            // the structure-tensor accumulator, not the inflation rule).
+            let cov =
+                bench_compute_corner_covariance(&img, center, ALPHA_MAX, SIGMA_N_SQ, 0.0, radius);
             acc += cov[(0, 0)] + cov[(0, 1)] + cov[(1, 1)];
         }
         black_box(acc)

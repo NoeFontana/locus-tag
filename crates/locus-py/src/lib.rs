@@ -378,6 +378,7 @@ pub struct PyDetectorConfig {
     pub huber_delta_px: f64,
     pub tikhonov_alpha_max: f64,
     pub sigma_n_sq: f64,
+    pub use_empirical_corner_noise: bool,
     pub structure_tensor_radius: u8,
     pub pose_consistency_fpr: f64,
     pub pose_consistency_gate_sigma_px: f64,
@@ -428,6 +429,7 @@ impl PyDetectorConfig {
         huber_delta_px,
         tikhonov_alpha_max,
         sigma_n_sq,
+        use_empirical_corner_noise,
         structure_tensor_radius,
         pose_consistency_fpr,
         pose_consistency_gate_sigma_px,
@@ -473,6 +475,7 @@ impl PyDetectorConfig {
         huber_delta_px: f64,
         tikhonov_alpha_max: f64,
         sigma_n_sq: f64,
+        use_empirical_corner_noise: bool,
         structure_tensor_radius: u8,
         pose_consistency_fpr: f64,
         pose_consistency_gate_sigma_px: f64,
@@ -517,6 +520,7 @@ impl PyDetectorConfig {
             huber_delta_px,
             tikhonov_alpha_max,
             sigma_n_sq,
+            use_empirical_corner_noise,
             structure_tensor_radius,
             pose_consistency_fpr,
             pose_consistency_gate_sigma_px,
@@ -601,6 +605,7 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             huber_delta_px: c.huber_delta_px,
             tikhonov_alpha_max: c.tikhonov_alpha_max,
             sigma_n_sq: c.sigma_n_sq,
+            use_empirical_corner_noise: c.use_empirical_corner_noise,
             structure_tensor_radius: c.structure_tensor_radius,
             pose_consistency_fpr: c.pose_consistency_fpr,
             pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
@@ -641,6 +646,14 @@ pub struct DetectionResult {
     pub corners: Py<PyArray3<f32>>,
     pub error_rates: Py<PyArray1<f32>>,
     pub poses: Option<Py<PyArray2<f32>>>,
+    /// Per-corner Phase 4 empirical noise variance (px²), shape `(N, 4)`,
+    /// drawn from the ERF edge-fit residual MSE. `0.0` entries mean the
+    /// corner did not traverse ERF refinement (e.g. ContourRdp+Gwlf
+    /// route, or both adjacent ERF fits failed). The production pose LM
+    /// inflates Σ_c by these values when `pose.use_empirical_corner_noise`
+    /// is enabled; pass them to `locus.bench.compute_corner_covariance(...,
+    /// empirical_n_sq=...)` to reconstruct the production Σ_c offline.
+    pub corner_empirical_noise: Py<PyArray2<f32>>,
     pub rejected_corners: Py<PyArray3<f32>>,
     pub rejected_error_rates: Py<PyArray1<f32>>,
     /// Per-rejected-quad funnel status code (matches `locus.FunnelStatus`).
@@ -1554,6 +1567,22 @@ impl Detector {
             None
         };
 
+        // Per-corner empirical noise (N, 4) f32 — production Phase 4 input.
+        // Zero-copy block transfer: `[[f32; 4]]` is layout-equivalent to a
+        // contiguous `f32` buffer of length `n * 4`.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
+        let emp_arr = unsafe { PyArray2::<f32>::new(py, [n, 4], false) };
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
+        unsafe {
+            let emp_slice = emp_arr
+                .as_slice_mut()
+                .map_err(|e| PyRuntimeError::new_err(format!("emp noise slice: {e}")))?;
+            emp_slice.copy_from_slice(std::slice::from_raw_parts(
+                detections.corner_empirical_noise.as_ptr().cast::<f32>(),
+                n * 4,
+            ));
+        }
+
         // Telemetry (zero-copy intermediate images)
         let telemetry = if let Some(telem) = detections.telemetry {
             let telem_result = build_pipeline_telemetry(py, &telem)?;
@@ -1567,6 +1596,7 @@ impl Detector {
             corners: corners_arr.unbind(),
             error_rates: error_rates_arr.unbind(),
             poses,
+            corner_empirical_noise: emp_arr.unbind(),
             rejected_corners: rejected_arr.unbind(),
             rejected_error_rates: rejected_error_rates_arr.unbind(),
             rejected_funnel_status: rejected_funnel_status_arr.unbind(),
@@ -1728,6 +1758,7 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             huber_delta_px: c.huber_delta_px,
             tikhonov_alpha_max: c.tikhonov_alpha_max,
             sigma_n_sq: c.sigma_n_sq,
+            use_empirical_corner_noise: c.use_empirical_corner_noise,
             structure_tensor_radius: c.structure_tensor_radius,
             pose_consistency_fpr: c.pose_consistency_fpr,
             pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
@@ -2276,11 +2307,17 @@ fn build_detection_result_from_owned(
     // SAFETY: see "NumPy allocation safety contract" in module docs.
     let rejected_funnel_status_arr = unsafe { PyArray1::<u8>::new(py, [0], false) };
 
+    // Per-corner empirical noise is not preserved on the concurrent / owned
+    // `Detection` path (the owned struct strips SoA-only diagnostics). All
+    // zeros — same sentinel Phase 4 uses for "no ERF measurement".
+    let emp_arr = PyArray2::<f32>::zeros(py, [n, 4], false);
+
     Ok(DetectionResult {
         ids: ids_arr.unbind(),
         corners: corners_arr.unbind(),
         error_rates: error_rates_arr.unbind(),
         poses,
+        corner_empirical_noise: emp_arr.unbind(),
         rejected_corners: rejected_arr.unbind(),
         rejected_error_rates: rejected_error_rates_arr.unbind(),
         rejected_funnel_status: rejected_funnel_status_arr.unbind(),
@@ -2564,8 +2601,13 @@ mod bench {
 
     /// Compute the 2×2 corner covariance matrix from the structure tensor at
     /// a single corner. Returns `[c00, c01, c10, c11]` (row-major).
+    ///
+    /// `empirical_n_sq` defaults to `0.0` (no Phase-4 empirical inflation)
+    /// — set positive to inflate the per-corner noise floor via
+    /// `max(sigma_n_sq, min(empirical_n_sq, 16·sigma_n_sq))`.
     #[pyfunction]
-    #[allow(clippy::needless_pass_by_value)] // pyo3 #[pyfunction] requires owned PyReadonlyArray2
+    #[pyo3(signature = (img, center_x, center_y, alpha_max, sigma_n_sq, radius, empirical_n_sq=0.0))]
+    #[allow(clippy::needless_pass_by_value, clippy::too_many_arguments)] // pyo3 #[pyfunction] requires owned PyReadonlyArray2
     pub fn _bench_compute_corner_covariance(
         img: PyReadonlyArray2<'_, u8>,
         center_x: f64,
@@ -2573,6 +2615,7 @@ mod bench {
         alpha_max: f64,
         sigma_n_sq: f64,
         radius: i32,
+        empirical_n_sq: f64,
     ) -> PyResult<[f64; 4]> {
         let buffer = prepare_image_view(&img)?;
         let view = buffer.view();
@@ -2581,6 +2624,7 @@ mod bench {
             [center_x, center_y],
             alpha_max,
             sigma_n_sq,
+            empirical_n_sq,
             radius,
         );
         Ok([cov[(0, 0)], cov[(0, 1)], cov[(1, 0)], cov[(1, 1)]])
@@ -2590,8 +2634,13 @@ mod bench {
     /// consistency gate) and return both the refined pose and the per-tag
     /// diagnostics that the production detector internally computes. `fpr`
     /// is the χ² gate false-positive rate; pass `None` to disable.
+    ///
+    /// `empirical_n_sq` is the per-corner Phase-4 empirical noise variance
+    /// (px²) drawn from the ERF edge-fit residual MSE; defaults to `None`
+    /// (no inflation). Only honoured when the `config`'s
+    /// `use_empirical_corner_noise` flag is `true`.
     #[pyfunction]
-    #[pyo3(signature = (intrinsics, corners, tag_size, config, image=None, fpr=None))]
+    #[pyo3(signature = (intrinsics, corners, tag_size, config, image=None, fpr=None, empirical_n_sq=None))]
     #[allow(clippy::needless_pass_by_value, clippy::too_many_arguments)]
     pub fn _bench_estimate_tag_pose<'py>(
         py: Python<'py>,
@@ -2601,6 +2650,7 @@ mod bench {
         config: PyDetectorConfig,
         image: Option<PyReadonlyArray2<'_, u8>>,
         fpr: Option<f64>,
+        empirical_n_sq: Option<[f32; 4]>,
     ) -> PyResult<Bound<'py, PyDict>> {
         let core_intr = locus_core::CameraIntrinsics::from(intrinsics);
         let core_cfg: locus_core::config::DetectorConfig = config.into();
@@ -2614,6 +2664,7 @@ mod bench {
             view_opt.as_ref(),
             &core_cfg,
             None,
+            empirical_n_sq.as_ref(),
             fpr,
         );
 

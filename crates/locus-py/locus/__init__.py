@@ -156,6 +156,14 @@ class DetectionBatch:
     corners: np.ndarray  # Shape: (N, 4, 2), Dtype: float32
     error_rates: np.ndarray  # Shape: (N,), Dtype: float32
     poses: np.ndarray | None = None  # Shape: (N, 7), Dtype: float32. [tx, ty, tz, qx, qy, qz, qw]
+    # Per-corner Phase 4 empirical noise variance (px²), Shape: (N, 4),
+    # Dtype: float32. Drawn from the ERF edge-fit residual MSE. 0.0
+    # entries mean the corner did not traverse ERF refinement (e.g.
+    # ContourRdp+Gwlf route). When `pose.use_empirical_corner_noise=true`,
+    # the production LM inflates Σ_c by these values. Always zero on the
+    # `detect_concurrent` path (the owned `Detection` form strips SoA-only
+    # diagnostics).
+    corner_empirical_noise: np.ndarray | None = None
     telemetry: "PipelineTelemetry | None" = None
     rejected_corners: np.ndarray | None = None  # Shape: (M, 4, 2), Dtype: float32
     rejected_error_rates: np.ndarray | None = None  # Shape: (M,), Dtype: float32
@@ -325,6 +333,7 @@ class Detector:
             corners=raw.corners,
             error_rates=raw.error_rates,
             poses=raw.poses,
+            corner_empirical_noise=raw.corner_empirical_noise,
             rejected_corners=raw.rejected_corners,
             rejected_error_rates=raw.rejected_error_rates,
             rejected_funnel_status=raw.rejected_funnel_status,
@@ -367,6 +376,7 @@ class Detector:
                 corners=r.corners,
                 error_rates=r.error_rates,
                 poses=r.poses,
+                corner_empirical_noise=r.corner_empirical_noise,
                 rejected_corners=r.rejected_corners,
                 rejected_error_rates=r.rejected_error_rates,
                 rejected_funnel_status=r.rejected_funnel_status,

@@ -164,6 +164,13 @@ pub struct ErfEdgeFitter<'a> {
     ny: f64,
     d: f64,
     last_jtj: f64,
+    /// Final per-sample mean-squared residual `Σ r² / N` from the last
+    /// converged `refine()` iteration, over samples inside the `|s|≤3`
+    /// window. NaN until a refinement iteration has run; NaN if zero
+    /// samples landed in-window. Feeds the per-corner empirical noise
+    /// estimate consumed by the pose-stage covariance inflation
+    /// (`docs/engineering/pose_covariance_followup_2026-05-22.md` §4).
+    last_residual_mse: f64,
 }
 
 impl<'a> ErfEdgeFitter<'a> {
@@ -211,6 +218,7 @@ impl<'a> ErfEdgeFitter<'a> {
             ny,
             d,
             last_jtj: 0.0,
+            last_residual_mse: f64::NAN,
         })
     }
 
@@ -332,9 +340,17 @@ impl<'a> ErfEdgeFitter<'a> {
                 break;
             }
 
-            let (sum_jtj, sum_jt_res) =
+            let (sum_jtj, sum_jt_res, sum_res_sq, sample_count) =
                 refine_accumulate_optimized(samples, self.nx, self.ny, self.d, a, b, inv_sigma);
             self.last_jtj = sum_jtj;
+            // Always record the latest MSE — even if we break on singularity
+            // or step convergence on the next branch — so the empirical
+            // noise estimate reflects the residuals at the final `d`.
+            self.last_residual_mse = if sample_count > 0 {
+                sum_res_sq / sample_count as f64
+            } else {
+                f64::NAN
+            };
 
             if sum_jtj < config.singular_threshold {
                 break;
@@ -393,6 +409,17 @@ impl<'a> ErfEdgeFitter<'a> {
     #[must_use]
     pub fn line_jtj(&self) -> f64 {
         self.last_jtj
+    }
+
+    /// Final per-sample mean-squared residual `Σ r² / N` (intensity units²)
+    /// from the last [`Self::refine`] iteration. Returns NaN when no
+    /// iteration has run or zero samples landed in-window. Used by the
+    /// per-corner empirical noise estimate (Phase 4 pose-covariance
+    /// inflation; see followup memo §4).
+    #[inline]
+    #[must_use]
+    pub fn last_residual_mse(&self) -> f64 {
+        self.last_residual_mse
     }
 
     #[inline]
@@ -484,12 +511,20 @@ fn estimate_ab_per_iter(
 
 // ── SIMD-Accelerated Gauss-Newton Accumulation ───────────────────────────────
 
-/// Accumulate J^T J and J^T r for the Gauss-Newton step.
+/// Accumulate J^T J, J^T r, Σ r², and the in-window sample count for the
+/// Gauss-Newton step.
 ///
 /// The model is `I(d) = (A+B)/2 + (B-A)/2 * erf(d/sigma)` with Jacobian
 /// `dI/dd = (B-A) / (sqrt(pi) * sigma) * exp(-s^2)` where `s = d/sigma`.
 ///
 /// On AVX2+FMA targets, uses vectorized erf_approx_v4 and FMA accumulation.
+///
+/// Returns `(sum_jtj, sum_jt_res, sum_res_sq, sample_count)` where the last
+/// two power the per-corner empirical noise estimate consumed by the
+/// pose-stage covariance inflation. `sample_count` only counts samples
+/// inside the `|s| ≤ 3` window — the same masked subset that contributes
+/// to `sum_jtj` / `sum_jt_res` — so the MSE `sum_res_sq / sample_count`
+/// is consistent with the GN step that produced `d`.
 #[multiversion(targets(
     "x86_64+avx2+fma+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
@@ -504,9 +539,11 @@ fn refine_accumulate_optimized(
     a: f64,
     b: f64,
     inv_sigma: f64,
-) -> (f64, f64) {
+) -> (f64, f64, f64, usize) {
     let mut sum_jtj = 0.0;
     let mut sum_jt_res = 0.0;
+    let mut sum_res_sq = 0.0;
+    let mut sample_count: usize = 0;
     let k = (b - a) * inv_sigma * INV_SQRT_PI;
 
     let mut i = 0;
@@ -528,6 +565,7 @@ fn refine_accumulate_optimized(
 
             let mut v_sum_jtj = _mm256_setzero_pd();
             let mut v_sum_jt_res = _mm256_setzero_pd();
+            let mut v_sum_res_sq = _mm256_setzero_pd();
 
             while i + 4 <= samples.len() {
                 let s0 = samples[i];
@@ -548,7 +586,8 @@ fn refine_accumulate_optimized(
                 let v_abs_s = _mm256_andnot_pd(v_abs_mask, v_s);
                 let v_range_mask = _mm256_cmp_pd(v_abs_s, _mm256_set1_pd(3.0), _CMP_LE_OQ);
 
-                if _mm256_movemask_pd(v_range_mask) != 0 {
+                let range_bits = _mm256_movemask_pd(v_range_mask);
+                if range_bits != 0 {
                     // Vectorized ERF + Gauss-Newton accumulation.
                     // SAFETY: erf_approx_v4 requires AVX2+FMA, guaranteed by multiversion target.
                     let v_erf = crate::simd::math::erf_approx_v4(v_s);
@@ -576,6 +615,10 @@ fn refine_accumulate_optimized(
 
                     v_sum_jtj = _mm256_fmadd_pd(v_jac_masked, v_jac_masked, v_sum_jtj);
                     v_sum_jt_res = _mm256_fmadd_pd(v_jac_masked, v_res_masked, v_sum_jt_res);
+                    // Phase 4: residual² accumulator — masked the same way so
+                    // it tracks the same in-window subset as `sample_count`.
+                    v_sum_res_sq = _mm256_fmadd_pd(v_res_masked, v_res_masked, v_sum_res_sq);
+                    sample_count += range_bits.count_ones() as usize;
                 }
                 i += 4;
             }
@@ -584,12 +627,15 @@ fn refine_accumulate_optimized(
             // SAFETY: transmute is safe for same-size SIMD ↔ array conversions.
             let jtj_lanes: [f64; 4] = std::mem::transmute(v_sum_jtj);
             let jtr_lanes: [f64; 4] = std::mem::transmute(v_sum_jt_res);
+            let res_sq_lanes: [f64; 4] = std::mem::transmute(v_sum_res_sq);
             sum_jtj += jtj_lanes[0] + jtj_lanes[1] + jtj_lanes[2] + jtj_lanes[3];
             sum_jt_res += jtr_lanes[0] + jtr_lanes[1] + jtr_lanes[2] + jtr_lanes[3];
+            sum_res_sq += res_sq_lanes[0] + res_sq_lanes[1] + res_sq_lanes[2] + res_sq_lanes[3];
         }
     }
 
-    // Scalar tail
+    // Scalar tail (also the sole path on non-AVX2 targets — AVX-512 and
+    // NEON multiversion declarations fall through here today).
     while i < samples.len() {
         let (x, y, img_val) = samples[i];
         let dist = nx * x + ny * y + d;
@@ -600,11 +646,13 @@ fn refine_accumulate_optimized(
             let jac = k * (-s * s).exp();
             sum_jtj += jac * jac;
             sum_jt_res += jac * residual;
+            sum_res_sq += residual * residual;
+            sample_count += 1;
         }
         i += 1;
     }
 
-    (sum_jtj, sum_jt_res)
+    (sum_jtj, sum_jt_res, sum_res_sq, sample_count)
 }
 
 // ── SIMD-Accelerated Sample Collection ───────────────────────────────────────
@@ -851,6 +899,135 @@ fn collect_samples_strided<'a>(
 mod tests {
     use super::*;
     use crate::test_utils::subpixel::{Line, SubpixelEdgeRenderer};
+
+    /// Scalar reference for `refine_accumulate_optimized`. Mirrors the
+    /// scalar tail exactly — including the `|s| ≤ 3` window — so the
+    /// AVX2 path's 4-tuple return can be pinned against a single,
+    /// auditable definition. Phase 4 SIMD parity gate.
+    #[allow(clippy::many_single_char_names, clippy::too_many_arguments)]
+    fn refine_accumulate_scalar_reference(
+        samples: &[(f64, f64, f64)],
+        nx: f64,
+        ny: f64,
+        d: f64,
+        a: f64,
+        b: f64,
+        inv_sigma: f64,
+    ) -> (f64, f64, f64, usize) {
+        let mut sum_jtj = 0.0;
+        let mut sum_jt_res = 0.0;
+        let mut sum_res_sq = 0.0;
+        let mut sample_count = 0usize;
+        let k = (b - a) * inv_sigma * INV_SQRT_PI;
+        for &(x, y, img_val) in samples {
+            let dist = nx * x + ny * y + d;
+            let s = dist * inv_sigma;
+            if s.abs() <= 3.0 {
+                let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::simd::math::erf_approx(s);
+                let residual = img_val - model;
+                let jac = k * (-s * s).exp();
+                sum_jtj += jac * jac;
+                sum_jt_res += jac * residual;
+                sum_res_sq += residual * residual;
+                sample_count += 1;
+            }
+        }
+        (sum_jtj, sum_jt_res, sum_res_sq, sample_count)
+    }
+
+    /// Phase 4 SIMD parity gate. Pin all four returns of
+    /// `refine_accumulate_optimized` against the scalar reference on a
+    /// realistic sample set. On AVX2+FMA hosts this exercises the
+    /// vectorized FMA accumulators (including the new `sum_res_sq`
+    /// lane); on other hosts both paths share the scalar tail and the
+    /// test still guards mathematical correctness.
+    ///
+    /// Mix of in-window (`|s|≤3`) and out-of-window samples plus a
+    /// non-multiple-of-4 total length is deliberate — it covers the
+    /// masked-lane path, the count-ones reduction, and the scalar tail
+    /// at one stroke.
+    #[test]
+    #[allow(clippy::many_single_char_names, clippy::similar_names)]
+    fn refine_accumulate_optimized_matches_scalar_reference() {
+        let nx = 0.6;
+        let ny = 0.8;
+        let d = -10.0;
+        let a = 30.0;
+        let b = 200.0;
+        let sigma = 0.6;
+        let inv_sigma = 1.0 / sigma;
+
+        // 11 samples — non-multiple of 4 to exercise the scalar tail.
+        // Mix s-values: some inside [-3, 3], some outside, some near the
+        // mask boundary.
+        let samples: [(f64, f64, f64); 11] = [
+            (10.0, 5.0, 40.0),
+            (11.0, 5.0, 50.0),
+            (12.0, 5.0, 80.0),
+            (13.0, 5.0, 120.0),
+            (14.0, 5.0, 160.0),
+            (15.0, 5.0, 190.0),
+            (16.0, 5.0, 200.0),
+            (17.0, 5.0, 205.0),
+            (18.0, 5.0, 210.0),
+            (50.0, 5.0, 200.0), // far out-of-window
+            (-50.0, 5.0, 30.0), // far out-of-window (other side)
+        ];
+
+        let (jtj_opt, jtr_opt, rss_opt, n_opt) =
+            refine_accumulate_optimized(&samples, nx, ny, d, a, b, inv_sigma);
+        let (jtj_ref, jtr_ref, rss_ref, n_ref) =
+            refine_accumulate_scalar_reference(&samples, nx, ny, d, a, b, inv_sigma);
+
+        assert_eq!(n_opt, n_ref, "sample_count mismatch");
+        assert!(
+            (jtj_opt - jtj_ref).abs() < 1e-9,
+            "sum_jtj: opt={jtj_opt}, ref={jtj_ref}"
+        );
+        assert!(
+            (jtr_opt - jtr_ref).abs() < 1e-9,
+            "sum_jt_res: opt={jtr_opt}, ref={jtr_ref}"
+        );
+        assert!(
+            (rss_opt - rss_ref).abs() < 1e-9,
+            "sum_res_sq: opt={rss_opt}, ref={rss_ref}"
+        );
+    }
+
+    /// `ErfEdgeFitter::last_residual_mse` should be NaN until `refine`
+    /// has actually accumulated samples, and finite & non-negative
+    /// after a successful fit on a synthetic edge.
+    #[test]
+    fn last_residual_mse_populated_after_fit() {
+        let width = 100;
+        let height = 100;
+        let sigma = 0.6;
+        let renderer = SubpixelEdgeRenderer::new(width, height)
+            .with_intensities(0.0, 255.0)
+            .with_sigma(sigma);
+        let line_gt = Line::from_points_cw([50.25, 10.0], [50.25, 90.0]);
+        let data = renderer.render_edge_u8(&line_gt);
+        let img = ImageView::new(&data, width, height, width).expect("invalid image view");
+        let arena = Bump::new();
+
+        let mut fitter = ErfEdgeFitter::new(&img, [50.0, 10.0], [50.0, 90.0], true)
+            .expect("edge length too short");
+        assert!(
+            fitter.last_residual_mse().is_nan(),
+            "MSE pre-fit must be NaN"
+        );
+
+        let sample_cfg = SampleConfig::for_quad(fitter.edge_len(), 1);
+        let refine_cfg = RefineConfig::quad_style(sigma);
+        assert!(fitter.fit(&arena, &sample_cfg, &refine_cfg));
+
+        let mse = fitter.last_residual_mse();
+        assert!(mse.is_finite(), "MSE post-fit must be finite, got {mse}");
+        assert!(mse >= 0.0, "MSE must be non-negative, got {mse}");
+        // Synthetic edge, no noise injection → MSE should be small
+        // (model residuals come only from PSF / quantization).
+        assert!(mse < 100.0, "Synthetic-edge MSE unreasonably large: {mse}");
+    }
 
     #[test]
     fn quad_style_recovers_axis_aligned_subpixel_edge() {

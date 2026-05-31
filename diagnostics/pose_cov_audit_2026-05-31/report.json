@@ -1,0 +1,100 @@
+{
+  "config_name": "locus_v1_tag36h11_1920x1080",
+  "profile": "high_accuracy",
+  "iso_date": "2026-05-31",
+  "hardware": {
+    "platform": "Linux-6.8.0-117-generic-x86_64-with-glibc2.39",
+    "python_version": "3.14.3",
+    "build_profile": "--release",
+    "rayon_num_threads": "unset",
+    "cpu": {
+      "Architecture": "x86_64",
+      "CPU(s)": "8",
+      "Vendor ID": "AuthenticAMD",
+      "Model name": "AMD EPYC-Milan Processor",
+      "Thread(s) per core": "2",
+      "L1d cache": "128 KiB (4 instances)",
+      "L2 cache": "2 MiB (4 instances)",
+      "L3 cache": "32 MiB (1 instance)"
+    }
+  },
+  "n_scenes_total": 50,
+  "n_samples": 50,
+  "skipped": {
+    "no_image": 0,
+    "no_detection": 0,
+    "lm_singular": 0,
+    "no_gt_pose": 0
+  },
+  "global_d2": {
+    "empirical_mean": 714.714433166759,
+    "empirical_var": 4081603.9172214773,
+    "ideal_mean": 6.0,
+    "ideal_var": 12.0,
+    "kl_divergence_to_chi2_6": 13.93332086172278,
+    "kl_verdict": "miscalibrated (KL > 0.5)",
+    "p10": 6.413600250316763,
+    "p50": 62.76466403373451,
+    "p90": 1635.952800852694,
+    "p99": 9435.307015994913
+  },
+  "per_axis": {
+    "tx": {
+      "empirical_mean_d2": 0.025806568066778123,
+      "empirical_var_d2": 0.002966880028609577,
+      "ideal_mean_d2": 1.0,
+      "ideal_var_d2": 2.0,
+      "calibration_ratio": 0.025806568066778123,
+      "verdict": "over-estimating uncertainty (\u03a3 too large)"
+    },
+    "ty": {
+      "empirical_mean_d2": 0.021084545576513763,
+      "empirical_var_d2": 0.003643331631027561,
+      "ideal_mean_d2": 1.0,
+      "ideal_var_d2": 2.0,
+      "calibration_ratio": 0.021084545576513763,
+      "verdict": "over-estimating uncertainty (\u03a3 too large)"
+    },
+    "tz": {
+      "empirical_mean_d2": 0.27396252385264414,
+      "empirical_var_d2": 1.2584172196123937,
+      "ideal_mean_d2": 1.0,
+      "ideal_var_d2": 2.0,
+      "calibration_ratio": 0.27396252385264414,
+      "verdict": "over-estimating uncertainty (\u03a3 too large)"
+    },
+    "rx": {
+      "empirical_mean_d2": 0.09387603253288525,
+      "empirical_var_d2": 0.04623410877608816,
+      "ideal_mean_d2": 1.0,
+      "ideal_var_d2": 2.0,
+      "calibration_ratio": 0.09387603253288525,
+      "verdict": "over-estimating uncertainty (\u03a3 too large)"
+    },
+    "ry": {
+      "empirical_mean_d2": 0.1535813629980932,
+      "empirical_var_d2": 0.09881563967470751,
+      "ideal_mean_d2": 1.0,
+      "ideal_var_d2": 2.0,
+      "calibration_ratio": 0.1535813629980932,
+      "verdict": "over-estimating uncertainty (\u03a3 too large)"
+    },
+    "rz": {
+      "empirical_mean_d2": 0.16894690297800516,
+      "empirical_var_d2": 0.09607136209940291,
+      "ideal_mean_d2": 1.0,
+      "ideal_var_d2": 2.0,
+      "calibration_ratio": 0.16894690297800516,
+      "verdict": "over-estimating uncertainty (\u03a3 too large)"
+    }
+  },
+  "plots": {
+    "qq_plot": "qq_plot.png",
+    "histogram": "histogram.png"
+  },
+  "pose_config": {
+    "sigma_n_sq": 4.0,
+    "tikhonov_alpha_max": 0.25,
+    "structure_tensor_radius": 2
+  }
+}

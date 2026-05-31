@@ -415,6 +415,10 @@ def run_audit(
     profile: str,
     output_dir: Path,
     rayon_threads: str | None,
+    force_ppb_threshold: float | None = None,
+    use_empirical: bool = True,
+    synthetic_empirical: float | None = None,
+    gt_residual_empirical: bool = False,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -427,6 +431,17 @@ def run_audit(
     tag_size = float(ds.tag_size)
 
     cfg = DetectorConfig.from_profile(profile)  # pyright: ignore[reportArgumentType]
+    # Phase 4 proof knobs — only used when the caller passes them.
+    #   `force_ppb_threshold`: forces more candidates onto the low-PPB
+    #     `AdaptivePpb` route so the ERF residual MSE is populated.
+    #   `use_empirical`: when False, the harness passes `empirical_n_sq=0.0`
+    #     to `compute_corner_covariance`, mirroring the pre-Phase-4 baseline
+    #     even when production wrote nonzero values to the SoA column.
+    if force_ppb_threshold is not None:
+        from locus._config import _AdaptivePpbPolicy
+
+        if isinstance(cfg.quad.extraction_policy, _AdaptivePpbPolicy):
+            cfg.quad.extraction_policy.AdaptivePpb.threshold = float(force_ppb_threshold)
     detector = locus.Detector(config=cfg, families=[locus.TagFamily.AprilTag36h11])
     sigma_n_sq = float(cfg.pose.sigma_n_sq)
     tikhonov_alpha_max = float(cfg.pose.tikhonov_alpha_max)
@@ -468,8 +483,47 @@ def run_audit(
             continue
         det_pose = np.asarray(batch.poses[det_idx], dtype=np.float64)
 
+        # Compute GT-projected corners up front so they can drive the Phase 4
+        # `--gt-residual-empirical` knob (which needs the per-corner residual
+        # norms to seed `empirical_n_sq`). This is a no-op for the production
+        # / synthetic / off-by-flag paths below.
+        gt_trans = np.asarray(gt_pose[0:3], dtype=np.float64)
+        gt_quat = np.asarray(gt_pose[3:7], dtype=np.float64)
+        gt_corners = _project_canonical_tag_corners(intrinsics, gt_trans, gt_quat, tag_size)
+        corner_residuals = det_corners - gt_corners  # (4, 2)
+        corner_residual_norms = np.linalg.norm(corner_residuals, axis=1)  # (4,)
+
+        # Phase 4: per-corner ERF residual MSE from production. `0.0`
+        # entries mean the corner did not traverse ERF (e.g. ContourRdp/GWLF
+        # route); `compute_corner_covariance(empirical_n_sq=0.0)` then
+        # collapses to the pre-Phase-4 structure-tensor-only Σ_c. When the
+        # profile has `pose.use_empirical_corner_noise=true`, passing these
+        # values here makes the audit observe the same Σ_c the production
+        # LM consumed. The field is `np.ndarray | None` on the dataclass
+        # for the concurrent-path edge case, but the single-frame `detect()`
+        # path always populates it — assert to narrow the type for callers.
+        assert batch.corner_empirical_noise is not None
+        det_emp = np.asarray(batch.corner_empirical_noise[det_idx], dtype=np.float64)
+        if synthetic_empirical is not None:
+            # Phase 4 proof: bypass the production-side empirical column (which
+            # is `0.0` on this corpus because ERF never fires under high_accuracy
+            # + this PPB regime) and inject a flat `empirical_n_sq` across all
+            # four corners. The inflation rule `max(σ_n², min(empirical, 16·σ_n²))`
+            # is exercised exactly the same way as in production, just driven
+            # by a CLI-provided value instead of the SoA column.
+            det_emp = np.full_like(det_emp, float(synthetic_empirical))
+        if gt_residual_empirical:
+            # Phase 4 best-case proof: use the per-corner GT residual norm² as
+            # the synthetic `empirical_n_sq`. This represents the upper bound
+            # on Phase 4's calibration gain — a perfect per-corner empirical
+            # estimator would converge here. Real ERF residual MSE will be a
+            # noisier proxy of the same quantity (per `combine_edge_mses`).
+            det_emp = (corner_residual_norms**2).astype(np.float64)
+        if not use_empirical:
+            det_emp = np.zeros_like(det_emp)
+
         covs = []
-        for c in det_corners:
+        for k, c in enumerate(det_corners):
             cov = lb.compute_corner_covariance(
                 img,
                 float(c[0]),
@@ -477,6 +531,7 @@ def run_audit(
                 tikhonov_alpha_max,
                 sigma_n_sq,
                 structure_tensor_radius,
+                empirical_n_sq=float(det_emp[k]),
             )
             covs.append(list(cov))
 
@@ -530,12 +585,10 @@ def run_audit(
         diag = np.diag(cov6)
         d2_axis = (delta * delta) / np.where(diag > 1e-30, diag, 1e-30)
 
-        # GT-corner residual analysis (Path B follow-up).
-        gt_trans = np.asarray(gt_pose[0:3], dtype=np.float64)
-        gt_quat = np.asarray(gt_pose[3:7], dtype=np.float64)
-        gt_corners = _project_canonical_tag_corners(intrinsics, gt_trans, gt_quat, tag_size)
-        corner_residuals = det_corners - gt_corners  # (4, 2)
-        corner_residual_norms = np.linalg.norm(corner_residuals, axis=1)  # (4,)
+        # GT-corner residual analysis (Path B follow-up). `gt_corners`,
+        # `corner_residuals`, and `corner_residual_norms` were hoisted above
+        # so the Phase 4 `--gt-residual-empirical` knob can seed
+        # `empirical_n_sq` from them.
 
         # Counterfactual LM with GT corners as inputs. Σ_corner is recomputed at
         # GT pixel locations (they are sub-pixel so the structure tensor still
@@ -761,6 +814,51 @@ def main() -> None:
         default=None,
         help="Value of RAYON_NUM_THREADS during the run (logged into the report).",
     )
+    parser.add_argument(
+        "--force-ppb-threshold",
+        type=float,
+        default=None,
+        help=(
+            "Phase 4 proof knob: override `quad.extraction_policy.AdaptivePpb."
+            "threshold` to force more candidates onto the low-PPB ERF route "
+            "so `corner_empirical_noise` is populated. Bounded `1.0 < t < 5.0`."
+        ),
+    )
+    parser.add_argument(
+        "--no-empirical-inflation",
+        action="store_true",
+        help=(
+            "Phase 4 proof knob: force `empirical_n_sq=0.0` in the Python "
+            "Σ_c reconstruction (mirroring the pre-Phase-4 baseline) even "
+            "when production wrote nonzero empirical noise. Useful for "
+            "before/after KL comparison on the same corpus."
+        ),
+    )
+    parser.add_argument(
+        "--synthetic-empirical",
+        type=float,
+        default=None,
+        help=(
+            "Phase 4 proof knob: ignore the production-written empirical "
+            "column and pass a flat `empirical_n_sq` value (px²) to every "
+            "corner. Drives the inflation rule when the corpus PPB regime "
+            "would otherwise leave the empirical column at the 0.0 sentinel."
+        ),
+    )
+    parser.add_argument(
+        "--gt-residual-empirical",
+        action="store_true",
+        help=(
+            "Phase 4 best-case proof: use the per-corner GT residual norm² "
+            "as the synthetic empirical_n_sq for each corner. Requires a "
+            "two-pass audit: first pass runs production LM to get the "
+            "residual norms (already in the harness), second pass re-runs "
+            "the cov computation with per-corner-differentiated empirical "
+            "values. Shows the upper bound on Phase 4's calibration gain "
+            "if the ERF residuals were perfectly aligned with the actual "
+            "per-corner image noise."
+        ),
+    )
     args = parser.parse_args()
 
     today = dt.date.today().isoformat()
@@ -771,6 +869,10 @@ def main() -> None:
         profile=args.profile,
         output_dir=output_dir,
         rayon_threads=args.rayon_threads,
+        force_ppb_threshold=args.force_ppb_threshold,
+        use_empirical=not args.no_empirical_inflation,
+        synthetic_empirical=args.synthetic_empirical,
+        gt_residual_empirical=args.gt_residual_empirical,
     )
 
     g = report["global_d2"]

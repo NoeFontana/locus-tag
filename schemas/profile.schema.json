@@ -147,6 +147,11 @@
           "minimum": 0.0,
           "title": "Tikhonov Alpha Max",
           "type": "number"
+        },
+        "use_empirical_corner_noise": {
+          "default": false,
+          "title": "Use Empirical Corner Noise",
+          "type": "boolean"
         }
       },
       "title": "PoseConfig",
