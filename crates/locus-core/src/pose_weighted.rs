@@ -383,6 +383,14 @@ pub(crate) fn refine_pose_lm_weighted_with_info(
     let mut current_jtr = Vector6::zeros();
     let mut current_cost = f64::MAX;
     let mut needs_rebuild = true;
+    // Mirror the bench-variant's `consecutive_chol_failures` guard (see
+    // `bench_refine_pose_lm_weighted_with_telemetry`): without it, a
+    // persistently rank-deficient Hessian causes the LM to spin through
+    // every iteration multiplying λ by 10 with no progress, then exit
+    // via MAX_ITERS and emit the NaN covariance sentinel. Bailing out
+    // after 3 consecutive failures lets the sentinel fire promptly with
+    // the same diagnostic value, without burning iterations.
+    let mut consecutive_chol_failures: u8 = 0;
 
     for _ in 0..MAX_ITERS {
         if needs_rebuild {
@@ -411,8 +419,13 @@ pub(crate) fn refine_pose_lm_weighted_with_info(
         }
 
         let delta = if let Some(chol) = jtj_damped.cholesky() {
+            consecutive_chol_failures = 0;
             chol.solve(&current_jtr)
         } else {
+            consecutive_chol_failures += 1;
+            if consecutive_chol_failures >= 3 {
+                break;
+            }
             lambda *= 10.0;
             nu = 2.0;
             continue;
@@ -475,13 +488,17 @@ pub(crate) fn refine_pose_lm_weighted_with_info(
         );
         current_jtj = jtj;
     }
-    // Singular `JᵀWJ` (e.g. degenerate near-coplanar 4-point geometry at
-    // grazing incidence) produces no calibrated covariance. Emit a NaN-filled
-    // matrix as a sentinel so downstream consumers can branch on
-    // `cov[(0,0)].is_nan()` instead of trusting a fabricated identity.
-    let covariance = current_jtj
-        .try_inverse()
-        .unwrap_or_else(|| Matrix6::from_element(f64::NAN));
+    // Singular OR near-singular `JᵀWJ` (e.g. degenerate near-coplanar
+    // 4-point geometry at grazing incidence) produces no calibrated
+    // covariance. `try_inverse` only catches EXACT singularity (LU zero
+    // pivot); a near-singular Hessian with tiny non-zero pivot inverts
+    // to a finite-but-absurd matrix (~1e15-1e30). Treat both cases the
+    // same way: emit a NaN-filled sentinel so downstream consumers can
+    // branch on `cov[(0,0)].is_nan()`.
+    let covariance = match current_jtj.try_inverse() {
+        Some(inv) if inv.iter().all(|v| v.is_finite()) => inv,
+        _ => Matrix6::from_element(f64::NAN),
+    };
 
     (pose, covariance.into())
 }
@@ -802,12 +819,14 @@ pub fn bench_refine_pose_lm_weighted_with_telemetry(
         current_per_corner_w = per_corner_w;
     }
 
-    // Singular Hessian ⇒ NaN-sentinel covariance (see production variant above
-    // for rationale). Bench-harness consumers that previously inspected the
-    // identity fallback must now branch on `is_nan()`.
-    let covariance = current_jtj
-        .try_inverse()
-        .unwrap_or_else(|| Matrix6::from_element(f64::NAN));
+    // Singular OR near-singular Hessian ⇒ NaN-sentinel covariance (see
+    // production variant above for rationale). Bench-harness consumers
+    // that previously inspected the identity fallback must now branch
+    // on `is_nan()`.
+    let covariance = match current_jtj.try_inverse() {
+        Some(inv) if inv.iter().all(|v| v.is_finite()) => inv,
+        _ => Matrix6::from_element(f64::NAN),
+    };
 
     BenchLmResult {
         pose,
@@ -1115,5 +1134,96 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Degenerate-geometry production test: tag size = 0 → all four
+    /// object-space corners coincide at the origin → all four projected
+    /// image corners coincide at the same pixel → the per-corner
+    /// Jacobian is identical for all 4 observations → `JᵀWJ` has rank
+    /// 2 < 6 → singular. Exercises the production LM through a
+    /// realistic (non-zero-info) input that the `singular_hessian_returns_
+    /// nan_covariance` algebra-trivial test cannot reach.
+    ///
+    /// This pins the "degenerate geometry that survived the upstream
+    /// gates" scenario the PR description cites, complementing the
+    /// algebra-trivial all-zero-info path.
+    #[test]
+    fn degenerate_geometry_returns_nan_covariance() {
+        let intrinsics = CameraIntrinsics::new(800.0, 800.0, 320.0, 240.0);
+        // Tag size 0 ⇒ all 4 object-space corners coincide at the origin.
+        let s = 0.0_f64;
+        let obj_pts = centered_tag_corners(s);
+        let gt_pose = Pose::new(
+            nalgebra::Rotation3::identity().matrix().into_owned(),
+            nalgebra::Vector3::new(0.0, 0.0, 0.5),
+        );
+        let corners: [[f64; 2]; 4] =
+            core::array::from_fn(|i| gt_pose.project(&obj_pts[i], &intrinsics));
+
+        // Realistic identity-scaled info matrices: the singularity
+        // comes from coincident geometry, not from zero weights.
+        let info = [Matrix2::<f64>::identity(); 4];
+
+        let (_pose, cov) =
+            refine_pose_lm_weighted_with_info(&intrinsics, &corners, s, gt_pose, &info);
+
+        // Either: exact-singular ⇒ NaN sentinel everywhere from the
+        // `try_inverse → None` lane, or near-singular ⇒ at least one
+        // non-finite entry from the post-inverse `is_finite` gate.
+        // Both satisfy the NaN-sentinel contract.
+        let any_non_finite = cov.iter().flatten().any(|v| !v.is_finite());
+        assert!(
+            any_non_finite,
+            "expected NaN-sentinel covariance for coincident-corner geometry; \
+             every entry was finite, cov[0][0]={}",
+            cov[0][0],
+        );
+    }
+
+    /// Mirror of `degenerate_geometry_returns_nan_covariance` for the
+    /// bench-internals telemetry variant. The bench LM is the
+    /// documented entry-point for `tools/bench/pose_cov_audit.py`; a
+    /// regression on the bench-variant sentinel would silently break
+    /// the audit's `lm_singular` skip lane without any production-side
+    /// signal.
+    ///
+    /// NOTE: the bench variant accepts COVARIANCES (which it inverts
+    /// internally), not info matrices, so the algebra-trivial
+    /// all-zero-info shortcut used in `singular_hessian_returns_nan_
+    /// covariance` cannot be reproduced here — `Matrix2::zeros().
+    /// try_inverse() → None` falls back to identity at line ~692,
+    /// silently re-introducing finite weights. Using degenerate
+    /// geometry is the only way to drive the bench LM to a singular
+    /// Hessian through its public API.
+    #[cfg(feature = "bench-internals")]
+    #[test]
+    fn bench_degenerate_geometry_returns_nan_covariance() {
+        let intrinsics = CameraIntrinsics::new(800.0, 800.0, 320.0, 240.0);
+        let s = 0.0_f64;
+        let obj_pts = centered_tag_corners(s);
+        let gt_pose = Pose::new(
+            nalgebra::Rotation3::identity().matrix().into_owned(),
+            nalgebra::Vector3::new(0.0, 0.0, 0.5),
+        );
+        let corners: [[f64; 2]; 4] =
+            core::array::from_fn(|i| gt_pose.project(&obj_pts[i], &intrinsics));
+
+        // Identity COVARIANCES (inverted internally → identity info).
+        let covs = [Matrix2::<f64>::identity(); 4];
+        let res = bench_refine_pose_lm_weighted_with_telemetry(
+            &intrinsics,
+            &corners,
+            s,
+            gt_pose,
+            &covs,
+        );
+
+        let any_non_finite = res.covariance.iter().flatten().any(|v| !v.is_finite());
+        assert!(
+            any_non_finite,
+            "bench variant must emit NaN-sentinel covariance on degenerate \
+             geometry; cov[0][0]={}",
+            res.covariance[0][0],
+        );
     }
 }

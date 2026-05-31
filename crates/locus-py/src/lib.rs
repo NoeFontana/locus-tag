@@ -653,7 +653,14 @@ pub struct DetectionResult {
 #[pyclass(get_all, frozen)]
 pub struct CharucoTelemetryResult {
     pub rejected_saddles: Py<PyArray2<f32>>,
+    /// Structure-tensor determinant for the low-det rejection lane.
+    /// NaN for entries from the singular-covariance lane — always gate
+    /// on [`Self::rejected_reasons`] before computing aggregates.
     pub rejected_determinants: Py<PyArray1<f32>>,
+    /// Reason code for each rejected saddle (u8 repr of
+    /// [`locus_core::charuco::RejectionReason`]: 0 =
+    /// `LowStructureTensorDet`, 1 = `SingularCovariance`).
+    pub rejected_reasons: Py<PyArray1<u8>>,
 }
 
 /// Typed result returned by `CharucoRefiner.estimate` (Python).
@@ -827,7 +834,10 @@ impl BoardEstimator {
     /// - `ids`:         `(N,) int32`  — decoded ArUco IDs
     /// - `corners`:     `(N, 4, 2) float32`  — tag corners
     /// - `board_pose`:  `(7,) float64` `[tx, ty, tz, qx, qy, qz, qw]` or `None`
-    /// - `board_cov`:   `(6, 6) float64` pose covariance or `None`
+    /// - `board_cov`:   `(6, 6) float64` pose covariance, or `None` if no
+    ///   board was estimated **or** the LM Hessian was singular (the
+    ///   pose still ships as a best-effort estimate; only the calibrated
+    ///   uncertainty is unavailable).
     #[pyo3(signature = (detector, img, intrinsics))]
     #[allow(clippy::needless_pass_by_value)]
     fn estimate(
@@ -890,6 +900,13 @@ impl BoardEstimator {
         });
 
         // 4. Board pose and covariance.
+        //
+        // Singular `JᵀWJ` produces a NaN-filled covariance sentinel
+        // (`refine_aw_lm` → `Matrix6::from_element(NAN)`). Surface this to
+        // Python as `board_cov = None` so the typed `NDArray | None`
+        // contract is honored: consumers branch on `cov is None`, not
+        // `np.isnan(cov).any()`. The pose itself remains a best-effort
+        // estimate.
         let (board_pose, board_cov) = if let Some(bp) = board_pose_raw {
             let q = locus_core::pose::quat_from_so3(bp.pose.rotation);
             let t = bp.pose.translation;
@@ -907,17 +924,23 @@ impl BoardEstimator {
             ps[5] = q.k;
             ps[6] = q.w;
 
-            // SAFETY: see "NumPy allocation safety contract" in module docs.
-            let cov_arr = unsafe { PyArray2::<f64>::new(py, [6, 6], false) };
-            // SAFETY: see "NumPy allocation safety contract" in module docs.
-            let cs = unsafe { cov_arr.as_slice_mut() }
-                .map_err(|e| PyRuntimeError::new_err(format!("cov array layout error: {e}")))?;
-            for row in 0..6 {
-                for col in 0..6 {
-                    cs[row * 6 + col] = bp.covariance[(row, col)];
+            let cov_opt = if bp.covariance.iter().all(|v| v.is_finite()) {
+                // SAFETY: see "NumPy allocation safety contract" in module docs.
+                let cov_arr = unsafe { PyArray2::<f64>::new(py, [6, 6], false) };
+                // SAFETY: see "NumPy allocation safety contract" in module docs.
+                let cs = unsafe { cov_arr.as_slice_mut() }.map_err(|e| {
+                    PyRuntimeError::new_err(format!("cov array layout error: {e}"))
+                })?;
+                for row in 0..6 {
+                    for col in 0..6 {
+                        cs[row * 6 + col] = bp.covariance[(row, col)];
+                    }
                 }
-            }
-            (Some(pose_arr.unbind()), Some(cov_arr.unbind()))
+                Some(cov_arr.unbind())
+            } else {
+                None
+            };
+            (Some(pose_arr.unbind()), cov_opt)
         } else {
             (None, None)
         };
@@ -990,10 +1013,19 @@ impl CharucoRefiner {
     /// - `saddle_pts`:  `(S, 2) float32`  — refined image coordinates
     /// - `saddle_obj`:  `(S, 3) float64`  — board-frame 3D coordinates
     /// - `board_pose`:  `(7,) float64` `[tx, ty, tz, qx, qy, qz, qw]` or `None`
-    /// - `board_cov`:   `(6, 6) float64` pose covariance or `None`
-    /// - `telemetry`:   dict with `"rejected_saddles"` `(R,2) float32` and
-    ///                  `"rejected_determinants"` `(R,) float32`, or `None`
-    ///                  (only populated when `debug_telemetry=True`)
+    /// - `board_cov`:   `(6, 6) float64` pose covariance, or `None` if no
+    ///   board was estimated **or** the LM Hessian was singular (the
+    ///   pose still ships as a best-effort estimate; only the calibrated
+    ///   uncertainty is unavailable).
+    /// - `telemetry`:   dict with `"rejected_saddles"` `(R,2) float32`,
+    ///                  `"rejected_determinants"` `(R,) float32`, and
+    ///                  `"rejected_reasons"` `(R,) uint8` (0 =
+    ///                  `LowStructureTensorDet`, 1 = `SingularCovariance`)
+    ///                  or `None` (only populated when
+    ///                  `debug_telemetry=True`). Always gate
+    ///                  `rejected_determinants` aggregations on
+    ///                  `rejected_reasons` — the `SingularCovariance`
+    ///                  lane writes NaN into the determinants buffer.
     #[pyo3(signature = (detector, img, intrinsics, debug_telemetry = false))]
     #[allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
     fn estimate(
@@ -1121,6 +1153,10 @@ impl CharucoRefiner {
         } else {
             self.batch.board_pose.take()
         };
+        // Singular `JᵀWJ` produces a NaN-filled covariance sentinel
+        // (`refine_pose_lm_weighted_with_info` → `Matrix6::from_element(NAN)`).
+        // Surface to Python as `board_cov = None` so the typed
+        // `NDArray | None` contract is honored.
         let (board_pose, board_cov) = if let Some(bp) = board_pose_raw {
             let q = locus_core::pose::quat_from_so3(bp.pose.rotation);
             let t = bp.pose.translation;
@@ -1139,20 +1175,25 @@ impl CharucoRefiner {
                 ps[5] = q.k;
                 ps[6] = q.w;
             }
-            // SAFETY: see "NumPy allocation safety contract" in module docs.
-            let cov_arr = unsafe { PyArray2::<f64>::new(py, [6, 6], false) };
-            // SAFETY: see "NumPy allocation safety contract" in module docs.
-            unsafe {
-                let cs = cov_arr
-                    .as_slice_mut()
-                    .map_err(|e| PyRuntimeError::new_err(format!("cov slice: {e}")))?;
-                for row in 0..6 {
-                    for col in 0..6 {
-                        cs[row * 6 + col] = bp.covariance[(row, col)];
+            let cov_opt = if bp.covariance.iter().all(|v| v.is_finite()) {
+                // SAFETY: see "NumPy allocation safety contract" in module docs.
+                let cov_arr = unsafe { PyArray2::<f64>::new(py, [6, 6], false) };
+                // SAFETY: see "NumPy allocation safety contract" in module docs.
+                unsafe {
+                    let cs = cov_arr
+                        .as_slice_mut()
+                        .map_err(|e| PyRuntimeError::new_err(format!("cov slice: {e}")))?;
+                    for row in 0..6 {
+                        for col in 0..6 {
+                            cs[row * 6 + col] = bp.covariance[(row, col)];
+                        }
                     }
                 }
-            }
-            (Some(pose_arr.unbind()), Some(cov_arr.unbind()))
+                Some(cov_arr.unbind())
+            } else {
+                None
+            };
+            (Some(pose_arr.unbind()), cov_opt)
         } else {
             (None, None)
         };
@@ -1164,6 +1205,8 @@ impl CharucoRefiner {
             let rej_pts_arr = unsafe { PyArray2::<f32>::new(py, [r, 2], false) };
             // SAFETY: see "NumPy allocation safety contract" in module docs.
             let rej_det_arr = unsafe { PyArray1::<f32>::new(py, [r], false) };
+            // SAFETY: see "NumPy allocation safety contract" in module docs.
+            let rej_reason_arr = unsafe { PyArray1::<u8>::new(py, [r], false) };
             // SAFETY: see "NumPy allocation safety contract" in module docs.
             unsafe {
                 // SAFETY: Point2f is repr(C) [f32; 2]; flat reinterpretation is sound.
@@ -1178,12 +1221,17 @@ impl CharucoRefiner {
                     .as_slice_mut()
                     .map_err(|e| PyRuntimeError::new_err(format!("rej_det slice: {e}")))?;
                 rdet.copy_from_slice(&t.rejected_determinants[..r]);
+                let rreason = rej_reason_arr
+                    .as_slice_mut()
+                    .map_err(|e| PyRuntimeError::new_err(format!("rej_reason slice: {e}")))?;
+                rreason.copy_from_slice(&t.rejected_reasons[..r]);
             }
             Some(Py::new(
                 py,
                 CharucoTelemetryResult {
                     rejected_saddles: rej_pts_arr.unbind(),
                     rejected_determinants: rej_det_arr.unbind(),
+                    rejected_reasons: rej_reason_arr.unbind(),
                 },
             )?)
         } else {
@@ -2193,6 +2241,16 @@ mod bench {
     /// `convergence` (0=gradient, 1=step, 2=max-iter, 3=cholesky-fail),
     /// `final_per_corner_d2`, `final_per_corner_irls_weight`, and `trace` (a
     /// list of per-iteration dicts).
+    ///
+    /// Note: `covariance` MAY contain NaN entries when the final `JᵀWJ` is
+    /// singular (sentinel from `Matrix6::from_element(f64::NAN)`); the
+    /// production PyO3 layer (`BoardEstimator.estimate` /
+    /// `CharucoRefiner.estimate`) surfaces the same condition as
+    /// `board_cov = None`, but this diagnostic entry-point preserves the
+    /// raw matrix so calibration audits can observe singular frames
+    /// directly. Always gate downstream `np.linalg.inv(...)` calls on
+    /// `np.isfinite(cov).all()` — `numpy.linalg.inv` does NOT raise on a
+    /// NaN matrix; it silently returns a NaN inverse.
     #[pyfunction]
     #[pyo3(signature = (intrinsics, corners, tag_size, initial_quaternion, initial_translation, corner_covariances))]
     pub fn _bench_refine_pose_lm_weighted_with_telemetry(

@@ -507,6 +507,15 @@ def run_audit(
             np.asarray(gt_pose[3:7], dtype=np.float64),
         )
 
+        # NaN-sentinel guard: `bench_refine_pose_lm_weighted_with_telemetry`
+        # emits `Matrix6::from_element(NAN)` when `JᵀWJ` is singular.
+        # `np.linalg.inv` does NOT raise `LinAlgError` on a NaN matrix —
+        # it silently returns a NaN inverse — so the `try/except` below
+        # would not catch it. The explicit isfinite check is the
+        # authoritative singular-Hessian detector for this consumer.
+        if not np.isfinite(cov6).all():
+            skipped["lm_singular"] += 1
+            continue
         try:
             cov_inv = np.linalg.inv(cov6)
         except np.linalg.LinAlgError:
@@ -515,7 +524,9 @@ def run_audit(
 
         d2_total = float(delta @ cov_inv @ delta)
 
-        # Per-axis 1-DOF Mahalanobis: δᵢ² / Σᵢᵢ.
+        # Per-axis 1-DOF Mahalanobis: δᵢ² / Σᵢᵢ. (cov6 was finite-gated
+        # above so `diag` is finite; `> 1e-30` is therefore a real
+        # near-zero guard, not a hidden NaN mask.)
         diag = np.diag(cov6)
         d2_axis = (delta * delta) / np.where(diag > 1e-30, diag, 1e-30)
 
@@ -555,11 +566,16 @@ def run_audit(
         ref_gt_trans = np.asarray(ref_gt["translation"], dtype=np.float64)
         ref_gt_quat = np.asarray(ref_gt["quaternion"], dtype=np.float64)
         delta_gt = _se3_residual(ref_gt_trans, ref_gt_quat, gt_trans, gt_quat)
-        try:
-            cov_gt_inv = np.linalg.inv(cov_gt6)
-            d2_gt = float(delta_gt @ cov_gt_inv @ delta_gt)
-        except np.linalg.LinAlgError:
+        # Same NaN-sentinel guard as above. `np.linalg.inv` does not raise
+        # on NaN input, so explicit isfinite gating is required.
+        if not np.isfinite(cov_gt6).all():
             d2_gt = float("nan")
+        else:
+            try:
+                cov_gt_inv = np.linalg.inv(cov_gt6)
+                d2_gt = float(delta_gt @ cov_gt_inv @ delta_gt)
+            except np.linalg.LinAlgError:
+                d2_gt = float("nan")
 
         samples.append(
             SceneSample(
