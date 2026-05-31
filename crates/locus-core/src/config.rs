@@ -233,6 +233,7 @@ pub enum QuadExtractionPolicy {
 /// pattern for ergonomic construction.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[allow(clippy::struct_excessive_bools)]
 pub struct DetectorConfig {
     // Threshold parameters
     /// Tile size for adaptive thresholding (default: 4).

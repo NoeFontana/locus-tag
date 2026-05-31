@@ -904,6 +904,7 @@ mod tests {
     /// scalar tail exactly — including the `|s| ≤ 3` window — so the
     /// AVX2 path's 4-tuple return can be pinned against a single,
     /// auditable definition. Phase 4 SIMD parity gate.
+    #[allow(clippy::many_single_char_names, clippy::too_many_arguments)]
     fn refine_accumulate_scalar_reference(
         samples: &[(f64, f64, f64)],
         nx: f64,
@@ -946,6 +947,7 @@ mod tests {
     /// masked-lane path, the count-ones reduction, and the scalar tail
     /// at one stroke.
     #[test]
+    #[allow(clippy::many_single_char_names, clippy::similar_names)]
     fn refine_accumulate_optimized_matches_scalar_reference() {
         let nx = 0.6;
         let ny = 0.8;

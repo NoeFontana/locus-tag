@@ -162,6 +162,7 @@ class PyDetectorConfig:
         huber_delta_px: float,
         tikhonov_alpha_max: float,
         sigma_n_sq: float,
+        use_empirical_corner_noise: bool,
         structure_tensor_radius: int,
         edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
         edlines_phase3_erf: EdLinesPhase3ErfPolicy,

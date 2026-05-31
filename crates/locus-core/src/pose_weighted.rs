@@ -1116,6 +1116,7 @@ mod tests {
     /// (c) return the empirical noise when it sits in `(σ_n², 16·σ_n²]`,
     /// (d) clamp negative empirical noise to 0 (defensive).
     #[test]
+    #[allow(clippy::float_cmp)]
     fn effective_sigma_n_sq_inflation_rule() {
         let sigma = 4.0;
         // (a) sentinel → no inflation

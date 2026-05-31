@@ -438,7 +438,7 @@ def run_audit(
     #     to `compute_corner_covariance`, mirroring the pre-Phase-4 baseline
     #     even when production wrote nonzero values to the SoA column.
     if force_ppb_threshold is not None:
-        from locus._config import _AdaptivePpbPolicy  # type: ignore[import-untyped]
+        from locus._config import _AdaptivePpbPolicy
 
         if isinstance(cfg.quad.extraction_policy, _AdaptivePpbPolicy):
             cfg.quad.extraction_policy.AdaptivePpb.threshold = float(force_ppb_threshold)
@@ -499,7 +499,10 @@ def run_audit(
         # collapses to the pre-Phase-4 structure-tensor-only Σ_c. When the
         # profile has `pose.use_empirical_corner_noise=true`, passing these
         # values here makes the audit observe the same Σ_c the production
-        # LM consumed.
+        # LM consumed. The field is `np.ndarray | None` on the dataclass
+        # for the concurrent-path edge case, but the single-frame `detect()`
+        # path always populates it — assert to narrow the type for callers.
+        assert batch.corner_empirical_noise is not None
         det_emp = np.asarray(batch.corner_empirical_noise[det_idx], dtype=np.float64)
         if synthetic_empirical is not None:
             # Phase 4 proof: bypass the production-side empirical column (which
@@ -515,7 +518,7 @@ def run_audit(
             # on Phase 4's calibration gain — a perfect per-corner empirical
             # estimator would converge here. Real ERF residual MSE will be a
             # noisier proxy of the same quantity (per `combine_edge_mses`).
-            det_emp = (corner_residual_norms ** 2).astype(np.float64)
+            det_emp = (corner_residual_norms**2).astype(np.float64)
         if not use_empirical:
             det_emp = np.zeros_like(det_emp)
 

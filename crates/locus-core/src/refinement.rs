@@ -336,6 +336,7 @@ mod tests {
     /// Equal-weight arithmetic mean, no clamp at this stage (clamp lives
     /// in `pose_weighted::effective_sigma_n_sq`).
     #[test]
+    #[allow(clippy::float_cmp)]
     fn combine_edge_mses_both_finite_averages() {
         assert_eq!(combine_edge_mses(4.0, 16.0), 10.0);
         assert_eq!(combine_edge_mses(0.0, 8.0), 4.0);
@@ -349,6 +350,7 @@ mod tests {
     /// should pass through unchanged — discarding the single available
     /// measurement just because its sibling is missing would be lossy.
     #[test]
+    #[allow(clippy::float_cmp)]
     fn combine_edge_mses_one_nan_passes_through_finite() {
         assert_eq!(combine_edge_mses(8.0, f64::NAN), 8.0);
         assert_eq!(combine_edge_mses(f64::NAN, 8.0), 8.0);
@@ -361,6 +363,7 @@ mod tests {
     /// which the pose-stage finalizer treats as `max(σ_n², 0) = σ_n²`
     /// (i.e. recovers today's structure-tensor-only behaviour).
     #[test]
+    #[allow(clippy::float_cmp)]
     fn combine_edge_mses_all_nan_emits_zero_sentinel() {
         assert_eq!(combine_edge_mses(f64::NAN, f64::NAN), 0.0);
         // Infinity (an ill-conditioned fit) is also rejected and treated

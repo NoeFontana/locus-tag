@@ -483,7 +483,11 @@ impl ConsistencyThresholds {
 /// and the disabled-path diagnostic d² compute is elided entirely on
 /// non-`bench-internals` builds (zero-overhead legacy path).
 #[must_use]
-#[allow(clippy::missing_panics_doc, clippy::too_many_arguments)]
+#[allow(
+    clippy::missing_panics_doc,
+    clippy::too_many_arguments,
+    clippy::too_many_lines
+)]
 #[tracing::instrument(skip_all, name = "pipeline::estimate_tag_pose_diag")]
 pub(crate) fn estimate_tag_pose_with_diagnostics(
     intrinsics: &CameraIntrinsics,
@@ -1694,7 +1698,7 @@ pub fn refine_poses_soa_with_config(
     // a direct call after monomorphisation — a closure-binding form was
     // opaque to LLVM and added measurable per-candidate overhead in the
     // pose microbenches.
-    #[allow(clippy::inline_always)]
+    #[allow(clippy::inline_always, clippy::too_many_arguments)]
     #[inline(always)]
     fn compute_one(
         intrinsics: &CameraIntrinsics,
