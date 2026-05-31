@@ -475,7 +475,13 @@ pub(crate) fn refine_pose_lm_weighted_with_info(
         );
         current_jtj = jtj;
     }
-    let covariance = current_jtj.try_inverse().unwrap_or_else(Matrix6::identity);
+    // Singular `JᵀWJ` (e.g. degenerate near-coplanar 4-point geometry at
+    // grazing incidence) produces no calibrated covariance. Emit a NaN-filled
+    // matrix as a sentinel so downstream consumers can branch on
+    // `cov[(0,0)].is_nan()` instead of trusting a fabricated identity.
+    let covariance = current_jtj
+        .try_inverse()
+        .unwrap_or_else(|| Matrix6::from_element(f64::NAN));
 
     (pose, covariance.into())
 }
@@ -796,7 +802,12 @@ pub fn bench_refine_pose_lm_weighted_with_telemetry(
         current_per_corner_w = per_corner_w;
     }
 
-    let covariance = current_jtj.try_inverse().unwrap_or_else(Matrix6::identity);
+    // Singular Hessian ⇒ NaN-sentinel covariance (see production variant above
+    // for rationale). Bench-harness consumers that previously inspected the
+    // identity fallback must now branch on `is_nan()`.
+    let covariance = current_jtj
+        .try_inverse()
+        .unwrap_or_else(|| Matrix6::from_element(f64::NAN));
 
     BenchLmResult {
         pose,
@@ -1061,5 +1072,49 @@ mod tests {
             covariances[3],
             Matrix2::identity().scale(OFF_IMAGE_CORNER_VARIANCE)
         );
+    }
+
+    /// Singular `JᵀWJ` ⇒ NaN-filled covariance sentinel (not identity).
+    ///
+    /// Construction: zero every per-corner info matrix. The Huber-Mahalanobis
+    /// objective then drops all four observations' contributions, so the
+    /// accumulated `JᵀWJ` is identically zero — exactly singular at any
+    /// floating-point precision. `try_inverse` returns `None`, triggering
+    /// the NaN sentinel introduced by PR-C.
+    #[test]
+    fn singular_hessian_returns_nan_covariance() {
+        let intrinsics = CameraIntrinsics::new(800.0, 800.0, 320.0, 240.0);
+        let s = 0.04_f64;
+        let obj_pts = centered_tag_corners(s);
+        let gt_pose = Pose::new(
+            nalgebra::Rotation3::identity().matrix().into_owned(),
+            nalgebra::Vector3::new(0.0, 0.0, 0.5),
+        );
+        let corners: [[f64; 2]; 4] =
+            core::array::from_fn(|i| gt_pose.project(&obj_pts[i], &intrinsics));
+
+        // All-zero info ⇒ zero `JᵀWJ` ⇒ rank-0 / singular.
+        let info = [Matrix2::<f64>::zeros(); 4];
+
+        let (_pose, cov) = refine_pose_lm_weighted_with_info(
+            &intrinsics, &corners, s, gt_pose, &info,
+        );
+
+        // Per the NaN-sentinel contract: any NaN on the diagonal is a
+        // sufficient signal for downstream consumers.
+        assert!(
+            cov[0][0].is_nan(),
+            "expected NaN-filled covariance on singular JᵀWJ, got cov[0][0]={}",
+            cov[0][0],
+        );
+        // And every entry should be NaN under `Matrix6::from_element(NAN)`.
+        for (r, row) in cov.iter().enumerate() {
+            for (c, v) in row.iter().enumerate() {
+                assert!(
+                    v.is_nan(),
+                    "NaN-sentinel covariance must be NaN everywhere: cov[{r}][{c}]={v}",
+                );
+            }
+        }
     }
 }

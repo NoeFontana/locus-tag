@@ -10,6 +10,7 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - `decoder.rs` SIMD gather blocks now carry full SAFETY justification including the 3-byte SIMD-gather padding contract (`crates/locus-core/src/decoder.rs` AVX2 + NEON paths in `sample_grid_values_simd`).
 - Regression tests against the hub dataset cache now panic instead of silently skipping when `LOCUS_HUB_DATASET_DIR` is set but the expected subdir is missing (closes the same footgun as PR #252).
 - Centralised SO(3) → quaternion conversion through `quat_from_so3` helper, eliminating the latent `UnitQuaternion::from_matrix` Müller-iteration hang risk on near-singular rotations across `board.rs`, `pose.rs`, and the PyO3 board-pose copy.
+- Pose/board LM and ChAruco saddle refinement now emit NaN-filled covariance on singular Hessian (was: identity/zero) — downstream consumers can branch on `is_nan()` instead of trusting a misleading sentinel. ChAruco saddles whose per-corner Σ_c happens to be singular (downstream of the structure-tensor gate) are now skipped rather than admitted with an identity info matrix.
 
 ### Added
 

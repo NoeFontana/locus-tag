@@ -1491,7 +1491,14 @@ impl RobustPoseSolver {
             }
         }
 
-        let covariance = cur_jtj.try_inverse().unwrap_or_else(Matrix6::zeros);
+        // Singular `JᵀWJ` (e.g. degenerate inlier geometry that the LO-RANSAC
+        // gate failed to reject) makes the inverse-Hessian covariance
+        // ill-defined. Emit a NaN-filled matrix as a sentinel; the previous
+        // zero fallback falsely advertised a perfectly-known pose. Downstream
+        // consumers can branch on `cov[(0,0)].is_nan()`.
+        let covariance = cur_jtj
+            .try_inverse()
+            .unwrap_or_else(|| Matrix6::from_element(f64::NAN));
         (pose, covariance)
     }
 }
@@ -2160,6 +2167,49 @@ mod tests {
                     "covariance must be symmetric: [{i},{j}]={} ≠ [{j},{i}]={}",
                     cov[(i, j)],
                     cov[(j, i)]
+                );
+            }
+        }
+    }
+
+    /// Empty inlier mask drives `JᵀWJ` to all-zero (rank 0). The covariance
+    /// step must then produce a NaN-filled sentinel rather than the legacy
+    /// zero matrix that falsely advertised a perfectly known pose.
+    #[test]
+    fn test_refine_aw_lm_singular_returns_nan_covariance() {
+        let config = math_test_config();
+        let estimator = BoardEstimator::new(Arc::clone(&config));
+        let intrinsics = test_intrinsics();
+        let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
+        let (mut batch, num_valid) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
+        let v = batch.partition(num_valid);
+        let view = batch.view(v);
+
+        let (img, obj, info) =
+            build_correspondences_from_batch(&config.obj_points, &view, &estimator);
+        let corr = PointCorrespondences {
+            image_points: &img,
+            object_points: &obj,
+            information_matrices: &info,
+            group_size: 4,
+        };
+        // All-zero mask ⇒ zero `JᵀWJ` ⇒ singular.
+        let no_inliers = [0u64; 16];
+
+        let solver = RobustPoseSolver::new();
+        let (_, cov) = solver.refine_aw_lm(&pose, &corr, &intrinsics, &no_inliers);
+
+        assert!(
+            cov[(0, 0)].is_nan(),
+            "expected NaN-sentinel covariance for singular JᵀWJ, got cov[0,0]={}",
+            cov[(0, 0)]
+        );
+        for r in 0..6 {
+            for c in 0..6 {
+                assert!(
+                    cov[(r, c)].is_nan(),
+                    "all entries must be NaN: cov[{r},{c}]={}",
+                    cov[(r, c)]
                 );
             }
         }
