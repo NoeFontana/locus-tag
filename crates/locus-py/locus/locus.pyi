@@ -205,6 +205,16 @@ class DetectionResult:
     def error_rates(self) -> npt.NDArray[np.float32]: ...  # (N,)
     @property
     def poses(self) -> npt.NDArray[np.float32] | None: ...  # (N, 7) [tx,ty,tz,qx,qy,qz,qw]
+    # Per-corner Phase 4 empirical noise variance (px²), shape (N, 4),
+    # drawn from the ERF edge-fit residual MSE. Entries are 0.0 for
+    # corners that did not traverse ERF refinement. The production pose
+    # LM inflates Σ_c by these values when `pose.use_empirical_corner_noise`
+    # is enabled; pass them to `locus.bench.compute_corner_covariance(...,
+    # empirical_n_sq=...)` to reconstruct production Σ_c offline. Always
+    # zero on the concurrent `Detector.detect_concurrent` path (the owned
+    # `Detection` form strips SoA-only diagnostics).
+    @property
+    def corner_empirical_noise(self) -> npt.NDArray[np.float32]: ...  # (N, 4)
     @property
     def rejected_corners(self) -> npt.NDArray[np.float32]: ...  # (M, 4, 2)
     @property

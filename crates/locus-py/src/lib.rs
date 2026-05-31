@@ -646,6 +646,14 @@ pub struct DetectionResult {
     pub corners: Py<PyArray3<f32>>,
     pub error_rates: Py<PyArray1<f32>>,
     pub poses: Option<Py<PyArray2<f32>>>,
+    /// Per-corner Phase 4 empirical noise variance (px²), shape `(N, 4)`,
+    /// drawn from the ERF edge-fit residual MSE. `0.0` entries mean the
+    /// corner did not traverse ERF refinement (e.g. ContourRdp+Gwlf
+    /// route, or both adjacent ERF fits failed). The production pose LM
+    /// inflates Σ_c by these values when `pose.use_empirical_corner_noise`
+    /// is enabled; pass them to `locus.bench.compute_corner_covariance(...,
+    /// empirical_n_sq=...)` to reconstruct the production Σ_c offline.
+    pub corner_empirical_noise: Py<PyArray2<f32>>,
     pub rejected_corners: Py<PyArray3<f32>>,
     pub rejected_error_rates: Py<PyArray1<f32>>,
     /// Per-rejected-quad funnel status code (matches `locus.FunnelStatus`).
@@ -1559,6 +1567,22 @@ impl Detector {
             None
         };
 
+        // Per-corner empirical noise (N, 4) f32 — production Phase 4 input.
+        // Zero-copy block transfer: `[[f32; 4]]` is layout-equivalent to a
+        // contiguous `f32` buffer of length `n * 4`.
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
+        let emp_arr = unsafe { PyArray2::<f32>::new(py, [n, 4], false) };
+        // SAFETY: see "NumPy allocation safety contract" in module docs.
+        unsafe {
+            let emp_slice = emp_arr
+                .as_slice_mut()
+                .map_err(|e| PyRuntimeError::new_err(format!("emp noise slice: {e}")))?;
+            emp_slice.copy_from_slice(std::slice::from_raw_parts(
+                detections.corner_empirical_noise.as_ptr().cast::<f32>(),
+                n * 4,
+            ));
+        }
+
         // Telemetry (zero-copy intermediate images)
         let telemetry = if let Some(telem) = detections.telemetry {
             let telem_result = build_pipeline_telemetry(py, &telem)?;
@@ -1572,6 +1596,7 @@ impl Detector {
             corners: corners_arr.unbind(),
             error_rates: error_rates_arr.unbind(),
             poses,
+            corner_empirical_noise: emp_arr.unbind(),
             rejected_corners: rejected_arr.unbind(),
             rejected_error_rates: rejected_error_rates_arr.unbind(),
             rejected_funnel_status: rejected_funnel_status_arr.unbind(),
@@ -2282,11 +2307,17 @@ fn build_detection_result_from_owned(
     // SAFETY: see "NumPy allocation safety contract" in module docs.
     let rejected_funnel_status_arr = unsafe { PyArray1::<u8>::new(py, [0], false) };
 
+    // Per-corner empirical noise is not preserved on the concurrent / owned
+    // `Detection` path (the owned struct strips SoA-only diagnostics). All
+    // zeros — same sentinel Phase 4 uses for "no ERF measurement".
+    let emp_arr = PyArray2::<f32>::zeros(py, [n, 4], false);
+
     Ok(DetectionResult {
         ids: ids_arr.unbind(),
         corners: corners_arr.unbind(),
         error_rates: error_rates_arr.unbind(),
         poses,
+        corner_empirical_noise: emp_arr.unbind(),
         rejected_corners: rejected_arr.unbind(),
         rejected_error_rates: rejected_error_rates_arr.unbind(),
         rejected_funnel_status: rejected_funnel_status_arr.unbind(),

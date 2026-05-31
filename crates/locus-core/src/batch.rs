@@ -359,6 +359,10 @@ pub struct DetectionBatchView<'a> {
     pub poses: &'a [Pose6D],
     /// Corner covariances (Fisher information priors).
     pub corner_covariances: &'a [[f32; 16]],
+    /// Per-corner Phase 4 empirical noise estimates (px²) from ERF residual
+    /// MSE. `0.0` sentinel for corners that did not traverse ERF. See
+    /// [`DetectionBatch::corner_empirical_noise`].
+    pub corner_empirical_noise: &'a [[f32; 4]],
     /// Optional telemetry data for intermediate images.
     pub telemetry: Option<TelemetryPayload>,
     /// Corners of quads that were extracted but rejected during decoding or verification.
@@ -460,6 +464,7 @@ impl DetectionBatch {
             error_rates: &self.error_rates[..n],
             poses: &self.poses[..n],
             corner_covariances: &self.corner_covariances[..n],
+            corner_empirical_noise: &self.corner_empirical_noise[..n],
             telemetry: None,
             rejected_corners: &[],
             rejected_error_rates: &[],
@@ -485,6 +490,7 @@ impl DetectionBatch {
             error_rates: &self.error_rates[..v_clamped],
             poses: &self.poses[..v_clamped],
             corner_covariances: &self.corner_covariances[..v_clamped],
+            corner_empirical_noise: &self.corner_empirical_noise[..v_clamped],
             telemetry,
             rejected_corners: &self.corners[v_clamped..n_clamped],
             rejected_error_rates: &self.error_rates[v_clamped..n_clamped],
