@@ -32,9 +32,7 @@ def _valid_img() -> np.ndarray:
     (to exercise the gate's negative path) should wrap with
     :func:`np.ascontiguousarray`.
     """
-    parent = np.zeros(
-        (_VALID_SHAPE[0], _VALID_SHAPE[1] + _SIMD_PAD), dtype=np.uint8
-    )
+    parent = np.zeros((_VALID_SHAPE[0], _VALID_SHAPE[1] + _SIMD_PAD), dtype=np.uint8)
     return parent[:, : _VALID_SHAPE[1]]
 
 
@@ -164,9 +162,7 @@ class TestNegativeStrideRejection:
         with pytest.raises(ValueError, match=r"stride|C-contiguous"):
             detector.detect(img)
 
-    def test_reverse_row_axis_is_rejected_concurrent(
-        self, detector: locus.Detector
-    ) -> None:
+    def test_reverse_row_axis_is_rejected_concurrent(self, detector: locus.Detector) -> None:
         tight = np.ascontiguousarray(_valid_img())
         img = tight[::-1, :]
         assert img.strides[0] < 0
