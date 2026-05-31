@@ -557,10 +557,27 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
     // survive Huber attenuation bias the rotation tail. Gated on (a) the
     // weighted-LM path (we need Σ_c to compute per-corner d² and mask
     // one corner) and (b) the per-profile threshold opt-in.
+    //
+    // Note on the `Matrix2::identity` fallback below: the per-corner Σ_c
+    // kernel (`finalize_corner_covariance` in `pose_weighted.rs`) is
+    // Tikhonov-regularised with `+1.0` on both diagonals plus a flat-
+    // window identity fallback, so `try_inverse() → None` is unreachable
+    // on the production kernel. The 4-corner LM is intrinsically tight
+    // (cannot drop one corner without losing pose rank), so a singular
+    // Σ_c cannot be rejected by skipping the tag — we depend on the
+    // Tikhonov invariant. The `debug_assert!` makes that contract
+    // explicit; in release builds, the identity fallback is a defensive
+    // last resort and is dead code under the invariant.
     let outlier_corner_idx = match (covariances.as_ref(), config.outlier_drop_d2_threshold) {
         (Some(covs), threshold) if threshold > 0.0 => {
-            let info_matrices: [Matrix2<f64>; 4] =
-                core::array::from_fn(|i| covs[i].try_inverse().unwrap_or_else(Matrix2::identity));
+            let info_matrices: [Matrix2<f64>; 4] = core::array::from_fn(|i| {
+                debug_assert!(
+                    covs[i].try_inverse().is_some(),
+                    "Tikhonov invariant violated: per-corner Σ_c[{i}] is singular; \
+                     `finalize_corner_covariance` is supposed to guarantee PD output",
+                );
+                covs[i].try_inverse().unwrap_or_else(Matrix2::identity)
+            });
             match maybe_drop_outlier_corner(
                 intrinsics,
                 corners,
@@ -781,8 +798,18 @@ fn pick_selector_info(
     let Some(covs) = covariances else {
         return *fallback;
     };
-    let info: [Matrix2<f64>; 4] =
-        core::array::from_fn(|i| covs[i].try_inverse().unwrap_or_else(Matrix2::identity));
+    // Per the Tikhonov invariant in `finalize_corner_covariance`, the
+    // kernel-level Σ_c is guaranteed PD; `try_inverse → None` is
+    // unreachable on production kernel output. The `info_matrices_well_
+    // conditioned` check below provides an additional condition-number
+    // safety net even when invertibility is guaranteed.
+    let info: [Matrix2<f64>; 4] = core::array::from_fn(|i| {
+        debug_assert!(
+            covs[i].try_inverse().is_some(),
+            "Tikhonov invariant violated: per-corner Σ_c[{i}] is singular",
+        );
+        covs[i].try_inverse().unwrap_or_else(Matrix2::identity)
+    });
     if info_matrices_well_conditioned(&info) {
         info
     } else {

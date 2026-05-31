@@ -269,6 +269,11 @@ struct BoardSummaryMetrics {
     mean_tag_coverage: f64,
     mean_total_ms: f64,
     frames_no_estimate: usize,
+    // Frames where the board pose was estimated but the LM Hessian was
+    // singular (covariance is the `Matrix6::from_element(NAN)` sentinel
+    // from `refine_aw_lm`). Excluded from std metrics; included in
+    // error metrics (the pose itself is still a best-effort estimate).
+    frames_singular_covariance: usize,
 }
 
 #[derive(Serialize)]
@@ -350,6 +355,7 @@ impl BoardRegressionHarness {
         let mut r_stds = Vec::new();
         let mut frames_with_board = 0;
         let mut frames_no_estimate = 0;
+        let mut frames_singular_covariance = 0;
         let mut total_coverage = 0.0;
         let mut total_time = 0.0;
 
@@ -440,19 +446,30 @@ impl BoardRegressionHarness {
                             .to_degrees(),
                     );
 
-                    t_stds.push(
-                        (est.covariance[(0, 0)].max(0.0)
-                            + est.covariance[(1, 1)].max(0.0)
-                            + est.covariance[(2, 2)].max(0.0))
-                        .sqrt(),
-                    );
-                    r_stds.push(
-                        (est.covariance[(3, 3)].max(0.0)
-                            + est.covariance[(4, 4)].max(0.0)
-                            + est.covariance[(5, 5)].max(0.0))
-                        .sqrt()
-                        .to_degrees(),
-                    );
+                    // NaN-sentinel guard: a singular `JᵀWJ` makes
+                    // `refine_aw_lm` emit a NaN-filled covariance.
+                    // `f64::NAN.max(0.0) == 0` silently coerces NaN to 0,
+                    // so an isfinite check is the only correct gate.
+                    // Exclude such frames from std metrics but keep the
+                    // pose in error metrics (it is still an estimate).
+                    let std_finite = (0..6).all(|i| est.covariance[(i, i)].is_finite());
+                    if std_finite {
+                        t_stds.push(
+                            (est.covariance[(0, 0)].max(0.0)
+                                + est.covariance[(1, 1)].max(0.0)
+                                + est.covariance[(2, 2)].max(0.0))
+                            .sqrt(),
+                        );
+                        r_stds.push(
+                            (est.covariance[(3, 3)].max(0.0)
+                                + est.covariance[(4, 4)].max(0.0)
+                                + est.covariance[(5, 5)].max(0.0))
+                            .sqrt()
+                            .to_degrees(),
+                        );
+                    } else {
+                        frames_singular_covariance += 1;
+                    }
                 } else {
                     frames_no_estimate += 1;
                 }
@@ -460,6 +477,7 @@ impl BoardRegressionHarness {
         }
 
         let count = t_errors.len() as f64;
+        let std_count = t_stds.len() as f64;
         let summary = BoardSummaryMetrics {
             dataset_size: provider.images.len(),
             frames_with_board,
@@ -479,19 +497,20 @@ impl BoardRegressionHarness {
             p50_board_rotation_error_deg: calculate_percentile(&mut r_errors, 0.5),
             p95_board_rotation_error_deg: calculate_percentile(&mut r_errors, 0.95),
             p99_board_rotation_error_deg: calculate_percentile(&mut r_errors, 0.99),
-            mean_board_translation_std_m: if count > 0.0 {
-                t_stds.iter().sum::<f64>() / count
+            mean_board_translation_std_m: if std_count > 0.0 {
+                t_stds.iter().sum::<f64>() / std_count
             } else {
                 0.0
             },
-            mean_board_rotation_std_deg: if count > 0.0 {
-                r_stds.iter().sum::<f64>() / count
+            mean_board_rotation_std_deg: if std_count > 0.0 {
+                r_stds.iter().sum::<f64>() / std_count
             } else {
                 0.0
             },
             mean_tag_coverage: total_coverage / (provider.images.len() as f64).max(1.0),
             mean_total_ms: total_time / (provider.images.len() as f64).max(1.0),
             frames_no_estimate,
+            frames_singular_covariance,
         };
 
         let report = BoardRegressionReport { summary };
@@ -942,6 +961,7 @@ mod tests {
         let mut r_stds = Vec::new();
         let mut frames_with_board = 0;
         let mut frames_no_estimate = 0;
+        let mut frames_singular_covariance = 0;
         let mut total_coverage = 0.0;
         let mut total_time = 0.0;
 
@@ -1023,25 +1043,36 @@ mod tests {
                         .to_degrees(),
                 );
 
-                t_stds.push(
-                    (est.covariance[(0, 0)].max(0.0)
-                        + est.covariance[(1, 1)].max(0.0)
-                        + est.covariance[(2, 2)].max(0.0))
-                    .sqrt(),
-                );
-                r_stds.push(
-                    (est.covariance[(3, 3)].max(0.0)
-                        + est.covariance[(4, 4)].max(0.0)
-                        + est.covariance[(5, 5)].max(0.0))
-                    .sqrt()
-                    .to_degrees(),
-                );
+                // NaN-sentinel guard (see charuco run for rationale):
+                // `f64::NAN.max(0.0) == 0` silently coerces NaN cov to 0;
+                // the explicit isfinite check excludes singular-Hessian
+                // frames from std metrics without poisoning the pose
+                // error statistics.
+                let std_finite = (0..6).all(|i| est.covariance[(i, i)].is_finite());
+                if std_finite {
+                    t_stds.push(
+                        (est.covariance[(0, 0)].max(0.0)
+                            + est.covariance[(1, 1)].max(0.0)
+                            + est.covariance[(2, 2)].max(0.0))
+                        .sqrt(),
+                    );
+                    r_stds.push(
+                        (est.covariance[(3, 3)].max(0.0)
+                            + est.covariance[(4, 4)].max(0.0)
+                            + est.covariance[(5, 5)].max(0.0))
+                        .sqrt()
+                        .to_degrees(),
+                    );
+                } else {
+                    frames_singular_covariance += 1;
+                }
             } else {
                 frames_no_estimate += 1;
             }
         }
 
         let count = t_errors.len() as f64;
+        let std_count = t_stds.len() as f64;
         let summary = BoardSummaryMetrics {
             dataset_size: provider.images.len(),
             frames_with_board,
@@ -1061,19 +1092,20 @@ mod tests {
             p50_board_rotation_error_deg: calculate_percentile(&mut r_errors, 0.5),
             p95_board_rotation_error_deg: calculate_percentile(&mut r_errors, 0.95),
             p99_board_rotation_error_deg: calculate_percentile(&mut r_errors, 0.99),
-            mean_board_translation_std_m: if count > 0.0 {
-                t_stds.iter().sum::<f64>() / count
+            mean_board_translation_std_m: if std_count > 0.0 {
+                t_stds.iter().sum::<f64>() / std_count
             } else {
                 0.0
             },
-            mean_board_rotation_std_deg: if count > 0.0 {
-                r_stds.iter().sum::<f64>() / count
+            mean_board_rotation_std_deg: if std_count > 0.0 {
+                r_stds.iter().sum::<f64>() / std_count
             } else {
                 0.0
             },
             mean_tag_coverage: total_coverage / (provider.images.len() as f64).max(1.0),
             mean_total_ms: total_time / (provider.images.len() as f64).max(1.0),
             frames_no_estimate,
+            frames_singular_covariance,
         };
 
         let report = BoardRegressionReport { summary };

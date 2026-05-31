@@ -18,3 +18,4 @@ summary:
   mean_tag_coverage: 0.8981045751633985
   mean_total_ms: "[DURATION]"
   frames_no_estimate: 14
+  frames_singular_covariance: 0

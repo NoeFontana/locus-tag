@@ -822,7 +822,12 @@ impl RobustPoseSolver {
             self.refine_aw_lm(&best_pose, corr, intrinsics, &aw_lm_mask);
 
         // Opt-in: outlier-aware drop on the AW-LM result (N-observation
-        // form of the per-tag mechanism).
+        // form of the per-tag mechanism). If the masked re-fit produced
+        // a singular Hessian (NaN-sentinel cov), prefer the unmasked
+        // covariance — the dropped-group pose is still selected because
+        // `kept_3 < kept_4` proved its fit was better, but emitting a
+        // NaN cov alongside a non-NaN one when both are available throws
+        // away usable uncertainty.
         let (final_pose, final_cov) = match self.apply_outlier_drop_to_board_lm(
             &refined_pose,
             corr,
@@ -830,7 +835,16 @@ impl RobustPoseSolver {
             &aw_lm_mask,
             outlier_drop_d2_threshold,
         ) {
-            Some((pose_3, cov_3, _g_dropped)) => (pose_3, cov_3),
+            Some((pose_3, cov_3, _g_dropped)) => {
+                let cov_3_finite = cov_3.iter().all(|v| v.is_finite());
+                let cov_4_finite = covariance.iter().all(|v| v.is_finite());
+                if cov_3_finite || !cov_4_finite {
+                    (pose_3, cov_3)
+                } else {
+                    // pose_3 wins on fit, cov_4 wins on definedness.
+                    (pose_3, covariance)
+                }
+            },
             None => (refined_pose, covariance),
         };
 
@@ -1445,6 +1459,11 @@ impl RobustPoseSolver {
         };
 
         let (mut cur_cost, mut cur_jtj, mut cur_jtr) = compute_equations(&pose);
+        // See `pose_weighted.rs:refine_pose_lm_weighted_with_info` for
+        // rationale: bail out after 3 consecutive Cholesky failures so a
+        // persistently-singular damped Hessian doesn't burn MAX_ITERS
+        // before triggering the NaN-cov sentinel.
+        let mut consecutive_chol_failures: u8 = 0;
 
         for _iter in 0..20 {
             if cur_jtr.amax() < 1e-8 {
@@ -1458,6 +1477,7 @@ impl RobustPoseSolver {
             }
 
             if let Some(chol) = jtj_damped.cholesky() {
+                consecutive_chol_failures = 0;
                 let delta = chol.solve(&cur_jtr);
                 let twist = Vector3::new(delta[3], delta[4], delta[5]);
                 let dq = UnitQuaternion::from_scaled_axis(twist);
@@ -1487,11 +1507,25 @@ impl RobustPoseSolver {
                     nu *= 2.0;
                 }
             } else {
+                consecutive_chol_failures += 1;
+                if consecutive_chol_failures >= 3 {
+                    break;
+                }
                 lambda *= 10.0;
             }
         }
 
-        let covariance = cur_jtj.try_inverse().unwrap_or_else(Matrix6::zeros);
+        // Singular OR near-singular `JᵀWJ` (e.g. degenerate inlier geometry
+        // that the LO-RANSAC gate failed to reject) makes the
+        // inverse-Hessian covariance ill-defined. `try_inverse` only
+        // catches EXACT singularity (LU zero pivot); near-singular Hessians
+        // invert to finite-but-absurd matrices (~1e15-1e30). Emit a
+        // NaN-filled sentinel in both cases; downstream consumers branch
+        // on `cov[(0,0)].is_nan()`.
+        let covariance = match cur_jtj.try_inverse() {
+            Some(inv) if inv.iter().all(|v| v.is_finite()) => inv,
+            _ => Matrix6::from_element(f64::NAN),
+        };
         (pose, covariance)
     }
 }
@@ -2160,6 +2194,49 @@ mod tests {
                     "covariance must be symmetric: [{i},{j}]={} ≠ [{j},{i}]={}",
                     cov[(i, j)],
                     cov[(j, i)]
+                );
+            }
+        }
+    }
+
+    /// Empty inlier mask drives `JᵀWJ` to all-zero (rank 0). The covariance
+    /// step must then produce a NaN-filled sentinel rather than the legacy
+    /// zero matrix that falsely advertised a perfectly known pose.
+    #[test]
+    fn test_refine_aw_lm_singular_returns_nan_covariance() {
+        let config = math_test_config();
+        let estimator = BoardEstimator::new(Arc::clone(&config));
+        let intrinsics = test_intrinsics();
+        let pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
+        let (mut batch, num_valid) = build_synthetic_batch(&config.obj_points, &pose, &intrinsics);
+        let v = batch.partition(num_valid);
+        let view = batch.view(v);
+
+        let (img, obj, info) =
+            build_correspondences_from_batch(&config.obj_points, &view, &estimator);
+        let corr = PointCorrespondences {
+            image_points: &img,
+            object_points: &obj,
+            information_matrices: &info,
+            group_size: 4,
+        };
+        // All-zero mask ⇒ zero `JᵀWJ` ⇒ singular.
+        let no_inliers = [0u64; 16];
+
+        let solver = RobustPoseSolver::new();
+        let (_, cov) = solver.refine_aw_lm(&pose, &corr, &intrinsics, &no_inliers);
+
+        assert!(
+            cov[(0, 0)].is_nan(),
+            "expected NaN-sentinel covariance for singular JᵀWJ, got cov[0,0]={}",
+            cov[(0, 0)]
+        );
+        for r in 0..6 {
+            for c in 0..6 {
+                assert!(
+                    cov[(r, c)].is_nan(),
+                    "all entries must be NaN: cov[{r},{c}]={}",
+                    cov[(r, c)]
                 );
             }
         }

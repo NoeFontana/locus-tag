@@ -218,8 +218,18 @@ class CharucoTelemetryResult:
     """Debug telemetry from :meth:`CharucoRefiner.estimate`."""
     @property
     def rejected_saddles(self) -> npt.NDArray[np.float32]: ...  # (R, 2)
+    # Structure-tensor determinant for the low-det rejection lane (reason
+    # code 0); NaN for entries from the singular-covariance lane (reason
+    # code 1). Always gate aggregations on `rejected_reasons`.
     @property
     def rejected_determinants(self) -> npt.NDArray[np.float32]: ...  # (R,)
+    # Per-rejection reason code: 0 = LowStructureTensorDet,
+    # 1 = SingularCovariance. The SingularCovariance lane is currently
+    # unreachable on the production kernel (Tikhonov invariant) but
+    # recorded distinctly so a future weakening of the regularisation
+    # is observable via this discriminator.
+    @property
+    def rejected_reasons(self) -> npt.NDArray[np.uint8]: ...  # (R,)
 
 class CharucoEstimateResult:
     """Typed result from :meth:`CharucoRefiner.estimate`."""
@@ -235,6 +245,9 @@ class CharucoEstimateResult:
     def saddle_obj(self) -> npt.NDArray[np.float64]: ...  # (S, 3)
     @property
     def board_pose(self) -> npt.NDArray[np.float64] | None: ...  # (7,) [tx,ty,tz,qx,qy,qz,qw]
+    # `None` if no board was estimated OR the LM Hessian was singular
+    # (the pose still ships as a best-effort estimate). Returned arrays
+    # are guaranteed to be finite — NaN sentinels are surfaced as `None`.
     @property
     def board_cov(self) -> npt.NDArray[np.float64] | None: ...  # (6, 6)
     @property
@@ -248,6 +261,9 @@ class BoardEstimateResult:
     def corners(self) -> npt.NDArray[np.float32]: ...  # (N, 4, 2)
     @property
     def board_pose(self) -> npt.NDArray[np.float64] | None: ...  # (7,) [tx,ty,tz,qx,qy,qz,qw]
+    # `None` if no board was estimated OR the LM Hessian was singular
+    # (the pose still ships as a best-effort estimate). Returned arrays
+    # are guaranteed to be finite — NaN sentinels are surfaced as `None`.
     @property
     def board_cov(self) -> npt.NDArray[np.float64] | None: ...  # (6, 6)
 

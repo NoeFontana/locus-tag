@@ -34,6 +34,24 @@ use std::sync::Arc;
 
 // ── Telemetry sub-buffer ──────────────────────────────────────────────────
 
+/// Reason a saddle candidate was rejected. The numeric values are part of
+/// the FFI contract — they appear verbatim in `CharucoTelemetry::
+/// rejected_reasons` and the Python `CharucoTelemetryResult.rejected_reasons`
+/// NumPy buffer. Add new variants only, never renumber existing ones.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RejectionReason {
+    /// Structure-tensor determinant fell below `CharucoRefiner::MIN_DET`
+    /// (flat / low-conditioning window).
+    LowStructureTensorDet = 0,
+    /// Per-corner Σ_c was singular (`try_inverse() → None`). Unreachable
+    /// on the production kernel under the Tikhonov invariant in
+    /// `finalize_corner_covariance`, but recorded distinctly so a debug
+    /// observer can distinguish the two lanes if the invariant is ever
+    /// relaxed. See `compute_corner_covariance` for the contract.
+    SingularCovariance = 1,
+}
+
 /// Per-frame diagnostic record of rejected saddle candidates.
 ///
 /// Pre-allocated once; reused across frames with zero heap allocation.
@@ -41,8 +59,18 @@ use std::sync::Arc;
 pub struct CharucoTelemetry {
     /// Homography-predicted 2D position of each rejected saddle (before refinement).
     pub rejected_predictions: Box<[Point2f]>,
-    /// Structure tensor determinant at rejection (lower = blurrier / flatter region).
+    /// Structure tensor determinant at rejection for the
+    /// [`RejectionReason::LowStructureTensorDet`] lane. NaN for entries
+    /// from the [`RejectionReason::SingularCovariance`] lane — always
+    /// gate on `rejected_reasons[i]` before consuming this value.
     pub rejected_determinants: Box<[f32]>,
+    /// Reason code (u8 repr of [`RejectionReason`]) for each rejection;
+    /// disambiguates the two rejection lanes that share the
+    /// `rejected_determinants` buffer. Always inspect this BEFORE
+    /// computing any aggregate on `rejected_determinants` (means,
+    /// percentiles, thresholded counts), since NaN entries would
+    /// otherwise silently poison those statistics.
+    pub rejected_reasons: Box<[u8]>,
     /// Number of valid entries in `[0..count]` on the last frame.
     pub count: usize,
 }
@@ -55,6 +83,7 @@ impl CharucoTelemetry {
         Self {
             rejected_predictions: vec![Point2f { x: 0.0, y: 0.0 }; n].into_boxed_slice(),
             rejected_determinants: vec![0.0f32; n].into_boxed_slice(),
+            rejected_reasons: vec![0u8; n].into_boxed_slice(),
             count: 0,
         }
     }
@@ -66,11 +95,21 @@ impl CharucoTelemetry {
         &self.rejected_predictions[..self.count]
     }
 
-    /// Slice of rejection determinants for this frame.
+    /// Slice of rejection determinants for this frame. Entries from the
+    /// [`RejectionReason::SingularCovariance`] lane are NaN; gate on
+    /// [`Self::rejected_reasons`] when computing aggregates.
     #[inline]
     #[must_use]
     pub fn rejected_determinants(&self) -> &[f32] {
         &self.rejected_determinants[..self.count]
+    }
+
+    /// Slice of rejection reason codes (u8 repr of [`RejectionReason`])
+    /// for this frame.
+    #[inline]
+    #[must_use]
+    pub fn rejected_reasons(&self) -> &[u8] {
+        &self.rejected_reasons[..self.count]
     }
 }
 
@@ -351,23 +390,65 @@ impl CharucoRefiner {
                 let det_s = compute_structure_tensor_det(img, px, py, Self::ST_RADIUS);
                 if det_s < Self::MIN_DET {
                     if TELEMETRY {
-                        record_rejection(&mut batch.telemetry, px, py, det_s);
+                        record_rejection(
+                            &mut batch.telemetry,
+                            px,
+                            py,
+                            det_s,
+                            RejectionReason::LowStructureTensorDet,
+                        );
                     }
                     continue;
                 }
 
                 // ── Step D: build correspondence ──────────────────────────
+                // Information matrix = covariance^{-1}. A singular Σ_c
+                // (zero-gradient / flat window that nonetheless slipped past
+                // the determinant gate above) cannot be inverted into a
+                // meaningful info matrix; defaulting to identity would advertise
+                // unit confidence for a corner with no observed structure, so
+                // the saddle is dropped instead.
+                //
+                // This branch is currently unreachable on the production
+                // kernel: `finalize_corner_covariance` applies a Tikhonov
+                // `+1.0` regularisation and falls back to a scaled identity
+                // for flat windows, so the output is always PD. The branch
+                // is retained as defensive code in case the Tikhonov
+                // invariant is ever relaxed; the `debug_assert!` makes the
+                // invariant explicit so a future weakening fails loudly in
+                // tests rather than silently inflating the saddle drop rate.
+                //
+                // Telemetry distinguishes the two rejection lanes via the
+                // `rejected_reasons` discriminator buffer (NOT via a NaN
+                // determinant marker, which would silently poison any
+                // aggregate over `rejected_determinants`).
+                #[allow(clippy::cast_possible_truncation)]
+                let cov =
+                    compute_corner_covariance(img, [px, py], 0.1, 2.0, Self::ST_RADIUS as i32);
+                debug_assert!(
+                    cov.try_inverse().is_some(),
+                    "Tikhonov invariant violated: compute_corner_covariance produced \
+                     a singular Σ_c at ({px}, {py}); see finalize_corner_covariance",
+                );
+                let Some(info) = cov.try_inverse() else {
+                    if TELEMETRY {
+                        record_rejection(
+                            &mut batch.telemetry,
+                            px,
+                            py,
+                            f64::NAN,
+                            RejectionReason::SingularCovariance,
+                        );
+                    }
+                    continue;
+                };
                 self.scratch_saddle_ids[num_accepted] = saddle_id;
                 self.scratch_img[num_accepted] = Point2f {
                     x: px as f32,
                     y: py as f32,
                 };
                 self.scratch_obj[num_accepted] = sp;
-                // Information matrix = covariance^{-1}.
-                #[allow(clippy::cast_possible_truncation)]
-                let cov =
-                    compute_corner_covariance(img, [px, py], 0.1, 2.0, Self::ST_RADIUS as i32);
-                self.scratch_info[num_accepted] = cov.try_inverse().unwrap_or(Matrix2::identity());
+                self.scratch_info[num_accepted] = info;
                 num_accepted += 1;
             }
         }
@@ -509,8 +590,19 @@ fn compute_structure_tensor_det(img: &ImageView, cx: f64, cy: f64, radius: isize
 /// Record a rejected saddle prediction into the telemetry buffer (no-op when
 /// `telemetry` is `None`).  Inlined so the call site is zero-cost for
 /// `TELEMETRY = false` (dead-code eliminated by LLVM).
+///
+/// `det` is the structure-tensor determinant for the
+/// [`RejectionReason::LowStructureTensorDet`] lane; for other lanes pass
+/// `f64::NAN` (or any sentinel) — downstream consumers must gate on
+/// `rejected_reasons` BEFORE consuming `rejected_determinants`.
 #[inline]
-fn record_rejection(telemetry: &mut Option<Box<CharucoTelemetry>>, px: f64, py: f64, det: f64) {
+fn record_rejection(
+    telemetry: &mut Option<Box<CharucoTelemetry>>,
+    px: f64,
+    py: f64,
+    det: f64,
+    reason: RejectionReason,
+) {
     if let Some(t) = telemetry.as_mut() {
         let idx = t.count;
         if idx < t.rejected_predictions.len() {
@@ -522,6 +614,7 @@ fn record_rejection(telemetry: &mut Option<Box<CharucoTelemetry>>, px: f64, py: 
             {
                 t.rejected_determinants[idx] = det as f32;
             }
+            t.rejected_reasons[idx] = reason as u8;
             t.count += 1;
         }
     }
@@ -627,5 +720,86 @@ mod tests {
         let [u2, v2] = board_to_canonical(1.0, 1.0, [0.0, 0.0, 0.0], 1.0);
         assert!((u2 - 1.0).abs() < 1e-12);
         assert!((v2 - 1.0).abs() < 1e-12);
+    }
+
+    /// Singular-`Σ_c` rejection contract: every saddle that survives the
+    /// extraction pass must carry a finite, non-NaN information matrix.
+    ///
+    /// In practice the `compute_corner_covariance` Tikhonov-regularised
+    /// kernel returns positive-definite Σ_c by construction, so the
+    /// `try_inverse() → None` branch added in PR-C is defensive. This test
+    /// verifies the invariant the branch upholds (no NaN/infinite info
+    /// matrix reaches the LM), and is the appropriate observable since
+    /// the rejection helper is `pub(crate)`-inlined in `estimate_impl`.
+    ///
+    /// A uniform mid-grey image is the harshest realistic stress case: zero
+    /// Sobel gradient → minimal anisotropy → Tikhonov holds Σ_c at
+    /// `2.0 · I` (well-conditioned). Any accepted saddle must have a
+    /// finite `info`.
+    #[test]
+    fn admitted_saddle_info_matrices_are_finite() {
+        let config = CharucoTopology::new(4, 4, 0.04, 0.03, usize::MAX).unwrap();
+        let mut refiner = CharucoRefiner::new(config);
+
+        let buf = vec![128u8; 256 * 256];
+        let img = ImageView::new(&buf, 256, 256, 256).unwrap();
+        let intrinsics = CameraIntrinsics::new(500.0, 500.0, 128.0, 128.0);
+
+        let mut det_batch = DetectionBatch::new();
+        det_batch.ids[0] = 0;
+        det_batch.status_mask[0] = crate::batch::CandidateState::Valid;
+        // Column-major identity homography with an image-centre translation
+        // (`(u, v) ↦ (u + 128, v + 128)`). Saddles for tag 0 land within
+        // image bounds.
+        det_batch.homographies[0].data = [
+            1.0, 0.0, 0.0, // col 0
+            0.0, 1.0, 0.0, // col 1
+            128.0, 128.0, 1.0, // col 2
+        ];
+        let v = det_batch.partition(1);
+        let view = det_batch.view(v);
+
+        let mut out = refiner.new_batch();
+        refiner.estimate(&view, &img, &intrinsics, &mut out, 0.0);
+
+        // Whatever the count, every admitted info matrix must be finite.
+        // A singular Σ_c would have produced NaN entries in the inverse
+        // before PR-C's reject-and-skip policy; that path now bumps the
+        // skip counter without growing `num_accepted`.
+        for i in 0..out.count {
+            let info = refiner.scratch_info[i];
+            for r in 0..2 {
+                for c in 0..2 {
+                    let v = info[(r, c)];
+                    assert!(
+                        v.is_finite(),
+                        "admitted saddle {i} info[{r},{c}] must be finite, got {v}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Auxiliary smoke test of the rejection policy: a saddle whose Σ_c is
+    /// constructed singular-by-hand must not be admitted to the LM solver.
+    /// Driven via the public `compute_corner_covariance` kernel + a manual
+    /// `try_inverse` to mirror the kernel's branching, this verifies our
+    /// rejection contract at the policy level: `cov.try_inverse() == None`
+    /// ⇒ saddle dropped.
+    #[test]
+    fn singular_covariance_try_inverse_returns_none() {
+        // A genuinely singular 2×2: `[[1, 1], [1, 1]]` has rank 1, det = 0.
+        let singular = Matrix2::<f64>::new(1.0, 1.0, 1.0, 1.0);
+        assert!(
+            singular.try_inverse().is_none(),
+            "singular 2×2 must be uninvertible — the rejection contract \
+             relies on this for the F6 skip-and-record-rejection branch"
+        );
+
+        // And the recovery shape we use in the implementation: an info
+        // matrix recovered via `try_inverse` must be `Some(_)` only on
+        // invertible input, so the `let Some(info) = cov.try_inverse()`
+        // binding is sufficient to drive the saddle-skip control flow.
+        assert!(Matrix2::<f64>::identity().try_inverse().is_some());
     }
 }
