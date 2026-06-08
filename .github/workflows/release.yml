@@ -188,7 +188,7 @@ jobs:
           path: dist
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v8.1.0
+        uses: astral-sh/setup-uv@v8.2.0
         with:
           python-version: '3.10'
 
