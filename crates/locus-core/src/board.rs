@@ -1719,8 +1719,8 @@ mod tests {
         obj_points: &[Option<[[f64; 3]; 4]>],
         pose: &Pose,
         intrinsics: &CameraIntrinsics,
-    ) -> (DetectionBatch, usize) {
-        let mut batch = DetectionBatch::new();
+    ) -> (Box<DetectionBatch>, usize) {
+        let mut batch = DetectionBatch::new_boxed();
         let mut n = 0usize;
 
         let q = quat_from_so3(pose.rotation);
@@ -2250,7 +2250,7 @@ mod tests {
         let intrinsics = test_intrinsics();
 
         for n_valid in 0..4 {
-            let mut batch = DetectionBatch::new();
+            let mut batch = DetectionBatch::new_boxed();
             for i in 0..n_valid {
                 batch.ids[i] = i as u32;
                 batch.status_mask[i] = CandidateState::Valid;

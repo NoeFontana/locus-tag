@@ -211,8 +211,8 @@ pub fn extract_quads_soa(
             u.push(unrefined_pts);
         }
         // Skip telemetry writes when disabled: the columns retain their
-        // `DetectionBatch::new()` defaults (ROUTED_TO_STATIC, 0.0), preserving
-        // Static-mode byte-identity regardless of policy.
+        // `DetectionBatch::new_boxed()` defaults (ROUTED_TO_STATIC, 0.0),
+        // preserving Static-mode byte-identity regardless of policy.
         if debug_telemetry {
             batch.routed_to[i] = route_label;
             batch.ppb_estimate[i] = ppb_estimate;
