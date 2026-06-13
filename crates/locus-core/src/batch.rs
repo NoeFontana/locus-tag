@@ -501,4 +501,3 @@ impl DetectionBatch {
         }
     }
 }
-

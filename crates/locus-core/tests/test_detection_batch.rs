@@ -61,9 +61,12 @@ fn test_new_boxed_defaults_full_coverage() {
     assert_eq!(batch.ids[0], 0);
     assert_eq!(batch.ids[last], 0);
     assert_eq!(batch.payloads[0], 0);
-    assert_eq!(batch.error_rates[0], 0.0);
-    assert_eq!(batch.ppb_estimate[0], 0.0);
-    assert_eq!(batch.ppb_estimate[last], 0.0);
+    // Compare f32 zero-defaults by bit pattern: `new_zeroed` guarantees all
+    // bytes are 0, which for IEEE 754 means `+0.0`. `assert_eq!(_, 0.0)` would
+    // trip `clippy::float_cmp`.
+    assert_eq!(batch.error_rates[0].to_bits(), 0);
+    assert_eq!(batch.ppb_estimate[0].to_bits(), 0);
+    assert_eq!(batch.ppb_estimate[last].to_bits(), 0);
 
     // Non-zero column patched by `slice::fill`.
     assert_eq!(batch.routed_to[0], ROUTED_TO_STATIC);
