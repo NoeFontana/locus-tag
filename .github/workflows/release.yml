@@ -153,11 +153,17 @@ jobs:
       # pyo3 is pinned to abi3-py310 in crates/locus-py/Cargo.toml, so a
       # single wheel per (target, manylinux) covers Python 3.10+ — no
       # per-Py matrix.
+      # Pass `target` as the bare arch (not the full `<arch>-unknown-linux-gnu`
+      # triple) so maturin-action picks the glibc vs musl ABI from the
+      # `manylinux` flag. A pinned `-unknown-linux-gnu` target inside a
+      # musllinux_1_2 container ends up cross-linking with the host's
+      # x86_64 rust-lld against aarch64 objects — that's the failure
+      # mode v0.6.0-rc.1 exposed on the musllinux × aarch64 cell.
       - name: Build Wheels
         uses: PyO3/maturin-action@v1
         with:
           command: build
-          target: ${{ matrix.target }}-unknown-linux-gnu
+          target: ${{ matrix.target }}
           args: --out dist --release --manifest-path crates/locus-py/Cargo.toml
           manylinux: ${{ matrix.manylinux }}
 
