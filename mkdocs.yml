@@ -35,6 +35,15 @@ markdown_extensions:
   - pymdownx.arithmatex:
       generic: true
   - admonition
+  # Re-added narrowly so `docs/explanation/performance.md` can include
+  # the Performance Profiles + ICRA comparison tables from README.md
+  # via named markers (`<!-- --8<-- [start:performance-tables] -->`).
+  # Single source of truth for the benchmark numbers across the README
+  # (GitHub / PyPI) and the docs site. Do NOT widen to inline the entire
+  # README again — that was the original drift footgun.
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
 
 extra_javascript:
   - javascripts/mathjax.js
@@ -71,6 +80,7 @@ nav:
       - explanation/memory_model.md
       - explanation/algorithms.md
       - explanation/coordinates.md
+      - explanation/performance.md
   - Reference:
       - reference/api.md
   - Engineering (Internal):

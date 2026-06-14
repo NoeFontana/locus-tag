@@ -84,6 +84,7 @@ code.
 - [Memory model (SoA / arena / FFI)](explanation/memory_model.md)
 - [Algorithms](explanation/algorithms.md)
 - [Coordinate conventions](explanation/coordinates.md)
+- [Performance](explanation/performance.md) — headline recall / RMSE numbers and detector comparison.
 
 ### Reference
 Generated API documentation.
