@@ -15,7 +15,7 @@ use locus_core::bench_api::*;
 
 #[test]
 fn test_pose_refinement_soa_empty() {
-    let mut batch = DetectionBatch::new();
+    let mut batch = DetectionBatch::new_boxed();
     let intrinsics = CameraIntrinsics::new(800.0, 800.0, 320.0, 240.0);
 
     refine_poses_soa(&mut batch, 0, &intrinsics, 0.1, None);

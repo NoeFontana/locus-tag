@@ -16,7 +16,7 @@ use locus_core::bench_api::*;
 #[cfg(feature = "bench-internals")]
 #[test]
 fn test_partition_basic() {
-    let mut batch = DetectionBatch::new();
+    let mut batch = DetectionBatch::new_boxed();
     batch.status_mask[0] = CandidateState::Valid;
     batch.status_mask[1] = CandidateState::FailedDecode;
     batch.status_mask[2] = CandidateState::Valid;

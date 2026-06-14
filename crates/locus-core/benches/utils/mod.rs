@@ -103,8 +103,8 @@ impl BenchDataset {
     ///
     /// Populates `num_valid` candidates with Valid state and `num_active` with Active state.
     #[must_use]
-    pub fn generate_bench_batch(num_valid: usize, num_active: usize) -> DetectionBatch {
-        let mut batch = DetectionBatch::new();
+    pub fn generate_bench_batch(num_valid: usize, num_active: usize) -> Box<DetectionBatch> {
+        let mut batch = DetectionBatch::new_boxed();
         let total = (num_valid + num_active).min(1024);
 
         for i in 0..total {

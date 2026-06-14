@@ -9,6 +9,12 @@ Locus achieves its latency targets by strictly avoiding the system allocator (`m
   * ✅ **Required:** Use the `bumpalo::Bump` arena for all ephemeral per-frame data.
   * ✅ **Required:** Adhere to the [DetectionBatch (SoA) Contract](./detection-batch-contract.md) to ensure zero-allocation performance and cache efficiency.
   * ✅ **Allowed:** Stack-allocated structures like `SmallVec`, `arrayvec`, or fixed-size arrays `[T; N]`.
+* **Large SoA / batch structs (≥ 64 KB):**
+  * ❌ **Forbidden:** `pub fn new() -> Self` (or any other constructor that returns the struct by value) and `impl Default`.
+  * ❌ **Forbidden:** Holding such structs inline as a field of another type whose constructor returns by value.
+  * ✅ **Required:** Expose only `pub fn new_boxed() -> Box<Self>`, implemented via `Box::<Self>::new_zeroed().assume_init()` (or equivalent in-place heap initialization) so the struct never lives on the stack. Patch non-zero defaults in place via `slice::fill` after `assume_init`.
+  * ✅ **Required:** Owning types must hold the struct via `Box<T>` (e.g. `FrameContext.batch: Box<DetectionBatch>`).
+  * **Rationale:** Debug-mode `rustc` does not perform RVO/NRVO, so a by-value `-> Self` materializes the struct in *every* caller's stack frame along the construction chain. The Windows main-thread stack (1 MB) and `std::thread::spawn`'s default (2 MB) are easily overflowed once two or three frames each hold a copy. See `crates/locus-core/src/batch.rs::DetectionBatch::new_boxed` and the `detector_constructs_in_constrained_stack` regression test.
 
 ## 2. FFI & Zero-Copy Boundaries
 The Rust-Python boundary must be invisible to performance.

@@ -5,7 +5,7 @@ use locus_core::image::ImageView;
 
 #[test]
 fn test_contrast_gate_rejection() {
-    let mut batch = DetectionBatch::new();
+    let mut batch = DetectionBatch::new_boxed();
     // Create a low-contrast quad (e.g., all pixels are around 128)
     batch.corners[0] = [
         Point2f { x: 5.0, y: 5.0 },
@@ -33,7 +33,7 @@ fn test_contrast_gate_rejection() {
 
 #[test]
 fn test_contrast_gate_pass() {
-    let mut batch = DetectionBatch::new();
+    let mut batch = DetectionBatch::new_boxed();
     // Create a high-contrast quad
     batch.corners[0] = [
         Point2f { x: 5.0, y: 5.0 },

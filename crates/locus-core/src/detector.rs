@@ -9,11 +9,16 @@ use bumpalo::Bump;
 ///
 /// Owns the arena allocator and the fixed-capacity SoA batch. Construct one
 /// per thread and reuse across frames to preserve the zero-allocation hot-path.
+///
+/// `batch` is heap-allocated via `Box` because `DetectionBatch` is ~215 KB
+/// and would otherwise force every level of the construction call chain to
+/// hold a 215 KB stack copy under debug builds (rustc does not perform
+/// RVO/NRVO in debug). See [`DetectionBatch::new_boxed`].
 pub struct FrameContext {
     /// Memory pool for ephemeral per-frame allocations.
     pub arena: Bump,
     /// Vectorized storage for quad candidates and results.
-    pub batch: DetectionBatch,
+    pub batch: Box<DetectionBatch>,
     /// Reusable buffer for upscaling.
     pub upscale_buf: Vec<u8>,
 }
@@ -24,7 +29,7 @@ impl FrameContext {
     pub fn new() -> Self {
         Self {
             arena: Bump::new(),
-            batch: DetectionBatch::new(),
+            batch: DetectionBatch::new_boxed(),
             upscale_buf: Vec::new(),
         }
     }
@@ -134,31 +139,42 @@ impl Detector {
         self.engine.config()
     }
 
-    /// Returns a cloned copy of the internal detection batch.
+    /// Returns a cloned copy of the internal detection batch on the heap.
     /// Exclusively for benchmarking.
+    ///
+    /// Every SoA column in `DetectionBatch` must be copied here so callers
+    /// observe identical state to `self.ctx.batch`. If a new column is added
+    /// to `DetectionBatch`, mirror it here.
     #[cfg(feature = "bench-internals")]
     #[must_use]
-    pub fn bench_api_get_batch_cloned(&self) -> DetectionBatch {
-        let mut new_batch = DetectionBatch::new();
-        new_batch.corners.copy_from_slice(&self.ctx.batch.corners);
-        new_batch
-            .homographies
-            .copy_from_slice(&self.ctx.batch.homographies);
-        new_batch.ids.copy_from_slice(&self.ctx.batch.ids);
-        new_batch.payloads.copy_from_slice(&self.ctx.batch.payloads);
-        new_batch
-            .error_rates
-            .copy_from_slice(&self.ctx.batch.error_rates);
-        new_batch.poses.copy_from_slice(&self.ctx.batch.poses);
-        new_batch
-            .status_mask
-            .copy_from_slice(&self.ctx.batch.status_mask);
-        new_batch
-            .funnel_status
-            .copy_from_slice(&self.ctx.batch.funnel_status);
+    pub fn bench_api_get_batch_cloned(&self) -> Box<DetectionBatch> {
+        let src = &self.ctx.batch;
+        let mut new_batch = DetectionBatch::new_boxed();
+        new_batch.corners.copy_from_slice(&src.corners);
+        new_batch.homographies.copy_from_slice(&src.homographies);
+        new_batch.ids.copy_from_slice(&src.ids);
+        new_batch.payloads.copy_from_slice(&src.payloads);
+        new_batch.error_rates.copy_from_slice(&src.error_rates);
+        new_batch.poses.copy_from_slice(&src.poses);
+        new_batch.status_mask.copy_from_slice(&src.status_mask);
+        new_batch.funnel_status.copy_from_slice(&src.funnel_status);
         new_batch
             .corner_covariances
-            .copy_from_slice(&self.ctx.batch.corner_covariances);
+            .copy_from_slice(&src.corner_covariances);
+        new_batch.routed_to.copy_from_slice(&src.routed_to);
+        new_batch.ppb_estimate.copy_from_slice(&src.ppb_estimate);
+        new_batch
+            .pose_consistency_d2
+            .copy_from_slice(&src.pose_consistency_d2);
+        new_batch
+            .pose_consistency_d2_max_corner
+            .copy_from_slice(&src.pose_consistency_d2_max_corner);
+        new_batch
+            .ippe_branch_d2_ratio
+            .copy_from_slice(&src.ippe_branch_d2_ratio);
+        new_batch
+            .outlier_corner_idx
+            .copy_from_slice(&src.outlier_corner_idx);
         new_batch
     }
 }
@@ -1036,5 +1052,46 @@ mod tests {
         detector
             .detect(&img, Some(&intrinsics), None, false)
             .expect("edlines with pinhole intrinsics must succeed");
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod construction_tests {
+    use super::*;
+
+    /// Stack budget for the constrained-construction regression test.
+    ///
+    /// Sized to be smaller than `2 × sizeof(DetectionBatch)` (≈430 KB) so any
+    /// regression that puts a single `DetectionBatch` back on the stack —
+    /// plus the surrounding frames `Detector::with_config` builds — fails
+    /// fast. Wide enough (256 KB) to absorb routine debug frame overhead
+    /// without flaking on unrelated code changes.
+    const STACK_BUDGET_BYTES: usize = 256 * 1024;
+
+    /// Regression test for the debug-mode stack overflow that hit downstream
+    /// users on `v0.5.0-rc.1`: `Detector::with_config` used to materialize a
+    /// ~215 KB `DetectionBatch` on the stack at multiple frames of the
+    /// construction call chain (rustc does not perform RVO/NRVO in debug),
+    /// blowing the 1 MB Windows main-thread stack and the 2 MB default
+    /// `std::thread::spawn` stack.
+    ///
+    /// A regression aborts the test process via the OS guard-page handler
+    /// (Linux SIGSEGV / Windows `STATUS_STACK_OVERFLOW`) — the Rust runtime
+    /// calls `std::process::abort()`, so `join()` never returns and the test
+    /// runner reports a process crash rather than a graceful panic. That is
+    /// still a hard failure, just not one this `.expect` would see; the
+    /// `.expect` only fires for ordinary panics inside the spawned closure.
+    #[test]
+    fn detector_constructs_in_constrained_stack() {
+        std::thread::Builder::new()
+            .stack_size(STACK_BUDGET_BYTES)
+            .spawn(|| {
+                let mut detector = Detector::with_config(DetectorConfig::default());
+                detector.set_families(&[crate::config::TagFamily::AprilTag36h11]);
+            })
+            .expect("spawn constrained-stack thread")
+            .join()
+            .expect("constructor panicked inside the constrained-stack thread");
     }
 }

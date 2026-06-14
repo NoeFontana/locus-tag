@@ -16,7 +16,7 @@ use locus_core::{DetectorConfig, ImageView, TagFamily};
 
 #[test]
 fn test_decoding_soa_empty() {
-    let mut batch = DetectionBatch::new();
+    let mut batch = DetectionBatch::new_boxed();
     let data = vec![0u8; 100 * 100];
     let img = ImageView::new(&data, 100, 100, 100).unwrap();
     let config = DetectorConfig::default();

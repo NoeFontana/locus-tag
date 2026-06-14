@@ -203,7 +203,7 @@ fn build_decode_fixture() -> (Box<DetectionBatch>, Vec<u8>, usize) {
     let (data, gt_corners) =
         generate_synthetic_test_image(TagFamily::AprilTag36h11, 0, tag_size, canvas, 0.0);
 
-    let mut batch = Box::new(DetectionBatch::new());
+    let mut batch = DetectionBatch::new_boxed();
     let n: usize = 250;
     let active_count: usize = 50;
     // Candidate 0: the tag's ground-truth corners — decodes into the
@@ -262,7 +262,7 @@ fn build_decode_fixture() -> (Box<DetectionBatch>, Vec<u8>, usize) {
 /// Build a pose-refinement fixture: 50 Valid candidates with realistic
 /// corner coordinates so the LM solver actually iterates.
 fn build_pose_fixture() -> Box<DetectionBatch> {
-    let mut batch = Box::new(DetectionBatch::new());
+    let mut batch = DetectionBatch::new_boxed();
     let v: usize = 50;
     for i in 0..v {
         let base_x = (i % 16) as f32 * 14.0 + 4.0;

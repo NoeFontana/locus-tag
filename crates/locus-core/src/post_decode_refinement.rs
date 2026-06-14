@@ -211,7 +211,7 @@ mod tests {
     }
 
     fn synthetic_batch(corners: [Point2f; 4]) -> Box<DetectionBatch> {
-        let mut batch = Box::new(DetectionBatch::new());
+        let mut batch = DetectionBatch::new_boxed();
         batch.corners[0] = corners;
         batch.status_mask[0] = CandidateState::Valid;
         batch.homographies[0] = Matrix3x3 {

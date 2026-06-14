@@ -128,7 +128,7 @@ fn load_board_meta(dataset: &str) -> (Arc<AprilGridTopology>, CameraIntrinsics) 
 /// Captures a real `DetectionBatch` from the AprilGrid Golden v1 frame
 /// `scene_0010_cam_0000.png`. The detection pipeline runs once here (NOT
 /// timed by the caller's `bencher.bench_local`).
-fn setup_aprilgrid_estimator() -> (BoardEstimator, CameraIntrinsics, DetectionBatch, usize) {
+fn setup_aprilgrid_estimator() -> (BoardEstimator, CameraIntrinsics, Box<DetectionBatch>, usize) {
     const DATASET: &str = "aprilgrid_golden_v1_1920x1080";
     const IMAGE: &str = "scene_0010_cam_0000.png";
 

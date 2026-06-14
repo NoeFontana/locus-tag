@@ -128,7 +128,7 @@ macro_rules! hub_benchmarks {
                 );
 
                 bencher.bench_local(move || {
-                    let mut batch = DetectionBatch::new();
+                    let mut batch = DetectionBatch::new_boxed();
                     let _n = extract_quads_soa(
                         &mut batch,
                         &img,

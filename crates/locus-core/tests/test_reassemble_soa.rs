@@ -16,7 +16,7 @@ use locus_core::bench_api::*;
 
 #[test]
 fn test_reassemble_single() {
-    let mut batch = DetectionBatch::new();
+    let mut batch = DetectionBatch::new_boxed();
     batch.status_mask[0] = CandidateState::Valid;
     batch.ids[0] = 42;
     batch.corners[0] = [

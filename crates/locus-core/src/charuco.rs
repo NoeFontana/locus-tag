@@ -677,7 +677,7 @@ mod tests {
         let config = CharucoTopology::new(4, 4, 0.04, 0.03, usize::MAX).unwrap();
         let mut refiner = CharucoRefiner::new(config);
 
-        let det_batch = DetectionBatch::new();
+        let det_batch = DetectionBatch::new_boxed();
         let view = det_batch.view(0);
         let buf = vec![128u8; 256 * 256];
         let img = ImageView::new(&buf, 256, 256, 256).unwrap();
@@ -698,7 +698,7 @@ mod tests {
         let config = CharucoTopology::new(4, 4, 0.04, 0.03, usize::MAX).unwrap();
         let mut refiner = CharucoRefiner::new(config);
 
-        let det_batch = DetectionBatch::new();
+        let det_batch = DetectionBatch::new_boxed();
         let view = det_batch.view(0);
         let buf = vec![128u8; 256 * 256];
         let img = ImageView::new(&buf, 256, 256, 256).unwrap();
@@ -745,7 +745,7 @@ mod tests {
         let img = ImageView::new(&buf, 256, 256, 256).unwrap();
         let intrinsics = CameraIntrinsics::new(500.0, 500.0, 128.0, 128.0);
 
-        let mut det_batch = DetectionBatch::new();
+        let mut det_batch = DetectionBatch::new_boxed();
         det_batch.ids[0] = 0;
         det_batch.status_mask[0] = crate::batch::CandidateState::Valid;
         // Column-major identity homography with an image-centre translation

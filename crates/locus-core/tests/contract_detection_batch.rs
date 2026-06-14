@@ -98,9 +98,9 @@ fn seed_sentinels(batch: &mut DetectionBatch) {
             batch.outlier_corner_idx[i] = 222;
         }
         // Routed-to/ppb telemetry columns: distinctive sentinels that differ
-        // from both the `DetectionBatch::new()` defaults (ROUTED_TO_STATIC,
-        // 0.0) and the values a Phase A write would produce (0/1, >0). Any
-        // overwrite is caught.
+        // from both the `DetectionBatch::new_boxed()` defaults
+        // (ROUTED_TO_STATIC, 0.0) and the values a Phase A write would
+        // produce (0/1, >0). Any overwrite is caught.
         batch.routed_to[i] = 77;
         batch.ppb_estimate[i] = F32_SENTINEL;
     }
@@ -176,7 +176,7 @@ fn changed_columns(before: &DetectionBatch, after: &DetectionBatch) -> BTreeSet<
 
 /// Clone a `DetectionBatch` into a fresh heap allocation for before/after diff.
 fn snapshot(batch: &DetectionBatch) -> Box<DetectionBatch> {
-    let mut out = Box::new(DetectionBatch::new());
+    let mut out = DetectionBatch::new_boxed();
     out.corners.copy_from_slice(&batch.corners);
     out.homographies.copy_from_slice(&batch.homographies);
     out.ids.copy_from_slice(&batch.ids);
@@ -222,7 +222,7 @@ fn assert_writes_within(changed: &BTreeSet<Column>, allowed: &[Column], phase_na
 
 #[test]
 fn contract_phase_a_empty_label_result() {
-    let mut batch = Box::new(DetectionBatch::new());
+    let mut batch = DetectionBatch::new_boxed();
     seed_sentinels(&mut batch);
     let before = snapshot(&batch);
 
@@ -282,7 +282,7 @@ fn contract_phase_a_real_tag() {
         config.quad_min_area,
     );
 
-    let mut batch = Box::new(DetectionBatch::new());
+    let mut batch = DetectionBatch::new_boxed();
     seed_sentinels(&mut batch);
     let before = snapshot(&batch);
 
@@ -310,7 +310,7 @@ fn contract_phase_a_real_tag() {
 
 #[test]
 fn contract_phase_b_compute_homographies() {
-    let mut batch = Box::new(DetectionBatch::new());
+    let mut batch = DetectionBatch::new_boxed();
     seed_sentinels(&mut batch);
 
     batch.corners[0] = [
@@ -352,7 +352,7 @@ fn contract_phase_b_compute_homographies() {
 
 #[test]
 fn contract_phase_bd5_apply_funnel_gate() {
-    let mut batch = Box::new(DetectionBatch::new());
+    let mut batch = DetectionBatch::new_boxed();
     seed_sentinels(&mut batch);
 
     batch.corners[0] = [
@@ -400,7 +400,7 @@ fn contract_phase_bd5_apply_funnel_gate() {
 
 #[test]
 fn contract_phase_c_decode_batch_soa_empty() {
-    let mut batch = Box::new(DetectionBatch::new());
+    let mut batch = DetectionBatch::new_boxed();
     seed_sentinels(&mut batch);
     let before = snapshot(&batch);
 
@@ -432,7 +432,7 @@ fn contract_phase_c_decode_batch_soa_active() {
     let decoders = vec![family_to_decoder(TagFamily::AprilTag36h11)];
     let config = DetectorConfig::default();
 
-    let mut batch = Box::new(DetectionBatch::new());
+    let mut batch = DetectionBatch::new_boxed();
     seed_sentinels(&mut batch);
     batch.corners[0] = [
         Point2f { x: 20.0, y: 20.0 },
@@ -480,7 +480,7 @@ fn contract_phase_c_decode_batch_soa_active() {
 
 #[test]
 fn contract_phase_c5_refit_valid_corners_disabled_is_noop() {
-    let mut batch = Box::new(DetectionBatch::new());
+    let mut batch = DetectionBatch::new_boxed();
     seed_sentinels(&mut batch);
     batch.status_mask[0] = CandidateState::Valid;
     let before = snapshot(&batch);
@@ -511,7 +511,7 @@ fn contract_phase_c5_refit_valid_corners_active_writes() {
     }
     let img = ImageView::new(&data, size, size, size).expect("valid image");
 
-    let mut batch = Box::new(DetectionBatch::new());
+    let mut batch = DetectionBatch::new_boxed();
     seed_sentinels(&mut batch);
     batch.corners[0] = [
         Point2f { x: 20.0, y: 20.0 },
@@ -551,7 +551,7 @@ fn contract_phase_c5_refit_valid_corners_active_writes() {
 
 #[test]
 fn contract_phase_d_refine_poses_soa() {
-    let mut batch = Box::new(DetectionBatch::new());
+    let mut batch = DetectionBatch::new_boxed();
     seed_sentinels(&mut batch);
 
     batch.corners[0] = [

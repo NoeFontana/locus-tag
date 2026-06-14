@@ -61,6 +61,17 @@ pub enum FunnelStatus {
     RejectedSampling = 3,
 }
 
+// Soundness guard for `DetectionBatch::new_boxed`: the unsafe
+// `Box::<Self>::new_zeroed().assume_init()` path treats `status_mask` and
+// `funnel_status` slots as the default variants. If a future reorder or a
+// dropped `= 0` literal moves either variant off discriminant 0, the build
+// must fail here instead of silently producing invalid enum values at
+// runtime. Pinning the SAFETY contract at compile time.
+const _: () = {
+    assert!(CandidateState::Empty as u8 == 0);
+    assert!(FunnelStatus::None as u8 == 0);
+};
+
 /// A batched state container for fiducial marker detections using a Structure of Arrays (SoA) layout.
 /// This structure is designed for high-performance SIMD processing and zero heap allocations.
 #[repr(C, align(32))]
@@ -131,37 +142,46 @@ pub const ROUTED_TO_LOW: u8 = 0;
 pub const ROUTED_TO_HIGH: u8 = 1;
 
 impl DetectionBatch {
-    /// Creates a new DetectionBatch with all fields initialized to zero (Empty state).
+    /// Heap-allocate a default `DetectionBatch` without ever materializing it on the stack.
+    ///
+    /// The struct is ~215 KB (≈228 KB under `bench-internals`). Returning it by
+    /// value — which a naive `new() -> Self` did — forces every caller's stack
+    /// frame to hold a copy because debug-mode rustc does not perform RVO/NRVO.
+    /// Chained construction (`Detector::with_config` → `DetectorBuilder::build`
+    /// → `FrameContext::new` → `DetectionBatch::new`) accumulated several
+    /// copies and overflowed the main-thread stack on Windows (1 MB default)
+    /// and Linux worker threads (2 MB default).
+    ///
+    /// This version allocates a zeroed `Box<MaybeUninit<Self>>` directly on the
+    /// heap and patches the few non-zero defaults in place via `slice::fill`.
+    /// No `DetectionBatch`-sized value ever lives on the stack.
     #[must_use]
-    #[allow(clippy::large_stack_arrays)]
-    pub fn new() -> Self {
-        *Box::new(Self {
-            corners: [[Point2f { x: 0.0, y: 0.0 }; 4]; MAX_CANDIDATES],
-            homographies: [Matrix3x3 {
-                data: [0.0; 9],
-                padding: [0.0; 7],
-            }; MAX_CANDIDATES],
-            ids: [0; MAX_CANDIDATES],
-            payloads: [0; MAX_CANDIDATES],
-            error_rates: [0.0; MAX_CANDIDATES],
-            poses: [Pose6D {
-                data: [0.0; 7],
-                padding: 0.0,
-            }; MAX_CANDIDATES],
-            status_mask: [CandidateState::Empty; MAX_CANDIDATES],
-            funnel_status: [FunnelStatus::None; MAX_CANDIDATES],
-            corner_covariances: [[0.0; 16]; MAX_CANDIDATES],
-            #[cfg(feature = "bench-internals")]
-            pose_consistency_d2: [f32::NAN; MAX_CANDIDATES],
-            #[cfg(feature = "bench-internals")]
-            pose_consistency_d2_max_corner: [f32::NAN; MAX_CANDIDATES],
-            #[cfg(feature = "bench-internals")]
-            ippe_branch_d2_ratio: [f32::NAN; MAX_CANDIDATES],
-            #[cfg(feature = "bench-internals")]
-            outlier_corner_idx: [u8::MAX; MAX_CANDIDATES],
-            routed_to: [ROUTED_TO_STATIC; MAX_CANDIDATES],
-            ppb_estimate: [0.0; MAX_CANDIDATES],
-        })
+    #[allow(unsafe_code)]
+    pub fn new_boxed() -> Box<Self> {
+        // SAFETY: All-zero is a valid bit pattern for every field of
+        // `DetectionBatch`:
+        //  - `Point2f` / `Matrix3x3` / `Pose6D`: every component is `f32`
+        //    (`0.0` is a valid float, matches the previous explicit default).
+        //  - `[u32 / u64 / u8 / f32; N]` numeric arrays: zero matches the
+        //    previous explicit `0` / `0.0` defaults.
+        //  - `status_mask` / `funnel_status`: `#[repr(u8)]` enums whose
+        //    default variants (`CandidateState::Empty` and
+        //    `FunnelStatus::None`) both have discriminant `0`.
+        //  - `corner_covariances`: nested `[f32; 16]` arrays — zero matches.
+        // Fields whose default is non-zero (`routed_to`, and the four
+        // `bench-internals` NaN / `u8::MAX` fields) are patched below before
+        // the box is returned.
+        let mut boxed: Box<Self> = unsafe { Box::<Self>::new_zeroed().assume_init() };
+        // Patch non-zero defaults via in-place slice writes — no stack temp.
+        boxed.routed_to.fill(ROUTED_TO_STATIC);
+        #[cfg(feature = "bench-internals")]
+        {
+            boxed.pose_consistency_d2.fill(f32::NAN);
+            boxed.pose_consistency_d2_max_corner.fill(f32::NAN);
+            boxed.ippe_branch_d2_ratio.fill(f32::NAN);
+            boxed.outlier_corner_idx.fill(u8::MAX);
+        }
+        boxed
     }
     /// Returns the maximum capacity of the batch.
     #[must_use]
@@ -479,11 +499,5 @@ impl DetectionBatch {
             rejected_error_rates: &self.error_rates[v_clamped..n_clamped],
             rejected_funnel_status: &self.funnel_status[v_clamped..n_clamped],
         }
-    }
-}
-
-impl Default for DetectionBatch {
-    fn default() -> Self {
-        Self::new()
     }
 }
