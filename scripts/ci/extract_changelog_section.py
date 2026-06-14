@@ -38,7 +38,7 @@ HEADING_RE = re.compile(
 )
 
 
-def _heading_id(match: "re.Match[str]") -> str:
+def _heading_id(match: re.Match[str]) -> str:
     return match.group("bracketed") or match.group("bare")
 
 
@@ -63,10 +63,7 @@ def extract(version: str, changelog: str) -> str:
             # Advance to the start of the line *after* the heading so
             # the body never includes the heading's date suffix.
             after_heading = changelog.find("\n", match.end())
-            if after_heading == -1:
-                start = len(changelog)
-            else:
-                start = after_heading + 1
+            start = len(changelog) if after_heading == -1 else after_heading + 1
             next_heading = HEADING_RE.search(changelog, start)
             end = next_heading.start() if next_heading else len(changelog)
             body = changelog[start:end].strip()
@@ -75,10 +72,7 @@ def extract(version: str, changelog: str) -> str:
                     f"error: CHANGELOG section ## {target} is empty",
                 )
             preamble = (
-                f"_Release candidate {version} — notes from"
-                f" `## {target}`._\n\n"
-                if is_rc
-                else ""
+                f"_Release candidate {version} — notes from `## {target}`._\n\n" if is_rc else ""
             )
             return preamble + body + "\n"
 
