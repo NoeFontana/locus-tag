@@ -822,10 +822,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#headline-metrics" class="md-nav__link">
+  <a href="#profiles" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Headline metrics
+        Profiles
       
     </span>
   </a>
@@ -841,14 +841,36 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Performance Profiles">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-benchmark-suites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two benchmark suites
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Two benchmark suites">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#comparison-icra-2020-forward-50-images" class="md-nav__link">
+  <a href="#icra-2020-forward-community-benchmark" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Comparison (ICRA 2020 Forward - 50 images)
+        ICRA 2020 Forward (community benchmark)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#render-tag-high-fidelity-blender-psf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        render-tag (high-fidelity Blender + PSF)
       
     </span>
   </a>
@@ -1831,10 +1853,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#headline-metrics" class="md-nav__link">
+  <a href="#profiles" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Headline metrics
+        Profiles
       
     </span>
   </a>
@@ -1850,14 +1872,36 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Performance Profiles">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-benchmark-suites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two benchmark suites
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Two benchmark suites">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#comparison-icra-2020-forward-50-images" class="md-nav__link">
+  <a href="#icra-2020-forward-community-benchmark" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Comparison (ICRA 2020 Forward - 50 images)
+        ICRA 2020 Forward (community benchmark)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#render-tag-high-fidelity-blender-psf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        render-tag (high-fidelity Blender + PSF)
       
     </span>
   </a>
@@ -1923,91 +1967,197 @@
 
 
 <h1 id="performance">Performance</h1>
-<p>Locus is built for bounded latency and high recall on real-world
-robotics / AV camera imagery. This page surfaces the headline
-numbers; the <a href="../../engineering/benchmarking/">benchmarking deep-dive</a>
-documents methodology, hardware, and per-stage timing.</p>
-<h2 id="headline-metrics">Headline metrics</h2>
-<p>The tables below are reproduced from the project README so the
-numbers stay consistent across the GitHub landing, the PyPI page, and
-the docs site (snippet-included from <code>README.md</code> — single source of
-truth).</p>
+<p>Locus optimises for <strong>high recall</strong>, <strong>low corner RMSE</strong>, and <strong>low
+latency</strong>. This page surfaces the headline numbers across the two
+datasets we regression-test against. The
+<a href="../../engineering/benchmarking/">benchmarking deep-dive</a> documents
+methodology, hardware, and per-stage timing.</p>
+<h2 id="profiles">Profiles</h2>
+<p>The shipped profiles are authored in JSON
+(<code>crates/locus-core/profiles/*.json</code>) and embedded into the wheel.
+Start from a profile, edit one or two fields, and hand the result
+back to the detector — see the <a href="../../tutorials/guide/">Detection guide</a>
+for the <code>DetectorConfig</code> API.</p>
 <h2 id="performance-profiles">Performance Profiles</h2>
-<p>Profiles are selected by name; the three shipped profiles are authored as
-JSON files and embedded in the wheel.</p>
+<p>Locus optimises for <strong>high recall</strong>, <strong>low corner RMSE</strong>, and <strong>low
+latency</strong>. Profiles are selected by name; the three shipped profiles
+are authored as JSON files and embedded in the wheel.</p>
 <table>
 <thead>
 <tr>
 <th style="text-align: left;"><code>profile</code></th>
-<th style="text-align: center;">ICRA 2020 Recall</th>
-<th style="text-align: center;">Corner RMSE</th>
-<th style="text-align: left;">Primary Characteristics</th>
+<th style="text-align: left;">Primary characteristic</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align: left;"><code>"standard"</code></td>
-<td style="text-align: center;"><strong>96.2%</strong></td>
-<td style="text-align: center;">0.315 px</td>
-<td style="text-align: left;">Production default; balanced recall/precision.</td>
+<td style="text-align: left;">Production default; balanced recall + precision.</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>"grid"</code></td>
-<td style="text-align: center;"><strong>91.4%</strong></td>
-<td style="text-align: center;">0.458 px</td>
-<td style="text-align: left;">4-connectivity for touching tags (checkerboards).</td>
+<td style="text-align: left;">4-connectivity for touching tags — ChArUco / AprilGrid boards.</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>"high_accuracy"</code></td>
-<td style="text-align: center;">46.3%*</td>
-<td style="text-align: center;"><strong>0.16 px</strong></td>
-<td style="text-align: left;">EdLines + GN optimizer; prioritized for metrology.</td>
+<td style="text-align: left;">EdLines + axis-imbalance gate + adaptive PPB; prioritises pose precision and tail-rotation control.</td>
 </tr>
 </tbody>
 </table>
-<p><em>*<code>high_accuracy</code> is optimized for high-resolution near-field images (Hugging Face Hub datasets).</em></p>
-<h3 id="comparison-icra-2020-forward-50-images">Comparison (ICRA 2020 Forward - 50 images)</h3>
+<h2 id="two-benchmark-suites">Two benchmark suites</h2>
+<p>The performance numbers below come from two regression-tested
+benchmarks that exercise complementary regimes. We track them
+independently and <strong>do not trade gains on one for regressions on the
+other</strong> (see <code>feedback_dataset_priority</code> in the engineering memory).</p>
+<table>
+<thead>
+<tr>
+<th>Suite</th>
+<th>Frames</th>
+<th>Render quality</th>
+<th>Ground truth</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ICRA 2020 Forward</td>
+<td>50</td>
+<td>Lower-fidelity synthetic</td>
+<td>Tag IDs + corners</td>
+<td>Continuity with the published AprilTag-community comparison</td>
+</tr>
+<tr>
+<td><code>render-tag</code></td>
+<td>50 (1080p subset)</td>
+<td>High-fidelity Blender + PSF + sensor model</td>
+<td>IDs + corners + 6-DOF pose</td>
+<td>Pose-accuracy SOTA tracking, internal CI gate</td>
+</tr>
+</tbody>
+</table>
+<p>Snippet-included from the README so the numbers stay consistent
+across the GitHub landing, the PyPI page, and this docs page —
+single source of truth.</p>
+<h3 id="icra-2020-forward-community-benchmark">ICRA 2020 Forward (community benchmark)</h3>
+<p><a href="https://github.com/aprilrobotics/apriltag-comparison">ICRA 2020 Forward</a>
+is the closest thing the AprilTag community has to a neutral
+benchmark. The 50-frame subset we report on is <strong>synthetic</strong> (not
+real-camera), but it's public, peer-reviewed, and the basis for prior
+detector comparisons — we report on it for continuity with the
+literature.</p>
 <table>
 <thead>
 <tr>
 <th style="text-align: left;">Detector</th>
 <th style="text-align: center;">Recall</th>
-<th style="text-align: center;">RMSE</th>
+<th style="text-align: center;">Corner RMSE</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;"><strong>Locus (<code>Standard</code>)</strong></td>
-<td style="text-align: center;"><strong>96.2%</strong></td>
+<td style="text-align: left;"><strong>Locus (<code>standard</code>)</strong></td>
+<td style="text-align: center;"><strong>96.2 %</strong></td>
 <td style="text-align: center;">0.315 px</td>
 </tr>
 <tr>
 <td style="text-align: left;">AprilTag 3 (UMich)</td>
-<td style="text-align: center;">62.3%</td>
-<td style="text-align: center;">0.22 px</td>
+<td style="text-align: center;">62.3 %</td>
+<td style="text-align: center;"><strong>0.22 px</strong></td>
 </tr>
 <tr>
-<td style="text-align: left;">OpenCV</td>
-<td style="text-align: center;">33.2%</td>
+<td style="text-align: left;">OpenCV (<code>cv2.aruco</code>)</td>
+<td style="text-align: center;">33.2 %</td>
 <td style="text-align: center;">0.92 px</td>
 </tr>
 </tbody>
 </table>
+<h3 id="render-tag-high-fidelity-blender-psf">render-tag (high-fidelity Blender + PSF)</h3>
+<p><code>render-tag</code> is our in-house render suite — Blender with calibrated
+PSF, exposure, sensor noise, and lens distortion models. The
+detection scenes carry pixel-accurate ground truth for both corners
+and 6-DOF pose, which lets us report translation / rotation
+percentiles in addition to recall. <strong>Numbers below are from the
+2026-04-25 SOTA snapshot on the 1080p 50-scene subset</strong> (see
+<a href="https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/render_tag_sota_20260425.md"><code>docs/engineering/benchmarking/render_tag_sota_20260425.md</code></a>
+for methodology).</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Detector</th>
+<th style="text-align: center;">Recall</th>
+<th style="text-align: center;">Trans p50</th>
+<th style="text-align: center;">Trans p99</th>
+<th style="text-align: center;">Rot p50</th>
+<th style="text-align: center;">Rot p99</th>
+<th style="text-align: center;">Latency</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Locus (<code>high_accuracy</code>)</strong></td>
+<td style="text-align: center;"><strong>100 %</strong></td>
+<td style="text-align: center;"><strong>0.4 mm</strong></td>
+<td style="text-align: center;"><strong>25.6 mm</strong></td>
+<td style="text-align: center;"><strong>0.058 °</strong></td>
+<td style="text-align: center;"><strong>1.897 °</strong></td>
+<td style="text-align: center;"><strong>11.67 ms</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus (<code>standard</code>)</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">3.5 mm</td>
+<td style="text-align: center;">50.3 mm</td>
+<td style="text-align: center;">0.288 °</td>
+<td style="text-align: center;">27.248 °</td>
+<td style="text-align: center;">19.24 ms</td>
+</tr>
+<tr>
+<td style="text-align: left;">AprilTag-C (pupil)</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">2.9 mm</td>
+<td style="text-align: center;">54.4 mm</td>
+<td style="text-align: center;">0.061 °</td>
+<td style="text-align: center;">65.365 °</td>
+<td style="text-align: center;">25.54 ms</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV (<code>cv2.aruco</code>)</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">3.4 mm</td>
+<td style="text-align: center;">141.4 mm</td>
+<td style="text-align: center;">0.113 °</td>
+<td style="text-align: center;">1.228 °</td>
+<td style="text-align: center;">44.45 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Per-percentile is load-bearing: AprilTag-C's median rotation is the
+best in class (0.06 °) but its p99 explodes to 65 ° on the
+symmetric-tag IRLS branch-ambiguity failures.</p>
 <h2 id="how-to-read-these-numbers">How to read these numbers</h2>
 <ul>
-<li><strong>Recall</strong> measures the fraction of ground-truth tags the detector
-  correctly localised and decoded (correct ID + four corners within
-  RMSE budget). 100 % is unachievable in practice — heavy motion blur,
-  oblique incidence, and partial occlusion cap real-world recall.</li>
-<li><strong>Corner RMSE</strong> is the root-mean-square Euclidean error of detected
-  corners against ground truth, in pixels. Lower is better for
-  pose-recovery accuracy; the LM solver consumes the per-corner
-  covariance and propagates it into the 6-DOF pose covariance.</li>
-<li><strong>ICRA 2020 Forward</strong> is a public, peer-reviewed dataset of 50
-  real-camera frames. We use it because it's the closest thing the
-  community has to a neutral benchmark; render-tag and Hugging Face
-  Hub datasets exercise different regimes (see
-  <a href="../../engineering/benchmarking/">benchmarking</a>).</li>
+<li><strong>Recall</strong> — fraction of ground-truth tags whose ID was correctly
+  decoded. Recall counts a detection toward the corner / pose
+  distributions even if its corners or pose are poor, so per-percentile
+  RMSE / translation / rotation columns are how we surface
+  fail-loudly cases (an <code>r p99</code> of 65 ° is the symptom of a small
+  number of catastrophic branch-ambiguity failures, not a
+  distribution-wide regression).</li>
+<li><strong>Corner RMSE</strong> — root-mean-square Euclidean error of detected
+  corners against ground truth, in pixels. Lower is better; the LM
+  pose solver consumes the per-corner covariance and propagates it
+  into the 6-DOF pose covariance, so corner RMSE is a leading
+  indicator of pose precision.</li>
+<li><strong>Translation / rotation percentiles</strong> — <code>t p99</code> and <code>r p99</code> are
+  the <strong>tail metrics</strong> we care most about for AV / robotics work.
+  A robot that loses pose once per thousand frames is more dangerous
+  than one that's slightly less accurate on every frame. Medians
+  hide tail failures; we never accept a profile change that
+  improves median at the cost of p99.</li>
+<li><strong>Latency</strong> — wall-clock per-frame on a single rayon thread
+  (<code>RAYON_NUM_THREADS=1</code>). Multi-thread scaling is documented in
+  the <a href="../../how-to/concurrent_detection/">Concurrent detection how-to</a>.</li>
 </ul>
 <h2 id="choosing-a-profile">Choosing a profile</h2>
 <table>
@@ -2030,22 +2180,20 @@ JSON files and embedded in the wheel.</p>
 <td>4-connectivity recovers touching tags that <code>"standard"</code> rejects as overlapping.</td>
 </tr>
 <tr>
-<td>Sub-pixel metrology, near-field</td>
+<td>Sub-pixel metrology, high-resolution near-field, AV pose</td>
 <td><code>"high_accuracy"</code></td>
-<td>EdLines + GN optimizer trades recall for ~2× corner precision.</td>
+<td>EdLines + adaptive PPB + axis-imbalance gate. <strong>Best on <code>render-tag</code> across every translation percentile</strong>; trades 6 pp of ICRA recall for the pose-tail control.</td>
 </tr>
 </tbody>
 </table>
-<p>The shipped profiles are authored in JSON
-(<code>crates/locus-core/profiles/*.json</code>) and embedded into the wheel.
-Start from a profile, edit a single field, and hand the result back to
-the detector — see the <a href="../../tutorials/guide/">Detection guide</a> for
-the <code>DetectorConfig</code> API.</p>
 <h2 id="related-reading">Related reading</h2>
 <ul>
-<li><a href="../../engineering/benchmarking/">Benchmarking methodology</a> — how the
-  recall / RMSE numbers are measured, what hardware they ran on, and
-  the regression suite that keeps them honest.</li>
+<li><a href="../../engineering/benchmarking/">Benchmarking methodology</a> — how
+  the recall / RMSE / latency numbers are measured, what hardware
+  they ran on, and the regression suite that keeps them honest.</li>
+<li><a href="https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/render_tag_sota_20260425.md"><code>render_tag_sota_20260425.md</code></a>
+  — the snapshot the render-tag table above is sourced from, with
+  detector-by-detector deep dive on rotation tails and recall gaps.</li>
 <li><a href="../architecture/">System architecture</a> — why the pipeline is
   shaped to release the GIL and avoid the system allocator on the
   hot path.</li>
