@@ -1,64 +1,52 @@
 ---
 name: Release Process
-description: Manage the end-to-end release lifecycle using Unified Lockstep Versioning and Release Branches.
+description: Cut a locus-tag release via cargo-release; CI handles publishing and the GitHub Release page.
 ---
 
-# Release Process Skill
+# Release skill
 
-This skill ensures that releases are performed safely, consistently, and according to the project's versioning standards.
+This skill is a quick-reference for the operator. The full procedure —
+including OIDC bootstrap, rollback, and the topology of every CI job —
+lives in **[`docs/engineering/release-runbook.md`](../../../docs/engineering/release-runbook.md)**.
+Read the runbook first when in doubt.
 
-## 1. Pre-Release Validation
-Before initiating a release, ensure the following state is achieved:
+## Pre-flight
+1. Working tree clean, on latest `main`, tests green.
+2. `## Unreleased` block in `CHANGELOG.md` contains real entries for
+   the new version. `create-github-release` fails if the resulting
+   notes section is empty.
 
-- [ ] All feature branches are merged into `main` via Pull Request.
-- [ ] Working directory is clean (`git status`).
-- [ ] You are on the `main` branch with the latest code pulled.
-- [ ] `testing` skill has been successfully completed on the latest `main`.
-- [ ] `linting` and `type_check` workflows have passed.
+## Cut the bump
 
-## 2. Versioning Strategy
-We use **Unified Lockstep Versioning**. All components are versioned together.
-
-- **Patch (0.1.x)**: Performance improvements, new methods, bug fixes.
-- **Minor (0.x.0)**: Breaking changes, API renames, structural shifts.
-
-## 3. Execution Flow
-
-### Phase A: Branching
-Create a dedicated release branch from the latest `main`:
 ```bash
 git checkout -b release-vX.Y.Z
+
+# patch (perf / bugfix)
+cargo release patch --execute --no-publish \
+  --allow-branch release-vX.Y.Z --config release.toml
+
+# minor (breaking / structural)
+cargo release minor --execute --no-publish \
+  --allow-branch release-vX.Y.Z --config release.toml
 ```
 
-### Phase B: Version Bump & Tagging
-Execute the release locally using `cargo release`. 
-> **Note:** Always use `--no-publish` to delegate the actual publishing to GitHub Actions. Use `--allow-branch` to override default branch restrictions.
+Rename `## Unreleased` → `## [X.Y.Z] - YYYY-MM-DD` in `CHANGELOG.md`,
+start a fresh empty `## Unreleased` block, amend the commit, and push.
 
-**Scenario 1: Patch Release**
-```bash
-cargo release patch --execute --no-publish --allow-branch release-vX.Y.Z --config release.toml
-```
+## Verify
+- `gh run watch <release.yml run>` — all 8 jobs green.
+- GH Release page renders the CHANGELOG body and lists all wheels +
+  sdist + .crate as assets.
+- PyPI shows the new version with a PEP 740 attestation badge.
+- crates.io shows the new `locus-core` version.
+- Docs site exposes `/locus-tag/X.Y/` and `stable` redirects to it.
 
-**Scenario 2: Minor Release**
-```bash
-cargo release minor --execute --no-publish --allow-branch release-vX.Y.Z --config release.toml
-```
+## When something goes wrong
+See **[release-runbook §5 — Rollback](../../../docs/engineering/release-runbook.md#5--rollback)**.
+Both registries permit yank but never re-upload of the same version;
+ship the fix under `X.Y.Z+1`.
 
-### Phase C: Finalizing
-1.  Push the release branch and the tag:
-    ```bash
-    git push origin release-vX.Y.Z --tags
-    ```
-2.  Open a Pull Request from `release-vX.Y.Z` to `main` to bring the version bump back to the primary branch.
-3.  Merge the PR once CI passes.
-
-## 4. Post-Release Verification
-- [ ] Verify `Cargo.toml` in `crates/locus-core` and `crates/locus-py` have the same version.
-- [ ] Verify `pyproject.toml` version matches.
-- [ ] Confirm git tag `vX.Y.Z` exists on GitHub.
-- [ ] Monitor GitHub Actions to ensure the `release.yml` workflow triggers and completes successfully.
-
-**Success Criteria:**
-- **Consistency:** All manifest versions are perfectly synchronized across the workspace.
-- **Atomicity:** The release process either completes fully with a tag or makes no changes.
-- **Delegation:** Publishing is handled securely by CI, not the local developer environment.
+## Dry-run
+Tag with an `-rc.N` suffix (e.g., `v0.5.1-rc.1`) to exercise the full
+pipeline without touching either registry. See
+**[release-runbook §4 — RC convention](../../../docs/engineering/release-runbook.md#4--rc-convention)**.
