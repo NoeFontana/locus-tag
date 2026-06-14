@@ -99,15 +99,35 @@ jobs:
       - name: Deploy main + latest alias (push to main)
         if: github.ref == 'refs/heads/main'
         run: uv run --no-sync mike deploy --push --update-aliases main latest
-      # RC tags (`v*-rc.*`) do NOT touch the docs site: `latest` (from
-      # the next main push that follows the RC merge) already reflects
-      # RC content for testers, and `stable` must keep pointing at the
-      # last real release until a non-RC tag fires.
+      # Prerelease tags (`v*-rc.*`, `v*-alpha.*`, `v*-beta.*`, …) do
+      # NOT touch the docs site: `latest` (from the next main push)
+      # already reflects RC content for testers, and `stable` must
+      # keep pointing at the last real release until a bare-semver tag
+      # fires. The strict regex match below makes this gate symmetric
+      # with `release.yml`'s `publish` gate; any tag that doesn't
+      # match `v[0-9]+.[0-9]+.[0-9]+` falls through and the step
+      # skips.
       - name: Deploy X.Y + stable alias (release tag)
-        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-rc.')
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           set -euo pipefail
           version="${GITHUB_REF#refs/tags/v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "skipping prerelease tag '$version' — stable alias unchanged"
+            exit 0
+          fi
+          # Independent of release.yml: refuse to deploy docs for a tag
+          # whose pyproject version doesn't match. release.yml's
+          # verify-tag is a separate workflow and races with this one;
+          # without this check a mismatched tag would advance the
+          # `stable` alias even though the publish jobs fail. Single
+          # source of truth is `pyproject.toml` since cargo-release
+          # keeps locus-core/Cargo.toml in lockstep with it.
+          py_version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          if [[ "$version" != "$py_version" ]]; then
+            echo "::error::tag v${version} does not match pyproject=${py_version} — skipping docs deploy" >&2
+            exit 1
+          fi
           # Collapse to the minor (X.Y) so 0.5.0 / 0.5.1 / ... share one
           # versioned page that always reflects the latest patch.
           # Pre-1.0 every patch updates `stable`; once the project hits

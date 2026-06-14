@@ -165,10 +165,14 @@ the tag, not the PR.
   redirects there. The `mike deploy` step also updates `latest` on the
   next push to `main`.
 
-## 4 — RC convention
+## 4 — Prerelease convention
 
-We use the `-rc.N` suffix on tags to dry-run the entire release
-pipeline without touching either registry.
+We use `-rc.N` by convention but the publish gate is a **strict
+positive match on bare semver** (`v[0-9]+.[0-9]+.[0-9]+`). Any tag
+with a `-X` suffix — `-rc.N`, `-rc1` (no dot, common typo), `-alpha.N`,
+`-beta.N`, `-dev`, `+build.42` — routes to the dry-run path and
+does not publish to either registry. This is symmetric across
+`release.yml` (publish gate) and `docs.yml` (stable-alias update).
 
 ```bash
 # Bump to 0.5.1-rc.1 locally (no automation — edit manifests by hand
@@ -178,17 +182,22 @@ git push origin v0.5.1-rc.1
 ```
 
 What happens:
-- `verify-tag` strips `-rc.1` before comparing against on-disk
-  versions, so the manifests can stay at `0.5.0` until the real bump.
-- `outputs.publish=false`, so `publish-pypi` and `publish-crates-io`
-  are skipped.
-- All `build-wheels-*`, `build-sdist`, and `wheel-validate` jobs run.
+- `verify-tag` strips the prerelease suffix (`${tag%%-*}`) before
+  comparing against on-disk versions, so the manifests can stay at
+  `0.5.0` until the real bump.
+- The publish gate's strict regex `^[0-9]+\.[0-9]+\.[0-9]+$` rejects
+  the suffixed tag → `outputs.publish=false` → `publish-pypi` and
+  `publish-crates-io` skip.
+- All `build-wheels-*`, `build-sdist`, and `wheel-validate` jobs run
+  (including musllinux smoke under `python:3.11-alpine`).
 - `create-github-release` posts a GitHub Release with body extracted
   from `## [0.5.1]` if it exists, otherwise `## Unreleased` with a
-  one-line "release candidate" preamble. The Release is marked
-  `--prerelease`.
-- `docs.yml` deploy job skips the tag-deploy step entirely for RC
-  tags, so `stable` stays at the last real release.
+  one-line "notes inherited" preamble. The Release is marked
+  `--prerelease`. The step is idempotent — re-tagging the same name
+  updates notes + re-uploads artefacts via `gh release upload
+  --clobber` instead of failing.
+- `docs.yml` deploy job skips the tag-deploy step entirely for any
+  prerelease tag, so `stable` stays at the last real release.
 
 When the dry-run is green, delete the RC GitHub Release (the tag can
 stay for history), then follow §3 to ship the real version.
