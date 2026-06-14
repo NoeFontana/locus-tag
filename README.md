@@ -1,7 +1,7 @@
 # locus-tag
 
 [![CI](https://github.com/NoeFontana/locus-tag/actions/workflows/ci.yml/badge.svg)](https://github.com/NoeFontana/locus-tag/actions/workflows/ci.yml)
-[![Docs](https://github.com/NoeFontana/locus-tag/actions/workflows/docs.yml/badge.svg)](https://noefontana.github.io/locus-tag/)
+[![Docs](https://github.com/NoeFontana/locus-tag/actions/workflows/docs.yml/badge.svg)](https://noefontana.github.io/locus-tag/latest/)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 **Locus** detects AprilTag and ArUco markers as well as AprilGrid and ChArUco boards. The library is implemented in Rust and provides zero-copy Python bindings.
@@ -17,6 +17,7 @@
 - **Memory**: Uses `bumpalo` arena allocation for zero heap allocations in the detection loop.
 - **Solvers**: 6-DOF recovery using IPPE-Square or weighted Levenberg-Marquardt with corner uncertainty.
 
+<!-- --8<-- [start:performance-tables] -->
 ## Performance Profiles
 
 Profiles are selected by name; the three shipped profiles are authored as
@@ -37,6 +38,7 @@ JSON files and embedded in the wheel.
 | **Locus (`Standard`)** | **96.2%** | 0.315 px |
 | AprilTag 3 (UMich) | 62.3% | 0.22 px |
 | OpenCV | 33.2% | 0.92 px |
+<!-- --8<-- [end:performance-tables] -->
 
 ## Installation
 
@@ -44,7 +46,7 @@ JSON files and embedded in the wheel.
 pip install locus-tag
 ```
 
-The PyPI wheel is compiled for rectified (pinhole) imagery. For unrectified cameras (Brown-Conrady polynomial, Kannala-Brandt equidistant fisheye), see [Install with distortion support](https://noefontana.github.io/locus-tag/how-to/install-with-distortion/).
+The PyPI wheel is compiled for rectified (pinhole) imagery. For unrectified cameras (Brown-Conrady polynomial, Kannala-Brandt equidistant fisheye), see [Install with distortion support](https://noefontana.github.io/locus-tag/latest/how-to/install-with-distortion/).
 
 ## Quick Start
 
@@ -108,9 +110,9 @@ if batch.telemetry:
 
 ## Documentation
 
-- **[Architecture & Memory Model](https://noefontana.github.io/locus-tag/explanation/architecture/)**
-- **[Coordinate Systems](https://noefontana.github.io/locus-tag/explanation/coordinates/)**
-- **[Benchmarking Methodology](https://noefontana.github.io/locus-tag/engineering/benchmarking/)**
+- **[Architecture & Memory Model](https://noefontana.github.io/locus-tag/latest/explanation/architecture/)**
+- **[Coordinate Systems](https://noefontana.github.io/locus-tag/latest/explanation/coordinates/)**
+- **[Benchmarking Methodology](https://noefontana.github.io/locus-tag/latest/engineering/benchmarking/)**
 
 ## License
 
