@@ -17,28 +17,60 @@
 - **Memory**: Uses `bumpalo` arena allocation for zero heap allocations in the detection loop.
 - **Solvers**: 6-DOF recovery using IPPE-Square or weighted Levenberg-Marquardt with corner uncertainty.
 
-<!-- --8<-- [start:performance-tables] -->
+<!-- --8<-- [start:performance-profiles] -->
 ## Performance Profiles
 
-Profiles are selected by name; the three shipped profiles are authored as
-JSON files and embedded in the wheel.
+Locus optimises for **high recall**, **low corner RMSE**, and **low
+latency**. Profiles are selected by name; the three shipped profiles
+are authored as JSON files and embedded in the wheel.
 
-| `profile` | ICRA 2020 Recall | Corner RMSE | Primary Characteristics |
-| :--- | :---: | :---: | :--- |
-| `"standard"` | **96.2%** | 0.315 px | Production default; balanced recall/precision. |
-| `"grid"` | **91.4%** | 0.458 px | 4-connectivity for touching tags (checkerboards). |
-| `"high_accuracy"` | 46.3%* | **0.16 px** | EdLines + GN optimizer; prioritized for metrology. |
+| `profile` | Primary characteristic |
+| :--- | :--- |
+| `"standard"` | Production default; balanced recall + precision. |
+| `"grid"` | 4-connectivity for touching tags — ChArUco / AprilGrid boards. |
+| `"high_accuracy"` | EdLines + axis-imbalance gate + adaptive PPB; prioritises pose precision and tail-rotation control. |
+<!-- --8<-- [end:performance-profiles] -->
 
-*\*`high_accuracy` is optimized for high-resolution near-field images (Hugging Face Hub datasets).*
+<!-- --8<-- [start:icra-comparison] -->
+### ICRA 2020 Forward (community benchmark)
 
-### Comparison (ICRA 2020 Forward - 50 images)
+[ICRA 2020 Forward](https://github.com/aprilrobotics/apriltag-comparison)
+is the closest thing the AprilTag community has to a neutral
+benchmark. The 50-frame subset we report on is **synthetic** (not
+real-camera), but it's public, peer-reviewed, and the basis for prior
+detector comparisons — we report on it for continuity with the
+literature.
 
-| Detector | Recall | RMSE |
+| Detector | Recall | Corner RMSE |
 | :--- | :---: | :---: |
-| **Locus (`Standard`)** | **96.2%** | 0.315 px |
-| AprilTag 3 (UMich) | 62.3% | 0.22 px |
-| OpenCV | 33.2% | 0.92 px |
-<!-- --8<-- [end:performance-tables] -->
+| **Locus (`standard`)** | **96.2 %** | 0.315 px |
+| AprilTag 3 (UMich) | 62.3 % | **0.22 px** |
+| OpenCV (`cv2.aruco`) | 33.2 % | 0.92 px |
+<!-- --8<-- [end:icra-comparison] -->
+
+<!-- --8<-- [start:render-tag-comparison] -->
+### render-tag (high-fidelity Blender + PSF)
+
+`render-tag` is our in-house render suite — Blender with calibrated
+PSF, exposure, sensor noise, and lens distortion models. The
+detection scenes carry pixel-accurate ground truth for both corners
+and 6-DOF pose, which lets us report translation / rotation
+percentiles in addition to recall. **Numbers below are from the
+2026-04-25 SOTA snapshot on the 1080p 50-scene subset** (see
+[`docs/engineering/benchmarking/render_tag_sota_20260425.md`](https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/render_tag_sota_20260425.md)
+for methodology).
+
+| Detector | Recall | Trans p50 | Trans p99 | Rot p50 | Rot p99 | Latency |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Locus (`high_accuracy`)** | **100 %** | **0.4 mm** | **25.6 mm** | **0.058 °** | **1.897 °** | **11.67 ms** |
+| Locus (`standard`) | 100 % | 3.5 mm | 50.3 mm | 0.288 ° | 27.248 ° | 19.24 ms |
+| AprilTag-C (pupil) | 100 % | 2.9 mm | 54.4 mm | 0.061 ° | 65.365 ° | 25.54 ms |
+| OpenCV (`cv2.aruco`) | 100 % | 3.4 mm | 141.4 mm | 0.113 ° | 1.228 ° | 44.45 ms |
+
+Per-percentile is load-bearing: AprilTag-C's median rotation is the
+best in class (0.06 °) but its p99 explodes to 65 ° on the
+symmetric-tag IRLS branch-ambiguity failures.
+<!-- --8<-- [end:render-tag-comparison] -->
 
 ## Installation
 
