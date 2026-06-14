@@ -1,10 +1,16 @@
 [package]
 name = "locus-py"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Python bindings for locus-core (built via maturin; not published to crates.io)."
 publish = false
+
+# Opt into `cargo release` despite `publish = false` so workspace
+# `shared-version` keeps locus-py's version in lockstep with
+# locus-core (verify-tag asserts both manifests match the tag).
+[package.metadata.release]
+release = true
 
 [lib]
 name = "locus"

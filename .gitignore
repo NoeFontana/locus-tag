@@ -7,3 +7,7 @@ tests/data
 /conductor/tracks/
 *.tracy
 .claude/settings.local.json
+# Insta snapshot review files — accepted via `cargo insta review`, never committed
+*.snap.new
+# Local debug-bench output dirs (`tools/bench/*.py`); 10s of MB each, never committed
+/diagnostics/

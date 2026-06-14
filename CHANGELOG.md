@@ -5,6 +5,8 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## [0.6.0] - 2026-06-14
+
 ### Changed
 
 - **Docs landing**: `docs/index.md` is a hand-crafted landing page (Diátaxis-shaped: at-a-glance, install, quick-start, per-section navigator) instead of inlining `README.md` via `pymdownx.snippets`. The inlined-README approach broke under mike's per-version routing — README's absolute docs-site URLs 404'd, and cross-version navigation jumped from `/0.5/` to wherever the README's hardcoded URLs pointed. The split uses mkdocs-relative links throughout the landing so a reader on `/0.5/` stays on `/0.5/` when navigating. README cross-references now use the `/latest/` mike alias (consistent badge + body channel). `mkdocs.yml` swaps `pymdownx.snippets` for `admonition` (snippets re-used only for the new `docs/explanation/performance.md` table inclusion); the `admonition` change incidentally fixes pre-existing `!!! warning` blocks in `coordinates.md`, `pipeline.md`, and `concurrent_detection.md` that were rendering as plain text.
