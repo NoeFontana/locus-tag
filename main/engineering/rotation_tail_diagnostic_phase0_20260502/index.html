@@ -1,0 +1,2375 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-performance fiducial marker detector.">
+      
+      
+      
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/rotation_tail_diagnostic_phase0_20260502/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Rotation-Tail Diagnostic — Phase 0 (20260502) - Locus</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="purple">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#rotation-tail-diagnostic-phase-0-20260502" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Locus
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Rotation-Tail Diagnostic — Phase 0 (20260502)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="purple"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/NoeFontana/locus-tag" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    NoeFontana/locus-tag
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Locus
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/NoeFontana/locus-tag" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    NoeFontana/locus-tag
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-To Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-To Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/add_dictionary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to: Add a custom fiducial dictionary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/debug_with_rerun/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to Guide: Debugging with Rerun
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/concurrent_detection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How to Run Concurrent Detection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/install-with-distortion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install with distortion support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Detection Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/memory_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/algorithms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Algorithms &amp; Mathematical Foundations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/coordinates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coordinate Systems
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engineering (Internal)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Engineering (Internal)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Identity &amp; Engineering Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feature Development Workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release-runbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release runbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../detection-batch-contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architectural Contract: DetectionBatch (SoA)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../constraints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strict Constraints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ffi_contracts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FFI Contract Inventory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../profiles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Detector Profiles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../stratification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stratification Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quality-gates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quality Gates &amp; Verification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rust-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rust Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../python-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../general-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    General Code Style Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_13" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_13" id="__nav_6_13_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_13_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_13">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Benchmarking
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking &amp; Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/lessons/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking Lessons (consolidated, 2026-05-02)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/micro-benchmarking-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Micro-Benchmarking Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/release_performance_20260418/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Locus Release Performance Report (2026-04-18)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/hub_regression_20260423/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hub Regression Performance Report (2026-04-23)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/render_tag_sota_20260425/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Render-tag 1080p SOTA pursuit (2026-04-25)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2160p render_tag_hub recall lift (2026-04-25)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/quad_truncation_fix_20260426/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quad-extraction truncation fix (2026-04-26)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migration
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Migration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../migration/config-refactor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config refactor — migration notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-tldr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §1 TL;DR
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="§1 TL;DR">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reproducibility-cross-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproducibility cross-check
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-failure-mode-breakdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §2 Failure-mode breakdown
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-stratified-rotation-error" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §3 Stratified rotation error
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="§3 Stratified rotation error">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#angle-of-incidence-deg" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Angle of incidence (deg)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#distance-m" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Distance (m)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#estimated-ppm-pxm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Estimated PPM (px/m)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-top-10-worst-scenes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §4 Top-10 worst scenes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-calibration-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §5 σ calibration check
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-irls-weight-mahalanobis-distribution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §6 IRLS weight + Mahalanobis distribution
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-what-this-points-at" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §7 What this points at
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-profile-mode-reproducibility-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §8 Profile × mode reproducibility table
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-recommendations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §9 Recommendations
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="rotation-tail-diagnostic-phase-0-20260502">Rotation-Tail Diagnostic — Phase 0 (20260502)</h1>
+<p>Forensics of the residual rotation tail on <code>locus_v1_tag36h11_1920x1080</code> under <code>high_accuracy</code> + Accurate-mode pose. Output of the Phase 0 diagnostic harness (<code>tools/bench/rotation_tail_diag/</code>).</p>
+<h2 id="1-tldr">§1 TL;DR</h2>
+<ul>
+<li><strong>Dataset</strong>: <code>locus_v1_tag36h11_1920x1080</code> — 50 scenes, single tag each, AprilTag36h11 family, 1920×1080.</li>
+<li><strong>Profile / mode</strong>: <code>high_accuracy</code> + <code>Accurate</code>. σ_n² configured = 4.000 (σ ≈ 2.000px).</li>
+<li><strong>Recall</strong>: 50/50 scenes detected.</li>
+<li><strong>Rotation error vs GT</strong> (degrees, 95% bootstrap CI):  p50 = 0.057 [0.041, 0.093]  ·  p95 = 0.473 [0.275, 0.780]  ·  p99 = 0.771 [0.383, 0.874]</li>
+<li><strong>Translation error vs GT</strong> (mm):  p50 = 0.4  ·  p95 = 8.6  ·  p99 = 18.9</li>
+<li><strong>Latency</strong> (ms, production path, no diagnostics):  p50 = 8.26  ·  p99 = 25.45</li>
+</ul>
+<h3 id="reproducibility-cross-check">Reproducibility cross-check</h3>
+<p>The published <code>high_accuracy</code> baseline (commit <code>8890efc</code>, 2026-04-25) reported rot p99 = 1.897° on this dataset. The current run lands at rot p50 = 0.057° / p99 = 0.771° — the bulk distribution is <em>better</em> than the published memo (the snapshot rebless after PR #212 measured all 50 scenes honestly), with a residual tail driven by a small number of outlier scenes. See §2 / §4 for the breakdown.</p>
+<h2 id="2-failure-mode-breakdown">§2 Failure-mode breakdown</h2>
+<p>Mutually-exclusive classification of the 50 scenes.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Mode</th>
+<th style="text-align: right;">Count</th>
+<th style="text-align: right;">%</th>
+<th style="text-align: right;">Counterfactual rot p99 if resolved</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>healthy</code></td>
+<td style="text-align: right;">50</td>
+<td style="text-align: right;">100.0%</td>
+<td style="text-align: right;">—</td>
+</tr>
+</tbody>
+</table>
+<p>_Counterfactual interpretation: "if all <code>&lt;mode&gt;</code> scenes had rotation error = 0, what would p99 become?" Current p99 = 0.771°. The mode whose counterfactual drops p99 the most is the priority fix.</p>
+<h2 id="3-stratified-rotation-error">§3 Stratified rotation error</h2>
+<h3 id="angle-of-incidence-deg">Angle of incidence (deg)</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Bucket</th>
+<th style="text-align: right;">n</th>
+<th style="text-align: right;">rot p50 (95% CI)</th>
+<th style="text-align: right;">rot p95</th>
+<th style="text-align: right;">rot p99</th>
+<th style="text-align: right;">rot max</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">10.59…28.93</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">0.189 [0.071, 0.339]</td>
+<td style="text-align: right;">0.686</td>
+<td style="text-align: right;">0.837</td>
+<td style="text-align: right;">0.874</td>
+</tr>
+<tr>
+<td style="text-align: left;">30.45…45.85</td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">0.032 [0.022, 0.074]</td>
+<td style="text-align: right;">0.196</td>
+<td style="text-align: right;">0.236</td>
+<td style="text-align: right;">0.246</td>
+</tr>
+<tr>
+<td style="text-align: left;">45.86…54.21</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">0.047 [0.018, 0.194]</td>
+<td style="text-align: right;">0.519</td>
+<td style="text-align: right;">0.635</td>
+<td style="text-align: right;">0.664</td>
+</tr>
+<tr>
+<td style="text-align: left;">56.29…59.55</td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">0.074 [0.033, 0.093]</td>
+<td style="text-align: right;">0.228</td>
+<td style="text-align: right;">0.229</td>
+<td style="text-align: right;">0.230</td>
+</tr>
+</tbody>
+</table>
+<h3 id="distance-m">Distance (m)</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Bucket</th>
+<th style="text-align: right;">n</th>
+<th style="text-align: right;">rot p50 (95% CI)</th>
+<th style="text-align: right;">rot p95</th>
+<th style="text-align: right;">rot p99</th>
+<th style="text-align: right;">rot max</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">0.56…0.68</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">0.027 [0.016, 0.032]</td>
+<td style="text-align: right;">0.060</td>
+<td style="text-align: right;">0.073</td>
+<td style="text-align: right;">0.077</td>
+</tr>
+<tr>
+<td style="text-align: left;">0.69…0.91</td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">0.049 [0.033, 0.074]</td>
+<td style="text-align: right;">0.243</td>
+<td style="text-align: right;">0.340</td>
+<td style="text-align: right;">0.365</td>
+</tr>
+<tr>
+<td style="text-align: left;">0.93…1.45</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">0.076 [0.043, 0.137]</td>
+<td style="text-align: right;">0.529</td>
+<td style="text-align: right;">0.805</td>
+<td style="text-align: right;">0.874</td>
+</tr>
+<tr>
+<td style="text-align: left;">1.46…3.74</td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">0.230 [0.117, 0.313]</td>
+<td style="text-align: right;">0.585</td>
+<td style="text-align: right;">0.648</td>
+<td style="text-align: right;">0.664</td>
+</tr>
+</tbody>
+</table>
+<h3 id="estimated-ppm-pxm">Estimated PPM (px/m)</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Bucket</th>
+<th style="text-align: right;">n</th>
+<th style="text-align: right;">rot p50 (95% CI)</th>
+<th style="text-align: right;">rot p95</th>
+<th style="text-align: right;">rot p99</th>
+<th style="text-align: right;">rot max</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">293.68…750.68</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">0.231 [0.117, 0.357]</td>
+<td style="text-align: right;">0.592</td>
+<td style="text-align: right;">0.650</td>
+<td style="text-align: right;">0.664</td>
+</tr>
+<tr>
+<td style="text-align: left;">798.05…1349.88</td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">0.078 [0.054, 0.181]</td>
+<td style="text-align: right;">0.498</td>
+<td style="text-align: right;">0.799</td>
+<td style="text-align: right;">0.874</td>
+</tr>
+<tr>
+<td style="text-align: left;">1417.66…1711.10</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">0.055 [0.020, 0.099]</td>
+<td style="text-align: right;">0.253</td>
+<td style="text-align: right;">0.342</td>
+<td style="text-align: right;">0.365</td>
+</tr>
+<tr>
+<td style="text-align: left;">1737.58…2232.15</td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">0.031 [0.023, 0.033]</td>
+<td style="text-align: right;">0.048</td>
+<td style="text-align: right;">0.049</td>
+<td style="text-align: right;">0.049</td>
+</tr>
+</tbody>
+</table>
+<h2 id="4-top-10-worst-scenes">§4 Top-10 worst scenes</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">#</th>
+<th style="text-align: left;">scene_id</th>
+<th style="text-align: right;">rot err (°)</th>
+<th style="text-align: right;">trans err (mm)</th>
+<th style="text-align: right;">branch</th>
+<th style="text-align: left;">classification</th>
+<th style="text-align: left;">Rerun</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1</td>
+<td style="text-align: left;"><code>scene_0008_cam_0000</code></td>
+<td style="text-align: right;">0.87</td>
+<td style="text-align: right;">11.1</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;"><code>healthy</code></td>
+<td style="text-align: left;"><code>recordings/scene_0008_cam_0000.rrd</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">2</td>
+<td style="text-align: left;"><code>scene_0005_cam_0000</code></td>
+<td style="text-align: right;">0.66</td>
+<td style="text-align: right;">26.4</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;"><code>healthy</code></td>
+<td style="text-align: left;"><code>recordings/scene_0005_cam_0000.rrd</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">3</td>
+<td style="text-align: left;"><code>scene_0009_cam_0000</code></td>
+<td style="text-align: right;">0.53</td>
+<td style="text-align: right;">8.4</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;"><code>healthy</code></td>
+<td style="text-align: left;"><code>recordings/scene_0009_cam_0000.rrd</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">4</td>
+<td style="text-align: left;"><code>scene_0025_cam_0000</code></td>
+<td style="text-align: right;">0.40</td>
+<td style="text-align: right;">6.9</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;"><code>healthy</code></td>
+<td style="text-align: left;"><code>recordings/scene_0025_cam_0000.rrd</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">5</td>
+<td style="text-align: left;"><code>scene_0018_cam_0000</code></td>
+<td style="text-align: right;">0.36</td>
+<td style="text-align: right;">0.3</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;"><code>healthy</code></td>
+<td style="text-align: left;"><code>recordings/scene_0018_cam_0000.rrd</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">6</td>
+<td style="text-align: left;"><code>scene_0033_cam_0000</code></td>
+<td style="text-align: right;">0.31</td>
+<td style="text-align: right;">1.2</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;"><code>healthy</code></td>
+<td style="text-align: left;"><code>recordings/scene_0033_cam_0000.rrd</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">7</td>
+<td style="text-align: left;"><code>scene_0023_cam_0000</code></td>
+<td style="text-align: right;">0.30</td>
+<td style="text-align: right;">7.9</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;"><code>healthy</code></td>
+<td style="text-align: left;"><code>recordings/scene_0023_cam_0000.rrd</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">8</td>
+<td style="text-align: left;"><code>scene_0015_cam_0000</code></td>
+<td style="text-align: right;">0.25</td>
+<td style="text-align: right;">1.0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;"><code>healthy</code></td>
+<td style="text-align: left;"><code>recordings/scene_0015_cam_0000.rrd</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">9</td>
+<td style="text-align: left;"><code>scene_0041_cam_0000</code></td>
+<td style="text-align: right;">0.23</td>
+<td style="text-align: right;">1.6</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;"><code>healthy</code></td>
+<td style="text-align: left;"><code>recordings/scene_0041_cam_0000.rrd</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">10</td>
+<td style="text-align: left;"><code>scene_0021_cam_0000</code></td>
+<td style="text-align: right;">0.23</td>
+<td style="text-align: right;">8.8</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;"><code>healthy</code></td>
+<td style="text-align: left;"><code>recordings/scene_0021_cam_0000.rrd</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-calibration-check">§5 σ calibration check</h2>
+<p>Configured σ in <code>high_accuracy.json</code>: σ = √4.000 ≈ 2.000px.</p>
+<p>Per-image estimated σ (Immerkær median Laplacian):</p>
+<div class="highlight"><pre><span></span><code>   0.494– 0.914  │ ████████████████████████████████████████  (29)
+   0.914– 1.334  │ ██████████  (7)
+   1.334– 1.754  │ █  (1)
+   1.754– 2.174  │ █  (1)
+   2.174– 2.595  │ ████████  (6)
+   2.595– 3.015  │ ███  (2)
+   3.015– 3.435  │   (0)
+   3.435– 3.855  │ █  (1)
+   3.855– 4.275  │ █  (1)
+   4.275– 4.695  │   (0)
+   4.695– 5.115  │   (0)
+   5.115– 5.535  │ █  (1)
+   5.535– 5.955  │   (0)
+   5.955– 6.375  │   (0)
+   6.375– 6.795  │   (0)
+   6.795– 7.215  │   (0)
+   7.215– 7.635  │   (0)
+   7.635– 8.055  │   (0)
+   8.055– 8.475  │   (0)
+   8.475– 8.895  │ █  (1)
+</code></pre></div>
+<p>Population: median σ = 0.741px, max = 8.895px. 34 of 50 scenes have σ &lt; 1.00px (half the configured value).</p>
+<h2 id="6-irls-weight-mahalanobis-distribution">§6 IRLS weight + Mahalanobis distribution</h2>
+<p>Final per-corner Huber IRLS weights at the LM-converged pose:</p>
+<div class="highlight"><pre><span></span><code>  0.219–0.258  │   (1)
+  0.258–0.297  │   (0)
+  0.297–0.336  │   (0)
+  0.336–0.375  │   (0)
+  0.375–0.414  │   (0)
+  0.414–0.453  │   (0)
+  0.453–0.492  │   (0)
+  0.492–0.531  │   (0)
+  0.531–0.570  │   (0)
+  0.570–0.609  │   (0)
+  0.609–0.649  │   (0)
+  0.649–0.688  │   (0)
+  0.688–0.727  │   (0)
+  0.727–0.766  │   (0)
+  0.766–0.805  │   (0)
+  0.805–0.844  │   (0)
+  0.844–0.883  │   (0)
+  0.883–0.922  │   (0)
+  0.922–0.961  │   (0)
+  0.961–1.000  │ ████████████████████████████████████████  (199)
+</code></pre></div>
+<p>1 of 200 corners have IRLS weight &lt; 0.3 — that's the threshold the <code>corner_outlier</code> classifier uses.</p>
+<p>Per-scene branch-d² (chosen vs alternate, log-binned counts):</p>
+<p><strong>Chosen branch (log10 d²):</strong>
+<div class="highlight"><pre><span></span><code>  -2.72–-2.50  │ ████████████  (3)
+  -2.50–-2.27  │   (0)
+  -2.27–-2.05  │ ████████████████████  (5)
+  -2.05–-1.82  │ ████████  (2)
+  -1.82–-1.59  │ ████████  (2)
+  -1.59–-1.37  │ ████████████  (3)
+  -1.37–-1.14  │ ████████████████████████████████████  (9)
+  -1.14–-0.92  │ ████████████████████████████████  (8)
+  -0.92–-0.69  │ ████████████████████████████████████████  (10)
+  -0.69–-0.47  │ ████████████████  (4)
+  -0.47–-0.24  │ ████████  (2)
+  -0.24–-0.01  │   (0)
+  -0.01– 0.21  │ ████  (1)
+   0.21– 0.44  │   (0)
+   0.44– 0.66  │   (0)
+   0.66– 0.89  │   (0)
+   0.89– 1.12  │   (0)
+   1.12– 1.34  │   (0)
+   1.34– 1.57  │   (0)
+   1.57– 1.79  │ ████  (1)
+</code></pre></div></p>
+<p><strong>Alternate branch (log10 d²):</strong>
+<div class="highlight"><pre><span></span><code>  -2.50–-2.10  │ ███████  (2)
+  -2.10–-1.70  │   (0)
+  -1.70–-1.31  │   (0)
+  -1.31–-0.91  │ ████  (1)
+  -0.91–-0.51  │ ███████████████  (4)
+  -0.51–-0.12  │ ███████  (2)
+  -0.12– 0.28  │   (0)
+   0.28– 0.67  │   (0)
+   0.67– 1.07  │   (0)
+   1.07– 1.47  │ ███████████  (3)
+   1.47– 1.86  │ ███████  (2)
+   1.86– 2.26  │ ████  (1)
+   2.26– 2.66  │ ████  (1)
+   2.66– 3.05  │ ██████████████████  (5)
+   3.05– 3.45  │   (0)
+   3.45– 3.85  │ ███████████  (3)
+   3.85– 4.24  │ █████████████████████████████  (8)
+   4.24– 4.64  │ ████████████████████████████████████████  (11)
+   4.64– 5.03  │ ██████████████████████  (6)
+   5.03– 5.43  │ ████  (1)
+</code></pre></div></p>
+<h2 id="7-what-this-points-at">§7 What this points at</h2>
+<p>All 50 scenes classify as <code>healthy</code> — every rotation residual is within the per-class detector thresholds. Whatever residual tail remains in §1 is below the classifier's discriminating threshold and likely reflects sensor / render noise rather than a fixable pipeline mode. Re-tune the classifier thresholds or extend the failure-mode taxonomy before further triage.</p>
+<p><strong>Healthy</strong> at 50 of 50 scenes — the bulk distribution is well-calibrated; the tail is concentrated in the 0 non-healthy scene(s) above.</p>
+<h2 id="8-profile-mode-reproducibility-table">§8 Profile × mode reproducibility table</h2>
+<p>Captured via <code>tools/bench/render_tag_sota_eval.py</code> on the same dataset, today, for context. (Source: <code>/tmp/render_tag_sota_full.json</code> after running the eval tool.)</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Profile</th>
+<th style="text-align: left;">Mode</th>
+<th style="text-align: right;">Recall</th>
+<th style="text-align: right;">rot p50</th>
+<th style="text-align: right;">rot p95</th>
+<th style="text-align: right;">rot p99</th>
+<th style="text-align: right;">trans p99</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>standard</code></td>
+<td style="text-align: left;">Accurate</td>
+<td style="text-align: right;">100.0 %</td>
+<td style="text-align: right;">0.288°</td>
+<td style="text-align: right;">1.572°</td>
+<td style="text-align: right;">27.248°</td>
+<td style="text-align: right;">50.3 mm</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>high_accuracy</code></td>
+<td style="text-align: left;">Fast</td>
+<td style="text-align: right;">94.0 %</td>
+<td style="text-align: right;">0.345°</td>
+<td style="text-align: right;">6.350°</td>
+<td style="text-align: right;">104.238°</td>
+<td style="text-align: right;">2210 mm</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>high_accuracy</code></td>
+<td style="text-align: left;">Accurate</td>
+<td style="text-align: right;">94.0 %</td>
+<td style="text-align: right;">62.857°</td>
+<td style="text-align: right;">148.239°</td>
+<td style="text-align: right;">154.233°</td>
+<td style="text-align: right;">3261 mm</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>high_accuracy</code></td>
+<td style="text-align: left;">Fast</td>
+<td style="text-align: right;">100.0 %</td>
+<td style="text-align: right;">0.363°</td>
+<td style="text-align: right;">6.137°</td>
+<td style="text-align: right;">103.402°</td>
+<td style="text-align: right;">2164 mm</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong><code>high_accuracy</code></strong></td>
+<td style="text-align: left;"><strong>Accurate</strong></td>
+<td style="text-align: right;"><strong>100.0 %</strong></td>
+<td style="text-align: right;"><strong>0.057°</strong></td>
+<td style="text-align: right;"><strong>0.473°</strong></td>
+<td style="text-align: right;"><strong>0.771°</strong></td>
+<td style="text-align: right;"><strong>19 mm</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Non-<code>high_accuracy</code> rows above are pre-fix snapshots from 2026-04-25 (commit <code>8890efc</code>). After PR #212 the <code>high_accuracy</code> Accurate row in particular is stale — rerun <code>tools/bench/render_tag_sota_eval.py</code> for fresh numbers.</p>
+<h2 id="9-recommendations">§9 Recommendations</h2>
+<ol>
+<li>
+<p><strong>Triage the non-healthy scenes (§4 top-10).</strong> 1 of 50 scenes carry the entire residual tail; the linked <code>.rrd</code> recordings let you see whether the remaining error is a corner-localization issue, a remaining branch-selector edge case, or sensor / render noise. Fix at this granularity rather than tuning population-level knobs.</p>
+</li>
+<li>
+<p><strong>Reframe the SOTA gap.</strong> With high_accuracy at rot p50 = 0.057° / p99 = 0.771°, the bulk distribution already beats every external detector. Where external libraries still hold the rotation P95/P99 tail (per <code>render_tag_sota_20260425.md</code>) is what closing this residual tail unlocks. The next bottleneck is no longer a single regression — it is the tail of outlier scenes plus the σ calibration mismatch on Blender-rendered data.</p>
+</li>
+<li>
+<p><strong>Consider extending the failure-mode taxonomy.</strong> Healthy = 50/50 means most residual error falls below the discriminating thresholds in <code>classify.py</code>. As the tail shrinks further, the classifier should grow finer modes (e.g. grazing-angle subclass, per-corner GN-residual outlier) to keep producing actionable signal.</p>
+</li>
+</ol>
+<hr />
+<p><em>Generated by <code>tools/bench/rotation_tail_diag/report.py</code> from <code>diagnostics/2026-05-02/</code>. Bootstrap CIs are non-parametric, 10000 resamples, RNG seed 42. .rrd recordings live alongside scenes.json — open with <code>rerun recordings/scene_NNNN.rrd</code> (per-scene).</em></p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+      
+        <script src="../../javascripts/mermaid-init.js"></script>
+      
+    
+  </body>
+</html>
