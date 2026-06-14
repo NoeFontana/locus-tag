@@ -87,11 +87,21 @@ jobs:
           # itself, but unshallowing keeps the diff readable in the
           # workflow log.
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v8.1.0
+      # `mike deploy` invokes `mkdocs build` internally, and the
+      # mkdocstrings plugin imports the `locus` Python module to
+      # extract API docstrings for reference/api.md. The `build` job
+      # above also `maturin develop`s the extension before `mkdocs
+      # build` — this deploy job must mirror that setup, otherwise
+      # mkdocstrings raises `ModuleNotFoundError: No module named
+      # 'locus'` and the deploy aborts.
+      - uses: ./.github/actions/setup-toolchain
         with:
           python-version: '3.10'
-      - name: Install docs deps
-        run: uv sync --group docs --no-install-project
+          cache-key: docs-deploy
+      - name: Install dependencies
+        run: uv sync --group docs --group dev
+      - name: Build extension
+        run: uv run maturin develop --manifest-path crates/locus-py/Cargo.toml
       - name: Configure git identity
         run: |
           git config user.name "github-actions[bot]"
