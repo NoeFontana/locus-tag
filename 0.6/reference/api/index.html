@@ -1,0 +1,4453 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-performance fiducial marker detector.">
+      
+      
+      
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/0.6/reference/api/">
+      
+      
+        <link rel="prev" href="../../explanation/performance/">
+      
+      
+        <link rel="next" href="../../engineering/core/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>API Reference - Locus</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="purple">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#api-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Locus
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              API Reference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="purple"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/NoeFontana/locus-tag" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    NoeFontana/locus-tag
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Locus
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/NoeFontana/locus-tag" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    NoeFontana/locus-tag
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-To Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-To Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/add_dictionary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to: Add a custom fiducial dictionary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/debug_with_rerun/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to Guide: Debugging with Rerun
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/concurrent_detection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How to Run Concurrent Detection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/install-with-distortion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install with distortion support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Detection Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/memory_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/algorithms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Algorithms &amp; Mathematical Foundations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/coordinates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coordinate Systems
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#core-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Interface
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#locus.Detector" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Detector
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Detector">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.Detector-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.Detector.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __init__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#locus.Detector.detect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        detect
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#concurrent-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Concurrent Detection
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Concurrent Detection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#detectorbuilder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DetectorBuilder
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectorConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DetectorConfig
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="DetectorConfig">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectorConfig-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectorConfig.from_profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_profile
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectorConfig.from_profile_json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_profile_json
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectOptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DetectOptions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data Models
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Data Models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectionBatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DetectionBatch
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="DetectionBatch">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectionBatch-attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attributes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Attributes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectionBatch.centers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        centers
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#locus.Pose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pose
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#geometry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Geometry
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Geometry">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.CameraIntrinsics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CameraIntrinsics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#board-pose-estimation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Board Pose Estimation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Board Pose Estimation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#aprilgrid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AprilGrid
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#charucoboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CharucoBoard
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#boardestimator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BoardEstimator
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#enumerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enumerations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Enumerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.TagFamily" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TagFamily
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#locus.CornerRefinementMode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CornerRefinementMode
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#locus.SegmentationConnectivity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SegmentationConnectivity
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engineering (Internal)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Engineering (Internal)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Identity &amp; Engineering Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feature Development Workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/release-runbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release runbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/detection-batch-contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architectural Contract: DetectionBatch (SoA)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/constraints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strict Constraints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/ffi_contracts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FFI Contract Inventory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/profiles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Detector Profiles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/stratification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stratification Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/quality-gates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quality Gates &amp; Verification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/rust-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rust Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/python-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/general-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    General Code Style Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_13" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_13" id="__nav_6_13_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_13_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_13">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Benchmarking
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking &amp; Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/lessons/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking Lessons (consolidated, 2026-05-02)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/micro-benchmarking-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Micro-Benchmarking Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/release_performance_20260418/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Locus Release Performance Report (2026-04-18)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/hub_regression_20260423/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hub Regression Performance Report (2026-04-23)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/render_tag_sota_20260425/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Render-tag 1080p SOTA pursuit (2026-04-25)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2160p render_tag_hub recall lift (2026-04-25)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/quad_truncation_fix_20260426/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quad-extraction truncation fix (2026-04-26)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migration
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Migration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../migration/config-refactor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config refactor — migration notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#core-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Interface
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#locus.Detector" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Detector
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Detector">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.Detector-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.Detector.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __init__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#locus.Detector.detect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        detect
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#concurrent-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Concurrent Detection
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Concurrent Detection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#detectorbuilder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DetectorBuilder
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectorConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DetectorConfig
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="DetectorConfig">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectorConfig-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectorConfig.from_profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_profile
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectorConfig.from_profile_json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_profile_json
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectOptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DetectOptions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data Models
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Data Models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectionBatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DetectionBatch
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="DetectionBatch">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectionBatch-attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attributes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Attributes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.DetectionBatch.centers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        centers
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#locus.Pose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pose
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#geometry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Geometry
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Geometry">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.CameraIntrinsics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CameraIntrinsics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#board-pose-estimation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Board Pose Estimation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Board Pose Estimation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#aprilgrid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AprilGrid
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#charucoboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CharucoBoard
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#boardestimator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BoardEstimator
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#enumerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enumerations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Enumerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.TagFamily" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TagFamily
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#locus.CornerRefinementMode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CornerRefinementMode
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#locus.SegmentationConnectivity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SegmentationConnectivity
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="api-reference">API Reference</h1>
+<p>This page provides detailed information about the Locus Python API.</p>
+<h2 id="core-interface">Core Interface</h2>
+<p>The primary entry point is the <code>Detector</code> class. It can be initialized with various configuration parameters passed as keyword arguments.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">locus</span>
+
+<span class="c1"># Initialize with keyword arguments</span>
+<span class="n">detector</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">Detector</span><span class="p">(</span>
+    <span class="n">families</span><span class="o">=</span><span class="p">[</span><span class="n">locus</span><span class="o">.</span><span class="n">TagFamily</span><span class="o">.</span><span class="n">AprilTag36h11</span><span class="p">,</span> <span class="n">locus</span><span class="o">.</span><span class="n">TagFamily</span><span class="o">.</span><span class="n">ArUco4x4_50</span><span class="p">],</span>
+    <span class="n">decimation</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">threads</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">batch</span> <span class="o">=</span> <span class="n">detector</span><span class="o">.</span><span class="n">detect</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+</code></pre></div>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="locus.Detector" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">locus.Detector</span>
+
+
+</h2>
+
+
+    <div class="doc doc-contents first">
+
+
+
+        <p>High-level detector.</p>
+
+
+<details class="construction" open>
+  <summary>Construction</summary>
+  <p><code>Detector(profile="standard")</code> — load a shipped JSON profile by name.
+<code>Detector(config=my_cfg)</code> — use a pre-built :class:<code>DetectorConfig</code>.
+<code>Detector()</code> — equivalent to <code>profile="standard"</code>.</p>
+</details>        <p>Per-call orchestration options (<code>decimation</code>, <code>threads</code>, <code>families</code>)
+stay outside the profile because they describe <em>how</em> the detector is
+invoked, not <em>what</em> it looks for.</p>
+
+
+
+
+
+
+
+
+              <details class="mkdocstrings-source">
+                <summary>Source code in <code>crates/locus-py/locus/__init__.py</code></summary>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
+<span class="normal">213</span>
+<span class="normal">214</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span>
+<span class="normal">220</span>
+<span class="normal">221</span>
+<span class="normal">222</span>
+<span class="normal">223</span>
+<span class="normal">224</span>
+<span class="normal">225</span>
+<span class="normal">226</span>
+<span class="normal">227</span>
+<span class="normal">228</span>
+<span class="normal">229</span>
+<span class="normal">230</span>
+<span class="normal">231</span>
+<span class="normal">232</span>
+<span class="normal">233</span>
+<span class="normal">234</span>
+<span class="normal">235</span>
+<span class="normal">236</span>
+<span class="normal">237</span>
+<span class="normal">238</span>
+<span class="normal">239</span>
+<span class="normal">240</span>
+<span class="normal">241</span>
+<span class="normal">242</span>
+<span class="normal">243</span>
+<span class="normal">244</span>
+<span class="normal">245</span>
+<span class="normal">246</span>
+<span class="normal">247</span>
+<span class="normal">248</span>
+<span class="normal">249</span>
+<span class="normal">250</span>
+<span class="normal">251</span>
+<span class="normal">252</span>
+<span class="normal">253</span>
+<span class="normal">254</span>
+<span class="normal">255</span>
+<span class="normal">256</span>
+<span class="normal">257</span>
+<span class="normal">258</span>
+<span class="normal">259</span>
+<span class="normal">260</span>
+<span class="normal">261</span>
+<span class="normal">262</span>
+<span class="normal">263</span>
+<span class="normal">264</span>
+<span class="normal">265</span>
+<span class="normal">266</span>
+<span class="normal">267</span>
+<span class="normal">268</span>
+<span class="normal">269</span>
+<span class="normal">270</span>
+<span class="normal">271</span>
+<span class="normal">272</span>
+<span class="normal">273</span>
+<span class="normal">274</span>
+<span class="normal">275</span>
+<span class="normal">276</span>
+<span class="normal">277</span>
+<span class="normal">278</span>
+<span class="normal">279</span>
+<span class="normal">280</span>
+<span class="normal">281</span>
+<span class="normal">282</span>
+<span class="normal">283</span>
+<span class="normal">284</span>
+<span class="normal">285</span>
+<span class="normal">286</span>
+<span class="normal">287</span>
+<span class="normal">288</span>
+<span class="normal">289</span>
+<span class="normal">290</span>
+<span class="normal">291</span>
+<span class="normal">292</span>
+<span class="normal">293</span>
+<span class="normal">294</span>
+<span class="normal">295</span>
+<span class="normal">296</span>
+<span class="normal">297</span>
+<span class="normal">298</span>
+<span class="normal">299</span>
+<span class="normal">300</span>
+<span class="normal">301</span>
+<span class="normal">302</span>
+<span class="normal">303</span>
+<span class="normal">304</span>
+<span class="normal">305</span>
+<span class="normal">306</span>
+<span class="normal">307</span>
+<span class="normal">308</span>
+<span class="normal">309</span>
+<span class="normal">310</span>
+<span class="normal">311</span>
+<span class="normal">312</span>
+<span class="normal">313</span>
+<span class="normal">314</span>
+<span class="normal">315</span>
+<span class="normal">316</span>
+<span class="normal">317</span>
+<span class="normal">318</span>
+<span class="normal">319</span>
+<span class="normal">320</span>
+<span class="normal">321</span>
+<span class="normal">322</span>
+<span class="normal">323</span>
+<span class="normal">324</span>
+<span class="normal">325</span>
+<span class="normal">326</span>
+<span class="normal">327</span>
+<span class="normal">328</span>
+<span class="normal">329</span>
+<span class="normal">330</span>
+<span class="normal">331</span>
+<span class="normal">332</span>
+<span class="normal">333</span>
+<span class="normal">334</span>
+<span class="normal">335</span>
+<span class="normal">336</span>
+<span class="normal">337</span>
+<span class="normal">338</span>
+<span class="normal">339</span>
+<span class="normal">340</span>
+<span class="normal">341</span>
+<span class="normal">342</span>
+<span class="normal">343</span>
+<span class="normal">344</span>
+<span class="normal">345</span>
+<span class="normal">346</span>
+<span class="normal">347</span>
+<span class="normal">348</span>
+<span class="normal">349</span>
+<span class="normal">350</span>
+<span class="normal">351</span>
+<span class="normal">352</span>
+<span class="normal">353</span>
+<span class="normal">354</span>
+<span class="normal">355</span>
+<span class="normal">356</span>
+<span class="normal">357</span>
+<span class="normal">358</span>
+<span class="normal">359</span>
+<span class="normal">360</span>
+<span class="normal">361</span>
+<span class="normal">362</span>
+<span class="normal">363</span>
+<span class="normal">364</span>
+<span class="normal">365</span>
+<span class="normal">366</span>
+<span class="normal">367</span>
+<span class="normal">368</span>
+<span class="normal">369</span>
+<span class="normal">370</span>
+<span class="normal">371</span>
+<span class="normal">372</span>
+<span class="normal">373</span>
+<span class="normal">374</span>
+<span class="normal">375</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Detector</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;High-level detector.</span>
+
+<span class="sd">    Construction:</span>
+<span class="sd">        ``Detector(profile=&quot;standard&quot;)`` — load a shipped JSON profile by name.</span>
+<span class="sd">        ``Detector(config=my_cfg)`` — use a pre-built :class:`DetectorConfig`.</span>
+<span class="sd">        ``Detector()`` — equivalent to ``profile=&quot;standard&quot;``.</span>
+
+<span class="sd">    Per-call orchestration options (``decimation``, ``threads``, ``families``)</span>
+<span class="sd">    stay outside the profile because they describe *how* the detector is</span>
+<span class="sd">    invoked, not *what* it looks for.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">profile</span><span class="p">:</span> <span class="n">ProfileName</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">DetectorConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">decimation</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">families</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TagFamily</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">profile</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Pass either `profile` or `config`, not both.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">config</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">config</span> <span class="o">=</span> <span class="n">DetectorConfig</span><span class="o">.</span><span class="n">from_profile</span><span class="p">(</span><span class="n">profile</span> <span class="ow">or</span> <span class="s2">&quot;standard&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">families</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">families</span> <span class="o">=</span> <span class="p">[</span><span class="n">TagFamily</span><span class="o">.</span><span class="n">AprilTag36h11</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span> <span class="o">=</span> <span class="n">_create_detector_from_config</span><span class="p">(</span>
+            <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">_to_ffi_config</span><span class="p">(),</span>
+            <span class="n">decimation</span><span class="o">=</span><span class="n">decimation</span><span class="p">,</span>
+            <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
+            <span class="n">families</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">families</span><span class="p">],</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">config</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectorConfig</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the current detector configuration as a nested model.&quot;&quot;&quot;</span>
+        <span class="n">raw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span><span class="o">.</span><span class="n">config</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">DetectorConfig</span><span class="p">(</span>
+            <span class="n">threshold</span><span class="o">=</span><span class="n">ThresholdConfig</span><span class="p">(</span>
+                <span class="n">tile_size</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">threshold_tile_size</span><span class="p">,</span>
+                <span class="n">min_range</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">threshold_min_range</span><span class="p">,</span>
+                <span class="n">enable_sharpening</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">enable_sharpening</span><span class="p">,</span>
+                <span class="n">enable_adaptive_window</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">enable_adaptive_window</span><span class="p">,</span>
+                <span class="n">min_radius</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">threshold_min_radius</span><span class="p">,</span>
+                <span class="n">max_radius</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">threshold_max_radius</span><span class="p">,</span>
+                <span class="n">constant</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">adaptive_threshold_constant</span><span class="p">,</span>
+                <span class="n">gradient_threshold</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">adaptive_threshold_gradient_threshold</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">quad</span><span class="o">=</span><span class="n">QuadConfig</span><span class="p">(</span>
+                <span class="n">min_area</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_min_area</span><span class="p">,</span>
+                <span class="n">max_aspect_ratio</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_max_aspect_ratio</span><span class="p">,</span>
+                <span class="n">min_fill_ratio</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_min_fill_ratio</span><span class="p">,</span>
+                <span class="n">max_fill_ratio</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_max_fill_ratio</span><span class="p">,</span>
+                <span class="n">min_edge_length</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_min_edge_length</span><span class="p">,</span>
+                <span class="n">min_edge_score</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_min_edge_score</span><span class="p">,</span>
+                <span class="n">subpixel_refinement_sigma</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">subpixel_refinement_sigma</span><span class="p">,</span>
+                <span class="n">upscale_factor</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">upscale_factor</span><span class="p">,</span>
+                <span class="n">max_elongation</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_max_elongation</span><span class="p">,</span>
+                <span class="n">min_density</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_min_density</span><span class="p">,</span>
+                <span class="n">extraction_mode</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_extraction_mode</span><span class="p">,</span>
+                <span class="n">edlines_imbalance_gate</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">edlines_imbalance_gate</span><span class="p">,</span>
+                <span class="n">edlines_phase3_erf</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">edlines_phase3_erf</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">decoder</span><span class="o">=</span><span class="n">DecoderConfig</span><span class="p">(</span>
+                <span class="n">min_contrast</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">decoder_min_contrast</span><span class="p">,</span>
+                <span class="n">refinement_mode</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">refinement_mode</span><span class="p">,</span>
+                <span class="n">max_hamming_error</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">max_hamming_error</span><span class="p">,</span>
+                <span class="n">gwlf_transversal_alpha</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">gwlf_transversal_alpha</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">pose</span><span class="o">=</span><span class="n">PoseConfig</span><span class="p">(</span>
+                <span class="n">huber_delta_px</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">huber_delta_px</span><span class="p">,</span>
+                <span class="n">tikhonov_alpha_max</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">tikhonov_alpha_max</span><span class="p">,</span>
+                <span class="n">sigma_n_sq</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">sigma_n_sq</span><span class="p">,</span>
+                <span class="n">structure_tensor_radius</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">structure_tensor_radius</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">segmentation</span><span class="o">=</span><span class="n">SegmentationConfig</span><span class="p">(</span>
+                <span class="n">connectivity</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">segmentation_connectivity</span><span class="p">,</span>
+                <span class="n">margin</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">segmentation_margin</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_families</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">families</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TagFamily</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update the tag families to be detected.&quot;&quot;&quot;</span>
+        <span class="n">family_values</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">families</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span><span class="o">.</span><span class="n">set_families</span><span class="p">(</span><span class="n">family_values</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">detect</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">img</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">intrinsics</span><span class="p">:</span> <span class="n">CameraIntrinsics</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tag_size</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">debug_telemetry</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectionBatch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Detect tags in the image.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            img: Input grayscale image (np.uint8).</span>
+<span class="sd">            intrinsics: Optional CameraIntrinsics for 3D pose estimation.</span>
+<span class="sd">            tag_size: Optional physical tag size (meters).</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A vectorized DetectionBatch object.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">img</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Input image must be uint8, got </span><span class="si">{</span><span class="n">img</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">raw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span><span class="o">.</span><span class="n">detect</span><span class="p">(</span>
+            <span class="n">img</span><span class="p">,</span>
+            <span class="n">intrinsics</span><span class="o">=</span><span class="n">intrinsics</span><span class="p">,</span>
+            <span class="n">tag_size</span><span class="o">=</span><span class="n">tag_size</span><span class="p">,</span>
+            <span class="n">debug_telemetry</span><span class="o">=</span><span class="n">debug_telemetry</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">telemetry</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">raw</span><span class="o">.</span><span class="n">telemetry</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">raw</span><span class="o">.</span><span class="n">telemetry</span>
+            <span class="n">telemetry</span> <span class="o">=</span> <span class="n">PipelineTelemetry</span><span class="p">(</span>
+                <span class="n">binarized</span><span class="o">=</span><span class="n">t</span><span class="o">.</span><span class="n">binarized</span><span class="p">,</span>
+                <span class="n">threshold_map</span><span class="o">=</span><span class="n">t</span><span class="o">.</span><span class="n">threshold_map</span><span class="p">,</span>
+                <span class="n">gwlf_fallback_count</span><span class="o">=</span><span class="n">t</span><span class="o">.</span><span class="n">gwlf_fallback_count</span><span class="p">,</span>
+                <span class="n">gwlf_avg_delta</span><span class="o">=</span><span class="n">t</span><span class="o">.</span><span class="n">gwlf_avg_delta</span><span class="p">,</span>
+                <span class="n">subpixel_jitter</span><span class="o">=</span><span class="n">t</span><span class="o">.</span><span class="n">subpixel_jitter</span><span class="p">,</span>
+                <span class="n">reprojection_errors</span><span class="o">=</span><span class="n">t</span><span class="o">.</span><span class="n">reprojection_errors</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">DetectionBatch</span><span class="p">(</span>
+            <span class="n">ids</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">ids</span><span class="p">,</span>
+            <span class="n">corners</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">corners</span><span class="p">,</span>
+            <span class="n">error_rates</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">error_rates</span><span class="p">,</span>
+            <span class="n">poses</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">poses</span><span class="p">,</span>
+            <span class="n">rejected_corners</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">rejected_corners</span><span class="p">,</span>
+            <span class="n">rejected_error_rates</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">rejected_error_rates</span><span class="p">,</span>
+            <span class="n">rejected_funnel_status</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">rejected_funnel_status</span><span class="p">,</span>
+            <span class="n">telemetry</span><span class="o">=</span><span class="n">telemetry</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">detect_concurrent</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">frames</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+        <span class="n">intrinsics</span><span class="p">:</span> <span class="n">CameraIntrinsics</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tag_size</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">DetectionBatch</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Detect tags in multiple frames concurrently.</span>
+
+<span class="sd">        Releases the GIL for the entire parallel section. Telemetry and</span>
+<span class="sd">        rejected-corner data are not available via this method.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            frames: List of grayscale uint8 images.</span>
+<span class="sd">            intrinsics: Optional CameraIntrinsics for 3D pose estimation.</span>
+<span class="sd">            tag_size: Optional physical tag size (meters).</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A list of DetectionBatch, one per input frame, in the same order.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">img</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">frames</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">img</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Frame </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> must be uint8, got </span><span class="si">{</span><span class="n">img</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">raw_results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span><span class="o">.</span><span class="n">detect_concurrent</span><span class="p">(</span>
+            <span class="n">frames</span><span class="p">,</span>
+            <span class="n">intrinsics</span><span class="o">=</span><span class="n">intrinsics</span><span class="p">,</span>
+            <span class="n">tag_size</span><span class="o">=</span><span class="n">tag_size</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="n">DetectionBatch</span><span class="p">(</span>
+                <span class="n">ids</span><span class="o">=</span><span class="n">r</span><span class="o">.</span><span class="n">ids</span><span class="p">,</span>
+                <span class="n">corners</span><span class="o">=</span><span class="n">r</span><span class="o">.</span><span class="n">corners</span><span class="p">,</span>
+                <span class="n">error_rates</span><span class="o">=</span><span class="n">r</span><span class="o">.</span><span class="n">error_rates</span><span class="p">,</span>
+                <span class="n">poses</span><span class="o">=</span><span class="n">r</span><span class="o">.</span><span class="n">poses</span><span class="p">,</span>
+                <span class="n">rejected_corners</span><span class="o">=</span><span class="n">r</span><span class="o">.</span><span class="n">rejected_corners</span><span class="p">,</span>
+                <span class="n">rejected_error_rates</span><span class="o">=</span><span class="n">r</span><span class="o">.</span><span class="n">rejected_error_rates</span><span class="p">,</span>
+                <span class="n">rejected_funnel_status</span><span class="o">=</span><span class="n">r</span><span class="o">.</span><span class="n">rejected_funnel_status</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">raw_results</span>
+        <span class="p">]</span>
+</code></pre></div></td></tr></table></div>
+              </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+<h3 id="locus.Detector-functions">Functions</h3>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="locus.Detector.__init__" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">__init__</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">__init__</span><span class="p">(</span><span class="n">profile</span><span class="p">:</span> <span class="n">ProfileName</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">DetectorConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">decimation</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">families</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TagFamily</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>crates/locus-py/locus/__init__.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
+<span class="normal">213</span>
+<span class="normal">214</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span>
+<span class="normal">220</span>
+<span class="normal">221</span>
+<span class="normal">222</span>
+<span class="normal">223</span>
+<span class="normal">224</span>
+<span class="normal">225</span>
+<span class="normal">226</span>
+<span class="normal">227</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+    <span class="bp">self</span><span class="p">,</span>
+    <span class="n">profile</span><span class="p">:</span> <span class="n">ProfileName</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">config</span><span class="p">:</span> <span class="n">DetectorConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">decimation</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">families</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TagFamily</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">profile</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Pass either `profile` or `config`, not both.&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">config</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">DetectorConfig</span><span class="o">.</span><span class="n">from_profile</span><span class="p">(</span><span class="n">profile</span> <span class="ow">or</span> <span class="s2">&quot;standard&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">families</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">families</span> <span class="o">=</span> <span class="p">[</span><span class="n">TagFamily</span><span class="o">.</span><span class="n">AprilTag36h11</span><span class="p">]</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span> <span class="o">=</span> <span class="n">_create_detector_from_config</span><span class="p">(</span>
+        <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">_to_ffi_config</span><span class="p">(),</span>
+        <span class="n">decimation</span><span class="o">=</span><span class="n">decimation</span><span class="p">,</span>
+        <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
+        <span class="n">families</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">families</span><span class="p">],</span>
+    <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="locus.Detector.detect" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">detect</span>
+
+
+</h4>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">detect</span><span class="p">(</span><span class="n">img</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">intrinsics</span><span class="p">:</span> <span class="n">CameraIntrinsics</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">tag_size</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">debug_telemetry</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectionBatch</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Detect tags in the image.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>img</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Input grayscale image (np.uint8).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>intrinsics</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="locus.CameraIntrinsics (locus.locus.CameraIntrinsics)" href="#locus.CameraIntrinsics">CameraIntrinsics</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional CameraIntrinsics for 3D pose estimation.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>tag_size</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional physical tag size (meters).</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="locus.DetectionBatch
+
+
+  
+      dataclass
+  " href="#locus.DetectionBatch">DetectionBatch</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A vectorized DetectionBatch object.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>crates/locus-py/locus/__init__.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">281</span>
+<span class="normal">282</span>
+<span class="normal">283</span>
+<span class="normal">284</span>
+<span class="normal">285</span>
+<span class="normal">286</span>
+<span class="normal">287</span>
+<span class="normal">288</span>
+<span class="normal">289</span>
+<span class="normal">290</span>
+<span class="normal">291</span>
+<span class="normal">292</span>
+<span class="normal">293</span>
+<span class="normal">294</span>
+<span class="normal">295</span>
+<span class="normal">296</span>
+<span class="normal">297</span>
+<span class="normal">298</span>
+<span class="normal">299</span>
+<span class="normal">300</span>
+<span class="normal">301</span>
+<span class="normal">302</span>
+<span class="normal">303</span>
+<span class="normal">304</span>
+<span class="normal">305</span>
+<span class="normal">306</span>
+<span class="normal">307</span>
+<span class="normal">308</span>
+<span class="normal">309</span>
+<span class="normal">310</span>
+<span class="normal">311</span>
+<span class="normal">312</span>
+<span class="normal">313</span>
+<span class="normal">314</span>
+<span class="normal">315</span>
+<span class="normal">316</span>
+<span class="normal">317</span>
+<span class="normal">318</span>
+<span class="normal">319</span>
+<span class="normal">320</span>
+<span class="normal">321</span>
+<span class="normal">322</span>
+<span class="normal">323</span>
+<span class="normal">324</span>
+<span class="normal">325</span>
+<span class="normal">326</span>
+<span class="normal">327</span>
+<span class="normal">328</span>
+<span class="normal">329</span>
+<span class="normal">330</span>
+<span class="normal">331</span>
+<span class="normal">332</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">detect</span><span class="p">(</span>
+    <span class="bp">self</span><span class="p">,</span>
+    <span class="n">img</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">intrinsics</span><span class="p">:</span> <span class="n">CameraIntrinsics</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">tag_size</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">debug_telemetry</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectionBatch</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Detect tags in the image.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        img: Input grayscale image (np.uint8).</span>
+<span class="sd">        intrinsics: Optional CameraIntrinsics for 3D pose estimation.</span>
+<span class="sd">        tag_size: Optional physical tag size (meters).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A vectorized DetectionBatch object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">img</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Input image must be uint8, got </span><span class="si">{</span><span class="n">img</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">raw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span><span class="o">.</span><span class="n">detect</span><span class="p">(</span>
+        <span class="n">img</span><span class="p">,</span>
+        <span class="n">intrinsics</span><span class="o">=</span><span class="n">intrinsics</span><span class="p">,</span>
+        <span class="n">tag_size</span><span class="o">=</span><span class="n">tag_size</span><span class="p">,</span>
+        <span class="n">debug_telemetry</span><span class="o">=</span><span class="n">debug_telemetry</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">telemetry</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">raw</span><span class="o">.</span><span class="n">telemetry</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">raw</span><span class="o">.</span><span class="n">telemetry</span>
+        <span class="n">telemetry</span> <span class="o">=</span> <span class="n">PipelineTelemetry</span><span class="p">(</span>
+            <span class="n">binarized</span><span class="o">=</span><span class="n">t</span><span class="o">.</span><span class="n">binarized</span><span class="p">,</span>
+            <span class="n">threshold_map</span><span class="o">=</span><span class="n">t</span><span class="o">.</span><span class="n">threshold_map</span><span class="p">,</span>
+            <span class="n">gwlf_fallback_count</span><span class="o">=</span><span class="n">t</span><span class="o">.</span><span class="n">gwlf_fallback_count</span><span class="p">,</span>
+            <span class="n">gwlf_avg_delta</span><span class="o">=</span><span class="n">t</span><span class="o">.</span><span class="n">gwlf_avg_delta</span><span class="p">,</span>
+            <span class="n">subpixel_jitter</span><span class="o">=</span><span class="n">t</span><span class="o">.</span><span class="n">subpixel_jitter</span><span class="p">,</span>
+            <span class="n">reprojection_errors</span><span class="o">=</span><span class="n">t</span><span class="o">.</span><span class="n">reprojection_errors</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">DetectionBatch</span><span class="p">(</span>
+        <span class="n">ids</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">ids</span><span class="p">,</span>
+        <span class="n">corners</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">corners</span><span class="p">,</span>
+        <span class="n">error_rates</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">error_rates</span><span class="p">,</span>
+        <span class="n">poses</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">poses</span><span class="p">,</span>
+        <span class="n">rejected_corners</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">rejected_corners</span><span class="p">,</span>
+        <span class="n">rejected_error_rates</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">rejected_error_rates</span><span class="p">,</span>
+        <span class="n">rejected_funnel_status</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">rejected_funnel_status</span><span class="p">,</span>
+        <span class="n">telemetry</span><span class="o">=</span><span class="n">telemetry</span><span class="p">,</span>
+    <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="concurrent-detection">Concurrent Detection</h2>
+<p><code>Detector</code> supports concurrent multi-frame processing via <code>detect_concurrent</code>. To configure the internal pool size (<code>max_concurrent_frames</code>), you must use the <code>DetectorBuilder</code>.</p>
+<p>See the <a href="../../how-to/concurrent_detection/">Concurrent Detection how-to</a> for full usage examples.</p>
+<h3 id="detectorbuilder"><code>DetectorBuilder</code></h3>
+<p>The fluent builder is used to construct <code>Detector</code> instances with advanced settings not yet exposed in the primary <code>Detector</code> constructor, specifically <code>max_concurrent_frames</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">locus</span>
+
+<span class="n">detector</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">locus</span><span class="o">.</span><span class="n">DetectorBuilder</span><span class="p">()</span>
+    <span class="o">.</span><span class="n">with_family</span><span class="p">(</span><span class="n">locus</span><span class="o">.</span><span class="n">TagFamily</span><span class="o">.</span><span class="n">AprilTag36h11</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_threads</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_max_concurrent_frames</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span> <span class="c1"># Enable parallel batch processing</span>
+    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
+<span class="p">)</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Method</th>
+<th style="text-align: left;">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>with_family(family)</code></td>
+<td style="text-align: left;">Add a tag family to detect.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>with_decimation(n)</code></td>
+<td style="text-align: left;">Spatial decimation factor (default 1).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>with_threads(n)</code></td>
+<td style="text-align: left;">Rayon intra-frame thread count (0 = all cores).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>with_corner_refinement(mode)</code></td>
+<td style="text-align: left;"><code>CornerRefinementMode</code> for subpixel accuracy.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>with_max_concurrent_frames(n)</code></td>
+<td style="text-align: left;">Pool size for <code>detect_concurrent</code> (default 1 = sequential).</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>build()</code></td>
+<td style="text-align: left;">Build the <code>Detector</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>detect_concurrent(frames, *, intrinsics=None, tag_size=None) -&gt; list[DetectionResult]</code></strong></p>
+<p>Detect tags in multiple frames concurrently using Rayon. Releases the GIL for the entire parallel section. Pool contexts are managed internally. Rejected-corner data and telemetry are not available via this method.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Parameter</th>
+<th style="text-align: left;">Type</th>
+<th style="text-align: left;">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>frames</code></td>
+<td style="text-align: left;"><code>list[np.ndarray]</code></td>
+<td style="text-align: left;">List of (H, W) uint8 grayscale frames.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>intrinsics</code></td>
+<td style="text-align: left;"><code>CameraIntrinsics \| None</code></td>
+<td style="text-align: left;">Camera intrinsics for 3D pose estimation.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>tag_size</code></td>
+<td style="text-align: left;"><code>float \| None</code></td>
+<td style="text-align: left;">Physical tag side length in metres.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="configuration">Configuration</h2>
+<p>Locus uses Pydantic for robust configuration validation.</p>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="locus.DetectorConfig" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">locus.DetectorConfig</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code></p>
+
+
+
+        <p>Nested detector configuration — Python source of truth.</p>
+<p>The three shipped profiles live in <code>crates/locus-core/profiles/*.json</code>
+and are embedded into the Rust crate at compile time; the wheel reads
+the exact same bytes through the FFI. Load via :meth:<code>from_profile</code>
+for a shipped profile or :meth:<code>from_profile_json</code> for a user-supplied
+JSON string.</p>
+
+
+
+
+
+
+
+
+              <details class="mkdocstrings-source">
+                <summary>Source code in <code>crates/locus-py/locus/_config.py</code></summary>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">359</span>
+<span class="normal">360</span>
+<span class="normal">361</span>
+<span class="normal">362</span>
+<span class="normal">363</span>
+<span class="normal">364</span>
+<span class="normal">365</span>
+<span class="normal">366</span>
+<span class="normal">367</span>
+<span class="normal">368</span>
+<span class="normal">369</span>
+<span class="normal">370</span>
+<span class="normal">371</span>
+<span class="normal">372</span>
+<span class="normal">373</span>
+<span class="normal">374</span>
+<span class="normal">375</span>
+<span class="normal">376</span>
+<span class="normal">377</span>
+<span class="normal">378</span>
+<span class="normal">379</span>
+<span class="normal">380</span>
+<span class="normal">381</span>
+<span class="normal">382</span>
+<span class="normal">383</span>
+<span class="normal">384</span>
+<span class="normal">385</span>
+<span class="normal">386</span>
+<span class="normal">387</span>
+<span class="normal">388</span>
+<span class="normal">389</span>
+<span class="normal">390</span>
+<span class="normal">391</span>
+<span class="normal">392</span>
+<span class="normal">393</span>
+<span class="normal">394</span>
+<span class="normal">395</span>
+<span class="normal">396</span>
+<span class="normal">397</span>
+<span class="normal">398</span>
+<span class="normal">399</span>
+<span class="normal">400</span>
+<span class="normal">401</span>
+<span class="normal">402</span>
+<span class="normal">403</span>
+<span class="normal">404</span>
+<span class="normal">405</span>
+<span class="normal">406</span>
+<span class="normal">407</span>
+<span class="normal">408</span>
+<span class="normal">409</span>
+<span class="normal">410</span>
+<span class="normal">411</span>
+<span class="normal">412</span>
+<span class="normal">413</span>
+<span class="normal">414</span>
+<span class="normal">415</span>
+<span class="normal">416</span>
+<span class="normal">417</span>
+<span class="normal">418</span>
+<span class="normal">419</span>
+<span class="normal">420</span>
+<span class="normal">421</span>
+<span class="normal">422</span>
+<span class="normal">423</span>
+<span class="normal">424</span>
+<span class="normal">425</span>
+<span class="normal">426</span>
+<span class="normal">427</span>
+<span class="normal">428</span>
+<span class="normal">429</span>
+<span class="normal">430</span>
+<span class="normal">431</span>
+<span class="normal">432</span>
+<span class="normal">433</span>
+<span class="normal">434</span>
+<span class="normal">435</span>
+<span class="normal">436</span>
+<span class="normal">437</span>
+<span class="normal">438</span>
+<span class="normal">439</span>
+<span class="normal">440</span>
+<span class="normal">441</span>
+<span class="normal">442</span>
+<span class="normal">443</span>
+<span class="normal">444</span>
+<span class="normal">445</span>
+<span class="normal">446</span>
+<span class="normal">447</span>
+<span class="normal">448</span>
+<span class="normal">449</span>
+<span class="normal">450</span>
+<span class="normal">451</span>
+<span class="normal">452</span>
+<span class="normal">453</span>
+<span class="normal">454</span>
+<span class="normal">455</span>
+<span class="normal">456</span>
+<span class="normal">457</span>
+<span class="normal">458</span>
+<span class="normal">459</span>
+<span class="normal">460</span>
+<span class="normal">461</span>
+<span class="normal">462</span>
+<span class="normal">463</span>
+<span class="normal">464</span>
+<span class="normal">465</span>
+<span class="normal">466</span>
+<span class="normal">467</span>
+<span class="normal">468</span>
+<span class="normal">469</span>
+<span class="normal">470</span>
+<span class="normal">471</span>
+<span class="normal">472</span>
+<span class="normal">473</span>
+<span class="normal">474</span>
+<span class="normal">475</span>
+<span class="normal">476</span>
+<span class="normal">477</span>
+<span class="normal">478</span>
+<span class="normal">479</span>
+<span class="normal">480</span>
+<span class="normal">481</span>
+<span class="normal">482</span>
+<span class="normal">483</span>
+<span class="normal">484</span>
+<span class="normal">485</span>
+<span class="normal">486</span>
+<span class="normal">487</span>
+<span class="normal">488</span>
+<span class="normal">489</span>
+<span class="normal">490</span>
+<span class="normal">491</span>
+<span class="normal">492</span>
+<span class="normal">493</span>
+<span class="normal">494</span>
+<span class="normal">495</span>
+<span class="normal">496</span>
+<span class="normal">497</span>
+<span class="normal">498</span>
+<span class="normal">499</span>
+<span class="normal">500</span>
+<span class="normal">501</span>
+<span class="normal">502</span>
+<span class="normal">503</span>
+<span class="normal">504</span>
+<span class="normal">505</span>
+<span class="normal">506</span>
+<span class="normal">507</span>
+<span class="normal">508</span>
+<span class="normal">509</span>
+<span class="normal">510</span>
+<span class="normal">511</span>
+<span class="normal">512</span>
+<span class="normal">513</span>
+<span class="normal">514</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">DetectorConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Nested detector configuration — Python source of truth.</span>
+
+<span class="sd">    The three shipped profiles live in ``crates/locus-core/profiles/*.json``</span>
+<span class="sd">    and are embedded into the Rust crate at compile time; the wheel reads</span>
+<span class="sd">    the exact same bytes through the FFI. Load via :meth:`from_profile`</span>
+<span class="sd">    for a shipped profile or :meth:`from_profile_json` for a user-supplied</span>
+<span class="sd">    JSON string.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">,</span> <span class="n">frozen</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">extends</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">threshold</span><span class="p">:</span> <span class="n">ThresholdConfig</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">ThresholdConfig</span><span class="p">)</span>
+    <span class="n">quad</span><span class="p">:</span> <span class="n">QuadConfig</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">QuadConfig</span><span class="p">)</span>
+    <span class="n">decoder</span><span class="p">:</span> <span class="n">DecoderConfig</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">DecoderConfig</span><span class="p">)</span>
+    <span class="n">pose</span><span class="p">:</span> <span class="n">PoseConfig</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">PoseConfig</span><span class="p">)</span>
+    <span class="n">segmentation</span><span class="p">:</span> <span class="n">SegmentationConfig</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">SegmentationConfig</span><span class="p">)</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_extends_unresolved</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectorConfig</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">extends</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Profile inheritance (extends=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">extends</span><span class="si">!r}</span><span class="s2">) is declared in the schema &quot;</span>
+                <span class="s2">&quot;but not yet resolved by the loader. Inline the parent profile&#39;s values for &quot;</span>
+                <span class="s2">&quot;now; resolution will land in a follow-up.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_cross_group_compat</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectorConfig</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">extraction_mode</span> <span class="o">==</span> <span class="n">QuadExtractionMode</span><span class="o">.</span><span class="n">EdLines</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="o">.</span><span class="n">refinement_mode</span> <span class="o">==</span> <span class="n">CornerRefinementMode</span><span class="o">.</span><span class="n">Erf</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;quad.extraction_mode=EdLines is incompatible with decoder.refinement_mode=Erf&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># Mirrors `DetectorConfig::validate` in `crates/locus-core/src/config.rs`.</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">extraction_policy</span><span class="p">,</span> <span class="n">_AdaptivePpbPolicy</span><span class="p">):</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">extraction_policy</span><span class="o">.</span><span class="n">AdaptivePpb</span>
+            <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">low_extraction</span> <span class="o">==</span> <span class="n">p</span><span class="o">.</span><span class="n">high_extraction</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;quad.extraction_policy.AdaptivePpb has identical low/high extraction &quot;</span>
+                    <span class="s1">&#39;modes; use &quot;Static&quot; for single-mode operation&#39;</span>
+                <span class="p">)</span>
+            <span class="c1"># `threshold` bounds are already enforced by the Pydantic Field</span>
+            <span class="c1"># constraints (gt=1.0, lt=5.0) on AdaptivePpbConfig; re-checking</span>
+            <span class="c1"># here would duplicate the message surface.</span>
+            <span class="k">for</span> <span class="n">ext</span><span class="p">,</span> <span class="n">refine</span> <span class="ow">in</span> <span class="p">(</span>
+                <span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">low_extraction</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">low_refinement</span><span class="p">),</span>
+                <span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">high_extraction</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">high_refinement</span><span class="p">),</span>
+            <span class="p">):</span>
+                <span class="k">if</span> <span class="n">ext</span> <span class="o">==</span> <span class="n">QuadExtractionMode</span><span class="o">.</span><span class="n">EdLines</span> <span class="ow">and</span> <span class="n">refine</span> <span class="o">==</span> <span class="n">CornerRefinementMode</span><span class="o">.</span><span class="n">Erf</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;quad.extraction_policy.AdaptivePpb route uses EdLines with &quot;</span>
+                        <span class="s2">&quot;refinement_mode=Erf, which is incompatible&quot;</span>
+                    <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_profile</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="n">ProfileName</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectorConfig</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load a shipped profile by name.</span>
+
+<span class="sd">        General-purpose profiles must stay on ``QuadExtractionPolicy::Static``.</span>
+<span class="sd">        Adaptive routing lives in explicit opt-in profiles</span>
+<span class="sd">        (currently only ``max_recall_adaptive``).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">SHIPPED_PROFILES</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unknown shipped profile </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">; expected one of </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">SHIPPED_PROFILES</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="n">_shipped_profile_json</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_STATIC_ONLY_PROFILES</span> <span class="ow">and</span> <span class="n">cfg</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">extraction_policy</span> <span class="o">!=</span> <span class="s2">&quot;Static&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s1">&#39;Shipped profile </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s1"> must carry quad.extraction_policy=&quot;Static&quot;; &#39;</span>
+                <span class="s2">&quot;adaptive routing lives in opt-in profiles only&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">cfg</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_profile_json</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">json_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectorConfig</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load a user-supplied profile from a JSON string.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="n">json_str</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_to_ffi_config</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PyDetectorConfig</span><span class="p">:</span>
+        <span class="c1"># Cross-group validation has already fired in this Pydantic model;</span>
+        <span class="c1"># Rust&#39;s `DetectorConfig::validate()` remains the final gate.</span>
+        <span class="c1">#</span>
+        <span class="c1"># `PyDetectorConfig` stays `Copy` on the Rust side, so the enum-shaped</span>
+        <span class="c1"># `quad.extraction_policy` is flattened across a boolean discriminator</span>
+        <span class="c1"># + five scalar fields here. Rust&#39;s `From&lt;PyDetectorConfig&gt;` rebuilds</span>
+        <span class="c1"># the enum. See `crates/locus-py/src/lib.rs` for the round-trip.</span>
+        <span class="n">is_adaptive</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">extraction_policy</span><span class="p">,</span> <span class="n">_AdaptivePpbPolicy</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">is_adaptive</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">extraction_policy</span><span class="p">,</span> <span class="n">_AdaptivePpbPolicy</span><span class="p">)</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">extraction_policy</span><span class="o">.</span><span class="n">AdaptivePpb</span>
+            <span class="n">ppb_threshold</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">threshold</span>
+            <span class="n">ppb_low_ext</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">low_extraction</span>
+            <span class="n">ppb_high_ext</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">high_extraction</span>
+            <span class="n">ppb_low_ref</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">low_refinement</span>
+            <span class="n">ppb_high_ref</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">high_refinement</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Placeholder scalars — Rust&#39;s `From&lt;PyDetectorConfig&gt;` ignores</span>
+            <span class="c1"># them when `quad_extraction_policy_is_adaptive == False`.</span>
+            <span class="n">ppb_threshold</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="n">ppb_low_ext</span> <span class="o">=</span> <span class="n">QuadExtractionMode</span><span class="o">.</span><span class="n">ContourRdp</span>
+            <span class="n">ppb_high_ext</span> <span class="o">=</span> <span class="n">QuadExtractionMode</span><span class="o">.</span><span class="n">EdLines</span>
+            <span class="n">ppb_low_ref</span> <span class="o">=</span> <span class="n">CornerRefinementMode</span><span class="o">.</span><span class="n">Erf</span>
+            <span class="n">ppb_high_ref</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">CornerRefinementMode</span><span class="p">,</span> <span class="s2">&quot;None&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">PyDetectorConfig</span><span class="p">(</span>
+            <span class="n">threshold_tile_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">tile_size</span><span class="p">,</span>
+            <span class="n">threshold_min_range</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">min_range</span><span class="p">,</span>
+            <span class="n">enable_sharpening</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">enable_sharpening</span><span class="p">,</span>
+            <span class="n">enable_adaptive_window</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">enable_adaptive_window</span><span class="p">,</span>
+            <span class="n">threshold_min_radius</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">min_radius</span><span class="p">,</span>
+            <span class="n">threshold_max_radius</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">max_radius</span><span class="p">,</span>
+            <span class="n">adaptive_threshold_constant</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">constant</span><span class="p">,</span>
+            <span class="n">adaptive_threshold_gradient_threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">gradient_threshold</span><span class="p">,</span>
+            <span class="n">quad_min_area</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">min_area</span><span class="p">,</span>
+            <span class="n">quad_max_aspect_ratio</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">max_aspect_ratio</span><span class="p">,</span>
+            <span class="n">quad_min_fill_ratio</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">min_fill_ratio</span><span class="p">,</span>
+            <span class="n">quad_max_fill_ratio</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">max_fill_ratio</span><span class="p">,</span>
+            <span class="n">quad_min_edge_length</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">min_edge_length</span><span class="p">,</span>
+            <span class="n">quad_min_edge_score</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">min_edge_score</span><span class="p">,</span>
+            <span class="n">subpixel_refinement_sigma</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">subpixel_refinement_sigma</span><span class="p">,</span>
+            <span class="n">upscale_factor</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">upscale_factor</span><span class="p">,</span>
+            <span class="n">quad_max_elongation</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">max_elongation</span><span class="p">,</span>
+            <span class="n">quad_min_density</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">min_density</span><span class="p">,</span>
+            <span class="n">quad_extraction_mode</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">extraction_mode</span><span class="p">,</span>
+            <span class="n">edlines_imbalance_gate</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">edlines_imbalance_gate</span><span class="p">,</span>
+            <span class="n">edlines_phase3_erf</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">edlines_phase3_erf</span><span class="p">,</span>
+            <span class="n">quad_extraction_policy_is_adaptive</span><span class="o">=</span><span class="n">is_adaptive</span><span class="p">,</span>
+            <span class="n">adaptive_ppb_threshold</span><span class="o">=</span><span class="n">ppb_threshold</span><span class="p">,</span>
+            <span class="n">adaptive_ppb_low_extraction</span><span class="o">=</span><span class="n">ppb_low_ext</span><span class="p">,</span>
+            <span class="n">adaptive_ppb_high_extraction</span><span class="o">=</span><span class="n">ppb_high_ext</span><span class="p">,</span>
+            <span class="n">adaptive_ppb_low_refinement</span><span class="o">=</span><span class="n">ppb_low_ref</span><span class="p">,</span>
+            <span class="n">adaptive_ppb_high_refinement</span><span class="o">=</span><span class="n">ppb_high_ref</span><span class="p">,</span>
+            <span class="n">decoder_min_contrast</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="o">.</span><span class="n">min_contrast</span><span class="p">,</span>
+            <span class="n">refinement_mode</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="o">.</span><span class="n">refinement_mode</span><span class="p">,</span>
+            <span class="n">max_hamming_error</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="o">.</span><span class="n">max_hamming_error</span><span class="p">,</span>
+            <span class="n">gwlf_transversal_alpha</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="o">.</span><span class="n">gwlf_transversal_alpha</span><span class="p">,</span>
+            <span class="n">post_decode_refinement</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="o">.</span><span class="n">post_decode_refinement</span><span class="p">,</span>
+            <span class="n">huber_delta_px</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">huber_delta_px</span><span class="p">,</span>
+            <span class="n">tikhonov_alpha_max</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">tikhonov_alpha_max</span><span class="p">,</span>
+            <span class="n">sigma_n_sq</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">sigma_n_sq</span><span class="p">,</span>
+            <span class="n">structure_tensor_radius</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">structure_tensor_radius</span><span class="p">,</span>
+            <span class="n">pose_consistency_fpr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">pose_consistency_fpr</span><span class="p">,</span>
+            <span class="n">pose_consistency_gate_sigma_px</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">pose_consistency_gate_sigma_px</span><span class="p">,</span>
+            <span class="n">pose_consistency_min_decisive_ratio</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">pose_consistency_min_decisive_ratio</span><span class="p">,</span>
+            <span class="n">outlier_drop_d2_threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">outlier_drop_d2_threshold</span><span class="p">,</span>
+            <span class="n">segmentation_connectivity</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">segmentation</span><span class="o">.</span><span class="n">connectivity</span><span class="p">,</span>
+            <span class="n">segmentation_margin</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">segmentation</span><span class="o">.</span><span class="n">margin</span><span class="p">,</span>
+        <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+              </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+<h4 id="locus.DetectorConfig-functions">Functions</h4>
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="locus.DetectorConfig.from_profile" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">from_profile</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+</h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">from_profile</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="n">ProfileName</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectorConfig</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Load a shipped profile by name.</p>
+<p>General-purpose profiles must stay on <code>QuadExtractionPolicy::Static</code>.
+Adaptive routing lives in explicit opt-in profiles
+(currently only <code>max_recall_adaptive</code>).</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>crates/locus-py/locus/_config.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">420</span>
+<span class="normal">421</span>
+<span class="normal">422</span>
+<span class="normal">423</span>
+<span class="normal">424</span>
+<span class="normal">425</span>
+<span class="normal">426</span>
+<span class="normal">427</span>
+<span class="normal">428</span>
+<span class="normal">429</span>
+<span class="normal">430</span>
+<span class="normal">431</span>
+<span class="normal">432</span>
+<span class="normal">433</span>
+<span class="normal">434</span>
+<span class="normal">435</span>
+<span class="normal">436</span>
+<span class="normal">437</span>
+<span class="normal">438</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">from_profile</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="n">ProfileName</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectorConfig</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load a shipped profile by name.</span>
+
+<span class="sd">    General-purpose profiles must stay on ``QuadExtractionPolicy::Static``.</span>
+<span class="sd">    Adaptive routing lives in explicit opt-in profiles</span>
+<span class="sd">    (currently only ``max_recall_adaptive``).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">SHIPPED_PROFILES</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Unknown shipped profile </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">; expected one of </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">SHIPPED_PROFILES</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="n">cfg</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="n">_shipped_profile_json</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_STATIC_ONLY_PROFILES</span> <span class="ow">and</span> <span class="n">cfg</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">extraction_policy</span> <span class="o">!=</span> <span class="s2">&quot;Static&quot;</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s1">&#39;Shipped profile </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s1"> must carry quad.extraction_policy=&quot;Static&quot;; &#39;</span>
+            <span class="s2">&quot;adaptive routing lives in opt-in profiles only&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">cfg</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="locus.DetectorConfig.from_profile_json" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">from_profile_json</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+</h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">from_profile_json</span><span class="p">(</span><span class="n">json_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectorConfig</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Load a user-supplied profile from a JSON string.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>crates/locus-py/locus/_config.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">440</span>
+<span class="normal">441</span>
+<span class="normal">442</span>
+<span class="normal">443</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">from_profile_json</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">json_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectorConfig</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load a user-supplied profile from a JSON string.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="n">json_str</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="locus.DetectOptions" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">locus.DetectOptions</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code></p>
+
+
+
+        <p>Per-call options for tag detection.</p>
+
+
+
+
+
+
+
+
+              <details class="mkdocstrings-source">
+                <summary>Source code in <code>crates/locus-py/locus/_config.py</code></summary>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">517</span>
+<span class="normal">518</span>
+<span class="normal">519</span>
+<span class="normal">520</span>
+<span class="normal">521</span>
+<span class="normal">522</span>
+<span class="normal">523</span>
+<span class="normal">524</span>
+<span class="normal">525</span>
+<span class="normal">526</span>
+<span class="normal">527</span>
+<span class="normal">528</span>
+<span class="normal">529</span>
+<span class="normal">530</span>
+<span class="normal">531</span>
+<span class="normal">532</span>
+<span class="normal">533</span>
+<span class="normal">534</span>
+<span class="normal">535</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">DetectOptions</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Per-call options for tag detection.&quot;&quot;&quot;</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">families</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TagFamily</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">decimation</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ge</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">intrinsics</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="n">CameraIntrinsics</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">tag_size</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ge</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">all</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectOptions</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">families</span><span class="o">=</span><span class="p">[</span>
+                <span class="n">TagFamily</span><span class="o">.</span><span class="n">AprilTag36h11</span><span class="p">,</span>
+                <span class="n">TagFamily</span><span class="o">.</span><span class="n">ArUco4x4_50</span><span class="p">,</span>
+                <span class="n">TagFamily</span><span class="o">.</span><span class="n">ArUco4x4_100</span><span class="p">,</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+              </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="data-models">Data Models</h2>
+<p>These classes represent the output and internal state of the detection pipeline.</p>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="locus.DetectionBatch" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">locus.DetectionBatch</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents first">
+
+
+
+        <p>Vectorized detection results.</p>
+<p>This dataclass contains parallel NumPy arrays representing a batch of detections.</p>
+
+
+
+
+
+
+
+
+              <details class="mkdocstrings-source">
+                <summary>Source code in <code>crates/locus-py/locus/__init__.py</code></summary>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">147</span>
+<span class="normal">148</span>
+<span class="normal">149</span>
+<span class="normal">150</span>
+<span class="normal">151</span>
+<span class="normal">152</span>
+<span class="normal">153</span>
+<span class="normal">154</span>
+<span class="normal">155</span>
+<span class="normal">156</span>
+<span class="normal">157</span>
+<span class="normal">158</span>
+<span class="normal">159</span>
+<span class="normal">160</span>
+<span class="normal">161</span>
+<span class="normal">162</span>
+<span class="normal">163</span>
+<span class="normal">164</span>
+<span class="normal">165</span>
+<span class="normal">166</span>
+<span class="normal">167</span>
+<span class="normal">168</span>
+<span class="normal">169</span>
+<span class="normal">170</span>
+<span class="normal">171</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">DetectionBatch</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Vectorized detection results.</span>
+
+<span class="sd">    This dataclass contains parallel NumPy arrays representing a batch of detections.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">ids</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>  <span class="c1"># Shape: (N,), Dtype: int32</span>
+    <span class="n">corners</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>  <span class="c1"># Shape: (N, 4, 2), Dtype: float32</span>
+    <span class="n">error_rates</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>  <span class="c1"># Shape: (N,), Dtype: float32</span>
+    <span class="n">poses</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Shape: (N, 7), Dtype: float32. [tx, ty, tz, qx, qy, qz, qw]</span>
+    <span class="n">telemetry</span><span class="p">:</span> <span class="s2">&quot;PipelineTelemetry | None&quot;</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">rejected_corners</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Shape: (M, 4, 2), Dtype: float32</span>
+    <span class="n">rejected_error_rates</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Shape: (M,), Dtype: float32</span>
+    <span class="c1"># Shape: (M,), Dtype: uint8. Codes from `FunnelStatus`.</span>
+    <span class="n">rejected_funnel_status</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">centers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute centers from corners: (N, 2)&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">corners</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ids</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+              </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+<h4 id="locus.DetectionBatch-attributes">Attributes</h4>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h5 id="locus.DetectionBatch.centers" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">centers</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="n">centers</span><span class="p">:</span> <span class="n">ndarray</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Compute centers from corners: (N, 2)</p>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="locus.Pose" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">locus.Pose</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents first">
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="geometry">Geometry</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="locus.CameraIntrinsics" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">locus.CameraIntrinsics</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents first">
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="board-pose-estimation">Board Pose Estimation</h2>
+<p>Locus supports board-level 6-DOF pose estimation for AprilGrid and ChAruco boards.
+All board types enforce dictionary bounds at construction time — a <code>ValueError</code> is raised
+if the board requires more marker IDs than the target <code>TagFamily</code> provides.</p>
+<p>For the underlying algorithm, see <a href="../../explanation/algorithms/#7-board-level-pose-estimation">Board-Level Pose Estimation</a>.</p>
+<h3 id="aprilgrid"><code>AprilGrid</code></h3>
+<div class="highlight"><pre><span></span><code><span class="n">locus</span><span class="o">.</span><span class="n">AprilGrid</span><span class="p">(</span>
+    <span class="n">rows</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">cols</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>        <span class="c1"># gap between markers (metres)</span>
+    <span class="n">marker_length</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>  <span class="c1"># physical marker side length (metres)</span>
+    <span class="n">family</span><span class="p">:</span> <span class="n">TagFamily</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Immutable topology for an AprilTag grid board. <code>spacing = square_length - marker_length</code>.
+Raises <code>ValueError</code> if <code>rows * cols &gt; family.max_id_count()</code>.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Attribute</th>
+<th style="text-align: left;">Type</th>
+<th style="text-align: left;">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>rows</code></td>
+<td style="text-align: left;"><code>int</code></td>
+<td style="text-align: left;">Number of tag rows.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>cols</code></td>
+<td style="text-align: left;"><code>int</code></td>
+<td style="text-align: left;">Number of tag columns.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="charucoboard"><code>CharucoBoard</code></h3>
+<div class="highlight"><pre><span></span><code><span class="n">locus</span><span class="o">.</span><span class="n">CharucoBoard</span><span class="p">(</span>
+    <span class="n">rows</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">cols</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">square_length</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>  <span class="c1"># physical checkerboard square side (metres)</span>
+    <span class="n">marker_length</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>  <span class="c1"># physical ArUco marker side (metres)</span>
+    <span class="n">family</span><span class="p">:</span> <span class="n">TagFamily</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Immutable topology for a ChAruco board. Markers occupy squares where <code>(row + col)</code> is even.
+Saddle points are at the outer corners of each square (<code>(rows-1)*(cols-1)</code> total).
+Raises <code>ValueError</code> if the required marker count exceeds <code>family.max_id_count()</code>.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Attribute</th>
+<th style="text-align: left;">Type</th>
+<th style="text-align: left;">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>rows</code></td>
+<td style="text-align: left;"><code>int</code></td>
+<td style="text-align: left;">Number of square rows.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>cols</code></td>
+<td style="text-align: left;"><code>int</code></td>
+<td style="text-align: left;">Number of square columns.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="boardestimator"><code>BoardEstimator</code></h3>
+<p>Unified stateful estimator for both AprilGrid and ChAruco boards. All scratch buffers
+are pre-allocated at construction; <code>estimate()</code> performs <strong>zero heap allocations</strong>.</p>
+<p><strong>Construction:</strong></p>
+<div class="highlight"><pre><span></span><code><span class="c1"># AprilGrid board</span>
+<span class="n">estimator</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">BoardEstimator</span><span class="p">(</span><span class="n">board</span><span class="p">:</span> <span class="n">AprilGrid</span><span class="p">)</span>
+
+<span class="c1"># ChAruco board</span>
+<span class="n">estimator</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">BoardEstimator</span><span class="o">.</span><span class="n">from_charuco</span><span class="p">(</span><span class="n">board</span><span class="p">:</span> <span class="n">CharucoBoard</span><span class="p">)</span>
+</code></pre></div>
+<p><strong>Estimation:</strong></p>
+<div class="highlight"><pre><span></span><code><span class="n">result</span><span class="p">:</span> <span class="n">BoardEstimateResult</span> <span class="o">=</span> <span class="n">estimator</span><span class="o">.</span><span class="n">estimate</span><span class="p">(</span>
+    <span class="n">detector</span><span class="p">:</span> <span class="n">locus</span><span class="o">.</span><span class="n">Detector</span><span class="p">,</span>
+    <span class="n">img</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>           <span class="c1"># (H, W) uint8 grayscale</span>
+    <span class="n">intrinsics</span><span class="p">:</span> <span class="n">CameraIntrinsics</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p><code>BoardEstimateResult</code> attributes:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Attribute</th>
+<th style="text-align: left;">Shape / Type</th>
+<th style="text-align: left;">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>ids</code></td>
+<td style="text-align: left;"><code>(N,) int32</code></td>
+<td style="text-align: left;">Decoded tag IDs visible in this frame.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>corners</code></td>
+<td style="text-align: left;"><code>(N, 4, 2) float32</code></td>
+<td style="text-align: left;">Refined tag corner image coordinates.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>board_pose</code></td>
+<td style="text-align: left;"><code>(7,) float64</code> or <code>None</code></td>
+<td style="text-align: left;"><code>[tx, ty, tz, qx, qy, qz, qw]</code> in camera frame — <code>None</code> if insufficient observations. Pose origin is the board's top-left marker corner.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>board_cov</code></td>
+<td style="text-align: left;"><code>(6, 6) float64</code> or <code>None</code></td>
+<td style="text-align: left;">Pose covariance in <span class="arithmatex">\(\mathfrak{se}(3)\)</span> tangent space <code>[t, ω]</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="enumerations">Enumerations</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="locus.TagFamily" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">locus.TagFamily</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="enum.IntEnum">IntEnum</span></code></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="locus.CornerRefinementMode" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">locus.CornerRefinementMode</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="enum.IntEnum">IntEnum</span></code></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="locus.SegmentationConnectivity" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">locus.SegmentationConnectivity</span>
+
+
+</h3>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="enum.IntEnum">IntEnum</span></code></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+      
+        <script src="../../javascripts/mermaid-init.js"></script>
+      
+    
+  </body>
+</html>

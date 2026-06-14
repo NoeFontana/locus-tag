@@ -1,0 +1,3024 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-performance fiducial marker detector.">
+      
+      
+      
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/0.6/engineering/benchmarking/lessons/">
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../micro-benchmarking-guide/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Benchmarking Lessons (consolidated, 2026-05-02) - Locus</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="purple">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#benchmarking-lessons-consolidated-2026-05-02" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Locus
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Benchmarking Lessons (consolidated, 2026-05-02)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="purple"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/NoeFontana/locus-tag" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    NoeFontana/locus-tag
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Locus
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/NoeFontana/locus-tag" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    NoeFontana/locus-tag
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-To Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-To Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/add_dictionary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to: Add a custom fiducial dictionary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/debug_with_rerun/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to Guide: Debugging with Rerun
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/concurrent_detection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How to Run Concurrent Detection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/install-with-distortion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install with distortion support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../explanation/pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Detection Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../explanation/memory_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../explanation/algorithms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Algorithms &amp; Mathematical Foundations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../explanation/coordinates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coordinate Systems
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../explanation/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engineering (Internal)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Engineering (Internal)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Identity &amp; Engineering Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feature Development Workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release-runbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release runbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../detection-batch-contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architectural Contract: DetectionBatch (SoA)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../constraints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strict Constraints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ffi_contracts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FFI Contract Inventory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../profiles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Detector Profiles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stratification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stratification Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quality-gates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quality Gates &amp; Verification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../rust-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rust Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../general-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    General Code Style Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_13" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6_13" id="__nav_6_13_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_13_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6_13">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Benchmarking
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking &amp; Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking Lessons (consolidated, 2026-05-02)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking Lessons (consolidated, 2026-05-02)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-optimization-timeline-mar-2-apr-26" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §1 Optimization timeline (Mar 2 → Apr 26)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-architecture-shaping-decisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §2 Architecture-shaping decisions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="§2 Architecture-shaping decisions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-soa-detectionbatch-with-hard-max_candidates-1024" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §2.1 SoA DetectionBatch with hard MAX_CANDIDATES = 1024
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-zero-allocation-hot-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §2.2 Zero-allocation hot loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-gil-release-across-the-entire-detect-pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §2.3 GIL release across the entire detect pass
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-telemetry-erasure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §2.4 Telemetry erasure
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-profile-philosophy-four-shipped-json-presets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §3 Profile philosophy: four shipped JSON presets
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="§3 Profile philosophy: four shipped JSON presets">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-why-four-and-not-one" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §3.1 Why four and not one
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-decode-mode-is-profile-bound-not-user-tunable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §3.2 Decode mode is profile-bound, not user-tunable
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-algorithm-tradeoffs-that-should-inform-future-tuning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §4 Algorithm tradeoffs that should inform future tuning
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="§4 Algorithm tradeoffs that should inform future tuning">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-refinement-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §4.1 Refinement modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-gn-trades-corner-rmse-for-pose-precision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §4.2 GN trades corner RMSE for pose precision
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-edlines-axis-aligned-imbalance-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §4.3 EdLines axis-aligned imbalance gate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-ppb-pixels-per-bit-sets-the-recall-floor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §4.4 PPB (pixels per bit) sets the recall floor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#45-pruned-algorithms-dont-reintroduce" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §4.5 Pruned algorithms (don't reintroduce)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#46-adaptiveppb-gracefully-falls-back-on-distortion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §4.6 AdaptivePpb gracefully falls back on distortion
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-benchmark-methodology-traps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §5 Benchmark methodology traps
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="§5 Benchmark methodology traps">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-pose-convention-misalignment-between-detectors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §5.1 Pose convention misalignment between detectors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-cargo-integration-test-cwd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §5.2 Cargo integration test CWD
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-dataset-priority-when-results-conflict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §5.3 Dataset priority (when results conflict)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54-hardware-metadata-is-mandatory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §5.4 Hardware metadata is mandatory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55-soft-decode-is-a-footgun-outside-specific-scenarios" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §5.5 Soft decode is a footgun outside specific scenarios
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-kpi-watchlist-set-by-regression_render_tag_robustness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §6 KPI watchlist (set by regression_render_tag_robustness)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-icra-2020-community-benchmark-fixture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §7 ICRA 2020 community-benchmark fixture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-where-to-look-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §8 Where to look next
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../micro-benchmarking-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Micro-Benchmarking Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release_performance_20260418/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Locus Release Performance Report (2026-04-18)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hub_regression_20260423/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hub Regression Performance Report (2026-04-23)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../render_tag_sota_20260425/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Render-tag 1080p SOTA pursuit (2026-04-25)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../render_tag_2160p_20260425/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2160p render_tag_hub recall lift (2026-04-25)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quad_truncation_fix_20260426/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quad-extraction truncation fix (2026-04-26)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migration
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Migration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../migration/config-refactor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config refactor — migration notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-optimization-timeline-mar-2-apr-26" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §1 Optimization timeline (Mar 2 → Apr 26)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-architecture-shaping-decisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §2 Architecture-shaping decisions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="§2 Architecture-shaping decisions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-soa-detectionbatch-with-hard-max_candidates-1024" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §2.1 SoA DetectionBatch with hard MAX_CANDIDATES = 1024
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-zero-allocation-hot-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §2.2 Zero-allocation hot loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-gil-release-across-the-entire-detect-pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §2.3 GIL release across the entire detect pass
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-telemetry-erasure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §2.4 Telemetry erasure
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-profile-philosophy-four-shipped-json-presets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §3 Profile philosophy: four shipped JSON presets
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="§3 Profile philosophy: four shipped JSON presets">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-why-four-and-not-one" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §3.1 Why four and not one
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-decode-mode-is-profile-bound-not-user-tunable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §3.2 Decode mode is profile-bound, not user-tunable
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-algorithm-tradeoffs-that-should-inform-future-tuning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §4 Algorithm tradeoffs that should inform future tuning
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="§4 Algorithm tradeoffs that should inform future tuning">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-refinement-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §4.1 Refinement modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-gn-trades-corner-rmse-for-pose-precision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §4.2 GN trades corner RMSE for pose precision
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-edlines-axis-aligned-imbalance-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §4.3 EdLines axis-aligned imbalance gate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-ppb-pixels-per-bit-sets-the-recall-floor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §4.4 PPB (pixels per bit) sets the recall floor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#45-pruned-algorithms-dont-reintroduce" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §4.5 Pruned algorithms (don't reintroduce)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#46-adaptiveppb-gracefully-falls-back-on-distortion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §4.6 AdaptivePpb gracefully falls back on distortion
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-benchmark-methodology-traps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §5 Benchmark methodology traps
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="§5 Benchmark methodology traps">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-pose-convention-misalignment-between-detectors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §5.1 Pose convention misalignment between detectors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-cargo-integration-test-cwd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §5.2 Cargo integration test CWD
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-dataset-priority-when-results-conflict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §5.3 Dataset priority (when results conflict)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54-hardware-metadata-is-mandatory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §5.4 Hardware metadata is mandatory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55-soft-decode-is-a-footgun-outside-specific-scenarios" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §5.5 Soft decode is a footgun outside specific scenarios
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-kpi-watchlist-set-by-regression_render_tag_robustness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §6 KPI watchlist (set by regression_render_tag_robustness)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-icra-2020-community-benchmark-fixture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §7 ICRA 2020 community-benchmark fixture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-where-to-look-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §8 Where to look next
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="benchmarking-lessons-consolidated-2026-05-02">Benchmarking Lessons (consolidated, 2026-05-02)</h1>
+<p>This doc captures the <strong>durable</strong> learnings from two months of detector
+optimization (Mar–Apr 2026). It supersedes
+<code>historical_evolution.md</code>, <code>sota_metrology_20260321.md</code>,
+<code>edlines_gauss_newton_20260321.md</code>, and three point-in-time progress
+reports — what survives below is the part that should still inform
+future work even after the surrounding numbers go stale.</p>
+<blockquote>
+<p><strong>Note (2026-05-03):</strong> Soft decode (<code>DecodeMode::Soft</code>) was removed
+from the codebase entirely. The Soft-vs-Hard analysis below is kept
+as historical context — the lesson is preserved so the rationale for
+rejecting LLR-based decoding on real-camera data isn't relearned.</p>
+<p><strong>Note (2026-05-15):</strong> <code>PoseEstimationMode</code> (the <code>Fast</code> / <code>Accurate</code>
+toggle) was removed in the same spirit. Fast was latency-neutral on
+<code>high_accuracy</code>, ≤ 13 % faster on <code>standard</code>, and 5–6× worse pose
+RMSE on every measured workload. The kwarg existed because a
+Fast / Accurate toggle felt like API "completeness" — but its only
+effect at the default value was to make pose worse. The underlying
+unweighted Huber LM still survives as an internal fallback when
+callers skip both the image view and external covariances (e.g.
+pure pose-only refits). Default-value artifacts of this kind get
+deleted, not preserved as configuration knobs.</p>
+</blockquote>
+<p>For current numbers, see <code>release_performance_20260418.md</code>,
+<code>hub_regression_20260423.md</code>, <code>render_tag_sota_20260425.md</code>,
+<code>render_tag_2160p_20260425.md</code>, and <code>quad_truncation_fix_20260426.md</code>.</p>
+<h2 id="1-optimization-timeline-mar-2-apr-26">§1 Optimization timeline (Mar 2 → Apr 26)</h2>
+<div class="highlight"><pre><span></span><code>Mar 02   55.94 ms/frame  ── Initial baseline (decoding = 70 % of frame)
+Mar 03   14.55 ms/frame  ── SoA migration (3.8× total)
+Mar 12     accuracy      ── GWLF: 7× rotation improvement vs ContourRdp+ERF
+Mar 16   0.063 ms/1024   ── DDA-SIMD decode: decode is no longer the bottleneck
+Mar 19     ~3× CCL       ── SIMD CCL Fusion (RLE + LSL): defeated the memory wall
+Mar 21     accuracy      ── EdLines + Joint Gauss-Newton (planarity-constrained corners)
+Mar 21    presets        ── Three SOTA profiles ship: high_accuracy / standard / grid
+Apr 18      v0.3.1       ── All shipped profiles default to Hard decode (precision floor)
+Apr 23   regressions     ── Hub-rename + robustness suite (tag16h5 / low_key / raw_pipeline)
+Apr 25      SOTA         ── render_tag_hub profile beats AprilTag-C on every t-percentile
+Apr 25     2160p fix     ── pixel_count_descending_order — MAX_CANDIDATES truncation bug
+Apr 26    correction     ── Truncate post-filter, not pre-filter (distortion +6.5 pp)
+</code></pre></div>
+<p>Per-stage speedups that still hold (single-thread, 1080p):</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th style="text-align: right;">Before SIMD</th>
+<th style="text-align: right;">After (Apr 18)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Thresholding</td>
+<td style="text-align: right;">4.26 ms</td>
+<td style="text-align: right;"><strong>1.51 ms</strong> (2.8×)</td>
+</tr>
+<tr>
+<td>Segmentation (CCL)</td>
+<td style="text-align: right;">~9 ms scalar</td>
+<td style="text-align: right;"><strong>2.57 ms</strong></td>
+</tr>
+<tr>
+<td>Quad extraction</td>
+<td style="text-align: right;">34.35 ms</td>
+<td style="text-align: right;"><strong>23.79 ms</strong></td>
+</tr>
+<tr>
+<td>Decoding (1024 cands)</td>
+<td style="text-align: right;">~200 ms</td>
+<td style="text-align: right;"><strong>0.063 ms</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Decode is no longer the bottleneck; <strong>preprocessing dominates</strong> at every
+resolution above 720p. Future micro-optimization cycles should target
+thresholding and quad extraction first.</p>
+<h2 id="2-architecture-shaping-decisions">§2 Architecture-shaping decisions</h2>
+<p>These are the decisions that constrain future work. Violating any of
+them re-introduces a class of bug we've already paid for once.</p>
+<h3 id="21-soa-detectionbatch-with-hard-max_candidates-1024">§2.1 SoA <code>DetectionBatch</code> with hard <code>MAX_CANDIDATES = 1024</code></h3>
+<p><strong>Why it matters.</strong> Identity = index. <code>corners[7]</code>, <code>homographies[7]</code>,
+<code>ids[7]</code>, <code>poses[7]</code> belong to the same physical marker. Phase
+isolation (Phase A/B/C/D) is enforced by
+<code>contract_detection_batch.rs</code>. The L1-friendly layout is what made the
+3.8× SoA migration win.</p>
+<p><strong>The 1024 ceiling is real.</strong> EdLines accepts more candidate quads
+than ContourRdp (more permissive geometric gates → smaller noise
+components survive). On dense scenes the candidate count exceeds
+<code>MAX_CANDIDATES</code>. Two bugs already cost us 6 weeks of confusion:</p>
+<ol>
+<li><em>Pre-filter truncation by raster order</em> dropped tag-bearing
+   candidates with high label indices when noise filled the first
+   1024 slots (2160p recall stuck at 47/50). Fix: sort by
+   <code>pixel_count</code> descending. (<code>render_tag_2160p_20260425.md</code>)</li>
+<li><em>Pre-filter truncation by pixel-count</em> kept giant background blobs
+   that geometric gates would have rejected anyway, and starved the
+   downstream survivor set of true tag candidates (Brown–Conrady
+   recall stuck at 0.870). Fix: truncate <strong>post-filter</strong>; let Rayon's
+   ordered <code>collect()</code> preserve descending order so the smallest
+   <em>survivors</em> are the ones dropped. (<code>quad_truncation_fix_20260426.md</code>)</li>
+</ol>
+<p><strong>Forward rule:</strong> any change to candidate ordering or truncation
+must be regression-tested across <strong>all</strong> suites — render-tag is
+order-insensitive (clean PSF/Blender renders), but ICRA and
+distortion are order- and content-sensitive and will silently lose
+2–3 pp recall.</p>
+<h3 id="22-zero-allocation-hot-loop">§2.2 Zero-allocation hot loop</h3>
+<p><code>bumpalo::Bump</code> per frame; reset (cursor → 0) at frame start. No
+<code>Vec::new</code>, no <code>Box::new</code>, no <code>HashMap::new</code> in <code>detect()</code>. Stack
+allocation (<code>SmallVec</code>, fixed <code>[T; N]</code>) only.</p>
+<p>The <code>extract_quads_soa</code> API was over-engineered to take a <code>&amp;Bump</code>
+parameter that nobody read; the per-component allocator is
+<code>WORKSPACE_ARENA.with(...)</code> per Rayon worker. Lesson: pass the
+allocator <em>at the level it's used</em>, not "for symmetry".</p>
+<h3 id="23-gil-release-across-the-entire-detect-pass">§2.3 GIL release across the entire detect pass</h3>
+<p>The Python wrapper releases the GIL for the whole pipeline. Concurrent
+detection of N frames scales linearly. Adding any Python callback
+inside <code>detect()</code> would re-acquire the GIL and serialize all workers —
+don't.</p>
+<h3 id="24-telemetry-erasure">§2.4 Telemetry erasure</h3>
+<p><code>tracing</code> deps must carry <code>features = ["release_max_level_info"]</code> in
+both <code>locus-core</code> and <code>locus-py</code>. <code>debug!</code>/<code>trace!</code> spans are
+compile-time erased. Without this, per-pixel debug spans cost
+~5–10 % even when no subscriber is attached.</p>
+<p><code>TELEMETRY_MODE</code> env is mutually exclusive: <code>tracy</code> (high-fidelity GUI)
+or <code>json</code> (structured dumps). Never both — the JSON serialization
+pollutes Tracy's nanosecond ring buffers (the "Observer Effect").</p>
+<h2 id="3-profile-philosophy-four-shipped-json-presets">§3 Profile philosophy: four shipped JSON presets</h2>
+<p>Detector settings live in <code>crates/locus-core/profiles/*.json</code>,
+<code>include_str!</code>'d into the Rust crate and re-exposed to Python via
+<code>_shipped_profile_json</code>. <strong>The JSON is authoritative</strong>; if a Rust
+constant disagrees, the JSON wins.</p>
+<p>The four presets target mutually incompatible scenarios:</p>
+<table>
+<thead>
+<tr>
+<th>Profile</th>
+<th>Target</th>
+<th>Quad extract</th>
+<th>Refinement</th>
+<th>Sharpen</th>
+<th>Decode</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>high_accuracy</code></td>
+<td>Pose-precision SOTA (synthetic + lab metrology)</td>
+<td>AdaptivePpb (ContourRdp+Erf low / EdLines+None high) + axis-imbalance gate</td>
+<td>None on EdLines route</td>
+<td>off</td>
+<td>Hard</td>
+<td>Beats AprilTag-C on every translation percentile; subsumes the former <code>render_tag_hub</code> profile (PR #2xx)</td>
+</tr>
+<tr>
+<td><code>standard</code></td>
+<td>Dense multi-tag production tracking</td>
+<td>ContourRdp</td>
+<td>Erf</td>
+<td>on</td>
+<td>Hard</td>
+<td>v0.3.1+ ships Hard for 100 % precision (was Soft Mar 21)</td>
+</tr>
+<tr>
+<td><code>grid</code></td>
+<td>Touching-tag checkerboard</td>
+<td>ContourRdp + 4-conn</td>
+<td>Erf</td>
+<td>off</td>
+<td>Hard</td>
+<td>4-connectivity separates touching borders; sharpening creates halos</td>
+</tr>
+<tr>
+<td><code>max_recall_adaptive</code></td>
+<td>Production tracking with per-candidate PPB routing</td>
+<td>AdaptivePpb (ContourRdp+Erf low / EdLines+None high)</td>
+<td>Erf on low / None on high</td>
+<td>on</td>
+<td>Hard</td>
+<td>Adds <code>max_hamming_error=2</code> and <code>post_decode_refinement=true</code> for blurry / distant tags</td>
+</tr>
+</tbody>
+</table>
+<h3 id="31-why-four-and-not-one">§3.1 Why four and not one</h3>
+<ul>
+<li><strong>HighAccuracy</strong> needs the lowest corner RMSE. EdLines + GN gives
+  it (0.16–0.29 px on hub vs 0.99–1.15 px for production); AdaptivePpb
+  routing falls back to ContourRdp+Erf for tags below ~2.5 PPB so
+  ICRA-class data doesn't collapse inside EdLines, and the
+  axis-imbalance gate rescues near-axis-aligned synthetic tags.</li>
+<li><strong>Standard</strong> needs maximum recall without losing precision.
+  ContourRdp + sharpening keeps recall at 100 % on dense scenes.
+  Soft decode would add +19 pp recall on ICRA but causes a 10–22 %
+  precision collapse when paired with EdLines (which surfaces more
+  background-edge candidates) — so Standard ships ContourRdp + Hard.</li>
+<li><strong>Grid</strong> has non-negotiable topological constraints
+  (4-connectivity, relaxed contrast / edge-score gates) that hurt
+  isolated-tag performance.</li>
+<li><strong>MaxRecallAdaptive</strong> trades the two specialty pose-tail knobs
+  (χ² gate, σ_gate=0.5) for <code>max_hamming_error=2</code> and
+  <code>post_decode_refinement=true</code> to recover blurry / distant tags
+  in real-camera tracking.</li>
+</ul>
+<h3 id="32-decode-mode-is-profile-bound-not-user-tunable">§3.2 Decode mode is profile-bound, not user-tunable</h3>
+<table>
+<thead>
+<tr>
+<th>Decode</th>
+<th>Use with</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hard</td>
+<td>Default everywhere</td>
+<td>Standard threshold → bit majority</td>
+</tr>
+<tr>
+<td>Soft</td>
+<td>ContourRdp on <strong>synthetic ICRA-like</strong> data only</td>
+<td>+19 pp recall, ~+15 % RMSE</td>
+</tr>
+</tbody>
+</table>
+<p>Soft + EdLines is forbidden by every shipped profile — the precision
+collapse is well-characterized and will recur if anyone re-enables it.</p>
+<h2 id="4-algorithm-tradeoffs-that-should-inform-future-tuning">§4 Algorithm tradeoffs that should inform future tuning</h2>
+<h3 id="41-refinement-modes">§4.1 Refinement modes</h3>
+<p>GN corners from EdLines Phase 5 are already sub-pixel. With EdLines as
+the extractor, the post-refinement stage is <em>counter-productive</em> for
+raw RMSE:</p>
+<table>
+<thead>
+<tr>
+<th>EdLines + refinement (720p hub)</th>
+<th style="text-align: right;">Corner RMSE</th>
+<th style="text-align: right;">Repro RMSE</th>
+<th style="text-align: right;">Rot P50</th>
+<th>Use case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>None</code> (GN direct)</td>
+<td style="text-align: right;"><strong>0.166 px</strong></td>
+<td style="text-align: right;"><strong>0.541</strong></td>
+<td style="text-align: right;">0.27°</td>
+<td>Best for metrology</td>
+</tr>
+<tr>
+<td><code>Erf</code></td>
+<td style="text-align: right;">0.592 px</td>
+<td style="text-align: right;">0.848</td>
+<td style="text-align: right;">0.28°</td>
+<td>(don't — degrades GN)</td>
+</tr>
+<tr>
+<td><code>Gwlf</code></td>
+<td style="text-align: right;">0.563 px</td>
+<td style="text-align: right;">0.564</td>
+<td style="text-align: right;"><strong>0.06°</strong></td>
+<td>Best rotation stability</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Rule:</strong> with <code>QuadExtractionMode::EdLines</code>, default to
+<code>CornerRefinementMode::None</code>. Use <code>Gwlf</code> only when angular stability
+matters more than per-corner pixel error.</p>
+<p>ERF was designed for integer ContourRdp corners — it expects to push
+them to sub-pixel positions. Applied to already-sub-pixel GN
+corners, it just adds noise. The <code>Gwlf</code> row improved over earlier
+numbers (was 0.621 / 0.656 / 0.16°) once the quad-stage refit was
+removed from the EdLines + Gwlf path: the gradient-peak refit between
+EdLines GN and the detector-level GWLF pass was degrading the
+initialization GWLF received.</p>
+<p><strong>Warm-start matters for ContourRdp + Gwlf — the opposite call.</strong>
+ContourRdp's coarse corners are integer-precision midpoints. Without a
+quad-stage warm-start, the detector-level GWLF pass converges to a
+worse minimum and regresses mean RMSE by ~15 % and p90 rotation by
+~210 % on the 1080p render-tag hub. Resolution:
+<code>refine_quad_corners</code> in <code>crates/locus-core/src/refinement.rs</code> splits
+on <code>(extraction, refinement)</code> and runs a gradient-peak warm-start only
+on <code>ContourRdp + Gwlf</code>; EdLines + Gwlf passes through unrefined. The split is empirical, not symmetric, and codifies the
+trade-off this section describes.</p>
+<h3 id="42-gn-trades-corner-rmse-for-pose-precision">§4.2 GN trades corner RMSE for pose precision</h3>
+<p>Joint 8-DOF Gauss-Newton (Phase 5) optimizes all four corners
+simultaneously under the planarity constraint. Result: ~1 % worse
+corner RMSE, but <strong>34–39 % better median rotation</strong> and <strong>26–43 %
+better P90 rotation</strong>. Geometrically consistent corners → better
+poses, even if individual pixel positions move slightly from their
+locally-optimal locations.</p>
+<h3 id="43-edlines-axis-aligned-imbalance-gate">§4.3 EdLines axis-aligned imbalance gate</h3>
+<p>EdLines's Phase 1 partitions the boundary at the topmost / rightmost
+/ bottommost / leftmost extremals (TRBL). On a near-axis-aligned tag,
+two adjacent corners can collapse onto the same TRBL extremal —
+lumping their shared edge into one arc and compressing the opposite
+to near-zero. Phases 2–5 fit a wrong-but-validation-passing quad and
+the decoder rejects it on Hamming margin.</p>
+<p>The fix:
+<code>DetectorConfig.edlines_imbalance_gate: EdLinesImbalanceGatePolicy</code>
+(default <strong>Disabled</strong>). When <code>Enabled</code>, AXIS-mode arcs that hit &gt; 40 % / &lt; 16 %
+imbalance divert to DIAG-mode (NW/NE/SE/SW extremals) which gives
+clean four-way partitioning on axis-aligned tags.</p>
+<p><strong>Why the <code>high_accuracy</code> profile can leave the gate on.</strong> The
+upstream guard at <code>crates/locus-core/src/detector.rs:194-198</code>
+rejects EdLines under any non-trivial distortion, routing distorted
+inputs through ContourRdp. So the gate is unreachable on the
+distortion-bearing inputs (Brown–Conrady aprilgrid sub-tags in the
+8–15 % min-arc band) where it would have collapsed legitimate
+detections. The previous "opt-in" reasoning predates that guard;
+post-guard, the gate is safe wherever EdLines runs.</p>
+<h3 id="44-ppb-pixels-per-bit-sets-the-recall-floor">§4.4 PPB (pixels per bit) sets the recall floor</h3>
+<table>
+<thead>
+<tr>
+<th>PPB</th>
+<th>Symptom</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>&gt; 5.0</td>
+<td>Clean</td>
+<td><code>high_accuracy</code> is fine</td>
+</tr>
+<tr>
+<td>1.5–5.0</td>
+<td>Marginal</td>
+<td>Sharpening + EdLines OK</td>
+</tr>
+<tr>
+<td>1.2–1.5</td>
+<td>EdLines collapses to &lt; 1 % recall</td>
+<td>Use ContourRdp</td>
+</tr>
+<tr>
+<td>&lt; 1.2</td>
+<td>Sub-pixel bit boundaries</td>
+<td>Hard limit — Soft decode + ContourRdp + sharpening best we can do</td>
+</tr>
+</tbody>
+</table>
+<p>ICRA <code>forward</code> has ~18 % of tags below 1.2 PPB; <code>circle</code> has
+thousands below 1.0 PPB (some at 0.03 PPB). This is why
+<code>high_accuracy</code> reports 46.3 % recall on ICRA but 95.6 % on hub
+1080p. <strong>Real-world robotics tracking should default to <code>standard</code>,
+not <code>high_accuracy</code>.</strong></p>
+<h3 id="45-pruned-algorithms-dont-reintroduce">§4.5 Pruned algorithms (don't reintroduce)</h3>
+<ul>
+<li><strong>Bilateral filtering</strong> distorts the PSF; the GN solver's weighted
+  least-squares already gives better noise rejection without
+  geometric distortion. Removed Apr 11.</li>
+<li><strong>GridFit corner refinement</strong> assumes a rigid 2D grid template and
+  is mathematically incompatible with edge-driven GN. Removed Apr 11.</li>
+<li><strong>Iterate-until-converged threshold-tile invalid propagation,
+  larger threshold tile sizes, opt-in 2× decimation</strong> were tried as
+  fixes for the 2160p recall gap. None moved the needle on detector
+  recall — the gap was the SoA truncation bug, not segmentation.
+  Documented in <code>render_tag_2160p_20260425.md</code> §2.</li>
+</ul>
+<h3 id="46-adaptiveppb-gracefully-falls-back-on-distortion">§4.6 AdaptivePpb gracefully falls back on distortion</h3>
+<p>EdLines is geometrically incompatible with distorted intrinsics
+(Huber IRLS line fit + GN solver assume Euclidean pixel geometry). Two
+guards work together to keep this safe:</p>
+<ol>
+<li><strong>Static <code>EdLines</code> + distortion</strong>: the run-pipeline guard at
+   <code>detector.rs:194-198</code> errors with <code>EdLinesUnsupportedWithDistortion</code>.
+   This is the user-explicit-misconfiguration signal — they asked for
+   EdLines on a distorted frame, we tell them.</li>
+<li><strong>AdaptivePpb with <code>EdLines</code> high route + distortion</strong>: the per-tag
+   distortion extraction path (<code>extract_single_quad_with_camera</code>)
+   silently degrades to ContourRdp, paired with the <strong>low-route's
+   refinement</strong> (typically Erf) rather than the high-route's
+   refinement. The high-PPB route's <code>None</code> refinement would skip
+   sub-pixel refinement entirely on aprilgrid sub-tags, costing
+   ~5 pp recall on the Brown-Conrady regression suite.</li>
+</ol>
+<p>The graceful-fallback for AdaptivePpb means a single profile (e.g.
+<code>max_recall_adaptive</code>, currently bound to rectified-only tests) can
+load on either rectified or distorted frames without per-camera
+profile switching. Static EdLines stays explicit-error so the
+misconfiguration doesn't silently degrade.</p>
+<h2 id="5-benchmark-methodology-traps">§5 Benchmark methodology traps</h2>
+<p>Things that look like algorithmic regressions but aren't:</p>
+<h3 id="51-pose-convention-misalignment-between-detectors">§5.1 Pose convention misalignment between detectors</h3>
+<table>
+<thead>
+<tr>
+<th>Detector</th>
+<th>Convention</th>
+<th>Fix in <code>tools/bench/utils.py</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AprilTag-C (<code>pupil_apriltags</code>)</td>
+<td>Tag frame 180° rotated about z vs Hub GT and Locus</td>
+<td><code>R @ diag(-1, -1, 1)</code></td>
+</tr>
+<tr>
+<td>OpenCV <code>cv2.aruco</code></td>
+<td><code>solvePnP(SOLVEPNP_ITERATIVE)</code> with y-down centered object points</td>
+<td>Wrap with explicit object points; <strong>never</strong> use <code>IPPE_SQUARE</code> (picks an inconsistent branch on ~half of symmetric synthetic tags)</td>
+</tr>
+<tr>
+<td>Locus</td>
+<td>Center-origin pose (<code>centered_tag_corners</code>)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>Without these wrapper fixes, rotation error reads ~180° for AprilTag-C
+and OpenCV even when translation is correct.</p>
+<h3 id="52-cargo-integration-test-cwd">§5.2 Cargo integration test CWD</h3>
+<p>Cargo runs each integration test with CWD = package root, <strong>not</strong>
+workspace root. Always resolve dataset paths via <code>CARGO_MANIFEST_DIR</code>,
+never bare <code>canonicalize</code>. The 2026-04-26 ICRA "byte-identical"
+errata was caused by <code>tests/common::resolve_dataset_root</code> falling
+through to a 1-frame stub when <code>LOCUS_ICRA_DATASET_DIR</code> resolved
+relative to a wrong CWD — masking a real 2–3 pp regression.</p>
+<h3 id="53-dataset-priority-when-results-conflict">§5.3 Dataset priority (when results conflict)</h3>
+<ol>
+<li><strong>render-tag</strong> (Hub, PSF/Blender) — production-relevant, treat as
+   ground truth.</li>
+<li><strong>distortion</strong> (Brown–Conrady, Kannala–Brandt) — production-relevant
+   for non-pinhole optics.</li>
+<li><strong>ICRA forward / checkerboard</strong> — community research benchmark;
+   useful regression signal, but its synthetic imaging differs from
+   real cameras (no PSF, hard pixel edges), so <strong>never</strong> trade
+   render-tag pose tail or mean RMSE for ICRA recall gains.</li>
+<li><strong>robustness</strong> (tag16h5, low_key, high_iso, raw_pipeline) — KPI
+   watchlist, not a regression bar.</li>
+</ol>
+<h3 id="54-hardware-metadata-is-mandatory">§5.4 Hardware metadata is mandatory</h3>
+<p>Every performance report must include <code>lscpu</code> / <code>/proc/cpuinfo</code>
+output captured in the same session as the benchmark. State the
+build profile (<code>--release</code>), thread count, and <code>RAYON_NUM_THREADS</code>.
+Placeholder hardware specs (e.g. "Intel CPU" without verification)
+are treated as a quality-gate failure.</p>
+<h3 id="55-soft-decode-is-a-footgun-outside-specific-scenarios">§5.5 Soft decode is a footgun outside specific scenarios</h3>
+<table>
+<thead>
+<tr>
+<th>Combo</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ContourRdp + Soft + ICRA</td>
+<td>+19 pp recall, precision holds at 100 %</td>
+</tr>
+<tr>
+<td>EdLines + Soft + hub</td>
+<td>Precision collapses to 78–90 % (more candidates surfaced from background edges)</td>
+</tr>
+<tr>
+<td>Anything + Soft + render-tag PSF</td>
+<td>Marginal at best; EdLines+sharp+Hard is already at 100 % recall</td>
+</tr>
+</tbody>
+</table>
+<h2 id="6-kpi-watchlist-set-by-regression_render_tag_robustness">§6 KPI watchlist (set by <code>regression_render_tag_robustness</code>)</h2>
+<p>These four 1080p single-tag subsets stress the detector under
+conditions the golden render-tag suite doesn't exercise. Treat each
+as a forward-looking watchlist, not a regression bar.</p>
+<table>
+<thead>
+<tr>
+<th>Subset</th>
+<th>Family</th>
+<th style="text-align: right;">Baseline</th>
+<th style="text-align: right;">Tuned ceiling</th>
+<th>Knob</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tag16h5</code></td>
+<td>AprilTag16h5</td>
+<td style="text-align: right;">R 100 % / <strong>P 27.6 %</strong></td>
+<td style="text-align: right;">P 68.9 %</td>
+<td><code>decoder.max_hamming_error: 2→1</code> is the dominant lever</td>
+</tr>
+<tr>
+<td><code>high_iso</code></td>
+<td>AprilTag36h11</td>
+<td style="text-align: right;">R 100 %</td>
+<td style="text-align: right;">—</td>
+<td>No regression — high-noise demosaic is fine</td>
+</tr>
+<tr>
+<td><code>low_key</code></td>
+<td>AprilTag36h11</td>
+<td style="text-align: right;"><strong>R 10.0 %</strong></td>
+<td style="text-align: right;">R 22.0 %</td>
+<td><code>threshold.tile_size: 8→2</code> + neg <code>constant</code> — <strong>22 % is the config ceiling</strong>, future contrast-robust threshold work needed</td>
+</tr>
+<tr>
+<td><code>raw_pipeline</code></td>
+<td>AprilTag36h11</td>
+<td style="text-align: right;"><strong>R 58.0 %</strong></td>
+<td style="text-align: right;">R 60.0 %</td>
+<td>Largely config-bound; remaining 40 % is noise-fragmented contours</td>
+</tr>
+</tbody>
+</table>
+<p>Movement on <code>tag16h5</code> precision (up = win, down = regression) and
+<code>low_key</code> recall (up = win, down = regression) is interesting in
+either direction. Movement on the others toward the baseline is a
+regression.</p>
+<h2 id="7-icra-2020-community-benchmark-fixture">§7 ICRA 2020 community-benchmark fixture</h2>
+<p>The ICRA 2020 fiducial-tag benchmark is a long-standing research
+dataset used widely in the AprilTag / fiducial-marker literature. Its
+synthesis pipeline produces hard pixel edges and no PSF (different
+imaging characteristics from real-camera and Blender-rendered data),
+which is fine for the role it plays — head-to-head detector
+comparison on a shared, reproducible reference. Its
+<code>forward/pure_tags_images</code> subset has ~18 % of tags below 1.2 PPB
+(sub-pixel bit boundaries), so the production-default recall on this
+subset is ~74 % — the rest are structurally unrecoverable on Hard
+decode without changing the decoder's noise model.</p>
+<p>Soft decode bridges the gap on this dataset's imaging characteristics
+specifically: it treats each bit as an LLR and accepts ambiguous
+decodes that Hard would reject. The trade-off (precision falls on
+real-camera data with PSF) is documented in §3.2 / §5.5, so the
+tuning lives in a test-only fixture at
+<code>crates/locus-core/tests/fixtures/icra_synthetic.json</code> rather than as
+a shipped profile. Production users get Hard decode by default;
+researchers reproducing literature numbers on ICRA 2020 can opt into
+the fixture-driven Soft pathway.</p>
+<p>The <code>regression_icra_forward_synthetic</code> test records the published
+recall using the winning combination from the original sweep:
+<strong>Soft decode + threshold <code>tile_size=4</code></strong>. Recall = 0.9403, with
+~6 fewer false positives per worst-case scene than Soft alone.</p>
+<p><strong>Sweep findings (from the original 4-variant exploration, kept here as
+documentation rather than as a permanent matrix of fixtures):</strong></p>
+<ol>
+<li><strong>Soft decode is the only recall lever.</strong> ContourRdp + Hard sits at
+   0.738 on <code>forward/pure_tags_images</code>; Soft lifts it to 0.940 (+20.2
+   pp). The remaining ~6 pp miss is structural — those tags are below
+   1.2 PPB and decode-failed at the bit level.</li>
+<li><strong><code>min_area=20</code> has zero ICRA effect.</strong> Neither recall nor FP rate
+   changed in the sweep. Negative result: this knob is not a useful
+   ICRA lever.</li>
+<li><strong><code>tile_size=4</code> is a precision win on top of Soft.</strong> Same recall as
+   Soft alone, but ~6 fewer FPs per worst-case scene. Finer threshold
+   tiles let the gate reject background-edge candidates that Soft's
+   probabilistic decode would otherwise call. <strong>This is what the
+   shipped fixture uses.</strong></li>
+<li><strong>The published number for community comparison</strong> is recall = 0.9403
+   from <code>regression_icra_forward_synthetic</code>.</li>
+</ol>
+<p><strong>Why this fixture is not a shipped profile.</strong> Soft decode causes a
+10-22 % precision collapse on data with PSF (real cameras, Blender-
+rendered hub data) per §5.5. ICRA 2020's imaging characteristics don't
+trigger that collapse because there's no PSF to amplify the LLR's
+spurious-decode candidates — but production users almost always have
+PSF and would lose precision. Keep the fixture in <code>tests/fixtures/</code>
+so researchers can opt in for community comparison; never promote it
+to <code>crates/locus-core/profiles/</code>.</p>
+<h2 id="8-where-to-look-next">§8 Where to look next</h2>
+<ul>
+<li><strong>Preprocessing dominates above 720p.</strong> Thresholding + integral
+  image is the next micro-optimization target.</li>
+<li><strong><code>low_key</code> recall ceiling at 22 %.</strong> Future contrast-robust
+  threshold work — anything beyond histogram-equalization-style
+  preprocessing.</li>
+<li><strong><code>tag16h5</code> precision floor at 27 %.</strong> Codebook-aware FP rejection
+  (the remaining FPs are dense structural ambiguities in the 16h5
+  dictionary itself, not detector bugs).</li>
+<li><strong><code>raw_pipeline</code> recall at 58 %.</strong> Pre-filtering pass for noise-
+  fragmented contours.</li>
+<li><strong>Rotation-tail residual on 1080p hub.</strong> Post PR #216 we lead OpenCV
+  on rotation p99 (0.77° vs 1.23°). The remaining residual is EdLines
+  pose ambiguity on grazing-angle synthetic renders; further headroom
+  comes from the diagnostic-driven Phase 1 work (corner outlier /
+  branch-flip dominance analysis).</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+      
+        <script src="../../../javascripts/mermaid-init.js"></script>
+      
+    
+  </body>
+</html>
