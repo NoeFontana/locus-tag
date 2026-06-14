@@ -78,6 +78,7 @@ nav:
   - Engineering (Internal):
       - engineering/core.md
       - engineering/workflow.md
+      - engineering/release-runbook.md
       - engineering/detection-batch-contract.md
       - engineering/constraints.md
       - engineering/ffi_contracts.md
@@ -98,3 +99,8 @@ nav:
           - engineering/benchmarking/quad_truncation_fix_20260426.md
   - Migration:
       - migration/config-refactor.md
+
+extra:
+  version:
+    provider: mike
+    default: stable

@@ -1,9 +1,39 @@
 name: Release
 
+# Fan-out for every `v*` tag push and a monthly Linux-only canary.
+#
+# On a tag push:
+#   verify-tag                                       (refuses mismatched tags)
+#     ├─► build-rust                                 (cargo package -p locus-core)
+#     ├─► build-wheels-linux  (manylinux + musllinux × x86_64/aarch64)
+#     ├─► build-wheels-macos  (x86_64/aarch64)       [skipped on schedule]
+#     ├─► build-wheels-windows (x64)                 [skipped on schedule]
+#     └─► build-sdist
+#                                          │
+#                                          ▼
+#                                    wheel-validate  (smoke on x86_64 + aarch64 QEMU)
+#                                          │
+#         ┌────────────────────────────────┼────────────────────────────────┐
+#         ▼                                ▼                                ▼
+#   publish-pypi (OIDC + PEP 740)   publish-crates-io (OIDC)        create-github-release
+#                                                                  (notes + artefacts)
+#
+# `verify-tag` gates publishing: tags ending in `-rc.*` set
+# outputs.publish=false, which skips both publish jobs and marks the GH
+# Release as `--prerelease`. The monthly cron exercises the wheel build
+# on Linux only to catch toolchain drift between releases; macOS (10×
+# billing) and Windows (2× billing) are reserved for actual release
+# builds.
+
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+  schedule:
+    # 1st-of-month, 06:00 UTC. Linux-only canary; macOS/Windows/publish
+    # jobs gate themselves off `github.event_name == 'schedule'`.
+    - cron: '0 6 1 * *'
 
 concurrency:
   group: release-${{ github.ref }}
@@ -17,28 +47,42 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # Tag-gated guard: refuse to release a `vX.Y.Z` tag that doesn't match the
-  # on-disk versions in both `crates/locus-core/Cargo.toml` and
-  # `pyproject.toml`. Catches a forgotten bump before either registry has a
-  # chance to accept the upload — neither PyPI nor crates.io permits
-  # re-uploading the same version, so a mismatch caught post-publish costs a
-  # patch bump.
+  # Tag-gated guard: refuse to release a `vX.Y.Z` tag that doesn't match
+  # the on-disk versions in both `crates/locus-core/Cargo.toml` and
+  # `pyproject.toml`. Catches a forgotten bump before either registry has
+  # a chance to accept the upload — neither PyPI nor crates.io permits
+  # re-uploading the same version, so a mismatch caught post-publish
+  # costs a patch bump.
   verify-tag:
     name: Verify tag matches on-disk versions
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     outputs:
       publish: ${{ steps.gate.outputs.publish }}
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - name: Assert ref is a `v*` tag
+        run: |
+          set -euo pipefail
+          # workflow_dispatch from a branch ref would leave the downstream
+          # `${GITHUB_REF#refs/tags/v}` strip as a no-op and produce a
+          # garbage tag like `refs/heads/main`. Refuse early with a clear
+          # error so the operator knows to dispatch from a tag.
+          if [[ "${GITHUB_REF}" != refs/tags/v* ]]; then
+            echo "::error::Release workflow must run from a v* tag — got '${GITHUB_REF}'. Push a tag or dispatch from one." >&2
+            exit 1
+          fi
       - name: Assert tag == locus-core Cargo.toml == pyproject.toml
         run: |
           set -euo pipefail
           tag="${GITHUB_REF#refs/tags/v}"
-          # Strip -rc.N suffix so RC dry-run tags (v0.5.0-rc.1) compare equal
-          # to the manifest version (0.5.0). The publish gate below uses the
-          # full ref to decide whether to actually publish.
-          tag="${tag%-rc.*}"
+          # Strip ANY prerelease suffix (`-rc.N`, `-rc1`, `-alpha.N`,
+          # `-beta.N`, `-dev`, …) so prerelease dry-run tags compare
+          # equal to the bare manifest version. The publish gate below
+          # uses a strict semver match on the original tag to decide
+          # whether to actually publish.
+          tag="${tag%%-*}"
           core_version="$(cargo metadata --format-version 1 --no-deps \
             | python3 -c "import json,sys; m=json.load(sys.stdin); print(next(p['version'] for p in m['packages'] if p['name']=='locus-core'))")"
           py_version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
@@ -47,12 +91,18 @@ jobs:
             echo "::error::tag v${tag} does not match locus-core=${core_version} / pyproject=${py_version}" >&2
             exit 1
           fi
-      # Single source of truth for "should this tag publish?". Both
-      # publish-pypi and publish-crates-io read `needs.verify-tag.outputs.publish`.
-      - name: Compute publish gate (skip RC tags)
+      # Single source of truth for "should this tag publish?". Strict
+      # positive match: only bare semver (`vX.Y.Z`, no suffix) publishes.
+      # Every prerelease form — `-rc.N`, `-rc1` (typo'd), `-alpha.N`,
+      # `-beta.N`, `-dev`, `+build.42` — falls through to the dry-run
+      # path. Both publish-pypi and publish-crates-io read
+      # `needs.verify-tag.outputs.publish`.
+      - name: Compute publish gate (strict semver only)
         id: gate
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* && "${GITHUB_REF}" != *-rc.* ]]; then
+          set -euo pipefail
+          tag="${GITHUB_REF#refs/tags/v}"
+          if [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
           else
             echo "publish=false" >> "$GITHUB_OUTPUT"
@@ -60,6 +110,7 @@ jobs:
 
   build-rust:
     name: Build & Verify Crate
+    if: github.event_name != 'schedule'
     needs: verify-tag
     runs-on: ubuntu-latest
     steps:
@@ -77,13 +128,21 @@ jobs:
           path: target/package/*.crate
           retention-days: 1
 
-  build-wheels:
-    name: Build Wheels (${{ matrix.target }})
+  build-wheels-linux:
+    name: Wheels linux ${{ matrix.target }} ${{ matrix.manylinux }}
     needs: verify-tag
+    # On schedule runs verify-tag is skipped → `needs` evaluates to
+    # `skipped`, which would skip this job by default. Force the build
+    # to run anyway by checking event_name directly.
+    if: always() && (needs.verify-tag.result == 'success' || github.event_name == 'schedule')
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         target: [x86_64, aarch64]
+        # `2_28` is pinned explicitly so the runbook's "manylinux_2_28"
+        # claim stays honest across maturin-action container bumps.
+        manylinux: ['2_28', musllinux_1_2]
     steps:
       - uses: actions/checkout@v6
 
@@ -92,24 +151,85 @@ jobs:
         uses: docker/setup-qemu-action@v4
 
       # pyo3 is pinned to abi3-py310 in crates/locus-py/Cargo.toml, so a
-      # single wheel per target covers Python 3.10+ — no per-Py matrix.
+      # single wheel per (target, manylinux) covers Python 3.10+ — no
+      # per-Py matrix.
       - name: Build Wheels
         uses: PyO3/maturin-action@v1
         with:
           command: build
           target: ${{ matrix.target }}-unknown-linux-gnu
           args: --out dist --release --manifest-path crates/locus-py/Cargo.toml
-          manylinux: 2_28
+          manylinux: ${{ matrix.manylinux }}
 
       - name: Upload Wheels
         uses: actions/upload-artifact@v7
         with:
-          name: wheels-${{ matrix.target }}
+          name: wheels-linux-${{ matrix.target }}-${{ matrix.manylinux }}
+          path: dist/*.whl
+          retention-days: 1
+
+  build-wheels-macos:
+    name: Wheels macos ${{ matrix.target }}
+    # Skip on schedule: macOS runners bill 10× and are reserved for tag
+    # / manual release-candidate builds.
+    if: github.event_name != 'schedule'
+    needs: verify-tag
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - name: Build Wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: ${{ matrix.target }}-apple-darwin
+          args: --out dist --release --manifest-path crates/locus-py/Cargo.toml
+      - name: Upload Wheels
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheels-macos-${{ matrix.target }}
+          path: dist/*.whl
+          retention-days: 1
+
+  build-wheels-windows:
+    name: Wheels windows ${{ matrix.target }}
+    # Skip on schedule: Windows runners bill 2× and are reserved for tag
+    # / manual release-candidate builds.
+    if: github.event_name != 'schedule'
+    needs: verify-tag
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+          architecture: ${{ matrix.target }}
+      - name: Build Wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: x86_64-pc-windows-msvc
+          args: --out dist --release --manifest-path crates/locus-py/Cargo.toml
+      - name: Upload Wheels
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheels-windows-${{ matrix.target }}
           path: dist/*.whl
           retention-days: 1
 
   build-sdist:
     name: Build Source Distribution
+    if: github.event_name != 'schedule'
     needs: verify-tag
     runs-on: ubuntu-latest
     steps:
@@ -130,51 +250,81 @@ jobs:
           path: dist/*.tar.gz
           retention-days: 1
 
+  # Smoke-test every Linux wheel we ship — both manylinux and musllinux
+  # variants, across x86_64 (native) and aarch64 (QEMU). macOS/Windows
+  # wheels skip pre-publish smoke (their runners bill 10×/2× and
+  # build-time ABI catches are usually sufficient — Rust + PyO3 + maturin
+  # surface dynamic-link issues at build); revisit if a platform-specific
+  # bug ever ships.
   wheel-validate:
-    name: Smoke-test built wheel (${{ matrix.target }})
-    needs: build-wheels
+    name: Smoke ${{ matrix.target }} ${{ matrix.manylinux }}
+    if: github.event_name != 'schedule'
+    needs: build-wheels-linux
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         target: [x86_64, aarch64]
+        manylinux: ['2_28', musllinux_1_2]
     steps:
       - uses: actions/checkout@v6
 
       - name: Download wheel artifact
         uses: actions/download-artifact@v8
         with:
-          name: wheels-${{ matrix.target }}
+          name: wheels-linux-${{ matrix.target }}-${{ matrix.manylinux }}
           path: dist
 
       - name: Set up QEMU
         if: matrix.target == 'aarch64'
         uses: docker/setup-qemu-action@v4
 
-      - name: Smoke test (x86_64, native)
-        if: matrix.target == 'x86_64'
-        run: bash scripts/ci/install_and_smoke_wheel.sh
-
-      - name: Smoke test (aarch64, QEMU)
-        if: matrix.target == 'aarch64'
+      # Run the smoke under a glibc image for manylinux wheels and a
+      # musl image for musllinux wheels. x86_64 uses the host arch
+      # directly; aarch64 layers on the QEMU set up above. Alpine ships
+      # ash, not bash, so install bash there before invoking the script.
+      - name: Smoke test
         run: |
-          docker run --rm --platform linux/arm64 \
+          set -euo pipefail
+          case "${{ matrix.manylinux }}" in
+            musllinux_1_2) image=python:3.11-alpine; setup='apk add --no-cache bash >/dev/null';;
+            *)             image=python:3.11-slim;  setup=':';;
+          esac
+          case "${{ matrix.target }}" in
+            aarch64) platform=linux/arm64;;
+            *)       platform=linux/amd64;;
+          esac
+          docker run --rm --platform "$platform" \
             -v "$PWD:/work" -w /work \
-            python:3.11-slim \
-            bash scripts/ci/install_and_smoke_wheel.sh
+            "$image" \
+            sh -c "$setup && bash scripts/ci/install_and_smoke_wheel.sh"
 
+  # PyPI publish via Trusted Publisher (OIDC — no API token stored in
+  # GitHub secrets). Switched from `uv publish` to
+  # `pypa/gh-action-pypi-publish` to get PEP 740 sigstore attestations
+  # (`attestations: true`). PyPI verifies and exposes the attestation
+  # on the project page; supply-chain-conscious consumers
+  # (`pip --require-hashes`, `pip-audit`, security-scanning tools)
+  # gate installs on it.
   publish-pypi:
     name: Publish to PyPI
-    needs: [verify-tag, build-wheels, build-sdist, wheel-validate]
+    needs: [verify-tag, build-wheels-linux, build-wheels-macos, build-wheels-windows, build-sdist, wheel-validate]
     runs-on: ubuntu-latest
-    environment: release
-    if: needs.verify-tag.outputs.publish == 'true'
+    # No `environment:` for now — GitHub Actions only enforces the
+    # required-reviewer protection rule on private repos under Pro/Team
+    # tiers, and free-tier private repos make the gate a no-op (which is
+    # worse than no gate: it implies a checkpoint that doesn't fire).
+    # `verify-tag` plus deliberate tag pushes are the safety net. When
+    # the repo upgrades to a tier that enforces protections, set
+    # `environment: release` here and update the PyPI Trusted Publisher
+    # entry's `Environment` field to match — see release-runbook §1.
+    if: |
+      github.event_name != 'schedule'
+      && needs.verify-tag.outputs.publish == 'true'
     permissions:
       id-token: write   # OIDC for PyPI Trusted Publisher
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Download wheels + sdist
+      - name: Download wheels
         uses: actions/download-artifact@v8
         with:
           path: dist
@@ -187,20 +337,24 @@ jobs:
           name: sdist
           path: dist
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v8.1.0
+      - name: Publish to PyPI (Trusted Publisher + PEP 740 attestations)
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          python-version: '3.10'
+          attestations: true
 
-      - name: Publish to PyPI (Trusted Publisher)
-        run: uv publish dist/*.whl dist/*.tar.gz --trusted-publishing automatic
-
+  # crates.io publish via Trusted Publisher (OIDC — no
+  # CARGO_REGISTRY_TOKEN secret). Requires Trusted Publishers set up at
+  # https://crates.io/me/trusted-publishers for `locus-core` pointing
+  # at this workflow with `Environment` left blank.
   publish-crates-io:
     name: Publish to crates.io
     needs: [verify-tag, build-rust, wheel-validate]
     runs-on: ubuntu-latest
-    environment: release
-    if: needs.verify-tag.outputs.publish == 'true'
+    # No `environment:` for now — see the matching comment on
+    # `publish-pypi` for rationale and the upgrade path.
+    if: |
+      github.event_name != 'schedule'
+      && needs.verify-tag.outputs.publish == 'true'
     permissions:
       id-token: write   # OIDC for rust-lang/crates-io-auth-action
       contents: read
@@ -208,10 +362,6 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
 
-      # Trusted Publisher (OIDC) — replaces the long-lived
-      # CARGO_REGISTRY_TOKEN secret. Requires one-time setup at
-      # https://crates.io/me/trusted-publishers for `locus-core` pointing at
-      # `.github/workflows/release.yml`.
       - name: Mint short-lived crates.io token
         id: auth
         uses: rust-lang/crates-io-auth-action@v1
@@ -220,3 +370,99 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: cargo publish -p locus-core
+
+  # Posts a GH Release page with the CHANGELOG.md `## [X.Y.Z]` block as
+  # the body and the full artefact set (wheels, sdist, .crate) attached.
+  # Runs on every `v*` tag (including RC tags), marks RC tags as
+  # `--prerelease`. The `always()` guard plus per-need result checks
+  # let this fire even when publish-pypi / publish-crates-io are skipped
+  # (RC dry-run path), while still requiring the build + validate jobs
+  # to have succeeded.
+  create-github-release:
+    name: Create GitHub Release
+    needs: [verify-tag, build-rust, build-wheels-linux, build-wheels-macos, build-wheels-windows, build-sdist, wheel-validate, publish-pypi, publish-crates-io]
+    if: |
+      always()
+      && github.event_name != 'schedule'
+      && needs.verify-tag.result == 'success'
+      && needs.build-rust.result == 'success'
+      && needs.build-wheels-linux.result == 'success'
+      && needs.build-wheels-macos.result == 'success'
+      && needs.build-wheels-windows.result == 'success'
+      && needs.build-sdist.result == 'success'
+      && needs.wheel-validate.result == 'success'
+      && (needs.publish-pypi.result == 'success' || needs.publish-pypi.result == 'skipped')
+      && (needs.publish-crates-io.result == 'success' || needs.publish-crates-io.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # gh release create writes to the repo
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download wheels
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: 'wheels-*'
+          merge-multiple: true
+
+      - name: Download sdist
+        uses: actions/download-artifact@v8
+        with:
+          name: sdist
+          path: dist
+
+      - name: Download .crate
+        uses: actions/download-artifact@v8
+        with:
+          name: rust-crate
+          path: dist
+
+      - name: Extract release notes
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF#refs/tags/v}"
+          python3 scripts/ci/extract_changelog_section.py "$tag" CHANGELOG.md > release-notes.md
+          echo "::group::Release notes"
+          cat release-notes.md
+          echo "::endgroup::"
+
+      - name: Compute prerelease flag
+        id: prerelease
+        run: |
+          set -euo pipefail
+          if [[ "${{ needs.verify-tag.outputs.publish }}" == "true" ]]; then
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Idempotent: if a Release already exists for this tag (e.g. the
+      # operator retag-pushed during a rollback drill — see
+      # release-runbook §5), `gh release create` fails non-zero. Guard
+      # with a view-then-edit-or-create branch so the rollback path
+      # doesn't trip on a pre-existing page. `gh release upload
+      # --clobber` overwrites artefacts uploaded earlier under the same
+      # name.
+      - name: gh release create / upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ steps.prerelease.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF#refs/tags/}"
+          flag=""
+          if [[ "$PRERELEASE" == "true" ]]; then
+            flag="--prerelease"
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists — updating notes and re-uploading artefacts."
+            gh release edit "$tag" --notes-file release-notes.md $flag
+            gh release upload "$tag" --clobber dist/*.whl dist/*.tar.gz dist/*.crate
+          else
+            gh release create "$tag" \
+              --title "$tag" \
+              --notes-file release-notes.md \
+              $flag \
+              dist/*.whl dist/*.tar.gz dist/*.crate
+          fi

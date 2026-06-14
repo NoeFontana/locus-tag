@@ -1,19 +1,22 @@
 name: Documentation
 
+# Builds + spell-checks docs on every PR (strict gate); deploys versioned
+# docs to gh-pages via `mike` on main pushes and `v*` tag pushes.
+#
+# Versioning model (matches vernier `.github/workflows/docs.yml`):
+#   - push main          → `mike deploy main`, alias `latest`
+#   - push refs/tags/v*  → `mike deploy X.Y`, alias `stable`
+# `extra.version.default = stable` in mkdocs.yml redirects bare `/locus-tag/`
+# to the stable channel. Pre-1.0 we treat every patch as a new "stable";
+# once the project hits 1.0 the stable-alias rule changes to update only
+# on minor releases (see docs/engineering/release-runbook.md §5).
+
 on:
   push:
     branches:
       - main
-    paths:
-      - 'docs/**'
-      - 'mkdocs.yml'
-      - 'README.md'
-      - 'crates/locus-py/**'
-      - 'pyproject.toml'
-      - 'uv.lock'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.github/workflows/docs.yml'
+    tags:
+      - 'v*'
   pull_request:
     branches:
       - main
@@ -21,11 +24,9 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: "pages-${{ github.ref }}"
+  group: "docs-${{ github.ref }}"
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -45,13 +46,8 @@ jobs:
       - name: Build extension
         run: uv run maturin develop --manifest-path crates/locus-py/Cargo.toml
 
-      - name: Build MkDocs
+      - name: Build MkDocs (strict)
         run: uv run mkdocs build --strict
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: 'site'
 
   spell:
     name: codespell
@@ -67,14 +63,74 @@ jobs:
         # engineering/ uses domain notation and is excluded from the site
         run: uv run --no-sync codespell docs/ --skip "docs/engineering"
 
+  # Deploy versioned site to gh-pages via mike. Pushes to main update the
+  # `main` version and the `latest` alias; tag pushes deploy `X.Y` (the
+  # minor-version segment of the tag) and update the `stable` alias.
+  #
+  # First-deploy setup (one-time, after the first run lands a gh-pages
+  # branch): in repo Settings → Pages set Source = "Deploy from a branch"
+  # and Branch = "gh-pages" / root, then locally run
+  # `uv run mike set-default --push stable` to redirect /locus-tag/ to
+  # /locus-tag/stable/. See docs/engineering/release-runbook.md §3.
   deploy:
+    name: deploy to gh-pages
     needs: [build, spell]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
+      - uses: actions/checkout@v6
+        with:
+          # mike commits to the gh-pages branch and needs to see it; the
+          # default shallow checkout works because mike fetches gh-pages
+          # itself, but unshallowing keeps the diff readable in the
+          # workflow log.
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: '3.10'
+      - name: Install docs deps
+        run: uv sync --group docs --no-install-project
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Deploy main + latest alias (push to main)
+        if: github.ref == 'refs/heads/main'
+        run: uv run --no-sync mike deploy --push --update-aliases main latest
+      # Prerelease tags (`v*-rc.*`, `v*-alpha.*`, `v*-beta.*`, …) do
+      # NOT touch the docs site: `latest` (from the next main push)
+      # already reflects RC content for testers, and `stable` must
+      # keep pointing at the last real release until a bare-semver tag
+      # fires. The strict regex match below makes this gate symmetric
+      # with `release.yml`'s `publish` gate; any tag that doesn't
+      # match `v[0-9]+.[0-9]+.[0-9]+` falls through and the step
+      # skips.
+      - name: Deploy X.Y + stable alias (release tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF#refs/tags/v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "skipping prerelease tag '$version' — stable alias unchanged"
+            exit 0
+          fi
+          # Independent of release.yml: refuse to deploy docs for a tag
+          # whose pyproject version doesn't match. release.yml's
+          # verify-tag is a separate workflow and races with this one;
+          # without this check a mismatched tag would advance the
+          # `stable` alias even though the publish jobs fail. Single
+          # source of truth is `pyproject.toml` since cargo-release
+          # keeps locus-core/Cargo.toml in lockstep with it.
+          py_version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          if [[ "$version" != "$py_version" ]]; then
+            echo "::error::tag v${version} does not match pyproject=${py_version} — skipping docs deploy" >&2
+            exit 1
+          fi
+          # Collapse to the minor (X.Y) so 0.5.0 / 0.5.1 / ... share one
+          # versioned page that always reflects the latest patch.
+          # Pre-1.0 every patch updates `stable`; once the project hits
+          # 1.0 this rule changes to "minor releases only" (see runbook).
+          minor="${version%.*}"
+          uv run --no-sync mike deploy --push --update-aliases "$minor" stable
