@@ -573,6 +573,8 @@
       
         
       
+        
+      
     
     
     
@@ -1031,6 +1033,34 @@
     
   
     Coordinate Systems
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
   
 
     
@@ -2396,8 +2426,10 @@
 <li><strong>LO-RANSAC + AW-LM</strong> — <code>RobustPoseSolver</code> runs over the accepted saddles with <code>group_size=1</code> (each saddle is an independent point), yielding the board pose and covariance.</li>
 </ol>
 <p><strong>Module:</strong> <code>charuco.rs</code> | <strong>Struct:</strong> <code>CharucoRefiner</code> | <strong>Complexity:</strong> <span class="arithmatex">\(O(V + S_\text{accepted})\)</span> | <strong>Allocations:</strong> zero inside <code>estimate()</code></p>
-<p>!!! note "Why saddles, not tag corners?"
-    Tag corners are at the boundary of the ArUco marker (Layer A). Saddle points are at the outer corners of the <em>enclosing black square</em> (Layer B), which is a sharper, unambiguous image feature and is independent of the tag's own corner quality. The white padding margin between a tag's edge and its enclosing square is precisely <code>(square_length − marker_length) / 2</code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Why saddles, not tag corners?</p>
+<p>Tag corners are at the boundary of the ArUco marker (Layer A). Saddle points are at the outer corners of the <em>enclosing black square</em> (Layer B), which is a sharper, unambiguous image feature and is independent of the tag's own corner quality. The white padding margin between a tag's edge and its enclosing square is precisely <code>(square_length − marker_length) / 2</code>.</p>
+</div>
 <h2 id="end-to-end-sequence">End-to-End Sequence</h2>
 <pre class="mermaid"><code>sequenceDiagram
     participant App as Application

@@ -16,7 +16,7 @@
         <link rel="prev" href="../algorithms/">
       
       
-        <link rel="next" href="../../reference/api/">
+        <link rel="next" href="../performance/">
       
       
         
@@ -573,6 +573,8 @@
       
         
       
+        
+      
     
     
     
@@ -979,6 +981,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -2130,11 +2160,13 @@
 - The center of the top-left pixel is <span class="arithmatex">\((0.5, 0.5)\)</span>.
 - The top-left corner of the image (the boundary of the first pixel) is <span class="arithmatex">\((0.0, 0.0)\)</span>.</p>
 <p>This convention is strictly followed to ensure that sub-pixel corner refinement and RMSE calculations are compatible with standard computer vision datasets like <strong>ICRA 2020</strong>.</p>
-<p>!!! info "ICRA 2020 Parity"
-    While Locus uses the same pixel coordinate system as the ICRA 2020 benchmark, the <strong>corner indexing</strong> differs due to winding conventions:
-    - <strong>ICRA 2020</strong>: Uses UMich-style Counter-Clockwise (CCW) winding starting from the bottom-left <span class="arithmatex">\([BL, BR, TR, TL]\)</span>.
-    - <strong>Locus</strong>: Uses Modern OpenCV Clockwise (CW) winding starting from the top-left <span class="arithmatex">\([TL, TR, BR, BL]\)</span>.
-    - <strong>Orientation</strong>: The ICRA dataset has a 180-degree bit-rotation offset relative to Locus's row-major 0-degree orientation.</p>
+<div class="admonition info">
+<p class="admonition-title">ICRA 2020 Parity</p>
+<p>While Locus uses the same pixel coordinate system as the ICRA 2020 benchmark, the <strong>corner indexing</strong> differs due to winding conventions:
+- <strong>ICRA 2020</strong>: Uses UMich-style Counter-Clockwise (CCW) winding starting from the bottom-left <span class="arithmatex">\([BL, BR, TR, TL]\)</span>.
+- <strong>Locus</strong>: Uses Modern OpenCV Clockwise (CW) winding starting from the top-left <span class="arithmatex">\([TL, TR, BR, BL]\)</span>.
+- <strong>Orientation</strong>: The ICRA dataset has a 180-degree bit-rotation offset relative to Locus's row-major 0-degree orientation.</p>
+</div>
 <h2 id="2-tag-local-coordinates-object-space">2. Tag Local Coordinates (Object Space)</h2>
 <p>When estimating 3D pose, the tag is defined in a right-handed local coordinate system where the tag lies on the <span class="arithmatex">\(Z=0\)</span> plane. The origin is placed at the <strong>geometric center</strong> of the tag, consistent with the board coordinate convention used by <code>AprilGridTopology</code> and <code>CharucoTopology</code>.</p>
 <p>For a tag of physical size <span class="arithmatex">\(s\)</span> (e.g., in meters):</p>
@@ -2186,12 +2218,13 @@
 <p>This matches the internal memory layout of OpenCV's <code>bytesList</code>.</p>
 <h3 id="canonical-orientation-0-degrees">Canonical Orientation (0 Degrees)</h3>
 <p>The 0-degree ("canonical") orientation of a tag is defined such that the bits are read from top-left to bottom-right without any rotation.</p>
-<p>!!! warning "Migration Warning: Orientation Shift"
-    Users migrating from the legacy <strong>UMich C library</strong> or <code>apriltag</code> Python package should note that Locus's 0-degree orientation is shifted by <strong>90 degrees clockwise</strong> relative to UMich. 
-    - <strong>UMich 0-deg</strong>: Origin at bottom-left (spiral bit order).
-    - <strong>Locus/OpenCV 0-deg</strong>: Origin at top-left (row-major bit order).</p>
-<pre><code>If you are comparing pose outputs ($R, t$) against UMich-based ground truth, you may need to apply a 90-degree Z-axis rotation to the results.
-</code></pre>
+<div class="admonition warning">
+<p class="admonition-title">Migration Warning: Orientation Shift</p>
+<p>Users migrating from the legacy <strong>UMich C library</strong> or <code>apriltag</code> Python package should note that Locus's 0-degree orientation is shifted by <strong>90 degrees clockwise</strong> relative to UMich. 
+- <strong>UMich 0-deg</strong>: Origin at bottom-left (spiral bit order).
+- <strong>Locus/OpenCV 0-deg</strong>: Origin at top-left (row-major bit order).</p>
+<p>If you are comparing pose outputs (<span class="arithmatex">\(R, t\)</span>) against UMich-based ground truth, you may need to apply a 90-degree Z-axis rotation to the results.</p>
+</div>
 <h2 id="4-3d-camera-coordinate-system">4. 3D Camera Coordinate System</h2>
 <p>Locus utilizes a <strong>right-handed</strong> coordinate system for the camera, consistent with the standard pinhole camera model.</p>
 <ul>

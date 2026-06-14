@@ -673,6 +673,8 @@
       
         
       
+        
+      
     
     
     
@@ -842,6 +844,34 @@
     
   
     Coordinate Systems
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
   
 
     
@@ -1860,8 +1890,10 @@
 
 <h1 id="how-to-run-concurrent-detection">How to Run Concurrent Detection</h1>
 <p><code>Detector</code> supports two modes controlled by <code>max_concurrent_frames</code> at construction.</p>
-<p>!!! note "API Constraint"
-    Currently, <code>max_concurrent_frames</code> is only exposed through the <code>DetectorBuilder</code> API. Using the standard <code>locus.Detector()</code> constructor will default to a single-frame pool.</p>
+<div class="admonition note">
+<p class="admonition-title">API Constraint</p>
+<p>Currently, <code>max_concurrent_frames</code> is only exposed through the <code>DetectorBuilder</code> API. Using the standard <code>locus.Detector()</code> constructor will default to a single-frame pool.</p>
+</div>
 <table>
 <thead>
 <tr>
