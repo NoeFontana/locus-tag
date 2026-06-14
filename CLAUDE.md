@@ -31,6 +31,7 @@ Read the relevant file when the task touches its area.
 | Coordinates & math conventions | `docs/explanation/coordinates.md` |
 | Memory model (SoA / arena / FFI) | `docs/explanation/memory_model.md` |
 | Workflow (branching, testing requirements) | `docs/engineering/workflow.md` |
+| Release lifecycle (cargo-release, OIDC, mike, rollback) | `docs/engineering/release-runbook.md` |
 
 ## Skills (slash commands)
 | Command | Description |
