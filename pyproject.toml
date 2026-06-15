@@ -107,6 +107,13 @@ docs = [
     "codespell>=2.2",
 ]
 etl = [
-    "huggingface-hub>=0.19.0",
+    "huggingface-hub>=1.19.0",
     "tqdm>=4.66.0",
 ]
+
+[tool.uv]
+# hf-hub 1.16.4+ caps `typer<0.26.0` due to a CLI incompatibility with
+# typer 0.26.x. We only consume hf-hub as a library (hf_hub_download,
+# HfApi, errors) — never its `hf` CLI — so the cap is safe to override.
+# This unblocks typer 0.26+ alongside the latest hf-hub releases.
+override-dependencies = ["typer>=0.26.0"]
