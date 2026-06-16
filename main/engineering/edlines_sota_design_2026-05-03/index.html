@@ -2086,6 +2086,12 @@ chord between them (<code>fit_edge_line</code>, <code>quad.rs:1340</code>).</p>
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p><strong>Status update (2026-05-25)</strong>: F4 and F6 have been probed empirically; see <code>edlines_sota_followup_postmortem_2026-05-25.md</code>.
+- F6: replacing the static gate with a continuous arc-balance selector regresses render-tag mean RMSE at 640×480 (decoder-rejection failure mode dominates the selector criterion space).
+- F4: chord-coupling turns out to be a <em>variance-reducing regulariser</em>, not just a hack; per-line decoupling (Improvement #2 below) blows up mean RMSE +30–43 % at every resolution.</p>
+<p>Both fixes are closed without ship.  scene_0008's bias is bounded upstream by PR #281's covariance gates.</p>
+</blockquote>
 <p>scene_0008 is consistent with <strong>F1 + F4</strong>: a near-axis-aligned tag where
 the LEFT edge has ~0.3 px binary-vs-gray offset (the "PSF inward shift"
 quantified in V1), Phase 3 places sub-pixel points correctly enough that
@@ -2162,6 +2168,14 @@ fewer than <code>min_edge_pts</code> valid sub-pixel points (e.g., the gradient
 threshold filters them out at the refined-line probe positions), we
 fall back to <code>fl_v1</code>, which is the current Phase-4 output.</p>
 <h3 id="52-improvement-2-decouple-phase-5-chord-direction-from-corners">§5.2 Improvement #2 — decouple Phase 5 chord direction from corners</h3>
+<blockquote>
+<p><strong>Status (2026-05-25): Empirically falsified.</strong>  Implemented and run
+against the protected <code>regression_render_tag</code> suite; mean RMSE
++30–43 % and p99 rotation +30–100 % at every resolution.  Reverted
+the same day.  Re-attempt requires resolving one of the four
+conditions enumerated in
+<code>edlines_sota_followup_postmortem_2026-05-25.md §3.4</code>.</p>
+</blockquote>
 <p><strong>Mechanism.</strong> Replace the 8-DoF state vector <code>(x_0, y_0, …, x_3, y_3)</code>
 with a 12-DoF state vector parameterising <strong>lines</strong> instead of corners:</p>
 <pre><code>θ = (n̂_0, d_0, n̂_1, d_1, n̂_2, d_2, n̂_3, d_3)
@@ -2296,6 +2310,7 @@ conclusive for #3; empirical re-test required.</p>
 <th>Likelihood scene_0008 fixes</th>
 <th>Risk to 49 typical scenes</th>
 <th>Code surface</th>
+<th>Status (2026-05-25)</th>
 </tr>
 </thead>
 <tbody>
@@ -2304,18 +2319,21 @@ conclusive for #3; empirical re-test required.</p>
 <td><strong>Medium-high</strong></td>
 <td><strong>Low</strong></td>
 <td>~50 LoC</td>
+<td>Untested</td>
 </tr>
 <tr>
 <td>#2 (decouple chord)</td>
 <td>High</td>
 <td>Medium</td>
 <td>~150 LoC</td>
+<td><strong>Falsified</strong> — see postmortem</td>
 </tr>
 <tr>
 <td>#3 (ERF in Phase 3)</td>
 <td>High</td>
 <td>High</td>
 <td>~300 LoC + new module integration</td>
+<td>Opt-in today via <code>edlines_phase3_erf</code></td>
 </tr>
 </tbody>
 </table>
@@ -2354,8 +2372,13 @@ might help one scene but risk over-fitting the corpus.</p>
 (rewriting with line parameterisation); if #2 succeeds, the chord
 cost is obsoleted.</p>
 <h2 id="9-reference">§9 Reference</h2>
-<p><code>docs/engineering/scene_0008_root_cause_2026-05-03.md</code> — the empirical
-investigation that motivated this design memo.</p>
+<ul>
+<li><code>docs/engineering/scene_0008_root_cause_2026-05-03.md</code> — the
+  empirical investigation that motivated this design memo.</li>
+<li><code>docs/engineering/edlines_sota_followup_postmortem_2026-05-25.md</code>
+  — 2026-05-25 empirical falsification of Improvement #2 and of a
+  separate F6 (axis-imbalance gate) fix attempt.</li>
+</ul>
 
 
 
