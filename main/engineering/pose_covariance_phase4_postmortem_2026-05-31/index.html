@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/pose_covariance_followup_2026-05-22/">
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/pose_covariance_phase4_postmortem_2026-05-31/">
       
       
       
@@ -23,7 +23,7 @@
     
     
       
-        <title>Pose-Covariance Calibration Follow-Up — 2026-05-22 - Locus</title>
+        <title>Pose-Covariance Phase 4 (per-corner ERF empirical noise) — Postmortem — 2026-05-31 - Locus</title>
       
     
     
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#pose-covariance-calibration-follow-up-2026-05-22" class="md-skip">
+        <a href="#pose-covariance-phase-4-per-corner-erf-empirical-noise-postmortem-2026-05-31" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Pose-Covariance Calibration Follow-Up — 2026-05-22
+              Pose-Covariance Phase 4 (per-corner ERF empirical noise) — Postmortem — 2026-05-31
             
           </span>
         </div>
@@ -1708,10 +1708,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-starting-point" class="md-nav__link">
+  <a href="#tldr" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Starting point
+        TL;DR
       
     </span>
   </a>
@@ -1719,60 +1719,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-what-was-tried-and-why-none-of-it-shipped" class="md-nav__link">
+  <a href="#1-what-was-built" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. What was tried, and why none of it shipped
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="2. What was tried, and why none of it shipped">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#phase-1-gwlf-empirical-inflation-refine_quad_gwlf_with_cov" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Phase 1 — GWLF empirical inflation (refine_quad_gwlf_with_cov)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#phase-2-pre-lm-scalar-multiplier-on-_c" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Phase 2 — pre-LM scalar multiplier on Σ_c
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#phase-3-post-lm-per-axis-66-congruence" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Phase 3 — post-LM per-axis 6×6 congruence
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#3-the-structural-finding" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3. The structural finding
+        1. What was built
       
     </span>
   </a>
@@ -1780,10 +1730,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-recommended-next-step" class="md-nav__link">
+  <a href="#2-the-measurement-that-falsifies-it" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. Recommended next step
+        2. The measurement that falsifies it
       
     </span>
   </a>
@@ -1791,10 +1741,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#5-anti-pattern-entry-do-not-re-attempt" class="md-nav__link">
+  <a href="#3-why-it-cannot-work-as-specified" class="md-nav__link">
     <span class="md-ellipsis">
       
-        5. Anti-pattern entry (do-not-re-attempt)
+        3. Why it cannot work as specified
       
     </span>
   </a>
@@ -1802,10 +1752,54 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#6-diff-that-was-prepared-and-rolled-back" class="md-nav__link">
+  <a href="#4-re-attempt-conditions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        6. Diff that was prepared and rolled back
+        4. Re-attempt conditions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-what-to-salvage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. What to salvage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-status-of-the-covariance-investigation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Status of the covariance investigation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-reproduction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Reproduction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
       
     </span>
   </a>
@@ -1832,181 +1826,232 @@
   
 
 
-<h1 id="pose-covariance-calibration-follow-up-2026-05-22">Pose-Covariance Calibration Follow-Up — 2026-05-22</h1>
-<p>Negative-result postmortem for the apriltag3-style empirical-covariance work
-that started from the 2026-05-03 audit
-(<code>pose_covariance_calibration_audit_2026-05-03.md</code>). No production code
-changes ship from this investigation; this memo records what was tried,
-what didn't move, and the one lever that actually can.</p>
-<h2 id="1-starting-point">1. Starting point</h2>
-<p>The 2026-05-03 audit measured the 6×6 SE(3) covariance returned by
-<code>refine_pose_lm_weighted</code> on the hub <code>tag36h11_1080p</code> corpus:</p>
+<h1 id="pose-covariance-phase-4-per-corner-erf-empirical-noise-postmortem-2026-05-31">Pose-Covariance Phase 4 (per-corner ERF empirical noise) — Postmortem — 2026-05-31</h1>
+<p>Negative-result postmortem for <strong>Phase 4</strong>, the per-corner ERF residual-MSE
+covariance-inflation lever sketched in
+<code>pose_covariance_followup_2026-05-22.md</code> §4. Phase 4 was the <em>only</em> lever the
+2026-05-21 sweep had not ruled out. It has now been measured end-to-end and
+<strong>falsified on the hub corpus</strong>. No production code ships from this work; this
+memo records what was built, what was measured, and the conditions under which
+re-attempting could make sense.</p>
+<p>This continues the pattern of <code>pose_covariance_followup_2026-05-22.md</code> §6 and
+the EdLines postmortem (<code>edlines_sota_followup_postmortem_2026-05-25.md</code>):
+falsified mechanism is recorded in docs, the code stays recoverable in git
+history, and <code>main</code> stays clean.</p>
+<h2 id="tldr">TL;DR</h2>
+<ul>
+<li>Phase 4 inflates each corner's structure-tensor covariance with the
+  empirical ERF edge-fit residual MSE:
+  <code>σ²_eff = max(σ_n², min(ε_empirical, 16·σ_n²))</code>.</li>
+<li>The plumbing was implemented and the audit harness extended to read it
+  (branch <code>feat/activate-per-corner-empirical-noise</code>, PR #290).</li>
+<li><strong>The §4 acceptance gate was KL &lt; 0.5. Phase 4 leaves KL at 13.93</strong> — the
+  baseline value, unchanged to ±0.02 even at the theoretical upper bound where
+  <code>ε</code> is set to the actual per-corner ground-truth residual². It is falsified.</li>
+<li>Two independent reasons it cannot work as specified:</li>
+<li><strong>Structural</strong> — per-corner <em>diagonal</em> inflation cannot repair the
+     <em>off-diagonal</em> correlation structure of <code>(JᵀWJ)⁻¹</code>. Same wall that
+     bottomed Phase 3 at KL ≈ 3.</li>
+<li><strong>Reachability</strong> — on every shipped profile the production column
+     <code>corner_empirical_noise</code> is <strong>all zeros</strong>, because every hub tag has
+     PPB &gt; 5.0 and the ERF route never fires under <code>AdaptivePpb</code>. The lever is
+     dormant by construction.</li>
+<li><strong>Disposition:</strong> do not ship the ~700 lines of SIMD/FFI/SoA/config plumbing.
+  Render-tag protected snapshots are byte-identical with the flag on, which is
+  itself proof the mechanism changes nothing observable. The audit-harness
+  knobs and the empirical bound below are the salvageable artifacts.</li>
+</ul>
+<h2 id="1-what-was-built">1. What was built</h2>
+<p>Per <code>pose_covariance_followup_2026-05-22.md</code> §4, on branch
+<code>feat/activate-per-corner-empirical-noise</code> (PR #290, re-authored from the
+earlier PR #276 / <code>feat/per-corner-empirical-noise</code>):</p>
+<ul>
+<li><strong>SIMD residual² accumulator</strong> in <code>refine_accumulate_optimized</code>
+  (<code>edge_refinement.rs</code>) — <code>Σ r²</code> + in-window <code>sample_count</code> alongside the
+  existing <code>sum_jtj</code> / <code>sum_jt_res</code>. SIMD-vs-scalar parity test included.</li>
+<li><code>ErfEdgeFitter::last_residual_mse()</code> surfaces the converged per-sample MSE;
+  <code>refine_corner</code> combines the two adjacent edges' MSE via <code>combine_edge_mses</code>
+  (arithmetic mean, NaN-zero sentinel fallback).</li>
+<li><strong>New SoA column</strong> <code>DetectionBatch::corner_empirical_noise: [[f32; 4];
+  MAX_CANDIDATES]</code>, written by Phase A on the ERF route (<code>0.0</code> sentinel
+  otherwise), read by Phase D.</li>
+<li><code>finalize_corner_covariance</code> replaces the constant <code>σ_n²</code> with
+  <code>max(σ_n², min(ε, 16·σ_n²))</code>. The 16× ceiling clamp bounds the Phase-2
+  tail-cliff failure mode.</li>
+<li>Config flag <code>pose.use_empirical_corner_noise</code> (default <code>false</code>); only
+  <code>high_accuracy</code> opted in.</li>
+<li><strong>Audit-harness extension</strong> (<code>tools/bench/pose_cov_audit.py</code>): reads
+  <code>batch.corner_empirical_noise</code> and passes it as <code>empirical_n_sq=</code> to
+  <code>lb.compute_corner_covariance</code>, plus four knobs to exercise the rule on any
+  corpus — <code>--no-empirical-inflation</code>, <code>--synthetic-empirical &lt;px²&gt;</code>,
+  <code>--gt-residual-empirical</code>, <code>--force-ppb-threshold &lt;t&gt;</code>.</li>
+</ul>
+<h2 id="2-the-measurement-that-falsifies-it">2. The measurement that falsifies it</h2>
+<p>Audit re-run on <code>locus_v1_tag36h11_1920x1080</code> (high_accuracy, AMD EPYC-Milan,
+8 vCPU, <code>RAYON_NUM_THREADS</code> unset). Sweep
+(<code>diagnostics/pose_cov_audit_2026-05-31/report.json</code> on the PR branch):</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Statistic</th>
-<th style="text-align: right;">Empirical</th>
-<th style="text-align: right;">χ²(6) ideal</th>
-<th style="text-align: right;">Ratio</th>
+<th style="text-align: left;">Run</th>
+<th style="text-align: left;"><code>empirical_n_sq</code> source</th>
+<th style="text-align: right;">KL(emp ‖ χ²₆)</th>
+<th style="text-align: right;">mean d²</th>
+<th style="text-align: right;">p99 d²</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">mean d²</td>
-<td style="text-align: right;">714.7</td>
-<td style="text-align: right;">6.0</td>
-<td style="text-align: right;">119×</td>
+<td style="text-align: left;"><strong>A</strong> (production today)</td>
+<td style="text-align: left;">0.0 (SoA column, all-zero)</td>
+<td style="text-align: right;"><strong>13.93</strong></td>
+<td style="text-align: right;">714.71</td>
+<td style="text-align: right;">9435</td>
 </tr>
 <tr>
-<td style="text-align: left;">KL(emp‖χ²(6))</td>
+<td style="text-align: left;">B</td>
+<td style="text-align: left;">flat ε = σ_n² (4.0)</td>
 <td style="text-align: right;">13.93</td>
-<td style="text-align: right;">0</td>
-<td style="text-align: right;">—</td>
+<td style="text-align: right;">714.71</td>
+<td style="text-align: right;">9435</td>
 </tr>
 <tr>
-<td style="text-align: left;">Per-axis ratio (tx, ty, tz, rx, ry, rz)</td>
-<td style="text-align: right;">0.026, 0.021, 0.27, 0.094, 0.15, 0.17</td>
-<td style="text-align: right;">1.0</td>
-<td style="text-align: right;">—</td>
+<td style="text-align: left;">C</td>
+<td style="text-align: left;">flat ε = 4·σ_n² (16.0)</td>
+<td style="text-align: right;">13.95</td>
+<td style="text-align: right;">651.95</td>
+<td style="text-align: right;">7840</td>
+</tr>
+<tr>
+<td style="text-align: left;">D</td>
+<td style="text-align: left;">flat ε = 16·σ_n² (ceiling)</td>
+<td style="text-align: right;">13.93</td>
+<td style="text-align: right;">625.51</td>
+<td style="text-align: right;">7186</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>E</strong></td>
+<td style="text-align: left;">per-corner GT-residual² (upper bound)</td>
+<td style="text-align: right;">13.93</td>
+<td style="text-align: right;">655.34</td>
+<td style="text-align: right;">7921</td>
 </tr>
 </tbody>
 </table>
-<p>Verdict: <code>Σ</code> is ~119× too tight on the joint metric, with 99 % of the
-miscalibration concentrated in the two stiffest principal axes.</p>
-<p>The apriltag3 brief from the same week proposed an empirical-covariance
-inflation: scale <code>Σ_ℓ</code> by <code>max(1, MSE_emp / σ²_th)</code> before propagation. This
-memo documents the three concrete attempts at adapting that brief to Locus.</p>
-<h2 id="2-what-was-tried-and-why-none-of-it-shipped">2. What was tried, and why none of it shipped</h2>
-<h3 id="phase-1-gwlf-empirical-inflation-refine_quad_gwlf_with_cov">Phase 1 — GWLF empirical inflation (<code>refine_quad_gwlf_with_cov</code>)</h3>
-<p>Inflate the per-side <code>cov_l</code> by <code>max(1, (λ_min/W) / theoretical_variance_px2)</code>
-inside the GWLF eigendecomposition. Faithful to the apriltag3 brief; the
-empirical perpendicular MSE falls out of the existing weighted moment
-solve for free.</p>
-<p><strong>Why it didn't ship:</strong> none of the four shipped profiles
-(<code>standard</code>, <code>grid</code>, <code>high_accuracy</code>, <code>max_recall_adaptive</code>) routes
-candidates through <code>CornerRefinementMode::Gwlf</code>. <code>apply_detector_gwlf</code>
-short-circuits via <code>any_route_uses_gwlf()</code> and the inflation code is
-unreachable. Verified by flipping the flag on <code>high_accuracy</code>'s GWLF-route
-test fixtures — every protected snapshot stayed byte-identical because
-the structure-tensor covariance is sourced from <code>pose_weighted.rs</code>, not
-<code>gwlf.rs</code>. The audit was run against the ERF/structure-tensor path; the
-GWLF lever can't move it.</p>
-<h3 id="phase-2-pre-lm-scalar-multiplier-on-_c">Phase 2 — pre-LM scalar multiplier on <code>Σ_c</code></h3>
-<p>Multiply the structure-tensor corner covariance <code>Σ_c = σ_n²·S⁻¹ + α·I</code>
-by a uniform per-profile scalar <code>m</code> before the weighted-LM solve. The
-probe showed that on real corners the Tikhonov term <code>α·I</code> dominates the
-trace by ~5 orders of magnitude (<code>trace(σ_n²·S⁻¹) ≈ 4e-6</code> vs
-<code>trace(α·I) ≈ 0.18</code>); scaling <code>σ_n²</code> alone barely moves anything, so
-the lever has to cover the <em>whole</em> <code>Σ_c</code>.</p>
-<p>Calibration sweep at <code>m = 250</code> on <code>high_accuracy</code>:
-<code>mean d² 714.7 → 6.45</code>, <code>KL 13.9 → 5.08</code>. <strong>But it regressed render-tag
-p99 rotation from 0.86° → 1.90° (+120 %).</strong> The LM's inflated weights
-let IPPE branch-ambiguity outliers through the pose-consistency gate.
-Per the project's "never trade render-tag tail" rule
-(<code>feedback_dataset_priority</code>), this lever is empirically harmful.</p>
-<h3 id="phase-3-post-lm-per-axis-66-congruence">Phase 3 — post-LM per-axis 6×6 congruence</h3>
-<p>Apply <code>Σ_new[i,j] = √(m_i·m_j)·Σ[i,j]</code> to the 6×6 LM output, where
-<code>m = [tx, ty, tz, rx, ry, rz]</code>. PSD- and correlation-coefficient-
-preserving. The pose value is computed before the inflation runs, so by
-construction it cannot regress any tracked metric (corner RMSE, p99
-rotation/translation, recall, latency).</p>
-<p>Audit-derived <code>m = [38.75, 47.43, 3.65, 10.65, 6.51, 5.92]</code> (the
-empirical per-axis ratios from the baseline run) gives
-<code>mean d² 714.7 → 83.4</code>, <code>KL 13.9 → 6.3</code>. <strong>But KL stays well above the
-"well-calibrated" gate of 0.5</strong>, and no protected suite moves because the
-pose value is unchanged.</p>
-<p>Sweeping per-axis values that calibrate each diagonal ratio to exactly
-1.0 (i.e. the audit's stated target) <em>worsens</em> the joint metric:
-<code>mean d² 9188</code>, <code>KL 27.5</code>. The diagonal lever is in irreconcilable
-conflict with the joint Mahalanobis when off-diagonals are wrong.</p>
-<h2 id="3-the-structural-finding">3. The structural finding</h2>
-<p><strong>No global multiplicative scheme can bring KL below ~3 on this dataset.</strong></p>
-<p>A diagonal congruence <code>D·Σ·D</code> preserves the correlation matrix and only
-rescales per-axis variances. The audit's evidence is that the
-correlation matrix of the LM-output <code>Σ</code> is wrong — empirical
-<code>δᵢ</code>-components are correlated differently from what <code>(JᵀWJ)⁻¹</code>
-predicts. Heavy-tailed scene-specific outliers in d² show this clearly:
-some scenes have d² in the thousands while the median sits below 1,
-which cannot be calibrated by any monotonic rescaling.</p>
-<p>Mechanically, the only lever left is <strong>per-scene / per-corner
-adaptivity</strong> — letting the covariance reshape itself based on local
-image evidence rather than a single global table.</p>
-<h2 id="4-recommended-next-step">4. Recommended next step</h2>
-<blockquote>
-<p><strong>Status (2026-05-31): Empirically falsified.</strong> Phase 4 was built and
-measured end-to-end on branch <code>feat/activate-per-corner-empirical-noise</code>
-(PR #290). The §4 gate below was <strong>KL &lt; 0.5</strong>; Phase 4 leaves KL at the
-baseline <strong>13.93</strong>, unchanged to ±0.02 even at the theoretical upper bound
-(<code>ε</code> = per-corner GT residual²). It also fires on nothing in production —
-<code>corner_empirical_noise</code> is all-zero on every shipped profile because the
-hub corpus has no low-PPB tags to route through ERF. Not shipped; plumbing
-stays recoverable on the branch. Full analysis:
-<code>pose_covariance_phase4_postmortem_2026-05-31.md</code>. <strong>All four phases are now
-closed — there is no known surviving covariance-calibration lever.</strong></p>
-</blockquote>
-<p><strong>Phase 4 — per-corner ERF residual MSE plumbing.</strong></p>
-<p>This is the original apriltag3 idea applied honestly to Locus's
-production code path:</p>
+<p>Read this as:</p>
 <ol>
-<li>Modify <code>refine_accumulate_optimized</code> in <code>crates/locus-core/src/edge_refinement.rs</code>
-   to also accumulate <code>Σ residual²</code> and <code>sample_count</code> alongside the
-   existing <code>sum_jtj</code> / <code>sum_jt_res</code>. ~10 lines in the SIMD inner loop;
-   one extra <code>_mm256_fmadd_pd</code>.</li>
-<li>Store the converged MSE on <code>ErfEdgeFitter</code> (new field <code>last_residual_mse</code>).</li>
-<li>In <code>crates/locus-core/src/refinement.rs::refine_corner</code>, combine the two
-   adjacent edges' MSE into a per-corner empirical noise estimate.</li>
-<li>Add a new SoA column on <code>DetectionBatch</code> (<code>corner_empirical_noise:
-   [[f32; 4]; MAX_CANDIDATES]</code>).</li>
-<li>Plumb that into <code>compute_framework_uncertainty</code>. Inside
-   <code>finalize_corner_covariance</code>, replace the constant <code>sigma_n_sq</code> with
-   <code>max(sigma_n_sq, empirical_per_corner_noise)</code>.</li>
+<li><strong>The mechanism is wired correctly.</strong> Mean d² falls monotonically as ε
+   grows, and the 16× ceiling engages in run D as designed.</li>
+<li><strong>KL does not move.</strong> It stays 13.93 ± 0.02 across every setting including
+   run E, the theoretical ceiling where <code>ε</code> is the true per-corner residual².
+   The §4 gate (KL &lt; 0.5) is missed by ~28×. <code>report.json</code> records
+   <code>"kl_verdict": "miscalibrated (KL &gt; 0.5)"</code>.</li>
+<li><strong>The production column is all zeros.</strong> Every hub tag has PPB &gt; 5.0 (the
+   <code>AdaptivePpb.threshold</code> Pydantic/Rust max), so all candidates take the
+   high-PPB EdLines + None route. ERF never fires → no empirical MSE → <code>0.0</code>
+   sentinel. Run A ≡ baseline.</li>
 </ol>
-<p>Estimated diff: ~200 LOC, touches AVX2 / AVX-512 / NEON multiversion
-code (highest-stakes section per <code>docs/engineering/constraints.md</code>).
-Risk: high — SIMD edits are unforgiving. Reward: the only lever the
-2026-05-21 sweep didn't rule out.</p>
-<p>A Phase 4 PR should land with:</p>
+<h2 id="3-why-it-cannot-work-as-specified">3. Why it cannot work as specified</h2>
 <ul>
-<li>An SIMD unit test pinning the new <code>Σ residual²</code> accumulator
-  against a scalar reference.</li>
-<li>A re-audit confirming KL drops below 0.5 (the gating threshold) on
-  the hub <code>tag36h11_1080p</code> corpus.</li>
-<li>Zero regression on the four protected suites — same constraint as
-  Phase 3, harder to honor because per-corner reweighting <em>can</em> change
-  the LM solution.</li>
+<li><strong>Diagonal inflation, off-diagonal problem.</strong> This is the exact structural
+  finding of <code>pose_covariance_followup_2026-05-22.md</code> §3: <em>"no global
+  multiplicative scheme can bring the pose-covariance KL below ~3 — the
+  correlation structure of (JᵀWJ)⁻¹ is wrong, not just its scale."</em> Phase 4
+  is a per-corner diagonal <code>σ_n²</code> rescale; it modulates the <em>magnitude</em> of
+  individual corner weights but leaves the off-diagonal structure of the
+  inverted normal matrix untouched. Run E proves even a perfect per-corner
+  residual estimator does not escape this wall.</li>
+<li><strong>Unreachable on shipped profiles.</strong> Even if the diagonal lever helped, it
+  fires on nothing in production. ERF refinement is gated to low-PPB
+  candidates under <code>AdaptivePpb</code>, and the hub corpus has none. The 14/14
+  byte-identical <code>regression_render_tag</code> snapshots with the flag on confirm
+  zero production effect.</li>
 </ul>
-<h2 id="5-anti-pattern-entry-do-not-re-attempt">5. Anti-pattern entry (do-not-re-attempt)</h2>
-<p>For the auto-memory index and future agents:</p>
+<h2 id="4-re-attempt-conditions">4. Re-attempt conditions</h2>
+<p>Phase 4 should not be reopened until <strong>both</strong> of these change, together:</p>
+<ol>
+<li><strong>A corpus where ERF actually fires</strong> — low-PPB tags, or a profile that
+   routes more candidates through ERF (lifting the <code>EdLines + None</code> high-PPB
+   route, currently empirically justified by scene_0008), so
+   <code>corner_empirical_noise</code> is non-zero in production.</li>
+<li><strong>A non-diagonal fix</strong> — something that changes the correlation structure
+   of the pose information matrix, not just per-corner weight magnitudes. A
+   diagonal lever provably cannot (runs C/D/E above; §3 of the followup).</li>
+</ol>
+<p>Condition 1 alone makes the column observable but, per run E, does not move KL.
+Condition 2 is the load-bearing one and is unsolved.</p>
+<h2 id="5-what-to-salvage">5. What to salvage</h2>
 <ul>
-<li><strong>Pre-LM scalar <code>Σ_c</code> multiplier</strong>: empirically harmful (<code>m=250</code>
-  regresses render-tag p99 rotation 0.86° → 1.90°). Do not re-attempt
-  unless the LM's IPPE branch-ambiguity behaviour is also re-evaluated.</li>
-<li><strong>Post-LM diagonal <code>Σ</code> congruence (any flavour — uniform scalar,
-  per-axis vector, trans/rot pair)</strong>: KL bottoms at ~3 because the
-  off-diagonal correlation structure of <code>(JᵀWJ)⁻¹</code> is wrong, not just
-  its scale. Do not re-attempt without changing the correlation
-  structure (which a diagonal lever cannot).</li>
-<li><strong>GWLF empirical inflation in <code>refine_quad_gwlf_with_cov</code></strong>: mechanism
-  is sound but no shipped profile routes through GWLF refinement, so
-  any "performance improvement" claim must first ship a profile that
-  actually exercises that path.</li>
-<li><strong>Phase 4 — per-corner ERF residual MSE inflation</strong> (added 2026-05-31):
-  falsified. KL stays at the baseline 13.93 even at the theoretical upper
-  bound — a per-corner <em>diagonal</em> <code>σ_n²</code> rescale cannot fix the <em>off-diagonal</em>
-  correlation structure of <code>(JᵀWJ)⁻¹</code> (same wall as the post-LM diagonal
-  lever above). Also dormant in production: the empirical column is all-zero
-  on every shipped profile because the hub corpus has no low-PPB tags to
-  route through ERF. Do not re-attempt without <strong>both</strong> a corpus where ERF
-  fires <strong>and</strong> a non-diagonal correlation-structure fix. See
-  <code>pose_covariance_phase4_postmortem_2026-05-31.md</code>.</li>
+<li><strong>The empirical bound in §2</strong> is the durable result: Phase 4's KL ceiling is
+  the baseline, full stop.</li>
+<li><strong>The audit-harness knobs</strong> (<code>--synthetic-empirical</code>, <code>--gt-residual-empirical</code>,
+  <code>--force-ppb-threshold</code>, <code>--no-empirical-inflation</code>) let a future agent probe
+  any per-corner inflation rule <em>without</em> shipping production plumbing — they
+  compute <code>ε</code> Python-side and pass it through <code>lb.compute_corner_covariance</code>.
+  They live on branch <code>feat/activate-per-corner-empirical-noise</code>; recover via
+  <code>git show</code> exactly as §6 prescribes for the GWLF template.</li>
+<li><strong>The ~700 lines of SIMD/FFI/SoA/config plumbing</strong> stay on that branch and do
+  <strong>not</strong> ship to <code>main</code>. They change nothing observable and would only bit-rot.</li>
 </ul>
-<h2 id="6-diff-that-was-prepared-and-rolled-back">6. Diff that was prepared and rolled back</h2>
-<p>The investigation produced ~580 lines of mechanism (<code>DetectorConfig</code>
-fields, FFI wiring, Pydantic mirror, JSON profile entries, tests, schema,
-audit-script hooks) for two knobs that ended up at byte-identical
-defaults. None of it is on <code>main</code>. The exploration branch was
-<code>feat/gwlf-empirical-cov-inflation</code>; recover via <code>git show</code> if a future
-Phase 4 wants to copy the FFI/config plumbing template.</p>
+<h2 id="6-status-of-the-covariance-investigation">6. Status of the covariance investigation</h2>
+<p>With Phase 4 falsified, <strong>all four phases are now closed</strong>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Phase</th>
+<th style="text-align: left;">Lever</th>
+<th style="text-align: left;">Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">1</td>
+<td style="text-align: left;">GWLF empirical inflation</td>
+<td style="text-align: left;">Unreachable — no profile routes through GWLF</td>
+</tr>
+<tr>
+<td style="text-align: left;">2</td>
+<td style="text-align: left;">Pre-LM uniform <code>Σ_c</code> multiplier</td>
+<td style="text-align: left;">Harmful — render-tag p99 rot 0.86° → 1.90°</td>
+</tr>
+<tr>
+<td style="text-align: left;">3</td>
+<td style="text-align: left;">Post-LM diagonal <code>Σ</code> congruence</td>
+<td style="text-align: left;">Bottoms at KL ≈ 3 — off-diagonal structure wrong</td>
+</tr>
+<tr>
+<td style="text-align: left;">4</td>
+<td style="text-align: left;">Per-corner ERF residual MSE</td>
+<td style="text-align: left;">Falsified — KL unchanged at 13.93; dormant in production</td>
+</tr>
+</tbody>
+</table>
+<p>There is no known surviving global or per-corner covariance-calibration lever.
+Any future work must attack the off-diagonal correlation structure of
+<code>(JᵀWJ)⁻¹</code> directly.</p>
+<h2 id="7-reproduction">7. Reproduction</h2>
+<p>On branch <code>feat/activate-per-corner-empirical-noise</code>, after
+<code>maturin develop --release --features bench-internals</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Run A (production, all-zero column)</span>
+<span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/bench/pose_cov_audit.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--hub-config<span class="w"> </span>locus_v1_tag36h11_1920x1080<span class="w"> </span>--profile<span class="w"> </span>high_accuracy
+
+<span class="c1"># Run E (theoretical upper bound)</span>
+<span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/bench/pose_cov_audit.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--hub-config<span class="w"> </span>locus_v1_tag36h11_1920x1080<span class="w"> </span>--profile<span class="w"> </span>high_accuracy<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--gt-residual-empirical
+</code></pre></div>
+<p>Both report <code>kl_divergence_to_chi2_6 ≈ 13.93</code>.</p>
+<h2 id="references">References</h2>
+<ul>
+<li><code>pose_covariance_followup_2026-05-22.md</code> §3 (structural finding), §4 (Phase 4
+  sketch + KL &lt; 0.5 gate), §6 (don't-ship-dormant-mechanism precedent).</li>
+<li><code>edlines_sota_followup_postmortem_2026-05-25.md</code> (the docs-only negative-result
+  pattern this follows).</li>
+<li>PR #290 <code>feat/activate-per-corner-empirical-noise</code> (plumbing + harness, not
+  shipped); PR #276 (superseded, closed).</li>
+<li><code>diagnostics/pose_cov_audit_2026-05-31/report.json</code> (the falsifying numbers).</li>
+</ul>
 
 
 
