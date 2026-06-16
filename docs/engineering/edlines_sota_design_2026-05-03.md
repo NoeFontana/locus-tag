@@ -129,6 +129,12 @@ chord between them (`fit_edge_line`, `quad.rs:1340`).
 | F5 | Phase-5 5 % exclusion zone is computed against the *current* chord; when chord is wrong, "near-corner" points are misidentified, removing exactly the points that would constrain corner position. | 5 | Wrong-chord initial conditions |
 | F6 | Imbalance gate (`edlines.rs:1088`) fires only on AxisAligned mode and uses a static 16 % / 40 % threshold. Marginal cases below the threshold still produce slightly-off Diagonal partitions. | 1 | Tags rotated near 0° but not exactly axis-aligned |
 
+> **Status update (2026-05-25)**: F4 and F6 have been probed empirically; see `edlines_sota_followup_postmortem_2026-05-25.md`.
+> - F6: replacing the static gate with a continuous arc-balance selector regresses render-tag mean RMSE at 640×480 (decoder-rejection failure mode dominates the selector criterion space).
+> - F4: chord-coupling turns out to be a *variance-reducing regulariser*, not just a hack; per-line decoupling (Improvement #2 below) blows up mean RMSE +30–43 % at every resolution.
+>
+> Both fixes are closed without ship.  scene_0008's bias is bounded upstream by PR #281's covariance gates.
+
 scene_0008 is consistent with **F1 + F4**: a near-axis-aligned tag where
 the LEFT edge has ~0.3 px binary-vs-gray offset (the "PSF inward shift"
 quantified in V1), Phase 3 places sub-pixel points correctly enough that
@@ -218,6 +224,13 @@ threshold filters them out at the refined-line probe positions), we
 fall back to `fl_v1`, which is the current Phase-4 output.
 
 ### §5.2 Improvement #2 — decouple Phase 5 chord direction from corners
+
+> **Status (2026-05-25): Empirically falsified.**  Implemented and run
+> against the protected `regression_render_tag` suite; mean RMSE
+> +30–43 % and p99 rotation +30–100 % at every resolution.  Reverted
+> the same day.  Re-attempt requires resolving one of the four
+> conditions enumerated in
+> `edlines_sota_followup_postmortem_2026-05-25.md §3.4`.
 
 **Mechanism.** Replace the 8-DoF state vector `(x_0, y_0, …, x_3, y_3)`
 with a 12-DoF state vector parameterising **lines** instead of corners:
@@ -370,11 +383,11 @@ fn refine_edge_subpixel_erf<'a>(
 
 ## §6 Risk register summary
 
-| # | Likelihood scene_0008 fixes | Risk to 49 typical scenes | Code surface |
-|---|---|---|---|
-| #1 (iterate 3/4) | **Medium-high** | **Low** | ~50 LoC |
-| #2 (decouple chord) | High | Medium | ~150 LoC |
-| #3 (ERF in Phase 3) | High | High | ~300 LoC + new module integration |
+| # | Likelihood scene_0008 fixes | Risk to 49 typical scenes | Code surface | Status (2026-05-25) |
+|---|---|---|---|---|
+| #1 (iterate 3/4) | **Medium-high** | **Low** | ~50 LoC | Untested |
+| #2 (decouple chord) | High | Medium | ~150 LoC | **Falsified** — see postmortem |
+| #3 (ERF in Phase 3) | High | High | ~300 LoC + new module integration | Opt-in today via `edlines_phase3_erf` |
 
 ## §7 Validation strategy
 
@@ -420,5 +433,8 @@ cost is obsoleted.
 
 ## §9 Reference
 
-`docs/engineering/scene_0008_root_cause_2026-05-03.md` — the empirical
-investigation that motivated this design memo.
+- `docs/engineering/scene_0008_root_cause_2026-05-03.md` — the
+  empirical investigation that motivated this design memo.
+- `docs/engineering/edlines_sota_followup_postmortem_2026-05-25.md`
+  — 2026-05-25 empirical falsification of Improvement #2 and of a
+  separate F6 (axis-imbalance gate) fix attempt.
