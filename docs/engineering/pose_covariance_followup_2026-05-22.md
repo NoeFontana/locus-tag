@@ -96,6 +96,17 @@ image evidence rather than a single global table.
 
 ## 4. Recommended next step
 
+> **Status (2026-05-31): Empirically falsified.** Phase 4 was built and
+> measured end-to-end on branch `feat/activate-per-corner-empirical-noise`
+> (PR #290). The §4 gate below was **KL < 0.5**; Phase 4 leaves KL at the
+> baseline **13.93**, unchanged to ±0.02 even at the theoretical upper bound
+> (`ε` = per-corner GT residual²). It also fires on nothing in production —
+> `corner_empirical_noise` is all-zero on every shipped profile because the
+> hub corpus has no low-PPB tags to route through ERF. Not shipped; plumbing
+> stays recoverable on the branch. Full analysis:
+> `pose_covariance_phase4_postmortem_2026-05-31.md`. **All four phases are now
+> closed — there is no known surviving covariance-calibration lever.**
+
 **Phase 4 — per-corner ERF residual MSE plumbing.**
 
 This is the original apriltag3 idea applied honestly to Locus's
@@ -145,6 +156,15 @@ For the auto-memory index and future agents:
   is sound but no shipped profile routes through GWLF refinement, so
   any "performance improvement" claim must first ship a profile that
   actually exercises that path.
+- **Phase 4 — per-corner ERF residual MSE inflation** (added 2026-05-31):
+  falsified. KL stays at the baseline 13.93 even at the theoretical upper
+  bound — a per-corner *diagonal* `σ_n²` rescale cannot fix the *off-diagonal*
+  correlation structure of `(JᵀWJ)⁻¹` (same wall as the post-LM diagonal
+  lever above). Also dormant in production: the empirical column is all-zero
+  on every shipped profile because the hub corpus has no low-PPB tags to
+  route through ERF. Do not re-attempt without **both** a corpus where ERF
+  fires **and** a non-diagonal correlation-structure fix. See
+  `pose_covariance_phase4_postmortem_2026-05-31.md`.
 
 ## 6. Diff that was prepared and rolled back
 
