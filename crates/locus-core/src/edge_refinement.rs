@@ -167,14 +167,6 @@ const THETA_DEADBAND_RAD: f64 = 0.007;
 /// correcting a genuinely misrotated seed are kept.
 const TWO_DOF_ACCEPT_COST_FRAC: f64 = 0.97;
 
-/// The 2-DOF rotation is only *attempted* when the proven 1-DOF reference fit
-/// is poor relative to the edge contrast `|B − A|` — positive evidence the
-/// seed normal is genuinely misrotated. Edges whose 1-DOF fit is already good
-/// keep 1-DOF and skip the 2-DOF solve entirely (the common case), which both
-/// eliminates the decode-recall / board-coverage regressions from spurious
-/// rotations and avoids paying for the 2-DOF GN loop on well-aligned edges.
-const TWO_DOF_POOR_FIT_FRAC: f64 = 0.15;
-
 /// Per-sample residual influence is clipped at `(this · |B − A|)²` in
 /// [`robust_edge_cost`]. Bounds the leverage of a minority of off-edge /
 /// adjacent-structure samples so the 1-DOF-vs-2-DOF comparison is fair to
@@ -513,20 +505,20 @@ impl<'a> ErfEdgeFitter<'a> {
         // and the baseline the 2-DOF rotation must beat. `refine_one_dof`
         // leaves the seed normal frozen, so this is byte-identical to the
         // `OneDof` path.
+        //
+        // (Efficiency follow-up: a 1-DOF-first *skip* — bail out here when the
+        // 1-DOF fit is already good, avoiding the 2-DOF GN loop on the common
+        // well-aligned edge — is possible, but an absolute `cost < frac ·
+        // contrast` trigger can forgo a genuinely-acceptable 2-DOF improvement
+        // at the margin. The robust gate below already rejects marginal
+        // rotations, so the skip is pure compute savings, not accuracy; it
+        // needs a noise-relative trigger to be safe and is left as a follow-up.
+        // We instead always run the 2-DOF solve and let the gate decide.)
         self.refine_one_dof(samples, config, inv_sigma, seed_a, seed_b);
         let (one_nx, one_ny, one_d, one_jtj) = (self.nx, self.ny, self.d, self.last_jtj);
         let cost_1dof = robust_edge_cost(
             samples, one_nx, one_ny, one_d, seed_a, seed_b, inv_sigma, clip,
         );
-
-        // Attempt the extra rotational DOF only when the 1-DOF fit is poor
-        // (positive evidence of a misrotated seed). A good 1-DOF fit ⇒ the
-        // seed orientation is already correct ⇒ keep it and skip the 2-DOF
-        // GN loop entirely (the common case; also keeps well-aligned edges
-        // byte-identical to 1-DOF).
-        if cost_1dof.sqrt() <= TWO_DOF_POOR_FIT_FRAC * contrast {
-            return;
-        }
 
         // --- 2-DOF (θ, ρ) Gauss-Newton from the seed. ---
         self.nx = seed_nx;
