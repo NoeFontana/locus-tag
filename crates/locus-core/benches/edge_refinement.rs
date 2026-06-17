@@ -50,10 +50,13 @@ fn run_bench(bencher: Bencher, sigma: f64, decoder_style: bool) {
     let width = 80;
     let height = (EDGE_LEN as usize) + 20;
 
+    // Mirror the production band selection in `quad.rs::refine_edge_erf`: the
+    // 2-DOF quad path uses the narrow band, so the bench measures the shipped
+    // cost rather than the wider legacy band.
     let sample_cfg = if decoder_style {
         SampleConfig::for_decoder()
     } else {
-        SampleConfig::for_quad(EDGE_LEN, 1)
+        SampleConfig::for_quad_narrow(EDGE_LEN, 1)
     };
     let refine_cfg = if decoder_style {
         RefineConfig::decoder_style(sigma)

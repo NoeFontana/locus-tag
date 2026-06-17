@@ -126,9 +126,15 @@ mod tests {
     use crate::image::ImageView;
     use bumpalo::Bump;
 
-    /// Quad-style fit helper: mirrors the semantics that `quad.rs::refine_corner`
-    /// relies on. Returns the fitted line `(nx, ny, d)` under the LHN convention
-    /// of `ErfEdgeFitter` (opposite sign to `Line::from_points_cw`).
+    /// Quad-style fit helper for the fitter's *recovery-capability* unit tests
+    /// (perpendicular capture range, angle, decimation, noise). Uses the wide
+    /// [`SampleConfig::for_quad`] band deliberately: these tests probe how far
+    /// the GN can pull a seed, which is a function of the captured transition,
+    /// not of the 2-DOF adjacent-edge-rejection band. Production's narrower
+    /// `for_quad_narrow` 2-DOF band is exercised end-to-end by the
+    /// `regression_render_tag*` integration suites and by
+    /// `quad_style_recovers_axis_aligned_subpixel_edge`. Returns the fitted
+    /// line `(nx, ny, d)` under the LHN convention of `ErfEdgeFitter`.
     fn fit_quad_style(
         arena: &Bump,
         img: &ImageView,
@@ -495,7 +501,7 @@ mod tests {
         if let Some((_nx, _ny, d)) = fit_quad_style(&arena, &img, p1, p2, sigma, 1) {
             let error = (d - x_gt).abs();
             println!("Off-edge seed recovery error: {error:.4}");
-            assert!(error < 0.1);
+            assert!(error < 0.1, "off-edge recovery error {error:.4}");
         }
     }
 }

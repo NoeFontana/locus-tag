@@ -158,19 +158,30 @@ const THETA_CLAMP_RAD: f64 = 0.05;
 const THETA_DEADBAND_RAD: f64 = 0.007;
 
 /// The 2-DOF rotation is accepted over the 1-DOF reference only when its
-/// robust edge-fit residual is below this fraction of the 1-DOF residual
-/// (i.e. a ≥10 % improvement). Penalises the extra rotational DOF so a
-/// marginally-better fit that drifts the corner onto adjacent tag structure
-/// is rejected, while the large residual drops from correcting a genuinely
-/// misrotated seed are kept.
-const TWO_DOF_ACCEPT_RESID_FRAC: f64 = 0.97;
+/// robust edge-fit cost is below this fraction of the 1-DOF cost (i.e. a
+/// ≥3 % RMS improvement). This is a *relative* ratio of two costs measured
+/// over the **same** sample set with the **same** bounded-influence aggregate
+/// (see [`robust_edge_cost`]), so it is scale-independent and penalises the
+/// extra rotational DOF: a marginally-better fit that drifts the corner onto
+/// adjacent tag structure is rejected, while the large cost drops from
+/// correcting a genuinely misrotated seed are kept.
+const TWO_DOF_ACCEPT_COST_FRAC: f64 = 0.97;
 
-/// The 2-DOF rotation is only attempted when the 1-DOF reference fit is poor
-/// relative to the edge contrast `|B − A|` — i.e. there is positive evidence
-/// the seed normal is genuinely misrotated. Tags whose 1-DOF fit is already
-/// good (they decode fine) keep 1-DOF, eliminating the decode-recall and
-/// board-coverage regressions from spurious rotations.
+/// The 2-DOF rotation is only *attempted* when the proven 1-DOF reference fit
+/// is poor relative to the edge contrast `|B − A|` — positive evidence the
+/// seed normal is genuinely misrotated. Edges whose 1-DOF fit is already good
+/// keep 1-DOF and skip the 2-DOF solve entirely (the common case), which both
+/// eliminates the decode-recall / board-coverage regressions from spurious
+/// rotations and avoids paying for the 2-DOF GN loop on well-aligned edges.
 const TWO_DOF_POOR_FIT_FRAC: f64 = 0.15;
+
+/// Per-sample residual influence is clipped at `(this · |B − A|)²` in
+/// [`robust_edge_cost`]. Bounds the leverage of a minority of off-edge /
+/// adjacent-structure samples so the 1-DOF-vs-2-DOF comparison is fair to
+/// both the seed-frozen and the rotated fit (a correct rotation moves *away*
+/// from contamination; without clipping those samples would unfairly inflate
+/// the rotated fit's cost).
+const TWO_DOF_COST_CLIP_FRAC: f64 = 0.5;
 
 /// Tukey biweight tuning constant — 95 % Gaussian efficiency.
 const TUKEY_C: f64 = 4.685;
@@ -491,15 +502,37 @@ impl<'a> ErfEdgeFitter<'a> {
         // conditioning guard's variance estimate is meaningful.
         let pcx = self.p1[0] + 0.5 * self.dx;
         let pcy = self.p1[1] + 0.5 * self.dy;
-        let mut rho = self.nx * pcx + self.ny * pcy + self.d;
 
-        // Seed line params, captured so the deadband check after the loop can
-        // fall back to the proven 1-DOF ρ-only solve when the 2-DOF rotation
-        // turns out negligible (see the comment at that check).
         let (seed_nx, seed_ny, seed_d) = (self.nx, self.ny, self.d);
         let (seed_a, seed_b) = (a, b);
+        let contrast = (seed_b - seed_a).abs();
+        let clip = TWO_DOF_COST_CLIP_FRAC * contrast;
+        self.last_sigma_hat = f64::NAN;
 
-        let sigma_floor = ROBUST_SIGMA_FLOOR_KAPPA * (b - a).abs();
+        // Proven 1-DOF ρ-only reference first: it is both the default output
+        // and the baseline the 2-DOF rotation must beat. `refine_one_dof`
+        // leaves the seed normal frozen, so this is byte-identical to the
+        // `OneDof` path.
+        self.refine_one_dof(samples, config, inv_sigma, seed_a, seed_b);
+        let (one_nx, one_ny, one_d, one_jtj) = (self.nx, self.ny, self.d, self.last_jtj);
+        let cost_1dof = robust_edge_cost(
+            samples, one_nx, one_ny, one_d, seed_a, seed_b, inv_sigma, clip,
+        );
+
+        // Attempt the extra rotational DOF only when the 1-DOF fit is poor
+        // (positive evidence of a misrotated seed). A good 1-DOF fit ⇒ the
+        // seed orientation is already correct ⇒ keep it and skip the 2-DOF
+        // GN loop entirely (the common case; also keeps well-aligned edges
+        // byte-identical to 1-DOF).
+        if cost_1dof.sqrt() <= TWO_DOF_POOR_FIT_FRAC * contrast {
+            return;
+        }
+
+        // --- 2-DOF (θ, ρ) Gauss-Newton from the seed. ---
+        self.nx = seed_nx;
+        self.ny = seed_ny;
+        self.d = seed_d;
+        let mut rho = seed_nx * pcx + seed_ny * pcy + seed_d;
         let mut sigma_hat = f64::NAN;
 
         for _ in 0..config.max_iterations {
@@ -517,31 +550,36 @@ impl<'a> ErfEdgeFitter<'a> {
                 break;
             }
 
-            let accum = if use_tukey {
-                // Pre-pass: σ̂ from unweighted residuals at the current
-                // line params, then weighted accumulator with Tukey
-                // weights computed from that σ̂. Prevents the iter-0
-                // unweighted rotation that contaminates IRLS.
+            // Same-iter σ̂ pre-pass (Tukey only): the unweighted residual
+            // scale at the *current* line params seeds this iteration's IRLS
+            // weights. This is load-bearing — it is what stops the iter-0
+            // unweighted GN step from rotating onto an adjacent edge (the
+            // 104° `moments_culling` failure the ablation diagnosed); it must
+            // NOT be replaced by a one-iteration-lagged σ̂. The unweighted
+            // path (`use_tukey == false`, the test-only baseline) passes
+            // `inv_c_sigma = 0`, which makes every Tukey weight `(1 − 0)² = 1`
+            // — one kernel serves both, byte-identically.
+            let inv_c_sigma = if use_tukey {
+                let sigma_floor = ROBUST_SIGMA_FLOOR_KAPPA * (b - a).abs();
                 let s = sigma_at(samples, self.nx, self.ny, rho, pcx, pcy, a, b, inv_sigma)
                     .max(sigma_floor);
                 sigma_hat = s;
-                refine_accumulate_optimized_2dof_tukey(
-                    samples,
-                    self.nx,
-                    self.ny,
-                    rho,
-                    pcx,
-                    pcy,
-                    a,
-                    b,
-                    inv_sigma,
-                    1.0 / (TUKEY_C * s),
-                )
+                1.0 / (TUKEY_C * s)
             } else {
-                refine_accumulate_optimized_2dof(
-                    samples, self.nx, self.ny, rho, pcx, pcy, a, b, inv_sigma,
-                )
+                0.0
             };
+            let accum = refine_accumulate_optimized_2dof_tukey(
+                samples,
+                self.nx,
+                self.ny,
+                rho,
+                pcx,
+                pcy,
+                a,
+                b,
+                inv_sigma,
+                inv_c_sigma,
+            );
             self.last_jtj = accum.jtj_rr;
 
             if accum.jtj_rr < config.singular_threshold {
@@ -581,50 +619,49 @@ impl<'a> ErfEdgeFitter<'a> {
                 self.ny = rotated[1];
             }
 
+            // Convergence in consistent pixel units: `drho` is already a
+            // perpendicular offset in px; convert the rotation step to the
+            // displacement it induces at the edge tip (½·len from `p_c`) so
+            // both DOFs are tested against the same physical tolerance rather
+            // than radians-vs-pixels against one shared threshold.
             if drho.abs() < config.convergence_threshold
-                && dtheta.abs() < config.convergence_threshold
+                && dtheta.abs() * self.len * 0.5 < config.convergence_threshold
             {
                 break;
             }
         }
 
-        // 2-DOF candidate solution and its robust edge-fit residual.
+        // The 2-DOF candidate (current `self`) vs the 1-DOF reference,
+        // compared by a bounded-influence cost over the SAME full sample set
+        // ([`robust_edge_cost`]). Using the same samples and the same robust
+        // aggregate for both makes the decision fair (a rotation cannot win
+        // merely by shedding high-residual samples out of an in-range band)
+        // and degenerate-safe (the cost is over all ≥10 collected samples, so
+        // it can never be the `0.0` an empty in-range set would produce).
+        // Accept only when the rotation is meaningful (past the deadband —
+        // which also keeps well-aligned edges byte-identical to 1-DOF) AND it
+        // beats 1-DOF by a clear margin; otherwise the proven 1-DOF reference
+        // stands, so the path is never worse than 1-DOF on robust edge fit.
         let theta_total = (seed_nx * self.ny - seed_ny * self.nx)
             .clamp(-1.0, 1.0)
             .asin();
-        let (cand_nx, cand_ny) = (self.nx, self.ny);
-        let cand_d = rho - cand_nx * pcx - cand_ny * pcy;
-        let resid_2dof = sigma_at(samples, cand_nx, cand_ny, rho, pcx, pcy, a, b, inv_sigma);
-
-        // Proven 1-DOF ρ-only reference from the seed normal (byte-identical
-        // to the `OneDof` path), with its own residual.
-        self.nx = seed_nx;
-        self.ny = seed_ny;
-        self.d = seed_d;
-        self.refine_one_dof(samples, config, inv_sigma, seed_a, seed_b);
-        let rho_1dof = seed_nx * pcx + seed_ny * pcy + self.d;
-        let resid_1dof = sigma_at(
-            samples, seed_nx, seed_ny, rho_1dof, pcx, pcy, a, b, inv_sigma,
+        let cand_d = rho - self.nx * pcx - self.ny * pcy;
+        let cost_2dof = robust_edge_cost(
+            samples, self.nx, self.ny, cand_d, seed_a, seed_b, inv_sigma, clip,
         );
-
-        // Accept the 2-DOF rotation only when it is genuinely warranted: the
-        // normal rotated past the deadband AND the rotation reduces the robust
-        // edge-fit residual by a clear margin. This keeps the large pose-tail
-        // wins (badly misrotated Douglas-Peucker seeds → big residual drop)
-        // while rejecting marginal rotations that drift a corner onto adjacent
-        // tag structure — the source of the decode-recall and board-coverage
-        // regressions. Otherwise the proven 1-DOF result (already written
-        // above) stands, so the path is never worse than 1-DOF on edge fit.
-        let contrast = (b - a).abs();
-        if theta_total.abs() >= THETA_DEADBAND_RAD
-            && resid_1dof > TWO_DOF_POOR_FIT_FRAC * contrast
-            && resid_2dof < TWO_DOF_ACCEPT_RESID_FRAC * resid_1dof
-        {
-            self.nx = cand_nx;
-            self.ny = cand_ny;
-            self.d = cand_d;
-        }
         self.last_sigma_hat = sigma_hat;
+
+        if theta_total.abs() >= THETA_DEADBAND_RAD
+            && cost_2dof < TWO_DOF_ACCEPT_COST_FRAC * cost_1dof
+        {
+            self.d = cand_d;
+        } else {
+            // Keep the proven 1-DOF reference; restore its telemetry too.
+            self.nx = one_nx;
+            self.ny = one_ny;
+            self.d = one_d;
+            self.last_jtj = one_jtj;
+        }
     }
 
     /// End-to-end fit: optional initial-`d` scan, sample collection, and GN refinement.
@@ -914,165 +951,21 @@ struct GnAccum2 {
     jtr_t: f64,
 }
 
-/// Accumulate the 2×2 `JᵀJ` and 2-vector `Jᵀr` for the centered `(θ, ρ)` GN step.
+/// Tukey-weighted 2×2 `JᵀJ` + 2-vector `Jᵀr` accumulator for the centered
+/// `(θ, ρ)` GN step. The single 2-DOF accumulator: `inv_c_sigma = 1 / (c · σ̂)`
+/// controls the Tukey rejection cutoff, with per-sample weight
+/// `w_i = (1 − (r_i · inv_c_sigma)²)²` when in range else `0`. Passing
+/// `inv_c_sigma = 0` makes every weight `(1 − 0)² = 1`, i.e. an unweighted
+/// 2-DOF solve — so this one kernel serves both the production Tukey IRLS path
+/// and the (test-only) unweighted baseline byte-identically, with no second
+/// hand-written SIMD kernel to keep in sync.
 ///
-/// Jacobian columns (per sample):
-///     `∂r/∂ρ = jac`            (same as the 1-DOF column)
-///     `∂r/∂θ = jac · t`        with `t = -ny·xc + nx·yc` (tangent ⟂ normal)
-/// where `(xc, yc) = (x - p_c.x, y - p_c.y)`. Centering on `p_c` keeps
-/// `mean(t) ≈ 0` for symmetric sample bands so the ρθ cross-term stays small
-/// and the conditioning guard's variance estimate is meaningful.
-///
-/// Mirrors the 1-DOF accumulator's SIMD shape: AVX2/FMA hot path on x86_64,
-/// `aarch64+neon` and `avx512f` variants via `#[multiversion]`, scalar tail
-/// for the remainder. Kept separate from [`refine_accumulate_optimized`] so
-/// 1-DOF callers (`decoder_style`, `post_decode_style`) don't pay the 2-DOF
-/// arithmetic — three extra FMAs and two `_mm256_sub_pd` per 4-lane block.
-#[multiversion(targets(
-    "x86_64+avx2+fma+bmi1+bmi2+popcnt+lzcnt",
-    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
-    "aarch64+neon"
-))]
-#[allow(clippy::too_many_arguments, clippy::similar_names)]
-fn refine_accumulate_optimized_2dof(
-    samples: &[(f64, f64, f64)],
-    nx: f64,
-    ny: f64,
-    rho: f64,
-    pcx: f64,
-    pcy: f64,
-    a: f64,
-    b: f64,
-    inv_sigma: f64,
-) -> GnAccum2 {
-    let mut acc = GnAccum2::default();
-    let k = (b - a) * inv_sigma * INV_SQRT_PI;
-
-    let mut i = 0;
-
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
-    if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
-        // SAFETY: All AVX2/FMA intrinsics are guarded by cfg and runtime dispatch.
-        unsafe {
-            use std::arch::x86_64::*;
-            let v_nx = _mm256_set1_pd(nx);
-            let v_ny = _mm256_set1_pd(ny);
-            let v_rho = _mm256_set1_pd(rho);
-            let v_pcx = _mm256_set1_pd(pcx);
-            let v_pcy = _mm256_set1_pd(pcy);
-            let v_a = _mm256_set1_pd(a);
-            let v_b = _mm256_set1_pd(b);
-            let v_inv_sigma = _mm256_set1_pd(inv_sigma);
-            let v_k = _mm256_set1_pd(k);
-            let v_half = _mm256_set1_pd(0.5);
-            let v_abs_mask = _mm256_set1_pd(-0.0);
-
-            let mut v_sum_jtj_rr = _mm256_setzero_pd();
-            let mut v_sum_jtj_rt = _mm256_setzero_pd();
-            let mut v_sum_jtj_tt = _mm256_setzero_pd();
-            let mut v_sum_jtr_r = _mm256_setzero_pd();
-            let mut v_sum_jtr_t = _mm256_setzero_pd();
-
-            while i + 4 <= samples.len() {
-                let s0 = samples[i];
-                let s1 = samples[i + 1];
-                let s2 = samples[i + 2];
-                let s3 = samples[i + 3];
-
-                let v_x = _mm256_set_pd(s3.0, s2.0, s1.0, s0.0);
-                let v_y = _mm256_set_pd(s3.1, s2.1, s1.1, s0.1);
-                let v_img_val = _mm256_set_pd(s3.2, s2.2, s1.2, s0.2);
-
-                let v_xc = _mm256_sub_pd(v_x, v_pcx);
-                let v_yc = _mm256_sub_pd(v_y, v_pcy);
-
-                let v_dist = _mm256_add_pd(
-                    _mm256_add_pd(_mm256_mul_pd(v_nx, v_xc), _mm256_mul_pd(v_ny, v_yc)),
-                    v_rho,
-                );
-                let v_s = _mm256_mul_pd(v_dist, v_inv_sigma);
-
-                let v_abs_s = _mm256_andnot_pd(v_abs_mask, v_s);
-                let v_range_mask = _mm256_cmp_pd(v_abs_s, _mm256_set1_pd(3.0), _CMP_LE_OQ);
-
-                if _mm256_movemask_pd(v_range_mask) != 0 {
-                    // SAFETY: erf_approx_v4 requires AVX2+FMA, guaranteed by multiversion target.
-                    let v_erf = crate::simd::math::erf_approx_v4(v_s);
-
-                    let v_ab_half = _mm256_mul_pd(_mm256_add_pd(v_a, v_b), v_half);
-                    let v_ba_half = _mm256_mul_pd(_mm256_sub_pd(v_b, v_a), v_half);
-                    let v_model = _mm256_fmadd_pd(v_ba_half, v_erf, v_ab_half);
-
-                    let v_residual = _mm256_sub_pd(v_img_val, v_model);
-
-                    // SAFETY: transmute is safe for same-size SIMD ↔ array conversions.
-                    let v_neg_s2 = _mm256_mul_pd(v_s, v_s);
-                    let v_neg_s2 = _mm256_xor_pd(v_neg_s2, v_abs_mask);
-                    let ns2: [f64; 4] = std::mem::transmute(v_neg_s2);
-                    let v_exp =
-                        _mm256_set_pd(ns2[3].exp(), ns2[2].exp(), ns2[1].exp(), ns2[0].exp());
-                    let v_jac = _mm256_mul_pd(v_k, v_exp);
-
-                    // Tangential coordinate t = -ny·xc + nx·yc.
-                    let v_t = _mm256_sub_pd(_mm256_mul_pd(v_nx, v_yc), _mm256_mul_pd(v_ny, v_xc));
-
-                    let v_jac_m = _mm256_and_pd(v_jac, v_range_mask);
-                    let v_res_m = _mm256_and_pd(v_residual, v_range_mask);
-                    let v_jact = _mm256_mul_pd(v_jac_m, v_t);
-
-                    v_sum_jtj_rr = _mm256_fmadd_pd(v_jac_m, v_jac_m, v_sum_jtj_rr);
-                    v_sum_jtj_rt = _mm256_fmadd_pd(v_jac_m, v_jact, v_sum_jtj_rt);
-                    v_sum_jtj_tt = _mm256_fmadd_pd(v_jact, v_jact, v_sum_jtj_tt);
-                    v_sum_jtr_r = _mm256_fmadd_pd(v_jac_m, v_res_m, v_sum_jtr_r);
-                    v_sum_jtr_t = _mm256_fmadd_pd(v_jact, v_res_m, v_sum_jtr_t);
-                }
-                i += 4;
-            }
-
-            // Horizontal reductions.
-            // SAFETY: transmute is safe for same-size SIMD ↔ array conversions.
-            let rr: [f64; 4] = std::mem::transmute(v_sum_jtj_rr);
-            let rt: [f64; 4] = std::mem::transmute(v_sum_jtj_rt);
-            let tt: [f64; 4] = std::mem::transmute(v_sum_jtj_tt);
-            let gr: [f64; 4] = std::mem::transmute(v_sum_jtr_r);
-            let gt: [f64; 4] = std::mem::transmute(v_sum_jtr_t);
-            acc.jtj_rr += rr[0] + rr[1] + rr[2] + rr[3];
-            acc.jtj_rt += rt[0] + rt[1] + rt[2] + rt[3];
-            acc.jtj_tt += tt[0] + tt[1] + tt[2] + tt[3];
-            acc.jtr_r += gr[0] + gr[1] + gr[2] + gr[3];
-            acc.jtr_t += gt[0] + gt[1] + gt[2] + gt[3];
-        }
-    }
-
-    // Scalar tail
-    while i < samples.len() {
-        let (x, y, img_val) = samples[i];
-        let xc = x - pcx;
-        let yc = y - pcy;
-        let dist = nx * xc + ny * yc + rho;
-        let s = dist * inv_sigma;
-        if s.abs() <= 3.0 {
-            let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::simd::math::erf_approx(s);
-            let residual = img_val - model;
-            let jac = k * (-s * s).exp();
-            let t = -ny * xc + nx * yc;
-            let jact = jac * t;
-            acc.jtj_rr += jac * jac;
-            acc.jtj_rt += jac * jact;
-            acc.jtj_tt += jact * jact;
-            acc.jtr_r += jac * residual;
-            acc.jtr_t += jact * residual;
-        }
-        i += 1;
-    }
-
-    acc
-}
-
-/// Tukey-weighted 2-DOF accumulator. `inv_c_sigma = 1 / (c · σ̂)` controls
-/// the rejection cutoff; weights are `w_i = (1 − (r_i · inv_c_sigma)²)²`
-/// when in range, else `0`. Mirrors [`refine_accumulate_optimized_2dof`]
-/// with the addition of per-sample weighting in the FMA chain.
+/// Jacobian columns per sample: `∂r/∂ρ = jac`, `∂r/∂θ = jac · t` with the
+/// tangent `t = -ny·xc + nx·yc` and `(xc, yc) = (x − p_c)`. Centering on `p_c`
+/// keeps `mean(t) ≈ 0` so the ρθ cross-term stays small. AVX2/FMA + AVX-512 +
+/// `aarch64+neon` via `#[multiversion]`, scalar tail for the remainder. Kept
+/// separate from the 1-DOF [`refine_accumulate_optimized`] so 1-DOF callers
+/// don't pay the 2-DOF arithmetic.
 #[multiversion(targets(
     "x86_64+avx2+fma+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
@@ -1225,12 +1118,50 @@ fn refine_accumulate_optimized_2dof_tukey(
     acc
 }
 
+/// Bounded-influence edge-fit cost of a line `nx·x + ny·y + d = 0` over ALL
+/// collected samples — the fair, degenerate-safe basis for the 1-DOF-vs-2-DOF
+/// acceptance decision. Returns the mean of `min(r², clip²)` over the samples,
+/// where `r` is the ERF-model residual. Clipping each squared residual caps
+/// the leverage of a minority of off-edge / adjacent-structure samples, so a
+/// correct rotation (which moves *away* from contamination) is not unfairly
+/// penalised, and neither candidate can win merely by shedding samples out of
+/// an in-range band (both are scored over the same full set). Returns `+∞`
+/// for an empty set so a degenerate candidate is never preferred. Called O(1)
+/// times per edge (not per GN iteration), so a scalar pass is adequate.
+#[allow(clippy::too_many_arguments, clippy::many_single_char_names)]
+fn robust_edge_cost(
+    samples: &[(f64, f64, f64)],
+    nx: f64,
+    ny: f64,
+    d: f64,
+    a: f64,
+    b: f64,
+    inv_sigma: f64,
+    clip: f64,
+) -> f64 {
+    if samples.is_empty() {
+        return f64::INFINITY;
+    }
+    let mid = 0.5 * (a + b);
+    let half = 0.5 * (b - a);
+    let clip_sq = clip * clip;
+    let mut sum = 0.0_f64;
+    for &(x, y, img_val) in samples {
+        let s = (nx * x + ny * y + d) * inv_sigma;
+        let model = mid + half * crate::simd::math::erf_approx(s);
+        let r = img_val - model;
+        sum += (r * r).min(clip_sq);
+    }
+    sum / samples.len() as f64
+}
+
 /// Robust scale `σ̂ = sqrt(Σ r² / N)` at the current `(nx, ny, rho)` line
 /// params. Used for the pre-pass that initialises Tukey weights before the
 /// weighted GN accumulator runs. Returns 0.0 when no in-range samples exist.
 #[multiversion(targets(
     "x86_64+avx2+fma+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
 ))]
 #[allow(clippy::too_many_arguments)]
 fn sigma_at(
@@ -1759,12 +1690,15 @@ mod tests {
     }
 
     #[test]
-    fn two_dof_conditioning_guard_fires_on_concentrated_samples() {
-        // Long edge, but tangential sample band is narrowed to ~2% of the edge
-        // parametric range — samples cluster near p_c, gradient-weighted Var(t)
-        // falls below THETA_OBSERVABILITY_FLOOR_PX2, and θ is no longer
-        // observable from the noise. The guard must catch this every iteration
-        // and fall back to a 1-DOF ρ-only step; (nx, ny) must remain at seed.
+    fn two_dof_concentrated_samples_no_spurious_rotation() {
+        // Concentrated tangential band (~2% of the edge) makes θ unobservable.
+        // On a clean edge the 1-DOF fit is already good, so the 2-DOF solve is
+        // not even attempted (the poor-fit trigger is the primary protection
+        // against rotating on noise); the in-loop conditioning guard remains as
+        // defence-in-depth for the singular-`det` / low-`var_t` case should the
+        // solve run. Either way the invariant holds: a concentrated sample band
+        // must not induce a spurious rotation — the orientation stays at seed
+        // and ρ is recovered.
         let width = 120;
         let height = 120;
         let sigma = 0.6;
@@ -1787,17 +1721,10 @@ mod tests {
             stride: 1,
             t_range: (0.49, 0.51),
         };
-        let cfg = RefineConfig {
-            mode: RefineMode::TwoDof,
-            ..RefineConfig::quad_style(sigma)
-        };
-        assert!(fitter.fit(&arena, &sample_cfg, &cfg));
+        // Production path (TwoDofTukey).
+        assert!(fitter.fit(&arena, &sample_cfg, &RefineConfig::quad_style(sigma)));
 
         let (nx, ny, d) = fitter.line_params();
-        assert!(
-            fitter.last_guard_fired(),
-            "guard expected to fire on concentrated samples"
-        );
         assert!(
             (nx + 1.0).abs() < 1e-6 && ny.abs() < 1e-6,
             "normal drifted from seed: ({nx}, {ny})"
@@ -1913,31 +1840,55 @@ mod tests {
         assert!(fitter_t.last_sigma_hat().is_finite());
     }
 
-    /// Clean edge, no outliers — σ̂ would collapse without the floor and
-    /// drive every weight to zero. The σ̂-floor keeps weights finite.
+    /// Clean (outlier-free) edge with a mis-angled seed: the 1-DOF fit is poor
+    /// (frozen at the rotated seed) so the 2-DOF Tukey solve runs, and as it
+    /// rotates onto the clean edge the residuals → ~0. Without the σ̂-floor the
+    /// scale would collapse and drive every Tukey weight to zero; the floor
+    /// keeps σ̂ finite and positive so the solve still recovers the rotation.
     #[test]
+    #[allow(clippy::similar_names)]
     fn tukey_sigma_floor_protects_perfect_fit() {
-        let width = 120;
-        let height = 120;
+        let width = 160;
+        let height = 160;
         let sigma = 0.6;
-        let x_gt = 60.25;
-
         let renderer = SubpixelEdgeRenderer::new(width, height)
             .with_intensities(20.0, 230.0)
             .with_sigma(sigma);
-        let line_gt = Line::from_points_cw([x_gt, 20.0], [x_gt, 100.0]);
+
+        let p1_gt = [40.0, 60.0];
+        let p2_gt = [120.0, 60.0 + 80.0 * 30f64.to_radians().tan()];
+        let line_gt = Line::from_points_cw(p1_gt, p2_gt);
         let data = renderer.render_edge_u8(&line_gt);
         let img = ImageView::new(&data, width, height, width).expect("invalid image view");
 
-        let p1 = [x_gt, 20.0];
-        let p2 = [x_gt, 100.0];
+        // Seed: GT endpoints rotated +1.5° about their midpoint → 1-DOF poor.
+        let perturb = 1.5_f64.to_radians();
+        let (sp, cp) = perturb.sin_cos();
+        let mid = [(p1_gt[0] + p2_gt[0]) * 0.5, (p1_gt[1] + p2_gt[1]) * 0.5];
+        let rotate = |p: [f64; 2]| -> [f64; 2] {
+            let dx = p[0] - mid[0];
+            let dy = p[1] - mid[1];
+            [mid[0] + dx * cp - dy * sp, mid[1] + dx * sp + dy * cp]
+        };
+        let p1 = rotate(p1_gt);
+        let p2 = rotate(p2_gt);
+
+        let true_len = (p2_gt[0] - p1_gt[0]).hypot(p2_gt[1] - p1_gt[1]);
+        let nx_true = -(p2_gt[1] - p1_gt[1]) / true_len;
+        let ny_true = (p2_gt[0] - p1_gt[0]) / true_len;
+
         let arena = Bump::new();
         let mut fitter = ErfEdgeFitter::new(&img, p1, p2, true).expect("edge length too short");
-        let sample_cfg = SampleConfig::for_quad(80.0, 1);
+        let sample_cfg = SampleConfig::for_quad(true_len, 1);
         assert!(fitter.fit(&arena, &sample_cfg, &RefineConfig::quad_style(sigma)));
-        let (nx, _ny, d) = fitter.line_params();
-        assert!((nx + 1.0).abs() < 1e-5, "nx drifted: {nx}");
-        assert!((d - x_gt).abs() < 0.05, "x_recovered={d}, gt={x_gt}");
+
+        let (nx, ny, _) = fitter.line_params();
+        let err = (nx * nx_true + ny * ny_true)
+            .abs()
+            .clamp(0.0, 1.0)
+            .acos()
+            .to_degrees();
+        assert!(err < 0.5, "rotation not recovered: {err}°");
         let sigma_hat = fitter.last_sigma_hat();
         assert!(
             sigma_hat.is_finite() && sigma_hat > 0.0,

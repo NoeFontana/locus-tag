@@ -133,18 +133,20 @@ pub(crate) fn refine_corner(
             let y = (l2.0 * l1.2 - l1.0 * l2.2) / det;
 
             let dist_sq = (x - p.x).powi(2) + (y - p.y).powi(2);
-            // 2-DOF ERF refinement can legitimately move corners further
-            // from the seed than 1-DOF's pure ρ-step (the seed is a
-            // Douglas-Peucker chord midpoint and can be 1-3° off truth).
-            // Bumped from 2.0 to 3.0 px to admit those refinements
-            // while still rejecting pathological GN runaway. 2.5
-            // clipped the P99 rotation wins on tag16h5 back to ~27°;
-            // 4.0 caused board_charuco P99 translation +241 %; 3.0 is
-            // the empirical sweet spot across the full insta suite.
+            // Base displacement gate. The ERF (2-DOF) path can legitimately
+            // move a corner further from the seed than the gradient-peak path,
+            // because 2-DOF also corrects the seed's 1–3° rotation (the seed is
+            // a Douglas-Peucker chord midpoint): it gets 3.0 px. The
+            // gradient-peak path (`use_erf == false`) keeps the original 2.0 px
+            // gate — widening it gains nothing there and only admits more
+            // runaway. (For ERF: 2.5 clipped the tag16h5 P99 rotation wins back
+            // to ~27°; 4.0 caused board_charuco P99 translation +241 %; 3.0 is
+            // the empirical sweet spot across the insta suite.)
+            let base_max_dist = if use_erf { 3.0 } else { 2.0 };
             let max_dist = if decimation > 1 {
-                (decimation as f64) + 3.0
+                (decimation as f64) + base_max_dist
             } else {
-                3.0
+                base_max_dist
             };
             if dist_sq < max_dist * max_dist {
                 return Point { x, y };
