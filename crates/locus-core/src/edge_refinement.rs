@@ -149,6 +149,29 @@ const THETA_OBSERVABILITY_FLOOR_PX2: f64 = 1.0;
 /// breakdown.
 const THETA_CLAMP_RAD: f64 = 0.05;
 
+/// Total-rotation deadband (radians). `≈ 0.40°`. When the 2-DOF solve's
+/// converged normal rotated less than this from the seed, the rotation was
+/// not warranted; the solve falls back to the 1-DOF ρ-only estimator to
+/// avoid the joint solve's small ρ bias on well-aligned edges. Sits an order
+/// of magnitude above the spurious sub-0.1° rotations seen on clean corners
+/// and an order below the 1–3° misrotations the 2-DOF path exists to correct.
+const THETA_DEADBAND_RAD: f64 = 0.007;
+
+/// The 2-DOF rotation is accepted over the 1-DOF reference only when its
+/// robust edge-fit residual is below this fraction of the 1-DOF residual
+/// (i.e. a ≥10 % improvement). Penalises the extra rotational DOF so a
+/// marginally-better fit that drifts the corner onto adjacent tag structure
+/// is rejected, while the large residual drops from correcting a genuinely
+/// misrotated seed are kept.
+const TWO_DOF_ACCEPT_RESID_FRAC: f64 = 0.97;
+
+/// The 2-DOF rotation is only attempted when the 1-DOF reference fit is poor
+/// relative to the edge contrast `|B − A|` — i.e. there is positive evidence
+/// the seed normal is genuinely misrotated. Tags whose 1-DOF fit is already
+/// good (they decode fine) keep 1-DOF, eliminating the decode-recall and
+/// board-coverage regressions from spurious rotations.
+const TWO_DOF_POOR_FIT_FRAC: f64 = 0.15;
+
 /// Tukey biweight tuning constant — 95 % Gaussian efficiency.
 const TUKEY_C: f64 = 4.685;
 
@@ -453,6 +476,7 @@ impl<'a> ErfEdgeFitter<'a> {
     /// Tukey weights derived from that σ̂. This eliminates the iter-0
     /// unweighted GN step that breaks `moments_culling`. Falls back to a
     /// 1-DOF ρ-only step whenever the conditioning guard fires.
+    #[allow(clippy::too_many_lines, clippy::similar_names)]
     fn refine_two_dof(
         &mut self,
         samples: &[(f64, f64, f64)],
@@ -468,6 +492,12 @@ impl<'a> ErfEdgeFitter<'a> {
         let pcx = self.p1[0] + 0.5 * self.dx;
         let pcy = self.p1[1] + 0.5 * self.dy;
         let mut rho = self.nx * pcx + self.ny * pcy + self.d;
+
+        // Seed line params, captured so the deadband check after the loop can
+        // fall back to the proven 1-DOF ρ-only solve when the 2-DOF rotation
+        // turns out negligible (see the comment at that check).
+        let (seed_nx, seed_ny, seed_d) = (self.nx, self.ny, self.d);
+        let (seed_a, seed_b) = (a, b);
 
         let sigma_floor = ROBUST_SIGMA_FLOOR_KAPPA * (b - a).abs();
         let mut sigma_hat = f64::NAN;
@@ -558,7 +588,42 @@ impl<'a> ErfEdgeFitter<'a> {
             }
         }
 
-        self.d = rho - self.nx * pcx - self.ny * pcy;
+        // 2-DOF candidate solution and its robust edge-fit residual.
+        let theta_total = (seed_nx * self.ny - seed_ny * self.nx)
+            .clamp(-1.0, 1.0)
+            .asin();
+        let (cand_nx, cand_ny) = (self.nx, self.ny);
+        let cand_d = rho - cand_nx * pcx - cand_ny * pcy;
+        let resid_2dof = sigma_at(samples, cand_nx, cand_ny, rho, pcx, pcy, a, b, inv_sigma);
+
+        // Proven 1-DOF ρ-only reference from the seed normal (byte-identical
+        // to the `OneDof` path), with its own residual.
+        self.nx = seed_nx;
+        self.ny = seed_ny;
+        self.d = seed_d;
+        self.refine_one_dof(samples, config, inv_sigma, seed_a, seed_b);
+        let rho_1dof = seed_nx * pcx + seed_ny * pcy + self.d;
+        let resid_1dof = sigma_at(
+            samples, seed_nx, seed_ny, rho_1dof, pcx, pcy, a, b, inv_sigma,
+        );
+
+        // Accept the 2-DOF rotation only when it is genuinely warranted: the
+        // normal rotated past the deadband AND the rotation reduces the robust
+        // edge-fit residual by a clear margin. This keeps the large pose-tail
+        // wins (badly misrotated Douglas-Peucker seeds → big residual drop)
+        // while rejecting marginal rotations that drift a corner onto adjacent
+        // tag structure — the source of the decode-recall and board-coverage
+        // regressions. Otherwise the proven 1-DOF result (already written
+        // above) stands, so the path is never worse than 1-DOF on edge fit.
+        let contrast = (b - a).abs();
+        if theta_total.abs() >= THETA_DEADBAND_RAD
+            && resid_1dof > TWO_DOF_POOR_FIT_FRAC * contrast
+            && resid_2dof < TWO_DOF_ACCEPT_RESID_FRAC * resid_1dof
+        {
+            self.nx = cand_nx;
+            self.ny = cand_ny;
+            self.d = cand_d;
+        }
         self.last_sigma_hat = sigma_hat;
     }
 
