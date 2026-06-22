@@ -22,7 +22,7 @@ jobs:
     name: Validate Project & Lint Python
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
@@ -49,7 +49,7 @@ jobs:
     name: Type Check Python (basedpyright)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
@@ -67,7 +67,7 @@ jobs:
     name: Rust Lint & Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
@@ -117,7 +117,7 @@ jobs:
     name: Rust Cross-compile & Rustdoc
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
@@ -155,7 +155,7 @@ jobs:
     needs: validate-project
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
@@ -183,7 +183,7 @@ jobs:
       matrix:
         python-version: ${{ fromJSON(inputs.python-matrix) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
@@ -211,7 +211,7 @@ jobs:
     needs: [validate-project, rust-checks]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
@@ -264,7 +264,7 @@ jobs:
     needs: [validate-project, build-wheel]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
@@ -292,7 +292,7 @@ jobs:
     needs: build-wheel
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Download wheel artifact
         uses: actions/download-artifact@v8
@@ -309,7 +309,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Toolchains
         uses: ./.github/actions/setup-toolchain
