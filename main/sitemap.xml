@@ -2,214 +2,214 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/benchmarking/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/constraints/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/core/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/detection-batch-contract/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/edlines_phase5_decoupling_2026-05-03/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/edlines_s1_corner_exclusion_2026-05-04/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/edlines_segmentation_design_2026-05-03/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/edlines_sota_design_2026-05-03/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/edlines_sota_experiments_2026-05-03/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/edlines_sota_followup_postmortem_2026-05-25/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/erf-simd-attempt-postmortem/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/ffi_contracts/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/general-style/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/icra_forward_high_accuracy_diagnostic_20260426/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/latency_audit_2160p_segmentation_addendum_2026-05-03/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/max_recall_adaptive_calibration_20260426/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/pose_covariance_calibration_audit_2026-05-03/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/pose_covariance_followup_2026-05-22/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/pose_covariance_investigation_summary_2026-05-03/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/pose_covariance_phase4_postmortem_2026-05-31/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/post_decode_refinement_20260426/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/profiles/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/python-style/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/quality-gates/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/release-runbook/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/rotation_tail_diagnostic_phase0_20260502/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/rotation_tail_diagnostic_phase0_20260503/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/rust-style/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/scene_0008_root_cause_2026-05-03/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/stratification/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/track2_precision_threshold/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/workflow/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/benchmarking/hub_regression_20260423/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/benchmarking/lessons/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/benchmarking/micro-benchmarking-guide/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/benchmarking/quad_truncation_fix_20260426/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/benchmarking/release_performance_20260418/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/benchmarking/render_tag_2160p_20260425/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/engineering/benchmarking/render_tag_sota_20260425/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/explanation/algorithms/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/explanation/architecture/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/explanation/coordinates/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/explanation/memory_model/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/explanation/performance/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/explanation/pipeline/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/how-to/add_dictionary/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/how-to/concurrent_detection/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/how-to/debug_with_rerun/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/how-to/install-with-distortion/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/migration/config-refactor/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/reference/api/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/main/tutorials/guide/</loc>
-         <lastmod>2026-06-16</lastmod>
+         <lastmod>2026-06-24</lastmod>
     </url>
 </urlset>
