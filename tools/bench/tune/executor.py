@@ -319,16 +319,34 @@ def run_search(
     return [by_key[_cell_key(cell)] for cell in cells]
 
 
-def verify_latency(cells: list[Cell], *, progress: bool = True) -> list[CellResult]:
-    """Measure latency **serially, in-process** with production threading.
+def _run_latency_isolated(cell: Cell) -> CellResult:
+    """Run one latency cell in a fresh, **un-pinned** 1-worker subprocess.
 
-    Unlike :func:`run_search`, this never enters the pinned pool: it runs one
-    cell at a time in the main process so rayon uses all cores unthrottled, as in
-    deployment. Serial execution means no cross-cell CPU contention, so these are
-    the only trustworthy latency numbers. Each cell should set
+    Unlike :func:`_run_isolated` (which pins threads for the accuracy sweep),
+    this uses *no* initializer, so the child's rayon/OpenCV pools use all cores —
+    production threading, the point of latency verification. Running in a child
+    (not the main process) means a native crash — heap corruption / segfault in a
+    competitor detector for some frontier config — becomes one errored
+    ``CellResult`` instead of taking down the whole tune.
+    """
+    ctx = multiprocessing.get_context("spawn")
+    try:
+        with ProcessPoolExecutor(max_workers=1, mp_context=ctx) as pool:
+            return pool.submit(run_cell, cell).result()
+    except Exception as exc:  # noqa: BLE001 — includes BrokenProcessPool (native crash)
+        return _error_result(cell, f"latency worker crashed (likely native): {type(exc).__name__}")
+
+
+def verify_latency(cells: list[Cell], *, progress: bool = True) -> list[CellResult]:
+    """Measure latency **serially** with production threading, crash-isolated.
+
+    Each cell runs one at a time (no cross-cell CPU contention → trustworthy
+    timing) in its own un-pinned subprocess so rayon uses all cores as in
+    deployment, and a native crash in one frontier config is contained to that
+    cell rather than killing the tune. Each cell should set
     ``measure_latency=True``.
     """
     results: list[CellResult] = []
     for cell in tqdm(cells, disable=not progress, desc="verify-latency"):
-        results.append(run_cell(cell))
+        results.append(_run_latency_isolated(cell))
     return results
