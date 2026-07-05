@@ -112,10 +112,11 @@ pub fn apply_funnel_gate(
             let cx = (corners[0].x + corners[1].x + corners[2].x + corners[3].x) * 0.25;
             let cy = (corners[0].y + corners[1].y + corners[2].y + corners[3].y) * 0.25;
 
-            #[allow(clippy::cast_sign_loss)]
+            // `.max(0.0)` before each `as usize` guarantees no sign loss.
+            #[expect(clippy::cast_sign_loss, reason = "clamped to >= 0.0 before the cast")]
             let tx = (cx / tile_size as f32).max(0.0) as usize;
             let tx = tx.min(tiles_wide.saturating_sub(1));
-            #[allow(clippy::cast_sign_loss)]
+            #[expect(clippy::cast_sign_loss, reason = "clamped to >= 0.0 before the cast")]
             let ty = (cy / tile_size as f32).max(0.0) as usize;
             let ty = ty.min(tiles_high.saturating_sub(1));
             let stats = tile_stats[ty * tiles_wide + tx];

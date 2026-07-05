@@ -51,7 +51,11 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "B", "UP", "SIM", "I"] # Pyflakes, pycodestyle, bugbear, pyupgrade, simplify, isort
-ignore = ["E501", "B006", "B008"] # Line length handled by formatter
+ignore = [
+    "E501",  # line length is enforced by the formatter, not the linter
+    "B006",  # mutable defaults are used intentionally for frozen/validated config models
+    "B008",  # function calls in defaults (e.g. typer.Option) are the sanctioned idiom
+]
 
 [tool.pyright]
 pythonVersion = "3.10"

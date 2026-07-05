@@ -336,7 +336,10 @@ pub struct PyPose {
 // ============================================================================
 #[pyclass(get_all, frozen, from_py_object)]
 #[derive(Clone, Copy)]
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the flat DetectorConfig; each bool is an independent public config toggle, not a state machine"
+)]
 pub struct PyDetectorConfig {
     pub threshold_tile_size: usize,
     pub threshold_min_range: u8,
@@ -389,7 +392,10 @@ pub struct PyDetectorConfig {
 #[pymethods]
 impl PyDetectorConfig {
     #[new]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "constructor mirrors every flat DetectorConfig field as a keyword-only pyo3 argument"
+    )]
     #[pyo3(signature = (
         *,
         threshold_tile_size,
@@ -435,7 +441,10 @@ impl PyDetectorConfig {
         outlier_drop_d2_threshold,
         post_decode_refinement,
     ))]
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[expect(
+        clippy::fn_params_excessive_bools,
+        reason = "keyword-only constructor exposes each DetectorConfig bool flag directly to Python; they are independent config toggles"
+    )]
     fn new(
         threshold_tile_size: usize,
         threshold_min_range: u8,
@@ -839,7 +848,10 @@ impl BoardEstimator {
     ///   pose still ships as a best-effort estimate; only the calibrated
     ///   uncertainty is unavailable).
     #[pyo3(signature = (detector, img, intrinsics))]
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "pyo3 #[pymethods] extraction requires owned PyReadonlyArray2/CameraIntrinsics arguments"
+    )]
     fn estimate(
         &mut self,
         py: Python<'_>,
@@ -1027,7 +1039,14 @@ impl CharucoRefiner {
     ///                  `rejected_reasons` — the `SingularCovariance`
     ///                  lane writes NaN into the determinants buffer.
     #[pyo3(signature = (detector, img, intrinsics, debug_telemetry = false))]
-    #[allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "pyo3 #[pymethods] extraction requires owned PyReadonlyArray2/CameraIntrinsics arguments"
+    )]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one cohesive board-estimate FFI routine (detect -> estimate -> marshal results/telemetry into NumPy); splitting would fragment the buffer marshalling"
+    )]
     fn estimate(
         &mut self,
         py: Python<'_>,
@@ -1123,7 +1142,10 @@ impl CharucoRefiner {
                 .map_err(|e| PyRuntimeError::new_err(format!("saddle_ids slice: {e}")))?;
             for (dst, &src) in sid_slice.iter_mut().zip(active_batch.saddle_ids()) {
                 // saddle IDs are bounded by board saddle count (≤ (rows-1)*(cols-1) ≤ ~400).
-                #[allow(clippy::cast_possible_wrap)]
+                #[expect(
+                    clippy::cast_possible_wrap,
+                    reason = "saddle IDs are bounded by the board saddle count (<= ~400), well within i32"
+                )]
                 {
                     *dst = src as i32;
                 }
@@ -1420,8 +1442,14 @@ pub struct Detector {
 impl Detector {
     /// Detect tags and return a typed [`DetectionResult`] containing NumPy arrays.
     #[pyo3(signature = (img, intrinsics=None, tag_size=None, debug_telemetry=false))]
-    #[allow(clippy::needless_pass_by_value)]
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "pyo3 #[pymethods] extraction requires owned PyReadonlyArray2/CameraIntrinsics arguments"
+    )]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one cohesive detect FFI routine (run pipeline -> marshal detections/telemetry into NumPy arrays); splitting would fragment the buffer marshalling"
+    )]
     fn detect(
         &mut self,
         py: Python<'_>,
@@ -1582,7 +1610,10 @@ impl Detector {
     ///
     /// Telemetry and rejected-corner data are not available via this method.
     #[pyo3(signature = (frames, intrinsics=None, tag_size=None))]
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "pyo3 #[pymethods] extraction requires owned Vec<PyReadonlyArray2>/CameraIntrinsics arguments"
+    )]
     fn detect_concurrent(
         &self,
         py: Python<'_>,
@@ -2096,7 +2127,10 @@ fn prepare_image_view<'py>(img: &'py PyReadonlyArray2<'_, u8>) -> PyResult<FfiIm
     // `stride < width` is independently caught by `ImageView::new`, but we
     // surface a typed `PyValueError` at the FFI boundary instead of a
     // wrapped `PyRuntimeError`.
-    #[allow(clippy::cast_possible_wrap)]
+    #[expect(
+        clippy::cast_possible_wrap,
+        reason = "image width is bounded by the NumPy array dimensions, well within isize"
+    )]
     let width_isize = width as isize;
     if strides[0] < width_isize {
         return Err(PyValueError::new_err(format!(
@@ -2228,7 +2262,10 @@ fn build_detection_result_from_owned(
             .map_err(|e| PyRuntimeError::new_err(format!("error_rates: {e}")))?;
 
         for (i, det) in detections.iter().enumerate() {
-            #[allow(clippy::cast_possible_wrap)]
+            #[expect(
+                clippy::cast_possible_wrap,
+                reason = "decoded tag IDs index a finite family codebook (thousands of entries), far below i32::MAX"
+            )]
             {
                 ids_sl[i] = det.id as i32;
             }
@@ -2370,7 +2407,10 @@ mod bench {
     /// Estimate per-image additive Gaussian noise σ via the Immerkær estimator.
     /// Returns σ in pixel-intensity units (u8 scale).
     #[pyfunction]
-    #[allow(clippy::needless_pass_by_value)] // pyo3 #[pyfunction] requires owned PyReadonlyArray2
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "pyo3 #[pyfunction] requires owned PyReadonlyArray2"
+    )]
     pub fn _bench_estimate_image_noise(img: PyReadonlyArray2<'_, u8>) -> PyResult<f64> {
         let buffer = prepare_image_view(&img)?;
         let view = buffer.view();
@@ -2383,7 +2423,10 @@ mod bench {
     /// `aggregate_d2`, `per_corner_d2`.
     #[pyfunction]
     #[pyo3(signature = (intrinsics, corners, tag_size, config, image=None))]
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "pyo3 #[pyfunction] requires owned CameraIntrinsics/PyDetectorConfig arguments"
+    )]
     pub fn _bench_estimate_both_branches<'py>(
         py: Python<'py>,
         intrinsics: CameraIntrinsics,
@@ -2505,7 +2548,14 @@ mod bench {
     /// pose dict.
     #[pyfunction]
     #[pyo3(signature = (intrinsics, corners, tag_size, initial_quaternion, initial_translation, drop_idx, config, image=None))]
-    #[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "bench harness entry mirroring the pose-refit signature; pyo3 keyword args cannot be grouped"
+    )]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "pyo3 #[pyfunction] requires owned CameraIntrinsics/PyDetectorConfig arguments"
+    )]
     pub fn _bench_refit_pose_drop_corner<'py>(
         py: Python<'py>,
         intrinsics: CameraIntrinsics,
@@ -2544,7 +2594,10 @@ mod bench {
     /// `None` if the window has no support in the image.
     /// `R = λ_min / λ_max ∈ [0, 1]` is the corner-quality anisotropy ratio.
     #[pyfunction]
-    #[allow(clippy::needless_pass_by_value)] // pyo3 #[pyfunction] requires owned PyReadonlyArray2
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "pyo3 #[pyfunction] requires owned PyReadonlyArray2"
+    )]
     pub fn _bench_corner_structure_tensor_eigenvalues(
         img: PyReadonlyArray2<'_, u8>,
         center_x: f64,
@@ -2565,7 +2618,10 @@ mod bench {
     /// Compute the 2×2 corner covariance matrix from the structure tensor at
     /// a single corner. Returns `[c00, c01, c10, c11]` (row-major).
     #[pyfunction]
-    #[allow(clippy::needless_pass_by_value)] // pyo3 #[pyfunction] requires owned PyReadonlyArray2
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "pyo3 #[pyfunction] requires owned PyReadonlyArray2"
+    )]
     pub fn _bench_compute_corner_covariance(
         img: PyReadonlyArray2<'_, u8>,
         center_x: f64,
@@ -2592,7 +2648,10 @@ mod bench {
     /// is the χ² gate false-positive rate; pass `None` to disable.
     #[pyfunction]
     #[pyo3(signature = (intrinsics, corners, tag_size, config, image=None, fpr=None))]
-    #[allow(clippy::needless_pass_by_value, clippy::too_many_arguments)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "pyo3 #[pyfunction] requires owned CameraIntrinsics/PyDetectorConfig arguments"
+    )]
     pub fn _bench_estimate_tag_pose<'py>(
         py: Python<'py>,
         intrinsics: CameraIntrinsics,

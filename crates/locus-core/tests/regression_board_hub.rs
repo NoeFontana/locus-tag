@@ -111,7 +111,6 @@ pub struct BoardHubProvider {
 
 impl BoardHubProvider {
     #[must_use]
-    #[allow(clippy::missing_panics_doc)]
     pub fn new(dataset_dir: &Path) -> Option<Self> {
         let rich_truth_path = dataset_dir.join("rich_truth.json");
         if !rich_truth_path.exists() {

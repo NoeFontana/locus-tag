@@ -22,7 +22,6 @@
 
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::cast_possible_wrap)]
-#![allow(clippy::cast_precision_loss)]
 #![allow(clippy::similar_names)]
 #![allow(clippy::too_many_arguments)]
 
@@ -224,7 +223,6 @@ fn shoelace_area(pts: &[(f64, f64); 4]) -> f64 {
 /// All computation is on the stack.  Returns `None` if the system is degenerate
 /// (any diagonal pivot drops below `1e-12`).
 #[must_use]
-#[allow(clippy::many_single_char_names)]
 /// Cholesky factorisation of a symmetric positive-definite 8×8 matrix.
 ///
 /// Returns the lower-triangular factor L (row-major) such that H = L·L^T,
@@ -257,7 +255,10 @@ fn cholesky_factor_8x8(h_in: &[f64; 64]) -> Option<[f64; 64]> {
 }
 
 /// Solve L·L^T·x = b given the Cholesky factor L (forward + backward substitution).
-#[allow(clippy::many_single_char_names)]
+#[expect(
+    clippy::many_single_char_names,
+    reason = "single-char bindings (l, b, x, y, i, k) match the forward/backward-substitution linear-algebra notation"
+)]
 fn cholesky_solve_with_factor(l: &[f64; 64], b: &[f64; 8]) -> [f64; 8] {
     // Forward substitution: L·y = b
     let mut y = [0.0_f64; 8];
@@ -507,7 +508,10 @@ enum SegmentationMode {
 ///   edge\[3\]: L → T  (top-left facing edge, wraps around)
 ///
 /// This correctly handles any tag rotation angle without interior contamination.
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one cohesive boundary-segment extraction routine (pixel collection, extremal detection, angular arc assignment into the four CW edges); splitting it would fragment the shared geometric state without clarity gain"
+)]
 fn extract_boundary_segments<'a>(
     arena: &'a Bump,
     labels: &[u32],
@@ -797,7 +801,10 @@ fn extract_boundary_segments<'a>(
     //
     // Min-arc-width threshold: 5° (0.087 rad). Narrower arcs produce too few
     // points on one edge for reliable IRLS convergence.
-    #[allow(clippy::items_after_statements)]
+    #[expect(
+        clippy::items_after_statements,
+        reason = "the 5° minimum-arc-width constant is declared next to its first use, directly below the comment documenting it, rather than hoisted to the top of the function"
+    )]
     const MIN_ARC: f64 = 5.0 * PI / 180.0;
 
     // Compute axis-aligned arc widths (CW: T→R→B→L→T).
@@ -885,7 +892,6 @@ fn extract_boundary_segments<'a>(
 ///
 /// This is mathematically equivalent to a 4-DOF joint GN on (μ, σ, A, B) but
 /// numerically stabler with only 5 data points.
-#[allow(clippy::many_single_char_names)]
 fn fit_erf_step_lm(
     intensities: &[f64; 5],
     mu_init: f64,
@@ -1180,7 +1186,11 @@ enum PipelineOutcome {
 
 /// Run Phase 1-5 for a single segmentation mode.  Corners are returned in
 /// binary-image (decimated) space.
-#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "one cohesive Phase 1-5 EdLines routine for a single segmentation mode; its arguments carry the full per-component context (arena, image views, labels, config, mode, decimated bounds) and splitting the staged pipeline would fragment the data flow without clarity gain"
+)]
 fn run_pipeline_with_mode(
     arena: &Bump,
     binary: &ImageView,

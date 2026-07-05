@@ -37,7 +37,10 @@ use crate::quad::{CornerCovariances, fit_edge_line, refine_edge_erf};
 /// mean RMSE +15 % and p90 rotation +210 % on the 1080p render-tag
 /// hub). EdLines' Gauss-Newton corners are already sub-pixel and a
 /// gradient-peak refit only degrades them.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "per-frame corner-refinement dispatch; arena, image, quad, covariances, the two route enums, sigma and decimation are distinct pipeline inputs and grouping them into a struct only adds indirection on the refinement hot path"
+)]
 #[inline]
 pub(crate) fn refine_quad_corners(
     arena: &Bump,
@@ -101,7 +104,10 @@ pub(crate) fn refine_all_quad_corners(
 /// `use_erf = true` runs the PSF-blurred Gauss-Newton fit and falls
 /// back to the gradient-peak fit on sample shortfall. `use_erf = false`
 /// runs only the gradient-peak fit.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "single-corner refinement primitive; the point, its two neighbours, arena, image, sigma, decimation and use_erf flag are each distinct geometric or tuning inputs with no natural struct grouping"
+)]
 pub(crate) fn refine_corner(
     arena: &Bump,
     img: &ImageView,

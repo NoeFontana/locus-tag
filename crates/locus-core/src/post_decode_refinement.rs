@@ -24,8 +24,6 @@
 //! GWLF / structure-tensor covariance is calibrated against pose RMSE and is
 //! the correct prior to keep.
 
-#![allow(clippy::cast_possible_truncation)]
-
 use bumpalo::Bump;
 
 use crate::batch::{CandidateState, DetectionBatch, Point2f};
@@ -177,7 +175,6 @@ fn refit_one_tag(
 /// `[x; y] = -M⁻¹ [d_a; d_b]`. Returns `None` for near-parallel adjacent
 /// edges (degenerate quad after refit).
 #[inline]
-#[allow(clippy::similar_names)]
 fn intersect_lines(line_a: &[f64; 3], line_b: &[f64; 3]) -> Option<(f64, f64)> {
     let [nxa, nya, da] = *line_a;
     let [nxb, nyb, db] = *line_b;

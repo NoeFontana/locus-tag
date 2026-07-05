@@ -136,7 +136,10 @@ pub(crate) fn extract_quads_fast(
 ///
 /// This function populates the `corners` and `status_mask` fields of the provided `DetectionBatch`.
 /// It returns the total number of candidates found ($N$).
-#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "hot-path quad-extraction pipeline stage; batch, image views, config, decimation and telemetry flags pass straight through, and grouping them into a struct would add indirection on the per-frame hot path"
+)]
 #[tracing::instrument(skip_all, name = "pipeline::quad_extraction")]
 pub fn extract_quads_soa(
     batch: &mut DetectionBatch,
@@ -230,7 +233,11 @@ pub fn extract_quads_soa(
 
 /// Internal helper to extract a single quad from a component.
 #[inline]
-#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "one cohesive single-quad extraction routine (bbox filtering, contour trace, RDP simplification, corner refinement); the arguments carry the per-component extraction context and splitting the body would fragment the data flow without clarity gain"
+)]
 fn extract_single_quad(
     arena: &Bump,
     img: &ImageView,
@@ -472,7 +479,10 @@ impl ScaledIntrinsics {
 /// The pinhole path (`C::IS_RECTIFIED == true`) is compile-time erased to
 /// the existing rectified flow via monomorphization.
 #[cfg(feature = "non_rectified")]
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "camera-aware variant of the quad-extraction pipeline stage; mirrors extract_quads_soa's parameter list plus the camera model and intrinsics needed for undistorted-space extraction"
+)]
 #[tracing::instrument(skip_all, name = "pipeline::quad_extraction_camera")]
 pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
     batch: &mut DetectionBatch,
@@ -582,7 +592,11 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
 /// `DetectorError::Config(EdLinesUnsupportedWithDistortion)`.
 #[cfg(feature = "non_rectified")]
 #[inline]
-#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "camera-aware single-quad extraction routine run in undistorted space; mirrors extract_single_quad's context plus the camera/intrinsics, and splitting the cohesive contour→RDP→refine flow would fragment the data flow without clarity gain"
+)]
 fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     arena: &Bump,
     img: &ImageView,
@@ -1324,7 +1338,10 @@ pub(crate) fn refine_edge_erf(
 /// "stay near the original" sanity check, matching `refine_corner`.
 #[cfg(feature = "non_rectified")]
 #[must_use]
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "corner refinement in rectified space; needs the corner plus its two rectified neighbours, the original pixel-space corner, decimation, intrinsics and camera model to fit the two edge lines and re-distort their intersection"
+)]
 fn refine_corner_with_camera<C: crate::camera::CameraModel>(
     img: &ImageView,
     p_rect: Point,

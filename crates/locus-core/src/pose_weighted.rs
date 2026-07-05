@@ -55,7 +55,10 @@ pub(crate) fn compute_corner_covariance(
     finalize_corner_covariance(sum_gx2, sum_gy2, sum_gxgy, alpha_max, sigma_n_sq)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "structure-tensor accumulation threads the image, window bounds and sigma; grouping into a struct adds indirection"
+)]
 fn accumulate_structure_tensor_sums(
     img: &ImageView,
     center: [f64; 2],
@@ -556,7 +559,6 @@ pub struct BenchLmResult {
 /// Mahalanobis d² and IRLS weight. Mirrors the kernel exactly so the trace
 /// reflects what the production solver would have seen at this pose.
 #[cfg(feature = "bench-internals")]
-#[allow(clippy::too_many_arguments)]
 fn build_normal_equations_telemetry(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
@@ -671,7 +673,10 @@ fn build_normal_equations_telemetry(
 /// THROWAWAY: revert with the rest of this section after Phase 0 ships.
 #[cfg(feature = "bench-internals")]
 #[must_use]
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one cohesive LM refinement-plus-telemetry routine mirroring the production solver; splitting would fragment the iteration trace"
+)]
 pub fn bench_refine_pose_lm_weighted_with_telemetry(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],

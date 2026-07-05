@@ -1426,7 +1426,10 @@ impl DetectorConfig {
     /// Panics on a malformed embedded JSON, which would be a build error
     /// caught by the `profile_loading` integration test.
     #[must_use]
-    #[allow(clippy::panic)] // Closed set; unknown-name is a programming error.
+    #[expect(
+        clippy::panic,
+        reason = "closed set of compile-time-embedded profiles; an unknown name is a programming error"
+    )]
     pub fn from_profile(name: &str) -> Self {
         let json = match name {
             "standard" => STANDARD_JSON,

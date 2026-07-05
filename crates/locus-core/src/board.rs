@@ -564,7 +564,14 @@ fn gn_step_on_sample(
 /// disambiguation without losing the noise-averaging benefit.  This is the
 /// rescue path for the "catastrophic per-tag collapse" frames documented in
 /// `diagnostics/board_p99_investigation_2026-05-14/MEMO.md`.
-#[allow(clippy::similar_names, clippy::many_single_char_names)]
+#[expect(
+    clippy::similar_names,
+    reason = "DLT/homography vars (cx_o/cy_o, h_n/h_metric) mirror the math notation"
+)]
+#[expect(
+    clippy::many_single_char_names,
+    reason = "single-char names (x, y, u, v) mirror the DLT correspondence notation"
+)]
 fn ippe_branches_from_sample_homography(
     sample: &[usize; 4],
     corr: &PointCorrespondences<'_>,
@@ -709,7 +716,6 @@ fn ippe_branches_from_sample_homography(
 ///
 /// Returns `None` only on pathological inputs (NaN intrinsics, degenerate
 /// sample) — callers should treat `None` as "skip this minimal sample".
-#[allow(clippy::similar_names)]
 fn solve_seed_from_sample_homography(
     sample: &[usize; 4],
     corr: &PointCorrespondences<'_>,
@@ -873,7 +879,10 @@ impl RobustPoseSolver {
     /// returns the lower-joint-reprojection branch.  IPPE-Square's two-branch
     /// enumeration disambiguates the planar pose ambiguity that a Zhang
     /// `R = SO(3)-project(K⁻¹H)` decomposition would silently collapse.
-    #[allow(clippy::too_many_lines, clippy::cast_sign_loss)]
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "the dynamic RANSAC iteration count is clamped via .max(0.0) before the `as u32` cast, so it is provably non-negative"
+    )]
     fn lo_ransac_loop(
         &self,
         corr: &PointCorrespondences<'_>,
@@ -1022,7 +1031,10 @@ impl RobustPoseSolver {
     /// points: those solvers accumulate whatever non-degenerate corners remain,
     /// whereas the inlier test must be conservative — a partial error sum would
     /// undercount reprojection error and admit a bad pose as an inlier.
-    #[allow(clippy::unused_self)]
+    #[expect(
+        clippy::unused_self,
+        reason = "kept as a method for call-site symmetry with the other &self RANSAC/GN estimator helpers"
+    )]
     fn evaluate_inliers(
         &self,
         pose: &Pose,
@@ -1073,7 +1085,10 @@ impl RobustPoseSolver {
     /// No Marquardt damping, no information-matrix weighting.
     ///
     /// Returns the original pose unchanged if the normal equations are singular.
-    #[allow(clippy::unused_self)]
+    #[expect(
+        clippy::unused_self,
+        reason = "kept as a method for call-site symmetry with the other &self RANSAC/GN estimator helpers"
+    )]
     fn gn_step(
         &self,
         pose: &Pose,
@@ -1340,7 +1355,18 @@ impl RobustPoseSolver {
     /// Uses pre-inverted information matrices from `corr.information_matrices`
     /// and Huber weighting (k = 1.345) for robustness against mild outliers
     /// inside the wide `tau_aw_lm` window.
-    #[allow(clippy::too_many_lines, clippy::similar_names, clippy::unused_self)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one cohesive anisotropic-weighted LM refinement routine; splitting would fragment the solver data flow"
+    )]
+    #[expect(
+        clippy::similar_names,
+        reason = "LM vars (jtj/jtr, lambda/nu) mirror the solver math notation"
+    )]
+    #[expect(
+        clippy::unused_self,
+        reason = "kept as a method for call-site symmetry with the other &self estimator solvers"
+    )]
     fn refine_aw_lm(
         &self,
         initial_pose: &Pose,

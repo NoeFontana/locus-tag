@@ -26,7 +26,10 @@ use rayon::prelude::*;
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
-#[allow(clippy::cast_sign_loss)]
+#[expect(
+    clippy::cast_sign_loss,
+    reason = "gradient magnitude is a sum of absolute values, right-shifted and clamped to 0..=255, so it is provably non-negative before the as u8 cast"
+)]
 pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
     let w = img.width;
     let h = img.height;
@@ -206,7 +209,11 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
-#[allow(clippy::needless_range_loop, clippy::cast_sign_loss)]
+#[expect(
+    clippy::needless_range_loop,
+    clippy::cast_sign_loss,
+    reason = "the x loop indexes several parallel rows (r0/r1/r2 and dst_row) by offset, not a single iterated slice; the sharpened value is clamped to 0..=255 before the as u8 cast"
+)]
 pub(crate) fn laplacian_sharpen(img: &ImageView, output: &mut [u8]) {
     let w = img.width;
     let h = img.height;
