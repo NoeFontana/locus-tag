@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/release-runbook/">
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/how-to/tune_and_compare/">
       
       
-        <link rel="prev" href="../workflow/">
+        <link rel="prev" href="../install-with-distortion/">
       
       
-        <link rel="next" href="../detection-batch-contract/">
+        <link rel="next" href="../../explanation/architecture/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Release runbook - Locus</title>
+        <title>Tune detectors and compare against other libraries - Locus</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#release-runbook" class="md-skip">
+        <a href="#tune-detectors-and-compare-against-other-libraries" class="md-skip">
           Skip to content
         </a>
       
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Release runbook
+              Tune detectors and compare against other libraries
             
           </span>
         </div>
@@ -378,8 +378,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -397,13 +399,11 @@
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
@@ -424,7 +424,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -442,7 +442,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/add_dictionary/" class="md-nav__link">
+      <a href="../add_dictionary/" class="md-nav__link">
         
   
   
@@ -470,7 +470,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/debug_with_rerun/" class="md-nav__link">
+      <a href="../debug_with_rerun/" class="md-nav__link">
         
   
   
@@ -498,7 +498,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/concurrent_detection/" class="md-nav__link">
+      <a href="../concurrent_detection/" class="md-nav__link">
         
   
   
@@ -526,7 +526,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/install-with-distortion/" class="md-nav__link">
+      <a href="../install-with-distortion/" class="md-nav__link">
         
   
   
@@ -551,10 +551,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../how-to/tune_and_compare/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tune detectors and compare against other libraries
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -570,6 +597,81 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-sweep-a-search-space-accuracy-parallel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Sweep a search space (accuracy, parallel)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-tune-to-a-frontier-adds-selection-serial-latency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Tune to a frontier (adds selection + serial latency)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-comparative-lever-report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Comparative lever report
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notes
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -912,10 +1014,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -949,11 +1049,13 @@
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
         
           
           <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
@@ -974,7 +1076,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -992,7 +1094,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../core/" class="md-nav__link">
+      <a href="../../engineering/core/" class="md-nav__link">
         
   
   
@@ -1020,7 +1122,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../workflow/" class="md-nav__link">
+      <a href="../../engineering/workflow/" class="md-nav__link">
         
   
   
@@ -1045,37 +1147,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Release runbook
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../engineering/release-runbook/" class="md-nav__link">
         
   
   
@@ -1091,242 +1166,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#1-topology" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        1 — Topology
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#2-one-time-setup" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2 — One-time setup
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="2 — One-time setup">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#21-pypi-trusted-publisher" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2.1 PyPI Trusted Publisher
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#22-cratesio-trusted-publisher" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2.2 crates.io Trusted Publisher
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#23-gh-pages-bootstrap-for-mike-versioned-docs" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2.3 gh-pages bootstrap (for mike versioned docs)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#3-per-release-flow-operator" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3 — Per-release flow (operator)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="3 — Per-release flow (operator)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#31-pre-release-checklist" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3.1 Pre-release checklist
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#32-cut-the-version-bump" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3.2 Cut the version bump
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#33-open-the-back-merge-pr" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3.3 Open the back-merge PR
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#34-watch-the-publish" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3.4 Watch the publish
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#4-prerelease-convention" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        4 — Prerelease convention
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#5-rollback" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5 — Rollback
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="5 — Rollback">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#51-pypi" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5.1 PyPI
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#52-cratesio" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5.2 crates.io
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#53-github-release" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5.3 GitHub Release
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#54-docs-mike" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5.4 Docs (mike)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#55-partial-failure-scenario-publish-pypi-succeeded-publish-crates-io-failed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5.5 Partial-failure scenario: publish-pypi succeeded, publish-crates-io failed
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#6-release-history" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        6 — Release history
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1339,7 +1178,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../detection-batch-contract/" class="md-nav__link">
+      <a href="../../engineering/detection-batch-contract/" class="md-nav__link">
         
   
   
@@ -1367,7 +1206,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../constraints/" class="md-nav__link">
+      <a href="../../engineering/constraints/" class="md-nav__link">
         
   
   
@@ -1395,7 +1234,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../ffi_contracts/" class="md-nav__link">
+      <a href="../../engineering/ffi_contracts/" class="md-nav__link">
         
   
   
@@ -1423,7 +1262,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../profiles/" class="md-nav__link">
+      <a href="../../engineering/profiles/" class="md-nav__link">
         
   
   
@@ -1451,7 +1290,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../stratification/" class="md-nav__link">
+      <a href="../../engineering/stratification/" class="md-nav__link">
         
   
   
@@ -1479,7 +1318,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../quality-gates/" class="md-nav__link">
+      <a href="../../engineering/quality-gates/" class="md-nav__link">
         
   
   
@@ -1507,7 +1346,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../rust-style/" class="md-nav__link">
+      <a href="../../engineering/rust-style/" class="md-nav__link">
         
   
   
@@ -1535,7 +1374,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../python-style/" class="md-nav__link">
+      <a href="../../engineering/python-style/" class="md-nav__link">
         
   
   
@@ -1563,7 +1402,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../general-style/" class="md-nav__link">
+      <a href="../../engineering/general-style/" class="md-nav__link">
         
   
   
@@ -1658,7 +1497,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/" class="md-nav__link">
         
   
   
@@ -1686,7 +1525,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/lessons/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/lessons/" class="md-nav__link">
         
   
   
@@ -1714,7 +1553,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/micro-benchmarking-guide/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/micro-benchmarking-guide/" class="md-nav__link">
         
   
   
@@ -1742,7 +1581,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/release_performance_20260418/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/release_performance_20260418/" class="md-nav__link">
         
   
   
@@ -1770,7 +1609,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/hub_regression_20260423/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/hub_regression_20260423/" class="md-nav__link">
         
   
   
@@ -1798,7 +1637,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_sota_20260425/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/render_tag_sota_20260425/" class="md-nav__link">
         
   
   
@@ -1826,7 +1665,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
         
   
   
@@ -1854,7 +1693,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/quad_truncation_fix_20260426/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/quad_truncation_fix_20260426/" class="md-nav__link">
         
   
   
@@ -2005,10 +1844,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-topology" class="md-nav__link">
+  <a href="#prerequisites" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1 — Topology
+        Prerequisites
       
     </span>
   </a>
@@ -2016,121 +1855,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-one-time-setup" class="md-nav__link">
+  <a href="#1-sweep-a-search-space-accuracy-parallel" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2 — One-time setup
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="2 — One-time setup">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#21-pypi-trusted-publisher" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2.1 PyPI Trusted Publisher
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#22-cratesio-trusted-publisher" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2.2 crates.io Trusted Publisher
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#23-gh-pages-bootstrap-for-mike-versioned-docs" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2.3 gh-pages bootstrap (for mike versioned docs)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#3-per-release-flow-operator" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3 — Per-release flow (operator)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="3 — Per-release flow (operator)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#31-pre-release-checklist" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3.1 Pre-release checklist
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#32-cut-the-version-bump" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3.2 Cut the version bump
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#33-open-the-back-merge-pr" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3.3 Open the back-merge PR
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#34-watch-the-publish" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3.4 Watch the publish
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#4-prerelease-convention" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        4 — Prerelease convention
+        1. Sweep a search space (accuracy, parallel)
       
     </span>
   </a>
@@ -2138,82 +1866,32 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#5-rollback" class="md-nav__link">
+  <a href="#2-tune-to-a-frontier-adds-selection-serial-latency" class="md-nav__link">
     <span class="md-ellipsis">
       
-        5 — Rollback
+        2. Tune to a frontier (adds selection + serial latency)
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="5 — Rollback">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#51-pypi" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5.1 PyPI
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#52-cratesio" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5.2 crates.io
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#53-github-release" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5.3 GitHub Release
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#54-docs-mike" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5.4 Docs (mike)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#55-partial-failure-scenario-publish-pypi-succeeded-publish-crates-io-failed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5.5 Partial-failure scenario: publish-pypi succeeded, publish-crates-io failed
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#6-release-history" class="md-nav__link">
+  <a href="#3-comparative-lever-report" class="md-nav__link">
     <span class="md-ellipsis">
       
-        6 — Release history
+        3. Comparative lever report
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notes
       
     </span>
   </a>
@@ -2240,281 +1918,76 @@
   
 
 
-<h1 id="release-runbook">Release runbook</h1>
-<p>How to ship a locus-tag patch to PyPI, crates.io, GitHub Releases, and
-the versioned docs site. Two workflows fan out from a tag push:</p>
+<h1 id="tune-detectors-and-compare-against-other-libraries">Tune detectors and compare against other libraries</h1>
+<p>The tuning harness (<code>tools/bench/tune/</code>) runs many detector configurations
+across CPU cores, selects an optimal frontier under hard constraints, and
+compares tuned Locus against tuned competitors (OpenCV ArUco, pupil_apriltags)
+to expose <em>which levers move which metric</em>.</p>
+<p>It is a research tool layered on the existing bench substrate: it reuses the
+detector wrappers, the Tier-1 <code>ObservationRecord</code> records, and the 5-axis
+stratification. It does <strong>not</strong> touch the Rust core or the insta regression
+snapshots.</p>
+<h2 id="prerequisites">Prerequisites</h2>
 <ul>
-<li><a href="https://github.com/NoeFontana/locus-tag/blob/main/.github/workflows/release.yml"><code>.github/workflows/release.yml</code></a>
-  — wheels (PyPI), crate (crates.io), and the GitHub Release page with
-  CHANGELOG-extracted notes + attached artefacts.</li>
-<li><a href="https://github.com/NoeFontana/locus-tag/blob/main/.github/workflows/docs.yml"><code>.github/workflows/docs.yml</code></a>
-  — versioned docs site, deployed to <code>gh-pages</code> via <a href="https://github.com/jimporter/mike"><code>mike</code></a>.</li>
+<li>A synced hub dataset (see <code>.agent/skills/testing/SKILL.md</code>), e.g.
+  <code>tests/data/hub_cache/locus_v1_tag36h11_1920x1080/</code>.</li>
+<li>The <code>bench</code> dependency group: prefix commands with <code>uv run --group bench</code>.</li>
 </ul>
-<p><code>cargo-release</code> (config:
-<a href="https://github.com/NoeFontana/locus-tag/blob/main/release.toml"><code>release.toml</code></a>)
-drives the version bump locally; CI takes over once the <code>v*</code> tag
-lands. This document is the operator's end-to-end view.</p>
-<h2 id="1-topology">1 — Topology</h2>
-<p>A <code>v*</code> tag push fans out as follows:</p>
-<div class="highlight"><pre><span></span><code>release.yml:
-  verify-tag                                            (refuses mismatched tags)
-    ├─► build-rust                                       (cargo package -p locus-core)
-    ├─► build-wheels-linux   (manylinux + musllinux × x86_64/aarch64)
-    ├─► build-wheels-macos   (x86_64/aarch64)
-    ├─► build-wheels-windows (x64)
-    └─► build-sdist
-                                  │
-                                  ▼
-                          wheel-validate                 (smoke on x86_64 + aarch64 QEMU)
-                                  │
-   ┌──────────────────────────────┼──────────────────────────────┐
-   ▼                              ▼                              ▼
- publish-pypi             publish-crates-io           create-github-release
- (OIDC + PEP 740)         (OIDC, locus-core)          (notes + artefacts; --prerelease on RC)
-
-docs.yml:
-  build + spell ─► deploy                                (mike → gh-pages, X.Y + stable alias)
+<h2 id="1-sweep-a-search-space-accuracy-parallel">1. Sweep a search space (accuracy, parallel)</h2>
+<p>A <em>search space</em> declares tunable parameters per library as JSON in
+<code>tools/bench/tune/spaces/</code>. <code>bench sweep</code> fans the space across cores and writes
+tidy result tables. Accuracy only — latency is <strong>not</strong> measured here (parallel
+timing is contention-poisoned).</p>
+<div class="highlight"><pre><span></span><code><span class="nv">LOCUS_HUB_DATASET_DIR</span><span class="o">=</span>tests/data/hub_cache<span class="w"> </span><span class="se">\</span>
+uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>python<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>sweep<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--library<span class="w"> </span>locus<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--hub-config<span class="w"> </span>locus_v1_tag36h11_1920x1080<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--strategy<span class="w"> </span>random<span class="w"> </span>--n<span class="w"> </span><span class="m">64</span><span class="w"> </span>--seed<span class="w"> </span><span class="m">0</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--out<span class="w"> </span>out/sweep
 </code></pre></div>
-<p><code>verify-tag</code> gates publishing: tags ending in <code>-rc.*</code> set
-<code>outputs.publish=false</code>, both publish jobs skip, and
-<code>create-github-release</code> runs with <code>--prerelease</code>. The docs <code>deploy</code> job
-deliberately skips RC tags so the <code>stable</code> alias keeps pointing at the
-last real release.</p>
-<p>A monthly cron (<code>0 6 1 * *</code>) on <code>release.yml</code> exercises only the Linux
-wheel build to catch toolchain drift between releases. macOS (10×
-billing) and Windows (2× billing) are reserved for actual release
-builds.</p>
-<p>Neither publish job is wrapped in a GitHub <code>environment:</code> for now —
-GitHub Actions only enforces required-reviewer protection on private
-repos under Pro/Team tiers. The safety net is <code>verify-tag</code> plus
-deliberate tag pushes. When this repo upgrades to a tier that enforces
-environment protections, set <code>environment: release</code> on <code>publish-pypi</code>
-and <code>publish-crates-io</code> and add reviewers there.</p>
-<h2 id="2-one-time-setup">2 — One-time setup</h2>
-<p>Done once per repo, then the per-release flow takes over.</p>
-<h3 id="21-pypi-trusted-publisher">2.1 PyPI Trusted Publisher</h3>
-<p>At <a href="https://pypi.org/manage/project/locus-tag/settings/publishing/">https://pypi.org/manage/project/locus-tag/settings/publishing/</a>,
-add a Trusted Publisher entry:</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Value</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Owner</td>
-<td><code>NoeFontana</code></td>
-</tr>
-<tr>
-<td>Repository</td>
-<td><code>locus-tag</code></td>
-</tr>
-<tr>
-<td>Workflow</td>
-<td><code>release.yml</code></td>
-</tr>
-<tr>
-<td>Environment</td>
-<td><em>(leave blank)</em></td>
-</tr>
-</tbody>
-</table>
-<p>When the repo eventually goes public — or this account upgrades to a
-tier that enforces environment protection rules — set Environment to
-<code>release</code> here and add <code>environment: release</code> to the <code>publish-pypi</code>
-job.</p>
-<h3 id="22-cratesio-trusted-publisher">2.2 crates.io Trusted Publisher</h3>
-<p>crates.io scopes Trusted Publishers per crate. At
-<a href="https://crates.io/me/trusted-publishers">https://crates.io/me/trusted-publishers</a> add:</p>
-<table>
-<thead>
-<tr>
-<th>Crate</th>
-<th>Repository</th>
-<th>Workflow</th>
-<th>Environment</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>locus-core</code></td>
-<td><code>NoeFontana/locus-tag</code></td>
-<td><code>release.yml</code></td>
-<td><em>(blank)</em></td>
-</tr>
-</tbody>
-</table>
-<p><code>locus-py</code> is not published (<code>publish = false</code> in its <code>Cargo.toml</code>).</p>
-<h3 id="23-gh-pages-bootstrap-for-mike-versioned-docs">2.3 gh-pages bootstrap (for <code>mike</code> versioned docs)</h3>
-<ol>
-<li>Push the docs workflow → first deploy lands a <code>gh-pages</code> branch
-   with <code>main</code> + <code>latest</code>.</li>
-<li>Repo Settings → Pages → Source: <strong>Deploy from a branch</strong>, Branch:
-   <strong>gh-pages / (root)</strong>.</li>
-<li>Locally (one-shot, by a maintainer with push perms):
-   <div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>mike<span class="w"> </span>set-default<span class="w"> </span>--push<span class="w"> </span>latest
+<p>Writes <code>out/sweep/tune_results.parquet</code> (long-form <code>(library, param_hash,
+dataset, stratum_id, metric) → value</code>) and <code>tune_configs.parquet</code> (the
+<code>param_hash → param_values</code> sidecar).</p>
+<p>Strategies: <code>grid</code>, <code>random</code> (both dependency-free), or <code>bayes</code> (needs the
+optional extra: <code>pip install -e '.[tune]'</code>).</p>
+<h2 id="2-tune-to-a-frontier-adds-selection-serial-latency">2. Tune to a frontier (adds selection + serial latency)</h2>
+<p><code>bench tune</code> runs the sweep, then selects the Pareto frontier over
+<em>(maximize recall, minimize p99 pose error)</em> subject to a precision floor (and
+optional latency budget), verifies latency <strong>serially</strong> with production
+threading, and guards against regressing the render-tag tail/mean versus shipped
+Locus profiles. Repeat <code>--library</code> to tune competitors in the same run.</p>
+<div class="highlight"><pre><span></span><code><span class="nv">LOCUS_HUB_DATASET_DIR</span><span class="o">=</span>tests/data/hub_cache<span class="w"> </span><span class="se">\</span>
+uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>python<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>tune<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--library<span class="w"> </span>locus<span class="w"> </span>--library<span class="w"> </span>opencv_aruco<span class="w"> </span>--library<span class="w"> </span>apriltag<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--hub-config<span class="w"> </span>locus_v1_tag36h11_1920x1080<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--strategy<span class="w"> </span>random<span class="w"> </span>--n<span class="w"> </span><span class="m">64</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--precision-floor<span class="w"> </span><span class="m">0</span>.99<span class="w"> </span>--tail-metric<span class="w"> </span>trans_p99<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--out<span class="w"> </span>out/tune
 </code></pre></div>
-   This redirects <code>https://noefontana.github.io/locus-tag/</code> to
-   <code>/locus-tag/latest/</code>. After the first real release tag fires (which
-   updates <code>stable</code>), switch the default:
-   <div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>mike<span class="w"> </span>set-default<span class="w"> </span>--push<span class="w"> </span>stable
-</code></pre></div></li>
-</ol>
-<h2 id="3-per-release-flow-operator">3 — Per-release flow (operator)</h2>
-<h3 id="31-pre-release-checklist">3.1 Pre-release checklist</h3>
+<p>Writes <code>out/tune/pareto/&lt;library&gt;.json</code> — the feasible frontier you pick a
+deployment config from. A <code>✓promotable</code> config improves without regressing the
+render-tag tail/mean; a <code>⚠tail-regress</code> one does not.</p>
+<h2 id="3-comparative-lever-report">3. Comparative lever report</h2>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>python<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>compare-report<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--results<span class="w"> </span>out/tune/tune_results.parquet<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--pareto-dir<span class="w"> </span>out/tune/pareto<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--out<span class="w"> </span>out/report
+</code></pre></div>
+<p>Produces <code>out/report/index.html</code> with:</p>
 <ul>
-<li>[ ] All feature branches merged into <code>main</code>.</li>
-<li>[ ] Working tree clean.</li>
-<li>[ ] On <code>main</code> with latest pulled.</li>
-<li>[ ] <code>cargo nextest run</code> and <code>pytest</code> green on the latest <code>main</code>
-      (run via the <code>testing</code> skill).</li>
-<li>[ ] <strong>CHANGELOG block exists for the new version.</strong> Under
-      <code>## Unreleased</code> confirm the entries are real and complete; the
-      <code>create-github-release</code> job will fail if the resulting section
-      is empty or missing.</li>
+<li>a <strong>lever-sensitivity heatmap</strong> — for each library, which knob most moves each
+  metric (e.g. <code>decoder.refinement_mode</code> drives the pose tail, not recall);</li>
+<li><strong>per-stratum deltas</strong> — where tuned Locus trails / leads the best tuned
+  competitor, so you know which implementation to improve and where.</li>
 </ul>
-<h3 id="32-cut-the-version-bump">3.2 Cut the version bump</h3>
-<p>Create a release branch from latest <code>main</code>:</p>
-<div class="highlight"><pre><span></span><code>git<span class="w"> </span>checkout<span class="w"> </span>-b<span class="w"> </span>release-vX.Y.Z
-</code></pre></div>
-<p>Run <code>cargo release</code> with <code>--no-publish</code> (CI handles the publish):</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># patch (perf/bugfix)</span>
-cargo<span class="w"> </span>release<span class="w"> </span>patch<span class="w"> </span>--execute<span class="w"> </span>--no-publish<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--allow-branch<span class="w"> </span>release-vX.Y.Z<span class="w"> </span>--config<span class="w"> </span>release.toml
-
-<span class="c1"># minor (breaking / structural)</span>
-cargo<span class="w"> </span>release<span class="w"> </span>minor<span class="w"> </span>--execute<span class="w"> </span>--no-publish<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--allow-branch<span class="w"> </span>release-vX.Y.Z<span class="w"> </span>--config<span class="w"> </span>release.toml
-</code></pre></div>
-<p><code>cargo-release</code> bumps <code>locus-core</code> and <code>locus-py</code> to the new version,
-runs <code>uv lock</code> (via <code>pre-release-hook</code>), updates <code>pyproject.toml</code>
-(via <code>pre-release-replacements</code>), commits, tags <code>vX.Y.Z</code>, and pushes.</p>
-<p>Edit <code>CHANGELOG.md</code> in the same branch: rename <code>## Unreleased</code> to
-<code>## [X.Y.Z] - YYYY-MM-DD</code> and start a fresh empty <code>## Unreleased</code> block
-above it. Amend the bump commit (or add a second commit) and force-push.</p>
-<h3 id="33-open-the-back-merge-pr">3.3 Open the back-merge PR</h3>
-<p>Open <code>release-vX.Y.Z</code> → <code>main</code> via <code>gh pr create --draft</code>. Wait for
-the standard PR-gate CI (<code>ci.yml</code>) to go green, then mark ready and
-squash-merge once approved. The <code>v*</code> tag was already pushed in §3.2,
-so <code>release.yml</code> may already be running — that's fine, it operates off
-the tag, not the PR.</p>
-<h3 id="34-watch-the-publish">3.4 Watch the publish</h3>
+<h2 id="notes">Notes</h2>
 <ul>
-<li><code>gh run watch &lt;release.yml run id&gt;</code> until all 8 jobs are green.</li>
-<li>Verify the GitHub Release page renders the CHANGELOG body and lists
-  all wheels + sdist + .crate as assets.</li>
-<li>Verify on <a href="https://pypi.org/project/locus-tag/">https://pypi.org/project/locus-tag/</a> that the new version
-  is live with a sigstore attestation badge (PEP 740).</li>
-<li>Verify on <a href="https://crates.io/crates/locus-core">https://crates.io/crates/locus-core</a> that the new
-  version is live.</li>
-<li>Verify the docs site: <code>/locus-tag/X.Y/</code> exists and <code>/locus-tag/stable/</code>
-  redirects there. The <code>mike deploy</code> step also updates <code>latest</code> on the
-  next push to <code>main</code>.</li>
+<li><strong>Fair comparison</strong> needs the competitor spaces (<code>spaces/opencv_default.json</code>,
+  <code>spaces/apriltag_default.json</code>) reviewed for breadth — narrow competitor
+  spaces make the deltas misleading.</li>
+<li><strong>Priority</strong>: render-tag hub datasets outrank ICRA; the tuner never promotes a
+  config that trades render-tag tail/mean for recall.</li>
 </ul>
-<h2 id="4-prerelease-convention">4 — Prerelease convention</h2>
-<p>We use <code>-rc.N</code> by convention but the publish gate is a <strong>strict
-positive match on bare semver</strong> (<code>v[0-9]+.[0-9]+.[0-9]+</code>). Any tag
-with a <code>-X</code> suffix — <code>-rc.N</code>, <code>-rc1</code> (no dot, common typo), <code>-alpha.N</code>,
-<code>-beta.N</code>, <code>-dev</code>, <code>+build.42</code> — routes to the dry-run path and
-does not publish to either registry. This is symmetric across
-<code>release.yml</code> (publish gate) and <code>docs.yml</code> (stable-alias update).</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># Bump to 0.5.1-rc.1 locally (no automation — edit manifests by hand</span>
-<span class="c1"># and tag manually, or use `cargo release rc` if available).</span>
-git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>v0.5.1-rc.1<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;dry-run release build (build + smoke, publish skipped)&quot;</span>
-git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.5.1-rc.1
-</code></pre></div>
-<p>What happens:
-- <code>verify-tag</code> strips the prerelease suffix (<code>${tag%%-*}</code>) before
-  comparing against on-disk versions, so the manifests can stay at
-  <code>0.5.0</code> until the real bump.
-- The publish gate's strict regex <code>^[0-9]+\.[0-9]+\.[0-9]+$</code> rejects
-  the suffixed tag → <code>outputs.publish=false</code> → <code>publish-pypi</code> and
-  <code>publish-crates-io</code> skip.
-- All <code>build-wheels-*</code>, <code>build-sdist</code>, and <code>wheel-validate</code> jobs run
-  (including musllinux smoke under <code>python:3.11-alpine</code>).
-- <code>create-github-release</code> posts a GitHub Release with body extracted
-  from <code>## [0.5.1]</code> if it exists, otherwise <code>## Unreleased</code> with a
-  one-line "notes inherited" preamble. The Release is marked
-  <code>--prerelease</code>. The step is idempotent — re-tagging the same name
-  updates notes + re-uploads artefacts via <code>gh release upload
-  --clobber</code> instead of failing.
-- <code>docs.yml</code> deploy job skips the tag-deploy step entirely for any
-  prerelease tag, so <code>stable</code> stays at the last real release.</p>
-<p>When the dry-run is green, delete the RC GitHub Release (the tag can
-stay for history), then follow §3 to ship the real version.</p>
-<h2 id="5-rollback">5 — Rollback</h2>
-<h3 id="51-pypi">5.1 PyPI</h3>
-<p>PyPI permits <strong>yank</strong> but never re-upload of the same version. To
-withdraw a botched release:</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># from the PyPI project page → &quot;Manage release&quot; → &quot;Yank&quot;</span>
-<span class="c1"># or via twine / pypi-cli</span>
-</code></pre></div>
-<p>Yanked versions can no longer be <code>pip install</code>'d without an exact
-<code>==</code> pin, but stay available for reproducibility. To ship a fix,
-publish under <code>X.Y.Z+1</code> — there is no rollback to a previous version
-number.</p>
-<h3 id="52-cratesio">5.2 crates.io</h3>
-<p>crates.io permits <code>cargo yank</code> only as a deprecation signal:</p>
-<div class="highlight"><pre><span></span><code>cargo<span class="w"> </span>yank<span class="w"> </span>--version<span class="w"> </span>X.Y.Z<span class="w"> </span>--crate<span class="w"> </span>locus-core
-</code></pre></div>
-<p>Yanked versions can no longer be selected by a fresh resolve, but
-existing <code>Cargo.lock</code> files continue to use them. To ship a fix,
-publish under <code>X.Y.Z+1</code>.</p>
-<h3 id="53-github-release">5.3 GitHub Release</h3>
-<div class="highlight"><pre><span></span><code>gh<span class="w"> </span>release<span class="w"> </span>delete<span class="w"> </span>vX.Y.Z<span class="w"> </span>--cleanup-tag<span class="w">  </span><span class="c1"># drops the GH Release AND the tag</span>
-<span class="c1"># Tag deletion is destructive — only do this if you also intend to</span>
-<span class="c1"># re-tag the same SHA. Otherwise:</span>
-gh<span class="w"> </span>release<span class="w"> </span>delete<span class="w"> </span>vX.Y.Z<span class="w">                </span><span class="c1"># keeps the tag for history</span>
-</code></pre></div>
-<h3 id="54-docs-mike">5.4 Docs (<code>mike</code>)</h3>
-<div class="highlight"><pre><span></span><code><span class="c1"># Remove the versioned page entirely</span>
-uv<span class="w"> </span>run<span class="w"> </span>mike<span class="w"> </span>delete<span class="w"> </span>--push<span class="w"> </span>X.Y
-
-<span class="c1"># Or just rebuild it from a different ref</span>
-git<span class="w"> </span>checkout<span class="w"> </span>vX.Y.Z-fix
-uv<span class="w"> </span>run<span class="w"> </span>mike<span class="w"> </span>deploy<span class="w"> </span>--push<span class="w"> </span>--update-aliases<span class="w"> </span>X.Y<span class="w"> </span>stable
-</code></pre></div>
-<h3 id="55-partial-failure-scenario-publish-pypi-succeeded-publish-crates-io-failed">5.5 Partial-failure scenario: publish-pypi succeeded, publish-crates-io failed</h3>
-<p>The most common rollback case. <code>publish-pypi</code> succeeded and the wheel
-is live; <code>publish-crates-io</code> failed (e.g., transient network, OIDC
-hiccup, or <code>crates.io</code> index lag). Options:</p>
-<ol>
-<li><strong>Re-run only the failed job</strong> if the failure is transient
-   (<code>gh run rerun &lt;id&gt; --failed</code>). Most cases resolve here.</li>
-<li>If the failure is permanent (e.g., a typo'd <code>Cargo.toml</code>
-   <code>description</code>), yank the PyPI release and bump to <code>X.Y.Z+1</code> for
-   both registries.</li>
-</ol>
-<p>The reverse case (<code>publish-crates-io</code> succeeded, <code>publish-pypi</code>
-failed) is symmetric: yank the crate, bump, re-tag.</p>
-<h2 id="6-release-history">6 — Release history</h2>
-<table>
-<thead>
-<tr>
-<th>Tag</th>
-<th>Date</th>
-<th>Type</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>v0.5.0-rc.1</code></td>
-<td>2026-05-20</td>
-<td>RC dry-run</td>
-<td>Validated pipeline before v0.5.0</td>
-</tr>
-<tr>
-<td><code>v0.5.0</code></td>
-<td>2026-05-20</td>
-<td>Minor</td>
-<td>Unified JSON-profile config refactor</td>
-</tr>
-</tbody>
-</table>
-<p>Append new entries here as releases land.</p>
 
 
 
