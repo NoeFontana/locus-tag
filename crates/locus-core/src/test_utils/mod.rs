@@ -185,7 +185,7 @@ impl Default for TestImageParams {
 /// Generate a test image based on the provided parameters.
 /// Includes tag generation, placement, and photometric adjustments.
 #[must_use]
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[allow(clippy::cast_sign_loss)]
 #[allow(dead_code)]
 pub(crate) fn generate_test_image_with_params(
     params: &TestImageParams,

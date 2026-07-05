@@ -3,9 +3,12 @@
 //! This module provides the first stage of the detection pipeline, converting grayscale
 //! input into binary images while adapting to local lighting conditions.
 //!
-//! It features two primary implementations:
-//! 1. **Tile-based Thresholding**: Blazing fast approach using local tile stats.
-//! 2. **Integral Image Thresholding**: Per-pixel adaptive thresholding for small features.
+//! Two implementations trade accuracy for throughput:
+//! 1. **Tile-based**: one threshold per 8×8 tile from tile min/max, then
+//!    expanded to pixels. Cheap (stats computed once per tile, not per pixel);
+//!    the default hot path.
+//! 2. **Integral-image**: a true per-pixel local-mean threshold. Costlier but
+//!    resolves features smaller than a tile, where the tile grid aliases.
 
 #![allow(unsafe_code, clippy::cast_sign_loss)]
 use crate::config::DetectorConfig;
@@ -91,7 +94,10 @@ impl ThresholdEngine {
 
     /// Apply adaptive thresholding to the image.
     /// Optimized with pre-expanded threshold maps and vectorized row processing.
-    #[allow(clippy::too_many_lines, clippy::needless_range_loop)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one cohesive adaptive-threshold routine (tile threshold + validity, propagation, row expansion); splitting it would fragment the data flow"
+    )]
     #[allow(dead_code)]
     pub fn apply_threshold(
         &self,
@@ -255,7 +261,10 @@ impl ThresholdEngine {
     ///
     /// This is needed for threshold-model-aware segmentation, which uses the
     /// per-pixel threshold values to connect pixels by their deviation sign.
-    #[allow(clippy::needless_range_loop)]
+    #[expect(
+        clippy::needless_range_loop,
+        reason = "tx indexes both the tile-neighbourhood min/max scan and the t_row write, so the range loop is clearer than a zipped iterator here"
+    )]
     #[tracing::instrument(skip_all, name = "pipeline::threshold_apply_map")]
     pub fn apply_threshold_with_map(
         &self,
@@ -839,7 +848,11 @@ fn compute_min_max_simd(data: &[u8]) -> (u8, u8) {
 ///
 /// Uses a 2-pass parallel implementation for maximum throughput on modern multicore CPUs.
 /// The `integral` buffer must have size `(img.width + 1) * (img.height + 1)`.
-#[allow(clippy::needless_range_loop, clippy::items_after_statements)]
+#[expect(
+    clippy::needless_range_loop,
+    clippy::items_after_statements,
+    reason = "the first-row zero-init writes integral[x] by flat index to match the surrounding integral-buffer index arithmetic, and const BLOCK_SIZE is declared at its point of use in the second (vertical) pass"
+)]
 #[allow(dead_code)]
 pub fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
     let w = img.width;
@@ -1031,35 +1044,13 @@ pub fn adaptive_threshold_integral(
     });
 }
 
-/// Fast adaptive threshold combining integral image approach with SIMD.
-///
-/// This is the main entry point for performance-oriented adaptive thresholding:
-/// - Computes integral image once
-/// - Applies per-pixel adaptive threshold with local mean
-/// - Uses default parameters tuned for AprilTag detection
-#[allow(dead_code)]
-pub(crate) fn apply_adaptive_threshold_fast(img: &ImageView, output: &mut [u8]) {
-    // OpenCV uses blockSize=13 (radius=6) and C=3 as good defaults
-    apply_adaptive_threshold_with_params(img, output, 6, 3);
-}
-
-/// Adaptive threshold with custom parameters.
-#[allow(dead_code)]
-pub(crate) fn apply_adaptive_threshold_with_params(
-    img: &ImageView,
-    output: &mut [u8],
-    radius: usize,
-    c: i16,
-) {
-    let mut integral = vec![0u64; (img.width + 1) * (img.height + 1)];
-    compute_integral_image(img, &mut integral);
-    adaptive_threshold_integral(img, &integral, output, radius, c);
-}
-
 /// Apply per-pixel adaptive threshold with gradient-based window sizing.
 ///
 /// Highly optimized using Parallel processing, precomputed LUTs, and branchless logic.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "per-pixel thresholding kernel; the image/gradient/integral buffers plus the radius, gradient-threshold and offset knobs mirror the OpenCV adaptiveThreshold parameter list, and grouping them adds indirection on this hot path"
+)]
 #[multiversion(targets(
     "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
@@ -1153,7 +1144,11 @@ pub fn adaptive_threshold_gradient_window(
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
-#[allow(clippy::cast_sign_loss, clippy::needless_range_loop)]
+#[expect(
+    clippy::cast_sign_loss,
+    clippy::needless_range_loop,
+    reason = "mean values are clamped to 0..=255 (and areas are usize products) before the unsigned casts, so no sign is lost; the interior loop index i addresses five parallel integral-row slices (row00/01/10/11 and interior_dst), not a single iterated slice"
+)]
 pub(crate) fn compute_threshold_map(
     img: &ImageView,
     integral: &[u64],

@@ -1,8 +1,6 @@
 //! Stride-aware image view for zero-copy ingestion.
 #![allow(clippy::inline_always)]
 #![allow(clippy::cast_sign_loss)]
-#![allow(clippy::missing_errors_doc)]
-#![allow(clippy::missing_panics_doc)]
 #![allow(unsafe_code)]
 
 use rayon::prelude::*;

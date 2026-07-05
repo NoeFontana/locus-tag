@@ -5,6 +5,23 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Changed
+
+- **Lint-suppression modernization**: migrated production `#[allow(...)]` lint
+  suppressions to `#[expect(..., reason = "...")]` (stable since Rust 1.81)
+  across `locus-core`/`locus-py`, so a suppression that stops being needed now
+  fails the build (`unfulfilled_lint_expectations`) instead of lingering
+  silently. The migration surfaced and removed ~20 stale or redundant
+  suppressions — item allows duplicating the workspace lint table, and
+  `too_many_lines`/`too_many_arguments`/`similar_names` allows on functions that
+  no longer trip the lint — and deleted the dead
+  `apply_adaptive_threshold_fast`/`apply_adaptive_threshold_with_params`
+  integral-image path. Exported-API-sensitive lints (`unused_self`,
+  `struct_field_names`) intentionally stay `#[allow]` because their firing is
+  Cargo-feature-dependent. Comment/doc touch-ups in `pose.rs`, `threshold.rs`,
+  and `segmentation.rs` favour why-over-what. No public API or runtime-behavior
+  change.
+
 ### Documentation
 
 - **Pose-covariance Phase 4 postmortem** (`docs/engineering/pose_covariance_phase4_postmortem_2026-05-31.md`): records the empirical falsification of Phase 4 (per-corner ERF residual-MSE covariance inflation), the last covariance-calibration lever the 2026-05-21 sweep had not ruled out. Measured end-to-end on branch `feat/activate-per-corner-empirical-noise` (PR #290): KL stays at the baseline 13.93 against the §4 gate of < 0.5, unchanged even at the theoretical upper bound, because a per-corner diagonal `σ_n²` rescale cannot fix the off-diagonal structure of `(JᵀWJ)⁻¹`; the empirical column is also all-zero in production (no low-PPB tags route through ERF on the hub corpus). The ~700 lines of SIMD/FFI/SoA plumbing are not shipped (recoverable on the branch per the §6 precedent); the audit-harness knobs and empirical bound are the salvageable artifacts. `pose_covariance_followup_2026-05-22.md` §4/§5 amended with status banners. All four covariance phases are now closed.

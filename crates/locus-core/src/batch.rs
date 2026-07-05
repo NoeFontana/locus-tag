@@ -156,7 +156,10 @@ impl DetectionBatch {
     /// heap and patches the few non-zero defaults in place via `slice::fill`.
     /// No `DetectionBatch`-sized value ever lives on the stack.
     #[must_use]
-    #[allow(unsafe_code)]
+    #[expect(
+        unsafe_code,
+        reason = "constructs the large SoA batch in place on the heap via new_zeroed().assume_init(); the SAFETY comment justifies the all-zero bit pattern"
+    )]
     pub fn new_boxed() -> Box<Self> {
         // SAFETY: All-zero is a valid bit pattern for every field of
         // `DetectionBatch`:
@@ -185,6 +188,9 @@ impl DetectionBatch {
     }
     /// Returns the maximum capacity of the batch.
     #[must_use]
+    // `allow`, not `expect`: `unused_self` fires only in feature configs where
+    // this type is not part of the exported API, so the expectation would be
+    // unfulfilled under `--all-features`. Kept as a method for call-site symmetry.
     #[allow(clippy::unused_self)]
     pub fn capacity(&self) -> usize {
         MAX_CANDIDATES
@@ -230,7 +236,10 @@ impl DetectionBatch {
 
     /// Reassemble the batched SoA data into a list of discrete `Detection` objects.
     #[must_use]
-    #[allow(clippy::cast_sign_loss)]
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "`error_rates` holds a non-negative Hamming/error count, so the f32->u32 cast cannot lose a sign"
+    )]
     pub fn reassemble(&self, v: usize) -> Vec<crate::Detection> {
         let mut detections = Vec::with_capacity(v);
         for i in 0..v {
@@ -337,15 +346,21 @@ pub struct TelemetryPayload {
     pub stride: usize,
 }
 
+#[expect(
+    unsafe_code,
+    reason = "manual Send impl for the raw-pointer telemetry payload; the SAFETY comment below justifies cross-thread access"
+)]
 // SAFETY: TelemetryPayload contains raw pointers to the detector's arena.
 // These pointers are stable for the duration of the frame processing and
 // are only accessed from the Python thread while the arena is still alive.
-#[allow(unsafe_code)]
 unsafe impl Send for TelemetryPayload {}
 
+#[expect(
+    unsafe_code,
+    reason = "manual Sync impl for the read-only raw-pointer telemetry payload; the SAFETY comment below justifies shared access"
+)]
 // SAFETY: TelemetryPayload is read-only from the Python thread and does not
 // contain any interior mutability.
-#[allow(unsafe_code)]
 unsafe impl Sync for TelemetryPayload {}
 
 /// A lightweight, borrowed view of the detection results.
@@ -397,7 +412,10 @@ impl DetectionBatchView<'_> {
     /// `reassemble_owned()`, then drop the view, then return the `FrameContext` to
     /// the pool — the view borrows from the context, so extraction must happen first.
     #[must_use]
-    #[allow(clippy::cast_sign_loss)]
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "`error_rates` holds a non-negative Hamming/error count, so the f32->u32 cast cannot lose a sign"
+    )]
     pub fn reassemble_owned(&self) -> Vec<crate::Detection> {
         let v = self.ids.len();
         let mut detections = Vec::with_capacity(v);

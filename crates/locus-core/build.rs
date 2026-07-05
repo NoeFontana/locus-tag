@@ -106,7 +106,7 @@ fn compute_mih(
     min_hamming: u32,
 ) -> (usize, usize, u32, u32, Vec<usize>, Vec<u64>) {
     let chunks = ((min_hamming as usize - 1) / 2) + 1;
-    #[allow(clippy::cast_sign_loss, clippy::cast_precision_loss)]
+    #[allow(clippy::cast_sign_loss)]
     let bits_per_chunk = (payload_length as f32 / chunks as f32).ceil() as u32;
     let last_chunk_bits = payload_length - (chunks as u32 - 1) * bits_per_chunk;
 

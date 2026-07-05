@@ -551,7 +551,10 @@ fn sample_grid_values_dda_simd(
     }
 
     #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
-    #[allow(unsafe_code)]
+    #[expect(
+        unsafe_code,
+        reason = "workspace denies unsafe_code; this NEON-gated block uses aarch64 SIMD intrinsics and its soundness is justified in the SAFETY comment below"
+    )]
     // SAFETY:
     // 1. NEON intrinsics (`vfmaq_f32`, `vrecpeq_f32`, `vld1q_f32`,
     //    `vst1q_f32`, etc.) are sound on aarch64 because the enclosing
@@ -888,7 +891,10 @@ pub fn rotate90(bits: u64, dim: usize) -> u64 {
 /// This path is only called for non-rectified cameras (`!C::IS_RECTIFIED`). For rectified
 /// cameras the faster SIMD path in [`sample_grid_soa_precomputed`] is used instead.
 #[cfg(feature = "non_rectified")]
-#[allow(clippy::similar_names)]
+#[expect(
+    clippy::similar_names,
+    reason = "paired coordinate-component bindings (px/py, xn/yn, xd/yd, ix/iy, nx/ny) follow the x/y and ideal-vs-distorted math notation and are intentionally similar"
+)]
 fn sample_grid_values_distorted<C: crate::camera::CameraModel>(
     img: &crate::image::ImageView,
     h_ideal: &Homography,

@@ -422,7 +422,6 @@ impl CharucoRefiner {
                 // `rejected_reasons` discriminator buffer (NOT via a NaN
                 // determinant marker, which would silently poison any
                 // aggregate over `rejected_determinants`).
-                #[allow(clippy::cast_possible_truncation)]
                 let cov =
                     compute_corner_covariance(img, [px, py], 0.1, 2.0, Self::ST_RADIUS as i32);
                 debug_assert!(
@@ -610,10 +609,7 @@ fn record_rejection(
                 x: px as f32,
                 y: py as f32,
             };
-            #[allow(clippy::cast_possible_truncation)]
-            {
-                t.rejected_determinants[idx] = det as f32;
-            }
+            t.rejected_determinants[idx] = det as f32;
             t.rejected_reasons[idx] = reason as u8;
             t.count += 1;
         }

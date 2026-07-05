@@ -2,7 +2,6 @@
 
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::cast_possible_wrap)]
-#![allow(clippy::missing_panics_doc)]
 
 use crate::image::ImageView;
 use bumpalo::Bump;

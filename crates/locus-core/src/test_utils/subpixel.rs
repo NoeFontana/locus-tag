@@ -294,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[allow(clippy::cast_sign_loss)]
     fn test_edge_recovery_scale_invariance() {
         let sigma = 0.6;
         let mut renderer = SubpixelEdgeRenderer::new(1, 1).with_sigma(sigma);

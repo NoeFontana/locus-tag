@@ -618,7 +618,10 @@ fn refine_accumulate_optimized(
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "multiversioned SIMD gradient-projection kernel; the edge normal, ROI bounds (x0/x1/y0/y1) and scan offset are passed as flat scalars so the vectorized inner loop stays register-friendly"
+)]
 fn project_gradients_optimized(
     img: &ImageView,
     nx: f64,
@@ -698,7 +701,10 @@ fn project_gradients_optimized(
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "multiversioned SIMD sample-collection kernel; the line geometry (normal, offset, endpoint, direction, length) and ROI bounds are passed as flat scalars to keep the vectorized inner loop register-friendly"
+)]
 fn collect_samples_optimized<'a>(
     img: &ImageView,
     nx: f64,
@@ -803,7 +809,10 @@ fn collect_samples_optimized<'a>(
 ///
 /// Identical logic to `collect_samples_optimized` but with pixel stride > 1.
 /// Used by the quad extraction stage for large edges in upscaled images.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "strided variant of collect_samples_optimized; mirrors its line-geometry and ROI-bound parameter list with an added pixel stride for decimated images"
+)]
 fn collect_samples_strided<'a>(
     img: &ImageView,
     nx: f64,

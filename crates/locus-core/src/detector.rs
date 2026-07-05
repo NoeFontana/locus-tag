@@ -184,9 +184,14 @@ impl Detector {
 /// Runs the full pipeline (thresholding → segmentation → quad extraction →
 /// homography → decoding → pose) using the provided mutable [`FrameContext`].
 /// Returns a [`DetectionBatchView`] whose lifetime is tied to `ctx`.
-#[allow(clippy::similar_names)]
-#[allow(clippy::too_many_lines)]
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one cohesive detection-pipeline routine (threshold -> segment -> quad -> homography -> decode -> pose); splitting would fragment the per-frame data flow"
+)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "hot-path pipeline entry threading config, decoders, image, context, intrinsics and telemetry per frame; a param struct adds indirection"
+)]
 fn run_detection_pipeline<'ctx>(
     config: &DetectorConfig,
     decoders: &[Box<dyn TagDecoder + Send + Sync>],
@@ -508,7 +513,10 @@ fn run_detection_pipeline<'ctx>(
 /// Run pose refinement on valid candidates and optionally compute reprojection errors.
 ///
 /// Returns `(reprojection_errors_ptr, num_reprojection)` for telemetry.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "pose-refinement stage threads batch, arena, intrinsics, tag size, image, config and telemetry flag per frame; grouping adds indirection"
+)]
 fn run_pose_refinement(
     batch: &mut crate::batch::DetectionBatch,
     arena: &bumpalo::Bump,

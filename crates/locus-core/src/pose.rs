@@ -102,7 +102,10 @@ impl CameraIntrinsics {
     /// Create new intrinsics with Brown-Conrady distortion.
     #[cfg(feature = "non_rectified")]
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "constructor mirrors the OpenCV Brown-Conrady intrinsic + distortion coefficient list; a struct would just be unpacked at each call site"
+    )]
     pub fn with_brown_conrady(
         fx: f64,
         fy: f64,
@@ -126,7 +129,10 @@ impl CameraIntrinsics {
     /// Create new intrinsics with Kannala-Brandt fisheye distortion.
     #[cfg(feature = "non_rectified")]
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "constructor mirrors the OpenCV Kannala-Brandt intrinsic + fisheye coefficient list; a struct would just be unpacked at each call site"
+    )]
     pub fn with_kannala_brandt(
         fx: f64,
         fy: f64,
@@ -334,25 +340,21 @@ pub(crate) fn projection_jacobian(
     )
 }
 
-/// Estimate pose from tag detection using homography decomposition and refinement.
+/// Estimate a tag's 6-DoF pose from its four detected image corners.
 ///
-/// # Arguments
-/// * `intrinsics` - Camera intrinsics.
-/// * `corners` - Detected corners in image coordinates [[x, y]; 4].
-/// * `tag_size` - Physical size of the tag in world units (e.g., meters).
-/// * `img` - Optional image view. Without it the solver falls back to
-///   unweighted Huber LM unless external covariances are supplied.
+/// Seeds with IPPE-Square (homography decomposition), then refines with
+/// Levenberg-Marquardt. `tag_size` is the physical tag edge length in world
+/// units.
 ///
-/// # Returns
-/// A tuple containing:
-/// * `Option<Pose>`: The estimated pose (if successful).
-/// * `Option<[[f64; 6]; 6]>`: The estimated covariance matrix (only when
-///   weighted LM ran — i.e. covariances were available).
+/// The weighting branch is selected by data availability: when `img` is
+/// supplied the solver can weight residuals by per-corner covariance
+/// (Mahalanobis LM); otherwise it falls back to unweighted Huber LM unless
+/// external covariances are provided. The returned covariance matrix is
+/// populated only when the weighted branch actually ran.
 ///
 /// # Panics
-/// Panics if SVD decomposition fails during orthogonalization (extremely rare).
+/// Panics if SVD orthogonalization fails (numerically near-impossible).
 #[must_use]
-#[allow(clippy::missing_panics_doc)]
 #[tracing::instrument(skip_all, name = "pipeline::estimate_tag_pose")]
 pub fn estimate_tag_pose(
     intrinsics: &CameraIntrinsics,
@@ -372,7 +374,6 @@ pub fn estimate_tag_pose(
 
 /// Estimate pose with explicit configuration for tuning parameters.
 #[must_use]
-#[allow(clippy::missing_panics_doc)]
 #[tracing::instrument(skip_all, name = "pipeline::estimate_tag_pose")]
 pub fn estimate_tag_pose_with_config(
     intrinsics: &CameraIntrinsics,
@@ -478,7 +479,6 @@ impl ConsistencyThresholds {
 /// and the disabled-path diagnostic d² compute is elided entirely on
 /// non-`bench-internals` builds (zero-overhead legacy path).
 #[must_use]
-#[allow(clippy::missing_panics_doc, clippy::too_many_arguments)]
 #[tracing::instrument(skip_all, name = "pipeline::estimate_tag_pose_diag")]
 pub(crate) fn estimate_tag_pose_with_diagnostics(
     intrinsics: &CameraIntrinsics,
@@ -1071,7 +1071,10 @@ fn project_with_distortion(p_cam: &Vector3<f64>, intrinsics: &CameraIntrinsics) 
 ///    the projection `P_cam → pixel` routes through the distortion map, and the analytic
 ///    chain-rule Jacobian `∂[u,v]/∂P_cam = diag(fx,fy) · J_dist · J_normalize` is used,
 ///    ensuring the solver converges to the correct distortion-compensated pose.
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one cohesive Levenberg-Marquardt loop — Jacobian assembly, damping update, and convergence test read more clearly inline than split across helpers"
+)]
 fn refine_pose_lm(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
@@ -1643,7 +1646,10 @@ pub fn refine_poses_soa(
 }
 
 /// Refine poses for all valid candidates with explicit config for tuning parameters.
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "single SoA sweep over all candidates; the per-corner setup, solve, and covariance write-back belong together for cache locality"
+)]
 #[tracing::instrument(skip_all, name = "pipeline::pose_refinement")]
 pub fn refine_poses_soa_with_config(
     batch: &mut DetectionBatch,
@@ -1670,7 +1676,10 @@ pub fn refine_poses_soa_with_config(
     // a direct call after monomorphisation — a closure-binding form was
     // opaque to LLVM and added measurable per-candidate overhead in the
     // pose microbenches.
-    #[allow(clippy::inline_always)]
+    #[expect(
+        clippy::inline_always,
+        reason = "the measured per-candidate overhead documented above is exactly what forcing the inline removes"
+    )]
     #[inline(always)]
     fn compute_one(
         intrinsics: &CameraIntrinsics,
@@ -1899,7 +1908,6 @@ impl From<PoseDiagnostics> for BenchPoseDiagnostics {
 /// THROWAWAY: revert with the rest of this section after Phase 0 ships.
 #[cfg(feature = "bench-internals")]
 #[must_use]
-#[allow(clippy::missing_panics_doc, clippy::too_many_arguments)]
 pub fn bench_estimate_both_branches(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
@@ -1972,7 +1980,6 @@ pub fn bench_estimate_both_branches(
 /// THROWAWAY: revert with the rest of this section after Phase 0 ships.
 #[cfg(feature = "bench-internals")]
 #[must_use]
-#[allow(clippy::missing_panics_doc, clippy::too_many_arguments)]
 pub fn bench_refit_pose_drop_corner(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
@@ -2035,7 +2042,6 @@ pub fn bench_refit_pose_drop_corner(
 /// THROWAWAY: revert after Phase 0; the bench harness won't outlive it.
 #[cfg(feature = "bench-internals")]
 #[must_use]
-#[allow(clippy::missing_panics_doc, clippy::too_many_arguments)]
 pub fn bench_estimate_tag_pose(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],

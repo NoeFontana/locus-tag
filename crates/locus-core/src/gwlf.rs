@@ -4,8 +4,13 @@ use crate::image::ImageView;
 use nalgebra::{Matrix2, Matrix3, SMatrix, Vector2, Vector3};
 
 /// Accumulator for gradient-weighted spatial moments of an edge.
-#[derive(Clone, Copy, Debug, Default)]
+///
+/// The shared `sum_` field prefix is intentional (each field is a moment sum).
+// `allow`, not `expect`: `struct_field_names` fires only when this type is not
+// re-exported (feature-dependent), so an expectation would be unfulfilled under
+// `--all-features`.
 #[allow(clippy::struct_field_names)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct MomentAccumulator {
     /// Sum of weights: sum(w_i)
     pub sum_w: f64,
@@ -53,7 +58,10 @@ impl MomentAccumulator {
 
     /// Compute the 2x2 gradient-weighted spatial covariance matrix.
     #[must_use]
-    #[allow(clippy::similar_names)]
+    #[expect(
+        clippy::similar_names,
+        reason = "s_xx/s_yy/s_xy match the covariance-component math notation"
+    )]
     pub fn covariance(&self) -> Option<Matrix2<f64>> {
         let c = self.centroid()?;
         let s_w = self.sum_w;
@@ -127,7 +135,10 @@ pub struct EigenResult {
 
 /// Solves the eigendecomposition of a 2x2 symmetric matrix [[a, b], [b, c]].
 #[must_use]
-#[allow(clippy::manual_midpoint)]
+#[expect(
+    clippy::manual_midpoint,
+    reason = "explicit (trace ± disc)/2 mirrors the quadratic-formula eigenvalue expression"
+)]
 pub fn solve_2x2_symmetric(a: f64, b: f64, c: f64) -> EigenResult {
     let trace = a + c;
     let det = a * c - b * b;
@@ -162,10 +173,18 @@ pub fn solve_2x2_symmetric(a: f64, b: f64, c: f64) -> EigenResult {
 ///
 /// Returns the refined corners [[x, y]; 4] and their 2x2 covariances [Matrix2; 4].
 #[must_use]
-#[allow(clippy::similar_names)]
-#[allow(clippy::cast_sign_loss)]
-#[allow(clippy::cast_possible_wrap)]
-#[allow(clippy::type_complexity)]
+#[expect(
+    clippy::similar_names,
+    reason = "edge/normal vars (dx_edge/dy_edge, nx_coarse/ny_coarse) match the geometric notation"
+)]
+#[expect(
+    clippy::cast_sign_loss,
+    reason = "`steps` derives from `len`, which is guaranteed >= 2.0 above, so the `as usize` cast cannot lose a sign"
+)]
+#[expect(
+    clippy::type_complexity,
+    reason = "return bundles the four refined corners with their per-corner 2x2 covariances; a named struct adds no clarity"
+)]
 pub fn refine_quad_gwlf_with_cov(
     img: &ImageView,
     coarse_corners: &[[f32; 2]; 4],

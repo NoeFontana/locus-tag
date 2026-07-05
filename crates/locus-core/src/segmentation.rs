@@ -175,7 +175,10 @@ struct Run {
 /// implementation is retained for tests and benches that exercise the
 /// reference RLE+UnionFind path.
 #[cfg(any(test, feature = "bench-internals"))]
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one cohesive reference RLE + union-find connected-component labelling routine; splitting the run extraction, label resolution and per-component stats accumulation would fragment the data flow without clarity gain"
+)]
 pub fn label_components_with_stats<'a>(
     arena: &'a Bump,
     binary: &[u8],
@@ -183,7 +186,8 @@ pub fn label_components_with_stats<'a>(
     height: usize,
     use_8_connectivity: bool,
 ) -> LabelResult<'a> {
-    // Pass 1: Extract runs - Optimized with Rayon parallel processing
+    // Pass 1: Extract runs. Rows are independent, so runs are collected per-row
+    // in parallel and stitched in the label pass below.
     let all_runs: Vec<Vec<Run>> = binary
         .par_chunks(width)
         .enumerate()
@@ -315,7 +319,7 @@ pub fn label_components_with_stats<'a>(
         stats.m11 += yu * (b * (b - 1) / 2 - a * a.saturating_sub(1) / 2);
     }
 
-    // Pass 4: Assign labels to pixels - Optimized with slice fill
+    // Pass 4: Paint each run's resolved root label onto its pixels (0 = background).
     let labels = arena.alloc_slice_fill_copy(width * height, 0u32);
     for (run, root) in runs.iter().zip(run_roots) {
         let label = root_to_label[root];

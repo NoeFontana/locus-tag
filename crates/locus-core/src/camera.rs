@@ -157,7 +157,10 @@ impl CameraModel for BrownConradyModel {
         [xu, yu]
     }
 
-    #[allow(clippy::similar_names)]
+    #[expect(
+        clippy::similar_names,
+        reason = "partial-derivative vars (dxd_dxn/dxd_dyn/dyd_dxn/dyd_dyn) match the Jacobian math notation"
+    )]
     fn distort_jacobian(&self, xn: f64, yn: f64) -> [[f64; 2]; 2] {
         let r2 = xn * xn + yn * yn;
         let r4 = r2 * r2;
@@ -294,7 +297,10 @@ impl CameraModel for KannalaBrandtModel {
         [xd * scale, yd * scale]
     }
 
-    #[allow(clippy::similar_names)]
+    #[expect(
+        clippy::similar_names,
+        reason = "partial-derivative vars (dxd_dxn/dxd_dyn/dyd_dxn/dyd_dyn) match the Jacobian math notation"
+    )]
     fn distort_jacobian(&self, xn: f64, yn: f64) -> [[f64; 2]; 2] {
         let r2 = xn * xn + yn * yn;
         let r = r2.sqrt();
