@@ -269,41 +269,9 @@ impl ThresholdEngine {
         let tiles_wide = img.width / ts;
         let tiles_high = img.height / ts;
 
-        let mut tile_thresholds = BumpVec::with_capacity_in(tiles_wide * tiles_high, arena);
-        tile_thresholds.resize(tiles_wide * tiles_high, 0u8);
+        let tile_thresholds = self.compute_tile_thresholds(arena, img, stats);
         let mut tile_valid = BumpVec::with_capacity_in(tiles_wide * tiles_high, arena);
         tile_valid.resize(tiles_wide * tiles_high, 0u8);
-
-        tile_thresholds
-            .par_chunks_mut(tiles_wide)
-            .enumerate()
-            .for_each(|(ty, t_row)| {
-                let y_start = ty.saturating_sub(1);
-                let y_end = (ty + 1).min(tiles_high - 1);
-
-                for tx in 0..tiles_wide {
-                    let mut nmin = 255u8;
-                    let mut nmax = 0u8;
-
-                    let x_start = tx.saturating_sub(1);
-                    let x_end = (tx + 1).min(tiles_wide - 1);
-
-                    for ny in y_start..=y_end {
-                        let row_off = ny * tiles_wide;
-                        for nx in x_start..=x_end {
-                            let s = stats[row_off + nx];
-                            if s.min < nmin {
-                                nmin = s.min;
-                            }
-                            if s.max > nmax {
-                                nmax = s.max;
-                            }
-                        }
-                    }
-
-                    t_row[tx] = ((u16::from(nmin) + u16::from(nmax)) >> 1) as u8;
-                }
-            });
 
         // Compute tile_valid
         for ty in 0..tiles_high {
@@ -423,6 +391,113 @@ impl ThresholdEngine {
                     }
                 },
             );
+    }
+
+    /// Compute the per-tile threshold — the midpoint of the 3×3
+    /// tile-neighbourhood `min`/`max` — for every tile. Shared prologue of
+    /// [`Self::apply_threshold_with_map`] and [`Self::apply_threshold_map_only`].
+    // `tx` indexes both the tile-neighbourhood scan and the `t_row` write, so the
+    // range loop is clearer than a zipped iterator here.
+    #[allow(clippy::needless_range_loop)]
+    fn compute_tile_thresholds<'a>(
+        &self,
+        arena: &'a Bump,
+        img: &ImageView,
+        stats: &[TileStats],
+    ) -> BumpVec<'a, u8> {
+        let ts = self.tile_size;
+        let tiles_wide = img.width / ts;
+        let tiles_high = img.height / ts;
+
+        let mut tile_thresholds = BumpVec::with_capacity_in(tiles_wide * tiles_high, arena);
+        tile_thresholds.resize(tiles_wide * tiles_high, 0u8);
+
+        tile_thresholds
+            .par_chunks_mut(tiles_wide)
+            .enumerate()
+            .for_each(|(ty, t_row)| {
+                let y_start = ty.saturating_sub(1);
+                let y_end = (ty + 1).min(tiles_high - 1);
+
+                for tx in 0..tiles_wide {
+                    let mut nmin = 255u8;
+                    let mut nmax = 0u8;
+
+                    let x_start = tx.saturating_sub(1);
+                    let x_end = (tx + 1).min(tiles_wide - 1);
+
+                    for ny in y_start..=y_end {
+                        let row_off = ny * tiles_wide;
+                        for nx in x_start..=x_end {
+                            let s = stats[row_off + nx];
+                            if s.min < nmin {
+                                nmin = s.min;
+                            }
+                            if s.max > nmax {
+                                nmax = s.max;
+                            }
+                        }
+                    }
+
+                    t_row[tx] = ((u16::from(nmin) + u16::from(nmax)) >> 1) as u8;
+                }
+            });
+
+        tile_thresholds
+    }
+
+    /// Threshold-map-only variant for the production hot path.
+    ///
+    /// Writes only the per-pixel threshold map consumed by threshold-model-aware
+    /// segmentation. Unlike [`Self::apply_threshold_with_map`] it skips the
+    /// full-image binary image — which is read only by debug telemetry via
+    /// `binarized_ptr` — and, with it, the `tile_valid` pass, since validity
+    /// gates only the binary output and never the threshold map. This removes a
+    /// full-image SIMD threshold compare plus a `W×H` byte write (and the
+    /// `tile_valid` computation) from every non-telemetry `detect()` call.
+    ///
+    /// The emitted `threshold_output` is byte-identical to the map produced by
+    /// [`Self::apply_threshold_with_map`] for the same inputs (see
+    /// `map_only_matches_with_map_unaligned` for the enforced contract).
+    #[tracing::instrument(skip_all, name = "pipeline::threshold_apply_map_only")]
+    pub fn apply_threshold_map_only(
+        &self,
+        arena: &Bump,
+        img: &ImageView,
+        stats: &[TileStats],
+        threshold_output: &mut [u8],
+    ) {
+        let ts = self.tile_size;
+        let tiles_wide = img.width / ts;
+        let tiles_high = img.height / ts;
+
+        let tile_thresholds = self.compute_tile_thresholds(arena, img, stats);
+        let thresholds_slice = tile_thresholds.as_slice();
+
+        // No per-worker scratch: the threshold map is constant down a tile band,
+        // so build the band's first row directly in the output and replicate it
+        // to the remaining `ts - 1` rows. Keeps the hot path allocation-free
+        // (constraints.md §1) and skips the redundant scratch copy.
+        threshold_output
+            .par_chunks_mut(ts * img.width)
+            .enumerate()
+            .for_each(|(ty, thresh_tile_rows)| {
+                if ty >= tiles_high {
+                    return;
+                }
+                let (first_row, sibling_rows) = thresh_tile_rows.split_at_mut(img.width);
+                for tx in 0..tiles_wide {
+                    let thresh = thresholds_slice[ty * tiles_wide + tx];
+                    first_row[tx * ts..(tx + 1) * ts].fill(thresh);
+                }
+                // Trailing columns [tiles_wide*ts, width) belong to no tile; zero
+                // them to match `apply_threshold_with_map`, whose scratch row is
+                // pre-zeroed and never overwritten past `tiles_wide*ts`.
+                first_row[tiles_wide * ts..].fill(0);
+                for dy in 1..ts {
+                    sibling_rows[(dy - 1) * img.width..dy * img.width].copy_from_slice(first_row);
+                }
+            });
     }
 }
 
@@ -572,6 +647,49 @@ mod tests {
         assert_eq!(output[8 * width + 8], 0);
         // At (1,1), it should be white (255)
         assert_eq!(output[width + 1], 255);
+    }
+
+    /// Locks the contract documented on `apply_threshold_map_only`: it must emit
+    /// a byte-identical threshold map to `apply_threshold_with_map`. Uses
+    /// dimensions that are NOT multiples of the tile size (8) so the
+    /// `width % ts` / `height % ts` remainder columns and rows are exercised —
+    /// the render-tag regression snapshots only use tile-aligned resolutions and
+    /// never cover this path.
+    #[test]
+    fn map_only_matches_with_map_unaligned() {
+        let width = 37;
+        let height = 29;
+        let mut data = vec![0u8; width * height];
+        // Spatially varying content so tile thresholds differ tile-to-tile.
+        for y in 0..height {
+            for x in 0..width {
+                data[y * width + x] = ((x * 7 + y * 13) % 256) as u8;
+            }
+        }
+        // A dark block so some tiles clear the contrast gate and others don't.
+        for y in 5..20 {
+            for x in 5..25 {
+                data[y * width + x] = 20;
+            }
+        }
+
+        let img = ImageView::new(&data, width, height, width).unwrap();
+        let engine = ThresholdEngine::new();
+        let arena = Bump::new();
+        let stats = engine.compute_tile_stats(&arena, &img);
+
+        let mut binarized = vec![0u8; width * height];
+        let mut map_with = vec![0u8; width * height];
+        engine.apply_threshold_with_map(&arena, &img, &stats, &mut binarized, &mut map_with);
+
+        let mut map_only = vec![0u8; width * height];
+        engine.apply_threshold_map_only(&arena, &img, &stats, &mut map_only);
+
+        assert_eq!(
+            map_with, map_only,
+            "apply_threshold_map_only must produce a byte-identical threshold map \
+             to apply_threshold_with_map, including the width%ts / height%ts remainder"
+        );
     }
 
     #[test]

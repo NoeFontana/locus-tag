@@ -73,6 +73,21 @@ macro_rules! hub_benchmarks {
             }
 
             #[divan::bench]
+            fn thresholding_map_only(bencher: Bencher) {
+                let (data, width, height) = load_image($dataset, "scene_0000_cam_0000.png");
+                let img = ImageView::new(&data, width, height, width).unwrap();
+                let config = DetectorConfig::default();
+                let engine = ThresholdEngine::from_config(&config);
+
+                bencher.bench_local(move || {
+                    let arena = Bump::new();
+                    let mut threshold_map = vec![0u8; width * height];
+                    let tile_stats = engine.compute_tile_stats(&arena, &img);
+                    engine.apply_threshold_map_only(&arena, &img, &tile_stats, &mut threshold_map);
+                });
+            }
+
+            #[divan::bench]
             fn segmentation(bencher: Bencher) {
                 let (data, width, height) = load_image($dataset, "scene_0000_cam_0000.png");
                 let img = ImageView::new(&data, width, height, width).unwrap();
@@ -160,3 +175,4 @@ macro_rules! hub_benchmarks {
 hub_benchmarks!(res_480p, "locus_v1_tag36h11_640x480");
 hub_benchmarks!(res_720p, "locus_v1_tag36h11_1280x720");
 hub_benchmarks!(res_1080p, "locus_v1_tag36h11_1920x1080");
+hub_benchmarks!(res_2160p, "locus_v1_tag36h11_3840x2160");

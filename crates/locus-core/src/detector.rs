@@ -252,24 +252,41 @@ fn run_detection_pipeline<'ctx>(
         *img
     };
 
-    let binarized = state
-        .arena
-        .alloc_slice_fill_copy(img.width * img.height, 0u8);
     let threshold_map = state
         .arena
         .alloc_slice_fill_copy(img.width * img.height, 0u8);
+    // The full-image binary is consumed only by debug telemetry (`binarized_ptr`
+    // below); on the production hot path we skip both its allocation and the
+    // extra threshold pass that fills it (see `apply_threshold_map_only`).
+    let mut binarized: Option<&mut [u8]> = if debug_telemetry {
+        Some(
+            state
+                .arena
+                .alloc_slice_fill_copy(img.width * img.height, 0u8),
+        )
+    } else {
+        None
+    };
 
     // 1. Thresholding & 2. Segmentation & 3. Quad Extraction
     let (n, unrefined) = {
         let engine = crate::threshold::ThresholdEngine::from_config(config);
         let tile_stats = engine.compute_tile_stats(&state.arena, &sharpened_img);
-        engine.apply_threshold_with_map(
-            &state.arena,
-            &sharpened_img,
-            &tile_stats,
-            binarized,
-            threshold_map,
-        );
+        match binarized.as_deref_mut() {
+            Some(binarized) => engine.apply_threshold_with_map(
+                &state.arena,
+                &sharpened_img,
+                &tile_stats,
+                binarized,
+                threshold_map,
+            ),
+            None => engine.apply_threshold_map_only(
+                &state.arena,
+                &sharpened_img,
+                &tile_stats,
+                threshold_map,
+            ),
+        }
 
         // 2. Segmentation (SIMD Fused RLE + LSL)
         let label_result = crate::simd_ccl_fusion::label_components_lsl(
@@ -483,7 +500,9 @@ fn run_detection_pipeline<'ctx>(
 
     let telemetry = if debug_telemetry {
         Some(crate::batch::TelemetryPayload {
-            binarized_ptr: binarized.as_ptr(),
+            binarized_ptr: binarized
+                .as_deref()
+                .map_or(std::ptr::null(), <[u8]>::as_ptr),
             threshold_map_ptr: threshold_map.as_ptr(),
             subpixel_jitter_ptr: jitter_ptr,
             num_jitter,
