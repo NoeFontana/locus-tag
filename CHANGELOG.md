@@ -7,6 +7,31 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **Per-instance comparative benchmarking + visualization** (`tools/bench/compare/`,
+  Python-only). Compares locus-tag against tuned OpenCV ArUco / pupil_apriltags
+  **image-by-image and per tag instance** to find which library wins on which
+  strata and which specific images are Locus's improvement levers. New CLI:
+  - `bench compare-instances` — end-to-end: runs four series (`locus:tuned`,
+    `locus:shipped`, `opencv_aruco:tuned`, `apriltag:tuned`) from a `bench tune`
+    `pareto/` dir across the render-tag datasets → per-instance report → rerun
+    deep-dive. Split into `bench compare-generate` (the combined Tier-1 parquet)
+    and `bench compare-report-instances` for iteration.
+  - Analysis is **polars**-native (`compare/analysis.py`): per-instance winners,
+    per-stratum win-rates, and a worst-Locus lever table. Figures are
+    matplotlib→**SVG** (`plots/{winrate_heatmap,error_ecdf,error_violin,
+    paired_scatter,delta_hist}.py`) with a two-section HTML bundle + a docs
+    markdown report. A **rerun** deep-dive (`compare/deepdive.py`) overlays each
+    library's corners (separate, toggleable entity paths) + GT + per-library
+    error scalars on a scrubbable timeline over the worst-Locus cases.
+  - Reuses the tuning wrappers (`from_params`), `Collector`/records, `pareto/*.json`
+    and stratification; the tune executor's frame loop was extracted to
+    `drive_cell` + `run_search_records` (same crash-isolation) rather than duplicated.
+  - Fixed a cross-library measurement bug: pupil_apriltags labels corners in a
+    different order than the GT/Locus/OpenCV convention (a fixed `[1,0,3,2]` relabel,
+    verified sub-pixel), so the collector's corner RMSE was ~200 px for apriltag and
+    incomparable. `AprilTagWrapper` now normalises corners with that fixed adapter;
+    the metric stays **order-preserving** (a genuine wrong-orientation detection must
+    still surface as a large error), only the deterministic convention offset is fixed.
 - **Parallel tuning + comparative-benchmarking harness** (`tools/bench/tune/`,
   Python-only, no Rust or runtime change). New CLI subcommands drive it:
   - `bench sweep` — fan a declarative search space (`tune/spaces/*.json`) for

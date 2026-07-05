@@ -341,7 +341,12 @@ class Collector:
     def _errors(
         self, det: dict[str, Any], gt: TagGroundTruth, intrinsics: Any | None
     ) -> tuple[float, float, float]:
-        # Reprojection error: per-corner RMS in pixels.
+        # Corner RMS error in pixels, **order-preserving**: corner i of the
+        # detection is compared to corner i of the GT. Cross-library comparability
+        # is the wrappers' job — each adapter reorders its detector's corners into
+        # the GT convention (see ``utils.py`` corner-order adapters). We must NOT
+        # order-invariantly minimise here: that would hide a genuine wrong-
+        # orientation detection (which corrupts pose sign / decode orientation).
         det_corners = np.asarray(det["corners"], dtype=np.float64)
         gt_corners = np.asarray(gt.corners, dtype=np.float64)
         repro = float(np.sqrt(np.mean(np.sum((det_corners - gt_corners) ** 2, axis=1))))

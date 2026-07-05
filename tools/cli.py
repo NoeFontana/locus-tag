@@ -1469,5 +1469,215 @@ def bench_compare_report(
     typer.echo(f"Report → {index_path}")
 
 
+_RENDER_TAG_CONFIGS = [
+    "locus_v1_tag36h11_640x480",
+    "locus_v1_tag36h11_1280x720",
+    "locus_v1_tag36h11_1920x1080",
+    "locus_v1_tag36h11_3840x2160",
+]
+
+
+def _parse_space_overrides(space: list[str]) -> dict[str, str]:
+    overrides: dict[str, str] = {}
+    for item in space:
+        if "=" not in item:
+            raise typer.BadParameter(f"--space must be lib=ref, got {item!r}")
+        lib, ref = item.split("=", 1)
+        overrides[lib] = ref
+    return overrides
+
+
+@bench_app.command("compare-generate")
+def bench_compare_generate(
+    pareto_dir: Path = typer.Option(..., help="Directory of pareto/<library>.json frontiers"),
+    hub_config: list[str] = typer.Option(
+        _RENDER_TAG_CONFIGS, help="Hub dataset config(s), repeatable"
+    ),
+    variant: str = typer.Option("both", help="both | tuned | shipped"),
+    shipped_profile: str = typer.Option(
+        "high_accuracy", help="Shipped Locus profile for Section B"
+    ),
+    space: list[str] = typer.Option([], help="Per-library space override: lib=ref (repeatable)"),
+    family: str = typer.Option("AprilTag36h11", help="Tag family"),
+    data_dir: Path = typer.Option(Path("tests/data/hub_cache"), help="Hub cache directory"),
+    out: Path = typer.Option(..., help="Output directory (writes instance_records.parquet)"),
+    limit: int | None = typer.Option(None, help="Limit frames per dataset"),
+    skip: int = typer.Option(0, help="Skip first N frames per dataset"),
+    workers: int | None = typer.Option(None, help="Parallel workers (default cpu_count)"),
+):
+    """Run the tuned + shipped series and write one combined per-instance parquet."""
+    from tools.bench.compare.generate import generate_instance_records, load_chosen_configs
+    from tools.bench.tune.orchestrate import resolve_family
+
+    fam = resolve_family(family)
+    configs = load_chosen_configs(
+        pareto_dir,
+        variant=variant,  # pyright: ignore[reportArgumentType]
+        shipped_profile=shipped_profile,
+        space_overrides=_parse_space_overrides(space),
+    )
+    out_path = out / "instance_records.parquet"
+    n = generate_instance_records(
+        configs=configs,
+        datasets=list(hub_config),
+        family=fam,
+        data_dir=data_dir,
+        out_path=out_path,
+        limit=limit,
+        skip=skip,
+        workers=workers,
+    )
+    typer.echo(f"Wrote {n} per-instance records ({len(configs)} series) → {out_path}")
+
+
+@bench_app.command("compare-report-instances")
+def bench_compare_report_instances(
+    records: Path = typer.Option(..., help="instance_records.parquet from compare-generate"),
+    out: Path = typer.Option(..., help="Output directory for the report bundle"),
+    metric: str = typer.Option("repro", help="Lever metric: repro | trans | rot"),
+    top_n: int = typer.Option(25, help="Worst-Locus instances per section"),
+    fmt: str = typer.Option("svg", help="Figure format: svg | png"),
+    markdown_out: Path | None = typer.Option(None, help="Also write a docs markdown report here"),
+    date: str = typer.Option("2026-07-05", help="Report date (reproducible, not now())"),
+    title: str = typer.Option("Per-instance comparative benchmark", help="Report title"),
+    pareto_dir: Path | None = typer.Option(
+        None, help="Pareto dir (for the rerun deep-dive configs)"
+    ),
+    data_dir: Path = typer.Option(
+        Path("tests/data/hub_cache"), help="Hub cache (for the deep-dive)"
+    ),
+    family: str = typer.Option("AprilTag36h11", help="Tag family (for the deep-dive)"),
+    emit_rerun: bool = typer.Option(
+        True, help="Emit the rerun .rrd deep-dive of worst-Locus cases"
+    ),
+    max_deepdive: int = typer.Option(24, help="Max instances in the deep-dive recording"),
+):
+    """Build the per-instance report (tables + SVG figures) and rerun deep-dive."""
+    from tools.bench.compare import analysis as A
+    from tools.bench.compare.deepdive import emit_deepdive
+    from tools.bench.compare.generate import load_chosen_configs
+    from tools.bench.compare.report_instances import generate
+    from tools.bench.tune.orchestrate import resolve_family
+
+    index_path = generate(
+        records_path=records,
+        out_dir=out,
+        metric=metric,
+        top_n=top_n,
+        fmt=fmt,
+        markdown_out=markdown_out,
+        date=date,
+        title=title,
+    )
+    typer.echo(f"Report → {index_path}")
+
+    if emit_rerun and pareto_dir is not None:
+        long = A.load_instances(records)
+        wide, series = A.build_wide(long)
+        competitors = sorted(s for s in series if not s.startswith("locus:"))
+        section = A.compare_section(
+            wide, locus_series="locus:tuned", competitors=competitors, metric=metric
+        )
+        worst = A.worst_locus(section, metric=metric, top_n=max_deepdive)
+        best = A.best_locus(section, metric=metric, top_n=3)
+        configs = load_chosen_configs(pareto_dir, variant="both")
+        rrd = emit_deepdive(
+            worst_df=worst,
+            best_df=best,
+            configs=configs,
+            data_dir=data_dir,
+            out_dir=out,
+            family=resolve_family(family),
+            max_deepdive=max_deepdive,
+        )
+        if rrd is not None:
+            typer.echo(f"Deep-dive → {rrd}")
+
+
+@bench_app.command("compare-instances")
+def bench_compare_instances(
+    pareto_dir: Path = typer.Option(..., help="Directory of pareto/<library>.json frontiers"),
+    hub_config: list[str] = typer.Option(
+        _RENDER_TAG_CONFIGS, help="Hub dataset config(s), repeatable"
+    ),
+    variant: str = typer.Option("both", help="both | tuned | shipped"),
+    shipped_profile: str = typer.Option(
+        "high_accuracy", help="Shipped Locus profile for Section B"
+    ),
+    space: list[str] = typer.Option([], help="Per-library space override: lib=ref (repeatable)"),
+    family: str = typer.Option("AprilTag36h11", help="Tag family"),
+    data_dir: Path = typer.Option(Path("tests/data/hub_cache"), help="Hub cache directory"),
+    out: Path = typer.Option(..., help="Output directory (parquet + report + rerun)"),
+    metric: str = typer.Option("repro", help="Lever metric: repro | trans | rot"),
+    top_n: int = typer.Option(25, help="Worst-Locus instances per section"),
+    fmt: str = typer.Option("svg", help="Figure format: svg | png"),
+    markdown_out: Path | None = typer.Option(None, help="Also write a docs markdown report here"),
+    date: str = typer.Option("2026-07-05", help="Report date"),
+    limit: int | None = typer.Option(None, help="Limit frames per dataset"),
+    skip: int = typer.Option(0, help="Skip first N frames per dataset"),
+    workers: int | None = typer.Option(None, help="Parallel workers"),
+    emit_rerun: bool = typer.Option(True, help="Emit the rerun .rrd deep-dive"),
+    max_deepdive: int = typer.Option(24, help="Max instances in the deep-dive"),
+):
+    """End-to-end: generate per-instance records → report + figures → rerun deep-dive."""
+    from tools.bench.compare import analysis as A
+    from tools.bench.compare.deepdive import emit_deepdive
+    from tools.bench.compare.generate import generate_instance_records, load_chosen_configs
+    from tools.bench.compare.report_instances import generate
+    from tools.bench.tune.orchestrate import resolve_family
+
+    fam = resolve_family(family)
+    configs = load_chosen_configs(
+        pareto_dir,
+        variant=variant,  # pyright: ignore[reportArgumentType]
+        shipped_profile=shipped_profile,
+        space_overrides=_parse_space_overrides(space),
+    )
+    records_path = out / "instance_records.parquet"
+    n = generate_instance_records(
+        configs=configs,
+        datasets=list(hub_config),
+        family=fam,
+        data_dir=data_dir,
+        out_path=records_path,
+        limit=limit,
+        skip=skip,
+        workers=workers,
+    )
+    typer.echo(f"Wrote {n} per-instance records ({len(configs)} series)")
+
+    index_path = generate(
+        records_path=records_path,
+        out_dir=out,
+        metric=metric,
+        top_n=top_n,
+        fmt=fmt,
+        markdown_out=markdown_out,
+        date=date,
+    )
+    typer.echo(f"Report → {index_path}")
+
+    if emit_rerun:
+        long = A.load_instances(records_path)
+        wide, series = A.build_wide(long)
+        competitors = sorted(s for s in series if not s.startswith("locus:"))
+        section = A.compare_section(
+            wide, locus_series="locus:tuned", competitors=competitors, metric=metric
+        )
+        worst = A.worst_locus(section, metric=metric, top_n=max_deepdive)
+        best = A.best_locus(section, metric=metric, top_n=3)
+        rrd = emit_deepdive(
+            worst_df=worst,
+            best_df=best,
+            configs=configs,
+            data_dir=data_dir,
+            out_dir=out,
+            family=fam,
+            max_deepdive=max_deepdive,
+        )
+        if rrd is not None:
+            typer.echo(f"Deep-dive → {rrd}")
+
+
 if __name__ == "__main__":
     app()
