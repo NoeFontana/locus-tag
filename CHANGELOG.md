@@ -17,8 +17,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     isolated to one errored cell instead of failing the sweep.
   - `bench tune` — select the Pareto frontier over *(maximize recall, minimize
     p99 pose error)* under hard precision/latency gates, then verify latency
-    **serially** (production threading — the only trustworthy timing) and guard
-    against regressing the render-tag tail/mean vs shipped Locus profiles. Writes
+    **serially** (each frontier config in its own un-pinned subprocess:
+    production threading for trustworthy timing, plus native-crash isolation so a
+    corrupting competitor config can't take down the tune) and guard against
+    regressing the render-tag tail/mean vs shipped Locus profiles. Writes
     `pareto/<library>.json`.
   - `bench compare-report` — knob-sensitivity heatmap (which lever moves which
     metric) + per-stratum tuned-Locus-vs-best-competitor deltas + HTML bundle.
