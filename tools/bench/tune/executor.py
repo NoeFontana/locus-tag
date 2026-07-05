@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import multiprocessing
 import os
+import sys
 import time
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -36,25 +37,18 @@ from tools.bench.tune.aggregate import summarize
 from tools.bench.tune.space import SearchSpace
 from tools.bench.utils import (
     HUB_CACHE_DIR,
+    WRAPPER_BY_LIBRARY,
     DatasetLoader,
     HubDatasetLoader,
-    LibraryWrapper,
-    LocusWrapper,
-    OpenCVWrapper,
     TagAxes,
     TagGroundTruth,
 )
-from tools.bench.utils import AprilTagWrapper as _AprilTagWrapper
 
 _R = TypeVar("_R")
 _Key = tuple[str, str, str]
 
 # library_id -> wrapper class, so a cell can rebuild the right detector.
-_WRAPPERS: dict[str, type[LibraryWrapper]] = {
-    "locus": LocusWrapper,
-    "opencv_aruco": OpenCVWrapper,
-    "apriltag": _AprilTagWrapper,
-}
+_WRAPPERS = WRAPPER_BY_LIBRARY
 
 
 @dataclass(frozen=True)
@@ -124,17 +118,7 @@ def run_cell(cell: Cell) -> CellResult:
     try:
         return _run_cell_inner(cell)
     except Exception as exc:  # noqa: BLE001 — a bad cell must not kill the sweep
-        return CellResult(
-            library=cell.library,
-            param_hash=cell.param_hash,
-            dataset=cell.dataset,
-            param_values=cell.param_values,
-            overall={},
-            per_stratum={},
-            latency_valid=False,
-            n_frames=0,
-            error=f"{type(exc).__name__}: {exc}",
-        )
+        return _error_result(cell, f"{type(exc).__name__}: {exc}")
 
 
 def drive_cell(cell: Cell) -> tuple[Collector, int]:
@@ -243,12 +227,21 @@ def _collect_cell(cell: Cell) -> list[ObservationRecord]:
     """Run one cell and return its raw Tier-1 records (per-instance comparison path).
 
     Python errors collapse to an empty record list so a bad cell doesn't abort the
-    batch; native crashes are handled by the isolation layer (its ``on_crash``).
+    batch (native crashes are handled by the isolation layer's ``on_crash``), but a
+    warning is emitted so the failure is not silent — and the caller
+    (``generate_instance_records``) refuses to write a parquet where some cells are
+    empty while others succeeded, since that would score the failed series as
+    all-missed.
     """
     try:
         collector, _ = drive_cell(cell)
         return collector.records
-    except Exception:  # noqa: BLE001 — a bad cell must not kill the batch
+    except Exception as exc:  # noqa: BLE001 — a bad cell must not kill the batch
+        print(  # noqa: T201 — surfaced to the parent's stderr from the worker
+            f"WARN: compare cell {cell.library}:{cell.profile_label}/{cell.dataset} failed: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return []
 
 

@@ -18,29 +18,26 @@ import numpy as np
 import polars as pl
 
 from tools.bench.compare.generate import ChosenConfig
+from tools.bench.matching import MATCH_DISTANCE_THRESHOLD_PX
+from tools.bench.metrics import corner_rmse_px
+from tools.bench.plots._compare_style import series_color_map
 from tools.bench.utils import (
-    AprilTagWrapper,
+    WRAPPER_BY_LIBRARY,
     HubDatasetLoader,
     LibraryWrapper,
-    LocusWrapper,
-    OpenCVWrapper,
     rotation_error_deg,
 )
 
-_WRAPPERS: dict[str, type[LibraryWrapper]] = {
-    "locus": LocusWrapper,
-    "opencv_aruco": OpenCVWrapper,
-    "apriltag": AprilTagWrapper,
-}
-
-# Fixed RGB per series/GT for the overlays (0–255).
+# GT overlay color (0–255). Per-series overlay colors are derived from the shared
+# report palette (series_color_map) so a library reads the same color in the SVG
+# report and the rerun deep-dive.
 GT_COLOR = [0, 200, 0]
-_SERIES_RGB = {
-    "locus:tuned": [255, 140, 0],  # orange
-    "locus:shipped": [0, 190, 255],  # cyan
-    "opencv_aruco:tuned": [30, 90, 255],  # blue
-    "apriltag:tuned": [220, 0, 220],  # magenta
-}
+
+
+def _series_rgb(series: list[str]) -> dict[str, list[int]]:
+    return {
+        s: [int(round(c * 255)) for c in rgba[:3]] for s, rgba in series_color_map(series).items()
+    }
 
 
 def _closed(corners: np.ndarray) -> list[list[float]]:
@@ -65,17 +62,27 @@ def _build_wrappers(configs: list[ChosenConfig], family: int) -> dict[str, Libra
     wrappers: dict[str, LibraryWrapper] = {}
     for c in configs:
         series = f"{c.library}:{c.profile_label}"
-        wrappers[series] = _WRAPPERS[c.library].from_params(
+        wrappers[series] = WRAPPER_BY_LIBRARY[c.library].from_params(
             family=family, params=c.param_values, space=c.space
         )
     return wrappers
 
 
 def _nearest_detection(dets: list[dict], tag_id: int, gt_center: np.ndarray) -> dict | None:
+    """The same-id detection matched to this GT, or None if none within threshold.
+
+    Uses the same ``MATCH_DISTANCE_THRESHOLD_PX`` as the Collector that produced the
+    parquet, so the deep-dive's focus metric agrees with the metric row that selected
+    the instance (a threshold-less nearest pick could log a "matched" error for a
+    detection the parquet counted as missed).
+    """
     same_id = [d for d in dets if int(d["id"]) == tag_id]
     if not same_id:
         return None
-    return min(same_id, key=lambda d: float(np.linalg.norm(np.asarray(d["center"]) - gt_center)))
+    best = min(same_id, key=lambda d: float(np.linalg.norm(np.asarray(d["center"]) - gt_center)))
+    if float(np.linalg.norm(np.asarray(best["center"]) - gt_center)) >= MATCH_DISTANCE_THRESHOLD_PX:
+        return None
+    return best
 
 
 def emit_deepdive(
@@ -99,13 +106,21 @@ def emit_deepdive(
         return None
 
     wrappers = _build_wrappers(configs, family)
+    series_rgb = _series_rgb(list(wrappers))
     loaders: dict[str, Any] = {}
+    img_cache: dict[tuple[str, str], np.ndarray | None] = {}
     det_cache: dict[tuple[str, str, str], list[dict]] = {}
 
     def dataset(name: str) -> Any:
         if name not in loaders:
             loaders[name] = HubDatasetLoader(root=data_dir).load_dataset(name)
         return loaders[name]
+
+    def image(ds_name: str, image_id: str, ds: Any) -> np.ndarray | None:
+        key = (ds_name, image_id)
+        if key not in img_cache:
+            img_cache[key] = cv2.imread(str(ds.images_dir / image_id), cv2.IMREAD_GRAYSCALE)
+        return img_cache[key]
 
     def detections(
         series: str, ds_name: str, image_id: str, img: np.ndarray, ds: Any
@@ -119,8 +134,7 @@ def emit_deepdive(
     rr.init("locus_compare_deepdive", spawn=False)
     for i, inst in enumerate(selected):
         ds = dataset(inst["dataset"])
-        img_path = ds.images_dir / inst["image_id"]
-        img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+        img = image(inst["dataset"], inst["image_id"], ds)
         if img is None:
             continue
         rr.set_time(timeline="frame_idx", sequence=i)
@@ -150,15 +164,14 @@ def emit_deepdive(
 
         for series in wrappers:
             dets = detections(series, inst["dataset"], inst["image_id"], img, ds)
-            color = _SERIES_RGB.get(series, [200, 200, 200])
+            color = series_rgb.get(series, [200, 200, 200])
             strips = [_closed(np.asarray(d["corners"], dtype=np.float64)) for d in dets]
             path = f"world/camera/{series.replace(':', '_')}_corners"
             rr.log(path, rr.LineStrips2D(strips, colors=[color], radii=1.0))
 
             focus = _nearest_detection(dets, tag_id, gt_center)
             if focus is not None and gt_corners is not None:
-                dc = np.asarray(focus["corners"], dtype=np.float64)
-                rmse = float(np.sqrt(np.mean(np.sum((dc - gt_corners) ** 2, axis=1))))
+                rmse = corner_rmse_px(focus["corners"], gt_corners)
                 rr.log(f"metrics/{series}/corner_rmse_px", rr.Scalars([rmse]))
                 dp = focus.get("pose")
                 if dp is not None and gt_pose is not None:

@@ -52,9 +52,12 @@ Split the two phases (same pattern as `bench tune` ↔ `bench compare-report`):
 
 ```bash
 # 1. generate the combined parquet once (the slow part)
-bench compare-generate --pareto-dir out/tune/pareto --out out/compare
+LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \
+uv run --group bench python tools/cli.py bench compare-generate \
+  --pareto-dir out/tune/pareto --out out/compare
 # 2. re-render the report / try metrics without re-detecting
-bench compare-report-instances --records out/compare/instance_records.parquet \
+uv run --group bench python tools/cli.py bench compare-report-instances \
+  --records out/compare/instance_records.parquet \
   --out out/compare --metric trans --pareto-dir out/tune/pareto
 ```
 

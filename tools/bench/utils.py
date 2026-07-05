@@ -1099,6 +1099,15 @@ class AprilTagWrapper(LibraryWrapper):
         return detections, None
 
 
+# Single library-id → wrapper-class registry, shared by the tuning executor and the
+# comparison deep-dive so a new/renamed detector is wired in exactly one place.
+WRAPPER_BY_LIBRARY: dict[str, type[LibraryWrapper]] = {
+    "locus": LocusWrapper,
+    "opencv_aruco": OpenCVWrapper,
+    "apriltag": AprilTagWrapper,
+}
+
+
 def generate_synthetic_image(
     num_tags: int, res: tuple[int, int], noise_sigma: float = 0.0, family: int | None = None
 ) -> tuple[np.ndarray, list[TagGroundTruth]]:

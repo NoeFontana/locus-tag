@@ -155,6 +155,24 @@ def generate_instance_records(
         configs, datasets=datasets, family=family, data_dir=str(data_dir), limit=limit, skip=skip
     )
     record_lists = run_search_records(cells, workers=workers)
+
+    # A cell that ran always emits at least a missed_gt/matched row per GT tag. So an
+    # empty cell means it errored or crashed. If SOME cells are empty while others
+    # produced records, the empty series would be silently scored as all-missed —
+    # refuse to write a corrupted comparison rather than alias a failure to a miss.
+    empty = [i for i, records in enumerate(record_lists) if not records]
+    nonempty = [i for i, records in enumerate(record_lists) if records]
+    if empty and nonempty:
+        failed = sorted(
+            {(cells[i].library, cells[i].profile_label, cells[i].dataset) for i in empty}
+        )
+        raise ValueError(
+            f"{len(failed)} (series, dataset) cell(s) produced no records while others "
+            f"succeeded — a crash/error would silently score them as all-missed. "
+            f"Failed cells: {failed}. Refusing to write a corrupted comparison parquet "
+            f"(see the WARN lines above for the underlying errors)."
+        )
+
     all_records = [record for records in record_lists for record in records]
 
     provenance = build_provenance()

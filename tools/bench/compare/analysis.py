@@ -47,6 +47,13 @@ def load_instances(parquet_path: Path | str) -> pl.DataFrame:
     ground-truth tag instance (Collector emits exactly one such row per GT tag).
     """
     df = pl.read_parquet(parquet_path)
+    # Tier-1 records store math.nan (not null) for a missed/pose-less error. Convert
+    # to null so polars aggregations skip them: NaN would otherwise poison medians/
+    # quantiles (accuracy table) and be picked as a spurious "best" by min_horizontal
+    # (NaN==NaN is True in polars). null is the correct "absent value" representation.
+    df = df.with_columns(
+        pl.col(c).fill_nan(None) for c in ("repro_err_px", "trans_err_m", "rot_err_deg")
+    )
     df = df.with_columns((pl.col("binary") + pl.lit(":") + pl.col("profile")).alias("series"))
     stratum = stratum_id_series(
         df["resolution_h"].to_list(),
@@ -86,7 +93,11 @@ def _best_of(value_cols: list[str], names: list[str]) -> tuple[pl.Expr, pl.Expr]
     """(best value, series-name-of-best) across ``value_cols`` (min, null-skipping).
 
     Ties go to the earliest series in ``names``. All-null ⇒ null value and name.
+    Empty ``value_cols`` (no competitors) ⇒ null value and name — ``min_horizontal``
+    of an empty list is an error, so guard it here for the single-library case.
     """
+    if not value_cols:
+        return pl.lit(None, dtype=pl.Float64), pl.lit(None, dtype=pl.Utf8)
     best_val = pl.min_horizontal([pl.col(c) for c in value_cols])
     name_expr: pl.Expr = pl.lit(None, dtype=pl.Utf8)
     # Build nested when/otherwise so the FIRST-listed series wins ties.

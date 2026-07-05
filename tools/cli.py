@@ -1487,6 +1487,50 @@ def _parse_space_overrides(space: list[str]) -> dict[str, str]:
     return overrides
 
 
+def _emit_compare_deepdive(
+    *,
+    records_path: Path,
+    configs: list[Any],
+    out: Path,
+    data_dir: Path,
+    family: int,
+    metric: str,
+    max_deepdive: int,
+) -> None:
+    """Shared rerun deep-dive step for both compare CLI entry points.
+
+    Variant-aware (picks the available Locus series, tuned preferred) and guarded
+    against the single-library case (no competitor → nothing to compare against),
+    so it never crashes after the report has already been written.
+    """
+    from tools.bench.compare import analysis as A
+    from tools.bench.compare.deepdive import emit_deepdive
+
+    long = A.load_instances(records_path)
+    wide, series = A.build_wide(long)
+    competitors = sorted(s for s in series if not s.startswith("locus:"))
+    locus_series = next((s for s in ("locus:tuned", "locus:shipped") if s in series), None)
+    if locus_series is None or not competitors:
+        typer.echo("  (skipping deep-dive: need a Locus series and ≥1 competitor)")
+        return
+    section = A.compare_section(
+        wide, locus_series=locus_series, competitors=competitors, metric=metric
+    )
+    worst = A.worst_locus(section, metric=metric, top_n=max_deepdive)
+    best = A.best_locus(section, metric=metric, top_n=3)
+    rrd = emit_deepdive(
+        worst_df=worst,
+        best_df=best,
+        configs=configs,
+        data_dir=data_dir,
+        out_dir=out,
+        family=family,
+        max_deepdive=max_deepdive,
+    )
+    if rrd is not None:
+        typer.echo(f"Deep-dive → {rrd}")
+
+
 @bench_app.command("compare-generate")
 def bench_compare_generate(
     pareto_dir: Path = typer.Option(..., help="Directory of pareto/<library>.json frontiers"),
@@ -1553,8 +1597,6 @@ def bench_compare_report_instances(
     max_deepdive: int = typer.Option(24, help="Max instances in the deep-dive recording"),
 ):
     """Build the per-instance report (tables + SVG figures) and rerun deep-dive."""
-    from tools.bench.compare import analysis as A
-    from tools.bench.compare.deepdive import emit_deepdive
     from tools.bench.compare.generate import load_chosen_configs
     from tools.bench.compare.report_instances import generate
     from tools.bench.tune.orchestrate import resolve_family
@@ -1572,26 +1614,15 @@ def bench_compare_report_instances(
     typer.echo(f"Report → {index_path}")
 
     if emit_rerun and pareto_dir is not None:
-        long = A.load_instances(records)
-        wide, series = A.build_wide(long)
-        competitors = sorted(s for s in series if not s.startswith("locus:"))
-        section = A.compare_section(
-            wide, locus_series="locus:tuned", competitors=competitors, metric=metric
-        )
-        worst = A.worst_locus(section, metric=metric, top_n=max_deepdive)
-        best = A.best_locus(section, metric=metric, top_n=3)
-        configs = load_chosen_configs(pareto_dir, variant="both")
-        rrd = emit_deepdive(
-            worst_df=worst,
-            best_df=best,
-            configs=configs,
+        _emit_compare_deepdive(
+            records_path=records,
+            configs=load_chosen_configs(pareto_dir, variant="both"),
+            out=out,
             data_dir=data_dir,
-            out_dir=out,
             family=resolve_family(family),
+            metric=metric,
             max_deepdive=max_deepdive,
         )
-        if rrd is not None:
-            typer.echo(f"Deep-dive → {rrd}")
 
 
 @bench_app.command("compare-instances")
@@ -1620,8 +1651,6 @@ def bench_compare_instances(
     max_deepdive: int = typer.Option(24, help="Max instances in the deep-dive"),
 ):
     """End-to-end: generate per-instance records → report + figures → rerun deep-dive."""
-    from tools.bench.compare import analysis as A
-    from tools.bench.compare.deepdive import emit_deepdive
     from tools.bench.compare.generate import generate_instance_records, load_chosen_configs
     from tools.bench.compare.report_instances import generate
     from tools.bench.tune.orchestrate import resolve_family
@@ -1658,25 +1687,15 @@ def bench_compare_instances(
     typer.echo(f"Report → {index_path}")
 
     if emit_rerun:
-        long = A.load_instances(records_path)
-        wide, series = A.build_wide(long)
-        competitors = sorted(s for s in series if not s.startswith("locus:"))
-        section = A.compare_section(
-            wide, locus_series="locus:tuned", competitors=competitors, metric=metric
-        )
-        worst = A.worst_locus(section, metric=metric, top_n=max_deepdive)
-        best = A.best_locus(section, metric=metric, top_n=3)
-        rrd = emit_deepdive(
-            worst_df=worst,
-            best_df=best,
+        _emit_compare_deepdive(
+            records_path=records_path,
             configs=configs,
+            out=out,
             data_dir=data_dir,
-            out_dir=out,
             family=fam,
+            metric=metric,
             max_deepdive=max_deepdive,
         )
-        if rrd is not None:
-            typer.echo(f"Deep-dive → {rrd}")
 
 
 if __name__ == "__main__":

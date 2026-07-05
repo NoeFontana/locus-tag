@@ -9,6 +9,7 @@ rendering (no pandas); figures via the ``tools/bench/plots`` modules → SVG.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import polars as pl
@@ -105,57 +106,56 @@ def generate(
     winrate.write_parquet(out_dir / "winrate_by_stratum.parquet")
     accuracy = A.accuracy_by_resolution(long, series)
 
-    # Shared figures (all series).
-    shared: list[tuple[str, str]] = []
-    shared.append(
+    # Shared figures (all series): (caption, plot fn, data frame, filename stem, metric).
+    fig_specs = [
         (
             "Detection win-rate by stratum",
-            winrate_heatmap.plot(
-                winrate, out_dir / f"winrate_detection.{fmt}", metric="detection"
-            ).name,
-        )
-    )
-    shared.append(
+            winrate_heatmap.plot,
+            winrate,
+            "winrate_detection",
+            "detection",
+        ),
         (
             f"{metric} win-rate by stratum",
-            winrate_heatmap.plot(winrate, out_dir / f"winrate_{metric}.{fmt}", metric=metric).name,
-        )
-    )
-    shared.append(
-        (
-            "Corner-error ECDF by stratum",
-            error_ecdf.plot(long, out_dir / f"ecdf_repro.{fmt}", metric="repro").name,
-        )
-    )
-    shared.append(
-        (
-            "Translation-error ECDF by stratum",
-            error_ecdf.plot(long, out_dir / f"ecdf_trans.{fmt}", metric="trans").name,
-        )
-    )
-    shared.append(
-        (
-            f"{metric} distribution (violin)",
-            error_violin.plot(long, out_dir / f"violin_{metric}.{fmt}", metric=metric).name,
-        )
-    )
+            winrate_heatmap.plot,
+            winrate,
+            f"winrate_{metric}",
+            metric,
+        ),
+        ("Corner-error ECDF by stratum", error_ecdf.plot, long, "ecdf_repro", "repro"),
+        ("Translation-error ECDF by stratum", error_ecdf.plot, long, "ecdf_trans", "trans"),
+        (f"{metric} distribution (violin)", error_violin.plot, long, f"violin_{metric}", metric),
+    ]
+    shared = [
+        (caption, plot_fn(data, out_dir / f"{stem}.{fmt}", metric=m).name)
+        for caption, plot_fn, data, stem, m in fig_specs
+    ]
 
-    section_html: list[str] = []
+    # Per-section data, computed ONCE and consumed by both the HTML and markdown
+    # renderers (no recompute, no risk of the two paths selecting different columns).
+    sections_data: list[_SectionData] = []
     for sid, locus_series, competitors in _sections(series):
-        section = A.compare_section(
+        primary = A.compare_section(
             wide, locus_series=locus_series, competitors=competitors, metric=metric
         )
-        worst = A.worst_locus(section, metric=metric, top_n=top_n)
-        worst.write_parquet(out_dir / f"worst_locus_{sid}.parquet")
-        scatter = paired_scatter.plot(section, out_dir / f"scatter_{sid}.{fmt}", metric=metric).name
-        dhist = delta_hist.plot(section, out_dir / f"delta_{sid}.{fmt}", metric=metric).name
-        worst_show = worst.select([c for c in _WORST_COLS if c in worst.columns])
-        section_html.append(
-            f"<h2>Section {sid.upper()} — {locus_series} vs {', '.join(competitors)}</h2>"
-            f"<h3>Where Locus most underperforms ({metric}) — improvement levers</h3>"
-            f"{_pl_to_html(worst_show)}"
-            f"<img src='{scatter}' style='max-width:100%'>"
-            f"<img src='{dhist}' style='max-width:100%'>"
+        scatter = paired_scatter.plot(primary, out_dir / f"scatter_{sid}.{fmt}", metric=metric).name
+        dhist = delta_hist.plot(primary, out_dir / f"delta_{sid}.{fmt}", metric=metric).name
+        # Levers across ALL error metrics — corner AND pose (trans/rot) — so a
+        # pose-tail regression can't hide behind a corner-only (repro) ranking.
+        worst_by_metric: dict[str, pl.DataFrame] = {}
+        for m in A.ERROR_METRICS:
+            section_m = (
+                primary
+                if m == metric
+                else A.compare_section(
+                    wide, locus_series=locus_series, competitors=competitors, metric=m
+                )
+            )
+            worst = A.worst_locus(section_m, metric=m, top_n=top_n)
+            worst_by_metric[m] = worst.select([c for c in _WORST_COLS if c in worst.columns])
+        worst_by_metric[metric].write_parquet(out_dir / f"worst_locus_{sid}.parquet")
+        sections_data.append(
+            _SectionData(sid, locus_series, competitors, scatter, dhist, worst_by_metric)
         )
 
     index = out_dir / "index.html"
@@ -166,7 +166,8 @@ def generate(
             configs=configs,
             shared=shared,
             accuracy_html=_pl_to_html(accuracy.select(_ACC_COLS)),
-            section_html=section_html,
+            sections=sections_data,
+            primary_metric=metric,
         )
     )
 
@@ -178,13 +179,22 @@ def generate(
                 date=date,
                 configs=configs,
                 accuracy=accuracy.select(_ACC_COLS),
-                series=series,
-                wide=wide,
-                metric=metric,
-                top_n=top_n,
+                sections=sections_data,
             )
         )
     return index
+
+
+@dataclass
+class _SectionData:
+    """One report section, computed once and rendered to both HTML and markdown."""
+
+    sid: str
+    locus_series: str
+    competitors: list[str]
+    scatter: str  # figure filename
+    dhist: str  # figure filename
+    worst_by_metric: dict[str, pl.DataFrame]  # metric -> worst-Locus table (col-selected)
 
 
 def _render_html(
@@ -194,7 +204,8 @@ def _render_html(
     configs: list[dict],
     shared: list[tuple[str, str]],
     accuracy_html: str,
-    section_html: list[str],
+    sections: list[_SectionData],
+    primary_metric: str,
 ) -> str:
     cfg_rows = "".join(
         f"<li><b>{c['library']}:{c['profile']}</b> — {c['param_hash']} "
@@ -203,6 +214,18 @@ def _render_html(
     )
     shared_imgs = "\n".join(
         f"<h3>{cap}</h3><img src='{fn}' style='max-width:100%'>" for cap, fn in shared
+    )
+    section_html = "".join(
+        f"<h2>Section {s.sid.upper()} — {s.locus_series} vs {', '.join(s.competitors)}</h2>"
+        + "".join(
+            f"<h4>Improvement levers by {m} — where Locus underperforms</h4>"
+            f"{_pl_to_html(s.worst_by_metric[m])}"
+            for m in s.worst_by_metric
+        )
+        + f"<h4>{primary_metric}: Locus vs best competitor</h4>"
+        + f"<img src='{s.scatter}' style='max-width:100%'>"
+        + f"<img src='{s.dhist}' style='max-width:100%'>"
+        for s in sections
     )
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><title>{title}</title>
@@ -220,7 +243,7 @@ def _render_html(
 {accuracy_html}
 <h2>Distributions (all series)</h2>
 {shared_imgs}
-{"".join(section_html)}
+{section_html}
 <h2>Provenance</h2>
 <pre>{provenance}</pre>
 </body></html>
@@ -233,10 +256,7 @@ def _render_markdown(
     date: str,
     configs: list[dict],
     accuracy: pl.DataFrame,
-    series: list[str],
-    wide: pl.DataFrame,
-    metric: str,
-    top_n: int,
+    sections: list[_SectionData],
 ) -> str:
     parts = [f"# {title}\n", f"_Generated {date}. Tables only; see the HTML bundle for figures._\n"]
     parts.append("## Series\n")
@@ -249,14 +269,11 @@ def _render_markdown(
     )
     parts.append("## Accuracy by resolution\n")
     parts.append(_pl_to_md(accuracy))
-    for sid, locus_series, competitors in _sections(series):
-        section = A.compare_section(
-            wide, locus_series=locus_series, competitors=competitors, metric=metric
+    for s in sections:
+        parts.append(
+            f"\n## Section {s.sid.upper()} — {s.locus_series} vs {', '.join(s.competitors)}\n"
         )
-        worst = A.worst_locus(section, metric=metric, top_n=top_n).select(
-            [c for c in _WORST_COLS if c in section.columns or c in ("metric", "failure_kind")]
-        )
-        parts.append(f"\n## Section {sid.upper()} — {locus_series} vs {', '.join(competitors)}\n")
-        parts.append(f"### Improvement levers — where Locus most underperforms ({metric})\n")
-        parts.append(_pl_to_md(worst))
+        for m, worst in s.worst_by_metric.items():
+            parts.append(f"### Improvement levers by {m} — where Locus underperforms\n")
+            parts.append(_pl_to_md(worst))
     return "\n".join(parts)

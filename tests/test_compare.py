@@ -7,6 +7,8 @@ the dataset-driven generate/report/deepdive paths are exercised via the CLI.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import polars as pl
 import pytest
@@ -145,3 +147,121 @@ def test_accuracy_by_resolution_recall():
     by = dict(zip(acc["series"].to_list(), acc["recall"].to_list(), strict=True))
     assert by["locus:tuned"] == pytest.approx(1.0)  # detected both
     assert by["apriltag:tuned"] == pytest.approx(0.5)  # missed inst 2
+
+
+def test_best_of_empty_competitors_is_null_not_crash():
+    # Single-library case: no competitors -> min_horizontal([]) would raise; the
+    # guard must return null value + null name instead.
+    val, name = A._best_of([], [])
+    got = pl.DataFrame({"x": [1.0]}).select(val.alias("v"), name.alias("n"))
+    assert got["v"][0] is None and got["n"][0] is None
+
+
+# --------------------------------------------------------------------------- #
+# Real-data NaN handling: records store math.nan (not None) for missed/pose-less
+# errors. load_instances must convert NaN→null so aggregations/argmin are correct.
+# --------------------------------------------------------------------------- #
+def _write_records(recs, path):
+    from tools.bench.collect import build_provenance
+    from tools.bench.records import write_records
+
+    write_records(recs, build_provenance(), path)
+
+
+def _obs(binary, kind, tag, *, matched, repro, trans):
+    import dataclasses
+
+    from tools.bench.records import empty_record
+
+    r = empty_record(
+        run_id="r",
+        binary=binary,
+        profile="tuned",
+        dataset="d",
+        image_id="img0",
+        record_kind=kind,
+        n_gt_in_frame=1,
+        n_det_in_frame=1,
+        frame_latency_ms=1.0,
+        resolution_h=1080,
+    )
+    return dataclasses.replace(
+        r,
+        tag_id=tag,
+        matched=matched,
+        repro_err_px=repro,
+        trans_err_m=trans,
+        distance_m=0.5,
+        aoi_deg=10.0,
+        ppm=1500.0,
+    )
+
+
+def test_nan_missed_rows_do_not_poison_best_competitor(tmp_path):
+    p = tmp_path / "r.parquet"
+    _write_records(
+        [
+            _obs("locus", "matched", 1, matched=True, repro=1.0, trans=0.02),
+            _obs("opencv_aruco", "matched", 1, matched=True, repro=0.5, trans=0.01),
+            _obs("apriltag", "missed_gt", 1, matched=False, repro=math.nan, trans=math.nan),
+        ],
+        p,
+    )
+    long = A.load_instances(p)
+    # NaN error on the missed row is converted to null (not left as NaN).
+    apr = long.filter(pl.col("series") == "apriltag:tuned")
+    assert apr["repro_err_px"][0] is None
+    wide, _ = A.build_wide(long)
+    sec = A.compare_section(
+        wide,
+        locus_series="locus:tuned",
+        competitors=["apriltag:tuned", "opencv_aruco:tuned"],
+        metric="repro",
+    )
+    # Best competitor is opencv (0.5), NOT the missing apriltag; delta = 1.0 − 0.5.
+    assert sec["best_competitor"][0] == "opencv_aruco:tuned"
+    assert sec["delta"][0] == pytest.approx(0.5)
+
+
+def test_generate_refuses_corrupted_parquet_on_partial_failure(tmp_path, monkeypatch):
+    # If one (series×dataset) cell fails (empty records) while another succeeds,
+    # writing the parquet would silently score the failed series as all-missed.
+    # generate must refuse rather than alias a failure to a miss.
+    from tools.bench.compare import generate as G
+    from tools.bench.tune.space import SearchSpace
+
+    cfg = G.ChosenConfig(
+        library="locus",
+        profile_label="tuned",
+        param_hash="h",
+        param_values={},
+        space=SearchSpace(library="locus", base_profile="standard", params={}),
+        space_name="s",
+    )
+    monkeypatch.setattr(G, "run_search_records", lambda cells, workers=None: [[object()], []])
+    with pytest.raises(ValueError, match="corrupted comparison parquet"):
+        G.generate_instance_records(
+            configs=[cfg],
+            datasets=["d1", "d2"],
+            family=0,
+            data_dir=tmp_path,
+            out_path=tmp_path / "o.parquet",
+        )
+
+
+def test_accuracy_p99_finite_with_nan_pose(tmp_path):
+    # A matched detection lacking a pose stores NaN trans; the accuracy table must
+    # not return NaN p99 / biased p50 (null is skipped by median/quantile).
+    p = tmp_path / "r.parquet"
+    _write_records(
+        [
+            _obs("locus", "matched", 1, matched=True, repro=0.5, trans=0.01),
+            _obs("locus", "matched", 2, matched=True, repro=0.5, trans=math.nan),
+            _obs("locus", "matched", 3, matched=True, repro=0.5, trans=0.03),
+        ],
+        p,
+    )
+    long = A.load_instances(p)
+    acc = A.accuracy_by_resolution(long, ["locus:tuned"])
+    p99 = acc["trans_p99"][0]
+    assert p99 is not None and p99 == p99  # finite, not NaN
