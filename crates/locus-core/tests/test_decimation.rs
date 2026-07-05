@@ -86,6 +86,35 @@ fn test_decimation_accuracy() {
     let err2 = compute_corner_error(&corners2, &gt_corners);
 
     println!("Error D1: {err1}, Error D2: {err2}");
-    // Decimation should maintain reasonable sub-pixel accuracy
-    assert!(err2 < 1.5);
+
+    // Full-resolution detection of a clean, noise-free synthetic tag must be
+    // tightly sub-pixel. Measured ~4e-4 px; gate at 0.01 px (~25x margin) —
+    // roughly 150x tighter than the previous `err2 < 1.5` smoke bound, which
+    // left `err1` computed-but-never-asserted.
+    const ACCURACY_GATE_PX: f64 = 0.01;
+    assert!(
+        err1 < ACCURACY_GATE_PX,
+        "decimation-1 corner error {err1} exceeds {ACCURACY_GATE_PX} px"
+    );
+    assert!(
+        err2 < ACCURACY_GATE_PX,
+        "decimation-2 corner error {err2} exceeds {ACCURACY_GATE_PX} px"
+    );
+
+    // Decimation invariance: the center-aware decimation mapping (the +0.5
+    // pixel rule) must map decimated coordinates back to the full-resolution
+    // grid without a systematic shift, so the refined corners at decimation 2
+    // must coincide with decimation 1. This is the observable form of the +0.5
+    // rule — a broken mapping shows up here as a ~0.5 px offset.
+    for k in 0..4 {
+        let dx = (corners1[k][0] - corners2[k][0]).abs();
+        let dy = (corners1[k][1] - corners2[k][1]).abs();
+        assert!(
+            dx < ACCURACY_GATE_PX && dy < ACCURACY_GATE_PX,
+            "corner {k}: decimation-1 {:?} and decimation-2 {:?} diverge by ({dx}, {dy}) px \
+             — center-aware decimation mapping (+0.5 rule) may be broken",
+            corners1[k],
+            corners2[k],
+        );
+    }
 }

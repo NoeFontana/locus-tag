@@ -19,4 +19,8 @@ fn test_pose_refinement_soa_empty() {
     let intrinsics = CameraIntrinsics::new(800.0, 800.0, 320.0, 240.0);
 
     refine_poses_soa(&mut batch, 0, &intrinsics, 0.1, None);
+
+    // Zero-candidate boundary contract: refining 0 valid candidates is a no-op
+    // on the SoA batch (no panic, no OOB, nothing reassembles to a detection).
+    assert!(batch.reassemble(0).is_empty());
 }

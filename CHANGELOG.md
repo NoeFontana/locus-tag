@@ -5,6 +5,26 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Tests
+
+- **Numerical test hardening (tests-only, no production-code change)**: replaced
+  weak/smoke assertions with real numerical invariants and pruned redundant
+  tests across the Rust and Python suites. Highlights: the homography SoA test
+  now checks the canonical-square→quad reprojection instead of `data[0] != 0.0`;
+  `test_decimation_accuracy` gates full-res *and* decimated corner error at
+  0.01 px (was an unasserted `err1` plus a loose `err2 < 1.5`) and asserts
+  decimation invariance (the observable +0.5-pixel rule); the GWLF synthetic
+  test gates a measured 0.2 px cross-seed bound (was 1.0 px) and gains an
+  idempotence check; two `robustness/geometry.rs` no-op (`prop_assert!(true)`)
+  degenerate-quad tests now assert the solvers return `None` or *finite*
+  (never NaN/Inf) output, verified over thousands of pathological quads; a new
+  cross-thread/run-to-run detection determinism test and an image-edge
+  robustness test were added; the tautological `DetectorConfig` default/builder
+  tests were replaced by a builder-isolation invariant; and the duplicated
+  `test_vectorized_poses` was de-duplicated and tightened from a `tz > 0` sign
+  check to the full pose (`tz = 0.80 m`, near-identity quaternion). No public
+  API or runtime-behavior change.
+
 ### Changed
 
 - **Lint-suppression modernization**: migrated production `#[allow(...)]` lint
