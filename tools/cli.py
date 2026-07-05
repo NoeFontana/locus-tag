@@ -1343,5 +1343,131 @@ def bench_rotation_tail_diag(
     typer.echo(f"  memo:            {memo_path}")
 
 
+@bench_app.command("sweep")
+def bench_sweep(
+    library: list[str] = typer.Option(
+        ["locus"], help="Detector(s): locus | opencv_aruco | apriltag (repeatable)"
+    ),
+    hub_config: list[str] = typer.Option(..., help="Hub dataset config(s) to sweep (repeatable)"),
+    space: str | None = typer.Option(
+        None, help="Search space name/path (single library only; else per-library default)"
+    ),
+    strategy: str = typer.Option("random", help="grid | random | bayes"),
+    n: int = typer.Option(32, help="Random/bayes budget (ignored for grid)"),
+    seed: int = typer.Option(0, help="RNG seed (reproducible random/bayes)"),
+    workers: int | None = typer.Option(None, help="Parallel workers (default: cpu_count)"),
+    family: str = typer.Option("AprilTag36h11", help="Tag family"),
+    data_dir: Path = typer.Option(Path("tests/data/hub_cache"), help="Hub cache directory"),
+    out: Path = typer.Option(..., help="Output directory for the result tables"),
+    limit: int | None = typer.Option(None, help="Limit frames per dataset"),
+    skip: int = typer.Option(0, help="Skip first N frames per dataset"),
+):
+    """Parallel accuracy sweep over a search space (accuracy only; no latency)."""
+    from tools.bench.tune.orchestrate import resolve_family, run_sweep
+
+    fam = resolve_family(family)
+    sweep = run_sweep(
+        libraries=list(library),
+        space_arg=space,
+        datasets=list(hub_config),
+        family=fam,
+        strategy=strategy,
+        n=n,
+        seed=seed,
+        workers=workers,
+        data_dir=str(data_dir),
+        out_dir=out,
+        limit=limit,
+        skip=skip,
+    )
+    n_ok = sum(1 for r in sweep.results if r.error is None)
+    n_err = len(sweep.results) - n_ok
+    typer.echo(
+        f"Swept {len(sweep.results)} cells ({n_ok} ok, {n_err} skipped) → {sweep.results_path}"
+    )
+
+
+@bench_app.command("tune")
+def bench_tune(
+    library: list[str] = typer.Option(
+        ["locus"], help="Detector(s): locus | opencv_aruco | apriltag (repeatable)"
+    ),
+    hub_config: list[str] = typer.Option(..., help="Hub dataset config(s) to tune on (repeatable)"),
+    space: str | None = typer.Option(
+        None, help="Search space name or path (default: <library>_default)"
+    ),
+    strategy: str = typer.Option("random", help="grid | random | bayes"),
+    n: int = typer.Option(32, help="Random/bayes budget (ignored for grid)"),
+    seed: int = typer.Option(0, help="RNG seed"),
+    workers: int | None = typer.Option(None, help="Parallel workers (default: cpu_count)"),
+    family: str = typer.Option("AprilTag36h11", help="Tag family"),
+    data_dir: Path = typer.Option(Path("tests/data/hub_cache"), help="Hub cache directory"),
+    out: Path = typer.Option(..., help="Output directory (writes pareto/<library>.json)"),
+    precision_floor: float = typer.Option(0.99, help="Hard precision constraint"),
+    tail_metric: str = typer.Option("trans_p99", help="Frontier tail metric: trans_p99 | rot_p99"),
+    latency_budget_ms: float | None = typer.Option(None, help="Optional p95 latency budget (ms)"),
+    protect_baseline: list[str] = typer.Option(
+        ["standard", "high_accuracy"],
+        help="Locus profiles to guard against (render-tag tail/mean); repeatable",
+    ),
+    limit: int | None = typer.Option(None, help="Limit frames per dataset"),
+    skip: int = typer.Option(0, help="Skip first N frames per dataset"),
+):
+    """Sweep, select the Pareto frontier + constraint gate, verify latency serially."""
+    from tools.bench.tune.orchestrate import resolve_family, run_tune
+
+    libraries = list(library)
+    baselines = list(protect_baseline)
+    fam = resolve_family(family)
+    result = run_tune(
+        libraries=libraries,
+        space_arg=space,
+        datasets=list(hub_config),
+        family=fam,
+        strategy=strategy,
+        n=n,
+        seed=seed,
+        workers=workers,
+        data_dir=str(data_dir),
+        out_dir=out,
+        precision_floor=precision_floor,
+        tail_metric=tail_metric,
+        latency_budget_ms=latency_budget_ms,
+        protect_baselines=baselines,
+        limit=limit,
+        skip=skip,
+    )
+    for lib, tune in result.per_library.items():
+        frontier = [e for e in tune.entries if e.on_frontier]
+        typer.echo(f"\n[{lib}] Pareto frontier ({len(frontier)} configs) → {tune.pareto_path}")
+        guard_on = lib == "locus" and tune.reference_baseline is not None
+        for e in sorted(frontier, key=lambda x: -x.summary.recall):
+            s = e.summary
+            lat = f"{s.latency_p95_ms:.1f}ms" if s.latency_p95_ms is not None else "  n/a"
+            guard = "" if not guard_on else ("  ✓promotable" if e.promotable else "  ⚠tail-regress")
+            typer.echo(
+                f"  recall={s.recall:.3f} P={s.precision:.3f} "
+                f"trans_p99={s.trans_p99_m:.5f}m lat_p95={lat}{guard}  [{s.param_hash}]"
+            )
+        if guard_on and frontier and not any(e.promotable for e in frontier):
+            typer.echo(
+                "  ⚠ No frontier config improves recall without a render-tag tail/mean regression."
+            )
+
+
+@bench_app.command("compare-report")
+def bench_compare_report(
+    results: Path = typer.Option(..., help="Path to tune_results.parquet from a sweep/tune"),
+    pareto_dir: Path = typer.Option(..., help="Directory of pareto/<library>.json frontiers"),
+    out: Path = typer.Option(..., help="Output directory for the report bundle"),
+    title: str = typer.Option("Comparative tuning report", help="Report title"),
+):
+    """Lever sensitivity + comparative deltas + HTML report from sweep results."""
+    from tools.bench.tune.report_compare import generate
+
+    index_path = generate(results_path=results, pareto_dir=pareto_dir, out_dir=out, title=title)
+    typer.echo(f"Report → {index_path}")
+
+
 if __name__ == "__main__":
     app()

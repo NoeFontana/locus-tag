@@ -28,6 +28,12 @@ classifiers = [
 ]
 dependencies = ["numpy>=2.0", "pydantic>=2.0"]
 
+[project.optional-dependencies]
+# Bayesian search backend for `bench tune --strategy bayes`. Optional: grid and
+# random search work without it; the tuner only imports optuna when bayes is
+# requested (see tools/bench/tune/search_optuna.py).
+tune = ["optuna>=3.0"]
+
 [project.urls]
 Homepage = "https://github.com/NoeFontana/locus-tag"
 Source = "https://github.com/NoeFontana/locus-tag"

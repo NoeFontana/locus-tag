@@ -31,6 +31,7 @@ from typing import Any
 
 import numpy as np
 
+from tools.bench.matching import MATCH_DISTANCE_THRESHOLD_PX, match_detections_to_gt
 from tools.bench.records import ObservationRecord, RecordKind, empty_record, write_records
 from tools.bench.schema import Provenance
 from tools.bench.utils import (
@@ -41,10 +42,9 @@ from tools.bench.utils import (
     rotation_error_deg,
 )
 
-# Detection ↔ GT pairing threshold in pixels. Mirrors
-# ``Metrics.match_detections``' default at ``tools/bench/utils.py:704`` so the
-# collector and the headline aggregator agree on what counts as a TP.
-MATCH_DISTANCE_THRESHOLD_PX = 20.0
+# ``MATCH_DISTANCE_THRESHOLD_PX`` is re-exported from ``tools.bench.matching``
+# (imported above) so the collector and the headline aggregator share one
+# constant and one matching algorithm — see :func:`match_detections_to_gt`.
 
 # Center-distance threshold for attributing a rejected quad to a GT tag, as a
 # multiple of the rejected quad's longest edge. Quads further than this from
@@ -117,27 +117,11 @@ class Collector:
         n_gt = len(gt_tags)
         n_det = len(detections)
 
-        # Phase 1: match detections to GT (mirrors Metrics.match_detections so
-        # the records align with the headline recall numbers).
-        matched_gt: dict[int, dict[str, Any]] = {}  # gt_index -> det dict
-        matched_det: set[int] = set()  # detection indices that paired
-        used_gt: set[int] = set()
-        for det_idx, det in enumerate(detections):
-            best_idx = -1
-            min_dist = float("inf")
-            det_center = np.asarray(det["center"], dtype=np.float64)
-            for idx, gt in enumerate(gt_tags):
-                if idx in used_gt or gt.tag_id != det["id"]:
-                    continue
-                gt_center = np.mean(gt.corners, axis=0)
-                dist = float(np.linalg.norm(det_center - gt_center))
-                if dist < min_dist:
-                    min_dist = dist
-                    best_idx = idx
-            if best_idx != -1 and min_dist < MATCH_DISTANCE_THRESHOLD_PX:
-                used_gt.add(best_idx)
-                matched_gt[best_idx] = det
-                matched_det.add(det_idx)
+        # Phase 1: match detections to GT via the shared matcher, so the records
+        # align with the headline recall numbers by construction.
+        match = match_detections_to_gt(detections, gt_tags, MATCH_DISTANCE_THRESHOLD_PX)
+        matched_gt: dict[int, dict[str, Any]] = match.gt_index_to_det(detections)
+        matched_det: set[int] = match.matched_det_indices
 
         # Phase 2: emit one row per GT tag (matched or missed).
         for idx, gt in enumerate(gt_tags):

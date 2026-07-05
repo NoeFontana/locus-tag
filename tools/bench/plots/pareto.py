@@ -15,6 +15,7 @@ import pandas as pd
 from matplotlib.lines import Line2D
 
 from tools.bench.metrics import compute_precision, compute_recall
+from tools.bench.pareto_core import pareto_mask
 
 
 def _pareto_mask(
@@ -30,20 +31,13 @@ def _pareto_mask(
     Points with precision below ``min_precision`` are excluded both as
     candidates and as dominators — the use case is "exclude the 1%-precision
     Soft point from the operating frontier so it can't dominate anything."
+
+    Delegates to :func:`tools.bench.pareto_core.pareto_mask` with ``strict=True``
+    (minimize latency, maximize recall) and a precision feasibility mask.
     """
-    n = len(latencies)
-    optimal = np.ones(n, dtype=bool)
-    for i in range(n):
-        if precisions[i] < min_precision:
-            optimal[i] = False
-            continue
-        for j in range(n):
-            if i == j or precisions[j] < min_precision:
-                continue
-            if latencies[j] < latencies[i] and recalls[j] > recalls[i]:
-                optimal[i] = False
-                break
-    return optimal
+    feasible = np.asarray(precisions) >= min_precision
+    objectives = np.column_stack([latencies, recalls])
+    return pareto_mask(objectives, senses=(-1, 1), strict=True, feasible=feasible)
 
 
 def _aggregate(df: pd.DataFrame) -> pd.DataFrame:

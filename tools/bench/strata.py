@@ -18,7 +18,9 @@ The grammar of the produced ``stratum_id`` matches ``tools/bench/schema.py``
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Bucket boundaries (see strata_histogram.py for derivation)
@@ -129,3 +131,39 @@ def compute_stratum_id(axes: AxisValues) -> str:
         f"dist={_bucket_dist(axes.distance_m)}|"
         f"mot={_bucket_mot(axes.velocity)}"
     )
+
+
+def _to_res(value: Any) -> int | None:
+    """Coerce a resolution_h cell (int / float-NaN / None) to ``int | None``."""
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return None
+    return int(value)
+
+
+def stratum_id_series(
+    resolution_h: Iterable[Any],
+    distance_m: Iterable[Any],
+    aoi_deg: Iterable[Any],
+    ppm: Iterable[Any],
+    velocity: float | None = None,
+) -> list[str]:
+    """Derive one ``stratum_id`` per row from parallel axis columns.
+
+    The single source of truth for turning a Tier-1 record frame's raw axis
+    columns into stratum ids — shared by ``plots/_io.load_records_df`` and the
+    tuner's ``tune/aggregate.summarize`` so they can never diverge. Accepts any
+    zippable sequences (pandas Series, lists); NaN/None resolution → ``unk``.
+    Kept pandas-free so ``strata.py`` stays import-light.
+    """
+    return [
+        compute_stratum_id(
+            AxisValues(
+                resolution_h=_to_res(r),
+                distance_m=float(d),
+                aoi_deg=float(a),
+                ppm=float(p),
+                velocity=velocity,
+            )
+        )
+        for r, d, a, p in zip(resolution_h, distance_m, aoi_deg, ppm, strict=True)
+    ]

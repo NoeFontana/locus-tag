@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pyarrow.parquet as pq
 
-from tools.bench.strata import AxisValues, compute_stratum_id
+from tools.bench.strata import stratum_id_series
 
 
 def load_records_df(paths: list[Path | str]) -> pd.DataFrame:
@@ -31,18 +31,7 @@ def load_records_df(paths: list[Path | str]) -> pd.DataFrame:
         frames.append(frame)
     df = pd.concat(frames, ignore_index=True)
 
-    df["stratum_id"] = [
-        compute_stratum_id(
-            AxisValues(
-                resolution_h=int(r) if pd.notna(r) else None,
-                distance_m=float(d),
-                aoi_deg=float(a),
-                ppm=float(p),
-                velocity=None,
-            )
-        )
-        for r, d, a, p in zip(
-            df["resolution_h"], df["distance_m"], df["aoi_deg"], df["ppm"], strict=True
-        )
-    ]
+    df["stratum_id"] = stratum_id_series(
+        df["resolution_h"], df["distance_m"], df["aoi_deg"], df["ppm"], velocity=None
+    )
     return df
