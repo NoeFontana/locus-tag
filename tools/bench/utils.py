@@ -996,6 +996,11 @@ class OpenCVWrapper(LibraryWrapper):
         return detections, None
 
 
+# Fixed permutation mapping pupil_apriltags' corner order to the GT / Locus /
+# OpenCV convention (empirically verified sub-pixel across all detections).
+_APRILTAG_CORNER_TO_GT = [1, 0, 3, 2]
+
+
 class AprilTagWrapper(LibraryWrapper):
     library_id = "apriltag"
 
@@ -1070,10 +1075,17 @@ class AprilTagWrapper(LibraryWrapper):
         )
         detections = []
         for d in raw_dets:  # pyright: ignore[reportGeneralTypeIssues]  # pupil_apriltags stub types Detector.detect as Detection (single), runtime returns list
+            # Corner-convention adapter: pupil_apriltags labels the four corners in
+            # a different order than the GT / Locus / OpenCV convention (verified
+            # empirically: a fixed [1,0,3,2] relabel aligns them to sub-pixel RMSE
+            # across all detections; without it the direct corner error is ~200px).
+            # A FIXED permutation — not an order-invariant metric — so a genuine
+            # wrong-orientation detection still surfaces as a large corner error.
+            corners = np.asarray(d.corners, dtype=np.float64)[_APRILTAG_CORNER_TO_GT]
             det = {
                 "id": d.tag_id,
                 "center": d.center.tolist(),
-                "corners": d.corners.tolist(),
+                "corners": corners.tolist(),
                 "hamming": d.hamming,
                 "margin": d.decision_margin,
             }
@@ -1085,6 +1097,15 @@ class AprilTagWrapper(LibraryWrapper):
                 det["pose"] = _pose_from_R_t(R_corrected, np.asarray(pose_t).flatten())
             detections.append(det)
         return detections, None
+
+
+# Single library-id → wrapper-class registry, shared by the tuning executor and the
+# comparison deep-dive so a new/renamed detector is wired in exactly one place.
+WRAPPER_BY_LIBRARY: dict[str, type[LibraryWrapper]] = {
+    "locus": LocusWrapper,
+    "opencv_aruco": OpenCVWrapper,
+    "apriltag": AprilTagWrapper,
+}
 
 
 def generate_synthetic_image(

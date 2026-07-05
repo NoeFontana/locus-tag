@@ -35,3 +35,19 @@ def percentiles(values: object, qs: list[float]) -> list[float]:
     if arr.size == 0:
         return [0.0] * len(qs)
     return [float(v) for v in np.percentile(arr, qs)]
+
+
+def corner_rmse_px(det_corners: object, gt_corners: object) -> float:
+    """Order-preserving per-corner RMS distance in pixels (corner i vs GT corner i).
+
+    The single definition of corner accuracy, shared by the Tier-1 collector and the
+    comparison deep-dive so they can't diverge. **Order-preserving on purpose**:
+    normalising each detector's corner convention to the GT convention is the
+    wrappers' job (the corner adapters), never an order-invariant metric — a genuine
+    wrong-orientation detection must surface as a large error.
+    """
+    import numpy as np
+
+    d = np.asarray(det_corners, dtype=np.float64)
+    g = np.asarray(gt_corners, dtype=np.float64)
+    return float(np.sqrt(np.mean(np.sum((d - g) ** 2, axis=1))))

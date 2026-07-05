@@ -32,6 +32,7 @@ from typing import Any
 import numpy as np
 
 from tools.bench.matching import MATCH_DISTANCE_THRESHOLD_PX, match_detections_to_gt
+from tools.bench.metrics import corner_rmse_px
 from tools.bench.records import ObservationRecord, RecordKind, empty_record, write_records
 from tools.bench.schema import Provenance
 from tools.bench.utils import (
@@ -341,10 +342,10 @@ class Collector:
     def _errors(
         self, det: dict[str, Any], gt: TagGroundTruth, intrinsics: Any | None
     ) -> tuple[float, float, float]:
-        # Reprojection error: per-corner RMS in pixels.
-        det_corners = np.asarray(det["corners"], dtype=np.float64)
-        gt_corners = np.asarray(gt.corners, dtype=np.float64)
-        repro = float(np.sqrt(np.mean(np.sum((det_corners - gt_corners) ** 2, axis=1))))
+        # Order-preserving corner RMS error (shared with the comparison deep-dive
+        # via metrics.corner_rmse_px). Cross-library comparability is the wrappers'
+        # job — each adapter reorders its detector's corners into the GT convention.
+        repro = corner_rmse_px(det["corners"], gt.corners)
 
         # Pose errors: only when both sides have a 7-vector pose.
         det_pose = det.get("pose")

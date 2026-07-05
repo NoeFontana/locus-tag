@@ -75,6 +75,7 @@ nav:
       - how-to/concurrent_detection.md
       - how-to/install-with-distortion.md
       - how-to/tune_and_compare.md
+      - how-to/per_instance_comparison.md
   - Explanation:
       - explanation/architecture.md
       - explanation/pipeline.md

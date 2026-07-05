@@ -17,39 +17,38 @@ from __future__ import annotations
 import contextlib
 import multiprocessing
 import os
+import sys
 import time
+from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
 from multiprocessing.context import BaseContext
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import cv2
 import numpy as np
 from tqdm import tqdm
 
 from tools.bench.collect import Collector
+from tools.bench.records import ObservationRecord
 from tools.bench.tune.aggregate import summarize
 from tools.bench.tune.space import SearchSpace
 from tools.bench.utils import (
     HUB_CACHE_DIR,
+    WRAPPER_BY_LIBRARY,
     DatasetLoader,
     HubDatasetLoader,
-    LibraryWrapper,
-    LocusWrapper,
-    OpenCVWrapper,
     TagAxes,
     TagGroundTruth,
 )
-from tools.bench.utils import AprilTagWrapper as _AprilTagWrapper
+
+_R = TypeVar("_R")
+_Key = tuple[str, str, str]
 
 # library_id -> wrapper class, so a cell can rebuild the right detector.
-_WRAPPERS: dict[str, type[LibraryWrapper]] = {
-    "locus": LocusWrapper,
-    "opencv_aruco": OpenCVWrapper,
-    "apriltag": _AprilTagWrapper,
-}
+_WRAPPERS = WRAPPER_BY_LIBRARY
 
 
 @dataclass(frozen=True)
@@ -119,20 +118,17 @@ def run_cell(cell: Cell) -> CellResult:
     try:
         return _run_cell_inner(cell)
     except Exception as exc:  # noqa: BLE001 — a bad cell must not kill the sweep
-        return CellResult(
-            library=cell.library,
-            param_hash=cell.param_hash,
-            dataset=cell.dataset,
-            param_values=cell.param_values,
-            overall={},
-            per_stratum={},
-            latency_valid=False,
-            n_frames=0,
-            error=f"{type(exc).__name__}: {exc}",
-        )
+        return _error_result(cell, f"{type(exc).__name__}: {exc}")
 
 
-def _run_cell_inner(cell: Cell) -> CellResult:
+def drive_cell(cell: Cell) -> tuple[Collector, int]:
+    """Build the cell's detector and run it across the dataset frames.
+
+    Returns the populated ``Collector`` (raw Tier-1 records) and the frame count.
+    Shared by ``run_cell`` (which summarizes) and the per-instance comparison
+    path (which flushes the records) so the ``from_params`` + ``Collector.observe``
+    frame loop lives in exactly one place.
+    """
     space = SearchSpace.model_validate_json(cell.space_json)
     wrapper_cls = _WRAPPERS[cell.library]
     wrapper = wrapper_cls.from_params(family=cell.family, params=cell.param_values, space=space)
@@ -173,7 +169,11 @@ def _run_cell_inner(cell: Cell) -> CellResult:
             resolution_h=int(img.shape[0]),
             intrinsics=ds.intrinsics,
         )
+    return collector, n_frames
 
+
+def _run_cell_inner(cell: Cell) -> CellResult:
+    collector, n_frames = drive_cell(cell)
     overall, per_stratum = summarize(collector.records, include_latency=cell.measure_latency)
     return CellResult(
         library=cell.library,
@@ -223,43 +223,67 @@ def _error_result(cell: Cell, message: str) -> CellResult:
     )
 
 
-def _run_isolated(cell: Cell) -> CellResult:
-    """Run a single cell in its own fresh 1-worker pool, surviving native crashes.
+def _collect_cell(cell: Cell) -> list[ObservationRecord]:
+    """Run one cell and return its raw Tier-1 records (per-instance comparison path).
+
+    Python errors collapse to an empty record list so a bad cell doesn't abort the
+    batch (native crashes are handled by the isolation layer's ``on_crash``), but a
+    warning is emitted so the failure is not silent — and the caller
+    (``generate_instance_records``) refuses to write a parquet where some cells are
+    empty while others succeeded, since that would score the failed series as
+    all-missed.
+    """
+    try:
+        collector, _ = drive_cell(cell)
+        return collector.records
+    except Exception as exc:  # noqa: BLE001 — a bad cell must not kill the batch
+        print(  # noqa: T201 — surfaced to the parent's stderr from the worker
+            f"WARN: compare cell {cell.library}:{cell.profile_label}/{cell.dataset} failed: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return []
+
+
+def _run_isolated(
+    cell: Cell, *, worker: Callable[[Cell], _R], on_crash: Callable[[Cell, BaseException], _R]
+) -> _R:
+    """Run one cell in its own fresh 1-worker pinned pool, surviving native crashes.
 
     Competitor detectors (e.g. pupil_apriltags with some params) can *segfault*,
-    which kills the worker and poisons a shared pool. Isolating the cell means a
-    crash becomes an errored ``CellResult`` for that one config instead of taking
-    down the sweep.
+    poisoning a shared pool. Isolating the cell turns a crash into ``on_crash``'s
+    fallback result for that one cell instead of taking down the whole batch.
     """
     ctx = multiprocessing.get_context("spawn")
     try:
         with ProcessPoolExecutor(max_workers=1, mp_context=ctx, initializer=_init_worker) as pool:
-            return pool.submit(run_cell, cell).result()
+            return pool.submit(worker, cell).result()
     except Exception as exc:  # noqa: BLE001 — includes BrokenProcessPool (native crash)
-        return _error_result(cell, f"worker crashed (likely native): {type(exc).__name__}")
+        return on_crash(cell, exc)
 
 
 def _pool_round(
     cells: list[Cell],
     *,
+    worker: Callable[[Cell], _R],
     n_workers: int,
     ctx: BaseContext,
     progress: bool,
     desc: str,
-) -> dict[tuple[str, str, str], CellResult]:
-    """Run cells in one shared pool; return whatever completed before a crash.
+) -> dict[_Key, _R]:
+    """Run cells in one shared pinned pool; return whatever completed before a crash.
 
     A native crash poisons the pool, so results collected before the break are
     returned and the caller retries the survivors.
     """
-    done: dict[tuple[str, str, str], CellResult] = {}
+    done: dict[_Key, _R] = {}
     with (
         contextlib.suppress(BrokenProcessPool),
         ProcessPoolExecutor(
             max_workers=n_workers, mp_context=ctx, initializer=_init_worker
         ) as pool,
     ):
-        futures = {pool.submit(run_cell, cell): _cell_key(cell) for cell in cells}
+        futures = {pool.submit(worker, cell): _cell_key(cell) for cell in cells}
         for future in tqdm(
             as_completed(futures), total=len(futures), disable=not progress, desc=desc
         ):
@@ -270,53 +294,101 @@ def _pool_round(
     return done
 
 
-def run_search(
-    cells: list[Cell], *, workers: int | None = None, progress: bool = True
-) -> list[CellResult]:
-    """Fan cells across a process pool, returning results in **input order**.
+def _fan_out(
+    cells: list[Cell],
+    *,
+    worker: Callable[[Cell], _R],
+    on_crash: Callable[[Cell, BaseException], _R],
+    workers: int | None,
+    progress: bool,
+    desc: str,
+) -> list[_R]:
+    """Fan cells across a pinned spawn pool, returning results in **input order**.
 
-    Every cell runs in a ``spawn`` worker pinned by :func:`_init_worker`, so the
-    result is independent of worker count and completion order (results are keyed
-    and re-ordered to match ``cells``). ``workers`` defaults to ``os.cpu_count()``;
-    since each worker is single-threaded this saturates cores without
-    oversubscription.
-
-    A native crash in one worker poisons the whole pool. Rather than collapse to
-    fully-serial execution, the survivors are retried in a fresh **shared** pool
-    (keeping parallelism); only when a round makes zero progress — i.e. the head
-    cell reliably crashes any pool it enters — is that single cell run in
-    isolation and recorded as one errored ``CellResult``. So a handful of bad
-    configs cost a handful of isolated runs, not the whole sweep's parallelism.
+    Each cell runs in a worker pinned by :func:`_init_worker`, so the result is
+    independent of worker count and completion order (keyed + re-ordered). A native
+    crash poisons the pool; survivors are retried in a fresh **shared** pool
+    (keeping parallelism), and only when a round makes zero progress — the head cell
+    reliably crashes any pool it enters — is that one cell run in isolation and
+    recorded via ``on_crash``. So a handful of bad configs cost a handful of
+    isolated runs, not the whole batch's parallelism.
     """
     if not cells:
         return []
-    # Structural guard for the accuracy-parallel / latency-serial split: timing
-    # measured under N-way pool contention is invalid, so the pinned pool must
-    # never carry latency-measuring cells. Latency is measured only by the serial
-    # ``verify_latency`` path.
-    if any(cell.measure_latency for cell in cells):
-        raise ValueError(
-            "run_search received measure_latency=True cells; parallel latency is "
-            "contention-poisoned — use verify_latency for latency measurement"
-        )
     n_workers = workers or (os.cpu_count() or 1)
     ctx = multiprocessing.get_context("spawn")
-    by_key: dict[tuple[str, str, str], CellResult] = {}
+    by_key: dict[_Key, _R] = {}
     remaining = list(cells)
     while remaining:
         before = len(remaining)
         by_key.update(
-            _pool_round(remaining, n_workers=n_workers, ctx=ctx, progress=progress, desc="sweep")
+            _pool_round(
+                remaining, worker=worker, n_workers=n_workers, ctx=ctx, progress=progress, desc=desc
+            )
         )
         remaining = [cell for cell in remaining if _cell_key(cell) not in by_key]
         if len(remaining) == before:
             # Zero progress: the first survivor crashes any pool it enters.
             # Isolate exactly that cell (it runs alone, so the crash is attributable).
             culprit = remaining.pop(0)
-            by_key[_cell_key(culprit)] = _run_isolated(culprit)
+            by_key[_cell_key(culprit)] = _run_isolated(culprit, worker=worker, on_crash=on_crash)
 
-    # Re-order deterministically to match the input cell list.
     return [by_key[_cell_key(cell)] for cell in cells]
+
+
+def _reject_latency_cells(cells: list[Cell]) -> None:
+    """Structural guard: the pinned pool must never carry latency-measuring cells.
+
+    Timing under N-way pool contention is invalid; latency is measured only by the
+    serial ``verify_latency`` path.
+    """
+    if any(cell.measure_latency for cell in cells):
+        raise ValueError(
+            "parallel driver received measure_latency=True cells; parallel latency is "
+            "contention-poisoned — use verify_latency for latency measurement"
+        )
+
+
+def run_search(
+    cells: list[Cell], *, workers: int | None = None, progress: bool = True
+) -> list[CellResult]:
+    """Fan accuracy cells across the pinned pool, returning ``CellResult`` summaries."""
+    if not cells:
+        return []
+    _reject_latency_cells(cells)
+    return _fan_out(
+        cells,
+        worker=run_cell,
+        on_crash=lambda cell, exc: _error_result(
+            cell, f"worker crashed (likely native): {type(exc).__name__}"
+        ),
+        workers=workers,
+        progress=progress,
+        desc="sweep",
+    )
+
+
+def run_search_records(
+    cells: list[Cell], *, workers: int | None = None, progress: bool = True
+) -> list[list[ObservationRecord]]:
+    """Fan cells across the pinned pool, returning each cell's raw Tier-1 records.
+
+    The per-instance comparison path: same crash-isolation and determinism as
+    :func:`run_search`, but each cell yields its ``ObservationRecord`` list (for
+    flushing to a combined parquet) instead of a summary. A crashed cell yields an
+    empty list.
+    """
+    if not cells:
+        return []
+    _reject_latency_cells(cells)
+    return _fan_out(
+        cells,
+        worker=_collect_cell,
+        on_crash=lambda cell, exc: [],
+        workers=workers,
+        progress=progress,
+        desc="collect",
+    )
 
 
 def _run_latency_isolated(cell: Cell) -> CellResult:
