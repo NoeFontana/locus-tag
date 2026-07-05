@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/quality-gates/">
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/how-to/per_instance_comparison/">
       
       
-        <link rel="prev" href="../stratification/">
+        <link rel="prev" href="../tune_and_compare/">
       
       
-        <link rel="next" href="../rust-style/">
+        <link rel="next" href="../../explanation/architecture/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Quality Gates & Verification - Locus</title>
+        <title>Compare detectors per image and find Locus's levers - Locus</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#quality-gates-verification" class="md-skip">
+        <a href="#compare-detectors-per-image-and-find-locuss-levers" class="md-skip">
           Skip to content
         </a>
       
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Quality Gates &amp; Verification
+              Compare detectors per image and find Locus's levers
             
           </span>
         </div>
@@ -378,8 +378,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -399,13 +401,11 @@
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
@@ -426,7 +426,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -444,7 +444,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/add_dictionary/" class="md-nav__link">
+      <a href="../add_dictionary/" class="md-nav__link">
         
   
   
@@ -472,7 +472,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/debug_with_rerun/" class="md-nav__link">
+      <a href="../debug_with_rerun/" class="md-nav__link">
         
   
   
@@ -500,7 +500,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/concurrent_detection/" class="md-nav__link">
+      <a href="../concurrent_detection/" class="md-nav__link">
         
   
   
@@ -528,7 +528,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/install-with-distortion/" class="md-nav__link">
+      <a href="../install-with-distortion/" class="md-nav__link">
         
   
   
@@ -556,7 +556,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/tune_and_compare/" class="md-nav__link">
+      <a href="../tune_and_compare/" class="md-nav__link">
         
   
   
@@ -581,10 +581,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../how-to/per_instance_comparison/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compare detectors per image and find Locus's levers
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -600,6 +627,70 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#one-shot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-shot
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#iterating" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Iterating
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notes-on-measurement-fidelity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notes on measurement fidelity
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -942,10 +1033,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -979,11 +1068,13 @@
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
         
           
           <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
@@ -1004,7 +1095,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1022,7 +1113,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../core/" class="md-nav__link">
+      <a href="../../engineering/core/" class="md-nav__link">
         
   
   
@@ -1050,7 +1141,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../workflow/" class="md-nav__link">
+      <a href="../../engineering/workflow/" class="md-nav__link">
         
   
   
@@ -1078,7 +1169,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../release-runbook/" class="md-nav__link">
+      <a href="../../engineering/release-runbook/" class="md-nav__link">
         
   
   
@@ -1106,7 +1197,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../detection-batch-contract/" class="md-nav__link">
+      <a href="../../engineering/detection-batch-contract/" class="md-nav__link">
         
   
   
@@ -1134,7 +1225,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../constraints/" class="md-nav__link">
+      <a href="../../engineering/constraints/" class="md-nav__link">
         
   
   
@@ -1162,7 +1253,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../ffi_contracts/" class="md-nav__link">
+      <a href="../../engineering/ffi_contracts/" class="md-nav__link">
         
   
   
@@ -1190,7 +1281,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../profiles/" class="md-nav__link">
+      <a href="../../engineering/profiles/" class="md-nav__link">
         
   
   
@@ -1218,7 +1309,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../stratification/" class="md-nav__link">
+      <a href="../../engineering/stratification/" class="md-nav__link">
         
   
   
@@ -1243,37 +1334,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Quality Gates &amp; Verification
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../engineering/quality-gates/" class="md-nav__link">
         
   
   
@@ -1289,87 +1353,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#1-mandatory-pre-commit-checks" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        1. Mandatory Pre-Commit Checks
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#2-performance-regression-gates" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2. Performance &amp; Regression Gates
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="2. Performance &amp; Regression Gates">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#micro-optimization-protocol" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Micro-Optimization Protocol
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#system-level-verification" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        System-Level Verification
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#3-documentation-quality" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3. Documentation Quality
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1382,7 +1365,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../rust-style/" class="md-nav__link">
+      <a href="../../engineering/rust-style/" class="md-nav__link">
         
   
   
@@ -1410,7 +1393,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../python-style/" class="md-nav__link">
+      <a href="../../engineering/python-style/" class="md-nav__link">
         
   
   
@@ -1438,7 +1421,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../general-style/" class="md-nav__link">
+      <a href="../../engineering/general-style/" class="md-nav__link">
         
   
   
@@ -1533,7 +1516,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/" class="md-nav__link">
         
   
   
@@ -1561,7 +1544,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/lessons/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/lessons/" class="md-nav__link">
         
   
   
@@ -1589,7 +1572,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/micro-benchmarking-guide/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/micro-benchmarking-guide/" class="md-nav__link">
         
   
   
@@ -1617,7 +1600,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/release_performance_20260418/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/release_performance_20260418/" class="md-nav__link">
         
   
   
@@ -1645,7 +1628,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/hub_regression_20260423/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/hub_regression_20260423/" class="md-nav__link">
         
   
   
@@ -1673,7 +1656,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_sota_20260425/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/render_tag_sota_20260425/" class="md-nav__link">
         
   
   
@@ -1701,7 +1684,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
         
   
   
@@ -1729,7 +1712,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/quad_truncation_fix_20260426/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/quad_truncation_fix_20260426/" class="md-nav__link">
         
   
   
@@ -1880,10 +1863,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-mandatory-pre-commit-checks" class="md-nav__link">
+  <a href="#prerequisites" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Mandatory Pre-Commit Checks
+        Prerequisites
       
     </span>
   </a>
@@ -1891,49 +1874,32 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-performance-regression-gates" class="md-nav__link">
+  <a href="#one-shot" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Performance &amp; Regression Gates
+        One-shot
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="2. Performance &amp; Regression Gates">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#micro-optimization-protocol" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Micro-Optimization Protocol
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#system-level-verification" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        System-Level Verification
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#3-documentation-quality" class="md-nav__link">
+  <a href="#iterating" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Documentation Quality
+        Iterating
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notes-on-measurement-fidelity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notes on measurement fidelity
       
     </span>
   </a>
@@ -1960,83 +1926,69 @@
   
 
 
-<h1 id="quality-gates-verification">Quality Gates &amp; Verification</h1>
-<p>Before any code is merged, it MUST pass the following automated and manual quality gates.</p>
-<h2 id="1-mandatory-pre-commit-checks">1. Mandatory Pre-Commit Checks</h2>
-<p>Run these commands locally to ensure your code is ready for CI:</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># 1. Rust Formatting &amp; Linting</span>
-cargo<span class="w"> </span>clippy<span class="w"> </span>--workspace<span class="w"> </span>--all-targets<span class="w"> </span>--all-features<span class="w"> </span>--<span class="w"> </span>-D<span class="w"> </span>warnings
-cargo<span class="w"> </span>fmt<span class="w"> </span>--all
-
-<span class="c1"># 2. Python Formatting &amp; Linting</span>
-uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>.<span class="w"> </span>--fix
-uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>format<span class="w"> </span>.
-
-<span class="c1"># 3. Static Type Checking (Python)</span>
-uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>types<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>--group<span class="w"> </span>etl<span class="w"> </span>basedpyright
-
-<span class="c1"># 4. Unit Testing</span>
-<span class="c1"># We use cargo-nextest for fast, concurrent test execution.</span>
-<span class="c1"># By default, heavy regression tests are excluded (see .config/nextest.toml).</span>
-<span class="c1"># Always use --release for Rust tests as debug performance is non-representative.</span>
-cargo<span class="w"> </span>nextest<span class="w"> </span>run<span class="w"> </span>--release<span class="w"> </span>--all-features
-
-<span class="c1"># Build the Python extension in release mode before running Python tests.</span>
-uv<span class="w"> </span>run<span class="w"> </span>maturin<span class="w"> </span>develop<span class="w"> </span>--release<span class="w"> </span>--manifest-path<span class="w"> </span>crates/locus-py/Cargo.toml
-uv<span class="w"> </span>run<span class="w"> </span>pytest
-
-<span class="c1"># 5. Cross-Compilation Check (aarch64)</span>
-<span class="c1"># Ensure NEON/SIMD paths compile correctly for ARM targets.</span>
-rustup<span class="w"> </span>target<span class="w"> </span>add<span class="w"> </span>aarch64-unknown-linux-gnu
-cargo<span class="w"> </span>check<span class="w"> </span>--target<span class="w"> </span>aarch64-unknown-linux-gnu<span class="w"> </span>--all-features
+<h1 id="compare-detectors-per-image-and-find-locuss-levers">Compare detectors per image and find Locus's levers</h1>
+<p>The per-instance comparison (<code>tools/bench/compare/</code>) takes the tuned frontier
+configs from a <code>bench tune</code> run and compares locus-tag against OpenCV ArUco and
+pupil_apriltags <strong>image-by-image, tag-by-tag</strong>. It answers <em>which library wins on
+which strata</em> and <em>which specific images Locus should improve on</em>, and produces a
+structured report, embeddable SVG figures, and a scrubbable rerun deep-dive.</p>
+<p>It reuses the Tier-1 record substrate, the tuning wrappers, and stratification.
+The analysis layer is <a href="https://pola.rs">polars</a>; figures are matplotlib → SVG.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ul>
+<li>A <code>bench tune</code> output directory with <code>pareto/&lt;library&gt;.json</code> for locus,
+  opencv_aruco, and apriltag (see <code>how-to/tune_and_compare.md</code>).</li>
+<li>Synced render-tag hub datasets under <code>tests/data/hub_cache/</code>.</li>
+<li>The <code>bench</code> dependency group: prefix commands with <code>uv run --group bench</code>.</li>
+</ul>
+<h2 id="one-shot">One-shot</h2>
+<div class="highlight"><pre><span></span><code><span class="nv">LOCUS_HUB_DATASET_DIR</span><span class="o">=</span>tests/data/hub_cache<span class="w"> </span><span class="se">\</span>
+uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>python<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>compare-instances<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--pareto-dir<span class="w"> </span>out/tune/pareto<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--metric<span class="w"> </span>repro<span class="w"> </span>--top-n<span class="w"> </span><span class="m">25</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--markdown-out<span class="w"> </span>docs/engineering/benchmarking/comparative_2026-07-05.md<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--out<span class="w"> </span>out/compare
 </code></pre></div>
-<h2 id="2-performance-regression-gates">2. Performance &amp; Regression Gates</h2>
-<p>If you are modifying the detection pipeline, math kernels, or SIMD dispatch, you must empirically validate that latency and recall remain within acceptable bounds.</p>
-<h3 id="micro-optimization-protocol">Micro-Optimization Protocol</h3>
-<p>Before performing any micro-performance optimization (e.g., SIMD kernels, hot-loop refactoring):
-1. <strong>Setup Benchmark:</strong> Create or update a realistic, isolated benchmark in <code>crates/locus-core/benches/</code> using the <code>divan</code> framework.
-2. <strong>Establish Baseline:</strong> Run the benchmark on the <code>main</code> branch or current stable state to establish a statistically significant baseline.
-3. <strong>Verify Gain:</strong> Demonstrate a measurable improvement in the targeted metric without regressing other pipeline stages.</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># Example: Running a specific micro-benchmark</span>
-cargo<span class="w"> </span>bench<span class="w"> </span>--bench<span class="w"> </span>comprehensive<span class="w"> </span>--<span class="w"> </span><span class="s2">&quot;bench_thresholding&quot;</span>
-</code></pre></div>
-<h3 id="system-level-verification">System-Level Verification</h3>
-<div class="highlight"><pre><span></span><code><span class="c1"># 1. Forward Evaluation — ICRA 2020 (Accuracy &amp; Yield)</span>
-uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>real<span class="w"> </span>--compare
-
-<span class="c1"># 2. Hub Dataset Evaluation — Python CLI (Recall + Pose RMSE)</span>
-<span class="c1"># Requires hub_cache to be populated via `bench prepare` first.</span>
-<span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>real<span class="w"> </span>--hub-config<span class="w"> </span>locus_v1_tag36h11_1920x1080
-<span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>real<span class="w"> </span>--hub-config<span class="w"> </span>aprilgrid_golden_v1_1920x1080
-<span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>real<span class="w"> </span>--hub-config<span class="w"> </span>charuco_golden_v1_1920x1080
-
-<span class="c1"># 3. Rust Regression Testing (Sequential for accurate latency)</span>
-<span class="c1"># Requires LOCUS_ICRA_DATASET_DIR to be set.</span>
-<span class="nv">TRACY_NO_INVARIANT_CHECK</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="nv">LOCUS_ICRA_DATASET_DIR</span><span class="o">=</span>tests/data/icra2020<span class="w"> </span>cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--release<span class="w"> </span>--test<span class="w"> </span>regression_icra2020<span class="w"> </span>--features<span class="w"> </span>bench-internals<span class="w"> </span>--<span class="w"> </span>--test-threads<span class="o">=</span><span class="m">1</span>
-
-<span class="c1"># 4. Snapshot Verification &amp; Update</span>
-<span class="c1"># Runs all regression suites (ICRA, Hub tag-level, Hub board-level, distortion)</span>
-<span class="c1"># and dictionary parity tests. LOCUS_HUB_DATASET_DIR is required by</span>
-<span class="c1"># regression_render_tag and regression_distortion_hub; regression_board_hub</span>
-<span class="c1"># resolves tests/data/hub_cache/ automatically from the workspace root.</span>
-<span class="c1">#</span>
-<span class="c1"># The distortion suite (regression_distortion_hub) additionally requires</span>
-<span class="c1"># syncing the `aprilgrid_distortion_brown_conrady_v1_1920x1080` and</span>
-<span class="c1"># `aprilgrid_distortion_kannala_brandt_v1_1920x1080` configs — see</span>
-<span class="c1"># `.agent/skills/testing/SKILL.md` for the one-time setup.</span>
-<span class="nv">TRACY_NO_INVARIANT_CHECK</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
-<span class="nv">LOCUS_ICRA_DATASET_DIR</span><span class="o">=</span>tests/data/icra2020<span class="w"> </span><span class="se">\</span>
+<p>This runs <strong>four series</strong> — <code>locus:tuned</code>, <code>locus:shipped</code> (default profile
+<code>high_accuracy</code>), <code>opencv_aruco:tuned</code>, <code>apriltag:tuned</code> — across the four
+render-tag resolutions, then writes:</p>
+<ul>
+<li><code>out/compare/index.html</code> — the report bundle with <strong>two sections</strong> (tuned-Locus
+  and shipped-Locus, each vs the tuned competitors): per-stratum win-rate
+  heatmaps, per-instance error ECDFs/violins, Locus-vs-best-competitor paired
+  scatters, delta histograms, and the <strong>worst-Locus lever table</strong> (the exact
+  images/tags where Locus trails and by how much).</li>
+<li><code>out/compare/*.parquet</code> — <code>instances_wide</code>, <code>winrate_by_stratum</code>,
+  <code>worst_locus_{tuned,shipped}</code> for further analysis.</li>
+<li><code>out/compare/recordings/compare_deepdive.rrd</code> — a rerun recording: scrub the
+  <code>frame_idx</code> timeline through the worst-Locus cases, with GT and each library's
+  corners as <strong>separately toggleable overlays</strong> and per-library corner/pose error
+  as time-series. Open with <code>rerun out/compare/recordings/compare_deepdive.rrd</code>.</li>
+<li>The markdown report for the docs (tables only).</li>
+</ul>
+<p><code>--metric</code> picks the lever ranking metric (<code>repro</code> = corner RMSE, <code>trans</code>, <code>rot</code>).</p>
+<h2 id="iterating">Iterating</h2>
+<p>Split the two phases (same pattern as <code>bench tune</code> ↔ <code>bench compare-report</code>):</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># 1. generate the combined parquet once (the slow part)</span>
 <span class="nv">LOCUS_HUB_DATASET_DIR</span><span class="o">=</span>tests/data/hub_cache<span class="w"> </span><span class="se">\</span>
-cargo<span class="w"> </span>insta<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--release<span class="w"> </span>--all-features<span class="w"> </span>--features<span class="w"> </span>bench-internals<span class="w"> </span>--review
+uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>python<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>compare-generate<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--pareto-dir<span class="w"> </span>out/tune/pareto<span class="w"> </span>--out<span class="w"> </span>out/compare
+<span class="c1"># 2. re-render the report / try metrics without re-detecting</span>
+uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>python<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>compare-report-instances<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--records<span class="w"> </span>out/compare/instance_records.parquet<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--out<span class="w"> </span>out/compare<span class="w"> </span>--metric<span class="w"> </span>trans<span class="w"> </span>--pareto-dir<span class="w"> </span>out/tune/pareto
 </code></pre></div>
-<h2 id="3-documentation-quality">3. Documentation Quality</h2>
-<p>Ensure the documentation builds correctly and is complete.</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># 1. Sync dependencies for documentation</span>
-uv<span class="w"> </span>sync<span class="w"> </span>--group<span class="w"> </span>docs
-
-<span class="c1"># 2. Build the MkDocs static site</span>
-uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>docs<span class="w"> </span>mkdocs<span class="w"> </span>build
-</code></pre></div>
+<h2 id="notes-on-measurement-fidelity">Notes on measurement fidelity</h2>
+<ul>
+<li><strong>Corner error is order-preserving.</strong> Each library's corners are normalised to
+  the ground-truth convention by a <em>fixed</em> per-library adapter (e.g. apriltag's
+  corner order is a fixed <code>[1,0,3,2]</code> relabel). We do <strong>not</strong> use an
+  orientation-independent metric — a genuine wrong-orientation detection must
+  still surface as a large error, since orientation drives pose sign and decode.</li>
+<li><strong>Best-vs-best.</strong> The comparison uses each library's tuned config, so a Locus
+  loss is a real gap, not an un-tuned-competitor artifact. Section B additionally
+  shows what the shipped Locus profile delivers.</li>
+</ul>
 
 
 
