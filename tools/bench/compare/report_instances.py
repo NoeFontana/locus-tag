@@ -50,13 +50,25 @@ def _fmt(v: object) -> str:
 
 def _pl_to_html(df: pl.DataFrame, max_rows: int = 40) -> str:
     if df.is_empty():
-        return "<p><em>(no rows)</em></p>"
+        return "<p class='empty'><em>(no rows)</em></p>"
     df = df.head(max_rows)
     head = "".join(f"<th>{c}</th>" for c in df.columns)
     body = "".join(
         "<tr>" + "".join(f"<td>{_fmt(v)}</td>" for v in row) + "</tr>" for row in df.iter_rows()
     )
-    return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+    return (
+        "<div class='table-wrap'><table>"
+        f"<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>"
+    )
+
+
+def _figure(caption: str, fn: str, *, wide: bool = False) -> str:
+    """A figure with its caption in a block element (never overlapping the SVG)."""
+    cls = " class='wide'" if wide else ""
+    return (
+        f"<figure{cls}><img src='{fn}' loading='lazy' alt='{caption}'>"
+        f"<figcaption>{caption}</figcaption></figure>"
+    )
 
 
 def _pl_to_md(df: pl.DataFrame, max_rows: int = 60) -> str:
@@ -212,40 +224,159 @@ def _render_html(
         f"(space {c['space_name']})</li>"
         for c in configs
     )
-    shared_imgs = "\n".join(
-        f"<h3>{cap}</h3><img src='{fn}' style='max-width:100%'>" for cap, fn in shared
-    )
-    section_html = "".join(
-        f"<h2>Section {s.sid.upper()} — {s.locus_series} vs {', '.join(s.competitors)}</h2>"
-        + "".join(
-            f"<h4>Improvement levers by {m} — where Locus underperforms</h4>"
-            f"{_pl_to_html(s.worst_by_metric[m])}"
+
+    # Large win-rate heatmaps get their own full-width block; the smaller ECDF /
+    # violin plots flow into a responsive grid capped so nothing blows out.
+    heatmaps = [(cap, fn) for cap, fn in shared if fn.startswith("winrate")]
+    smalls = [(cap, fn) for cap, fn in shared if not fn.startswith("winrate")]
+    shared_blocks = "".join(_figure(cap, fn, wide=True) for cap, fn in heatmaps)
+    if smalls:
+        shared_blocks += (
+            "<div class='fig-grid'>" + "".join(_figure(cap, fn) for cap, fn in smalls) + "</div>"
+        )
+
+    section_blocks = ""
+    for s in sections:
+        levers = "".join(
+            f"<details{' open' if m == primary_metric else ''}>"
+            f"<summary>Improvement levers by <b>{m}</b> — where Locus underperforms</summary>"
+            f"{_pl_to_html(s.worst_by_metric[m])}</details>"
             for m in s.worst_by_metric
         )
-        + f"<h4>{primary_metric}: Locus vs best competitor</h4>"
-        + f"<img src='{s.scatter}' style='max-width:100%'>"
-        + f"<img src='{s.dhist}' style='max-width:100%'>"
-        for s in sections
-    )
+        section_blocks += (
+            f"<section class='card' id='section-{s.sid}'>"
+            f"<h2>Section {s.sid.upper()} — {s.locus_series} "
+            f"<span class='vs'>vs</span> {', '.join(s.competitors)}</h2>"
+            "<h3>Improvement levers</h3>"
+            f"{levers}"
+            f"<h3>{primary_metric}: Locus vs best competitor</h3>"
+            "<div class='fig-grid'>"
+            f"{_figure(f'{primary_metric}: Locus vs best competitor (paired)', s.scatter)}"
+            f"{_figure(f'{primary_metric} delta histogram', s.dhist)}"
+            "</div></section>"
+        )
+
+    toc_items: list[tuple[str, str]] = [
+        ("series", "Series"),
+        ("accuracy", "Accuracy by resolution"),
+        ("distributions", "Distributions"),
+    ]
+    toc_items += [(f"section-{s.sid}", f"Section {s.sid.upper()}") for s in sections]
+    toc_items.append(("provenance", "Provenance"))
+    toc = "".join(f"<li><a href='#{anchor}'>{label}</a></li>" for anchor, label in toc_items)
+
     return f"""<!doctype html>
-<html><head><meta charset='utf-8'><title>{title}</title>
+<html lang='en'><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>{title}</title>
 <style>
- body {{ font-family: system-ui, sans-serif; margin: 2rem; max-width: 1150px; }}
- table {{ border-collapse: collapse; font-size: 0.8rem; }}
- th, td {{ padding: 3px 7px; border-bottom: 1px solid #ddd; text-align: right; }}
- th:first-child, td:first-child {{ text-align: left; }}
- pre {{ background: #f6f6f6; padding: 0.5rem; }}
+ :root {{
+   --fg: #1c1e21; --muted: #6b7280; --bg: #ffffff; --card-bg: #fafbfc;
+   --border: #e3e6ea; --rule: #cdd2d8; --head-bg: #2f3640; --head-fg: #ffffff;
+   --zebra: #f3f5f8; --accent: #2d6cdf;
+ }}
+ * {{ box-sizing: border-box; }}
+ body {{
+   font-family: system-ui, -apple-system, Segoe UI, sans-serif; color: var(--fg);
+   background: var(--bg); margin: 0 auto; padding: 2rem 2.5rem 4rem;
+   max-width: 1200px; line-height: 1.5;
+ }}
+ h1 {{ font-size: 1.85rem; margin: 0 0 0.25rem; }}
+ h2 {{
+   font-size: 1.3rem; margin: 0 0 1rem; padding-bottom: 0.35rem;
+   border-bottom: 2px solid var(--rule); scroll-margin-top: 1rem;
+ }}
+ h3 {{ font-size: 1.05rem; margin: 1.6rem 0 0.6rem; color: #33373d; }}
+ h2 .vs {{ color: var(--muted); font-weight: 400; font-size: 0.9em; }}
+ p, li {{ max-width: 74ch; }}
+ a {{ color: var(--accent); }}
+ nav.toc {{
+   background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
+   padding: 0.75rem 1.25rem; margin: 1.25rem 0 2.5rem;
+ }}
+ nav.toc .lbl {{
+   display: block; margin-bottom: 0.4rem; font-size: 0.78rem; color: var(--muted);
+   text-transform: uppercase; letter-spacing: 0.06em;
+ }}
+ nav.toc ul {{
+   list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap;
+   gap: 0.35rem 1.4rem;
+ }}
+ nav.toc a {{ text-decoration: none; }}
+ nav.toc a:hover {{ text-decoration: underline; }}
+ section.card {{
+   background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+   padding: 1.4rem 1.75rem; margin: 0 0 2.5rem;
+ }}
+ .table-wrap {{
+   overflow-x: auto; margin: 0.5rem 0 1rem; border: 1px solid var(--border);
+   border-radius: 6px;
+ }}
+ table {{
+   border-collapse: collapse; font-size: 0.82rem; width: 100%; background: var(--bg);
+ }}
+ thead th {{
+   position: sticky; top: 0; background: var(--head-bg); color: var(--head-fg);
+   text-align: right; padding: 6px 10px; white-space: nowrap; font-weight: 600;
+ }}
+ thead th:first-child {{ text-align: left; }}
+ tbody td {{
+   padding: 4px 10px; border-bottom: 1px solid var(--border); text-align: right;
+   white-space: nowrap;
+ }}
+ tbody td:first-child {{ text-align: left; }}
+ tbody tr:nth-child(even) {{ background: var(--zebra); }}
+ p.empty {{ color: var(--muted); }}
+ figure {{
+   margin: 0; background: var(--bg); border: 1px solid var(--border);
+   border-radius: 8px; padding: 0.75rem;
+ }}
+ figure img {{ display: block; width: 100%; height: auto; }}
+ figure figcaption {{
+   margin-top: 0.6rem; font-size: 0.85rem; color: var(--muted); text-align: center;
+ }}
+ figure.wide {{ margin: 1rem 0; }}
+ .fig-grid {{
+   display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+   gap: 1.25rem; margin: 1rem 0;
+ }}
+ .fig-grid figure img {{ max-width: 760px; margin: 0 auto; }}
+ details {{
+   border: 1px solid var(--border); border-radius: 6px; margin: 0.6rem 0;
+   background: var(--bg);
+ }}
+ summary {{
+   cursor: pointer; padding: 0.6rem 0.9rem; font-weight: 500; font-size: 0.95rem;
+ }}
+ summary:hover {{ background: var(--zebra); }}
+ details > .table-wrap {{ margin: 0.25rem 0.75rem 0.75rem; }}
+ pre {{
+   background: #f6f7f9; border: 1px solid var(--border); border-radius: 6px;
+   padding: 0.75rem 1rem; overflow-x: auto; font-size: 0.8rem; line-height: 1.4;
+ }}
 </style></head><body>
 <h1>{title}</h1>
-<h2>Series (config per library)</h2>
-<ul>{cfg_rows or "<li><em>none</em></li>"}</ul>
-<h2>Headline: accuracy by resolution</h2>
-{accuracy_html}
-<h2>Distributions (all series)</h2>
-{shared_imgs}
-{section_html}
-<h2>Provenance</h2>
-<pre>{provenance}</pre>
+<nav class='toc'>
+ <span class='lbl'>On this page</span>
+ <ul>{toc}</ul>
+</nav>
+<section class='card' id='series'>
+ <h2>Series (config per library)</h2>
+ <ul>{cfg_rows or "<li><em>none</em></li>"}</ul>
+</section>
+<section class='card' id='accuracy'>
+ <h2>Headline: accuracy by resolution</h2>
+ {accuracy_html}
+</section>
+<section class='card' id='distributions'>
+ <h2>Distributions (all series)</h2>
+ {shared_blocks}
+</section>
+{section_blocks}
+<section class='card' id='provenance'>
+ <h2>Provenance</h2>
+ <pre>{provenance}</pre>
+</section>
 </body></html>
 """
 
