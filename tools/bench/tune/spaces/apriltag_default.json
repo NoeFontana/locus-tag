@@ -1,0 +1,11 @@
+{
+  "library": "apriltag",
+  "base_profile": null,
+  "params": {
+    "quad_decimate": {"kind": "categorical", "choices": [1.0, 2.0]},
+    "quad_sigma": {"kind": "float", "low": 0.0, "high": 0.8, "step": 0.4},
+    "decode_sharpening": {"kind": "float", "low": 0.0, "high": 0.5, "step": 0.25},
+    "refine_edges": {"kind": "bool"}
+  },
+  "fixed": {"nthreads": 1}
+}

@@ -5,6 +5,37 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Added
+
+- **Parallel tuning + comparative-benchmarking harness** (`tools/bench/tune/`,
+  Python-only, no Rust or runtime change). New CLI subcommands drive it:
+  - `bench sweep` — fan a declarative search space (`tune/spaces/*.json`) for
+    Locus **and** competitors (OpenCV ArUco, pupil_apriltags) across cores; each
+    worker is pinned to a single thread (`RAYON_NUM_THREADS=1` / `cv2.setNumThreads(0)`)
+    so N workers never oversubscribe, and the accuracy sweep is byte-identical
+    regardless of worker count. A native crash in a competitor detector is
+    isolated to one errored cell instead of failing the sweep.
+  - `bench tune` — select the Pareto frontier over *(maximize recall, minimize
+    p99 pose error)* under hard precision/latency gates, then verify latency
+    **serially** (production threading — the only trustworthy timing) and guard
+    against regressing the render-tag tail/mean vs shipped Locus profiles. Writes
+    `pareto/<library>.json`.
+  - `bench compare-report` — knob-sensitivity heatmap (which lever moves which
+    metric) + per-stratum tuned-Locus-vs-best-competitor deltas + HTML bundle.
+  - Competitor detector wrappers are now fully parameterizable (`from_params`),
+    so comparisons tune all libraries fairly. Optional Bayesian search via the
+    `[tune]` extra (`pip install -e '.[tune]'`); grid/random need no extra deps.
+  - Results persist as tidy `tune_results.parquet` / `tune_configs.parquet`
+    reusing the existing Tier-1 `ObservationRecord` substrate and stratification.
+
+### Changed
+
+- **Bench metric plumbing consolidated** (behaviour-preserving, verified
+  byte-identical): the detection↔GT matcher (`tools/bench/matching.py`), the
+  percentile helper (`metrics.percentiles`), and the Pareto-frontier primitive
+  (`tools/bench/pareto_core.py`) are now single implementations shared by the
+  headline aggregator, the Tier-1 collector, and the plot layer.
+
 ### Tests
 
 - **Numerical test hardening (tests-only, no production-code change)**: replaced

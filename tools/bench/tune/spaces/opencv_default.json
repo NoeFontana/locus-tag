@@ -1,0 +1,16 @@
+{
+  "library": "opencv_aruco",
+  "base_profile": null,
+  "params": {
+    "adaptiveThreshWinSizeMin": {"kind": "int", "low": 3, "high": 7, "step": 2},
+    "adaptiveThreshWinSizeMax": {"kind": "int", "low": 15, "high": 35, "step": 10},
+    "adaptiveThreshWinSizeStep": {"kind": "int", "low": 4, "high": 10, "step": 3},
+    "adaptiveThreshConstant": {"kind": "float", "low": 3.0, "high": 11.0, "step": 4.0},
+    "cornerRefinementMethod": {"kind": "categorical", "choices": ["none", "subpix", "contour", "apriltag"]},
+    "cornerRefinementWinSize": {"kind": "int", "low": 3, "high": 7, "step": 2},
+    "minMarkerPerimeterRate": {"kind": "float", "low": 0.01, "high": 0.05, "step": 0.02},
+    "polygonalApproxAccuracyRate": {"kind": "float", "low": 0.01, "high": 0.05, "step": 0.02},
+    "minMarkerDistanceRate": {"kind": "float", "low": 0.01, "high": 0.05, "step": 0.02}
+  },
+  "fixed": {}
+}

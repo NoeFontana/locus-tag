@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import csv
 import json
 import math
@@ -13,6 +15,9 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from pupil_apriltags import Detector as AprilTagDetector
 from tqdm import tqdm
+
+from tools.bench.matching import MATCH_DISTANCE_THRESHOLD_PX, match_detections_to_gt
+from tools.bench.metrics import percentiles
 
 ICRA_REPO_ID = "NoeFontana/apriltag-validation-data"
 ICRA_CACHE_DIR = Path("tests/data/icra2020")
@@ -168,6 +173,34 @@ class FamilyMapper:
         return mapping.get(int(family))
 
 
+# Canonical tag-family name/alias → integer id, including the short aliases the
+# CLI accepts. Single source of truth so `bench real` and `bench tune` agree on
+# what family names are valid.
+_TAG_FAMILY_BY_NAME: dict[str, int] = {
+    "AprilTag16h5": int(locus.TagFamily.AprilTag16h5),
+    "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
+    "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
+    "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
+    "ArUco6x6_250": int(locus.TagFamily.ArUco6x6_250),
+    "16h5": int(locus.TagFamily.AprilTag16h5),
+    "36h11": int(locus.TagFamily.AprilTag36h11),
+    "4x4_50": int(locus.TagFamily.ArUco4x4_50),
+    "4x4_100": int(locus.TagFamily.ArUco4x4_100),
+    "6x6_250": int(locus.TagFamily.ArUco6x6_250),
+}
+
+
+def resolve_tag_family(name: str) -> int:
+    """Map a tag-family name or short alias to its integer id.
+
+    Raises ``ValueError`` on an unknown name.
+    """
+    fam = _TAG_FAMILY_BY_NAME.get(name)
+    if fam is None:
+        raise ValueError(f"unknown tag family {name!r}; known: {sorted(_TAG_FAMILY_BY_NAME)}")
+    return fam
+
+
 @dataclass
 class TagGroundTruth:
     tag_id: int
@@ -227,7 +260,7 @@ class RejectedQuads:
     error_rates: np.ndarray  # (M,) float32
 
     @classmethod
-    def from_batch(cls, batch: "locus.DetectionBatch") -> "RejectedQuads | None":
+    def from_batch(cls, batch: locus.DetectionBatch) -> RejectedQuads | None:
         if batch.rejected_corners is None or batch.rejected_funnel_status is None:
             return None
         return cls(
@@ -242,7 +275,7 @@ class RejectedQuads:
         return len(self.corners)
 
 
-def serializable_from_batch(batch: "locus.DetectionBatch") -> list[dict[str, Any]]:
+def serializable_from_batch(batch: locus.DetectionBatch) -> list[dict[str, Any]]:
     """Convert a Locus :class:`DetectionBatch` to the wrapper-uniform dict list.
 
     Shared between :meth:`LocusWrapper.detect` (ICRA flow) and the Hub flow at
@@ -636,8 +669,8 @@ def new_pose_stats() -> dict[str, Any]:
 
 
 def evaluate_tag_pose(
-    wrapper: "LibraryWrapper",
-    ds: "HubDatasetResult",
+    wrapper: LibraryWrapper,
+    ds: HubDatasetResult,
     eval_tag_size: float,
 ) -> dict[str, Any]:
     """Run a wrapper across a Hub tag-only dataset, returning raw per-detection stats.
@@ -696,16 +729,14 @@ def aggregate_pose_stats(stats: dict[str, Any]) -> dict[str, Any]:
     }
     if trans.size:
         out["trans_mean_m"] = float(np.mean(trans))
-        out["trans_p50_m"], out["trans_p95_m"], out["trans_p99_m"] = (
-            float(v) for v in np.percentile(trans, [50, 95, 99])
+        out["trans_p50_m"], out["trans_p95_m"], out["trans_p99_m"] = percentiles(
+            trans, [50, 95, 99]
         )
     else:
         out["trans_mean_m"] = out["trans_p50_m"] = out["trans_p95_m"] = out["trans_p99_m"] = 0.0
     if rot.size:
         out["rot_mean_deg"] = float(np.mean(rot))
-        out["rot_p50_deg"], out["rot_p95_deg"], out["rot_p99_deg"] = (
-            float(v) for v in np.percentile(rot, [50, 95, 99])
-        )
+        out["rot_p50_deg"], out["rot_p95_deg"], out["rot_p99_deg"] = percentiles(rot, [50, 95, 99])
     else:
         out["rot_mean_deg"] = out["rot_p50_deg"] = out["rot_p95_deg"] = out["rot_p99_deg"] = 0.0
     return out
@@ -746,39 +777,48 @@ class Metrics:
 
     @staticmethod
     def match_detections(
-        detections: list[dict[str, Any]], gt_tags: list[TagGroundTruth], threshold: float = 20.0
+        detections: list[dict[str, Any]],
+        gt_tags: list[TagGroundTruth],
+        threshold: float = MATCH_DISTANCE_THRESHOLD_PX,
     ) -> tuple[int, float, int]:
-        correct = 0
+        """Return ``(correct, corner_err_sum, n_matched_gt)`` for the frame.
+
+        The pairing is delegated to the shared :func:`match_detections_to_gt`;
+        this method only sums the per-match corner error on top of it.
+        """
+        result = match_detections_to_gt(detections, gt_tags, threshold)
         err_sum = 0.0
-        matched_gt = set()
-
-        for det in detections:
-            det_center = np.array(det["center"])
-            best_gt_idx = -1
-            min_dist = float("inf")
-
-            for idx, gt in enumerate(gt_tags):
-                if idx in matched_gt or gt.tag_id != det["id"]:
-                    continue
-                gt_center = np.mean(gt.corners, axis=0)
-                dist = np.linalg.norm(det_center - gt_center)
-                if dist < min_dist:
-                    min_dist = float(dist)
-                    best_gt_idx = idx
-
-            if best_gt_idx != -1 and min_dist < threshold:
-                matched_gt.add(best_gt_idx)
-                correct += 1
-                err_sum += Metrics.compute_corner_error(
-                    np.array(det["corners"]), gt_tags[best_gt_idx].corners
-                )
-
-        return correct, err_sum, len(matched_gt)
+        for det_idx, gt_idx in result.pairs:
+            err_sum += Metrics.compute_corner_error(
+                np.array(detections[det_idx]["corners"]), gt_tags[gt_idx].corners
+            )
+        correct = len(result.pairs)
+        return correct, err_sum, correct
 
 
 class LibraryWrapper:
+    # Stable detector identifier used to label ``Collector.binary`` / tuning
+    # rows. Overridden per concrete wrapper; matches the ``records.py`` vocab.
+    library_id: str = "base"
+
     def __init__(self, name: str):
         self.name = name
+
+    @classmethod
+    def from_params(
+        cls,
+        *,
+        family: int | None = None,
+        params: dict[str, Any] | None = None,
+        space: Any | None = None,
+    ) -> LibraryWrapper:
+        """Construct a wrapper from a ``{param: value}`` draw of a search space.
+
+        Uniform constructor for the tuner: ``params={}`` reproduces the wrapper's
+        default (shipped) detector exactly. ``space`` carries library-level
+        context (e.g. Locus base profile) and is unused by competitors.
+        """
+        raise NotImplementedError
 
     def detect(
         self,
@@ -795,6 +835,8 @@ class LibraryWrapper:
 
 
 class LocusWrapper(LibraryWrapper):
+    library_id = "locus"
+
     def __init__(
         self,
         name: str = "Locus",
@@ -810,36 +852,92 @@ class LocusWrapper(LibraryWrapper):
             families = FamilyMapper.to_locus(family)
             self.detector = locus.Detector(decimation=decimation, families=families)
 
+    @classmethod
+    def from_params(
+        cls,
+        *,
+        family: int | None = None,
+        params: dict[str, Any] | None = None,
+        space: Any | None = None,
+        name: str = "Locus",
+    ) -> LocusWrapper:
+        """Build a Locus detector from a base profile + parameter draw.
+
+        ``space`` supplies the ``base_profile`` and any pinned ``fixed`` overrides;
+        when omitted, the ``standard`` profile is used with no fixed overrides, so
+        ``params={}`` yields the shipped ``standard`` detector.
+        """
+        from tools.bench.tune.materialize import materialize_locus
+        from tools.bench.tune.space import SearchSpace
+
+        if space is None:
+            space = SearchSpace(library="locus", base_profile="standard", params={})
+        cfg = materialize_locus(space, params or {})
+        families = FamilyMapper.to_locus(family)
+        detector = locus.Detector(config=cfg, families=families)
+        return cls(name=name, detector=detector)
+
     def detect(
         self,
         img: np.ndarray,
         intrinsics: locus.CameraIntrinsics | None = None,
         tag_size: float | None = None,
-    ) -> tuple[list[dict[str, Any]], "RejectedQuads | None"]:
+    ) -> tuple[list[dict[str, Any]], RejectedQuads | None]:
         batch = self.detector.detect(img, intrinsics=intrinsics, tag_size=tag_size)
         return serializable_from_batch(batch), RejectedQuads.from_batch(batch)
 
 
 class OpenCVWrapper(LibraryWrapper):
-    def __init__(self, family: int | None = None):
+    library_id = "opencv_aruco"
+
+    # Categorical ``cornerRefinementMethod`` strings → cv2 constants.
+    _CORNER_REFINE = {
+        "none": cv2.aruco.CORNER_REFINE_NONE,
+        "subpix": cv2.aruco.CORNER_REFINE_SUBPIX,
+        "contour": cv2.aruco.CORNER_REFINE_CONTOUR,
+        "apriltag": cv2.aruco.CORNER_REFINE_APRILTAG,
+    }
+
+    # Behaviour-preserving defaults: applying these with ``params={}`` reproduces
+    # the previously-hardcoded detector exactly. Any tuned param overrides a key.
+    _DEFAULTS: dict[str, Any] = {
+        "cornerRefinementMethod": "subpix",
+        "minMarkerPerimeterRate": 0.005,
+        "adaptiveThreshConstant": 3,
+        "adaptiveThreshWinSizeStep": 5,
+        "minMarkerDistanceRate": 0.01,
+        "minDistanceToBorder": 1,
+        "polygonalApproxAccuracyRate": 0.01,
+    }
+
+    def __init__(self, family: int | None = None, params: dict[str, Any] | None = None):
         super().__init__("OpenCV")
-        self.detector: cv2.aruco.ArucoDetector | None = None
+        self.detector: cv2.aruco.ArucoDetector | None = self._build(family, params or {})
+
+    @classmethod
+    def from_params(
+        cls,
+        *,
+        family: int | None = None,
+        params: dict[str, Any] | None = None,
+        space: Any | None = None,
+    ) -> OpenCVWrapper:
+        # Honor the space's pinned `fixed` overrides (swept `params` win on conflict).
+        fixed = getattr(space, "fixed", None) or {}
+        return cls(family=family, params={**fixed, **(params or {})})
+
+    @classmethod
+    def _build(cls, family: int | None, params: dict[str, Any]) -> cv2.aruco.ArucoDetector | None:
         cv_family = FamilyMapper.to_opencv(family)
-
-        if cv_family is not None:
-            dictionary = cv2.aruco.getPredefinedDictionary(cv_family)
-            parameters = cv2.aruco.DetectorParameters()
-            parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
-            parameters.minMarkerPerimeterRate = 0.005
-            parameters.adaptiveThreshConstant = 3
-            parameters.adaptiveThreshWinSizeStep = 5
-            parameters.minMarkerDistanceRate = 0.01
-            parameters.minDistanceToBorder = 1
-            parameters.polygonalApproxAccuracyRate = 0.01
-            self.detector = cv2.aruco.ArucoDetector(dictionary, parameters)
-
-        else:
-            self.detector = None
+        if cv_family is None:
+            return None
+        dictionary = cv2.aruco.getPredefinedDictionary(cv_family)
+        parameters = cv2.aruco.DetectorParameters()
+        for key, value in {**cls._DEFAULTS, **params}.items():
+            if key == "cornerRefinementMethod" and isinstance(value, str):
+                value = cls._CORNER_REFINE[value]
+            setattr(parameters, key, value)
+        return cv2.aruco.ArucoDetector(dictionary, parameters)
 
     def detect(
         self,
@@ -899,21 +997,56 @@ class OpenCVWrapper(LibraryWrapper):
 
 
 class AprilTagWrapper(LibraryWrapper):
-    def __init__(self, nthreads: int = 8, quad_decimate: float = 1.0, family: int | None = None):
-        super().__init__("AprilTag")
-        at_family = FamilyMapper.to_apriltag(family)
+    library_id = "apriltag"
 
-        if at_family is not None:
-            self.detector = AprilTagDetector(
-                families=at_family,
-                nthreads=nthreads,
-                quad_decimate=quad_decimate,
-                quad_sigma=0.0,
-                decode_sharpening=0.25,
-                refine_edges=True,
-            )
-        else:
-            self.detector = None
+    # Behaviour-preserving defaults: with ``params={}`` and the historical
+    # ``nthreads=8`` this reproduces the previously-hardcoded detector exactly.
+    _DEFAULTS: dict[str, Any] = {
+        "nthreads": 8,
+        "quad_decimate": 1.0,
+        "quad_sigma": 0.0,
+        "decode_sharpening": 0.25,
+        "refine_edges": True,
+    }
+
+    def __init__(
+        self,
+        nthreads: int = 8,
+        quad_decimate: float = 1.0,
+        family: int | None = None,
+        params: dict[str, Any] | None = None,
+    ):
+        super().__init__("AprilTag")
+        # Positional args seed the kwargs; ``params`` (tuner path) wins last.
+        kwargs = {
+            **self._DEFAULTS,
+            "nthreads": nthreads,
+            "quad_decimate": quad_decimate,
+            **(params or {}),
+        }
+        self.detector = self._build(family, kwargs)
+
+    @classmethod
+    def from_params(
+        cls,
+        *,
+        family: int | None = None,
+        params: dict[str, Any] | None = None,
+        space: Any | None = None,
+    ) -> AprilTagWrapper:
+        # Honor the space's pinned `fixed` overrides, but force single-threaded
+        # regardless — the tuner owns threading (workers are pinned to 1 thread
+        # to avoid oversubscription), so nthreads always wins.
+        fixed = getattr(space, "fixed", None) or {}
+        merged = {**fixed, **(params or {}), "nthreads": 1}
+        return cls(family=family, params=merged)
+
+    @classmethod
+    def _build(cls, family: int | None, kwargs: dict[str, Any]) -> AprilTagDetector | None:
+        at_family = FamilyMapper.to_apriltag(family)
+        if at_family is None:
+            return None
+        return AprilTagDetector(families=at_family, **kwargs)
 
     def detect(
         self,

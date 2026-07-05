@@ -1,0 +1,22 @@
+{
+  "library": "locus",
+  "base_profile": "standard",
+  "params": {
+    "threshold.tile_size": {"kind": "int", "low": 4, "high": 12, "step": 4},
+    "threshold.constant": {"kind": "int", "low": -4, "high": 4, "step": 4},
+    "threshold.min_range": {"kind": "int", "low": 5, "high": 20, "step": 5},
+    "quad.min_edge_score": {"kind": "float", "low": 1.0, "high": 6.0, "step": 1.0},
+    "quad.min_fill_ratio": {"kind": "float", "low": 0.05, "high": 0.2, "step": 0.05},
+    "quad.subpixel_refinement_sigma": {"kind": "float", "low": 0.4, "high": 0.8, "step": 0.2},
+    "quad.extraction_mode": {"kind": "categorical", "choices": ["ContourRdp", "EdLines"]},
+    "decoder.min_contrast": {"kind": "float", "low": 5.0, "high": 30.0, "step": 5.0},
+    "decoder.refinement_mode": {"kind": "categorical", "choices": ["None", "Erf", "Gwlf"]},
+    "decoder.max_hamming_error": {"kind": "int", "low": 0, "high": 2, "step": 1},
+    "pose.huber_delta_px": {"kind": "float", "low": 1.0, "high": 2.5, "step": 0.5},
+    "pose.tikhonov_alpha_max": {"kind": "float", "low": 0.1, "high": 0.5, "step": 0.1}
+  },
+  "fixed": {},
+  "exclusions": [
+    {"quad.extraction_mode": "EdLines", "decoder.refinement_mode": "Erf"}
+  ]
+}

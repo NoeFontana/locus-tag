@@ -18,6 +18,10 @@ Metric = Literal[
     "rot_err_p50_deg",
     "repro_err_p50_px",
     "latency_p50_ms",
+    # Tail metrics — surfaced for the comparative tuning report.
+    "trans_err_p99_m",
+    "rot_err_p99_deg",
+    "latency_p99_ms",
 ]
 
 GroupBy = Literal["stratum_id", "resolution_h"]
