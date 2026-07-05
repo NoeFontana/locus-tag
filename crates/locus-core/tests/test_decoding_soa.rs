@@ -23,4 +23,8 @@ fn test_decoding_soa_empty() {
     let decoders = vec![family_to_decoder(TagFamily::AprilTag36h11)];
 
     decode_batch_soa(&mut batch, 0, &img, &decoders, &config);
+
+    // Zero-candidate boundary contract: decoding 0 candidates is a no-op on the
+    // SoA batch (no panic, no OOB, nothing reassembles to a detection).
+    assert!(batch.reassemble(0).is_empty());
 }

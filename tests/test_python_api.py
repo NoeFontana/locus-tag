@@ -70,26 +70,6 @@ def test_config_object():
     assert overridden.quad.min_area == 500
 
 
-def test_vectorized_poses():
-    """Verify that 3D poses are returned in the compact (N, 7) format."""
-    # Create an ArUco tag
-    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
-    tag_img = cv2.aruco.generateImageMarker(dictionary, 0, 100)
-    canvas = np.ones((400, 400), dtype=np.uint8) * 128
-    canvas[150:250, 150:250] = tag_img
-
-    detector = locus.Detector(families=[locus.TagFamily.ArUco4x4_50])
-
-    # Request pose estimation
-    intrinsics = locus.CameraIntrinsics(fx=800.0, fy=800.0, cx=200.0, cy=200.0)
-    batch = detector.detect(canvas, intrinsics=intrinsics, tag_size=0.10)
-
-    assert len(batch) == 1
-    assert batch.poses is not None
-    assert batch.poses.shape == (1, 7)
-    assert batch.poses.dtype == np.float32
-
-    # [tx, ty, tz, qx, qy, qz, qw]
-    assert abs(batch.poses[0, 0]) < 0.1
-    assert abs(batch.poses[0, 1]) < 0.1
-    assert batch.poses[0, 2] > 0  # Positive Z
+# NOTE: the pose-correctness test previously duplicated here verbatim lives in
+# `tests/test_vectorized_api.py::test_vectorized_poses`, where it now asserts the
+# full pose (tz = 0.80 m, near-identity quaternion) instead of just `tz > 0`.

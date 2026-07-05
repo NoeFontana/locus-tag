@@ -54,13 +54,21 @@ def test_vectorized_poses():
     assert batch.poses.shape == (1, 7)
     assert batch.poses.dtype == np.float32
 
-    # [tx, ty, tz, qx, qy, qz, qw]
-    # Translation should be centered roughly at (0, 0, Z) since we didn't specify offset
-    # but the principal point is 200,200 and the tag is at 200,200 (center of 400x400)
-    # So tx, ty should be near 0.
-    assert abs(batch.poses[0, 0]) < 0.1
-    assert abs(batch.poses[0, 1]) < 0.1
-    assert batch.poses[0, 2] > 0  # Positive Z
+    # [tx, ty, tz, qx, qy, qz, qw]. The 100 px tag is centered exactly on the
+    # principal point (200, 200), facing the camera front-on, so this is a fully
+    # determined pose — assert the actual values, not just a sign:
+    #   * tx, ty ~ 0        (tag center == principal point)
+    #   * tz = fx * tag_size / tag_px = 800 * 0.10 / 100 = 0.80 m
+    #   * quaternion ~ identity (frontal, unrotated tag)
+    tx, ty, tz, qx, qy, qz, qw = (float(v) for v in batch.poses[0])
+    assert abs(tx) < 1e-2, f"tx {tx} should be ~0 (tag on principal point)"
+    assert abs(ty) < 1e-2, f"ty {ty} should be ~0 (tag on principal point)"
+    assert abs(tz - 0.80) < 1e-2, f"tz {tz} should be ~0.80 m (fx*size/px)"
+    # Frontal tag: rotation is near-identity, so |qw| ~ 1 and the vector part ~ 0.
+    assert abs(qw) > 0.99, f"qw {qw} should be ~1 for a frontal tag"
+    assert abs(qx) < 0.05 and abs(qy) < 0.05 and abs(qz) < 0.05, (
+        f"quaternion vector part ({qx}, {qy}, {qz}) should be ~0 for a frontal tag"
+    )
 
 
 def test_invalid_input_contiguity():

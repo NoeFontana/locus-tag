@@ -1454,28 +1454,29 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(clippy::float_cmp)]
-    fn test_detector_config_builder() {
+    fn test_builder_overrides_only_named_fields() {
         let config = DetectorConfig::builder()
             .threshold_tile_size(16)
             .quad_min_area(1000)
             .build();
+
+        // The two named fields take the builder values.
         assert_eq!(config.threshold_tile_size, 16);
         assert_eq!(config.quad_min_area, 1000);
-        // Check defaults
-        assert_eq!(config.threshold_min_range, 10);
-        assert_eq!(config.quad_min_edge_score, 4.0);
-        assert_eq!(config.max_hamming_error, None);
-    }
 
-    #[test]
-    #[allow(clippy::float_cmp)]
-    fn test_detector_config_defaults() {
-        let config = DetectorConfig::default();
-        assert_eq!(config.threshold_tile_size, 8);
-        assert_eq!(config.quad_min_area, 36);
-        assert_eq!(config.quad_min_edge_length, 4.0);
-        assert_eq!(config.max_hamming_error, None);
+        // Every OTHER field must be left exactly at `Default`. Patching just the
+        // two overrides into a fresh default and asserting full-struct equality
+        // proves the builder neither clobbers nor silently mutates untouched
+        // fields — the real builder-isolation contract. This is also robust to
+        // default-value changes (unlike hardcoding `threshold_min_range == 10`),
+        // and the authoritative default values themselves are locked down by
+        // `tests/profile_loading.rs` against the shipped JSON profiles.
+        let expected = DetectorConfig {
+            threshold_tile_size: 16,
+            quad_min_area: 1000,
+            ..DetectorConfig::default()
+        };
+        assert_eq!(config, expected);
     }
 
     #[test]

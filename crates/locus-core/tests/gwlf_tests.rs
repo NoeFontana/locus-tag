@@ -6,31 +6,103 @@ use locus_core::bench_api::{
 };
 use nalgebra::{Matrix3, Vector3};
 
+/// Max Euclidean corner error (px) of a refined quad vs. its ground-truth corners.
+fn max_corner_error(refined: &[[f32; 2]; 4], truth: &[[f64; 2]; 4]) -> f64 {
+    (0..4)
+        .map(|k| {
+            (f64::from(refined[k][0]) - truth[k][0]).hypot(f64::from(refined[k][1]) - truth[k][1])
+        })
+        .fold(0.0f64, f64::max)
+}
+
 #[test]
 fn test_gwlf_refinement_synthetic_square() {
+    // Per-seed accuracy gate (see rationale below).
+    const GATE_PX: f64 = 0.2;
+
     let width = 100;
     let height = 100;
     let mut data = vec![0u8; width * height];
 
-    // Create a 40x40 white square at (20, 20) to (60, 60)
+    // 40x40 white square filling pixel columns/rows [20, 60) - its geometric
+    // edges sit exactly at 20.0 and 60.0 in pixel-corner coordinates.
     for y in 20..60 {
         for x in 20..60 {
             data[y * width + x] = 255;
         }
     }
+    let view = ImageView::new(&data, width, height, width).expect("valid image");
+    let truth = [[20.0, 20.0], [60.0, 20.0], [60.0, 60.0], [20.0, 60.0]];
 
+    // GWLF is sub-pixel accurate, but exhibits a small seed-position-dependent
+    // quantization bias: the transversal intensity profile is sampled on an
+    // integer grid offset from the seed. Measured worst case over symmetric
+    // seeds {0.3, 0.5, 0.7, 1.0} px is ~0.16 px (usually < 0.05 px). We gate
+    // every seed at 0.2 px - 5x tighter than the previous 1.0 px smoke
+    // tolerance and enough to catch any real regression - and separately
+    // require the refinement to *improve* on its seed. (Tighter, ~0.02 px
+    // sub-pixel accuracy on anti-aliased ERF edges is covered by
+    // `edge_refinement.rs`; a hard binary step carries no finer sub-pixel
+    // information.)
+    for j in [0.3f32, 0.5, 0.7, 1.0] {
+        // Symmetric inward seed: each corner pushed toward the square center by j.
+        let seed = [
+            [20.0 + j, 20.0 + j],
+            [60.0 - j, 20.0 + j],
+            [60.0 - j, 60.0 - j],
+            [20.0 + j, 60.0 - j],
+        ];
+        let refined = refine_quad_gwlf(&view, &seed, 0.01).expect("refinement should succeed");
+
+        let refined_err = max_corner_error(&refined, &truth);
+        let seed_err = max_corner_error(&seed, &truth);
+        assert!(
+            refined_err < GATE_PX,
+            "seed +/-{j}px: refined corner error {refined_err:.4}px exceeds {GATE_PX}px gate \
+             (refined = {refined:?})"
+        );
+        assert!(
+            refined_err < seed_err,
+            "seed +/-{j}px: refinement did not improve on seed \
+             (refined {refined_err:.4}px vs seed {seed_err:.4}px)"
+        );
+    }
+}
+
+#[test]
+fn test_gwlf_refinement_is_idempotent() {
+    // Refining an already-refined quad must be (near) a fixed point: a second
+    // GWLF pass should barely move the corners. A large second-pass drift would
+    // signal an unstable line fit or a coordinate-convention mismatch between
+    // the seed and the output.
+    let width = 100;
+    let height = 100;
+    let mut data = vec![0u8; width * height];
+    for y in 20..60 {
+        for x in 20..60 {
+            data[y * width + x] = 255;
+        }
+    }
     let view = ImageView::new(&data, width, height, width).expect("valid image");
 
-    // Coarse corners slightly jittered from (20,20), (60,20), (60,60), (20,60)
-    let coarse = [[21.5, 19.5], [59.0, 21.0], [60.5, 60.5], [19.0, 59.0]];
+    let seed = [[20.5, 20.5], [59.5, 20.5], [59.5, 59.5], [20.5, 59.5]];
+    let pass1 = refine_quad_gwlf(&view, &seed, 0.01).expect("first pass");
+    let pass2 = refine_quad_gwlf(&view, &pass1, 0.01).expect("second pass");
 
-    let refined = refine_quad_gwlf(&view, &coarse, 0.01).expect("refinement should succeed");
+    // Second-pass drift vs the first refinement (both f32 corner arrays).
+    let drift = (0..4)
+        .map(|k| {
+            (f64::from(pass2[k][0]) - f64::from(pass1[k][0]))
+                .hypot(f64::from(pass2[k][1]) - f64::from(pass1[k][1]))
+        })
+        .fold(0.0f64, f64::max);
 
-    // Should be close to the true edges (20.0 and 60.0)
-    assert!((refined[0][0] - 20.0).abs() < 1.0);
-    assert!((refined[0][1] - 20.0).abs() < 1.0);
-    assert!((refined[2][0] - 60.0).abs() < 1.0);
-    assert!((refined[2][1] - 60.0).abs() < 1.0);
+    // Measured ~0.017 px (residual seed-quantization bias, see
+    // `test_gwlf_refinement_synthetic_square`); gate at 0.05 px.
+    assert!(
+        drift < 0.05,
+        "second GWLF pass drifted {drift:.4}px from the first — refinement is not a fixed point"
+    );
 }
 
 #[test]
