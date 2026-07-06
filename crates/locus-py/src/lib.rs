@@ -2666,7 +2666,7 @@ mod bench {
         let buffer_opt = image.as_ref().map(prepare_image_view).transpose()?;
         let view_opt = buffer_opt.as_ref().map(FfiImageBuffer::view);
 
-        let (pose_opt, _cov_opt, diag) = locus_core::bench_api::bench_estimate_tag_pose(
+        let (pose_opt, cov_opt, diag) = locus_core::bench_api::bench_estimate_tag_pose(
             &core_intr,
             &corners,
             tag_size,
@@ -2680,6 +2680,16 @@ mod bench {
         match pose_opt {
             Some(p) => out.set_item("pose", pose_to_dict(py, &p)?)?,
             None => out.set_item("pose", py.None())?,
+        }
+        // The emitted 6x6 pose covariance (row-major, as a nested list), or None when
+        // the final JᵀWJ is singular (NaN sentinel). Same finite-gate contract as
+        // `board_cov`; a nested Vec keeps this bench diagnostic dependency-free.
+        match cov_opt {
+            Some(cov) if cov.iter().flatten().all(|v| v.is_finite()) => {
+                let rows: Vec<Vec<f64>> = cov.iter().map(|row| row.to_vec()).collect();
+                out.set_item("covariance", rows)?;
+            },
+            _ => out.set_item("covariance", py.None())?,
         }
         out.set_item("aggregate_d2", diag.aggregate_d2)?;
         out.set_item("max_corner_d2", diag.max_corner_d2)?;
