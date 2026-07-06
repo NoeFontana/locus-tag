@@ -885,8 +885,13 @@ pub(crate) fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
     // 2. Eigen Analysis of 2x2 Matrix B
     //    Characteristic eq: lambda^2 - Tr(B)lambda + Det(B) = 0
     let trace = a + b;
-    let det = a * b - c * c;
-    let delta = (trace * trace - 4.0 * det).max(0.0).sqrt();
+    // Discriminant sqrt(tr² − 4·det). Algebraically tr² − 4·det = (a−b)² + 4c², a
+    // manifestly non-negative, cancellation-free form. The naive `tr² − 4·det`
+    // suffers catastrophic cancellation exactly near frontal (a≈b, c≈0 ⇒ tr²≈4·det),
+    // degrading the precision of s1,s2 — and thus the seed rotation direction
+    // v = [s1²−b, c] — in precisely the regime where rotation accuracy is hardest.
+    // Compute the equivalent sum-of-squares form directly (cannot be negative).
+    let delta = ((a - b).powi(2) + 4.0 * c * c).sqrt();
 
     // lambda1 >= lambda2
     let s1_sq = (trace + delta) * 0.5;
@@ -903,12 +908,20 @@ pub(crate) fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
         // R = Gram-Schmidt orthonormalization of [h1, h2, h1xh2]
 
         let mut r1 = h1.clone_owned();
-        let scale = 1.0 / r1.norm();
+        let r1_norm = r1.norm();
+        // Guard the normalization: a degenerate homography with ‖h1‖→0 would make
+        // `1/‖r1‖` non-finite. Bail (caller falls back / rejects) rather than emit
+        // a NaN pose. Latent on validated input (square_to_quad rejects non-finite
+        // reprojection upstream); this is defense-in-depth.
+        if r1_norm < 1e-12 {
+            return None;
+        }
+        let scale = 1.0 / r1_norm;
         r1 *= scale;
 
-        // Orthogonalize r2 w.r.t r1
-        let mut r2 = h2 - r1 * (h2.dot(&r1));
-        r2 = r2.normalize();
+        // Orthogonalize r2 w.r.t r1. If h2 ∥ r1 the residual collapses to ~0, so
+        // normalize via try_normalize and bail instead of dividing by ‖r2‖→0.
+        let r2 = (h2 - r1 * (h2.dot(&r1))).try_normalize(1e-12)?;
 
         let r3 = r1.cross(&r2);
         let rot = Matrix3::from_columns(&[r1, r2, r3]);
