@@ -242,7 +242,17 @@ impl Homography {
     #[must_use]
     pub fn project(&self, p: [f64; 2]) -> [f64; 2] {
         let res = self.h * SVector::<f64, 3>::new(p[0], p[1], 1.0);
+        // Guard the perspective divide: a near-zero `w` (point on the camera plane /
+        // degenerate homography) would yield a non-finite result. Clamp to a tiny
+        // sign-preserving epsilon so the divide stays finite — the projection becomes
+        // large-but-finite, which callers reject via their reprojection-residual gate
+        // (mirrors the `d.abs() < 1e-8` guard in `sample_grid_values_distorted`).
         let w = res[2];
+        let w = if w.abs() < 1e-12 {
+            1e-12_f64.copysign(w)
+        } else {
+            w
+        };
         [res[0] / w, res[1] / w]
     }
 }
@@ -2287,6 +2297,22 @@ mod tests {
             assert_eq!(decoded_id, u32::from(id));
             assert_eq!(hamming, 0);
             assert_eq!(rot, 0);
+        }
+    }
+
+    #[test]
+    fn test_project_stays_finite_at_near_zero_w() {
+        // Last row all-zero → the perspective weight w = 0 for every point, so an
+        // unguarded `res/w` would be ±inf/NaN. The sign-preserving epsilon clamp must
+        // keep the projection finite (callers then reject it via reprojection residual).
+        let h = SMatrix::<f64, 3, 3>::new(1.0, 0.0, 5.0, 0.0, 1.0, 7.0, 0.0, 0.0, 0.0);
+        let hom = Homography { h };
+        for p in [[0.0, 0.0], [3.0, -2.0], [1e6, 1e6]] {
+            let out = hom.project(p);
+            assert!(
+                out[0].is_finite() && out[1].is_finite(),
+                "project must stay finite at w≈0, got {out:?} for {p:?}"
+            );
         }
     }
 }

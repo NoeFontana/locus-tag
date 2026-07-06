@@ -365,24 +365,29 @@ fn extract_single_quad(
         },
     };
 
-    // Scale to full resolution using correct coordinate mapping.
-    // A point at (x, y) in decimated coordinates maps to (x*d, y*d) in full-res.
+    // Scale to full resolution using the center-aware decimation mapping: a point
+    // at `x` in decimated coordinates maps to `(x + 0.5)·d − 0.5` in full-res (the
+    // exact inverse of the `p_dec = (p_full + 0.5)/d − 0.5` convention applied to the
+    // intrinsics in `ScaledIntrinsics`). At the shipped `decimation = 1` this is the
+    // identity `x`, so it is byte-stable on every shipped profile; for user `d > 1`
+    // it removes a `0.5·(d−1)` bias that the naive `x·d` introduced.
+    let to_full = |v: f64| (v + 0.5) * d - 0.5;
     let quad_pts = [
         Point {
-            x: quad_pts_dec[0].x * d,
-            y: quad_pts_dec[0].y * d,
+            x: to_full(quad_pts_dec[0].x),
+            y: to_full(quad_pts_dec[0].y),
         },
         Point {
-            x: quad_pts_dec[1].x * d,
-            y: quad_pts_dec[1].y * d,
+            x: to_full(quad_pts_dec[1].x),
+            y: to_full(quad_pts_dec[1].y),
         },
         Point {
-            x: quad_pts_dec[2].x * d,
-            y: quad_pts_dec[2].y * d,
+            x: to_full(quad_pts_dec[2].x),
+            y: to_full(quad_pts_dec[2].y),
         },
         Point {
-            x: quad_pts_dec[3].x * d,
-            y: quad_pts_dec[3].y * d,
+            x: to_full(quad_pts_dec[3].x),
+            y: to_full(quad_pts_dec[3].y),
         },
     ];
 

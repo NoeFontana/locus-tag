@@ -226,6 +226,12 @@ pub struct KannalaBrandtModel {
     pub k4: f64,
 }
 
+/// Upper clamp on the recovered incidence angle θ before `tan(θ)` in KB `undistort`,
+/// so a Newton iterate that diverges past the calibrated fisheye envelope produces a
+/// large-but-finite radius (caught by the round-trip residual gate) rather than ±∞.
+#[cfg(feature = "non_rectified")]
+const MAX_KB_THETA: f64 = core::f64::consts::FRAC_PI_2 - 1e-3;
+
 #[cfg(feature = "non_rectified")]
 impl KannalaBrandtModel {
     /// Construct from a flat coefficient slice `[k1, k2, k3, k4]`.
@@ -291,8 +297,11 @@ impl CameraModel for KannalaBrandtModel {
             theta -= f / d_theta_d.max(1e-8);
             theta = theta.max(0.0);
         }
-        // r_undistorted = tan(θ)
-        let r_undist = theta.tan();
+        // r_undistorted = tan(θ). Clamp θ just below π/2 so a Newton iterate driven
+        // into the divergent tail (extreme fisheye beyond the calibrated envelope)
+        // cannot make `tan(θ)` blow up to ±∞; the resulting large-but-finite radius
+        // is then caught by the undistort round-trip residual gate.
+        let r_undist = theta.min(MAX_KB_THETA).tan();
         let scale = r_undist / r_d;
         [xd * scale, yd * scale]
     }
@@ -455,6 +464,26 @@ mod tests {
             };
             for &(xn, yn) in &[(0.1, 0.2), (-0.3, 0.15), (0.3, -0.3)] {
                 check_jacobian(&m, xn, yn);
+            }
+        }
+
+        #[test]
+        fn kannala_brandt_undistort_stays_finite_at_extreme_radius() {
+            // A large distorted radius drives the Newton iterate toward θ→π/2, where
+            // an unclamped `tan(θ)` would blow up to ±∞. The MAX_KB_THETA clamp must
+            // keep undistort finite (the round-trip residual gate then rejects it).
+            let m = KannalaBrandtModel {
+                k1: 0.1,
+                k2: 0.01,
+                k3: 0.0,
+                k4: 0.0,
+            };
+            for &(xd, yd) in &[(5.0, 5.0), (50.0, 0.0), (0.0, 100.0)] {
+                let out = m.undistort(xd, yd);
+                assert!(
+                    out[0].is_finite() && out[1].is_finite(),
+                    "undistort must stay finite at extreme radius, got {out:?} for ({xd}, {yd})"
+                );
             }
         }
 
