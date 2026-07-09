@@ -35,10 +35,6 @@ class EdLinesImbalanceGatePolicy(enum.IntEnum):
     Disabled = 0
     Enabled = 1
 
-class EdLinesPhase3ErfPolicy(enum.IntEnum):
-    Disabled = 0
-    Enabled = 1
-
 class DistortionModel(enum.IntEnum):
     """Lens distortion model tag for `CameraIntrinsics`.
 
@@ -86,7 +82,6 @@ class PyDetectorConfig:
     threshold_tile_size: int
     threshold_min_range: int
     enable_sharpening: bool
-    enable_adaptive_window: bool
     threshold_min_radius: int
     threshold_max_radius: int
     adaptive_threshold_constant: int
@@ -119,7 +114,6 @@ class PyDetectorConfig:
     sigma_n_sq: float
     structure_tensor_radius: int
     edlines_imbalance_gate: EdLinesImbalanceGatePolicy
-    edlines_phase3_erf: EdLinesPhase3ErfPolicy
     pose_consistency_fpr: float
     pose_consistency_gate_sigma_px: float
     pose_consistency_min_decisive_ratio: float
@@ -130,7 +124,6 @@ class PyDetectorConfig:
         threshold_tile_size: int,
         threshold_min_range: int,
         enable_sharpening: bool,
-        enable_adaptive_window: bool,
         threshold_min_radius: int,
         threshold_max_radius: int,
         adaptive_threshold_constant: int,
@@ -163,7 +156,6 @@ class PyDetectorConfig:
         sigma_n_sq: float,
         structure_tensor_radius: int,
         edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
-        edlines_phase3_erf: EdLinesPhase3ErfPolicy,
         pose_consistency_fpr: float,
         pose_consistency_gate_sigma_px: float,
         pose_consistency_min_decisive_ratio: float,

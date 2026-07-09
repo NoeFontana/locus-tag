@@ -137,3 +137,37 @@ If your config used `Edge` simply to skip the PSF Gauss-Newton cost on
 high-volume scenes, `None` is the right choice with `EdLines`
 extraction (whose GN corners are already sub-pixel — see
 `docs/engineering/benchmarking/lessons.md §4.1`).
+
+## `decoder.post_decode_refinement` removed
+
+The Phase C.5 post-decode edge-fit re-refit (`post_decode_refinement`)
+and the `max_recall_adaptive` profile that was its only consumer are
+removed. No other shipped profile set the flag, so detection output is
+unchanged.
+
+Migration: delete the key from any custom profile JSON, and drop the
+`post_decode_refinement=...` kwarg from any nested `DecoderConfig`.
+Because the profile shim uses `deny_unknown_fields` (Rust) and
+`extra="forbid"` (Pydantic), a leftover key now fails to load rather
+than being ignored.
+
+## `threshold.enable_adaptive_window` removed
+
+This flag was plumbed through every config layer but read by no
+algorithm code — a dead knob. Removed everywhere.
+
+Migration: delete `"enable_adaptive_window"` from any custom profile
+JSON and drop the `enable_adaptive_window=...` kwarg from any nested
+`ThresholdConfig`.
+
+## `quad.edlines_phase3_erf` removed (and `EdLinesPhase3ErfPolicy`)
+
+No shipped profile enabled the per-micro-ray ERF sub-pixel finder;
+parabolic-vertex was the only production path. The knob, the
+`EdLinesPhase3ErfPolicy` enum, and its dual-format legacy `bool`/string
+deserializer are removed.
+
+Migration: delete `"edlines_phase3_erf"` from any custom profile JSON
+(both the legacy `false`/`true` bool form and the `"Disabled"`/
+`"Enabled"` string form are gone) and drop the `edlines_phase3_erf=...`
+kwarg from any nested `QuadConfig`.

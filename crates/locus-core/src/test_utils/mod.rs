@@ -373,7 +373,7 @@ pub fn generate_checkered(width: usize, height: usize) -> Vec<u8> {
 pub mod subpixel;
 
 /// Complex multi-tag scene generation for integration testing.
-#[cfg(any(feature = "extended-tests", feature = "extended-bench"))]
+#[cfg(feature = "extended-bench")]
 pub mod scene;
-#[cfg(any(feature = "extended-tests", feature = "extended-bench"))]
+#[cfg(feature = "extended-bench")]
 pub use scene::{SceneBuilder, TagPlacement};
