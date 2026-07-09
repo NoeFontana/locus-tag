@@ -1597,10 +1597,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#31-why-four-and-not-one" class="md-nav__link">
+  <a href="#31-why-three-and-not-one" class="md-nav__link">
     <span class="md-ellipsis">
       
-        §3.1 Why four and not one
+        §3.1 Why three and not one
       
     </span>
   </a>
@@ -2202,10 +2202,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#31-why-four-and-not-one" class="md-nav__link">
+  <a href="#31-why-three-and-not-one" class="md-nav__link">
     <span class="md-ellipsis">
       
-        §3.1 Why four and not one
+        §3.1 Why three and not one
       
     </span>
   </a>
@@ -2567,7 +2567,7 @@ pollutes Tracy's nanosecond ring buffers (the "Observer Effect").</p>
 <code>include_str!</code>'d into the Rust crate and re-exposed to Python via
 <code>_shipped_profile_json</code>. <strong>The JSON is authoritative</strong>; if a Rust
 constant disagrees, the JSON wins.</p>
-<p>The four presets target mutually incompatible scenarios:</p>
+<p>The three presets target mutually incompatible scenarios:</p>
 <table>
 <thead>
 <tr>
@@ -2608,18 +2608,9 @@ constant disagrees, the JSON wins.</p>
 <td>Hard</td>
 <td>4-connectivity separates touching borders; sharpening creates halos</td>
 </tr>
-<tr>
-<td><code>max_recall_adaptive</code></td>
-<td>Production tracking with per-candidate PPB routing</td>
-<td>AdaptivePpb (ContourRdp+Erf low / EdLines+None high)</td>
-<td>Erf on low / None on high</td>
-<td>on</td>
-<td>Hard</td>
-<td>Adds <code>max_hamming_error=2</code> and <code>post_decode_refinement=true</code> for blurry / distant tags</td>
-</tr>
 </tbody>
 </table>
-<h3 id="31-why-four-and-not-one">§3.1 Why four and not one</h3>
+<h3 id="31-why-three-and-not-one">§3.1 Why three and not one</h3>
 <ul>
 <li><strong>HighAccuracy</strong> needs the lowest corner RMSE. EdLines + GN gives
   it (0.16–0.29 px on hub vs 0.99–1.15 px for production); AdaptivePpb
@@ -2634,10 +2625,6 @@ constant disagrees, the JSON wins.</p>
 <li><strong>Grid</strong> has non-negotiable topological constraints
   (4-connectivity, relaxed contrast / edge-score gates) that hurt
   isolated-tag performance.</li>
-<li><strong>MaxRecallAdaptive</strong> trades the two specialty pose-tail knobs
-  (χ² gate, σ_gate=0.5) for <code>max_hamming_error=2</code> and
-  <code>post_decode_refinement=true</code> to recover blurry / distant tags
-  in real-camera tracking.</li>
 </ul>
 <h3 id="32-decode-mode-is-profile-bound-not-user-tunable">§3.2 Decode mode is profile-bound, not user-tunable</h3>
 <table>
@@ -2816,7 +2803,7 @@ guards work together to keep this safe:</p>
    ~5 pp recall on the Brown-Conrady regression suite.</li>
 </ol>
 <p>The graceful-fallback for AdaptivePpb means a single profile (e.g.
-<code>max_recall_adaptive</code>, currently bound to rectified-only tests) can
+<code>high_accuracy</code>) can
 load on either rectified or distorted frames without per-camera
 profile switching. Static EdLines stays explicit-error so the
 misconfiguration doesn't silently degrade.</p>
