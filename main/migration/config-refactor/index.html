@@ -1862,6 +1862,39 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#decoderpost_decode_refinement-removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        decoder.post_decode_refinement removed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#thresholdenable_adaptive_window-removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        threshold.enable_adaptive_window removed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quadedlines_phase3_erf-removed-and-edlinesphase3erfpolicy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        quad.edlines_phase3_erf removed (and EdLinesPhase3ErfPolicy)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1992,6 +2025,39 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#decoderpost_decode_refinement-removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        decoder.post_decode_refinement removed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#thresholdenable_adaptive_window-removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        threshold.enable_adaptive_window removed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quadedlines_phase3_erf-removed-and-edlinesphase3erfpolicy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        quad.edlines_phase3_erf removed (and EdLinesPhase3ErfPolicy)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2105,6 +2171,31 @@ choosing <code>Erf</code> is a strict superset of the old <code>Edge</code> path
 high-volume scenes, <code>None</code> is the right choice with <code>EdLines</code>
 extraction (whose GN corners are already sub-pixel — see
 <code>docs/engineering/benchmarking/lessons.md §4.1</code>).</p>
+<h2 id="decoderpost_decode_refinement-removed"><code>decoder.post_decode_refinement</code> removed</h2>
+<p>The Phase C.5 post-decode edge-fit re-refit (<code>post_decode_refinement</code>)
+and the <code>max_recall_adaptive</code> profile that was its only consumer are
+removed. No other shipped profile set the flag, so detection output is
+unchanged.</p>
+<p>Migration: delete the key from any custom profile JSON, and drop the
+<code>post_decode_refinement=...</code> kwarg from any nested <code>DecoderConfig</code>.
+Because the profile shim uses <code>deny_unknown_fields</code> (Rust) and
+<code>extra="forbid"</code> (Pydantic), a leftover key now fails to load rather
+than being ignored.</p>
+<h2 id="thresholdenable_adaptive_window-removed"><code>threshold.enable_adaptive_window</code> removed</h2>
+<p>This flag was plumbed through every config layer but read by no
+algorithm code — a dead knob. Removed everywhere.</p>
+<p>Migration: delete <code>"enable_adaptive_window"</code> from any custom profile
+JSON and drop the <code>enable_adaptive_window=...</code> kwarg from any nested
+<code>ThresholdConfig</code>.</p>
+<h2 id="quadedlines_phase3_erf-removed-and-edlinesphase3erfpolicy"><code>quad.edlines_phase3_erf</code> removed (and <code>EdLinesPhase3ErfPolicy</code>)</h2>
+<p>No shipped profile enabled the per-micro-ray ERF sub-pixel finder;
+parabolic-vertex was the only production path. The knob, the
+<code>EdLinesPhase3ErfPolicy</code> enum, and its dual-format legacy <code>bool</code>/string
+deserializer are removed.</p>
+<p>Migration: delete <code>"edlines_phase3_erf"</code> from any custom profile JSON
+(both the legacy <code>false</code>/<code>true</code> bool form and the <code>"Disabled"</code>/
+<code>"Enabled"</code> string form are gone) and drop the <code>edlines_phase3_erf=...</code>
+kwarg from any nested <code>QuadConfig</code>.</p>
 
 
 
