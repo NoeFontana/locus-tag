@@ -43,15 +43,13 @@ ProfileName: TypeAlias = Literal[
     "standard",
     "grid",
     "high_accuracy",
-    "max_recall_adaptive",
 ]
 SHIPPED_PROFILES: tuple[ProfileName, ...] = (
     "standard",
     "grid",
     "high_accuracy",
-    "max_recall_adaptive",
 )
-_ADAPTIVE_PROFILES: frozenset[ProfileName] = frozenset({"high_accuracy", "max_recall_adaptive"})
+_ADAPTIVE_PROFILES: frozenset[ProfileName] = frozenset({"high_accuracy"})
 _STATIC_ONLY_PROFILES: frozenset[ProfileName] = frozenset(SHIPPED_PROFILES) - _ADAPTIVE_PROFILES
 
 
@@ -279,17 +277,6 @@ class DecoderConfig(BaseModel):
     explicit integer overrides every family uniformly.
     """
     gwlf_transversal_alpha: float = Field(default=0.01, ge=0.0)
-    post_decode_refinement: bool = Field(default=False)
-    """Run an edge-fit corner re-refit after decoding (Phase C.5).
-
-    ``False`` (the default) preserves byte-identical behaviour. When
-    ``True``, each Valid candidate's four outer edges are independently
-    fitted with the shared ERF step model and intersected pairwise to
-    recover four sub-pixel corners; the homography is then re-solved.
-    Phase A's GWLF / structure-tensor covariance is preserved — the line
-    fit's Cramér-Rao bound is too optimistic for synthetic-PSF imagery
-    and would over-trust the refined corners in the weighted pose solver.
-    """
 
 
 class PoseConfig(BaseModel):
@@ -423,7 +410,7 @@ class DetectorConfig(BaseModel):
 
         General-purpose profiles must stay on ``QuadExtractionPolicy::Static``.
         Adaptive routing lives in explicit opt-in profiles
-        (currently only ``max_recall_adaptive``).
+        (currently only ``high_accuracy``).
         """
         if name not in SHIPPED_PROFILES:
             raise ValueError(
@@ -500,7 +487,6 @@ class DetectorConfig(BaseModel):
             refinement_mode=self.decoder.refinement_mode,
             max_hamming_error=self.decoder.max_hamming_error,
             gwlf_transversal_alpha=self.decoder.gwlf_transversal_alpha,
-            post_decode_refinement=self.decoder.post_decode_refinement,
             huber_delta_px=self.pose.huber_delta_px,
             tikhonov_alpha_max=self.pose.tikhonov_alpha_max,
             sigma_n_sq=self.pose.sigma_n_sq,

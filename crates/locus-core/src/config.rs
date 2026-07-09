@@ -438,21 +438,6 @@ pub struct DetectorConfig {
     /// snapshot-review campaign: every downstream test that constructs a
     /// default config would silently exercise new code.
     pub quad_extraction_policy: QuadExtractionPolicy,
-
-    /// Run an edge-fit corner re-refit after decoding (Phase C.5).
-    ///
-    /// When `true`, each Valid candidate's 4 outer edges are independently
-    /// fitted with the shared `ErfEdgeFitter` (PSF step model), the four
-    /// adjacent edge pairs are intersected to recover sub-pixel corners,
-    /// and the homography is re-solved. `corner_covariances` is left
-    /// untouched — Phase A's GWLF / structure-tensor covariance is the
-    /// calibrated prior for the weighted LM solver, and the line fit's
-    /// Cramér-Rao bound is too tight for synthetic-PSF imagery (see
-    /// `docs/engineering/post_decode_refinement_20260426.md`).
-    ///
-    /// `false` (the default) preserves byte-identity for all profiles that
-    /// don't opt in.
-    pub post_decode_refinement: bool,
 }
 
 impl Default for DetectorConfig {
@@ -504,7 +489,6 @@ impl Default for DetectorConfig {
             pose_consistency_min_decisive_ratio: 5.0,
             outlier_drop_d2_threshold: 0.0,
             quad_extraction_policy: QuadExtractionPolicy::Static,
-            post_decode_refinement: false,
         }
     }
 }
@@ -818,7 +802,6 @@ impl DetectorConfigBuilder {
             quad_extraction_policy: self
                 .quad_extraction_policy
                 .unwrap_or(d.quad_extraction_policy),
-            post_decode_refinement: d.post_decode_refinement,
         }
     }
 
@@ -1223,11 +1206,6 @@ mod profile_json {
         #[serde(default)]
         pub max_hamming_error: Option<u32>,
         pub gwlf_transversal_alpha: f64,
-        // Optional so existing profile JSONs (and any third-party files
-        // shipped before this field existed) deserialize unchanged. Missing
-        // → `false` → Phase C.5 disabled, byte-identical to today.
-        #[serde(default)]
-        pub post_decode_refinement: bool,
     }
 
     impl Default for DecoderJson {
@@ -1238,7 +1216,6 @@ mod profile_json {
                 refinement_mode: d.refinement_mode,
                 max_hamming_error: d.max_hamming_error,
                 gwlf_transversal_alpha: d.gwlf_transversal_alpha,
-                post_decode_refinement: d.post_decode_refinement,
             }
         }
     }
@@ -1357,7 +1334,6 @@ mod profile_json {
                 pose_consistency_min_decisive_ratio: p.pose.pose_consistency_min_decisive_ratio,
                 outlier_drop_d2_threshold: p.pose.outlier_drop_d2_threshold,
                 quad_extraction_policy: p.quad.extraction_policy,
-                post_decode_refinement: p.decoder.post_decode_refinement,
             }
         }
     }
@@ -1369,8 +1345,6 @@ const STANDARD_JSON: &str = include_str!("../profiles/standard.json");
 const GRID_JSON: &str = include_str!("../profiles/grid.json");
 #[cfg(feature = "profiles")]
 const HIGH_ACCURACY_JSON: &str = include_str!("../profiles/high_accuracy.json");
-#[cfg(feature = "profiles")]
-const MAX_RECALL_ADAPTIVE_JSON: &str = include_str!("../profiles/max_recall_adaptive.json");
 
 /// Return the raw embedded JSON for a shipped profile, or `None` if the name
 /// is unknown. Exposed so FFI consumers (the Python wheel) can read the exact
@@ -1382,7 +1356,6 @@ pub fn shipped_profile_json(name: &str) -> Option<&'static str> {
         "standard" => Some(STANDARD_JSON),
         "grid" => Some(GRID_JSON),
         "high_accuracy" => Some(HIGH_ACCURACY_JSON),
-        "max_recall_adaptive" => Some(MAX_RECALL_ADAPTIVE_JSON),
         _ => None,
     }
 }
@@ -1416,8 +1389,7 @@ impl DetectorConfig {
 
     /// Load a shipped profile by name.
     ///
-    /// Accepts `"standard"`, `"grid"`, `"high_accuracy"`, or
-    /// `"max_recall_adaptive"`.
+    /// Accepts `"standard"`, `"grid"`, or `"high_accuracy"`.
     ///
     /// # Panics
     ///
@@ -1435,11 +1407,9 @@ impl DetectorConfig {
             "standard" => STANDARD_JSON,
             "grid" => GRID_JSON,
             "high_accuracy" => HIGH_ACCURACY_JSON,
-            "max_recall_adaptive" => MAX_RECALL_ADAPTIVE_JSON,
             other => panic!(
                 "Unknown shipped profile {other:?}; expected one of \
-                 [\"standard\", \"grid\", \"high_accuracy\", \
-                 \"max_recall_adaptive\"]"
+                 [\"standard\", \"grid\", \"high_accuracy\"]"
             ),
         };
         Self::from_profile_json(json).unwrap_or_else(|e| {

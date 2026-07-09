@@ -208,8 +208,8 @@ fn run_detection_pipeline<'ctx>(
     // misconfiguration is visible. For `AdaptivePpb` policies that happen to
     // route to EdLines on the high-PPB branch, the distorted-camera extraction
     // path (`extract_single_quad_with_camera`) silently degrades to ContourRdp
-    // — there's no error to surface, just a graceful fallback. This lets the
-    // single `max_recall_adaptive` profile work across rectified and distorted
+    // — there's no error to surface, just a graceful fallback. This lets an
+    // `AdaptivePpb`-routed profile work across rectified and distorted
     // datasets without per-frame profile switching.
     let has_distortion = intrinsics.is_some_and(|k| k.distortion.is_distorted());
     if has_distortion && config.static_uses_edlines() {
@@ -458,15 +458,6 @@ fn run_detection_pipeline<'ctx>(
             );
         },
     }
-
-    // Phase C.5 — post-decode edge-fit corner re-refit.
-    crate::post_decode_refinement::refit_valid_corners(
-        &mut state.batch,
-        n,
-        &refinement_img,
-        config,
-        &state.arena,
-    );
 
     // Partition valid candidates to the front [0..v]
     let v = state.batch.partition(n);

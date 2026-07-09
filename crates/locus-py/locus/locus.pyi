@@ -124,7 +124,6 @@ class PyDetectorConfig:
     pose_consistency_gate_sigma_px: float
     pose_consistency_min_decisive_ratio: float
     outlier_drop_d2_threshold: float
-    post_decode_refinement: bool
     def __init__(
         self,
         *,
@@ -169,7 +168,6 @@ class PyDetectorConfig:
         pose_consistency_gate_sigma_px: float,
         pose_consistency_min_decisive_ratio: float,
         outlier_drop_d2_threshold: float,
-        post_decode_refinement: bool,
     ) -> None: ...
 
 # ---------------------------------------------------------------------------
@@ -335,7 +333,6 @@ class Detector:
             "standard",
             "grid",
             "high_accuracy",
-            "max_recall_adaptive",
         ]
         | None = None,
         config: Any | None = None,

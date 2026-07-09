@@ -157,8 +157,7 @@ fn setup_aprilgrid_estimator() -> (BoardEstimator, CameraIntrinsics, Box<Detecti
     (estimator, intrinsics, batch, v)
 }
 
-/// Baseline: outlier-drop disabled (matches `standard` / `grid` /
-/// `max_recall_adaptive` profiles).
+/// Baseline: outlier-drop disabled (matches `standard` / `grid` profiles).
 #[divan::bench]
 fn bench_board_estimate_aprilgrid(bencher: Bencher) {
     let (mut estimator, intrinsics, batch, v) = setup_aprilgrid_estimator();

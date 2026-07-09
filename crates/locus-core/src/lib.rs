@@ -47,8 +47,6 @@ pub mod image;
 pub mod pose;
 /// Weighted pose estimation logic.
 pub(crate) mod pose_weighted;
-/// Phase C.5 — post-decode edge-fit corner re-refit.
-pub(crate) mod post_decode_refinement;
 /// Quad extraction and geometric primitives.
 pub(crate) mod quad;
 /// Corner refinement dispatch (per-candidate + detector-level GWLF).
@@ -98,7 +96,6 @@ pub mod bench_api {
     pub use crate::gwlf::*;
     pub use crate::pose::*;
     pub use crate::pose_weighted::bench_compute_corner_covariance;
-    pub use crate::post_decode_refinement::*;
     pub use crate::quad::*;
     pub use crate::segmentation::*;
     pub use crate::simd::sampler::*;

@@ -128,20 +128,6 @@ impl RefineConfig {
             min_contrast: 5.0,
         }
     }
-
-    /// Post-decode edge-fit style. Identical to [`Self::decoder_style`] except
-    /// `scan_initial` is off (decoded corners are already sub-pixel after
-    /// Phase A) and `singular_threshold` is tighter (no scan fallback if the
-    /// solve is ill-conditioned). Used by Phase C.5 corner re-refinement.
-    #[inline]
-    #[must_use]
-    pub fn post_decode_style(sigma: f64) -> Self {
-        Self {
-            scan_initial: false,
-            singular_threshold: 1e-10,
-            ..Self::decoder_style(sigma)
-        }
-    }
 }
 
 /// Unified ERF-based edge fitter.
@@ -163,7 +149,6 @@ pub struct ErfEdgeFitter<'a> {
     nx: f64,
     ny: f64,
     d: f64,
-    last_jtj: f64,
 }
 
 impl<'a> ErfEdgeFitter<'a> {
@@ -210,7 +195,6 @@ impl<'a> ErfEdgeFitter<'a> {
             nx,
             ny,
             d,
-            last_jtj: 0.0,
         })
     }
 
@@ -334,7 +318,6 @@ impl<'a> ErfEdgeFitter<'a> {
 
             let (sum_jtj, sum_jt_res) =
                 refine_accumulate_optimized(samples, self.nx, self.ny, self.d, a, b, inv_sigma);
-            self.last_jtj = sum_jtj;
 
             if sum_jtj < config.singular_threshold {
                 break;
@@ -382,17 +365,6 @@ impl<'a> ErfEdgeFitter<'a> {
     #[must_use]
     pub fn edge_len(&self) -> f64 {
         self.len
-    }
-
-    /// Final `J^T J` from the last [`Self::refine`] call. Zero if `refine` never
-    /// ran a Gauss-Newton iteration (e.g., insufficient samples or low contrast).
-    /// Used as a conditioning / convergence sentinel — a near-zero value
-    /// indicates a degenerate fit (uniform sample band) regardless of whether
-    /// `(nx, ny, d)` numerically converged.
-    #[inline]
-    #[must_use]
-    pub fn line_jtj(&self) -> f64 {
-        self.last_jtj
     }
 
     #[inline]

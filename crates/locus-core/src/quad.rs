@@ -78,7 +78,7 @@ fn pixel_count_descending_order(stats: &[crate::segmentation::ComponentStats]) -
 /// (`ContourRdp` + the low-route refinement). Used on the distortion
 /// path where EdLines is geometrically incompatible — without forcing
 /// the low route, high-PPB candidates would otherwise be paired with
-/// the high-route refinement (`None` for max_recall_adaptive), losing
+/// the high-route refinement (`None`), losing
 /// the Erf sub-pixel pass and dropping aprilgrid recall ~5 pp.
 #[inline]
 fn resolve_route(
@@ -795,7 +795,7 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     // Distortion path is ContourRdp-only. `force_low_route=true` collapses
     // `AdaptivePpb` to its low-route extraction+refinement (`ContourRdp`+
     // low_refinement). Without this, high-PPB candidates would otherwise be
-    // paired with the high-route refinement (`None` for max_recall_adaptive),
+    // paired with the high-route refinement (`None`),
     // skipping sub-pixel refinement on aprilgrid sub-tags.
     let (_route_extraction, route_refinement, route_label, ppb_estimate) =
         resolve_route(config, bbox_w.min(bbox_h), min_outer_dim, true);

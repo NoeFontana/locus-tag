@@ -128,16 +128,15 @@ Detector settings live in `crates/locus-core/profiles/*.json`,
 `_shipped_profile_json`. **The JSON is authoritative**; if a Rust
 constant disagrees, the JSON wins.
 
-The four presets target mutually incompatible scenarios:
+The three presets target mutually incompatible scenarios:
 
 | Profile | Target | Quad extract | Refinement | Sharpen | Decode | Notes |
 |---|---|---|---|---|---|---|
 | `high_accuracy` | Pose-precision SOTA (synthetic + lab metrology) | AdaptivePpb (ContourRdp+Erf low / EdLines+None high) + axis-imbalance gate | None on EdLines route | off | Hard | Beats AprilTag-C on every translation percentile; subsumes the former `render_tag_hub` profile (PR #2xx) |
 | `standard` | Dense multi-tag production tracking | ContourRdp | Erf | on | Hard | v0.3.1+ ships Hard for 100 % precision (was Soft Mar 21) |
 | `grid` | Touching-tag checkerboard | ContourRdp + 4-conn | Erf | off | Hard | 4-connectivity separates touching borders; sharpening creates halos |
-| `max_recall_adaptive` | Production tracking with per-candidate PPB routing | AdaptivePpb (ContourRdp+Erf low / EdLines+None high) | Erf on low / None on high | on | Hard | Adds `max_hamming_error=2` and `post_decode_refinement=true` for blurry / distant tags |
 
-### §3.1 Why four and not one
+### §3.1 Why three and not one
 
 - **HighAccuracy** needs the lowest corner RMSE. EdLines + GN gives
   it (0.16–0.29 px on hub vs 0.99–1.15 px for production); AdaptivePpb
@@ -152,10 +151,6 @@ The four presets target mutually incompatible scenarios:
 - **Grid** has non-negotiable topological constraints
   (4-connectivity, relaxed contrast / edge-score gates) that hurt
   isolated-tag performance.
-- **MaxRecallAdaptive** trades the two specialty pose-tail knobs
-  (χ² gate, σ_gate=0.5) for `max_hamming_error=2` and
-  `post_decode_refinement=true` to recover blurry / distant tags
-  in real-camera tracking.
 
 ### §3.2 Decode mode is profile-bound, not user-tunable
 
@@ -283,7 +278,7 @@ guards work together to keep this safe:
    ~5 pp recall on the Brown-Conrady regression suite.
 
 The graceful-fallback for AdaptivePpb means a single profile (e.g.
-`max_recall_adaptive`, currently bound to rectified-only tests) can
+`high_accuracy`) can
 load on either rectified or distorted frames without per-camera
 profile switching. Static EdLines stays explicit-error so the
 misconfiguration doesn't silently degrade.
