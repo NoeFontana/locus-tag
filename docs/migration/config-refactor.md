@@ -20,8 +20,8 @@ After:
 detector = locus.Detector(config=locus.DetectorConfig.from_profile("standard"))
 ```
 
-Valid profile names: `"standard"`, `"grid"`, `"high_accuracy"`,
-`"max_recall_adaptive"`. Custom JSON profiles round-trip through
+Valid profile names: `"standard"`, `"grid"`, `"high_accuracy"`.
+Custom JSON profiles round-trip through
 `DetectorConfig.from_profile_json(text)`.
 
 ## Flat detector kwargs → nested `DetectorConfig`

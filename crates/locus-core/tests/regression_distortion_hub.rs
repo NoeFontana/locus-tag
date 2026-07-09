@@ -131,7 +131,7 @@ fn regression_hub_distortion_kannala_brandt() {
 // The two tests below pin the distortion-routing dispatch in
 // `crates/locus-core/src/detector.rs::run_detection_pipeline`:
 //
-//   1. `max_recall_adaptive` (AdaptivePpb policy, high-PPB route = EdLines):
+//   1. `AdaptivePpb` policy (high-PPB route = EdLines):
 //      under distorted intrinsics the high-PPB branch is silently degraded to
 //      ContourRdp + Erf via `force_low_route=true` in `resolve_route`. This
 //      test asserts the silent-fallback semantics so a regression that lets
@@ -143,15 +143,17 @@ fn regression_hub_distortion_kannala_brandt() {
 //      test asserts the variant pattern (not a display string) so the gate
 //      can be renamed without churn.
 
-/// `max_recall_adaptive` profile + distorted intrinsics: every active
-/// candidate must be routed through the low (ContourRdp) branch even when
-/// PPB would otherwise select the high (EdLines) branch. Telemetry hook:
+/// `AdaptivePpb` policy + distorted intrinsics: every active candidate must be
+/// routed through the low (ContourRdp) branch even when PPB would otherwise
+/// select the high (EdLines) branch. Telemetry hook:
 /// `DetectionBatch.routed_to[..N] == 0` (all low route) when
-/// `debug_telemetry=true`.
+/// `debug_telemetry=true`. The policy is built inline (rather than loaded from a
+/// profile) so the dispatch coverage is independent of any shipped profile's
+/// candidate-area gate.
 #[cfg(feature = "non_rectified")]
 #[test]
-fn test_max_recall_adaptive_falls_back_under_distortion() {
-    let _guard = common::telemetry::init("test_max_recall_adaptive_falls_back_under_distortion");
+fn test_adaptive_ppb_falls_back_under_distortion() {
+    let _guard = common::telemetry::init("test_adaptive_ppb_falls_back_under_distortion");
 
     let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") else {
         println!("Skipping: set LOCUS_HUB_DATASET_DIR to run.");
@@ -204,7 +206,24 @@ fn test_max_recall_adaptive_falls_back_under_distortion() {
     );
     let tag_size = first_entry.tag_size_mm.map(|mm| mm / 1000.0);
 
-    let config = DetectorConfig::from_profile("max_recall_adaptive");
+    // Reproduces only the extraction *policy* formerly shipped by
+    // `max_recall_adaptive` (high-PPB route = EdLines) — everything else is
+    // `DetectorConfig::default()`. That is all this test needs: it asserts the
+    // under-distortion routing dispatch (`force_low_route`), which depends on
+    // the policy alone, not on the deleted profile's other knobs. The default
+    // `quad_min_area` (36) is permissive enough that aprilgrid sub-tags reach
+    // the router.
+    use locus_core::config::{AdaptivePpbConfig, QuadExtractionPolicy};
+    let config = DetectorConfig {
+        quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
+            threshold: 2.5,
+            low_extraction: QuadExtractionMode::ContourRdp,
+            high_extraction: QuadExtractionMode::EdLines,
+            low_refinement: CornerRefinementMode::Erf,
+            high_refinement: CornerRefinementMode::None,
+        }),
+        ..Default::default()
+    };
     let mut detector = Detector::builder()
         .with_config(config)
         .with_family(TagFamily::AprilTag36h11)
@@ -270,7 +289,7 @@ fn test_max_recall_adaptive_falls_back_under_distortion() {
     let high_route_count = routed.iter().filter(|&&r| r == 1).count();
     let low_route_count_dbg = routed.iter().filter(|&&r| r == 0).count();
     println!(
-        "test_max_recall_adaptive_falls_back_under_distortion: scene={fname} \
+        "test_adaptive_ppb_falls_back_under_distortion: scene={fname} \
          decoded={decoded} gt={gt_count} num_routed={n} \
          low_route={low_route_count_dbg} high_route={high_route_count}"
     );

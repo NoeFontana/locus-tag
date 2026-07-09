@@ -336,10 +336,6 @@ pub struct PyPose {
 // ============================================================================
 #[pyclass(get_all, frozen, from_py_object)]
 #[derive(Clone, Copy)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "mirrors the flat DetectorConfig; each bool is an independent public config toggle, not a state machine"
-)]
 pub struct PyDetectorConfig {
     pub threshold_tile_size: usize,
     pub threshold_min_range: u8,
@@ -386,7 +382,6 @@ pub struct PyDetectorConfig {
     pub pose_consistency_gate_sigma_px: f64,
     pub pose_consistency_min_decisive_ratio: f64,
     pub outlier_drop_d2_threshold: f64,
-    pub post_decode_refinement: bool,
 }
 
 #[pymethods]
@@ -439,12 +434,7 @@ impl PyDetectorConfig {
         pose_consistency_gate_sigma_px,
         pose_consistency_min_decisive_ratio,
         outlier_drop_d2_threshold,
-        post_decode_refinement,
     ))]
-    #[expect(
-        clippy::fn_params_excessive_bools,
-        reason = "keyword-only constructor exposes each DetectorConfig bool flag directly to Python; they are independent config toggles"
-    )]
     fn new(
         threshold_tile_size: usize,
         threshold_min_range: u8,
@@ -487,7 +477,6 @@ impl PyDetectorConfig {
         pose_consistency_gate_sigma_px: f64,
         pose_consistency_min_decisive_ratio: f64,
         outlier_drop_d2_threshold: f64,
-        post_decode_refinement: bool,
     ) -> Self {
         Self {
             threshold_tile_size,
@@ -531,7 +520,6 @@ impl PyDetectorConfig {
             pose_consistency_gate_sigma_px,
             pose_consistency_min_decisive_ratio,
             outlier_drop_d2_threshold,
-            post_decode_refinement,
         }
     }
 }
@@ -615,7 +603,6 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
             pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
             outlier_drop_d2_threshold: c.outlier_drop_d2_threshold,
-            post_decode_refinement: c.post_decode_refinement,
         }
     }
 }
@@ -1764,7 +1751,6 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
             pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
             outlier_drop_d2_threshold: c.outlier_drop_d2_threshold,
-            post_decode_refinement: c.post_decode_refinement,
             segmentation_connectivity: c.segmentation_connectivity.into(),
             segmentation_margin: c.segmentation_margin,
             quad_extraction_policy: policy,
@@ -2349,7 +2335,7 @@ fn _shipped_profile_json(name: &str) -> PyResult<&'static str> {
     locus_core::config::shipped_profile_json(name).ok_or_else(|| {
         PyValueError::new_err(format!(
             "Unknown shipped profile {name:?}; expected one of \
-             ['standard', 'grid', 'high_accuracy', 'max_recall_adaptive']"
+             ['standard', 'grid', 'high_accuracy']"
         ))
     })
 }

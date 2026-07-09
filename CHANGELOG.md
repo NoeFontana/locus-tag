@@ -7,6 +7,21 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Removed
 
+- **`max_recall_adaptive` profile (shipped presets 4 → 3).** The opt-in
+  "Phase 1 sentinel" carried a placeholder PPB threshold, minimal coverage, and
+  was excluded from the SOTA eval; the shipped set is now `standard`, `grid`,
+  `high_accuracy` — matching what the docs already described. **Breaking (Python
+  config API):** `"max_recall_adaptive"` is no longer a valid `profile=` /
+  `DetectorConfig.from_profile()` argument. The `AdaptivePpb` machinery it shared
+  with `high_accuracy` is untouched; its distortion-routing regression test was
+  retargeted to build the policy inline so that dispatch coverage survives.
+- **Phase C.5 post-decode corner re-refit** (`post_decode_refinement`). Removed
+  its only consumer (`max_recall_adaptive`), so the feature — the
+  `post_decode_refinement.rs` module, the `decoder.post_decode_refinement` config
+  field across all representations, and the now-orphaned
+  `RefineConfig::post_decode_style` / `ErfEdgeFitter::line_jtj` helpers — is
+  deleted. **Breaking (Python config API):** the `decoder.post_decode_refinement`
+  field is gone. No shipped profile set it, so detection output is unchanged.
 - **Phase 0 rotation-tail diagnostic harness** (bench-internals-only, always
   marked throwaway). Its stated revert precondition — the Phase 0 memo landing —
   is met, and the single-frame rotation line of inquiry is closed. Deleted the

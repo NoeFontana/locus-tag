@@ -150,44 +150,6 @@ fn high_accuracy_profile_routes_low_ppb_to_contour_rdp() {
 }
 
 #[test]
-fn max_recall_adaptive_profile_enables_adaptive_router() {
-    let cfg = DetectorConfig::from_profile("max_recall_adaptive");
-
-    match cfg.quad_extraction_policy {
-        QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
-            threshold,
-            low_extraction,
-            high_extraction,
-            low_refinement,
-            high_refinement,
-        }) => {
-            assert!(
-                threshold > 1.0 && threshold < 5.0,
-                "threshold must be in validator bounds (1,5), got {threshold}"
-            );
-            assert_eq!(low_extraction, QuadExtractionMode::ContourRdp);
-            assert_eq!(high_extraction, QuadExtractionMode::EdLines);
-            assert_eq!(low_refinement, CornerRefinementMode::Erf);
-            assert_eq!(high_refinement, CornerRefinementMode::None);
-        },
-        QuadExtractionPolicy::Static => {
-            panic!("max_recall_adaptive profile must carry AdaptivePpb policy, got Static");
-        },
-    }
-
-    // Runtime-overridden fields still round-trip (readable via debug tools).
-    assert_eq!(cfg.quad_extraction_mode, QuadExtractionMode::ContourRdp);
-    assert_eq!(cfg.refinement_mode, CornerRefinementMode::Erf);
-    assert_eq!(
-        cfg.segmentation_connectivity,
-        SegmentationConnectivity::Eight
-    );
-
-    cfg.validate()
-        .expect("max_recall_adaptive profile must validate");
-}
-
-#[test]
 fn from_profile_json_accepts_minimal_document() {
     // Loader must tolerate groups being absent and fall back to
     // `DetectorConfig::default()` per-field.

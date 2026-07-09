@@ -664,20 +664,6 @@ fn regression_icra_forward_highaccuracy() {
     }
 }
 
-// ── MaxRecallAdaptive (PPB-routed: ContourRdp+Erf low / EdLines+None high) ────
-
-#[test]
-fn regression_icra_forward_max_recall_adaptive() {
-    let _guard = common::telemetry::init("regression_icra_forward_max_recall_adaptive");
-    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
-        let snapshot = "icra_forward_pure_max_recall_adaptive".to_string();
-        RegressionHarness::new(snapshot)
-            .with_profile("max_recall_adaptive")
-            .with_families(vec![TagFamily::AprilTag36h11])
-            .run(provider);
-    }
-}
-
 // ── Grid (icra_grid fixture, checkerboard corners) ────────────────────────────
 
 #[test]
