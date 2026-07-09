@@ -302,7 +302,6 @@ serde = ["dep:serde", "nalgebra/serde-serialize"]
 # JSON profile loading (`DetectorConfig::from_profile` / `from_profile_json`).
 # Default-on; disable only for exotic builds that cannot pull in serde_json.
 profiles = ["serde", "dep:serde_json"]
-extended-tests = []
 extended-bench = []
 bench-internals = ["dep:rand", "dep:rand_distr"]
 non_rectified = []

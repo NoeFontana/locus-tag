@@ -110,69 +110,6 @@ impl<'de> serde::Deserialize<'de> for EdLinesImbalanceGatePolicy {
     }
 }
 
-/// Policy controlling the EdLines Phase 3 sub-pixel edge finder.
-///
-/// `Disabled` (default): 3-point parabolic vertex on the central-difference
-/// gradient profile, vertex clamped to `[-1.5, +1.5]` px.
-///
-/// `Enabled`: PSF-blurred erf-step Gauss-Newton fit per micro-ray. Adapts σ
-/// per ray and removes the directional bias the parabolic clamp introduces
-/// when the true offset exceeds ±1.5 px. Per-ray fallback to the parabolic
-/// vertex on low contrast or singular GN.
-///
-/// Trades Phase 3 latency for sub-pixel accuracy; the cost compounds with tag
-/// density (one GN solve per probed pixel). See
-/// `docs/engineering/edlines_sota_design_2026-05-03.md` for the design and
-/// `diagnostics/edlines_phase3_erf_ab/` for the latest benchmark deltas.
-///
-/// The legacy boolean form is accepted on the JSON / Python boundary.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub enum EdLinesPhase3ErfPolicy {
-    /// Use the 3-point parabolic vertex (default; matches today's behavior).
-    #[default]
-    Disabled,
-    /// Use the PSF-blurred erf-step Gauss-Newton fit per micro-ray.
-    Enabled,
-}
-
-impl EdLinesPhase3ErfPolicy {
-    /// Lower the policy to the boolean consumed by the EdLines extractor.
-    #[must_use]
-    #[inline]
-    pub const fn is_enabled(self) -> bool {
-        matches!(self, Self::Enabled)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for EdLinesPhase3ErfPolicy {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(serde::Deserialize)]
-        #[serde(untagged)]
-        enum Raw {
-            Bool(bool),
-            Str(String),
-        }
-        match Raw::deserialize(deserializer)? {
-            Raw::Bool(true) => Ok(Self::Enabled),
-            Raw::Bool(false) => Ok(Self::Disabled),
-            Raw::Str(s) => match s.as_str() {
-                "Enabled" => Ok(Self::Enabled),
-                "Disabled" => Ok(Self::Disabled),
-                other => Err(serde::de::Error::custom(format!(
-                    "EdLinesPhase3ErfPolicy: {other:?} is not a valid \
-                     variant (allowed: \"Disabled\", \"Enabled\", or boolean \
-                     true/false)"
-                ))),
-            },
-        }
-    }
-}
-
 /// Per-candidate routing config for [`QuadExtractionPolicy::AdaptivePpb`].
 ///
 /// A pixels-per-bit (PPB) estimate is computed per candidate from its
@@ -245,8 +182,6 @@ pub struct DetectorConfig {
     /// Enable Laplacian sharpening to enhance edges for small tags (default: true).
     pub enable_sharpening: bool,
 
-    /// Enable adaptive threshold window sizing based on gradient (default: true).
-    pub enable_adaptive_window: bool,
     /// Minimum threshold window radius for high-gradient regions (default: 2 = 5x5).
     pub threshold_min_radius: usize,
     /// Maximum threshold window radius for low-gradient regions (default: 7 = 15x15).
@@ -427,11 +362,6 @@ pub struct DetectorConfig {
     /// [`EdLinesImbalanceGatePolicy`].
     pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
 
-    /// EdLines Phase 3 sub-pixel finder policy. See
-    /// [`EdLinesPhase3ErfPolicy`]. Defaults to `Disabled` (parabolic vertex)
-    /// to preserve byte-identity across all profiles that do not opt in.
-    pub edlines_phase3_erf: EdLinesPhase3ErfPolicy,
-
     /// Per-frame extraction-routing policy.
     ///
     /// DO NOT change the default to `AdaptivePpb` without a planned
@@ -446,7 +376,6 @@ impl Default for DetectorConfig {
             threshold_tile_size: 8,
             threshold_min_range: 10,
             enable_sharpening: false,
-            enable_adaptive_window: false,
             threshold_min_radius: 2,
             threshold_max_radius: 15,
             adaptive_threshold_constant: 0,
@@ -483,7 +412,6 @@ impl Default for DetectorConfig {
             quad_min_density: 0.0,
             quad_extraction_mode: QuadExtractionMode::ContourRdp,
             edlines_imbalance_gate: EdLinesImbalanceGatePolicy::Disabled,
-            edlines_phase3_erf: EdLinesPhase3ErfPolicy::Disabled,
             pose_consistency_fpr: 0.0,
             pose_consistency_gate_sigma_px: 1.0,
             pose_consistency_min_decisive_ratio: 5.0,
@@ -596,7 +524,6 @@ pub struct DetectorConfigBuilder {
     threshold_tile_size: Option<usize>,
     threshold_min_range: Option<u8>,
     enable_sharpening: Option<bool>,
-    enable_adaptive_window: Option<bool>,
     threshold_min_radius: Option<usize>,
     threshold_max_radius: Option<usize>,
     adaptive_threshold_constant: Option<i16>,
@@ -706,13 +633,6 @@ impl DetectorConfigBuilder {
         self
     }
 
-    /// Enable or disable adaptive threshold window sizing.
-    #[must_use]
-    pub fn enable_adaptive_window(mut self, enable: bool) -> Self {
-        self.enable_adaptive_window = Some(enable);
-        self
-    }
-
     /// Set minimum threshold window radius.
     #[must_use]
     pub fn threshold_min_radius(mut self, radius: usize) -> Self {
@@ -749,9 +669,6 @@ impl DetectorConfigBuilder {
             threshold_tile_size: self.threshold_tile_size.unwrap_or(d.threshold_tile_size),
             threshold_min_range: self.threshold_min_range.unwrap_or(d.threshold_min_range),
             enable_sharpening: self.enable_sharpening.unwrap_or(d.enable_sharpening),
-            enable_adaptive_window: self
-                .enable_adaptive_window
-                .unwrap_or(d.enable_adaptive_window),
             threshold_min_radius: self.threshold_min_radius.unwrap_or(d.threshold_min_radius),
             threshold_max_radius: self.threshold_max_radius.unwrap_or(d.threshold_max_radius),
             adaptive_threshold_constant: self
@@ -794,7 +711,6 @@ impl DetectorConfigBuilder {
             quad_min_density: self.quad_min_density.unwrap_or(d.quad_min_density),
             quad_extraction_mode: self.quad_extraction_mode.unwrap_or(d.quad_extraction_mode),
             edlines_imbalance_gate: d.edlines_imbalance_gate,
-            edlines_phase3_erf: d.edlines_phase3_erf,
             pose_consistency_fpr: d.pose_consistency_fpr,
             pose_consistency_gate_sigma_px: d.pose_consistency_gate_sigma_px,
             pose_consistency_min_decisive_ratio: d.pose_consistency_min_decisive_ratio,
@@ -1100,8 +1016,8 @@ impl DetectOptionsBuilder {
 #[cfg(feature = "profiles")]
 mod profile_json {
     use super::{
-        CornerRefinementMode, DetectorConfig, EdLinesImbalanceGatePolicy, EdLinesPhase3ErfPolicy,
-        QuadExtractionMode, SegmentationConnectivity,
+        CornerRefinementMode, DetectorConfig, EdLinesImbalanceGatePolicy, QuadExtractionMode,
+        SegmentationConnectivity,
     };
     use serde::Deserialize;
 
@@ -1131,7 +1047,6 @@ mod profile_json {
         pub tile_size: usize,
         pub min_range: u8,
         pub enable_sharpening: bool,
-        pub enable_adaptive_window: bool,
         pub min_radius: usize,
         pub max_radius: usize,
         pub constant: i16,
@@ -1145,7 +1060,6 @@ mod profile_json {
                 tile_size: d.threshold_tile_size,
                 min_range: d.threshold_min_range,
                 enable_sharpening: d.enable_sharpening,
-                enable_adaptive_window: d.enable_adaptive_window,
                 min_radius: d.threshold_min_radius,
                 max_radius: d.threshold_max_radius,
                 constant: d.adaptive_threshold_constant,
@@ -1171,8 +1085,6 @@ mod profile_json {
         #[serde(default)]
         pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
         #[serde(default)]
-        pub edlines_phase3_erf: EdLinesPhase3ErfPolicy,
-        #[serde(default)]
         pub extraction_policy: super::QuadExtractionPolicy,
     }
 
@@ -1192,7 +1104,6 @@ mod profile_json {
                 min_density: d.quad_min_density,
                 extraction_mode: d.quad_extraction_mode,
                 edlines_imbalance_gate: d.edlines_imbalance_gate,
-                edlines_phase3_erf: d.edlines_phase3_erf,
                 extraction_policy: d.quad_extraction_policy,
             }
         }
@@ -1299,7 +1210,6 @@ mod profile_json {
                 threshold_tile_size: p.threshold.tile_size,
                 threshold_min_range: p.threshold.min_range,
                 enable_sharpening: p.threshold.enable_sharpening,
-                enable_adaptive_window: p.threshold.enable_adaptive_window,
                 threshold_min_radius: p.threshold.min_radius,
                 threshold_max_radius: p.threshold.max_radius,
                 adaptive_threshold_constant: p.threshold.constant,
@@ -1328,7 +1238,6 @@ mod profile_json {
                 quad_min_density: p.quad.min_density,
                 quad_extraction_mode: p.quad.extraction_mode,
                 edlines_imbalance_gate: p.quad.edlines_imbalance_gate,
-                edlines_phase3_erf: p.quad.edlines_phase3_erf,
                 pose_consistency_fpr: p.pose.pose_consistency_fpr,
                 pose_consistency_gate_sigma_px: p.pose.pose_consistency_gate_sigma_px,
                 pose_consistency_min_decisive_ratio: p.pose.pose_consistency_min_decisive_ratio,

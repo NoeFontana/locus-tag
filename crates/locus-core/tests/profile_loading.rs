@@ -23,7 +23,6 @@ use locus_core::config::{
 fn assert_shared_defaults(cfg: &DetectorConfig) {
     let d = DetectorConfig::default();
     assert_eq!(cfg.threshold_min_range, d.threshold_min_range);
-    assert_eq!(cfg.enable_adaptive_window, d.enable_adaptive_window);
     assert_eq!(cfg.threshold_min_radius, d.threshold_min_radius);
     assert_eq!(cfg.threshold_max_radius, d.threshold_max_radius);
     assert_eq!(

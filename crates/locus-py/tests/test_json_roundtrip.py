@@ -67,7 +67,4 @@ def test_shipped_json_matches_loaded_model(profile: ProfileName) -> None:
     # ``edlines_imbalance_gate`` defaults to ``"Disabled"`` and may be
     # omitted by profiles that don't override it.
     on_disk.get("quad", {}).setdefault("edlines_imbalance_gate", "Disabled")
-    # ``edlines_phase3_erf`` defaults to ``"Disabled"`` and may be omitted
-    # by profiles that don't opt in.
-    on_disk.get("quad", {}).setdefault("edlines_phase3_erf", "Disabled")
     assert on_disk == loaded

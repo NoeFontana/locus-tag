@@ -133,33 +133,6 @@ impl From<locus_core::config::EdLinesImbalanceGatePolicy> for EdLinesImbalanceGa
     }
 }
 
-#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum EdLinesPhase3ErfPolicy {
-    Disabled = 0,
-    Enabled = 1,
-}
-
-impl From<EdLinesPhase3ErfPolicy> for locus_core::config::EdLinesPhase3ErfPolicy {
-    fn from(m: EdLinesPhase3ErfPolicy) -> Self {
-        match m {
-            EdLinesPhase3ErfPolicy::Disabled => {
-                locus_core::config::EdLinesPhase3ErfPolicy::Disabled
-            },
-            EdLinesPhase3ErfPolicy::Enabled => locus_core::config::EdLinesPhase3ErfPolicy::Enabled,
-        }
-    }
-}
-
-impl From<locus_core::config::EdLinesPhase3ErfPolicy> for EdLinesPhase3ErfPolicy {
-    fn from(m: locus_core::config::EdLinesPhase3ErfPolicy) -> Self {
-        match m {
-            locus_core::config::EdLinesPhase3ErfPolicy::Disabled => Self::Disabled,
-            locus_core::config::EdLinesPhase3ErfPolicy::Enabled => Self::Enabled,
-        }
-    }
-}
-
 // ============================================================================
 // Structs
 // ============================================================================
@@ -340,7 +313,6 @@ pub struct PyDetectorConfig {
     pub threshold_tile_size: usize,
     pub threshold_min_range: u8,
     pub enable_sharpening: bool,
-    pub enable_adaptive_window: bool,
     pub threshold_min_radius: usize,
     pub threshold_max_radius: usize,
     pub adaptive_threshold_constant: i16,
@@ -363,7 +335,6 @@ pub struct PyDetectorConfig {
     pub quad_min_density: f64,
     pub quad_extraction_mode: QuadExtractionMode,
     pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
-    pub edlines_phase3_erf: EdLinesPhase3ErfPolicy,
     // Quad-extraction policy passthrough — Rust's `QuadExtractionPolicy` is an
     // enum (`Static` | `AdaptivePpb(...)`), flattened here so `PyDetectorConfig`
     // stays `Copy`. When `quad_extraction_policy_is_adaptive == false`, the
@@ -396,7 +367,6 @@ impl PyDetectorConfig {
         threshold_tile_size,
         threshold_min_range,
         enable_sharpening,
-        enable_adaptive_window,
         threshold_min_radius,
         threshold_max_radius,
         adaptive_threshold_constant,
@@ -419,7 +389,6 @@ impl PyDetectorConfig {
         quad_min_density,
         quad_extraction_mode,
         edlines_imbalance_gate,
-        edlines_phase3_erf,
         quad_extraction_policy_is_adaptive,
         adaptive_ppb_threshold,
         adaptive_ppb_low_extraction,
@@ -439,7 +408,6 @@ impl PyDetectorConfig {
         threshold_tile_size: usize,
         threshold_min_range: u8,
         enable_sharpening: bool,
-        enable_adaptive_window: bool,
         threshold_min_radius: usize,
         threshold_max_radius: usize,
         adaptive_threshold_constant: i16,
@@ -462,7 +430,6 @@ impl PyDetectorConfig {
         quad_min_density: f64,
         quad_extraction_mode: QuadExtractionMode,
         edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
-        edlines_phase3_erf: EdLinesPhase3ErfPolicy,
         quad_extraction_policy_is_adaptive: bool,
         adaptive_ppb_threshold: f32,
         adaptive_ppb_low_extraction: QuadExtractionMode,
@@ -482,7 +449,6 @@ impl PyDetectorConfig {
             threshold_tile_size,
             threshold_min_range,
             enable_sharpening,
-            enable_adaptive_window,
             threshold_min_radius,
             threshold_max_radius,
             adaptive_threshold_constant,
@@ -505,7 +471,6 @@ impl PyDetectorConfig {
             quad_min_density,
             quad_extraction_mode,
             edlines_imbalance_gate,
-            edlines_phase3_erf,
             quad_extraction_policy_is_adaptive,
             adaptive_ppb_threshold,
             adaptive_ppb_low_extraction,
@@ -558,7 +523,6 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             threshold_tile_size: c.threshold_tile_size,
             threshold_min_range: c.threshold_min_range,
             enable_sharpening: c.enable_sharpening,
-            enable_adaptive_window: c.enable_adaptive_window,
             threshold_min_radius: c.threshold_min_radius,
             threshold_max_radius: c.threshold_max_radius,
             adaptive_threshold_constant: c.adaptive_threshold_constant,
@@ -588,7 +552,6 @@ impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
             quad_min_density: c.quad_min_density,
             quad_extraction_mode: quad_extraction_mode_to_py(c.quad_extraction_mode),
             edlines_imbalance_gate: c.edlines_imbalance_gate.into(),
-            edlines_phase3_erf: c.edlines_phase3_erf.into(),
             quad_extraction_policy_is_adaptive: policy_is_adaptive,
             adaptive_ppb_threshold: adaptive_threshold,
             adaptive_ppb_low_extraction: adaptive_low_ext,
@@ -1721,7 +1684,6 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             threshold_tile_size: c.threshold_tile_size,
             threshold_min_range: c.threshold_min_range,
             enable_sharpening: c.enable_sharpening,
-            enable_adaptive_window: c.enable_adaptive_window,
             threshold_min_radius: c.threshold_min_radius,
             threshold_max_radius: c.threshold_max_radius,
             adaptive_threshold_constant: c.adaptive_threshold_constant,
@@ -1738,7 +1700,6 @@ impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
             quad_min_density: c.quad_min_density,
             quad_extraction_mode: c.quad_extraction_mode.into(),
             edlines_imbalance_gate: c.edlines_imbalance_gate.into(),
-            edlines_phase3_erf: c.edlines_phase3_erf.into(),
             decoder_min_contrast: c.decoder_min_contrast,
             refinement_mode: c.refinement_mode.into(),
             max_hamming_error: c.max_hamming_error,
@@ -2348,7 +2309,6 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<CornerRefinementMode>()?;
     m.add_class::<QuadExtractionMode>()?;
     m.add_class::<EdLinesImbalanceGatePolicy>()?;
-    m.add_class::<EdLinesPhase3ErfPolicy>()?;
     // Config / misc structs
     m.add_class::<DistortionModel>()?;
     m.add_class::<CameraIntrinsics>()?;

@@ -7,6 +7,22 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Removed
 
+- **Dead / unused detector config knobs.** Pruned three knobs across all
+  representations (flat Rust `DetectorConfig`, serde profile shim, Pydantic
+  model, PyO3 FFI, `.pyi` stub, JSON schema):
+  - `threshold.enable_adaptive_window` — plumbed through every layer but read by
+    no algorithm code (genuinely dead). Removed from the 3 shipped profiles and
+    the test fixtures that carried it.
+  - `quad.edlines_phase3_erf` — set by no shipped profile (parabolic-vertex is
+    the only production path). Removing the knob let us delete the dead
+    per-micro-ray ERF branch in `edlines.rs`, the `fit_erf_step_lm` kernel and
+    its unit tests, and the enum's dual-format legacy `bool`/string deserializer.
+  - `extended-tests` Cargo feature — redundant with `extended-bench`; collapsed.
+
+  **Breaking (Python config API):** the `threshold.enable_adaptive_window` and
+  `quad.edlines_phase3_erf` fields and the `EdLinesPhase3ErfPolicy` enum are gone.
+  No shipped profile relied on either, so detection output is unchanged
+  (render-tag / ICRA snapshots byte-identical).
 - **`max_recall_adaptive` profile (shipped presets 4 → 3).** The opt-in
   "Phase 1 sentinel" carried a placeholder PPB threshold, minimal coverage, and
   was excluded from the SOTA eval; the shipped set is now `standard`, `grid`,
