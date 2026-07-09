@@ -5,6 +5,20 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Removed
+
+- **Phase 0 rotation-tail diagnostic harness** (bench-internals-only, always
+  marked throwaway). Its stated revert precondition — the Phase 0 memo landing —
+  is met, and the single-frame rotation line of inquiry is closed. Deleted the
+  dual-branch LM / leave-one-out refit / per-iteration IRLS telemetry entry
+  points in `locus-core` (`pose.rs`, `pose_weighted.rs`), the `mod bench` FFI
+  surface and `locus.bench` Python sub-module in `locus-py`, and the
+  `tools/bench/rotation_tail_diag/` + `tools/bench/pose_cov_audit.py` tooling
+  built on it. The permanent foundation is untouched: the `bench-internals`
+  feature itself, `compute_image_noise_floor`, the `branch_chosen` field on
+  `PoseDiagnostics`, `bench_compute_corner_covariance`, and the shipped
+  pose-consistency / outlier-drop telemetry columns on `DetectionBatch`.
+
 ### Added
 
 - **Per-instance comparative benchmarking + visualization** (`tools/bench/compare/`,
