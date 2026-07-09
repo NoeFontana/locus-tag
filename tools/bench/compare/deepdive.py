@@ -5,7 +5,7 @@ tuned wrappers) on the selected worst-Locus (+ a few best) instances and logs ON
 ``.rrd`` with a ``frame_idx`` timeline over instances. Each library's corners go
 on a **separate entity path** so overlays are individually toggleable in the
 viewer; ground truth is overlaid in green. Mirrors the vocabulary of
-``rotation_tail_diag.extract._log_rerun_scene`` / ``tools.viz_rerun_hub``.
+``tools.viz_rerun_hub``.
 """
 
 from __future__ import annotations
