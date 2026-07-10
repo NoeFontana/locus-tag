@@ -5,6 +5,19 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Added
+
+- **Config field-set parity tripwire.** A `locus-core` unit test
+  (`config::schema_parity_tests`) now asserts the serde profile shim
+  (`ProfileJson` + nested `*Json` structs) exposes the exact same JSON key set as
+  the referee `schemas/profile.schema.json`. Because the schema is already
+  CI-locked to the Pydantic model, this transitively pins **Rust ↔ Python**
+  config field-set agreement — the one seam none of the value-oriented tripwires
+  (`profile_loading.rs`, `test_profiles.py`, the schema-diff job) asserted.
+  Adding/removing a knob on only one side is now a loud red build. The `*Json`
+  shim structs gained `Serialize` (and `ProfileJson` a derived `Default`) to
+  support the reflection; no behavior change.
+
 ### Removed
 
 - **Dead / unused detector config knobs.** Pruned three knobs across all

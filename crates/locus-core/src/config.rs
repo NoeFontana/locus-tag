@@ -1019,9 +1019,9 @@ mod profile_json {
         CornerRefinementMode, DetectorConfig, EdLinesImbalanceGatePolicy, QuadExtractionMode,
         SegmentationConnectivity,
     };
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Default, Deserialize, Serialize)]
     #[serde(deny_unknown_fields)]
     pub(super) struct ProfileJson {
         #[allow(dead_code)]
@@ -1041,7 +1041,7 @@ mod profile_json {
         pub segmentation: SegmentationJson,
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Deserialize, Serialize)]
     #[serde(deny_unknown_fields)]
     pub(super) struct ThresholdJson {
         pub tile_size: usize,
@@ -1068,7 +1068,7 @@ mod profile_json {
         }
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Deserialize, Serialize)]
     #[serde(deny_unknown_fields)]
     pub(super) struct QuadJson {
         pub min_area: u32,
@@ -1109,7 +1109,7 @@ mod profile_json {
         }
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Deserialize, Serialize)]
     #[serde(deny_unknown_fields)]
     pub(super) struct DecoderJson {
         pub min_contrast: f64,
@@ -1131,7 +1131,7 @@ mod profile_json {
         }
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Deserialize, Serialize)]
     #[serde(deny_unknown_fields)]
     pub(super) struct PoseJson {
         pub huber_delta_px: f64,
@@ -1184,7 +1184,7 @@ mod profile_json {
         }
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Deserialize, Serialize)]
     #[serde(deny_unknown_fields)]
     pub(super) struct SegmentationJson {
         pub connectivity: SegmentationConnectivity,
@@ -1563,5 +1563,157 @@ mod tests {
             ..DetectorConfig::default()
         };
         assert!(!adaptive_with_edlines.static_uses_edlines());
+    }
+}
+
+/// Field-set parity tripwire.
+///
+/// The serde profile shim (`ProfileJson` + its nested `*Json` structs) and the
+/// referee schema `schemas/profile.schema.json` must expose the identical JSON
+/// key set. The schema is CI-locked to the Pydantic model
+/// (`tools/export_profile_schema.py --check`), so pinning the Rust shim to the
+/// schema transitively pins **Rust ↔ Python** config field-set agreement — the
+/// one seam none of the value-oriented tripwires (`profile_loading.rs`,
+/// `test_profiles.py`, the schema-diff job) asserts. Adding a knob on one side
+/// and forgetting the other turns from a silent bug into a loud red build.
+#[cfg(all(test, feature = "profiles"))]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+mod schema_parity_tests {
+    use super::profile_json::ProfileJson;
+    use super::{AdaptivePpbConfig, QuadExtractionPolicy};
+    use std::collections::BTreeSet;
+    use std::path::Path;
+
+    /// Recursively collect dotted leaf paths from a serialized JSON value.
+    /// Objects recurse; every scalar (string enum, number, bool, `null`) is a leaf.
+    fn json_leaf_paths(prefix: &str, value: &serde_json::Value, out: &mut BTreeSet<String>) {
+        match value {
+            serde_json::Value::Object(map) => {
+                for (key, child) in map {
+                    let path = if prefix.is_empty() {
+                        key.clone()
+                    } else {
+                        format!("{prefix}.{key}")
+                    };
+                    json_leaf_paths(&path, child, out);
+                }
+            },
+            _ => {
+                out.insert(prefix.to_string());
+            },
+        }
+    }
+
+    /// The full JSON key set the Rust serde shim round-trips. `extraction_policy`
+    /// is an externally-tagged enum, so a `Static` default hides the adaptive
+    /// sub-fields; union it with an `AdaptivePpb` variant to surface them.
+    fn rust_key_paths() -> BTreeSet<String> {
+        let mut paths = BTreeSet::new();
+
+        let static_default = ProfileJson::default();
+        json_leaf_paths(
+            "",
+            &serde_json::to_value(&static_default).expect("serialize default ProfileJson"),
+            &mut paths,
+        );
+
+        let mut adaptive = ProfileJson::default();
+        adaptive.quad.extraction_policy =
+            QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig::default());
+        json_leaf_paths(
+            "",
+            &serde_json::to_value(&adaptive).expect("serialize adaptive ProfileJson"),
+            &mut paths,
+        );
+
+        paths
+    }
+
+    /// Resolve a `{"$ref": "#/$defs/Name"}` node against the schema's `$defs`;
+    /// returns the node unchanged when it is not a ref.
+    fn resolve<'a>(
+        node: &'a serde_json::Value,
+        defs: &'a serde_json::Value,
+    ) -> &'a serde_json::Value {
+        match node.get("$ref").and_then(serde_json::Value::as_str) {
+            Some(reference) => {
+                let name = reference.rsplit('/').next().expect("non-empty $ref");
+                &defs[name]
+            },
+            None => node,
+        }
+    }
+
+    /// Collect dotted leaf paths from a JSON-Schema node, resolving `$ref`s and
+    /// expanding `anyOf` (a scalar/`const`/`null` branch makes the property a
+    /// leaf; an object branch recurses — mirroring the serde enum's two forms).
+    fn schema_leaf_paths(
+        prefix: &str,
+        node: &serde_json::Value,
+        defs: &serde_json::Value,
+        out: &mut BTreeSet<String>,
+    ) {
+        let node = resolve(node, defs);
+
+        if let Some(props) = node
+            .get("properties")
+            .and_then(serde_json::Value::as_object)
+        {
+            for (key, child) in props {
+                let path = if prefix.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{prefix}.{key}")
+                };
+                schema_leaf_paths(&path, child, defs, out);
+            }
+            return;
+        }
+
+        if let Some(branches) = node.get("anyOf").and_then(serde_json::Value::as_array) {
+            for branch in branches {
+                if resolve(branch, defs).get("properties").is_some() {
+                    schema_leaf_paths(prefix, branch, defs, out);
+                } else {
+                    out.insert(prefix.to_string());
+                }
+            }
+            return;
+        }
+
+        out.insert(prefix.to_string());
+    }
+
+    fn schema_key_paths() -> BTreeSet<String> {
+        let schema_path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/profile.schema.json");
+        let text = std::fs::read_to_string(&schema_path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", schema_path.display()));
+        let schema: serde_json::Value = serde_json::from_str(&text).expect("parse referee schema");
+        let defs = schema
+            .get("$defs")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+
+        let mut paths = BTreeSet::new();
+        schema_leaf_paths("", &schema, &defs, &mut paths);
+        paths
+    }
+
+    #[test]
+    fn serde_shim_matches_referee_schema() {
+        let rust = rust_key_paths();
+        let schema = schema_key_paths();
+
+        let only_in_rust: Vec<&String> = rust.difference(&schema).collect();
+        let only_in_schema: Vec<&String> = schema.difference(&rust).collect();
+
+        assert!(
+            only_in_rust.is_empty() && only_in_schema.is_empty(),
+            "profile field-set drift between the Rust serde shim and \
+             schemas/profile.schema.json\n  only in Rust shim: {only_in_rust:?}\n  \
+             only in schema:    {only_in_schema:?}\n\nAdd/remove the field on both \
+             sides (and re-run tools/export_profile_schema.py).",
+        );
     }
 }
