@@ -152,11 +152,16 @@ Pydantic or extend `validate()`.
 Rust entry at `crates/locus-py/src/lib.rs:1314-1422`. Python wrapper at
 `crates/locus-py/locus/__init__.py:159-228`.
 
+The config crosses the FFI as a **JSON string**, not a typed struct: Python
+passes `config.model_dump_json()` to `_create_detector_from_config(config_json=…)`,
+and Rust parses it with `DetectorConfig::from_profile_json`.
+
 | Invariant | Enforcement point | Error type |
 | --- | --- | --- |
 | `families[i] in {0,1,2,3,4}` (valid `TagFamily` discriminant) | `tag_family_from_i32` in `crates/locus-py/src/lib.rs` | `PyValueError` |
 | Nested config invariants (radius ordering, fill-ratio ordering, cross-group compatibility) | `locus._config.DetectorConfig` model validators | `pydantic.ValidationError` |
-| Final config passes Rust `DetectorConfig::validate()` | `_create_detector_from_config` → `validated_build()` | `PyValueError` (wrapped from `ConfigError`) |
+| `config_json` parses (known keys only, valid enum-variant strings) | `from_profile_json` serde deserialize (`deny_unknown_fields`) | `PyValueError` (wrapped from `ConfigError::ProfileParse`) |
+| Final config passes Rust `DetectorConfig::validate()` | `_create_detector_from_config` → `from_profile_json` → `validated_build()` | `PyValueError` (wrapped from `ConfigError`) |
 
 ### Profile-level connectivity is an invariant, not advice
 

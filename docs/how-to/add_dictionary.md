@@ -151,10 +151,17 @@ pub fn get_dictionary(family: TagFamily) -> &'static TagDictionary {
 If you forget any of these three, the wheel will compile but the family will
 panic with `Invalid TagFamily value` at the FFI boundary.
 
-### 3.5 Update the type stub
+### 3.5 Regenerate the type stub
 
-`crates/locus-py/locus/locus.pyi` — add the new value to the `TagFamily`
-enum so type checkers see it.
+`crates/locus-py/locus/locus.pyi` is generated from the pyo3 surface — do not
+hand-edit it. After adding the `TagFamily` variant, regenerate and commit the
+stub so type checkers see the new value:
+
+```bash
+cargo run --bin stub_gen --no-default-features --features profiles,stub-gen
+```
+
+(Run under `uv run`; CI's `stub_gen --check` fails if the committed stub drifts.)
 
 ---
 

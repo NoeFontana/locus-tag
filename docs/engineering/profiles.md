@@ -41,8 +41,9 @@ JSON + JSON Schema wins because it is boring and works everywhere.
 The Python consumer base uses Pydantic ubiquitously for config management;
 reusing the model keeps editor validation, IDE autocomplete, and our own
 validators on one toolchain. `model_dump_json` round-trips to the same
-string the Rust serde shim consumes — the two are independent readers of
-one shared file format.
+string the Rust serde shim consumes *and produces* — the two are independent
+reader **and writer** of one shared file format, which is exactly what lets the
+config cross the FFI as JSON (see "Crossing the Rust ↔ Python boundary").
 
 ## Why build-time embedding?
 
@@ -61,22 +62,48 @@ caller's to handle.
 | Source of truth (embedded into Rust) | `crates/locus-core/profiles/*.json` |
 | Python accessor (reads embedded bytes via FFI) | `locus._config.DetectorConfig.from_profile` |
 | Referee schema | `schemas/profile.schema.json` |
-| Serde shim | `crates/locus-core/src/config.rs::ProfileJson` |
+| Serde shim (JSON ↔ flat, both directions) | `crates/locus-core/src/config.rs::ProfileJson` |
 | Pydantic model | `locus._config.DetectorConfig` |
-| Flat Rust struct | `crates/locus-core/src/config.rs::DetectorConfig` (exposed to Python via `Detector.config()`) |
+| Flat Rust struct | `crates/locus-core/src/config.rs::DetectorConfig` |
+| Generated Python type stub | `crates/locus-py/locus/locus.pyi` (regenerate: `cargo run --bin stub_gen --no-default-features --features profiles,stub-gen`) |
+
+## Crossing the Rust ↔ Python boundary
+
+Config crosses the FFI as **JSON text, not a typed struct**. Constructing a
+detector serializes the Pydantic model with `model_dump_json()` and hands the
+string to Rust's `from_profile_json`; `Detector.config()` calls Rust's
+`to_profile_json` and Python re-parses the result. The shipped JSON profile
+format is therefore the single contract on both sides — Rust and Python are
+independent *reader and writer* of one format, and the round-trip is total over
+every field (no hand-maintained field-by-field FFI struct to drift).
+
+One consequence: `f64::INFINITY` (the documented value that disables the
+pose-consistency escape clause) has no JSON number form, so it round-trips as
+`null` — the serde shim maps `∞ ↔ null` and Pydantic maps `math.inf ↔ null`.
+
+The Python type stub (`locus.pyi`) is **generated** from the annotated pyo3
+surface by the `stub_gen` binary; do not hand-edit it.
 
 ## Drift tripwires
 
-Three failure modes are instrumented:
+Five failure modes are instrumented, closing the loop
+**Rust flat struct ↔ serde shim ↔ Pydantic ↔ schema ↔ `.pyi`**:
 
-1. `profile_loading.rs` — Rust test; loads each shipped profile and
-   asserts hand-transcribed values. Catches profile drift.
-2. `schemas/profile.schema.json` — CI job dumps Pydantic's
-   `model_json_schema()` at runtime and diffs against this file. Catches
-   Pydantic/schema drift.
-3. `test_profiles.py` — Python test; builds a `Detector` from each shipped
-   profile and asserts `Detector.config()` matches the JSON-loaded config.
-   Catches Rust/Python FFI drift.
+1. `profile_loading.rs` — Rust test; loads each shipped profile, asserts
+   hand-transcribed values, and round-trips a config through
+   `to_profile_json`/`from_profile_json`. Catches profile drift and value
+   mis-wiring in the flat↔nested mapping.
+2. `config::schema_parity_tests` — Rust unit test; asserts the serde shim's
+   JSON key set equals `schemas/profile.schema.json`. Catches Rust ↔ schema
+   field-set drift.
+3. `schemas/profile.schema.json` — CI job dumps Pydantic's
+   `model_json_schema()` and diffs against this file. Catches Pydantic ↔ schema
+   drift.
+4. `test_profiles.py` — Python test; builds a `Detector` from each shipped
+   profile and asserts `Detector.config()` equals the source config over every
+   field. Catches Rust ↔ Python FFI drift.
+5. `stub_gen --check` — CI step; regenerates `locus.pyi` and fails on drift.
+   Catches pyo3 surface ↔ stub drift.
 
-A regression in any of the three should fail CI. A regression in all three
-simultaneously is a design-level issue — escalate.
+A regression in any one should fail CI. A regression in several simultaneously
+is a design-level issue — escalate.
