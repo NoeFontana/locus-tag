@@ -610,10 +610,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#35-update-the-type-stub" class="md-nav__link">
+  <a href="#35-regenerate-the-type-stub" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3.5 Update the type stub
+        3.5 Regenerate the type stub
       
     </span>
   </a>
@@ -2069,10 +2069,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#35-update-the-type-stub" class="md-nav__link">
+  <a href="#35-regenerate-the-type-stub" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3.5 Update the type stub
+        3.5 Regenerate the type stub
       
     </span>
   </a>
@@ -2284,9 +2284,13 @@ helpers see it.</p>
 </ol>
 <p>If you forget any of these three, the wheel will compile but the family will
 panic with <code>Invalid TagFamily value</code> at the FFI boundary.</p>
-<h3 id="35-update-the-type-stub">3.5 Update the type stub</h3>
-<p><code>crates/locus-py/locus/locus.pyi</code> — add the new value to the <code>TagFamily</code>
-enum so type checkers see it.</p>
+<h3 id="35-regenerate-the-type-stub">3.5 Regenerate the type stub</h3>
+<p><code>crates/locus-py/locus/locus.pyi</code> is generated from the pyo3 surface — do not
+hand-edit it. After adding the <code>TagFamily</code> variant, regenerate and commit the
+stub so type checkers see the new value:</p>
+<div class="highlight"><pre><span></span><code>cargo<span class="w"> </span>run<span class="w"> </span>--bin<span class="w"> </span>stub_gen<span class="w"> </span>--no-default-features<span class="w"> </span>--features<span class="w"> </span>profiles,stub-gen
+</code></pre></div>
+<p>(Run under <code>uv run</code>; CI's <code>stub_gen --check</code> fails if the committed stub drifts.)</p>
 <hr />
 <h2 id="4-rebuild-and-verify">4. Rebuild and verify</h2>
 <div class="highlight"><pre><span></span><code><span class="c1"># 1. Rebuild the wheel; build.rs picks up the new JSON + mapping.</span>

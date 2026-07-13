@@ -1936,7 +1936,7 @@
 <h2 id="2-typing-api-surface">2. Typing &amp; API Surface</h2>
 <ul>
 <li><strong>Strict Typing:</strong> All Python code must be fully type-hinted. We rely on <code>basedpyright</code> (via the <code>types</code> dependency group) to enforce static typing.</li>
-<li><strong>Stub Synchronization:</strong> If the PyO3 Rust interface changes, you MUST update the corresponding <code>locus/locus.pyi</code> type stubs to match perfectly.</li>
+<li><strong>Stub Synchronization:</strong> <code>locus/locus.pyi</code> is <strong>generated</strong> from the annotated pyo3 surface — do not hand-edit it. After changing the PyO3 interface, regenerate and commit it with <code>cargo run --bin stub_gen --no-default-features --features profiles,stub-gen</code> (under <code>uv run</code>); CI's <code>stub_gen --check</code> fails on drift. New <code>#[pyclass]</code>/<code>#[pymethods]</code>/<code>#[pyfunction]</code> items need the matching <code>#[gen_stub_*]</code> annotation to appear in the stub.</li>
 </ul>
 <h2 id="3-environment-orchestration">3. Environment &amp; Orchestration</h2>
 <ul>

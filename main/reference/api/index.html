@@ -1242,6 +1242,51 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="CameraIntrinsics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.CameraIntrinsics-attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attributes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Attributes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.CameraIntrinsics.dist_coeffs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dist_coeffs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#locus.CameraIntrinsics.distortion_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        distortion_model
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
       </ul>
@@ -2471,6 +2516,51 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="CameraIntrinsics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.CameraIntrinsics-attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attributes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Attributes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#locus.CameraIntrinsics.dist_coeffs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dist_coeffs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#locus.CameraIntrinsics.distortion_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        distortion_model
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
       </ul>
@@ -2651,7 +2741,12 @@ invoked, not <em>what</em> it looks for.</p>
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>crates/locus-py/locus/__init__.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">190</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
 <span class="normal">191</span>
 <span class="normal">192</span>
 <span class="normal">193</span>
@@ -2792,48 +2887,7 @@ invoked, not <em>what</em> it looks for.</p>
 <span class="normal">328</span>
 <span class="normal">329</span>
 <span class="normal">330</span>
-<span class="normal">331</span>
-<span class="normal">332</span>
-<span class="normal">333</span>
-<span class="normal">334</span>
-<span class="normal">335</span>
-<span class="normal">336</span>
-<span class="normal">337</span>
-<span class="normal">338</span>
-<span class="normal">339</span>
-<span class="normal">340</span>
-<span class="normal">341</span>
-<span class="normal">342</span>
-<span class="normal">343</span>
-<span class="normal">344</span>
-<span class="normal">345</span>
-<span class="normal">346</span>
-<span class="normal">347</span>
-<span class="normal">348</span>
-<span class="normal">349</span>
-<span class="normal">350</span>
-<span class="normal">351</span>
-<span class="normal">352</span>
-<span class="normal">353</span>
-<span class="normal">354</span>
-<span class="normal">355</span>
-<span class="normal">356</span>
-<span class="normal">357</span>
-<span class="normal">358</span>
-<span class="normal">359</span>
-<span class="normal">360</span>
-<span class="normal">361</span>
-<span class="normal">362</span>
-<span class="normal">363</span>
-<span class="normal">364</span>
-<span class="normal">365</span>
-<span class="normal">366</span>
-<span class="normal">367</span>
-<span class="normal">368</span>
-<span class="normal">369</span>
-<span class="normal">370</span>
-<span class="normal">371</span>
-<span class="normal">372</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Detector</span><span class="p">:</span>
+<span class="normal">331</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Detector</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;High-level detector.</span>
 
 <span class="sd">    Construction:</span>
@@ -2865,56 +2919,20 @@ invoked, not <em>what</em> it looks for.</p>
             <span class="n">families</span> <span class="o">=</span> <span class="p">[</span><span class="n">TagFamily</span><span class="o">.</span><span class="n">AprilTag36h11</span><span class="p">]</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span> <span class="o">=</span> <span class="n">_create_detector_from_config</span><span class="p">(</span>
-            <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">_to_ffi_config</span><span class="p">(),</span>
+            <span class="n">config_json</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">model_dump_json</span><span class="p">(),</span>
             <span class="n">decimation</span><span class="o">=</span><span class="n">decimation</span><span class="p">,</span>
             <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
             <span class="n">families</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">families</span><span class="p">],</span>
         <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">config</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectorConfig</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the current detector configuration as a nested model.&quot;&quot;&quot;</span>
-        <span class="n">raw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span><span class="o">.</span><span class="n">config</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">DetectorConfig</span><span class="p">(</span>
-            <span class="n">threshold</span><span class="o">=</span><span class="n">ThresholdConfig</span><span class="p">(</span>
-                <span class="n">tile_size</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">threshold_tile_size</span><span class="p">,</span>
-                <span class="n">min_range</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">threshold_min_range</span><span class="p">,</span>
-                <span class="n">enable_sharpening</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">enable_sharpening</span><span class="p">,</span>
-                <span class="n">min_radius</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">threshold_min_radius</span><span class="p">,</span>
-                <span class="n">max_radius</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">threshold_max_radius</span><span class="p">,</span>
-                <span class="n">constant</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">adaptive_threshold_constant</span><span class="p">,</span>
-                <span class="n">gradient_threshold</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">adaptive_threshold_gradient_threshold</span><span class="p">,</span>
-            <span class="p">),</span>
-            <span class="n">quad</span><span class="o">=</span><span class="n">QuadConfig</span><span class="p">(</span>
-                <span class="n">min_area</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_min_area</span><span class="p">,</span>
-                <span class="n">max_aspect_ratio</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_max_aspect_ratio</span><span class="p">,</span>
-                <span class="n">min_fill_ratio</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_min_fill_ratio</span><span class="p">,</span>
-                <span class="n">max_fill_ratio</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_max_fill_ratio</span><span class="p">,</span>
-                <span class="n">min_edge_length</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_min_edge_length</span><span class="p">,</span>
-                <span class="n">min_edge_score</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_min_edge_score</span><span class="p">,</span>
-                <span class="n">subpixel_refinement_sigma</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">subpixel_refinement_sigma</span><span class="p">,</span>
-                <span class="n">upscale_factor</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">upscale_factor</span><span class="p">,</span>
-                <span class="n">max_elongation</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_max_elongation</span><span class="p">,</span>
-                <span class="n">min_density</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_min_density</span><span class="p">,</span>
-                <span class="n">extraction_mode</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">quad_extraction_mode</span><span class="p">,</span>
-                <span class="n">edlines_imbalance_gate</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">edlines_imbalance_gate</span><span class="p">,</span>
-            <span class="p">),</span>
-            <span class="n">decoder</span><span class="o">=</span><span class="n">DecoderConfig</span><span class="p">(</span>
-                <span class="n">min_contrast</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">decoder_min_contrast</span><span class="p">,</span>
-                <span class="n">refinement_mode</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">refinement_mode</span><span class="p">,</span>
-                <span class="n">max_hamming_error</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">max_hamming_error</span><span class="p">,</span>
-                <span class="n">gwlf_transversal_alpha</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">gwlf_transversal_alpha</span><span class="p">,</span>
-            <span class="p">),</span>
-            <span class="n">pose</span><span class="o">=</span><span class="n">PoseConfig</span><span class="p">(</span>
-                <span class="n">huber_delta_px</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">huber_delta_px</span><span class="p">,</span>
-                <span class="n">tikhonov_alpha_max</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">tikhonov_alpha_max</span><span class="p">,</span>
-                <span class="n">sigma_n_sq</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">sigma_n_sq</span><span class="p">,</span>
-                <span class="n">structure_tensor_radius</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">structure_tensor_radius</span><span class="p">,</span>
-            <span class="p">),</span>
-            <span class="n">segmentation</span><span class="o">=</span><span class="n">SegmentationConfig</span><span class="p">(</span>
-                <span class="n">connectivity</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">segmentation_connectivity</span><span class="p">,</span>
-                <span class="n">margin</span><span class="o">=</span><span class="n">raw</span><span class="o">.</span><span class="n">segmentation_margin</span><span class="p">,</span>
-            <span class="p">),</span>
-        <span class="p">)</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the current detector configuration as a nested model.</span>
+
+<span class="sd">        Rust serializes its live config into the profile-JSON format and Python</span>
+<span class="sd">        re-parses it, so the readback is total over every field — no per-field</span>
+<span class="sd">        transcription to drift out of sync.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">DetectorConfig</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_inner</span><span class="o">.</span><span class="n">config</span><span class="p">())</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">set_families</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">families</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TagFamily</span><span class="p">]):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Update the tag families to be detected.&quot;&quot;&quot;</span>
@@ -3048,7 +3066,12 @@ invoked, not <em>what</em> it looks for.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>crates/locus-py/locus/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">203</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
 <span class="normal">204</span>
 <span class="normal">205</span>
 <span class="normal">206</span>
@@ -3066,12 +3089,7 @@ invoked, not <em>what</em> it looks for.</p>
 <span class="normal">218</span>
 <span class="normal">219</span>
 <span class="normal">220</span>
-<span class="normal">221</span>
-<span class="normal">222</span>
-<span class="normal">223</span>
-<span class="normal">224</span>
-<span class="normal">225</span>
-<span class="normal">226</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+<span class="normal">221</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">profile</span><span class="p">:</span> <span class="n">ProfileName</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">config</span><span class="p">:</span> <span class="n">DetectorConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -3090,7 +3108,7 @@ invoked, not <em>what</em> it looks for.</p>
         <span class="n">families</span> <span class="o">=</span> <span class="p">[</span><span class="n">TagFamily</span><span class="o">.</span><span class="n">AprilTag36h11</span><span class="p">]</span>
 
     <span class="bp">self</span><span class="o">.</span><span class="n">_inner</span> <span class="o">=</span> <span class="n">_create_detector_from_config</span><span class="p">(</span>
-        <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">_to_ffi_config</span><span class="p">(),</span>
+        <span class="n">config_json</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">model_dump_json</span><span class="p">(),</span>
         <span class="n">decimation</span><span class="o">=</span><span class="n">decimation</span><span class="p">,</span>
         <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
         <span class="n">families</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">families</span><span class="p">],</span>
@@ -3210,7 +3228,48 @@ invoked, not <em>what</em> it looks for.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>crates/locus-py/locus/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">278</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">237</span>
+<span class="normal">238</span>
+<span class="normal">239</span>
+<span class="normal">240</span>
+<span class="normal">241</span>
+<span class="normal">242</span>
+<span class="normal">243</span>
+<span class="normal">244</span>
+<span class="normal">245</span>
+<span class="normal">246</span>
+<span class="normal">247</span>
+<span class="normal">248</span>
+<span class="normal">249</span>
+<span class="normal">250</span>
+<span class="normal">251</span>
+<span class="normal">252</span>
+<span class="normal">253</span>
+<span class="normal">254</span>
+<span class="normal">255</span>
+<span class="normal">256</span>
+<span class="normal">257</span>
+<span class="normal">258</span>
+<span class="normal">259</span>
+<span class="normal">260</span>
+<span class="normal">261</span>
+<span class="normal">262</span>
+<span class="normal">263</span>
+<span class="normal">264</span>
+<span class="normal">265</span>
+<span class="normal">266</span>
+<span class="normal">267</span>
+<span class="normal">268</span>
+<span class="normal">269</span>
+<span class="normal">270</span>
+<span class="normal">271</span>
+<span class="normal">272</span>
+<span class="normal">273</span>
+<span class="normal">274</span>
+<span class="normal">275</span>
+<span class="normal">276</span>
+<span class="normal">277</span>
+<span class="normal">278</span>
 <span class="normal">279</span>
 <span class="normal">280</span>
 <span class="normal">281</span>
@@ -3220,48 +3279,7 @@ invoked, not <em>what</em> it looks for.</p>
 <span class="normal">285</span>
 <span class="normal">286</span>
 <span class="normal">287</span>
-<span class="normal">288</span>
-<span class="normal">289</span>
-<span class="normal">290</span>
-<span class="normal">291</span>
-<span class="normal">292</span>
-<span class="normal">293</span>
-<span class="normal">294</span>
-<span class="normal">295</span>
-<span class="normal">296</span>
-<span class="normal">297</span>
-<span class="normal">298</span>
-<span class="normal">299</span>
-<span class="normal">300</span>
-<span class="normal">301</span>
-<span class="normal">302</span>
-<span class="normal">303</span>
-<span class="normal">304</span>
-<span class="normal">305</span>
-<span class="normal">306</span>
-<span class="normal">307</span>
-<span class="normal">308</span>
-<span class="normal">309</span>
-<span class="normal">310</span>
-<span class="normal">311</span>
-<span class="normal">312</span>
-<span class="normal">313</span>
-<span class="normal">314</span>
-<span class="normal">315</span>
-<span class="normal">316</span>
-<span class="normal">317</span>
-<span class="normal">318</span>
-<span class="normal">319</span>
-<span class="normal">320</span>
-<span class="normal">321</span>
-<span class="normal">322</span>
-<span class="normal">323</span>
-<span class="normal">324</span>
-<span class="normal">325</span>
-<span class="normal">326</span>
-<span class="normal">327</span>
-<span class="normal">328</span>
-<span class="normal">329</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">detect</span><span class="p">(</span>
+<span class="normal">288</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">detect</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">img</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
     <span class="n">intrinsics</span><span class="p">:</span> <span class="n">CameraIntrinsics</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -3439,9 +3457,7 @@ JSON string.</p>
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>crates/locus-py/locus/_config.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">326</span>
-<span class="normal">327</span>
-<span class="normal">328</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">328</span>
 <span class="normal">329</span>
 <span class="normal">330</span>
 <span class="normal">331</span>
@@ -3525,73 +3541,7 @@ JSON string.</p>
 <span class="normal">409</span>
 <span class="normal">410</span>
 <span class="normal">411</span>
-<span class="normal">412</span>
-<span class="normal">413</span>
-<span class="normal">414</span>
-<span class="normal">415</span>
-<span class="normal">416</span>
-<span class="normal">417</span>
-<span class="normal">418</span>
-<span class="normal">419</span>
-<span class="normal">420</span>
-<span class="normal">421</span>
-<span class="normal">422</span>
-<span class="normal">423</span>
-<span class="normal">424</span>
-<span class="normal">425</span>
-<span class="normal">426</span>
-<span class="normal">427</span>
-<span class="normal">428</span>
-<span class="normal">429</span>
-<span class="normal">430</span>
-<span class="normal">431</span>
-<span class="normal">432</span>
-<span class="normal">433</span>
-<span class="normal">434</span>
-<span class="normal">435</span>
-<span class="normal">436</span>
-<span class="normal">437</span>
-<span class="normal">438</span>
-<span class="normal">439</span>
-<span class="normal">440</span>
-<span class="normal">441</span>
-<span class="normal">442</span>
-<span class="normal">443</span>
-<span class="normal">444</span>
-<span class="normal">445</span>
-<span class="normal">446</span>
-<span class="normal">447</span>
-<span class="normal">448</span>
-<span class="normal">449</span>
-<span class="normal">450</span>
-<span class="normal">451</span>
-<span class="normal">452</span>
-<span class="normal">453</span>
-<span class="normal">454</span>
-<span class="normal">455</span>
-<span class="normal">456</span>
-<span class="normal">457</span>
-<span class="normal">458</span>
-<span class="normal">459</span>
-<span class="normal">460</span>
-<span class="normal">461</span>
-<span class="normal">462</span>
-<span class="normal">463</span>
-<span class="normal">464</span>
-<span class="normal">465</span>
-<span class="normal">466</span>
-<span class="normal">467</span>
-<span class="normal">468</span>
-<span class="normal">469</span>
-<span class="normal">470</span>
-<span class="normal">471</span>
-<span class="normal">472</span>
-<span class="normal">473</span>
-<span class="normal">474</span>
-<span class="normal">475</span>
-<span class="normal">476</span>
-<span class="normal">477</span>
-<span class="normal">478</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">DetectorConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="normal">412</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">DetectorConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Nested detector configuration — Python source of truth.</span>
 
 <span class="sd">    The three shipped profiles live in ``crates/locus-core/profiles/*.json``</span>
@@ -3676,74 +3626,6 @@ JSON string.</p>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_profile_json</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">json_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectorConfig</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Load a user-supplied profile from a JSON string.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="n">json_str</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_to_ffi_config</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PyDetectorConfig</span><span class="p">:</span>
-        <span class="c1"># Cross-group validation has already fired in this Pydantic model;</span>
-        <span class="c1"># Rust&#39;s `DetectorConfig::validate()` remains the final gate.</span>
-        <span class="c1">#</span>
-        <span class="c1"># `PyDetectorConfig` stays `Copy` on the Rust side, so the enum-shaped</span>
-        <span class="c1"># `quad.extraction_policy` is flattened across a boolean discriminator</span>
-        <span class="c1"># + five scalar fields here. Rust&#39;s `From&lt;PyDetectorConfig&gt;` rebuilds</span>
-        <span class="c1"># the enum. See `crates/locus-py/src/lib.rs` for the round-trip.</span>
-        <span class="n">is_adaptive</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">extraction_policy</span><span class="p">,</span> <span class="n">_AdaptivePpbPolicy</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">is_adaptive</span><span class="p">:</span>
-            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">extraction_policy</span><span class="p">,</span> <span class="n">_AdaptivePpbPolicy</span><span class="p">)</span>
-            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">extraction_policy</span><span class="o">.</span><span class="n">AdaptivePpb</span>
-            <span class="n">ppb_threshold</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">threshold</span>
-            <span class="n">ppb_low_ext</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">low_extraction</span>
-            <span class="n">ppb_high_ext</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">high_extraction</span>
-            <span class="n">ppb_low_ref</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">low_refinement</span>
-            <span class="n">ppb_high_ref</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">high_refinement</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># Placeholder scalars — Rust&#39;s `From&lt;PyDetectorConfig&gt;` ignores</span>
-            <span class="c1"># them when `quad_extraction_policy_is_adaptive == False`.</span>
-            <span class="n">ppb_threshold</span> <span class="o">=</span> <span class="mf">0.0</span>
-            <span class="n">ppb_low_ext</span> <span class="o">=</span> <span class="n">QuadExtractionMode</span><span class="o">.</span><span class="n">ContourRdp</span>
-            <span class="n">ppb_high_ext</span> <span class="o">=</span> <span class="n">QuadExtractionMode</span><span class="o">.</span><span class="n">EdLines</span>
-            <span class="n">ppb_low_ref</span> <span class="o">=</span> <span class="n">CornerRefinementMode</span><span class="o">.</span><span class="n">Erf</span>
-            <span class="n">ppb_high_ref</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">CornerRefinementMode</span><span class="p">,</span> <span class="s2">&quot;None&quot;</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">PyDetectorConfig</span><span class="p">(</span>
-            <span class="n">threshold_tile_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">tile_size</span><span class="p">,</span>
-            <span class="n">threshold_min_range</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">min_range</span><span class="p">,</span>
-            <span class="n">enable_sharpening</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">enable_sharpening</span><span class="p">,</span>
-            <span class="n">threshold_min_radius</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">min_radius</span><span class="p">,</span>
-            <span class="n">threshold_max_radius</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">max_radius</span><span class="p">,</span>
-            <span class="n">adaptive_threshold_constant</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">constant</span><span class="p">,</span>
-            <span class="n">adaptive_threshold_gradient_threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">gradient_threshold</span><span class="p">,</span>
-            <span class="n">quad_min_area</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">min_area</span><span class="p">,</span>
-            <span class="n">quad_max_aspect_ratio</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">max_aspect_ratio</span><span class="p">,</span>
-            <span class="n">quad_min_fill_ratio</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">min_fill_ratio</span><span class="p">,</span>
-            <span class="n">quad_max_fill_ratio</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">max_fill_ratio</span><span class="p">,</span>
-            <span class="n">quad_min_edge_length</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">min_edge_length</span><span class="p">,</span>
-            <span class="n">quad_min_edge_score</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">min_edge_score</span><span class="p">,</span>
-            <span class="n">subpixel_refinement_sigma</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">subpixel_refinement_sigma</span><span class="p">,</span>
-            <span class="n">upscale_factor</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">upscale_factor</span><span class="p">,</span>
-            <span class="n">quad_max_elongation</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">max_elongation</span><span class="p">,</span>
-            <span class="n">quad_min_density</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">min_density</span><span class="p">,</span>
-            <span class="n">quad_extraction_mode</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">extraction_mode</span><span class="p">,</span>
-            <span class="n">edlines_imbalance_gate</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">edlines_imbalance_gate</span><span class="p">,</span>
-            <span class="n">quad_extraction_policy_is_adaptive</span><span class="o">=</span><span class="n">is_adaptive</span><span class="p">,</span>
-            <span class="n">adaptive_ppb_threshold</span><span class="o">=</span><span class="n">ppb_threshold</span><span class="p">,</span>
-            <span class="n">adaptive_ppb_low_extraction</span><span class="o">=</span><span class="n">ppb_low_ext</span><span class="p">,</span>
-            <span class="n">adaptive_ppb_high_extraction</span><span class="o">=</span><span class="n">ppb_high_ext</span><span class="p">,</span>
-            <span class="n">adaptive_ppb_low_refinement</span><span class="o">=</span><span class="n">ppb_low_ref</span><span class="p">,</span>
-            <span class="n">adaptive_ppb_high_refinement</span><span class="o">=</span><span class="n">ppb_high_ref</span><span class="p">,</span>
-            <span class="n">decoder_min_contrast</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="o">.</span><span class="n">min_contrast</span><span class="p">,</span>
-            <span class="n">refinement_mode</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="o">.</span><span class="n">refinement_mode</span><span class="p">,</span>
-            <span class="n">max_hamming_error</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="o">.</span><span class="n">max_hamming_error</span><span class="p">,</span>
-            <span class="n">gwlf_transversal_alpha</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="o">.</span><span class="n">gwlf_transversal_alpha</span><span class="p">,</span>
-            <span class="n">huber_delta_px</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">huber_delta_px</span><span class="p">,</span>
-            <span class="n">tikhonov_alpha_max</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">tikhonov_alpha_max</span><span class="p">,</span>
-            <span class="n">sigma_n_sq</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">sigma_n_sq</span><span class="p">,</span>
-            <span class="n">structure_tensor_radius</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">structure_tensor_radius</span><span class="p">,</span>
-            <span class="n">pose_consistency_fpr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">pose_consistency_fpr</span><span class="p">,</span>
-            <span class="n">pose_consistency_gate_sigma_px</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">pose_consistency_gate_sigma_px</span><span class="p">,</span>
-            <span class="n">pose_consistency_min_decisive_ratio</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">pose_consistency_min_decisive_ratio</span><span class="p">,</span>
-            <span class="n">outlier_drop_d2_threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">outlier_drop_d2_threshold</span><span class="p">,</span>
-            <span class="n">segmentation_connectivity</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">segmentation</span><span class="o">.</span><span class="n">connectivity</span><span class="p">,</span>
-            <span class="n">segmentation_margin</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">segmentation</span><span class="o">.</span><span class="n">margin</span><span class="p">,</span>
-        <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
               </details>
 
@@ -3785,9 +3667,7 @@ Adaptive routing lives in explicit opt-in profiles
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>crates/locus-py/locus/_config.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">387</span>
-<span class="normal">388</span>
-<span class="normal">389</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">389</span>
 <span class="normal">390</span>
 <span class="normal">391</span>
 <span class="normal">392</span>
@@ -3803,7 +3683,9 @@ Adaptive routing lives in explicit opt-in profiles
 <span class="normal">402</span>
 <span class="normal">403</span>
 <span class="normal">404</span>
-<span class="normal">405</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="normal">405</span>
+<span class="normal">406</span>
+<span class="normal">407</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">from_profile</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="n">ProfileName</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectorConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Load a shipped profile by name.</span>
 
@@ -3850,10 +3732,10 @@ Adaptive routing lives in explicit opt-in profiles
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>crates/locus-py/locus/_config.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">407</span>
-<span class="normal">408</span>
-<span class="normal">409</span>
-<span class="normal">410</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">409</span>
+<span class="normal">410</span>
+<span class="normal">411</span>
+<span class="normal">412</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">from_profile_json</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">json_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectorConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Load a user-supplied profile from a JSON string.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="n">json_str</span><span class="p">)</span>
@@ -3899,25 +3781,25 @@ Adaptive routing lives in explicit opt-in profiles
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>crates/locus-py/locus/_config.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">481</span>
-<span class="normal">482</span>
-<span class="normal">483</span>
-<span class="normal">484</span>
-<span class="normal">485</span>
-<span class="normal">486</span>
-<span class="normal">487</span>
-<span class="normal">488</span>
-<span class="normal">489</span>
-<span class="normal">490</span>
-<span class="normal">491</span>
-<span class="normal">492</span>
-<span class="normal">493</span>
-<span class="normal">494</span>
-<span class="normal">495</span>
-<span class="normal">496</span>
-<span class="normal">497</span>
-<span class="normal">498</span>
-<span class="normal">499</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">DetectOptions</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">415</span>
+<span class="normal">416</span>
+<span class="normal">417</span>
+<span class="normal">418</span>
+<span class="normal">419</span>
+<span class="normal">420</span>
+<span class="normal">421</span>
+<span class="normal">422</span>
+<span class="normal">423</span>
+<span class="normal">424</span>
+<span class="normal">425</span>
+<span class="normal">426</span>
+<span class="normal">427</span>
+<span class="normal">428</span>
+<span class="normal">429</span>
+<span class="normal">430</span>
+<span class="normal">431</span>
+<span class="normal">432</span>
+<span class="normal">433</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">DetectOptions</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Per-call options for tag detection.&quot;&quot;&quot;</span>
 
     <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -3993,7 +3875,12 @@ Adaptive routing lives in explicit opt-in profiles
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>crates/locus-py/locus/__init__.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">146</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">141</span>
+<span class="normal">142</span>
+<span class="normal">143</span>
+<span class="normal">144</span>
+<span class="normal">145</span>
+<span class="normal">146</span>
 <span class="normal">147</span>
 <span class="normal">148</span>
 <span class="normal">149</span>
@@ -4012,12 +3899,7 @@ Adaptive routing lives in explicit opt-in profiles
 <span class="normal">162</span>
 <span class="normal">163</span>
 <span class="normal">164</span>
-<span class="normal">165</span>
-<span class="normal">166</span>
-<span class="normal">167</span>
-<span class="normal">168</span>
-<span class="normal">169</span>
-<span class="normal">170</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="normal">165</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">DetectionBatch</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Vectorized detection results.</span>
@@ -4150,6 +4032,27 @@ Adaptive routing lives in explicit opt-in profiles
 
 
 
+        <p>Camera intrinsic parameters with optional lens distortion.</p>
+<p>Construct with just <code>(fx, fy, cx, cy)</code> for a rectified camera, or
+pass <code>distortion_model</code> and <code>dist_coeffs</code> for a distorted camera:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Pinhole (no distortion)</span>
+<span class="n">k</span> <span class="o">=</span> <span class="n">CameraIntrinsics</span><span class="p">(</span><span class="n">fx</span><span class="o">=</span><span class="mf">800.0</span><span class="p">,</span> <span class="n">fy</span><span class="o">=</span><span class="mf">800.0</span><span class="p">,</span> <span class="n">cx</span><span class="o">=</span><span class="mf">400.0</span><span class="p">,</span> <span class="n">cy</span><span class="o">=</span><span class="mf">300.0</span><span class="p">)</span>
+
+<span class="c1"># Brown-Conrady</span>
+<span class="n">k</span> <span class="o">=</span> <span class="n">CameraIntrinsics</span><span class="p">(</span>
+    <span class="n">fx</span><span class="o">=</span><span class="mf">800.0</span><span class="p">,</span> <span class="n">fy</span><span class="o">=</span><span class="mf">800.0</span><span class="p">,</span> <span class="n">cx</span><span class="o">=</span><span class="mf">400.0</span><span class="p">,</span> <span class="n">cy</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>
+    <span class="n">distortion_model</span><span class="o">=</span><span class="n">DistortionModel</span><span class="o">.</span><span class="n">BrownConrady</span><span class="p">,</span>
+    <span class="n">dist_coeffs</span><span class="o">=</span><span class="p">[</span><span class="o">-</span><span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.002</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="c1"># Kannala-Brandt fisheye</span>
+<span class="n">k</span> <span class="o">=</span> <span class="n">CameraIntrinsics</span><span class="p">(</span>
+    <span class="n">fx</span><span class="o">=</span><span class="mf">380.0</span><span class="p">,</span> <span class="n">fy</span><span class="o">=</span><span class="mf">380.0</span><span class="p">,</span> <span class="n">cx</span><span class="o">=</span><span class="mf">320.0</span><span class="p">,</span> <span class="n">cy</span><span class="o">=</span><span class="mf">240.0</span><span class="p">,</span>
+    <span class="n">distortion_model</span><span class="o">=</span><span class="n">DistortionModel</span><span class="o">.</span><span class="n">KannalaBrandt</span><span class="p">,</span>
+    <span class="n">dist_coeffs</span><span class="o">=</span><span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span>
+<span class="p">)</span>
+</code></pre></div>
+
 
 
 
@@ -4166,7 +4069,62 @@ Adaptive routing lives in explicit opt-in profiles
 
 
 
+<h4 id="locus.CameraIntrinsics-attributes">Attributes</h4>
 
+<div class="doc doc-object doc-attribute">
+
+
+
+<h5 id="locus.CameraIntrinsics.dist_coeffs" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">dist_coeffs</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+      <small class="doc doc-label doc-label-writable"><code>writable</code></small>
+  </span>
+
+</h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="n">dist_coeffs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Distortion coefficients corresponding to the chosen model.</p>
+<ul>
+<li><code>BrownConrady</code>: <code>[k1, k2, p1, p2, k3]</code> (5 values)</li>
+<li><code>KannalaBrandt</code>: <code>[k1, k2, k3, k4]</code> (4 values)</li>
+<li><code>Pinhole</code>: ignored (may be empty)</li>
+</ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h5 id="locus.CameraIntrinsics.distortion_model" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">distortion_model</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+      <small class="doc doc-label doc-label-writable"><code>writable</code></small>
+  </span>
+
+</h5>
+<div class="doc-signature highlight"><pre><span></span><code><span class="n">distortion_model</span><span class="p">:</span> <span class="n">DistortionModel</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The distortion model to use. Defaults to [<code>DistortionModel::Pinhole</code>].</p>
+
+    </div>
+
+</div>
 
 
 

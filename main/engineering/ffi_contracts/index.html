@@ -2365,6 +2365,9 @@ Pydantic or extend <code>validate()</code>.</p>
 <h2 id="4-detector-constructor-create_detector">4. <code>Detector</code> constructor (<code>create_detector</code>)</h2>
 <p>Rust entry at <code>crates/locus-py/src/lib.rs:1314-1422</code>. Python wrapper at
 <code>crates/locus-py/locus/__init__.py:159-228</code>.</p>
+<p>The config crosses the FFI as a <strong>JSON string</strong>, not a typed struct: Python
+passes <code>config.model_dump_json()</code> to <code>_create_detector_from_config(config_json=…)</code>,
+and Rust parses it with <code>DetectorConfig::from_profile_json</code>.</p>
 <table>
 <thead>
 <tr>
@@ -2385,8 +2388,13 @@ Pydantic or extend <code>validate()</code>.</p>
 <td><code>pydantic.ValidationError</code></td>
 </tr>
 <tr>
+<td><code>config_json</code> parses (known keys only, valid enum-variant strings)</td>
+<td><code>from_profile_json</code> serde deserialize (<code>deny_unknown_fields</code>)</td>
+<td><code>PyValueError</code> (wrapped from <code>ConfigError::ProfileParse</code>)</td>
+</tr>
+<tr>
 <td>Final config passes Rust <code>DetectorConfig::validate()</code></td>
-<td><code>_create_detector_from_config</code> → <code>validated_build()</code></td>
+<td><code>_create_detector_from_config</code> → <code>from_profile_json</code> → <code>validated_build()</code></td>
 <td><code>PyValueError</code> (wrapped from <code>ConfigError</code>)</td>
 </tr>
 </tbody>

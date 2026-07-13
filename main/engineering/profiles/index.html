@@ -1305,6 +1305,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#crossing-the-rust-python-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Crossing the Rust ↔ Python boundary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#drift-tripwires" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1940,6 +1951,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#crossing-the-rust-python-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Crossing the Rust ↔ Python boundary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#drift-tripwires" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2008,8 +2030,9 @@ JSON + JSON Schema wins because it is boring and works everywhere.</p>
 <p>The Python consumer base uses Pydantic ubiquitously for config management;
 reusing the model keeps editor validation, IDE autocomplete, and our own
 validators on one toolchain. <code>model_dump_json</code> round-trips to the same
-string the Rust serde shim consumes — the two are independent readers of
-one shared file format.</p>
+string the Rust serde shim consumes <em>and produces</em> — the two are independent
+reader <strong>and writer</strong> of one shared file format, which is exactly what lets the
+config cross the FFI as JSON (see "Crossing the Rust ↔ Python boundary").</p>
 <h2 id="why-build-time-embedding">Why build-time embedding?</h2>
 <p>A runtime profile load that fails produces an obscure
 <code>FileNotFoundError</code> at detector construction — typically long after the
@@ -2040,7 +2063,7 @@ caller's to handle.</p>
 <td><code>schemas/profile.schema.json</code></td>
 </tr>
 <tr>
-<td>Serde shim</td>
+<td>Serde shim (JSON ↔ flat, both directions)</td>
 <td><code>crates/locus-core/src/config.rs::ProfileJson</code></td>
 </tr>
 <tr>
@@ -2049,24 +2072,49 @@ caller's to handle.</p>
 </tr>
 <tr>
 <td>Flat Rust struct</td>
-<td><code>crates/locus-core/src/config.rs::DetectorConfig</code> (exposed to Python via <code>Detector.config()</code>)</td>
+<td><code>crates/locus-core/src/config.rs::DetectorConfig</code></td>
+</tr>
+<tr>
+<td>Generated Python type stub</td>
+<td><code>crates/locus-py/locus/locus.pyi</code> (regenerate: <code>cargo run --bin stub_gen --no-default-features --features profiles,stub-gen</code>)</td>
 </tr>
 </tbody>
 </table>
+<h2 id="crossing-the-rust-python-boundary">Crossing the Rust ↔ Python boundary</h2>
+<p>Config crosses the FFI as <strong>JSON text, not a typed struct</strong>. Constructing a
+detector serializes the Pydantic model with <code>model_dump_json()</code> and hands the
+string to Rust's <code>from_profile_json</code>; <code>Detector.config()</code> calls Rust's
+<code>to_profile_json</code> and Python re-parses the result. The shipped JSON profile
+format is therefore the single contract on both sides — Rust and Python are
+independent <em>reader and writer</em> of one format, and the round-trip is total over
+every field (no hand-maintained field-by-field FFI struct to drift).</p>
+<p>One consequence: <code>f64::INFINITY</code> (the documented value that disables the
+pose-consistency escape clause) has no JSON number form, so it round-trips as
+<code>null</code> — the serde shim maps <code>∞ ↔ null</code> and Pydantic maps <code>math.inf ↔ null</code>.</p>
+<p>The Python type stub (<code>locus.pyi</code>) is <strong>generated</strong> from the annotated pyo3
+surface by the <code>stub_gen</code> binary; do not hand-edit it.</p>
 <h2 id="drift-tripwires">Drift tripwires</h2>
-<p>Three failure modes are instrumented:</p>
+<p>Five failure modes are instrumented, closing the loop
+<strong>Rust flat struct ↔ serde shim ↔ Pydantic ↔ schema ↔ <code>.pyi</code></strong>:</p>
 <ol>
-<li><code>profile_loading.rs</code> — Rust test; loads each shipped profile and
-   asserts hand-transcribed values. Catches profile drift.</li>
+<li><code>profile_loading.rs</code> — Rust test; loads each shipped profile, asserts
+   hand-transcribed values, and round-trips a config through
+   <code>to_profile_json</code>/<code>from_profile_json</code>. Catches profile drift and value
+   mis-wiring in the flat↔nested mapping.</li>
+<li><code>config::schema_parity_tests</code> — Rust unit test; asserts the serde shim's
+   JSON key set equals <code>schemas/profile.schema.json</code>. Catches Rust ↔ schema
+   field-set drift.</li>
 <li><code>schemas/profile.schema.json</code> — CI job dumps Pydantic's
-   <code>model_json_schema()</code> at runtime and diffs against this file. Catches
-   Pydantic/schema drift.</li>
+   <code>model_json_schema()</code> and diffs against this file. Catches Pydantic ↔ schema
+   drift.</li>
 <li><code>test_profiles.py</code> — Python test; builds a <code>Detector</code> from each shipped
-   profile and asserts <code>Detector.config()</code> matches the JSON-loaded config.
-   Catches Rust/Python FFI drift.</li>
+   profile and asserts <code>Detector.config()</code> equals the source config over every
+   field. Catches Rust ↔ Python FFI drift.</li>
+<li><code>stub_gen --check</code> — CI step; regenerates <code>locus.pyi</code> and fails on drift.
+   Catches pyo3 surface ↔ stub drift.</li>
 </ol>
-<p>A regression in any of the three should fail CI. A regression in all three
-simultaneously is a design-level issue — escalate.</p>
+<p>A regression in any one should fail CI. A regression in several simultaneously
+is a design-level issue — escalate.</p>
 
 
 
