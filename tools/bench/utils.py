@@ -898,16 +898,46 @@ class OpenCVWrapper(LibraryWrapper):
         "apriltag": cv2.aruco.CORNER_REFINE_APRILTAG,
     }
 
-    # Behaviour-preserving defaults: applying these with ``params={}`` reproduces
-    # the previously-hardcoded detector exactly. Any tuned param overrides a key.
+    # Best-accuracy baseline (default). Tuned on locus_v1_tag36h11_1920x1080 under
+    # OpenCV 5.0.0 (`bench tune`, n=32, tail=trans_p99, precision_floor=0.98,
+    # 2026-07-13). Tag-aware `apriltag` corner refinement is the load-bearing win:
+    # recall 100 %, precision 100 %, trans p99 ≈ 55 mm / rot p99 ≈ 0.38° (vs subpix
+    # 98 % / 141 mm / 1.23°) at ~14× the latency. The co-tuned threshold params are
+    # not accuracy-load-bearing here — the whole Pareto frontier gave identical
+    # accuracy regardless of their values. The fast alternative is `_SUBPIX_ALT`.
     _DEFAULTS: dict[str, Any] = {
-        "cornerRefinementMethod": "subpix",
-        "minMarkerPerimeterRate": 0.005,
-        "adaptiveThreshConstant": 3,
-        "adaptiveThreshWinSizeStep": 5,
-        "minMarkerDistanceRate": 0.01,
+        "cornerRefinementMethod": "apriltag",
+        "cornerRefinementWinSize": 5,
+        "adaptiveThreshConstant": 9.755,
+        "adaptiveThreshWinSizeMin": 5,
+        "adaptiveThreshWinSizeMax": 30,
+        "adaptiveThreshWinSizeStep": 6,
+        "minMarkerPerimeterRate": 0.0221,
+        "minMarkerDistanceRate": 0.0414,
         "minDistanceToBorder": 1,
-        "polygonalApproxAccuracyRate": 0.01,
+        "polygonalApproxAccuracyRate": 0.0291,
+    }
+
+    # Fast operating point: subpix refinement (≈14× faster than apriltag).
+    # Also tuned under OpenCV 5.0.0 (accuracy-only sweep, 2026-07-13): better
+    # adaptive-threshold detection params take subpix from 141 mm → 66.6 mm
+    # trans p99 (1.23° → 0.57° rot) at the same speed. subpix then plateaus —
+    # the corner-refinement convergence knobs (maxIterations, minAccuracy) do
+    # NOT help further, so it cannot reach apriltag's 55 mm; that last 11 mm is
+    # structural (homography vs intensity-gradient corners). Reported as a
+    # second OpenCV row. Same key set as `_DEFAULTS` so it fully overrides on
+    # the merge in `_build`.
+    _SUBPIX_ALT: dict[str, Any] = {
+        "cornerRefinementMethod": "subpix",
+        "cornerRefinementWinSize": 9,
+        "adaptiveThreshConstant": 10.0,
+        "adaptiveThreshWinSizeMin": 4,
+        "adaptiveThreshWinSizeMax": 33,
+        "adaptiveThreshWinSizeStep": 9,
+        "minMarkerPerimeterRate": 0.019,
+        "minMarkerDistanceRate": 0.028,
+        "minDistanceToBorder": 1,
+        "polygonalApproxAccuracyRate": 0.023,
     }
 
     def __init__(self, family: int | None = None, params: dict[str, Any] | None = None):
@@ -972,10 +1002,12 @@ class OpenCVWrapper(LibraryWrapper):
                 dtype=np.float64,
             )
 
-        for i, tid in enumerate(ids):
+        # OpenCV 5.0 returns `ids` as a flat (N,) array; 4.x returned (N, 1).
+        # Flatten so each `tid` is a scalar id regardless of the OpenCV version.
+        for i, tid in enumerate(np.asarray(ids).reshape(-1)):
             c = corners[i][0]
             det = {
-                "id": int(tid[0]),
+                "id": int(tid),
                 "center": np.mean(c, axis=0).tolist(),
                 "corners": c.tolist(),
                 "hamming": 0,

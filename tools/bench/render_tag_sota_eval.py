@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -30,11 +31,19 @@ from tools.bench.utils import (
     evaluate_tag_pose,
 )
 
-HUB_CONFIG = "locus_v1_tag36h11_1920x1080"
+# Resolution override for the 2160p SOTA table without editing the source:
+#   RENDER_TAG_SOTA_CONFIG=locus_v1_tag36h11_3840x2160 uv run ... render_tag_sota_eval.py
+HUB_CONFIG = os.environ.get("RENDER_TAG_SOTA_CONFIG", "locus_v1_tag36h11_1920x1080")
 LOCUS_PROFILES: tuple[ProfileName, ...] = ("standard", "high_accuracy")
 
 
 def main() -> None:
+    import cv2
+
+    # Single-threaded latency for a fair apples-to-apples comparison: force every
+    # detector to one thread (OpenCV's internal pool, Locus/rayon, AprilTag).
+    cv2.setNumThreads(1)
+
     ds = HubDatasetLoader(root=HUB_CACHE_DIR).load_dataset(HUB_CONFIG)
     eval_tag_size = ds.tag_size if ds.tag_size is not None else 1.0
     family = locus.TagFamily.AprilTag36h11
@@ -42,21 +51,29 @@ def main() -> None:
     results: dict[str, dict[str, Any]] = {}
     for profile in LOCUS_PROFILES:
         cfg = locus.DetectorConfig.from_profile(profile)
-        detector = locus.Detector(config=cfg, families=[family])
+        detector = locus.Detector(config=cfg, families=[family], threads=1)
         wrapper = LocusWrapper(name=f"Locus ({profile})", detector=detector, family=int(family))
         stats = evaluate_tag_pose(wrapper, ds, eval_tag_size)
         results[wrapper.name] = aggregate_pose_stats(stats)
 
-    cv_wrap = OpenCVWrapper(family=int(family))
-    cv_wrap.name = "OpenCV cv2.aruco"
-    at_wrap = AprilTagWrapper(nthreads=8, family=int(family))
+    # Two OpenCV operating points: the fast `subpix` baseline and the tuned
+    # best-accuracy `apriltag` config (the shipped `_DEFAULTS`). Reporting both
+    # shows OpenCV's real speed/accuracy frontier.
+    cv_subpix = OpenCVWrapper(family=int(family), params=OpenCVWrapper._SUBPIX_ALT)
+    cv_subpix.name = "OpenCV (subpix)"
+    cv_apriltag = OpenCVWrapper(family=int(family))
+    cv_apriltag.name = "OpenCV (apriltag)"
+    at_wrap = AprilTagWrapper(nthreads=1, family=int(family))
     at_wrap.name = "AprilTag-C (pupil)"
-    for wrap in (cv_wrap, at_wrap):
+    for wrap in (cv_subpix, cv_apriltag, at_wrap):
         results[wrap.name] = aggregate_pose_stats(evaluate_tag_pose(wrap, ds, eval_tag_size))
 
+    opencv_version = str(cv2.__version__)
     out_path = Path("/tmp/render_tag_sota_full.json")
-    out_path.write_text(json.dumps({HUB_CONFIG: results}, indent=2))
-    print(f"\nSaved results to {out_path}\n")
+    out_path.write_text(
+        json.dumps({"opencv_version": opencv_version, HUB_CONFIG: results}, indent=2)
+    )
+    print(f"\nSaved results to {out_path}  (OpenCV {opencv_version})\n")
 
     print(
         f"{'Detector':<24} | {'Rec %':>6} | {'Prec %':>6} | "

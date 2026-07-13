@@ -68,6 +68,10 @@ class Provenance(BaseModel):
     cpu_cores_physical: int = Field(ge=1)
     cpu_cores_logical: int = Field(ge=1)
     locus_version: str = Field(min_length=1)
+    opencv_version: str | None = Field(
+        default=None,
+        description="cv2.__version__ when a comparison run includes the OpenCV baseline; None otherwise.",
+    )
     dataset_version: str = Field(min_length=1)
     rayon_threads: int | None = Field(default=None, ge=1)
     build_profile: Literal["release", "debug"]

@@ -1,5 +1,10 @@
 # Render-tag 1080p SOTA pursuit (2026-04-25)
 
+> **Superseded (OpenCV rows):** see
+> [`render_tag_sota_20260713.md`](render_tag_sota_20260713.md) for the OpenCV-5.0
+> re-tuned refresh (single-threaded, two OpenCV operating points, + 2160p). This
+> doc is kept as the historical 2026-04-25 record.
+
 Track the build of a `render_tag_hub` profile that beats AprilTag-C
 (`pupil_apriltags`) and OpenCV `cv2.aruco.ArucoDetector` on the
 `locus_v1_tag36h11_1920x1080` Hub regression subset (50 scenes, single tag36h11 each).
