@@ -17,6 +17,18 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   Adding/removing a knob on only one side is now a loud red build. The `*Json`
   shim structs gained `Serialize` (and `ProfileJson` a derived `Default`) to
   support the reflection; no behavior change.
+- **Generated `locus/locus.pyi` type stub + drift gate.** The hand-maintained
+  stub (whose silent drift motivated this pass) is now generated from the
+  annotated pyo3 surface via `pyo3-stub-gen`: `cargo run --bin stub_gen`
+  (re)writes it, and a CI step (`stub_gen --check`, in the *Profile Schema & Stub
+  Parity* job) fails on drift. Together with the field-set tripwire and the
+  schema-diff job this closes the loop **Rust ↔ Pydantic ↔ schema ↔ .pyi**.
+  `pyo3-stub-gen` is an *optional* dependency behind a non-default `stub-gen`
+  feature, so the shipped wheel and the `cargo deny` graph never pull it (or its
+  parser / unmaintained-unicode transitive deps) — the production build is
+  byte-identical to before, as the `#[gen_stub_*]` annotations compile out under
+  default features. `pyo3`'s `extension-module` became a toggleable default
+  feature so the generator binary can link libpython and run standalone.
 
 ### Changed
 

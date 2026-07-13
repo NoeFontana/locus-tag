@@ -27,11 +27,16 @@ use numpy::{
 };
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+#[cfg(feature = "stub-gen")]
+use pyo3_stub_gen::derive::{
+    gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pyfunction, gen_stub_pymethods,
+};
 
 // ============================================================================
 // Enums
 // ============================================================================
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TagFamily {
@@ -54,6 +59,7 @@ impl From<TagFamily> for locus_core::TagFamily {
     }
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum SegmentationConnectivity {
@@ -70,6 +76,7 @@ impl From<SegmentationConnectivity> for locus_core::config::SegmentationConnecti
     }
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum CornerRefinementMode {
@@ -88,6 +95,7 @@ impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
     }
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum QuadExtractionMode {
@@ -104,6 +112,7 @@ impl From<QuadExtractionMode> for locus_core::config::QuadExtractionMode {
     }
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum EdLinesImbalanceGatePolicy {
@@ -138,6 +147,7 @@ impl From<locus_core::config::EdLinesImbalanceGatePolicy> for EdLinesImbalanceGa
 // ============================================================================
 
 /// Identifies which lens distortion model the [`CameraIntrinsics`] coefficients apply to.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum DistortionModel {
@@ -179,6 +189,7 @@ pub enum DistortionModel {
 ///     dist_coeffs=[0.1, -0.01, 0.001, 0.0],
 /// )
 /// ```
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct CameraIntrinsics {
@@ -202,6 +213,7 @@ pub struct CameraIntrinsics {
     pub dist_coeffs: Vec<f64>,
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl CameraIntrinsics {
     #[new]
@@ -297,6 +309,7 @@ impl From<CameraIntrinsics> for locus_core::CameraIntrinsics {
     }
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyPose {
@@ -311,6 +324,7 @@ pub struct PyPose {
 // ============================================================================
 
 /// Intermediate pipeline artifacts emitted when `debug_telemetry=True`.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(get_all, frozen)]
 pub struct PipelineTelemetryResult {
     pub binarized: Py<PyArray2<u8>>,
@@ -330,6 +344,7 @@ pub struct PipelineTelemetryResult {
 }
 
 /// Typed result returned by `Detector.detect` (Python).
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(get_all, frozen)]
 pub struct DetectionResult {
     pub ids: Py<PyArray1<i32>>,
@@ -345,6 +360,7 @@ pub struct DetectionResult {
 }
 
 /// Telemetry from `CharucoRefiner.estimate` (Python), populated when `debug_telemetry=True`.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(get_all, frozen)]
 pub struct CharucoTelemetryResult {
     pub rejected_saddles: Py<PyArray2<f32>>,
@@ -359,6 +375,7 @@ pub struct CharucoTelemetryResult {
 }
 
 /// Typed result returned by `CharucoRefiner.estimate` (Python).
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(get_all, frozen)]
 pub struct CharucoEstimateResult {
     pub ids: Py<PyArray1<i32>>,
@@ -384,11 +401,13 @@ pub struct CharucoEstimateResult {
 /// The `family` parameter is checked against the board marker count at
 /// construction time: if the board needs more tag IDs than the dictionary
 /// provides, a `ValueError` is raised.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass]
 pub struct CharucoBoard {
     pub(crate) inner: std::sync::Arc<locus_core::board::CharucoTopology>,
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl CharucoBoard {
     /// Create a ChAruco board configuration.
@@ -433,11 +452,13 @@ impl CharucoBoard {
 /// The `family` parameter is checked against the board marker count at
 /// construction time: if the board needs more tag IDs than the dictionary
 /// provides, a `ValueError` is raised.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass]
 pub struct AprilGrid {
     pub(crate) inner: std::sync::Arc<locus_core::board::AprilGridTopology>,
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl AprilGrid {
     /// Create an AprilGrid board configuration.
@@ -486,11 +507,13 @@ impl AprilGrid {
 ///
 /// Reuse a single `BoardEstimator` across frames to amortise the one-time
 /// scratch-buffer allocation.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(unsendable)]
 pub struct BoardEstimator {
     inner: locus_core::board::BoardEstimator,
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl BoardEstimator {
     /// Create a `BoardEstimator` for the given board.
@@ -653,6 +676,7 @@ impl BoardEstimator {
 }
 
 /// Typed result returned by `BoardEstimator.estimate` (Python).
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(get_all, frozen)]
 pub struct BoardEstimateResult {
     pub ids: Py<PyArray1<i32>>,
@@ -670,6 +694,7 @@ pub struct BoardEstimateResult {
 ///
 /// Reuse a single `CharucoRefiner` across frames to amortise the one-time
 /// scratch-buffer allocation.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(unsendable)]
 pub struct CharucoRefiner {
     inner: locus_core::charuco::CharucoRefiner,
@@ -679,6 +704,7 @@ pub struct CharucoRefiner {
     telem_batch: locus_core::charuco::CharucoBatch,
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl CharucoRefiner {
     /// Create a `CharucoRefiner` for the given board.
@@ -1119,11 +1145,13 @@ struct SendPtr(usize);
 // that holds the GIL. The pointer remains exclusively owned by that thread.
 unsafe impl Send for SendPtr {}
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(unsendable)]
 pub struct Detector {
     inner: Box<locus_core::Detector>,
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl Detector {
     /// Detect tags and return a typed [`DetectionResult`] containing NumPy arrays.
@@ -1391,6 +1419,7 @@ fn tag_family_from_i32(f: i32) -> PyResult<locus_core::TagFamily> {
     }
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (config_json, decimation=None, threads=None, families=vec![]))]
 fn _create_detector_from_config(
@@ -1440,6 +1469,7 @@ fn _create_detector_from_config(
 ///         .build()
 /// )
 /// ```
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass]
 pub struct DetectorBuilder {
     inner: Option<locus_core::DetectorBuilder>,
@@ -1453,6 +1483,7 @@ impl DetectorBuilder {
     }
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl DetectorBuilder {
     #[new]
@@ -1951,6 +1982,7 @@ fn build_detection_result_from_owned(
 // Profiling
 // ============================================================================
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyfunction)]
 #[pyfunction]
 fn init_tracy() {
     #[cfg(feature = "tracy")]
@@ -1966,6 +1998,7 @@ fn init_tracy() {
 }
 
 #[cfg(feature = "profiles")]
+#[cfg_attr(feature = "stub-gen", gen_stub_pyfunction)]
 #[pyfunction]
 fn _shipped_profile_json(name: &str) -> PyResult<&'static str> {
     locus_core::config::shipped_profile_json(name).ok_or_else(|| {
@@ -2008,4 +2041,28 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(feature = "profiles")]
     m.add_function(wrap_pyfunction!(_shipped_profile_json, m)?)?;
     Ok(())
+}
+
+/// `&mut Detector` appears as a `#[pymethods]` argument (board estimation
+/// mutably borrows the detector to run `detect`). pyo3-stub-gen only implements
+/// `PyStubType` for `&T`, so teach it that `&mut Detector` types the same as
+/// `Detector` in a stub. `&mut` is a fundamental type, so this local impl is
+/// coherent. Lets the arguments generate without a per-parameter override
+/// (which does not compose with the `stub-gen` feature gate via `cfg_attr`).
+#[cfg(feature = "stub-gen")]
+impl pyo3_stub_gen::PyStubType for &mut Detector {
+    fn type_output() -> pyo3_stub_gen::TypeInfo {
+        <Detector as pyo3_stub_gen::PyStubType>::type_output()
+    }
+}
+
+#[cfg(feature = "stub-gen")]
+/// Gather stub info from the workspace-root `pyproject.toml`. This crate ships
+/// no `pyproject.toml` of its own (maturin config lives at the repo root), so we
+/// cannot use `define_stub_info_gatherer!` (it hardcodes the crate-dir path).
+/// Must live in the library crate, not the `stub_gen` binary — `inventory`
+/// collection only sees items linked into the same crate.
+pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
+    let manifest_dir: &std::path::Path = env!("CARGO_MANIFEST_DIR").as_ref();
+    pyo3_stub_gen::StubInfo::from_pyproject_toml(manifest_dir.join("../../pyproject.toml"))
 }
