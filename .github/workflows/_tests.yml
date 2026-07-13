@@ -297,7 +297,7 @@ jobs:
         run: |
           libdir="$(uv run --no-sync python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
           LD_LIBRARY_PATH="$libdir" uv run --no-sync cargo run --bin stub_gen \
-            --no-default-features --features profiles -- --check
+            --no-default-features --features profiles,stub-gen -- --check
 
   wheel-smoke:
     name: Wheel Install Smoke Test

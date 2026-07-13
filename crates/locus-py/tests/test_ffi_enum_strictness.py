@@ -47,6 +47,25 @@ def test_invalid_enum_variant_rejected(group: str, field: str) -> None:
         _build(doc)
 
 
+@pytest.mark.parametrize(
+    ("group", "field"),
+    [
+        ("quad", "extraction_mode"),
+        ("decoder", "refinement_mode"),
+        ("segmentation", "connectivity"),
+    ],
+)
+def test_raw_integer_in_enum_position_rejected(group: str, field: str) -> None:
+    # The enums are serialized by their variant *name* (a JSON string). A raw
+    # integer must NOT silently coerce into a variant across the boundary — serde
+    # rejects it. (This preserves the guarantee the pre-JSON PyDetectorConfig
+    # strictness test enforced, which the boundary change would otherwise drop.)
+    doc = _base_json()
+    doc[group][field] = 0
+    with pytest.raises(ValueError):
+        _build(doc)
+
+
 def test_unknown_field_rejected() -> None:
     doc = _base_json()
     doc["quad"]["bogus_knob"] = 1

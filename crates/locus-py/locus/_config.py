@@ -11,6 +11,7 @@ JSON is authoritative.
 
 from __future__ import annotations
 
+import math
 import warnings
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias, TypeVar, cast
@@ -282,7 +283,9 @@ class PoseConfig(BaseModel):
     (``≈ 4 px²``) so the gate catches sub-2-px false-positive residuals
     that the looser LM noise model would let through.
     """
-    pose_consistency_min_decisive_ratio: float = Field(default=5.0, ge=1.0)
+    pose_consistency_min_decisive_ratio: Annotated[
+        float, BeforeValidator(lambda v: math.inf if v is None else v)
+    ] = Field(default=5.0, ge=1.0)
     """Branch-ratio escape clause for the χ² consistency gate.
 
     ``alternate_d2 / primary_d2`` from the IPPE branch selector. When this

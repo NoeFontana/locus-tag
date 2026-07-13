@@ -1053,18 +1053,26 @@ mod profile_json {
         pub gradient_threshold: u8,
     }
 
+    impl ThresholdJson {
+        /// Project the flat hot-path struct into this nested group. Single source
+        /// of the flat→nested field correspondence, shared by `Default` and
+        /// `From<&DetectorConfig> for ProfileJson`.
+        fn from_config(c: &DetectorConfig) -> Self {
+            Self {
+                tile_size: c.threshold_tile_size,
+                min_range: c.threshold_min_range,
+                enable_sharpening: c.enable_sharpening,
+                min_radius: c.threshold_min_radius,
+                max_radius: c.threshold_max_radius,
+                constant: c.adaptive_threshold_constant,
+                gradient_threshold: c.adaptive_threshold_gradient_threshold,
+            }
+        }
+    }
+
     impl Default for ThresholdJson {
         fn default() -> Self {
-            let d = DetectorConfig::default();
-            Self {
-                tile_size: d.threshold_tile_size,
-                min_range: d.threshold_min_range,
-                enable_sharpening: d.enable_sharpening,
-                min_radius: d.threshold_min_radius,
-                max_radius: d.threshold_max_radius,
-                constant: d.adaptive_threshold_constant,
-                gradient_threshold: d.adaptive_threshold_gradient_threshold,
-            }
+            Self::from_config(&DetectorConfig::default())
         }
     }
 
@@ -1088,24 +1096,29 @@ mod profile_json {
         pub extraction_policy: super::QuadExtractionPolicy,
     }
 
+    impl QuadJson {
+        fn from_config(c: &DetectorConfig) -> Self {
+            Self {
+                min_area: c.quad_min_area,
+                max_aspect_ratio: c.quad_max_aspect_ratio,
+                min_fill_ratio: c.quad_min_fill_ratio,
+                max_fill_ratio: c.quad_max_fill_ratio,
+                min_edge_length: c.quad_min_edge_length,
+                min_edge_score: c.quad_min_edge_score,
+                subpixel_refinement_sigma: c.subpixel_refinement_sigma,
+                upscale_factor: c.upscale_factor,
+                max_elongation: c.quad_max_elongation,
+                min_density: c.quad_min_density,
+                extraction_mode: c.quad_extraction_mode,
+                edlines_imbalance_gate: c.edlines_imbalance_gate,
+                extraction_policy: c.quad_extraction_policy,
+            }
+        }
+    }
+
     impl Default for QuadJson {
         fn default() -> Self {
-            let d = DetectorConfig::default();
-            Self {
-                min_area: d.quad_min_area,
-                max_aspect_ratio: d.quad_max_aspect_ratio,
-                min_fill_ratio: d.quad_min_fill_ratio,
-                max_fill_ratio: d.quad_max_fill_ratio,
-                min_edge_length: d.quad_min_edge_length,
-                min_edge_score: d.quad_min_edge_score,
-                subpixel_refinement_sigma: d.subpixel_refinement_sigma,
-                upscale_factor: d.upscale_factor,
-                max_elongation: d.quad_max_elongation,
-                min_density: d.quad_min_density,
-                extraction_mode: d.quad_extraction_mode,
-                edlines_imbalance_gate: d.edlines_imbalance_gate,
-                extraction_policy: d.quad_extraction_policy,
-            }
+            Self::from_config(&DetectorConfig::default())
         }
     }
 
@@ -1119,15 +1132,20 @@ mod profile_json {
         pub gwlf_transversal_alpha: f64,
     }
 
+    impl DecoderJson {
+        fn from_config(c: &DetectorConfig) -> Self {
+            Self {
+                min_contrast: c.decoder_min_contrast,
+                refinement_mode: c.refinement_mode,
+                max_hamming_error: c.max_hamming_error,
+                gwlf_transversal_alpha: c.gwlf_transversal_alpha,
+            }
+        }
+    }
+
     impl Default for DecoderJson {
         fn default() -> Self {
-            let d = DetectorConfig::default();
-            Self {
-                min_contrast: d.decoder_min_contrast,
-                refinement_mode: d.refinement_mode,
-                max_hamming_error: d.max_hamming_error,
-                gwlf_transversal_alpha: d.gwlf_transversal_alpha,
-            }
+            Self::from_config(&DetectorConfig::default())
         }
     }
 
@@ -1151,7 +1169,15 @@ mod profile_json {
         pub pose_consistency_gate_sigma_px: f64,
         // Branch-ratio escape clause for the χ² gate. Missing → 5.0
         // (alternate IPPE d² ≥ 5× primary IPPE d² bypasses the gate).
-        #[serde(default = "default_min_decisive_ratio")]
+        // `f64::INFINITY` (the documented value that disables the escape
+        // clause) has no JSON number form, so it round-trips as `null` in
+        // both directions — matching Pydantic, which serializes `math.inf`
+        // to `null` and parses `null` back to `math.inf` for this field.
+        #[serde(
+            default = "default_min_decisive_ratio",
+            serialize_with = "serialize_ratio_inf_as_null",
+            deserialize_with = "deserialize_ratio_null_as_inf"
+        )]
         pub pose_consistency_min_decisive_ratio: f64,
         // Outlier-aware corner-drop trigger threshold. Missing → 0.0
         // (disabled), preserving byte-identity for profiles that have not
@@ -1160,27 +1186,59 @@ mod profile_json {
         pub outlier_drop_d2_threshold: f64,
     }
 
+    // Serde `default` fns source their values from `DetectorConfig::default()`
+    // so the "missing key" fallback cannot drift from the canonical default.
     fn default_gate_sigma_px() -> f64 {
-        1.0
+        DetectorConfig::default().pose_consistency_gate_sigma_px
     }
 
     fn default_min_decisive_ratio() -> f64 {
-        5.0
+        DetectorConfig::default().pose_consistency_min_decisive_ratio
+    }
+
+    /// Serialize the escape-clause ratio, emitting JSON `null` for the
+    /// non-finite disable sentinel (`f64::INFINITY`) that JSON numbers cannot
+    /// represent. Finite values serialize as numbers.
+    // `&f64` is required by serde's `serialize_with` signature.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn serialize_ratio_inf_as_null<S: serde::Serializer>(
+        value: &f64,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        if value.is_finite() {
+            serializer.serialize_f64(*value)
+        } else {
+            serializer.serialize_none()
+        }
+    }
+
+    /// Deserialize the escape-clause ratio, mapping JSON `null` back to
+    /// `f64::INFINITY` (disabled). A present number deserializes as itself; an
+    /// absent key is handled by the field's `default` and never reaches here.
+    fn deserialize_ratio_null_as_inf<'de, D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<f64, D::Error> {
+        Ok(Option::<f64>::deserialize(deserializer)?.unwrap_or(f64::INFINITY))
+    }
+
+    impl PoseJson {
+        fn from_config(c: &DetectorConfig) -> Self {
+            Self {
+                huber_delta_px: c.huber_delta_px,
+                tikhonov_alpha_max: c.tikhonov_alpha_max,
+                sigma_n_sq: c.sigma_n_sq,
+                structure_tensor_radius: c.structure_tensor_radius,
+                pose_consistency_fpr: c.pose_consistency_fpr,
+                pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
+                pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
+                outlier_drop_d2_threshold: c.outlier_drop_d2_threshold,
+            }
+        }
     }
 
     impl Default for PoseJson {
         fn default() -> Self {
-            let d = DetectorConfig::default();
-            Self {
-                huber_delta_px: d.huber_delta_px,
-                tikhonov_alpha_max: d.tikhonov_alpha_max,
-                sigma_n_sq: d.sigma_n_sq,
-                structure_tensor_radius: d.structure_tensor_radius,
-                pose_consistency_fpr: d.pose_consistency_fpr,
-                pose_consistency_gate_sigma_px: d.pose_consistency_gate_sigma_px,
-                pose_consistency_min_decisive_ratio: d.pose_consistency_min_decisive_ratio,
-                outlier_drop_d2_threshold: d.outlier_drop_d2_threshold,
-            }
+            Self::from_config(&DetectorConfig::default())
         }
     }
 
@@ -1191,13 +1249,18 @@ mod profile_json {
         pub margin: i16,
     }
 
+    impl SegmentationJson {
+        fn from_config(c: &DetectorConfig) -> Self {
+            Self {
+                connectivity: c.segmentation_connectivity,
+                margin: c.segmentation_margin,
+            }
+        }
+    }
+
     impl Default for SegmentationJson {
         fn default() -> Self {
-            let d = DetectorConfig::default();
-            Self {
-                connectivity: d.segmentation_connectivity,
-                margin: d.segmentation_margin,
-            }
+            Self::from_config(&DetectorConfig::default())
         }
     }
 
@@ -1257,50 +1320,11 @@ mod profile_json {
             ProfileJson {
                 name: None,
                 extends: None,
-                threshold: ThresholdJson {
-                    tile_size: c.threshold_tile_size,
-                    min_range: c.threshold_min_range,
-                    enable_sharpening: c.enable_sharpening,
-                    min_radius: c.threshold_min_radius,
-                    max_radius: c.threshold_max_radius,
-                    constant: c.adaptive_threshold_constant,
-                    gradient_threshold: c.adaptive_threshold_gradient_threshold,
-                },
-                quad: QuadJson {
-                    min_area: c.quad_min_area,
-                    max_aspect_ratio: c.quad_max_aspect_ratio,
-                    min_fill_ratio: c.quad_min_fill_ratio,
-                    max_fill_ratio: c.quad_max_fill_ratio,
-                    min_edge_length: c.quad_min_edge_length,
-                    min_edge_score: c.quad_min_edge_score,
-                    subpixel_refinement_sigma: c.subpixel_refinement_sigma,
-                    upscale_factor: c.upscale_factor,
-                    max_elongation: c.quad_max_elongation,
-                    min_density: c.quad_min_density,
-                    extraction_mode: c.quad_extraction_mode,
-                    edlines_imbalance_gate: c.edlines_imbalance_gate,
-                    extraction_policy: c.quad_extraction_policy,
-                },
-                decoder: DecoderJson {
-                    min_contrast: c.decoder_min_contrast,
-                    refinement_mode: c.refinement_mode,
-                    max_hamming_error: c.max_hamming_error,
-                    gwlf_transversal_alpha: c.gwlf_transversal_alpha,
-                },
-                pose: PoseJson {
-                    huber_delta_px: c.huber_delta_px,
-                    tikhonov_alpha_max: c.tikhonov_alpha_max,
-                    sigma_n_sq: c.sigma_n_sq,
-                    structure_tensor_radius: c.structure_tensor_radius,
-                    pose_consistency_fpr: c.pose_consistency_fpr,
-                    pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
-                    pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
-                    outlier_drop_d2_threshold: c.outlier_drop_d2_threshold,
-                },
-                segmentation: SegmentationJson {
-                    connectivity: c.segmentation_connectivity,
-                    margin: c.segmentation_margin,
-                },
+                threshold: ThresholdJson::from_config(c),
+                quad: QuadJson::from_config(c),
+                decoder: DecoderJson::from_config(c),
+                pose: PoseJson::from_config(c),
+                segmentation: SegmentationJson::from_config(c),
             }
         }
     }

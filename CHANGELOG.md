@@ -99,6 +99,12 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   any detector whose config set them. `config()` now reparses Rust's serialized
   effective config (see the JSON-boundary change above), so the round-trip is
   total. Covered by the rewritten `test_profiles.py` full-config comparison.
+- **`pose_consistency_min_decisive_ratio = math.inf` survives the JSON FFI
+  boundary.** The documented `f64::INFINITY` value (which disables the χ²
+  escape clause) has no JSON number form; it now round-trips as `null` in both
+  directions — Rust's serde shim maps `∞`↔`null` and Pydantic parses `null`
+  back to `math.inf` — instead of raising `ValueError` at `Detector`
+  construction. Other non-finite handling is unchanged.
 
 ### Added
 

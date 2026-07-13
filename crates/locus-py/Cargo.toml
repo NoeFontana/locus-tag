@@ -47,7 +47,7 @@ nalgebra = { version = "0.35", default-features = false, features = ["std"] }
 [features]
 default = ["profiles", "extension-module"]
 # pyo3's Python-embedding mode. Default-on so normal builds match the shipped
-# wheel; disable it (`--no-default-features --features profiles`) to build the
+# wheel; disable it (`--no-default-features --features profiles,stub-gen`) to build the
 # `stub_gen` binary, which links libpython and runs outside an interpreter.
 extension-module = ["pyo3/extension-module"]
 # Enables the pyo3-stub-gen annotations + `stub_gen` binary. Non-default so the

@@ -82,3 +82,15 @@ def test_profile_default_is_standard() -> None:
     left = locus.Detector().config()
     right = locus.Detector(profile="standard").config()
     _assert_configs_equal(left, right, "default_vs_standard")
+
+
+def test_infinite_decisive_ratio_round_trips_through_ffi() -> None:
+    # `math.inf` disables the χ² escape clause (documented). It has no JSON
+    # number form, so it crosses the FFI as `null` and must survive construction
+    # AND config() readback rather than raising at the boundary.
+    import math
+
+    cfg = locus.DetectorConfig.from_profile("standard")
+    cfg.pose.pose_consistency_min_decisive_ratio = math.inf
+    det = locus.Detector(config=cfg)
+    assert det.config().pose.pose_consistency_min_decisive_ratio == math.inf
