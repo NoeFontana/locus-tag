@@ -6,15 +6,10 @@ import numpy as np
 
 from ._config import (
     AdaptivePpbConfig,
-    DecoderConfig,
     DetectOptions,
     DetectorConfig,
-    PoseConfig,
     ProfileName,
-    QuadConfig,
     QuadExtractionPolicy,
-    SegmentationConfig,
-    ThresholdConfig,
 )
 from .locus import (
     AprilGrid,
@@ -219,56 +214,20 @@ class Detector:
             families = [TagFamily.AprilTag36h11]
 
         self._inner = _create_detector_from_config(
-            config=config._to_ffi_config(),
+            config_json=config.model_dump_json(),
             decimation=decimation,
             threads=threads,
             families=[int(f) for f in families],
         )
 
     def config(self) -> DetectorConfig:
-        """Returns the current detector configuration as a nested model."""
-        raw = self._inner.config()
-        return DetectorConfig(
-            threshold=ThresholdConfig(
-                tile_size=raw.threshold_tile_size,
-                min_range=raw.threshold_min_range,
-                enable_sharpening=raw.enable_sharpening,
-                min_radius=raw.threshold_min_radius,
-                max_radius=raw.threshold_max_radius,
-                constant=raw.adaptive_threshold_constant,
-                gradient_threshold=raw.adaptive_threshold_gradient_threshold,
-            ),
-            quad=QuadConfig(
-                min_area=raw.quad_min_area,
-                max_aspect_ratio=raw.quad_max_aspect_ratio,
-                min_fill_ratio=raw.quad_min_fill_ratio,
-                max_fill_ratio=raw.quad_max_fill_ratio,
-                min_edge_length=raw.quad_min_edge_length,
-                min_edge_score=raw.quad_min_edge_score,
-                subpixel_refinement_sigma=raw.subpixel_refinement_sigma,
-                upscale_factor=raw.upscale_factor,
-                max_elongation=raw.quad_max_elongation,
-                min_density=raw.quad_min_density,
-                extraction_mode=raw.quad_extraction_mode,
-                edlines_imbalance_gate=raw.edlines_imbalance_gate,
-            ),
-            decoder=DecoderConfig(
-                min_contrast=raw.decoder_min_contrast,
-                refinement_mode=raw.refinement_mode,
-                max_hamming_error=raw.max_hamming_error,
-                gwlf_transversal_alpha=raw.gwlf_transversal_alpha,
-            ),
-            pose=PoseConfig(
-                huber_delta_px=raw.huber_delta_px,
-                tikhonov_alpha_max=raw.tikhonov_alpha_max,
-                sigma_n_sq=raw.sigma_n_sq,
-                structure_tensor_radius=raw.structure_tensor_radius,
-            ),
-            segmentation=SegmentationConfig(
-                connectivity=raw.segmentation_connectivity,
-                margin=raw.segmentation_margin,
-            ),
-        )
+        """Returns the current detector configuration as a nested model.
+
+        Rust serializes its live config into the profile-JSON format and Python
+        re-parses it, so the readback is total over every field — no per-field
+        transcription to drift out of sync.
+        """
+        return DetectorConfig.model_validate_json(self._inner.config())
 
     def set_families(self, families: list[TagFamily]):
         """Update the tag families to be detected."""

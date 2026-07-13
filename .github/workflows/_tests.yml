@@ -260,7 +260,7 @@ jobs:
           PY
 
   schema-parity:
-    name: Profile Schema Parity
+    name: Profile Schema & Stub Parity
     needs: [validate-project, build-wheel]
     runs-on: ubuntu-latest
     steps:
@@ -286,6 +286,18 @@ jobs:
 
       - name: Check schema is up to date
         run: uv run --no-sync python tools/export_profile_schema.py --check
+
+      # Regenerate locus.pyi from the annotated pyo3 surface and fail on drift.
+      # Built with extension-module OFF so the generator links libpython and runs
+      # standalone; LD_LIBRARY_PATH points the runtime loader at the uv
+      # interpreter's libpython. Together with the `config::schema_parity_tests`
+      # Rust unit test (Rust shim ↔ schema) and export_profile_schema.py (schema
+      # ↔ Pydantic), this closes the loop: Rust ↔ Pydantic ↔ schema ↔ .pyi stub.
+      - name: Check .pyi stub is up to date
+        run: |
+          libdir="$(uv run --no-sync python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
+          LD_LIBRARY_PATH="$libdir" uv run --no-sync cargo run --bin stub_gen \
+            --no-default-features --features profiles,stub-gen -- --check
 
   wheel-smoke:
     name: Wheel Install Smoke Test

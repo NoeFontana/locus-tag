@@ -14,10 +14,28 @@ release = true
 
 [lib]
 name = "locus"
-crate-type = ["cdylib"]
+# `rlib` (alongside `cdylib`) lets the `stub_gen` binary link the crate to emit
+# `locus.pyi`. See the `extension-module` feature below for the pyo3 linking
+# split between the wheel/`cargo` builds and the standalone stub generator.
+crate-type = ["cdylib", "rlib"]
+# No Rust unit tests live here (the surface is exercised from Python). Adding
+# `rlib` above makes `cargo test` build a lib-test harness that would link the
+# extension module standalone — impossible with deferred libpython symbols. Skip
+# it; Python tests + the doctest harness still run.
+test = false
 
 [dependencies]
-pyo3 = { version = "0.29", features = ["extension-module", "abi3-py310"] }
+# `extension-module` is a feature (below), not set here: it is ON by default
+# (so `cargo`/`clippy`/`nextest` build the cdylib exactly as before — pyo3
+# defers libpython symbols to the host interpreter, no link against libpython),
+# and turned OFF only for the `stub_gen` binary, which must link libpython to
+# run standalone.
+pyo3 = { version = "0.29", features = ["abi3-py310"] }
+# Optional + non-default: only the `stub_gen` binary pulls it in (via the
+# `stub-gen` feature). Keeping it out of the default graph means the shipped
+# wheel never compiles/links its parser + unicode transitive deps, and
+# `cargo deny` (which scans default features) never sees them.
+pyo3-stub-gen = { version = "0.23", optional = true }
 numpy = "0.29"
 locus-core = { path = "../locus-core" }
 bumpalo = "3.20"
@@ -27,12 +45,32 @@ tracing-subscriber = { version = "0.3", features = ["registry", "env-filter"], o
 nalgebra = { version = "0.35", default-features = false, features = ["std"] }
 
 [features]
-default = ["profiles"]
+default = ["profiles", "extension-module"]
+# pyo3's Python-embedding mode. Default-on so normal builds match the shipped
+# wheel; disable it (`--no-default-features --features profiles,stub-gen`) to build the
+# `stub_gen` binary, which links libpython and runs outside an interpreter.
+extension-module = ["pyo3/extension-module"]
+# Enables the pyo3-stub-gen annotations + `stub_gen` binary. Non-default so the
+# production wheel stays lean; build the generator with
+# `--no-default-features --features profiles,stub-gen`.
+stub-gen = ["dep:pyo3-stub-gen"]
 profiles = ["locus-core/profiles"]
 tracy = ["locus-core/tracy", "dep:tracing-tracy", "dep:tracing-subscriber"]
 non_rectified = ["locus-core/non_rectified"]
 # Forwards to `locus-core/bench-internals`, which unlocks the `bench_api`
 # surface consumed by the Rust benchmarks and integration tests.
 bench-internals = ["locus-core/bench-internals"]
+
+# Regenerates `locus/locus.pyi` from the annotated pyo3 surface. Needs
+# `stub-gen` ON (pulls pyo3-stub-gen) and `extension-module` OFF (so it links
+# libpython and runs standalone, under `uv run`):
+#   cargo run --bin stub_gen --no-default-features --features profiles,stub-gen
+# Under any other feature set its body is compiled out (see the file) so plain
+# `cargo build`/`clippy` never link a bin against a deferred-symbol extension
+# module. CI diffs the result to catch stub drift.
+[[bin]]
+name = "stub_gen"
+path = "src/bin/stub_gen.rs"
+
 [lints]
 workspace = true

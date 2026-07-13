@@ -5,6 +5,46 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Added
+
+- **Config field-set parity tripwire.** A `locus-core` unit test
+  (`config::schema_parity_tests`) now asserts the serde profile shim
+  (`ProfileJson` + nested `*Json` structs) exposes the exact same JSON key set as
+  the referee `schemas/profile.schema.json`. Because the schema is already
+  CI-locked to the Pydantic model, this transitively pins **Rust ↔ Python**
+  config field-set agreement — the one seam none of the value-oriented tripwires
+  (`profile_loading.rs`, `test_profiles.py`, the schema-diff job) asserted.
+  Adding/removing a knob on only one side is now a loud red build. The `*Json`
+  shim structs gained `Serialize` (and `ProfileJson` a derived `Default`) to
+  support the reflection; no behavior change.
+- **Generated `locus/locus.pyi` type stub + drift gate.** The hand-maintained
+  stub (whose silent drift motivated this pass) is now generated from the
+  annotated pyo3 surface via `pyo3-stub-gen`: `cargo run --bin stub_gen`
+  (re)writes it, and a CI step (`stub_gen --check`, in the *Profile Schema & Stub
+  Parity* job) fails on drift. Together with the field-set tripwire and the
+  schema-diff job this closes the loop **Rust ↔ Pydantic ↔ schema ↔ .pyi**.
+  `pyo3-stub-gen` is an *optional* dependency behind a non-default `stub-gen`
+  feature, so the shipped wheel and the `cargo deny` graph never pull it (or its
+  parser / unmaintained-unicode transitive deps) — the production build is
+  byte-identical to before, as the `#[gen_stub_*]` annotations compile out under
+  default features. `pyo3`'s `extension-module` became a toggleable default
+  feature so the generator binary can link libpython and run standalone.
+
+### Changed
+
+- **Detector config crosses the Rust↔Python FFI as JSON, not a 40-field struct.**
+  The Pydantic `DetectorConfig` is now shipped to Rust as its `model_dump_json()`
+  string (parsed by `DetectorConfig::from_profile_json`) and read back the same
+  way (`DetectorConfig::to_profile_json`), making the shipped JSON profile format
+  the single contract on both sides of the boundary. This deletes the
+  `PyDetectorConfig` pyclass, its 40-argument constructor, both `From` impls,
+  Python's `_to_ffi_config`, the `quad.extraction_policy` enum-flattening
+  discriminator hack, and the hand-written `.pyi` block — ~300 lines of pure
+  transcription, and the FFI seam that had no runtime coverage. Behavior-neutral:
+  render-tag / ICRA snapshots byte-identical. `PyDetectorConfig` is removed from
+  the `locus.locus` extension surface (internal FFI glue; it was never in
+  `__all__`).
+
 ### Removed
 
 - **Dead / unused detector config knobs.** Pruned three knobs across all
@@ -49,6 +89,22 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   feature itself, `compute_image_noise_floor`, the `branch_chosen` field on
   `PoseDiagnostics`, `bench_compute_corner_covariance`, and the shipped
   pose-consistency / outlier-drop telemetry columns on `DetectionBatch`.
+
+### Fixed
+
+- **`Detector.config()` now round-trips every field.** The Python readback
+  previously reconstructed only ~29 of 39 config fields by hand, silently
+  substituting Pydantic defaults for the `pose_consistency_*` /
+  `outlier_drop_d2_threshold` knobs and the adaptive `quad.extraction_policy` on
+  any detector whose config set them. `config()` now reparses Rust's serialized
+  effective config (see the JSON-boundary change above), so the round-trip is
+  total. Covered by the rewritten `test_profiles.py` full-config comparison.
+- **`pose_consistency_min_decisive_ratio = math.inf` survives the JSON FFI
+  boundary.** The documented `f64::INFINITY` value (which disables the χ²
+  escape clause) has no JSON number form; it now round-trips as `null` in both
+  directions — Rust's serde shim maps `∞`↔`null` and Pydantic parses `null`
+  back to `math.inf` — instead of raising `ValueError` at `Detector`
+  construction. Other non-finite handling is unchanged.
 
 ### Added
 

@@ -11,6 +11,7 @@ JSON is authoritative.
 
 from __future__ import annotations
 
+import math
 import warnings
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias, TypeVar, cast
@@ -29,7 +30,6 @@ from .locus import (
     CameraIntrinsics,
     CornerRefinementMode,
     EdLinesImbalanceGatePolicy,
-    PyDetectorConfig,
     QuadExtractionMode,
     SegmentationConnectivity,
     TagFamily,
@@ -283,7 +283,9 @@ class PoseConfig(BaseModel):
     (``≈ 4 px²``) so the gate catches sub-2-px false-positive residuals
     that the looser LM noise model would let through.
     """
-    pose_consistency_min_decisive_ratio: float = Field(default=5.0, ge=1.0)
+    pose_consistency_min_decisive_ratio: Annotated[
+        float, BeforeValidator(lambda v: math.inf if v is None else v)
+    ] = Field(default=5.0, ge=1.0)
     """Branch-ratio escape clause for the χ² consistency gate.
 
     ``alternate_d2 / primary_d2`` from the IPPE branch selector. When this
@@ -408,74 +410,6 @@ class DetectorConfig(BaseModel):
     def from_profile_json(cls, json_str: str) -> DetectorConfig:
         """Load a user-supplied profile from a JSON string."""
         return cls.model_validate_json(json_str)
-
-    def _to_ffi_config(self) -> PyDetectorConfig:
-        # Cross-group validation has already fired in this Pydantic model;
-        # Rust's `DetectorConfig::validate()` remains the final gate.
-        #
-        # `PyDetectorConfig` stays `Copy` on the Rust side, so the enum-shaped
-        # `quad.extraction_policy` is flattened across a boolean discriminator
-        # + five scalar fields here. Rust's `From<PyDetectorConfig>` rebuilds
-        # the enum. See `crates/locus-py/src/lib.rs` for the round-trip.
-        is_adaptive = isinstance(self.quad.extraction_policy, _AdaptivePpbPolicy)
-        if is_adaptive:
-            assert isinstance(self.quad.extraction_policy, _AdaptivePpbPolicy)
-            p = self.quad.extraction_policy.AdaptivePpb
-            ppb_threshold = p.threshold
-            ppb_low_ext = p.low_extraction
-            ppb_high_ext = p.high_extraction
-            ppb_low_ref = p.low_refinement
-            ppb_high_ref = p.high_refinement
-        else:
-            # Placeholder scalars — Rust's `From<PyDetectorConfig>` ignores
-            # them when `quad_extraction_policy_is_adaptive == False`.
-            ppb_threshold = 0.0
-            ppb_low_ext = QuadExtractionMode.ContourRdp
-            ppb_high_ext = QuadExtractionMode.EdLines
-            ppb_low_ref = CornerRefinementMode.Erf
-            ppb_high_ref = getattr(CornerRefinementMode, "None")
-
-        return PyDetectorConfig(
-            threshold_tile_size=self.threshold.tile_size,
-            threshold_min_range=self.threshold.min_range,
-            enable_sharpening=self.threshold.enable_sharpening,
-            threshold_min_radius=self.threshold.min_radius,
-            threshold_max_radius=self.threshold.max_radius,
-            adaptive_threshold_constant=self.threshold.constant,
-            adaptive_threshold_gradient_threshold=self.threshold.gradient_threshold,
-            quad_min_area=self.quad.min_area,
-            quad_max_aspect_ratio=self.quad.max_aspect_ratio,
-            quad_min_fill_ratio=self.quad.min_fill_ratio,
-            quad_max_fill_ratio=self.quad.max_fill_ratio,
-            quad_min_edge_length=self.quad.min_edge_length,
-            quad_min_edge_score=self.quad.min_edge_score,
-            subpixel_refinement_sigma=self.quad.subpixel_refinement_sigma,
-            upscale_factor=self.quad.upscale_factor,
-            quad_max_elongation=self.quad.max_elongation,
-            quad_min_density=self.quad.min_density,
-            quad_extraction_mode=self.quad.extraction_mode,
-            edlines_imbalance_gate=self.quad.edlines_imbalance_gate,
-            quad_extraction_policy_is_adaptive=is_adaptive,
-            adaptive_ppb_threshold=ppb_threshold,
-            adaptive_ppb_low_extraction=ppb_low_ext,
-            adaptive_ppb_high_extraction=ppb_high_ext,
-            adaptive_ppb_low_refinement=ppb_low_ref,
-            adaptive_ppb_high_refinement=ppb_high_ref,
-            decoder_min_contrast=self.decoder.min_contrast,
-            refinement_mode=self.decoder.refinement_mode,
-            max_hamming_error=self.decoder.max_hamming_error,
-            gwlf_transversal_alpha=self.decoder.gwlf_transversal_alpha,
-            huber_delta_px=self.pose.huber_delta_px,
-            tikhonov_alpha_max=self.pose.tikhonov_alpha_max,
-            sigma_n_sq=self.pose.sigma_n_sq,
-            structure_tensor_radius=self.pose.structure_tensor_radius,
-            pose_consistency_fpr=self.pose.pose_consistency_fpr,
-            pose_consistency_gate_sigma_px=self.pose.pose_consistency_gate_sigma_px,
-            pose_consistency_min_decisive_ratio=self.pose.pose_consistency_min_decisive_ratio,
-            outlier_drop_d2_threshold=self.pose.outlier_drop_d2_threshold,
-            segmentation_connectivity=self.segmentation.connectivity,
-            segmentation_margin=self.segmentation.margin,
-        )
 
 
 class DetectOptions(BaseModel):

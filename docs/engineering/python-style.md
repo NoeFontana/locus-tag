@@ -8,7 +8,7 @@ When modifying Python code in `crates/locus-py` or `scripts/`, the focus must be
 
 ## 2. Typing & API Surface
 * **Strict Typing:** All Python code must be fully type-hinted. We rely on `basedpyright` (via the `types` dependency group) to enforce static typing.
-* **Stub Synchronization:** If the PyO3 Rust interface changes, you MUST update the corresponding `locus/locus.pyi` type stubs to match perfectly.
+* **Stub Synchronization:** `locus/locus.pyi` is **generated** from the annotated pyo3 surface — do not hand-edit it. After changing the PyO3 interface, regenerate and commit it with `cargo run --bin stub_gen --no-default-features --features profiles,stub-gen` (under `uv run`); CI's `stub_gen --check` fails on drift. New `#[pyclass]`/`#[pymethods]`/`#[pyfunction]` items need the matching `#[gen_stub_*]` annotation to appear in the stub.
 
 ## 3. Environment & Orchestration
 * **`uv` Everywhere:** Never use global `pip`. All dependency management, locking, and tool execution must be routed through `uv`.

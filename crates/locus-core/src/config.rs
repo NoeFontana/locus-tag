@@ -1019,9 +1019,9 @@ mod profile_json {
         CornerRefinementMode, DetectorConfig, EdLinesImbalanceGatePolicy, QuadExtractionMode,
         SegmentationConnectivity,
     };
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Default, Deserialize, Serialize)]
     #[serde(deny_unknown_fields)]
     pub(super) struct ProfileJson {
         #[allow(dead_code)]
@@ -1041,7 +1041,7 @@ mod profile_json {
         pub segmentation: SegmentationJson,
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Deserialize, Serialize)]
     #[serde(deny_unknown_fields)]
     pub(super) struct ThresholdJson {
         pub tile_size: usize,
@@ -1053,22 +1053,30 @@ mod profile_json {
         pub gradient_threshold: u8,
     }
 
-    impl Default for ThresholdJson {
-        fn default() -> Self {
-            let d = DetectorConfig::default();
+    impl ThresholdJson {
+        /// Project the flat hot-path struct into this nested group. Single source
+        /// of the flat→nested field correspondence, shared by `Default` and
+        /// `From<&DetectorConfig> for ProfileJson`.
+        fn from_config(c: &DetectorConfig) -> Self {
             Self {
-                tile_size: d.threshold_tile_size,
-                min_range: d.threshold_min_range,
-                enable_sharpening: d.enable_sharpening,
-                min_radius: d.threshold_min_radius,
-                max_radius: d.threshold_max_radius,
-                constant: d.adaptive_threshold_constant,
-                gradient_threshold: d.adaptive_threshold_gradient_threshold,
+                tile_size: c.threshold_tile_size,
+                min_range: c.threshold_min_range,
+                enable_sharpening: c.enable_sharpening,
+                min_radius: c.threshold_min_radius,
+                max_radius: c.threshold_max_radius,
+                constant: c.adaptive_threshold_constant,
+                gradient_threshold: c.adaptive_threshold_gradient_threshold,
             }
         }
     }
 
-    #[derive(Debug, Deserialize)]
+    impl Default for ThresholdJson {
+        fn default() -> Self {
+            Self::from_config(&DetectorConfig::default())
+        }
+    }
+
+    #[derive(Debug, Deserialize, Serialize)]
     #[serde(deny_unknown_fields)]
     pub(super) struct QuadJson {
         pub min_area: u32,
@@ -1088,28 +1096,33 @@ mod profile_json {
         pub extraction_policy: super::QuadExtractionPolicy,
     }
 
-    impl Default for QuadJson {
-        fn default() -> Self {
-            let d = DetectorConfig::default();
+    impl QuadJson {
+        fn from_config(c: &DetectorConfig) -> Self {
             Self {
-                min_area: d.quad_min_area,
-                max_aspect_ratio: d.quad_max_aspect_ratio,
-                min_fill_ratio: d.quad_min_fill_ratio,
-                max_fill_ratio: d.quad_max_fill_ratio,
-                min_edge_length: d.quad_min_edge_length,
-                min_edge_score: d.quad_min_edge_score,
-                subpixel_refinement_sigma: d.subpixel_refinement_sigma,
-                upscale_factor: d.upscale_factor,
-                max_elongation: d.quad_max_elongation,
-                min_density: d.quad_min_density,
-                extraction_mode: d.quad_extraction_mode,
-                edlines_imbalance_gate: d.edlines_imbalance_gate,
-                extraction_policy: d.quad_extraction_policy,
+                min_area: c.quad_min_area,
+                max_aspect_ratio: c.quad_max_aspect_ratio,
+                min_fill_ratio: c.quad_min_fill_ratio,
+                max_fill_ratio: c.quad_max_fill_ratio,
+                min_edge_length: c.quad_min_edge_length,
+                min_edge_score: c.quad_min_edge_score,
+                subpixel_refinement_sigma: c.subpixel_refinement_sigma,
+                upscale_factor: c.upscale_factor,
+                max_elongation: c.quad_max_elongation,
+                min_density: c.quad_min_density,
+                extraction_mode: c.quad_extraction_mode,
+                edlines_imbalance_gate: c.edlines_imbalance_gate,
+                extraction_policy: c.quad_extraction_policy,
             }
         }
     }
 
-    #[derive(Debug, Deserialize)]
+    impl Default for QuadJson {
+        fn default() -> Self {
+            Self::from_config(&DetectorConfig::default())
+        }
+    }
+
+    #[derive(Debug, Deserialize, Serialize)]
     #[serde(deny_unknown_fields)]
     pub(super) struct DecoderJson {
         pub min_contrast: f64,
@@ -1119,19 +1132,24 @@ mod profile_json {
         pub gwlf_transversal_alpha: f64,
     }
 
-    impl Default for DecoderJson {
-        fn default() -> Self {
-            let d = DetectorConfig::default();
+    impl DecoderJson {
+        fn from_config(c: &DetectorConfig) -> Self {
             Self {
-                min_contrast: d.decoder_min_contrast,
-                refinement_mode: d.refinement_mode,
-                max_hamming_error: d.max_hamming_error,
-                gwlf_transversal_alpha: d.gwlf_transversal_alpha,
+                min_contrast: c.decoder_min_contrast,
+                refinement_mode: c.refinement_mode,
+                max_hamming_error: c.max_hamming_error,
+                gwlf_transversal_alpha: c.gwlf_transversal_alpha,
             }
         }
     }
 
-    #[derive(Debug, Deserialize)]
+    impl Default for DecoderJson {
+        fn default() -> Self {
+            Self::from_config(&DetectorConfig::default())
+        }
+    }
+
+    #[derive(Debug, Deserialize, Serialize)]
     #[serde(deny_unknown_fields)]
     pub(super) struct PoseJson {
         pub huber_delta_px: f64,
@@ -1151,7 +1169,15 @@ mod profile_json {
         pub pose_consistency_gate_sigma_px: f64,
         // Branch-ratio escape clause for the χ² gate. Missing → 5.0
         // (alternate IPPE d² ≥ 5× primary IPPE d² bypasses the gate).
-        #[serde(default = "default_min_decisive_ratio")]
+        // `f64::INFINITY` (the documented value that disables the escape
+        // clause) has no JSON number form, so it round-trips as `null` in
+        // both directions — matching Pydantic, which serializes `math.inf`
+        // to `null` and parses `null` back to `math.inf` for this field.
+        #[serde(
+            default = "default_min_decisive_ratio",
+            serialize_with = "serialize_ratio_inf_as_null",
+            deserialize_with = "deserialize_ratio_null_as_inf"
+        )]
         pub pose_consistency_min_decisive_ratio: f64,
         // Outlier-aware corner-drop trigger threshold. Missing → 0.0
         // (disabled), preserving byte-identity for profiles that have not
@@ -1160,44 +1186,81 @@ mod profile_json {
         pub outlier_drop_d2_threshold: f64,
     }
 
+    // Serde `default` fns source their values from `DetectorConfig::default()`
+    // so the "missing key" fallback cannot drift from the canonical default.
     fn default_gate_sigma_px() -> f64 {
-        1.0
+        DetectorConfig::default().pose_consistency_gate_sigma_px
     }
 
     fn default_min_decisive_ratio() -> f64 {
-        5.0
+        DetectorConfig::default().pose_consistency_min_decisive_ratio
     }
 
-    impl Default for PoseJson {
-        fn default() -> Self {
-            let d = DetectorConfig::default();
+    /// Serialize the escape-clause ratio, emitting JSON `null` for the
+    /// non-finite disable sentinel (`f64::INFINITY`) that JSON numbers cannot
+    /// represent. Finite values serialize as numbers.
+    // `&f64` is required by serde's `serialize_with` signature.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn serialize_ratio_inf_as_null<S: serde::Serializer>(
+        value: &f64,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        if value.is_finite() {
+            serializer.serialize_f64(*value)
+        } else {
+            serializer.serialize_none()
+        }
+    }
+
+    /// Deserialize the escape-clause ratio, mapping JSON `null` back to
+    /// `f64::INFINITY` (disabled). A present number deserializes as itself; an
+    /// absent key is handled by the field's `default` and never reaches here.
+    fn deserialize_ratio_null_as_inf<'de, D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<f64, D::Error> {
+        Ok(Option::<f64>::deserialize(deserializer)?.unwrap_or(f64::INFINITY))
+    }
+
+    impl PoseJson {
+        fn from_config(c: &DetectorConfig) -> Self {
             Self {
-                huber_delta_px: d.huber_delta_px,
-                tikhonov_alpha_max: d.tikhonov_alpha_max,
-                sigma_n_sq: d.sigma_n_sq,
-                structure_tensor_radius: d.structure_tensor_radius,
-                pose_consistency_fpr: d.pose_consistency_fpr,
-                pose_consistency_gate_sigma_px: d.pose_consistency_gate_sigma_px,
-                pose_consistency_min_decisive_ratio: d.pose_consistency_min_decisive_ratio,
-                outlier_drop_d2_threshold: d.outlier_drop_d2_threshold,
+                huber_delta_px: c.huber_delta_px,
+                tikhonov_alpha_max: c.tikhonov_alpha_max,
+                sigma_n_sq: c.sigma_n_sq,
+                structure_tensor_radius: c.structure_tensor_radius,
+                pose_consistency_fpr: c.pose_consistency_fpr,
+                pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
+                pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
+                outlier_drop_d2_threshold: c.outlier_drop_d2_threshold,
             }
         }
     }
 
-    #[derive(Debug, Deserialize)]
+    impl Default for PoseJson {
+        fn default() -> Self {
+            Self::from_config(&DetectorConfig::default())
+        }
+    }
+
+    #[derive(Debug, Deserialize, Serialize)]
     #[serde(deny_unknown_fields)]
     pub(super) struct SegmentationJson {
         pub connectivity: SegmentationConnectivity,
         pub margin: i16,
     }
 
+    impl SegmentationJson {
+        fn from_config(c: &DetectorConfig) -> Self {
+            Self {
+                connectivity: c.segmentation_connectivity,
+                margin: c.segmentation_margin,
+            }
+        }
+    }
+
     impl Default for SegmentationJson {
         fn default() -> Self {
-            let d = DetectorConfig::default();
-            Self {
-                connectivity: d.segmentation_connectivity,
-                margin: d.segmentation_margin,
-            }
+            Self::from_config(&DetectorConfig::default())
         }
     }
 
@@ -1243,6 +1306,25 @@ mod profile_json {
                 pose_consistency_min_decisive_ratio: p.pose.pose_consistency_min_decisive_ratio,
                 outlier_drop_d2_threshold: p.pose.outlier_drop_d2_threshold,
                 quad_extraction_policy: p.quad.extraction_policy,
+            }
+        }
+    }
+
+    impl From<&DetectorConfig> for ProfileJson {
+        /// Inverse of `From<ProfileJson>`: project the flat hot-path struct back
+        /// into the nested profile shape for serialization. `decimation` /
+        /// `nthreads` are per-call orchestration and are intentionally omitted
+        /// (they are not profile fields). Total over every profile field, so the
+        /// serialized document round-trips losslessly through Pydantic.
+        fn from(c: &DetectorConfig) -> Self {
+            ProfileJson {
+                name: None,
+                extends: None,
+                threshold: ThresholdJson::from_config(c),
+                quad: QuadJson::from_config(c),
+                decoder: DecoderJson::from_config(c),
+                pose: PoseJson::from_config(c),
+                segmentation: SegmentationJson::from_config(c),
             }
         }
     }
@@ -1294,6 +1376,25 @@ impl DetectorConfig {
         let config: DetectorConfig = parsed.into();
         config.validate()?;
         Ok(config)
+    }
+
+    /// Serialize this config into the nested profile-JSON shape.
+    ///
+    /// The inverse of [`DetectorConfig::from_profile_json`]. This is the format
+    /// that crosses the Python FFI boundary for `Detector.config()` readback:
+    /// Python re-parses it into the Pydantic model, so the round-trip is total
+    /// over every profile field (unlike the former field-by-field FFI struct
+    /// copy, which silently dropped knobs). `decimation` / `nthreads` are
+    /// per-call orchestration and are not part of the profile document.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConfigError::ProfileParse`] if serde_json fails to
+    /// serialize (not expected for the closed set of `Copy` scalar fields).
+    pub fn to_profile_json(&self) -> Result<String, crate::error::ConfigError> {
+        use crate::error::ConfigError;
+        let profile = profile_json::ProfileJson::from(self);
+        serde_json::to_string(&profile).map_err(|e| ConfigError::ProfileParse(e.to_string()))
     }
 
     /// Load a shipped profile by name.
@@ -1563,5 +1664,157 @@ mod tests {
             ..DetectorConfig::default()
         };
         assert!(!adaptive_with_edlines.static_uses_edlines());
+    }
+}
+
+/// Field-set parity tripwire.
+///
+/// The serde profile shim (`ProfileJson` + its nested `*Json` structs) and the
+/// referee schema `schemas/profile.schema.json` must expose the identical JSON
+/// key set. The schema is CI-locked to the Pydantic model
+/// (`tools/export_profile_schema.py --check`), so pinning the Rust shim to the
+/// schema transitively pins **Rust ↔ Python** config field-set agreement — the
+/// one seam none of the value-oriented tripwires (`profile_loading.rs`,
+/// `test_profiles.py`, the schema-diff job) asserts. Adding a knob on one side
+/// and forgetting the other turns from a silent bug into a loud red build.
+#[cfg(all(test, feature = "profiles"))]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+mod schema_parity_tests {
+    use super::profile_json::ProfileJson;
+    use super::{AdaptivePpbConfig, QuadExtractionPolicy};
+    use std::collections::BTreeSet;
+    use std::path::Path;
+
+    /// Recursively collect dotted leaf paths from a serialized JSON value.
+    /// Objects recurse; every scalar (string enum, number, bool, `null`) is a leaf.
+    fn json_leaf_paths(prefix: &str, value: &serde_json::Value, out: &mut BTreeSet<String>) {
+        match value {
+            serde_json::Value::Object(map) => {
+                for (key, child) in map {
+                    let path = if prefix.is_empty() {
+                        key.clone()
+                    } else {
+                        format!("{prefix}.{key}")
+                    };
+                    json_leaf_paths(&path, child, out);
+                }
+            },
+            _ => {
+                out.insert(prefix.to_string());
+            },
+        }
+    }
+
+    /// The full JSON key set the Rust serde shim round-trips. `extraction_policy`
+    /// is an externally-tagged enum, so a `Static` default hides the adaptive
+    /// sub-fields; union it with an `AdaptivePpb` variant to surface them.
+    fn rust_key_paths() -> BTreeSet<String> {
+        let mut paths = BTreeSet::new();
+
+        let static_default = ProfileJson::default();
+        json_leaf_paths(
+            "",
+            &serde_json::to_value(&static_default).expect("serialize default ProfileJson"),
+            &mut paths,
+        );
+
+        let mut adaptive = ProfileJson::default();
+        adaptive.quad.extraction_policy =
+            QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig::default());
+        json_leaf_paths(
+            "",
+            &serde_json::to_value(&adaptive).expect("serialize adaptive ProfileJson"),
+            &mut paths,
+        );
+
+        paths
+    }
+
+    /// Resolve a `{"$ref": "#/$defs/Name"}` node against the schema's `$defs`;
+    /// returns the node unchanged when it is not a ref.
+    fn resolve<'a>(
+        node: &'a serde_json::Value,
+        defs: &'a serde_json::Value,
+    ) -> &'a serde_json::Value {
+        match node.get("$ref").and_then(serde_json::Value::as_str) {
+            Some(reference) => {
+                let name = reference.rsplit('/').next().expect("non-empty $ref");
+                &defs[name]
+            },
+            None => node,
+        }
+    }
+
+    /// Collect dotted leaf paths from a JSON-Schema node, resolving `$ref`s and
+    /// expanding `anyOf` (a scalar/`const`/`null` branch makes the property a
+    /// leaf; an object branch recurses — mirroring the serde enum's two forms).
+    fn schema_leaf_paths(
+        prefix: &str,
+        node: &serde_json::Value,
+        defs: &serde_json::Value,
+        out: &mut BTreeSet<String>,
+    ) {
+        let node = resolve(node, defs);
+
+        if let Some(props) = node
+            .get("properties")
+            .and_then(serde_json::Value::as_object)
+        {
+            for (key, child) in props {
+                let path = if prefix.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{prefix}.{key}")
+                };
+                schema_leaf_paths(&path, child, defs, out);
+            }
+            return;
+        }
+
+        if let Some(branches) = node.get("anyOf").and_then(serde_json::Value::as_array) {
+            for branch in branches {
+                if resolve(branch, defs).get("properties").is_some() {
+                    schema_leaf_paths(prefix, branch, defs, out);
+                } else {
+                    out.insert(prefix.to_string());
+                }
+            }
+            return;
+        }
+
+        out.insert(prefix.to_string());
+    }
+
+    fn schema_key_paths() -> BTreeSet<String> {
+        let schema_path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/profile.schema.json");
+        let text = std::fs::read_to_string(&schema_path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", schema_path.display()));
+        let schema: serde_json::Value = serde_json::from_str(&text).expect("parse referee schema");
+        let defs = schema
+            .get("$defs")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+
+        let mut paths = BTreeSet::new();
+        schema_leaf_paths("", &schema, &defs, &mut paths);
+        paths
+    }
+
+    #[test]
+    fn serde_shim_matches_referee_schema() {
+        let rust = rust_key_paths();
+        let schema = schema_key_paths();
+
+        let only_in_rust: Vec<&String> = rust.difference(&schema).collect();
+        let only_in_schema: Vec<&String> = schema.difference(&rust).collect();
+
+        assert!(
+            only_in_rust.is_empty() && only_in_schema.is_empty(),
+            "profile field-set drift between the Rust serde shim and \
+             schemas/profile.schema.json\n  only in Rust shim: {only_in_rust:?}\n  \
+             only in schema:    {only_in_schema:?}\n\nAdd/remove the field on both \
+             sides (and re-run tools/export_profile_schema.py).",
+        );
     }
 }

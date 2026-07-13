@@ -1,39 +1,73 @@
-"""Raw integers must be rejected where typed PyO3 enums are expected."""
+"""The JSON FFI boundary must reject malformed profile documents.
+
+The Pydantic ``DetectorConfig`` crosses into Rust as its ``model_dump_json()``
+string, parsed by ``DetectorConfig::from_profile_json`` (serde, with
+``deny_unknown_fields``). Invalid enum variants and unknown keys must surface as
+a ``ValueError`` at construction, not silently coerce or pass through.
+"""
 
 from __future__ import annotations
 
+import json
+
 import locus
 import pytest
-from locus.locus import PyDetectorConfig
 
 
-def _base_kwargs() -> dict:
-    cfg = locus.DetectorConfig.from_profile("standard")._to_ffi_config()
-    return {name: getattr(cfg, name) for name in dir(cfg) if not name.startswith("_")}
+def _base_json() -> dict:
+    return json.loads(locus.DetectorConfig.from_profile("standard").model_dump_json())
 
 
-@pytest.mark.parametrize(
-    "field",
-    [
-        "quad_extraction_mode",
-        "refinement_mode",
-        "segmentation_connectivity",
-    ],
-)
-def test_raw_int_rejected_for_enum_fields(field: str) -> None:
-    kwargs = _base_kwargs()
-    kwargs[field] = 0
-    with pytest.raises((TypeError, ValueError)):
-        PyDetectorConfig(**kwargs)
-
-
-def test_typed_enum_accepted() -> None:
-    kwargs = _base_kwargs()
-    cfg = PyDetectorConfig(**kwargs)
-    det = locus._create_detector_from_config(
-        config=cfg,
+def _build(doc: dict) -> None:
+    locus._create_detector_from_config(
+        config_json=json.dumps(doc),
         decimation=None,
         threads=None,
         families=[int(locus.TagFamily.AprilTag36h11)],
     )
-    assert det is not None
+
+
+def test_valid_json_builds_detector() -> None:
+    # Sanity: the unmodified base document is accepted across the boundary.
+    _build(_base_json())
+
+
+@pytest.mark.parametrize(
+    ("group", "field"),
+    [
+        ("quad", "extraction_mode"),
+        ("decoder", "refinement_mode"),
+        ("segmentation", "connectivity"),
+    ],
+)
+def test_invalid_enum_variant_rejected(group: str, field: str) -> None:
+    doc = _base_json()
+    doc[group][field] = "NotAVariant"
+    with pytest.raises(ValueError):
+        _build(doc)
+
+
+@pytest.mark.parametrize(
+    ("group", "field"),
+    [
+        ("quad", "extraction_mode"),
+        ("decoder", "refinement_mode"),
+        ("segmentation", "connectivity"),
+    ],
+)
+def test_raw_integer_in_enum_position_rejected(group: str, field: str) -> None:
+    # The enums are serialized by their variant *name* (a JSON string). A raw
+    # integer must NOT silently coerce into a variant across the boundary — serde
+    # rejects it. (This preserves the guarantee the pre-JSON PyDetectorConfig
+    # strictness test enforced, which the boundary change would otherwise drop.)
+    doc = _base_json()
+    doc[group][field] = 0
+    with pytest.raises(ValueError):
+        _build(doc)
+
+
+def test_unknown_field_rejected() -> None:
+    doc = _base_json()
+    doc["quad"]["bogus_knob"] = 1
+    with pytest.raises(ValueError):
+        _build(doc)

@@ -27,11 +27,16 @@ use numpy::{
 };
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+#[cfg(feature = "stub-gen")]
+use pyo3_stub_gen::derive::{
+    gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pyfunction, gen_stub_pymethods,
+};
 
 // ============================================================================
 // Enums
 // ============================================================================
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TagFamily {
@@ -54,6 +59,7 @@ impl From<TagFamily> for locus_core::TagFamily {
     }
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum SegmentationConnectivity {
@@ -70,6 +76,7 @@ impl From<SegmentationConnectivity> for locus_core::config::SegmentationConnecti
     }
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum CornerRefinementMode {
@@ -88,6 +95,7 @@ impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
     }
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum QuadExtractionMode {
@@ -104,6 +112,7 @@ impl From<QuadExtractionMode> for locus_core::config::QuadExtractionMode {
     }
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum EdLinesImbalanceGatePolicy {
@@ -138,6 +147,7 @@ impl From<locus_core::config::EdLinesImbalanceGatePolicy> for EdLinesImbalanceGa
 // ============================================================================
 
 /// Identifies which lens distortion model the [`CameraIntrinsics`] coefficients apply to.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum DistortionModel {
@@ -179,6 +189,7 @@ pub enum DistortionModel {
 ///     dist_coeffs=[0.1, -0.01, 0.001, 0.0],
 /// )
 /// ```
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct CameraIntrinsics {
@@ -202,6 +213,7 @@ pub struct CameraIntrinsics {
     pub dist_coeffs: Vec<f64>,
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl CameraIntrinsics {
     #[new]
@@ -297,6 +309,7 @@ impl From<CameraIntrinsics> for locus_core::CameraIntrinsics {
     }
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyPose {
@@ -307,274 +320,11 @@ pub struct PyPose {
 }
 
 // ============================================================================
-#[pyclass(get_all, frozen, from_py_object)]
-#[derive(Clone, Copy)]
-pub struct PyDetectorConfig {
-    pub threshold_tile_size: usize,
-    pub threshold_min_range: u8,
-    pub enable_sharpening: bool,
-    pub threshold_min_radius: usize,
-    pub threshold_max_radius: usize,
-    pub adaptive_threshold_constant: i16,
-    pub adaptive_threshold_gradient_threshold: u8,
-    pub quad_min_area: u32,
-    pub quad_max_aspect_ratio: f32,
-    pub quad_min_fill_ratio: f32,
-    pub quad_max_fill_ratio: f32,
-    pub quad_min_edge_length: f64,
-    pub quad_min_edge_score: f64,
-    pub subpixel_refinement_sigma: f64,
-    pub segmentation_margin: i16,
-    pub segmentation_connectivity: SegmentationConnectivity,
-    pub upscale_factor: usize,
-    pub decoder_min_contrast: f64,
-    pub refinement_mode: CornerRefinementMode,
-    pub max_hamming_error: Option<u32>,
-    pub gwlf_transversal_alpha: f64,
-    pub quad_max_elongation: f64,
-    pub quad_min_density: f64,
-    pub quad_extraction_mode: QuadExtractionMode,
-    pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
-    // Quad-extraction policy passthrough — Rust's `QuadExtractionPolicy` is an
-    // enum (`Static` | `AdaptivePpb(...)`), flattened here so `PyDetectorConfig`
-    // stays `Copy`. When `quad_extraction_policy_is_adaptive == false`, the
-    // `adaptive_*` fields are ignored on the `From<PyDetectorConfig>` path.
-    pub quad_extraction_policy_is_adaptive: bool,
-    pub adaptive_ppb_threshold: f32,
-    pub adaptive_ppb_low_extraction: QuadExtractionMode,
-    pub adaptive_ppb_high_extraction: QuadExtractionMode,
-    pub adaptive_ppb_low_refinement: CornerRefinementMode,
-    pub adaptive_ppb_high_refinement: CornerRefinementMode,
-    pub huber_delta_px: f64,
-    pub tikhonov_alpha_max: f64,
-    pub sigma_n_sq: f64,
-    pub structure_tensor_radius: u8,
-    pub pose_consistency_fpr: f64,
-    pub pose_consistency_gate_sigma_px: f64,
-    pub pose_consistency_min_decisive_ratio: f64,
-    pub outlier_drop_d2_threshold: f64,
-}
-
-#[pymethods]
-impl PyDetectorConfig {
-    #[new]
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "constructor mirrors every flat DetectorConfig field as a keyword-only pyo3 argument"
-    )]
-    #[pyo3(signature = (
-        *,
-        threshold_tile_size,
-        threshold_min_range,
-        enable_sharpening,
-        threshold_min_radius,
-        threshold_max_radius,
-        adaptive_threshold_constant,
-        adaptive_threshold_gradient_threshold,
-        quad_min_area,
-        quad_max_aspect_ratio,
-        quad_min_fill_ratio,
-        quad_max_fill_ratio,
-        quad_min_edge_length,
-        quad_min_edge_score,
-        subpixel_refinement_sigma,
-        segmentation_margin,
-        segmentation_connectivity,
-        upscale_factor,
-        decoder_min_contrast,
-        refinement_mode,
-        max_hamming_error,
-        gwlf_transversal_alpha,
-        quad_max_elongation,
-        quad_min_density,
-        quad_extraction_mode,
-        edlines_imbalance_gate,
-        quad_extraction_policy_is_adaptive,
-        adaptive_ppb_threshold,
-        adaptive_ppb_low_extraction,
-        adaptive_ppb_high_extraction,
-        adaptive_ppb_low_refinement,
-        adaptive_ppb_high_refinement,
-        huber_delta_px,
-        tikhonov_alpha_max,
-        sigma_n_sq,
-        structure_tensor_radius,
-        pose_consistency_fpr,
-        pose_consistency_gate_sigma_px,
-        pose_consistency_min_decisive_ratio,
-        outlier_drop_d2_threshold,
-    ))]
-    fn new(
-        threshold_tile_size: usize,
-        threshold_min_range: u8,
-        enable_sharpening: bool,
-        threshold_min_radius: usize,
-        threshold_max_radius: usize,
-        adaptive_threshold_constant: i16,
-        adaptive_threshold_gradient_threshold: u8,
-        quad_min_area: u32,
-        quad_max_aspect_ratio: f32,
-        quad_min_fill_ratio: f32,
-        quad_max_fill_ratio: f32,
-        quad_min_edge_length: f64,
-        quad_min_edge_score: f64,
-        subpixel_refinement_sigma: f64,
-        segmentation_margin: i16,
-        segmentation_connectivity: SegmentationConnectivity,
-        upscale_factor: usize,
-        decoder_min_contrast: f64,
-        refinement_mode: CornerRefinementMode,
-        max_hamming_error: Option<u32>,
-        gwlf_transversal_alpha: f64,
-        quad_max_elongation: f64,
-        quad_min_density: f64,
-        quad_extraction_mode: QuadExtractionMode,
-        edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
-        quad_extraction_policy_is_adaptive: bool,
-        adaptive_ppb_threshold: f32,
-        adaptive_ppb_low_extraction: QuadExtractionMode,
-        adaptive_ppb_high_extraction: QuadExtractionMode,
-        adaptive_ppb_low_refinement: CornerRefinementMode,
-        adaptive_ppb_high_refinement: CornerRefinementMode,
-        huber_delta_px: f64,
-        tikhonov_alpha_max: f64,
-        sigma_n_sq: f64,
-        structure_tensor_radius: u8,
-        pose_consistency_fpr: f64,
-        pose_consistency_gate_sigma_px: f64,
-        pose_consistency_min_decisive_ratio: f64,
-        outlier_drop_d2_threshold: f64,
-    ) -> Self {
-        Self {
-            threshold_tile_size,
-            threshold_min_range,
-            enable_sharpening,
-            threshold_min_radius,
-            threshold_max_radius,
-            adaptive_threshold_constant,
-            adaptive_threshold_gradient_threshold,
-            quad_min_area,
-            quad_max_aspect_ratio,
-            quad_min_fill_ratio,
-            quad_max_fill_ratio,
-            quad_min_edge_length,
-            quad_min_edge_score,
-            subpixel_refinement_sigma,
-            segmentation_margin,
-            segmentation_connectivity,
-            upscale_factor,
-            decoder_min_contrast,
-            refinement_mode,
-            max_hamming_error,
-            gwlf_transversal_alpha,
-            quad_max_elongation,
-            quad_min_density,
-            quad_extraction_mode,
-            edlines_imbalance_gate,
-            quad_extraction_policy_is_adaptive,
-            adaptive_ppb_threshold,
-            adaptive_ppb_low_extraction,
-            adaptive_ppb_high_extraction,
-            adaptive_ppb_low_refinement,
-            adaptive_ppb_high_refinement,
-            huber_delta_px,
-            tikhonov_alpha_max,
-            sigma_n_sq,
-            structure_tensor_radius,
-            pose_consistency_fpr,
-            pose_consistency_gate_sigma_px,
-            pose_consistency_min_decisive_ratio,
-            outlier_drop_d2_threshold,
-        }
-    }
-}
-
-impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
-    fn from(c: locus_core::config::DetectorConfig) -> Self {
-        // Flatten the policy once rather than pattern-matching it per sibling
-        // field. Defaults for the `Static` branch match the historical values
-        // exposed through the Python kwarg surface.
-        let (
-            policy_is_adaptive,
-            adaptive_threshold,
-            adaptive_low_ext,
-            adaptive_high_ext,
-            adaptive_low_ref,
-            adaptive_high_ref,
-        ) = match c.quad_extraction_policy {
-            locus_core::config::QuadExtractionPolicy::AdaptivePpb(p) => (
-                true,
-                p.threshold,
-                quad_extraction_mode_to_py(p.low_extraction),
-                quad_extraction_mode_to_py(p.high_extraction),
-                corner_refinement_mode_to_py(p.low_refinement),
-                corner_refinement_mode_to_py(p.high_refinement),
-            ),
-            locus_core::config::QuadExtractionPolicy::Static => (
-                false,
-                0.0,
-                QuadExtractionMode::ContourRdp,
-                QuadExtractionMode::EdLines,
-                CornerRefinementMode::Erf,
-                CornerRefinementMode::None,
-            ),
-        };
-        Self {
-            threshold_tile_size: c.threshold_tile_size,
-            threshold_min_range: c.threshold_min_range,
-            enable_sharpening: c.enable_sharpening,
-            threshold_min_radius: c.threshold_min_radius,
-            threshold_max_radius: c.threshold_max_radius,
-            adaptive_threshold_constant: c.adaptive_threshold_constant,
-            adaptive_threshold_gradient_threshold: c.adaptive_threshold_gradient_threshold,
-            quad_min_area: c.quad_min_area,
-            quad_max_aspect_ratio: c.quad_max_aspect_ratio,
-            quad_min_fill_ratio: c.quad_min_fill_ratio,
-            quad_max_fill_ratio: c.quad_max_fill_ratio,
-            quad_min_edge_length: c.quad_min_edge_length,
-            quad_min_edge_score: c.quad_min_edge_score,
-            subpixel_refinement_sigma: c.subpixel_refinement_sigma,
-            segmentation_margin: c.segmentation_margin,
-            segmentation_connectivity: match c.segmentation_connectivity {
-                locus_core::config::SegmentationConnectivity::Four => {
-                    SegmentationConnectivity::Four
-                },
-                locus_core::config::SegmentationConnectivity::Eight => {
-                    SegmentationConnectivity::Eight
-                },
-            },
-            upscale_factor: c.upscale_factor,
-            decoder_min_contrast: c.decoder_min_contrast,
-            refinement_mode: corner_refinement_mode_to_py(c.refinement_mode),
-            max_hamming_error: c.max_hamming_error,
-            gwlf_transversal_alpha: c.gwlf_transversal_alpha,
-            quad_max_elongation: c.quad_max_elongation,
-            quad_min_density: c.quad_min_density,
-            quad_extraction_mode: quad_extraction_mode_to_py(c.quad_extraction_mode),
-            edlines_imbalance_gate: c.edlines_imbalance_gate.into(),
-            quad_extraction_policy_is_adaptive: policy_is_adaptive,
-            adaptive_ppb_threshold: adaptive_threshold,
-            adaptive_ppb_low_extraction: adaptive_low_ext,
-            adaptive_ppb_high_extraction: adaptive_high_ext,
-            adaptive_ppb_low_refinement: adaptive_low_ref,
-            adaptive_ppb_high_refinement: adaptive_high_ref,
-            huber_delta_px: c.huber_delta_px,
-            tikhonov_alpha_max: c.tikhonov_alpha_max,
-            sigma_n_sq: c.sigma_n_sq,
-            structure_tensor_radius: c.structure_tensor_radius,
-            pose_consistency_fpr: c.pose_consistency_fpr,
-            pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
-            pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
-            outlier_drop_d2_threshold: c.outlier_drop_d2_threshold,
-        }
-    }
-}
-
-// ============================================================================
 // Result types
 // ============================================================================
 
 /// Intermediate pipeline artifacts emitted when `debug_telemetry=True`.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(get_all, frozen)]
 pub struct PipelineTelemetryResult {
     pub binarized: Py<PyArray2<u8>>,
@@ -594,6 +344,7 @@ pub struct PipelineTelemetryResult {
 }
 
 /// Typed result returned by `Detector.detect` (Python).
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(get_all, frozen)]
 pub struct DetectionResult {
     pub ids: Py<PyArray1<i32>>,
@@ -609,6 +360,7 @@ pub struct DetectionResult {
 }
 
 /// Telemetry from `CharucoRefiner.estimate` (Python), populated when `debug_telemetry=True`.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(get_all, frozen)]
 pub struct CharucoTelemetryResult {
     pub rejected_saddles: Py<PyArray2<f32>>,
@@ -623,6 +375,7 @@ pub struct CharucoTelemetryResult {
 }
 
 /// Typed result returned by `CharucoRefiner.estimate` (Python).
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(get_all, frozen)]
 pub struct CharucoEstimateResult {
     pub ids: Py<PyArray1<i32>>,
@@ -648,11 +401,13 @@ pub struct CharucoEstimateResult {
 /// The `family` parameter is checked against the board marker count at
 /// construction time: if the board needs more tag IDs than the dictionary
 /// provides, a `ValueError` is raised.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass]
 pub struct CharucoBoard {
     pub(crate) inner: std::sync::Arc<locus_core::board::CharucoTopology>,
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl CharucoBoard {
     /// Create a ChAruco board configuration.
@@ -697,11 +452,13 @@ impl CharucoBoard {
 /// The `family` parameter is checked against the board marker count at
 /// construction time: if the board needs more tag IDs than the dictionary
 /// provides, a `ValueError` is raised.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass]
 pub struct AprilGrid {
     pub(crate) inner: std::sync::Arc<locus_core::board::AprilGridTopology>,
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl AprilGrid {
     /// Create an AprilGrid board configuration.
@@ -750,11 +507,13 @@ impl AprilGrid {
 ///
 /// Reuse a single `BoardEstimator` across frames to amortise the one-time
 /// scratch-buffer allocation.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(unsendable)]
 pub struct BoardEstimator {
     inner: locus_core::board::BoardEstimator,
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl BoardEstimator {
     /// Create a `BoardEstimator` for the given board.
@@ -917,6 +676,7 @@ impl BoardEstimator {
 }
 
 /// Typed result returned by `BoardEstimator.estimate` (Python).
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(get_all, frozen)]
 pub struct BoardEstimateResult {
     pub ids: Py<PyArray1<i32>>,
@@ -934,6 +694,7 @@ pub struct BoardEstimateResult {
 ///
 /// Reuse a single `CharucoRefiner` across frames to amortise the one-time
 /// scratch-buffer allocation.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(unsendable)]
 pub struct CharucoRefiner {
     inner: locus_core::charuco::CharucoRefiner,
@@ -943,6 +704,7 @@ pub struct CharucoRefiner {
     telem_batch: locus_core::charuco::CharucoBatch,
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl CharucoRefiner {
     /// Create a `CharucoRefiner` for the given board.
@@ -1383,11 +1145,13 @@ struct SendPtr(usize);
 // that holds the GIL. The pointer remains exclusively owned by that thread.
 unsafe impl Send for SendPtr {}
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(unsendable)]
 pub struct Detector {
     inner: Box<locus_core::Detector>,
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl Detector {
     /// Detect tags and return a typed [`DetectionResult`] containing NumPy arrays.
@@ -1619,9 +1383,16 @@ impl Detector {
             .collect()
     }
 
-    /// Returns the current detector configuration.
-    fn config(&self) -> PyDetectorConfig {
-        PyDetectorConfig::from(self.inner.config())
+    /// Returns the current detector configuration as a profile-JSON string.
+    ///
+    /// Python re-parses this into the Pydantic `DetectorConfig`, so the readback
+    /// is total over every profile field (the former field-by-field FFI struct
+    /// silently dropped knobs it did not re-copy).
+    fn config(&self) -> PyResult<String> {
+        self.inner
+            .config()
+            .to_profile_json()
+            .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
     /// Update the tag families to be detected.
@@ -1648,87 +1419,20 @@ fn tag_family_from_i32(f: i32) -> PyResult<locus_core::TagFamily> {
     }
 }
 
-fn quad_extraction_mode_to_py(m: locus_core::config::QuadExtractionMode) -> QuadExtractionMode {
-    match m {
-        locus_core::config::QuadExtractionMode::ContourRdp => QuadExtractionMode::ContourRdp,
-        locus_core::config::QuadExtractionMode::EdLines => QuadExtractionMode::EdLines,
-    }
-}
-
-fn corner_refinement_mode_to_py(
-    m: locus_core::config::CornerRefinementMode,
-) -> CornerRefinementMode {
-    match m {
-        locus_core::config::CornerRefinementMode::None => CornerRefinementMode::None,
-        locus_core::config::CornerRefinementMode::Erf => CornerRefinementMode::Erf,
-        locus_core::config::CornerRefinementMode::Gwlf => CornerRefinementMode::Gwlf,
-    }
-}
-
-impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
-    fn from(c: PyDetectorConfig) -> Self {
-        let policy = if c.quad_extraction_policy_is_adaptive {
-            locus_core::config::QuadExtractionPolicy::AdaptivePpb(
-                locus_core::config::AdaptivePpbConfig {
-                    threshold: c.adaptive_ppb_threshold,
-                    low_extraction: c.adaptive_ppb_low_extraction.into(),
-                    high_extraction: c.adaptive_ppb_high_extraction.into(),
-                    low_refinement: c.adaptive_ppb_low_refinement.into(),
-                    high_refinement: c.adaptive_ppb_high_refinement.into(),
-                },
-            )
-        } else {
-            locus_core::config::QuadExtractionPolicy::Static
-        };
-        Self {
-            threshold_tile_size: c.threshold_tile_size,
-            threshold_min_range: c.threshold_min_range,
-            enable_sharpening: c.enable_sharpening,
-            threshold_min_radius: c.threshold_min_radius,
-            threshold_max_radius: c.threshold_max_radius,
-            adaptive_threshold_constant: c.adaptive_threshold_constant,
-            adaptive_threshold_gradient_threshold: c.adaptive_threshold_gradient_threshold,
-            quad_min_area: c.quad_min_area,
-            quad_max_aspect_ratio: c.quad_max_aspect_ratio,
-            quad_min_fill_ratio: c.quad_min_fill_ratio,
-            quad_max_fill_ratio: c.quad_max_fill_ratio,
-            quad_min_edge_length: c.quad_min_edge_length,
-            quad_min_edge_score: c.quad_min_edge_score,
-            subpixel_refinement_sigma: c.subpixel_refinement_sigma,
-            upscale_factor: c.upscale_factor,
-            quad_max_elongation: c.quad_max_elongation,
-            quad_min_density: c.quad_min_density,
-            quad_extraction_mode: c.quad_extraction_mode.into(),
-            edlines_imbalance_gate: c.edlines_imbalance_gate.into(),
-            decoder_min_contrast: c.decoder_min_contrast,
-            refinement_mode: c.refinement_mode.into(),
-            max_hamming_error: c.max_hamming_error,
-            gwlf_transversal_alpha: c.gwlf_transversal_alpha,
-            huber_delta_px: c.huber_delta_px,
-            tikhonov_alpha_max: c.tikhonov_alpha_max,
-            sigma_n_sq: c.sigma_n_sq,
-            structure_tensor_radius: c.structure_tensor_radius,
-            pose_consistency_fpr: c.pose_consistency_fpr,
-            pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
-            pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
-            outlier_drop_d2_threshold: c.outlier_drop_d2_threshold,
-            segmentation_connectivity: c.segmentation_connectivity.into(),
-            segmentation_margin: c.segmentation_margin,
-            quad_extraction_policy: policy,
-            ..locus_core::config::DetectorConfig::default()
-        }
-    }
-}
-
+#[cfg_attr(feature = "stub-gen", gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (config, decimation=None, threads=None, families=vec![]))]
+#[pyo3(signature = (config_json, decimation=None, threads=None, families=vec![]))]
 fn _create_detector_from_config(
-    config: PyDetectorConfig,
+    config_json: &str,
     decimation: Option<usize>,
     threads: Option<usize>,
     families: Vec<i32>,
 ) -> PyResult<Detector> {
-    let cfg: locus_core::config::DetectorConfig = config.into();
+    // The Pydantic `DetectorConfig` crosses the FFI as its `model_dump_json()`
+    // string — the same profile format Rust already reads — so the shipped JSON
+    // profile is the single source of truth on both sides of the boundary.
+    let cfg = locus_core::config::DetectorConfig::from_profile_json(config_json)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let mut builder = locus_core::DetectorBuilder::new().with_config(cfg);
 
     if let Some(d) = decimation {
@@ -1765,6 +1469,7 @@ fn _create_detector_from_config(
 ///         .build()
 /// )
 /// ```
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass]
 pub struct DetectorBuilder {
     inner: Option<locus_core::DetectorBuilder>,
@@ -1778,6 +1483,7 @@ impl DetectorBuilder {
     }
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl DetectorBuilder {
     #[new]
@@ -2276,6 +1982,7 @@ fn build_detection_result_from_owned(
 // Profiling
 // ============================================================================
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pyfunction)]
 #[pyfunction]
 fn init_tracy() {
     #[cfg(feature = "tracy")]
@@ -2291,6 +1998,7 @@ fn init_tracy() {
 }
 
 #[cfg(feature = "profiles")]
+#[cfg_attr(feature = "stub-gen", gen_stub_pyfunction)]
 #[pyfunction]
 fn _shipped_profile_json(name: &str) -> PyResult<&'static str> {
     locus_core::config::shipped_profile_json(name).ok_or_else(|| {
@@ -2313,7 +2021,6 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<DistortionModel>()?;
     m.add_class::<CameraIntrinsics>()?;
     m.add_class::<PyPose>()?;
-    m.add_class::<PyDetectorConfig>()?;
     // Result types
     m.add_class::<PipelineTelemetryResult>()?;
     m.add_class::<DetectionResult>()?;
@@ -2334,4 +2041,28 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(feature = "profiles")]
     m.add_function(wrap_pyfunction!(_shipped_profile_json, m)?)?;
     Ok(())
+}
+
+/// `&mut Detector` appears as a `#[pymethods]` argument (board estimation
+/// mutably borrows the detector to run `detect`). pyo3-stub-gen only implements
+/// `PyStubType` for `&T`, so teach it that `&mut Detector` types the same as
+/// `Detector` in a stub. `&mut` is a fundamental type, so this local impl is
+/// coherent. Lets the arguments generate without a per-parameter override
+/// (which does not compose with the `stub-gen` feature gate via `cfg_attr`).
+#[cfg(feature = "stub-gen")]
+impl pyo3_stub_gen::PyStubType for &mut Detector {
+    fn type_output() -> pyo3_stub_gen::TypeInfo {
+        <Detector as pyo3_stub_gen::PyStubType>::type_output()
+    }
+}
+
+#[cfg(feature = "stub-gen")]
+/// Gather stub info from the workspace-root `pyproject.toml`. This crate ships
+/// no `pyproject.toml` of its own (maturin config lives at the repo root), so we
+/// cannot use `define_stub_info_gatherer!` (it hardcodes the crate-dir path).
+/// Must live in the library crate, not the `stub_gen` binary — `inventory`
+/// collection only sees items linked into the same crate.
+pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
+    let manifest_dir: &std::path::Path = env!("CARGO_MANIFEST_DIR").as_ref();
+    pyo3_stub_gen::StubInfo::from_pyproject_toml(manifest_dir.join("../../pyproject.toml"))
 }
