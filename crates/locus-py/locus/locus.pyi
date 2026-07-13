@@ -78,90 +78,6 @@ class PyPose:
     @property
     def translation(self) -> list[float]: ...  # [x, y, z]
 
-class PyDetectorConfig:
-    threshold_tile_size: int
-    threshold_min_range: int
-    enable_sharpening: bool
-    threshold_min_radius: int
-    threshold_max_radius: int
-    adaptive_threshold_constant: int
-    adaptive_threshold_gradient_threshold: int
-    quad_min_area: int
-    quad_max_aspect_ratio: float
-    quad_min_fill_ratio: float
-    quad_max_fill_ratio: float
-    quad_min_edge_length: float
-    quad_min_edge_score: float
-    subpixel_refinement_sigma: float
-    segmentation_margin: int
-    segmentation_connectivity: SegmentationConnectivity
-    upscale_factor: int
-    decoder_min_contrast: float
-    refinement_mode: CornerRefinementMode
-    max_hamming_error: int | None
-    gwlf_transversal_alpha: float
-    quad_max_elongation: float
-    quad_min_density: float
-    quad_extraction_mode: QuadExtractionMode
-    quad_extraction_policy_is_adaptive: bool
-    adaptive_ppb_threshold: float
-    adaptive_ppb_low_extraction: QuadExtractionMode
-    adaptive_ppb_high_extraction: QuadExtractionMode
-    adaptive_ppb_low_refinement: CornerRefinementMode
-    adaptive_ppb_high_refinement: CornerRefinementMode
-    huber_delta_px: float
-    tikhonov_alpha_max: float
-    sigma_n_sq: float
-    structure_tensor_radius: int
-    edlines_imbalance_gate: EdLinesImbalanceGatePolicy
-    pose_consistency_fpr: float
-    pose_consistency_gate_sigma_px: float
-    pose_consistency_min_decisive_ratio: float
-    outlier_drop_d2_threshold: float
-    def __init__(
-        self,
-        *,
-        threshold_tile_size: int,
-        threshold_min_range: int,
-        enable_sharpening: bool,
-        threshold_min_radius: int,
-        threshold_max_radius: int,
-        adaptive_threshold_constant: int,
-        adaptive_threshold_gradient_threshold: int,
-        quad_min_area: int,
-        quad_max_aspect_ratio: float,
-        quad_min_fill_ratio: float,
-        quad_max_fill_ratio: float,
-        quad_min_edge_length: float,
-        quad_min_edge_score: float,
-        subpixel_refinement_sigma: float,
-        segmentation_margin: int,
-        segmentation_connectivity: SegmentationConnectivity,
-        upscale_factor: int,
-        decoder_min_contrast: float,
-        refinement_mode: CornerRefinementMode,
-        max_hamming_error: int | None,
-        gwlf_transversal_alpha: float,
-        quad_max_elongation: float,
-        quad_min_density: float,
-        quad_extraction_mode: QuadExtractionMode,
-        quad_extraction_policy_is_adaptive: bool,
-        adaptive_ppb_threshold: float,
-        adaptive_ppb_low_extraction: QuadExtractionMode,
-        adaptive_ppb_high_extraction: QuadExtractionMode,
-        adaptive_ppb_low_refinement: CornerRefinementMode,
-        adaptive_ppb_high_refinement: CornerRefinementMode,
-        huber_delta_px: float,
-        tikhonov_alpha_max: float,
-        sigma_n_sq: float,
-        structure_tensor_radius: int,
-        edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
-        pose_consistency_fpr: float,
-        pose_consistency_gate_sigma_px: float,
-        pose_consistency_min_decisive_ratio: float,
-        outlier_drop_d2_threshold: float,
-    ) -> None: ...
-
 # ---------------------------------------------------------------------------
 # Result types
 # ---------------------------------------------------------------------------
@@ -353,7 +269,7 @@ class Detector:
         Telemetry and rejected-corner data are not available via this method.
         """
         ...
-    def config(self) -> PyDetectorConfig: ...
+    def config(self) -> str: ...  # profile-JSON; Python re-parses into DetectorConfig
     def set_families(self, families: list[int]) -> None: ...
 
 class DetectorBuilder:
@@ -386,7 +302,7 @@ class DetectorBuilder:
 # ---------------------------------------------------------------------------
 
 def _create_detector_from_config(
-    config: PyDetectorConfig,
+    config_json: str,
     decimation: int | None = None,
     threads: int | None = None,
     families: list[int] = [],

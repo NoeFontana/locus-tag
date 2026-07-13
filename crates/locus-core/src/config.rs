@@ -1246,6 +1246,64 @@ mod profile_json {
             }
         }
     }
+
+    impl From<&DetectorConfig> for ProfileJson {
+        /// Inverse of `From<ProfileJson>`: project the flat hot-path struct back
+        /// into the nested profile shape for serialization. `decimation` /
+        /// `nthreads` are per-call orchestration and are intentionally omitted
+        /// (they are not profile fields). Total over every profile field, so the
+        /// serialized document round-trips losslessly through Pydantic.
+        fn from(c: &DetectorConfig) -> Self {
+            ProfileJson {
+                name: None,
+                extends: None,
+                threshold: ThresholdJson {
+                    tile_size: c.threshold_tile_size,
+                    min_range: c.threshold_min_range,
+                    enable_sharpening: c.enable_sharpening,
+                    min_radius: c.threshold_min_radius,
+                    max_radius: c.threshold_max_radius,
+                    constant: c.adaptive_threshold_constant,
+                    gradient_threshold: c.adaptive_threshold_gradient_threshold,
+                },
+                quad: QuadJson {
+                    min_area: c.quad_min_area,
+                    max_aspect_ratio: c.quad_max_aspect_ratio,
+                    min_fill_ratio: c.quad_min_fill_ratio,
+                    max_fill_ratio: c.quad_max_fill_ratio,
+                    min_edge_length: c.quad_min_edge_length,
+                    min_edge_score: c.quad_min_edge_score,
+                    subpixel_refinement_sigma: c.subpixel_refinement_sigma,
+                    upscale_factor: c.upscale_factor,
+                    max_elongation: c.quad_max_elongation,
+                    min_density: c.quad_min_density,
+                    extraction_mode: c.quad_extraction_mode,
+                    edlines_imbalance_gate: c.edlines_imbalance_gate,
+                    extraction_policy: c.quad_extraction_policy,
+                },
+                decoder: DecoderJson {
+                    min_contrast: c.decoder_min_contrast,
+                    refinement_mode: c.refinement_mode,
+                    max_hamming_error: c.max_hamming_error,
+                    gwlf_transversal_alpha: c.gwlf_transversal_alpha,
+                },
+                pose: PoseJson {
+                    huber_delta_px: c.huber_delta_px,
+                    tikhonov_alpha_max: c.tikhonov_alpha_max,
+                    sigma_n_sq: c.sigma_n_sq,
+                    structure_tensor_radius: c.structure_tensor_radius,
+                    pose_consistency_fpr: c.pose_consistency_fpr,
+                    pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
+                    pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
+                    outlier_drop_d2_threshold: c.outlier_drop_d2_threshold,
+                },
+                segmentation: SegmentationJson {
+                    connectivity: c.segmentation_connectivity,
+                    margin: c.segmentation_margin,
+                },
+            }
+        }
+    }
 }
 
 #[cfg(feature = "profiles")]
@@ -1294,6 +1352,25 @@ impl DetectorConfig {
         let config: DetectorConfig = parsed.into();
         config.validate()?;
         Ok(config)
+    }
+
+    /// Serialize this config into the nested profile-JSON shape.
+    ///
+    /// The inverse of [`DetectorConfig::from_profile_json`]. This is the format
+    /// that crosses the Python FFI boundary for `Detector.config()` readback:
+    /// Python re-parses it into the Pydantic model, so the round-trip is total
+    /// over every profile field (unlike the former field-by-field FFI struct
+    /// copy, which silently dropped knobs). `decimation` / `nthreads` are
+    /// per-call orchestration and are not part of the profile document.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConfigError::ProfileParse`] if serde_json fails to
+    /// serialize (not expected for the closed set of `Copy` scalar fields).
+    pub fn to_profile_json(&self) -> Result<String, crate::error::ConfigError> {
+        use crate::error::ConfigError;
+        let profile = profile_json::ProfileJson::from(self);
+        serde_json::to_string(&profile).map_err(|e| ConfigError::ProfileParse(e.to_string()))
     }
 
     /// Load a shipped profile by name.

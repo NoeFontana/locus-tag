@@ -307,270 +307,6 @@ pub struct PyPose {
 }
 
 // ============================================================================
-#[pyclass(get_all, frozen, from_py_object)]
-#[derive(Clone, Copy)]
-pub struct PyDetectorConfig {
-    pub threshold_tile_size: usize,
-    pub threshold_min_range: u8,
-    pub enable_sharpening: bool,
-    pub threshold_min_radius: usize,
-    pub threshold_max_radius: usize,
-    pub adaptive_threshold_constant: i16,
-    pub adaptive_threshold_gradient_threshold: u8,
-    pub quad_min_area: u32,
-    pub quad_max_aspect_ratio: f32,
-    pub quad_min_fill_ratio: f32,
-    pub quad_max_fill_ratio: f32,
-    pub quad_min_edge_length: f64,
-    pub quad_min_edge_score: f64,
-    pub subpixel_refinement_sigma: f64,
-    pub segmentation_margin: i16,
-    pub segmentation_connectivity: SegmentationConnectivity,
-    pub upscale_factor: usize,
-    pub decoder_min_contrast: f64,
-    pub refinement_mode: CornerRefinementMode,
-    pub max_hamming_error: Option<u32>,
-    pub gwlf_transversal_alpha: f64,
-    pub quad_max_elongation: f64,
-    pub quad_min_density: f64,
-    pub quad_extraction_mode: QuadExtractionMode,
-    pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
-    // Quad-extraction policy passthrough — Rust's `QuadExtractionPolicy` is an
-    // enum (`Static` | `AdaptivePpb(...)`), flattened here so `PyDetectorConfig`
-    // stays `Copy`. When `quad_extraction_policy_is_adaptive == false`, the
-    // `adaptive_*` fields are ignored on the `From<PyDetectorConfig>` path.
-    pub quad_extraction_policy_is_adaptive: bool,
-    pub adaptive_ppb_threshold: f32,
-    pub adaptive_ppb_low_extraction: QuadExtractionMode,
-    pub adaptive_ppb_high_extraction: QuadExtractionMode,
-    pub adaptive_ppb_low_refinement: CornerRefinementMode,
-    pub adaptive_ppb_high_refinement: CornerRefinementMode,
-    pub huber_delta_px: f64,
-    pub tikhonov_alpha_max: f64,
-    pub sigma_n_sq: f64,
-    pub structure_tensor_radius: u8,
-    pub pose_consistency_fpr: f64,
-    pub pose_consistency_gate_sigma_px: f64,
-    pub pose_consistency_min_decisive_ratio: f64,
-    pub outlier_drop_d2_threshold: f64,
-}
-
-#[pymethods]
-impl PyDetectorConfig {
-    #[new]
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "constructor mirrors every flat DetectorConfig field as a keyword-only pyo3 argument"
-    )]
-    #[pyo3(signature = (
-        *,
-        threshold_tile_size,
-        threshold_min_range,
-        enable_sharpening,
-        threshold_min_radius,
-        threshold_max_radius,
-        adaptive_threshold_constant,
-        adaptive_threshold_gradient_threshold,
-        quad_min_area,
-        quad_max_aspect_ratio,
-        quad_min_fill_ratio,
-        quad_max_fill_ratio,
-        quad_min_edge_length,
-        quad_min_edge_score,
-        subpixel_refinement_sigma,
-        segmentation_margin,
-        segmentation_connectivity,
-        upscale_factor,
-        decoder_min_contrast,
-        refinement_mode,
-        max_hamming_error,
-        gwlf_transversal_alpha,
-        quad_max_elongation,
-        quad_min_density,
-        quad_extraction_mode,
-        edlines_imbalance_gate,
-        quad_extraction_policy_is_adaptive,
-        adaptive_ppb_threshold,
-        adaptive_ppb_low_extraction,
-        adaptive_ppb_high_extraction,
-        adaptive_ppb_low_refinement,
-        adaptive_ppb_high_refinement,
-        huber_delta_px,
-        tikhonov_alpha_max,
-        sigma_n_sq,
-        structure_tensor_radius,
-        pose_consistency_fpr,
-        pose_consistency_gate_sigma_px,
-        pose_consistency_min_decisive_ratio,
-        outlier_drop_d2_threshold,
-    ))]
-    fn new(
-        threshold_tile_size: usize,
-        threshold_min_range: u8,
-        enable_sharpening: bool,
-        threshold_min_radius: usize,
-        threshold_max_radius: usize,
-        adaptive_threshold_constant: i16,
-        adaptive_threshold_gradient_threshold: u8,
-        quad_min_area: u32,
-        quad_max_aspect_ratio: f32,
-        quad_min_fill_ratio: f32,
-        quad_max_fill_ratio: f32,
-        quad_min_edge_length: f64,
-        quad_min_edge_score: f64,
-        subpixel_refinement_sigma: f64,
-        segmentation_margin: i16,
-        segmentation_connectivity: SegmentationConnectivity,
-        upscale_factor: usize,
-        decoder_min_contrast: f64,
-        refinement_mode: CornerRefinementMode,
-        max_hamming_error: Option<u32>,
-        gwlf_transversal_alpha: f64,
-        quad_max_elongation: f64,
-        quad_min_density: f64,
-        quad_extraction_mode: QuadExtractionMode,
-        edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
-        quad_extraction_policy_is_adaptive: bool,
-        adaptive_ppb_threshold: f32,
-        adaptive_ppb_low_extraction: QuadExtractionMode,
-        adaptive_ppb_high_extraction: QuadExtractionMode,
-        adaptive_ppb_low_refinement: CornerRefinementMode,
-        adaptive_ppb_high_refinement: CornerRefinementMode,
-        huber_delta_px: f64,
-        tikhonov_alpha_max: f64,
-        sigma_n_sq: f64,
-        structure_tensor_radius: u8,
-        pose_consistency_fpr: f64,
-        pose_consistency_gate_sigma_px: f64,
-        pose_consistency_min_decisive_ratio: f64,
-        outlier_drop_d2_threshold: f64,
-    ) -> Self {
-        Self {
-            threshold_tile_size,
-            threshold_min_range,
-            enable_sharpening,
-            threshold_min_radius,
-            threshold_max_radius,
-            adaptive_threshold_constant,
-            adaptive_threshold_gradient_threshold,
-            quad_min_area,
-            quad_max_aspect_ratio,
-            quad_min_fill_ratio,
-            quad_max_fill_ratio,
-            quad_min_edge_length,
-            quad_min_edge_score,
-            subpixel_refinement_sigma,
-            segmentation_margin,
-            segmentation_connectivity,
-            upscale_factor,
-            decoder_min_contrast,
-            refinement_mode,
-            max_hamming_error,
-            gwlf_transversal_alpha,
-            quad_max_elongation,
-            quad_min_density,
-            quad_extraction_mode,
-            edlines_imbalance_gate,
-            quad_extraction_policy_is_adaptive,
-            adaptive_ppb_threshold,
-            adaptive_ppb_low_extraction,
-            adaptive_ppb_high_extraction,
-            adaptive_ppb_low_refinement,
-            adaptive_ppb_high_refinement,
-            huber_delta_px,
-            tikhonov_alpha_max,
-            sigma_n_sq,
-            structure_tensor_radius,
-            pose_consistency_fpr,
-            pose_consistency_gate_sigma_px,
-            pose_consistency_min_decisive_ratio,
-            outlier_drop_d2_threshold,
-        }
-    }
-}
-
-impl From<locus_core::config::DetectorConfig> for PyDetectorConfig {
-    fn from(c: locus_core::config::DetectorConfig) -> Self {
-        // Flatten the policy once rather than pattern-matching it per sibling
-        // field. Defaults for the `Static` branch match the historical values
-        // exposed through the Python kwarg surface.
-        let (
-            policy_is_adaptive,
-            adaptive_threshold,
-            adaptive_low_ext,
-            adaptive_high_ext,
-            adaptive_low_ref,
-            adaptive_high_ref,
-        ) = match c.quad_extraction_policy {
-            locus_core::config::QuadExtractionPolicy::AdaptivePpb(p) => (
-                true,
-                p.threshold,
-                quad_extraction_mode_to_py(p.low_extraction),
-                quad_extraction_mode_to_py(p.high_extraction),
-                corner_refinement_mode_to_py(p.low_refinement),
-                corner_refinement_mode_to_py(p.high_refinement),
-            ),
-            locus_core::config::QuadExtractionPolicy::Static => (
-                false,
-                0.0,
-                QuadExtractionMode::ContourRdp,
-                QuadExtractionMode::EdLines,
-                CornerRefinementMode::Erf,
-                CornerRefinementMode::None,
-            ),
-        };
-        Self {
-            threshold_tile_size: c.threshold_tile_size,
-            threshold_min_range: c.threshold_min_range,
-            enable_sharpening: c.enable_sharpening,
-            threshold_min_radius: c.threshold_min_radius,
-            threshold_max_radius: c.threshold_max_radius,
-            adaptive_threshold_constant: c.adaptive_threshold_constant,
-            adaptive_threshold_gradient_threshold: c.adaptive_threshold_gradient_threshold,
-            quad_min_area: c.quad_min_area,
-            quad_max_aspect_ratio: c.quad_max_aspect_ratio,
-            quad_min_fill_ratio: c.quad_min_fill_ratio,
-            quad_max_fill_ratio: c.quad_max_fill_ratio,
-            quad_min_edge_length: c.quad_min_edge_length,
-            quad_min_edge_score: c.quad_min_edge_score,
-            subpixel_refinement_sigma: c.subpixel_refinement_sigma,
-            segmentation_margin: c.segmentation_margin,
-            segmentation_connectivity: match c.segmentation_connectivity {
-                locus_core::config::SegmentationConnectivity::Four => {
-                    SegmentationConnectivity::Four
-                },
-                locus_core::config::SegmentationConnectivity::Eight => {
-                    SegmentationConnectivity::Eight
-                },
-            },
-            upscale_factor: c.upscale_factor,
-            decoder_min_contrast: c.decoder_min_contrast,
-            refinement_mode: corner_refinement_mode_to_py(c.refinement_mode),
-            max_hamming_error: c.max_hamming_error,
-            gwlf_transversal_alpha: c.gwlf_transversal_alpha,
-            quad_max_elongation: c.quad_max_elongation,
-            quad_min_density: c.quad_min_density,
-            quad_extraction_mode: quad_extraction_mode_to_py(c.quad_extraction_mode),
-            edlines_imbalance_gate: c.edlines_imbalance_gate.into(),
-            quad_extraction_policy_is_adaptive: policy_is_adaptive,
-            adaptive_ppb_threshold: adaptive_threshold,
-            adaptive_ppb_low_extraction: adaptive_low_ext,
-            adaptive_ppb_high_extraction: adaptive_high_ext,
-            adaptive_ppb_low_refinement: adaptive_low_ref,
-            adaptive_ppb_high_refinement: adaptive_high_ref,
-            huber_delta_px: c.huber_delta_px,
-            tikhonov_alpha_max: c.tikhonov_alpha_max,
-            sigma_n_sq: c.sigma_n_sq,
-            structure_tensor_radius: c.structure_tensor_radius,
-            pose_consistency_fpr: c.pose_consistency_fpr,
-            pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
-            pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
-            outlier_drop_d2_threshold: c.outlier_drop_d2_threshold,
-        }
-    }
-}
-
-// ============================================================================
 // Result types
 // ============================================================================
 
@@ -1619,9 +1355,16 @@ impl Detector {
             .collect()
     }
 
-    /// Returns the current detector configuration.
-    fn config(&self) -> PyDetectorConfig {
-        PyDetectorConfig::from(self.inner.config())
+    /// Returns the current detector configuration as a profile-JSON string.
+    ///
+    /// Python re-parses this into the Pydantic `DetectorConfig`, so the readback
+    /// is total over every profile field (the former field-by-field FFI struct
+    /// silently dropped knobs it did not re-copy).
+    fn config(&self) -> PyResult<String> {
+        self.inner
+            .config()
+            .to_profile_json()
+            .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
     /// Update the tag families to be detected.
@@ -1648,87 +1391,19 @@ fn tag_family_from_i32(f: i32) -> PyResult<locus_core::TagFamily> {
     }
 }
 
-fn quad_extraction_mode_to_py(m: locus_core::config::QuadExtractionMode) -> QuadExtractionMode {
-    match m {
-        locus_core::config::QuadExtractionMode::ContourRdp => QuadExtractionMode::ContourRdp,
-        locus_core::config::QuadExtractionMode::EdLines => QuadExtractionMode::EdLines,
-    }
-}
-
-fn corner_refinement_mode_to_py(
-    m: locus_core::config::CornerRefinementMode,
-) -> CornerRefinementMode {
-    match m {
-        locus_core::config::CornerRefinementMode::None => CornerRefinementMode::None,
-        locus_core::config::CornerRefinementMode::Erf => CornerRefinementMode::Erf,
-        locus_core::config::CornerRefinementMode::Gwlf => CornerRefinementMode::Gwlf,
-    }
-}
-
-impl From<PyDetectorConfig> for locus_core::config::DetectorConfig {
-    fn from(c: PyDetectorConfig) -> Self {
-        let policy = if c.quad_extraction_policy_is_adaptive {
-            locus_core::config::QuadExtractionPolicy::AdaptivePpb(
-                locus_core::config::AdaptivePpbConfig {
-                    threshold: c.adaptive_ppb_threshold,
-                    low_extraction: c.adaptive_ppb_low_extraction.into(),
-                    high_extraction: c.adaptive_ppb_high_extraction.into(),
-                    low_refinement: c.adaptive_ppb_low_refinement.into(),
-                    high_refinement: c.adaptive_ppb_high_refinement.into(),
-                },
-            )
-        } else {
-            locus_core::config::QuadExtractionPolicy::Static
-        };
-        Self {
-            threshold_tile_size: c.threshold_tile_size,
-            threshold_min_range: c.threshold_min_range,
-            enable_sharpening: c.enable_sharpening,
-            threshold_min_radius: c.threshold_min_radius,
-            threshold_max_radius: c.threshold_max_radius,
-            adaptive_threshold_constant: c.adaptive_threshold_constant,
-            adaptive_threshold_gradient_threshold: c.adaptive_threshold_gradient_threshold,
-            quad_min_area: c.quad_min_area,
-            quad_max_aspect_ratio: c.quad_max_aspect_ratio,
-            quad_min_fill_ratio: c.quad_min_fill_ratio,
-            quad_max_fill_ratio: c.quad_max_fill_ratio,
-            quad_min_edge_length: c.quad_min_edge_length,
-            quad_min_edge_score: c.quad_min_edge_score,
-            subpixel_refinement_sigma: c.subpixel_refinement_sigma,
-            upscale_factor: c.upscale_factor,
-            quad_max_elongation: c.quad_max_elongation,
-            quad_min_density: c.quad_min_density,
-            quad_extraction_mode: c.quad_extraction_mode.into(),
-            edlines_imbalance_gate: c.edlines_imbalance_gate.into(),
-            decoder_min_contrast: c.decoder_min_contrast,
-            refinement_mode: c.refinement_mode.into(),
-            max_hamming_error: c.max_hamming_error,
-            gwlf_transversal_alpha: c.gwlf_transversal_alpha,
-            huber_delta_px: c.huber_delta_px,
-            tikhonov_alpha_max: c.tikhonov_alpha_max,
-            sigma_n_sq: c.sigma_n_sq,
-            structure_tensor_radius: c.structure_tensor_radius,
-            pose_consistency_fpr: c.pose_consistency_fpr,
-            pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
-            pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
-            outlier_drop_d2_threshold: c.outlier_drop_d2_threshold,
-            segmentation_connectivity: c.segmentation_connectivity.into(),
-            segmentation_margin: c.segmentation_margin,
-            quad_extraction_policy: policy,
-            ..locus_core::config::DetectorConfig::default()
-        }
-    }
-}
-
 #[pyfunction]
-#[pyo3(signature = (config, decimation=None, threads=None, families=vec![]))]
+#[pyo3(signature = (config_json, decimation=None, threads=None, families=vec![]))]
 fn _create_detector_from_config(
-    config: PyDetectorConfig,
+    config_json: &str,
     decimation: Option<usize>,
     threads: Option<usize>,
     families: Vec<i32>,
 ) -> PyResult<Detector> {
-    let cfg: locus_core::config::DetectorConfig = config.into();
+    // The Pydantic `DetectorConfig` crosses the FFI as its `model_dump_json()`
+    // string — the same profile format Rust already reads — so the shipped JSON
+    // profile is the single source of truth on both sides of the boundary.
+    let cfg = locus_core::config::DetectorConfig::from_profile_json(config_json)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let mut builder = locus_core::DetectorBuilder::new().with_config(cfg);
 
     if let Some(d) = decimation {
@@ -2313,7 +1988,6 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<DistortionModel>()?;
     m.add_class::<CameraIntrinsics>()?;
     m.add_class::<PyPose>()?;
-    m.add_class::<PyDetectorConfig>()?;
     // Result types
     m.add_class::<PipelineTelemetryResult>()?;
     m.add_class::<DetectionResult>()?;

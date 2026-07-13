@@ -18,6 +18,21 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   shim structs gained `Serialize` (and `ProfileJson` a derived `Default`) to
   support the reflection; no behavior change.
 
+### Changed
+
+- **Detector config crosses the Rust↔Python FFI as JSON, not a 40-field struct.**
+  The Pydantic `DetectorConfig` is now shipped to Rust as its `model_dump_json()`
+  string (parsed by `DetectorConfig::from_profile_json`) and read back the same
+  way (`DetectorConfig::to_profile_json`), making the shipped JSON profile format
+  the single contract on both sides of the boundary. This deletes the
+  `PyDetectorConfig` pyclass, its 40-argument constructor, both `From` impls,
+  Python's `_to_ffi_config`, the `quad.extraction_policy` enum-flattening
+  discriminator hack, and the hand-written `.pyi` block — ~300 lines of pure
+  transcription, and the FFI seam that had no runtime coverage. Behavior-neutral:
+  render-tag / ICRA snapshots byte-identical. `PyDetectorConfig` is removed from
+  the `locus.locus` extension surface (internal FFI glue; it was never in
+  `__all__`).
+
 ### Removed
 
 - **Dead / unused detector config knobs.** Pruned three knobs across all
@@ -62,6 +77,16 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   feature itself, `compute_image_noise_floor`, the `branch_chosen` field on
   `PoseDiagnostics`, `bench_compute_corner_covariance`, and the shipped
   pose-consistency / outlier-drop telemetry columns on `DetectionBatch`.
+
+### Fixed
+
+- **`Detector.config()` now round-trips every field.** The Python readback
+  previously reconstructed only ~29 of 39 config fields by hand, silently
+  substituting Pydantic defaults for the `pose_consistency_*` /
+  `outlier_drop_d2_threshold` knobs and the adaptive `quad.extraction_policy` on
+  any detector whose config set them. `config()` now reparses Rust's serialized
+  effective config (see the JSON-boundary change above), so the round-trip is
+  total. Covered by the rewritten `test_profiles.py` full-config comparison.
 
 ### Added
 

@@ -162,3 +162,30 @@ fn from_profile_json_accepts_minimal_document() {
 fn from_profile_panics_on_unknown_name() {
     let _ = DetectorConfig::from_profile("does_not_exist");
 }
+
+#[test]
+fn to_profile_json_round_trips_every_field() {
+    // Serialize → deserialize must be the identity over every profile field.
+    // Exercise the knobs the former field-by-field FFI readback silently
+    // dropped (`pose_consistency_*`, `outlier_drop_*`, and the AdaptivePpb
+    // policy), plus a non-default extraction policy — precisely the fields a
+    // total JSON round-trip protects and a partial struct copy did not.
+    let cfg = DetectorConfig {
+        pose_consistency_fpr: 1e-3,
+        pose_consistency_gate_sigma_px: 0.75,
+        pose_consistency_min_decisive_ratio: 7.5,
+        outlier_drop_d2_threshold: 25.0,
+        quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
+            threshold: 3.25,
+            low_extraction: QuadExtractionMode::ContourRdp,
+            high_extraction: QuadExtractionMode::EdLines,
+            low_refinement: CornerRefinementMode::Erf,
+            high_refinement: CornerRefinementMode::None,
+        }),
+        ..DetectorConfig::default()
+    };
+
+    let json = cfg.to_profile_json().expect("serialize config");
+    let round_tripped = DetectorConfig::from_profile_json(&json).expect("re-parse config");
+    assert_eq!(round_tripped, cfg);
+}
