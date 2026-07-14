@@ -43,9 +43,13 @@ literature.
 
 | Detector | Recall | Corner RMSE |
 | :--- | :---: | :---: |
-| **Locus (`standard`)** | **96.2 %** | 0.315 px |
-| AprilTag 3 (UMich) | 62.3 % | **0.22 px** |
-| OpenCV (`cv2.aruco`) | 33.2 % | 0.92 px |
+| **Locus (`standard`)** | **96.2 %** | **0.315 px** |
+| AprilTag 3 (UMich) | 62.3 % | 0.22 px |
+| OpenCV (`cv2.aruco`) | 52.6 % | 0.98 px |
+
+The OpenCV row is its recall-best OpenCV 5.0 config (tuned `subpix`); the
+tag-aware `apriltag` refinement more than halves corner RMSE (0.39 px) but
+rejects ICRA's marginal small tags, dropping recall to ~30 %.
 <!-- --8<-- [end:icra-comparison] -->
 
 <!-- --8<-- [start:render-tag-comparison] -->
@@ -55,21 +59,26 @@ literature.
 PSF, exposure, sensor noise, and lens distortion models. The
 detection scenes carry pixel-accurate ground truth for both corners
 and 6-DOF pose, which lets us report translation / rotation
-percentiles in addition to recall. **Numbers below are from the
-2026-04-25 SOTA snapshot on the 1080p 50-scene subset** (see
-[`docs/engineering/benchmarking/render_tag_sota_20260425.md`](https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/render_tag_sota_20260425.md)
-for methodology).
+percentiles in addition to recall. **Numbers below are the 2026-07-13
+single-threaded SOTA snapshot on the 1080p 50-scene subset (OpenCV 5.0.0,
+re-tuned)** (see
+[`docs/engineering/benchmarking/render_tag_sota_20260713.md`](https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/render_tag_sota_20260713.md)
+for methodology, the 2160p table, and OpenCV's two operating points).
 
 | Detector | Recall | Trans p50 | Trans p99 | Rot p50 | Rot p99 | Latency |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Locus (`high_accuracy`)** | **100 %** | **0.4 mm** | **25.6 mm** | **0.058 °** | **1.897 °** | **11.67 ms** |
-| Locus (`standard`) | 100 % | 3.5 mm | 50.3 mm | 0.288 ° | 27.248 ° | 19.24 ms |
-| AprilTag-C (pupil) | 100 % | 2.9 mm | 54.4 mm | 0.061 ° | 65.365 ° | 25.54 ms |
-| OpenCV (`cv2.aruco`) | 100 % | 3.4 mm | 141.4 mm | 0.113 ° | 1.228 ° | 44.45 ms |
+| **Locus (`high_accuracy`)** | **100 %** | **0.4 mm** | **18.6 mm** | **0.057 °** | 0.600 ° | **13.8 ms** |
+| Locus (`standard`) | 100 % | 3.5 mm | 50.3 mm | 0.288 ° | 27.248 ° | 32.7 ms |
+| OpenCV (`cv2.aruco`, subpix) | 100 % | 3.5 mm | 66.6 mm | 0.127 ° | 0.569 ° | 101.1 ms |
+| OpenCV (`cv2.aruco`, apriltag) | 100 % | 3.0 mm | 55.3 mm | 0.067 ° | **0.376 °** | 195.8 ms |
+| AprilTag-C (pupil) | 100 % | 2.9 mm | 54.4 mm | 0.061 ° | 65.365 ° | 78.5 ms |
 
-Per-percentile is load-bearing: AprilTag-C's median rotation is the
-best in class (0.06 °) but its p99 explodes to 65 ° on the
-symmetric-tag IRLS branch-ambiguity failures.
+Latencies are single-thread. Locus `high_accuracy` wins the translation tail and
+is 14× faster than OpenCV's best-accuracy `apriltag` config; that config in turn
+has the best rotation tail (0.376°). OpenCV ships two operating points — fast
+`subpix` and accurate-but-~2×-slower `apriltag`. AprilTag-C's median rotation is
+best in class (0.06°) but its p99 explodes to 65° on symmetric-tag IRLS
+branch-ambiguity failures.
 <!-- --8<-- [end:render-tag-comparison] -->
 
 ## Installation

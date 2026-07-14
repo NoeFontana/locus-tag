@@ -44,6 +44,17 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   render-tag / ICRA snapshots byte-identical. `PyDetectorConfig` is removed from
   the `locus.locus` extension surface (internal FFI glue; it was never in
   `__all__`).
+- **OpenCV benchmark baseline bumped to 5.0.0 and re-tuned.** Bumped
+  `opencv-python-headless` 4.13 → 5.0.0 (fixing a `detectMarkers` `ids`-shape
+  change in the comparison adapter) and re-tuned the `cv2.aruco` baseline for its
+  best 5.0 config. The reported OpenCV numbers now show two operating points:
+  fast `subpix` (tuned detection thresholds: render-tag trans p99 141 → 66.6 mm
+  for free) and best-accuracy `apriltag` refinement (55.3 mm / best rotation tail,
+  ~2× slower). `apriltag` is now the shipped `OpenCVWrapper._DEFAULTS`. On ICRA
+  its recall rises to 52.6 % (from 33.2 %) with the recall-tuned `subpix` config.
+  All render-tag latencies re-measured single-threaded on verified hardware. See
+  `docs/engineering/benchmarking/render_tag_sota_20260713.md`; the OpenCV version
+  is now captured in benchmark provenance.
 
 ### Removed
 

@@ -105,6 +105,7 @@ nav:
           - engineering/benchmarking/release_performance_20260418.md
           - engineering/benchmarking/hub_regression_20260423.md
           - engineering/benchmarking/render_tag_sota_20260425.md
+          - engineering/benchmarking/render_tag_sota_20260713.md
           - engineering/benchmarking/render_tag_2160p_20260425.md
           - engineering/benchmarking/quad_truncation_fix_20260426.md
   - Migration:

@@ -389,6 +389,7 @@ def build_provenance(
         cpu_cores_physical=_cpu_cores_physical(),
         cpu_cores_logical=os.cpu_count() or 1,
         locus_version=_locus_version(),
+        opencv_version=_opencv_version(),
         dataset_version=dataset_version,
         rayon_threads=_rayon_threads(),
         build_profile=build_profile,  # pyright: ignore[reportArgumentType]
@@ -454,6 +455,16 @@ def _locus_version() -> str:
         return metadata.version("locus-tag")
     except metadata.PackageNotFoundError:
         return "0.0.0"
+
+
+def _opencv_version() -> str | None:
+    """`cv2.__version__` if OpenCV is importable, else None (Rust-only benchmark runs)."""
+    try:
+        import cv2
+
+        return str(cv2.__version__)
+    except ImportError:
+        return None
 
 
 def _rayon_threads() -> int | None:
