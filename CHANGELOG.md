@@ -7,6 +7,15 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **Corner-refinement variant benchmark + rotation-tail study.** New
+  `tools/bench/refine_variants_eval.py` runs the shipped `high_accuracy` detector
+  with only its large-marker refinement route swapped (config-only; shipped
+  profiles and snapshots untouched). The 2026-07-14 study
+  (`docs/engineering/benchmarking/refine_variants_20260714.md`) shows apriltag-style
+  edge-line refit (GWLF) reaches the rotation p99 target but regresses translation
+  3.4× (not a Pareto win), and that the residual rotation-p99 gap is 2–3 EdLines
+  arc-partition failures rather than distributed refinement noise. No library
+  behavior change — the study's `EdgeLineGated` prototype was reverted.
 - **Config field-set parity tripwire.** A `locus-core` unit test
   (`config::schema_parity_tests`) now asserts the serde profile shim
   (`ProfileJson` + nested `*Json` structs) exposes the exact same JSON key set as
