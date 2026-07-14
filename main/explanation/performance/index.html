@@ -1517,6 +1517,8 @@
       
         
       
+        
+      
     
     
     
@@ -1714,6 +1716,34 @@
     
   
     Render-tag 1080p SOTA pursuit (2026-04-25)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/render_tag_sota_20260713/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    render-tag SOTA refresh — OpenCV 5.0 (2026-07-13)
   
 
     
@@ -2118,29 +2148,33 @@ literature.</p>
 <tr>
 <td style="text-align: left;"><strong>Locus (<code>standard</code>)</strong></td>
 <td style="text-align: center;"><strong>96.2 %</strong></td>
-<td style="text-align: center;">0.315 px</td>
+<td style="text-align: center;"><strong>0.315 px</strong></td>
 </tr>
 <tr>
 <td style="text-align: left;">AprilTag 3 (UMich)</td>
 <td style="text-align: center;">62.3 %</td>
-<td style="text-align: center;"><strong>0.22 px</strong></td>
+<td style="text-align: center;">0.22 px</td>
 </tr>
 <tr>
 <td style="text-align: left;">OpenCV (<code>cv2.aruco</code>)</td>
-<td style="text-align: center;">33.2 %</td>
-<td style="text-align: center;">0.92 px</td>
+<td style="text-align: center;">52.6 %</td>
+<td style="text-align: center;">0.98 px</td>
 </tr>
 </tbody>
 </table>
+<p>The OpenCV row is its recall-best OpenCV 5.0 config (tuned <code>subpix</code>); the
+tag-aware <code>apriltag</code> refinement more than halves corner RMSE (0.39 px) but
+rejects ICRA's marginal small tags, dropping recall to ~30 %.</p>
 <h3 id="render-tag-high-fidelity-blender-psf">render-tag (high-fidelity Blender + PSF)</h3>
 <p><code>render-tag</code> is our in-house render suite — Blender with calibrated
 PSF, exposure, sensor noise, and lens distortion models. The
 detection scenes carry pixel-accurate ground truth for both corners
 and 6-DOF pose, which lets us report translation / rotation
-percentiles in addition to recall. <strong>Numbers below are from the
-2026-04-25 SOTA snapshot on the 1080p 50-scene subset</strong> (see
-<a href="https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/render_tag_sota_20260425.md"><code>docs/engineering/benchmarking/render_tag_sota_20260425.md</code></a>
-for methodology).</p>
+percentiles in addition to recall. <strong>Numbers below are the 2026-07-13
+single-threaded SOTA snapshot on the 1080p 50-scene subset (OpenCV 5.0.0,
+re-tuned)</strong> (see
+<a href="https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/render_tag_sota_20260713.md"><code>docs/engineering/benchmarking/render_tag_sota_20260713.md</code></a>
+for methodology, the 2160p table, and OpenCV's two operating points).</p>
 <table>
 <thead>
 <tr>
@@ -2158,10 +2192,10 @@ for methodology).</p>
 <td style="text-align: left;"><strong>Locus (<code>high_accuracy</code>)</strong></td>
 <td style="text-align: center;"><strong>100 %</strong></td>
 <td style="text-align: center;"><strong>0.4 mm</strong></td>
-<td style="text-align: center;"><strong>25.6 mm</strong></td>
-<td style="text-align: center;"><strong>0.058 °</strong></td>
-<td style="text-align: center;"><strong>1.897 °</strong></td>
-<td style="text-align: center;"><strong>11.67 ms</strong></td>
+<td style="text-align: center;"><strong>18.6 mm</strong></td>
+<td style="text-align: center;"><strong>0.057 °</strong></td>
+<td style="text-align: center;">0.600 °</td>
+<td style="text-align: center;"><strong>13.8 ms</strong></td>
 </tr>
 <tr>
 <td style="text-align: left;">Locus (<code>standard</code>)</td>
@@ -2170,7 +2204,25 @@ for methodology).</p>
 <td style="text-align: center;">50.3 mm</td>
 <td style="text-align: center;">0.288 °</td>
 <td style="text-align: center;">27.248 °</td>
-<td style="text-align: center;">19.24 ms</td>
+<td style="text-align: center;">32.7 ms</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV (<code>cv2.aruco</code>, subpix)</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">3.5 mm</td>
+<td style="text-align: center;">66.6 mm</td>
+<td style="text-align: center;">0.127 °</td>
+<td style="text-align: center;">0.569 °</td>
+<td style="text-align: center;">101.1 ms</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV (<code>cv2.aruco</code>, apriltag)</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">3.0 mm</td>
+<td style="text-align: center;">55.3 mm</td>
+<td style="text-align: center;">0.067 °</td>
+<td style="text-align: center;"><strong>0.376 °</strong></td>
+<td style="text-align: center;">195.8 ms</td>
 </tr>
 <tr>
 <td style="text-align: left;">AprilTag-C (pupil)</td>
@@ -2179,22 +2231,16 @@ for methodology).</p>
 <td style="text-align: center;">54.4 mm</td>
 <td style="text-align: center;">0.061 °</td>
 <td style="text-align: center;">65.365 °</td>
-<td style="text-align: center;">25.54 ms</td>
-</tr>
-<tr>
-<td style="text-align: left;">OpenCV (<code>cv2.aruco</code>)</td>
-<td style="text-align: center;">100 %</td>
-<td style="text-align: center;">3.4 mm</td>
-<td style="text-align: center;">141.4 mm</td>
-<td style="text-align: center;">0.113 °</td>
-<td style="text-align: center;">1.228 °</td>
-<td style="text-align: center;">44.45 ms</td>
+<td style="text-align: center;">78.5 ms</td>
 </tr>
 </tbody>
 </table>
-<p>Per-percentile is load-bearing: AprilTag-C's median rotation is the
-best in class (0.06 °) but its p99 explodes to 65 ° on the
-symmetric-tag IRLS branch-ambiguity failures.</p>
+<p>Latencies are single-thread. Locus <code>high_accuracy</code> wins the translation tail and
+is 14× faster than OpenCV's best-accuracy <code>apriltag</code> config; that config in turn
+has the best rotation tail (0.376°). OpenCV ships two operating points — fast
+<code>subpix</code> and accurate-but-~2×-slower <code>apriltag</code>. AprilTag-C's median rotation is
+best in class (0.06°) but its p99 explodes to 65° on symmetric-tag IRLS
+branch-ambiguity failures.</p>
 <h2 id="how-to-read-these-numbers">How to read these numbers</h2>
 <ul>
 <li><strong>Recall</strong> — fraction of ground-truth tags whose ID was correctly

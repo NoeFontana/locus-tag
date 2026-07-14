@@ -10,31 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/python-style/">
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/benchmarking/render_tag_sota_20260713/">
       
       
-        <link rel="prev" href="../rust-style/">
+        <link rel="prev" href="../render_tag_sota_20260425/">
       
       
-        <link rel="next" href="../general-style/">
+        <link rel="next" href="../render_tag_2160p_20260425/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>Python Engineering Guidelines - Locus</title>
+        <title>render-tag SOTA refresh — OpenCV 5.0 (2026-07-13) - Locus</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -53,9 +53,9 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#python-engineering-guidelines" class="md-skip">
+        <a href="#render-tag-sota-refresh-opencv-50-2026-07-13" class="md-skip">
           Skip to content
         </a>
       
@@ -100,7 +100,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
+    <a href="../../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Python Engineering Guidelines
+              render-tag SOTA refresh — OpenCV 5.0 (2026-07-13)
             
           </span>
         </div>
@@ -236,7 +236,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
+    <a href="../../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -266,7 +266,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -346,7 +346,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/guide/" class="md-nav__link">
+      <a href="../../../tutorials/guide/" class="md-nav__link">
         
   
   
@@ -444,7 +444,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/add_dictionary/" class="md-nav__link">
+      <a href="../../../how-to/add_dictionary/" class="md-nav__link">
         
   
   
@@ -472,7 +472,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/debug_with_rerun/" class="md-nav__link">
+      <a href="../../../how-to/debug_with_rerun/" class="md-nav__link">
         
   
   
@@ -500,7 +500,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/concurrent_detection/" class="md-nav__link">
+      <a href="../../../how-to/concurrent_detection/" class="md-nav__link">
         
   
   
@@ -528,7 +528,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/install-with-distortion/" class="md-nav__link">
+      <a href="../../../how-to/install-with-distortion/" class="md-nav__link">
         
   
   
@@ -556,7 +556,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/tune_and_compare/" class="md-nav__link">
+      <a href="../../../how-to/tune_and_compare/" class="md-nav__link">
         
   
   
@@ -584,7 +584,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/per_instance_comparison/" class="md-nav__link">
+      <a href="../../../how-to/per_instance_comparison/" class="md-nav__link">
         
   
   
@@ -682,7 +682,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/architecture/" class="md-nav__link">
+      <a href="../../../explanation/architecture/" class="md-nav__link">
         
   
   
@@ -710,7 +710,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/pipeline/" class="md-nav__link">
+      <a href="../../../explanation/pipeline/" class="md-nav__link">
         
   
   
@@ -738,7 +738,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/memory_model/" class="md-nav__link">
+      <a href="../../../explanation/memory_model/" class="md-nav__link">
         
   
   
@@ -766,7 +766,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/algorithms/" class="md-nav__link">
+      <a href="../../../explanation/algorithms/" class="md-nav__link">
         
   
   
@@ -794,7 +794,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/coordinates/" class="md-nav__link">
+      <a href="../../../explanation/coordinates/" class="md-nav__link">
         
   
   
@@ -822,7 +822,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/performance/" class="md-nav__link">
+      <a href="../../../explanation/performance/" class="md-nav__link">
         
   
   
@@ -910,7 +910,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/api/" class="md-nav__link">
+      <a href="../../../reference/api/" class="md-nav__link">
         
   
   
@@ -1022,7 +1022,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../core/" class="md-nav__link">
+      <a href="../../core/" class="md-nav__link">
         
   
   
@@ -1050,7 +1050,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../workflow/" class="md-nav__link">
+      <a href="../../workflow/" class="md-nav__link">
         
   
   
@@ -1078,7 +1078,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../release-runbook/" class="md-nav__link">
+      <a href="../../release-runbook/" class="md-nav__link">
         
   
   
@@ -1106,7 +1106,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../detection-batch-contract/" class="md-nav__link">
+      <a href="../../detection-batch-contract/" class="md-nav__link">
         
   
   
@@ -1134,7 +1134,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../constraints/" class="md-nav__link">
+      <a href="../../constraints/" class="md-nav__link">
         
   
   
@@ -1162,7 +1162,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../ffi_contracts/" class="md-nav__link">
+      <a href="../../ffi_contracts/" class="md-nav__link">
         
   
   
@@ -1190,7 +1190,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../profiles/" class="md-nav__link">
+      <a href="../../profiles/" class="md-nav__link">
         
   
   
@@ -1218,7 +1218,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../stratification/" class="md-nav__link">
+      <a href="../../stratification/" class="md-nav__link">
         
   
   
@@ -1246,7 +1246,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../quality-gates/" class="md-nav__link">
+      <a href="../../quality-gates/" class="md-nav__link">
         
   
   
@@ -1274,7 +1274,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../rust-style/" class="md-nav__link">
+      <a href="../../rust-style/" class="md-nav__link">
         
   
   
@@ -1282,6 +1282,299 @@
     
   
     Rust Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../general-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    General Code Style Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_13" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6_13" id="__nav_6_13_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_13_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6_13">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Benchmarking
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking &amp; Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lessons/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking Lessons (consolidated, 2026-05-02)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../micro-benchmarking-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Micro-Benchmarking Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release_performance_20260418/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Locus Release Performance Report (2026-04-18)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hub_regression_20260423/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hub Regression Performance Report (2026-04-23)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../render_tag_sota_20260425/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Render-tag 1080p SOTA pursuit (2026-04-25)
   
 
     
@@ -1318,7 +1611,7 @@
   <span class="md-ellipsis">
     
   
-    Python Engineering Guidelines
+    render-tag SOTA refresh — OpenCV 5.0 (2026-07-13)
   
 
     
@@ -1336,7 +1629,7 @@
   <span class="md-ellipsis">
     
   
-    Python Engineering Guidelines
+    render-tag SOTA refresh — OpenCV 5.0 (2026-07-13)
   
 
     
@@ -1362,10 +1655,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-ffi-zero-copy-rules" class="md-nav__link">
+  <a href="#methodology" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. FFI &amp; Zero-Copy Rules
+        Methodology
       
     </span>
   </a>
@@ -1373,10 +1666,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-typing-api-surface" class="md-nav__link">
+  <a href="#two-opencv-operating-points" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Typing &amp; API Surface
+        Two OpenCV operating points
       
     </span>
   </a>
@@ -1384,10 +1677,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#3-environment-orchestration" class="md-nav__link">
+  <a href="#1-detector-matrix-19201080-50-scenes-single-thread" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Environment &amp; Orchestration
+        §1 Detector matrix — 1920×1080 (50 scenes, single thread)
       
     </span>
   </a>
@@ -1395,10 +1688,32 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-quality-gates" class="md-nav__link">
+  <a href="#2-detector-matrix-38402160-50-scenes-single-thread" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. Quality Gates
+        §2 Detector matrix — 3840×2160 (50 scenes, single thread)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-icra-2020-forward-recall-corner-rmse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §3 ICRA 2020 Forward (recall + corner RMSE)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tuned-opencv-configs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tuned OpenCV configs
       
     </span>
   </a>
@@ -1421,300 +1736,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../general-style/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    General Code Style Principles
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    
-    
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_13" >
-        
-          
-          <label class="md-nav__link" for="__nav_6_13" id="__nav_6_13_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Benchmarking
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_13_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_13">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Benchmarking
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Benchmarking &amp; Diagnostics
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/lessons/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Benchmarking Lessons (consolidated, 2026-05-02)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/micro-benchmarking-guide/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Micro-Benchmarking Guide
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/release_performance_20260418/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Locus Release Performance Report (2026-04-18)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/hub_regression_20260423/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Hub Regression Performance Report (2026-04-23)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_sota_20260425/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Render-tag 1080p SOTA pursuit (2026-04-25)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_sota_20260713/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    render-tag SOTA refresh — OpenCV 5.0 (2026-07-13)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
+      <a href="../render_tag_2160p_20260425/" class="md-nav__link">
         
   
   
@@ -1742,7 +1764,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/quad_truncation_fix_20260426/" class="md-nav__link">
+      <a href="../quad_truncation_fix_20260426/" class="md-nav__link">
         
   
   
@@ -1838,7 +1860,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../migration/config-refactor/" class="md-nav__link">
+      <a href="../../../migration/config-refactor/" class="md-nav__link">
         
   
   
@@ -1893,10 +1915,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-ffi-zero-copy-rules" class="md-nav__link">
+  <a href="#methodology" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. FFI &amp; Zero-Copy Rules
+        Methodology
       
     </span>
   </a>
@@ -1904,10 +1926,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-typing-api-surface" class="md-nav__link">
+  <a href="#two-opencv-operating-points" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Typing &amp; API Surface
+        Two OpenCV operating points
       
     </span>
   </a>
@@ -1915,10 +1937,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#3-environment-orchestration" class="md-nav__link">
+  <a href="#1-detector-matrix-19201080-50-scenes-single-thread" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Environment &amp; Orchestration
+        §1 Detector matrix — 1920×1080 (50 scenes, single thread)
       
     </span>
   </a>
@@ -1926,10 +1948,32 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-quality-gates" class="md-nav__link">
+  <a href="#2-detector-matrix-38402160-50-scenes-single-thread" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. Quality Gates
+        §2 Detector matrix — 3840×2160 (50 scenes, single thread)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-icra-2020-forward-recall-corner-rmse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        §3 ICRA 2020 Forward (recall + corner RMSE)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tuned-opencv-configs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tuned OpenCV configs
       
     </span>
   </a>
@@ -1956,29 +2000,215 @@
   
 
 
-<h1 id="python-engineering-guidelines">Python Engineering Guidelines</h1>
-<p>When modifying Python code in <code>crates/locus-py</code> or <code>scripts/</code>, the focus must be on maximizing throughput at the FFI boundary, ensuring type safety, and maintaining reproducible environments.</p>
-<h2 id="1-ffi-zero-copy-rules">1. FFI &amp; Zero-Copy Rules</h2>
+<h1 id="render-tag-sota-refresh-opencv-50-2026-07-13">render-tag SOTA refresh — OpenCV 5.0 (2026-07-13)</h1>
+<p>Refreshes the detector-comparison matrix after the <strong>OpenCV 4.13 → 5.0.0</strong> bump,
+with the OpenCV baseline <strong>re-tuned</strong> for its best 5.0 config. Supersedes the
+<code>render_tag_sota_20260425.md</code> snapshot for the OpenCV rows.</p>
+<h2 id="methodology">Methodology</h2>
 <ul>
-<li><strong>No Hot-Loop Allocations:</strong> Do not slice, copy, or instantiate large arrays inside the tight detection loop.</li>
-<li><strong>Contiguous Memory:</strong> Ensure image data passed to Rust is contiguous. Rely on Rust's <code>PyReadonlyArray2&lt;u8&gt;</code> to interpret the buffer securely.</li>
+<li><strong>Datasets:</strong> <code>locus_v1_tag36h11_1920x1080</code> and <code>_3840x2160</code> Hub render-tag
+  subsets (50 scenes, single tag36h11 each); captured via
+  <code>tools/bench/render_tag_sota_eval.py</code> (set <code>RENDER_TAG_SOTA_CONFIG</code> for 2160p).</li>
+<li><strong>Single-threaded latency.</strong> Every detector is pinned to one thread for an
+  apples-to-apples comparison: <code>cv2.setNumThreads(1)</code>, Locus <code>threads=1</code>,
+  AprilTag <code>nthreads=1</code>, <code>RAYON_NUM_THREADS=1</code>. Latency is the mean per-frame
+  detector-only wall time, measured serially on a quiescent machine.</li>
+<li><strong>Hardware (verified, <code>lscpu</code>):</strong> AMD EPYC-Milan, 8 vCPU (4 cores × 2 threads),
+  KVM. Release build (<code>maturin develop --release</code>). Locus <code>git e3fa5f0</code>.</li>
+<li><strong>Versions:</strong> OpenCV <code>cv2</code> <strong>5.0.0</strong>, <code>pupil_apriltags</code> (AprilTag-C).</li>
+<li><strong>OpenCV tuning:</strong> <code>bench tune</code> / <code>bench sweep</code> over
+  <code>tools/bench/tune/spaces/opencv_default.json</code> (+ a subpix-refinement extension),
+  n≈32–48 random, <code>precision_floor=0.98</code>.</li>
 </ul>
-<h2 id="2-typing-api-surface">2. Typing &amp; API Surface</h2>
+<p>Accuracy is deterministic (independent of machine load); latency is not, hence
+the single-thread quiescent protocol.</p>
+<h2 id="two-opencv-operating-points">Two OpenCV operating points</h2>
+<p>OpenCV's corner-refinement choice is a genuine speed/accuracy lever, so both are
+reported:</p>
 <ul>
-<li><strong>Strict Typing:</strong> All Python code must be fully type-hinted. We rely on <code>basedpyright</code> (via the <code>types</code> dependency group) to enforce static typing.</li>
-<li><strong>Stub Synchronization:</strong> <code>locus/locus.pyi</code> is <strong>generated</strong> from the annotated pyo3 surface — do not hand-edit it. After changing the PyO3 interface, regenerate and commit it with <code>cargo run --bin stub_gen --no-default-features --features profiles,stub-gen</code> (under <code>uv run</code>); CI's <code>stub_gen --check</code> fails on drift. New <code>#[pyclass]</code>/<code>#[pymethods]</code>/<code>#[pyfunction]</code> items need the matching <code>#[gen_stub_*]</code> annotation to appear in the stub.</li>
+<li><strong><code>subpix</code></strong> — fast; intensity-gradient corner refinement. Tuned detection
+  thresholds (not the refinement convergence knobs, which don't help) take it
+  from the pre-tuning 141 mm → <strong>66.6 mm</strong> trans p99 at the same speed.</li>
+<li><strong><code>apriltag</code></strong> — best accuracy; tag-homography-aware refinement. <strong>55.3 mm</strong>
+  trans p99 / best rotation tail, at ~2× the subpix latency (1080p). The shipped
+  <code>OpenCVWrapper._DEFAULTS</code>. <strong>Note:</strong> its refinement <em>rejects</em> markers whose
+  local re-detection fails, so it is best only on clean imagery — see ICRA below.</li>
 </ul>
-<h2 id="3-environment-orchestration">3. Environment &amp; Orchestration</h2>
+<h2 id="1-detector-matrix-19201080-50-scenes-single-thread">§1 Detector matrix — 1920×1080 (50 scenes, single thread)</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Detector</th>
+<th style="text-align: center;">Recall</th>
+<th style="text-align: center;">Prec</th>
+<th style="text-align: center;">Trans p50</th>
+<th style="text-align: center;">Trans p99</th>
+<th style="text-align: center;">Rot p50</th>
+<th style="text-align: center;">Rot p99</th>
+<th style="text-align: center;">Latency</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Locus (<code>high_accuracy</code>)</strong></td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;"><strong>0.4 mm</strong></td>
+<td style="text-align: center;"><strong>18.6 mm</strong></td>
+<td style="text-align: center;"><strong>0.057°</strong></td>
+<td style="text-align: center;">0.600°</td>
+<td style="text-align: center;"><strong>13.8 ms</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus (<code>standard</code>)</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">3.5 mm</td>
+<td style="text-align: center;">50.3 mm</td>
+<td style="text-align: center;">0.288°</td>
+<td style="text-align: center;">27.248°</td>
+<td style="text-align: center;">32.7 ms</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV (<code>subpix</code>)</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">3.5 mm</td>
+<td style="text-align: center;">66.6 mm</td>
+<td style="text-align: center;">0.127°</td>
+<td style="text-align: center;">0.569°</td>
+<td style="text-align: center;">101.1 ms</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV (<code>apriltag</code>)</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">3.0 mm</td>
+<td style="text-align: center;">55.3 mm</td>
+<td style="text-align: center;">0.067°</td>
+<td style="text-align: center;"><strong>0.376°</strong></td>
+<td style="text-align: center;">195.8 ms</td>
+</tr>
+<tr>
+<td style="text-align: left;">AprilTag-C (pupil)</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">2.9 mm</td>
+<td style="text-align: center;">54.4 mm</td>
+<td style="text-align: center;">0.061°</td>
+<td style="text-align: center;">65.365°</td>
+<td style="text-align: center;">78.5 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Locus <code>high_accuracy</code> wins translation tail <strong>and</strong> speed (14× faster than
+OpenCV <code>apriltag</code>); OpenCV <code>apriltag</code> has the best rotation tail (0.376°).
+AprilTag-C's rotation p99 explodes to 65° on symmetric-tag IRLS branch ambiguity.</p>
+<h2 id="2-detector-matrix-38402160-50-scenes-single-thread">§2 Detector matrix — 3840×2160 (50 scenes, single thread)</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Detector</th>
+<th style="text-align: center;">Recall</th>
+<th style="text-align: center;">Prec</th>
+<th style="text-align: center;">Trans p50</th>
+<th style="text-align: center;">Trans p99</th>
+<th style="text-align: center;">Rot p50</th>
+<th style="text-align: center;">Rot p99</th>
+<th style="text-align: center;">Latency</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Locus (<code>high_accuracy</code>)</strong></td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;"><strong>0.9 mm</strong></td>
+<td style="text-align: center;"><strong>39.0 mm</strong></td>
+<td style="text-align: center;"><strong>0.055°</strong></td>
+<td style="text-align: center;">1.113°</td>
+<td style="text-align: center;"><strong>56.4 ms</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus (<code>standard</code>)</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">6.9 mm</td>
+<td style="text-align: center;">120.8 mm</td>
+<td style="text-align: center;">0.302°</td>
+<td style="text-align: center;">108.409°</td>
+<td style="text-align: center;">125.4 ms</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV (<code>subpix</code>)</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">6.5 mm</td>
+<td style="text-align: center;">133.8 mm</td>
+<td style="text-align: center;">0.104°</td>
+<td style="text-align: center;">0.489°</td>
+<td style="text-align: center;">253.9 ms</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV (<code>apriltag</code>)</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">5.8 mm</td>
+<td style="text-align: center;">107.5 mm</td>
+<td style="text-align: center;">0.072°</td>
+<td style="text-align: center;"><strong>0.449°</strong></td>
+<td style="text-align: center;">885.9 ms</td>
+</tr>
+<tr>
+<td style="text-align: left;">AprilTag-C (pupil)</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">100 %</td>
+<td style="text-align: center;">5.7 mm</td>
+<td style="text-align: center;">101.3 mm</td>
+<td style="text-align: center;">0.072°</td>
+<td style="text-align: center;">65.716°</td>
+<td style="text-align: center;">327.2 ms</td>
+</tr>
+</tbody>
+</table>
+<p>At 4K the OpenCV <code>apriltag</code> refinement cost scales badly (886 ms single-thread).</p>
+<h2 id="3-icra-2020-forward-recall-corner-rmse">§3 ICRA 2020 Forward (recall + corner RMSE)</h2>
+<p>ICRA's small / distant / lower-fidelity tags invert the render-tag result:
+OpenCV <code>apriltag</code> refinement <strong>rejects</strong> marginal detections, so it is <em>not</em>
+recall-best here. Per-dataset OpenCV sweep (recall × refinement):</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">OpenCV config (5.0)</th>
+<th style="text-align: center;">Recall</th>
+<th style="text-align: center;">Corner RMSE</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>subpix</code> (recall-best, perim 0.005)</td>
+<td style="text-align: center;"><strong>52.6 %</strong></td>
+<td style="text-align: center;">0.979 px</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>apriltag</code> (RMSE-best)</td>
+<td style="text-align: center;">29.95 %</td>
+<td style="text-align: center;"><strong>0.388 px</strong></td>
+</tr>
+</tbody>
+</table>
+<p>vs the previous OpenCV-4.13 baseline (33.2 % / 0.92 px). The README ICRA row
+reports the <strong>recall-best subpix</strong> config (ICRA is a detection-rate benchmark);
+<code>apriltag</code> refinement more than halves corner RMSE but at 30 % recall.</p>
+<h2 id="tuned-opencv-configs">Tuned OpenCV configs</h2>
 <ul>
-<li><strong><code>uv</code> Everywhere:</strong> Never use global <code>pip</code>. All dependency management, locking, and tool execution must be routed through <code>uv</code>.</li>
-<li><strong>PEP 735 Dependency Groups:</strong> Utilize specific groups (<code>dev</code>, <code>lint</code>, <code>types</code>, <code>bench</code>, <code>docs</code>, <code>etl</code>) when running tasks. For example: <code>uv run --group bench tools/cli.py bench</code>.</li>
-</ul>
-<h2 id="4-quality-gates">4. Quality Gates</h2>
-<ul>
-<li><strong>Linting:</strong> <code>uv run ruff check . --fix</code></li>
-<li><strong>Formatting:</strong> <code>uv run ruff format .</code></li>
-<li><strong>Type Checking:</strong> <code>uv run --group types --group bench --group etl basedpyright</code></li>
-<li><strong>Testing:</strong> <code>uv run pytest</code></li>
+<li><strong>render-tag <code>apriltag</code></strong> (<code>OpenCVWrapper._DEFAULTS</code>): <code>cornerRefinementMethod=apriltag</code>,
+  <code>cornerRefinementWinSize=5</code>, <code>adaptiveThreshConstant≈9.76</code>, <code>adaptiveThreshWinSize=[5,30] step 6</code>,
+  <code>minMarkerPerimeterRate≈0.022</code>, <code>minMarkerDistanceRate≈0.041</code>, <code>polygonalApproxAccuracyRate≈0.029</code>.</li>
+<li><strong>render-tag <code>subpix</code></strong> (<code>OpenCVWrapper._SUBPIX_ALT</code>): <code>cornerRefinementMethod=subpix</code>,
+  <code>cornerRefinementWinSize=9</code>, <code>adaptiveThreshConstant=10</code>, <code>adaptiveThreshWinSize=[4,33] step 9</code>,
+  <code>minMarkerPerimeterRate=0.019</code>, <code>minMarkerDistanceRate=0.028</code>, <code>polygonalApproxAccuracyRate=0.023</code>.</li>
+<li><strong>ICRA <code>subpix</code></strong>: as above but <code>minMarkerPerimeterRate=0.005</code>, <code>adaptiveThreshConstant=7</code>.</li>
 </ul>
 
 
@@ -2029,18 +2259,18 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
-        <script src="../../javascripts/mathjax.js"></script>
+        <script src="../../../javascripts/mathjax.js"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
       
-        <script src="../../javascripts/mermaid-init.js"></script>
+        <script src="../../../javascripts/mermaid-init.js"></script>
       
     
   </body>
