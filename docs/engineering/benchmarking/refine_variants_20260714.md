@@ -83,23 +83,44 @@ it to the 0.6 px edge-line floor. Worse, a corrected corner no longer trips the
 post-pose d² gate, so gating **neutralises** `outlier_drop` (on = off) — it fights the
 existing, better handler. Reverted; no dead config knob shipped.
 
-## Conclusion & the open lever
+## Result 4 — surgical repair / per-tag switch / fusion all fail (deep dive)
+
+The natural follow-up — surgically fix only the failing tags — was investigated in
+full and **falsified**. The rotation↔translation trade turns out to be fundamental at
+the **per-tag** level, not just globally:
+
+- **Per-corner repair is impossible.** Swapping *one* EdLines corner to its GWLF
+  position is *worse* than swapping all four (tag 563: EdLines 2.55° → all-GWLF 0.44°
+  → swap-worst-only **1.28°**). GWLF corners help rotation only because all four share
+  the same ~0.6 px common-mode offset; injecting one into three EdLines corners makes
+  it a differential outlier. You cannot mix corner systems on a tag.
+- **Per-tag switch — the oracle ceiling itself breaks the translation guardrail.**
+  Greedily switching whole tags to GWLF (real Accurate poses) reaches rot p99 0.377°
+  only at trans p99 **26.4 mm (+42%)**; every rotation-tail tag has *good* EdLines
+  translation that GWLF sacrifices. And the detector is impossible: switch-worthy tags
+  have corner-disagreement 0.53–1.14 px, non-worthy 0.53–**2.75** px (fully
+  overlapping — tag 563 has the *highest* disagreement but is not switch-worthy,
+  because `outlier_drop` already handles it).
+- **Internal multi-config fusion fails.** Per-corner median of {EdLines 0.2 px, GWLF
+  0.6 px, ContourRdp+Erf noisy} is dragged to the offset cluster → rotation improves
+  but trans p99 19.9 → 34.3 mm. Locus has no second corner source as accurate as
+  EdLines, so fusing drags translation down. (The 0.323° cross-detector median in the
+  rotation-tail diagnostic worked only because apriltag + subpix + locus are three
+  *comparable* detectors.)
+
+## Conclusion
 
 Shipped `high_accuracy` (0.600° / 18.6 mm) sits on the **single-frame single-detector
-Pareto frontier**: reaching apriltag's rotation requires the common-mode corner
-profile that structurally costs translation, and every reweighting lever loses to the
-existing Huber + `outlier_drop`. The residual gap is 2–3 EdLines arc-partition
-failures, and *dropping* their corners (what shipped does) caps at ~0.66° on those
-tags — you must **repair** the corner to near-truth to reach the 0.38° oracle ceiling.
+Pareto frontier**. Reaching OpenCV-apriltag's rotation requires the common-mode corner
+profile that structurally costs translation, and **every** corner-level lever — GWLF
+replacement, per-corner gated repair, per-tag switching (even oracle), and internal
+fusion — either trades translation or cannot be steered by any computable detector.
+The corner-refinement level is **exhausted**.
 
-**Untried, Pareto-plausible next lever — surgical edge repair:** detect the gross
-EdLines failure with the pose-independent GWLF-disagreement signal (it flags tag 563
-at 2.75 px), high τ so only the 2–3 real failures fire; repair by substituting the
-GWLF edge **line** for the mis-partitioned EdLines edge and re-running the
-chord-coupled Phase-5 GN (keeping the shared-corner regulariser the Phase-5 negative
-proved essential); do it *instead of* `outlier_drop` for those tags. Touches only the
-failing tags, so translation is preserved by construction. Oracle ceiling rot
-p99 → ~0.36–0.38°. Not yet built.
+The only remaining way to improve *both* metrics is to **add independent information**:
+an external EdLines-accuracy corner source (multi-detector fusion), a multi-tag **board
+joint-solve**, or **temporal** multi-frame fusion. These operate above the single-tag
+corner-refinement layer this study covers.
 
 ## Reproduce
 
