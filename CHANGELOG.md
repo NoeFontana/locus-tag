@@ -7,6 +7,30 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **Distorted-camera pose was silently wrong (correctness).** The production
+  single-tag pose path (the weighted LM `refine_pose_lm_weighted`) and the three
+  board pose solvers minimized a **pinhole** reprojection error even when the
+  `CameraIntrinsics` carried a Brown–Conrady / Kannala–Brandt distortion model —
+  only the image-less corner-LM fallback was distortion-aware. On a distorted
+  camera this biased every emitted pose (in a synthetic Brown–Conrady test the
+  weighted LM converged **8.6° off** ground truth; the distortion-aware fix
+  recovers it exactly). Both the normal-equations builder *and* the Nielsen
+  step-evaluation cost (`huber_mahalanobis_cost`, which was still pinhole and made
+  the gain ratio inconsistent) now route through the shared distortion-aware
+  `pose::projection_and_gradient`. The board path is made distortion-consistent
+  end-to-end for the same reason (its three LM sites, RANSAC branch scoring, inlier
+  evaluation, and per-observation d² all reprojected pinhole; all now use
+  `distort_normalized`, and the DLT/IPPE seed now undistorts observations to ideal
+  normalized coords before homography fitting). `Pose::project` is likewise made
+  distortion-aware (it was pinhole despite its doc, and biased the detector's
+  reprojection-error telemetry on distorted cameras). Undistorted
+  (`DistortionCoeffs::None`) results are unchanged — all pinhole regression
+  snapshots (render-tag, ICRA, board-hub, ROC, distortion-hub) pass byte-for-byte
+  (the projection differs from the removed pinhole arithmetic only by
+  floating-point reassociation of the pixel scaling, which moves no fixture).
+  Covered by `weighted_lm_minimises_distorted_reprojection` (the
+  `regression_distortion_hub` suite only exercised routing/decode, never pose
+  accuracy).
 - **Board pose LM convergence (accuracy).** The three `board.rs` pose solvers
   previously paired a camera-frame (Convention-1) rotation Jacobian with a
   *non-rotated* translation update (Convention-2), an inconsistency that let the LM
