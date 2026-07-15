@@ -2284,3 +2284,503 @@ mod tests {
         );
     }
 }
+
+/// Experimental right/body-perturbation pose LM, kept alongside the shipped
+/// left/camera-perturbation solver for head-to-head numerical evaluation.
+///
+/// Nothing here is wired into production — it is compiled only for tests and the
+/// `bench-internals` harness. The goal is to answer, with measurement rather than
+/// theory, whether parameterising the SE(3) update in the tag's *body* frame
+/// (`T' = T·exp(δ)`) yields better-conditioned normal equations and a smaller
+/// rotation-error tail than the shipped camera-frame update (`T' = exp(δ)·T`),
+/// given that our object points are symmetric about the body origin.
+#[cfg(any(test, feature = "bench-internals"))]
+pub(crate) mod right_perturbation {
+    use super::*;
+
+    /// SE(3) **right** (body-frame) perturbation `T' = T · exp(δ)`, `δ = [t | ω]`.
+    ///
+    /// To first order (V(ω) ≈ I, the same approximation the shipped left
+    /// `retract` makes): `R' = R · exp(ω)`, `t' = R · δt + t`. The translation
+    /// increment is expressed in the body frame and rotated into the camera by
+    /// the *current* `R`; the rotation increment acts on the right of `R`.
+    #[must_use]
+    pub(crate) fn retract_right(pose: &Pose, delta: &Vector6<f64>) -> Pose {
+        let exp_omega = Rotation3::new(Vector3::new(delta[3], delta[4], delta[5]))
+            .matrix()
+            .into_owned();
+        let dt_body = Vector3::new(delta[0], delta[1], delta[2]);
+        Pose::new(
+            pose.rotation * exp_omega,
+            pose.rotation * dt_body + pose.translation,
+        )
+    }
+
+    /// Right/body-perturbation analogue of [`corner_normal_equations`].
+    ///
+    /// Identical residual/weight/cost accumulation; only the Jacobian columns
+    /// change. Deriving `∂p_cam/∂δ` for `p_cam = R·(exp(ω)·P + δt) + t`:
+    ///   * translation: `∂p_cam/∂δt = R`      → row gets `∂proj/∂P_cam · R`
+    ///   * rotation:    `∂p_cam/∂ω  = -R·[P_body]_×`
+    ///
+    /// Factor `dq = Rᵀ·(∂proj/∂P_cam)` (the body-frame projection gradient); then
+    /// the translation columns are `dq` and the rotation columns are the same
+    /// `-[·]_×` cross-product structure as the left builder but on `(dq, P_body)`
+    /// instead of `(∂proj/∂P_cam, P_cam)`. Returns `(JᵀWJ, JᵀWr, huber_cost)` —
+    /// the cost is frame-independent and bit-comparable to the left builder's.
+    #[must_use]
+    pub(crate) fn corner_normal_equations_right(
+        intrinsics: &CameraIntrinsics,
+        corners: &[[f64; 2]; 4],
+        obj_pts: &[Vector3<f64>; 4],
+        pose: &Pose,
+        huber_delta: f64,
+    ) -> (Matrix6<f64>, Vector6<f64>, f64) {
+        let mut jtj = Matrix6::<f64>::zeros();
+        let mut jtr = Vector6::<f64>::zeros();
+        let mut cost = 0.0;
+        let rt = pose.rotation.transpose();
+        for i in 0..4 {
+            let pb = obj_pts[i];
+            let p_cam = pose.rotation * pb + pose.translation;
+            let z = p_cam.z.max(1e-4);
+            let z_inv = 1.0 / z;
+            let xn = p_cam.x / z;
+            let yn = p_cam.y / z;
+
+            let [u_est, v_est] = intrinsics.distort_normalized(xn, yn);
+            let res_u = corners[i][0] - u_est;
+            let res_v = corners[i][1] - v_est;
+
+            let r_norm = (res_u * res_u + res_v * res_v).sqrt();
+            let w = if r_norm <= huber_delta {
+                1.0
+            } else {
+                huber_delta / r_norm
+            };
+            if r_norm <= huber_delta {
+                cost += 0.5 * r_norm * r_norm;
+            } else {
+                cost += huber_delta * (r_norm - 0.5 * huber_delta);
+            }
+
+            let jd = intrinsics.distortion_jacobian(xn, yn);
+            let du_dp = Vector3::new(
+                intrinsics.fx * jd[0][0] * z_inv,
+                intrinsics.fx * jd[0][1] * z_inv,
+                -intrinsics.fx * (jd[0][0] * xn + jd[0][1] * yn) * z_inv,
+            );
+            let dv_dp = Vector3::new(
+                intrinsics.fy * jd[1][0] * z_inv,
+                intrinsics.fy * jd[1][1] * z_inv,
+                -intrinsics.fy * (jd[1][0] * xn + jd[1][1] * yn) * z_inv,
+            );
+
+            // Body-frame projection gradients dq = Rᵀ · ∂proj/∂P_cam.
+            let dqu = rt * du_dp;
+            let dqv = rt * dv_dp;
+
+            let mut row_u = Vector6::zeros();
+            row_u[0] = dqu[0];
+            row_u[1] = dqu[1];
+            row_u[2] = dqu[2];
+            row_u[3] = -(dqu[1] * pb.z - dqu[2] * pb.y);
+            row_u[4] = -(dqu[2] * pb.x - dqu[0] * pb.z);
+            row_u[5] = -(dqu[0] * pb.y - dqu[1] * pb.x);
+            let mut row_v = Vector6::zeros();
+            row_v[0] = dqv[0];
+            row_v[1] = dqv[1];
+            row_v[2] = dqv[2];
+            row_v[3] = -(dqv[1] * pb.z - dqv[2] * pb.y);
+            row_v[4] = -(dqv[2] * pb.x - dqv[0] * pb.z);
+            row_v[5] = -(dqv[0] * pb.y - dqv[1] * pb.x);
+
+            jtj += w * (row_u * row_u.transpose() + row_v * row_v.transpose());
+            jtr += w * (row_u * res_u + row_v * res_v);
+        }
+        (jtj, jtr, cost)
+    }
+
+    /// Per-run LM instrumentation for the head-to-head comparison.
+    #[derive(Debug, Clone, Copy, Default)]
+    pub(crate) struct LmStats {
+        pub iters: u32,
+        pub accepted: u32,
+        pub chol_fails: u32,
+    }
+
+    /// Generic Nielsen trust-region LM identical to the shipped `refine_pose_lm`
+    /// loop, parameterised by the normal-equations builder and the retraction so
+    /// the *only* difference between the left and right runs is those two
+    /// primitives. Returns the refined pose plus iteration/accept/Cholesky-fail
+    /// counts for the conditioning study.
+    pub(crate) fn run_lm<NE, RT>(
+        initial_pose: Pose,
+        normal_equations: NE,
+        retract: RT,
+    ) -> (Pose, LmStats)
+    where
+        NE: Fn(&Pose) -> (Matrix6<f64>, Vector6<f64>, f64),
+        RT: Fn(&Pose, &Vector6<f64>) -> Pose,
+    {
+        let mut pose = initial_pose;
+        let mut lambda = 1e-3_f64;
+        let mut nu = 2.0_f64;
+        let mut jtj = Matrix6::<f64>::zeros();
+        let mut jtr = Vector6::<f64>::zeros();
+        let mut current_cost = f64::MAX;
+        let mut needs_rebuild = true;
+        let mut stats = LmStats::default();
+
+        for _ in 0..20 {
+            stats.iters += 1;
+            if needs_rebuild {
+                let (rjtj, rjtr, cost) = normal_equations(&pose);
+                jtj = rjtj;
+                jtr = rjtr;
+                current_cost = cost;
+                needs_rebuild = false;
+            }
+            if jtr.amax() < 1e-8 {
+                break;
+            }
+            let d_diag = Vector6::new(
+                jtj[(0, 0)].max(1e-8),
+                jtj[(1, 1)].max(1e-8),
+                jtj[(2, 2)].max(1e-8),
+                jtj[(3, 3)].max(1e-8),
+                jtj[(4, 4)].max(1e-8),
+                jtj[(5, 5)].max(1e-8),
+            );
+            let mut jtj_damped = jtj;
+            for k in 0..6 {
+                jtj_damped[(k, k)] += lambda * d_diag[k];
+            }
+            let delta = if let Some(chol) = jtj_damped.cholesky() {
+                chol.solve(&jtr)
+            } else {
+                stats.chol_fails += 1;
+                lambda *= 10.0;
+                nu = 2.0;
+                continue;
+            };
+            let predicted_reduction =
+                0.5 * delta.dot(&(lambda * d_diag.component_mul(&delta) + jtr));
+            let new_pose = retract(&pose, &delta);
+            let (_, _, new_cost) = normal_equations(&new_pose);
+            let actual_reduction = current_cost - new_cost;
+            let rho = if predicted_reduction > 1e-12 {
+                actual_reduction / predicted_reduction
+            } else {
+                0.0
+            };
+            if rho > 0.0 {
+                pose = new_pose;
+                current_cost = new_cost;
+                needs_rebuild = true;
+                stats.accepted += 1;
+                lambda *= (1.0 - (2.0 * rho - 1.0).powi(3)).max(1.0 / 3.0);
+                nu = 2.0;
+                if delta.norm() < 1e-7 {
+                    break;
+                }
+            } else {
+                lambda *= nu;
+                nu *= 2.0;
+            }
+        }
+        (pose, stats)
+    }
+
+    /// Conditioning summary of a 6×6 SE(3) normal-equations matrix.
+    #[derive(Debug, Clone, Copy)]
+    pub(crate) struct Conditioning {
+        /// λ_max / λ_min of `JᵀJ` (∞ if rank-deficient).
+        pub cond: f64,
+        /// Normalized rotation↔translation coupling
+        /// `‖JᵀJ[t,ω]‖_F / √(‖JᵀJ[t,t]‖_F · ‖JᵀJ[ω,ω]‖_F)`.
+        pub coupling: f64,
+    }
+
+    #[must_use]
+    pub(crate) fn conditioning(jtj: &Matrix6<f64>) -> Conditioning {
+        let eig = jtj.symmetric_eigenvalues();
+        let lmax = eig.max();
+        let lmin = eig.min();
+        let cond = if lmin > 1e-300 {
+            lmax / lmin
+        } else {
+            f64::INFINITY
+        };
+        let tt = jtj.fixed_view::<3, 3>(0, 0).norm();
+        let rr = jtj.fixed_view::<3, 3>(3, 3).norm();
+        let tr = jtj.fixed_view::<3, 3>(0, 3).norm();
+        let denom = (tt * rr).sqrt();
+        let coupling = if denom > 1e-300 { tr / denom } else { 0.0 };
+        Conditioning { cond, coupling }
+    }
+
+    #[cfg(test)]
+    #[allow(clippy::unwrap_used, clippy::cast_precision_loss)]
+    mod diagnostics {
+        use super::*;
+
+        /// Build a GT pose + its noiseless projected corners for a given viewing
+        /// geometry: `depth` (m) along the optical axis, `bearing` (off-axis angle
+        /// of the tag centre, rad, in +x), `tilt` (out-of-plane rotation about the
+        /// camera x-axis, rad). Object points are centred on the body origin.
+        fn geometry(
+            intr: &CameraIntrinsics,
+            tag_size: f64,
+            depth: f64,
+            bearing: f64,
+            tilt: f64,
+        ) -> (Pose, [[f64; 2]; 4], [Vector3<f64>; 4]) {
+            let obj = centered_tag_corners(tag_size);
+            let rot = Rotation3::new(Vector3::new(tilt, 0.0, 0.0))
+                .matrix()
+                .into_owned();
+            let trans = Vector3::new(depth * bearing.tan(), 0.0, depth);
+            let pose = Pose::new(rot, trans);
+            let corners: [[f64; 2]; 4] = core::array::from_fn(|i| pose.project(&obj[i], intr));
+            (pose, corners, obj)
+        }
+
+        // Mechanism check for the right-perturbation hypothesis: on a body-centred
+        // planar target, does the body-frame (right) SE(3) parameterisation yield a
+        // better-conditioned JᵀJ and weaker rotation↔translation coupling than the
+        // shipped camera-frame (left) one? Prints a full table and an aggregate; the
+        // hard assertion only pins the qualitative claim we are testing.
+        #[test]
+        fn right_vs_left_conditioning() {
+            let intr = CameraIntrinsics::new(1400.0, 1400.0, 960.0, 540.0);
+            let tag_size = 0.10;
+            let huber = 1e9; // pure L2 — conditioning is a property of J, not the loss.
+            let depths = [0.4_f64, 0.8, 1.5];
+            let bearings_deg = [0.0_f64, 15.0, 30.0];
+            let tilts_deg = [0.0_f64, 30.0, 55.0];
+
+            println!(
+                "\n{:>6} {:>8} {:>6} | {:>12} {:>12} {:>7} | {:>9} {:>9}",
+                "depth", "bearing", "tilt", "cond_L", "cond_R", "R/L", "coup_L", "coup_R"
+            );
+
+            let mut log_ratio_sum = 0.0;
+            let mut coup_l_sum = 0.0;
+            let mut coup_r_sum = 0.0;
+            let mut n = 0usize;
+            let mut right_better = 0usize;
+
+            for &depth in &depths {
+                for &b in &bearings_deg {
+                    for &t in &tilts_deg {
+                        let (pose, corners, obj) =
+                            geometry(&intr, tag_size, depth, b.to_radians(), t.to_radians());
+                        let (jl, _, _) =
+                            corner_normal_equations(&intr, &corners, &obj, &pose, huber);
+                        let (jr, _, _) =
+                            corner_normal_equations_right(&intr, &corners, &obj, &pose, huber);
+                        let cl = conditioning(&jl);
+                        let cr = conditioning(&jr);
+                        let ratio = cr.cond / cl.cond;
+                        println!(
+                            "{depth:>6.1} {b:>8.0} {t:>6.0} | {:>12.3e} {:>12.3e} {ratio:>7.3} | {:>9.4} {:>9.4}",
+                            cl.cond, cr.cond, cl.coupling, cr.coupling
+                        );
+                        log_ratio_sum += ratio.ln();
+                        coup_l_sum += cl.coupling;
+                        coup_r_sum += cr.coupling;
+                        if cr.cond < cl.cond {
+                            right_better += 1;
+                        }
+                        n += 1;
+                    }
+                }
+            }
+
+            let geomean_ratio = (log_ratio_sum / n as f64).exp();
+            println!(
+                "\nAGG  geomean(cond_R/cond_L)={geomean_ratio:.4}  \
+                 right_better={right_better}/{n}  \
+                 mean_coup_L={:.4}  mean_coup_R={:.4}",
+                coup_l_sum / n as f64,
+                coup_r_sum / n as f64
+            );
+
+            // The claim under test: body-frame parameterisation lowers the mean
+            // rotation↔translation coupling on a centred target.
+            assert!(
+                coup_r_sum / n as f64 <= coup_l_sum / n as f64,
+                "right perturbation did not reduce mean coupling: L={:.4} R={:.4}",
+                coup_l_sum / n as f64,
+                coup_r_sum / n as f64
+            );
+        }
+
+        /// Deterministic PRNG (SplitMix64) — no `rand` dependency (constraints §5),
+        /// fully reproducible so the study is stable across runs.
+        struct Rng(u64);
+        impl Rng {
+            fn u64(&mut self) -> u64 {
+                self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+                let mut z = self.0;
+                z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+                z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+                z ^ (z >> 31)
+            }
+            fn uniform(&mut self) -> f64 {
+                // 53-bit mantissa in [0,1).
+                (self.u64() >> 11) as f64 / (1u64 << 53) as f64
+            }
+            fn normal(&mut self) -> f64 {
+                let u1 = self.uniform().max(1e-12);
+                let u2 = self.uniform();
+                (-2.0 * u1.ln()).sqrt() * (core::f64::consts::TAU * u2).cos()
+            }
+        }
+
+        fn rot_angle_deg(a: &Matrix3<f64>, b: &Matrix3<f64>) -> f64 {
+            (((a.transpose() * b).trace() - 1.0) * 0.5)
+                .clamp(-1.0, 1.0)
+                .acos()
+                .to_degrees()
+        }
+
+        fn percentile(sorted: &[f64], p: f64) -> f64 {
+            if sorted.is_empty() {
+                return f64::NAN;
+            }
+            let idx = ((p / 100.0) * (sorted.len() - 1) as f64).round() as usize;
+            sorted[idx]
+        }
+
+        // Phase B — solver-isolation head-to-head. From an identical IPPE-quality
+        // init and identical noisy corners, run the shipped left LM and the
+        // experimental right LM (same Nielsen loop, same budget — only the
+        // normal-equations builder + retraction differ) and compare the final
+        // rotation error vs ground truth. Both minimise the same noisy cost, so if
+        // both fully converge they land on the same optimum; a difference in the
+        // error *tail* would mean the left conditioning actually costs accuracy.
+        #[test]
+        fn right_vs_left_solver_accuracy() {
+            let intr = CameraIntrinsics::new(1400.0, 1400.0, 960.0, 540.0);
+            let tag_size = 0.10;
+            let huber = 1.5; // production-representative Huber delta (px).
+            let pixel_noise = 0.2; // render-tag corner RMSE ≈ 0.19 px (memory).
+            let init_rot_deg = 3.0_f64; // IPPE-typical rotation seed error.
+            let init_trans_frac = 0.02_f64; // 2 % translation seed error.
+            let trials_per_geom = 400usize;
+
+            let depths = [0.4_f64, 0.8, 1.5];
+            let bearings_deg = [0.0_f64, 20.0];
+            let tilts_deg = [10.0_f64, 40.0, 60.0];
+
+            let mut err_l = Vec::new();
+            let mut err_r = Vec::new();
+            let mut iters_l = 0u64;
+            let mut iters_r = 0u64;
+            let mut cholf_l = 0u64;
+            let mut cholf_r = 0u64;
+            let mut disagree = 0usize; // |err_L - err_R| > 1e-6 deg
+            let mut rng = Rng(0x1234_5678_9ABC_DEF0);
+
+            for &depth in &depths {
+                for &b in &bearings_deg {
+                    for &t in &tilts_deg {
+                        let (gt, clean, obj) =
+                            geometry(&intr, tag_size, depth, b.to_radians(), t.to_radians());
+                        for _ in 0..trials_per_geom {
+                            // Same noisy corners for both solvers.
+                            let mut corners = clean;
+                            for c in &mut corners {
+                                c[0] += pixel_noise * rng.normal();
+                                c[1] += pixel_noise * rng.normal();
+                            }
+                            // Same IPPE-quality init for both solvers.
+                            let axis = Vector3::new(rng.normal(), rng.normal(), rng.normal());
+                            let axis = if axis.norm() > 1e-9 {
+                                axis.normalize()
+                            } else {
+                                Vector3::z()
+                            };
+                            let seed_rot =
+                                Rotation3::from_axis_angle(
+                                    &nalgebra::Unit::new_normalize(axis),
+                                    init_rot_deg.to_radians(),
+                                )
+                                .matrix()
+                                    * gt.rotation;
+                            let seed_trans = gt.translation
+                                * (1.0 + init_trans_frac * rng.normal())
+                                + Vector3::new(
+                                    init_trans_frac * depth * rng.normal(),
+                                    init_trans_frac * depth * rng.normal(),
+                                    0.0,
+                                );
+                            let init = Pose::new(seed_rot, seed_trans);
+
+                            let (pl, sl) = run_lm(
+                                init,
+                                |p| corner_normal_equations(&intr, &corners, &obj, p, huber),
+                                |p, d| p.retract(d),
+                            );
+                            let (pr, sr) = run_lm(
+                                init,
+                                |p| corner_normal_equations_right(&intr, &corners, &obj, p, huber),
+                                |p, d| retract_right(p, d),
+                            );
+                            let el = rot_angle_deg(&pl.rotation, &gt.rotation);
+                            let er = rot_angle_deg(&pr.rotation, &gt.rotation);
+                            err_l.push(el);
+                            err_r.push(er);
+                            iters_l += u64::from(sl.iters);
+                            iters_r += u64::from(sr.iters);
+                            cholf_l += u64::from(sl.chol_fails);
+                            cholf_r += u64::from(sr.chol_fails);
+                            if (el - er).abs() > 1e-6 {
+                                disagree += 1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            err_l.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            err_r.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let n = err_l.len() as f64;
+            let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+
+            println!("\n=== Phase B: solver-isolation (left vs right), {} trials ===", err_l.len());
+            println!(
+                "{:>10} {:>12} {:>12} {:>12} {:>12}",
+                "metric", "rot_p50", "rot_p99", "rot_max", "rot_mean"
+            );
+            println!(
+                "{:>10} {:>12.4} {:>12.4} {:>12.4} {:>12.4}",
+                "left",
+                percentile(&err_l, 50.0),
+                percentile(&err_l, 99.0),
+                err_l.last().copied().unwrap(),
+                mean(&err_l)
+            );
+            println!(
+                "{:>10} {:>12.4} {:>12.4} {:>12.4} {:>12.4}",
+                "right",
+                percentile(&err_r, 50.0),
+                percentile(&err_r, 99.0),
+                err_r.last().copied().unwrap(),
+                mean(&err_r)
+            );
+            println!(
+                "mean_iters  L={:.2}  R={:.2}   chol_fails  L={cholf_l}  R={cholf_r}   \
+                 disagree(>1e-6deg)={disagree}/{}",
+                iters_l as f64 / n,
+                iters_r as f64 / n,
+                err_l.len()
+            );
+
+            // Sanity only — the numbers above are the actual deliverable.
+            assert!(percentile(&err_r, 99.0).is_finite());
+        }
+    }
+}
