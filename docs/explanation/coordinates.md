@@ -94,6 +94,32 @@ $$
 - $R$: A $3 \times 3$ rotation matrix.
 - $t$: A $3 \times 1$ translation vector (representing the tag's **geometric center** in the camera frame).
 
+### 5.1 Pose Covariance & Perturbation Frame
+
+The optional $6 \times 6$ covariance returned alongside a pose lives in the
+$\mathfrak{se}(3)$ tangent space, ordered $[\mathbf{t}, \boldsymbol{\omega}]$
+(translation first, then the rotation vector).
+
+The pose Levenberg–Marquardt solvers parameterise the update as a **right
+(body-frame) perturbation** $T' = T \cdot \exp(\delta)$ — the increment
+$\delta = [\mathbf{t}\;|\;\boldsymbol{\omega}]$ is expressed in the tag's *own*
+(body) frame and mapped into the camera by the current rotation. Because the
+object points are symmetric about the body origin, this decouples rotation from
+translation in the normal equations (a $\sim\!3.4\times$ better-conditioned
+$J^\top W J$ and $\sim\!0.999 \to 0.06$ rotation$\leftrightarrow$translation
+coupling), so the emitted covariance is a **body-frame** covariance. This is the
+frame most downstream consumers (per-tag EKFs, board joint solves) actually want.
+
+To move a covariance between frames, use the exact SE(3) adjoint at the pose:
+$\Sigma_{\text{camera}} = \mathrm{Ad}_T\,\Sigma_{\text{body}}\,\mathrm{Ad}_T^\top$
+and its inverse $\Sigma_{\text{body}} = \mathrm{Ad}_{T^{-1}}\,\Sigma_{\text{camera}}\,\mathrm{Ad}_{T^{-1}}^\top$
+(`Pose::adjoint`, `Pose::covariance_camera_to_body`,
+`Pose::covariance_body_to_camera`).
+
+> **Migration note.** Prior to the right-perturbation migration the emitted
+> covariance was expressed in the **camera** (left/spatial) frame. Consumers that
+> relied on the old frame can recover it with `covariance_body_to_camera`.
+
 ## 6. Board Coordinate Systems
 
 When using multi-tag boards, all poses are expressed in a **board-frame** coordinate system defined at the geometric centre of the board.
@@ -125,4 +151,4 @@ A board pose $(R, t)$ transforms a point $P_{\text{board}}$ from board coordinat
 
 $$P_{\text{camera}} = R \cdot P_{\text{board}} + t$$
 
-This is the same convention as the single-tag pose (Section 5). The covariance matrix returned alongside the board pose is a $6 \times 6$ matrix in $\mathfrak{se}(3)$ tangent space, ordered $[\mathbf{t}, \boldsymbol{\omega}]$.
+This is the same convention as the single-tag pose (Section 5). The covariance matrix returned alongside the board pose is a $6 \times 6$ matrix in $\mathfrak{se}(3)$ tangent space, ordered $[\mathbf{t}, \boldsymbol{\omega}]$, in the **body (board) frame** — see [Section 5.1](#51-pose-covariance--perturbation-frame) for the perturbation convention and frame-conversion helpers.

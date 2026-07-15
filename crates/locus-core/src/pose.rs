@@ -276,22 +276,90 @@ impl Pose {
         [x, y]
     }
 
-    /// Apply an SE(3) **left**-perturbation `exp(δ)·pose`, with `δ = [t | ω]`
-    /// (translation then rotation-vector, matching the LM Jacobian column layout):
-    /// the rotation acts on the left of `self.rotation` *and* on the translation.
-    /// The single definition of the manifold update used by the corner LMs
-    /// (`refine_pose_lm` and `pose_weighted`'s LM) — extracted verbatim from their
-    /// inline copies, so it is byte-identical. Note `board.rs::gn_step` deliberately
-    /// uses a *different* (right-quaternion, translation-not-rotated) update and is
-    /// **not** a caller — do not "unify" it onto this without re-deriving.
+    /// Apply an SE(3) **right** (body-frame) perturbation `pose · exp(δ)`, with
+    /// `δ = [t | ω]` (translation then rotation-vector, matching the LM Jacobian
+    /// column layout). To first order (`V(ω) ≈ I`): `R' = R · exp(ω)`,
+    /// `t' = R · δt + t` — the increment is expressed in the tag's *own* frame and
+    /// rotated into the camera by the current `R`.
+    ///
+    /// This is the single manifold update shared by **all** pose LMs (the corner
+    /// unweighted/weighted solvers and `board.rs`). The body frame is used
+    /// deliberately: because the object points are symmetric about the body origin,
+    /// it decouples rotation from translation in the normal equations (`JᵀWJ`
+    /// condition number ~3.4× better, rot↔trans coupling ~0.999→0.06), yielding
+    /// faster convergence and a body-frame pose covariance — see
+    /// `docs/explanation/coordinates.md` and the `right_perturbation` study.
+    ///
+    /// `R · exp(ω)` is a product of two exactly-orthonormal matrices, so the
+    /// result stays on SO(3) to ~1e-16 per step; over the ≤20 LM iterations the
+    /// accumulated drift (~1e-13) is far below the pose tolerances and needs no
+    /// re-orthonormalization (the corner LMs have always used this raw-product
+    /// update). Downstream quaternion extraction (`quat_from_so3`) tolerates it.
     #[inline]
     #[must_use]
     pub(crate) fn retract(&self, delta: &Vector6<f64>) -> Self {
-        let rot = Rotation3::new(Vector3::new(delta[3], delta[4], delta[5]))
+        let exp_omega = Rotation3::new(Vector3::new(delta[3], delta[4], delta[5]))
             .matrix()
             .into_owned();
-        let trans = Vector3::new(delta[0], delta[1], delta[2]);
-        Self::new(rot * self.rotation, rot * self.translation + trans)
+        let dt_body = Vector3::new(delta[0], delta[1], delta[2]);
+        Self::new(
+            self.rotation * exp_omega,
+            self.rotation * dt_body + self.translation,
+        )
+    }
+
+    /// SE(3) inverse: maps camera-frame points back into the tag body frame.
+    /// `R' = Rᵀ`, `t' = -Rᵀ t`.
+    #[must_use]
+    pub fn inverse(&self) -> Self {
+        let rt = self.rotation.transpose();
+        Self::new(rt, -(rt * self.translation))
+    }
+
+    /// The 6×6 SE(3) adjoint `Ad_T` for the twist ordering `[t | ω]`, i.e. the map
+    /// taking a **body**-frame (right) tangent vector to the equivalent
+    /// **camera**-frame (left) one: `δ_camera = Ad_T · δ_body` (from
+    /// `exp(δ_camera)·T = T·exp(δ_body)`). Layout:
+    /// `Ad_T = [[R, [t]_× R], [0, R]]`.
+    ///
+    /// Used to reframe a covariance between the camera and body tangent spaces:
+    /// `Σ_camera = Ad_T · Σ_body · Ad_Tᵀ`, and inversely
+    /// `Σ_body = Ad_{T⁻¹} · Σ_camera · Ad_{T⁻¹}ᵀ`.
+    #[must_use]
+    pub fn adjoint(&self) -> Matrix6<f64> {
+        let r = self.rotation;
+        let tx = self.translation.cross_matrix();
+        let mut ad = Matrix6::zeros();
+        ad.fixed_view_mut::<3, 3>(0, 0).copy_from(&r);
+        ad.fixed_view_mut::<3, 3>(0, 3).copy_from(&(tx * r));
+        ad.fixed_view_mut::<3, 3>(3, 3).copy_from(&r);
+        ad
+    }
+
+    /// Reframe a 6×6 pose covariance from the **camera** (left/spatial) tangent to
+    /// the **body** (right) tangent at this pose:
+    /// `Σ_body = Ad_{T⁻¹} · Σ_camera · Ad_{T⁻¹}ᵀ`.
+    ///
+    /// Since the LMs were migrated to right perturbation the emitted covariance is
+    /// already body-frame; this helper exists for consumers that hold a legacy
+    /// camera-frame covariance (or want to convert one they transformed elsewhere).
+    /// NaN sentinels propagate unchanged.
+    #[must_use]
+    pub fn covariance_camera_to_body(&self, cov_camera: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
+        let ad_inv = self.inverse().adjoint();
+        let cov = Matrix6::from_fn(|i, j| cov_camera[i][j]);
+        let out = ad_inv * cov * ad_inv.transpose();
+        core::array::from_fn(|i| core::array::from_fn(|j| out[(i, j)]))
+    }
+
+    /// Inverse of [`Pose::covariance_camera_to_body`]: body → camera tangent,
+    /// `Σ_camera = Ad_T · Σ_body · Ad_Tᵀ`.
+    #[must_use]
+    pub fn covariance_body_to_camera(&self, cov_body: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
+        let ad = self.adjoint();
+        let cov = Matrix6::from_fn(|i, j| cov_body[i][j]);
+        let out = ad * cov * ad.transpose();
+        core::array::from_fn(|i| core::array::from_fn(|j| out[(i, j)]))
     }
 }
 
@@ -302,6 +370,107 @@ pub(crate) fn symmetrize_jtj6(jtj: &mut Matrix6<f64>) {
         for c in 0..r {
             jtj[(r, c)] = jtj[(c, r)];
         }
+    }
+}
+
+/// One row of the SE(3) **right** (body-frame) perturbation Jacobian for a pixel
+/// coordinate, given the body-frame projection gradient `dq = Rᵀ·∂proj/∂P_cam`
+/// and the body point `pb`. Layout ξ = [t | ω]: translation columns are `dq`, the
+/// rotation columns are the cross-product `dq·(−[pb]_×)`. This is the single
+/// definition of the sign-sensitive rotation-row math, verified by
+/// `corner_normal_equations_gradient_is_descent` and `test_jacobian_rotation_rows`.
+#[inline]
+pub(crate) fn body_frame_row(dq: &Vector3<f64>, pb: &Vector3<f64>) -> Vector6<f64> {
+    Vector6::new(
+        dq[0],
+        dq[1],
+        dq[2],
+        -(dq[1] * pb.z - dq[2] * pb.y),
+        -(dq[2] * pb.x - dq[0] * pb.z),
+        -(dq[0] * pb.y - dq[1] * pb.x),
+    )
+}
+
+/// Pinhole projection gradients `∂[u,v]/∂P_cam` at a camera-frame point (given
+/// `z_inv = 1/z`, `x_z = x/z`, `y_z = y/z`). Shared by the board LMs and the
+/// weighted corner LM, which are pinhole-only; the single-tag
+/// [`corner_normal_equations`] uses the distortion-aware gradient instead.
+#[inline]
+#[must_use]
+pub(crate) fn pinhole_projection_gradients(
+    intrinsics: &CameraIntrinsics,
+    z_inv: f64,
+    x_z: f64,
+    y_z: f64,
+) -> (Vector3<f64>, Vector3<f64>) {
+    (
+        Vector3::new(intrinsics.fx * z_inv, 0.0, -intrinsics.fx * x_z * z_inv),
+        Vector3::new(0.0, intrinsics.fy * z_inv, -intrinsics.fy * y_z * z_inv),
+    )
+}
+
+/// Shared body-frame (right-perturbation) SE(3) normal-equations accumulator used
+/// by **every** pose LM (corner unweighted/weighted and the three `board.rs`
+/// solvers). Construct once from the linearization pose (captures `Rᵀ`), `add`
+/// each correspondence with its already-computed projection gradient — so the
+/// distortion model is the caller's choice and this stays frame-canonical without
+/// pinning pinhole — then `finish` for the symmetric `(JᵀWJ, JᵀWr)`.
+///
+/// Only the upper triangle of `JᵀWJ` is accumulated (exploiting its symmetry);
+/// `finish` mirrors it. This retires the four hand-transcribed copies of the
+/// Jacobian-row + normal-equations math the right-perturbation migration had
+/// spread across the solvers.
+pub(crate) struct BodyFrameNormalEquations {
+    jtj: Matrix6<f64>,
+    jtr: Vector6<f64>,
+    rt: Matrix3<f64>,
+}
+
+impl BodyFrameNormalEquations {
+    #[inline]
+    pub(crate) fn new(pose: &Pose) -> Self {
+        Self {
+            jtj: Matrix6::zeros(),
+            jtr: Vector6::zeros(),
+            rt: pose.rotation.transpose(),
+        }
+    }
+
+    /// Accumulate one correspondence. `pb` = body (object) point; `du_dp`/`dv_dp` =
+    /// `∂[u,v]/∂P_cam` (pinhole or distortion-aware, computed by the caller);
+    /// `[res_u, res_v]` = pixel residual; `w` = 2×2 information·robust weight
+    /// (`Matrix2::identity()` for the unweighted GN steps).
+    #[inline]
+    pub(crate) fn add(
+        &mut self,
+        pb: &Vector3<f64>,
+        du_dp: &Vector3<f64>,
+        dv_dp: &Vector3<f64>,
+        res_u: f64,
+        res_v: f64,
+        w: &Matrix2<f64>,
+    ) {
+        let row_u = body_frame_row(&(self.rt * du_dp), pb);
+        let row_v = body_frame_row(&(self.rt * dv_dp), pb);
+        let (w00, w01, w10, w11) = (w[(0, 0)], w[(0, 1)], w[(1, 0)], w[(1, 1)]);
+        // JᵀWr = row_u·(W r)_u + row_v·(W r)_v
+        self.jtr += row_u * (w00 * res_u + w01 * res_v) + row_v * (w10 * res_u + w11 * res_v);
+        // JᵀWJ upper triangle: wᵢⱼ folded outer products, symmetrized in `finish`.
+        for i in 0..6 {
+            for j in i..6 {
+                self.jtj[(i, j)] += w00 * row_u[i] * row_u[j]
+                    + w11 * row_v[i] * row_v[j]
+                    + w01 * row_u[i] * row_v[j]
+                    + w10 * row_v[i] * row_u[j];
+            }
+        }
+    }
+
+    /// Symmetrize and return `(JᵀWJ, JᵀWr)`.
+    #[inline]
+    pub(crate) fn finish(mut self) -> (Matrix6<f64>, Vector6<f64>) {
+        symmetrize_jtj6(&mut self.jtj);
+        (self.jtj, self.jtr)
     }
 }
 
@@ -325,37 +494,6 @@ pub(crate) fn symmetrize_jtj6(jtj: &mut Matrix6<f64>) {
 pub fn quat_from_so3(r: Matrix3<f64>) -> UnitQuaternion<f64> {
     let rot = Rotation3::from_matrix_unchecked(r);
     UnitQuaternion::from_rotation_matrix(&rot)
-}
-
-/// Computes the 10 non-zero scalar entries of the 2×6 left-perturbation SE(3) Jacobian
-/// for a calibrated projection.
-///
-/// The full 2×6 Jacobian has zeros at column (0,1) and (1,0); those are omitted.
-///
-/// # Returns
-/// `(ju0, ju2, ju3, ju4, ju5, jv1, jv2, jv3, jv4, jv5)` where
-/// `du/dξ = [ju0, 0, ju2, ju3, ju4, ju5]` and `dv/dξ = [0, jv1, jv2, jv3, jv4, jv5]`.
-#[inline]
-pub(crate) fn projection_jacobian(
-    x_z: f64,
-    y_z: f64,
-    z_inv: f64,
-    intrinsics: &CameraIntrinsics,
-) -> (f64, f64, f64, f64, f64, f64, f64, f64, f64, f64) {
-    let fx = intrinsics.fx;
-    let fy = intrinsics.fy;
-    (
-        fx * z_inv,
-        -fx * x_z * z_inv,
-        -fx * x_z * y_z,
-        fx * (x_z * x_z + 1.0),
-        -fx * y_z,
-        fy * z_inv,
-        -fy * y_z * z_inv,
-        -fy * (y_z * y_z + 1.0),
-        fy * y_z * x_z,
-        fy * x_z,
-    )
 }
 
 /// Estimate a tag's 6-DoF pose from its four detected image corners.
@@ -1096,11 +1234,17 @@ fn corner_normal_equations(
     pose: &Pose,
     huber_delta: f64,
 ) -> (Matrix6<f64>, Vector6<f64>, f64) {
-    let mut jtj = Matrix6::<f64>::zeros();
-    let mut jtr = Vector6::<f64>::zeros();
+    let mut ne = BodyFrameNormalEquations::new(pose);
     let mut cost = 0.0;
     for i in 0..4 {
-        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
+        let pb = obj_pts[i];
+        let p_cam = pose.rotation * pb + pose.translation;
+        // Behind-camera policy (deliberately differs from the board/weighted LMs,
+        // which DROP such correspondences): a single tag has exactly four corners
+        // we want to keep, so we clamp `z` and let the Huber weight softly reject
+        // the resulting large residual rather than discard a corner and lose rank.
+        // The board/weighted solvers see many points, so dropping a few invalid
+        // projections there is both safe and cheaper.
         let z = p_cam.z.max(1e-4);
         let z_inv = 1.0 / z;
         let xn = p_cam.x / z;
@@ -1127,7 +1271,9 @@ fn corner_normal_equations(
             cost += huber_delta * (r_norm - 0.5 * huber_delta);
         }
 
-        // ∂[u,v]/∂P_cam (chain rule through the distortion map).
+        // Distortion-aware projection gradient ∂[u,v]/∂P_cam (chain rule through
+        // the distortion map); the body-frame Jacobian + accumulation live in the
+        // shared `BodyFrameNormalEquations`. Scalar Huber weight → isotropic W.
         let jd = intrinsics.distortion_jacobian(xn, yn);
         let du_dp = Vector3::new(
             intrinsics.fx * jd[0][0] * z_inv,
@@ -1139,32 +1285,16 @@ fn corner_normal_equations(
             intrinsics.fy * jd[1][1] * z_inv,
             -intrinsics.fy * (jd[1][0] * xn + jd[1][1] * yn) * z_inv,
         );
-
-        // True SE(3) left-perturbation Jacobian: ∂proj/∂ω = ∂proj/∂P · (-[P]_×).
-        // This is the canonical *sign* convention (same as `projection_jacobian`,
-        // verified by `corner_normal_equations_gradient_is_descent`). The pre-2026-07
-        // inline form used the *negated* rotation rows, which made `jtr` an ascent
-        // direction for rotation — the trust region then rejected every rotation
-        // step, so this fallback LM silently refined only translation and shipped
-        // IPPE's rotation.
-        let mut row_u = Vector6::zeros();
-        row_u[0] = du_dp[0];
-        row_u[1] = du_dp[1];
-        row_u[2] = du_dp[2];
-        row_u[3] = -(du_dp[1] * p_cam.z - du_dp[2] * p_cam.y);
-        row_u[4] = -(du_dp[2] * p_cam.x - du_dp[0] * p_cam.z);
-        row_u[5] = -(du_dp[0] * p_cam.y - du_dp[1] * p_cam.x);
-        let mut row_v = Vector6::zeros();
-        row_v[0] = dv_dp[0];
-        row_v[1] = dv_dp[1];
-        row_v[2] = dv_dp[2];
-        row_v[3] = -(dv_dp[1] * p_cam.z - dv_dp[2] * p_cam.y);
-        row_v[4] = -(dv_dp[2] * p_cam.x - dv_dp[0] * p_cam.z);
-        row_v[5] = -(dv_dp[0] * p_cam.y - dv_dp[1] * p_cam.x);
-
-        jtj += w * (row_u * row_u.transpose() + row_v * row_v.transpose());
-        jtr += w * (row_u * res_u + row_v * res_v);
+        ne.add(
+            &pb,
+            &du_dp,
+            &dv_dp,
+            res_u,
+            res_v,
+            &Matrix2::new(w, 0.0, 0.0, w),
+        );
     }
+    let (jtj, jtr) = ne.finish();
     (jtj, jtr, cost)
 }
 
@@ -2016,6 +2146,85 @@ mod tests {
             finite(&r2),
             "collinear-corner refine produced a non-finite pose"
         );
+    }
+
+    // `Pose::adjoint` must satisfy the defining identity relating the body-frame
+    // (right) and camera-frame (left) tangents: `exp(Ad_T·δ)·T = T·exp(δ)`. We
+    // verify it by comparing the right retract `T·exp(δ)` against the explicit
+    // left update `exp(Ad_T·δ)·T` for a small twist (agreement to O(δ²)).
+    #[test]
+    fn adjoint_relates_body_and_camera_tangents() {
+        let r = Rotation3::new(Vector3::new(0.3, -0.2, 0.15))
+            .matrix()
+            .into_owned();
+        let pose = Pose::new(r, Vector3::new(0.12, -0.05, 0.7));
+        let delta_body = Vector6::new(2e-4, -1.5e-4, 3e-4, 1e-4, -2e-4, 1.5e-4);
+
+        // Right: T·exp(δ_body).
+        let right = pose.retract(&delta_body);
+
+        // Left: exp(Ad_T·δ_body)·T, built explicitly (rotation on the left, its
+        // translation part added, matching the SE(3) left perturbation to O(δ²)).
+        let delta_cam = pose.adjoint() * delta_body;
+        let rot_l = Rotation3::new(Vector3::new(delta_cam[3], delta_cam[4], delta_cam[5]))
+            .matrix()
+            .into_owned();
+        let t_l = Vector3::new(delta_cam[0], delta_cam[1], delta_cam[2]);
+        let left = Pose::new(rot_l * pose.rotation, rot_l * pose.translation + t_l);
+
+        assert!(
+            (right.rotation - left.rotation).abs().max() < 1e-7,
+            "rotation mismatch: {}",
+            (right.rotation - left.rotation).abs().max()
+        );
+        assert!(
+            (right.translation - left.translation).norm() < 1e-7,
+            "translation mismatch: {}",
+            (right.translation - left.translation).norm()
+        );
+    }
+
+    // Reframing a covariance camera→body→camera must be the identity (the two
+    // adjoint maps are exact inverses), and a body-frame covariance built from a
+    // real (body-frame) Hessian must reframe to a valid camera-frame one.
+    #[test]
+    #[allow(clippy::needless_range_loop)]
+    fn covariance_reframe_roundtrips() {
+        let r = Rotation3::new(Vector3::new(-0.25, 0.1, 0.4))
+            .matrix()
+            .into_owned();
+        let pose = Pose::new(r, Vector3::new(-0.08, 0.2, 0.55));
+
+        // A representative SPD covariance (body frame).
+        let intrinsics = CameraIntrinsics::new(700.0, 700.0, 320.0, 240.0);
+        let obj_pts = centered_tag_corners(0.05);
+        let corners: [[f64; 2]; 4] =
+            core::array::from_fn(|i| pose.project(&obj_pts[i], &intrinsics));
+        let (jtj, _, _) = corner_normal_equations(&intrinsics, &corners, &obj_pts, &pose, 1e9);
+        let cov_body_m = jtj.try_inverse().expect("SPD Hessian invertible");
+        let cov_body: [[f64; 6]; 6] =
+            core::array::from_fn(|i| core::array::from_fn(|j| cov_body_m[(i, j)]));
+
+        let cov_cam = pose.covariance_body_to_camera(&cov_body);
+        let back = pose.covariance_camera_to_body(&cov_cam);
+        for i in 0..6 {
+            for j in 0..6 {
+                assert!(
+                    (back[i][j] - cov_body[i][j]).abs() < 1e-9,
+                    "roundtrip mismatch at ({i},{j}): {} vs {}",
+                    back[i][j],
+                    cov_body[i][j]
+                );
+            }
+        }
+
+        // The camera-frame covariance is a different matrix (frames differ) but
+        // stays symmetric.
+        for i in 0..6 {
+            for j in 0..6 {
+                assert!((cov_cam[i][j] - cov_cam[j][i]).abs() < 1e-12);
+            }
+        }
     }
 
     #[test]

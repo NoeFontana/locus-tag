@@ -13,7 +13,7 @@ rows:
     realized_fpr: 0.01245
   - fpr: 0.001
     n_samples: 20000
-    realized_fpr: 0.00245
+    realized_fpr: 0.0025
   - fpr: 0.0001
     n_samples: 20000
     realized_fpr: 0.0006
