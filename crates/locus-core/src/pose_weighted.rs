@@ -1,8 +1,7 @@
 #![allow(clippy::similar_names)]
 use crate::image::ImageView;
 use crate::pose::{
-    BodyFrameNormalEquations, CameraIntrinsics, Pose, centered_tag_corners,
-    pinhole_projection_gradients,
+    BodyFrameNormalEquations, CameraIntrinsics, Pose, centered_tag_corners, projection_and_gradient,
 };
 use nalgebra::{Matrix2, Matrix6, Vector3, Vector6};
 
@@ -214,11 +213,15 @@ fn build_normal_equations(
         }
 
         let z_inv = 1.0 / p_cam.z;
-        let x_z = p_cam.x * z_inv;
-        let y_z = p_cam.y * z_inv;
+        let xn = p_cam.x * z_inv;
+        let yn = p_cam.y * z_inv;
 
-        let u_est = intrinsics.fx * x_z + intrinsics.cx;
-        let v_est = intrinsics.fy * y_z + intrinsics.cy;
+        // Distortion-aware projection + gradient (identity pass-through for
+        // DistortionCoeffs::None, so undistorted results are unchanged); the
+        // body-frame Jacobian + weighted accumulation live in the shared
+        // `BodyFrameNormalEquations`. Weight is the anisotropic information·Huber
+        // matrix `W = info·w`.
+        let ([u_est, v_est], du_dp, dv_dp) = projection_and_gradient(intrinsics, xn, yn, z_inv);
         let res_u = corners[i][0] - u_est;
         let res_v = corners[i][1] - v_est;
 
@@ -234,12 +237,6 @@ fn build_normal_equations(
 
         let w = if s_i <= huber_k { 1.0 } else { huber_k / s_i };
 
-        // Pinhole projection gradients ∂[u,v]/∂P_cam (this builder stays pinhole —
-        // the distortion-aware path is `pose::corner_normal_equations`); the
-        // body-frame Jacobian + weighted accumulation live in the shared
-        // `BodyFrameNormalEquations`. Weight is the anisotropic information·Huber
-        // matrix `W = info·w`.
-        let (du_dp, dv_dp) = pinhole_projection_gradients(intrinsics, z_inv, x_z, y_z);
         ne.add(&pb, &du_dp, &dv_dp, res_u, res_v, &(info * w));
     }
 
@@ -257,10 +254,6 @@ fn huber_mahalanobis_cost(
     k: f64,
 ) -> f64 {
     let mut cost = 0.0;
-    let fx = intrinsics.fx;
-    let fy = intrinsics.fy;
-    let cx = intrinsics.cx;
-    let cy = intrinsics.cy;
 
     for i in 0..4 {
         let p_cam = pose.rotation * obj_pts[i] + pose.translation;
@@ -268,9 +261,12 @@ fn huber_mahalanobis_cost(
             cost += 1e6;
             continue;
         }
+        // Distortion-aware residual, consistent with `build_normal_equations`
+        // (identity pass-through for DistortionCoeffs::None). A pinhole residual
+        // here would make the Nielsen gain ratio inconsistent with the analytic
+        // step on a distorted camera and stall the solver short of the optimum.
         let z_inv = 1.0 / p_cam.z;
-        let u_est = fx * p_cam.x * z_inv + cx;
-        let v_est = fy * p_cam.y * z_inv + cy;
+        let [u_est, v_est] = intrinsics.distort_normalized(p_cam.x * z_inv, p_cam.y * z_inv);
         let res_u = corners[i][0] - u_est;
         let res_v = corners[i][1] - v_est;
 
@@ -631,6 +627,69 @@ mod tests {
         let mut delta = nalgebra::Vector6::<f64>::zeros();
         delta[dof] = eps;
         pose.retract(&delta)
+    }
+
+    // The weighted production LM must minimise the DISTORTED reprojection error.
+    // We synthesise perfect observations through a Brown–Conrady camera, then
+    // refine from a perturbed init: interpreting the intrinsics *with* distortion
+    // recovers ground truth, while interpreting the SAME pixels as pinhole (the
+    // pre-fix behaviour) converges to a materially biased pose. Guards the
+    // distortion-aware `projection_and_gradient` path in `build_normal_equations`,
+    // which the `regression_distortion_hub` routing tests do not exercise.
+    #[cfg(feature = "non_rectified")]
+    #[test]
+    fn weighted_lm_minimises_distorted_reprojection() {
+        let (fx, cx, cy) = (700.0_f64, 320.0_f64, 240.0_f64);
+        let intr_distorted =
+            CameraIntrinsics::with_brown_conrady(fx, fx, cx, cy, -0.28, 0.10, 0.001, -0.0008, 0.0);
+        let intr_pinhole = CameraIntrinsics::new(fx, fx, cx, cy);
+
+        let tag = 0.10_f64;
+        let obj = centered_tag_corners(tag);
+        let gt_rot = nalgebra::Rotation3::new(nalgebra::Vector3::new(0.22, -0.16, 0.10))
+            .matrix()
+            .into_owned();
+        // Off-axis so the corners land where radial distortion actually bites.
+        let gt = Pose::new(gt_rot, nalgebra::Vector3::new(0.16, -0.11, 0.55));
+
+        // Perfect observations projected THROUGH the distortion model.
+        let corners: [[f64; 2]; 4] = core::array::from_fn(|i| {
+            let pc = gt.rotation * obj[i] + gt.translation;
+            let z_inv = 1.0 / pc.z;
+            intr_distorted.distort_normalized(pc.x * z_inv, pc.y * z_inv)
+        });
+
+        // Start close to GT: the distortion-aware LM must *stay* at the zero-residual
+        // truth, while the pinhole interpretation drifts to its (biased) optimum
+        // because the observations do not fit a pinhole model.
+        let init = Pose::new(
+            nalgebra::Rotation3::new(nalgebra::Vector3::new(0.01, 0.01, -0.008)).matrix() * gt_rot,
+            gt.translation + nalgebra::Vector3::new(0.003, -0.002, 0.004),
+        );
+        let covs = [Matrix2::<f64>::identity(); 4];
+
+        let (refined_d, _) = refine_pose_lm_weighted(&intr_distorted, &corners, tag, init, &covs);
+        let (refined_p, _) = refine_pose_lm_weighted(&intr_pinhole, &corners, tag, init, &covs);
+
+        let rot_err = |r: &nalgebra::Matrix3<f64>| {
+            let q_gt = crate::pose::quat_from_so3(gt_rot);
+            let q = crate::pose::quat_from_so3(*r);
+            q_gt.angle_to(&q).to_degrees()
+        };
+        let err_d = rot_err(&refined_d.rotation);
+        let err_p = rot_err(&refined_p.rotation);
+
+        // Distortion-aware LM recovers the exact zero-residual truth; the pinhole
+        // interpretation drifts to a materially biased optimum (~8°).
+        assert!(
+            err_d < 1e-3,
+            "distortion-aware LM should recover GT rotation, got {err_d:.5}°"
+        );
+        assert!(
+            err_p > 1.0,
+            "pinhole interpretation should be materially biased on distorted \
+             observations: pinhole {err_p:.4}° vs distortion-aware {err_d:.5}°"
+        );
     }
 
     #[test]

@@ -266,14 +266,14 @@ impl Pose {
         }
     }
 
-    /// Project a 3D point into the image using this pose and intrinsics.
+    /// Project a 3D point into the image using this pose and intrinsics, applying
+    /// the intrinsics' distortion model (identity for [`DistortionCoeffs::None`],
+    /// so undistorted results are unchanged).
     #[must_use]
     pub fn project(&self, point: &Vector3<f64>, intrinsics: &CameraIntrinsics) -> [f64; 2] {
         let p_cam = self.rotation * point + self.translation;
         let z = p_cam.z.max(1e-4);
-        let x = (p_cam.x / z) * intrinsics.fx + intrinsics.cx;
-        let y = (p_cam.y / z) * intrinsics.fy + intrinsics.cy;
-        [x, y]
+        intrinsics.distort_normalized(p_cam.x / z, p_cam.y / z)
     }
 
     /// Apply an SE(3) **right** (body-frame) perturbation `pose · exp(δ)`, with
@@ -391,22 +391,37 @@ pub(crate) fn body_frame_row(dq: &Vector3<f64>, pb: &Vector3<f64>) -> Vector6<f6
     )
 }
 
-/// Pinhole projection gradients `∂[u,v]/∂P_cam` at a camera-frame point (given
-/// `z_inv = 1/z`, `x_z = x/z`, `y_z = y/z`). Shared by the board LMs and the
-/// weighted corner LM, which are pinhole-only; the single-tag
-/// [`corner_normal_equations`] uses the distortion-aware gradient instead.
+/// Distortion-aware projected pixel `[u, v]` **and** its gradient `∂[u,v]/∂P_cam`
+/// at a normalized camera-frame point `(xn, yn) = (x/z, y/z)` with `z_inv = 1/z`.
+///
+/// The single projection+Jacobian used by **every** pose LM. It routes through the
+/// intrinsics' distortion map (`distort_normalized` / `distortion_jacobian`), so
+/// the chain-rule gradient is `diag(fx,fy) · J_dist · J_normalize`. For
+/// [`DistortionCoeffs::None`] the distortion map is the identity and the Jacobian
+/// is `diag(1,1)`, so this reduces **exactly** to the pinhole projection
+/// (`fx·xn+cx`) and pinhole gradient (`[fx·z_inv, 0, −fx·xn·z_inv]`) — i.e. it is
+/// byte-identical to the previous pinhole path on undistorted cameras.
 #[inline]
 #[must_use]
-pub(crate) fn pinhole_projection_gradients(
+pub(crate) fn projection_and_gradient(
     intrinsics: &CameraIntrinsics,
+    xn: f64,
+    yn: f64,
     z_inv: f64,
-    x_z: f64,
-    y_z: f64,
-) -> (Vector3<f64>, Vector3<f64>) {
-    (
-        Vector3::new(intrinsics.fx * z_inv, 0.0, -intrinsics.fx * x_z * z_inv),
-        Vector3::new(0.0, intrinsics.fy * z_inv, -intrinsics.fy * y_z * z_inv),
-    )
+) -> ([f64; 2], Vector3<f64>, Vector3<f64>) {
+    let uv = intrinsics.distort_normalized(xn, yn);
+    let jd = intrinsics.distortion_jacobian(xn, yn);
+    let du_dp = Vector3::new(
+        intrinsics.fx * jd[0][0] * z_inv,
+        intrinsics.fx * jd[0][1] * z_inv,
+        -intrinsics.fx * (jd[0][0] * xn + jd[0][1] * yn) * z_inv,
+    );
+    let dv_dp = Vector3::new(
+        intrinsics.fy * jd[1][0] * z_inv,
+        intrinsics.fy * jd[1][1] * z_inv,
+        -intrinsics.fy * (jd[1][0] * xn + jd[1][1] * yn) * z_inv,
+    );
+    (uv, du_dp, dv_dp)
 }
 
 /// Shared body-frame (right-perturbation) SE(3) normal-equations accumulator used
@@ -1250,8 +1265,10 @@ fn corner_normal_equations(
         let xn = p_cam.x / z;
         let yn = p_cam.y / z;
 
-        // Distortion-aware projection (identity pass-through for DistortionCoeffs::None).
-        let [u_est, v_est] = intrinsics.distort_normalized(xn, yn);
+        // Distortion-aware projection + gradient (identity pass-through for
+        // DistortionCoeffs::None); the body-frame Jacobian + accumulation live in
+        // the shared `BodyFrameNormalEquations`. Scalar Huber weight → isotropic W.
+        let ([u_est, v_est], du_dp, dv_dp) = projection_and_gradient(intrinsics, xn, yn, z_inv);
         let res_u = corners[i][0] - u_est;
         let res_v = corners[i][1] - v_est;
 
@@ -1271,20 +1288,6 @@ fn corner_normal_equations(
             cost += huber_delta * (r_norm - 0.5 * huber_delta);
         }
 
-        // Distortion-aware projection gradient ∂[u,v]/∂P_cam (chain rule through
-        // the distortion map); the body-frame Jacobian + accumulation live in the
-        // shared `BodyFrameNormalEquations`. Scalar Huber weight → isotropic W.
-        let jd = intrinsics.distortion_jacobian(xn, yn);
-        let du_dp = Vector3::new(
-            intrinsics.fx * jd[0][0] * z_inv,
-            intrinsics.fx * jd[0][1] * z_inv,
-            -intrinsics.fx * (jd[0][0] * xn + jd[0][1] * yn) * z_inv,
-        );
-        let dv_dp = Vector3::new(
-            intrinsics.fy * jd[1][0] * z_inv,
-            intrinsics.fy * jd[1][1] * z_inv,
-            -intrinsics.fy * (jd[1][0] * xn + jd[1][1] * yn) * z_inv,
-        );
         ne.add(
             &pb,
             &du_dp,

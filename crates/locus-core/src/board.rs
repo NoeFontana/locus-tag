@@ -2,8 +2,7 @@
 
 use crate::batch::{MAX_CANDIDATES, Point2f};
 use crate::pose::{
-    BodyFrameNormalEquations, CameraIntrinsics, Pose, pinhole_projection_gradients,
-    solve_ippe_square,
+    BodyFrameNormalEquations, CameraIntrinsics, Pose, projection_and_gradient, solve_ippe_square,
 };
 use nalgebra::{Matrix2, Matrix3, Matrix6, Vector3, Vector6};
 use std::sync::Arc;
@@ -438,8 +437,7 @@ fn sample_reprojection_score(
                 return f64::INFINITY;
             }
             let z_inv = 1.0 / p_cam.z;
-            let u = intrinsics.fx * p_cam.x * z_inv + intrinsics.cx;
-            let v = intrinsics.fy * p_cam.y * z_inv + intrinsics.cy;
+            let [u, v] = intrinsics.distort_normalized(p_cam.x * z_inv, p_cam.y * z_inv);
             let du = u - f64::from(corr.image_points[k].x);
             let dv = v - f64::from(corr.image_points[k].y);
             sum_sq += du * du + dv * dv;
@@ -488,14 +486,12 @@ fn gn_step_on_sample(
                 continue;
             }
             let z_inv = 1.0 / p_cam.z;
-            let x_z = p_cam.x * z_inv;
-            let y_z = p_cam.y * z_inv;
-            let u = intrinsics.fx * x_z + intrinsics.cx;
-            let v = intrinsics.fy * y_z + intrinsics.cy;
+            let xn = p_cam.x * z_inv;
+            let yn = p_cam.y * z_inv;
+            let ([u, v], du_dp, dv_dp) = projection_and_gradient(intrinsics, xn, yn, z_inv);
             let res_u = f64::from(corr.image_points[k].x) - u;
             let res_v = f64::from(corr.image_points[k].y) - v;
 
-            let (du_dp, dv_dp) = pinhole_projection_gradients(intrinsics, z_inv, x_z, y_z);
             ne.add(&p_world, &du_dp, &dv_dp, res_u, res_v, &w);
         }
     }
@@ -581,8 +577,16 @@ fn ippe_branches_from_sample_homography(
         for k in start..(start + gs) {
             let x = (corr.object_points[k][0] - cx_o) * scale_o;
             let y = (corr.object_points[k][1] - cy_o) * scale_o;
-            let u = (f64::from(corr.image_points[k].x) - intrinsics.cx) / intrinsics.fx;
-            let v = (f64::from(corr.image_points[k].y) - intrinsics.cy) / intrinsics.fy;
+            // Undistort to IDEAL normalized coords before the DLT/IPPE seed — the
+            // homography model is pinhole, so feeding distorted pixels would bias
+            // the seed on a distorted camera (identity for DistortionCoeffs::None,
+            // so undistorted results are unchanged).
+            let [ux, uy] = intrinsics.undistort_pixel(
+                f64::from(corr.image_points[k].x),
+                f64::from(corr.image_points[k].y),
+            );
+            let u = (ux - intrinsics.cx) / intrinsics.fx;
+            let v = (uy - intrinsics.cy) / intrinsics.fy;
 
             // DLT rows for the homography `[x_n, y_n, 1]^T ∝ H · [X, Y, 1]^T`.
             let r1 = [-x, -y, -1.0, 0.0, 0.0, 0.0, u * x, u * y, u];
@@ -1026,8 +1030,7 @@ impl RobustPoseSolver {
                     break;
                 }
                 let z_inv = 1.0 / p_cam.z;
-                let px = intrinsics.fx * p_cam.x * z_inv + intrinsics.cx;
-                let py = intrinsics.fy * p_cam.y * z_inv + intrinsics.cy;
+                let [px, py] = intrinsics.distort_normalized(p_cam.x * z_inv, p_cam.y * z_inv);
                 let dx = px - f64::from(corr.image_points[k].x);
                 let dy = py - f64::from(corr.image_points[k].y);
                 sum_sq += dx * dx + dy * dy;
@@ -1082,16 +1085,14 @@ impl RobustPoseSolver {
                     continue;
                 }
                 let z_inv = 1.0 / p_cam.z;
-                let x_z = p_cam.x * z_inv;
-                let y_z = p_cam.y * z_inv;
-                let u = intrinsics.fx * x_z + intrinsics.cx;
-                let v = intrinsics.fy * y_z + intrinsics.cy;
+                let xn = p_cam.x * z_inv;
+                let yn = p_cam.y * z_inv;
+                let ([u, v], du_dp, dv_dp) = projection_and_gradient(intrinsics, xn, yn, z_inv);
                 let res_u = f64::from(corr.image_points[k].x) - u;
                 let res_v = f64::from(corr.image_points[k].y) - v;
 
                 // Right (body-frame) SE(3) normal equations — see the shared
                 // `pose::BodyFrameNormalEquations` and `Pose::retract`.
-                let (du_dp, dv_dp) = pinhole_projection_gradients(intrinsics, z_inv, x_z, y_z);
                 ne.add(&p_world, &du_dp, &dv_dp, res_u, res_v, &w);
             }
         }
@@ -1123,8 +1124,7 @@ impl RobustPoseSolver {
             return None;
         }
         let z_inv = 1.0 / p_cam.z;
-        let u = intrinsics.fx * (p_cam.x * z_inv) + intrinsics.cx;
-        let v = intrinsics.fy * (p_cam.y * z_inv) + intrinsics.cy;
+        let [u, v] = intrinsics.distort_normalized(p_cam.x * z_inv, p_cam.y * z_inv);
         let res_u = f64::from(corr.image_points[k].x) - u;
         let res_v = f64::from(corr.image_points[k].y) - v;
         let info = corr.information_matrices[k];
@@ -1319,10 +1319,9 @@ impl RobustPoseSolver {
                         continue;
                     }
                     let z_inv = 1.0 / p_cam.z;
-                    let x_z = p_cam.x * z_inv;
-                    let y_z = p_cam.y * z_inv;
-                    let u = intrinsics.fx * x_z + intrinsics.cx;
-                    let v = intrinsics.fy * y_z + intrinsics.cy;
+                    let xn = p_cam.x * z_inv;
+                    let yn = p_cam.y * z_inv;
+                    let ([u, v], du_dp, dv_dp) = projection_and_gradient(intrinsics, xn, yn, z_inv);
 
                     let res_u = f64::from(corr.image_points[k].x) - u;
                     let res_v = f64::from(corr.image_points[k].y) - v;
@@ -1342,7 +1341,6 @@ impl RobustPoseSolver {
                     };
 
                     // Right (body-frame) SE(3) normal equations with W = info·weight.
-                    let (du_dp, dv_dp) = pinhole_projection_gradients(intrinsics, z_inv, x_z, y_z);
                     ne.add(&p_world, &du_dp, &dv_dp, res_u, res_v, &(info * weight));
                 }
             }
