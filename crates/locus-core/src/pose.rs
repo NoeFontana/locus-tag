@@ -275,6 +275,24 @@ impl Pose {
         let y = (p_cam.y / z) * intrinsics.fy + intrinsics.cy;
         [x, y]
     }
+
+    /// Apply an SE(3) **left**-perturbation `exp(δ)·pose`, with `δ = [t | ω]`
+    /// (translation then rotation-vector, matching the LM Jacobian column layout):
+    /// the rotation acts on the left of `self.rotation` *and* on the translation.
+    /// The single definition of the manifold update used by the corner LMs
+    /// (`refine_pose_lm` and `pose_weighted`'s LM) — extracted verbatim from their
+    /// inline copies, so it is byte-identical. Note `board.rs::gn_step` deliberately
+    /// uses a *different* (right-quaternion, translation-not-rotated) update and is
+    /// **not** a caller — do not "unify" it onto this without re-deriving.
+    #[inline]
+    #[must_use]
+    pub(crate) fn retract(&self, delta: &Vector6<f64>) -> Self {
+        let rot = Rotation3::new(Vector3::new(delta[3], delta[4], delta[5]))
+            .matrix()
+            .into_owned();
+        let trans = Vector3::new(delta[0], delta[1], delta[2]);
+        Self::new(rot * self.rotation, rot * self.translation + trans)
+    }
 }
 
 /// Fills the lower triangle of a 6×6 normal-equations matrix from its upper triangle.
@@ -1063,6 +1081,93 @@ fn project_with_distortion(p_cam: &Vector3<f64>, intrinsics: &CameraIntrinsics) 
     intrinsics.distort_normalized(xn, yn)
 }
 
+/// Assemble the Huber-weighted normal equations `(JᵀWJ, JᵀWr)` for the 4-corner
+/// reprojection problem at `pose`, plus the Huber cost at `pose`, shared by
+/// `refine_pose_lm` and its gradient tests. Layout: ξ = [tx, ty, tz, rx, ry, rz].
+///
+/// The returned cost is bit-identical to [`huber_cost`] evaluated at the same
+/// pose (both route through the same clamped normalized projection), so the LM
+/// can reuse it as the linearization-point cost without a redundant re-projection
+/// — mirroring `pose_weighted::build_normal_equations`'s `(jtj, jtr, cost)` triple.
+fn corner_normal_equations(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+    obj_pts: &[Vector3<f64>; 4],
+    pose: &Pose,
+    huber_delta: f64,
+) -> (Matrix6<f64>, Vector6<f64>, f64) {
+    let mut jtj = Matrix6::<f64>::zeros();
+    let mut jtr = Vector6::<f64>::zeros();
+    let mut cost = 0.0;
+    for i in 0..4 {
+        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
+        let z = p_cam.z.max(1e-4);
+        let z_inv = 1.0 / z;
+        let xn = p_cam.x / z;
+        let yn = p_cam.y / z;
+
+        // Distortion-aware projection (identity pass-through for DistortionCoeffs::None).
+        let [u_est, v_est] = intrinsics.distort_normalized(xn, yn);
+        let res_u = corners[i][0] - u_est;
+        let res_v = corners[i][1] - v_est;
+
+        // Huber IRLS weight on the 2-D geometric pixel distance.
+        let r_norm = (res_u * res_u + res_v * res_v).sqrt();
+        let w = if r_norm <= huber_delta {
+            1.0
+        } else {
+            huber_delta / r_norm
+        };
+
+        // Huber cost at the linearization point (identical formula/order to
+        // `huber_cost`, so the caller can skip a redundant re-projection).
+        if r_norm <= huber_delta {
+            cost += 0.5 * r_norm * r_norm;
+        } else {
+            cost += huber_delta * (r_norm - 0.5 * huber_delta);
+        }
+
+        // ∂[u,v]/∂P_cam (chain rule through the distortion map).
+        let jd = intrinsics.distortion_jacobian(xn, yn);
+        let du_dp = Vector3::new(
+            intrinsics.fx * jd[0][0] * z_inv,
+            intrinsics.fx * jd[0][1] * z_inv,
+            -intrinsics.fx * (jd[0][0] * xn + jd[0][1] * yn) * z_inv,
+        );
+        let dv_dp = Vector3::new(
+            intrinsics.fy * jd[1][0] * z_inv,
+            intrinsics.fy * jd[1][1] * z_inv,
+            -intrinsics.fy * (jd[1][0] * xn + jd[1][1] * yn) * z_inv,
+        );
+
+        // True SE(3) left-perturbation Jacobian: ∂proj/∂ω = ∂proj/∂P · (-[P]_×).
+        // This is the canonical *sign* convention (same as `projection_jacobian`,
+        // verified by `corner_normal_equations_gradient_is_descent`). The pre-2026-07
+        // inline form used the *negated* rotation rows, which made `jtr` an ascent
+        // direction for rotation — the trust region then rejected every rotation
+        // step, so this fallback LM silently refined only translation and shipped
+        // IPPE's rotation.
+        let mut row_u = Vector6::zeros();
+        row_u[0] = du_dp[0];
+        row_u[1] = du_dp[1];
+        row_u[2] = du_dp[2];
+        row_u[3] = -(du_dp[1] * p_cam.z - du_dp[2] * p_cam.y);
+        row_u[4] = -(du_dp[2] * p_cam.x - du_dp[0] * p_cam.z);
+        row_u[5] = -(du_dp[0] * p_cam.y - du_dp[1] * p_cam.x);
+        let mut row_v = Vector6::zeros();
+        row_v[0] = dv_dp[0];
+        row_v[1] = dv_dp[1];
+        row_v[2] = dv_dp[2];
+        row_v[3] = -(dv_dp[1] * p_cam.z - dv_dp[2] * p_cam.y);
+        row_v[4] = -(dv_dp[2] * p_cam.x - dv_dp[0] * p_cam.z);
+        row_v[5] = -(dv_dp[0] * p_cam.y - dv_dp[1] * p_cam.x);
+
+        jtj += w * (row_u * row_u.transpose() + row_v * row_v.transpose());
+        jtr += w * (row_u * res_u + row_v * res_v);
+    }
+    (jtj, jtr, cost)
+}
+
 /// Use a Manifold-Aware Trust-Region Levenberg-Marquardt solver to refine the pose.
 ///
 /// This upgrades the classic LM recipe to a SOTA production solver with three key improvements:
@@ -1084,10 +1189,6 @@ fn project_with_distortion(p_cam: &Vector3<f64>, intrinsics: &CameraIntrinsics) 
 ///    the projection `P_cam → pixel` routes through the distortion map, and the analytic
 ///    chain-rule Jacobian `∂[u,v]/∂P_cam = diag(fx,fy) · J_dist · J_normalize` is used,
 ///    ensuring the solver converges to the correct distortion-compensated pose.
-#[expect(
-    clippy::too_many_lines,
-    reason = "one cohesive Levenberg-Marquardt loop — Jacobian assembly, damping update, and convergence test read more clearly inline than split across helpers"
-)]
 fn refine_pose_lm(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
@@ -1103,85 +1204,25 @@ fn refine_pose_lm(
     // Nielsen's trust-region state. Start with small damping to encourage Gauss-Newton steps.
     let mut lambda = 1e-3_f64;
     let mut nu = 2.0_f64;
-    let mut current_cost = huber_cost(intrinsics, corners, &obj_pts, &pose, huber_delta);
+    // The normal-equations builder also returns the Huber cost at the linearization
+    // point, so we only rebuild (and re-project) after an accepted step — a rejected
+    // step reuses the cached Hessian and cost unchanged. `f64::MAX` forces the first
+    // rebuild; the loop always populates these before use.
+    let mut jtj = Matrix6::<f64>::zeros();
+    let mut jtr = Vector6::<f64>::zeros();
+    let mut current_cost = f64::MAX;
+    let mut needs_rebuild = true;
 
     // Allow up to 20 iterations; typically exits in 3-6 via the convergence gates below.
     for _ in 0..20 {
-        // Build J^T W J (6x6) and J^T W r (6x1) with Huber IRLS weights.
-        // Layout: delta = [tx, ty, tz, rx, ry, rz] (translation then rotation in se(3)).
-        let mut jtj = Matrix6::<f64>::zeros();
-        let mut jtr = Vector6::<f64>::zeros();
-
-        for i in 0..4 {
-            let p_world = obj_pts[i];
-            let p_cam = pose.rotation * p_world + pose.translation;
-            let z = p_cam.z.max(1e-4);
-            let z_inv = 1.0 / z;
-            let xn = p_cam.x / z;
-            let yn = p_cam.y / z;
-
-            // Apply distortion and compute pixel residual.
-            // For DistortionCoeffs::None, distort_normalized is an identity pass-through.
-            let [u_est, v_est] = intrinsics.distort_normalized(xn, yn);
-
-            let res_u = corners[i][0] - u_est;
-            let res_v = corners[i][1] - v_est;
-
-            // Huber IRLS weight: w=1 inside the trust region, w=delta/r outside.
-            // Applied per 2D point (geometric pixel distance).
-            let r_norm = (res_u * res_u + res_v * res_v).sqrt();
-            let w = if r_norm <= huber_delta {
-                1.0
-            } else {
-                huber_delta / r_norm
-            };
-
-            // Distortion Jacobian J_dist = [[∂xd/∂xn, ∂xd/∂yn], [∂yd/∂xn, ∂yd/∂yn]].
-            // For DistortionCoeffs::None this is the 2×2 identity, which recovers the
-            // original pinhole Jacobian exactly.
-            let jd = intrinsics.distortion_jacobian(xn, yn);
-
-            // Full Jacobian of pixel coordinates wrt camera-space point P_cam:
-            //
-            //   ∂u/∂P_cam = fx · [J_dist[0][0]/z, J_dist[0][1]/z, -(J_dist[0][0]·xn + J_dist[0][1]·yn)/z]
-            //   ∂v/∂P_cam = fy · [J_dist[1][0]/z, J_dist[1][1]/z, -(J_dist[1][0]·xn + J_dist[1][1]·yn)/z]
-            //
-            // Derivation: u = fx·xd + cx, xd = distort_x(xn, yn), xn = Px/Pz, yn = Py/Pz
-            //   ∂u/∂Px = fx·(∂xd/∂xn·1/z) = fx·jd[0][0]/z
-            //   ∂u/∂Py = fx·(∂xd/∂yn·1/z) = fx·jd[0][1]/z
-            //   ∂u/∂Pz = fx·(∂xd/∂xn·(-xn/z) + ∂xd/∂yn·(-yn/z))
-            let du_dp = Vector3::new(
-                intrinsics.fx * jd[0][0] * z_inv,
-                intrinsics.fx * jd[0][1] * z_inv,
-                -intrinsics.fx * (jd[0][0] * xn + jd[0][1] * yn) * z_inv,
-            );
-            let dv_dp = Vector3::new(
-                intrinsics.fy * jd[1][0] * z_inv,
-                intrinsics.fy * jd[1][1] * z_inv,
-                -intrinsics.fy * (jd[1][0] * xn + jd[1][1] * yn) * z_inv,
-            );
-
-            // Jacobian of Camera Point wrt Pose Update (Lie Algebra) (3x6):
-            // d(exp(w)*P)/d(xi) at xi=0 = [ I | -[P]_x ]
-            let mut row_u = Vector6::zeros();
-            row_u[0] = du_dp[0];
-            row_u[1] = du_dp[1];
-            row_u[2] = du_dp[2];
-            row_u[3] = du_dp[1] * p_cam.z - du_dp[2] * p_cam.y;
-            row_u[4] = du_dp[2] * p_cam.x - du_dp[0] * p_cam.z;
-            row_u[5] = du_dp[0] * p_cam.y - du_dp[1] * p_cam.x;
-
-            let mut row_v = Vector6::zeros();
-            row_v[0] = dv_dp[0];
-            row_v[1] = dv_dp[1];
-            row_v[2] = dv_dp[2];
-            row_v[3] = dv_dp[1] * p_cam.z - dv_dp[2] * p_cam.y;
-            row_v[4] = dv_dp[2] * p_cam.x - dv_dp[0] * p_cam.z;
-            row_v[5] = dv_dp[0] * p_cam.y - dv_dp[1] * p_cam.x;
-
-            // Accumulate J^T W J and J^T W r with Huber weight.
-            jtj += w * (row_u * row_u.transpose() + row_v * row_v.transpose());
-            jtr += w * (row_u * res_u + row_v * res_v);
+        if needs_rebuild {
+            // Huber-weighted normal equations + cost for the 4-corner reprojection problem.
+            let (rjtj, rjtr, cost) =
+                corner_normal_equations(intrinsics, corners, &obj_pts, &pose, huber_delta);
+            jtj = rjtj;
+            jtr = rjtr;
+            current_cost = cost;
+            needs_rebuild = false;
         }
 
         // Gate 1: Gradient convergence — solver is at a stationary point.
@@ -1222,13 +1263,7 @@ fn refine_pose_lm(
         let predicted_reduction = 0.5 * delta.dot(&(lambda * d_diag.component_mul(&delta) + jtr));
 
         // Evaluate new pose via SE(3) exponential map (manifold-safe update).
-        let twist = Vector3::new(delta[3], delta[4], delta[5]);
-        let trans_update = Vector3::new(delta[0], delta[1], delta[2]);
-        let rot_update = nalgebra::Rotation3::new(twist).matrix().into_owned();
-        let new_pose = Pose::new(
-            rot_update * pose.rotation,
-            rot_update * pose.translation + trans_update,
-        );
+        let new_pose = pose.retract(&delta);
 
         let new_cost = huber_cost(intrinsics, corners, &obj_pts, &new_pose, huber_delta);
         let actual_reduction = current_cost - new_cost;
@@ -1243,6 +1278,8 @@ fn refine_pose_lm(
             // Accept step: update state and shrink lambda toward Gauss-Newton regime.
             pose = new_pose;
             current_cost = new_cost;
+            // Pose moved, so the cached Hessian/cost are stale — rebuild next iteration.
+            needs_rebuild = true;
             // Nielsen's update rule: lambda scales by max(1/3, 1 - (2*rho - 1)^3).
             lambda *= (1.0 - (2.0 * rho - 1.0).powi(3)).max(1.0 / 3.0);
             nu = 2.0;
@@ -1252,7 +1289,8 @@ fn refine_pose_lm(
                 break;
             }
         } else {
-            // Reject step: grow lambda with doubling backoff to stay within trust region.
+            // Reject step: pose unchanged, so the cached Hessian/cost stay valid;
+            // grow lambda with doubling backoff to stay within the trust region.
             lambda *= nu;
             nu *= 2.0;
         }
@@ -1858,6 +1896,127 @@ pub fn refine_poses_soa_with_config(
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    // The corner-LM normal equations must satisfy `jtr = -∂cost/∂ξ` for the LM
+    // step `δ = (JᵀWJ)⁻¹ jtr` to be a descent direction (identical convention to
+    // the weighted LM's `test_weighted_jacobian_matches_finite_difference`). A
+    // sign error in any row flips `jtr[k]` vs the true gradient → relative_err ≈ 2.
+    #[test]
+    fn corner_normal_equations_gradient_is_descent() {
+        let intrinsics = CameraIntrinsics::new(600.0, 600.0, 320.0, 240.0);
+        let rot = Rotation3::new(Vector3::new(0.2, -0.15, 0.1))
+            .matrix()
+            .into_owned();
+        let pose = Pose::new(rot, Vector3::new(0.15, 0.12, 0.5));
+        let obj_pts = centered_tag_corners(0.04);
+        // Non-zero residuals so the gradient exposes a sign error.
+        let mut corners: [[f64; 2]; 4] =
+            core::array::from_fn(|i| pose.project(&obj_pts[i], &intrinsics));
+        corners[0][0] += 3.0;
+        corners[0][1] -= 2.0;
+        corners[1][0] -= 1.5;
+        corners[2][1] += 1.2;
+        let huber = 1e9; // pure L2 so cost is smooth for the finite difference
+
+        let (_jtj, jtr, cost) =
+            corner_normal_equations(&intrinsics, &corners, &obj_pts, &pose, huber);
+        // The returned cost must be bit-identical to a standalone `huber_cost` at
+        // the same pose, since the LM reuses it as the linearization-point cost.
+        // Compare raw bits: this is an exact-equality contract, not an approximation.
+        assert_eq!(
+            cost.to_bits(),
+            huber_cost(&intrinsics, &corners, &obj_pts, &pose, huber).to_bits()
+        );
+        let eps = 1e-6;
+        for dof in 0..6 {
+            let mut dp = Vector6::zeros();
+            dp[dof] = eps;
+            let cf = huber_cost(&intrinsics, &corners, &obj_pts, &pose.retract(&dp), huber);
+            dp[dof] = -eps;
+            let cb = huber_cost(&intrinsics, &corners, &obj_pts, &pose.retract(&dp), huber);
+            let num_grad = (cf - cb) / (2.0 * eps);
+            let scale = jtr[dof].abs().max(num_grad.abs()).max(1.0);
+            let rel = (jtr[dof] + num_grad).abs() / scale;
+            assert!(
+                rel < 1e-3,
+                "DOF {dof}: jtr={:.4} -grad={:.4} rel={rel:.3}",
+                jtr[dof],
+                -num_grad
+            );
+        }
+    }
+
+    // Demonstrates the sign fix: with the pre-fix (negated) rotation rows the
+    // trust region rejected every rotation step, so `refine_pose_lm` returned the
+    // init rotation. With the corrected rows it converges to the true rotation
+    // from a perturbed init. (Would fail before the fix; passes after.)
+    #[test]
+    fn refine_pose_lm_recovers_rotation() {
+        let intrinsics = CameraIntrinsics::new(700.0, 700.0, 320.0, 240.0);
+        let true_rot = Rotation3::new(Vector3::new(0.25, -0.18, 0.12))
+            .matrix()
+            .into_owned();
+        let true_pose = Pose::new(true_rot, Vector3::new(0.03, -0.02, 0.6));
+        let obj_pts = centered_tag_corners(0.05);
+        let corners: [[f64; 2]; 4] =
+            core::array::from_fn(|i| true_pose.project(&obj_pts[i], &intrinsics));
+
+        // Perturb the init rotation by ~5° and translation slightly.
+        let perturbed_rot = Rotation3::new(Vector3::new(0.06, 0.05, -0.04)).matrix() * true_rot;
+        let init = Pose::new(perturbed_rot, Vector3::new(0.05, 0.0, 0.62));
+
+        let refined = refine_pose_lm(&intrinsics, &corners, 0.05, init, 1.5);
+
+        let ang = |a: &Matrix3<f64>, b: &Matrix3<f64>| {
+            (((a.transpose() * b).trace() - 1.0) * 0.5)
+                .clamp(-1.0, 1.0)
+                .acos()
+        };
+        let init_err = ang(&init.rotation, &true_rot);
+        let refined_err = ang(&refined.rotation, &true_rot);
+        assert!(
+            refined_err < 0.1 * init_err,
+            "rotation not refined: init_err={init_err:.4} refined_err={refined_err:.4}"
+        );
+    }
+
+    // The rotation-Jacobian fix makes the fallback LM actually move rotation, so a
+    // rank-deficient corner configuration now drives the Hessian singular along the
+    // rotation DOFs. The Cholesky-failure / λ-backoff path must keep the solver
+    // bounded — it must never emit a NaN/∞ pose (which would poison downstream PnP
+    // and any covariance extraction). Guards the now-active path against degenerate
+    // inputs reachable through `estimate_tag_pose(corners, None)`.
+    #[test]
+    fn refine_pose_lm_stays_finite_on_degenerate_corners() {
+        let intrinsics = CameraIntrinsics::new(600.0, 600.0, 320.0, 240.0);
+        let init = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 0.5));
+
+        let finite = |p: &Pose| {
+            p.translation.iter().all(|v| v.is_finite()) && p.rotation.iter().all(|v| v.is_finite())
+        };
+
+        // Case 1: all four corners coincident (zero-area quad, fully rank-deficient).
+        let coincident = [[300.0, 250.0]; 4];
+        let r1 = refine_pose_lm(&intrinsics, &coincident, 0.05, init, 1.5);
+        assert!(
+            finite(&r1),
+            "coincident-corner refine produced a non-finite pose"
+        );
+
+        // Case 2: four collinear corners (rank-1 spatial support → rotation DOFs
+        // about the line are unobservable).
+        let collinear = [
+            [100.0, 250.0],
+            [200.0, 250.0],
+            [300.0, 250.0],
+            [400.0, 250.0],
+        ];
+        let r2 = refine_pose_lm(&intrinsics, &collinear, 0.05, init, 1.5);
+        assert!(
+            finite(&r2),
+            "collinear-corner refine produced a non-finite pose"
+        );
+    }
 
     #[test]
     fn test_pose_projection() {

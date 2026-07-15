@@ -5,6 +5,47 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Fixed
+
+- **`refine_pose_lm` rotation-Jacobian sign bug.** The unweighted corner-pose LM
+  built its rotation Jacobian rows with the wrong sign (the negative of the
+  canonical `∂proj/∂ω` used by the weighted LM and `projection_jacobian`), making
+  `Jᵀr` an *ascent* direction for rotation. Its trust region therefore rejected
+  every rotation step, so the solver refined only translation and returned IPPE's
+  rotation unrefined. This path is reachable only via the image-less
+  `estimate_tag_pose(corners, None)` API — the full detection pipeline always
+  supplies an image and so uses the weighted (already-correct) LM, which is why
+  the bug never affected pipeline detection and shipped undetected. Fixed to the
+  canonical sign; the corner normal-equations assembly was extracted to a shared
+  `corner_normal_equations` with a committed finite-difference gradient check
+  (`corner_normal_equations_gradient_is_descent`) and a rotation-recovery test.
+  **Behavior change for API consumers:** callers of the image-less
+  `estimate_tag_pose(corners, None)` / `estimate_tag_pose_with_diagnostics(..)`
+  path now receive a *rotation-refined* pose (previously the returned rotation was
+  IPPE's, unrefined); translation and every image-backed pipeline result are
+  unchanged. The shipped-profile detection snapshots (render-tag, ICRA, board-hub)
+  and all 253 default-feature tests are byte-identical. One `bench-internals`-gated
+  regression snapshot **does** move as the direct, intended consequence of the fix:
+  `regression_pose_consistency_roc` (synthetic-isotropic) — with rotation now
+  actually refined on the fallback path, the χ²(2) pose-consistency gate's realized
+  false-positive rate tracks the modeled FPR far more closely (e.g. 0.169 → 0.101 at
+  a modeled 0.1), so the recorded snapshot was regenerated to the better-calibrated
+  values.
+
+### Changed
+
+- **`Pose::retract`.** Extracted the SE(3) left-perturbation update
+  `exp([t|ω])·pose` into one method, replacing four inline copies across the pose
+  LMs (byte-identical). First step of the LM-consolidation series (see
+  `docs/engineering/lm_unification_spec.md`, landing with later phases).
+- **Unweighted corner LM cost caching.** `corner_normal_equations` now returns the
+  Huber cost at the linearization point alongside `(JᵀWJ, JᵀWr)` (bit-identical to
+  a standalone `huber_cost`), and `refine_pose_lm` adopts the weighted LM's
+  `needs_rebuild` caching so it re-projects only after an accepted step instead of
+  every iteration. Pure efficiency/consistency refactor — byte-identical results,
+  and brings the unweighted loop structurally in line with `pose_weighted` ahead of
+  the shared-core phase.
+
 ### Added
 
 - **Corner-refinement variant benchmark + rotation-tail study.** New
