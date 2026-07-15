@@ -11,3 +11,6 @@ tests/data
 *.snap.new
 # Local debug-bench output dirs (`tools/bench/*.py`); 10s of MB each, never committed
 /diagnostics/
+
+# Agent worktrees (ephemeral, isolated subagent checkouts)
+.claude/worktrees/

@@ -2288,14 +2288,15 @@ mod tests {
 /// Experimental right/body-perturbation pose LM, kept alongside the shipped
 /// left/camera-perturbation solver for head-to-head numerical evaluation.
 ///
-/// Nothing here is wired into production — it is compiled only for tests and the
-/// `bench-internals` harness. The goal is to answer, with measurement rather than
-/// theory, whether parameterising the SE(3) update in the tag's *body* frame
-/// (`T' = T·exp(δ)`) yields better-conditioned normal equations and a smaller
-/// rotation-error tail than the shipped camera-frame update (`T' = exp(δ)·T`),
-/// given that our object points are symmetric about the body origin.
-#[cfg(any(test, feature = "bench-internals"))]
-pub(crate) mod right_perturbation {
+/// Nothing here is wired into production — it is compiled only under `cfg(test)`.
+/// The goal is to answer, with measurement rather than theory, whether
+/// parameterising the SE(3) update in the tag's *body* frame (`T' = T·exp(δ)`)
+/// yields better-conditioned normal equations and a smaller rotation-error tail
+/// than the shipped camera-frame update (`T' = exp(δ)·T`), given that our object
+/// points are symmetric about the body origin.
+#[cfg(test)]
+#[allow(clippy::wildcard_imports)]
+mod right_perturbation {
     use super::*;
 
     /// SE(3) **right** (body-frame) perturbation `T' = T · exp(δ)`, `δ = [t | ω]`.
@@ -2407,6 +2408,9 @@ pub(crate) mod right_perturbation {
         pub iters: u32,
         pub accepted: u32,
         pub chol_fails: u32,
+        /// True if the loop exited via a convergence gate (gradient or step-size)
+        /// rather than exhausting the 20-iteration budget.
+        pub converged: bool,
     }
 
     /// Generic Nielsen trust-region LM identical to the shipped `refine_pose_lm`
@@ -2442,6 +2446,7 @@ pub(crate) mod right_perturbation {
                 needs_rebuild = false;
             }
             if jtr.amax() < 1e-8 {
+                stats.converged = true;
                 break;
             }
             let d_diag = Vector6::new(
@@ -2482,6 +2487,7 @@ pub(crate) mod right_perturbation {
                 lambda *= (1.0 - (2.0 * rho - 1.0).powi(3)).max(1.0 / 3.0);
                 nu = 2.0;
                 if delta.norm() < 1e-7 {
+                    stats.converged = true;
                     break;
                 }
             } else {
@@ -2520,8 +2526,13 @@ pub(crate) mod right_perturbation {
         Conditioning { cond, coupling }
     }
 
-    #[cfg(test)]
-    #[allow(clippy::unwrap_used, clippy::cast_precision_loss)]
+    #[allow(
+        clippy::unwrap_used,
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        clippy::too_many_lines
+    )]
     mod diagnostics {
         use super::*;
 
@@ -2703,13 +2714,12 @@ pub(crate) mod right_perturbation {
                             } else {
                                 Vector3::z()
                             };
-                            let seed_rot =
-                                Rotation3::from_axis_angle(
-                                    &nalgebra::Unit::new_normalize(axis),
-                                    init_rot_deg.to_radians(),
-                                )
-                                .matrix()
-                                    * gt.rotation;
+                            let seed_rot = Rotation3::from_axis_angle(
+                                &nalgebra::Unit::new_normalize(axis),
+                                init_rot_deg.to_radians(),
+                            )
+                            .matrix()
+                                * gt.rotation;
                             let seed_trans = gt.translation
                                 * (1.0 + init_trans_frac * rng.normal())
                                 + Vector3::new(
@@ -2722,12 +2732,12 @@ pub(crate) mod right_perturbation {
                             let (pl, sl) = run_lm(
                                 init,
                                 |p| corner_normal_equations(&intr, &corners, &obj, p, huber),
-                                |p, d| p.retract(d),
+                                Pose::retract,
                             );
                             let (pr, sr) = run_lm(
                                 init,
                                 |p| corner_normal_equations_right(&intr, &corners, &obj, p, huber),
-                                |p, d| retract_right(p, d),
+                                retract_right,
                             );
                             let el = rot_angle_deg(&pl.rotation, &gt.rotation);
                             let er = rot_angle_deg(&pr.rotation, &gt.rotation);
@@ -2750,7 +2760,10 @@ pub(crate) mod right_perturbation {
             let n = err_l.len() as f64;
             let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
 
-            println!("\n=== Phase B: solver-isolation (left vs right), {} trials ===", err_l.len());
+            println!(
+                "\n=== Phase B: solver-isolation (left vs right), {} trials ===",
+                err_l.len()
+            );
             println!(
                 "{:>10} {:>12} {:>12} {:>12} {:>12}",
                 "metric", "rot_p50", "rot_p99", "rot_max", "rot_mean"
@@ -2780,6 +2793,103 @@ pub(crate) mod right_perturbation {
             );
 
             // Sanity only — the numbers above are the actual deliverable.
+            assert!(percentile(&err_r, 99.0).is_finite());
+        }
+
+        // The one regime where left's blown-up conditioning (cond_L ≈ 3.8e6 at far
+        // depth) could plausibly cost accuracy: hard geometry + a poor init + the
+        // fixed 20-iteration budget, where the left solver might run out of budget
+        // before reaching the optimum while the better-conditioned right solver
+        // gets there. Stresses exactly that corner and reports *convergence
+        // completeness* (gate-exit rate), not just aggregate error.
+        #[test]
+        fn right_vs_left_hard_regime_convergence() {
+            let intr = CameraIntrinsics::new(1400.0, 1400.0, 960.0, 540.0);
+            let tag_size = 0.10;
+            let huber = 1.5;
+            let pixel_noise = 0.2;
+            let init_rot_deg = 8.0_f64; // deliberately poor seed.
+            let init_trans_frac = 0.06_f64; // 6 % translation seed error.
+            let trials = 2000usize;
+
+            // Far + oblique + off-axis — the worst-conditioned left case.
+            let depth = 1.5;
+            let bearing = 30.0_f64.to_radians();
+            let tilt = 15.0_f64.to_radians();
+            let (gt, clean, obj) = geometry(&intr, tag_size, depth, bearing, tilt);
+
+            let mut err_l = Vec::new();
+            let mut err_r = Vec::new();
+            let mut conv_l = 0usize;
+            let mut conv_r = 0usize;
+            let mut iters_l = 0u64;
+            let mut iters_r = 0u64;
+            let mut rng = Rng(0xDEAD_BEEF_CAFE_1234);
+
+            for _ in 0..trials {
+                let mut corners = clean;
+                for c in &mut corners {
+                    c[0] += pixel_noise * rng.normal();
+                    c[1] += pixel_noise * rng.normal();
+                }
+                let axis = Vector3::new(rng.normal(), rng.normal(), rng.normal());
+                let axis = if axis.norm() > 1e-9 {
+                    axis.normalize()
+                } else {
+                    Vector3::z()
+                };
+                let seed_rot = Rotation3::from_axis_angle(
+                    &nalgebra::Unit::new_normalize(axis),
+                    init_rot_deg.to_radians(),
+                )
+                .matrix()
+                    * gt.rotation;
+                let seed_trans = gt.translation * (1.0 + init_trans_frac * rng.normal())
+                    + Vector3::new(
+                        init_trans_frac * depth * rng.normal(),
+                        init_trans_frac * depth * rng.normal(),
+                        0.0,
+                    );
+                let init = Pose::new(seed_rot, seed_trans);
+
+                let (pl, sl) = run_lm(
+                    init,
+                    |p| corner_normal_equations(&intr, &corners, &obj, p, huber),
+                    Pose::retract,
+                );
+                let (pr, sr) = run_lm(
+                    init,
+                    |p| corner_normal_equations_right(&intr, &corners, &obj, p, huber),
+                    retract_right,
+                );
+                err_l.push(rot_angle_deg(&pl.rotation, &gt.rotation));
+                err_r.push(rot_angle_deg(&pr.rotation, &gt.rotation));
+                conv_l += usize::from(sl.converged);
+                conv_r += usize::from(sr.converged);
+                iters_l += u64::from(sl.iters);
+                iters_r += u64::from(sr.iters);
+            }
+
+            err_l.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            err_r.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let n = trials as f64;
+            println!(
+                "\n=== Hard regime (depth 1.5, bearing 30°, tilt 15°, 8° init), {trials} trials ==="
+            );
+            println!(
+                "left : rot_p99={:.4} rot_max={:.4} gate_exit={:.1}% mean_iters={:.2}",
+                percentile(&err_l, 99.0),
+                err_l.last().copied().unwrap(),
+                100.0 * conv_l as f64 / n,
+                iters_l as f64 / n
+            );
+            println!(
+                "right: rot_p99={:.4} rot_max={:.4} gate_exit={:.1}% mean_iters={:.2}",
+                percentile(&err_r, 99.0),
+                err_r.last().copied().unwrap(),
+                100.0 * conv_r as f64 / n,
+                iters_r as f64 / n
+            );
             assert!(percentile(&err_r, 99.0).is_finite());
         }
     }
