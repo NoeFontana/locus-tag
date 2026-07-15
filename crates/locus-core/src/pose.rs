@@ -275,6 +275,20 @@ impl Pose {
         let y = (p_cam.y / z) * intrinsics.fy + intrinsics.cy;
         [x, y]
     }
+
+    /// Apply an SE(3) left-perturbation `exp(δ)·pose`, with `δ = [t | ω]`
+    /// (translation then rotation-vector, matching the LM Jacobian column layout).
+    /// The single definition of the manifold update shared by every pose LM
+    /// (`refine_pose_lm`, the weighted LM, and model-edge refinement) — extracted
+    /// verbatim from those inline copies, so it is byte-identical.
+    #[must_use]
+    pub(crate) fn retract(&self, delta: &Vector6<f64>) -> Self {
+        let rot = Rotation3::new(Vector3::new(delta[3], delta[4], delta[5]))
+            .matrix()
+            .into_owned();
+        let trans = Vector3::new(delta[0], delta[1], delta[2]);
+        Self::new(rot * self.rotation, rot * self.translation + trans)
+    }
 }
 
 /// Fills the lower triangle of a 6×6 normal-equations matrix from its upper triangle.
@@ -1084,10 +1098,10 @@ fn project_with_distortion(p_cam: &Vector3<f64>, intrinsics: &CameraIntrinsics) 
 ///    the projection `P_cam → pixel` routes through the distortion map, and the analytic
 ///    chain-rule Jacobian `∂[u,v]/∂P_cam = diag(fx,fy) · J_dist · J_normalize` is used,
 ///    ensuring the solver converges to the correct distortion-compensated pose.
-#[expect(
-    clippy::too_many_lines,
-    reason = "one cohesive Levenberg-Marquardt loop — Jacobian assembly, damping update, and convergence test read more clearly inline than split across helpers"
-)]
+// `allow`, not `expect`: `too_many_lines` fires on an exact line-count threshold,
+// so refactors that trim the body (hoisting the SE(3) update into `Pose::retract`)
+// can leave an `#[expect]` unfulfilled — a build error under `-D warnings`.
+#[allow(clippy::too_many_lines)]
 fn refine_pose_lm(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
@@ -1222,13 +1236,7 @@ fn refine_pose_lm(
         let predicted_reduction = 0.5 * delta.dot(&(lambda * d_diag.component_mul(&delta) + jtr));
 
         // Evaluate new pose via SE(3) exponential map (manifold-safe update).
-        let twist = Vector3::new(delta[3], delta[4], delta[5]);
-        let trans_update = Vector3::new(delta[0], delta[1], delta[2]);
-        let rot_update = nalgebra::Rotation3::new(twist).matrix().into_owned();
-        let new_pose = Pose::new(
-            rot_update * pose.rotation,
-            rot_update * pose.translation + trans_update,
-        );
+        let new_pose = pose.retract(&delta);
 
         let new_cost = huber_cost(intrinsics, corners, &obj_pts, &new_pose, huber_delta);
         let actual_reduction = current_cost - new_cost;

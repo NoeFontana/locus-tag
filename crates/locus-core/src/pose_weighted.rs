@@ -434,13 +434,7 @@ pub(crate) fn refine_pose_lm_weighted_with_info(
         };
 
         // Gain ratio numerator: Actual cost reduction
-        let twist = Vector3::new(delta[3], delta[4], delta[5]);
-        let trans_update = Vector3::new(delta[0], delta[1], delta[2]);
-        let rot_update = nalgebra::Rotation3::new(twist).matrix().into_owned();
-        let new_pose = Pose::new(
-            rot_update * pose.rotation,
-            rot_update * pose.translation + trans_update,
-        );
+        let new_pose = pose.retract(&delta);
 
         let new_cost = huber_mahalanobis_cost(
             intrinsics,
@@ -664,13 +658,7 @@ mod tests {
     fn perturb_pose(pose: &Pose, dof: usize, eps: f64) -> Pose {
         let mut delta = nalgebra::Vector6::<f64>::zeros();
         delta[dof] = eps;
-        let twist = nalgebra::Vector3::new(delta[3], delta[4], delta[5]);
-        let t_update = nalgebra::Vector3::new(delta[0], delta[1], delta[2]);
-        let r_update = nalgebra::Rotation3::new(twist).matrix().into_owned();
-        Pose::new(
-            r_update * pose.rotation,
-            r_update * pose.translation + t_update,
-        )
+        pose.retract(&delta)
     }
 
     #[test]
