@@ -5,6 +5,30 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Fixed
+
+- **`refine_pose_lm` rotation-Jacobian sign bug.** The unweighted corner-pose LM
+  built its rotation Jacobian rows with the wrong sign (the negative of the
+  canonical `∂proj/∂ω` used by the weighted LM and `projection_jacobian`), making
+  `Jᵀr` an *ascent* direction for rotation. Its trust region therefore rejected
+  every rotation step, so the solver refined only translation and returned IPPE's
+  rotation unrefined. This path is reachable only via the image-less
+  `estimate_tag_pose(corners, None)` API — the full detection pipeline always
+  supplies an image and so uses the weighted (already-correct) LM, which is why
+  the bug never affected pipeline detection and shipped undetected (no regression
+  test exercised the fallback in a rotation-sensitive way). Fixed to the canonical
+  sign; the corner normal-equations assembly was extracted to a shared
+  `corner_normal_equations` with a committed finite-difference gradient check
+  (`corner_normal_equations_gradient_is_descent`) and a rotation-recovery test.
+  All 251 tests pass byte-identically (no snapshot moved).
+
+### Changed
+
+- **`Pose::retract`.** Extracted the SE(3) left-perturbation update
+  `exp([t|ω])·pose` into one method, replacing four inline copies across the pose
+  LMs (byte-identical). First step of the LM-consolidation series (see
+  `docs/engineering/lm_unification_spec.md`, landing with later phases).
+
 ### Added
 
 - **Corner-refinement variant benchmark + rotation-tail study.** New
