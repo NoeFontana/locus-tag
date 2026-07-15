@@ -20,7 +20,12 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   sign; the corner normal-equations assembly was extracted to a shared
   `corner_normal_equations` with a committed finite-difference gradient check
   (`corner_normal_equations_gradient_is_descent`) and a rotation-recovery test.
-  All 251 tests pass byte-identically (no snapshot moved).
+  **Behavior change for API consumers:** callers of the image-less
+  `estimate_tag_pose(corners, None)` / `estimate_tag_pose_with_diagnostics(..)`
+  path now receive a *rotation-refined* pose (previously the returned rotation was
+  IPPE's, unrefined) — translation and every image-backed pipeline result are
+  unchanged, and no shipped-profile snapshot moved. All 253 tests pass
+  byte-identically.
 
 ### Changed
 
@@ -28,6 +33,13 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `exp([t|ω])·pose` into one method, replacing four inline copies across the pose
   LMs (byte-identical). First step of the LM-consolidation series (see
   `docs/engineering/lm_unification_spec.md`, landing with later phases).
+- **Unweighted corner LM cost caching.** `corner_normal_equations` now returns the
+  Huber cost at the linearization point alongside `(JᵀWJ, JᵀWr)` (bit-identical to
+  a standalone `huber_cost`), and `refine_pose_lm` adopts the weighted LM's
+  `needs_rebuild` caching so it re-projects only after an accepted step instead of
+  every iteration. Pure efficiency/consistency refactor — byte-identical results,
+  and brings the unweighted loop structurally in line with `pose_weighted` ahead of
+  the shared-core phase.
 
 ### Added
 
