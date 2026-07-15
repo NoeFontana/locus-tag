@@ -352,7 +352,7 @@ impl Pose {
         core::array::from_fn(|i| core::array::from_fn(|j| out[(i, j)]))
     }
 
-    /// Inverse of [`covariance_camera_to_body`]: body → camera tangent,
+    /// Inverse of [`Pose::covariance_camera_to_body`]: body → camera tangent,
     /// `Σ_camera = Ad_T · Σ_body · Ad_Tᵀ`.
     #[must_use]
     pub fn covariance_body_to_camera(&self, cov_body: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
