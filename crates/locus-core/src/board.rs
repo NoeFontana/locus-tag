@@ -1,7 +1,10 @@
 //! Board-level configuration and layout utilities.
 
 use crate::batch::{MAX_CANDIDATES, Point2f};
-use crate::pose::{CameraIntrinsics, Pose, solve_ippe_square, symmetrize_jtj6};
+use crate::pose::{
+    BodyFrameNormalEquations, CameraIntrinsics, Pose, pinhole_projection_gradients,
+    solve_ippe_square,
+};
 use nalgebra::{Matrix2, Matrix3, Matrix6, Vector3, Vector6};
 use std::sync::Arc;
 
@@ -461,72 +464,18 @@ fn sample_reprojection_score(
 /// reliably separates the correct Necker branch from the wrong one.
 ///
 /// Returns the input pose unchanged if the 6×6 normal equations are singular.
-/// One row of the SE(3) **right** (body-frame) perturbation Jacobian for a pixel
-/// coordinate, given the body-frame projection gradient `dq = Rᵀ·∂proj/∂P_cam`
-/// and the board-frame point `pb`. Layout ξ = [t | ω]; the rotation columns are
-/// `dq·(−[pb]_×)`. Mirrors `pose::corner_normal_equations`.
-#[inline]
-fn body_frame_row(dq: &Vector3<f64>, pb: &Vector3<f64>) -> Vector6<f64> {
-    let mut row = Vector6::zeros();
-    row[0] = dq[0];
-    row[1] = dq[1];
-    row[2] = dq[2];
-    row[3] = -(dq[1] * pb.z - dq[2] * pb.y);
-    row[4] = -(dq[2] * pb.x - dq[0] * pb.z);
-    row[5] = -(dq[0] * pb.y - dq[1] * pb.x);
-    row
-}
-
-/// Accumulate one correspondence's contribution to the body-frame (right-
-/// perturbation) SE(3) normal equations shared by all three board pose solvers.
-/// `p_world` is the board-frame (body) point, `p_cam = R·p_world + t`, and `w` is
-/// the 2×2 information·robust weight (`Matrix2::identity()` for the unweighted GN
-/// steps). Pinhole projection gradients ∂[u,v]/∂P_cam.
-#[inline]
-#[expect(
-    clippy::too_many_arguments,
-    reason = "shared per-point accumulator threads the image geometry + weight; a struct would only add indirection at the call sites"
-)]
-#[expect(
+#[allow(
     clippy::similar_names,
-    reason = "du_dp/dv_dp and row_u/row_v mirror the u/v projection Jacobian rows"
+    reason = "du_dp/dv_dp mirror the u/v Jacobian rows"
 )]
-fn accumulate_body_frame_point(
-    jtj: &mut Matrix6<f64>,
-    jtr: &mut Vector6<f64>,
-    rt: &Matrix3<f64>,
-    p_world: &Vector3<f64>,
-    p_cam: &Vector3<f64>,
-    res_u: f64,
-    res_v: f64,
-    w: &Matrix2<f64>,
-    intrinsics: &CameraIntrinsics,
-) {
-    let z_inv = 1.0 / p_cam.z;
-    let x_z = p_cam.x * z_inv;
-    let y_z = p_cam.y * z_inv;
-    let du_dp = Vector3::new(intrinsics.fx * z_inv, 0.0, -intrinsics.fx * x_z * z_inv);
-    let dv_dp = Vector3::new(0.0, intrinsics.fy * z_inv, -intrinsics.fy * y_z * z_inv);
-    let row_u = body_frame_row(&(rt * du_dp), p_world);
-    let row_v = body_frame_row(&(rt * dv_dp), p_world);
-    let (w00, w01, w10, w11) = (w[(0, 0)], w[(0, 1)], w[(1, 0)], w[(1, 1)]);
-    *jtr += row_u * (w00 * res_u + w01 * res_v) + row_v * (w10 * res_u + w11 * res_v);
-    *jtj += w00 * (row_u * row_u.transpose())
-        + w11 * (row_v * row_v.transpose())
-        + w01 * (row_u * row_v.transpose())
-        + w10 * (row_v * row_u.transpose());
-}
-
 fn gn_step_on_sample(
     pose: &Pose,
     sample: &[usize; 4],
     corr: &PointCorrespondences<'_>,
     intrinsics: &CameraIntrinsics,
 ) -> Pose {
-    let mut jtj = Matrix6::<f64>::zeros();
-    let mut jtr = Vector6::<f64>::zeros();
+    let mut ne = BodyFrameNormalEquations::new(pose);
     let gs = corr.group_size;
-    let rt = pose.rotation.transpose();
     let w = Matrix2::identity();
 
     for &s_val in sample {
@@ -539,18 +488,19 @@ fn gn_step_on_sample(
                 continue;
             }
             let z_inv = 1.0 / p_cam.z;
-            let u = intrinsics.fx * (p_cam.x * z_inv) + intrinsics.cx;
-            let v = intrinsics.fy * (p_cam.y * z_inv) + intrinsics.cy;
+            let x_z = p_cam.x * z_inv;
+            let y_z = p_cam.y * z_inv;
+            let u = intrinsics.fx * x_z + intrinsics.cx;
+            let v = intrinsics.fy * y_z + intrinsics.cy;
             let res_u = f64::from(corr.image_points[k].x) - u;
             let res_v = f64::from(corr.image_points[k].y) - v;
 
-            accumulate_body_frame_point(
-                &mut jtj, &mut jtr, &rt, &p_world, &p_cam, res_u, res_v, &w, intrinsics,
-            );
+            let (du_dp, dv_dp) = pinhole_projection_gradients(intrinsics, z_inv, x_z, y_z);
+            ne.add(&p_world, &du_dp, &dv_dp, res_u, res_v, &w);
         }
     }
-    symmetrize_jtj6(&mut jtj);
 
+    let (jtj, jtr) = ne.finish();
     if let Some(chol) = jtj.cholesky() {
         pose.retract(&chol.solve(&jtr))
     } else {
@@ -1102,6 +1052,10 @@ impl RobustPoseSolver {
         clippy::unused_self,
         reason = "kept as a method for call-site symmetry with the other &self RANSAC/GN estimator helpers"
     )]
+    #[allow(
+        clippy::similar_names,
+        reason = "du_dp/dv_dp mirror the u/v Jacobian rows"
+    )]
     fn gn_step(
         &self,
         pose: &Pose,
@@ -1109,11 +1063,9 @@ impl RobustPoseSolver {
         intrinsics: &CameraIntrinsics,
         inlier_mask: &[u64; 16],
     ) -> Pose {
-        let mut jtj = Matrix6::<f64>::zeros();
-        let mut jtr = Vector6::<f64>::zeros();
+        let mut ne = BodyFrameNormalEquations::new(pose);
         let gs = corr.group_size;
         let num_groups = corr.num_groups();
-        let rt = pose.rotation.transpose();
         let w = Matrix2::identity();
 
         for g in 0..num_groups {
@@ -1130,21 +1082,22 @@ impl RobustPoseSolver {
                     continue;
                 }
                 let z_inv = 1.0 / p_cam.z;
-                let u = intrinsics.fx * (p_cam.x * z_inv) + intrinsics.cx;
-                let v = intrinsics.fy * (p_cam.y * z_inv) + intrinsics.cy;
+                let x_z = p_cam.x * z_inv;
+                let y_z = p_cam.y * z_inv;
+                let u = intrinsics.fx * x_z + intrinsics.cx;
+                let v = intrinsics.fy * y_z + intrinsics.cy;
                 let res_u = f64::from(corr.image_points[k].x) - u;
                 let res_v = f64::from(corr.image_points[k].y) - v;
 
-                // Right (body-frame) SE(3) normal equations — see
-                // `accumulate_body_frame_point` and `Pose::retract`.
-                accumulate_body_frame_point(
-                    &mut jtj, &mut jtr, &rt, &p_world, &p_cam, res_u, res_v, &w, intrinsics,
-                );
+                // Right (body-frame) SE(3) normal equations — see the shared
+                // `pose::BodyFrameNormalEquations` and `Pose::retract`.
+                let (du_dp, dv_dp) = pinhole_projection_gradients(intrinsics, z_inv, x_z, y_z);
+                ne.add(&p_world, &du_dp, &dv_dp, res_u, res_v, &w);
             }
         }
-        symmetrize_jtj6(&mut jtj);
 
         // Solve the normal equations; return original pose if system is singular.
+        let (jtj, jtr) = ne.finish();
         if let Some(chol) = jtj.cholesky() {
             pose.retract(&chol.solve(&jtr))
         } else {
@@ -1348,10 +1301,8 @@ impl RobustPoseSolver {
         let num_groups = corr.num_groups();
 
         let compute_equations = |current_pose: &Pose| -> (f64, Matrix6<f64>, Vector6<f64>) {
-            let mut jtj = Matrix6::<f64>::zeros();
-            let mut jtr = Vector6::<f64>::zeros();
+            let mut ne = BodyFrameNormalEquations::new(current_pose);
             let mut total_cost = 0.0;
-            let rt = current_pose.rotation.transpose();
 
             for g in 0..num_groups {
                 if (inlier_mask[g / 64] & (1 << (g % 64))) == 0 {
@@ -1368,8 +1319,10 @@ impl RobustPoseSolver {
                         continue;
                     }
                     let z_inv = 1.0 / p_cam.z;
-                    let u = intrinsics.fx * (p_cam.x * z_inv) + intrinsics.cx;
-                    let v = intrinsics.fy * (p_cam.y * z_inv) + intrinsics.cy;
+                    let x_z = p_cam.x * z_inv;
+                    let y_z = p_cam.y * z_inv;
+                    let u = intrinsics.fx * x_z + intrinsics.cx;
+                    let v = intrinsics.fy * y_z + intrinsics.cy;
 
                     let res_u = f64::from(corr.image_points[k].x) - u;
                     let res_v = f64::from(corr.image_points[k].y) - v;
@@ -1389,20 +1342,11 @@ impl RobustPoseSolver {
                     };
 
                     // Right (body-frame) SE(3) normal equations with W = info·weight.
-                    accumulate_body_frame_point(
-                        &mut jtj,
-                        &mut jtr,
-                        &rt,
-                        &p_world,
-                        &p_cam,
-                        res_u,
-                        res_v,
-                        &(info * weight),
-                        intrinsics,
-                    );
+                    let (du_dp, dv_dp) = pinhole_projection_gradients(intrinsics, z_inv, x_z, y_z);
+                    ne.add(&p_world, &du_dp, &dv_dp, res_u, res_v, &(info * weight));
                 }
             }
-            symmetrize_jtj6(&mut jtj);
+            let (jtj, jtr) = ne.finish();
             (total_cost, jtj, jtr)
         };
 

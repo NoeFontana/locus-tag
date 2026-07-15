@@ -1,6 +1,9 @@
 #![allow(clippy::similar_names)]
 use crate::image::ImageView;
-use crate::pose::{CameraIntrinsics, Pose, centered_tag_corners, symmetrize_jtj6};
+use crate::pose::{
+    BodyFrameNormalEquations, CameraIntrinsics, Pose, centered_tag_corners,
+    pinhole_projection_gradients,
+};
 use nalgebra::{Matrix2, Matrix6, Vector3, Vector6};
 
 const OFF_IMAGE_CORNER_VARIANCE: f64 = 100.0;
@@ -199,10 +202,8 @@ fn build_normal_equations(
     info_matrices: &[Matrix2<f64>; 4],
     huber_k: f64,
 ) -> (Matrix6<f64>, Vector6<f64>, f64) {
-    let mut jtj = Matrix6::<f64>::zeros();
-    let mut jtr = Vector6::<f64>::zeros();
+    let mut ne = BodyFrameNormalEquations::new(pose);
     let mut total_cost = 0.0;
-    let rt = pose.rotation.transpose();
 
     for i in 0..4 {
         let pb = obj_pts[i];
@@ -232,53 +233,17 @@ fn build_normal_equations(
         }
 
         let w = if s_i <= huber_k { 1.0 } else { huber_k / s_i };
-        let w00 = info[(0, 0)] * w;
-        let w01 = info[(0, 1)] * w;
-        let w10 = info[(1, 0)] * w;
-        let w11 = info[(1, 1)] * w;
 
-        // Pinhole projection gradients ∂[u,v]/∂P_cam (identical to the prior
-        // `projection_jacobian` entries; this builder stays pinhole — the
-        // distortion-aware path is `pose::corner_normal_equations`).
-        let du_dp = Vector3::new(intrinsics.fx * z_inv, 0.0, -intrinsics.fx * x_z * z_inv);
-        let dv_dp = Vector3::new(0.0, intrinsics.fy * z_inv, -intrinsics.fy * y_z * z_inv);
-
-        // SE(3) **right** (body-frame) perturbation Jacobian for `Pose::retract`:
-        // dq = Rᵀ·∂proj/∂P_cam, rotation columns use the body point `pb`. This
-        // decouples rot↔trans in `JᵀWJ` (better conditioning) and makes the
-        // recovered covariance body-frame. See `pose::corner_normal_equations`.
-        let dqu = rt * du_dp;
-        let dqv = rt * dv_dp;
-        let mut row_u = Vector6::zeros();
-        row_u[0] = dqu[0];
-        row_u[1] = dqu[1];
-        row_u[2] = dqu[2];
-        row_u[3] = -(dqu[1] * pb.z - dqu[2] * pb.y);
-        row_u[4] = -(dqu[2] * pb.x - dqu[0] * pb.z);
-        row_u[5] = -(dqu[0] * pb.y - dqu[1] * pb.x);
-        let mut row_v = Vector6::zeros();
-        row_v[0] = dqv[0];
-        row_v[1] = dqv[1];
-        row_v[2] = dqv[2];
-        row_v[3] = -(dqv[1] * pb.z - dqv[2] * pb.y);
-        row_v[4] = -(dqv[2] * pb.x - dqv[0] * pb.z);
-        row_v[5] = -(dqv[0] * pb.y - dqv[1] * pb.x);
-
-        // Weighted normal equations with the 2×2 information matrix `W = info·w`
-        // (`wNN` already fold in the Huber weight). `J = [row_u; row_v]` (2×6):
-        // `JᵀWr = row_u·(Wr)_u + row_v·(Wr)_v`,
-        // `JᵀWJ = w00·ruruᵀ + w11·rvrvᵀ + w01·rurvᵀ + w10·rvruᵀ`.
-        let wr_u = w00 * res_u + w01 * res_v;
-        let wr_v = w10 * res_u + w11 * res_v;
-        jtr += row_u * wr_u + row_v * wr_v;
-        jtj += w00 * (row_u * row_u.transpose())
-            + w11 * (row_v * row_v.transpose())
-            + w01 * (row_u * row_v.transpose())
-            + w10 * (row_v * row_u.transpose());
+        // Pinhole projection gradients ∂[u,v]/∂P_cam (this builder stays pinhole —
+        // the distortion-aware path is `pose::corner_normal_equations`); the
+        // body-frame Jacobian + weighted accumulation live in the shared
+        // `BodyFrameNormalEquations`. Weight is the anisotropic information·Huber
+        // matrix `W = info·w`.
+        let (du_dp, dv_dp) = pinhole_projection_gradients(intrinsics, z_inv, x_z, y_z);
+        ne.add(&pb, &du_dp, &dv_dp, res_u, res_v, &(info * w));
     }
 
-    symmetrize_jtj6(&mut jtj);
-
+    let (jtj, jtr) = ne.finish();
     (jtj, jtr, total_cost)
 }
 

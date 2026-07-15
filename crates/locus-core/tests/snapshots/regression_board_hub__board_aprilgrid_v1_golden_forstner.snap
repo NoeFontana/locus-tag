@@ -9,11 +9,11 @@ summary:
   p50_board_translation_error_m: 0.0007779931190356298
   p95_board_translation_error_m: 0.004355292772992728
   p99_board_translation_error_m: 0.010066937181844083
-  mean_board_rotation_error_deg: 0.041974581737747305
+  mean_board_rotation_error_deg: 0.04197458173774826
   p50_board_rotation_error_deg: 0.025427774765501104
   p95_board_rotation_error_deg: 0.12265409291381577
-  p99_board_rotation_error_deg: 0.3424009910890253
-  mean_board_translation_std_m: 0.0019102411210834688
+  p99_board_rotation_error_deg: 0.3424009910890486
+  mean_board_translation_std_m: 0.0019102411210834636
   mean_board_rotation_std_deg: 0.15195215060711167
   mean_tag_coverage: 0.9699005893168604
   mean_total_ms: "[DURATION]"

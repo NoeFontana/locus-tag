@@ -289,6 +289,12 @@ impl Pose {
     /// condition number ~3.4× better, rot↔trans coupling ~0.999→0.06), yielding
     /// faster convergence and a body-frame pose covariance — see
     /// `docs/explanation/coordinates.md` and the `right_perturbation` study.
+    ///
+    /// `R · exp(ω)` is a product of two exactly-orthonormal matrices, so the
+    /// result stays on SO(3) to ~1e-16 per step; over the ≤20 LM iterations the
+    /// accumulated drift (~1e-13) is far below the pose tolerances and needs no
+    /// re-orthonormalization (the corner LMs have always used this raw-product
+    /// update). Downstream quaternion extraction (`quat_from_so3`) tolerates it.
     #[inline]
     #[must_use]
     pub(crate) fn retract(&self, delta: &Vector6<f64>) -> Self {
@@ -322,7 +328,7 @@ impl Pose {
     #[must_use]
     pub fn adjoint(&self) -> Matrix6<f64> {
         let r = self.rotation;
-        let tx = skew(&self.translation);
+        let tx = self.translation.cross_matrix();
         let mut ad = Matrix6::zeros();
         ad.fixed_view_mut::<3, 3>(0, 0).copy_from(&r);
         ad.fixed_view_mut::<3, 3>(0, 3).copy_from(&(tx * r));
@@ -357,17 +363,6 @@ impl Pose {
     }
 }
 
-/// Skew-symmetric (cross-product) matrix `[v]_×` such that `[v]_× w = v × w`.
-#[inline]
-#[must_use]
-fn skew(v: &Vector3<f64>) -> Matrix3<f64> {
-    Matrix3::new(
-        0.0, -v.z, v.y, //
-        v.z, 0.0, -v.x, //
-        -v.y, v.x, 0.0,
-    )
-}
-
 /// Fills the lower triangle of a 6×6 normal-equations matrix from its upper triangle.
 #[inline]
 pub(crate) fn symmetrize_jtj6(jtj: &mut Matrix6<f64>) {
@@ -375,6 +370,107 @@ pub(crate) fn symmetrize_jtj6(jtj: &mut Matrix6<f64>) {
         for c in 0..r {
             jtj[(r, c)] = jtj[(c, r)];
         }
+    }
+}
+
+/// One row of the SE(3) **right** (body-frame) perturbation Jacobian for a pixel
+/// coordinate, given the body-frame projection gradient `dq = Rᵀ·∂proj/∂P_cam`
+/// and the body point `pb`. Layout ξ = [t | ω]: translation columns are `dq`, the
+/// rotation columns are the cross-product `dq·(−[pb]_×)`. This is the single
+/// definition of the sign-sensitive rotation-row math, verified by
+/// `corner_normal_equations_gradient_is_descent` and `test_jacobian_rotation_rows`.
+#[inline]
+pub(crate) fn body_frame_row(dq: &Vector3<f64>, pb: &Vector3<f64>) -> Vector6<f64> {
+    Vector6::new(
+        dq[0],
+        dq[1],
+        dq[2],
+        -(dq[1] * pb.z - dq[2] * pb.y),
+        -(dq[2] * pb.x - dq[0] * pb.z),
+        -(dq[0] * pb.y - dq[1] * pb.x),
+    )
+}
+
+/// Pinhole projection gradients `∂[u,v]/∂P_cam` at a camera-frame point (given
+/// `z_inv = 1/z`, `x_z = x/z`, `y_z = y/z`). Shared by the board LMs and the
+/// weighted corner LM, which are pinhole-only; the single-tag
+/// [`corner_normal_equations`] uses the distortion-aware gradient instead.
+#[inline]
+#[must_use]
+pub(crate) fn pinhole_projection_gradients(
+    intrinsics: &CameraIntrinsics,
+    z_inv: f64,
+    x_z: f64,
+    y_z: f64,
+) -> (Vector3<f64>, Vector3<f64>) {
+    (
+        Vector3::new(intrinsics.fx * z_inv, 0.0, -intrinsics.fx * x_z * z_inv),
+        Vector3::new(0.0, intrinsics.fy * z_inv, -intrinsics.fy * y_z * z_inv),
+    )
+}
+
+/// Shared body-frame (right-perturbation) SE(3) normal-equations accumulator used
+/// by **every** pose LM (corner unweighted/weighted and the three `board.rs`
+/// solvers). Construct once from the linearization pose (captures `Rᵀ`), `add`
+/// each correspondence with its already-computed projection gradient — so the
+/// distortion model is the caller's choice and this stays frame-canonical without
+/// pinning pinhole — then `finish` for the symmetric `(JᵀWJ, JᵀWr)`.
+///
+/// Only the upper triangle of `JᵀWJ` is accumulated (exploiting its symmetry);
+/// `finish` mirrors it. This retires the four hand-transcribed copies of the
+/// Jacobian-row + normal-equations math the right-perturbation migration had
+/// spread across the solvers.
+pub(crate) struct BodyFrameNormalEquations {
+    jtj: Matrix6<f64>,
+    jtr: Vector6<f64>,
+    rt: Matrix3<f64>,
+}
+
+impl BodyFrameNormalEquations {
+    #[inline]
+    pub(crate) fn new(pose: &Pose) -> Self {
+        Self {
+            jtj: Matrix6::zeros(),
+            jtr: Vector6::zeros(),
+            rt: pose.rotation.transpose(),
+        }
+    }
+
+    /// Accumulate one correspondence. `pb` = body (object) point; `du_dp`/`dv_dp` =
+    /// `∂[u,v]/∂P_cam` (pinhole or distortion-aware, computed by the caller);
+    /// `[res_u, res_v]` = pixel residual; `w` = 2×2 information·robust weight
+    /// (`Matrix2::identity()` for the unweighted GN steps).
+    #[inline]
+    pub(crate) fn add(
+        &mut self,
+        pb: &Vector3<f64>,
+        du_dp: &Vector3<f64>,
+        dv_dp: &Vector3<f64>,
+        res_u: f64,
+        res_v: f64,
+        w: &Matrix2<f64>,
+    ) {
+        let row_u = body_frame_row(&(self.rt * du_dp), pb);
+        let row_v = body_frame_row(&(self.rt * dv_dp), pb);
+        let (w00, w01, w10, w11) = (w[(0, 0)], w[(0, 1)], w[(1, 0)], w[(1, 1)]);
+        // JᵀWr = row_u·(W r)_u + row_v·(W r)_v
+        self.jtr += row_u * (w00 * res_u + w01 * res_v) + row_v * (w10 * res_u + w11 * res_v);
+        // JᵀWJ upper triangle: wᵢⱼ folded outer products, symmetrized in `finish`.
+        for i in 0..6 {
+            for j in i..6 {
+                self.jtj[(i, j)] += w00 * row_u[i] * row_u[j]
+                    + w11 * row_v[i] * row_v[j]
+                    + w01 * row_u[i] * row_v[j]
+                    + w10 * row_v[i] * row_u[j];
+            }
+        }
+    }
+
+    /// Symmetrize and return `(JᵀWJ, JᵀWr)`.
+    #[inline]
+    pub(crate) fn finish(mut self) -> (Matrix6<f64>, Vector6<f64>) {
+        symmetrize_jtj6(&mut self.jtj);
+        (self.jtj, self.jtr)
     }
 }
 
@@ -1138,13 +1234,17 @@ fn corner_normal_equations(
     pose: &Pose,
     huber_delta: f64,
 ) -> (Matrix6<f64>, Vector6<f64>, f64) {
-    let mut jtj = Matrix6::<f64>::zeros();
-    let mut jtr = Vector6::<f64>::zeros();
+    let mut ne = BodyFrameNormalEquations::new(pose);
     let mut cost = 0.0;
-    let rt = pose.rotation.transpose();
     for i in 0..4 {
         let pb = obj_pts[i];
         let p_cam = pose.rotation * pb + pose.translation;
+        // Behind-camera policy (deliberately differs from the board/weighted LMs,
+        // which DROP such correspondences): a single tag has exactly four corners
+        // we want to keep, so we clamp `z` and let the Huber weight softly reject
+        // the resulting large residual rather than discard a corner and lose rank.
+        // The board/weighted solvers see many points, so dropping a few invalid
+        // projections there is both safe and cheaper.
         let z = p_cam.z.max(1e-4);
         let z_inv = 1.0 / z;
         let xn = p_cam.x / z;
@@ -1171,7 +1271,9 @@ fn corner_normal_equations(
             cost += huber_delta * (r_norm - 0.5 * huber_delta);
         }
 
-        // ∂[u,v]/∂P_cam (chain rule through the distortion map).
+        // Distortion-aware projection gradient ∂[u,v]/∂P_cam (chain rule through
+        // the distortion map); the body-frame Jacobian + accumulation live in the
+        // shared `BodyFrameNormalEquations`. Scalar Huber weight → isotropic W.
         let jd = intrinsics.distortion_jacobian(xn, yn);
         let du_dp = Vector3::new(
             intrinsics.fx * jd[0][0] * z_inv,
@@ -1183,38 +1285,16 @@ fn corner_normal_equations(
             intrinsics.fy * jd[1][1] * z_inv,
             -intrinsics.fy * (jd[1][0] * xn + jd[1][1] * yn) * z_inv,
         );
-
-        // SE(3) **right** (body-frame) perturbation Jacobian for `Pose::retract`.
-        // Deriving `∂p_cam/∂δ` for `p_cam = R·(exp(ω)·P + δt) + t`:
-        //   * translation `∂p_cam/∂δt = R`     → row = ∂proj/∂P_cam · R
-        //   * rotation    `∂p_cam/∂ω  = -R·[P_body]_×`
-        // Factor `dq = Rᵀ·(∂proj/∂P_cam)` (the body-frame projection gradient);
-        // the translation columns are `dq` and the rotation columns keep the same
-        // `-[·]_×` structure as before but on `(dq, P_body)`. Because `P_body` is
-        // symmetric about the tag origin this decouples rot↔trans in `JᵀWJ` and
-        // makes the recovered covariance body-frame (see `Pose::retract` /
-        // `docs/explanation/coordinates.md`). Verified against a finite-difference
-        // gradient by `corner_normal_equations_gradient_is_descent`.
-        let dqu = rt * du_dp;
-        let dqv = rt * dv_dp;
-        let mut row_u = Vector6::zeros();
-        row_u[0] = dqu[0];
-        row_u[1] = dqu[1];
-        row_u[2] = dqu[2];
-        row_u[3] = -(dqu[1] * pb.z - dqu[2] * pb.y);
-        row_u[4] = -(dqu[2] * pb.x - dqu[0] * pb.z);
-        row_u[5] = -(dqu[0] * pb.y - dqu[1] * pb.x);
-        let mut row_v = Vector6::zeros();
-        row_v[0] = dqv[0];
-        row_v[1] = dqv[1];
-        row_v[2] = dqv[2];
-        row_v[3] = -(dqv[1] * pb.z - dqv[2] * pb.y);
-        row_v[4] = -(dqv[2] * pb.x - dqv[0] * pb.z);
-        row_v[5] = -(dqv[0] * pb.y - dqv[1] * pb.x);
-
-        jtj += w * (row_u * row_u.transpose() + row_v * row_v.transpose());
-        jtr += w * (row_u * res_u + row_v * res_v);
+        ne.add(
+            &pb,
+            &du_dp,
+            &dv_dp,
+            res_u,
+            res_v,
+            &Matrix2::new(w, 0.0, 0.0, w),
+        );
     }
+    let (jtj, jtr) = ne.finish();
     (jtj, jtr, cost)
 }
 
