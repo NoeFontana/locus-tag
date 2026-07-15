@@ -15,17 +15,22 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   rotation unrefined. This path is reachable only via the image-less
   `estimate_tag_pose(corners, None)` API — the full detection pipeline always
   supplies an image and so uses the weighted (already-correct) LM, which is why
-  the bug never affected pipeline detection and shipped undetected (no regression
-  test exercised the fallback in a rotation-sensitive way). Fixed to the canonical
-  sign; the corner normal-equations assembly was extracted to a shared
+  the bug never affected pipeline detection and shipped undetected. Fixed to the
+  canonical sign; the corner normal-equations assembly was extracted to a shared
   `corner_normal_equations` with a committed finite-difference gradient check
   (`corner_normal_equations_gradient_is_descent`) and a rotation-recovery test.
   **Behavior change for API consumers:** callers of the image-less
   `estimate_tag_pose(corners, None)` / `estimate_tag_pose_with_diagnostics(..)`
   path now receive a *rotation-refined* pose (previously the returned rotation was
-  IPPE's, unrefined) — translation and every image-backed pipeline result are
-  unchanged, and no shipped-profile snapshot moved. All 253 tests pass
-  byte-identically.
+  IPPE's, unrefined); translation and every image-backed pipeline result are
+  unchanged. The shipped-profile detection snapshots (render-tag, ICRA, board-hub)
+  and all 253 default-feature tests are byte-identical. One `bench-internals`-gated
+  regression snapshot **does** move as the direct, intended consequence of the fix:
+  `regression_pose_consistency_roc` (synthetic-isotropic) — with rotation now
+  actually refined on the fallback path, the χ²(2) pose-consistency gate's realized
+  false-positive rate tracks the modeled FPR far more closely (e.g. 0.169 → 0.101 at
+  a modeled 0.1), so the recorded snapshot was regenerated to the better-calibrated
+  values.
 
 ### Changed
 
