@@ -7,16 +7,16 @@ n_trials: 20000
 rows:
   - fpr: 0.1
     n_samples: 20000
-    realized_fpr: 0.16885
+    realized_fpr: 0.10075
   - fpr: 0.01
     n_samples: 20000
-    realized_fpr: 0.02775
+    realized_fpr: 0.01245
   - fpr: 0.001
     n_samples: 20000
-    realized_fpr: 0.0049
+    realized_fpr: 0.00245
   - fpr: 0.0001
     n_samples: 20000
-    realized_fpr: 0.0008
+    realized_fpr: 0.0006
   - fpr: 0.00001
     n_samples: 20000
-    realized_fpr: 0.00005
+    realized_fpr: 0.0001
