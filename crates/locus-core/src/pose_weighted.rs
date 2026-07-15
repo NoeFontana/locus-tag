@@ -1,8 +1,6 @@
 #![allow(clippy::similar_names)]
 use crate::image::ImageView;
-use crate::pose::{
-    CameraIntrinsics, Pose, centered_tag_corners, projection_jacobian, symmetrize_jtj6,
-};
+use crate::pose::{CameraIntrinsics, Pose, centered_tag_corners, symmetrize_jtj6};
 use nalgebra::{Matrix2, Matrix6, Vector3, Vector6};
 
 const OFF_IMAGE_CORNER_VARIANCE: f64 = 100.0;
@@ -204,9 +202,11 @@ fn build_normal_equations(
     let mut jtj = Matrix6::<f64>::zeros();
     let mut jtr = Vector6::<f64>::zeros();
     let mut total_cost = 0.0;
+    let rt = pose.rotation.transpose();
 
     for i in 0..4 {
-        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
+        let pb = obj_pts[i];
+        let p_cam = pose.rotation * pb + pose.translation;
         if p_cam.z < 1e-4 {
             total_cost += 1e6;
             continue;
@@ -237,55 +237,44 @@ fn build_normal_equations(
         let w10 = info[(1, 0)] * w;
         let w11 = info[(1, 1)] * w;
 
-        let (ju0, ju2, ju3, ju4, ju5, jv1, jv2, jv3, jv4, jv5) =
-            projection_jacobian(x_z, y_z, z_inv, intrinsics);
+        // Pinhole projection gradients ∂[u,v]/∂P_cam (identical to the prior
+        // `projection_jacobian` entries; this builder stays pinhole — the
+        // distortion-aware path is `pose::corner_normal_equations`).
+        let du_dp = Vector3::new(intrinsics.fx * z_inv, 0.0, -intrinsics.fx * x_z * z_inv);
+        let dv_dp = Vector3::new(0.0, intrinsics.fy * z_inv, -intrinsics.fy * y_z * z_inv);
 
-        let k00 = ju0 * w00;
-        let k01 = ju0 * w01;
-        let k10 = jv1 * w10;
-        let k11 = jv1 * w11;
-        let k20 = ju2 * w00 + jv2 * w10;
-        let k21 = ju2 * w01 + jv2 * w11;
-        let k30 = ju3 * w00 + jv3 * w10;
-        let k31 = ju3 * w01 + jv3 * w11;
-        let k40 = ju4 * w00 + jv4 * w10;
-        let k41 = ju4 * w01 + jv4 * w11;
-        let k50 = ju5 * w00 + jv5 * w10;
-        let k51 = ju5 * w01 + jv5 * w11;
+        // SE(3) **right** (body-frame) perturbation Jacobian for `Pose::retract`:
+        // dq = Rᵀ·∂proj/∂P_cam, rotation columns use the body point `pb`. This
+        // decouples rot↔trans in `JᵀWJ` (better conditioning) and makes the
+        // recovered covariance body-frame. See `pose::corner_normal_equations`.
+        let dqu = rt * du_dp;
+        let dqv = rt * dv_dp;
+        let mut row_u = Vector6::zeros();
+        row_u[0] = dqu[0];
+        row_u[1] = dqu[1];
+        row_u[2] = dqu[2];
+        row_u[3] = -(dqu[1] * pb.z - dqu[2] * pb.y);
+        row_u[4] = -(dqu[2] * pb.x - dqu[0] * pb.z);
+        row_u[5] = -(dqu[0] * pb.y - dqu[1] * pb.x);
+        let mut row_v = Vector6::zeros();
+        row_v[0] = dqv[0];
+        row_v[1] = dqv[1];
+        row_v[2] = dqv[2];
+        row_v[3] = -(dqv[1] * pb.z - dqv[2] * pb.y);
+        row_v[4] = -(dqv[2] * pb.x - dqv[0] * pb.z);
+        row_v[5] = -(dqv[0] * pb.y - dqv[1] * pb.x);
 
-        jtr[0] += k00 * res_u + k01 * res_v;
-        jtr[1] += k10 * res_u + k11 * res_v;
-        jtr[2] += k20 * res_u + k21 * res_v;
-        jtr[3] += k30 * res_u + k31 * res_v;
-        jtr[4] += k40 * res_u + k41 * res_v;
-        jtr[5] += k50 * res_u + k51 * res_v;
-
-        jtj[(0, 0)] += k00 * ju0;
-        jtj[(0, 1)] += k01 * jv1;
-        jtj[(0, 2)] += k00 * ju2 + k01 * jv2;
-        jtj[(0, 3)] += k00 * ju3 + k01 * jv3;
-        jtj[(0, 4)] += k00 * ju4 + k01 * jv4;
-        jtj[(0, 5)] += k00 * ju5 + k01 * jv5;
-
-        jtj[(1, 1)] += k11 * jv1;
-        jtj[(1, 2)] += k10 * ju2 + k11 * jv2;
-        jtj[(1, 3)] += k10 * ju3 + k11 * jv3;
-        jtj[(1, 4)] += k10 * ju4 + k11 * jv4;
-        jtj[(1, 5)] += k10 * ju5 + k11 * jv5;
-
-        jtj[(2, 2)] += k20 * ju2 + k21 * jv2;
-        jtj[(2, 3)] += k20 * ju3 + k21 * jv3;
-        jtj[(2, 4)] += k20 * ju4 + k21 * jv4;
-        jtj[(2, 5)] += k20 * ju5 + k21 * jv5;
-
-        jtj[(3, 3)] += k30 * ju3 + k31 * jv3;
-        jtj[(3, 4)] += k30 * ju4 + k31 * jv4;
-        jtj[(3, 5)] += k30 * ju5 + k31 * jv5;
-
-        jtj[(4, 4)] += k40 * ju4 + k41 * jv4;
-        jtj[(4, 5)] += k40 * ju5 + k41 * jv5;
-
-        jtj[(5, 5)] += k50 * ju5 + k51 * jv5;
+        // Weighted normal equations with the 2×2 information matrix `W = info·w`
+        // (`wNN` already fold in the Huber weight). `J = [row_u; row_v]` (2×6):
+        // `JᵀWr = row_u·(Wr)_u + row_v·(Wr)_v`,
+        // `JᵀWJ = w00·ruruᵀ + w11·rvrvᵀ + w01·rurvᵀ + w10·rvruᵀ`.
+        let wr_u = w00 * res_u + w01 * res_v;
+        let wr_v = w10 * res_u + w11 * res_v;
+        jtr += row_u * wr_u + row_v * wr_v;
+        jtj += w00 * (row_u * row_u.transpose())
+            + w11 * (row_v * row_v.transpose())
+            + w01 * (row_u * row_v.transpose())
+            + w10 * (row_v * row_u.transpose());
     }
 
     symmetrize_jtj6(&mut jtj);
@@ -508,33 +497,51 @@ mod tests {
 
     #[test]
     fn test_jacobian_rotation_rows() {
-        // Verify rotation Jacobian rows for left SE(3) perturbation.
-        // Setup: p_cam = [1,1,1], fx=fy=800, cx=cy=0, z=1.
-        //
-        // Left perturbation: T_new = exp(δξ)·T  →  ∂p_cam/∂δω = −[p_cam]×
-        // so ∂u/∂δω = du_dp · (−[p_cam]×) = p_cam × du_dp.
-        //
-        // Expected (via cross product with p_cam=[1,1,1], du_dp=[800,0,-800]):
-        //   δω_x: p × j = (1·(-800) - 1·0,  …) → ∂u/∂δω_x = 1·(-800) - 1·0 = -800
-        //   δω_y: → ∂u/∂δω_y = 1·800 - 1·(-800) = 1600
-        //   δω_z: → ∂u/∂δω_z = 1·0 - 1·800 = -800
-        let fx = 800.0_f64;
-        let z_inv = 1.0_f64;
-        let z_inv2 = 1.0_f64;
-        let p_cam_x = 1.0_f64;
-        let p_cam_y = 1.0_f64;
-        let p_cam_z = 1.0_f64;
+        // Verify the **right** (body-frame) SE(3) rotation Jacobian rows that
+        // `build_normal_equations` accumulates, against a central finite difference
+        // of the projected `u` through `Pose::retract`. Non-identity R and t so the
+        // body and camera frames genuinely differ (at R=I,t=0 they coincide and the
+        // test would not distinguish the convention).
+        let intrinsics = CameraIntrinsics::new(800.0, 800.0, 320.0, 240.0);
+        let r = nalgebra::Rotation3::from_euler_angles(0.2, -0.1, 0.15)
+            .matrix()
+            .into_owned();
+        let t = nalgebra::Vector3::new(0.03, -0.02, 0.6);
+        let pose = Pose::new(r, t);
+        let pb = nalgebra::Vector3::new(0.01, -0.008, 0.0);
 
-        let du_dp = nalgebra::Vector3::new(fx * z_inv, 0.0, -fx * p_cam_x * z_inv2);
+        // Analytic body-frame rotation rows (mirrors build_normal_equations).
+        let p_cam = r * pb + t;
+        let z_inv = 1.0 / p_cam.z;
+        let x_z = p_cam.x * z_inv;
+        let du_dp =
+            nalgebra::Vector3::new(intrinsics.fx * z_inv, 0.0, -intrinsics.fx * x_z * z_inv);
+        let dqu = r.transpose() * du_dp;
+        let row_u = [
+            -(dqu[1] * pb.z - dqu[2] * pb.y),
+            -(dqu[2] * pb.x - dqu[0] * pb.z),
+            -(dqu[0] * pb.y - dqu[1] * pb.x),
+        ];
 
-        // Implementation formula (p_cam × du_dp):
-        let row_u_3 = p_cam_y * du_dp[2] - p_cam_z * du_dp[1];
-        let row_u_4 = p_cam_z * du_dp[0] - p_cam_x * du_dp[2];
-        let row_u_5 = p_cam_x * du_dp[1] - p_cam_y * du_dp[0];
-
-        assert!((row_u_3 - (-800.0)).abs() < 1e-9, "∂u/∂δω_x: got {row_u_3}");
-        assert!((row_u_4 - 1600.0).abs() < 1e-9, "∂u/∂δω_y: got {row_u_4}");
-        assert!((row_u_5 - (-800.0)).abs() < 1e-9, "∂u/∂δω_z: got {row_u_5}");
+        // Finite-difference ∂u/∂ω through the right retract.
+        let proj_u = |p: &Pose| {
+            let pc = p.rotation * pb + p.translation;
+            intrinsics.fx * (pc.x / pc.z) + intrinsics.cx
+        };
+        let eps = 1e-7;
+        for k in 0..3 {
+            let mut d = Vector6::zeros();
+            d[3 + k] = eps;
+            let fwd = proj_u(&pose.retract(&d));
+            d[3 + k] = -eps;
+            let bwd = proj_u(&pose.retract(&d));
+            let num = (fwd - bwd) / (2.0 * eps);
+            assert!(
+                (row_u[k] - num).abs() < 1e-3,
+                "∂u/∂ω_{k}: analytic {} vs fd {num}",
+                row_u[k]
+            );
+        }
     }
 
     #[test]

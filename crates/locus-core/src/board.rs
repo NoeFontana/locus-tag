@@ -1,10 +1,8 @@
 //! Board-level configuration and layout utilities.
 
 use crate::batch::{MAX_CANDIDATES, Point2f};
-use crate::pose::{
-    CameraIntrinsics, Pose, projection_jacobian, quat_from_so3, solve_ippe_square, symmetrize_jtj6,
-};
-use nalgebra::{Matrix2, Matrix3, Matrix6, UnitQuaternion, Vector3, Vector6};
+use crate::pose::{CameraIntrinsics, Pose, solve_ippe_square, symmetrize_jtj6};
+use nalgebra::{Matrix2, Matrix3, Matrix6, Vector3, Vector6};
 use std::sync::Arc;
 
 // ── Board configuration error ──────────────────────────────────────────────
@@ -463,6 +461,62 @@ fn sample_reprojection_score(
 /// reliably separates the correct Necker branch from the wrong one.
 ///
 /// Returns the input pose unchanged if the 6×6 normal equations are singular.
+/// One row of the SE(3) **right** (body-frame) perturbation Jacobian for a pixel
+/// coordinate, given the body-frame projection gradient `dq = Rᵀ·∂proj/∂P_cam`
+/// and the board-frame point `pb`. Layout ξ = [t | ω]; the rotation columns are
+/// `dq·(−[pb]_×)`. Mirrors `pose::corner_normal_equations`.
+#[inline]
+fn body_frame_row(dq: &Vector3<f64>, pb: &Vector3<f64>) -> Vector6<f64> {
+    let mut row = Vector6::zeros();
+    row[0] = dq[0];
+    row[1] = dq[1];
+    row[2] = dq[2];
+    row[3] = -(dq[1] * pb.z - dq[2] * pb.y);
+    row[4] = -(dq[2] * pb.x - dq[0] * pb.z);
+    row[5] = -(dq[0] * pb.y - dq[1] * pb.x);
+    row
+}
+
+/// Accumulate one correspondence's contribution to the body-frame (right-
+/// perturbation) SE(3) normal equations shared by all three board pose solvers.
+/// `p_world` is the board-frame (body) point, `p_cam = R·p_world + t`, and `w` is
+/// the 2×2 information·robust weight (`Matrix2::identity()` for the unweighted GN
+/// steps). Pinhole projection gradients ∂[u,v]/∂P_cam.
+#[inline]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "shared per-point accumulator threads the image geometry + weight; a struct would only add indirection at the call sites"
+)]
+#[expect(
+    clippy::similar_names,
+    reason = "du_dp/dv_dp and row_u/row_v mirror the u/v projection Jacobian rows"
+)]
+fn accumulate_body_frame_point(
+    jtj: &mut Matrix6<f64>,
+    jtr: &mut Vector6<f64>,
+    rt: &Matrix3<f64>,
+    p_world: &Vector3<f64>,
+    p_cam: &Vector3<f64>,
+    res_u: f64,
+    res_v: f64,
+    w: &Matrix2<f64>,
+    intrinsics: &CameraIntrinsics,
+) {
+    let z_inv = 1.0 / p_cam.z;
+    let x_z = p_cam.x * z_inv;
+    let y_z = p_cam.y * z_inv;
+    let du_dp = Vector3::new(intrinsics.fx * z_inv, 0.0, -intrinsics.fx * x_z * z_inv);
+    let dv_dp = Vector3::new(0.0, intrinsics.fy * z_inv, -intrinsics.fy * y_z * z_inv);
+    let row_u = body_frame_row(&(rt * du_dp), p_world);
+    let row_v = body_frame_row(&(rt * dv_dp), p_world);
+    let (w00, w01, w10, w11) = (w[(0, 0)], w[(0, 1)], w[(1, 0)], w[(1, 1)]);
+    *jtr += row_u * (w00 * res_u + w01 * res_v) + row_v * (w10 * res_u + w11 * res_v);
+    *jtj += w00 * (row_u * row_u.transpose())
+        + w11 * (row_v * row_v.transpose())
+        + w01 * (row_u * row_v.transpose())
+        + w10 * (row_v * row_u.transpose());
+}
+
 fn gn_step_on_sample(
     pose: &Pose,
     sample: &[usize; 4],
@@ -472,6 +526,8 @@ fn gn_step_on_sample(
     let mut jtj = Matrix6::<f64>::zeros();
     let mut jtr = Vector6::<f64>::zeros();
     let gs = corr.group_size;
+    let rt = pose.rotation.transpose();
+    let w = Matrix2::identity();
 
     for &s_val in sample {
         let start = s_val * gs;
@@ -483,63 +539,20 @@ fn gn_step_on_sample(
                 continue;
             }
             let z_inv = 1.0 / p_cam.z;
-            let x_z = p_cam.x * z_inv;
-            let y_z = p_cam.y * z_inv;
-
-            let u = intrinsics.fx * x_z + intrinsics.cx;
-            let v = intrinsics.fy * y_z + intrinsics.cy;
+            let u = intrinsics.fx * (p_cam.x * z_inv) + intrinsics.cx;
+            let v = intrinsics.fy * (p_cam.y * z_inv) + intrinsics.cy;
             let res_u = f64::from(corr.image_points[k].x) - u;
             let res_v = f64::from(corr.image_points[k].y) - v;
 
-            let (ju0, ju2, ju3, ju4, ju5, jv1, jv2, jv3, jv4, jv5) =
-                projection_jacobian(x_z, y_z, z_inv, intrinsics);
-
-            jtr[0] += ju0 * res_u;
-            jtr[1] += jv1 * res_v;
-            jtr[2] += ju2 * res_u + jv2 * res_v;
-            jtr[3] += ju3 * res_u + jv3 * res_v;
-            jtr[4] += ju4 * res_u + jv4 * res_v;
-            jtr[5] += ju5 * res_u + jv5 * res_v;
-
-            jtj[(0, 0)] += ju0 * ju0;
-            jtj[(0, 2)] += ju0 * ju2;
-            jtj[(0, 3)] += ju0 * ju3;
-            jtj[(0, 4)] += ju0 * ju4;
-            jtj[(0, 5)] += ju0 * ju5;
-
-            jtj[(1, 1)] += jv1 * jv1;
-            jtj[(1, 2)] += jv1 * jv2;
-            jtj[(1, 3)] += jv1 * jv3;
-            jtj[(1, 4)] += jv1 * jv4;
-            jtj[(1, 5)] += jv1 * jv5;
-
-            jtj[(2, 2)] += ju2 * ju2 + jv2 * jv2;
-            jtj[(2, 3)] += ju2 * ju3 + jv2 * jv3;
-            jtj[(2, 4)] += ju2 * ju4 + jv2 * jv4;
-            jtj[(2, 5)] += ju2 * ju5 + jv2 * jv5;
-
-            jtj[(3, 3)] += ju3 * ju3 + jv3 * jv3;
-            jtj[(3, 4)] += ju3 * ju4 + jv3 * jv4;
-            jtj[(3, 5)] += ju3 * ju5 + jv3 * jv5;
-
-            jtj[(4, 4)] += ju4 * ju4 + jv4 * jv4;
-            jtj[(4, 5)] += ju4 * ju5 + jv4 * jv5;
-
-            jtj[(5, 5)] += ju5 * ju5 + jv5 * jv5;
+            accumulate_body_frame_point(
+                &mut jtj, &mut jtr, &rt, &p_world, &p_cam, res_u, res_v, &w, intrinsics,
+            );
         }
     }
     symmetrize_jtj6(&mut jtj);
 
     if let Some(chol) = jtj.cholesky() {
-        let delta = chol.solve(&jtr);
-        let twist = Vector3::new(delta[3], delta[4], delta[5]);
-        let dq = UnitQuaternion::from_scaled_axis(twist);
-        Pose {
-            rotation: (dq * quat_from_so3(pose.rotation))
-                .to_rotation_matrix()
-                .into_inner(),
-            translation: pose.translation + Vector3::new(delta[0], delta[1], delta[2]),
-        }
+        pose.retract(&chol.solve(&jtr))
     } else {
         *pose
     }
@@ -1081,7 +1094,7 @@ impl RobustPoseSolver {
 
     /// One step of **unweighted** Gauss-Newton pose refinement over inlier groups.
     ///
-    /// Solves `(J^T J) δ = J^T r` with the left-perturbation SE(3) Jacobian.
+    /// Solves `(J^T J) δ = J^T r` with the right (body-frame) perturbation SE(3) Jacobian.
     /// No Marquardt damping, no information-matrix weighting.
     ///
     /// Returns the original pose unchanged if the normal equations are singular.
@@ -1100,6 +1113,8 @@ impl RobustPoseSolver {
         let mut jtr = Vector6::<f64>::zeros();
         let gs = corr.group_size;
         let num_groups = corr.num_groups();
+        let rt = pose.rotation.transpose();
+        let w = Matrix2::identity();
 
         for g in 0..num_groups {
             if (inlier_mask[g / 64] & (1 << (g % 64))) == 0 {
@@ -1115,68 +1130,23 @@ impl RobustPoseSolver {
                     continue;
                 }
                 let z_inv = 1.0 / p_cam.z;
-                let x_z = p_cam.x * z_inv;
-                let y_z = p_cam.y * z_inv;
-
-                let u = intrinsics.fx * x_z + intrinsics.cx;
-                let v = intrinsics.fy * y_z + intrinsics.cy;
-
+                let u = intrinsics.fx * (p_cam.x * z_inv) + intrinsics.cx;
+                let v = intrinsics.fy * (p_cam.y * z_inv) + intrinsics.cy;
                 let res_u = f64::from(corr.image_points[k].x) - u;
                 let res_v = f64::from(corr.image_points[k].y) - v;
 
-                // Left-perturbation SE(3) Jacobian (scalar accumulation — no
-                // intermediate Matrix2x6; mirrors build_normal_equations in
-                // pose_weighted.rs with identity information matrix / w=1).
-                let (ju0, ju2, ju3, ju4, ju5, jv1, jv2, jv3, jv4, jv5) =
-                    projection_jacobian(x_z, y_z, z_inv, intrinsics);
-
-                jtr[0] += ju0 * res_u;
-                jtr[1] += jv1 * res_v;
-                jtr[2] += ju2 * res_u + jv2 * res_v;
-                jtr[3] += ju3 * res_u + jv3 * res_v;
-                jtr[4] += ju4 * res_u + jv4 * res_v;
-                jtr[5] += ju5 * res_u + jv5 * res_v;
-
-                jtj[(0, 0)] += ju0 * ju0;
-                jtj[(0, 2)] += ju0 * ju2;
-                jtj[(0, 3)] += ju0 * ju3;
-                jtj[(0, 4)] += ju0 * ju4;
-                jtj[(0, 5)] += ju0 * ju5;
-
-                jtj[(1, 1)] += jv1 * jv1;
-                jtj[(1, 2)] += jv1 * jv2;
-                jtj[(1, 3)] += jv1 * jv3;
-                jtj[(1, 4)] += jv1 * jv4;
-                jtj[(1, 5)] += jv1 * jv5;
-
-                jtj[(2, 2)] += ju2 * ju2 + jv2 * jv2;
-                jtj[(2, 3)] += ju2 * ju3 + jv2 * jv3;
-                jtj[(2, 4)] += ju2 * ju4 + jv2 * jv4;
-                jtj[(2, 5)] += ju2 * ju5 + jv2 * jv5;
-
-                jtj[(3, 3)] += ju3 * ju3 + jv3 * jv3;
-                jtj[(3, 4)] += ju3 * ju4 + jv3 * jv4;
-                jtj[(3, 5)] += ju3 * ju5 + jv3 * jv5;
-
-                jtj[(4, 4)] += ju4 * ju4 + jv4 * jv4;
-                jtj[(4, 5)] += ju4 * ju5 + jv4 * jv5;
-
-                jtj[(5, 5)] += ju5 * ju5 + jv5 * jv5;
+                // Right (body-frame) SE(3) normal equations — see
+                // `accumulate_body_frame_point` and `Pose::retract`.
+                accumulate_body_frame_point(
+                    &mut jtj, &mut jtr, &rt, &p_world, &p_cam, res_u, res_v, &w, intrinsics,
+                );
             }
         }
         symmetrize_jtj6(&mut jtj);
 
         // Solve the normal equations; return original pose if system is singular.
         if let Some(chol) = jtj.cholesky() {
-            let delta = chol.solve(&jtr);
-            let twist = Vector3::new(delta[3], delta[4], delta[5]);
-            let dq = UnitQuaternion::from_scaled_axis(twist);
-            Pose {
-                rotation: (dq * quat_from_so3(pose.rotation))
-                    .to_rotation_matrix()
-                    .into_inner(),
-                translation: pose.translation + Vector3::new(delta[0], delta[1], delta[2]),
-            }
+            pose.retract(&chol.solve(&jtr))
         } else {
             *pose
         }
@@ -1356,10 +1326,6 @@ impl RobustPoseSolver {
     /// and Huber weighting (k = 1.345) for robustness against mild outliers
     /// inside the wide `tau_aw_lm` window.
     #[expect(
-        clippy::too_many_lines,
-        reason = "one cohesive anisotropic-weighted LM refinement routine; splitting would fragment the solver data flow"
-    )]
-    #[expect(
         clippy::similar_names,
         reason = "LM vars (jtj/jtr, lambda/nu) mirror the solver math notation"
     )]
@@ -1385,6 +1351,7 @@ impl RobustPoseSolver {
             let mut jtj = Matrix6::<f64>::zeros();
             let mut jtr = Vector6::<f64>::zeros();
             let mut total_cost = 0.0;
+            let rt = current_pose.rotation.transpose();
 
             for g in 0..num_groups {
                 if (inlier_mask[g / 64] & (1 << (g % 64))) == 0 {
@@ -1401,11 +1368,8 @@ impl RobustPoseSolver {
                         continue;
                     }
                     let z_inv = 1.0 / p_cam.z;
-                    let x_z = p_cam.x * z_inv;
-                    let y_z = p_cam.y * z_inv;
-
-                    let u = intrinsics.fx * x_z + intrinsics.cx;
-                    let v = intrinsics.fy * y_z + intrinsics.cy;
+                    let u = intrinsics.fx * (p_cam.x * z_inv) + intrinsics.cx;
+                    let v = intrinsics.fy * (p_cam.y * z_inv) + intrinsics.cy;
 
                     let res_u = f64::from(corr.image_points[k].x) - u;
                     let res_v = f64::from(corr.image_points[k].y) - v;
@@ -1424,60 +1388,18 @@ impl RobustPoseSolver {
                         0.5 * dist_sq
                     };
 
-                    let (ju0, ju2, ju3, ju4, ju5, jv1, jv2, jv3, jv4, jv5) =
-                        projection_jacobian(x_z, y_z, z_inv, intrinsics);
-
-                    let w00 = info[(0, 0)] * weight;
-                    let w01 = info[(0, 1)] * weight;
-                    let w10 = info[(1, 0)] * weight;
-                    let w11 = info[(1, 1)] * weight;
-
-                    let k00 = ju0 * w00;
-                    let k01 = ju0 * w01;
-                    let k10 = jv1 * w10;
-                    let k11 = jv1 * w11;
-                    let k20 = ju2 * w00 + jv2 * w10;
-                    let k21 = ju2 * w01 + jv2 * w11;
-                    let k30 = ju3 * w00 + jv3 * w10;
-                    let k31 = ju3 * w01 + jv3 * w11;
-                    let k40 = ju4 * w00 + jv4 * w10;
-                    let k41 = ju4 * w01 + jv4 * w11;
-                    let k50 = ju5 * w00 + jv5 * w10;
-                    let k51 = ju5 * w01 + jv5 * w11;
-
-                    jtr[0] += k00 * res_u + k01 * res_v;
-                    jtr[1] += k10 * res_u + k11 * res_v;
-                    jtr[2] += k20 * res_u + k21 * res_v;
-                    jtr[3] += k30 * res_u + k31 * res_v;
-                    jtr[4] += k40 * res_u + k41 * res_v;
-                    jtr[5] += k50 * res_u + k51 * res_v;
-
-                    jtj[(0, 0)] += k00 * ju0;
-                    jtj[(0, 1)] += k01 * jv1;
-                    jtj[(0, 2)] += k00 * ju2 + k01 * jv2;
-                    jtj[(0, 3)] += k00 * ju3 + k01 * jv3;
-                    jtj[(0, 4)] += k00 * ju4 + k01 * jv4;
-                    jtj[(0, 5)] += k00 * ju5 + k01 * jv5;
-
-                    jtj[(1, 1)] += k11 * jv1;
-                    jtj[(1, 2)] += k10 * ju2 + k11 * jv2;
-                    jtj[(1, 3)] += k10 * ju3 + k11 * jv3;
-                    jtj[(1, 4)] += k10 * ju4 + k11 * jv4;
-                    jtj[(1, 5)] += k10 * ju5 + k11 * jv5;
-
-                    jtj[(2, 2)] += k20 * ju2 + k21 * jv2;
-                    jtj[(2, 3)] += k20 * ju3 + k21 * jv3;
-                    jtj[(2, 4)] += k20 * ju4 + k21 * jv4;
-                    jtj[(2, 5)] += k20 * ju5 + k21 * jv5;
-
-                    jtj[(3, 3)] += k30 * ju3 + k31 * jv3;
-                    jtj[(3, 4)] += k30 * ju4 + k31 * jv4;
-                    jtj[(3, 5)] += k30 * ju5 + k31 * jv5;
-
-                    jtj[(4, 4)] += k40 * ju4 + k41 * jv4;
-                    jtj[(4, 5)] += k40 * ju5 + k41 * jv5;
-
-                    jtj[(5, 5)] += k50 * ju5 + k51 * jv5;
+                    // Right (body-frame) SE(3) normal equations with W = info·weight.
+                    accumulate_body_frame_point(
+                        &mut jtj,
+                        &mut jtr,
+                        &rt,
+                        &p_world,
+                        &p_cam,
+                        res_u,
+                        res_v,
+                        &(info * weight),
+                        intrinsics,
+                    );
                 }
             }
             symmetrize_jtj6(&mut jtj);
@@ -1505,14 +1427,7 @@ impl RobustPoseSolver {
             if let Some(chol) = jtj_damped.cholesky() {
                 consecutive_chol_failures = 0;
                 let delta = chol.solve(&cur_jtr);
-                let twist = Vector3::new(delta[3], delta[4], delta[5]);
-                let dq = UnitQuaternion::from_scaled_axis(twist);
-                let new_pose = Pose {
-                    rotation: (dq * quat_from_so3(pose.rotation))
-                        .to_rotation_matrix()
-                        .into_inner(),
-                    translation: pose.translation + Vector3::new(delta[0], delta[1], delta[2]),
-                };
+                let new_pose = pose.retract(&delta);
 
                 let (new_cost, new_jtj, new_jtr) = compute_equations(&new_pose);
                 let rho = (cur_cost - new_cost)
@@ -1708,7 +1623,8 @@ impl BoardEstimator {
 mod tests {
     use super::*;
     use crate::batch::{CandidateState, DetectionBatch, DetectionBatchView, Point2f};
-    use nalgebra::Matrix3;
+    use crate::pose::quat_from_so3;
+    use nalgebra::{Matrix3, UnitQuaternion};
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 

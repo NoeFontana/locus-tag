@@ -276,23 +276,96 @@ impl Pose {
         [x, y]
     }
 
-    /// Apply an SE(3) **left**-perturbation `exp(δ)·pose`, with `δ = [t | ω]`
-    /// (translation then rotation-vector, matching the LM Jacobian column layout):
-    /// the rotation acts on the left of `self.rotation` *and* on the translation.
-    /// The single definition of the manifold update used by the corner LMs
-    /// (`refine_pose_lm` and `pose_weighted`'s LM) — extracted verbatim from their
-    /// inline copies, so it is byte-identical. Note `board.rs::gn_step` deliberately
-    /// uses a *different* (right-quaternion, translation-not-rotated) update and is
-    /// **not** a caller — do not "unify" it onto this without re-deriving.
+    /// Apply an SE(3) **right** (body-frame) perturbation `pose · exp(δ)`, with
+    /// `δ = [t | ω]` (translation then rotation-vector, matching the LM Jacobian
+    /// column layout). To first order (`V(ω) ≈ I`): `R' = R · exp(ω)`,
+    /// `t' = R · δt + t` — the increment is expressed in the tag's *own* frame and
+    /// rotated into the camera by the current `R`.
+    ///
+    /// This is the single manifold update shared by **all** pose LMs (the corner
+    /// unweighted/weighted solvers and `board.rs`). The body frame is used
+    /// deliberately: because the object points are symmetric about the body origin,
+    /// it decouples rotation from translation in the normal equations (`JᵀWJ`
+    /// condition number ~3.4× better, rot↔trans coupling ~0.999→0.06), yielding
+    /// faster convergence and a body-frame pose covariance — see
+    /// `docs/explanation/coordinates.md` and the `right_perturbation` study.
     #[inline]
     #[must_use]
     pub(crate) fn retract(&self, delta: &Vector6<f64>) -> Self {
-        let rot = Rotation3::new(Vector3::new(delta[3], delta[4], delta[5]))
+        let exp_omega = Rotation3::new(Vector3::new(delta[3], delta[4], delta[5]))
             .matrix()
             .into_owned();
-        let trans = Vector3::new(delta[0], delta[1], delta[2]);
-        Self::new(rot * self.rotation, rot * self.translation + trans)
+        let dt_body = Vector3::new(delta[0], delta[1], delta[2]);
+        Self::new(
+            self.rotation * exp_omega,
+            self.rotation * dt_body + self.translation,
+        )
     }
+
+    /// SE(3) inverse: maps camera-frame points back into the tag body frame.
+    /// `R' = Rᵀ`, `t' = -Rᵀ t`.
+    #[must_use]
+    pub fn inverse(&self) -> Self {
+        let rt = self.rotation.transpose();
+        Self::new(rt, -(rt * self.translation))
+    }
+
+    /// The 6×6 SE(3) adjoint `Ad_T` for the twist ordering `[t | ω]`, i.e. the map
+    /// taking a **body**-frame (right) tangent vector to the equivalent
+    /// **camera**-frame (left) one: `δ_camera = Ad_T · δ_body` (from
+    /// `exp(δ_camera)·T = T·exp(δ_body)`). Layout:
+    /// `Ad_T = [[R, [t]_× R], [0, R]]`.
+    ///
+    /// Used to reframe a covariance between the camera and body tangent spaces:
+    /// `Σ_camera = Ad_T · Σ_body · Ad_Tᵀ`, and inversely
+    /// `Σ_body = Ad_{T⁻¹} · Σ_camera · Ad_{T⁻¹}ᵀ`.
+    #[must_use]
+    pub fn adjoint(&self) -> Matrix6<f64> {
+        let r = self.rotation;
+        let tx = skew(&self.translation);
+        let mut ad = Matrix6::zeros();
+        ad.fixed_view_mut::<3, 3>(0, 0).copy_from(&r);
+        ad.fixed_view_mut::<3, 3>(0, 3).copy_from(&(tx * r));
+        ad.fixed_view_mut::<3, 3>(3, 3).copy_from(&r);
+        ad
+    }
+
+    /// Reframe a 6×6 pose covariance from the **camera** (left/spatial) tangent to
+    /// the **body** (right) tangent at this pose:
+    /// `Σ_body = Ad_{T⁻¹} · Σ_camera · Ad_{T⁻¹}ᵀ`.
+    ///
+    /// Since the LMs were migrated to right perturbation the emitted covariance is
+    /// already body-frame; this helper exists for consumers that hold a legacy
+    /// camera-frame covariance (or want to convert one they transformed elsewhere).
+    /// NaN sentinels propagate unchanged.
+    #[must_use]
+    pub fn covariance_camera_to_body(&self, cov_camera: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
+        let ad_inv = self.inverse().adjoint();
+        let cov = Matrix6::from_fn(|i, j| cov_camera[i][j]);
+        let out = ad_inv * cov * ad_inv.transpose();
+        core::array::from_fn(|i| core::array::from_fn(|j| out[(i, j)]))
+    }
+
+    /// Inverse of [`covariance_camera_to_body`]: body → camera tangent,
+    /// `Σ_camera = Ad_T · Σ_body · Ad_Tᵀ`.
+    #[must_use]
+    pub fn covariance_body_to_camera(&self, cov_body: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
+        let ad = self.adjoint();
+        let cov = Matrix6::from_fn(|i, j| cov_body[i][j]);
+        let out = ad * cov * ad.transpose();
+        core::array::from_fn(|i| core::array::from_fn(|j| out[(i, j)]))
+    }
+}
+
+/// Skew-symmetric (cross-product) matrix `[v]_×` such that `[v]_× w = v × w`.
+#[inline]
+#[must_use]
+fn skew(v: &Vector3<f64>) -> Matrix3<f64> {
+    Matrix3::new(
+        0.0, -v.z, v.y, //
+        v.z, 0.0, -v.x, //
+        -v.y, v.x, 0.0,
+    )
 }
 
 /// Fills the lower triangle of a 6×6 normal-equations matrix from its upper triangle.
@@ -325,37 +398,6 @@ pub(crate) fn symmetrize_jtj6(jtj: &mut Matrix6<f64>) {
 pub fn quat_from_so3(r: Matrix3<f64>) -> UnitQuaternion<f64> {
     let rot = Rotation3::from_matrix_unchecked(r);
     UnitQuaternion::from_rotation_matrix(&rot)
-}
-
-/// Computes the 10 non-zero scalar entries of the 2×6 left-perturbation SE(3) Jacobian
-/// for a calibrated projection.
-///
-/// The full 2×6 Jacobian has zeros at column (0,1) and (1,0); those are omitted.
-///
-/// # Returns
-/// `(ju0, ju2, ju3, ju4, ju5, jv1, jv2, jv3, jv4, jv5)` where
-/// `du/dξ = [ju0, 0, ju2, ju3, ju4, ju5]` and `dv/dξ = [0, jv1, jv2, jv3, jv4, jv5]`.
-#[inline]
-pub(crate) fn projection_jacobian(
-    x_z: f64,
-    y_z: f64,
-    z_inv: f64,
-    intrinsics: &CameraIntrinsics,
-) -> (f64, f64, f64, f64, f64, f64, f64, f64, f64, f64) {
-    let fx = intrinsics.fx;
-    let fy = intrinsics.fy;
-    (
-        fx * z_inv,
-        -fx * x_z * z_inv,
-        -fx * x_z * y_z,
-        fx * (x_z * x_z + 1.0),
-        -fx * y_z,
-        fy * z_inv,
-        -fy * y_z * z_inv,
-        -fy * (y_z * y_z + 1.0),
-        fy * y_z * x_z,
-        fy * x_z,
-    )
 }
 
 /// Estimate a tag's 6-DoF pose from its four detected image corners.
@@ -1099,8 +1141,10 @@ fn corner_normal_equations(
     let mut jtj = Matrix6::<f64>::zeros();
     let mut jtr = Vector6::<f64>::zeros();
     let mut cost = 0.0;
+    let rt = pose.rotation.transpose();
     for i in 0..4 {
-        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
+        let pb = obj_pts[i];
+        let p_cam = pose.rotation * pb + pose.translation;
         let z = p_cam.z.max(1e-4);
         let z_inv = 1.0 / z;
         let xn = p_cam.x / z;
@@ -1140,27 +1184,33 @@ fn corner_normal_equations(
             -intrinsics.fy * (jd[1][0] * xn + jd[1][1] * yn) * z_inv,
         );
 
-        // True SE(3) left-perturbation Jacobian: ∂proj/∂ω = ∂proj/∂P · (-[P]_×).
-        // This is the canonical *sign* convention (same as `projection_jacobian`,
-        // verified by `corner_normal_equations_gradient_is_descent`). The pre-2026-07
-        // inline form used the *negated* rotation rows, which made `jtr` an ascent
-        // direction for rotation — the trust region then rejected every rotation
-        // step, so this fallback LM silently refined only translation and shipped
-        // IPPE's rotation.
+        // SE(3) **right** (body-frame) perturbation Jacobian for `Pose::retract`.
+        // Deriving `∂p_cam/∂δ` for `p_cam = R·(exp(ω)·P + δt) + t`:
+        //   * translation `∂p_cam/∂δt = R`     → row = ∂proj/∂P_cam · R
+        //   * rotation    `∂p_cam/∂ω  = -R·[P_body]_×`
+        // Factor `dq = Rᵀ·(∂proj/∂P_cam)` (the body-frame projection gradient);
+        // the translation columns are `dq` and the rotation columns keep the same
+        // `-[·]_×` structure as before but on `(dq, P_body)`. Because `P_body` is
+        // symmetric about the tag origin this decouples rot↔trans in `JᵀWJ` and
+        // makes the recovered covariance body-frame (see `Pose::retract` /
+        // `docs/explanation/coordinates.md`). Verified against a finite-difference
+        // gradient by `corner_normal_equations_gradient_is_descent`.
+        let dqu = rt * du_dp;
+        let dqv = rt * dv_dp;
         let mut row_u = Vector6::zeros();
-        row_u[0] = du_dp[0];
-        row_u[1] = du_dp[1];
-        row_u[2] = du_dp[2];
-        row_u[3] = -(du_dp[1] * p_cam.z - du_dp[2] * p_cam.y);
-        row_u[4] = -(du_dp[2] * p_cam.x - du_dp[0] * p_cam.z);
-        row_u[5] = -(du_dp[0] * p_cam.y - du_dp[1] * p_cam.x);
+        row_u[0] = dqu[0];
+        row_u[1] = dqu[1];
+        row_u[2] = dqu[2];
+        row_u[3] = -(dqu[1] * pb.z - dqu[2] * pb.y);
+        row_u[4] = -(dqu[2] * pb.x - dqu[0] * pb.z);
+        row_u[5] = -(dqu[0] * pb.y - dqu[1] * pb.x);
         let mut row_v = Vector6::zeros();
-        row_v[0] = dv_dp[0];
-        row_v[1] = dv_dp[1];
-        row_v[2] = dv_dp[2];
-        row_v[3] = -(dv_dp[1] * p_cam.z - dv_dp[2] * p_cam.y);
-        row_v[4] = -(dv_dp[2] * p_cam.x - dv_dp[0] * p_cam.z);
-        row_v[5] = -(dv_dp[0] * p_cam.y - dv_dp[1] * p_cam.x);
+        row_v[0] = dqv[0];
+        row_v[1] = dqv[1];
+        row_v[2] = dqv[2];
+        row_v[3] = -(dqv[1] * pb.z - dqv[2] * pb.y);
+        row_v[4] = -(dqv[2] * pb.x - dqv[0] * pb.z);
+        row_v[5] = -(dqv[0] * pb.y - dqv[1] * pb.x);
 
         jtj += w * (row_u * row_u.transpose() + row_v * row_v.transpose());
         jtr += w * (row_u * res_u + row_v * res_v);
