@@ -67,6 +67,24 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **Shared Nielsen trust-region LM core.** The three pose LM loops (corner
+  unweighted/weighted and the board damped LM) are unified onto one
+  `pose::nielsen_lm` core parameterised by a `NielsenConfig`. This removes three
+  hand-rolled λ/ν loops and fixes a latent board inconsistency (it previously used
+  a plain `λδ` predicted reduction that did not match its own Marquardt damping);
+  the canonical form uses `D = max(diag(JᵀWJ), floor)` for both the damping *and*
+  the Madsen gain-ratio predicted reduction. Single-tag results (render-tag, ICRA,
+  ROC) are **byte-identical**; the board snapshots move only at the FP-reorder
+  floor (max 8.5e-7 relative, net neutral / slightly better medians) and are
+  re-baselined. A `nielsen_config_tuning_sweep` diagnostic evidences the constant
+  choices: it shows loosening the step gate `1e-7 → 1e-6` *would* cut mean LM
+  iterations ~44 % at identical accuracy on the synthetic + render-tag corpora —
+  but those corpora never bind the step gate, and an adversarial review flagged a
+  real rotation-tail risk out of distribution (the step gate means "last step
+  small", not "gradient zero", and the mixed-unit `‖δ‖` can let translation mask
+  un-converged rotation on grazing/far/small tags). Since the pose LM is not a
+  latency bottleneck (no measurable wall-clock change), the tune is **not worth the
+  tail risk** — the tight `step_tol = 1e-7` is kept.
 - **Pose LMs migrated to right (body-frame) SE(3) perturbation.** All four pose
   solvers — `pose::refine_pose_lm` (unweighted corner), `pose_weighted` (weighted
   production), and the three `board.rs` LM sites — now parameterise the update as

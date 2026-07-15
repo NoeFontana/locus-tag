@@ -1293,10 +1293,6 @@ impl RobustPoseSolver {
         intrinsics: &CameraIntrinsics,
         inlier_mask: &[u64; 16],
     ) -> (Pose, Matrix6<f64>) {
-        let mut pose = *initial_pose;
-        let mut lambda = 1e-3;
-        let mut nu = 2.0;
-
         let gs = corr.group_size;
         let num_groups = corr.num_groups();
 
@@ -1348,55 +1344,14 @@ impl RobustPoseSolver {
             (total_cost, jtj, jtr)
         };
 
-        let (mut cur_cost, mut cur_jtj, mut cur_jtr) = compute_equations(&pose);
-        // See `pose_weighted.rs:refine_pose_lm_weighted_with_info` for
-        // rationale: bail out after 3 consecutive Cholesky failures so a
-        // persistently-singular damped Hessian doesn't burn MAX_ITERS
-        // before triggering the NaN-cov sentinel.
-        let mut consecutive_chol_failures: u8 = 0;
-
-        for _iter in 0..20 {
-            if cur_jtr.amax() < 1e-8 {
-                break;
-            }
-
-            let mut jtj_damped = cur_jtj;
-            let diag = cur_jtj.diagonal();
-            for i in 0..6 {
-                jtj_damped[(i, i)] += lambda * (diag[i] + 1e-6);
-            }
-
-            if let Some(chol) = jtj_damped.cholesky() {
-                consecutive_chol_failures = 0;
-                let delta = chol.solve(&cur_jtr);
-                let new_pose = pose.retract(&delta);
-
-                let (new_cost, new_jtj, new_jtr) = compute_equations(&new_pose);
-                let rho = (cur_cost - new_cost)
-                    / (0.5 * delta.dot(&(lambda * delta + cur_jtr)).max(1e-12));
-
-                if rho > 0.0 {
-                    pose = new_pose;
-                    cur_cost = new_cost;
-                    cur_jtj = new_jtj;
-                    cur_jtr = new_jtr;
-                    lambda *= (1.0 - (2.0 * rho - 1.0).powi(3)).max(1.0 / 3.0);
-                    nu = 2.0;
-                    if delta.norm() < 1e-7 {
-                        break;
-                    }
-                } else {
-                    lambda *= nu;
-                    nu *= 2.0;
-                }
-            } else {
-                consecutive_chol_failures += 1;
-                if consecutive_chol_failures >= 3 {
-                    break;
-                }
-                lambda *= 10.0;
-            }
-        }
+        // Shared Nielsen trust-region core (adapting the closure's `(cost, jtj,
+        // jtr)` order). This replaces the board LM's previous plain-`λδ` predicted
+        // reduction + additive damping with the canonical, self-consistent form.
+        let (pose, cur_jtj) =
+            crate::pose::nielsen_lm(*initial_pose, &crate::pose::NielsenConfig::POSE, |p| {
+                let (cost, jtj, jtr) = compute_equations(p);
+                (jtj, jtr, cost)
+            });
 
         // Singular OR near-singular `JᵀWJ` (e.g. degenerate inlier geometry
         // that the LO-RANSAC gate failed to reject) makes the

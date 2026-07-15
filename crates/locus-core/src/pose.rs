@@ -489,6 +489,144 @@ impl BodyFrameNormalEquations {
     }
 }
 
+/// Tunable constants for the shared Nielsen trust-region LM ([`nielsen_lm`]).
+#[derive(Clone, Copy)]
+pub(crate) struct NielsenConfig {
+    /// Hard iteration cap.
+    pub max_iters: usize,
+    /// Initial Marquardt damping `λ₀`.
+    pub lambda0: f64,
+    /// Floor on each Marquardt diagonal `D = max(diag(JᵀWJ), floor)` — keeps the
+    /// damping (and the predicted-reduction model) non-singular on flat DOFs.
+    pub damping_floor: f64,
+    /// Gradient convergence gate: stop when `‖JᵀWr‖_∞ < grad_tol`.
+    pub grad_tol: f64,
+    /// Step convergence gate: stop after an accepted step with `‖δ‖ < step_tol`.
+    pub step_tol: f64,
+    /// Bail out after this many *consecutive* Cholesky failures (rank-deficient
+    /// Hessian) instead of burning the whole iteration budget.
+    pub max_chol_failures: u8,
+}
+
+impl NielsenConfig {
+    /// Canonical constants for the corner/board pose LMs.
+    ///
+    /// `damping_floor = 1e-6` is the standard Marquardt safety floor (the weighted
+    /// LM already used it; the unweighted corner LM's historical `1e-8` was ad-hoc
+    /// — the tighter `1e-6` only adds a little damping on near-flat DOFs, which is
+    /// conservative and byte-identical on the tested corpora).
+    ///
+    /// `step_tol = 1e-7` is deliberately **kept tight**. The `nielsen_config_tuning_sweep`
+    /// diagnostic shows loosening it to `1e-6` cuts mean LM iterations ~44 % with
+    /// identical accuracy *on the synthetic + render-tag corpora* — but those are
+    /// all in the easy regime where the gate never binds, and an adversarial review
+    /// flagged a real rotation-tail risk out of distribution: the step gate exits on
+    /// "last step small" (not "gradient zero"), and the mixed-unit `‖δ‖`
+    /// (translation-m + rotation-rad) lets translation mask an un-converged rotation
+    /// on grazing / far / small tags. The pose LM is not a latency bottleneck (no
+    /// measurable end-to-end wall-clock change from the iteration cut), so the tail
+    /// risk is not worth taking — rotation p99 is this project's most-protected
+    /// metric. Tuning outcome: keep the historical tight gate.
+    pub(crate) const POSE: Self = Self {
+        max_iters: 20,
+        lambda0: 1e-3,
+        damping_floor: 1e-6,
+        grad_tol: 1e-8,
+        step_tol: 1e-7,
+        max_chol_failures: 3,
+    };
+}
+
+/// Shared **Nielsen trust-region Levenberg–Marquardt** over SE(3) (right/body
+/// perturbation via [`Pose::retract`]), the single convergence loop behind every
+/// pose LM (corner unweighted/weighted and the board damped LM).
+///
+/// `normal_equations(pose) -> (JᵀWJ, JᵀWr, cost)` builds the Huber-weighted normal
+/// equations **and** the robust cost at that pose (the cost is bit-identical to a
+/// standalone re-projection cost, so the trial normal equations are reused as the
+/// next linearization on an accepted step — no redundant rebuild).
+///
+/// Marquardt damping uses `D = max(diag(JᵀWJ), floor)`, and the Nielsen gain-ratio
+/// predicted reduction uses the **same** `D` (Madsen et al. eq. 3.9), so the model
+/// is self-consistent (previously each solver floored `D` differently, and the
+/// board LM used a plain `λδ` predicted reduction inconsistent with its damping).
+///
+/// Returns the refined pose and the final undamped `JᵀWJ` at that pose (for
+/// covariance extraction; corner callers ignore it).
+pub(crate) fn nielsen_lm<NE>(
+    initial_pose: Pose,
+    cfg: &NielsenConfig,
+    normal_equations: NE,
+) -> (Pose, Matrix6<f64>)
+where
+    NE: Fn(&Pose) -> (Matrix6<f64>, Vector6<f64>, f64),
+{
+    let mut pose = initial_pose;
+    let mut lambda = cfg.lambda0;
+    let mut nu = 2.0_f64;
+    let (mut jtj, mut jtr, mut cost) = normal_equations(&pose);
+    let mut chol_failures: u8 = 0;
+
+    for _ in 0..cfg.max_iters {
+        // Gate 1: gradient convergence — stationary point.
+        if jtr.amax() < cfg.grad_tol {
+            break;
+        }
+
+        // Marquardt damping D = max(diag, floor); solve (JᵀWJ + λD) δ = JᵀWr.
+        let d = Vector6::from_fn(|k, _| jtj[(k, k)].max(cfg.damping_floor));
+        let mut damped = jtj;
+        for k in 0..6 {
+            damped[(k, k)] += lambda * d[k];
+        }
+        let Some(chol) = damped.cholesky() else {
+            chol_failures += 1;
+            if chol_failures >= cfg.max_chol_failures {
+                break;
+            }
+            lambda *= 10.0;
+            nu = 2.0;
+            continue;
+        };
+        chol_failures = 0;
+        let delta = chol.solve(&jtr);
+
+        // Evaluate the trial pose: build its normal equations once (gives the cost
+        // for the gain ratio and, if accepted, the reusable next linearization).
+        let new_pose = pose.retract(&delta);
+        let (new_jtj, new_jtr, new_cost) = normal_equations(&new_pose);
+
+        // Nielsen gain ratio ρ = actual / predicted (Madsen eq. 3.9, damping D).
+        let predicted = 0.5 * delta.dot(&(lambda * d.component_mul(&delta) + jtr));
+        let actual = cost - new_cost;
+        let rho = if predicted > 1e-12 {
+            actual / predicted
+        } else {
+            0.0
+        };
+
+        if rho > 0.0 {
+            // Accept: adopt the trial pose + its (reused) normal equations.
+            pose = new_pose;
+            jtj = new_jtj;
+            jtr = new_jtr;
+            cost = new_cost;
+            lambda *= (1.0 - (2.0 * rho - 1.0).powi(3)).max(1.0 / 3.0);
+            nu = 2.0;
+            // Gate 2: step-size convergence.
+            if delta.norm() < cfg.step_tol {
+                break;
+            }
+        } else {
+            // Reject: grow λ with doubling-ν backoff, keep the linearization.
+            lambda *= nu;
+            nu *= 2.0;
+        }
+    }
+
+    (pose, jtj)
+}
+
 /// Convert a near-orthogonal rotation matrix to a unit quaternion without the
 /// Müller iterative algorithm (which can hang on degenerate input).
 ///
@@ -1329,114 +1467,25 @@ fn refine_pose_lm(
     initial_pose: Pose,
     huber_delta_px: f64,
 ) -> Pose {
-    let huber_delta = huber_delta_px;
-
-    let mut pose = initial_pose;
     let obj_pts = centered_tag_corners(tag_size);
-
-    // Nielsen's trust-region state. Start with small damping to encourage Gauss-Newton steps.
-    let mut lambda = 1e-3_f64;
-    let mut nu = 2.0_f64;
-    // The normal-equations builder also returns the Huber cost at the linearization
-    // point, so we only rebuild (and re-project) after an accepted step — a rejected
-    // step reuses the cached Hessian and cost unchanged. `f64::MAX` forces the first
-    // rebuild; the loop always populates these before use.
-    let mut jtj = Matrix6::<f64>::zeros();
-    let mut jtr = Vector6::<f64>::zeros();
-    let mut current_cost = f64::MAX;
-    let mut needs_rebuild = true;
-
-    // Allow up to 20 iterations; typically exits in 3-6 via the convergence gates below.
-    for _ in 0..20 {
-        if needs_rebuild {
-            // Huber-weighted normal equations + cost for the 4-corner reprojection problem.
-            let (rjtj, rjtr, cost) =
-                corner_normal_equations(intrinsics, corners, &obj_pts, &pose, huber_delta);
-            jtj = rjtj;
-            jtr = rjtr;
-            current_cost = cost;
-            needs_rebuild = false;
-        }
-
-        // Gate 1: Gradient convergence — solver is at a stationary point.
-        if jtr.amax() < 1e-8 {
-            break;
-        }
-
-        // Marquardt diagonal scaling: D = diag(J^T W J).
-        // Damps each DOF proportionally to its own curvature, correcting for the
-        // scale mismatch between rotational and translational gradient magnitudes.
-        let d_diag = Vector6::new(
-            jtj[(0, 0)].max(1e-8),
-            jtj[(1, 1)].max(1e-8),
-            jtj[(2, 2)].max(1e-8),
-            jtj[(3, 3)].max(1e-8),
-            jtj[(4, 4)].max(1e-8),
-            jtj[(5, 5)].max(1e-8),
-        );
-
-        // Solve (J^T W J + lambda * D) delta = J^T W r
-        let mut jtj_damped = jtj;
-        for k in 0..6 {
-            jtj_damped[(k, k)] += lambda * d_diag[k];
-        }
-
-        let delta = if let Some(chol) = jtj_damped.cholesky() {
-            chol.solve(&jtr)
-        } else {
-            // System is ill-conditioned; increase damping and retry.
-            lambda *= 10.0;
-            nu = 2.0;
-            continue;
-        };
-
-        // Nielsen's gain ratio: rho = actual_reduction / predicted_reduction.
-        // Predicted reduction from the quadratic model (Madsen et al. eq 3.9):
-        // L(0) - L(delta) = 0.5 * delta^T (lambda * D * delta + J^T W r)
-        let predicted_reduction = 0.5 * delta.dot(&(lambda * d_diag.component_mul(&delta) + jtr));
-
-        // Evaluate new pose via SE(3) exponential map (manifold-safe update).
-        let new_pose = pose.retract(&delta);
-
-        let new_cost = huber_cost(intrinsics, corners, &obj_pts, &new_pose, huber_delta);
-        let actual_reduction = current_cost - new_cost;
-
-        let rho = if predicted_reduction > 1e-12 {
-            actual_reduction / predicted_reduction
-        } else {
-            0.0
-        };
-
-        if rho > 0.0 {
-            // Accept step: update state and shrink lambda toward Gauss-Newton regime.
-            pose = new_pose;
-            current_cost = new_cost;
-            // Pose moved, so the cached Hessian/cost are stale — rebuild next iteration.
-            needs_rebuild = true;
-            // Nielsen's update rule: lambda scales by max(1/3, 1 - (2*rho - 1)^3).
-            lambda *= (1.0 - (2.0 * rho - 1.0).powi(3)).max(1.0 / 3.0);
-            nu = 2.0;
-
-            // Gate 2: Step size convergence — pose has stopped moving.
-            if delta.norm() < 1e-7 {
-                break;
-            }
-        } else {
-            // Reject step: pose unchanged, so the cached Hessian/cost stay valid;
-            // grow lambda with doubling backoff to stay within the trust region.
-            lambda *= nu;
-            nu *= 2.0;
-        }
-    }
-
+    // Unweighted 4-corner Huber problem, refined by the shared Nielsen core. The
+    // final `JᵀWJ` is unused (no covariance from the fallback path).
+    let (pose, _) = nielsen_lm(initial_pose, &NielsenConfig::POSE, |p| {
+        corner_normal_equations(intrinsics, corners, &obj_pts, p, huber_delta_px)
+    });
     pose
 }
 
-/// Computes the total Huber robust cost over all four corner reprojection residuals.
+/// Standalone total Huber robust cost over the four corner reprojection residuals.
 ///
 /// The Huber function is quadratic for `|r| <= delta` (L2 regime) and linear beyond
 /// (L1 regime), providing continuous differentiability at the transition point.
 /// Uses distortion-aware projection when `intrinsics` carries a distortion model.
+///
+/// Retained as the **reference oracle** for the bit-identity test that guards the
+/// cost returned by [`corner_normal_equations`] (which the shared Nielsen LM reuses
+/// instead of a separate cost pass); not called on the production path.
+#[cfg(test)]
 fn huber_cost(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
@@ -2029,6 +2078,154 @@ pub fn refine_poses_soa_with_config(
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    // ── Nielsen-LM constant tuning diagnostic ────────────────────────────────
+    // Sweeps the tunable `NielsenConfig` constants on a realistic noisy corner-LM
+    // battery, reporting the accuracy/iteration trade so the shipped `POSE`
+    // constants are an evidenced choice, not a guess. Iterations are counted via
+    // the NE-closure (called once per trial), so no production signature changes.
+    // Run: `cargo test -p locus-core nielsen_config_tuning_sweep -- --nocapture`.
+    #[test]
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        clippy::too_many_lines
+    )]
+    fn nielsen_config_tuning_sweep() {
+        struct Rng(u64);
+        impl Rng {
+            fn next(&mut self) -> u64 {
+                self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+                let mut z = self.0;
+                z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+                z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+                z ^ (z >> 31)
+            }
+            fn unif(&mut self) -> f64 {
+                (self.next() >> 11) as f64 / (1u64 << 53) as f64
+            }
+            fn normal(&mut self) -> f64 {
+                let u1 = self.unif().max(1e-12);
+                (-2.0 * u1.ln()).sqrt() * (core::f64::consts::TAU * self.unif()).cos()
+            }
+        }
+        let rot_err = |a: &Matrix3<f64>, gt: &Matrix3<f64>| {
+            (((a.transpose() * gt).trace() - 1.0) * 0.5)
+                .clamp(-1.0, 1.0)
+                .acos()
+                .to_degrees()
+        };
+
+        let intr = CameraIntrinsics::new(1400.0, 1400.0, 960.0, 540.0);
+        let tag = 0.10;
+        let obj = centered_tag_corners(tag);
+        let geoms = [
+            (0.4_f64, 0.0_f64, 10.0_f64),
+            (0.8, 20.0, 40.0),
+            (1.5, 30.0, 55.0),
+        ];
+        let noise = 0.2;
+
+        // `shipped` is the tight-gate default we keep; the looser rows quantify the
+        // iteration savings a looser step gate WOULD buy (rejected — tail risk, see
+        // `NielsenConfig::POSE` docs). Accuracy is identical across all rows here
+        // precisely because this easy battery never binds the step gate.
+        let configs: [(&str, NielsenConfig); 4] = [
+            ("shipped(step=1e-7)", NielsenConfig::POSE),
+            (
+                "step=1e-6",
+                NielsenConfig {
+                    step_tol: 1e-6,
+                    ..NielsenConfig::POSE
+                },
+            ),
+            (
+                "step=1e-6,it=12",
+                NielsenConfig {
+                    max_iters: 12,
+                    step_tol: 1e-6,
+                    ..NielsenConfig::POSE
+                },
+            ),
+            (
+                "step=1e-5",
+                NielsenConfig {
+                    step_tol: 1e-5,
+                    ..NielsenConfig::POSE
+                },
+            ),
+        ];
+
+        println!(
+            "\n{:>20} | {:>9} | {:>9} | {:>9}",
+            "config", "rot_p50", "rot_p99", "mean_it"
+        );
+        let baseline_p99 = std::cell::Cell::new(0.0_f64);
+        for (name, cfg) in configs {
+            let mut errs = Vec::new();
+            let mut total_it = 0u64;
+            let mut rng = Rng(0xA5A5_1234_9876_F00D);
+            for &(depth, bearing_deg, tilt_deg) in &geoms {
+                let rot = Rotation3::new(Vector3::new(tilt_deg.to_radians(), 0.0, 0.0))
+                    .matrix()
+                    .into_owned();
+                let gt = Pose::new(
+                    rot,
+                    Vector3::new(depth * bearing_deg.to_radians().tan(), 0.0, depth),
+                );
+                let clean: [[f64; 2]; 4] = core::array::from_fn(|i| gt.project(&obj[i], &intr));
+                for _ in 0..400 {
+                    let mut corners = clean;
+                    for c in &mut corners {
+                        c[0] += noise * rng.normal();
+                        c[1] += noise * rng.normal();
+                    }
+                    let axis = Vector3::new(rng.normal(), rng.normal(), rng.normal());
+                    let axis = if axis.norm() > 1e-9 {
+                        axis.normalize()
+                    } else {
+                        Vector3::z()
+                    };
+                    let seed = Pose::new(
+                        Rotation3::from_axis_angle(
+                            &nalgebra::Unit::new_normalize(axis),
+                            3f64.to_radians(),
+                        )
+                        .matrix()
+                            * gt.rotation,
+                        gt.translation
+                            + Vector3::new(
+                                0.01 * rng.normal(),
+                                0.01 * rng.normal(),
+                                0.01 * rng.normal(),
+                            ),
+                    );
+                    let calls = std::cell::Cell::new(0u64);
+                    let (refined, _) = nielsen_lm(seed, &cfg, |p| {
+                        calls.set(calls.get() + 1);
+                        corner_normal_equations(&intr, &corners, &obj, p, 1.5)
+                    });
+                    errs.push(rot_err(&refined.rotation, &gt.rotation));
+                    total_it += calls.get().saturating_sub(1); // minus the initial build
+                }
+            }
+            errs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let p = |q: f64| errs[((q * (errs.len() - 1) as f64).round()) as usize];
+            let p99 = p(0.99);
+            if name.starts_with("shipped") {
+                baseline_p99.set(p99);
+            }
+            println!(
+                "{name:>20} | {:>9.4} | {:>9.4} | {:>9.2}",
+                p(0.50),
+                p99,
+                total_it as f64 / errs.len() as f64
+            );
+        }
+        // Sanity: the sweep ran; the printed table is the deliverable.
+        assert!(baseline_p99.get().is_finite());
+    }
 
     // The corner-LM normal equations must satisfy `jtr = -∂cost/∂ξ` for the LM
     // step `δ = (JᵀWJ)⁻¹ jtr` to be a descent direction (identical convention to
