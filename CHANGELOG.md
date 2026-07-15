@@ -7,6 +7,15 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **Board pose LM convergence (accuracy).** The three `board.rs` pose solvers
+  previously paired a camera-frame (Convention-1) rotation Jacobian with a
+  *non-rotated* translation update (Convention-2), an inconsistency that let the LM
+  take suboptimal steps and stop short of the optimum. The right-perturbation
+  migration makes Jacobian and update consistent, substantially improving board
+  rotation accuracy on the hub golden set — e.g. ChArUco board rotation error
+  mean 0.107°→0.053° (−51%) and p99 0.651°→0.218° (−67%); AprilGrid mean
+  0.073°→0.037° (−50%) — with board translation neutral and no new singular
+  covariances. Board pose snapshots re-baselined accordingly.
 - **`refine_pose_lm` rotation-Jacobian sign bug.** The unweighted corner-pose LM
   built its rotation Jacobian rows with the wrong sign (the negative of the
   canonical `∂proj/∂ω` used by the weighted LM and `projection_jacobian`), making
@@ -34,6 +43,19 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **Pose LMs migrated to right (body-frame) SE(3) perturbation.** All four pose
+  solvers — `pose::refine_pose_lm` (unweighted corner), `pose_weighted` (weighted
+  production), and the three `board.rs` LM sites — now parameterise the update as
+  `T' = T·exp(δ)` (`Pose::retract`) with the matching body-frame Jacobian, unified
+  onto shared accumulators. Because the object points are symmetric about the body
+  origin this decouples rotation from translation in `JᵀWJ` (~3.4× better
+  conditioning; rot↔translation coupling ~0.999→0.06) and converges in fewer
+  iterations. **Breaking:** the emitted 6×6 pose covariance is now expressed in the
+  **body** frame (previously camera/left). It remains ordered `[t, ω]`; consumers
+  that need the old camera-frame covariance can convert it with the new
+  `Pose::covariance_body_to_camera`. Single-tag accuracy is unchanged — render-tag
+  and ICRA regression snapshots hold within bounds; see `docs/explanation/coordinates.md §5.1`.
+  Supersedes the earlier "`Pose::retract` extracted (left-perturbation)" note below.
 - **`Pose::retract`.** Extracted the SE(3) left-perturbation update
   `exp([t|ω])·pose` into one method, replacing four inline copies across the pose
   LMs (byte-identical). First step of the LM-consolidation series (see
@@ -48,6 +70,12 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **`Pose::adjoint` + SE(3) covariance reframing.** `Pose::adjoint` returns the
+  6×6 SE(3) adjoint (`[t, ω]` ordering); `Pose::covariance_camera_to_body` and
+  `Pose::covariance_body_to_camera` convert a pose covariance between the camera
+  (left) and body (right) tangent frames exactly (`Σ_cam = Ad_T Σ_body Ad_Tᵀ`).
+  Plus `Pose::inverse`. Validated by `adjoint_relates_body_and_camera_tangents`
+  and `covariance_reframe_roundtrips`.
 - **Corner-refinement variant benchmark + rotation-tail study.** New
   `tools/bench/refine_variants_eval.py` runs the shipped `high_accuracy` detector
   with only its large-marker refinement route swapped (config-only; shipped

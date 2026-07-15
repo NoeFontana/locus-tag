@@ -109,7 +109,8 @@ class BoardEstimator:
         - `ids`:         `(N,) int32`  — decoded ArUco IDs
         - `corners`:     `(N, 4, 2) float32`  — tag corners
         - `board_pose`:  `(7,) float64` `[tx, ty, tz, qx, qy, qz, qw]` or `None`
-        - `board_cov`:   `(6, 6) float64` pose covariance, or `None` if no
+        - `board_cov`:   `(6, 6) float64` **body-frame** se(3) pose covariance
+          (ordered `[t, ω]`; see `docs/explanation/coordinates.md §5.1`), or `None` if no
           board was estimated **or** the LM Hessian was singular (the
           pose still ships as a best-effort estimate; only the calibrated
           uncertainty is unavailable).
@@ -272,7 +273,8 @@ class CharucoRefiner:
         - `saddle_pts`:  `(S, 2) float32`  — refined image coordinates
         - `saddle_obj`:  `(S, 3) float64`  — board-frame 3D coordinates
         - `board_pose`:  `(7,) float64` `[tx, ty, tz, qx, qy, qz, qw]` or `None`
-        - `board_cov`:   `(6, 6) float64` pose covariance, or `None` if no
+        - `board_cov`:   `(6, 6) float64` **body-frame** se(3) pose covariance
+          (ordered `[t, ω]`; see `docs/explanation/coordinates.md §5.1`), or `None` if no
           board was estimated **or** the LM Hessian was singular (the
           pose still ships as a best-effort estimate; only the calibrated
           uncertainty is unavailable).

@@ -2068,6 +2068,85 @@ mod tests {
         );
     }
 
+    // `Pose::adjoint` must satisfy the defining identity relating the body-frame
+    // (right) and camera-frame (left) tangents: `exp(Ad_T·δ)·T = T·exp(δ)`. We
+    // verify it by comparing the right retract `T·exp(δ)` against the explicit
+    // left update `exp(Ad_T·δ)·T` for a small twist (agreement to O(δ²)).
+    #[test]
+    fn adjoint_relates_body_and_camera_tangents() {
+        let r = Rotation3::new(Vector3::new(0.3, -0.2, 0.15))
+            .matrix()
+            .into_owned();
+        let pose = Pose::new(r, Vector3::new(0.12, -0.05, 0.7));
+        let delta_body = Vector6::new(2e-4, -1.5e-4, 3e-4, 1e-4, -2e-4, 1.5e-4);
+
+        // Right: T·exp(δ_body).
+        let right = pose.retract(&delta_body);
+
+        // Left: exp(Ad_T·δ_body)·T, built explicitly (rotation on the left, its
+        // translation part added, matching the SE(3) left perturbation to O(δ²)).
+        let delta_cam = pose.adjoint() * delta_body;
+        let rot_l = Rotation3::new(Vector3::new(delta_cam[3], delta_cam[4], delta_cam[5]))
+            .matrix()
+            .into_owned();
+        let t_l = Vector3::new(delta_cam[0], delta_cam[1], delta_cam[2]);
+        let left = Pose::new(rot_l * pose.rotation, rot_l * pose.translation + t_l);
+
+        assert!(
+            (right.rotation - left.rotation).abs().max() < 1e-7,
+            "rotation mismatch: {}",
+            (right.rotation - left.rotation).abs().max()
+        );
+        assert!(
+            (right.translation - left.translation).norm() < 1e-7,
+            "translation mismatch: {}",
+            (right.translation - left.translation).norm()
+        );
+    }
+
+    // Reframing a covariance camera→body→camera must be the identity (the two
+    // adjoint maps are exact inverses), and a body-frame covariance built from a
+    // real (body-frame) Hessian must reframe to a valid camera-frame one.
+    #[test]
+    #[allow(clippy::needless_range_loop)]
+    fn covariance_reframe_roundtrips() {
+        let r = Rotation3::new(Vector3::new(-0.25, 0.1, 0.4))
+            .matrix()
+            .into_owned();
+        let pose = Pose::new(r, Vector3::new(-0.08, 0.2, 0.55));
+
+        // A representative SPD covariance (body frame).
+        let intrinsics = CameraIntrinsics::new(700.0, 700.0, 320.0, 240.0);
+        let obj_pts = centered_tag_corners(0.05);
+        let corners: [[f64; 2]; 4] =
+            core::array::from_fn(|i| pose.project(&obj_pts[i], &intrinsics));
+        let (jtj, _, _) = corner_normal_equations(&intrinsics, &corners, &obj_pts, &pose, 1e9);
+        let cov_body_m = jtj.try_inverse().expect("SPD Hessian invertible");
+        let cov_body: [[f64; 6]; 6] =
+            core::array::from_fn(|i| core::array::from_fn(|j| cov_body_m[(i, j)]));
+
+        let cov_cam = pose.covariance_body_to_camera(&cov_body);
+        let back = pose.covariance_camera_to_body(&cov_cam);
+        for i in 0..6 {
+            for j in 0..6 {
+                assert!(
+                    (back[i][j] - cov_body[i][j]).abs() < 1e-9,
+                    "roundtrip mismatch at ({i},{j}): {} vs {}",
+                    back[i][j],
+                    cov_body[i][j]
+                );
+            }
+        }
+
+        // The camera-frame covariance is a different matrix (frames differ) but
+        // stays symmetric.
+        for i in 0..6 {
+            for j in 0..6 {
+                assert!((cov_cam[i][j] - cov_cam[j][i]).abs() < 1e-12);
+            }
+        }
+    }
+
     #[test]
     fn test_pose_projection() {
         let intrinsics = CameraIntrinsics::new(500.0, 500.0, 320.0, 240.0);
