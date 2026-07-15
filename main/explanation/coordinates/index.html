@@ -985,6 +985,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="5. Pose Representation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-pose-covariance-perturbation-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 Pose Covariance &amp; Perturbation Frame
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2194,6 +2211,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="5. Pose Representation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-pose-covariance-perturbation-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 Pose Covariance &amp; Perturbation Frame
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2368,6 +2402,29 @@ P_{camera} = R \cdot P_{object} + t
 <li><span class="arithmatex">\(R\)</span>: A <span class="arithmatex">\(3 \times 3\)</span> rotation matrix.</li>
 <li><span class="arithmatex">\(t\)</span>: A <span class="arithmatex">\(3 \times 1\)</span> translation vector (representing the tag's <strong>geometric center</strong> in the camera frame).</li>
 </ul>
+<h3 id="51-pose-covariance-perturbation-frame">5.1 Pose Covariance &amp; Perturbation Frame</h3>
+<p>The optional <span class="arithmatex">\(6 \times 6\)</span> covariance returned alongside a pose lives in the
+<span class="arithmatex">\(\mathfrak{se}(3)\)</span> tangent space, ordered <span class="arithmatex">\([\mathbf{t}, \boldsymbol{\omega}]\)</span>
+(translation first, then the rotation vector).</p>
+<p>The pose Levenberg–Marquardt solvers parameterise the update as a <strong>right
+(body-frame) perturbation</strong> <span class="arithmatex">\(T' = T \cdot \exp(\delta)\)</span> — the increment
+<span class="arithmatex">\(\delta = [\mathbf{t}\;|\;\boldsymbol{\omega}]\)</span> is expressed in the tag's <em>own</em>
+(body) frame and mapped into the camera by the current rotation. Because the
+object points are symmetric about the body origin, this decouples rotation from
+translation in the normal equations (a <span class="arithmatex">\(\sim\!3.4\times\)</span> better-conditioned
+<span class="arithmatex">\(J^\top W J\)</span> and <span class="arithmatex">\(\sim\!0.999 \to 0.06\)</span> rotation<span class="arithmatex">\(\leftrightarrow\)</span>translation
+coupling), so the emitted covariance is a <strong>body-frame</strong> covariance. This is the
+frame most downstream consumers (per-tag EKFs, board joint solves) actually want.</p>
+<p>To move a covariance between frames, use the exact SE(3) adjoint at the pose:
+<span class="arithmatex">\(\Sigma_{\text{camera}} = \mathrm{Ad}_T\,\Sigma_{\text{body}}\,\mathrm{Ad}_T^\top\)</span>
+and its inverse <span class="arithmatex">\(\Sigma_{\text{body}} = \mathrm{Ad}_{T^{-1}}\,\Sigma_{\text{camera}}\,\mathrm{Ad}_{T^{-1}}^\top\)</span>
+(<code>Pose::adjoint</code>, <code>Pose::covariance_camera_to_body</code>,
+<code>Pose::covariance_body_to_camera</code>).</p>
+<blockquote>
+<p><strong>Migration note.</strong> Prior to the right-perturbation migration the emitted
+covariance was expressed in the <strong>camera</strong> (left/spatial) frame. Consumers that
+relied on the old frame can recover it with <code>covariance_body_to_camera</code>.</p>
+</blockquote>
 <h2 id="6-board-coordinate-systems">6. Board Coordinate Systems</h2>
 <p>When using multi-tag boards, all poses are expressed in a <strong>board-frame</strong> coordinate system defined at the geometric centre of the board.</p>
 <h3 id="61-board-origin">6.1 Board Origin</h3>
@@ -2402,7 +2459,7 @@ P_{camera} = R \cdot P_{object} + t
 <h3 id="63-board-pose-convention">6.3 Board Pose Convention</h3>
 <p>A board pose <span class="arithmatex">\((R, t)\)</span> transforms a point <span class="arithmatex">\(P_{\text{board}}\)</span> from board coordinates into camera coordinates:</p>
 <div class="arithmatex">\[P_{\text{camera}} = R \cdot P_{\text{board}} + t\]</div>
-<p>This is the same convention as the single-tag pose (Section 5). The covariance matrix returned alongside the board pose is a <span class="arithmatex">\(6 \times 6\)</span> matrix in <span class="arithmatex">\(\mathfrak{se}(3)\)</span> tangent space, ordered <span class="arithmatex">\([\mathbf{t}, \boldsymbol{\omega}]\)</span>.</p>
+<p>This is the same convention as the single-tag pose (Section 5). The covariance matrix returned alongside the board pose is a <span class="arithmatex">\(6 \times 6\)</span> matrix in <span class="arithmatex">\(\mathfrak{se}(3)\)</span> tangent space, ordered <span class="arithmatex">\([\mathbf{t}, \boldsymbol{\omega}]\)</span>, in the <strong>body (board) frame</strong> — see <a href="#51-pose-covariance--perturbation-frame">Section 5.1</a> for the perturbation convention and frame-conversion helpers.</p>
 
 
 
