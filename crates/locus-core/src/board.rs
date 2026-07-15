@@ -2,7 +2,8 @@
 
 use crate::batch::{MAX_CANDIDATES, Point2f};
 use crate::pose::{
-    BodyFrameNormalEquations, CameraIntrinsics, Pose, projection_and_gradient, solve_ippe_square,
+    BodyFrameNormalEquations, CameraIntrinsics, MAHALANOBIS_HUBER_K, Pose, mahalanobis_huber,
+    projection_and_gradient, solve_ippe_square,
 };
 use nalgebra::{Matrix2, Matrix3, Matrix6, Vector3, Vector6};
 use std::sync::Arc;
@@ -1280,7 +1281,7 @@ impl RobustPoseSolver {
     /// inside the wide `tau_aw_lm` window.
     #[expect(
         clippy::similar_names,
-        reason = "LM vars (jtj/jtr, lambda/nu) mirror the solver math notation"
+        reason = "LM vars (jtj/jtr, du_dp/dv_dp, res_u/res_v) mirror the solver math notation"
     )]
     #[expect(
         clippy::unused_self,
@@ -1323,18 +1324,9 @@ impl RobustPoseSolver {
                     let res_v = f64::from(corr.image_points[k].y) - v;
 
                     let info = corr.information_matrices[k];
-
-                    let dist_sq = res_u * (info[(0, 0)] * res_u + info[(0, 1)] * res_v)
-                        + res_v * (info[(1, 0)] * res_u + info[(1, 1)] * res_v);
-
-                    let huber_k = 1.345;
-                    let dist = dist_sq.sqrt();
-                    let weight = if dist > huber_k { huber_k / dist } else { 1.0 };
-                    total_cost += if dist > huber_k {
-                        huber_k * (dist - 0.5 * huber_k)
-                    } else {
-                        0.5 * dist_sq
-                    };
+                    let (weight, cost) =
+                        mahalanobis_huber([res_u, res_v], &info, MAHALANOBIS_HUBER_K);
+                    total_cost += cost;
 
                     // Right (body-frame) SE(3) normal equations with W = info·weight.
                     ne.add(&p_world, &du_dp, &dv_dp, res_u, res_v, &(info * weight));

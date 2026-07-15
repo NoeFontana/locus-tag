@@ -489,6 +489,12 @@ impl BodyFrameNormalEquations {
     }
 }
 
+/// Huber transition constant for the **Mahalanobis-distance** robust cost used by
+/// the weighted corner LM and the board LM (95 %-efficiency threshold for a unit
+/// Gaussian). Shared so the two solvers can never drift on outlier rejection. The
+/// unweighted corner LM instead takes a *pixel*-space Huber delta as a parameter.
+pub(crate) const MAHALANOBIS_HUBER_K: f64 = 1.345;
+
 /// Tunable constants for the shared Nielsen trust-region LM ([`nielsen_lm`]).
 #[derive(Clone, Copy)]
 pub(crate) struct NielsenConfig {
@@ -1534,6 +1540,23 @@ pub(crate) fn mahalanobis_d2(residual: [f64; 2], info: &Matrix2<f64>) -> f64 {
     let r_v = residual[1];
     r_u * (info[(0, 0)] * r_u + info[(0, 1)] * r_v)
         + r_v * (info[(1, 0)] * r_u + info[(1, 1)] * r_v)
+}
+
+/// Mahalanobis–Huber robust kernel: from a 2-D residual and its information matrix,
+/// return `(irls_weight, cost_contribution)` under a Huber loss with transition `k`
+/// on the Mahalanobis distance `d = √(rᵀ·info·r)` — quadratic (`w=1`, `0.5·d²`) for
+/// `d ≤ k`, linear (`w=k/d`, `k·(d−0.5·k)`) beyond. The single definition shared by
+/// the weighted corner LM and the board LM, so their outlier handling cannot drift.
+#[inline]
+#[must_use]
+pub(crate) fn mahalanobis_huber(residual: [f64; 2], info: &Matrix2<f64>, k: f64) -> (f64, f64) {
+    let d2 = mahalanobis_d2(residual, info);
+    let d = d2.sqrt();
+    if d <= k {
+        (1.0, 0.5 * d2)
+    } else {
+        (k / d, k * (d - 0.5 * k))
+    }
 }
 
 /// Per-corner and aggregate squared Mahalanobis distances for a candidate pose.

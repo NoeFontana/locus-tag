@@ -226,16 +226,8 @@ fn build_normal_equations(
         let res_v = corners[i][1] - v_est;
 
         let info = &info_matrices[i];
-        let s_i_sq = crate::pose::mahalanobis_d2([res_u, res_v], info);
-        let s_i = s_i_sq.sqrt();
-
-        if s_i <= huber_k {
-            total_cost += 0.5 * s_i_sq;
-        } else {
-            total_cost += huber_k * (s_i - 0.5 * huber_k);
-        }
-
-        let w = if s_i <= huber_k { 1.0 } else { huber_k / s_i };
+        let (w, cost) = crate::pose::mahalanobis_huber([res_u, res_v], info, huber_k);
+        total_cost += cost;
 
         ne.add(&pb, &du_dp, &dv_dp, res_u, res_v, &(info * w));
     }
@@ -324,7 +316,7 @@ pub(crate) fn refine_pose_lm_weighted_with_info(
     initial_pose: Pose,
     info_matrices: &[Matrix2<f64>; 4],
 ) -> (Pose, [[f64; 6]; 6]) {
-    const HUBER_K: f64 = 1.345;
+    use crate::pose::MAHALANOBIS_HUBER_K as HUBER_K;
 
     let obj_pts = centered_tag_corners(tag_size);
     let info_matrices = *info_matrices;
@@ -481,6 +473,30 @@ mod tests {
             cost.to_bits(),
             oracle.to_bits(),
             "build_normal_equations cost must equal the huber_mahalanobis_cost oracle bit-for-bit"
+        );
+
+        // Behind-camera case: a steep tilt at very close range drives the -y corners
+        // to `p_cam.z < 1e-4`, exercising the `z<1e-4 → cost += 1e6; continue`
+        // penalty branch that both functions must apply identically (the earlier
+        // case only covers in-front geometry).
+        let steep = nalgebra::Rotation3::from_euler_angles(1.48, 0.0, 0.0)
+            .matrix()
+            .into_owned();
+        let close = Pose::new(steep, nalgebra::Vector3::new(0.02, 0.01, 0.02));
+        let behind: usize = (0..4)
+            .filter(|&i| (close.rotation * obj_pts[i] + close.translation).z < 1e-4)
+            .count();
+        assert!(
+            behind > 0,
+            "test setup must place ≥1 corner behind the camera"
+        );
+        let (_j, _r, cost_b) =
+            build_normal_equations(&intrinsics, &corners, &obj_pts, &close, &info, K);
+        let oracle_b = huber_mahalanobis_cost(&intrinsics, &corners, &obj_pts, &close, &info, K);
+        assert_eq!(
+            cost_b.to_bits(),
+            oracle_b.to_bits(),
+            "behind-camera 1e6-penalty cost must match the oracle bit-for-bit"
         );
     }
 

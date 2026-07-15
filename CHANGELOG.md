@@ -73,8 +73,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   hand-rolled λ/ν loops and fixes a latent board inconsistency (it previously used
   a plain `λδ` predicted reduction that did not match its own Marquardt damping);
   the canonical form uses `D = max(diag(JᵀWJ), floor)` for both the damping *and*
-  the Madsen gain-ratio predicted reduction. Single-tag results (render-tag, ICRA,
-  ROC) are **byte-identical**; the board snapshots move only at the FP-reorder
+  the Madsen gain-ratio predicted reduction. The weighted corner LM and the board
+  LM also now share one `mahalanobis_huber` robust kernel and one `MAHALANOBIS_HUBER_K`
+  constant (previously a third hand-copy of the Huber math + a duplicated literal).
+  Single-tag results (render-tag, ICRA, ROC) are **byte-identical**; the board snapshots move only at the FP-reorder
   floor (max 8.5e-7 relative, net neutral / slightly better medians) and are
   re-baselined. A `nielsen_config_tuning_sweep` diagnostic evidences the constant
   choices: it shows loosening the step gate `1e-7 → 1e-6` *would* cut mean LM
