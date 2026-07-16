@@ -531,16 +531,22 @@ impl NielsenConfig {
     /// identical pixel problem across a 10⁴× translation-scale range, the old L2 gate
     /// drifts 15→20 mean iterations (and on far/small tags fails to bind at all,
     /// running to `max_iters`), while `func_tol` is exactly scale-invariant at ~7.8
-    /// iterations. `step_gate_ood_battery` proves the switch is **accuracy-neutral**:
-    /// on grazing / far / small tags every gate — old, new, and a 200-iteration
-    /// reference — yields bit-identical rotation p99, because the reprojection
-    /// objective is flat in rotation well before either gate binds (the residual
-    /// gradient at exit is ~1e-4, four orders above `grad_tol`, yet rotation already
-    /// matches the converged pose to <1e-3°). The earlier "loosening risks the
-    /// rotation tail" rationale was thus empirically falsified; the real cost of the
-    /// old gate was unbounded, unit-dependent iteration counts on far/small tags (the
-    /// AV long-range regime). `grad_tol` remains the primary stationarity gate;
-    /// `func_tol` is the unit-free "progress stalled" secondary.
+    /// iterations. `step_gate_board_battery` proves the switch is **accuracy-neutral**
+    /// on a 36-point board (incl. gross outliers): old, new, and a fully-converged
+    /// reference reach the same rotation to <5e-3°, because the reprojection objective
+    /// is flat in rotation well before either gate binds (the residual gradient at
+    /// exit is ~1e-4, four orders above `grad_tol`, yet rotation already matches the
+    /// converged pose). The earlier "loosening risks the rotation tail" rationale was
+    /// thus empirically falsified; the real cost of the old gate was unbounded,
+    /// unit-dependent iteration counts on far/small tags (the AV long-range regime).
+    ///
+    /// Scope note: this makes the *secondary* gate unit-free, not the whole solver.
+    /// `grad_tol` (a max-norm over the mixed-unit gradient) and `damping_floor` (an
+    /// absolute floor on `diag(JᵀWJ)`) remain scale-dependent — a known, deferred
+    /// same-class item. In practice `func_tol`/`max_iters` bind first (exit gradient
+    /// ~1e-4 ≫ `grad_tol`), so the primary gate's unit-dependence rarely surfaces.
+    /// `grad_tol` stays the primary stationarity gate; `func_tol` is the "progress
+    /// stalled" secondary.
     pub(crate) const POSE: Self = Self {
         max_iters: 20,
         lambda0: 1e-3,
@@ -618,12 +624,13 @@ where
         } else {
             0.0
         };
-        // Relative cost reduction for the function-tolerance gate — unit-free and
-        // scale-invariant (measured against the pre-step cost, before the accept
-        // block overwrites `cost`).
-        let rel_reduction = if cost > 0.0 { actual / cost } else { 0.0 };
 
         if rho > 0.0 {
+            // Relative cost reduction for the function-tolerance gate — unit-free
+            // and scale-invariant, measured against the pre-step `cost` before it is
+            // overwritten below. Computed only on the accept path (the reject path
+            // never reads it). `actual > 0` here since ρ > 0, so it is in (0, 1].
+            let rel_reduction = if cost > 0.0 { actual / cost } else { 0.0 };
             // Accept: adopt the trial pose + its (reused) normal equations.
             pose = new_pose;
             jtj = new_jtj;
@@ -2128,30 +2135,8 @@ mod tests {
         clippy::too_many_lines
     )]
     fn nielsen_config_tuning_sweep() {
-        struct Rng(u64);
-        impl Rng {
-            fn next(&mut self) -> u64 {
-                self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
-                let mut z = self.0;
-                z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-                z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-                z ^ (z >> 31)
-            }
-            fn unif(&mut self) -> f64 {
-                (self.next() >> 11) as f64 / (1u64 << 53) as f64
-            }
-            fn normal(&mut self) -> f64 {
-                let u1 = self.unif().max(1e-12);
-                (-2.0 * u1.ln()).sqrt() * (core::f64::consts::TAU * self.unif()).cos()
-            }
-        }
-        let rot_err = |a: &Matrix3<f64>, gt: &Matrix3<f64>| {
-            (((a.transpose() * gt).trace() - 1.0) * 0.5)
-                .clamp(-1.0, 1.0)
-                .acos()
-                .to_degrees()
-        };
-
+        // RNG / rotation-error / percentile helpers are shared at module scope
+        // (`XRng`, `rot_err_deg`, `percentile`) — see the step-gate diagnostics.
         let intr = CameraIntrinsics::new(1400.0, 1400.0, 960.0, 540.0);
         let tag = 0.10;
         let obj = centered_tag_corners(tag);
@@ -2200,7 +2185,7 @@ mod tests {
         for (name, cfg) in configs {
             let mut errs = Vec::new();
             let mut total_it = 0u64;
-            let mut rng = Rng(0xA5A5_1234_9876_F00D);
+            let mut rng = XRng(0xA5A5_1234_9876_F00D);
             for &(depth, bearing_deg, tilt_deg) in &geoms {
                 let rot = Rotation3::new(Vector3::new(tilt_deg.to_radians(), 0.0, 0.0))
                     .matrix()
@@ -2241,19 +2226,18 @@ mod tests {
                         calls.set(calls.get() + 1);
                         corner_normal_equations(&intr, &corners, &obj, p, 1.5)
                     });
-                    errs.push(rot_err(&refined.rotation, &gt.rotation));
+                    errs.push(rot_err_deg(&refined.rotation, &gt.rotation));
                     total_it += calls.get().saturating_sub(1); // minus the initial build
                 }
             }
             errs.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            let p = |q: f64| errs[((q * (errs.len() - 1) as f64).round()) as usize];
-            let p99 = p(0.99);
+            let p99 = percentile(&errs, 0.99);
             if name.starts_with("shipped") {
                 baseline_p99.set(p99);
             }
             println!(
                 "{name:>20} | {:>9.4} | {:>9.4} | {:>9.2}",
-                p(0.50),
+                percentile(&errs, 0.50),
                 p99,
                 total_it as f64 / errs.len() as f64
             );
@@ -2262,12 +2246,12 @@ mod tests {
         assert!(baseline_p99.get().is_finite());
     }
 
-    // ── Step-gate investigation: L2 vs function-tolerance vs D/H-metric ──────
+    // ── Step-gate investigation: L2 step gate vs function-tolerance ──────────
     // A faithful test-only copy of `nielsen_lm` whose Gate-2 (post-accept exit)
     // is parametrized, so we can measure — not assume — whether the mixed-unit
-    // L2 step gate (a) is unit-dependent and (b) ever exits before `grad_tol`.
-    // The loop body is byte-for-byte the production loop (pose.rs) except the
-    // gate. Returns (pose, trial_ne_builds, exit_grad_amax, exit_reason).
+    // L2 step gate is unit-dependent and whether the func-tolerance swap is
+    // accuracy-neutral. The loop body is byte-for-byte the production loop
+    // (pose.rs) except the gate. Returns (pose, trial_ne_builds).
     #[derive(Clone, Copy)]
     enum Gate {
         L2(f64),      // ‖δ‖₂ < tol            (old, mixed-unit)
@@ -2281,7 +2265,7 @@ mod tests {
         cfg: &NielsenConfig,
         gate: Gate,
         normal_equations: NE,
-    ) -> (Pose, u32, f64, u8)
+    ) -> (Pose, u32)
     where
         NE: Fn(&Pose) -> (Matrix6<f64>, Vector6<f64>, f64),
     {
@@ -2294,7 +2278,7 @@ mod tests {
 
         for _ in 0..cfg.max_iters {
             if jtr.amax() < cfg.grad_tol {
-                return (pose, trials, jtr.amax(), 0); // grad gate
+                break; // grad gate
             }
             let d = Vector6::from_fn(|k, _| jtj[(k, k)].max(cfg.damping_floor));
             let mut damped = jtj;
@@ -2304,7 +2288,7 @@ mod tests {
             let Some(chol) = damped.cholesky() else {
                 chol_failures += 1;
                 if chol_failures >= cfg.max_chol_failures {
-                    return (pose, trials, jtr.amax(), 3); // chol fail
+                    break; // chol fail
                 }
                 lambda *= 10.0;
                 nu = 2.0;
@@ -2343,16 +2327,18 @@ mod tests {
                     Gate::Never => false,
                 };
                 if stop {
-                    return (pose, trials, jtr.amax(), 1); // step/func gate
+                    break; // step/func gate
                 }
             } else {
                 lambda *= nu;
                 nu *= 2.0;
             }
         }
-        (pose, trials, jtr.amax(), 2) // max_iters
+        (pose, trials)
     }
 
+    // Splitmix64 PRNG + geodesic rotation-angle helper, shared by the tuning sweep
+    // and the step-gate diagnostics (one copy, no drift).
     struct XRng(u64);
     impl XRng {
         fn next(&mut self) -> u64 {
@@ -2376,6 +2362,16 @@ mod tests {
             .clamp(-1.0, 1.0)
             .acos()
             .to_degrees()
+    }
+
+    // Percentile of a pre-sorted ascending slice (nearest-rank).
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation
+    )]
+    fn percentile(sorted: &[f64], q: f64) -> f64 {
+        sorted[((q * (sorted.len() - 1) as f64).round()) as usize]
     }
 
     // EXPERIMENT 1 — unit-rescale invariance. The identical pixel-space problem
@@ -2458,23 +2454,21 @@ mod tests {
                                 0.02 * rng.normal(),
                             ),
                     );
-                    let (refined, it, _g, _r) =
-                        nielsen_lm_gated(seed, &NielsenConfig::POSE, gate, |p| {
-                            corner_normal_equations(&intr, &corners, &obj, p, 1.5)
-                        });
+                    let (refined, it) = nielsen_lm_gated(seed, &NielsenConfig::POSE, gate, |p| {
+                        corner_normal_equations(&intr, &corners, &obj, p, 1.5)
+                    });
                     errs.push(rot_err_deg(&refined.rotation, &gt.rotation));
                     it_total += u64::from(it);
                 }
                 errs.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                let p = |q: f64| errs[((q * (errs.len() - 1) as f64).round()) as usize];
                 let mean_it = it_total as f64 / errs.len() as f64;
                 println!(
                     "  {k:>10.0e} | {:>10.5} | {:>10.5} | {mean_it:>9.2}",
-                    p(0.50),
-                    p(0.99)
+                    percentile(&errs, 0.50),
+                    percentile(&errs, 0.99)
                 );
                 iters_per_scale.push(mean_it);
-                p99_per_scale.push(p(0.99));
+                p99_per_scale.push(percentile(&errs, 0.99));
             }
             summary.push((gname, iters_per_scale, p99_per_scale));
         }
@@ -2497,13 +2491,17 @@ mod tests {
             spread(fr_it)
         );
         // (3) Accuracy is gate- and scale-neutral: both gates match across all scales.
+        // Bound is 1e-4° — decisive (a real gate/scale accuracy effect would be
+        // orders larger, ≳1e-2°) without pinning to the fp-reassociation floor.
         assert!(
-            spread(l2_p99) < 1e-6 && spread(fr_p99) < 1e-6,
-            "rotation p99 must be scale-invariant"
+            spread(l2_p99) < 1e-4 && spread(fr_p99) < 1e-4,
+            "rotation p99 must be scale-invariant (L2 {:.2e}, FuncRel {:.2e})",
+            spread(l2_p99),
+            spread(fr_p99)
         );
         for (a, b) in l2_p99.iter().zip(fr_p99.iter()) {
             assert!(
-                (a - b).abs() < 1e-6,
+                (a - b).abs() < 1e-4,
                 "gate must not change rotation accuracy: {a:.6} vs {b:.6}"
             );
         }
@@ -2554,13 +2552,18 @@ mod tests {
 
     // EXPERIMENT 3 — board/wide-baseline regime (where #338's ChArUco rotation-p99
     // win lives). Confirms the function-tolerance gate is accuracy-neutral on a
-    // 36-point coplanar board, not just the 4-corner single tag. Unlike Exp 1/2 this
-    // one ASSERTS neutrality (a real regression guard), not just prints.
+    // 36-point coplanar board, INCLUDING gross outliers — the high-residual regime a
+    // relative-cost gate is most at risk of exiting early on (large cost → a real
+    // step's relative reduction can dip below func_tol while the gradient is still
+    // large). Two points per trial are corrupted by ±40 px; the Huber kernel
+    // down-weights them and the gate must still reach the converged (robust) pose.
+    // Unlike Exp 1 this ASSERTS neutrality (a real regression guard), not just prints.
     #[test]
     #[allow(
         clippy::cast_precision_loss,
         clippy::cast_sign_loss,
-        clippy::cast_possible_truncation
+        clippy::cast_possible_truncation,
+        clippy::too_many_lines
     )]
     fn step_gate_board_battery() {
         let intr = CameraIntrinsics::new(1400.0, 1400.0, 960.0, 540.0);
@@ -2595,10 +2598,16 @@ mod tests {
         let (mut fr_gt, mut fr_dev, mut fr_it) = (Vec::new(), Vec::new(), 0u64);
         let mut ref_gt = Vec::new();
         for _ in 0..200 {
-            let obs: Vec<[f64; 2]> = clean
+            let mut obs: Vec<[f64; 2]> = clean
                 .iter()
                 .map(|c| [c[0] + noise * rng.normal(), c[1] + noise * rng.normal()])
                 .collect();
+            // Inject two gross outliers (±40 px) to inflate the robust cost and
+            // exercise the high-residual exit regime (indices vary per trial).
+            let o0 = (rng.unif() * 36.0) as usize;
+            let o1 = (rng.unif() * 36.0) as usize;
+            obs[o0][0] += 40.0;
+            obs[o1][1] -= 40.0;
             let axis = Vector3::new(rng.normal(), rng.normal(), rng.normal());
             let axis = if axis.norm() > 1e-9 {
                 axis.normalize()
@@ -2617,10 +2626,9 @@ mod tests {
                     ),
             );
             let ne = |p: &Pose| multipoint_normal_equations(&intr, &obs, &obj, p, 1.5);
-            let (converged, _, _, _) = nielsen_lm_gated(seed, &ref_cfg, Gate::Never, ne);
-            let (l2_pose, it_l2, _, _) =
-                nielsen_lm_gated(seed, &NielsenConfig::POSE, Gate::L2(1e-7), ne);
-            let (fr_pose, it_fr, _, _) =
+            let (converged, _) = nielsen_lm_gated(seed, &ref_cfg, Gate::Never, ne);
+            let (l2_pose, it_l2) = nielsen_lm_gated(seed, &NielsenConfig::POSE, Gate::L2(1e-7), ne);
+            let (fr_pose, it_fr) =
                 nielsen_lm_gated(seed, &NielsenConfig::POSE, Gate::FuncRel(1e-6), ne);
             ref_gt.push(rot_err_deg(&converged.rotation, &gt.rotation));
             l2_gt.push(rot_err_deg(&l2_pose.rotation, &gt.rotation));
@@ -2629,20 +2637,24 @@ mod tests {
             fr_dev.push(rot_err_deg(&fr_pose.rotation, &converged.rotation));
             fr_it += u64::from(it_fr);
         }
-        let pct = |v: &mut Vec<f64>, q: f64| {
+        let sorted = |mut v: Vec<f64>| {
             v.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            v[((q * (v.len() - 1) as f64).round()) as usize]
+            v
         };
+        let (l2_gt, fr_gt, fr_dev, ref_gt) =
+            (sorted(l2_gt), sorted(fr_gt), sorted(fr_dev), sorted(ref_gt));
         let n = ref_gt.len() as f64;
-        println!("\n== EXPERIMENT 3: board (36 pts) battery ==");
+        let (l2_gt99, fr_gt99, fr_dev99, ref_gt99) = (
+            percentile(&l2_gt, 0.99),
+            percentile(&fr_gt, 0.99),
+            percentile(&fr_dev, 0.99),
+            percentile(&ref_gt, 0.99),
+        );
+        println!("\n== EXPERIMENT 3: board (36 pts, 2 outliers) battery ==");
         println!(
             "  {:>18} | {:>9} | {:>11} | {:>7}",
             "gate", "rotGT_p99", "dev_ref_p99", "mean_it"
         );
-        let l2_gt99 = pct(&mut l2_gt, 0.99);
-        let fr_gt99 = pct(&mut fr_gt, 0.99);
-        let fr_dev99 = pct(&mut fr_dev, 0.99);
-        let ref_gt99 = pct(&mut ref_gt, 0.99);
         println!(
             "  {:>18} | {l2_gt99:>9.5} | {:>11} | {:>7.2}",
             "L2(1e-7) old",
@@ -2658,9 +2670,9 @@ mod tests {
             "  {:>18} | {ref_gt99:>9.5} | {:>11} | {:>7}",
             "reference", "-", "60"
         );
-        // Regression guard: the new gate reaches the converged rotation (p99
-        // deviation ≪ any real corner-noise floor) and matches the reference's GT
-        // accuracy on the wide-baseline board regime.
+        // Regression guard: even with gross outliers the new gate reaches the
+        // converged (robust) rotation (p99 deviation ≪ the real corner-noise floor)
+        // and matches the reference's GT accuracy on the wide-baseline board regime.
         assert!(
             fr_dev99 < 5e-3,
             "FuncRel board rotation p99 deviates {fr_dev99:.2e}° from converged"
