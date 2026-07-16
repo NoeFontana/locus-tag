@@ -226,16 +226,8 @@ fn build_normal_equations(
         let res_v = corners[i][1] - v_est;
 
         let info = &info_matrices[i];
-        let s_i_sq = crate::pose::mahalanobis_d2([res_u, res_v], info);
-        let s_i = s_i_sq.sqrt();
-
-        if s_i <= huber_k {
-            total_cost += 0.5 * s_i_sq;
-        } else {
-            total_cost += huber_k * (s_i - 0.5 * huber_k);
-        }
-
-        let w = if s_i <= huber_k { 1.0 } else { huber_k / s_i };
+        let (w, cost) = crate::pose::mahalanobis_huber([res_u, res_v], info, huber_k);
+        total_cost += cost;
 
         ne.add(&pb, &du_dp, &dv_dp, res_u, res_v, &(info * w));
     }
@@ -244,7 +236,10 @@ fn build_normal_equations(
     (jtj, jtr, total_cost)
 }
 
-/// Huber robust cost over Mahalanobis distances.
+/// Huber robust cost over Mahalanobis distances. Retained as the reference oracle
+/// for the analytic-gradient finite-difference test; the shared Nielsen LM reuses
+/// the cost returned by [`build_normal_equations`] instead of a separate pass.
+#[cfg(test)]
 fn huber_mahalanobis_cost(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
@@ -321,119 +316,17 @@ pub(crate) fn refine_pose_lm_weighted_with_info(
     initial_pose: Pose,
     info_matrices: &[Matrix2<f64>; 4],
 ) -> (Pose, [[f64; 6]; 6]) {
-    const HUBER_K: f64 = 1.345;
-    const MAX_ITERS: usize = 20;
+    use crate::pose::MAHALANOBIS_HUBER_K as HUBER_K;
 
-    let mut pose = initial_pose;
     let obj_pts = centered_tag_corners(tag_size);
     let info_matrices = *info_matrices;
 
-    let mut lambda = 1e-3_f64;
-    let mut nu = 2.0_f64;
-
-    // Cache for normal equations at the current accepted pose.
-    let mut current_jtj = Matrix6::zeros();
-    let mut current_jtr = Vector6::zeros();
-    let mut current_cost = f64::MAX;
-    let mut needs_rebuild = true;
-    // `consecutive_chol_failures` guard: without it, a
-    // persistently rank-deficient Hessian causes the LM to spin through
-    // every iteration multiplying λ by 10 with no progress, then exit
-    // via MAX_ITERS and emit the NaN covariance sentinel. Bailing out
-    // after 3 consecutive failures lets the sentinel fire promptly with
-    // the same diagnostic value, without burning iterations.
-    let mut consecutive_chol_failures: u8 = 0;
-
-    for _ in 0..MAX_ITERS {
-        if needs_rebuild {
-            let (jtj, jtr, cost) = build_normal_equations(
-                intrinsics,
-                corners,
-                &obj_pts,
-                &pose,
-                &info_matrices,
-                HUBER_K,
-            );
-            current_jtj = jtj;
-            current_jtr = jtr;
-            current_cost = cost;
-            needs_rebuild = false;
-        }
-
-        if current_jtr.amax() < 1e-8 {
-            break;
-        }
-
-        let mut jtj_damped = current_jtj;
-        for k in 0..6 {
-            // Marquardt damping with a safety epsilon to prevent singularity.
-            jtj_damped[(k, k)] += lambda * current_jtj[(k, k)].max(1e-6);
-        }
-
-        let delta = if let Some(chol) = jtj_damped.cholesky() {
-            consecutive_chol_failures = 0;
-            chol.solve(&current_jtr)
-        } else {
-            consecutive_chol_failures += 1;
-            if consecutive_chol_failures >= 3 {
-                break;
-            }
-            lambda *= 10.0;
-            nu = 2.0;
-            continue;
-        };
-
-        // Gain ratio numerator: Actual cost reduction
-        let new_pose = pose.retract(&delta);
-
-        let new_cost = huber_mahalanobis_cost(
-            intrinsics,
-            corners,
-            &obj_pts,
-            &new_pose,
-            &info_matrices,
-            HUBER_K,
-        );
-
-        // Gain ratio denominator: Predicted reduction based on quadratic model
-        let predicted_reduction =
-            0.5 * delta.dot(&(lambda * delta.component_mul(&current_jtj.diagonal()) + current_jtr));
-        let actual_reduction = current_cost - new_cost;
-        let rho = if predicted_reduction > 1e-12 {
-            actual_reduction / predicted_reduction
-        } else {
-            0.0
-        };
-
-        if rho > 0.0 {
-            // Accept step: update pose and trigger Hessian rebuild for next iteration.
-            pose = new_pose;
-            current_cost = new_cost;
-            needs_rebuild = true;
-            lambda *= (1.0 - (2.0 * rho - 1.0).powi(3)).max(1.0 / 3.0);
-            nu = 2.0;
-            if delta.norm() < 1e-7 {
-                break;
-            }
-        } else {
-            // Reject step: increase damping and retry with same Hessian.
-            lambda *= nu;
-            nu *= 2.0;
-        }
-    }
-
-    // Final covariance extraction from the last cached Hessian.
-    if needs_rebuild {
-        let (jtj, _, _) = build_normal_equations(
-            intrinsics,
-            corners,
-            &obj_pts,
-            &pose,
-            &info_matrices,
-            HUBER_K,
-        );
-        current_jtj = jtj;
-    }
+    // Weighted 4-corner Mahalanobis-Huber problem, refined by the shared Nielsen
+    // core. The final `JᵀWJ` at the converged pose feeds the covariance.
+    let (pose, current_jtj) =
+        crate::pose::nielsen_lm(initial_pose, &crate::pose::NielsenConfig::POSE, |p| {
+            build_normal_equations(intrinsics, corners, &obj_pts, p, &info_matrices, HUBER_K)
+        });
     // Singular OR near-singular `JᵀWJ` (e.g. degenerate near-coplanar
     // 4-point geometry at grazing incidence) produces no calibrated
     // covariance. `try_inverse` only catches EXACT singularity (LU zero
@@ -545,6 +438,65 @@ mod tests {
         assert!(
             r_err_deg < 0.001,
             "rotation error too large: {r_err_deg:.5} deg"
+        );
+    }
+
+    // The shared Nielsen LM reuses the cost returned by `build_normal_equations`
+    // as the gain-ratio cost (instead of a separate `huber_mahalanobis_cost` pass).
+    // That reuse is only correct if the two agree bit-for-bit — guard it, mirroring
+    // the corner path's `corner_normal_equations_gradient_is_descent` oracle check,
+    // across both the Huber-quadratic and Huber-linear regimes and a non-identity
+    // (anisotropic) information matrix.
+    #[test]
+    fn build_normal_equations_cost_matches_oracle() {
+        const K: f64 = 1.345;
+        let intrinsics = CameraIntrinsics::new(750.0, 750.0, 320.0, 240.0);
+        let rot = nalgebra::Rotation3::from_euler_angles(0.25, -0.18, 0.12)
+            .matrix()
+            .into_owned();
+        let pose = Pose::new(rot, nalgebra::Vector3::new(0.13, -0.09, 0.55));
+        let obj_pts = centered_tag_corners(0.05);
+        // Residuals spanning both Huber regimes (corner 0 is a large outlier).
+        let mut corners: [[f64; 2]; 4] =
+            core::array::from_fn(|i| pose.project(&obj_pts[i], &intrinsics));
+        corners[0][0] += 9.0;
+        corners[0][1] -= 7.0;
+        corners[1][0] -= 0.4;
+        corners[2][1] += 0.3;
+        // Anisotropic, off-diagonal information matrices.
+        let info = [Matrix2::new(2.0, 0.5, 0.5, 1.3); 4];
+
+        let (_jtj, _jtr, cost) =
+            build_normal_equations(&intrinsics, &corners, &obj_pts, &pose, &info, K);
+        let oracle = huber_mahalanobis_cost(&intrinsics, &corners, &obj_pts, &pose, &info, K);
+        assert_eq!(
+            cost.to_bits(),
+            oracle.to_bits(),
+            "build_normal_equations cost must equal the huber_mahalanobis_cost oracle bit-for-bit"
+        );
+
+        // Behind-camera case: a steep tilt at very close range drives the -y corners
+        // to `p_cam.z < 1e-4`, exercising the `z<1e-4 → cost += 1e6; continue`
+        // penalty branch that both functions must apply identically (the earlier
+        // case only covers in-front geometry).
+        let steep = nalgebra::Rotation3::from_euler_angles(1.48, 0.0, 0.0)
+            .matrix()
+            .into_owned();
+        let close = Pose::new(steep, nalgebra::Vector3::new(0.02, 0.01, 0.02));
+        let behind: usize = (0..4)
+            .filter(|&i| (close.rotation * obj_pts[i] + close.translation).z < 1e-4)
+            .count();
+        assert!(
+            behind > 0,
+            "test setup must place ≥1 corner behind the camera"
+        );
+        let (_j, _r, cost_b) =
+            build_normal_equations(&intrinsics, &corners, &obj_pts, &close, &info, K);
+        let oracle_b = huber_mahalanobis_cost(&intrinsics, &corners, &obj_pts, &close, &info, K);
+        assert_eq!(
+            cost_b.to_bits(),
+            oracle_b.to_bits(),
+            "behind-camera 1e6-penalty cost must match the oracle bit-for-bit"
         );
     }
 
