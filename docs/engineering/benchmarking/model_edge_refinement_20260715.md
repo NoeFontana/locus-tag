@@ -105,6 +105,30 @@ Reading the table:
   flat at 2160 (baseline → tuned: 2.4→3.8 / 6.3→7.5 / 14.3→15.3 / 57.4→58.2 ms).
   The stage is a bounded per-tag Gauss-Newton on the opt-in Accurate path.
 
+### Image-space accuracy — 2D corner RMSE & reprojection RMSE
+
+Two RMSEs make the "translation trades but the pose is still more accurate" story
+concrete (harness: `tools/bench/model_edge_rmse.py`):
+
+- **2D corner RMSE** (detected vs GT corners, px) — **identical** baseline vs edge
+  at every resolution (the detected corners are byte-identical; the stage emits only
+  the pose): mean 0.210 / 0.208 / 0.215 / 0.178 px for 640/720/1080/2160.
+- **Reprojection RMSE** (model corners reprojected through the *estimated pose* vs
+  GT corners, px — the `hub.rs` `mean_reprojection_rmse` quantity) — **improves at
+  every resolution and percentile**:
+
+| resolution | reproj mean (px) | reproj p95 (px) | reproj p99 (px) |
+| :--- | ---: | ---: | ---: |
+| 640×480   | 0.181 → **0.151** | 0.400 → **0.290** | 0.456 → **0.370** |
+| 1280×720  | 0.185 → **0.144** | 0.418 → **0.278** | 0.457 → **0.339** |
+| 1920×1080 | 0.173 → **0.141** | 0.406 → **0.254** | 0.759 → **0.553** |
+| 3840×2160 | 0.158 → **0.132** | 0.395 → **0.254** | 0.411 → **0.393** |
+
+Reprojection RMSE (mean −13…−22 %, p95 −27…−36 %, p99 −4…−27 %) falls everywhere:
+in **image space** the refined pose is uniformly *closer to truth*, so the small
+metric-translation p95 trade above is a depth/scale artefact of the corner re-anchor,
+not a loss of pose accuracy where it is observable. Corner localization is untouched.
+
 ## Why this works where corner-level levers failed
 
 The 2026-07-14 study (`refine_variants_20260714.md`) proved every *corner-level*
@@ -127,5 +151,7 @@ repeated runs); the latency column is a best-effort single-thread wall-time.
 
 ```bash
 PYTHONPATH=. LOCUS_HUB_DATASET_DIR=tests/data/hub_cache RAYON_NUM_THREADS=1 \
-  uv run --group bench tools/bench/model_edge_eval.py         # baseline vs enabled
+  uv run --group bench tools/bench/model_edge_eval.py    # pose: recall/precision/rot/trans
+PYTHONPATH=. LOCUS_HUB_DATASET_DIR=tests/data/hub_cache RAYON_NUM_THREADS=1 \
+  uv run --group bench tools/bench/model_edge_rmse.py    # image-space: 2D corner + reproj RMSE
 ```

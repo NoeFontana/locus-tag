@@ -149,7 +149,9 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   — mean −39…−55 %, **p99 −47…−76 % at every resolution** (1080p 0.600° → 0.249°,
   p95 0.385° → 0.180° — well under OpenCV `apriltag`'s 0.376°) — keeping translation
   best-in-class in mean and p99, against a small bounded p95 trade at high
-  resolution (the gated edges→rotation / corners→translation split), at +~1 ms/frame.
+  resolution (the gated edges→rotation / corners→translation split). **Reprojection
+  RMSE improves at every resolution** (mean −13…−22 %), confirming a genuine
+  image-space accuracy gain; 2D corner RMSE is unchanged. +~1 ms/frame.
   Requires camera intrinsics + `tag_size`; shipped profiles leave it off, so
   detection snapshots stay byte-identical. See
   `docs/engineering/benchmarking/model_edge_refinement_20260715.md` and
