@@ -258,8 +258,11 @@ The rotation update uses `UnitQuaternion::from_scaled_axis` for numerically stab
 
 #### Convergence
 
-- Gradient convergence: $\|\mathbf{J}^T \mathbf{W} \mathbf{r}\|_\infty < 10^{-8}$
-- Step convergence: $\|\boldsymbol{\delta}\| < 10^{-8}$
+- Gradient convergence (primary): $\|\mathbf{J}^T \mathbf{W} \mathbf{r}\|_\infty < 10^{-8}$
+- Function convergence (secondary): relative cost reduction
+  $(c_\text{prev} - c_\text{new}) / c_\text{prev} < 10^{-6}$ — a unit-free,
+  scale-invariant gate (replacing a mixed-unit $\|\boldsymbol{\delta}\|$ step gate
+  that summed rad² and m²).
 - Maximum 20 iterations (typically exits in 3-6).
 
 ---

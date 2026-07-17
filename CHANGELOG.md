@@ -67,6 +67,27 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **Pose LM convergence: unit-sound function-tolerance gate.** The shared
+  `nielsen_lm` secondary convergence gate is now a relative-cost-reduction test
+  (`(cost_prev − cost_new) / cost_prev < func_tol`, `func_tol = 1e-6`, the Ceres
+  `function_tolerance` default) in place of the mixed-unit `‖δ‖ < 1e-7` step gate.
+  The old gate summed translation-m² and rotation-rad² into one scalar — a
+  dimensionally-unsound quantity whose binding point drifts with the arbitrary
+  choice of length unit. Two committed diagnostics quantify the change:
+  `step_gate_unit_rescale_invariance` poses the *identical* pixel problem across a
+  10⁴× translation-scale range and shows the old gate drifts 15→20 mean iterations
+  (and on far/small tags fails to bind, running to `max_iters`), while `func_tol`
+  is exactly scale-invariant at ~7.8 iterations; `step_gate_board_battery` asserts
+  the new gate reaches the converged rotation to <5e-3° on a 36-point board. The
+  switch is **accuracy-neutral**: every gate — old, new, and a fully-converged
+  reference — yields identical rotation p99 (the reprojection objective is flat in
+  rotation long before either gate binds, so the earlier "loosening risks the
+  rotation tail" concern was empirically falsified — the old gate's real cost was
+  unbounded, unit-dependent iteration counts on the AV long-range regime).
+  Single-tag snapshots (render-tag, ICRA, ROC) stay **byte-identical**; the board
+  hub snapshots move only at the convergence-point-noise floor (mixed-sign,
+  sub-1 % on p99 aggregates, shipped `high_accuracy` ChArUco rotation essentially
+  unchanged) and are re-baselined. `grad_tol` remains the primary stationarity gate.
 - **Shared Nielsen trust-region LM core.** The three pose LM loops (corner
   unweighted/weighted and the board damped LM) are unified onto one
   `pose::nielsen_lm` core parameterised by a `NielsenConfig`. This removes three
@@ -79,14 +100,7 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   Single-tag results (render-tag, ICRA, ROC) are **byte-identical**; the board snapshots move only at the FP-reorder
   floor (max 8.5e-7 relative, net neutral / slightly better medians) and are
   re-baselined. A `nielsen_config_tuning_sweep` diagnostic evidences the constant
-  choices: it shows loosening the step gate `1e-7 → 1e-6` *would* cut mean LM
-  iterations ~44 % at identical accuracy on the synthetic + render-tag corpora —
-  but those corpora never bind the step gate, and an adversarial review flagged a
-  real rotation-tail risk out of distribution (the step gate means "last step
-  small", not "gradient zero", and the mixed-unit `‖δ‖` can let translation mask
-  un-converged rotation on grazing/far/small tags). Since the pose LM is not a
-  latency bottleneck (no measurable wall-clock change), the tune is **not worth the
-  tail risk** — the tight `step_tol = 1e-7` is kept.
+  choices (the step gate was revisited in the function-tolerance entry above).
 - **Pose LMs migrated to right (body-frame) SE(3) perturbation.** All four pose
   solvers — `pose::refine_pose_lm` (unweighted corner), `pose_weighted` (weighted
   production), and the three `board.rs` LM sites — now parameterise the update as
