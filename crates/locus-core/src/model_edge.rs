@@ -116,13 +116,20 @@ const BEHIND_PENALTY: f64 = 1e6;
 /// curvature tilts the normal at oblique views. Projection is analytic, so a
 /// tiny step carries no measurement noise.
 const TAN_EPS_FRAC: f64 = 1e-2;
-/// Upper bound on stored edge samples: `(N+1) * N * |SEG_FRACS| * 2`. For the
-/// current families N ≤ 8 (36h11/ArUco 6x6) → 9*8*7*2 = 1008; a larger grid simply
-/// caps its sample count here, which only trims the fit slightly. `1024` keeps the
-/// `[Sample; MAX_SAMPLES]` scratch (56 B/sample ⇒ ~56 KB) **under the 64 KB
-/// on-stack threshold** of `constraints.md §1`, so — like the original design — it
-/// stays a stack array on the 2 MB rayon-worker pose path with no per-tag heap
-/// allocation. Raising `SEG_FRACS` past 7 would breach that budget.
+/// Upper bound on stored edge samples: `(N+1) * N * |SEG_FRACS| * 2` where the
+/// full grid `N = dimension + 2`. All shipped families have data dimension ≤ 6
+/// (36h11 / ArUco 6×6 → N = 8 → 9*8*7*2 = 1008), so the cap is never hit and the
+/// full grid is sampled. `1024` keeps the `[Sample; MAX_SAMPLES]` scratch
+/// (56 B/sample ⇒ ~56 KB) **under the 64 KB on-stack threshold** of
+/// `constraints.md §1`, so — like the original design — it stays a stack array on
+/// the 2 MB rayon-worker pose path with no per-tag heap allocation.
+///
+/// NOTE: `measure_samples` fills in raster (boundary-line) order, so if a future
+/// family with dimension ≥ 7 pushed the count past `MAX_SAMPLES`, the cap would
+/// drop the *last* boundary lines — a spatially **one-sided** sample set that would
+/// bias the rotation, not a uniform thin-out. Adding such a family must either
+/// balance the sampling order or box the scratch to grow the budget. Raising
+/// `SEG_FRACS` past 7 would breach the 64 KB budget for the same reason.
 const MAX_SAMPLES: usize = 1024;
 
 /// A fixed edge measurement: the model point (tag frame), the measured sub-pixel
