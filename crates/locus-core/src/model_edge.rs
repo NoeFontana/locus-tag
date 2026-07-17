@@ -26,9 +26,10 @@
 //!    edges, or an implausibly large pose jump from the corner pose).
 //!
 //! Empirically (1080p render-tag, see the benchmarking note) this cuts rotation
-//! p99 ~0.60° → ~0.32° — beating OpenCV's `apriltag` refinement — while keeping
-//! Locus's best-in-class translation. See
-//! `docs/engineering/benchmarking/model_edge_refinement_*`.
+//! p99 ~0.60° → ~0.25° — well under OpenCV's `apriltag` refinement (~0.38°) — while
+//! keeping Locus's best-in-class translation. The interior edges are fit under a
+//! robust Huber loss so the clean bulk (not a few latched/biased edges) controls
+//! the rotation. See `docs/engineering/benchmarking/model_edge_refinement_*`.
 
 use nalgebra::{Matrix2, Matrix3, Vector3, Vector6};
 
@@ -52,9 +53,40 @@ const MEASURE_ITERS: usize = 4;
 /// LM can never drift from the production pose solver on numerics.
 const EDGE_LM: NielsenConfig = NielsenConfig::POSE;
 const TRANS_ITERS: usize = 3;
+/// Huber transition (px) for the robust edge loss. With a good pose init the edge
+/// residuals are ~0.1–0.4 px, but a few edges latch onto an adjacent boundary or
+/// carry PSF-asymmetry bias (up to the [`OFFSET_MAX`] reject). An L2 fit lets those
+/// few drag the rotation — the rotation *tail* (p99). Down-weighting residuals
+/// beyond `δ` with a Huber loss keeps the many clean interior edges in control of
+/// the fit. `0.5 px` sits above the clean-edge noise and below the latched-edge
+/// regime; the rank-1 edge weight becomes `w_huber · n·nᵀ`.
+const EDGE_HUBER_DELTA_PX: f64 = 0.5;
+
+/// Huber IRLS `(weight, cost)` for a 1-D edge residual `res` (px). Inliers
+/// (`|res| ≤ δ`) keep unit weight and the quadratic `½·res²`; outliers get the
+/// down-weight `δ/|res|` and the linear cost `δ·(|res| − ½δ)`. The weight is
+/// `ρ'(res)/res`, so `jtr = Σ j·w·res = Σ j·ρ'(res) = −∂cost/∂ξ` — the shared
+/// Nielsen gain-ratio's `grad = −jtr` convention holds unchanged.
+#[inline]
+fn edge_huber(res: f64) -> (f64, f64) {
+    let a = res.abs();
+    if a <= EDGE_HUBER_DELTA_PX {
+        (1.0, 0.5 * res * res)
+    } else {
+        (
+            EDGE_HUBER_DELTA_PX / a,
+            EDGE_HUBER_DELTA_PX * (a - 0.5 * EDGE_HUBER_DELTA_PX),
+        )
+    }
+}
 /// Interior fractions along each cell-boundary segment (avoid the cell-corner
-/// junctions, where a perpendicular scan would hit a T-junction and bias).
-const SEG_FRACS: [f64; 3] = [0.25, 0.5, 0.75];
+/// junctions, where a perpendicular scan would hit a T-junction and bias). Seven
+/// samples per boundary: more *independent* edge measurements average the per-scan
+/// noise down, which tightens the rotation tail materially (render-tag rot p99 at
+/// 1080p falls 0.36°→0.25° going 3→7 fractions). Seven is the knee under the
+/// on-stack sample budget (see [`MAX_SAMPLES`]); denser would force a per-tag heap
+/// allocation on the pose path for a marginal gain.
+const SEG_FRACS: [f64; 7] = [0.12, 0.253, 0.377, 0.5, 0.623, 0.747, 0.88];
 /// Minimum black/white contrast (0..255) for a scan to count as a real edge.
 /// High so only strong, unambiguous black↔white boundaries are used (weak/partial
 /// edges give incoherent measurements that swamp the pose signal).
@@ -85,9 +117,13 @@ const BEHIND_PENALTY: f64 = 1e6;
 /// tiny step carries no measurement noise.
 const TAN_EPS_FRAC: f64 = 1e-2;
 /// Upper bound on stored edge samples: `(N+1) * N * |SEG_FRACS| * 2`. For the
-/// current families N ≤ 8 (36h11/ArUco 6x6) → 9*8*3*2 = 432 < 640; a larger grid
-/// simply caps its sample count here, which only trims the fit slightly.
-const MAX_SAMPLES: usize = 640;
+/// current families N ≤ 8 (36h11/ArUco 6x6) → 9*8*7*2 = 1008; a larger grid simply
+/// caps its sample count here, which only trims the fit slightly. `1024` keeps the
+/// `[Sample; MAX_SAMPLES]` scratch (56 B/sample ⇒ ~56 KB) **under the 64 KB
+/// on-stack threshold** of `constraints.md §1`, so — like the original design — it
+/// stays a stack array on the 2 MB rayon-worker pose path with no per-tag heap
+/// allocation. Raising `SEG_FRACS` past 7 would breach that budget.
+const MAX_SAMPLES: usize = 1024;
 
 /// A fixed edge measurement: the model point (tag frame), the measured sub-pixel
 /// edge point (image px), and the edge normal (image px). Held constant while the
@@ -294,7 +330,7 @@ fn fixed_cost(intr: &CameraIntrinsics, pose: &Pose, samples: &[Sample]) -> f64 {
         }
         let [pu, pv] = intr.distort_normalized(p_cam.x / p_cam.z, p_cam.y / p_cam.z);
         let res = (s.m[0] - pu) * s.n[0] + (s.m[1] - pv) * s.n[1];
-        cost += 0.5 * res * res;
+        cost += edge_huber(res).1;
     }
     cost
 }
@@ -330,13 +366,16 @@ fn edge_normal_equations(
             projection_and_gradient(intr, p_cam.x * z_inv, p_cam.y * z_inv, z_inv);
         let (res_u, res_v) = (s.m[0] - pu, s.m[1] - pv);
         let (n0, n1) = (s.n[0], s.n[1]);
-        // 1-D residual along the edge normal; ½·res² to match the shared Nielsen
-        // gain-ratio's cost convention (grad = −jtr).
+        // 1-D residual along the edge normal, under a robust Huber loss so the
+        // clean interior edges (not a few latched/biased ones) control the fit.
+        // The ½·res² inlier cost matches the shared Nielsen gain-ratio (grad = −jtr).
         let res = n0 * res_u + n1 * res_v;
-        cost += 0.5 * res * res;
-        // Rank-1 projector onto the edge normal: reduces the 2-D corner accumulator
-        // to the 1-D-along-normal edge fit (see the fn doc).
-        let w = Matrix2::new(n0 * n0, n0 * n1, n0 * n1, n1 * n1);
+        let (wh, c) = edge_huber(res);
+        cost += c;
+        // Rank-1 projector onto the edge normal, scaled by the Huber weight:
+        // reduces the 2-D corner accumulator to the 1-D-along-normal robust edge
+        // fit (see the fn doc).
+        let w = Matrix2::new(n0 * n0, n0 * n1, n0 * n1, n1 * n1) * wh;
         ne.add(&s.p, &du, &dv, res_u, res_v, &w);
     }
     let (jtj, jtr) = ne.finish();
@@ -374,9 +413,10 @@ pub(crate) fn refine_pose_model_edges(
     let scan_half = (0.45 * projected_cell_px(corners, n)).clamp(1.0, SCAN_HALF_MAX);
 
     let mut pose = *init;
-    // ~35 KB of fixed edge targets on the stack. This is a leaf function on the
-    // opt-in Accurate-mode path (2 MB rayon worker stack); boxing would add a
-    // per-tag heap allocation on the pose path for no benefit.
+    // ~56 KB of fixed edge targets on the stack (under the 64 KB `constraints.md §1`
+    // threshold — see `MAX_SAMPLES`). This is a leaf function on the opt-in
+    // Accurate-mode path (2 MB rayon worker stack); boxing would add a per-tag heap
+    // allocation on the pose path for no benefit.
     #[allow(clippy::large_stack_arrays)]
     let mut samples = [Sample::default(); MAX_SAMPLES];
 
