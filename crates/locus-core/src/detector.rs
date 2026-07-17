@@ -463,6 +463,21 @@ fn run_detection_pipeline<'ctx>(
     let v = state.batch.partition(n);
 
     // 6. Pose Refinement (SoA)
+    let edge_refine_dim = if config.pose_edge_refinement_enabled {
+        let dim = common_grid_dimension(decoders);
+        if dim.is_none() {
+            // The stage needs one grid geometry; a mixed-dimension decoder set
+            // disables it for the whole batch. Surface it so an opted-in user
+            // isn't left wondering why nothing changed.
+            tracing::debug!(
+                "pose_edge_refinement enabled but active decoders have differing \
+                 grid dimensions; model-edge refinement is skipped for this frame"
+            );
+        }
+        dim
+    } else {
+        None
+    };
     let (repro_errors_ptr, num_repro) = run_pose_refinement(
         &mut state.batch,
         &state.arena,
@@ -471,6 +486,7 @@ fn run_detection_pipeline<'ctx>(
         tag_size,
         &refinement_img,
         config,
+        edge_refine_dim,
         debug_telemetry,
     );
 
@@ -516,6 +532,7 @@ fn run_pose_refinement(
     tag_size: Option<f64>,
     refinement_img: &ImageView,
     config: &DetectorConfig,
+    edge_refine_dim: Option<usize>,
     debug_telemetry: bool,
 ) -> (*const f32, usize) {
     let mut repro_errors_ptr = std::ptr::null();
@@ -529,6 +546,7 @@ fn run_pose_refinement(
             size,
             Some(refinement_img),
             config,
+            edge_refine_dim,
         );
 
         if debug_telemetry {
@@ -878,6 +896,15 @@ fn compute_min_outer_dim(decoders: &[Box<dyn TagDecoder + Send + Sync>]) -> u32 
         .map(|d| d.dimension() as u32 + 2)
         .min()
         .unwrap_or(6)
+}
+
+/// The data-grid dimension shared by every active decoder, or `None` if they
+/// differ (or the list is empty). Model-edge pose refinement needs one grid
+/// geometry; a mixed-dimension detector safely skips the stage.
+fn common_grid_dimension(decoders: &[Box<dyn TagDecoder + Send + Sync>]) -> Option<usize> {
+    let mut it = decoders.iter().map(|d| d.dimension());
+    let first = it.next()?;
+    it.all(|d| d == first).then_some(first)
 }
 
 impl LocusEngine {

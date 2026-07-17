@@ -124,6 +124,11 @@
           "title": "Pose Consistency Min Decisive Ratio",
           "type": "number"
         },
+        "pose_edge_refinement_enabled": {
+          "default": false,
+          "title": "Pose Edge Refinement Enabled",
+          "type": "boolean"
+        },
         "sigma_n_sq": {
           "default": 4.0,
           "minimum": 0.0,

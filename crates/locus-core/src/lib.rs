@@ -43,6 +43,8 @@ pub(crate) mod gradient;
 pub(crate) mod gwlf;
 /// Image buffer abstractions.
 pub mod image;
+/// Model-based edge pose refinement (opt-in Accurate-mode post-decode stage).
+pub(crate) mod model_edge;
 /// 3D Pose Estimation (PnP).
 pub mod pose;
 /// Weighted pose estimation logic.
