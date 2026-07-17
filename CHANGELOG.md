@@ -143,12 +143,15 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   the clean interior edges (not a few latched/biased ones) control the rotation.
   Edge scans that leave the image or project behind the camera are
   rejected/penalised, and the refined pose is re-validated against the
-  pose-consistency χ² gate so it can never weaken false-positive suppression. On
-  render-tag it cuts **rotation p99 by 47–76 % at every resolution** (1080p
-  0.600° → 0.249°, p95 0.385° → 0.180° — well under OpenCV `apriltag`'s 0.376°)
-  while keeping best-in-class translation, at +~1 ms/frame. Requires camera
-  intrinsics + `tag_size`; shipped profiles leave it off, so detection snapshots
-  stay byte-identical. See
+  pose-consistency χ² gate so it can never weaken false-positive suppression (recall
+  and precision stay 100 %/100 %; mean corner RMSE is untouched — the stage only
+  refines the pose). On render-tag it tightens the **whole rotation distribution**
+  — mean −39…−55 %, **p99 −47…−76 % at every resolution** (1080p 0.600° → 0.249°,
+  p95 0.385° → 0.180° — well under OpenCV `apriltag`'s 0.376°) — keeping translation
+  best-in-class in mean and p99, against a small bounded p95 trade at high
+  resolution (the gated edges→rotation / corners→translation split), at +~1 ms/frame.
+  Requires camera intrinsics + `tag_size`; shipped profiles leave it off, so
+  detection snapshots stay byte-identical. See
   `docs/engineering/benchmarking/model_edge_refinement_20260715.md` and
   `tools/bench/model_edge_eval.py`.
 - **`Pose::adjoint` + SE(3) covariance reframing.** `Pose::adjoint` returns the

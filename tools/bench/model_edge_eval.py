@@ -51,19 +51,26 @@ def _run(loader: HubDatasetLoader, cfg_name: str, enabled: bool) -> dict[str, An
 
 def main() -> None:
     loader = HubDatasetLoader(root=HUB_CACHE_DIR)
+    # Full guardrail set: recall/precision must stay flat (the stage only refines
+    # an accepted pose, never drops or adds a detection); mean corner RMSE is not
+    # shown because the stage never writes `batch.corners`, so it is identical to
+    # baseline by construction. rot/trans reported mean + p50/p95/p99.
     print(
-        f"{'config':<30} {'variant':<10} | {'rot p95':>7} {'rot p99':>7} | "
-        f"{'t p99 mm':>8} {'t mean':>7} | {'lat ms':>6}"
+        f"{'config':<12} {'variant':<9} | {'rec%':>5} {'prec%':>5} | "
+        f"{'r_mean':>6} {'r_p50':>6} {'r_p95':>6} {'r_p99':>6} | "
+        f"{'t_mean':>6} {'t_p95':>6} {'t_p99':>6} | {'lat ms':>6}"
     )
-    print("-" * 88)
+    print("-" * 100)
     for cfg_name in CONFIGS:
         short = cfg_name.replace("locus_v1_tag36h11_", "")
         for enabled, lbl in [(False, "baseline"), (True, "edge")]:
             r = _run(loader, cfg_name, enabled)
             print(
-                f"{short:<30} {lbl:<10} | {r['rot_p95_deg']:>7.3f} {r['rot_p99_deg']:>7.3f} | "
-                f"{r['trans_p99_m'] * 1000:>8.2f} {r['trans_mean_m'] * 1000:>7.2f} | "
-                f"{r['latency_ms']:>6.2f}"
+                f"{short:<12} {lbl:<9} | {r['recall']:>5.1f} {r['precision']:>5.1f} | "
+                f"{r['rot_mean_deg']:>6.3f} {r['rot_p50_deg']:>6.3f} "
+                f"{r['rot_p95_deg']:>6.3f} {r['rot_p99_deg']:>6.3f} | "
+                f"{r['trans_mean_m'] * 1000:>6.2f} {r['trans_p95_m'] * 1000:>6.2f} "
+                f"{r['trans_p99_m'] * 1000:>6.2f} | {r['latency_ms']:>6.2f}"
             )
 
 

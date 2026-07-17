@@ -65,36 +65,45 @@ inner LM reuses the vetted `NielsenConfig::POSE`, so no per-geometry calibration
 
 ## Results (render-tag, single-thread, Accurate pose)
 
-Locus `high_accuracy`: **baseline** (no edge stage) → **L2-edge** (shipped-#336,
-for reference) → **tuned** (Huber δ = 0.5 + 7 samples/boundary):
+**Recall and precision are 100 % / 100 % for both baseline and the enabled stage
+at every resolution** — the refinement only sharpens an already-accepted pose (the
+no-worse + pose-consistency χ² gates never null one), so it neither drops nor adds
+a detection. **Mean corner RMSE is unchanged by construction**: the stage never
+writes `batch.corners`; it reads them as fixed input and emits only the pose.
 
-| resolution | rot p95 (°) | rot p99 (°) | trans p99 (mm) | trans mean (mm) |
-| :--- | ---: | ---: | ---: | ---: |
-| 640×480   | 0.373 → 0.233 → **0.201** | 0.508 → 0.314 → **0.269** | 8.11 → 7.87 → **7.60** | 1.09 → 1.04 → **1.03** |
-| 1280×720  | 0.464 → 0.175 → **0.194** | 0.624 → 0.472 → **0.262** | 15.97 → 15.07 → **14.46** | 1.56 → 1.71 → **1.47** |
-| 1920×1080 | 0.385 → 0.195 → **0.180** | 0.600 → 0.409 → **0.249** | 18.62 → 21.06 → **20.10** | 1.95 → 2.16 → **1.88** |
-| 3840×2160 | 0.432 → 0.215 → **0.203** | 1.113 → 0.429 → **0.267** | 39.02 → 39.87 → **36.98** | 3.81 → 4.38 → **4.07** |
+Locus `high_accuracy`, **baseline** (no edge stage) → **tuned** (Huber δ = 0.5 + 7
+samples/boundary), full rotation/translation distribution:
 
-For reference, OpenCV `cv2.aruco` **apriltag** at 1080p is rot p99 **0.376°** /
-trans p99 **~55 mm**. The tuned stage brings Locus to rot p99 **0.249°** (p95
-**0.180°**) at trans p99 **20 mm** — i.e. **well under apriltag rotation at ~2.7×
-better translation.**
+| resolution | rot mean (°) | rot p50 (°) | rot p95 (°) | rot p99 (°) | t mean (mm) | t p95 (mm) | t p99 (mm) |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 640×480   | 0.155→**0.095** | 0.120→**0.084** | 0.373→**0.201** | 0.508→**0.269** | 1.09→**1.03** | 3.62→4.15 | 8.11→**7.60** |
+| 1280×720  | 0.131→**0.064** | 0.058→**0.046** | 0.464→**0.194** | 0.624→**0.262** | 1.56→**1.47** | 8.16→8.26 | 15.97→**14.46** |
+| 1920×1080 | 0.122→**0.062** | 0.057→**0.041** | 0.385→**0.180** | 0.600→**0.249** | 1.95→**1.88** | 8.62→9.75 | 18.62→20.10 |
+| 3840×2160 | 0.139→**0.063** | 0.055→**0.041** | 0.432→**0.203** | 1.113→**0.267** | 3.81→4.07 | 12.82→17.72 | 39.02→**36.98** |
 
-Highlights vs the **baseline** corner pose:
+Rotation p99 for reference — **baseline → L2-edge (pre-tuning) → tuned**:
+640 `0.508→0.314→0.269`, 720 `0.624→0.472→0.262`, 1080 `0.600→0.409→0.249`,
+2160 `1.113→0.429→0.267`. The tuning (Huber + denser sampling) cuts rot p99 a
+further −11 % to −44 % over the L2 stage.
 
-- **Rotation p99 −47 % to −76 %** at every resolution; **p95 roughly halved**
-  everywhere.
-- **Translation p99 improves** at 640/720/2160 and **trans mean improves** at
-  640/720/1080; the only regression is **+1.5 mm p99 at 1080p** — the known,
-  bounded edges→rotation trade (1–2 tags), *smaller* than the shipped L2 stage's
-  +2.4 mm and gated by the no-worse + χ² checks.
-- **Latency** (single-thread, approximate): +~1 ms/frame at 640/720/1080, roughly
-  flat at 2160 (baseline → tuned: 2.3→3.7 / 6.2→7.4 / 14.1→15.2 / 57.4→56.9 ms).
+Reading the table:
+
+- **Rotation improves across the *entire* distribution, not just the tail.** Mean
+  −39 % to −55 %, p50 roughly halved, p95 roughly halved, p99 −47 % to −76 %. At
+  1080p the tuned rot p99 **0.249°** (p95 **0.180°**) is well under OpenCV
+  `cv2.aruco` apriltag's **0.376°**, at trans p99 ~20 mm vs apriltag's ~55 mm —
+  **apriltag-class-and-better rotation at ~2.7× better translation.**
+- **Translation carries a bounded trade** — the edges→rotation / corners→translation
+  split. **t mean is flat-to-better** at 640/720/1080 (−0.06 to −0.09 mm) and
+  +0.26 mm only at 2160; **t p99 is better** at 640/720/2160 and +1.5 mm at 1080p.
+  The regression concentrates in **t p95** at higher resolution (1080p +1.1 mm,
+  2160p +4.9 mm) — the 1-2-tag pose-tail where a large rotation correction pulls the
+  corner-anchored translation. This is the known, gated trade; it stays inside the
+  opt-in stage (shipped profiles are byte-identical) and never touches recall,
+  precision, or corner RMSE.
+- **Latency** (single-thread, best-effort): +~1 ms/frame at 640/720/1080, roughly
+  flat at 2160 (baseline → tuned: 2.4→3.8 / 6.3→7.5 / 14.3→15.3 / 57.4→58.2 ms).
   The stage is a bounded per-tag Gauss-Newton on the opt-in Accurate path.
-
-vs the pre-tuning **L2-edge** stage, the tuning cuts rot p99 a further −11 % to
-−44 % (0.314→0.269, 0.472→0.262, 0.409→0.249, 0.429→0.267) with neutral-to-better
-translation.
 
 ## Why this works where corner-level levers failed
 
