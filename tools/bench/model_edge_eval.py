@@ -34,9 +34,7 @@ _DEFAULT = (
     "locus_v1_tag36h11_3840x2160",
 )
 CONFIGS = (
-    (os.environ["RENDER_TAG_SOTA_CONFIG"],)
-    if "RENDER_TAG_SOTA_CONFIG" in os.environ
-    else _DEFAULT
+    (os.environ["RENDER_TAG_SOTA_CONFIG"],) if "RENDER_TAG_SOTA_CONFIG" in os.environ else _DEFAULT
 )
 
 
