@@ -3158,8 +3158,11 @@ seed and the same Marquardt / Nielsen trust-region machinery.</p>
 <p>The rotation update uses <code>UnitQuaternion::from_scaled_axis</code> for numerically stable <span class="arithmatex">\(SO(3)\)</span> integration.</p>
 <h4 id="convergence">Convergence</h4>
 <ul>
-<li>Gradient convergence: <span class="arithmatex">\(\|\mathbf{J}^T \mathbf{W} \mathbf{r}\|_\infty &lt; 10^{-8}\)</span></li>
-<li>Step convergence: <span class="arithmatex">\(\|\boldsymbol{\delta}\| &lt; 10^{-8}\)</span></li>
+<li>Gradient convergence (primary): <span class="arithmatex">\(\|\mathbf{J}^T \mathbf{W} \mathbf{r}\|_\infty &lt; 10^{-8}\)</span></li>
+<li>Function convergence (secondary): relative cost reduction
+  <span class="arithmatex">\((c_\text{prev} - c_\text{new}) / c_\text{prev} &lt; 10^{-6}\)</span> — a unit-free,
+  scale-invariant gate (replacing a mixed-unit <span class="arithmatex">\(\|\boldsymbol{\delta}\|\)</span> step gate
+  that summed rad² and m²).</li>
 <li>Maximum 20 iterations (typically exits in 3-6).</li>
 </ul>
 <hr />
