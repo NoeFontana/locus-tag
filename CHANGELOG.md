@@ -5,8 +5,20 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## [0.7.1] - 2026-07-19
+
 ### Documentation
 
+- **README overhaul + engineering-learnings consolidation.** Reordered the README to
+  a user-first structure (pitch → experimental caveats → supported markers &
+  requirements → install → quick start, with benchmark depth moved below and into
+  `docs/explanation/performance.md`), added the missing supported-family / platform /
+  Python-version and API-reference information, and tightened the prose. Consolidated
+  ~19 dated engineering postmortems/diagnostics (~3,500 lines) into four durable,
+  repo-internal `docs/engineering/lessons/` pages (pose covariance; rotation tail &
+  edge refinement; EdLines; recall/quad/ICRA) plus an index and a going-forward
+  convention; removed the distilled raw sources (git history preserves them). No code
+  or shipped-behavior change.
 - **README + SOTA-doc pose metrics refreshed for the v0.7.0 `high_accuracy`
   default.** The render-tag comparison table (README `render-tag-comparison`
   snippet, re-used in `docs/explanation/performance.md`, and
