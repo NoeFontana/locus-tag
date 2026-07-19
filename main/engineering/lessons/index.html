@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/rotation_tail_diagnostic_phase0_20260503/">
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/lessons/">
       
       
       
@@ -23,7 +23,7 @@
     
     
       
-        <title>Rotation-Tail Diagnostic — Phase 0 (20260503) - Locus</title>
+        <title>Engineering lessons - Locus</title>
       
     
     
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#rotation-tail-diagnostic-phase-0-20260503" class="md-skip">
+        <a href="#engineering-lessons" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Rotation-Tail Diagnostic — Phase 0 (20260503)
+              Engineering lessons
             
           </span>
         </div>
@@ -1374,10 +1374,6 @@
       
         
       
-        
-      
-        
-      
     
     
     
@@ -1539,34 +1535,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/hub_regression_20260423/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Hub Regression Performance Report (2026-04-23)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../benchmarking/render_tag_sota_20260425/" class="md-nav__link">
         
   
@@ -1687,34 +1655,6 @@
     
   
     2160p render_tag_hub recall lift (2026-04-25)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/quad_truncation_fix_20260426/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Quad-extraction truncation fix (2026-04-26)
   
 
     
@@ -1858,38 +1798,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-tldr" class="md-nav__link">
+  <a href="#index" class="md-nav__link">
     <span class="md-ellipsis">
       
-        §1 TL;DR
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="§1 TL;DR">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#reproducibility-cross-check" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Reproducibility cross-check
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#2-failure-mode-breakdown" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §2 Failure-mode breakdown
+        Index
       
     </span>
   </a>
@@ -1897,115 +1809,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#3-stratified-rotation-error" class="md-nav__link">
+  <a href="#convention-how-to-record-a-new-learning-keeps-this-from-re-sprawling" class="md-nav__link">
     <span class="md-ellipsis">
       
-        §3 Stratified rotation error
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="§3 Stratified rotation error">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#angle-of-incidence-deg" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Angle of incidence (deg)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#distance-m" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Distance (m)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#estimated-ppm-pxm" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Estimated PPM (px/m)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#4-top-10-worst-scenes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §4 Top-10 worst scenes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#5-calibration-check" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §5 σ calibration check
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#6-irls-weight-mahalanobis-distribution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §6 IRLS weight + Mahalanobis distribution
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#7-what-this-points-at" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §7 What this points at
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#8-profile-mode-reproducibility-table" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §8 Profile × mode reproducibility table
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#9-recommendations" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §9 Recommendations
+        Convention — how to record a new learning (keeps this from re-sprawling)
       
     </span>
   </a>
@@ -2032,484 +1839,63 @@
   
 
 
-<h1 id="rotation-tail-diagnostic-phase-0-20260503">Rotation-Tail Diagnostic — Phase 0 (20260503)</h1>
-<p>Forensics of the residual rotation tail on <code>locus_v1_tag36h11_1920x1080</code> under <code>high_accuracy</code> + Accurate-mode pose. Output of the Phase 0 diagnostic harness (<code>tools/bench/rotation_tail_diag/</code>).</p>
-<h2 id="1-tldr">§1 TL;DR</h2>
-<ul>
-<li><strong>Dataset</strong>: <code>locus_v1_tag36h11_1920x1080</code> — 50 scenes, single tag each, AprilTag36h11 family, 1920×1080.</li>
-<li><strong>Profile / mode</strong>: <code>high_accuracy</code> + <code>Accurate</code>. σ_n² configured = 4.000 (σ ≈ 2.000px).</li>
-<li><strong>Recall</strong>: 50/50 scenes detected.</li>
-<li><strong>Rotation error vs GT</strong> (degrees, 95% bootstrap CI):  p50 = 0.057 [0.041, 0.093]  ·  p95 = 0.473 [0.275, 0.780]  ·  p99 = 0.771 [0.383, 0.874]</li>
-<li><strong>Translation error vs GT</strong> (mm):  p50 = 0.4  ·  p95 = 8.6  ·  p99 = 18.9</li>
-<li><strong>Latency</strong> (ms, production path, no diagnostics):  p50 = 8.26  ·  p99 = 25.45</li>
-</ul>
-<h3 id="reproducibility-cross-check">Reproducibility cross-check</h3>
-<p>The published <code>high_accuracy</code> baseline (commit <code>8890efc</code>, 2026-04-25) reported rot p99 = 1.897° on this dataset. The current run lands at rot p50 = 0.057° / p99 = 0.771° — the bulk distribution is <em>better</em> than the published memo (the snapshot rebless after PR #212 measured all 50 scenes honestly), with a residual tail driven by a small number of outlier scenes. See §2 / §4 for the breakdown.</p>
-<h2 id="2-failure-mode-breakdown">§2 Failure-mode breakdown</h2>
-<p>Mutually-exclusive classification of the 50 scenes. The <code>healthy</code> bucket is <strong>corpus-relative</strong>: a scene is healthy iff its rotation error is below the 85th percentile of the population. This keeps the bucket size bounded as absolute residuals shrink and preserves the discriminating power of the counterfactual table.</p>
+<h1 id="engineering-lessons">Engineering lessons</h1>
+<p>Durable conclusions from Locus's investigation history — what we tried, what we
+shipped, and what was empirically falsified. Each page distills a cluster of
+point-in-time postmortems and diagnostics (now removed; recoverable from git
+history) into one maintainable record, so a future engineer can find "did we
+already try X, and why didn't it work?" without reading twenty dated files.</p>
+<p>This pairs with the anti-pattern index in the agent memory: the memory is the
+fast "don't do X" lookup; these pages carry the mechanism and the re-attempt
+conditions.</p>
+<h2 id="index">Index</h2>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Mode</th>
-<th style="text-align: right;">Count</th>
-<th style="text-align: right;">%</th>
-<th style="text-align: right;">Counterfactual rot p99 if resolved</th>
+<th style="text-align: left;">Lesson</th>
+<th style="text-align: left;">Status</th>
+<th style="text-align: left;">One-line takeaway</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;"><code>healthy</code></td>
-<td style="text-align: right;">42</td>
-<td style="text-align: right;">84.0%</td>
-<td style="text-align: right;">—</td>
+<td style="text-align: left;"><a href="pose-covariance/">Pose covariance calibration</a></td>
+<td style="text-align: left;">CLOSED</td>
+<td style="text-align: left;">Every diagonal/scalar rescale of <code>(JᵀWJ)⁻¹</code> is falsified; the miscalibration is off-diagonal structure. Frontier: model-edge Fisher covariance (unmerged).</td>
 </tr>
 <tr>
-<td style="text-align: left;"><code>sigma_miscalibration</code></td>
-<td style="text-align: right;">5</td>
-<td style="text-align: right;">10.0%</td>
-<td style="text-align: right;">0.771°</td>
+<td style="text-align: left;"><a href="rotation-tail-and-edge-refinement/">Pose rotation-error tail &amp; edge refinement</a></td>
+<td style="text-align: left;">RESOLVED (single-frame)</td>
+<td style="text-align: left;">Corner-level levers are all trade-bound; adding information (model-edge refinement, v0.7.0) beat reshaping the 4 corners.</td>
 </tr>
 <tr>
-<td style="text-align: left;"><code>ppm_starved</code></td>
-<td style="text-align: right;">2</td>
-<td style="text-align: right;">4.0%</td>
-<td style="text-align: right;">0.642°</td>
+<td style="text-align: left;"><a href="edlines-segmentation/">EdLines quad extraction &amp; segmentation</a></td>
+<td style="text-align: left;">ACTIVE</td>
+<td style="text-align: left;">EdLines ships in <code>high_accuracy</code>; the arc-balance selector and the Phase-5 line decoupling were both falsified (decoder-rejection invisibility; chord-cost is a real regulariser).</td>
 </tr>
 <tr>
-<td style="text-align: left;"><code>corner_geometry_outlier</code></td>
-<td style="text-align: right;">1</td>
-<td style="text-align: right;">2.0%</td>
-<td style="text-align: right;">0.600°</td>
+<td style="text-align: left;"><a href="recall-quad-icra/">Recall, quad extraction &amp; ICRA</a></td>
+<td style="text-align: left;">CLOSED</td>
+<td style="text-align: left;">No static <code>(extraction, refinement)</code> pair wins both regimes; PPB adaptive routing does. <code>max_recall_adaptive</code> was folded into <code>high_accuracy</code>.</td>
 </tr>
 </tbody>
 </table>
-<p>_Counterfactual interpretation: "if all <code>&lt;mode&gt;</code> scenes had rotation error = 0, what would p99 become?" Current p99 = 0.771°. The mode whose counterfactual drops p99 the most is the priority fix.</p>
-<h2 id="3-stratified-rotation-error">§3 Stratified rotation error</h2>
-<h3 id="angle-of-incidence-deg">Angle of incidence (deg)</h3>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">Bucket</th>
-<th style="text-align: right;">n</th>
-<th style="text-align: right;">rot p50 (95% CI)</th>
-<th style="text-align: right;">rot p95</th>
-<th style="text-align: right;">rot p99</th>
-<th style="text-align: right;">rot max</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;">10.59…28.93</td>
-<td style="text-align: right;">12</td>
-<td style="text-align: right;">0.189 [0.071, 0.339]</td>
-<td style="text-align: right;">0.686</td>
-<td style="text-align: right;">0.837</td>
-<td style="text-align: right;">0.874</td>
-</tr>
-<tr>
-<td style="text-align: left;">30.45…45.85</td>
-<td style="text-align: right;">13</td>
-<td style="text-align: right;">0.032 [0.022, 0.074]</td>
-<td style="text-align: right;">0.196</td>
-<td style="text-align: right;">0.236</td>
-<td style="text-align: right;">0.246</td>
-</tr>
-<tr>
-<td style="text-align: left;">45.86…54.21</td>
-<td style="text-align: right;">12</td>
-<td style="text-align: right;">0.047 [0.018, 0.194]</td>
-<td style="text-align: right;">0.519</td>
-<td style="text-align: right;">0.635</td>
-<td style="text-align: right;">0.664</td>
-</tr>
-<tr>
-<td style="text-align: left;">56.29…59.55</td>
-<td style="text-align: right;">13</td>
-<td style="text-align: right;">0.074 [0.033, 0.093]</td>
-<td style="text-align: right;">0.228</td>
-<td style="text-align: right;">0.229</td>
-<td style="text-align: right;">0.230</td>
-</tr>
-</tbody>
-</table>
-<h3 id="distance-m">Distance (m)</h3>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">Bucket</th>
-<th style="text-align: right;">n</th>
-<th style="text-align: right;">rot p50 (95% CI)</th>
-<th style="text-align: right;">rot p95</th>
-<th style="text-align: right;">rot p99</th>
-<th style="text-align: right;">rot max</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;">0.56…0.68</td>
-<td style="text-align: right;">12</td>
-<td style="text-align: right;">0.027 [0.016, 0.032]</td>
-<td style="text-align: right;">0.060</td>
-<td style="text-align: right;">0.073</td>
-<td style="text-align: right;">0.077</td>
-</tr>
-<tr>
-<td style="text-align: left;">0.69…0.91</td>
-<td style="text-align: right;">13</td>
-<td style="text-align: right;">0.049 [0.033, 0.074]</td>
-<td style="text-align: right;">0.243</td>
-<td style="text-align: right;">0.340</td>
-<td style="text-align: right;">0.365</td>
-</tr>
-<tr>
-<td style="text-align: left;">0.93…1.45</td>
-<td style="text-align: right;">12</td>
-<td style="text-align: right;">0.076 [0.043, 0.137]</td>
-<td style="text-align: right;">0.529</td>
-<td style="text-align: right;">0.805</td>
-<td style="text-align: right;">0.874</td>
-</tr>
-<tr>
-<td style="text-align: left;">1.46…3.74</td>
-<td style="text-align: right;">13</td>
-<td style="text-align: right;">0.230 [0.117, 0.313]</td>
-<td style="text-align: right;">0.585</td>
-<td style="text-align: right;">0.648</td>
-<td style="text-align: right;">0.664</td>
-</tr>
-</tbody>
-</table>
-<h3 id="estimated-ppm-pxm">Estimated PPM (px/m)</h3>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">Bucket</th>
-<th style="text-align: right;">n</th>
-<th style="text-align: right;">rot p50 (95% CI)</th>
-<th style="text-align: right;">rot p95</th>
-<th style="text-align: right;">rot p99</th>
-<th style="text-align: right;">rot max</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;">293.68…750.68</td>
-<td style="text-align: right;">12</td>
-<td style="text-align: right;">0.231 [0.117, 0.357]</td>
-<td style="text-align: right;">0.592</td>
-<td style="text-align: right;">0.650</td>
-<td style="text-align: right;">0.664</td>
-</tr>
-<tr>
-<td style="text-align: left;">798.05…1349.88</td>
-<td style="text-align: right;">13</td>
-<td style="text-align: right;">0.078 [0.054, 0.181]</td>
-<td style="text-align: right;">0.498</td>
-<td style="text-align: right;">0.799</td>
-<td style="text-align: right;">0.874</td>
-</tr>
-<tr>
-<td style="text-align: left;">1417.66…1711.10</td>
-<td style="text-align: right;">12</td>
-<td style="text-align: right;">0.055 [0.020, 0.099]</td>
-<td style="text-align: right;">0.253</td>
-<td style="text-align: right;">0.342</td>
-<td style="text-align: right;">0.365</td>
-</tr>
-<tr>
-<td style="text-align: left;">1737.58…2232.15</td>
-<td style="text-align: right;">13</td>
-<td style="text-align: right;">0.031 [0.023, 0.033]</td>
-<td style="text-align: right;">0.048</td>
-<td style="text-align: right;">0.049</td>
-<td style="text-align: right;">0.049</td>
-</tr>
-</tbody>
-</table>
-<h2 id="4-top-10-worst-scenes">§4 Top-10 worst scenes</h2>
-<table>
-<thead>
-<tr>
-<th style="text-align: right;">#</th>
-<th style="text-align: left;">scene_id</th>
-<th style="text-align: right;">rot err (°)</th>
-<th style="text-align: right;">trans err (mm)</th>
-<th style="text-align: right;">branch</th>
-<th style="text-align: left;">classification</th>
-<th style="text-align: left;">Rerun</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: right;">1</td>
-<td style="text-align: left;"><code>scene_0008_cam_0000</code></td>
-<td style="text-align: right;">0.87</td>
-<td style="text-align: right;">11.1</td>
-<td style="text-align: right;">0</td>
-<td style="text-align: left;"><code>corner_geometry_outlier</code></td>
-<td style="text-align: left;"><code>recordings/scene_0008_cam_0000.rrd</code></td>
-</tr>
-<tr>
-<td style="text-align: right;">2</td>
-<td style="text-align: left;"><code>scene_0005_cam_0000</code></td>
-<td style="text-align: right;">0.66</td>
-<td style="text-align: right;">26.4</td>
-<td style="text-align: right;">0</td>
-<td style="text-align: left;"><code>ppm_starved</code></td>
-<td style="text-align: left;"><code>recordings/scene_0005_cam_0000.rrd</code></td>
-</tr>
-<tr>
-<td style="text-align: right;">3</td>
-<td style="text-align: left;"><code>scene_0009_cam_0000</code></td>
-<td style="text-align: right;">0.53</td>
-<td style="text-align: right;">8.4</td>
-<td style="text-align: right;">0</td>
-<td style="text-align: left;"><code>ppm_starved</code></td>
-<td style="text-align: left;"><code>recordings/scene_0009_cam_0000.rrd</code></td>
-</tr>
-<tr>
-<td style="text-align: right;">4</td>
-<td style="text-align: left;"><code>scene_0025_cam_0000</code></td>
-<td style="text-align: right;">0.40</td>
-<td style="text-align: right;">6.9</td>
-<td style="text-align: right;">0</td>
-<td style="text-align: left;"><code>sigma_miscalibration</code></td>
-<td style="text-align: left;"><code>recordings/scene_0025_cam_0000.rrd</code></td>
-</tr>
-<tr>
-<td style="text-align: right;">5</td>
-<td style="text-align: left;"><code>scene_0018_cam_0000</code></td>
-<td style="text-align: right;">0.36</td>
-<td style="text-align: right;">0.3</td>
-<td style="text-align: right;">0</td>
-<td style="text-align: left;"><code>sigma_miscalibration</code></td>
-<td style="text-align: left;"><code>recordings/scene_0018_cam_0000.rrd</code></td>
-</tr>
-<tr>
-<td style="text-align: right;">6</td>
-<td style="text-align: left;"><code>scene_0033_cam_0000</code></td>
-<td style="text-align: right;">0.31</td>
-<td style="text-align: right;">1.2</td>
-<td style="text-align: right;">0</td>
-<td style="text-align: left;"><code>sigma_miscalibration</code></td>
-<td style="text-align: left;"><code>recordings/scene_0033_cam_0000.rrd</code></td>
-</tr>
-<tr>
-<td style="text-align: right;">7</td>
-<td style="text-align: left;"><code>scene_0023_cam_0000</code></td>
-<td style="text-align: right;">0.30</td>
-<td style="text-align: right;">7.9</td>
-<td style="text-align: right;">0</td>
-<td style="text-align: left;"><code>sigma_miscalibration</code></td>
-<td style="text-align: left;"><code>recordings/scene_0023_cam_0000.rrd</code></td>
-</tr>
-<tr>
-<td style="text-align: right;">8</td>
-<td style="text-align: left;"><code>scene_0015_cam_0000</code></td>
-<td style="text-align: right;">0.25</td>
-<td style="text-align: right;">1.0</td>
-<td style="text-align: right;">0</td>
-<td style="text-align: left;"><code>sigma_miscalibration</code></td>
-<td style="text-align: left;"><code>recordings/scene_0015_cam_0000.rrd</code></td>
-</tr>
-<tr>
-<td style="text-align: right;">9</td>
-<td style="text-align: left;"><code>scene_0041_cam_0000</code></td>
-<td style="text-align: right;">0.23</td>
-<td style="text-align: right;">1.6</td>
-<td style="text-align: right;">0</td>
-<td style="text-align: left;"><code>healthy</code></td>
-<td style="text-align: left;"><code>recordings/scene_0041_cam_0000.rrd</code></td>
-</tr>
-<tr>
-<td style="text-align: right;">10</td>
-<td style="text-align: left;"><code>scene_0021_cam_0000</code></td>
-<td style="text-align: right;">0.23</td>
-<td style="text-align: right;">8.8</td>
-<td style="text-align: right;">0</td>
-<td style="text-align: left;"><code>healthy</code></td>
-<td style="text-align: left;"><code>recordings/scene_0021_cam_0000.rrd</code></td>
-</tr>
-</tbody>
-</table>
-<h2 id="5-calibration-check">§5 σ calibration check</h2>
-<p>Configured σ in <code>high_accuracy.json</code>: σ = √4.000 ≈ 2.000px.</p>
-<p>Per-image estimated σ (Immerkær median Laplacian):</p>
-<div class="highlight"><pre><span></span><code>   0.494– 0.914  │ ████████████████████████████████████████  (29)
-   0.914– 1.334  │ ██████████  (7)
-   1.334– 1.754  │ █  (1)
-   1.754– 2.174  │ █  (1)
-   2.174– 2.595  │ ████████  (6)
-   2.595– 3.015  │ ███  (2)
-   3.015– 3.435  │   (0)
-   3.435– 3.855  │ █  (1)
-   3.855– 4.275  │ █  (1)
-   4.275– 4.695  │   (0)
-   4.695– 5.115  │   (0)
-   5.115– 5.535  │ █  (1)
-   5.535– 5.955  │   (0)
-   5.955– 6.375  │   (0)
-   6.375– 6.795  │   (0)
-   6.795– 7.215  │   (0)
-   7.215– 7.635  │   (0)
-   7.635– 8.055  │   (0)
-   8.055– 8.475  │   (0)
-   8.475– 8.895  │ █  (1)
-</code></pre></div>
-<p>Population: median σ = 0.741px, max = 8.895px. 34 of 50 scenes have σ &lt; 1.00px (half the configured value).</p>
-<h2 id="6-irls-weight-mahalanobis-distribution">§6 IRLS weight + Mahalanobis distribution</h2>
-<p>Final per-corner Huber IRLS weights at the LM-converged pose:</p>
-<div class="highlight"><pre><span></span><code>  0.219–0.258  │   (1)
-  0.258–0.297  │   (0)
-  0.297–0.336  │   (0)
-  0.336–0.375  │   (0)
-  0.375–0.414  │   (0)
-  0.414–0.453  │   (0)
-  0.453–0.492  │   (0)
-  0.492–0.531  │   (0)
-  0.531–0.570  │   (0)
-  0.570–0.609  │   (0)
-  0.609–0.649  │   (0)
-  0.649–0.688  │   (0)
-  0.688–0.727  │   (0)
-  0.727–0.766  │   (0)
-  0.766–0.805  │   (0)
-  0.805–0.844  │   (0)
-  0.844–0.883  │   (0)
-  0.883–0.922  │   (0)
-  0.922–0.961  │   (0)
-  0.961–1.000  │ ████████████████████████████████████████  (199)
-</code></pre></div>
-<p>1 of 200 corners have IRLS weight &lt; 0.3 — that's the threshold the <code>corner_outlier</code> classifier uses.</p>
-<p>Per-scene branch-d² (chosen vs alternate, log-binned counts):</p>
-<p><strong>Chosen branch (log10 d²):</strong>
-<div class="highlight"><pre><span></span><code>  -2.72–-2.50  │ ████████████  (3)
-  -2.50–-2.27  │   (0)
-  -2.27–-2.05  │ ████████████████████  (5)
-  -2.05–-1.82  │ ████████  (2)
-  -1.82–-1.59  │ ████████  (2)
-  -1.59–-1.37  │ ████████████  (3)
-  -1.37–-1.14  │ ████████████████████████████████████  (9)
-  -1.14–-0.92  │ ████████████████████████████████  (8)
-  -0.92–-0.69  │ ████████████████████████████████████████  (10)
-  -0.69–-0.47  │ ████████████████  (4)
-  -0.47–-0.24  │ ████████  (2)
-  -0.24–-0.01  │   (0)
-  -0.01– 0.21  │ ████  (1)
-   0.21– 0.44  │   (0)
-   0.44– 0.66  │   (0)
-   0.66– 0.89  │   (0)
-   0.89– 1.12  │   (0)
-   1.12– 1.34  │   (0)
-   1.34– 1.57  │   (0)
-   1.57– 1.79  │ ████  (1)
-</code></pre></div></p>
-<p><strong>Alternate branch (log10 d²):</strong>
-<div class="highlight"><pre><span></span><code>  -2.50–-2.10  │ ███████  (2)
-  -2.10–-1.70  │   (0)
-  -1.70–-1.31  │   (0)
-  -1.31–-0.91  │ ████  (1)
-  -0.91–-0.51  │ ███████████████  (4)
-  -0.51–-0.12  │ ███████  (2)
-  -0.12– 0.28  │   (0)
-   0.28– 0.67  │   (0)
-   0.67– 1.07  │   (0)
-   1.07– 1.47  │ ███████████  (3)
-   1.47– 1.86  │ ███████  (2)
-   1.86– 2.26  │ ████  (1)
-   2.26– 2.66  │ ████  (1)
-   2.66– 3.05  │ ██████████████████  (5)
-   3.05– 3.45  │   (0)
-   3.45– 3.85  │ ███████████  (3)
-   3.85– 4.24  │ █████████████████████████████  (8)
-   4.24– 4.64  │ ████████████████████████████████████████  (11)
-   4.64– 5.03  │ ██████████████████████  (6)
-   5.03– 5.43  │ ████  (1)
-</code></pre></div></p>
-<h2 id="7-what-this-points-at">§7 What this points at</h2>
-<p>The dominant failure mode is <strong><code>corner_geometry_outlier</code></strong> at 1 of 50 scenes — at least one corner has Mahalanobis d² above the χ²(1) cutoff at α=1e-4 (≈15.137), i.e. it lives in the extreme tail of the noise model. This is a strict super-set of the IRLS-weight gate, so look upstream of the pose solver — sub-pixel localization on the offending corner is the primary suspect (GWLF, EdLines, ERF refinement, or saturated PSF on a close tag).</p>
-<p><strong>Healthy</strong> at 42 of 50 scenes — the bulk distribution is well-calibrated; the tail is concentrated in the 8 non-healthy scene(s) above.</p>
-<p><strong><code>sigma_miscalibration</code></strong> at 5 scene(s) — partially confounded with the dataset rather than the algorithm: Blender-rendered images have very low noise floors, while the production profiles ship <code>sigma_n_sq = 4.0</code> (σ ≈ 2 px). The <code>compute_image_noise_floor</code> helper is permanent in <code>gradient.rs</code> and ready to wire into the per-frame LM info matrices.</p>
-<h2 id="8-profile-mode-reproducibility-table">§8 Profile × mode reproducibility table</h2>
-<p>Captured via <code>tools/bench/render_tag_sota_eval.py</code> on the same dataset, today, for context. (Source: <code>/tmp/render_tag_sota_full.json</code> after running the eval tool.)</p>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">Profile</th>
-<th style="text-align: left;">Mode</th>
-<th style="text-align: right;">Recall</th>
-<th style="text-align: right;">rot p50</th>
-<th style="text-align: right;">rot p95</th>
-<th style="text-align: right;">rot p99</th>
-<th style="text-align: right;">trans p99</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;"><code>standard</code></td>
-<td style="text-align: left;">Accurate</td>
-<td style="text-align: right;">100.0 %</td>
-<td style="text-align: right;">0.288°</td>
-<td style="text-align: right;">1.572°</td>
-<td style="text-align: right;">27.248°</td>
-<td style="text-align: right;">50.3 mm</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>high_accuracy</code></td>
-<td style="text-align: left;">Fast</td>
-<td style="text-align: right;">94.0 %</td>
-<td style="text-align: right;">0.345°</td>
-<td style="text-align: right;">6.350°</td>
-<td style="text-align: right;">104.238°</td>
-<td style="text-align: right;">2210 mm</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>high_accuracy</code></td>
-<td style="text-align: left;">Accurate</td>
-<td style="text-align: right;">94.0 %</td>
-<td style="text-align: right;">62.857°</td>
-<td style="text-align: right;">148.239°</td>
-<td style="text-align: right;">154.233°</td>
-<td style="text-align: right;">3261 mm</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>high_accuracy</code></td>
-<td style="text-align: left;">Fast</td>
-<td style="text-align: right;">100.0 %</td>
-<td style="text-align: right;">0.363°</td>
-<td style="text-align: right;">6.137°</td>
-<td style="text-align: right;">103.402°</td>
-<td style="text-align: right;">2164 mm</td>
-</tr>
-<tr>
-<td style="text-align: left;"><strong><code>high_accuracy</code></strong></td>
-<td style="text-align: left;"><strong>Accurate</strong></td>
-<td style="text-align: right;"><strong>100.0 %</strong></td>
-<td style="text-align: right;"><strong>0.057°</strong></td>
-<td style="text-align: right;"><strong>0.473°</strong></td>
-<td style="text-align: right;"><strong>0.771°</strong></td>
-<td style="text-align: right;"><strong>19 mm</strong></td>
-</tr>
-</tbody>
-</table>
-<p>Non-<code>high_accuracy</code> rows above are pre-fix snapshots from 2026-04-25 (commit <code>8890efc</code>). After PR #212 the <code>high_accuracy</code> Accurate row in particular is stale — rerun <code>tools/bench/render_tag_sota_eval.py</code> for fresh numbers.</p>
-<h2 id="9-recommendations">§9 Recommendations</h2>
+<h2 id="convention-how-to-record-a-new-learning-keeps-this-from-re-sprawling">Convention — how to record a new learning (keeps this from re-sprawling)</h2>
 <ol>
-<li>
-<p><strong>Triage the non-healthy scenes (§4 top-10).</strong> 8 of 50 scenes carry the entire residual tail; the linked <code>.rrd</code> recordings let you see whether the remaining error is a corner-localization issue, a remaining branch-selector edge case, or sensor / render noise. Fix at this granularity rather than tuning population-level knobs.</p>
-</li>
-<li>
-<p><strong>Wire <code>compute_image_noise_floor</code> into the LM info matrices</strong> to address the <code>sigma_miscalibration</code> scenes (5 of 50 here). The helper is permanent in <code>gradient.rs</code>; what's missing is a per-frame call from <code>refine_pose_lm_weighted</code>. Counterfactual p99 below this drops the residual tail substantially (see §2 table).</p>
-</li>
-<li>
-<p><strong>Reframe the SOTA gap.</strong> With high_accuracy at rot p50 = 0.057° / p99 = 0.771°, the bulk distribution already beats every external detector. Where external libraries still hold the rotation P95/P99 tail (per <code>render_tag_sota_20260425.md</code>) is what closing this residual tail unlocks. The next bottleneck is no longer a single regression — it is the tail of outlier scenes plus the σ calibration mismatch on Blender-rendered data.</p>
-</li>
-<li>
-<p><strong>Consider extending the failure-mode taxonomy.</strong> Healthy = 42/50 means most residual error falls below the discriminating thresholds in <code>classify.py</code>. As the tail shrinks further, the classifier should grow finer modes (e.g. grazing-angle subclass, per-corner GN-residual outlier) to keep producing actionable signal.</p>
-</li>
+<li><strong>Two homes only.</strong> A durable conclusion goes into the relevant <code>lessons/&lt;topic&gt;.md</code>
+   page as a <strong>dated subsection</strong> — never a new top-level <code>docs/engineering/*_YYYYMMDD.md</code>
+   file. Current benchmark numbers go in <code>../benchmarking/</code> (one live snapshot per
+   metric family; supersede it in place).</li>
+<li><strong>Status banner is mandatory.</strong> Every lesson page (and every dated subsection)
+   opens with <code>Status: ACTIVE | CLOSED | RESOLVED | SUPERSEDED-BY &lt;link&gt; | FALSIFIED</code>.</li>
+<li><strong>Supersede, don't accrete.</strong> When a re-run replaces an old snapshot, overwrite or
+   delete the old one — do not add a dated sibling.</li>
+<li><strong>Distill, then delete.</strong> Once a postmortem's conclusion is captured here, delete the
+   raw file; git history is the archive. Keep only pages that a future engineer would
+   actually open.</li>
+<li><strong>CHANGELOG references are historical, not live links.</strong> Moving or deleting a doc that
+   only <code>CHANGELOG.md</code> cites is safe.</li>
 </ol>
-<hr />
-<p><em>Generated by <code>tools/bench/rotation_tail_diag/report.py</code> from <code>diagnostics/2026-05-03/</code>. Bootstrap CIs are non-parametric, 10000 resamples, RNG seed 42. .rrd recordings live alongside scenes.json — open with <code>rerun recordings/scene_NNNN.rrd</code> (per-scene).</em></p>
 
 
 
