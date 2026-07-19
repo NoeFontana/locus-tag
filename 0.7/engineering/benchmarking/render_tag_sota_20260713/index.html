@@ -1380,10 +1380,6 @@
       
         
       
-        
-      
-        
-      
     
     
     
@@ -1523,34 +1519,6 @@
     
   
     Locus Release Performance Report (2026-04-18)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../hub_regression_20260423/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Hub Regression Performance Report (2026-04-23)
   
 
     
@@ -1817,34 +1785,6 @@
 
               
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../quad_truncation_fix_20260426/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Quad-extraction truncation fix (2026-04-26)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
           </ul>
         </nav>
       
@@ -2064,6 +2004,15 @@
 <p>Refreshes the detector-comparison matrix after the <strong>OpenCV 4.13 → 5.0.0</strong> bump,
 with the OpenCV baseline <strong>re-tuned</strong> for its best 5.0 config. Supersedes the
 <code>render_tag_sota_20260425.md</code> snapshot for the OpenCV rows.</p>
+<blockquote>
+<p><strong>2026-07-19 update (v0.7.0).</strong> The <code>Locus (high_accuracy)</code> rows in §1/§2 are
+refreshed to the <strong>v0.7.0 shipped config</strong>, which enables model-edge pose
+refinement by default (<code>pose.pose_edge_refinement_enabled = true</code>). Re-measured on
+the same AMD EPYC-Milan hardware with <code>render_tag_sota_eval.py</code>; the competitor
+rows reproduced bit-for-bit (accuracy is deterministic) and are unchanged. The
+pre-refinement <code>high_accuracy</code> baseline was rot p99 0.600° (1080p) / 1.113° (2160p)
+at 13.8 / 56.4 ms. See <code>model_edge_refinement_20260715.md</code>.</p>
+</blockquote>
 <h2 id="methodology">Methodology</h2>
 <ul>
 <li><strong>Datasets:</strong> <code>locus_v1_tag36h11_1920x1080</code> and <code>_3840x2160</code> Hub render-tag
@@ -2114,10 +2063,10 @@ reported:</p>
 <td style="text-align: center;">100 %</td>
 <td style="text-align: center;">100 %</td>
 <td style="text-align: center;"><strong>0.4 mm</strong></td>
-<td style="text-align: center;"><strong>18.6 mm</strong></td>
-<td style="text-align: center;"><strong>0.057°</strong></td>
-<td style="text-align: center;">0.600°</td>
-<td style="text-align: center;"><strong>13.8 ms</strong></td>
+<td style="text-align: center;"><strong>20.1 mm</strong></td>
+<td style="text-align: center;"><strong>0.041°</strong></td>
+<td style="text-align: center;"><strong>0.249°</strong></td>
+<td style="text-align: center;"><strong>15.2 ms</strong></td>
 </tr>
 <tr>
 <td style="text-align: left;">Locus (<code>standard</code>)</td>
@@ -2146,7 +2095,7 @@ reported:</p>
 <td style="text-align: center;">3.0 mm</td>
 <td style="text-align: center;">55.3 mm</td>
 <td style="text-align: center;">0.067°</td>
-<td style="text-align: center;"><strong>0.376°</strong></td>
+<td style="text-align: center;">0.376°</td>
 <td style="text-align: center;">195.8 ms</td>
 </tr>
 <tr>
@@ -2161,8 +2110,9 @@ reported:</p>
 </tr>
 </tbody>
 </table>
-<p>Locus <code>high_accuracy</code> wins translation tail <strong>and</strong> speed (14× faster than
-OpenCV <code>apriltag</code>); OpenCV <code>apriltag</code> has the best rotation tail (0.376°).
+<p>Locus <code>high_accuracy</code> wins the translation tail, the rotation tail (0.249° p99,
+below OpenCV <code>apriltag</code>'s 0.376° — the model-edge refinement shipped on in v0.7.0
+closes the gap), <strong>and</strong> speed (13× faster than OpenCV <code>apriltag</code>).
 AprilTag-C's rotation p99 explodes to 65° on symmetric-tag IRLS branch ambiguity.</p>
 <h2 id="2-detector-matrix-38402160-50-scenes-single-thread">§2 Detector matrix — 3840×2160 (50 scenes, single thread)</h2>
 <table>
@@ -2183,11 +2133,11 @@ AprilTag-C's rotation p99 explodes to 65° on symmetric-tag IRLS branch ambiguit
 <td style="text-align: left;"><strong>Locus (<code>high_accuracy</code>)</strong></td>
 <td style="text-align: center;">100 %</td>
 <td style="text-align: center;">100 %</td>
-<td style="text-align: center;"><strong>0.9 mm</strong></td>
-<td style="text-align: center;"><strong>39.0 mm</strong></td>
-<td style="text-align: center;"><strong>0.055°</strong></td>
-<td style="text-align: center;">1.113°</td>
-<td style="text-align: center;"><strong>56.4 ms</strong></td>
+<td style="text-align: center;"><strong>0.8 mm</strong></td>
+<td style="text-align: center;"><strong>37.0 mm</strong></td>
+<td style="text-align: center;"><strong>0.041°</strong></td>
+<td style="text-align: center;"><strong>0.267°</strong></td>
+<td style="text-align: center;"><strong>58.0 ms</strong></td>
 </tr>
 <tr>
 <td style="text-align: left;">Locus (<code>standard</code>)</td>
@@ -2216,7 +2166,7 @@ AprilTag-C's rotation p99 explodes to 65° on symmetric-tag IRLS branch ambiguit
 <td style="text-align: center;">5.8 mm</td>
 <td style="text-align: center;">107.5 mm</td>
 <td style="text-align: center;">0.072°</td>
-<td style="text-align: center;"><strong>0.449°</strong></td>
+<td style="text-align: center;">0.449°</td>
 <td style="text-align: center;">885.9 ms</td>
 </tr>
 <tr>

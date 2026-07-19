@@ -1380,10 +1380,6 @@
       
         
       
-        
-      
-        
-      
     
     
     
@@ -1523,34 +1519,6 @@
     
   
     Locus Release Performance Report (2026-04-18)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../hub_regression_20260423/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Hub Regression Performance Report (2026-04-23)
   
 
     
@@ -1873,34 +1841,6 @@
 
               
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../quad_truncation_fix_20260426/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Quad-extraction truncation fix (2026-04-26)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
           </ul>
         </nav>
       
@@ -2182,8 +2122,9 @@ distributed across the interior where they pin orientation far better than the
 corners. On the render-tag suite this <strong>cuts rotation p99 47–76 % at every
 resolution — well under OpenCV's <code>apriltag</code> refinement — while keeping Locus's
 best-in-class translation.</strong></p>
-<p>Enabled by <code>pose.pose_edge_refinement_enabled = true</code> (default <strong>false</strong> →
-shipped-profile detection byte-identical). Requires camera intrinsics + <code>tag_size</code>.</p>
+<p>Enabled by <code>pose.pose_edge_refinement_enabled</code> (the field default is <strong>false</strong>;
+<strong><code>high_accuracy</code> ships it on as of v0.7.0</strong> — see the profile-decision section
+below — while <code>standard</code>/<code>grid</code> leave it off). Requires camera intrinsics + <code>tag_size</code>.</p>
 <blockquote>
 <p><strong>2026-07-17 update.</strong> Rebased onto the unified pose-LM machinery (#337–#341):
 the estimator now rides the shared body-frame Nielsen trust-region core

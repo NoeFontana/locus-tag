@@ -21,30 +21,6 @@
          <lastmod>2026-07-19</lastmod>
     </url>
     <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/edlines_phase5_decoupling_2026-05-03/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/edlines_s1_corner_exclusion_2026-05-04/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/edlines_segmentation_design_2026-05-03/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/edlines_sota_design_2026-05-03/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/edlines_sota_experiments_2026-05-03/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/edlines_sota_followup_postmortem_2026-05-25/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
          <loc>https://noefontana.github.io/locus-tag/0.7/engineering/erf-simd-attempt-postmortem/</loc>
          <lastmod>2026-07-19</lastmod>
     </url>
@@ -57,35 +33,7 @@
          <lastmod>2026-07-19</lastmod>
     </url>
     <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/icra_forward_high_accuracy_diagnostic_20260426/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
          <loc>https://noefontana.github.io/locus-tag/0.7/engineering/latency_audit_2160p_segmentation_addendum_2026-05-03/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/max_recall_adaptive_calibration_20260426/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/pose_covariance_calibration_audit_2026-05-03/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/pose_covariance_followup_2026-05-22/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/pose_covariance_investigation_summary_2026-05-03/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/pose_covariance_phase4_postmortem_2026-05-31/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/post_decode_refinement_20260426/</loc>
          <lastmod>2026-07-19</lastmod>
     </url>
     <url>
@@ -105,19 +53,7 @@
          <lastmod>2026-07-19</lastmod>
     </url>
     <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/rotation_tail_diagnostic_phase0_20260502/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/rotation_tail_diagnostic_phase0_20260503/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
          <loc>https://noefontana.github.io/locus-tag/0.7/engineering/rust-style/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/scene_0008_root_cause_2026-05-03/</loc>
          <lastmod>2026-07-19</lastmod>
     </url>
     <url>
@@ -133,10 +69,6 @@
          <lastmod>2026-07-19</lastmod>
     </url>
     <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/benchmarking/hub_regression_20260423/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
          <loc>https://noefontana.github.io/locus-tag/0.7/engineering/benchmarking/lessons/</loc>
          <lastmod>2026-07-19</lastmod>
     </url>
@@ -146,10 +78,6 @@
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/0.7/engineering/benchmarking/model_edge_refinement_20260715/</loc>
-         <lastmod>2026-07-19</lastmod>
-    </url>
-    <url>
-         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/benchmarking/quad_truncation_fix_20260426/</loc>
          <lastmod>2026-07-19</lastmod>
     </url>
     <url>
@@ -170,6 +98,26 @@
     </url>
     <url>
          <loc>https://noefontana.github.io/locus-tag/0.7/engineering/benchmarking/render_tag_sota_20260713/</loc>
+         <lastmod>2026-07-19</lastmod>
+    </url>
+    <url>
+         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/lessons/</loc>
+         <lastmod>2026-07-19</lastmod>
+    </url>
+    <url>
+         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/lessons/edlines-segmentation/</loc>
+         <lastmod>2026-07-19</lastmod>
+    </url>
+    <url>
+         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/lessons/pose-covariance/</loc>
+         <lastmod>2026-07-19</lastmod>
+    </url>
+    <url>
+         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/lessons/recall-quad-icra/</loc>
+         <lastmod>2026-07-19</lastmod>
+    </url>
+    <url>
+         <loc>https://noefontana.github.io/locus-tag/0.7/engineering/lessons/rotation-tail-and-edge-refinement/</loc>
          <lastmod>2026-07-19</lastmod>
     </url>
     <url>

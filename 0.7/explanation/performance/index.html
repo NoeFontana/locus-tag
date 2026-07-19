@@ -893,17 +893,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#performance-profiles" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Performance Profiles
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#two-benchmark-suites" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1519,10 +1508,6 @@
       
         
       
-        
-      
-        
-      
     
     
     
@@ -1684,34 +1669,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../../engineering/benchmarking/hub_regression_20260423/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Hub Regression Performance Report (2026-04-23)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../../engineering/benchmarking/render_tag_sota_20260425/" class="md-nav__link">
         
   
@@ -1832,34 +1789,6 @@
     
   
     2160p render_tag_hub recall lift (2026-04-25)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../engineering/benchmarking/quad_truncation_fix_20260426/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Quad-extraction truncation fix (2026-04-26)
   
 
     
@@ -2014,17 +1943,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#performance-profiles" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Performance Profiles
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#two-benchmark-suites" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2128,29 +2046,29 @@ methodology, hardware, and per-stage timing.</p>
 Start from a profile, edit one or two fields, and hand the result
 back to the detector — see the <a href="../../tutorials/guide/">Detection guide</a>
 for the <code>DetectorConfig</code> API.</p>
-<h2 id="performance-profiles">Performance Profiles</h2>
-<p>Locus optimises for <strong>high recall</strong>, <strong>low corner RMSE</strong>, and <strong>low
-latency</strong>. Profiles are selected by name; the three shipped profiles
-are authored as JSON files and embedded in the wheel.</p>
 <table>
 <thead>
 <tr>
 <th style="text-align: left;"><code>profile</code></th>
-<th style="text-align: left;">Primary characteristic</th>
+<th style="text-align: left;">Best for</th>
+<th style="text-align: left;">Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align: left;"><code>"standard"</code></td>
-<td style="text-align: left;">Production default; balanced recall + precision.</td>
+<td style="text-align: left;">General detection</td>
+<td style="text-align: left;">Balanced recall and precision; highest recall on small/distant tags.</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>"grid"</code></td>
-<td style="text-align: left;">4-connectivity for touching tags — ChArUco / AprilGrid boards.</td>
+<td style="text-align: left;">ChArUco / AprilGrid boards</td>
+<td style="text-align: left;">4-connectivity recovers touching tags that <code>"standard"</code> merges.</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>"high_accuracy"</code></td>
-<td style="text-align: left;">EdLines + axis-imbalance gate + adaptive PPB; prioritises pose precision and tail-rotation control.</td>
+<td style="text-align: left;">Metrology, AV pose</td>
+<td style="text-align: left;">Best pose accuracy and rotation-tail control. Needs camera intrinsics + <code>tag_size</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -2186,16 +2104,12 @@ other</strong> (see <code>feedback_dataset_priority</code> in the engineering me
 </tr>
 </tbody>
 </table>
-<p>Snippet-included from the README so the numbers stay consistent
-across the GitHub landing, the PyPI page, and this docs page —
-single source of truth.</p>
 <h3 id="icra-2020-forward-community-benchmark">ICRA 2020 Forward (community benchmark)</h3>
 <p><a href="https://github.com/aprilrobotics/apriltag-comparison">ICRA 2020 Forward</a>
-is the closest thing the AprilTag community has to a neutral
-benchmark. The 50-frame subset we report on is <strong>synthetic</strong> (not
-real-camera), but it's public, peer-reviewed, and the basis for prior
-detector comparisons — we report on it for continuity with the
-literature.</p>
+is the closest thing the AprilTag community has to a neutral benchmark.
+The 50-frame subset we report on is <strong>synthetic</strong> (not real-camera), but
+it's public, peer-reviewed, and the basis for prior detector comparisons —
+we report on it for continuity with the literature.</p>
 <table>
 <thead>
 <tr>
@@ -2226,15 +2140,16 @@ literature.</p>
 tag-aware <code>apriltag</code> refinement more than halves corner RMSE (0.39 px) but
 rejects ICRA's marginal small tags, dropping recall to ~30 %.</p>
 <h3 id="render-tag-high-fidelity-blender-psf">render-tag (high-fidelity Blender + PSF)</h3>
-<p><code>render-tag</code> is our in-house render suite — Blender with calibrated
-PSF, exposure, sensor noise, and lens distortion models. The
-detection scenes carry pixel-accurate ground truth for both corners
-and 6-DOF pose, which lets us report translation / rotation
-percentiles in addition to recall. <strong>Numbers below are the 2026-07-13
-single-threaded SOTA snapshot on the 1080p 50-scene subset (OpenCV 5.0.0,
-re-tuned)</strong> (see
-<a href="https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/render_tag_sota_20260713.md"><code>docs/engineering/benchmarking/render_tag_sota_20260713.md</code></a>
-for methodology, the 2160p table, and OpenCV's two operating points).</p>
+<p><code>render-tag</code> is our in-house render suite — Blender with calibrated PSF,
+exposure, sensor noise, and lens distortion models. The detection scenes
+carry pixel-accurate ground truth for both corners and 6-DOF pose, which
+lets us report translation / rotation percentiles in addition to recall.
+Numbers below are the 2026-07-13 single-threaded SOTA snapshot on the 1080p
+50-scene subset (OpenCV 5.0.0, re-tuned), with the <code>high_accuracy</code> row
+refreshed 2026-07-19 for the v0.7.0 model-edge-refinement default (same
+hardware; competitor and <code>standard</code> rows unchanged). See
+<a href="../../engineering/benchmarking/render_tag_sota_20260713/"><code>render_tag_sota_20260713.md</code></a>
+for methodology, the 2160p table, and OpenCV's two operating points.</p>
 <table>
 <thead>
 <tr>
@@ -2252,10 +2167,10 @@ for methodology, the 2160p table, and OpenCV's two operating points).</p>
 <td style="text-align: left;"><strong>Locus (<code>high_accuracy</code>)</strong></td>
 <td style="text-align: center;"><strong>100 %</strong></td>
 <td style="text-align: center;"><strong>0.4 mm</strong></td>
-<td style="text-align: center;"><strong>18.6 mm</strong></td>
-<td style="text-align: center;"><strong>0.057 °</strong></td>
-<td style="text-align: center;">0.600 °</td>
-<td style="text-align: center;"><strong>13.8 ms</strong></td>
+<td style="text-align: center;"><strong>20.1 mm</strong></td>
+<td style="text-align: center;"><strong>0.041 °</strong></td>
+<td style="text-align: center;"><strong>0.249 °</strong></td>
+<td style="text-align: center;"><strong>15.2 ms</strong></td>
 </tr>
 <tr>
 <td style="text-align: left;">Locus (<code>standard</code>)</td>
@@ -2281,7 +2196,7 @@ for methodology, the 2160p table, and OpenCV's two operating points).</p>
 <td style="text-align: center;">3.0 mm</td>
 <td style="text-align: center;">55.3 mm</td>
 <td style="text-align: center;">0.067 °</td>
-<td style="text-align: center;"><strong>0.376 °</strong></td>
+<td style="text-align: center;">0.376 °</td>
 <td style="text-align: center;">195.8 ms</td>
 </tr>
 <tr>
@@ -2295,22 +2210,24 @@ for methodology, the 2160p table, and OpenCV's two operating points).</p>
 </tr>
 </tbody>
 </table>
-<p>Latencies are single-thread. Locus <code>high_accuracy</code> wins the translation tail and
-is 14× faster than OpenCV's best-accuracy <code>apriltag</code> config; that config in turn
-has the best rotation tail among the <strong>default</strong> profiles (0.376°). OpenCV ships two
-operating points — fast <code>subpix</code> and accurate-but-~2×-slower <code>apriltag</code>. AprilTag-C's
-median rotation is best in class (0.06°) but its p99 explodes to 65° on symmetric-tag
-IRLS branch-ambiguity failures.</p>
+<p>Locus <code>high_accuracy</code> wins the translation tail <strong>and</strong> the rotation tail
+(0.249° p99, below OpenCV <code>apriltag</code>'s 0.376°) while staying ~13× faster than
+OpenCV's best-accuracy <code>apriltag</code> config — the model-edge pose refinement that
+ships on in <code>high_accuracy</code> (v0.7.0) is what closes that rotation gap. OpenCV
+ships two operating points — fast <code>subpix</code> and accurate-but-~2×-slower
+<code>apriltag</code>. AprilTag-C's median rotation is best in class (0.06°) but its p99
+explodes to 65° on symmetric-tag IRLS branch-ambiguity failures.</p>
 <blockquote>
-<p><strong>Optional: model-edge pose refinement.</strong> Setting
-<code>pose.pose_edge_refinement_enabled = True</code> adds an Accurate-mode stage that refines
-each decoded tag's pose against its ~40 internal bit-grid edges (rotation from the
-distributed edges; translation re-anchored to the corners). It takes <code>high_accuracy</code>
-rotation p99 to <strong>0.249°</strong> (p95 <strong>0.180°</strong>) — <strong>below OpenCV <code>apriltag</code>'s 0.376°</strong> —
-at ~2.7× better translation and +~1 ms/frame, with <strong>2D corner RMSE unchanged</strong> and
-reprojection RMSE improved. Off by default (shipped detection stays byte-identical);
-requires camera intrinsics + <code>tag_size</code>. See
-<a href="https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/model_edge_refinement_20260715.md"><code>docs/…/model_edge_refinement_20260715.md</code></a>.</p>
+<p><strong>Model-edge pose refinement.</strong> As of v0.7.0, <code>high_accuracy</code> ships with
+<code>pose.pose_edge_refinement_enabled = True</code>: an Accurate-mode stage that refines
+each decoded tag's pose against its ~40 internal bit-grid edges (rotation from
+the distributed edges; translation re-anchored to the corners). It takes
+<code>high_accuracy</code> rotation p99 from 0.600° to <strong>0.249°</strong> (p95 <strong>0.180°</strong>) at ~2.7×
+better translation and +~1 ms/frame, with 2D corner RMSE unchanged and
+reprojection RMSE improved. It requires camera intrinsics + <code>tag_size</code> (a no-op
+without them). <code>standard</code> and <code>grid</code> leave it off; set the flag to <code>False</code> to opt
+out on <code>high_accuracy</code>. See
+<a href="../../engineering/benchmarking/model_edge_refinement_20260715/"><code>model_edge_refinement_20260715.md</code></a>.</p>
 </blockquote>
 <h2 id="how-to-read-these-numbers">How to read these numbers</h2>
 <ul>
@@ -2368,9 +2285,9 @@ requires camera intrinsics + <code>tag_size</code>. See
 <li><a href="../../engineering/benchmarking/">Benchmarking methodology</a> — how
   the recall / RMSE / latency numbers are measured, what hardware
   they ran on, and the regression suite that keeps them honest.</li>
-<li><a href="https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/render_tag_sota_20260425.md"><code>render_tag_sota_20260425.md</code></a>
-  — the snapshot the render-tag table above is sourced from, with
-  detector-by-detector deep dive on rotation tails and recall gaps.</li>
+<li><a href="../../engineering/benchmarking/render_tag_sota_20260713/">render-tag SOTA snapshot</a>
+  — the source of the render-tag table above, with the detector-by-detector
+  deep dive, the 2160p table, and OpenCV's two operating points.</li>
 <li><a href="../architecture/">System architecture</a> — why the pipeline is
   shaped to release the GIL and avoid the system allocator on the
   hot path.</li>

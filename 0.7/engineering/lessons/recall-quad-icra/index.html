@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://noefontana.github.io/locus-tag/0.7/engineering/pose_covariance_calibration_audit_2026-05-03/">
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/0.7/engineering/lessons/recall-quad-icra/">
       
       
       
@@ -18,19 +18,19 @@
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>Pose-Covariance Calibration Audit — 2026-05-03 - Locus</title>
+        <title>Recall, quad extraction & ICRA — lessons - Locus</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -49,9 +49,9 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#pose-covariance-calibration-audit-2026-05-03" class="md-skip">
+        <a href="#recall-quad-extraction-icra-lessons" class="md-skip">
           Skip to content
         </a>
       
@@ -96,7 +96,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
+    <a href="../../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Pose-Covariance Calibration Audit — 2026-05-03
+              Recall, quad extraction &amp; ICRA — lessons
             
           </span>
         </div>
@@ -232,7 +232,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
+    <a href="../../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -262,7 +262,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -342,7 +342,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/guide/" class="md-nav__link">
+      <a href="../../../tutorials/guide/" class="md-nav__link">
         
   
   
@@ -440,7 +440,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/add_dictionary/" class="md-nav__link">
+      <a href="../../../how-to/add_dictionary/" class="md-nav__link">
         
   
   
@@ -468,7 +468,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/debug_with_rerun/" class="md-nav__link">
+      <a href="../../../how-to/debug_with_rerun/" class="md-nav__link">
         
   
   
@@ -496,7 +496,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/concurrent_detection/" class="md-nav__link">
+      <a href="../../../how-to/concurrent_detection/" class="md-nav__link">
         
   
   
@@ -524,7 +524,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/install-with-distortion/" class="md-nav__link">
+      <a href="../../../how-to/install-with-distortion/" class="md-nav__link">
         
   
   
@@ -552,7 +552,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/tune_and_compare/" class="md-nav__link">
+      <a href="../../../how-to/tune_and_compare/" class="md-nav__link">
         
   
   
@@ -580,7 +580,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/per_instance_comparison/" class="md-nav__link">
+      <a href="../../../how-to/per_instance_comparison/" class="md-nav__link">
         
   
   
@@ -678,7 +678,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/architecture/" class="md-nav__link">
+      <a href="../../../explanation/architecture/" class="md-nav__link">
         
   
   
@@ -706,7 +706,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/pipeline/" class="md-nav__link">
+      <a href="../../../explanation/pipeline/" class="md-nav__link">
         
   
   
@@ -734,7 +734,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/memory_model/" class="md-nav__link">
+      <a href="../../../explanation/memory_model/" class="md-nav__link">
         
   
   
@@ -762,7 +762,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/algorithms/" class="md-nav__link">
+      <a href="../../../explanation/algorithms/" class="md-nav__link">
         
   
   
@@ -790,7 +790,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/coordinates/" class="md-nav__link">
+      <a href="../../../explanation/coordinates/" class="md-nav__link">
         
   
   
@@ -818,7 +818,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/performance/" class="md-nav__link">
+      <a href="../../../explanation/performance/" class="md-nav__link">
         
   
   
@@ -906,7 +906,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/api/" class="md-nav__link">
+      <a href="../../../reference/api/" class="md-nav__link">
         
   
   
@@ -1018,7 +1018,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../core/" class="md-nav__link">
+      <a href="../../core/" class="md-nav__link">
         
   
   
@@ -1046,7 +1046,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../workflow/" class="md-nav__link">
+      <a href="../../workflow/" class="md-nav__link">
         
   
   
@@ -1074,7 +1074,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../release-runbook/" class="md-nav__link">
+      <a href="../../release-runbook/" class="md-nav__link">
         
   
   
@@ -1102,7 +1102,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../detection-batch-contract/" class="md-nav__link">
+      <a href="../../detection-batch-contract/" class="md-nav__link">
         
   
   
@@ -1130,7 +1130,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../constraints/" class="md-nav__link">
+      <a href="../../constraints/" class="md-nav__link">
         
   
   
@@ -1158,7 +1158,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../ffi_contracts/" class="md-nav__link">
+      <a href="../../ffi_contracts/" class="md-nav__link">
         
   
   
@@ -1186,7 +1186,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../profiles/" class="md-nav__link">
+      <a href="../../profiles/" class="md-nav__link">
         
   
   
@@ -1214,7 +1214,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../stratification/" class="md-nav__link">
+      <a href="../../stratification/" class="md-nav__link">
         
   
   
@@ -1242,7 +1242,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../quality-gates/" class="md-nav__link">
+      <a href="../../quality-gates/" class="md-nav__link">
         
   
   
@@ -1270,7 +1270,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../rust-style/" class="md-nav__link">
+      <a href="../../rust-style/" class="md-nav__link">
         
   
   
@@ -1298,7 +1298,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../python-style/" class="md-nav__link">
+      <a href="../../python-style/" class="md-nav__link">
         
   
   
@@ -1326,7 +1326,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../general-style/" class="md-nav__link">
+      <a href="../../general-style/" class="md-nav__link">
         
   
   
@@ -1355,10 +1355,6 @@
   
     
     
-      
-        
-      
-        
       
         
       
@@ -1427,7 +1423,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/" class="md-nav__link">
+      <a href="../../benchmarking/" class="md-nav__link">
         
   
   
@@ -1455,7 +1451,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/lessons/" class="md-nav__link">
+      <a href="../../benchmarking/lessons/" class="md-nav__link">
         
   
   
@@ -1483,7 +1479,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/micro-benchmarking-guide/" class="md-nav__link">
+      <a href="../../benchmarking/micro-benchmarking-guide/" class="md-nav__link">
         
   
   
@@ -1511,7 +1507,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/release_performance_20260418/" class="md-nav__link">
+      <a href="../../benchmarking/release_performance_20260418/" class="md-nav__link">
         
   
   
@@ -1539,35 +1535,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/hub_regression_20260423/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Hub Regression Performance Report (2026-04-23)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_sota_20260425/" class="md-nav__link">
+      <a href="../../benchmarking/render_tag_sota_20260425/" class="md-nav__link">
         
   
   
@@ -1595,7 +1563,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_sota_20260713/" class="md-nav__link">
+      <a href="../../benchmarking/render_tag_sota_20260713/" class="md-nav__link">
         
   
   
@@ -1623,7 +1591,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/refine_variants_20260714/" class="md-nav__link">
+      <a href="../../benchmarking/refine_variants_20260714/" class="md-nav__link">
         
   
   
@@ -1651,7 +1619,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/model_edge_refinement_20260715/" class="md-nav__link">
+      <a href="../../benchmarking/model_edge_refinement_20260715/" class="md-nav__link">
         
   
   
@@ -1679,7 +1647,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
+      <a href="../../benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
         
   
   
@@ -1687,34 +1655,6 @@
     
   
     2160p render_tag_hub recall lift (2026-04-25)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/quad_truncation_fix_20260426/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Quad-extraction truncation fix (2026-04-26)
   
 
     
@@ -1803,7 +1743,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../migration/config-refactor/" class="md-nav__link">
+      <a href="../../../migration/config-refactor/" class="md-nav__link">
         
   
   
@@ -1858,10 +1798,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-verified-hardware-metadata-per-constraintsmd-6" class="md-nav__link">
+  <a href="#tldr" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Verified hardware metadata (per constraints.md §6)
+        TL;DR
       
     </span>
   </a>
@@ -1869,38 +1809,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-mahalanobis-distribution-empirical-vs-26" class="md-nav__link">
+  <a href="#lessons" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Mahalanobis distribution — empirical vs. χ²(6)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="2. Mahalanobis distribution — empirical vs. χ²(6)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#eigen-decomposed-view-key-insight" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Eigen-decomposed view (key insight)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#3-per-axis-breakdown-1-dof-diagonal-slice" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3. Per-axis breakdown (1-DOF diagonal slice)
+        Lessons
       
     </span>
   </a>
@@ -1908,10 +1820,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-most-likely-formula-correction" class="md-nav__link">
+  <a href="#re-attempt-watch-outs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. Most likely formula correction
+        Re-attempt / watch-outs
       
     </span>
   </a>
@@ -1919,21 +1831,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#5-follow-up-todo" class="md-nav__link">
+  <a href="#provenance" class="md-nav__link">
     <span class="md-ellipsis">
       
-        5. Follow-up TODO
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#6-reproducing-the-audit" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        6. Reproducing the audit
+        Provenance
       
     </span>
   </a>
@@ -1960,367 +1861,27 @@
   
 
 
-<h1 id="pose-covariance-calibration-audit-2026-05-03">Pose-Covariance Calibration Audit — 2026-05-03</h1>
-<p>This memo documents an empirical calibration audit of the 6×6 covariance
-returned by <code>refine_pose_lm_weighted</code> (the production "Accurate" pose solver
-in <code>crates/locus-core/src/pose_weighted.rs</code>). Customers using Locus poses
-for downstream Kalman / factor-graph fusion need this covariance to be
-honest. It currently is not.</p>
-<p>The harness (<code>tools/bench/pose_cov_audit.py</code>) runs the production
-detector on the hub 1080p tag36h11 corpus, extracts the 6×6 covariance via
-the bench-internals <code>refine_pose_lm_weighted_with_telemetry</code> entry-point,
-and compares the empirical squared 6-DOF Mahalanobis distance against the
-theoretical χ²(6) reference distribution.</p>
-<h2 id="1-verified-hardware-metadata-per-constraintsmd-6">1. Verified hardware metadata (per <code>constraints.md</code> §6)</h2>
-<p>The audit was executed in this same session.</p>
-<div class="highlight"><pre><span></span><code>$ lscpu | grep -E &#39;Model name|Architecture|CPU\(s\):|Thread|Vendor|cache&#39;
-Architecture:                            x86_64
-CPU(s):                                  8
-Vendor ID:                               AuthenticAMD
-Model name:                              AMD EPYC-Milan Processor
-Thread(s) per core:                      2
-L1d cache:                               128 KiB (4 instances)
-L1i cache:                               128 KiB (4 instances)
-L2 cache:                                2 MiB (4 instances)
-L3 cache:                                32 MiB (1 instance)
-</code></pre></div>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">Item</th>
-<th style="text-align: left;">Value</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;">CPU</td>
-<td style="text-align: left;">AMD EPYC-Milan, x86_64, 8 logical CPUs, 2 SMT threads</td>
-</tr>
-<tr>
-<td style="text-align: left;">AVX support</td>
-<td style="text-align: left;">avx, avx2, fma, f16c (AVX-512 absent)</td>
-</tr>
-<tr>
-<td style="text-align: left;">Build profile</td>
-<td style="text-align: left;"><code>--release</code> (<code>cargo build --release</code> via maturin)</td>
-</tr>
-<tr>
-<td style="text-align: left;">Cargo features</td>
-<td style="text-align: left;"><code>bench-internals</code></td>
-</tr>
-<tr>
-<td style="text-align: left;">Rust toolchain</td>
-<td style="text-align: left;"><code>rustc 1.92.0 (ded5c06cf 2025-12-08)</code></td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>RAYON_NUM_THREADS</code></td>
-<td style="text-align: left;"><code>8</code></td>
-</tr>
-<tr>
-<td style="text-align: left;">Python</td>
-<td style="text-align: left;"><code>CPython 3.14.3</code> (uv venv)</td>
-</tr>
-<tr>
-<td style="text-align: left;">Locus profile</td>
-<td style="text-align: left;"><code>high_accuracy</code> (50 scenes, single tag36h11 per scene)</td>
-</tr>
-<tr>
-<td style="text-align: left;">Hub config</td>
-<td style="text-align: left;"><code>locus_v1_tag36h11_1920x1080</code></td>
-</tr>
-<tr>
-<td style="text-align: left;">Pose mode</td>
-<td style="text-align: left;"><code>PoseEstimationMode.Accurate</code></td>
-</tr>
-<tr>
-<td style="text-align: left;">Detector</td>
-<td style="text-align: left;"><code>detect()</code> (single-frame, full pipeline)</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>sigma_n_sq</code></td>
-<td style="text-align: left;">4.0 px²</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>tikhonov_alpha_max</code></td>
-<td style="text-align: left;">0.25</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>structure_tensor_radius</code></td>
-<td style="text-align: left;">2 px</td>
-</tr>
-</tbody>
-</table>
-<p>Raw outputs: <code>diagnostics/pose_cov_audit_2026-05-03/</code>
-(<code>report.json</code>, <code>samples.json</code>, <code>qq_plot.png</code>, <code>histogram.png</code>).</p>
-<h2 id="2-mahalanobis-distribution-empirical-vs-26">2. Mahalanobis distribution — empirical vs. χ²(6)</h2>
-<p>The 6-DOF residual is</p>
-<pre><code>δ = [Δt; Δθ]
-Δt = R_gtᵀ (t_det − t_gt)        ∈ ℝ³
-Δθ = log_SO3(R_gtᵀ R_det)         ∈ ℝ³
-</code></pre>
-<p>so <code>δ ∈ ℝ⁶</code> lives in the GT tangent space, parameter-aligned with the
-solver's 6×6 Jacobian (translation block 0..2, axis-angle 3..5). The
-audited statistic is</p>
-<pre><code>d² = δᵀ Σ⁻¹ δ
-</code></pre>
-<p>with <code>Σ</code> the 36-float row-major covariance returned by
-<code>refine_pose_lm_weighted_with_telemetry</code>. Under correct calibration,
-<code>d² ∼ χ²(6)</code> — mean 6, variance 12.</p>
-<p>Across all 50 hub scenes (50/50 detected, no LM singularities):</p>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">Statistic</th>
-<th style="text-align: right;">Empirical</th>
-<th style="text-align: right;">χ²(6) ideal</th>
-<th style="text-align: right;">Ratio</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;">Mean d²</td>
-<td style="text-align: right;"><strong>714.72</strong></td>
-<td style="text-align: right;">6.00</td>
-<td style="text-align: right;">119×</td>
-</tr>
-<tr>
-<td style="text-align: left;">Variance d²</td>
-<td style="text-align: right;"><strong>4 081 616.6</strong></td>
-<td style="text-align: right;">12.00</td>
-<td style="text-align: right;">340 000×</td>
-</tr>
-<tr>
-<td style="text-align: left;">p10 d²</td>
-<td style="text-align: right;">6.41</td>
-<td style="text-align: right;">2.20</td>
-<td style="text-align: right;">2.9×</td>
-</tr>
-<tr>
-<td style="text-align: left;">p50 d²</td>
-<td style="text-align: right;">62.76</td>
-<td style="text-align: right;">5.35</td>
-<td style="text-align: right;">11.7×</td>
-</tr>
-<tr>
-<td style="text-align: left;">p90 d²</td>
-<td style="text-align: right;">1635.95</td>
-<td style="text-align: right;">10.64</td>
-<td style="text-align: right;">154×</td>
-</tr>
-<tr>
-<td style="text-align: left;">p99 d²</td>
-<td style="text-align: right;">9435.32</td>
-<td style="text-align: right;">16.81</td>
-<td style="text-align: right;">561×</td>
-</tr>
-<tr>
-<td style="text-align: left;">KL(empirical ‖ χ²(6))</td>
-<td style="text-align: right;"><strong>13.93</strong> (nats)</td>
-<td style="text-align: right;">0</td>
-<td style="text-align: right;">—</td>
-</tr>
-</tbody>
-</table>
-<p>The KL divergence is <strong>&gt;&gt; 0.5</strong>, putting the covariance firmly in the
-"miscalibrated" bucket per the gating rubric (≤ 0.1 well-calibrated,
-0.1–0.5 drift, &gt; 0.5 miscalibrated). The Q-Q plot (<code>qq_plot.png</code>) shows
-the empirical curve climbs ~30× faster than <code>y = x</code> past the 70th
-percentile — i.e. there is a heavy right tail driven by a handful of
-scenes where Σ is severely overconfident along one or two principal
-axes of the Hessian.</p>
-<h3 id="eigen-decomposed-view-key-insight">Eigen-decomposed view (key insight)</h3>
-<p>Diagonalising each per-scene Σ and binning the d² contribution by
-eigendirection (sorted ascending, so eigvec[0] is the <em>stiffest</em> — the
-direction Σ claims is most certain):</p>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">Eigendirection (ascending λ)</th>
-<th style="text-align: right;">Mean d²</th>
-<th style="text-align: right;">Median d²</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;">eig[0] (stiffest)</td>
-<td style="text-align: right;">302.06</td>
-<td style="text-align: right;">11.63</td>
-</tr>
-<tr>
-<td style="text-align: left;">eig[1]</td>
-<td style="text-align: right;">411.78</td>
-<td style="text-align: right;">29.92</td>
-</tr>
-<tr>
-<td style="text-align: left;">eig[2]</td>
-<td style="text-align: right;">0.19</td>
-<td style="text-align: right;">0.07</td>
-</tr>
-<tr>
-<td style="text-align: left;">eig[3]</td>
-<td style="text-align: right;">0.62</td>
-<td style="text-align: right;">0.11</td>
-</tr>
-<tr>
-<td style="text-align: left;">eig[4]</td>
-<td style="text-align: right;">0.03</td>
-<td style="text-align: right;">0.006</td>
-</tr>
-<tr>
-<td style="text-align: left;">eig[5] (softest)</td>
-<td style="text-align: right;">0.02</td>
-<td style="text-align: right;">0.005</td>
-</tr>
-</tbody>
-</table>
-<p>Each eigendirection contributes 1.0 d²-units under correct calibration.
-<strong>99% of the d² mass concentrates in the two stiffest directions</strong> — Σ's
-two smallest eigenvalues understate the true error along those axes by a
-factor of <code>√300 ≈ 17×</code>. Conversely, the four softest directions over-state
-uncertainty (median d² &lt; 0.1 → Σ is roughly 3–10× too loose). The
-covariance is thus not uniformly "too small" — it is <em>anisotropically</em>
-miscalibrated.</p>
-<h2 id="3-per-axis-breakdown-1-dof-diagonal-slice">3. Per-axis breakdown (1-DOF diagonal slice)</h2>
-<p>Each axis treated independently as <code>δᵢ² / Σᵢᵢ</code> (ideal mean 1.0):</p>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">Axis</th>
-<th style="text-align: right;">Empirical mean d²</th>
-<th style="text-align: right;">Calibration ratio</th>
-<th style="text-align: left;">Verdict (diagonal-only)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;">tx</td>
-<td style="text-align: right;">0.026</td>
-<td style="text-align: right;">0.026</td>
-<td style="text-align: left;">over-estimating uncertainty (Σᵢᵢ too large)</td>
-</tr>
-<tr>
-<td style="text-align: left;">ty</td>
-<td style="text-align: right;">0.021</td>
-<td style="text-align: right;">0.021</td>
-<td style="text-align: left;">over-estimating uncertainty (Σᵢᵢ too large)</td>
-</tr>
-<tr>
-<td style="text-align: left;">tz</td>
-<td style="text-align: right;">0.274</td>
-<td style="text-align: right;">0.274</td>
-<td style="text-align: left;">over-estimating uncertainty (Σᵢᵢ too large)</td>
-</tr>
-<tr>
-<td style="text-align: left;">rx</td>
-<td style="text-align: right;">0.094</td>
-<td style="text-align: right;">0.094</td>
-<td style="text-align: left;">over-estimating uncertainty (Σᵢᵢ too large)</td>
-</tr>
-<tr>
-<td style="text-align: left;">ry</td>
-<td style="text-align: right;">0.154</td>
-<td style="text-align: right;">0.154</td>
-<td style="text-align: left;">over-estimating uncertainty (Σᵢᵢ too large)</td>
-</tr>
-<tr>
-<td style="text-align: left;">rz</td>
-<td style="text-align: right;">0.169</td>
-<td style="text-align: right;">0.169</td>
-<td style="text-align: left;">over-estimating uncertainty (Σᵢᵢ too large)</td>
-</tr>
-</tbody>
-</table>
-<p>Read carefully — the <strong>diagonal</strong> Σᵢᵢ values are loose (the residuals
-δᵢ are smaller than 1σ along every cardinal axis), but the <strong>full</strong>
-inverse Σ⁻¹ is overconfident along the principal stiffness axes
-(see eigen-decomposition above). This is a textbook signature of a
-covariance whose <strong>off-diagonal correlations are wrong</strong>: the Hessian
-has ~7-orders-of-magnitude eigenvalue spread (e.g. λ_min ≈ 1e-8,
-λ_max ≈ 3e-4 for a typical scene), and the principal axes don't align
-with translation/rotation cardinals — they live in mixed translation-
-rotation directions where the LM has fitted very tightly to corner pixel
-locations but the <em>world</em> error has a different correlation structure.</p>
-<h2 id="4-most-likely-formula-correction">4. Most likely formula correction</h2>
-<p>The miscalibration mass (KL = 13.9, 99% concentrated in the two
-stiffest principal directions) points squarely at <code>sigma_n_sq</code> and the
-Tikhonov regulariser. Three candidate corrections, ranked:</p>
-<ol>
-<li>
-<p><strong><code>sigma_n_sq = 4.0 px²</code> is too low by ~30×.</strong> It lives in
-   <code>crates/locus-core/profiles/high_accuracy.json:45</code> and feeds
-   <code>compute_corner_covariance</code> at
-   <code>crates/locus-core/src/pose_weighted.rs:154</code>:
-   <div class="highlight"><pre><span></span><code><span class="n">s_inv</span><span class="p">.</span><span class="n">scale</span><span class="p">(</span><span class="n">sigma_n_sq</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">Matrix2</span><span class="p">::</span><span class="n">identity</span><span class="p">().</span><span class="n">scale</span><span class="p">(</span><span class="n">alpha</span><span class="p">)</span>
-</code></pre></div>
-   The audit's mean d² is 715 ≈ <code>sigma_n_sq</code> undercount factor squared
-   times 6; raising <code>sigma_n_sq</code> to ~ <code>30² × 4 / 715 ≈ 5–8 px²</code> <em>along
-   the two stiff axes</em> would not help by itself because the axes also
-   need correlation surgery — but raising it would compress the per-axis
-   ratios closer to 1. <strong>Recommend running the harness twice with
-   <code>sigma_n_sq ∈ {16, 25}</code> and tracking the mean d² and KL.</strong> This is
-   probably the cheapest fix.</p>
-</li>
-<li>
-<p><strong><code>tikhonov_alpha_max = 0.25</code> is far too small</strong> to dominate
-   <code>s_inv.scale(sigma_n_sq)</code> when the structure tensor is well-conditioned
-   (sharp tag-corner). The Tikhonov term in
-   <code>pose_weighted.rs:152-154</code>:
-   <div class="highlight"><pre><span></span><code><span class="kd">let</span><span class="w"> </span><span class="n">alpha</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">alpha_max</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="mf">1.0</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">r</span><span class="p">).</span><span class="n">powi</span><span class="p">(</span><span class="mi">2</span><span class="p">);</span>
-<span class="err">…</span>
-<span class="n">s_inv</span><span class="p">.</span><span class="n">scale</span><span class="p">(</span><span class="n">sigma_n_sq</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">Matrix2</span><span class="p">::</span><span class="n">identity</span><span class="p">().</span><span class="n">scale</span><span class="p">(</span><span class="n">alpha</span><span class="p">)</span>
-</code></pre></div>
-   evaluates to <code>~0.0025</code> for an isotropic corner (<code>r ≈ 0.9</code>), so it
-   contributes essentially nothing to Σ_corner. Yet <em>unmodelled</em> error
-   sources — discretisation, motion blur, render-PSF — easily dominate
-   ~1 px standard deviation. <strong>Recommend bumping <code>tikhonov_alpha_max</code>
-   to ~1.0 px²</strong> so the floor catches systematic corner-location bias
-   that the structure tensor cannot see.</p>
-</li>
-<li>
-<p><strong>The covariance return path skips the Tikhonov ε on the 6×6
-   Hessian.</strong> At <code>pose_weighted.rs:456</code>:
-   <div class="highlight"><pre><span></span><code><span class="kd">let</span><span class="w"> </span><span class="n">covariance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">current_jtj</span><span class="p">.</span><span class="n">try_inverse</span><span class="p">().</span><span class="n">unwrap_or_else</span><span class="p">(</span><span class="n">Matrix6</span><span class="p">::</span><span class="n">identity</span><span class="p">);</span>
-</code></pre></div>
-   This inverts the <em>un-damped</em> <code>JᵀWJ</code>. The LM solver damps it during the
-   step (line 388: <code>jtj_damped[(k, k)] += lambda * current_jtj[(k, k)].max(1e-6)</code>)
-   but the returned covariance does not. For under-determined geometry
-   (small tag, near-perpendicular view), one or two Hessian eigenvalues
-   collapse, the inverse blows up, and the principal-axis variance is
-   wildly overestimated <em>for those scenes only</em> — the very scenes with
-   d² &gt; 1000. <strong>Recommend retaining the final accepted <code>lambda</code> and
-   returning <code>(JᵀWJ + λ · diag(JᵀWJ))⁻¹</code></strong> as a Tikhonov-stabilised
-   covariance, matching the regularisation the solver itself used.</p>
-</li>
-</ol>
-<p>The cheapest first experiment is (2)+(3): they are config-only changes
-that should compress the right tail without touching the kernel math.
-(1) requires re-blessing snapshots and is best deferred to a follow-up.</p>
-<h2 id="5-follow-up-todo">5. Follow-up TODO</h2>
-<p>KL = 13.9 ≫ 0.1 — file follow-up track to apply correction (3) (Tikhonov
-ε on the returned Hessian inverse, <code>pose_weighted.rs:456</code>) plus correction
-(2) (<code>tikhonov_alpha_max</code> bump from 0.25 to ~1.0 in
-<code>crates/locus-core/profiles/high_accuracy.json:44</code>). Re-run this audit
-after the change and target KL ≤ 0.1 with mean d² ∈ [4, 9] and per-axis
-calibration ratios ∈ [0.5, 2.0].</p>
-<h2 id="6-reproducing-the-audit">6. Reproducing the audit</h2>
-<div class="highlight"><pre><span></span><code><span class="nv">RAYON_NUM_THREADS</span><span class="o">=</span><span class="m">8</span><span class="w"> </span><span class="se">\</span>
-<span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span><span class="se">\</span>
-uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/bench/pose_cov_audit.py<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>--hub-config<span class="w"> </span>locus_v1_tag36h11_1920x1080<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>--rayon-threads<span class="w"> </span><span class="m">8</span>
-</code></pre></div>
-<p>Outputs land in <code>diagnostics/pose_cov_audit_&lt;ISO-date&gt;/</code>:</p>
+<h1 id="recall-quad-extraction-icra-lessons">Recall, quad extraction &amp; ICRA — lessons</h1>
+<p><strong>Status:</strong> CLOSED — the diagnosed issues shipped fixes; <code>max_recall_adaptive</code> profile was since removed.
+<strong>Last updated:</strong> 2026-07-19
+<strong>Owning code:</strong> quad extraction (<code>extract_quads_soa</code> / <code>extract_quads_soa_with_camera</code> and <code>pixel_count_descending_order</code> in the quad module), the AdaptivePpb extraction router (<code>quad.extraction_policy</code>), the decoder Hamming/bit-sample path, and the shipped profiles under <code>crates/locus-core/profiles/</code> (<code>standard.json</code>, <code>high_accuracy.json</code>).</p>
+<h2 id="tldr">TL;DR</h2>
+<p>Extraction-mode choice, not funnel/threshold/refinement knobs, governs recall vs. pose-tail trade-offs: EdLines wins the clean-render pose tail but culls ~50% of dense small-tag candidates; ContourRdp wins crude-render recall but destroys the render-tag rotation tail. No single static <code>(extraction, refinement)</code> pair wins both regimes — the durable fix is PPB-based adaptive routing (<code>AdaptivePpb</code>, threshold 2.5), which lets <code>high_accuracy</code> recover ICRA recall (+14.2 pt) while staying byte-identical on render-tag. A separate quad-truncation bug (truncating candidates by pixel_count <em>before</em> geometric filtering) silently dropped tag-sized candidates behind large background blobs; the fix moved truncation caller-side, post-filter. The <code>max_recall_adaptive</code> profile validated this routing but was later removed in the config consolidation — its behavior lives on inside <code>high_accuracy</code>'s AdaptivePpb block.</p>
+<h2 id="lessons">Lessons</h2>
+<p><strong>Quad truncation fix.</strong> <code>pixel_count_descending_order</code> bundled two things: (1) sort component indices by <code>pixel_count</code> descending (load-bearing — lifts ICRA <code>standard</code> recall ~2.8 pp and stabilizes order-sensitive dedup on crude renders), and (2) truncate <code>component_stats</code> to <code>MAX_CANDIDATES = 1024</code> <strong>before</strong> per-component geometric filtering (the bug). Tag candidates have small pixel_count relative to background blobs (texture/shadow/noise), so pre-filter truncation kept giant blobs (which gates would reject anyway) and discarded real tags. Fix: drop <em>only</em> the pre-filter truncation; keep the desc ordering verbatim; truncate caller-side after <code>extract_single_quad</code> filters geometrically (Rayon <code>collect()</code> preserves input order, so truncation drops the smallest <em>survivors</em> — the intended 4K-recall behavior). Impact: distortion Brown–Conrady recall <code>0.8701→0.9354</code> (+6.5 pp), Kannala–Brandt <code>0.8088→0.8130</code>; render-tag byte-identical. Same fix on the <code>_with_camera</code> path.</p>
+<p><strong>ICRA-forward high_accuracy diagnostic.</strong> <code>high_accuracy</code> (EdLines + <code>refinement_mode=None</code>) collapsed on ICRA forward frames — mean recall <code>0.4631</code> vs <code>standard</code>'s <code>0.7236</code>, with 5 of 6 dense frames detecting zero tags. The <code>icra_forward_diagnostic.rs</code> harness (per-frame funnel / rejected-size / decode-Hamming attribution) root-caused it: the funnel was <em>not</em> the bottleneck (both profiles pass 100% through contrast), so threshold/sharpening flips could not help. EdLines under-produced by ~50% (<code>~110</code> candidates/frame vs <code>~206</code>), and its imprecise corners pushed decode Hamming into the 6–10 bucket (97/102 rejected on one frame). Cause was attributable to <code>extraction_mode=EdLines</code> on dense small-tag scenes. Resolution: adopt the <code>AdaptivePpb</code> router (threshold 2.5; low = ContourRdp+Erf, high = EdLines+None) — a Pareto win: ICRA forward recall <code>0.4631→0.6053</code> (+14.2 pt), RMSE <code>0.7535→0.5572</code>, render-tag / distortion / board snapshots byte-identical (well-resolved tags have PPB≫2.5 and stay on EdLines+None; far-field PPB&lt;2.5 tags route to ContourRdp+Erf).</p>
+<p><strong>max_recall_adaptive calibration (REMOVED profile).</strong> A now-removed profile that first shipped the <code>AdaptivePpb</code> routing (threshold 2.5, sharpening on): ICRA forward recall <code>0.7380</code> (+27 pp vs high_accuracy, matching <code>standard</code>), every render-tag p99 rotation under budget. Its calibration sweep is the durable evidence: disabling sharpening cost <code>-19 pp</code> ICRA recall <em>and</em> worsened the render-tag p99 tail (3°+ outliers), so sharpening does real work on both extraction paths; lowering the threshold <code>2.5→1.5</code> had near-zero effect (candidates already sit above 2.5) with a small ICRA cost — the shipped config was a local Pareto optimum. Its residual render-tag RMSE gap (~0.6 px vs high_accuracy's ~0.2 px) is intrinsic to ContourRdp+Erf, which yields robust corners but no per-corner Fisher covariance prior. <strong>The profile was dropped in the config consolidation</strong> — its routing was absorbed into <code>high_accuracy</code>, so nothing was lost, but do not resurrect the standalone profile expecting new behavior.</p>
+<p><strong>Hub regression snapshot.</strong> A point-in-time perf/accuracy table (AMD EPYC-Milan, <code>--release</code>, single-threaded), now historical. Durable methodology notes: (a) <code>high_accuracy</code> is the accuracy <em>baseline</em> because its 4–6× tighter pose bounds catch pose-solver regressions that <code>standard</code>'s wide thresholds mask; small-tag recall is instead carried by the <code>standard</code>-profile robustness suite. (b) Latency scales ~linearly with pixel count; <code>high_accuracy</code> is ~2× faster than <code>standard</code> (EdLines cheaper than ContourRdp). (c) The robustness subsets are KPI watchlists, not regressions: <code>tag16h5</code> precision is codebook-bound (halving allowed Hamming is the dominant lever, remainder is dense-codebook ambiguity); <code>low_key</code> has a hard config recall ceiling (KPI for future contrast-robust threshold work); <code>raw_pipeline</code> is largely config-bound.</p>
+<h2 id="re-attempt-watch-outs">Re-attempt / watch-outs</h2>
 <ul>
-<li><code>report.json</code> — aggregate stats + per-axis breakdown.</li>
-<li><code>samples.json</code> — per-scene δ, Σ, d² (debug-friendly).</li>
-<li><code>qq_plot.png</code> — empirical d² quantiles vs. χ²(6).</li>
-<li><code>histogram.png</code> — empirical PMF overlaid on χ²(6).</li>
+<li>Do <strong>not</strong> reintroduce a standalone <code>max_recall_adaptive</code> profile — its <code>AdaptivePpb</code> block already lives in <code>high_accuracy</code>. Any revival must justify why the shared router isn't sufficient.</li>
+<li>Do <strong>not</strong> try to fix the ICRA/high_accuracy gap by knob-flipping (sharpening, static ContourRdp, static Erf): every static extraction/refinement pair either destroys the render-tag pose tail (<code>0.56°→102°</code>) or blows mean RMSE 4× (<code>0.20→0.86</code>). "No static pair wins both regimes" still holds — PPB routing sidesteps it, it does not refute it.</li>
+<li>Keep the quad-truncation edge case covered: truncation must stay <strong>caller-side, after geometric filtering</strong> (small tags hide behind large-pixel-count background blobs). Never truncate <code>component_stats</code> pre-filter. Preserve the pixel_count-descending order (with deterministic index tie-break) — load-bearing for order-sensitive dedup on crude renders.</li>
+<li>The render-tag RMSE gap on ContourRdp+Erf routes is intrinsic (no Fisher covariance prior). Closing it needs post-decode corner re-refinement (emitting its own per-corner covariance) or an image pyramid, not a config change.</li>
+<li>Test-infra trap: a relative <code>LOCUS_ICRA_DATASET_DIR</code> once resolved against the crate root and silently fell through to a 1-frame stub, producing a false "byte-identical" result. Relative paths now resolve against the workspace root and missing dataset dirs panic rather than skip. Verify ICRA snapshots against the real 50-frame dataset.</li>
 </ul>
-<p>Lint/type gates:</p>
-<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>lint<span class="w"> </span>--group<span class="w"> </span>bench<span class="w">    </span>ruff<span class="w"> </span>check<span class="w">     </span>tools/bench/pose_cov_audit.py
-uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>types<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>--group<span class="w"> </span>etl<span class="w"> </span>basedpyright<span class="w"> </span>tools/bench/pose_cov_audit.py
-</code></pre></div>
-<p>Both pass clean as of this commit.</p>
+<h2 id="provenance">Provenance</h2>
+<p>Distilled 2026-07-19 from (removed; see git history): <code>icra_forward_high_accuracy_diagnostic_20260426</code>, <code>quad_truncation_fix_20260426</code>, <code>max_recall_adaptive_calibration_20260426</code>, <code>hub_regression_20260423</code>.</p>
 
 
 
@@ -2370,18 +1931,18 @@ uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </s
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
-        <script src="../../javascripts/mathjax.js"></script>
+        <script src="../../../javascripts/mathjax.js"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
       
-        <script src="../../javascripts/mermaid-init.js"></script>
+        <script src="../../../javascripts/mermaid-init.js"></script>
       
     
   </body>

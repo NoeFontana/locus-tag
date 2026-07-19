@@ -1380,10 +1380,6 @@
       
         
       
-        
-      
-        
-      
     
     
     
@@ -1889,34 +1885,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../hub_regression_20260423/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Hub Regression Performance Report (2026-04-23)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../render_tag_sota_20260425/" class="md-nav__link">
         
   
@@ -2037,34 +2005,6 @@
     
   
     2160p render_tag_hub recall lift (2026-04-25)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../quad_truncation_fix_20260426/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Quad-extraction truncation fix (2026-04-26)
   
 
     
@@ -2549,9 +2489,9 @@ callers skip both the image view and external covariances (e.g.
 pure pose-only refits). Default-value artifacts of this kind get
 deleted, not preserved as configuration knobs.</p>
 </blockquote>
-<p>For current numbers, see <code>release_performance_20260418.md</code>,
-<code>hub_regression_20260423.md</code>, <code>render_tag_sota_20260425.md</code>,
-<code>render_tag_2160p_20260425.md</code>, and <code>quad_truncation_fix_20260426.md</code>.</p>
+<p>For current numbers, see the <a href="../render_tag_sota_20260713/">render-tag SOTA snapshot</a>.
+Deep, per-topic investigation distillations (pose covariance, rotation tail &amp; edge
+refinement, EdLines, recall/quad/ICRA) now live under <a href="../../lessons/"><code>../lessons/</code></a>.</p>
 <h2 id="1-optimization-timeline-mar-2-apr-26">§1 Optimization timeline (Mar 2 → Apr 26)</h2>
 <div class="highlight"><pre><span></span><code>Mar 02   55.94 ms/frame  ── Initial baseline (decoding = 70 % of frame)
 Mar 03   14.55 ms/frame  ── SoA migration (3.8× total)

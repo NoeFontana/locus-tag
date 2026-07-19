@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://noefontana.github.io/locus-tag/0.7/engineering/edlines_segmentation_design_2026-05-03/">
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/0.7/engineering/lessons/pose-covariance/">
       
       
       
@@ -18,19 +18,19 @@
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>EdLines #4 — Phase 1 boundary segmentation redesign (2026-05-03) - Locus</title>
+        <title>Pose covariance calibration — lessons - Locus</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -49,9 +49,9 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#edlines-4-phase-1-boundary-segmentation-redesign-2026-05-03" class="md-skip">
+        <a href="#pose-covariance-calibration-lessons" class="md-skip">
           Skip to content
         </a>
       
@@ -96,7 +96,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
+    <a href="../../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              EdLines #4 — Phase 1 boundary segmentation redesign (2026-05-03)
+              Pose covariance calibration — lessons
             
           </span>
         </div>
@@ -232,7 +232,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
+    <a href="../../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -262,7 +262,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -342,7 +342,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/guide/" class="md-nav__link">
+      <a href="../../../tutorials/guide/" class="md-nav__link">
         
   
   
@@ -440,7 +440,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/add_dictionary/" class="md-nav__link">
+      <a href="../../../how-to/add_dictionary/" class="md-nav__link">
         
   
   
@@ -468,7 +468,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/debug_with_rerun/" class="md-nav__link">
+      <a href="../../../how-to/debug_with_rerun/" class="md-nav__link">
         
   
   
@@ -496,7 +496,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/concurrent_detection/" class="md-nav__link">
+      <a href="../../../how-to/concurrent_detection/" class="md-nav__link">
         
   
   
@@ -524,7 +524,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/install-with-distortion/" class="md-nav__link">
+      <a href="../../../how-to/install-with-distortion/" class="md-nav__link">
         
   
   
@@ -552,7 +552,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/tune_and_compare/" class="md-nav__link">
+      <a href="../../../how-to/tune_and_compare/" class="md-nav__link">
         
   
   
@@ -580,7 +580,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/per_instance_comparison/" class="md-nav__link">
+      <a href="../../../how-to/per_instance_comparison/" class="md-nav__link">
         
   
   
@@ -678,7 +678,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/architecture/" class="md-nav__link">
+      <a href="../../../explanation/architecture/" class="md-nav__link">
         
   
   
@@ -706,7 +706,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/pipeline/" class="md-nav__link">
+      <a href="../../../explanation/pipeline/" class="md-nav__link">
         
   
   
@@ -734,7 +734,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/memory_model/" class="md-nav__link">
+      <a href="../../../explanation/memory_model/" class="md-nav__link">
         
   
   
@@ -762,7 +762,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/algorithms/" class="md-nav__link">
+      <a href="../../../explanation/algorithms/" class="md-nav__link">
         
   
   
@@ -790,7 +790,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/coordinates/" class="md-nav__link">
+      <a href="../../../explanation/coordinates/" class="md-nav__link">
         
   
   
@@ -818,7 +818,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/performance/" class="md-nav__link">
+      <a href="../../../explanation/performance/" class="md-nav__link">
         
   
   
@@ -906,7 +906,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/api/" class="md-nav__link">
+      <a href="../../../reference/api/" class="md-nav__link">
         
   
   
@@ -1018,7 +1018,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../core/" class="md-nav__link">
+      <a href="../../core/" class="md-nav__link">
         
   
   
@@ -1046,7 +1046,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../workflow/" class="md-nav__link">
+      <a href="../../workflow/" class="md-nav__link">
         
   
   
@@ -1074,7 +1074,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../release-runbook/" class="md-nav__link">
+      <a href="../../release-runbook/" class="md-nav__link">
         
   
   
@@ -1102,7 +1102,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../detection-batch-contract/" class="md-nav__link">
+      <a href="../../detection-batch-contract/" class="md-nav__link">
         
   
   
@@ -1130,7 +1130,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../constraints/" class="md-nav__link">
+      <a href="../../constraints/" class="md-nav__link">
         
   
   
@@ -1158,7 +1158,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../ffi_contracts/" class="md-nav__link">
+      <a href="../../ffi_contracts/" class="md-nav__link">
         
   
   
@@ -1186,7 +1186,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../profiles/" class="md-nav__link">
+      <a href="../../profiles/" class="md-nav__link">
         
   
   
@@ -1214,7 +1214,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../stratification/" class="md-nav__link">
+      <a href="../../stratification/" class="md-nav__link">
         
   
   
@@ -1242,7 +1242,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../quality-gates/" class="md-nav__link">
+      <a href="../../quality-gates/" class="md-nav__link">
         
   
   
@@ -1270,7 +1270,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../rust-style/" class="md-nav__link">
+      <a href="../../rust-style/" class="md-nav__link">
         
   
   
@@ -1298,7 +1298,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../python-style/" class="md-nav__link">
+      <a href="../../python-style/" class="md-nav__link">
         
   
   
@@ -1326,7 +1326,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../general-style/" class="md-nav__link">
+      <a href="../../general-style/" class="md-nav__link">
         
   
   
@@ -1355,10 +1355,6 @@
   
     
     
-      
-        
-      
-        
       
         
       
@@ -1427,7 +1423,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/" class="md-nav__link">
+      <a href="../../benchmarking/" class="md-nav__link">
         
   
   
@@ -1455,7 +1451,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/lessons/" class="md-nav__link">
+      <a href="../../benchmarking/lessons/" class="md-nav__link">
         
   
   
@@ -1483,7 +1479,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/micro-benchmarking-guide/" class="md-nav__link">
+      <a href="../../benchmarking/micro-benchmarking-guide/" class="md-nav__link">
         
   
   
@@ -1511,7 +1507,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/release_performance_20260418/" class="md-nav__link">
+      <a href="../../benchmarking/release_performance_20260418/" class="md-nav__link">
         
   
   
@@ -1539,35 +1535,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/hub_regression_20260423/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Hub Regression Performance Report (2026-04-23)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_sota_20260425/" class="md-nav__link">
+      <a href="../../benchmarking/render_tag_sota_20260425/" class="md-nav__link">
         
   
   
@@ -1595,7 +1563,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_sota_20260713/" class="md-nav__link">
+      <a href="../../benchmarking/render_tag_sota_20260713/" class="md-nav__link">
         
   
   
@@ -1623,7 +1591,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/refine_variants_20260714/" class="md-nav__link">
+      <a href="../../benchmarking/refine_variants_20260714/" class="md-nav__link">
         
   
   
@@ -1651,7 +1619,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/model_edge_refinement_20260715/" class="md-nav__link">
+      <a href="../../benchmarking/model_edge_refinement_20260715/" class="md-nav__link">
         
   
   
@@ -1679,7 +1647,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
+      <a href="../../benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
         
   
   
@@ -1687,34 +1655,6 @@
     
   
     2160p render_tag_hub recall lift (2026-04-25)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/quad_truncation_fix_20260426/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Quad-extraction truncation fix (2026-04-26)
   
 
     
@@ -1803,7 +1743,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../migration/config-refactor/" class="md-nav__link">
+      <a href="../../../migration/config-refactor/" class="md-nav__link">
         
   
   
@@ -1858,10 +1798,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-what-is-empirically-established" class="md-nav__link">
+  <a href="#tldr" class="md-nav__link">
     <span class="md-ellipsis">
       
-        §1 What is empirically established
+        TL;DR
       
     </span>
   </a>
@@ -1869,10 +1809,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-the-hypothesis" class="md-nav__link">
+  <a href="#what-was-tried-and-what-happened" class="md-nav__link">
     <span class="md-ellipsis">
       
-        §2 The hypothesis
+        What was tried and what happened
       
     </span>
   </a>
@@ -1880,187 +1820,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#3-s1-corner-region-exclusion-in-phase-1" class="md-nav__link">
+  <a href="#why-its-hard" class="md-nav__link">
     <span class="md-ellipsis">
       
-        §3 S1 — corner-region exclusion in Phase 1
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="§3 S1 — corner-region exclusion in Phase 1">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#31-specification" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §3.1 Specification
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#32-configuration-surface" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §3.2 Configuration surface
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#33-experiment" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §3.3 Experiment
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#34-falsification-criteria" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §3.4 Falsification criteria
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#35-acceptance" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §3.5 Acceptance
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#36-estimated-cost" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §3.6 Estimated cost
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#4-s3-ed-lines-anchor-walk-executed-on-s1-falsification" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §4 S3 — ED-Lines anchor walk (executed on S1 falsification)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="§4 S3 — ED-Lines anchor walk (executed on S1 falsification)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#41-why-skip-s2-convex-hull-partition" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §4.1 Why skip S2 (convex-hull partition)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#42-specification-sketch" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §4.2 Specification (sketch)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#43-why-this-would-fix-scene_0008" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §4.3 Why this would fix scene_0008
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#44-risks" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §4.4 Risks
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#45-estimated-cost" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §4.5 Estimated cost
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#46-falsification-criteria" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §4.6 Falsification criteria
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#47-if-s3-also-fails" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §4.7 If S3 also fails
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#5-out-of-scope" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §5 Out of scope
+        Why it's hard
       
     </span>
   </a>
@@ -2068,10 +1831,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#6-execution-plan-closed-2026-05-04" class="md-nav__link">
+  <a href="#re-attempt-only-if" class="md-nav__link">
     <span class="md-ellipsis">
       
-        §6 Execution plan (closed 2026-05-04)
+        Re-attempt only if
       
     </span>
   </a>
@@ -2079,10 +1842,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#7-reproducing" class="md-nav__link">
+  <a href="#provenance" class="md-nav__link">
     <span class="md-ellipsis">
       
-        §7 Reproducing
+        Provenance
       
     </span>
   </a>
@@ -2109,283 +1872,61 @@
   
 
 
-<h1 id="edlines-4-phase-1-boundary-segmentation-redesign-2026-05-03">EdLines #4 — Phase 1 boundary segmentation redesign (2026-05-03)</h1>
-<p>Design memo for the next leg of the scene_0008 investigation. Prior leg
-(<code>edlines_phase5_decoupling_2026-05-03.md</code>) falsified F4 (chord-locking)
-as the dominant cause and concluded the bug is upstream of Phase 5, in
-Phases 1–4. This memo proposes two interventions on Phase 1, ordered
-by cost: <strong>S1</strong> (corner-region exclusion) first, <strong>S3</strong> (ED-Lines
-anchor walk) on falsification of S1.</p>
-<p>S2 (convex-hull partition) is documented for completeness but is not on
-the execution path — its expected lift is a strict subset of S3's, and
-both cost more than S1.</p>
-<h2 id="1-what-is-empirically-established">§1 What is empirically established</h2>
-<p>From <code>scene_0008_root_cause_2026-05-03.md</code> and the two negative-result
-memos that followed:</p>
-<ol>
-<li>The image data is clean. Linear regression of actual sub-pixel
-   transitions on scene_0008's left and top edges agrees with GT pose
-   projection to <strong>0.06 px RMS</strong> over 143 rows. Geometric intersection
-   of the two image-edge fits sits at (903.16, 456.27), 0.24 px from
-   GT. The detector reports (907.25, 456.84) — <strong>4 px off</strong> image-edge
-   data, in a direction the pixel data does not support.</li>
-<li>The 4 px error originates <strong>before Phase 5</strong>. The line-GN decoupling
-   experiment (<code>edlines_phase5_decoupling_*.md</code>) showed that bypassing
-   Phase 5 entirely (intersect Phase 4 lines directly) recovers only
-   4 % of the error. F4 is real but not dominant on this scene.</li>
-<li>Phase 4's intersected sub-pixel lines themselves intersect at
-   ≈ (907.0, 457.0) — i.e. the bias is already present in <code>fl[3]</code> and
-   <code>fl[0]</code> after Phase 4's IRLS re-fit on sub-pixel points. So either
-   Phase 3's sub-pixel points are biased, or Phase 2's binary-line
-   slope was biased and Phase 3 inherited it.</li>
-<li>The 5 % exclusion zone in Phase 5 (F5) recovers ≈ 0.18 px when
-   shrunk to 1 % — small contribution. Confirmed by experiment.</li>
-</ol>
-<h2 id="2-the-hypothesis">§2 The hypothesis</h2>
-<p>scene_0008's tag is rotated ≈ 90° relative to canonical, but <strong>axis-
-aligned in image space</strong>. For an axis-aligned tag, the four TRBL
-extremals (T=topmost, R=rightmost, B=bottommost, L=leftmost) land at
-the <strong>corners</strong> of the quad, not at edge midpoints — exactly the
-geometry the angular-arc partition is least robust to.</p>
-<p>Concretely, near corner 1 (image top-left of the tag, where T and L
-extremals both land near the corner pixel):</p>
+<h1 id="pose-covariance-calibration-lessons">Pose covariance calibration — lessons</h1>
+<p><strong>Status:</strong> CLOSED — all single-frame covariance-scaling levers falsified; open frontier is model-edge Fisher covariance (unmerged).
+<strong>Last updated:</strong> 2026-07-19
+<strong>Owning code:</strong> <code>crates/locus-core/src/pose_weighted.rs</code> (<code>refine_pose_lm_weighted</code>, the production "Accurate" solver; <code>compute_corner_covariance</code>, <code>finalize_corner_covariance</code>; 6×6 return path at the <code>(JᵀWJ)⁻¹</code> inverse). Audit harness: <code>tools/bench/pose_cov_audit.py</code>.</p>
+<h2 id="tldr">TL;DR</h2>
+<p>The 6×6 SE(3) pose covariance emitted by the Accurate solver is anisotropically miscalibrated: on the hub <code>locus_v1_tag36h11_1920x1080</code> corpus the empirical squared 6-DoF Mahalanobis distance has mean d² = 714.7 vs χ²(6) ideal 6.0, and KL(empirical‖χ²(6)) = 13.93 nats (gate: ≤0.1 well-calibrated, 0.1–0.5 drift, &gt;0.5 miscalibrated). Four scaling levers (Phases 1–4) were built and measured: pre-LM uniform inflation, post-LM diagonal congruence, GWLF empirical inflation, and per-corner ERF residual-MSE. Every one was falsified — no global or per-corner <em>diagonal/scalar</em> rescale moves KL below ~3, because the defect is in the <strong>off-diagonal correlation structure</strong> of <code>(JᵀWJ)⁻¹</code>, not its scale. The counterfactual proof: feeding GT corners back through the same LM gives d² = 0.0 to floating-point precision, so 100% of the miscalibration is upstream corner bias interacting with planar-PnP CRB anisotropy, not the noise model or numerics.</p>
+<h2 id="what-was-tried-and-what-happened">What was tried and what happened</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Lever</th>
+<th style="text-align: left;">Approach</th>
+<th style="text-align: left;">Outcome</th>
+<th style="text-align: left;">Key evidence/number</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Phase 1 — GWLF empirical inflation</td>
+<td style="text-align: left;">Inflate per-side <code>cov_l</code> by <code>max(1, MSE_emp/σ²_th)</code> in <code>refine_quad_gwlf_with_cov</code></td>
+<td style="text-align: left;">Unreachable</td>
+<td style="text-align: left;">No shipped profile routes through <code>CornerRefinementMode::Gwlf</code>; audit path is structure-tensor, snapshots byte-identical</td>
+</tr>
+<tr>
+<td style="text-align: left;">Phase 2 — pre-LM uniform <code>Σ_c</code> multiplier</td>
+<td style="text-align: left;">Scale whole structure-tensor <code>Σ_c</code> by scalar <code>m</code> before weighted LM</td>
+<td style="text-align: left;">Harmful (falsified)</td>
+<td style="text-align: left;"><code>m=250</code>: mean d² 714.7→6.45, KL 13.9→5.08, BUT render-tag p99 rot 0.86°→1.90° (+120%); IPPE branch-ambiguity outliers leak past consistency gate</td>
+</tr>
+<tr>
+<td style="text-align: left;">Phase 3 — post-LM diagonal 6×6 congruence</td>
+<td style="text-align: left;"><code>Σ_new[i,j]=√(mᵢmⱼ)·Σ[i,j]</code> on LM output (PSD/corr-preserving, cannot regress pose)</td>
+<td style="text-align: left;">Falsified (bottoms out)</td>
+<td style="text-align: left;">audit-ratio <code>m</code>: mean d² 714.7→83.4, KL 13.9→6.3 — still ≫0.5; forcing per-axis ratios to 1.0 <em>worsens</em> joint metric to KL 27.5</td>
+</tr>
+<tr>
+<td style="text-align: left;">Phase 4 — per-corner ERF residual-MSE</td>
+<td style="text-align: left;"><code>σ²_eff=max(σ_n², min(ε,16σ_n²))</code> from ERF edge-fit MSE, plumbed through SoA/SIMD (PR #290)</td>
+<td style="text-align: left;">Falsified</td>
+<td style="text-align: left;">KL stays 13.93 ±0.02 across all ε, including run E (true GT residual² upper bound); mean d² falls monotonically (655) but KL never moves; also dormant — <code>corner_empirical_noise</code> all-zero in production (every hub tag PPB&gt;5.0, ERF never fires under <code>AdaptivePpb</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Also ruled out (investigation summary): α_max sweep (CF1 — p99-rot gate closes at α_max≈0.5–1.0 long before KL nears spec; extrapolated α_max≥3.0 → ~5° rot); Tikhonov-ε on returned Hessian (CF2 — redundant, Hessian is correct per GT-corner d²=0); per-corpus population <code>B=E[rrᵀ]</code> (Path β — honest form, dishonest spirit on synthetic data; defer to real cameras). Typical-scene corner residuals are already at a ~0.14 px isotropic noise floor (σx/σy=1.08).</p>
+<h2 id="why-its-hard">Why it's hard</h2>
+<p>A diagonal/scalar congruence <code>D·Σ·D</code> preserves the correlation matrix and only rescales per-axis variances. But the audit's eigen-decomposition shows 99% of the d² mass concentrates in the two <em>stiffest</em> principal directions (Σ understates error there by ~17×) while the four soft cardinal axes are simultaneously 3–10× too loose (per-axis diagonal ratios 0.026–0.27). The Hessian has ~7-orders-of-magnitude eigenvalue spread and its principal axes live in <em>mixed</em> translation–rotation directions that don't align with cardinals — so the correlation structure of <code>(JᵀWJ)⁻¹</code> is wrong, not merely its scale. No monotonic rescaling can simultaneously tighten the stiff mixed axes and loosen the soft cardinals; making the diagonal ratios exactly 1.0 blows the joint metric up (KL 27.5). Any real fix must alter the off-diagonal structure directly.</p>
+<h2 id="re-attempt-only-if">Re-attempt only if</h2>
 <ul>
-<li>The four arcs (T→R, R→B, B→L, L→T) pivot at the four extremals.</li>
-<li>Boundary pixels in a small column-neighborhood of corner-1 have
-  <code>atan2(p − centroid)</code> values almost identical to the T extremal's.</li>
-<li>Integer-pixel rounding of column-scan topmost-pixel positions
-  introduces ±0.5 px jitter in the y-coordinate; the <code>&lt;</code> comparator
-  in <code>extract_boundary_segments</code> (<code>edlines.rs:852-862</code>) deterministically
-  bins each point but <strong>a few are inevitably on the wrong side of the
-  L↔T arc boundary</strong>.</li>
-<li>Wrong-arc points sit at the <strong>end</strong> of an edge — maximum lever arm.
-  Three misassigned pixels at the end of a 150-px edge produce a
-  slope error of ≈ 1.5°, i.e. ≈ 4 px end-displacement on the opposite
-  end. <strong>This is the entire scene_0008 budget.</strong></li>
+<li>A <strong>fundamentally different covariance source</strong> is used — one that constructs the information matrix from richer geometry rather than rescaling <code>(JᵀWJ)⁻¹</code>. This is the current open frontier: a <strong>model-edge body-frame Fisher covariance</strong> (edge + corner residuals) exists as an unmerged draft (PR #343, 2026-07-19, bench-internals only) that cuts KL substantially but still misses the strict ship gate — start there, not from any scaling lever.</li>
+<li>A <strong>real-camera audit corpus</strong> exists: only then does population <code>B=E[rrᵀ]</code> / Path β become a defensible prior rather than a synthetic-data trap.</li>
+<li>Phase 4 specifically: reopen <strong>only if both</strong> (1) a corpus/profile where ERF actually fires (non-zero <code>corner_empirical_noise</code> in production) <strong>and</strong> (2) a non-diagonal correlation-structure fix land together — condition (2) is load-bearing and unsolved.</li>
+<li>Note the diagonal per-axis / per-corner σ_n² family is provably exhausted (runs C/D/E) — do not re-attempt any diagonal or global scalar rescale.</li>
 </ul>
-<p>The hypothesis is testable in a single line of code: drop boundary
-points within Δ pixels of the two extremals bounding each arc.</p>
-<h2 id="3-s1-corner-region-exclusion-in-phase-1">§3 S1 — corner-region exclusion in Phase 1</h2>
-<h3 id="31-specification">§3.1 Specification</h3>
-<p>After <code>extract_boundary_segments</code> returns the four edge point arrays,
-filter each arc k's points by Euclidean distance to the two extremals
-that defined the arc:</p>
-<div class="highlight"><pre><span></span><code><span class="c1">// Pseudocode — arc k spans extremal e_from[k] → e_to[k] (CW).</span>
-<span class="k">for</span><span class="w"> </span><span class="n">k</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="mi">0</span><span class="o">..</span><span class="mi">4</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="n">edges</span><span class="p">[</span><span class="n">k</span><span class="p">].</span><span class="n">retain</span><span class="p">(</span><span class="o">|</span><span class="n">p</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="n">dist</span><span class="p">(</span><span class="n">p</span><span class="p">,</span><span class="w"> </span><span class="n">e_from</span><span class="p">[</span><span class="n">k</span><span class="p">])</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">delta</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="n">p</span><span class="p">,</span><span class="w"> </span><span class="n">e_to</span><span class="p">[</span><span class="n">k</span><span class="p">])</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">delta</span>
-<span class="w">    </span><span class="p">});</span>
-<span class="p">}</span>
-</code></pre></div>
-<p>The two extremals per arc come from whichever system was selected
-(TRBL or Diagonal). They are already known at the call site —
-<code>extract_boundary_segments</code> would need to return them alongside the
-edge arrays, or the filter applied inside the function.</p>
-<h3 id="32-configuration-surface">§3.2 Configuration surface</h3>
-<div class="highlight"><pre><span></span><code><span class="c1">// EdLinesConfig</span>
-<span class="k">pub</span><span class="w"> </span><span class="n">corner_exclusion_px</span><span class="p">:</span><span class="w"> </span><span class="kt">f64</span><span class="p">,</span><span class="w">  </span><span class="c1">// default 0.0 (off, byte-identical)</span>
-</code></pre></div>
-<p>Routed through <code>high_accuracy.json</code> only. <code>standard.json</code> and
-<code>max_recall_adaptive.json</code> keep <code>corner_exclusion_px = 0.0</code> so existing
-snapshots are byte-identical off the opt-in path.</p>
-<h3 id="33-experiment">§3.3 Experiment</h3>
-<p>Sweep Δ ∈ {1, 2, 3, 5} px on:</p>
-<ol>
-<li><strong>scene_0008 only</strong> (cheap probe): pose-cov audit single-scene mode,
-   capture corner 1 ‖r‖ for each Δ.</li>
-<li><strong>Full corpus</strong> (50 scenes): re-run pose-cov audit; capture mean
-   ‖r‖, p99 ‖r‖, KL.</li>
-</ol>
-<p>Add a <code>bench-internals</code> telemetry hook on <code>run_pipeline_with_mode</code> that
-dumps per-edge <code>(slope, intercept, point_count, point_count_after_filter)</code>
-when <code>LOCUS_DUMP_EDLINES_PHASE1=1</code>. This converts the experiment into a
-diagnostic regardless of outcome — we learn <em>which</em> edge has the slope
-error and <em>how many</em> points the filter removed.</p>
-<h3 id="34-falsification-criteria">§3.4 Falsification criteria</h3>
-<p>S1 is <strong>falsified</strong> (and we move to S3) iff:</p>
-<ul>
-<li>No Δ ∈ {1,2,3,5} reduces scene_0008 corner 1 ‖r‖ by ≥ 1 px, AND</li>
-<li>The telemetry shows &lt; 5 boundary points removed per arc near corner 1.</li>
-</ul>
-<p>The first criterion alone says "the fix doesn't work"; the second says
-"the hypothesis was wrong" (the corner-region pixels weren't enough to
-move the slope, so the slope error is from somewhere else).</p>
-<p>S1 is <strong>non-shippable</strong> (even if scene_0008 improves) iff:</p>
-<ul>
-<li>Best Δ regresses corpus mean ‖r‖ by ≥ 0.03 px, OR</li>
-<li>Best Δ regresses corpus p99 ‖r‖ by ≥ 0.05 px, OR</li>
-<li>Any baseline-passing scene starts failing snapshot validation.</li>
-</ul>
-<h3 id="35-acceptance">§3.5 Acceptance</h3>
-<p>Ship if best Δ:</p>
-<ul>
-<li>Reduces scene_0008 corner 1 ‖r‖ by ≥ 2 px (from 3.83 to ≤ 1.83), AND</li>
-<li>Corpus mean ‖r‖ within ±0.005 px of baseline (0.191 px), AND</li>
-<li>Corpus p99 ‖r‖ within ±0.05 px of baseline (0.697 px).</li>
-</ul>
-<p>The recommended ship-default would be <code>corner_exclusion_px = best_Δ</code>
-on <code>high_accuracy</code> only.</p>
-<h3 id="36-estimated-cost">§3.6 Estimated cost</h3>
-<p>Implementation + telemetry hook: <strong>half day</strong>.
-Sweep + write-up: <strong>half day</strong>.
-<strong>Total: 1 day.</strong></p>
-<h2 id="4-s3-ed-lines-anchor-walk-executed-on-s1-falsification">§4 S3 — ED-Lines anchor walk (executed on S1 falsification)</h2>
-<h3 id="41-why-skip-s2-convex-hull-partition">§4.1 Why skip S2 (convex-hull partition)</h3>
-<p>S2 keeps the architecture of "binary-boundary tracing → 4 line fits →
-intersect → sub-pixel re-fit". Its only change is the point-to-edge
-assignment heuristic (perpendicular-to-hull-edge instead of
-angular-arc). Failure modes S2 fixes that S1 doesn't:</p>
-<ol>
-<li>The angular-arc partition is wrong globally (not just near corners).</li>
-</ol>
-<p>This is a narrow improvement. If S1 falsifies — meaning the corner-
-neighborhood pixels are not the issue — then either the binary-boundary
-tracing itself is biased (rasterization rounding propagating along the
-edge), or Phase 2's IRLS is not robust to systemic boundary noise.
-Neither is fixed by S2.</p>
-<p>S3 attacks both: by driving line extraction from <strong>gray-image
-gradients</strong> rather than binary-boundary points, it sidesteps the
-integer-pixel rounding floor entirely.</p>
-<h3 id="42-specification-sketch">§4.2 Specification (sketch)</h3>
-<p>Replace <code>extract_boundary_segments + fit_line_irls</code> (Phases 1–2) with
-the canonical Akinlar–Topal ED-Lines algorithm operating on the gray
-image:</p>
-<ol>
-<li><strong>Anchor extraction</strong>: for each pixel inside the component bbox,
-   compute <code>|∇I|</code> (Sobel or central-difference). Mark as anchor if
-   <code>|∇I| &gt; τ_anchor</code> AND it is a local maximum along its gradient
-   direction.</li>
-<li><strong>Edge chaining</strong>: from each anchor, walk along the gradient
-   direction (Smart Routing: try ±tangent, pick the higher-gradient
-   neighbor; stop at low-gradient pixel or chain length limit).
-   Produce ordered chains of pixels.</li>
-<li><strong>Line segment extraction</strong>: split each chain into linear segments
-   via least-squares with a residual threshold (typical 1.0 px). Apply
-   Helmholtz a-contrario validation: NFA(segment) &lt; 1 (Desolneux et al.
-   2000), where NFA penalizes alignment by chance.</li>
-<li><strong>Top-4 dominant segments</strong>: rank validated segments by length;
-   select top 4 with mutual-perpendicularity gate (each pair of
-   adjacent segments at ≥ 70° from parallel). Reject component if no
-   valid 4-segment configuration.</li>
-<li><strong>Pair adjacent segments → corners</strong>: intersect each pair of
-   adjacent (CW) segments to get the 4 corners. Phase 5 (joint GN)
-   continues to operate on these as before.</li>
-</ol>
-<h3 id="43-why-this-would-fix-scene_0008">§4.3 Why this would fix scene_0008</h3>
-<p>The 4 px error in Phase 4's lines is, by construction, an <strong>integer-
-pixel boundary tracing artefact</strong>: the binary boundary tracer emits
-the topmost foreground pixel per column with ±0.5 px y-jitter, and the
-column-direction monotone scan picks pixels in column order. The
-binary tracer commits to a slope before any sub-pixel information is
-seen. Phase 3 then walks orthogonal to <em>that</em> slope.</p>
-<p>ED-Lines' gradient-anchor approach is <strong>never tied to an integer-pixel
-slope</strong>. It always operates on continuous gradient information and
-its extracted line segments have sub-pixel slope/intercept from the
-first iteration. The floor is the gradient noise, not the rasterization
-floor.</p>
-<h3 id="44-risks">§4.4 Risks</h3>
-<ol>
-<li><strong>Corpus regression risk</strong>: ED-Lines anchor walks behave very
-   differently from the current monotone-scan + angular-partition
-   approach on small / blurred / partially-occluded tags. We will
-   need to bless 50+ snapshots and may inherit failure modes the
-   current scheme doesn't have.</li>
-<li><strong>Phase C.5 negative-result memory</strong>: Phase C.5
-   (<code>post_decode_refinement.rs</code>) is on a binary-line foundation and has
-   a documented ~0.6 px floor on Blender PSF. ED-Lines has its own
-   gradient-thresholding floor on synthetic PSF; our parabolic-vertex
-   path already approximates this and showed corpus regression in
-   experiment-1 of <code>edlines_sota_experiments_2026-05-03.md</code>. <strong>The
-   hypothesis is that S3's full chain-and-validate framework is more
-   robust than per-probe parabolic vertex</strong> — but this is a hypothesis,
-   not a guarantee.</li>
-<li><strong>Anchor parameter sensitivity</strong>: τ_anchor and the chain-length
-   threshold need tuning per resolution. Risk of the corpus-vs-
-   scene_0008 trade reappearing.</li>
-</ol>
-<h3 id="45-estimated-cost">§4.5 Estimated cost</h3>
-<p>Reference implementation + integration: <strong>3 days</strong>.
-Snapshot rebless + corpus sweep: <strong>1 day</strong>.
-Memo + cleanup: <strong>1 day</strong>.
-<strong>Total: 5 days.</strong></p>
-<h3 id="46-falsification-criteria">§4.6 Falsification criteria</h3>
-<p>S3 is <strong>non-shippable</strong> iff:</p>
-<ul>
-<li>Corpus mean ‖r‖ regresses by ≥ 0.03 px (same threshold as S1), OR</li>
-<li>Any baseline-passing snapshot fails to be reblessable (i.e. detection
-  count drops or a tag is missed entirely on a baseline scene).</li>
-</ul>
-<p>If S3 fixes scene_0008 but corpus regresses, the result becomes a
-<strong>conditional ship</strong> — opt-in on <code>high_accuracy</code> only, with the corpus
-trade documented. We make that decision based on the magnitude of the
-regression vs. the magnitude of the scene_0008 fix.</p>
-<h3 id="47-if-s3-also-fails">§4.7 If S3 also fails</h3>
-<p>If both S1 and S3 fail to recover ≥ 2 px on scene_0008, the failure
-mode is not in Phase 1–2 architecture and we have systematically
-exhausted the segmentation surface. Remaining candidates would be:</p>
-<ul>
-<li>Phase 3 sub-pixel parabolic vertex (improvement #3 in the SOTA
-  design memo — ERF model). Phase C.5 has a negative-result memo here,
-  so risk is high.</li>
-<li>A fundamental rasterization-vs-pose mismatch in the Blender render
-  pipeline that no detector can resolve, in which case the runtime
-  gate (Track A's <code>corner_geometry_outlier</code>) is the only defensible
-  path on synthetic data.</li>
-</ul>
-<p>At that point the recommendation hardens: <strong>defer further architectural
-work until real-camera evidence proves scene_0008-class failures occur
-on real cameras at non-trivial rates</strong> (Track C, hardware-blocked).</p>
-<h2 id="5-out-of-scope">§5 Out of scope</h2>
-<ul>
-<li>Phase 3 (sub-pixel) and Phase 4 (sub-pixel IRLS) changes. Both
-  consume Phase 1–2's output; if Phase 1–2 are fixed, Phase 3–4
-  inherit the fix.</li>
-<li>Phase 5 (joint GN) changes. Falsified as dominant in
-  <code>edlines_phase5_decoupling_*.md</code>.</li>
-<li>The runtime gate work (Track A's <code>corner_geometry_outlier</code>). It
-  remains the practical fix on synthetic data; this memo's work is
-  upstream of it and orthogonal.</li>
-<li>S2 (convex-hull partition). Documented in §4.1 for the record;
-  not on the execution path.</li>
-</ul>
-<h2 id="6-execution-plan-closed-2026-05-04">§6 Execution plan (closed 2026-05-04)</h2>
-<ol>
-<li><strong>S1 (1 day)</strong>: ✅ done. See
-   <code>docs/engineering/edlines_s1_corner_exclusion_2026-05-04.md</code> for
-   sweep results. Hypothesis confirmed (monotonic improvement; Phase-2
-   <code>y = 456.5</code> rounding-floor signature). Acceptance not met
-   (best -1.19 px on scene_0008, target -2 px). d² regresses +12-23 %.</li>
-<li><strong>Decision (principal-engineer call, 2026-05-04)</strong>: do not ship S1,
-   do not proceed to S3. The d² regression points the top-line metric
-   in the wrong direction; S3 inherits the Phase C.5 PSF-floor risk
-   and is multi-day on synthetic data alone; three negative-result
-   memos converge on the same answer (defer architectural work, ship
-   the runtime gate). See <code>edlines_s1_corner_exclusion_2026-05-04.md</code>
-   §6 for full reasoning.</li>
-<li><strong>S3</strong>: deferred. Design sketch (§4 above) preserved for revival
-   <em>if and only if</em> real-camera evidence emerges of scene_0008-class
-   failures at non-trivial rates (Track C — hardware-blocked). The
-   Phase C.5 PSF-floor risk applies; revival should plan for
-   measurement-of-rotation-tail directly, not just ‖r‖ proxies.</li>
-<li><strong>Action items</strong>: revert S1 plumbing (~25 LoC; done in same change
-   as this update), keep <code>dump_phase1</code> telemetry hook for future use,
-   pursue runtime gate (Track A's <code>corner_geometry_outlier</code>) as the
-   practical fix on synthetic data alone (~4 h, separate small track).</li>
-</ol>
-<h2 id="7-reproducing">§7 Reproducing</h2>
-<p>Same harness as prior EdLines memos:</p>
-<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>maturin<span class="w"> </span>develop<span class="w"> </span>--release<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>--manifest-path<span class="w"> </span>crates/locus-py/Cargo.toml<span class="w"> </span>--features<span class="w"> </span>bench-internals
-
-<span class="nv">LOCUS_DUMP_EDLINES_PHASE1</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
-<span class="nv">RAYON_NUM_THREADS</span><span class="o">=</span><span class="m">8</span><span class="w"> </span><span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>tools/bench/pose_cov_audit.py<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>--hub-config<span class="w"> </span>locus_v1_tag36h11_1920x1080<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>--scene-id<span class="w"> </span>scene_0008_cam_0000<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>--output-dir<span class="w"> </span>diagnostics/edlines_s1_delta_&lt;n&gt;
-</code></pre></div>
-<p>Hardware metadata per <code>constraints.md §6</code> to be captured in each
-follow-up memo.</p>
+<h2 id="provenance">Provenance</h2>
+<p>Distilled 2026-07-19 from (removed; see git history): <code>pose_covariance_calibration_audit_2026-05-03</code>, <code>pose_covariance_investigation_summary_2026-05-03</code>, <code>pose_covariance_followup_2026-05-22</code>, <code>pose_covariance_phase4_postmortem_2026-05-31</code>. Related: [<code>MEMORY</code> anti-pattern "Global covariance multipliers"], and the <a href="../../benchmarking/model_edge_refinement_20260715/">model-edge refinement</a> work whose Fisher-covariance offshoot is the open frontier.</p>
 
 
 
@@ -2435,18 +1976,18 @@ follow-up memo.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
-        <script src="../../javascripts/mathjax.js"></script>
+        <script src="../../../javascripts/mathjax.js"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
       
-        <script src="../../javascripts/mermaid-init.js"></script>
+        <script src="../../../javascripts/mermaid-init.js"></script>
       
     
   </body>

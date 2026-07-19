@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://noefontana.github.io/locus-tag/0.7/engineering/max_recall_adaptive_calibration_20260426/">
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/0.7/engineering/lessons/">
       
       
       
@@ -23,7 +23,7 @@
     
     
       
-        <title>max_recall_adaptive calibration & follow-ups - Locus</title>
+        <title>Engineering lessons - Locus</title>
       
     
     
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#max_recall_adaptive-calibration-follow-ups" class="md-skip">
+        <a href="#engineering-lessons" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              max_recall_adaptive calibration &amp; follow-ups
+              Engineering lessons
             
           </span>
         </div>
@@ -1374,10 +1374,6 @@
       
         
       
-        
-      
-        
-      
     
     
     
@@ -1539,34 +1535,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/hub_regression_20260423/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Hub Regression Performance Report (2026-04-23)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../benchmarking/render_tag_sota_20260425/" class="md-nav__link">
         
   
@@ -1687,34 +1655,6 @@
     
   
     2160p render_tag_hub recall lift (2026-04-25)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/quad_truncation_fix_20260426/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Quad-extraction truncation fix (2026-04-26)
   
 
     
@@ -1858,10 +1798,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-the-shipped-configuration" class="md-nav__link">
+  <a href="#index" class="md-nav__link">
     <span class="md-ellipsis">
       
-        §1 The shipped configuration
+        Index
       
     </span>
   </a>
@@ -1869,82 +1809,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-the-cheap-calibration-sweep-negative-result" class="md-nav__link">
+  <a href="#convention-how-to-record-a-new-learning-keeps-this-from-re-sprawling" class="md-nav__link">
     <span class="md-ellipsis">
       
-        §2 The cheap calibration sweep (negative result)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#3-phase-b-follow-ups-open-work" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §3 Phase B follow-ups (open work)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="§3 Phase B follow-ups (open work)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#b1-post-decode-corner-re-refinement" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        B1. Post-decode corner re-refinement
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#b2-image-pyramid-for-far-field" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        B2. Image pyramid for far-field
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#b3-per-route-sharpening-in-adaptiveppb" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        B3. Per-route sharpening in AdaptivePpb
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#4-how-to-re-run-the-calibration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §4 How to re-run the calibration
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#5-diagnostic-ppb-calibration-histogram" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §5 Diagnostic: PPB calibration histogram
+        Convention — how to record a new learning (keeps this from re-sprawling)
       
     </span>
   </a>
@@ -1971,211 +1839,63 @@
   
 
 
-<h1 id="max_recall_adaptive-calibration-follow-ups"><code>max_recall_adaptive</code> calibration &amp; follow-ups</h1>
-<p>Records the empirical calibration of the <code>max_recall_adaptive</code>
-profile (<code>crates/locus-core/profiles/max_recall_adaptive.json</code>) and
-the deferred Phase B work that would lift its render-tag pose metrics
-back to <code>high_accuracy</code> parity.</p>
-<h2 id="1-the-shipped-configuration">§1 The shipped configuration</h2>
-<div class="highlight"><pre><span></span><code>&quot;quad&quot;: {
-  &quot;extraction_policy&quot;: {
-    &quot;AdaptivePpb&quot;: {
-      &quot;threshold&quot;: 2.5,
-      &quot;low_extraction&quot;:  &quot;ContourRdp&quot;, &quot;low_refinement&quot;:  &quot;Erf&quot;,
-      &quot;high_extraction&quot;: &quot;EdLines&quot;,    &quot;high_refinement&quot;: &quot;None&quot;
-    }
-  }
-},
-&quot;threshold&quot;: { &quot;enable_sharpening&quot;: true }
-</code></pre></div>
-<p>Validation matrix — all snapshots blessed at <code>674b4ef</code>:</p>
+<h1 id="engineering-lessons">Engineering lessons</h1>
+<p>Durable conclusions from Locus's investigation history — what we tried, what we
+shipped, and what was empirically falsified. Each page distills a cluster of
+point-in-time postmortems and diagnostics (now removed; recoverable from git
+history) into one maintainable record, so a future engineer can find "did we
+already try X, and why didn't it work?" without reading twenty dated files.</p>
+<p>This pairs with the anti-pattern index in the agent memory: the memory is the
+fast "don't do X" lookup; these pages carry the mechanism and the re-attempt
+conditions.</p>
+<h2 id="index">Index</h2>
 <table>
 <thead>
 <tr>
-<th>Suite</th>
-<th>Resolution</th>
-<th style="text-align: right;">Adaptive</th>
-<th style="text-align: right;"><code>high_accuracy</code></th>
+<th style="text-align: left;">Lesson</th>
+<th style="text-align: left;">Status</th>
+<th style="text-align: left;">One-line takeaway</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>ICRA forward</td>
-<td>—</td>
-<td style="text-align: right;"><strong><code>0.7380</code></strong></td>
-<td style="text-align: right;"><code>0.4631</code></td>
+<td style="text-align: left;"><a href="pose-covariance/">Pose covariance calibration</a></td>
+<td style="text-align: left;">CLOSED</td>
+<td style="text-align: left;">Every diagonal/scalar rescale of <code>(JᵀWJ)⁻¹</code> is falsified; the miscalibration is off-diagonal structure. Frontier: model-edge Fisher covariance (unmerged).</td>
 </tr>
 <tr>
-<td>render-tag tag36h11</td>
-<td>480p</td>
-<td style="text-align: right;">recall <code>0.92</code>, p99 rot <code>0.717°</code>, RMSE <code>0.582</code></td>
-<td style="text-align: right;"><code>0.86</code> / <code>0.538°</code> / <code>0.245</code></td>
+<td style="text-align: left;"><a href="rotation-tail-and-edge-refinement/">Pose rotation-error tail &amp; edge refinement</a></td>
+<td style="text-align: left;">RESOLVED (single-frame)</td>
+<td style="text-align: left;">Corner-level levers are all trade-bound; adding information (model-edge refinement, v0.7.0) beat reshaping the 4 corners.</td>
 </tr>
 <tr>
-<td>render-tag tag36h11</td>
-<td>720p</td>
-<td style="text-align: right;"><code>0.90</code> / <code>1.016°</code> / <code>0.564</code></td>
-<td style="text-align: right;"><code>0.90</code> / <code>0.600°</code> / <code>0.187</code></td>
+<td style="text-align: left;"><a href="edlines-segmentation/">EdLines quad extraction &amp; segmentation</a></td>
+<td style="text-align: left;">ACTIVE</td>
+<td style="text-align: left;">EdLines ships in <code>high_accuracy</code>; the arc-balance selector and the Phase-5 line decoupling were both falsified (decoder-rejection invisibility; chord-cost is a real regulariser).</td>
 </tr>
 <tr>
-<td>render-tag tag36h11</td>
-<td>1080p</td>
-<td style="text-align: right;"><code>0.96</code> / <code>1.009°</code> / <code>0.588</code></td>
-<td style="text-align: right;"><code>0.94</code> / <code>0.562°</code> / <code>0.203</code></td>
-</tr>
-<tr>
-<td>render-tag tag36h11</td>
-<td>2160p</td>
-<td style="text-align: right;"><code>0.98</code> / <code>1.813°</code> / <code>0.606</code></td>
-<td style="text-align: right;"><code>1.00</code> / <code>1.357°</code> / <code>0.180</code></td>
+<td style="text-align: left;"><a href="recall-quad-icra/">Recall, quad extraction &amp; ICRA</a></td>
+<td style="text-align: left;">CLOSED</td>
+<td style="text-align: left;">No static <code>(extraction, refinement)</code> pair wins both regimes; PPB adaptive routing does. <code>max_recall_adaptive</code> was folded into <code>high_accuracy</code>.</td>
 </tr>
 </tbody>
 </table>
-<p>ICRA-suite recall lifts +27 pp vs <code>high_accuracy</code> and matches <code>standard</code>
-to within 1 pp. Every render-tag p99 rotation stays under the
-<code>1.897°</code> budget set in
-<a href="../benchmarking/render_tag_sota_20260425/"><code>docs/engineering/benchmarking/render_tag_sota_20260425.md</code></a>.</p>
-<p>The render-tag mean RMSE delta vs <code>high_accuracy</code> (<code>~0.6 px</code> versus
-<code>~0.2 px</code>) is <strong>intrinsic</strong> to the ContourRdp + Erf path: even at PPB ≥
-2.5 the EdLines path (selected by both profiles) gives sub-pixel corners
-with per-corner Fisher-information priors that the weighted LM solver
-consumes. ContourRdp + Erf produces equally robust corners but no
-covariance prior, so the LM solver falls back to the unweighted ideal-
-corner residual. That is the single largest knob driving the gap.</p>
-<h2 id="2-the-cheap-calibration-sweep-negative-result">§2 The cheap calibration sweep (negative result)</h2>
-<p>Two configurations were tested as in-place edits to
-<code>max_recall_adaptive.json</code>, each a single regression-suite run, before
-shipping:</p>
-<table>
-<thead>
-<tr>
-<th>Variant</th>
-<th style="text-align: right;">ICRA recall</th>
-<th style="text-align: right;">1080p p99 rot</th>
-<th style="text-align: right;">1080p RMSE</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>shipped</strong> <code>(2.5, sharp_on)</code></td>
-<td style="text-align: right;"><code>0.7380</code></td>
-<td style="text-align: right;"><code>1.009°</code></td>
-<td style="text-align: right;"><code>0.588</code></td>
-</tr>
-<tr>
-<td><code>(1.5, sharp_off)</code></td>
-<td style="text-align: right;"><code>0.5484</code></td>
-<td style="text-align: right;"><code>3.154°</code></td>
-<td style="text-align: right;"><code>0.607</code></td>
-</tr>
-<tr>
-<td><code>(1.5, sharp_on)</code></td>
-<td style="text-align: right;"><code>0.7074</code></td>
-<td style="text-align: right;"><code>1.009°</code></td>
-<td style="text-align: right;"><code>0.588</code></td>
-</tr>
-</tbody>
-</table>
-<ul>
-<li>Disabling sharpening cost ICRA recall (<code>-19 pp</code>) <strong>and</strong> worsened the
-  render-tag p99 tail (small-tag candidates routed to EdLines without
-  the sharpening prior locked unstably and produced 3°+ rotation
-  outliers). Sharpening is doing real work on both extraction paths.</li>
-<li>Lowering the threshold from <code>2.5 → 1.5</code> had near-zero effect at the
-  1080p / 2160p resolutions (every candidate already sat above <code>2.5</code>)
-  and a small ICRA cost (<code>-3 pp</code>) from boundary candidates routing to
-  EdLines instead of ContourRdp + Erf.</li>
-</ul>
-<p>Conclusion: the shipped configuration is at a local Pareto optimum.
-Further config-only changes will trade ICRA recall for render-tag
-RMSE, or vice versa. The <strong>only</strong> way to drive every metric up
-without trade is to change the underlying pipeline.</p>
-<h2 id="3-phase-b-follow-ups-open-work">§3 Phase B follow-ups (open work)</h2>
-<p>Listed in order of expected impact-per-effort. None of these are
-in-scope for the current PR.</p>
-<h3 id="b1-post-decode-corner-re-refinement">B1. Post-decode corner re-refinement</h3>
-<p>After a tag is <strong>decoded</strong>, its identity is known and so is the ideal
-corner geometry of the canonical tag template. Refit each corner to
-the local image gradient under that template:</p>
+<h2 id="convention-how-to-record-a-new-learning-keeps-this-from-re-sprawling">Convention — how to record a new learning (keeps this from re-sprawling)</h2>
 <ol>
-<li>From <code>(homography, ideal_corners)</code> build the ideal-image
-   transformation that lands each corner's bit grid on the observed
-   image.</li>
-<li>For each of the 4 corners, do a local sub-pixel search (parabolic
-   fit on the symmetric-corner response map, or Förstner / Saddle-
-   point Newton step) over a 5×5 / 7×7 neighbourhood of the current
-   corner estimate.</li>
-<li>Re-solve the homography from the 4 refined corners; emit the new
-   pose.</li>
+<li><strong>Two homes only.</strong> A durable conclusion goes into the relevant <code>lessons/&lt;topic&gt;.md</code>
+   page as a <strong>dated subsection</strong> — never a new top-level <code>docs/engineering/*_YYYYMMDD.md</code>
+   file. Current benchmark numbers go in <code>../benchmarking/</code> (one live snapshot per
+   metric family; supersede it in place).</li>
+<li><strong>Status banner is mandatory.</strong> Every lesson page (and every dated subsection)
+   opens with <code>Status: ACTIVE | CLOSED | RESOLVED | SUPERSEDED-BY &lt;link&gt; | FALSIFIED</code>.</li>
+<li><strong>Supersede, don't accrete.</strong> When a re-run replaces an old snapshot, overwrite or
+   delete the old one — do not add a dated sibling.</li>
+<li><strong>Distill, then delete.</strong> Once a postmortem's conclusion is captured here, delete the
+   raw file; git history is the archive. Keep only pages that a future engineer would
+   actually open.</li>
+<li><strong>CHANGELOG references are historical, not live links.</strong> Moving or deleting a doc that
+   only <code>CHANGELOG.md</code> cites is safe.</li>
 </ol>
-<p>Why it pushes render-tag RMSE down:</p>
-<ul>
-<li>Independent of extraction path. ContourRdp + Erf and EdLines both
-  benefit; the post-decode refit is anchored on the <strong>decoded</strong> ideal
-  corner, not the extracted candidate corner, so the dependency on
-  ContourRdp's coarser sub-pixel quality is broken.</li>
-<li><code>high_accuracy</code>'s advantage today comes from EdLines's per-corner
-  covariance prior. The post-decode refit emits its own per-corner
-  covariance (Hessian of the local response), so the weighted LM
-  solver still has a Fisher prior — even when the extraction was
-  ContourRdp.</li>
-</ul>
-<p>Expected: render-tag mean RMSE collapses toward <code>~0.2 px</code> across the
-matrix; ICRA recall unchanged. Adaptive becomes a strict-improvement
-profile vs <code>high_accuracy</code> on every resolution.</p>
-<p>Implementation cost: ~1 PR. The corner search lives next to
-<code>edge_refinement.rs</code>; the per-corner covariance feeds existing
-<code>corner_covariances</code> SoA columns.</p>
-<p>Risk: the post-decode pass is per-valid-tag, not per-candidate, so
-the cost scales with the number of accepted detections (small).
-The Phase 1 implementation should ship behind a profile flag
-(<code>decoder.post_decode_refinement: bool</code>, default <code>false</code>) so it can
-be A/B'd without touching the existing snapshot suite.</p>
-<h3 id="b2-image-pyramid-for-far-field">B2. Image pyramid for far-field</h3>
-<p>Detect at <code>½×</code> / <code>¼×</code>, lift corners back to full resolution and
-re-refine. Standard fix for dense small-tag recall — AprilTag3 ships
-this as <code>decimation</code>, OpenCV <code>cv2.aruco</code> ships it as a pyramid.</p>
-<p>Why it pushes ICRA recall up:</p>
-<ul>
-<li>ICRA forward frames <code>0..5</code> have candidates at PPB ≈ <code>1.06–1.20</code> —
-  below EdLines's lock-on threshold. A <code>2×</code> upscale gives them
-  effective PPB ≈ <code>2.1–2.4</code>, putting them in EdLines's working range
-  <em>without</em> changing the extraction algorithm.</li>
-<li>Pose precision is preserved because the corner refinement runs at
-  full resolution.</li>
-</ul>
-<p>Implementation cost: ~2 PRs. Coarse-to-fine engine work touches the
-detection-pipeline orchestration and the extraction caches.</p>
-<h3 id="b3-per-route-sharpening-in-adaptiveppb">B3. Per-route sharpening in <code>AdaptivePpb</code></h3>
-<p>Extend <code>AdaptivePpbConfig</code> with <code>low_sharpening: bool</code> and
-<code>high_sharpening: bool</code> so small tags can keep sharpening (recall)
-while large render-tag tags skip it (precision).</p>
-<p>Phase B3 is only worth doing <strong>after</strong> B1: the post-decode refit
-removes most of the sharpening-induced precision penalty on the
-high path, so the per-route knob may end up redundant.</p>
-<h2 id="4-how-to-re-run-the-calibration">§4 How to re-run the calibration</h2>
-<div class="highlight"><pre><span></span><code><span class="nv">TRACY_NO_INVARIANT_CHECK</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
-<span class="nv">LOCUS_HUB_DATASET_DIR</span><span class="o">=</span>tests/data/hub_cache<span class="w"> </span><span class="se">\</span>
-<span class="nv">LOCUS_ICRA_DATASET_DIR</span><span class="o">=</span>tests/data/icra2020<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--release<span class="w"> </span>--features<span class="w"> </span>bench-internals<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--test<span class="w"> </span>regression_render_tag<span class="w"> </span>--test<span class="w"> </span>regression_icra2020<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>max_recall_adaptive
-</code></pre></div>
-<p>Snapshot review: <code>cargo insta review</code>.</p>
-<h2 id="5-diagnostic-ppb-calibration-histogram">§5 Diagnostic: PPB calibration histogram</h2>
-<p><code>crates/locus-core/tests/icra_forward_diagnostic.rs</code> was extended in
-<code>674b4ef</code> with a per-frame PPB histogram over both valid and rejected
-candidates (using the same <code>bbox_short / outer_dim</code> estimator the
-runtime router uses). Re-run it whenever the threshold needs to be
-re-derived for a new dataset:</p>
-<div class="highlight"><pre><span></span><code><span class="nv">LOCUS_ICRA_DATASET_DIR</span><span class="o">=</span>/path/to/icra2020<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--release<span class="w"> </span>--features<span class="w"> </span>bench-internals<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--test<span class="w"> </span>icra_forward_diagnostic<span class="w"> </span>--<span class="w"> </span>--ignored<span class="w"> </span>--nocapture
-</code></pre></div>
-<p>The shipped <code>2.5</code> threshold was derived from this output: ICRA forward
-candidates land entirely in the <code>&lt;1.5</code> bucket on every frame, so the
-strict <code>&lt;</code> tie-break routes them all to ContourRdp + Erf even if a
-future release nudges the cutoff downward.</p>
 
 
 
