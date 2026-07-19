@@ -119,14 +119,14 @@ TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features b
 ## Performance Reports
 
 ### Methodology & durable learnings
+- [Engineering Lessons](lessons/README.md) — distilled investigation conclusions (pose covariance, rotation tail & edge refinement, EdLines, recall/quad/ICRA): what was tried, what shipped, what was falsified
 - [Benchmarking Lessons](benchmarking/lessons.md) — consolidated timeline + architecture/profile/algorithm tradeoffs that should inform future work
 - [Micro-Benchmarking Guide](benchmarking/micro-benchmarking-guide.md) — 3-tier validation loop
 
-### Recent point-in-time reports
-- [Quad-extraction truncation fix (2026-04-26)](benchmarking/quad_truncation_fix_20260426.md)
+### Point-in-time reports (historical snapshots)
+- [Render-tag 1080p SOTA (current, v0.7.0-refreshed)](benchmarking/render_tag_sota_20260713.md)
 - [Render-tag 2160p recall lift (2026-04-25)](benchmarking/render_tag_2160p_20260425.md)
 - [Render-tag 1080p SOTA pursuit (2026-04-25)](benchmarking/render_tag_sota_20260425.md)
-- [Hub Regression Performance (2026-04-23)](benchmarking/hub_regression_20260423.md)
 - [Release Performance Report (2026-04-18)](benchmarking/release_performance_20260418.md)
 
 ---

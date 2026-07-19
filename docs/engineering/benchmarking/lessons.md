@@ -23,9 +23,9 @@ future work even after the surrounding numbers go stale.
 > pure pose-only refits). Default-value artifacts of this kind get
 > deleted, not preserved as configuration knobs.
 
-For current numbers, see `release_performance_20260418.md`,
-`hub_regression_20260423.md`, `render_tag_sota_20260425.md`,
-`render_tag_2160p_20260425.md`, and `quad_truncation_fix_20260426.md`.
+For current numbers, see the [render-tag SOTA snapshot](render_tag_sota_20260713.md).
+Deep, per-topic investigation distillations (pose covariance, rotation tail & edge
+refinement, EdLines, recall/quad/ICRA) now live under [`../lessons/`](../lessons/README.md).
 
 ## §1 Optimization timeline (Mar 2 → Apr 26)
 
