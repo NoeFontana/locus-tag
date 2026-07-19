@@ -1,5 +1,6 @@
 ---
 source: crates/locus-core/tests/common/hub.rs
+assertion_line: 469
 expression: report
 ---
 summary:
@@ -7,13 +8,13 @@ summary:
   mean_recall: 1
   mean_precision: 1
   mean_rmse: 0.1796
-  mean_reprojection_rmse: 0.1597
+  mean_reprojection_rmse: 0.1333
   p50_translation_error: 0.0009
-  p90_translation_error: 0.0117
-  p99_translation_error: 0.0638
-  p50_rotation_error: 0.057
-  p90_rotation_error: 0.3276
-  p99_rotation_error: 1.3868
+  p90_translation_error: 0.0101
+  p99_translation_error: 0.0497
+  p50_rotation_error: 0.0427
+  p90_rotation_error: 0.1258
+  p99_rotation_error: 0.2771
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
   worst_offenders: []

@@ -14,7 +14,7 @@ Usage:
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, cast
 
 import locus
 
@@ -37,11 +37,16 @@ CONFIGS = (
     (os.environ["RENDER_TAG_SOTA_CONFIG"],) if "RENDER_TAG_SOTA_CONFIG" in os.environ else _DEFAULT
 )
 
+# Base profile whose corner baseline the edge stage is measured against. Defaults
+# to the shipped `high_accuracy`; set MODEL_EDGE_BASE_PROFILE=standard to measure
+# the gain against the `standard` corner baseline (ContourRdp + Erf, no gates).
+BASE_PROFILE = os.environ.get("MODEL_EDGE_BASE_PROFILE", "high_accuracy")
+
 
 def _run(loader: HubDatasetLoader, cfg_name: str, enabled: bool) -> dict[str, Any]:
     ds = loader.load_dataset(cfg_name)
     fam = locus.TagFamily.AprilTag36h11
-    cfg = locus.DetectorConfig.from_profile("high_accuracy")
+    cfg = locus.DetectorConfig.from_profile(cast(Any, BASE_PROFILE))
     cfg.pose.pose_edge_refinement_enabled = enabled
     detector = locus.Detector(config=cfg, families=[fam], threads=1)
     wrapper = LocusWrapper(name="locus", detector=detector, family=int(fam))
@@ -51,6 +56,7 @@ def _run(loader: HubDatasetLoader, cfg_name: str, enabled: bool) -> dict[str, An
 
 def main() -> None:
     loader = HubDatasetLoader(root=HUB_CACHE_DIR)
+    print(f"base profile: {BASE_PROFILE}  |  pose mode: Accurate (intrinsics + tag_size)")
     # Full guardrail set: recall/precision must stay flat (the stage only refines
     # an accepted pose, never drops or adds a detection); mean corner RMSE is not
     # shown because the stage never writes `batch.corners`, so it is identical to

@@ -46,7 +46,8 @@
     "structure_tensor_radius": 2,
     "pose_consistency_fpr": 1.0e-3,
     "pose_consistency_gate_sigma_px": 0.5,
-    "outlier_drop_d2_threshold": 25.0
+    "outlier_drop_d2_threshold": 25.0,
+    "pose_edge_refinement_enabled": true
   },
   "segmentation": {
     "connectivity": "Eight",

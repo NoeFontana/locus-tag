@@ -22,6 +22,7 @@ Usage:
 from __future__ import annotations
 
 import os
+from typing import Any, cast
 
 import cv2
 import locus
@@ -40,6 +41,10 @@ CONFIGS = (
         "locus_v1_tag36h11_3840x2160",
     )
 )
+
+# Base profile whose corner baseline the edge stage is measured against (see
+# model_edge_eval.py). Defaults to shipped `high_accuracy`.
+BASE_PROFILE = os.environ.get("MODEL_EDGE_BASE_PROFILE", "high_accuracy")
 
 
 def _project(model: np.ndarray, pose: np.ndarray, intr: object) -> np.ndarray:
@@ -83,7 +88,7 @@ def _run(
         f"{cfg_name}: GT-pose reprojection is {gt_reproj:.4f} px (expected ~0); "
         f"model-corner order or quaternion convention mismatch"
     )
-    cfg = locus.DetectorConfig.from_profile("high_accuracy")
+    cfg = locus.DetectorConfig.from_profile(cast(Any, BASE_PROFILE))
     cfg.pose.pose_edge_refinement_enabled = enabled
     det = locus.Detector(config=cfg, families=[locus.TagFamily.AprilTag36h11], threads=1)
 
@@ -116,6 +121,7 @@ def _run(
 
 def main() -> None:
     loader = HubDatasetLoader(root=HUB_CACHE_DIR)
+    print(f"base profile: {BASE_PROFILE}  |  pose mode: Accurate (intrinsics + tag_size)")
     print(
         f"{'config':<12} {'variant':<9} | {'corner_rmse 2D (px)':<24} | "
         f"{'reproj_rmse (px)':<24} | corners"

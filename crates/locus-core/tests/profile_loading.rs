@@ -73,6 +73,8 @@ fn standard_profile_matches_former_builder() {
         cfg.segmentation_connectivity,
         SegmentationConnectivity::Eight
     );
+    // Edge refinement is a high_accuracy-only opt-in; standard stays off.
+    assert_eq!(cfg.pose_edge_refinement_enabled, false);
 
     assert_shared_defaults(&cfg);
     cfg.validate().expect("standard profile must validate");
@@ -97,6 +99,8 @@ fn grid_profile_matches_former_builder() {
         cfg.segmentation_connectivity,
         SegmentationConnectivity::Four
     );
+    // Edge refinement is a high_accuracy-only opt-in; grid stays off.
+    assert_eq!(cfg.pose_edge_refinement_enabled, false);
 
     assert_shared_defaults(&cfg);
     cfg.validate().expect("grid profile must validate");
@@ -121,6 +125,9 @@ fn high_accuracy_profile_routes_low_ppb_to_contour_rdp() {
         cfg.segmentation_connectivity,
         SegmentationConnectivity::Eight
     );
+    // Model-edge pose refinement is shipped on for high_accuracy (v0.7.0); lock
+    // it so an accidental JSON revert is caught loudly. standard/grid stay off.
+    assert_eq!(cfg.pose_edge_refinement_enabled, true);
 
     match cfg.quad_extraction_policy {
         QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {

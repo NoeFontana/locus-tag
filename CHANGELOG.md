@@ -67,6 +67,25 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **`high_accuracy` profile now ships with model-edge pose refinement on.** The
+  `high_accuracy` profile sets `pose.pose_edge_refinement_enabled = true`, turning
+  the opt-in stage (added below) on by default for the metrology profile. On the
+  render-tag suite (Accurate pose, intrinsics + `tag_size`) this tightens the whole
+  rotation distribution — **p99 −47 % to −76 % at every resolution** (1080p
+  0.561° → 0.290°, 2160p 1.387° → 0.277° on the regression fixtures) — and
+  **reprojection RMSE improves at every resolution** (mean −13 % to −22 %), with
+  recall, precision and 2D corner RMSE **unchanged** (the stage only refines an
+  already-accepted pose; it never writes `batch.corners`) at ~+1 ms/frame. The win
+  is larger still on the degraded-imagery robustness sets (rot p99 −56 % to −84 %).
+  The `regression_render_tag` `accuracy_baseline` snapshots are re-baselined
+  accordingly; `board-hub` and ICRA snapshots are byte-identical (the stage is
+  confined to the single-tag Accurate pose path). **`standard` and `grid` stay
+  off** — on `standard`'s corner baseline the stage is a bulk win but does not fix
+  its catastrophic rotation-p99 tail and slightly regresses the high-resolution
+  reproj/translation tail, because `standard` lacks the pose-consistency χ² gate
+  that re-validates each refined pose (it would trade the render-tag tail); see
+  `docs/engineering/benchmarking/model_edge_refinement_20260715.md`.
+
 - **Pose LM convergence: unit-sound function-tolerance gate.** The shared
   `nielsen_lm` secondary convergence gate is now a relative-cost-reduction test
   (`(cost_prev − cost_new) / cost_prev < func_tol`, `func_tol = 1e-6`, the Ceres
