@@ -51,6 +51,19 @@ const MEASURE_ITERS: usize = 4;
 /// set. Reuses the vetted corner/board [`NielsenConfig::POSE`] core — same
 /// body-frame Jacobian, damping, and grad/func convergence gates — so the edge
 /// LM can never drift from the production pose solver on numerics.
+///
+/// **On reusing `POSE`'s absolute `grad_tol`/`damping_floor` for a ~1000-residual
+/// objective** (a review question): both are benign here.
+/// - `grad_tol = 1e-8` (max-norm on `‖JᵀWr‖_∞`) is *inert*: `POSE`'s own doc notes
+///   the 4-corner LM exits at gradient ~1e-4 (four orders above `grad_tol`); the edge
+///   fit sums ~1000 residuals, scaling `jtr` up ~250×, so `grad_tol` binds even less.
+///   Convergence is governed entirely by the scale-invariant relative `func_tol` — the
+///   one gate that transfers unchanged from 4 points to 1000.
+/// - `damping_floor = 1e-6` floors only the near-flat DOFs; for the edge objective that
+///   is the depth/scale direction (edges barely constrain it), whose LM result is
+///   *discarded* — [`finalize`] re-anchors translation to the 4 corners. The
+///   well-constrained rotation DOFs have curvature far above the floor. So the floor
+///   affects only a thrown-away direction. No dedicated edge config is warranted.
 const EDGE_LM: NielsenConfig = NielsenConfig::POSE;
 const TRANS_ITERS: usize = 3;
 /// Huber transition (px) for the robust edge loss. With a good pose init the edge
@@ -60,6 +73,21 @@ const TRANS_ITERS: usize = 3;
 /// beyond `δ` with a Huber loss keeps the many clean interior edges in control of
 /// the fit. `0.5 px` sits above the clean-edge noise and below the latched-edge
 /// regime; the rank-1 edge weight becomes `w_huber · n·nᵀ`.
+///
+/// **Why this is an absolute pixel constant (and not scale-relative).** Code review
+/// flagged the absolute unit as the class of constant the pose LM convergence gate
+/// was rewritten to remove. It was investigated in depth: a MAD-adaptive transition
+/// `δ = k · 1.4826·median(|res|)` (scale-invariant by construction) was implemented
+/// and swept — it **regresses** render-tag rot p99 (0.249° → 0.32–0.34° at every k)
+/// and is therefore rejected under the "never trade the render-tag tail" rule. The
+/// reason is structural: the outliers this loss must reject are *latched* edges,
+/// whose residual sits at an **absolute** pixel offset (an edge jumping toward the
+/// neighbouring boundary, bounded by [`OFFSET_MAX`]), set by the sub-pixel PSF/latch
+/// geometry — not by the inlier-noise spread `σ̂`, and not by the projected cell size
+/// (δ = 0.5 px holds across the 640→2160 6× cell-size range and the high-ISO /
+/// low-key / raw-pipeline robustness sets). So an absolute δ is the dimensionally
+/// appropriate scale for separating edge-latch outliers, unlike the mixed-unit
+/// `m² + rad²` LM step gate. Kept absolute, with this evidence.
 const EDGE_HUBER_DELTA_PX: f64 = 0.5;
 
 /// Huber IRLS `(weight, cost)` for a 1-D edge residual `res` (px). Inliers
@@ -446,6 +474,15 @@ pub(crate) fn refine_pose_model_edges(
         // barely constrain depth, so the adaptive damping is essential — Nielsen's
         // rule shrinks λ toward Gauss-Newton as it converges and grows it (with the
         // behind-camera penalty) to reject depth-blowup steps.
+        // `_jtj` is the edge fit's body-frame Fisher information at the refined pose —
+        // a far tighter *rotation* uncertainty than the 4-corner solve (it aggregates
+        // ~1000 constraints). It is discarded because the SoA `detect()` path emits no
+        // pose covariance today (`Pose6D` is 7 floats; the `Detection` conversion sets
+        // `pose_covariance: None`), so the "refined pose ships the corner covariance"
+        // review concern is fully latent. If SoA covariance emission is ever added,
+        // combine this `jtj` (rotation) with the corner re-anchor's information
+        // (translation) into the emitted body-frame covariance — do not reuse the
+        // corner-solve covariance for the refined pose.
         let (refined, _jtj) = nielsen_lm(pose, &EDGE_LM, |p| edge_normal_equations(intr, p, set));
         if !refined.translation.iter().all(|x| x.is_finite())
             || !refined.rotation.iter().all(|x| x.is_finite())
@@ -469,15 +506,21 @@ fn finalize(
     let mut pose = *edge_pose;
     // --- Stage 2: translation-only re-anchor against the 4 trusted corners
     // (edges weakly constrain depth/scale; the outer corners constrain it best).
+    // If the re-anchor is singular (degenerate corner geometry) or a corner projects
+    // behind the camera under the refined rotation, fall back to the *trusted corner
+    // translation* (`init.translation`) rather than discarding the whole refinement —
+    // the edge-refined ROTATION (the stage's actual product) is still kept. The χ²
+    // re-validation in `compute_one` is the backstop if this hybrid is inconsistent.
     let obj = crate::pose::centered_tag_corners(tag_size);
-    for _ in 0..TRANS_ITERS {
+    'reanchor: for _ in 0..TRANS_ITERS {
         let mut ata = Matrix3::<f64>::zeros();
         let mut atb = Vector3::<f64>::zeros();
         for i in 0..4 {
             let p_cam = pose.rotation * obj[i] + pose.translation;
             let z = p_cam.z;
             if z < 1e-4 {
-                return None;
+                pose.translation = init.translation;
+                break 'reanchor;
             }
             let z_inv = 1.0 / z;
             let ([pu, pv], du, dv) =
@@ -485,10 +528,14 @@ fn finalize(
             ata += du * du.transpose() + dv * dv.transpose();
             atb += du * (corners[i][0] - pu) + dv * (corners[i][1] - pv);
         }
-        let dt = ata.cholesky().map(|c| c.solve(&atb))?;
-        if !dt.iter().all(|x| x.is_finite()) {
-            return None;
-        }
+        let Some(dt) = ata
+            .cholesky()
+            .map(|c| c.solve(&atb))
+            .filter(|d| d.iter().all(|x| x.is_finite()))
+        else {
+            pose.translation = init.translation;
+            break 'reanchor;
+        };
         pose.translation += dt;
         if dt.norm() < 1e-9 {
             break;
