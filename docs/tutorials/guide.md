@@ -71,7 +71,9 @@ detector = locus.Detector(profile="grid")
 
 ### High-Accuracy Metrology
 For isolated-tag pose extraction at high resolution (`EdLines` + geometric
-corners + no sub-pixel refinement):
+corners + no sub-pixel refinement). When called with camera intrinsics and a
+`tag_size`, it also runs **model-edge pose refinement** — aligning the decoded
+tag's internal bit-grid edges to the image to tighten rotation accuracy:
 
 ```python
 detector = locus.Detector(profile="high_accuracy")

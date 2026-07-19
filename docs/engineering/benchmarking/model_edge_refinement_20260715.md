@@ -178,3 +178,44 @@ PYTHONPATH=. LOCUS_HUB_DATASET_DIR=tests/data/hub_cache RAYON_NUM_THREADS=1 \
 PYTHONPATH=. LOCUS_HUB_DATASET_DIR=tests/data/hub_cache RAYON_NUM_THREADS=1 \
   uv run --group bench tools/bench/model_edge_rmse.py    # image-space: 2D corner + reproj RMSE
 ```
+
+Both harnesses take `MODEL_EDGE_BASE_PROFILE` (default `high_accuracy`; set
+`=standard` to measure the gain against the `standard` corner baseline).
+
+## v0.7.0 profile decision — enabled in `high_accuracy`, NOT in `standard`
+
+For the v0.7.0 cut the stage is turned **on in `high_accuracy`** (the numbers above
+reproduced on the release hardware — AMD EPYC-Milan, `rustc 1.92.0`, `--release`,
+`RAYON_NUM_THREADS=1`; clean render-tag + all three degraded sets, recall/precision
+100 %/100 % throughout) and left **off in `standard`**.
+
+**Why `standard` stays off** (measured 2026-07-19, `MODEL_EDGE_BASE_PROFILE=standard`,
+Accurate pose). Against `standard`'s own corner baseline (`ContourRdp` + `Erf`, and —
+critically — **no pose-consistency χ² gate and no outlier-drop**), edge refinement is
+a large win on the *bulk* of the distribution but does **not** clean the tail:
+
+| res  | rot mean (°) base→edge | rot p95 (°) | rot p99 (°) | t p99 (mm) | reproj mean (px) | reproj p99 (px) |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 640  | 0.831→**0.261** | 2.556→**0.269** | 4.270→4.270 | 22.7→**20.7** | 0.966→**0.696** | 2.520→**2.044** |
+| 720  | 0.934→**0.567** | 1.840→**0.228** | 14.11→**12.99** | 41.3→**39.5** | 0.888→**0.688** | 2.164→**1.791** |
+| 1080 | 0.974→**0.594** | 1.508→**0.196** | 14.76→**13.77** | 50.4→50.0 | 0.939→**0.776** | 2.046→**3.030** |
+| 2160 | 7.058→**6.740** | 40.16→40.16 | 108.4→108.3 | 120.8→123.8 | 1.096→**0.942** | 4.691→**5.280** |
+
+Recall/precision stay 100 %/100 % and 2D corner RMSE is unchanged (as on
+`high_accuracy` — the stage never writes `batch.corners`). But `standard`'s **rotation
+p99 tail is essentially untouched** (4–108° gross IPPE-ambiguity outliers the edge fit
+cannot recover from a flipped seed), and the **high-resolution reproj/translation p99
+tail regresses** (reproj p99 1080 2.05→3.03, 2160 4.69→5.28). The mechanism is the
+missing safety net: on `high_accuracy` the refined pose is re-validated against the
+pose-consistency **χ²** gate (`pose_consistency_fpr = 1e-3`), so a refinement that
+worsens reprojection is rejected — reproj RMSE improves at *every* percentile there. On
+`standard` (`pose_consistency_fpr = 0`) there is no such re-validation, so the tail can
+drift. Enabling the stage on `standard` would therefore **trade the render-tag tail**,
+which the project rules forbid doing silently.
+
+`standard`'s real gap is the absent pose gates, not corner refinement. A fuller
+`standard` overhaul (edge refinement **+** χ² consistency gate **+** outlier-drop, the
+levers `high_accuracy` already ships) is the candidate that would fix the tail too, but
+it changes rejection behaviour and needs its own recall/precision benchmark (ICRA
+included) — deferred to a follow-up, not v0.7.0. `standard` stays the byte-compatible
+fast default this release.

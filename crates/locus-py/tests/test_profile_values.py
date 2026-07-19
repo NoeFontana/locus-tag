@@ -49,6 +49,8 @@ EXPECTED = {
         # `None` is a Python keyword — reach the variant via getattr.
         "decoder.refinement_mode": getattr(CornerRefinementMode, "None"),
         "segmentation.connectivity": SegmentationConnectivity.Eight,
+        # Model-edge pose refinement shipped on for high_accuracy (v0.7.0).
+        "pose.pose_edge_refinement_enabled": True,
     },
 }
 
