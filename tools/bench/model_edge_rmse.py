@@ -28,7 +28,7 @@ import locus
 import numpy as np
 
 from tools.bench.metrics import corner_rmse_px, percentiles
-from tools.bench.utils import HUB_CACHE_DIR, HubDatasetLoader
+from tools.bench.utils import HUB_CACHE_DIR, HubDatasetLoader, _quat_to_rot
 
 CONFIGS = (
     (os.environ["RENDER_TAG_SOTA_CONFIG"],)
@@ -42,16 +42,16 @@ CONFIGS = (
 )
 
 
-def _quat_to_rot(q: np.ndarray) -> np.ndarray:
-    """Rotation matrix from a `[qx, qy, qz, qw]` quaternion."""
-    x, y, z, w = q
-    return np.array(
-        [
-            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
-            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
-        ]
-    )
+def _project(model: np.ndarray, pose: np.ndarray, intr: object) -> np.ndarray:
+    """Pinhole-project body-frame `model` points (N×3) through `pose`
+    `[tx,ty,tz,qx,qy,qz,qw]`. Reuses the shared `utils._quat_to_rot` so the
+    quaternion convention cannot drift from the pose-error harness. **Pinhole
+    only** — callers must assert the intrinsics carry no distortion.
+    """
+    cam = (_quat_to_rot(*pose[3:7]) @ model.T).T + pose[:3]
+    u = intr.fx * cam[:, 0] / cam[:, 2] + intr.cx  # type: ignore[attr-defined]
+    v = intr.fy * cam[:, 1] / cam[:, 2] + intr.cy  # type: ignore[attr-defined]
+    return np.stack([u, v], 1)
 
 
 def _run(
@@ -60,8 +60,29 @@ def _run(
     ds = loader.load_dataset(cfg_name)
     intr = ds.intrinsics
     assert intr is not None and ds.tag_size is not None
+    # The reprojection here is pinhole-only; refuse to silently report wrong
+    # numbers on a distorted dataset (Locus's own Pose::project is distortion-aware).
+    assert not list(intr.dist_coeffs), (
+        f"{cfg_name}: model_edge_rmse reprojection is pinhole-only but the dataset "
+        f"carries distortion ({intr.distortion_model}, {list(intr.dist_coeffs)})"
+    )
     s = ds.tag_size / 2.0
     model = np.array([[-s, -s, 0], [s, -s, 0], [s, s, 0], [-s, s, 0]])  # BL,BR,TR,TL
+    # Self-check the model-corner order + projection convention against the GT:
+    # reprojecting a GT pose through `model` must land on the GT corners (~0 px).
+    # Catches a corner-order / quaternion-convention drift at runtime instead of
+    # silently inflating both baseline and edge equally.
+    k0 = sorted(ds.gt_map.keys())[0]
+    g0 = ds.gt_map[k0]["tags"]
+    t0 = g0[sorted(g0.keys())[0]]
+    gt_reproj = corner_rmse_px(
+        _project(model, np.asarray(t0["pose"], dtype=np.float64), intr),
+        np.asarray(t0["corners"], dtype=np.float64),
+    )
+    assert gt_reproj < 1e-3, (
+        f"{cfg_name}: GT-pose reprojection is {gt_reproj:.4f} px (expected ~0); "
+        f"model-corner order or quaternion convention mismatch"
+    )
     cfg = locus.DetectorConfig.from_profile("high_accuracy")
     cfg.pose.pose_edge_refinement_enabled = enabled
     det = locus.Detector(config=cfg, families=[locus.TagFamily.AprilTag36h11], threads=1)
@@ -89,10 +110,7 @@ def _run(
             corners[(img_name, tid)] = det_c
             if poses is not None:
                 p = np.asarray(poses[i], dtype=np.float64)
-                cam = (_quat_to_rot(p[3:7]) @ model.T).T + p[:3]
-                u = intr.fx * cam[:, 0] / cam[:, 2] + intr.cx
-                v = intr.fy * cam[:, 1] / cam[:, 2] + intr.cy
-                reproj_rmse.append(corner_rmse_px(np.stack([u, v], 1), gtc))
+                reproj_rmse.append(corner_rmse_px(_project(model, p, intr), gtc))
     return corner_rmse, reproj_rmse, corners
 
 

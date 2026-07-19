@@ -135,21 +135,11 @@ const MAX_SAMPLES: usize = 1024;
 /// A fixed edge measurement: the model point (tag frame), the measured sub-pixel
 /// edge point (image px), and the edge normal (image px). Held constant while the
 /// inner LM adjusts the pose to fit these targets.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 struct Sample {
     p: Vector3<f64>,
     m: [f64; 2],
     n: [f64; 2],
-}
-
-impl Default for Sample {
-    fn default() -> Self {
-        Self {
-            p: Vector3::zeros(),
-            m: [0.0; 2],
-            n: [0.0; 2],
-        }
-    }
 }
 
 /// Measure the sub-pixel edge offset along the normal `(nx, ny)` through the
@@ -433,6 +423,16 @@ pub(crate) fn refine_pose_model_edges(
     // re-scan would just track the projection and never improve).
     for outer in 0..MEASURE_ITERS {
         let ns = measure_samples(img, intr, &pose, n, cell, h, scan_half, &mut samples);
+        // Fail loud if the buffer saturated: `measure_samples` fills in raster order,
+        // so a saturated buffer means the last boundary lines were dropped — a
+        // spatially one-sided sample set that biases rotation (see `MAX_SAMPLES`).
+        // Unreachable for all shipped families (dim ≤ 6 → 1008 < 1024); this guards
+        // a future dim ≥ 7 family from silently regressing.
+        debug_assert!(
+            ns < MAX_SAMPLES,
+            "model-edge sample buffer saturated ({ns} ≥ {MAX_SAMPLES}): grid too \
+             large for the on-stack budget — one-sided truncation would bias rotation"
+        );
         if ns < MIN_EDGE_SAMPLES {
             if outer == 0 {
                 return None; // never enough evidence — keep the corner pose
@@ -558,10 +558,15 @@ mod tests {
                 let [u, v] = intr.distort_normalized(pc.x / pc.z, pc.y / pc.z);
                 let ang = 0.3 * i as f64; // vary the normal per sample
                 let (nx, ny) = (ang.cos(), ang.sin());
-                // Measured edge sits 0.4 px off the projection along the normal.
+                // Alternate the offset so some residuals are Huber INLIERS (0.3 px <
+                // δ=0.5) and some are OUTLIERS (0.9 px > δ) — this exercises *both*
+                // branches of `edge_huber` (the outlier `δ/|res|` weight controls the
+                // rotation tail, so it must be under the gradient check). Both offsets
+                // sit ≥0.2 px from the δ kink, so the ±eps FD never straddles it.
+                let off = if i % 2 == 0 { 0.3 } else { 0.9 };
                 Sample {
                     p,
-                    m: [u + 0.4 * nx, v + 0.4 * ny],
+                    m: [u + off * nx, v + off * ny],
                     n: [nx, ny],
                 }
             })

@@ -129,6 +129,28 @@ in **image space** the refined pose is uniformly *closer to truth*, so the small
 metric-translation p95 trade above is a depth/scale artefact of the corner re-anchor,
 not a loss of pose accuracy where it is observable. Corner localization is untouched.
 
+### Robustness — degraded-imagery corpora (does the render-tag tuning generalize?)
+
+The tuning constants (Huber δ, sampling density, gates) were fit on the *clean*
+render-tag suite. To check they are not render-tag-PSF-specific overfit, the stage
+was run on the three degraded-imagery robustness sets (1080p, baseline vs edge):
+
+| dataset | rec/prec | rot mean (°) | rot p99 (°) | t mean (mm) | t p99 (mm) |
+| :--- | :---: | ---: | ---: | ---: | ---: |
+| `high_iso` (sensor noise) | 100/100 both | 0.119 → **0.062** | 0.568 → **0.250** | 1.86 → 1.84 | 18.7 → 19.1 |
+| `low_key` (dark/low-key)  | 100/100 both | 0.127 → **0.020** | 0.953 → **0.154** | 7.46 → 7.88 | 51.3 → 51.4 |
+| `raw_pipeline`            | 100/100 both | 0.119 → **0.029** | 0.867 → **0.145** | 4.17 → 4.52 | 36.1 → 37.7 |
+
+The rotation win is **larger** on degraded imagery (p99 −56 % to −84 %) than on clean
+render-tag, because the corner baseline is noisier there while the ~40 distributed
+edges still average that noise down. Crucially **recall and precision stay 100 %/100 %**:
+the `CONTRAST_MIN=50` selection gate does *not* silently decline, and the absolute-pixel
+Huber δ does *not* mis-clip, on high-ISO / low-key / raw-pipeline inputs — the two
+failure modes an absolute-unit constant tuned on one corpus would be most prone to.
+(These are still synthetic Blender degradations, not real-camera; the absolute δ and
+the reused `NielsenConfig::POSE` absolute `grad_tol`/`damping_floor` remain the natural
+first place to make scale-relative if real-camera data ever shows a regression.)
+
 ## Why this works where corner-level levers failed
 
 The 2026-07-14 study (`refine_variants_20260714.md`) proved every *corner-level*
@@ -143,9 +165,10 @@ temporal fusion required.
 
 AMD EPYC-Milan (Zen 3), 1 socket × 4 cores × 2 threads = 8 vCPU (`avx2`, `fma`,
 `sse4_2`); `rustc 1.92.0`; `--release`; `RAYON_NUM_THREADS=1`, Locus `threads=1`;
-`locus_v1_tag36h11_{640x480,1280x720,1920x1080,3840x2160}` (50 frames each); pose
-mode **Accurate**. Accuracy columns are deterministic (verified identical across
-repeated runs); the latency column is a best-effort single-thread wall-time.
+`locus_v1_tag36h11_{640x480,1280x720,1920x1080,3840x2160}` and the robustness sets
+`locus_v1_{high_iso,low_key,raw_pipeline}_1920x1080` (50 frames each); pose mode
+**Accurate**. Accuracy columns are deterministic (verified identical across repeated
+runs); the latency column is a best-effort single-thread wall-time.
 
 ## Reproduce
 
