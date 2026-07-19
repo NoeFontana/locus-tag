@@ -1825,6 +1825,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#v070-profile-decision-enabled-in-high_accuracy-not-in-standard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v0.7.0 profile decision — enabled in high_accuracy, NOT in standard
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2130,6 +2141,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#v070-profile-decision-enabled-in-high_accuracy-not-in-standard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v0.7.0 profile decision — enabled in high_accuracy, NOT in standard
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2419,6 +2441,85 @@ runs); the latency column is a best-effort single-thread wall-time.</p>
 <span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span><span class="nv">LOCUS_HUB_DATASET_DIR</span><span class="o">=</span>tests/data/hub_cache<span class="w"> </span><span class="nv">RAYON_NUM_THREADS</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/bench/model_edge_rmse.py<span class="w">    </span><span class="c1"># image-space: 2D corner + reproj RMSE</span>
 </code></pre></div>
+<p>Both harnesses take <code>MODEL_EDGE_BASE_PROFILE</code> (default <code>high_accuracy</code>; set
+<code>=standard</code> to measure the gain against the <code>standard</code> corner baseline).</p>
+<h2 id="v070-profile-decision-enabled-in-high_accuracy-not-in-standard">v0.7.0 profile decision — enabled in <code>high_accuracy</code>, NOT in <code>standard</code></h2>
+<p>For the v0.7.0 cut the stage is turned <strong>on in <code>high_accuracy</code></strong> (the numbers above
+reproduced on the release hardware — AMD EPYC-Milan, <code>rustc 1.92.0</code>, <code>--release</code>,
+<code>RAYON_NUM_THREADS=1</code>; clean render-tag + all three degraded sets, recall/precision
+100 %/100 % throughout) and left <strong>off in <code>standard</code></strong>.</p>
+<p><strong>Why <code>standard</code> stays off</strong> (measured 2026-07-19, <code>MODEL_EDGE_BASE_PROFILE=standard</code>,
+Accurate pose). Against <code>standard</code>'s own corner baseline (<code>ContourRdp</code> + <code>Erf</code>, and —
+critically — <strong>no pose-consistency χ² gate and no outlier-drop</strong>), edge refinement is
+a large win on the <em>bulk</em> of the distribution but does <strong>not</strong> clean the tail:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">res</th>
+<th style="text-align: right;">rot mean (°) base→edge</th>
+<th style="text-align: right;">rot p95 (°)</th>
+<th style="text-align: right;">rot p99 (°)</th>
+<th style="text-align: right;">t p99 (mm)</th>
+<th style="text-align: right;">reproj mean (px)</th>
+<th style="text-align: right;">reproj p99 (px)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">640</td>
+<td style="text-align: right;">0.831→<strong>0.261</strong></td>
+<td style="text-align: right;">2.556→<strong>0.269</strong></td>
+<td style="text-align: right;">4.270→4.270</td>
+<td style="text-align: right;">22.7→<strong>20.7</strong></td>
+<td style="text-align: right;">0.966→<strong>0.696</strong></td>
+<td style="text-align: right;">2.520→<strong>2.044</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;">720</td>
+<td style="text-align: right;">0.934→<strong>0.567</strong></td>
+<td style="text-align: right;">1.840→<strong>0.228</strong></td>
+<td style="text-align: right;">14.11→<strong>12.99</strong></td>
+<td style="text-align: right;">41.3→<strong>39.5</strong></td>
+<td style="text-align: right;">0.888→<strong>0.688</strong></td>
+<td style="text-align: right;">2.164→<strong>1.791</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;">1080</td>
+<td style="text-align: right;">0.974→<strong>0.594</strong></td>
+<td style="text-align: right;">1.508→<strong>0.196</strong></td>
+<td style="text-align: right;">14.76→<strong>13.77</strong></td>
+<td style="text-align: right;">50.4→50.0</td>
+<td style="text-align: right;">0.939→<strong>0.776</strong></td>
+<td style="text-align: right;">2.046→<strong>3.030</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;">2160</td>
+<td style="text-align: right;">7.058→<strong>6.740</strong></td>
+<td style="text-align: right;">40.16→40.16</td>
+<td style="text-align: right;">108.4→108.3</td>
+<td style="text-align: right;">120.8→123.8</td>
+<td style="text-align: right;">1.096→<strong>0.942</strong></td>
+<td style="text-align: right;">4.691→<strong>5.280</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Recall/precision stay 100 %/100 % and 2D corner RMSE is unchanged (as on
+<code>high_accuracy</code> — the stage never writes <code>batch.corners</code>). But <code>standard</code>'s <strong>rotation
+p99 tail is essentially untouched</strong> (4–108° gross IPPE-ambiguity outliers the edge fit
+cannot recover from a flipped seed), and the <strong>high-resolution reproj/translation p99
+tail regresses</strong> (reproj p99 1080 2.05→3.03, 2160 4.69→5.28). The mechanism is the
+missing safety net: on <code>high_accuracy</code> the refined pose is re-validated against the
+pose-consistency <strong>χ²</strong> gate (<code>pose_consistency_fpr = 1e-3</code>), so a refinement that
+worsens reprojection is rejected — reproj RMSE improves at <em>every</em> percentile there. On
+<code>standard</code> (<code>pose_consistency_fpr = 0</code>) there is no such re-validation, so the tail can
+drift. Enabling the stage on <code>standard</code> would therefore <strong>trade the render-tag tail</strong>,
+which the project rules forbid doing silently.</p>
+<p><code>standard</code>'s real gap is the absent pose gates, not corner refinement. A fuller
+<code>standard</code> overhaul (edge refinement <strong>+</strong> χ² consistency gate <strong>+</strong> outlier-drop, the
+levers <code>high_accuracy</code> already ships) is the candidate that would fix the tail too, but
+it changes rejection behaviour and needs its own recall/precision benchmark (ICRA
+included) — deferred to a follow-up, not v0.7.0. <code>standard</code> stays the byte-compatible
+fast default this release.</p>
 
 
 

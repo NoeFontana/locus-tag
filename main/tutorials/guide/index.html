@@ -2244,7 +2244,9 @@ merging:</p>
 </code></pre></div>
 <h3 id="high-accuracy-metrology">High-Accuracy Metrology</h3>
 <p>For isolated-tag pose extraction at high resolution (<code>EdLines</code> + geometric
-corners + no sub-pixel refinement):</p>
+corners + no sub-pixel refinement). When called with camera intrinsics and a
+<code>tag_size</code>, it also runs <strong>model-edge pose refinement</strong> — aligning the decoded
+tag's internal bit-grid edges to the image to tighten rotation accuracy:</p>
 <div class="highlight"><pre><span></span><code><span class="n">detector</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">Detector</span><span class="p">(</span><span class="n">profile</span><span class="o">=</span><span class="s2">&quot;high_accuracy&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="targeted-families">Targeted Families</h3>
