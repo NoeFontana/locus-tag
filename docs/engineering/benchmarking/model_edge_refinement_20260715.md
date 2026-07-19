@@ -11,8 +11,9 @@ corners. On the render-tag suite this **cuts rotation p99 47–76 % at every
 resolution — well under OpenCV's `apriltag` refinement — while keeping Locus's
 best-in-class translation.**
 
-Enabled by `pose.pose_edge_refinement_enabled = true` (default **false** →
-shipped-profile detection byte-identical). Requires camera intrinsics + `tag_size`.
+Enabled by `pose.pose_edge_refinement_enabled` (the field default is **false**;
+**`high_accuracy` ships it on as of v0.7.0** — see the profile-decision section
+below — while `standard`/`grid` leave it off). Requires camera intrinsics + `tag_size`.
 
 > **2026-07-17 update.** Rebased onto the unified pose-LM machinery (#337–#341):
 > the estimator now rides the shared body-frame Nielsen trust-region core
