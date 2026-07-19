@@ -1917,6 +1917,7 @@ pub fn refine_poses_soa(
         tag_size,
         img,
         &crate::config::DetectorConfig::default(),
+        None,
     );
 }
 
@@ -1933,6 +1934,7 @@ pub fn refine_poses_soa_with_config(
     tag_size: f64,
     img: Option<&ImageView>,
     config: &crate::config::DetectorConfig,
+    edge_refine_dim: Option<usize>,
 ) {
     use rayon::prelude::*;
 
@@ -1955,6 +1957,10 @@ pub fn refine_poses_soa_with_config(
         clippy::inline_always,
         reason = "the measured per-candidate overhead documented above is exactly what forcing the inline removes"
     )]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "per-candidate pose kernel threads camera, tag size, image, config, thresholds, the edge-refinement dimension and the two SoA input rows; grouping adds indirection on the hot path"
+    )]
     #[inline(always)]
     fn compute_one(
         intrinsics: &CameraIntrinsics,
@@ -1962,6 +1968,7 @@ pub fn refine_poses_soa_with_config(
         img: Option<&ImageView>,
         config: &crate::config::DetectorConfig,
         thresholds: Option<ConsistencyThresholds>,
+        edge_refine_dim: Option<usize>,
         corners_row: &[Point2f; 4],
         covs_row: &[f32; 16],
     ) -> (Option<[f32; 7]>, PoseDiagnostics) {
@@ -1993,7 +2000,7 @@ pub fn refine_poses_soa_with_config(
                 None
             };
 
-        let (pose_opt, _, diag) = estimate_tag_pose_with_diagnostics(
+        let (pose_opt, _, mut diag) = estimate_tag_pose_with_diagnostics(
             intrinsics,
             &corners,
             tag_size,
@@ -2003,7 +2010,35 @@ pub fn refine_poses_soa_with_config(
             thresholds,
         );
 
-        let pose_data = if let Some(pose) = pose_opt {
+        let pose_data = if let Some(mut pose) = pose_opt {
+            // Opt-in: refine the corner pose against the decoded tag's model
+            // edges (rotation) + re-anchor translation to the corners. The
+            // refined pose is re-validated against the SAME consistency gate so
+            // it can never weaken the false-positive-suppression guarantee that
+            // accepted the corner pose, and the emitted diagnostics are refreshed
+            // to describe the pose actually written to the batch.
+            if let (true, Some(dim), Some(image)) =
+                (config.pose_edge_refinement_enabled, edge_refine_dim, img)
+                && let Some(refined) = crate::model_edge::refine_pose_model_edges(
+                    intrinsics, image, dim, tag_size, &pose, &corners,
+                )
+            {
+                let gate_info = isotropic_info_matrices(config.pose_consistency_gate_sigma_px);
+                let v = pose_consistency_check(
+                    intrinsics,
+                    &corners,
+                    &gate_info,
+                    tag_size,
+                    &refined,
+                    f64::from(diag.branch_d2_ratio),
+                    thresholds,
+                );
+                if v.accepted {
+                    pose = refined;
+                    diag.aggregate_d2 = v.aggregate_d2 as f32;
+                    diag.max_corner_d2 = v.max_corner_d2 as f32;
+                }
+            }
             let q = quat_from_so3(pose.rotation);
             let t = pose.translation;
 
@@ -2076,7 +2111,14 @@ pub fn refine_poses_soa_with_config(
                     cov_row,
                 )| {
                     let (pose_data, diag) = compute_one(
-                        intrinsics, tag_size, img, config, thresholds, c_row, cov_row,
+                        intrinsics,
+                        tag_size,
+                        img,
+                        config,
+                        thresholds,
+                        edge_refine_dim,
+                        c_row,
+                        cov_row,
                     );
                     *pose_slot = if let Some(data) = pose_data {
                         Pose6D { data, padding: 0.0 }
@@ -2101,7 +2143,14 @@ pub fn refine_poses_soa_with_config(
             .zip(covs_in.par_iter())
             .for_each(|((pose_slot, c_row), cov_row)| {
                 let (pose_data, _diag) = compute_one(
-                    intrinsics, tag_size, img, config, thresholds, c_row, cov_row,
+                    intrinsics,
+                    tag_size,
+                    img,
+                    config,
+                    thresholds,
+                    edge_refine_dim,
+                    c_row,
+                    cov_row,
                 );
                 *pose_slot = if let Some(data) = pose_data {
                     Pose6D { data, padding: 0.0 }

@@ -75,10 +75,20 @@ for methodology, the 2160p table, and OpenCV's two operating points).
 
 Latencies are single-thread. Locus `high_accuracy` wins the translation tail and
 is 14× faster than OpenCV's best-accuracy `apriltag` config; that config in turn
-has the best rotation tail (0.376°). OpenCV ships two operating points — fast
-`subpix` and accurate-but-~2×-slower `apriltag`. AprilTag-C's median rotation is
-best in class (0.06°) but its p99 explodes to 65° on symmetric-tag IRLS
-branch-ambiguity failures.
+has the best rotation tail among the **default** profiles (0.376°). OpenCV ships two
+operating points — fast `subpix` and accurate-but-~2×-slower `apriltag`. AprilTag-C's
+median rotation is best in class (0.06°) but its p99 explodes to 65° on symmetric-tag
+IRLS branch-ambiguity failures.
+
+> **Optional: model-edge pose refinement.** Setting
+> `pose.pose_edge_refinement_enabled = True` adds an Accurate-mode stage that refines
+> each decoded tag's pose against its ~40 internal bit-grid edges (rotation from the
+> distributed edges; translation re-anchored to the corners). It takes `high_accuracy`
+> rotation p99 to **0.249°** (p95 **0.180°**) — **below OpenCV `apriltag`'s 0.376°** —
+> at ~2.7× better translation and +~1 ms/frame, with **2D corner RMSE unchanged** and
+> reprojection RMSE improved. Off by default (shipped detection stays byte-identical);
+> requires camera intrinsics + `tag_size`. See
+> [`docs/…/model_edge_refinement_20260715.md`](https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/model_edge_refinement_20260715.md).
 <!-- --8<-- [end:render-tag-comparison] -->
 
 ## Installation

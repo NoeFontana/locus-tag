@@ -116,8 +116,9 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   Supersedes the earlier "`Pose::retract` extracted (left-perturbation)" note below.
 - **`Pose::retract`.** Extracted the SE(3) left-perturbation update
   `exp([t|ω])·pose` into one method, replacing four inline copies across the pose
-  LMs (byte-identical). First step of the LM-consolidation series (see
-  `docs/engineering/lm_unification_spec.md`, landing with later phases).
+  LMs (byte-identical). First step of the LM-consolidation series, completed by the
+  body-frame perturbation, distortion-aware, shared-Nielsen-core, and
+  function-tolerance-gate changes above.
 - **Unweighted corner LM cost caching.** `corner_normal_equations` now returns the
   Huber cost at the linearization point alongside `(JᵀWJ, JᵀWr)` (bit-identical to
   a standalone `huber_cost`), and `refine_pose_lm` adopts the weighted LM's
@@ -128,6 +129,33 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **Model-based edge pose refinement (opt-in, Accurate mode).** A new post-decode
+  stage (`pose.pose_edge_refinement_enabled`, default off) aligns a decoded tag's
+  ~40 internal bit-grid edges + border to the image and refines the 6-DoF pose
+  against them (rotation from the distributed interior edges; translation
+  re-anchored to the 4 corners). It *adds* information — the decoded interior —
+  rather than reshaping the 4 corners, so unlike the trade-bound corner-level
+  levers in the 2026-07-14 study it improves rotation without giving up Locus's
+  best-in-class translation. The stage rides the shared body-frame Nielsen
+  trust-region core (`nielsen_lm` + `BodyFrameNormalEquations`): each 1-D
+  edge-normal residual enters the same distortion-aware accumulator as a corner
+  residual weighted by the rank-1 projector `n·nᵀ`, under a robust Huber loss so
+  the clean interior edges (not a few latched/biased ones) control the rotation.
+  Edge scans that leave the image or project behind the camera are
+  rejected/penalised, and the refined pose is re-validated against the
+  pose-consistency χ² gate so it can never weaken false-positive suppression (recall
+  and precision stay 100 %/100 %; mean corner RMSE is untouched — the stage only
+  refines the pose). On render-tag it tightens the **whole rotation distribution**
+  — mean −39…−55 %, **p99 −47…−76 % at every resolution** (1080p 0.600° → 0.249°,
+  p95 0.385° → 0.180° — well under OpenCV `apriltag`'s 0.376°) — keeping translation
+  best-in-class in mean and p99, against a small bounded p95 trade at high
+  resolution (the gated edges→rotation / corners→translation split). **Reprojection
+  RMSE improves at every resolution** (mean −13…−22 %), confirming a genuine
+  image-space accuracy gain; 2D corner RMSE is unchanged. +~1 ms/frame.
+  Requires camera intrinsics + `tag_size`; shipped profiles leave it off, so
+  detection snapshots stay byte-identical. See
+  `docs/engineering/benchmarking/model_edge_refinement_20260715.md` and
+  `tools/bench/model_edge_eval.py`.
 - **`Pose::adjoint` + SE(3) covariance reframing.** `Pose::adjoint` returns the
   6×6 SE(3) adjoint (`[t, ω]` ordering); `Pose::covariance_camera_to_body` and
   `Pose::covariance_body_to_camera` convert a pose covariance between the camera

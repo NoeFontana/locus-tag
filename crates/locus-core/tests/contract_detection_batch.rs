@@ -497,7 +497,7 @@ fn contract_phase_d_refine_poses_soa() {
     let config = DetectorConfig::default();
     let before = snapshot(&batch);
 
-    refine_poses_soa_with_config(&mut batch, 1, &intrinsics, 0.1, None, &config);
+    refine_poses_soa_with_config(&mut batch, 1, &intrinsics, 0.1, None, &config, None);
 
     let changed = changed_columns(&before, &batch);
     let allowed = {

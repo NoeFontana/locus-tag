@@ -107,6 +107,7 @@ nav:
           - engineering/benchmarking/render_tag_sota_20260425.md
           - engineering/benchmarking/render_tag_sota_20260713.md
           - engineering/benchmarking/refine_variants_20260714.md
+          - engineering/benchmarking/model_edge_refinement_20260715.md
           - engineering/benchmarking/render_tag_2160p_20260425.md
           - engineering/benchmarking/quad_truncation_fix_20260426.md
   - Migration:

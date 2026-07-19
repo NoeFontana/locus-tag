@@ -362,7 +362,7 @@ fn contract_refine_poses_soa_zero_alloc_steady_state() {
     let config = DetectorConfig::default();
 
     assert_zero_alloc("refine_poses_soa_with_config (ERF route)", || {
-        refine_poses_soa_with_config(&mut batch, v, &intrinsics, tag_size, None, &config);
+        refine_poses_soa_with_config(&mut batch, v, &intrinsics, tag_size, None, &config, None);
     });
 }
 
@@ -402,7 +402,7 @@ fn contract_refine_poses_soa_zero_alloc_gwlf_route() {
     };
 
     assert_zero_alloc("refine_poses_soa_with_config (GWLF route)", || {
-        refine_poses_soa_with_config(&mut batch, v, &intrinsics, tag_size, None, &config);
+        refine_poses_soa_with_config(&mut batch, v, &intrinsics, tag_size, None, &config, None);
     });
 }
 

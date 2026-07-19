@@ -339,6 +339,16 @@ pub struct DetectorConfig {
     /// rotation p99 tail.
     pub outlier_drop_d2_threshold: f64,
 
+    /// Enable the opt-in **model-edge pose refinement** stage (Accurate mode).
+    ///
+    /// After the corner-based pose, aligns the decoded tag's internal bit-grid
+    /// edges + border to the image and refines the pose against them (rotation
+    /// from ~40 distributed edges, translation re-anchored to the 4 corners).
+    /// Cuts rotation p99 substantially while preserving translation. Requires
+    /// camera intrinsics + `tag_size` (Accurate mode). `false` (default) keeps
+    /// production byte-identical for profiles that have not opted in.
+    pub pose_edge_refinement_enabled: bool,
+
     /// Alpha parameter for GWLF adaptive transversal windowing.
     /// The search band is set to +/- max(2, alpha * edge_length).
     pub gwlf_transversal_alpha: f64,
@@ -416,6 +426,7 @@ impl Default for DetectorConfig {
             pose_consistency_gate_sigma_px: 1.0,
             pose_consistency_min_decisive_ratio: 5.0,
             outlier_drop_d2_threshold: 0.0,
+            pose_edge_refinement_enabled: false,
             quad_extraction_policy: QuadExtractionPolicy::Static,
         }
     }
@@ -715,6 +726,7 @@ impl DetectorConfigBuilder {
             pose_consistency_gate_sigma_px: d.pose_consistency_gate_sigma_px,
             pose_consistency_min_decisive_ratio: d.pose_consistency_min_decisive_ratio,
             outlier_drop_d2_threshold: d.outlier_drop_d2_threshold,
+            pose_edge_refinement_enabled: d.pose_edge_refinement_enabled,
             quad_extraction_policy: self
                 .quad_extraction_policy
                 .unwrap_or(d.quad_extraction_policy),
@@ -1184,6 +1196,10 @@ mod profile_json {
         // opted in.
         #[serde(default)]
         pub outlier_drop_d2_threshold: f64,
+        // Opt-in model-edge pose refinement. Missing → false (disabled),
+        // preserving byte-identity for profiles that have not opted in.
+        #[serde(default)]
+        pub pose_edge_refinement_enabled: bool,
     }
 
     // Serde `default` fns source their values from `DetectorConfig::default()`
@@ -1232,6 +1248,7 @@ mod profile_json {
                 pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
                 pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
                 outlier_drop_d2_threshold: c.outlier_drop_d2_threshold,
+                pose_edge_refinement_enabled: c.pose_edge_refinement_enabled,
             }
         }
     }
@@ -1305,6 +1322,7 @@ mod profile_json {
                 pose_consistency_gate_sigma_px: p.pose.pose_consistency_gate_sigma_px,
                 pose_consistency_min_decisive_ratio: p.pose.pose_consistency_min_decisive_ratio,
                 outlier_drop_d2_threshold: p.pose.outlier_drop_d2_threshold,
+                pose_edge_refinement_enabled: p.pose.pose_edge_refinement_enabled,
                 quad_extraction_policy: p.quad.extraction_policy,
             }
         }

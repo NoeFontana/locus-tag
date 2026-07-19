@@ -316,6 +316,16 @@ class PoseConfig(BaseModel):
     (≈ 5σ², χ²(1; 1.5e-6)) — only fires on genuinely catastrophic
     outliers driving the rotation p99 tail. ``high_accuracy`` opts in.
     """
+    pose_edge_refinement_enabled: bool = Field(default=False)
+    """Enable the opt-in model-edge pose refinement stage (Accurate mode).
+
+    After the corner-based pose, aligns the decoded tag's internal bit-grid
+    edges + border to the image and refines the pose against them (rotation
+    from ~40 distributed edges; translation re-anchored to the 4 corners),
+    substantially cutting rotation p99 while preserving translation. Requires
+    camera intrinsics + ``tag_size``. ``False`` (default) keeps detection
+    byte-identical for profiles that have not opted in.
+    """
 
 
 class SegmentationConfig(BaseModel):
