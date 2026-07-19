@@ -1,0 +1,2720 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-performance fiducial marker detector.">
+      
+      
+      
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/0.7/engineering/benchmarking/hub_regression_20260423/">
+      
+      
+        <link rel="prev" href="../release_performance_20260418/">
+      
+      
+        <link rel="next" href="../render_tag_sota_20260425/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Hub Regression Performance Report (2026-04-23) - Locus</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="purple">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#hub-regression-performance-report-2026-04-23" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Locus
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Hub Regression Performance Report (2026-04-23)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="purple"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/NoeFontana/locus-tag" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    NoeFontana/locus-tag
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Locus
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/NoeFontana/locus-tag" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    NoeFontana/locus-tag
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorials/guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-To Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-To Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/add_dictionary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to: Add a custom fiducial dictionary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/debug_with_rerun/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to Guide: Debugging with Rerun
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/concurrent_detection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How to Run Concurrent Detection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/install-with-distortion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install with distortion support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/tune_and_compare/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tune detectors and compare against other libraries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../how-to/per_instance_comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compare detectors per image and find Locus's levers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../explanation/pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Detection Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../explanation/memory_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../explanation/algorithms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Algorithms &amp; Mathematical Foundations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../explanation/coordinates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coordinate Systems
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../explanation/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engineering (Internal)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Engineering (Internal)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Identity &amp; Engineering Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feature Development Workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release-runbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release runbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../detection-batch-contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architectural Contract: DetectionBatch (SoA)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../constraints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strict Constraints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ffi_contracts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FFI Contract Inventory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../profiles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Detector Profiles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../stratification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stratification Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quality-gates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quality Gates &amp; Verification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../rust-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rust Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../general-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    General Code Style Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_13" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6_13" id="__nav_6_13_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_13_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6_13">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Benchmarking
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking &amp; Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lessons/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking Lessons (consolidated, 2026-05-02)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../micro-benchmarking-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Micro-Benchmarking Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release_performance_20260418/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Locus Release Performance Report (2026-04-18)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hub Regression Performance Report (2026-04-23)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hub Regression Performance Report (2026-04-23)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-accuracy-baseline-tag36h11-across-resolutions-high_accuracy-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Accuracy Baseline — tag36h11 across resolutions (high_accuracy profile)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-pose-mode-variant-tag36h11-1080p-standard-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Pose-Mode Variant — tag36h11 1080p, standard profile
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-refinement-variant-tag36h11-1080p-gwlf-on-standard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Refinement Variant — tag36h11 1080p, GWLF on standard
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-quad-extraction-variants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Quad-Extraction Variants
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-robustness-suite-new" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Robustness Suite — NEW
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Robustness Suite — NEW">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-configuration-only-tuned-variants-follow-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 Configuration-only tuned variants (follow-up)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-distortion-aprilgrid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Distortion — AprilGrid
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-board-level-reference-dataset-unchanged" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Board-Level (reference — dataset unchanged)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reproduction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproduction
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../render_tag_sota_20260425/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Render-tag 1080p SOTA pursuit (2026-04-25)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../render_tag_sota_20260713/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    render-tag SOTA refresh — OpenCV 5.0 (2026-07-13)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../refine_variants_20260714/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Corner-refinement variants vs the rotation-p99 tail (2026-07-14)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../model_edge_refinement_20260715/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model-based edge pose refinement — beating the rotation gap (2026-07-15, tuned 2026-07-17)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../render_tag_2160p_20260425/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2160p render_tag_hub recall lift (2026-04-25)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quad_truncation_fix_20260426/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quad-extraction truncation fix (2026-04-26)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migration
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Migration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../migration/config-refactor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config refactor — migration notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-accuracy-baseline-tag36h11-across-resolutions-high_accuracy-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Accuracy Baseline — tag36h11 across resolutions (high_accuracy profile)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-pose-mode-variant-tag36h11-1080p-standard-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Pose-Mode Variant — tag36h11 1080p, standard profile
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-refinement-variant-tag36h11-1080p-gwlf-on-standard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Refinement Variant — tag36h11 1080p, GWLF on standard
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-quad-extraction-variants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Quad-Extraction Variants
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-robustness-suite-new" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Robustness Suite — NEW
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Robustness Suite — NEW">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-configuration-only-tuned-variants-follow-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 Configuration-only tuned variants (follow-up)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-distortion-aprilgrid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Distortion — AprilGrid
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-board-level-reference-dataset-unchanged" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Board-Level (reference — dataset unchanged)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reproduction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproduction
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="hub-regression-performance-report-2026-04-23">Hub Regression Performance Report (2026-04-23)</h1>
+<p>Accompanies PR #198 (hub dataset rename + robustness suite). Captures
+accuracy, pose metrology, and latency for every hub-backed regression test
+after migration to the renamed <code>locus_v1_*</code> subsets and inclusion of four new
+single-tag robustness variants (<code>tag16h5</code>, <code>high_iso</code>, <code>low_key</code>,
+<code>raw_pipeline</code>).</p>
+<h2 id="environment">Environment</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CPU</td>
+<td>AMD EPYC-Milan (4 cores / 8 threads)</td>
+</tr>
+<tr>
+<td>L3 cache</td>
+<td>32 MiB</td>
+</tr>
+<tr>
+<td>RAM</td>
+<td>32 GiB</td>
+</tr>
+<tr>
+<td>Arch</td>
+<td>x86_64</td>
+</tr>
+<tr>
+<td>Build profile</td>
+<td><code>--release --all-features --features bench-internals</code></td>
+</tr>
+<tr>
+<td>Threads</td>
+<td><code>cargo test -- --test-threads=1</code> (sequential)</td>
+</tr>
+</tbody>
+</table>
+<p>Latencies are <code>mean_total_ms</code> per frame as reported by the harness stdout
+(the same value that is redacted as <code>[DURATION]</code> in the YAML snapshot for
+stability). Accuracy figures come directly from the accepted <code>.snap</code> files.</p>
+<h2 id="1-accuracy-baseline-tag36h11-across-resolutions-high_accuracy-profile">1. Accuracy Baseline — <code>tag36h11</code> across resolutions (<code>high_accuracy</code> profile)</h2>
+<table>
+<thead>
+<tr>
+<th>Resolution</th>
+<th>Images</th>
+<th>Recall</th>
+<th>Precision</th>
+<th>RMSE (px)</th>
+<th>Repro RMSE (px)</th>
+<th>Trans P50 (m)</th>
+<th>Rot P50 (°)</th>
+<th>Latency (ms)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>640×480</td>
+<td>50</td>
+<td>86.00%</td>
+<td>100.00%</td>
+<td>0.2449</td>
+<td>0.1993</td>
+<td>0.0005</td>
+<td>0.119</td>
+<td>2.02</td>
+</tr>
+<tr>
+<td>1280×720</td>
+<td>50</td>
+<td>90.00%</td>
+<td>100.00%</td>
+<td>0.1873</td>
+<td>0.1696</td>
+<td>0.0004</td>
+<td>0.064</td>
+<td>4.86</td>
+</tr>
+<tr>
+<td>1920×1080</td>
+<td>50</td>
+<td>94.00%</td>
+<td>100.00%</td>
+<td>0.2029</td>
+<td>0.1943</td>
+<td>0.0004</td>
+<td>0.054</td>
+<td>11.41</td>
+</tr>
+<tr>
+<td>3840×2160</td>
+<td>50</td>
+<td>94.00%</td>
+<td>100.00%</td>
+<td>0.1676</td>
+<td>0.1506</td>
+<td>0.0008</td>
+<td>0.049</td>
+<td>43.50</td>
+</tr>
+</tbody>
+</table>
+<p><code>high_accuracy</code> is used as the baseline because its 4-6× tighter pose
+bounds catch pose-solver regressions that <code>standard</code>'s wider thresholds
+mask. The 6-14 points of recall ceded (vs <code>standard</code>'s 100%) is the cost
+of <code>EdLines</code> + no-sharpen; small-tag recall signal is instead picked up
+by the robustness suite (§ 5), which stays on <code>standard</code>.</p>
+<p>Latency scales roughly linearly with pixel count (11.4 ms × 4 → 43.5 ms
+at 4K) as expected for a preprocessing-dominated pipeline. <code>high_accuracy</code>
+is also ~2× faster than <code>standard</code> because EdLines is cheaper than
+ContourRdp.</p>
+<h2 id="2-pose-mode-variant-tag36h11-1080p-standard-profile">2. Pose-Mode Variant — <code>tag36h11</code> 1080p, <code>standard</code> profile</h2>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Recall</th>
+<th>RMSE (px)</th>
+<th>Repro RMSE (px)</th>
+<th>Trans P50 (m)</th>
+<th>Rot P50 (°)</th>
+<th>Latency (ms)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fast</td>
+<td>100.00%</td>
+<td>1.3403</td>
+<td>4.8908</td>
+<td>0.0073</td>
+<td>2.002</td>
+<td>18.70</td>
+</tr>
+</tbody>
+</table>
+<p>The Fast-mode test stays on <code>standard</code> so that it contrasts cleanly against
+the <code>standard</code>-profile Accurate metrics derivable from § 4 and the
+robustness baseline. Fast mode preserves recall and pixel RMSE but its
+pose accuracy is substantially worse than <code>standard</code>-Accurate (5×
+reprojection error, 6× rotation error) at only ~13% latency saving —
+consistent with the LM solver not dominating a 50-tag 1080p frame.</p>
+<h2 id="3-refinement-variant-tag36h11-1080p-gwlf-on-standard">3. Refinement Variant — <code>tag36h11</code> 1080p, GWLF on <code>standard</code></h2>
+<table>
+<thead>
+<tr>
+<th>Refinement</th>
+<th>Recall</th>
+<th>RMSE (px)</th>
+<th>Repro RMSE (px)</th>
+<th>Trans P50 (m)</th>
+<th>Rot P50 (°)</th>
+<th>Latency (ms)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GWLF</td>
+<td>100.00%</td>
+<td>0.9891</td>
+<td>0.8502</td>
+<td>0.0032</td>
+<td>0.067</td>
+<td>15.08</td>
+</tr>
+</tbody>
+</table>
+<p>GWLF-on-<code>standard</code> is retained as a refinement variant since it's the only
+<code>standard</code>-profile configuration with tight rotation P50 — useful for
+catching regressions in the covariance-consuming weighted LM path without
+paying the <code>high_accuracy</code> recall tax. Counter-intuitively it's <em>faster</em>
+than <code>standard</code> default (15.1 ms vs 21.4 ms) because the weighted solver
+converges in fewer iterations when fed GWLF priors.</p>
+<p>The <code>high_accuracy</code>-profile 1080p test was removed from this module — it
+is now the baseline at § 1.</p>
+<h2 id="4-quad-extraction-variants">4. Quad-Extraction Variants</h2>
+<p><code>tag36h11</code> 720p:</p>
+<table>
+<thead>
+<tr>
+<th>Config</th>
+<th>Recall</th>
+<th>RMSE (px)</th>
+<th>Repro RMSE (px)</th>
+<th>Latency (ms)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EdLines + no refinement</td>
+<td>90.00%</td>
+<td>0.1714</td>
+<td>0.1599</td>
+<td>7.46</td>
+</tr>
+<tr>
+<td>EdLines + GWLF</td>
+<td>90.00%</td>
+<td>0.5794</td>
+<td>0.5804</td>
+<td>9.21</td>
+</tr>
+</tbody>
+</table>
+<p><code>tag36h11</code> 1080p:</p>
+<table>
+<thead>
+<tr>
+<th>Config</th>
+<th>Recall</th>
+<th>RMSE (px)</th>
+<th>Repro RMSE (px)</th>
+<th>Latency (ms)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Default + moments culling</td>
+<td>100.00%</td>
+<td>1.3403</td>
+<td>0.9294</td>
+<td>18.20</td>
+</tr>
+<tr>
+<td>EdLines</td>
+<td>96.00%</td>
+<td>0.5861</td>
+<td>0.5809</td>
+<td>24.14</td>
+</tr>
+<tr>
+<td>EdLines + moments culling</td>
+<td>96.00%</td>
+<td>0.5861</td>
+<td>0.5809</td>
+<td>23.76</td>
+</tr>
+</tbody>
+</table>
+<p>Moments culling shaves ~3 ms off the default 1080p run (18.2 vs 21.4 ms)
+without changing accuracy. Paired with EdLines it has no material effect —
+EdLines' own filtering already rejects the same candidates.</p>
+<h2 id="5-robustness-suite-new">5. Robustness Suite — NEW</h2>
+<p>Single-tag subsets stressing the detector under conditions the golden
+<code>tag36h11</code> rendering does not exercise. All at 1920×1080, Accurate mode,
+<code>standard</code> profile — the robustness suite stays on <code>standard</code> precisely
+because it depends on the recall path that <code>high_accuracy</code> trades away.</p>
+<table>
+<thead>
+<tr>
+<th>Subset</th>
+<th>Family</th>
+<th>Images</th>
+<th>Recall</th>
+<th>Precision</th>
+<th>RMSE (px)</th>
+<th>Trans P50 (m)</th>
+<th>Rot P50 (°)</th>
+<th>Latency (ms)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tag16h5</code></td>
+<td>AprilTag16h5</td>
+<td>100</td>
+<td>100.00%</td>
+<td><strong>27.64%</strong></td>
+<td>1.0799</td>
+<td>0.0057</td>
+<td>0.463</td>
+<td>16.96</td>
+</tr>
+<tr>
+<td><code>high_iso</code></td>
+<td>AprilTag36h11</td>
+<td>50</td>
+<td>100.00%</td>
+<td>100.00%</td>
+<td>1.3361</td>
+<td>0.0035</td>
+<td>0.309</td>
+<td>21.95</td>
+</tr>
+<tr>
+<td><code>low_key</code></td>
+<td>AprilTag36h11</td>
+<td>50</td>
+<td><strong>10.00%</strong></td>
+<td>100.00%</td>
+<td>0.2578</td>
+<td>0.0029</td>
+<td>0.459</td>
+<td>15.24</td>
+</tr>
+<tr>
+<td><code>raw_pipeline</code></td>
+<td>AprilTag36h11</td>
+<td>50</td>
+<td><strong>58.00%</strong></td>
+<td>100.00%</td>
+<td>0.7594</td>
+<td>0.0013</td>
+<td>0.389</td>
+<td>17.40</td>
+</tr>
+</tbody>
+</table>
+<p>Observations (baselining new behaviour — each row is a forward-looking
+watchlist, not a regression):</p>
+<ul>
+<li><strong><code>tag16h5</code> — precision cliff.</strong> 100% recall but only 27.6% precision.
+  The 16h5 family has a dense codebook (30 codes in 16 bits) and rampant
+  false-positive decodes are the dominant failure mode. This is a known
+  property of the family rather than a detector bug; any future detector
+  change that moves 16h5 precision should be treated as a <em>regression</em> if
+  it drops, and a <em>win</em> if it climbs.</li>
+<li><strong><code>low_key</code> — 10% recall.</strong> Intentional: the dataset simulates extreme
+  low-dynamic-range captures. Current adaptive thresholding leaves most
+  tags buried in the black level. Surfacing this at 10% gives us a clear
+  KPI for future contrast-robust threshold work.</li>
+<li><strong><code>raw_pipeline</code> — 58% recall.</strong> Raw-like pipeline variant exposes the
+  detector to less-processed sensor output. Useful middle-ground target.</li>
+<li><strong><code>high_iso</code> — no regression.</strong> The detector's demosaic/denoise chain
+  appears robust to synthetic high-noise captures (100% recall matches
+  clean <code>tag36h11_1920x1080</code>).</li>
+</ul>
+<h3 id="51-configuration-only-tuned-variants-follow-up">5.1 Configuration-only tuned variants (follow-up)</h3>
+<p>Each subset above was re-run with a bespoke JSON profile (embedded at
+<code>crates/locus-core/tests/fixtures/robustness/&lt;subset&gt;_tuned.json</code>) to
+quantify how far the existing <code>DetectorConfig</code> knob set can move each KPI
+without algorithmic changes. The baselines are retained as the KPI
+watchlist; these rows are additive.</p>
+<table>
+<thead>
+<tr>
+<th>Subset</th>
+<th>Baseline</th>
+<th>Tuned</th>
+<th>Δ</th>
+<th>Knobs that moved the number</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tag16h5</code></td>
+<td>R 100% / P <strong>27.64%</strong> / 16.96 ms</td>
+<td>R 100% / P <strong>68.85%</strong> / 16.78 ms</td>
+<td><strong>Precision ×2.5</strong> at zero recall cost</td>
+<td><code>decoder.max_hamming_error: 2→1</code>, <code>decoder.min_contrast: 20→30</code>, <code>quad.min_edge_score: 4→8</code>, <code>quad.min_fill_ratio: 0.10→0.18</code></td>
+</tr>
+<tr>
+<td><code>low_key</code></td>
+<td>R <strong>10.00%</strong> / P 100% / 15.24 ms</td>
+<td>R <strong>22.00%</strong> / P 100% / 28.08 ms</td>
+<td><strong>Recall ×2.2</strong>, latency ×1.8</td>
+<td><code>threshold.tile_size: 8→2</code>, <code>threshold.min_range: 10→0</code>, <code>threshold.constant: 0→-20</code></td>
+</tr>
+<tr>
+<td><code>raw_pipeline</code></td>
+<td>R <strong>58.00%</strong> / P 100% / 17.40 ms</td>
+<td>R <strong>60.00%</strong> / P 100% / 19.05 ms</td>
+<td>Recall +2 pts (marginal)</td>
+<td><code>quad.min_area: 16→8</code>, <code>quad.min_edge_length: 4→2</code>, <code>quad.min_edge_score: 4→1</code></td>
+</tr>
+</tbody>
+</table>
+<p>Findings:</p>
+<ul>
+<li><strong><code>tag16h5</code> is the clear configuration win.</strong> Halving the allowed
+  Hamming distance is the dominant lever; raising the decoder's contrast
+  gate and the upstream quad edge-score/fill-ratio gates trim the
+  remaining false-positive pool without sacrificing a single true positive.
+  A <code>+41.2</code> precision-point lift at <strong>zero</strong> recall cost is the ceiling we
+  could find; pushing further (<code>min_edge_score: 10</code>, <code>min_fill_ratio:
+  0.22</code>) recovers ~3 more precision points at the cost of 1-2 recall
+  points — not a trade we took. The remaining ~31% of false positives are
+  dense structural ambiguities in the 16h5 codebook itself and are no
+  longer configuration-bound.</li>
+<li><strong><code>low_key</code> has a configuration ceiling at 22% recall.</strong> A finer
+  adaptive-threshold grid (<code>tile_size=2</code>) with zero <code>min_range</code> and a
+  strongly negative <code>constant</code> unlocks the tags buried in the low-DR
+  black level. A full sweep (<code>tile_size ∈ {2,4,8,16}</code>, <code>min_range ∈
+  {0,2,5,10}</code>, <code>constant ∈ {0,-3,-5,-10,-15,-20,-30,-50}</code>, plus decoder
+  and quad-gate relaxation, plus structure-tensor radius and adaptive
+  window) converges to the same 22% ceiling. Confirms the report's
+  framing: this subset is <em>the</em> KPI for future contrast-robust threshold
+  work.</li>
+<li><strong><code>raw_pipeline</code> is largely config-bound at its baseline.</strong> Threshold
+  and decoder relaxation do not move the needle; only quad-gate
+  relaxation adds a marginal +2 recall points. <code>EdLines</code> extraction gives
+  the same recall at materially better RMSE (0.33 vs 0.76 px) but we did
+  not swap the default in this batch because the suite's baseline is
+  <code>ContourRdp</code> and switching extractors is a separate regression axis.
+  The remaining 40% are likely noise-fragmented contours that would
+  require a pre-filtering pass to recover.</li>
+</ul>
+<h2 id="6-distortion-aprilgrid">6. Distortion — AprilGrid</h2>
+<p>All 1920×1080, 50 images per subset, AprilTag36h11, Accurate pose mode.
+Pose-mode coverage lives in § 2; this suite isolates the undistortion path.</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Recall</th>
+<th>Precision</th>
+<th>RMSE (px)</th>
+<th>Repro RMSE (px)</th>
+<th>Trans P50 (m)</th>
+<th>Rot P50 (°)</th>
+<th>Latency (ms)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Brown–Conrady</td>
+<td>92.93%</td>
+<td>99.43%</td>
+<td>1.0947</td>
+<td>1.1336</td>
+<td>0.0634</td>
+<td>2.151</td>
+<td>26.52</td>
+</tr>
+<tr>
+<td>Kannala–Brandt</td>
+<td>81.30%</td>
+<td>98.97%</td>
+<td>1.5204</td>
+<td>3.0482</td>
+<td>0.0926</td>
+<td>7.313</td>
+<td>24.76</td>
+</tr>
+</tbody>
+</table>
+<p>Kannala–Brandt (fisheye) recall sits ~11 points below Brown–Conrady at
+equivalent pixel RMSE, confirming that the wider field of view pushes a
+larger fraction of tags into the distortion-heavy periphery where the
+detector's undistorted assumptions cost yield.</p>
+<h2 id="7-board-level-reference-dataset-unchanged">7. Board-Level (reference — dataset unchanged)</h2>
+<p>Included for completeness. These snapshots pre-date PR #198 and were not
+regenerated; the board datasets themselves were not re-rendered.</p>
+<table>
+<thead>
+<tr>
+<th>Board</th>
+<th>Frames</th>
+<th>Frames with board</th>
+<th>Mean Trans Err (m)</th>
+<th>Mean Rot Err (°)</th>
+<th>Mean Coverage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>charuco_golden_v1_1920x1080</code></td>
+<td>150</td>
+<td>149</td>
+<td>0.0081</td>
+<td>1.929</td>
+<td>99.0%</td>
+</tr>
+<tr>
+<td><code>aprilgrid_golden_v1_1920x1080</code></td>
+<td>145</td>
+<td>145</td>
+<td>0.0108</td>
+<td>2.035</td>
+<td>95.0%</td>
+</tr>
+</tbody>
+</table>
+<h2 id="reproduction">Reproduction</h2>
+<div class="highlight"><pre><span></span><code><span class="nv">TRACY_NO_INVARIANT_CHECK</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
+<span class="nv">LOCUS_HUB_DATASET_DIR</span><span class="o">=</span>tests/data/hub_cache<span class="w"> </span><span class="se">\</span>
+cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--release<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--test<span class="w"> </span>regression_render_tag<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--test<span class="w"> </span>regression_render_tag_robustness<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--test<span class="w"> </span>regression_distortion_hub<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--test<span class="w"> </span>regression_board_hub<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--features<span class="w"> </span>bench-internals<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--<span class="w"> </span>--test-threads<span class="o">=</span><span class="m">1</span><span class="w"> </span>--nocapture
+</code></pre></div>
+<p>The <code>regression_render_tag_robustness</code> suite includes both the baseline
+watchlist runs (<code>regression_hub_&lt;subset&gt;_1080p</code>) and the configuration-
+tuned follow-up runs (<code>regression_hub_&lt;subset&gt;_1080p_tuned</code>). The tuned
+variants load their JSON profiles from
+<code>crates/locus-core/tests/fixtures/robustness/*_tuned.json</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+      
+        <script src="../../../javascripts/mermaid-init.js"></script>
+      
+    
+  </body>
+</html>

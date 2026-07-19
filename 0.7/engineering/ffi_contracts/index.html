@@ -1,0 +1,2680 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-performance fiducial marker detector.">
+      
+      
+      
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/0.7/engineering/ffi_contracts/">
+      
+      
+        <link rel="prev" href="../constraints/">
+      
+      
+        <link rel="next" href="../profiles/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>FFI Contract Inventory - Locus</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="purple">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#ffi-contract-inventory" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Locus
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              FFI Contract Inventory
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="purple"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/NoeFontana/locus-tag" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    NoeFontana/locus-tag
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Locus
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/NoeFontana/locus-tag" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    NoeFontana/locus-tag
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-To Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-To Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/add_dictionary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to: Add a custom fiducial dictionary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/debug_with_rerun/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to Guide: Debugging with Rerun
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/concurrent_detection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How to Run Concurrent Detection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/install-with-distortion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install with distortion support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/tune_and_compare/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tune detectors and compare against other libraries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/per_instance_comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compare detectors per image and find Locus's levers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Detection Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/memory_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/algorithms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Algorithms &amp; Mathematical Foundations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/coordinates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coordinate Systems
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engineering (Internal)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Engineering (Internal)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Identity &amp; Engineering Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feature Development Workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release-runbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release runbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../detection-batch-contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architectural Contract: DetectionBatch (SoA)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../constraints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strict Constraints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FFI Contract Inventory
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FFI Contract Inventory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-image-buffer-invariants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Image buffer invariants
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Image buffer invariants">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#simd-padding-a12-enforced-via-internal-copy-fallback" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SIMD padding (A1.2 — enforced via internal copy fallback)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#intrinsics-image-shape-coupling-enforced" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Intrinsics ↔ image-shape coupling (enforced)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-cameraintrinsics-construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. CameraIntrinsics construction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-detectorconfig-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. DetectorConfig validation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. DetectorConfig validation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields-with-no-runtime-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields with no runtime validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-detector-constructor-create_detector" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Detector constructor (create_detector)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Detector constructor (create_detector)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#profile-level-connectivity-is-an-invariant-not-advice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Profile-level connectivity is an invariant, not advice
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-detect-vs-detect_concurrent-differences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. detect() vs detect_concurrent() differences
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-entry-point-reference-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Entry-point reference index
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-gaps-and-follow-ups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Gaps and follow-ups
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../profiles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Detector Profiles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../stratification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stratification Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quality-gates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quality Gates &amp; Verification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rust-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rust Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../python-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../general-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    General Code Style Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_13" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_13" id="__nav_6_13_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_13_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_13">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Benchmarking
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking &amp; Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/lessons/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking Lessons (consolidated, 2026-05-02)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/micro-benchmarking-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Micro-Benchmarking Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/release_performance_20260418/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Locus Release Performance Report (2026-04-18)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/hub_regression_20260423/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hub Regression Performance Report (2026-04-23)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/render_tag_sota_20260425/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Render-tag 1080p SOTA pursuit (2026-04-25)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/render_tag_sota_20260713/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    render-tag SOTA refresh — OpenCV 5.0 (2026-07-13)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/refine_variants_20260714/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Corner-refinement variants vs the rotation-p99 tail (2026-07-14)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/model_edge_refinement_20260715/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model-based edge pose refinement — beating the rotation gap (2026-07-15, tuned 2026-07-17)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2160p render_tag_hub recall lift (2026-04-25)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarking/quad_truncation_fix_20260426/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quad-extraction truncation fix (2026-04-26)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migration
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Migration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../migration/config-refactor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config refactor — migration notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-image-buffer-invariants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Image buffer invariants
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Image buffer invariants">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#simd-padding-a12-enforced-via-internal-copy-fallback" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SIMD padding (A1.2 — enforced via internal copy fallback)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#intrinsics-image-shape-coupling-enforced" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Intrinsics ↔ image-shape coupling (enforced)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-cameraintrinsics-construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. CameraIntrinsics construction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-detectorconfig-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. DetectorConfig validation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. DetectorConfig validation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields-with-no-runtime-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields with no runtime validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-detector-constructor-create_detector" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Detector constructor (create_detector)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Detector constructor (create_detector)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#profile-level-connectivity-is-an-invariant-not-advice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Profile-level connectivity is an invariant, not advice
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-detect-vs-detect_concurrent-differences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. detect() vs detect_concurrent() differences
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-entry-point-reference-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Entry-point reference index
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-gaps-and-follow-ups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Gaps and follow-ups
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="ffi-contract-inventory">FFI Contract Inventory</h1>
+<blockquote>
+<p><strong>Scope.</strong> This document enumerates every invariant the Python↔Rust boundary
+enforces today, keyed to its enforcement point. It is the authoritative test
+matrix for Phase A1 hardening: each row here is a test to write.</p>
+</blockquote>
+<p>Entry points covered:</p>
+<ul>
+<li><code>Detector.detect</code> / <code>Detector.detect_concurrent</code></li>
+<li><code>BoardEstimator.estimate</code></li>
+<li><code>CharucoRefiner.estimate</code></li>
+<li><code>CameraIntrinsics.__new__</code></li>
+<li><code>create_detector</code> (implicit constructor behind <code>Detector.__init__</code>)</li>
+</ul>
+<p>Each section is organised as <code>{Invariant | Enforcement point | Error type | Notes}</code>.
+"Enforcement point" is the file and line where the check actually runs —
+not where the argument is declared.</p>
+<hr />
+<h2 id="1-image-buffer-invariants">1. Image buffer invariants</h2>
+<p>All four detection entry points accept a 2-D <code>uint8</code> NumPy array and route it
+through <code>prepare_image_view</code> at <code>crates/locus-py/src/lib.rs:1631</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Invariant</th>
+<th>Enforcement point</th>
+<th>Error type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dtype == np.uint8</code> (single-frame)</td>
+<td><code>crates/locus-py/locus/__init__.py:268</code></td>
+<td><code>ValueError</code> (Python-side)</td>
+</tr>
+<tr>
+<td><code>dtype == np.uint8</code> (per frame in concurrent path)</td>
+<td><code>crates/locus-py/locus/__init__.py:325</code></td>
+<td><code>ValueError</code> (Python-side)</td>
+</tr>
+<tr>
+<td>Shape is 2-D <code>(H, W)</code></td>
+<td><code>PyReadonlyArray2&lt;'_, u8&gt;</code> signature at <code>lib.rs:593</code> (<code>BoardEstimator::estimate</code>), <code>lib.rs:758</code> (<code>CharucoRefiner::estimate</code>), <code>lib.rs:1097</code> (<code>Detector::detect</code>)</td>
+<td><code>TypeError</code> (PyO3 built-in)</td>
+</tr>
+<tr>
+<td><code>stride_x == 1</code> (row-major, C-contiguous along the last axis)</td>
+<td><code>lib.rs</code> in <code>prepare_image_view</code></td>
+<td><code>PyValueError</code> — <code>"Array must be C-contiguous. Call np.ascontiguousarray(image) first."</code></td>
+</tr>
+<tr>
+<td><code>strides[0] &gt;= width</code> (rejects reverse-axis views with negative row stride)</td>
+<td><code>lib.rs</code> in <code>prepare_image_view</code></td>
+<td><code>PyValueError</code> — <code>"Array row stride (&lt;value&gt;) must be &gt;= width (&lt;value&gt;); negative strides…"</code></td>
+</tr>
+<tr>
+<td><code>stride_y &gt;= width</code> and buffer length fits <code>(height - 1) * stride + width</code></td>
+<td><code>crates/locus-core/src/image.rs:26-46</code> (<code>ImageView::new</code>)</td>
+<td><code>PyRuntimeError</code> (wrapped from <code>String</code>)</td>
+</tr>
+<tr>
+<td><code>has_simd_padding()</code> — ≥3 trailing bytes past the last logical pixel</td>
+<td><code>lib.rs</code> in <code>prepare_image_view</code> (silently satisfied via internal copy fallback when missing)</td>
+<td>n/a — accepted via copy into padded scratch</td>
+</tr>
+</tbody>
+</table>
+<h3 id="simd-padding-a12-enforced-via-internal-copy-fallback">SIMD padding (A1.2 — enforced via internal copy fallback)</h3>
+<p><code>ImageView::has_simd_padding()</code> at <code>image.rs:55-67</code> returns whether the buffer
+has ≥3 bytes past the last logical pixel — the slack that AVX2 <code>gather</code>
+instructions (e.g. <code>sample_bilinear_v8</code> in <code>decoder.rs</code>) may touch when
+loading 32-bit words on 8-bit data. <strong><code>prepare_image_view</code> is responsible for
+this gate at every entry path</strong>, but it satisfies it transparently rather
+than rejecting under-padded inputs:</p>
+<ul>
+<li>If the incoming NumPy buffer already exposes ≥3 trailing bytes per row
+  (<code>stride_y &gt;= width + 3</code>, e.g. a <code>parent[:, :W]</code> slice from a wider
+  parent allocation), the function returns a zero-copy <code>FfiImageBuffer::Borrowed</code>
+  variant — the <code>ImageView</code> borrows directly from the NumPy data.</li>
+<li>Otherwise (e.g. a tightly-packed <code>np.zeros((H, W), dtype=np.uint8)</code>),
+  the function copies the image into an over-allocated scratch
+  <code>Vec&lt;u8&gt;</code> of length <code>H * W + 3</code> (the trailing 3 bytes are zero-padded
+  guard bytes) and returns an <code>FfiImageBuffer::Padded</code> variant. The
+  scratch buffer lives for the lifetime of the <code>detect()</code> call and is
+  dropped afterwards.</li>
+</ul>
+<p>The fallback violates the otherwise-strict "no copies at the FFI" rule in
+<code>docs/engineering/constraints.md</code> §2. It is a deliberate trade-off —
+PR #287 PR-A initially rejected under-padded inputs and broke every
+<code>np.zeros((H, W))</code> call site in the public API; the redesign restored
+backwards-compatibility at the cost of one <code>H × W</code>-byte allocation + copy
+per <code>detect()</code> call for the tightly-packed path. PRs that touch this
+fallback should re-evaluate the trade-off if frame copy becomes a
+measurable cost.</p>
+<p>To take the zero-copy fast path explicitly, allocate a wider parent and
+view a column prefix:</p>
+<div class="highlight"><pre><span></span><code><span class="n">parent</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">)))</span>  <span class="c1"># or `np.zeros((H, W + 3), ...)`</span>
+<span class="n">view</span> <span class="o">=</span> <span class="n">parent</span><span class="p">[:,</span> <span class="p">:</span> <span class="n">img</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+<span class="n">detector</span><span class="o">.</span><span class="n">detect</span><span class="p">(</span><span class="n">view</span><span class="p">)</span>  <span class="c1"># FfiImageBuffer::Borrowed — zero-copy</span>
+</code></pre></div>
+<p>Note that <code>view</code> is non-C-contiguous (<code>stride_y &gt; width</code>) by design — the
+<code>stride_x == 1</code> gate is what defines "C-contiguous along the last axis" at
+this boundary, not NumPy's stricter <code>flags['C_CONTIGUOUS']</code>.</p>
+<h3 id="intrinsics-image-shape-coupling-enforced">Intrinsics ↔ image-shape coupling (enforced)</h3>
+<p>When <code>intrinsics</code> is passed to <code>detect()</code> or <code>detect_concurrent()</code>, the
+principal point is validated against each image's dimensions:</p>
+<table>
+<thead>
+<tr>
+<th>Invariant</th>
+<th>Enforcement point</th>
+<th>Error type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0 &lt;= cx &lt; width</code></td>
+<td><code>lib.rs:validate_principal_point</code> (called before <code>detach</code>)</td>
+<td><code>PyValueError</code></td>
+</tr>
+<tr>
+<td><code>0 &lt;= cy &lt; height</code></td>
+<td>same</td>
+<td><code>PyValueError</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>fx, fy</code> plausibility relative to the image size is not gated — it is a
+calibration concern, not a correctness concern.</p>
+<hr />
+<h2 id="2-cameraintrinsics-construction">2. <code>CameraIntrinsics</code> construction</h2>
+<p>Defined at <code>crates/locus-py/src/lib.rs:214-264</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Invariant</th>
+<th>Enforcement point</th>
+<th>Error type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fx, fy, cx, cy</code> all finite (no NaN/±inf)</td>
+<td><code>CameraIntrinsics::new</code></td>
+<td><code>PyValueError</code></td>
+</tr>
+<tr>
+<td><code>fx &gt; 0</code> and <code>fy &gt; 0</code></td>
+<td><code>CameraIntrinsics::new</code></td>
+<td><code>PyValueError</code></td>
+</tr>
+<tr>
+<td><code>distortion_model == Pinhole</code> → any <code>dist_coeffs</code> length (including empty) accepted</td>
+<td><code>CameraIntrinsics::new</code></td>
+<td>n/a</td>
+</tr>
+<tr>
+<td><code>distortion_model == BrownConrady</code> → <code>len(dist_coeffs) == 5</code></td>
+<td><code>CameraIntrinsics::new</code> (feature-gated on <code>non_rectified</code>)</td>
+<td><code>PyValueError</code></td>
+</tr>
+<tr>
+<td><code>distortion_model == KannalaBrandt</code> → <code>len(dist_coeffs) == 4</code></td>
+<td><code>CameraIntrinsics::new</code> (feature-gated on <code>non_rectified</code>)</td>
+<td><code>PyValueError</code></td>
+</tr>
+<tr>
+<td><code>BrownConrady</code> / <code>KannalaBrandt</code> available</td>
+<td>Compile-time <code>#[cfg(feature = "non_rectified")]</code></td>
+<td><code>AttributeError</code> at import time if feature off</td>
+</tr>
+</tbody>
+</table>
+<p>Principal-point bounds <code>(cx, cy)</code> ∈ image are checked at
+<code>detect()</code>/<code>detect_concurrent()</code> — see §1 "Intrinsics ↔ image-shape coupling".</p>
+<hr />
+<h2 id="3-detectorconfig-validation">3. <code>DetectorConfig</code> validation</h2>
+<p>All configuration validation happens in <code>DetectorConfig::validate()</code> at
+<code>crates/locus-core/src/config.rs:234-272</code>, invoked by
+<code>DetectorBuilder::validated_build()</code>. Every <code>ConfigError</code> is mapped to
+<code>PyValueError</code> at <code>crates/locus-py/src/lib.rs:1623-1624</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Invariant</th>
+<th>Enforcement point</th>
+<th><code>ConfigError</code> variant</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>threshold_tile_size &gt;= 2</code></td>
+<td><code>config.rs:237-239</code></td>
+<td><code>TileSizeTooSmall</code></td>
+</tr>
+<tr>
+<td><code>decimation &gt;= 1</code></td>
+<td><code>config.rs:240-242</code></td>
+<td><code>InvalidDecimation</code></td>
+</tr>
+<tr>
+<td><code>upscale_factor &gt;= 1</code></td>
+<td><code>config.rs:243-245</code></td>
+<td><code>InvalidUpscaleFactor</code></td>
+</tr>
+<tr>
+<td><code>0.0 &lt;= quad_min_fill_ratio &lt; quad_max_fill_ratio &lt;= 1.0</code></td>
+<td><code>config.rs:246-254</code></td>
+<td><code>InvalidFillRatio { min, max }</code></td>
+</tr>
+<tr>
+<td><code>quad_min_edge_length &gt; 0.0</code></td>
+<td><code>config.rs:255-257</code></td>
+<td><code>InvalidEdgeLength</code></td>
+</tr>
+<tr>
+<td><code>structure_tensor_radius &lt;= 8</code></td>
+<td><code>config.rs:258-262</code></td>
+<td><code>InvalidStructureTensorRadius</code></td>
+</tr>
+<tr>
+<td><code>quad_extraction_mode == EdLines</code> ⇒ <code>refinement_mode != Erf</code></td>
+<td><code>config.rs:263-266</code></td>
+<td><code>EdLinesIncompatibleWithErf</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="fields-with-no-runtime-validation">Fields with <strong>no</strong> runtime validation</h3>
+<p>The following fields are passed straight through without range checks, even
+though the Pydantic <code>DetectorConfig</code> in <code>crates/locus-py/locus/_config.py</code>
+declares explicit ranges:</p>
+<ul>
+<li><code>threshold_min_range</code>, <code>threshold_min_radius</code>, <code>threshold_max_radius</code></li>
+<li><code>adaptive_threshold_constant</code>, <code>adaptive_threshold_gradient_threshold</code></li>
+<li><code>quad_min_area</code>, <code>quad_max_aspect_ratio</code>, <code>quad_min_edge_score</code></li>
+<li><code>subpixel_refinement_sigma</code>, <code>segmentation_margin</code></li>
+<li><code>decoder_min_contrast</code>, <code>max_hamming_error</code>, <code>gwlf_transversal_alpha</code></li>
+<li><code>quad_max_elongation</code>, <code>quad_min_density</code></li>
+<li><code>huber_delta_px</code>, <code>tikhonov_alpha_max</code>, <code>sigma_n_sq</code></li>
+</ul>
+<p>Python-side Pydantic catches some of these (e.g. <code>threshold_min_range: ge=0,
+le=255</code>), <strong>but only when the user constructs a <code>DetectorConfig</code> directly</strong>.
+Values passed through <code>Detector(**kwargs)</code> skip the Pydantic model and go
+straight to the Rust builder. A1 should either route all kwargs through
+Pydantic or extend <code>validate()</code>.</p>
+<hr />
+<h2 id="4-detector-constructor-create_detector">4. <code>Detector</code> constructor (<code>create_detector</code>)</h2>
+<p>Rust entry at <code>crates/locus-py/src/lib.rs:1314-1422</code>. Python wrapper at
+<code>crates/locus-py/locus/__init__.py:159-228</code>.</p>
+<p>The config crosses the FFI as a <strong>JSON string</strong>, not a typed struct: Python
+passes <code>config.model_dump_json()</code> to <code>_create_detector_from_config(config_json=…)</code>,
+and Rust parses it with <code>DetectorConfig::from_profile_json</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Invariant</th>
+<th>Enforcement point</th>
+<th>Error type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>families[i] in {0,1,2,3,4}</code> (valid <code>TagFamily</code> discriminant)</td>
+<td><code>tag_family_from_i32</code> in <code>crates/locus-py/src/lib.rs</code></td>
+<td><code>PyValueError</code></td>
+</tr>
+<tr>
+<td>Nested config invariants (radius ordering, fill-ratio ordering, cross-group compatibility)</td>
+<td><code>locus._config.DetectorConfig</code> model validators</td>
+<td><code>pydantic.ValidationError</code></td>
+</tr>
+<tr>
+<td><code>config_json</code> parses (known keys only, valid enum-variant strings)</td>
+<td><code>from_profile_json</code> serde deserialize (<code>deny_unknown_fields</code>)</td>
+<td><code>PyValueError</code> (wrapped from <code>ConfigError::ProfileParse</code>)</td>
+</tr>
+<tr>
+<td>Final config passes Rust <code>DetectorConfig::validate()</code></td>
+<td><code>_create_detector_from_config</code> → <code>from_profile_json</code> → <code>validated_build()</code></td>
+<td><code>PyValueError</code> (wrapped from <code>ConfigError</code>)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="profile-level-connectivity-is-an-invariant-not-advice">Profile-level connectivity is an invariant, not advice</h3>
+<p>The <code>grid</code> profile JSON sets <code>segmentation.connectivity = "Four"</code>. Because
+detector settings now come from a profile file rather than from kwargs,
+mixing the <code>grid</code> profile with 8-connectivity is inexpressible — the user
+would have to hand-edit the profile first, and at that point the setting is
+theirs to own.</p>
+<hr />
+<h2 id="5-detect-vs-detect_concurrent-differences">5. <code>detect()</code> vs <code>detect_concurrent()</code> differences</h2>
+<p>Both share the image invariants above. Behavioural differences:</p>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th><code>detect()</code></th>
+<th><code>detect_concurrent()</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Frame pool gating</td>
+<td>single <code>FrameContext</code></td>
+<td><code>max_concurrent_frames</code> pool (<code>lib.rs:1610-1614</code>)</td>
+</tr>
+<tr>
+<td>Telemetry returned</td>
+<td>yes (<code>PipelineTelemetry</code>)</td>
+<td>no (documented at <code>__init__.py:313</code>)</td>
+</tr>
+<tr>
+<td>Rejected-corner data returned</td>
+<td>yes</td>
+<td>no — built from an owned path at <code>lib.rs:1663 build_detection_result_from_owned</code></td>
+</tr>
+<tr>
+<td>GIL released</td>
+<td>yes, for the pipeline body</td>
+<td>yes, for the entire parallel section</td>
+</tr>
+</tbody>
+</table>
+<p>A1 should document whether callers should rely on the presence of
+<code>rejected_corners</code> as a signal for path selection, or if the two paths should
+converge.</p>
+<hr />
+<h2 id="6-entry-point-reference-index">6. Entry-point reference index</h2>
+<table>
+<thead>
+<tr>
+<th>Python entry</th>
+<th>Rust entry</th>
+<th>Line</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Detector.__init__</code> → <code>_create_detector</code></td>
+<td><code>create_detector</code></td>
+<td><code>lib.rs:1314</code></td>
+</tr>
+<tr>
+<td><code>Detector.detect</code></td>
+<td><code>Detector::detect</code></td>
+<td><code>lib.rs:1097</code></td>
+</tr>
+<tr>
+<td><code>Detector.detect_concurrent</code></td>
+<td><code>Detector::detect_concurrent</code></td>
+<td><code>lib.rs:1236</code> (doc), body below</td>
+</tr>
+<tr>
+<td><code>BoardEstimator.estimate</code></td>
+<td><code>BoardEstimator::estimate</code></td>
+<td><code>lib.rs:593</code></td>
+</tr>
+<tr>
+<td><code>CharucoRefiner.estimate</code></td>
+<td><code>CharucoRefiner::estimate</code></td>
+<td><code>lib.rs:758</code></td>
+</tr>
+<tr>
+<td><code>CameraIntrinsics.__new__</code></td>
+<td><code>CameraIntrinsics::new</code></td>
+<td><code>lib.rs:214</code></td>
+</tr>
+<tr>
+<td>(internal) stride/padding check</td>
+<td><code>prepare_image_view</code></td>
+<td><code>lib.rs:1631</code></td>
+</tr>
+<tr>
+<td>(internal) image-view constructor</td>
+<td><code>ImageView::new</code></td>
+<td><code>crates/locus-core/src/image.rs:26</code></td>
+</tr>
+<tr>
+<td>(internal) config validator</td>
+<td><code>DetectorConfig::validate</code></td>
+<td><code>crates/locus-core/src/config.rs:234</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7-gaps-and-follow-ups">7. Gaps and follow-ups</h2>
+<p>These feed the Phase A1 test matrix:</p>
+<ul>
+<li><strong>Image:</strong> SIMD padding is now satisfied transparently at
+  <code>prepare_image_view</code> via a copy-into-padded-scratch fallback (A1.2 —
+  shipped 2026-05-30 alongside the negative-stride and lifetime-tie fixes).
+  Tightly packed <code>np.zeros((H, W))</code> buffers are accepted at the FFI: the
+  function returns a <code>Borrowed</code> zero-copy view when the input already has
+  ≥3 trailing bytes per row, or a <code>Padded</code> owned scratch otherwise (see §1
+  SIMD-padding block). The public Python API is unchanged from pre-PR #287.
+  Test fixtures in <code>tests/</code> and <code>crates/locus-py/tests/</code> were briefly
+  flipped to the column-prefix-view pattern by PR #287 PR-A's reject
+  design and then reverted to the original tight-buffer pattern when the
+  copy fallback shipped.</li>
+<li><strong>Config:</strong> ~18 Rust fields have no range validation. With the JSON-profile
+  refactor, Pydantic <code>_config.py</code> is the first-line gate and the
+  <code>Detector(**kwargs)</code> escape hatch is gone, so these reach Rust only through
+  user-authored <code>from_profile_json</code> payloads — lift range checks into the
+  Pydantic model where they are missing.</li>
+<li><strong><code>detect()</code> vs <code>detect_concurrent()</code>:</strong> Telemetry + rejected-corner asymmetry
+  is load-bearing for callers; document or converge.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+      
+        <script src="../../javascripts/mermaid-init.js"></script>
+      
+    
+  </body>
+</html>
