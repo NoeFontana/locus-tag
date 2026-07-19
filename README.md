@@ -4,96 +4,28 @@
 [![Docs](https://github.com/NoeFontana/locus-tag/actions/workflows/docs.yml/badge.svg)](https://noefontana.github.io/locus-tag/latest/)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-**Locus** detects AprilTag and ArUco markers as well as AprilGrid and ChArUco boards. The library is implemented in Rust and provides zero-copy Python bindings.
+**Locus** detects AprilTag and ArUco markers, plus AprilGrid and ChArUco boards. It's implemented in Rust with zero-copy Python bindings, and tuned for the bounded latency and pose accuracy that robotics and AV perception need.
 
 > [!WARNING]
-> **Experimental Status**: API is subject to breaking changes until 1.0.0 ships. The main workstreams towards 1.0.0 are reducing the API surface and validating against non-synthetic data. Until then, this library isn't recommended for production systems. The support for distortion models is experimental and requires a ground-up redesign. Addition of default tag families may happen on request, the current defaults were chosen to be minimal and support most commonly used tags.
+> **Experimental — pre-1.0, not recommended for production yet.**
+> - The API may break until 1.0.0. The road to 1.0 is a smaller API surface and validation on real-camera (not just synthetic) data.
+> - Distortion-model support is experimental and slated for a redesign.
+> - The shipped tag families are intentionally minimal — [open an issue](https://github.com/NoeFontana/locus-tag/issues) to request more.
 
-## Technical Capabilities
+## What you get
 
-- **Zero-Copy Ingestion**: Accesses NumPy arrays via the Python Buffer Protocol.
-- **Parallel Execution**: Releases the Python GIL during detection to allow multi-threaded use.
-- **Vectorized Results**: Returns a `DetectionBatch` with parallel arrays for IDs, corners, and poses.
-- **Memory**: Uses `bumpalo` arena allocation for zero heap allocations in the detection loop.
-- **Solvers**: 6-DOF recovery using IPPE-Square or weighted Levenberg-Marquardt with corner uncertainty.
+- **Zero-copy ingestion** — images cross the Rust↔Python boundary through the NumPy Buffer Protocol; no copies.
+- **Releases the GIL** during detection, so it parallelizes cleanly across Python threads.
+- **Batch results** — one `DetectionBatch` of parallel NumPy arrays for IDs, corners, and poses.
+- **6-DOF pose** — an IPPE-Square seed refined by a weighted Levenberg–Marquardt solver that consumes per-corner uncertainty.
+- **Allocation-free hot loop** — per-frame arena allocation, no `malloc` inside `detect()`.
 
-<!-- --8<-- [start:performance-profiles] -->
-## Performance Profiles
+## Supported markers & requirements
 
-Locus optimises for **high recall**, **low corner RMSE**, and **low
-latency**. Profiles are selected by name; the three shipped profiles
-are authored as JSON files and embedded in the wheel.
-
-| `profile` | Primary characteristic |
-| :--- | :--- |
-| `"standard"` | Production default; balanced recall + precision. |
-| `"grid"` | 4-connectivity for touching tags — ChArUco / AprilGrid boards. |
-| `"high_accuracy"` | EdLines + axis-imbalance gate + adaptive PPB; prioritises pose precision and tail-rotation control. |
-<!-- --8<-- [end:performance-profiles] -->
-
-<!-- --8<-- [start:icra-comparison] -->
-### ICRA 2020 Forward (community benchmark)
-
-[ICRA 2020 Forward](https://github.com/aprilrobotics/apriltag-comparison)
-is the closest thing the AprilTag community has to a neutral
-benchmark. The 50-frame subset we report on is **synthetic** (not
-real-camera), but it's public, peer-reviewed, and the basis for prior
-detector comparisons — we report on it for continuity with the
-literature.
-
-| Detector | Recall | Corner RMSE |
-| :--- | :---: | :---: |
-| **Locus (`standard`)** | **96.2 %** | **0.315 px** |
-| AprilTag 3 (UMich) | 62.3 % | 0.22 px |
-| OpenCV (`cv2.aruco`) | 52.6 % | 0.98 px |
-
-The OpenCV row is its recall-best OpenCV 5.0 config (tuned `subpix`); the
-tag-aware `apriltag` refinement more than halves corner RMSE (0.39 px) but
-rejects ICRA's marginal small tags, dropping recall to ~30 %.
-<!-- --8<-- [end:icra-comparison] -->
-
-<!-- --8<-- [start:render-tag-comparison] -->
-### render-tag (high-fidelity Blender + PSF)
-
-`render-tag` is our in-house render suite — Blender with calibrated
-PSF, exposure, sensor noise, and lens distortion models. The
-detection scenes carry pixel-accurate ground truth for both corners
-and 6-DOF pose, which lets us report translation / rotation
-percentiles in addition to recall. **Numbers below are the 2026-07-13
-single-threaded SOTA snapshot on the 1080p 50-scene subset (OpenCV 5.0.0,
-re-tuned)**, with the **`high_accuracy` row refreshed 2026-07-19** for the
-v0.7.0 model-edge-refinement default (same hardware; competitor and `standard`
-rows unchanged) (see
-[`docs/engineering/benchmarking/render_tag_sota_20260713.md`](https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/render_tag_sota_20260713.md)
-for methodology, the 2160p table, and OpenCV's two operating points).
-
-| Detector | Recall | Trans p50 | Trans p99 | Rot p50 | Rot p99 | Latency |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Locus (`high_accuracy`)** | **100 %** | **0.4 mm** | **20.1 mm** | **0.041 °** | **0.249 °** | **15.2 ms** |
-| Locus (`standard`) | 100 % | 3.5 mm | 50.3 mm | 0.288 ° | 27.248 ° | 32.7 ms |
-| OpenCV (`cv2.aruco`, subpix) | 100 % | 3.5 mm | 66.6 mm | 0.127 ° | 0.569 ° | 101.1 ms |
-| OpenCV (`cv2.aruco`, apriltag) | 100 % | 3.0 mm | 55.3 mm | 0.067 ° | 0.376 ° | 195.8 ms |
-| AprilTag-C (pupil) | 100 % | 2.9 mm | 54.4 mm | 0.061 ° | 65.365 ° | 78.5 ms |
-
-Latencies are single-thread. Locus `high_accuracy` wins the translation tail **and**
-the rotation tail (0.249° p99, below OpenCV `apriltag`'s 0.376°) while staying **13×
-faster** than OpenCV's best-accuracy `apriltag` config — the model-edge refinement
-that ships on in `high_accuracy` (see note) is what closes that rotation gap. OpenCV
-ships two operating points — fast `subpix` and accurate-but-~2×-slower `apriltag`.
-AprilTag-C's median rotation is best in class (0.06°) but its p99 explodes to 65° on
-symmetric-tag IRLS branch-ambiguity failures.
-
-> **Model-edge pose refinement** — the rotation-tail win in the `high_accuracy` row.
-> As of **v0.7.0**, `high_accuracy` ships with `pose.pose_edge_refinement_enabled =
-> True`: an Accurate-mode stage that refines each decoded tag's pose against its ~40
-> internal bit-grid edges (rotation from the distributed edges; translation
-> re-anchored to the corners). It takes `high_accuracy` rotation p99 from 0.600° to
-> **0.249°** (p95 **0.180°**) — **below OpenCV `apriltag`'s 0.376°** — at ~2.7× better
-> translation and +~1 ms/frame, with **2D corner RMSE unchanged** and reprojection RMSE
-> improved. It requires camera intrinsics + `tag_size` (a no-op without them). `standard`
-> and `grid` leave it off; set the flag to `False` to opt out on `high_accuracy`. See
-> [`docs/…/model_edge_refinement_20260715.md`](https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/model_edge_refinement_20260715.md).
-<!-- --8<-- [end:render-tag-comparison] -->
+- **Tag families:** AprilTag (`16h5`, `36h11`) and ArUco (`4x4_50`, `4x4_100`, `6x6_250`). More can be registered — see [Add a dictionary](https://noefontana.github.io/locus-tag/latest/how-to/add_dictionary/).
+- **Boards:** AprilGrid and ChArUco layouts over those families.
+- **Python:** 3.10+ (abi3 wheels).
+- **Platforms:** prebuilt wheels for Linux (x86_64 / aarch64, glibc + musl), macOS (Intel + Apple Silicon), and Windows (x64).
 
 ## Installation
 
@@ -101,11 +33,11 @@ symmetric-tag IRLS branch-ambiguity failures.
 pip install locus-tag
 ```
 
-The PyPI wheel is compiled for rectified (pinhole) imagery. For unrectified cameras (Brown-Conrady polynomial, Kannala-Brandt equidistant fisheye), see [Install with distortion support](https://noefontana.github.io/locus-tag/latest/how-to/install-with-distortion/).
+The PyPI wheel targets rectified (pinhole) imagery. For unrectified cameras (Brown–Conrady, Kannala–Brandt fisheye), see [Install with distortion support](https://noefontana.github.io/locus-tag/latest/how-to/install-with-distortion/).
 
-## Quick Start
+## Quick start
 
-### Basic Detection
+### Detect markers
 
 ```python
 import cv2
@@ -114,48 +46,54 @@ import locus
 img = cv2.imread("tags.jpg", cv2.IMREAD_GRAYSCALE)
 detector = locus.Detector(families=[locus.TagFamily.AprilTag36h11])
 
-# batch contains parallel NumPy arrays
-batch = detector.detect(img)
-print(f"IDs: {batch.ids}")
-print(f"Corners: {batch.corners.shape}") # (N, 4, 2)
+batch = detector.detect(img)          # parallel NumPy arrays
+print(batch.ids)                      # (N,)
+print(batch.corners.shape)            # (N, 4, 2)
 ```
 
-### 6-DOF Pose Estimation
+### Estimate 6-DOF pose
 
 ```python
 from locus import Detector, CameraIntrinsics
 
-# fx, fy, cx, cy
 intrinsics = CameraIntrinsics(fx=800.0, fy=800.0, cx=640.0, cy=360.0)
 
-# Returns [tx, ty, tz, qx, qy, qz, qw] for each tag
 batch = detector.detect(
     img,
     intrinsics=intrinsics,
-    tag_size=0.10,  # physical side length in meters
+    tag_size=0.10,                    # physical side length, meters
 )
 
 if batch.poses is not None:
-    # First tag translation
-    print(batch.poses[0, :3])
+    print(batch.poses[0])             # [tx, ty, tz, qx, qy, qz, qw]
 ```
 
-### Configuration Overrides
+Configuration is nested and Pydantic-validated: start from a shipped profile, edit the group you care about, and hand it back to the detector. The [detection guide](https://noefontana.github.io/locus-tag/latest/tutorials/guide/) walks through the `DetectorConfig` API.
 
-Settings are nested and validated by Pydantic. Start from a shipped profile,
-edit the group you care about, and hand it back to the detector:
+## Performance
 
-```python
-base = locus.DetectorConfig.from_profile("high_accuracy").model_dump()
-base["quad"]["upscale_factor"] = 2
-base["decoder"]["max_hamming_error"] = 1
+Profiles are selected by name and embedded in the wheel:
 
-detector = locus.Detector(config=locus.DetectorConfig.model_validate(base))
-```
+<!-- --8<-- [start:performance-profiles] -->
+| `profile` | Best for | Notes |
+| :--- | :--- | :--- |
+| `"standard"` | General detection | Balanced recall and precision; highest recall on small/distant tags. |
+| `"grid"` | ChArUco / AprilGrid boards | 4-connectivity recovers touching tags that `"standard"` merges. |
+| `"high_accuracy"` | Metrology, AV pose | Best pose accuracy and rotation-tail control. Needs camera intrinsics + `tag_size`. |
+<!-- --8<-- [end:performance-profiles] -->
 
-## Visual Debugging
+On our high-fidelity `render-tag` suite (1080p, single-thread), `high_accuracy` leads both the translation **and** rotation tails while running ~13× faster than OpenCV's best-accuracy configuration:
 
-Built-in integration with the **[Rerun SDK](https://rerun.io)**:
+| Detector | Rot p99 | Trans p99 | Latency |
+| :--- | :---: | :---: | :---: |
+| **Locus (`high_accuracy`)** | **0.249°** | **20.1 mm** | **15.2 ms** |
+| OpenCV (`cv2.aruco`, apriltag) | 0.376° | 55.3 mm | 195.8 ms |
+
+Full results — both benchmark suites (render-tag + ICRA 2020), every percentile, methodology, and hardware — are in the [performance docs](https://noefontana.github.io/locus-tag/latest/explanation/performance/).
+
+## Visual debugging
+
+Built-in integration with the **[Rerun SDK](https://rerun.io)** emits intermediate pipeline stages:
 
 ```python
 batch = detector.detect(img, debug_telemetry=True)
@@ -165,9 +103,15 @@ if batch.telemetry:
 
 ## Documentation
 
-- **[Architecture & Memory Model](https://noefontana.github.io/locus-tag/latest/explanation/architecture/)**
-- **[Coordinate Systems](https://noefontana.github.io/locus-tag/latest/explanation/coordinates/)**
-- **[Benchmarking Methodology](https://noefontana.github.io/locus-tag/latest/engineering/benchmarking/)**
+- [Detection guide](https://noefontana.github.io/locus-tag/latest/tutorials/guide/) — end-to-end usage and the config API
+- [Python API reference](https://noefontana.github.io/locus-tag/latest/reference/api/)
+- [Performance & benchmarks](https://noefontana.github.io/locus-tag/latest/explanation/performance/)
+- [Architecture & memory model](https://noefontana.github.io/locus-tag/latest/explanation/architecture/)
+- [Coordinate conventions](https://noefontana.github.io/locus-tag/latest/explanation/coordinates/)
+
+## Contributing
+
+Built with `uv` (Python) and `cargo` + `maturin` (Rust); tests run under `cargo nextest` and `pytest`. See the [engineering workflow](https://noefontana.github.io/locus-tag/latest/engineering/workflow/) for the dev setup and PR gates.
 
 ## License
 
