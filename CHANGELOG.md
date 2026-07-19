@@ -5,6 +5,8 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## [0.7.0] - 2026-07-19
+
 ### Fixed
 
 - **Distorted-camera pose was silently wrong (correctness).** The production
