@@ -5,6 +5,20 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Documentation
+
+- **README + SOTA-doc pose metrics refreshed for the v0.7.0 `high_accuracy`
+  default.** The render-tag comparison table (README `render-tag-comparison`
+  snippet, re-used in `docs/explanation/performance.md`, and
+  `docs/engineering/benchmarking/render_tag_sota_20260713.md` §1/§2) still showed the
+  pre-refinement `high_accuracy` row. Refreshed to the shipped edge-refinement-on
+  config on the same AMD EPYC-Milan hardware (competitor + `standard` rows reproduced
+  identically and are unchanged): rot p99 0.600°→**0.249°** (1080p) / 1.113°→**0.267°**
+  (2160p), rot p50 0.057°→0.041°, trans p99 18.6→20.1 mm (1080p) / 39.0→37.0 mm
+  (2160p), latency 13.8→15.2 / 56.4→58.0 ms. `high_accuracy` now leads the rotation
+  tail too (below OpenCV `apriltag`'s 0.376°); corrected the stale "off by default"
+  note.
+
 ## [0.7.0] - 2026-07-19
 
 ### Fixed

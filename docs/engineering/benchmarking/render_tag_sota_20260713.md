@@ -4,6 +4,14 @@ Refreshes the detector-comparison matrix after the **OpenCV 4.13 → 5.0.0** bum
 with the OpenCV baseline **re-tuned** for its best 5.0 config. Supersedes the
 `render_tag_sota_20260425.md` snapshot for the OpenCV rows.
 
+> **2026-07-19 update (v0.7.0).** The `Locus (high_accuracy)` rows in §1/§2 are
+> refreshed to the **v0.7.0 shipped config**, which enables model-edge pose
+> refinement by default (`pose.pose_edge_refinement_enabled = true`). Re-measured on
+> the same AMD EPYC-Milan hardware with `render_tag_sota_eval.py`; the competitor
+> rows reproduced bit-for-bit (accuracy is deterministic) and are unchanged. The
+> pre-refinement `high_accuracy` baseline was rot p99 0.600° (1080p) / 1.113° (2160p)
+> at 13.8 / 56.4 ms. See `model_edge_refinement_20260715.md`.
+
 ## Methodology
 
 - **Datasets:** `locus_v1_tag36h11_1920x1080` and `_3840x2160` Hub render-tag
@@ -40,24 +48,25 @@ reported:
 
 | Detector | Recall | Prec | Trans p50 | Trans p99 | Rot p50 | Rot p99 | Latency |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Locus (`high_accuracy`)** | 100 % | 100 % | **0.4 mm** | **18.6 mm** | **0.057°** | 0.600° | **13.8 ms** |
+| **Locus (`high_accuracy`)** | 100 % | 100 % | **0.4 mm** | **20.1 mm** | **0.041°** | **0.249°** | **15.2 ms** |
 | Locus (`standard`) | 100 % | 100 % | 3.5 mm | 50.3 mm | 0.288° | 27.248° | 32.7 ms |
 | OpenCV (`subpix`) | 100 % | 100 % | 3.5 mm | 66.6 mm | 0.127° | 0.569° | 101.1 ms |
-| OpenCV (`apriltag`) | 100 % | 100 % | 3.0 mm | 55.3 mm | 0.067° | **0.376°** | 195.8 ms |
+| OpenCV (`apriltag`) | 100 % | 100 % | 3.0 mm | 55.3 mm | 0.067° | 0.376° | 195.8 ms |
 | AprilTag-C (pupil) | 100 % | 100 % | 2.9 mm | 54.4 mm | 0.061° | 65.365° | 78.5 ms |
 
-Locus `high_accuracy` wins translation tail **and** speed (14× faster than
-OpenCV `apriltag`); OpenCV `apriltag` has the best rotation tail (0.376°).
+Locus `high_accuracy` wins the translation tail, the rotation tail (0.249° p99,
+below OpenCV `apriltag`'s 0.376° — the model-edge refinement shipped on in v0.7.0
+closes the gap), **and** speed (13× faster than OpenCV `apriltag`).
 AprilTag-C's rotation p99 explodes to 65° on symmetric-tag IRLS branch ambiguity.
 
 ## §2 Detector matrix — 3840×2160 (50 scenes, single thread)
 
 | Detector | Recall | Prec | Trans p50 | Trans p99 | Rot p50 | Rot p99 | Latency |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Locus (`high_accuracy`)** | 100 % | 100 % | **0.9 mm** | **39.0 mm** | **0.055°** | 1.113° | **56.4 ms** |
+| **Locus (`high_accuracy`)** | 100 % | 100 % | **0.8 mm** | **37.0 mm** | **0.041°** | **0.267°** | **58.0 ms** |
 | Locus (`standard`) | 100 % | 100 % | 6.9 mm | 120.8 mm | 0.302° | 108.409° | 125.4 ms |
 | OpenCV (`subpix`) | 100 % | 100 % | 6.5 mm | 133.8 mm | 0.104° | 0.489° | 253.9 ms |
-| OpenCV (`apriltag`) | 100 % | 100 % | 5.8 mm | 107.5 mm | 0.072° | **0.449°** | 885.9 ms |
+| OpenCV (`apriltag`) | 100 % | 100 % | 5.8 mm | 107.5 mm | 0.072° | 0.449° | 885.9 ms |
 | AprilTag-C (pupil) | 100 % | 100 % | 5.7 mm | 101.3 mm | 0.072° | 65.716° | 327.2 ms |
 
 At 4K the OpenCV `apriltag` refinement cost scales badly (886 ms single-thread).

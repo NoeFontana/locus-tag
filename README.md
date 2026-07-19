@@ -61,33 +61,37 @@ detection scenes carry pixel-accurate ground truth for both corners
 and 6-DOF pose, which lets us report translation / rotation
 percentiles in addition to recall. **Numbers below are the 2026-07-13
 single-threaded SOTA snapshot on the 1080p 50-scene subset (OpenCV 5.0.0,
-re-tuned)** (see
+re-tuned)**, with the **`high_accuracy` row refreshed 2026-07-19** for the
+v0.7.0 model-edge-refinement default (same hardware; competitor and `standard`
+rows unchanged) (see
 [`docs/engineering/benchmarking/render_tag_sota_20260713.md`](https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/render_tag_sota_20260713.md)
 for methodology, the 2160p table, and OpenCV's two operating points).
 
 | Detector | Recall | Trans p50 | Trans p99 | Rot p50 | Rot p99 | Latency |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Locus (`high_accuracy`)** | **100 %** | **0.4 mm** | **18.6 mm** | **0.057 °** | 0.600 ° | **13.8 ms** |
+| **Locus (`high_accuracy`)** | **100 %** | **0.4 mm** | **20.1 mm** | **0.041 °** | **0.249 °** | **15.2 ms** |
 | Locus (`standard`) | 100 % | 3.5 mm | 50.3 mm | 0.288 ° | 27.248 ° | 32.7 ms |
 | OpenCV (`cv2.aruco`, subpix) | 100 % | 3.5 mm | 66.6 mm | 0.127 ° | 0.569 ° | 101.1 ms |
-| OpenCV (`cv2.aruco`, apriltag) | 100 % | 3.0 mm | 55.3 mm | 0.067 ° | **0.376 °** | 195.8 ms |
+| OpenCV (`cv2.aruco`, apriltag) | 100 % | 3.0 mm | 55.3 mm | 0.067 ° | 0.376 ° | 195.8 ms |
 | AprilTag-C (pupil) | 100 % | 2.9 mm | 54.4 mm | 0.061 ° | 65.365 ° | 78.5 ms |
 
-Latencies are single-thread. Locus `high_accuracy` wins the translation tail and
-is 14× faster than OpenCV's best-accuracy `apriltag` config; that config in turn
-has the best rotation tail among the **default** profiles (0.376°). OpenCV ships two
-operating points — fast `subpix` and accurate-but-~2×-slower `apriltag`. AprilTag-C's
-median rotation is best in class (0.06°) but its p99 explodes to 65° on symmetric-tag
-IRLS branch-ambiguity failures.
+Latencies are single-thread. Locus `high_accuracy` wins the translation tail **and**
+the rotation tail (0.249° p99, below OpenCV `apriltag`'s 0.376°) while staying **13×
+faster** than OpenCV's best-accuracy `apriltag` config — the model-edge refinement
+that ships on in `high_accuracy` (see note) is what closes that rotation gap. OpenCV
+ships two operating points — fast `subpix` and accurate-but-~2×-slower `apriltag`.
+AprilTag-C's median rotation is best in class (0.06°) but its p99 explodes to 65° on
+symmetric-tag IRLS branch-ambiguity failures.
 
-> **Optional: model-edge pose refinement.** Setting
-> `pose.pose_edge_refinement_enabled = True` adds an Accurate-mode stage that refines
-> each decoded tag's pose against its ~40 internal bit-grid edges (rotation from the
-> distributed edges; translation re-anchored to the corners). It takes `high_accuracy`
-> rotation p99 to **0.249°** (p95 **0.180°**) — **below OpenCV `apriltag`'s 0.376°** —
-> at ~2.7× better translation and +~1 ms/frame, with **2D corner RMSE unchanged** and
-> reprojection RMSE improved. Off by default (shipped detection stays byte-identical);
-> requires camera intrinsics + `tag_size`. See
+> **Model-edge pose refinement** — the rotation-tail win in the `high_accuracy` row.
+> As of **v0.7.0**, `high_accuracy` ships with `pose.pose_edge_refinement_enabled =
+> True`: an Accurate-mode stage that refines each decoded tag's pose against its ~40
+> internal bit-grid edges (rotation from the distributed edges; translation
+> re-anchored to the corners). It takes `high_accuracy` rotation p99 from 0.600° to
+> **0.249°** (p95 **0.180°**) — **below OpenCV `apriltag`'s 0.376°** — at ~2.7× better
+> translation and +~1 ms/frame, with **2D corner RMSE unchanged** and reprojection RMSE
+> improved. It requires camera intrinsics + `tag_size` (a no-op without them). `standard`
+> and `grid` leave it off; set the flag to `False` to opt out on `high_accuracy`. See
 > [`docs/…/model_edge_refinement_20260715.md`](https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/model_edge_refinement_20260715.md).
 <!-- --8<-- [end:render-tag-comparison] -->
 
