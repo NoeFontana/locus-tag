@@ -126,8 +126,6 @@ explodes to 65° on symmetric-tag IRLS branch-ambiguity failures.
 - [render-tag SOTA snapshot](../engineering/benchmarking/render_tag_sota_20260713.md)
   — the source of the render-tag table above, with the detector-by-detector
   deep dive, the 2160p table, and OpenCV's two operating points.
-- [Engineering lessons](../engineering/lessons/README.md) — distilled
-  conclusions on the pose rotation tail, EdLines, covariance, and recall/quad.
 - [System architecture](architecture.md) — why the pipeline is
   shaped to release the GIL and avoid the system allocator on the
   hot path.
