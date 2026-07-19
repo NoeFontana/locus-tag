@@ -2232,7 +2232,9 @@ detection scenes carry pixel-accurate ground truth for both corners
 and 6-DOF pose, which lets us report translation / rotation
 percentiles in addition to recall. <strong>Numbers below are the 2026-07-13
 single-threaded SOTA snapshot on the 1080p 50-scene subset (OpenCV 5.0.0,
-re-tuned)</strong> (see
+re-tuned)</strong>, with the <strong><code>high_accuracy</code> row refreshed 2026-07-19</strong> for the
+v0.7.0 model-edge-refinement default (same hardware; competitor and <code>standard</code>
+rows unchanged) (see
 <a href="https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/render_tag_sota_20260713.md"><code>docs/engineering/benchmarking/render_tag_sota_20260713.md</code></a>
 for methodology, the 2160p table, and OpenCV's two operating points).</p>
 <table>
@@ -2252,10 +2254,10 @@ for methodology, the 2160p table, and OpenCV's two operating points).</p>
 <td style="text-align: left;"><strong>Locus (<code>high_accuracy</code>)</strong></td>
 <td style="text-align: center;"><strong>100 %</strong></td>
 <td style="text-align: center;"><strong>0.4 mm</strong></td>
-<td style="text-align: center;"><strong>18.6 mm</strong></td>
-<td style="text-align: center;"><strong>0.057 °</strong></td>
-<td style="text-align: center;">0.600 °</td>
-<td style="text-align: center;"><strong>13.8 ms</strong></td>
+<td style="text-align: center;"><strong>20.1 mm</strong></td>
+<td style="text-align: center;"><strong>0.041 °</strong></td>
+<td style="text-align: center;"><strong>0.249 °</strong></td>
+<td style="text-align: center;"><strong>15.2 ms</strong></td>
 </tr>
 <tr>
 <td style="text-align: left;">Locus (<code>standard</code>)</td>
@@ -2281,7 +2283,7 @@ for methodology, the 2160p table, and OpenCV's two operating points).</p>
 <td style="text-align: center;">3.0 mm</td>
 <td style="text-align: center;">55.3 mm</td>
 <td style="text-align: center;">0.067 °</td>
-<td style="text-align: center;"><strong>0.376 °</strong></td>
+<td style="text-align: center;">0.376 °</td>
 <td style="text-align: center;">195.8 ms</td>
 </tr>
 <tr>
@@ -2295,21 +2297,23 @@ for methodology, the 2160p table, and OpenCV's two operating points).</p>
 </tr>
 </tbody>
 </table>
-<p>Latencies are single-thread. Locus <code>high_accuracy</code> wins the translation tail and
-is 14× faster than OpenCV's best-accuracy <code>apriltag</code> config; that config in turn
-has the best rotation tail among the <strong>default</strong> profiles (0.376°). OpenCV ships two
-operating points — fast <code>subpix</code> and accurate-but-~2×-slower <code>apriltag</code>. AprilTag-C's
-median rotation is best in class (0.06°) but its p99 explodes to 65° on symmetric-tag
-IRLS branch-ambiguity failures.</p>
+<p>Latencies are single-thread. Locus <code>high_accuracy</code> wins the translation tail <strong>and</strong>
+the rotation tail (0.249° p99, below OpenCV <code>apriltag</code>'s 0.376°) while staying <strong>13×
+faster</strong> than OpenCV's best-accuracy <code>apriltag</code> config — the model-edge refinement
+that ships on in <code>high_accuracy</code> (see note) is what closes that rotation gap. OpenCV
+ships two operating points — fast <code>subpix</code> and accurate-but-~2×-slower <code>apriltag</code>.
+AprilTag-C's median rotation is best in class (0.06°) but its p99 explodes to 65° on
+symmetric-tag IRLS branch-ambiguity failures.</p>
 <blockquote>
-<p><strong>Optional: model-edge pose refinement.</strong> Setting
-<code>pose.pose_edge_refinement_enabled = True</code> adds an Accurate-mode stage that refines
-each decoded tag's pose against its ~40 internal bit-grid edges (rotation from the
-distributed edges; translation re-anchored to the corners). It takes <code>high_accuracy</code>
-rotation p99 to <strong>0.249°</strong> (p95 <strong>0.180°</strong>) — <strong>below OpenCV <code>apriltag</code>'s 0.376°</strong> —
-at ~2.7× better translation and +~1 ms/frame, with <strong>2D corner RMSE unchanged</strong> and
-reprojection RMSE improved. Off by default (shipped detection stays byte-identical);
-requires camera intrinsics + <code>tag_size</code>. See
+<p><strong>Model-edge pose refinement</strong> — the rotation-tail win in the <code>high_accuracy</code> row.
+As of <strong>v0.7.0</strong>, <code>high_accuracy</code> ships with <code>pose.pose_edge_refinement_enabled =
+True</code>: an Accurate-mode stage that refines each decoded tag's pose against its ~40
+internal bit-grid edges (rotation from the distributed edges; translation
+re-anchored to the corners). It takes <code>high_accuracy</code> rotation p99 from 0.600° to
+<strong>0.249°</strong> (p95 <strong>0.180°</strong>) — <strong>below OpenCV <code>apriltag</code>'s 0.376°</strong> — at ~2.7× better
+translation and +~1 ms/frame, with <strong>2D corner RMSE unchanged</strong> and reprojection RMSE
+improved. It requires camera intrinsics + <code>tag_size</code> (a no-op without them). <code>standard</code>
+and <code>grid</code> leave it off; set the flag to <code>False</code> to opt out on <code>high_accuracy</code>. See
 <a href="https://github.com/NoeFontana/locus-tag/blob/main/docs/engineering/benchmarking/model_edge_refinement_20260715.md"><code>docs/…/model_edge_refinement_20260715.md</code></a>.</p>
 </blockquote>
 <h2 id="how-to-read-these-numbers">How to read these numbers</h2>
