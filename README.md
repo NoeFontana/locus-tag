@@ -4,25 +4,24 @@
 [![Docs](https://github.com/NoeFontana/locus-tag/actions/workflows/docs.yml/badge.svg)](https://noefontana.github.io/locus-tag/latest/)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-**Locus** detects AprilTag and ArUco markers, plus AprilGrid and ChArUco boards. It's implemented in Rust with zero-copy Python bindings, and tuned for the bounded latency and pose accuracy that robotics and AV perception need.
+**Locus** detects AprilTag and ArUco markers, as well as AprilGrid and ChArUco boards. It's implemented in Rust with zero-copy Python bindings. It targets a balance of low latency, high pose accuracy and high recall.
 
 > [!WARNING]
 > **Experimental — pre-1.0, not recommended for production yet.**
 > - The API may break until 1.0.0. The road to 1.0 is a smaller API surface and validation on real-camera (not just synthetic) data.
 > - Distortion-model support is experimental and slated for a redesign.
-> - The shipped tag families are intentionally minimal — [open an issue](https://github.com/NoeFontana/locus-tag/issues) to request more.
+> - The shipped tag families are intentionally minimal.
 
-## What you get
+## Some Features
 
-- **Zero-copy ingestion** — images cross the Rust↔Python boundary through the NumPy Buffer Protocol; no copies.
+- **Zero-copy ingestion**: images cross the Rust↔Python boundary through the NumPy Buffer Protocol; no copies.
 - **Releases the GIL** during detection, so it parallelizes cleanly across Python threads.
-- **Batch results** — one `DetectionBatch` of parallel NumPy arrays for IDs, corners, and poses.
-- **6-DOF pose** — an IPPE-Square seed refined by a weighted Levenberg–Marquardt solver that consumes per-corner uncertainty.
-- **Allocation-free hot loop** — per-frame arena allocation, no `malloc` inside `detect()`.
+- **6-DOF pose**: an IPPE-Square seed refined by a weighted Levenberg–Marquardt solver, and internal-edge based optional refinement.
+- **Allocation light**: per-frame arena allocation, no `malloc` inside `detect()`.
 
 ## Supported markers & requirements
 
-- **Tag families:** AprilTag (`16h5`, `36h11`) and ArUco (`4x4_50`, `4x4_100`, `6x6_250`). More can be registered — see [Add a dictionary](https://noefontana.github.io/locus-tag/latest/how-to/add_dictionary/).
+- **Tag families:** AprilTag (`16h5`, `36h11`) and ArUco (`4x4_50`, `4x4_100`, `6x6_250`). More can be registered: [Add a dictionary](https://noefontana.github.io/locus-tag/latest/how-to/add_dictionary/).
 - **Boards:** AprilGrid and ChArUco layouts over those families.
 - **Python:** 3.10+ (abi3 wheels).
 - **Platforms:** prebuilt wheels for Linux (x86_64 / aarch64, glibc + musl), macOS (Intel + Apple Silicon), and Windows (x64).
@@ -103,7 +102,7 @@ if batch.telemetry:
 
 ## Documentation
 
-- [Detection guide](https://noefontana.github.io/locus-tag/latest/tutorials/guide/) — end-to-end usage and the config API
+- [Detection guide](https://noefontana.github.io/locus-tag/latest/tutorials/guide/) for end-to-end usage and the config API
 - [Python API reference](https://noefontana.github.io/locus-tag/latest/reference/api/)
 - [Performance & benchmarks](https://noefontana.github.io/locus-tag/latest/explanation/performance/)
 - [Architecture & memory model](https://noefontana.github.io/locus-tag/latest/explanation/architecture/)
@@ -111,7 +110,7 @@ if batch.telemetry:
 
 ## Contributing
 
-Built with `uv` (Python) and `cargo` + `maturin` (Rust); tests run under `cargo nextest` and `pytest`. See the [engineering workflow](https://noefontana.github.io/locus-tag/latest/engineering/workflow/) for the dev setup and PR gates.
+See the [engineering workflow](https://noefontana.github.io/locus-tag/latest/engineering/workflow/) for the dev setup and PR gates.
 
 ## License
 
