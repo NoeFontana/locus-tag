@@ -10,31 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/quality-gates/">
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/benchmarking/model_edge_refinement_20260715/">
       
       
-        <link rel="prev" href="../stratification/">
+        <link rel="prev" href="../refine_variants_20260714/">
       
       
-        <link rel="next" href="../rust-style/">
+        <link rel="next" href="../render_tag_2160p_20260425/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>Quality Gates & Verification - Locus</title>
+        <title>Model-based edge pose refinement — beating the rotation gap (2026-07-15, tuned 2026-07-17) - Locus</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -53,9 +53,9 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#quality-gates-verification" class="md-skip">
+        <a href="#model-based-edge-pose-refinement-beating-the-rotation-gap-2026-07-15-tuned-2026-07-17" class="md-skip">
           Skip to content
         </a>
       
@@ -100,7 +100,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
+    <a href="../../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Quality Gates &amp; Verification
+              Model-based edge pose refinement — beating the rotation gap (2026-07-15, tuned 2026-07-17)
             
           </span>
         </div>
@@ -236,7 +236,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
+    <a href="../../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -266,7 +266,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -346,7 +346,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/guide/" class="md-nav__link">
+      <a href="../../../tutorials/guide/" class="md-nav__link">
         
   
   
@@ -444,7 +444,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/add_dictionary/" class="md-nav__link">
+      <a href="../../../how-to/add_dictionary/" class="md-nav__link">
         
   
   
@@ -472,7 +472,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/debug_with_rerun/" class="md-nav__link">
+      <a href="../../../how-to/debug_with_rerun/" class="md-nav__link">
         
   
   
@@ -500,7 +500,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/concurrent_detection/" class="md-nav__link">
+      <a href="../../../how-to/concurrent_detection/" class="md-nav__link">
         
   
   
@@ -528,7 +528,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/install-with-distortion/" class="md-nav__link">
+      <a href="../../../how-to/install-with-distortion/" class="md-nav__link">
         
   
   
@@ -556,7 +556,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/tune_and_compare/" class="md-nav__link">
+      <a href="../../../how-to/tune_and_compare/" class="md-nav__link">
         
   
   
@@ -584,7 +584,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/per_instance_comparison/" class="md-nav__link">
+      <a href="../../../how-to/per_instance_comparison/" class="md-nav__link">
         
   
   
@@ -682,7 +682,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/architecture/" class="md-nav__link">
+      <a href="../../../explanation/architecture/" class="md-nav__link">
         
   
   
@@ -710,7 +710,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/pipeline/" class="md-nav__link">
+      <a href="../../../explanation/pipeline/" class="md-nav__link">
         
   
   
@@ -738,7 +738,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/memory_model/" class="md-nav__link">
+      <a href="../../../explanation/memory_model/" class="md-nav__link">
         
   
   
@@ -766,7 +766,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/algorithms/" class="md-nav__link">
+      <a href="../../../explanation/algorithms/" class="md-nav__link">
         
   
   
@@ -794,7 +794,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/coordinates/" class="md-nav__link">
+      <a href="../../../explanation/coordinates/" class="md-nav__link">
         
   
   
@@ -822,7 +822,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/performance/" class="md-nav__link">
+      <a href="../../../explanation/performance/" class="md-nav__link">
         
   
   
@@ -910,7 +910,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/api/" class="md-nav__link">
+      <a href="../../../reference/api/" class="md-nav__link">
         
   
   
@@ -1022,7 +1022,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../core/" class="md-nav__link">
+      <a href="../../core/" class="md-nav__link">
         
   
   
@@ -1050,7 +1050,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../workflow/" class="md-nav__link">
+      <a href="../../workflow/" class="md-nav__link">
         
   
   
@@ -1078,7 +1078,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../release-runbook/" class="md-nav__link">
+      <a href="../../release-runbook/" class="md-nav__link">
         
   
   
@@ -1106,7 +1106,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../detection-batch-contract/" class="md-nav__link">
+      <a href="../../detection-batch-contract/" class="md-nav__link">
         
   
   
@@ -1134,7 +1134,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../constraints/" class="md-nav__link">
+      <a href="../../constraints/" class="md-nav__link">
         
   
   
@@ -1162,7 +1162,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../ffi_contracts/" class="md-nav__link">
+      <a href="../../ffi_contracts/" class="md-nav__link">
         
   
   
@@ -1190,7 +1190,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../profiles/" class="md-nav__link">
+      <a href="../../profiles/" class="md-nav__link">
         
   
   
@@ -1218,7 +1218,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../stratification/" class="md-nav__link">
+      <a href="../../stratification/" class="md-nav__link">
         
   
   
@@ -1226,6 +1226,415 @@
     
   
     Stratification Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quality-gates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quality Gates &amp; Verification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../rust-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rust Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../general-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    General Code Style Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_13" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6_13" id="__nav_6_13_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_13_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6_13">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Benchmarking
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking &amp; Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lessons/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking Lessons (consolidated, 2026-05-02)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../micro-benchmarking-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Micro-Benchmarking Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release_performance_20260418/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Locus Release Performance Report (2026-04-18)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hub_regression_20260423/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hub Regression Performance Report (2026-04-23)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../render_tag_sota_20260425/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Render-tag 1080p SOTA pursuit (2026-04-25)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../render_tag_sota_20260713/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    render-tag SOTA refresh — OpenCV 5.0 (2026-07-13)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../refine_variants_20260714/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Corner-refinement variants vs the rotation-p99 tail (2026-07-14)
   
 
     
@@ -1262,7 +1671,7 @@
   <span class="md-ellipsis">
     
   
-    Quality Gates &amp; Verification
+    Model-based edge pose refinement — beating the rotation gap (2026-07-15, tuned 2026-07-17)
   
 
     
@@ -1280,7 +1689,7 @@
   <span class="md-ellipsis">
     
   
-    Quality Gates &amp; Verification
+    Model-based edge pose refinement — beating the rotation gap (2026-07-15, tuned 2026-07-17)
   
 
     
@@ -1306,10 +1715,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-mandatory-pre-commit-checks" class="md-nav__link">
+  <a href="#summary" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Mandatory Pre-Commit Checks
+        Summary
       
     </span>
   </a>
@@ -1317,33 +1726,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-performance-regression-gates" class="md-nav__link">
+  <a href="#method" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Performance &amp; Regression Gates
+        Method
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="2. Performance &amp; Regression Gates">
+    <nav class="md-nav" aria-label="Method">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#micro-optimization-protocol" class="md-nav__link">
+  <a href="#tuning-levers-2026-07-17" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Micro-Optimization Protocol
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#system-level-verification" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        System-Level Verification
+        Tuning levers (2026-07-17)
       
     </span>
   </a>
@@ -1356,10 +1754,71 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#3-documentation-quality" class="md-nav__link">
+  <a href="#results-render-tag-single-thread-accurate-pose" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Documentation Quality
+        Results (render-tag, single-thread, Accurate pose)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Results (render-tag, single-thread, Accurate pose)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#image-space-accuracy-2d-corner-rmse-reprojection-rmse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Image-space accuracy — 2D corner RMSE &amp; reprojection RMSE
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robustness-degraded-imagery-corpora-does-the-render-tag-tuning-generalize" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Robustness — degraded-imagery corpora (does the render-tag tuning generalize?)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-this-works-where-corner-level-levers-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why this works where corner-level levers failed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#provenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provenance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reproduce" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproduce
       
     </span>
   </a>
@@ -1382,416 +1841,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../rust-style/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Rust Engineering Guidelines
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../python-style/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Python Engineering Guidelines
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../general-style/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    General Code Style Principles
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    
-    
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_13" >
-        
-          
-          <label class="md-nav__link" for="__nav_6_13" id="__nav_6_13_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Benchmarking
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_13_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_13">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Benchmarking
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Benchmarking &amp; Diagnostics
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/lessons/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Benchmarking Lessons (consolidated, 2026-05-02)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/micro-benchmarking-guide/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Micro-Benchmarking Guide
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/release_performance_20260418/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Locus Release Performance Report (2026-04-18)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/hub_regression_20260423/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Hub Regression Performance Report (2026-04-23)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_sota_20260425/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Render-tag 1080p SOTA pursuit (2026-04-25)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_sota_20260713/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    render-tag SOTA refresh — OpenCV 5.0 (2026-07-13)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/refine_variants_20260714/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Corner-refinement variants vs the rotation-p99 tail (2026-07-14)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/model_edge_refinement_20260715/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Model-based edge pose refinement — beating the rotation gap (2026-07-15, tuned 2026-07-17)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
+      <a href="../render_tag_2160p_20260425/" class="md-nav__link">
         
   
   
@@ -1819,7 +1869,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/quad_truncation_fix_20260426/" class="md-nav__link">
+      <a href="../quad_truncation_fix_20260426/" class="md-nav__link">
         
   
   
@@ -1915,7 +1965,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../migration/config-refactor/" class="md-nav__link">
+      <a href="../../../migration/config-refactor/" class="md-nav__link">
         
   
   
@@ -1970,10 +2020,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-mandatory-pre-commit-checks" class="md-nav__link">
+  <a href="#summary" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Mandatory Pre-Commit Checks
+        Summary
       
     </span>
   </a>
@@ -1981,33 +2031,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-performance-regression-gates" class="md-nav__link">
+  <a href="#method" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Performance &amp; Regression Gates
+        Method
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="2. Performance &amp; Regression Gates">
+    <nav class="md-nav" aria-label="Method">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#micro-optimization-protocol" class="md-nav__link">
+  <a href="#tuning-levers-2026-07-17" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Micro-Optimization Protocol
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#system-level-verification" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        System-Level Verification
+        Tuning levers (2026-07-17)
       
     </span>
   </a>
@@ -2020,10 +2059,71 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#3-documentation-quality" class="md-nav__link">
+  <a href="#results-render-tag-single-thread-accurate-pose" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Documentation Quality
+        Results (render-tag, single-thread, Accurate pose)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Results (render-tag, single-thread, Accurate pose)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#image-space-accuracy-2d-corner-rmse-reprojection-rmse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Image-space accuracy — 2D corner RMSE &amp; reprojection RMSE
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#robustness-degraded-imagery-corpora-does-the-render-tag-tuning-generalize" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Robustness — degraded-imagery corpora (does the render-tag tuning generalize?)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-this-works-where-corner-level-levers-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why this works where corner-level levers failed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#provenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provenance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reproduce" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproduce
       
     </span>
   </a>
@@ -2050,82 +2150,274 @@
   
 
 
-<h1 id="quality-gates-verification">Quality Gates &amp; Verification</h1>
-<p>Before any code is merged, it MUST pass the following automated and manual quality gates.</p>
-<h2 id="1-mandatory-pre-commit-checks">1. Mandatory Pre-Commit Checks</h2>
-<p>Run these commands locally to ensure your code is ready for CI:</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># 1. Rust Formatting &amp; Linting</span>
-cargo<span class="w"> </span>clippy<span class="w"> </span>--workspace<span class="w"> </span>--all-targets<span class="w"> </span>--all-features<span class="w"> </span>--<span class="w"> </span>-D<span class="w"> </span>warnings
-cargo<span class="w"> </span>fmt<span class="w"> </span>--all
-
-<span class="c1"># 2. Python Formatting &amp; Linting</span>
-uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>.<span class="w"> </span>--fix
-uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>format<span class="w"> </span>.
-
-<span class="c1"># 3. Static Type Checking (Python)</span>
-uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>types<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>--group<span class="w"> </span>etl<span class="w"> </span>basedpyright
-
-<span class="c1"># 4. Unit Testing</span>
-<span class="c1"># We use cargo-nextest for fast, concurrent test execution.</span>
-<span class="c1"># By default, heavy regression tests are excluded (see .config/nextest.toml).</span>
-<span class="c1"># Always use --release for Rust tests as debug performance is non-representative.</span>
-cargo<span class="w"> </span>nextest<span class="w"> </span>run<span class="w"> </span>--release<span class="w"> </span>--all-features
-
-<span class="c1"># Build the Python extension in release mode before running Python tests.</span>
-uv<span class="w"> </span>run<span class="w"> </span>maturin<span class="w"> </span>develop<span class="w"> </span>--release<span class="w"> </span>--manifest-path<span class="w"> </span>crates/locus-py/Cargo.toml
-uv<span class="w"> </span>run<span class="w"> </span>pytest
-
-<span class="c1"># 5. Cross-Compilation Check (aarch64)</span>
-<span class="c1"># Ensure NEON/SIMD paths compile correctly for ARM targets.</span>
-rustup<span class="w"> </span>target<span class="w"> </span>add<span class="w"> </span>aarch64-unknown-linux-gnu
-cargo<span class="w"> </span>check<span class="w"> </span>--target<span class="w"> </span>aarch64-unknown-linux-gnu<span class="w"> </span>--all-features
-</code></pre></div>
-<h2 id="2-performance-regression-gates">2. Performance &amp; Regression Gates</h2>
-<p>If you are modifying the detection pipeline, math kernels, or SIMD dispatch, you must empirically validate that latency and recall remain within acceptable bounds.</p>
-<h3 id="micro-optimization-protocol">Micro-Optimization Protocol</h3>
-<p>Before performing any micro-performance optimization (e.g., SIMD kernels, hot-loop refactoring):
-1. <strong>Setup Benchmark:</strong> Create or update a realistic, isolated benchmark in <code>crates/locus-core/benches/</code> using the <code>divan</code> framework.
-2. <strong>Establish Baseline:</strong> Run the benchmark on the <code>main</code> branch or current stable state to establish a statistically significant baseline.
-3. <strong>Verify Gain:</strong> Demonstrate a measurable improvement in the targeted metric without regressing other pipeline stages.</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># Example: Running a specific micro-benchmark</span>
-cargo<span class="w"> </span>bench<span class="w"> </span>--bench<span class="w"> </span>comprehensive<span class="w"> </span>--<span class="w"> </span><span class="s2">&quot;bench_thresholding&quot;</span>
-</code></pre></div>
-<h3 id="system-level-verification">System-Level Verification</h3>
-<div class="highlight"><pre><span></span><code><span class="c1"># 1. Forward Evaluation — ICRA 2020 (Accuracy &amp; Yield)</span>
-uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>real<span class="w"> </span>--compare
-
-<span class="c1"># 2. Hub Dataset Evaluation — Python CLI (Recall + Pose RMSE)</span>
-<span class="c1"># Requires hub_cache to be populated via `bench prepare` first.</span>
-<span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>real<span class="w"> </span>--hub-config<span class="w"> </span>locus_v1_tag36h11_1920x1080
-<span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>real<span class="w"> </span>--hub-config<span class="w"> </span>aprilgrid_golden_v1_1920x1080
-<span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>real<span class="w"> </span>--hub-config<span class="w"> </span>charuco_golden_v1_1920x1080
-
-<span class="c1"># 3. Rust Regression Testing (Sequential for accurate latency)</span>
-<span class="c1"># Requires LOCUS_ICRA_DATASET_DIR to be set.</span>
-<span class="nv">TRACY_NO_INVARIANT_CHECK</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="nv">LOCUS_ICRA_DATASET_DIR</span><span class="o">=</span>tests/data/icra2020<span class="w"> </span>cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--release<span class="w"> </span>--test<span class="w"> </span>regression_icra2020<span class="w"> </span>--features<span class="w"> </span>bench-internals<span class="w"> </span>--<span class="w"> </span>--test-threads<span class="o">=</span><span class="m">1</span>
-
-<span class="c1"># 4. Snapshot Verification &amp; Update</span>
-<span class="c1"># Runs all regression suites (ICRA, Hub tag-level, Hub board-level, distortion)</span>
-<span class="c1"># and dictionary parity tests. LOCUS_HUB_DATASET_DIR is required by</span>
-<span class="c1"># regression_render_tag and regression_distortion_hub; regression_board_hub</span>
-<span class="c1"># resolves tests/data/hub_cache/ automatically from the workspace root.</span>
-<span class="c1">#</span>
-<span class="c1"># The distortion suite (regression_distortion_hub) additionally requires</span>
-<span class="c1"># syncing the `aprilgrid_distortion_brown_conrady_v1_1920x1080` and</span>
-<span class="c1"># `aprilgrid_distortion_kannala_brandt_v1_1920x1080` configs — see</span>
-<span class="c1"># `.agent/skills/testing/SKILL.md` for the one-time setup.</span>
-<span class="nv">TRACY_NO_INVARIANT_CHECK</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
-<span class="nv">LOCUS_ICRA_DATASET_DIR</span><span class="o">=</span>tests/data/icra2020<span class="w"> </span><span class="se">\</span>
-<span class="nv">LOCUS_HUB_DATASET_DIR</span><span class="o">=</span>tests/data/hub_cache<span class="w"> </span><span class="se">\</span>
-cargo<span class="w"> </span>insta<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--release<span class="w"> </span>--all-features<span class="w"> </span>--features<span class="w"> </span>bench-internals<span class="w"> </span>--review
-</code></pre></div>
-<h2 id="3-documentation-quality">3. Documentation Quality</h2>
-<p>Ensure the documentation builds correctly and is complete.</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># 1. Sync dependencies for documentation</span>
-uv<span class="w"> </span>sync<span class="w"> </span>--group<span class="w"> </span>docs
-
-<span class="c1"># 2. Build the MkDocs static site</span>
-uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>docs<span class="w"> </span>mkdocs<span class="w"> </span>build
+<h1 id="model-based-edge-pose-refinement-beating-the-rotation-gap-2026-07-15-tuned-2026-07-17">Model-based edge pose refinement — beating the rotation gap (2026-07-15, tuned 2026-07-17)</h1>
+<h2 id="summary">Summary</h2>
+<p>An opt-in Accurate-mode pose-refinement stage that aligns a <strong>decoded</strong> tag's
+internal bit-grid edges (plus the border) to the image and refines the 6-DoF pose
+against them. A corner PnP pose is fixed by only 4 points; a 36h11 tag exposes
+<strong>~40 internal high-contrast edges</strong>, an order of magnitude more constraints,
+distributed across the interior where they pin orientation far better than the
+corners. On the render-tag suite this <strong>cuts rotation p99 47–76 % at every
+resolution — well under OpenCV's <code>apriltag</code> refinement — while keeping Locus's
+best-in-class translation.</strong></p>
+<p>Enabled by <code>pose.pose_edge_refinement_enabled = true</code> (default <strong>false</strong> →
+shipped-profile detection byte-identical). Requires camera intrinsics + <code>tag_size</code>.</p>
+<blockquote>
+<p><strong>2026-07-17 update.</strong> Rebased onto the unified pose-LM machinery (#337–#341):
+the estimator now rides the shared body-frame Nielsen trust-region core
+(<code>nielsen_lm</code> + <code>BodyFrameNormalEquations</code> + distortion-aware
+<code>projection_and_gradient</code>) instead of a bespoke left-perturbation LM loop — each
+1-D edge-normal residual enters the same accumulator as a corner residual under a
+rank-1 <code>n·nᵀ</code> weight. Two tuning levers were then added (<strong>robust Huber edge
+loss</strong> + <strong>denser edge sampling</strong>); the results below are the tuned figures, with
+the pre-tuning shipped-#336 column kept for reference.</p>
+</blockquote>
+<h2 id="method">Method</h2>
+<p>Post-decode, per tag (<code>crates/locus-core/src/model_edge.rs</code>):</p>
+<ol>
+<li><strong>Sample</strong> every candidate cell-boundary + border line in the tag frame (7
+   interior points per boundary), project under the current pose, and measure the
+   sub-pixel edge by the <strong>50 %-intensity crossing</strong> along each edge normal
+   (unbiased for a symmetric PSF). Low-contrast samples (same-colour boundaries)
+   are dropped automatically — the image contrast selects the real edges, so no
+   bit-pattern reconstruction is needed. Junction, out-of-image, and large-offset
+   (spurious) samples are excluded.</li>
+<li><strong><code>measure → fit</code></strong> iterations: hold the measured edge points fixed and refine
+   the full 6-DoF pose to them with the shared <strong>Nielsen trust-region LM</strong> under a
+   robust <strong>Huber</strong> loss (δ = 0.5 px, so the clean interior edges — not a few
+   latched/biased ones — control the fit), then re-measure. This gives an excellent
+   <strong>rotation</strong> but weakly constrains depth/scale.</li>
+<li><strong>Re-anchor translation</strong> with a translation-only solve against the 4 trusted
+   corners under the refined rotation. <em>Edges → rotation, corners → translation.</em></li>
+<li>A <strong>no-worse gate</strong> rejects untrustworthy refinements (too few edges, or an
+   implausible pose jump), falling back to the corner pose. The refined pose is
+   re-validated against the pose-consistency χ² gate before it is emitted.</li>
+</ol>
+<h3 id="tuning-levers-2026-07-17">Tuning levers (2026-07-17)</h3>
+<p>Both attack the rotation <strong>p99 tail</strong>, ranked on render-tag with hard
+translation/RMSE/recall guardrails (corners are untouched by this stage, so mean
+corner RMSE is unaffected):</p>
+<ul>
+<li><strong>Robust Huber edge loss (δ = 0.5 px).</strong> An L2 fit lets a few edges that latch
+  onto an adjacent boundary or carry PSF-asymmetry bias drag the rotation; the
+  Huber weight <code>w·n·nᵀ</code> down-weights them. δ = 0.5 px was the sweep optimum (0.35
+  regressed p95, 0.75 was weaker). <em>1080p rot p99 0.409° → 0.364°.</em></li>
+<li><strong>7 (was 3) samples per cell boundary.</strong> More <em>independent</em> edge measurements
+  average per-scan noise down, tightening the tail further. Seven is the knee under
+  the 64 KB on-stack sample budget (<code>constraints.md §1</code>); denser would force a
+  per-tag heap allocation on the pose path. <em>1080p rot p99 0.364° → 0.249°.</em></li>
+</ul>
+<p>The <code>measure → fit</code> count (4) was already converged (6 gave no change) and the
+inner LM reuses the vetted <code>NielsenConfig::POSE</code>, so no per-geometry calibration.</p>
+<h2 id="results-render-tag-single-thread-accurate-pose">Results (render-tag, single-thread, Accurate pose)</h2>
+<p><strong>Recall and precision are 100 % / 100 % for both baseline and the enabled stage
+at every resolution</strong> — the refinement only sharpens an already-accepted pose (the
+no-worse + pose-consistency χ² gates never null one), so it neither drops nor adds
+a detection. <strong>Mean corner RMSE is unchanged by construction</strong>: the stage never
+writes <code>batch.corners</code>; it reads them as fixed input and emits only the pose.</p>
+<p>Locus <code>high_accuracy</code>, <strong>baseline</strong> (no edge stage) → <strong>tuned</strong> (Huber δ = 0.5 + 7
+samples/boundary), full rotation/translation distribution:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">resolution</th>
+<th style="text-align: right;">rot mean (°)</th>
+<th style="text-align: right;">rot p50 (°)</th>
+<th style="text-align: right;">rot p95 (°)</th>
+<th style="text-align: right;">rot p99 (°)</th>
+<th style="text-align: right;">t mean (mm)</th>
+<th style="text-align: right;">t p95 (mm)</th>
+<th style="text-align: right;">t p99 (mm)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">640×480</td>
+<td style="text-align: right;">0.155→<strong>0.095</strong></td>
+<td style="text-align: right;">0.120→<strong>0.084</strong></td>
+<td style="text-align: right;">0.373→<strong>0.201</strong></td>
+<td style="text-align: right;">0.508→<strong>0.269</strong></td>
+<td style="text-align: right;">1.09→<strong>1.03</strong></td>
+<td style="text-align: right;">3.62→4.15</td>
+<td style="text-align: right;">8.11→<strong>7.60</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;">1280×720</td>
+<td style="text-align: right;">0.131→<strong>0.064</strong></td>
+<td style="text-align: right;">0.058→<strong>0.046</strong></td>
+<td style="text-align: right;">0.464→<strong>0.194</strong></td>
+<td style="text-align: right;">0.624→<strong>0.262</strong></td>
+<td style="text-align: right;">1.56→<strong>1.47</strong></td>
+<td style="text-align: right;">8.16→8.26</td>
+<td style="text-align: right;">15.97→<strong>14.46</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;">1920×1080</td>
+<td style="text-align: right;">0.122→<strong>0.062</strong></td>
+<td style="text-align: right;">0.057→<strong>0.041</strong></td>
+<td style="text-align: right;">0.385→<strong>0.180</strong></td>
+<td style="text-align: right;">0.600→<strong>0.249</strong></td>
+<td style="text-align: right;">1.95→<strong>1.88</strong></td>
+<td style="text-align: right;">8.62→9.75</td>
+<td style="text-align: right;">18.62→20.10</td>
+</tr>
+<tr>
+<td style="text-align: left;">3840×2160</td>
+<td style="text-align: right;">0.139→<strong>0.063</strong></td>
+<td style="text-align: right;">0.055→<strong>0.041</strong></td>
+<td style="text-align: right;">0.432→<strong>0.203</strong></td>
+<td style="text-align: right;">1.113→<strong>0.267</strong></td>
+<td style="text-align: right;">3.81→4.07</td>
+<td style="text-align: right;">12.82→17.72</td>
+<td style="text-align: right;">39.02→<strong>36.98</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Rotation p99 for reference — <strong>baseline → L2-edge (pre-tuning) → tuned</strong>:
+640 <code>0.508→0.314→0.269</code>, 720 <code>0.624→0.472→0.262</code>, 1080 <code>0.600→0.409→0.249</code>,
+2160 <code>1.113→0.429→0.267</code>. The tuning (Huber + denser sampling) cuts rot p99 a
+further −11 % to −44 % over the L2 stage.</p>
+<p>Reading the table:</p>
+<ul>
+<li><strong>Rotation improves across the <em>entire</em> distribution, not just the tail.</strong> Mean
+  −39 % to −55 %, p50 roughly halved, p95 roughly halved, p99 −47 % to −76 %. At
+  1080p the tuned rot p99 <strong>0.249°</strong> (p95 <strong>0.180°</strong>) is well under OpenCV
+  <code>cv2.aruco</code> apriltag's <strong>0.376°</strong>, at trans p99 ~20 mm vs apriltag's ~55 mm —
+  <strong>apriltag-class-and-better rotation at ~2.7× better translation.</strong></li>
+<li><strong>Translation carries a bounded trade</strong> — the edges→rotation / corners→translation
+  split. <strong>t mean is flat-to-better</strong> at 640/720/1080 (−0.06 to −0.09 mm) and
+  +0.26 mm only at 2160; <strong>t p99 is better</strong> at 640/720/2160 and +1.5 mm at 1080p.
+  The regression concentrates in <strong>t p95</strong> at higher resolution (1080p +1.1 mm,
+  2160p +4.9 mm) — the 1-2-tag pose-tail where a large rotation correction pulls the
+  corner-anchored translation. This is the known, gated trade; it stays inside the
+  opt-in stage (shipped profiles are byte-identical) and never touches recall,
+  precision, or corner RMSE.</li>
+<li><strong>Latency</strong> (single-thread, best-effort): +~1 ms/frame at 640/720/1080, roughly
+  flat at 2160 (baseline → tuned: 2.4→3.8 / 6.3→7.5 / 14.3→15.3 / 57.4→58.2 ms).
+  The stage is a bounded per-tag Gauss-Newton on the opt-in Accurate path.</li>
+</ul>
+<h3 id="image-space-accuracy-2d-corner-rmse-reprojection-rmse">Image-space accuracy — 2D corner RMSE &amp; reprojection RMSE</h3>
+<p>Two RMSEs make the "translation trades but the pose is still more accurate" story
+concrete (harness: <code>tools/bench/model_edge_rmse.py</code>):</p>
+<ul>
+<li><strong>2D corner RMSE</strong> (detected vs GT corners, px) — <strong>identical</strong> baseline vs edge
+  at every resolution (the detected corners are byte-identical; the stage emits only
+  the pose): mean 0.210 / 0.208 / 0.215 / 0.178 px for 640/720/1080/2160.</li>
+<li><strong>Reprojection RMSE</strong> (model corners reprojected through the <em>estimated pose</em> vs
+  GT corners, px — the <code>hub.rs</code> <code>mean_reprojection_rmse</code> quantity) — <strong>improves at
+  every resolution and percentile</strong>:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">resolution</th>
+<th style="text-align: right;">reproj mean (px)</th>
+<th style="text-align: right;">reproj p95 (px)</th>
+<th style="text-align: right;">reproj p99 (px)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">640×480</td>
+<td style="text-align: right;">0.181 → <strong>0.151</strong></td>
+<td style="text-align: right;">0.400 → <strong>0.290</strong></td>
+<td style="text-align: right;">0.456 → <strong>0.370</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;">1280×720</td>
+<td style="text-align: right;">0.185 → <strong>0.144</strong></td>
+<td style="text-align: right;">0.418 → <strong>0.278</strong></td>
+<td style="text-align: right;">0.457 → <strong>0.339</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;">1920×1080</td>
+<td style="text-align: right;">0.173 → <strong>0.141</strong></td>
+<td style="text-align: right;">0.406 → <strong>0.254</strong></td>
+<td style="text-align: right;">0.759 → <strong>0.553</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;">3840×2160</td>
+<td style="text-align: right;">0.158 → <strong>0.132</strong></td>
+<td style="text-align: right;">0.395 → <strong>0.254</strong></td>
+<td style="text-align: right;">0.411 → <strong>0.393</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Reprojection RMSE (mean −13…−22 %, p95 −27…−36 %, p99 −4…−27 %) falls everywhere:
+in <strong>image space</strong> the refined pose is uniformly <em>closer to truth</em>, so the small
+metric-translation p95 trade above is a depth/scale artefact of the corner re-anchor,
+not a loss of pose accuracy where it is observable. Corner localization is untouched.</p>
+<h3 id="robustness-degraded-imagery-corpora-does-the-render-tag-tuning-generalize">Robustness — degraded-imagery corpora (does the render-tag tuning generalize?)</h3>
+<p>The tuning constants (Huber δ, sampling density, gates) were fit on the <em>clean</em>
+render-tag suite. To check they are not render-tag-PSF-specific overfit, the stage
+was run on the three degraded-imagery robustness sets (1080p, baseline vs edge):</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">dataset</th>
+<th style="text-align: center;">rec/prec</th>
+<th style="text-align: right;">rot mean (°)</th>
+<th style="text-align: right;">rot p99 (°)</th>
+<th style="text-align: right;">t mean (mm)</th>
+<th style="text-align: right;">t p99 (mm)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>high_iso</code> (sensor noise)</td>
+<td style="text-align: center;">100/100 both</td>
+<td style="text-align: right;">0.119 → <strong>0.062</strong></td>
+<td style="text-align: right;">0.568 → <strong>0.250</strong></td>
+<td style="text-align: right;">1.86 → 1.84</td>
+<td style="text-align: right;">18.7 → 19.1</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>low_key</code> (dark/low-key)</td>
+<td style="text-align: center;">100/100 both</td>
+<td style="text-align: right;">0.127 → <strong>0.020</strong></td>
+<td style="text-align: right;">0.953 → <strong>0.154</strong></td>
+<td style="text-align: right;">7.46 → 7.88</td>
+<td style="text-align: right;">51.3 → 51.4</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>raw_pipeline</code></td>
+<td style="text-align: center;">100/100 both</td>
+<td style="text-align: right;">0.119 → <strong>0.029</strong></td>
+<td style="text-align: right;">0.867 → <strong>0.145</strong></td>
+<td style="text-align: right;">4.17 → 4.52</td>
+<td style="text-align: right;">36.1 → 37.7</td>
+</tr>
+</tbody>
+</table>
+<p>The rotation win is <strong>larger</strong> on degraded imagery (p99 −56 % to −84 %) than on clean
+render-tag, because the corner baseline is noisier there while the ~40 distributed
+edges still average that noise down. Crucially <strong>recall and precision stay 100 %/100 %</strong>:
+the <code>CONTRAST_MIN=50</code> selection gate does <em>not</em> silently decline, and the absolute-pixel
+Huber δ does <em>not</em> mis-clip, on high-ISO / low-key / raw-pipeline inputs — the two
+failure modes an absolute-unit constant tuned on one corpus would be most prone to.
+(These are still synthetic Blender degradations, not real-camera; the absolute δ and
+the reused <code>NielsenConfig::POSE</code> absolute <code>grad_tol</code>/<code>damping_floor</code> remain the natural
+first place to make scale-relative if real-camera data ever shows a regression.)</p>
+<h2 id="why-this-works-where-corner-level-levers-failed">Why this works where corner-level levers failed</h2>
+<p>The 2026-07-14 study (<code>refine_variants_20260714.md</code>) proved every <em>corner-level</em>
+lever is trade-bound: GWLF/apriltag-edge, per-corner repair, per-tag switch, and
+fusion all trade rotation for translation because they only reshape the same 4
+corner observations. This stage instead <strong>adds independent single-frame
+information</strong> — the decoded interior pattern's ~40 edges — which over-constrains
+rotation without disturbing the corner-anchored translation. No multi-tag or
+temporal fusion required.</p>
+<h2 id="provenance">Provenance</h2>
+<p>AMD EPYC-Milan (Zen 3), 1 socket × 4 cores × 2 threads = 8 vCPU (<code>avx2</code>, <code>fma</code>,
+<code>sse4_2</code>); <code>rustc 1.92.0</code>; <code>--release</code>; <code>RAYON_NUM_THREADS=1</code>, Locus <code>threads=1</code>;
+<code>locus_v1_tag36h11_{640x480,1280x720,1920x1080,3840x2160}</code> and the robustness sets
+<code>locus_v1_{high_iso,low_key,raw_pipeline}_1920x1080</code> (50 frames each); pose mode
+<strong>Accurate</strong>. Accuracy columns are deterministic (verified identical across repeated
+runs); the latency column is a best-effort single-thread wall-time.</p>
+<h2 id="reproduce">Reproduce</h2>
+<div class="highlight"><pre><span></span><code><span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span><span class="nv">LOCUS_HUB_DATASET_DIR</span><span class="o">=</span>tests/data/hub_cache<span class="w"> </span><span class="nv">RAYON_NUM_THREADS</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/bench/model_edge_eval.py<span class="w">    </span><span class="c1"># pose: recall/precision/rot/trans</span>
+<span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span><span class="nv">LOCUS_HUB_DATASET_DIR</span><span class="o">=</span>tests/data/hub_cache<span class="w"> </span><span class="nv">RAYON_NUM_THREADS</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/bench/model_edge_rmse.py<span class="w">    </span><span class="c1"># image-space: 2D corner + reproj RMSE</span>
 </code></pre></div>
 
 
@@ -2176,18 +2468,18 @@ uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </s
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
-        <script src="../../javascripts/mathjax.js"></script>
+        <script src="../../../javascripts/mathjax.js"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
       
-        <script src="../../javascripts/mermaid-init.js"></script>
+        <script src="../../../javascripts/mermaid-init.js"></script>
       
     
   </body>
