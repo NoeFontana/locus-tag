@@ -7,8 +7,8 @@
 **Locus** detects AprilTag and ArUco markers, as well as AprilGrid and ChArUco boards. It's implemented in Rust with zero-copy Python bindings. It targets a balance of low latency, high pose accuracy and high recall.
 
 > [!WARNING]
-> **Experimental — pre-1.0, not recommended for production yet.**
-> - The API may break until 1.0.0. The road to 1.0 is a smaller API surface and validation on real-camera (not just synthetic) data.
+> **Experimental: pre-1.0, not recommended for production yet.**
+> - The API may break until 1.0.0. The road to 1.0 is a smaller API surface and validation on real-camera (not just synthetic) data. Contribution of permissively licensed real datasets greatly appreciated (open an issue to chat about it)!
 > - Distortion-model support is experimental and slated for a redesign.
 > - The shipped tag families are intentionally minimal.
 
