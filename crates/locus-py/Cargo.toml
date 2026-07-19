@@ -1,6 +1,6 @@
 [package]
 name = "locus-py"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Python bindings for locus-core (built via maturin; not published to crates.io)."
