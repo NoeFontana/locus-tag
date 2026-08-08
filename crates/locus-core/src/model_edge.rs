@@ -555,6 +555,124 @@ fn finalize(
     Some(pose)
 }
 
+/// **Bench-internals only** — the combined edge+corner body-frame pose covariance
+/// for the model-edge-refined `pose` (Phase-A calibration measurement for honest
+/// covariance emission; NOT a production path).
+///
+/// Re-measures the edge samples at `pose`, then builds ONE body-frame Fisher
+/// information from BOTH the ~1000 edge residuals (rank-1 `n·nᵀ`, information-weighted
+/// by `1/σ̂²_edge` where `σ̂_edge = 1.4826·median|res|` is the per-tag robust noise
+/// scale) AND the 4 corners (isotropic, `1/σ_n²`). Returns `(JᵀWJ)⁻¹` (body-frame
+/// `[t, ω]`) or `None` if singular / too few edges / behind camera. `sigma_n_sq` is
+/// the profile's assumed corner-noise variance (px²).
+#[cfg(feature = "bench-internals")]
+#[must_use]
+#[allow(clippy::missing_panics_doc, clippy::too_many_arguments)]
+pub fn bench_model_edge_covariance(
+    intr: &CameraIntrinsics,
+    img: &ImageView,
+    dimension: usize,
+    tag_size: f64,
+    pose: &Pose,
+    corners: &[[f64; 2]; 4],
+    sigma_n_sq: f64,
+    sigma_edge_scale: f64,
+    sigma_corner_scale: f64,
+    block_diagonal: bool,
+) -> Option<[[f64; 6]; 6]> {
+    let n = dimension + 2;
+    let h = tag_size * 0.5;
+    let cell = 2.0 / (n as f64);
+    let scan_half = (0.45 * projected_cell_px(corners, n)).clamp(1.0, SCAN_HALF_MAX);
+    #[allow(clippy::large_stack_arrays)]
+    let mut samples = [Sample::default(); MAX_SAMPLES];
+    let ns = measure_samples(img, intr, pose, n, cell, h, scan_half, &mut samples);
+    if ns < MIN_EDGE_SAMPLES {
+        return None;
+    }
+    let set = &samples[..ns];
+
+    // Per-tag robust edge-noise variance σ̂²_edge = (1.4826·median|res|)² at `pose`.
+    let mut abs_res: Vec<f64> = set
+        .iter()
+        .filter_map(|s| {
+            let p_cam = pose.rotation * s.p + pose.translation;
+            (p_cam.z >= 1e-4).then(|| {
+                let [pu, pv] = intr.distort_normalized(p_cam.x / p_cam.z, p_cam.y / p_cam.z);
+                ((s.m[0] - pu) * s.n[0] + (s.m[1] - pv) * s.n[1]).abs()
+            })
+        })
+        .collect();
+    if abs_res.is_empty() {
+        return None;
+    }
+    abs_res.sort_by(f64::total_cmp);
+    let sigma_edge_sq =
+        (sigma_edge_scale * (1.4826 * abs_res[abs_res.len() / 2]).powi(2)).max(1e-9);
+
+    // Edge Fisher info (rank-1 n·nᵀ, information-weighted 1/σ̂²_edge).
+    let inv_edge = 1.0 / sigma_edge_sq;
+    let mut ne_edge = BodyFrameNormalEquations::new(pose);
+    for s in set {
+        let p_cam = pose.rotation * s.p + pose.translation;
+        let z = p_cam.z;
+        if z < 1e-4 {
+            continue;
+        }
+        let z_inv = 1.0 / z;
+        let ([pu, pv], du, dv) =
+            projection_and_gradient(intr, p_cam.x * z_inv, p_cam.y * z_inv, z_inv);
+        let (n0, n1) = (s.n[0], s.n[1]);
+        let w = Matrix2::new(n0 * n0, n0 * n1, n0 * n1, n1 * n1) * inv_edge;
+        ne_edge.add(&s.p, &du, &dv, s.m[0] - pu, s.m[1] - pv, &w);
+    }
+    // Corner Fisher info (isotropic, information-weighted 1/σ_n²).
+    let obj = crate::pose::centered_tag_corners(tag_size);
+    let w_corner = Matrix2::identity() * (1.0 / (sigma_n_sq * sigma_corner_scale));
+    let mut ne_corner = BodyFrameNormalEquations::new(pose);
+    for i in 0..4 {
+        let p_cam = pose.rotation * obj[i] + pose.translation;
+        let z = p_cam.z;
+        if z < 1e-4 {
+            continue;
+        }
+        let z_inv = 1.0 / z;
+        let ([pu, pv], du, dv) =
+            projection_and_gradient(intr, p_cam.x * z_inv, p_cam.y * z_inv, z_inv);
+        ne_corner.add(
+            &obj[i],
+            &du,
+            &dv,
+            corners[i][0] - pu,
+            corners[i][1] - pv,
+            &w_corner,
+        );
+    }
+    let (jtj_edge, _) = ne_edge.finish();
+    let (jtj_corner, _) = ne_corner.finish();
+
+    let cov = if block_diagonal {
+        // Block-diagonal reflecting the sequential estimator: rotation (ω) from the
+        // edge fit, translation (t) from the corner re-anchor only — matching how
+        // each was actually computed. The "combine into one JᵀWJ" alternative is
+        // edge-dominated (1000 edges swamp 4 corners) so its translation block does
+        // NOT describe the corner-derived emitted translation.
+        let cov_edge = jtj_edge.try_inverse()?;
+        let cov_corner = jtj_corner.try_inverse()?;
+        let mut c = nalgebra::Matrix6::zeros();
+        for r in 0..3 {
+            for col in 0..3 {
+                c[(r, col)] = cov_corner[(r, col)]; // translation block
+                c[(r + 3, col + 3)] = cov_edge[(r + 3, col + 3)]; // rotation block
+            }
+        }
+        c
+    } else {
+        (jtj_edge + jtj_corner).try_inverse()?
+    };
+    cov.iter().all(|x| x.is_finite()).then(|| cov.into())
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
