@@ -40,7 +40,7 @@ numpy = "0.29"
 locus-core = { path = "../locus-core" }
 bumpalo = "3.20"
 tracing = { version = "0.1", features = ["release_max_level_info"] }
-tracing-tracy = { version = "0.11", optional = true }
+tracing-tracy = { version = "0.12", optional = true }
 tracing-subscriber = { version = "0.3", features = ["registry", "env-filter"], optional = true }
 nalgebra = { version = "0.35", default-features = false, features = ["std"] }
 
