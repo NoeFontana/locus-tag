@@ -75,7 +75,7 @@ import rerun as rr
 
 # Initialize Rerun
 rr.init("my_app")
-rr.connect() # Connect to local viewer
+rr.connect()  # Connect to local viewer
 
 detector = locus.Detector()
 # Telemetry is ONLY computed when debug_telemetry is True
@@ -84,8 +84,8 @@ batch = detector.detect(img, debug_telemetry=True)
 if batch.telemetry:
     # Access raw telemetry arrays
     bin_img = batch.telemetry.binarized
-    jitter = batch.telemetry.subpixel_jitter # Shape: (N, 4, 2)
-    
+    jitter = batch.telemetry.subpixel_jitter  # Shape: (N, 4, 2)
+
     # Log to Rerun
     rr.log("debug/binarized", rr.Image(bin_img))
 ```

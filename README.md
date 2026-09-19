@@ -45,9 +45,9 @@ import locus
 img = cv2.imread("tags.jpg", cv2.IMREAD_GRAYSCALE)
 detector = locus.Detector(families=[locus.TagFamily.AprilTag36h11])
 
-batch = detector.detect(img)          # parallel NumPy arrays
-print(batch.ids)                      # (N,)
-print(batch.corners.shape)            # (N, 4, 2)
+batch = detector.detect(img)  # parallel NumPy arrays
+print(batch.ids)  # (N,)
+print(batch.corners.shape)  # (N, 4, 2)
 ```
 
 ### Estimate 6-DOF pose
@@ -60,11 +60,11 @@ intrinsics = CameraIntrinsics(fx=800.0, fy=800.0, cx=640.0, cy=360.0)
 batch = detector.detect(
     img,
     intrinsics=intrinsics,
-    tag_size=0.10,                    # physical side length, meters
+    tag_size=0.10,  # physical side length, meters
 )
 
 if batch.poses is not None:
-    print(batch.poses[0])             # [tx, ty, tz, qx, qy, qz, qw]
+    print(batch.poses[0])  # [tx, ty, tz, qx, qy, qz, qw]
 ```
 
 Configuration is nested and Pydantic-validated: start from a shipped profile, edit the group you care about, and hand it back to the detector. The [detection guide](https://noefontana.github.io/locus-tag/latest/tutorials/guide/) walks through the `DetectorConfig` API.

@@ -10,7 +10,7 @@ wheel: `standard`, `grid`, and `high_accuracy`.
 ```python
 import locus
 
-detector = locus.Detector(profile="standard")      # default; dense multi-tag
+detector = locus.Detector(profile="standard")  # default; dense multi-tag
 tags = detector.detect(img)
 ```
 
@@ -21,7 +21,7 @@ it detects:
 ```python
 detector = locus.Detector(
     profile="standard",
-    decimation=2,                                 # 4x preprocessing speedup
+    decimation=2,  # 4x preprocessing speedup
     families=[locus.TagFamily.AprilTag36h11],
 )
 ```
@@ -32,7 +32,7 @@ Load a shipped profile, edit the relevant nested group, then pass it back:
 
 ```python
 base = locus.DetectorConfig.from_profile("standard").model_dump()
-base["threshold"]["tile_size"] = 16               # larger tiles run faster
+base["threshold"]["tile_size"] = 16  # larger tiles run faster
 base["decoder"]["min_contrast"] = 10.0
 
 custom = locus.DetectorConfig.model_validate(base)
@@ -84,10 +84,12 @@ Searching for fewer families reduces the decoding search space and improves
 latency:
 
 ```python
-detector.set_families([
-    locus.TagFamily.AprilTag36h11,
-    locus.TagFamily.ArUco4x4_50,
-])
+detector.set_families(
+    [
+        locus.TagFamily.AprilTag36h11,
+        locus.TagFamily.ArUco4x4_50,
+    ]
+)
 ```
 
 ## Precise Configuration
@@ -98,9 +100,9 @@ tripping a profile through a dict:
 
 ```python
 base = locus.DetectorConfig.from_profile("standard").model_dump()
-base["quad"]["min_area"] = 16                    # filter small components
+base["quad"]["min_area"] = 16  # filter small components
 base["quad"]["subpixel_refinement_sigma"] = 0.8  # corner-refinement kernel
-base["decoder"]["min_contrast"] = 10.0           # bit-transition sensitivity
+base["decoder"]["min_contrast"] = 10.0  # bit-transition sensitivity
 
 detector = locus.Detector(config=locus.DetectorConfig.model_validate(base))
 ```
@@ -116,16 +118,12 @@ For standard detection, we use **IPPE-Square** (Infinitesimal Plane-Based Pose E
 intrinsics = locus.CameraIntrinsics(fx=800.0, fy=800.0, cx=640.0, cy=360.0)
 
 # Pass intrinsics and tag size (meters) to enable pose estimation
-tags = detector.detect(
-    img,
-    intrinsics=intrinsics,
-    tag_size=0.16
-)
+tags = detector.detect(img, intrinsics=intrinsics, tag_size=0.16)
 
 for t in tags:
     if t.pose:
-        print(f"Translation: {t.pose.translation}") # [x, y, z]
-        print(f"Rotation: {t.pose.rotation}")       # 3x3 Matrix
+        print(f"Translation: {t.pose.translation}")  # [x, y, z]
+        print(f"Rotation: {t.pose.rotation}")  # 3x3 Matrix
 ```
 
 ### Per-tag Covariance

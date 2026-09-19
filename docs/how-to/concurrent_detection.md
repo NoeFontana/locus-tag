@@ -21,8 +21,8 @@ import locus
 detector = (
     locus.DetectorBuilder()
     .with_family(locus.TagFamily.AprilTag36h11)
-    .with_threads(4)               # Rayon threads per frame
-    .with_max_concurrent_frames(8) # up to 8 frames in parallel
+    .with_threads(4)  # Rayon threads per frame
+    .with_max_concurrent_frames(8)  # up to 8 frames in parallel
     .build()
 )
 ```
@@ -42,7 +42,7 @@ Single-frame `detect` supports debug telemetry; `detect_concurrent` does not.
 ## Batch detection
 
 ```python
-frames: list[np.ndarray] = [...]   # list of (H, W) uint8 arrays
+frames: list[np.ndarray] = [...]  # list of (H, W) uint8 arrays
 
 results = detector.detect_concurrent(
     frames,
@@ -68,10 +68,13 @@ For workloads where each thread processes a continuous stream (e.g. one camera p
 import threading
 import locus
 
+
 def make_detector() -> locus.Detector:
     return locus.DetectorBuilder().with_family(locus.TagFamily.AprilTag36h11).build()
 
+
 _local = threading.local()
+
 
 def detect_one(frame):
     if not hasattr(_local, "detector"):
@@ -87,11 +90,8 @@ A good starting point is the number of CPU cores, or the expected batch size if 
 
 ```python
 import os
-detector = (
-    locus.DetectorBuilder()
-    .with_max_concurrent_frames(os.cpu_count())
-    .build()
-)
+
+detector = locus.DetectorBuilder().with_max_concurrent_frames(os.cpu_count()).build()
 ```
 
 If more frames arrive simultaneously than the pool size, Locus allocates temporary overflow contexts (~200 KB each) rather than blocking. This is acceptable for burst traffic but suboptimal under sustained over-subscription.

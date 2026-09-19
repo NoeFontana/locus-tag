@@ -51,7 +51,7 @@ img = cv2.imread("tags.jpg", cv2.IMREAD_GRAYSCALE)
 detector = locus.Detector(families=[locus.TagFamily.AprilTag36h11])
 
 batch = detector.detect(img)
-print(batch.ids)            # (N,)
+print(batch.ids)  # (N,)
 print(batch.corners.shape)  # (N, 4, 2)
 ```
 
