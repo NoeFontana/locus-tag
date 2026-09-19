@@ -324,14 +324,19 @@ impl<'a> ImageView<'a> {
 
         let scale = 1.0 / factor as f64;
 
+        // Centre-aware mapping: output pixel `x` has its centre at `x + 0.5`
+        // in output space, i.e. `(x + 0.5) / factor` in source space
+        // (`sample_bilinear` takes pixel-centre-at-0.5 coordinates). This is
+        // the inverse of the `(v + 0.5) * d - 0.5` decimation mapping with
+        // `d = 1/factor`, so `x_src = (x_up + 0.5)/factor - 0.5` in index units.
         output
             .par_chunks_exact_mut(new_w)
             .enumerate()
             .take(new_h)
             .for_each(|(y, out_row)| {
-                let src_y = y as f64 * scale;
+                let src_y = (y as f64 + 0.5) * scale;
                 for (x, val) in out_row.iter_mut().enumerate() {
-                    let src_x = x as f64 * scale;
+                    let src_x = (x as f64 + 0.5) * scale;
                     // We can use unchecked version for speed if we are confident,
                     // but sample_bilinear handles bounds checks.
                     // Given we are inside image bounds, it should be fine.

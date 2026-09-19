@@ -221,14 +221,23 @@ fn run_detection_pipeline<'ctx>(
     ctx.reset();
     let state = ctx;
 
-    let (detection_img, _effective_scale, refinement_img) = if config.decimation > 1 {
+    // Original-resolution image: the coordinate frame of every public output
+    // (corners, homographies, pose input). `detection_img` may live on a
+    // decimated or upscaled grid.
+    let full_img = *img;
+
+    // `upscale` is the factor by which `detection_img` (and, for upscaling,
+    // `refinement_img`) is larger than the input. `1` for the decimation path
+    // (where extraction maps back to full-res itself) and when no resampling
+    // is active.
+    let (detection_img, upscale, refinement_img) = if config.decimation > 1 {
         let new_w = img.width / config.decimation;
         let new_h = img.height / config.decimation;
         let decimated_data = state.arena.alloc_slice_fill_copy(new_w * new_h, 0u8);
         let decimated_img = img
             .decimate_to(config.decimation, decimated_data)
             .map_err(DetectorError::Preprocessing)?;
-        (decimated_img, 1.0 / config.decimation as f64, *img)
+        (decimated_img, 1usize, *img)
     } else if config.upscale_factor > 1 {
         let new_w = img.width * config.upscale_factor;
         let new_h = img.height * config.upscale_factor;
@@ -237,9 +246,9 @@ fn run_detection_pipeline<'ctx>(
         let upscaled_img = img
             .upscale_to(config.upscale_factor, &mut state.upscale_buf)
             .map_err(DetectorError::Preprocessing)?;
-        (upscaled_img, config.upscale_factor as f64, upscaled_img)
+        (upscaled_img, config.upscale_factor, upscaled_img)
     } else {
-        (*img, 1.0, *img)
+        (*img, 1usize, *img)
     };
 
     let img = &detection_img;
@@ -362,6 +371,32 @@ fn run_detection_pipeline<'ctx>(
         (n, unrefined)
     };
 
+    // Quad extraction (and the funnel gate above, which samples the upscaled
+    // image with `sampling_scale = 1`) ran on the upscaled grid, so `corners`
+    // are still in upscaled pixels. Map them back to original-image
+    // coordinates before anything downstream (GWLF, homography, decode, pose)
+    // consumes them. Uses the same centre-aware convention as decimation
+    // (`quad.rs::to_full` with `d = 1/upscale`): `x_orig = (x_up + 0.5)/U - 0.5`,
+    // the exact inverse of `ImageView::upscale_to`. No-op (skipped) for `U = 1`.
+    let inv_upscale = 1.0 / upscale as f64;
+    let map_f64 = |v: f64| (v + 0.5) * inv_upscale - 0.5;
+    if upscale > 1 {
+        let map = |v: f32| map_f64(f64::from(v)) as f32;
+        let cov_scale = (inv_upscale * inv_upscale) as f32;
+        for i in 0..n {
+            for c in &mut state.batch.corners[i] {
+                c.x = map(c.x);
+                c.y = map(c.y);
+            }
+            // Covariances are in px^2 of the upscaled grid.
+            for v in &mut state.batch.corner_covariances[i] {
+                *v *= cov_scale;
+            }
+        }
+    }
+    // Decode, GWLF refinement and pose all sample the original image.
+    let refinement_img = full_img;
+
     // Compute subpixel jitter if requested
     let mut jitter_ptr = std::ptr::null();
     let mut num_jitter = 0;
@@ -371,8 +406,15 @@ fn run_detection_pipeline<'ctx>(
         let jitter = state.arena.alloc_slice_fill_copy(num_jitter * 8, 0.0f32);
         for (i, unrefined_corners) in unrefined_pts.iter().enumerate() {
             for (j, unrefined_corner) in unrefined_corners.iter().enumerate() {
-                let dx = state.batch.corners[i][j].x - unrefined_corner.x as f32;
-                let dy = state.batch.corners[i][j].y - unrefined_corner.y as f32;
+                // `unrefined_corner` is on the extraction grid; bring it into the
+                // same (original-image) frame as the already-mapped corners.
+                let (ux, uy) = if upscale > 1 {
+                    (map_f64(unrefined_corner.x), map_f64(unrefined_corner.y))
+                } else {
+                    (unrefined_corner.x, unrefined_corner.y)
+                };
+                let dx = state.batch.corners[i][j].x - ux as f32;
+                let dy = state.batch.corners[i][j].y - uy as f32;
                 jitter[i * 8 + j * 2] = dx;
                 jitter[i * 8 + j * 2 + 1] = dy;
             }
