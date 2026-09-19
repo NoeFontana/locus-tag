@@ -7,7 +7,7 @@ never committed, packaged in wheels/sdist, or republished in converted form.
 Ground truth is per-image corners + ids + a rotation code; there are no poses
 and no intrinsics. The markers use the ``ARUCO_MIP_36h12`` dictionary
 (``locus.TagFamily.ArUcoMip36h12``). Scoring is id-agnostic *quad* recall
-(:func:`quad_recall_for_image`) plus, when that family is selected, id-aware
+(:func:`score_detections` with ``det_ids=None``) plus, when that family is selected, id-aware
 decode recall/precision via the shared centre matcher.
 """
 
@@ -23,7 +23,6 @@ from typing import Any
 
 import numpy as np
 
-from tools.bench.matching import MATCH_DISTANCE_THRESHOLD_PX
 from tools.bench.utils import TagGroundTruth
 
 ZENODO_RECORD = 18667018
@@ -35,6 +34,10 @@ LIU4K_CACHE_DIR = Path("tests/data/liu4k")
 LIU4K_SUBDIR = "liu4k_markers_1024"
 # Dictionary the markers were generated from (per aruco_nano's testperf.cpp).
 LIU4K_DICTIONARY = "ARUCO_MIP_36h12"
+
+# Liu4K-specific match radius (px): aruco_nano's testperf.cpp uses `dist <= 10.0`.
+# Deliberately NOT the repo-wide MATCH_DISTANCE_THRESHOLD_PX used by other datasets.
+LIU4K_MATCH_THRESHOLD_PX = 10.0
 
 # `FunnelStatus` code for "passed the geometric funnel, rejected by the decoder"
 # (see tools/bench/collect.py).
@@ -127,29 +130,66 @@ def candidate_quads(batch: Any) -> np.ndarray:
     return np.concatenate(parts, axis=0)
 
 
-def quad_recall_for_image(
-    quads: np.ndarray,
-    gt_tags: list[TagGroundTruth],
-    threshold: float = MATCH_DISTANCE_THRESHOLD_PX,
-) -> tuple[int, int]:
-    """Id-agnostic greedy one-to-one centre matching; returns ``(matched, n_gt)``.
+def _center(corners: np.ndarray) -> np.ndarray:
+    return np.asarray(corners, dtype=np.float64).reshape(4, 2).mean(axis=0)
 
-    Corner error is deliberately not reported: without a decoded id the corner
-    order (rotation) is unknown, and corner error must stay order-preserving.
+
+def score_detections(
+    det_ids: list[int] | None,
+    det_corners: np.ndarray,
+    gt_tags: list[TagGroundTruth],
+    threshold: float = LIU4K_MATCH_THRESHOLD_PX,
+) -> tuple[int, int, int]:
+    """Return ``(tp, fp, fn)`` exactly as aruco_nano's ``evaluateDetection``.
+
+    For each detection in order, the *first* not-yet-matched GT marker with the same id
+    whose centre is within ``threshold`` pixels (``<=``) is a TP; a detection with no such
+    GT is a FP; ``fn = n_gt - tp``. Pass ``det_ids=None`` for the id-agnostic quad variant,
+    which drops the id condition (same first-match rule, same threshold).
     """
-    used: set[int] = set()
-    matched = 0
-    centers = quads.mean(axis=1) if len(quads) else np.empty((0, 2))
-    for gt in gt_tags:
-        gc = gt.corners.astype(np.float64).mean(axis=0)
-        best, best_d = -1, threshold
-        for i, c in enumerate(centers):
-            if i in used:
+    matched = [False] * len(gt_tags)
+    gt_centers = [_center(g.corners) for g in gt_tags]
+    tp = fp = 0
+    for k in range(len(det_corners)):
+        c = _center(det_corners[k])
+        hit = False
+        for j, g in enumerate(gt_tags):
+            if matched[j] or (det_ids is not None and int(det_ids[k]) != g.tag_id):
                 continue
-            d = float(np.linalg.norm(c - gc))
-            if d < best_d:
-                best, best_d = i, d
-        if best >= 0:
-            used.add(best)
-            matched += 1
-    return matched, len(gt_tags)
+            if float(np.linalg.norm(c - gt_centers[j])) <= threshold:
+                matched[j] = True
+                tp += 1
+                hit = True
+                break
+        if not hit:
+            fp += 1
+    return tp, fp, len(gt_tags) - tp
+
+
+@dataclass
+class Liu4kTally:
+    """Accumulated aruco_nano-style TP/FP/FN over images."""
+
+    tp: int = 0
+    fp: int = 0
+    fn: int = 0
+
+    def add(self, counts: tuple[int, int, int]) -> None:
+        self.tp += counts[0]
+        self.fp += counts[1]
+        self.fn += counts[2]
+
+    @property
+    def recall(self) -> float:
+        d = self.tp + self.fn
+        return self.tp / d * 100 if d else 0.0
+
+    @property
+    def precision(self) -> float:
+        d = self.tp + self.fp
+        return self.tp / d * 100 if d else 0.0
+
+    @property
+    def f1(self) -> float:
+        p, r = self.precision, self.recall
+        return 2 * p * r / (p + r) if p + r else 0.0
