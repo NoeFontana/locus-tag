@@ -381,7 +381,7 @@ class TestDetectorConfigValidation:
 class TestTagFamilyCoercion:
     """A0.4 §4 row 1 — ``tag_family_from_i32`` rejects out-of-range discriminants."""
 
-    @pytest.mark.parametrize("bad", [5, -1, 999])
+    @pytest.mark.parametrize("bad", [6, -1, 999])
     def test_invalid_discriminant_rejected(self, bad: int) -> None:
         # Intentionally bypassing the enum to exercise the i32-coercion gate.
         with pytest.raises(ValueError, match=r"Invalid TagFamily value"):
