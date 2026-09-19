@@ -45,6 +45,7 @@ pub enum TagFamily {
     ArUco4x4_50 = 2,
     ArUco4x4_100 = 3,
     ArUco6x6_250 = 4,
+    ArUcoMip36h12 = 5,
 }
 
 impl From<TagFamily> for locus_core::TagFamily {
@@ -55,6 +56,7 @@ impl From<TagFamily> for locus_core::TagFamily {
             TagFamily::ArUco4x4_50 => locus_core::TagFamily::ArUco4x4_50,
             TagFamily::ArUco4x4_100 => locus_core::TagFamily::ArUco4x4_100,
             TagFamily::ArUco6x6_250 => locus_core::TagFamily::ArUco6x6_250,
+            TagFamily::ArUcoMip36h12 => locus_core::TagFamily::ArUcoMip36h12,
         }
     }
 }
@@ -1415,6 +1417,7 @@ fn tag_family_from_i32(f: i32) -> PyResult<locus_core::TagFamily> {
         2 => Ok(locus_core::TagFamily::ArUco4x4_50),
         3 => Ok(locus_core::TagFamily::ArUco4x4_100),
         4 => Ok(locus_core::TagFamily::ArUco6x6_250),
+        5 => Ok(locus_core::TagFamily::ArUcoMip36h12),
         _ => Err(PyValueError::new_err(format!(
             "Invalid TagFamily value: {f}"
         ))),

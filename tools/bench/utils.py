@@ -142,6 +142,7 @@ class FamilyMapper:
             int(locus.TagFamily.ArUco4x4_50): locus.TagFamily.ArUco4x4_50,
             int(locus.TagFamily.ArUco4x4_100): locus.TagFamily.ArUco4x4_100,
             int(locus.TagFamily.ArUco6x6_250): locus.TagFamily.ArUco6x6_250,
+            int(locus.TagFamily.ArUcoMip36h12): locus.TagFamily.ArUcoMip36h12,
         }
         f = mapping.get(int(family))
         return [f] if f else None
@@ -156,6 +157,7 @@ class FamilyMapper:
             int(locus.TagFamily.ArUco4x4_50): cv2.aruco.DICT_4X4_50,
             int(locus.TagFamily.ArUco4x4_100): cv2.aruco.DICT_4X4_100,
             int(locus.TagFamily.ArUco6x6_250): cv2.aruco.DICT_6X6_250,
+            int(locus.TagFamily.ArUcoMip36h12): cv2.aruco.DICT_ARUCO_MIP_36h12,
         }
         return mapping.get(int(family))
 
@@ -169,6 +171,7 @@ class FamilyMapper:
             int(locus.TagFamily.ArUco4x4_50): None,
             int(locus.TagFamily.ArUco4x4_100): None,
             int(locus.TagFamily.ArUco6x6_250): None,
+            int(locus.TagFamily.ArUcoMip36h12): None,
         }
         return mapping.get(int(family))
 
@@ -182,11 +185,13 @@ _TAG_FAMILY_BY_NAME: dict[str, int] = {
     "ArUco4x4_50": int(locus.TagFamily.ArUco4x4_50),
     "ArUco4x4_100": int(locus.TagFamily.ArUco4x4_100),
     "ArUco6x6_250": int(locus.TagFamily.ArUco6x6_250),
+    "ArUcoMip36h12": int(locus.TagFamily.ArUcoMip36h12),
     "16h5": int(locus.TagFamily.AprilTag16h5),
     "36h11": int(locus.TagFamily.AprilTag36h11),
     "4x4_50": int(locus.TagFamily.ArUco4x4_50),
     "4x4_100": int(locus.TagFamily.ArUco4x4_100),
     "6x6_250": int(locus.TagFamily.ArUco6x6_250),
+    "mip_36h12": int(locus.TagFamily.ArUcoMip36h12),
 }
 
 

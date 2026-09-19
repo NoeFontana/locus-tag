@@ -1766,7 +1766,7 @@ pub trait TagDecoder: Send + Sync {
     /// 36h11 = 2 (code distance 11), 16h5 = 0 (code distance 5; admitting
     /// h≤1 floods the rendered tag16h5 1080p suite with false positives
     /// at unchanged recall — see `regression_hub_tag16h5_1080p`),
-    /// ArUco4x4_* = 1 (dense codebooks), ArUco6x6_250 = 2.
+    /// ArUco4x4_* = 1 (dense codebooks), ArUco6x6_250 = 2, ArUcoMip36h12 = 2 (code distance 12).
     fn default_max_hamming(&self) -> u32;
 }
 
@@ -1995,6 +1995,52 @@ impl TagDecoder for ArUco6x6_250 {
     }
 }
 
+/// Decoder for the ArUco MIP 36h12 family.
+pub struct ArUcoMip36h12;
+
+impl TagDecoder for ArUcoMip36h12 {
+    fn name(&self) -> &'static str {
+        "MIP_36h12"
+    }
+    fn dimension(&self) -> usize {
+        6
+    }
+    fn bit_count(&self) -> usize {
+        36
+    }
+
+    fn sample_points(&self) -> &[(f64, f64)] {
+        crate::dictionaries::POINTS_ARUCOMIP36H12
+    }
+
+    fn decode(&self, bits: u64) -> Option<(u32, u32, u8)> {
+        crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUcoMip36h12)
+            .decode(bits, 4)
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
+    }
+
+    fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)> {
+        crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUcoMip36h12)
+            .decode(bits, max_hamming)
+            .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
+    }
+
+    fn get_code(&self, id: u16) -> Option<u64> {
+        crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUcoMip36h12).get_code(id)
+    }
+
+    fn num_codes(&self) -> usize {
+        crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUcoMip36h12).len()
+    }
+
+    fn rotated_codes(&self) -> &[(u64, u16, u8)] {
+        &[]
+    }
+    fn default_max_hamming(&self) -> u32 {
+        2
+    }
+}
+
 /// Convert a TagFamily enum to a boxed decoder instance.
 #[must_use]
 pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send + Sync> {
@@ -2004,6 +2050,7 @@ pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send
         config::TagFamily::ArUco4x4_50 => Box::new(ArUco4x4_50),
         config::TagFamily::ArUco4x4_100 => Box::new(ArUco4x4_100),
         config::TagFamily::ArUco6x6_250 => Box::new(ArUco6x6_250),
+        config::TagFamily::ArUcoMip36h12 => Box::new(ArUcoMip36h12),
     }
 }
 
@@ -2292,6 +2339,20 @@ mod tests {
         let test_ids = [0, 42, 100, 249];
 
         for &id in &test_ids {
+            let code = decoder.get_code(id).expect("code should exist");
+            let (decoded_id, hamming, rot) = decoder.decode(code).expect("should decode");
+            assert_eq!(decoded_id, u32::from(id));
+            assert_eq!(hamming, 0);
+            assert_eq!(rot, 0);
+        }
+    }
+
+    /// Test ArUco MIP 36h12 dictionary integration (250 codes, rotation round-trip).
+    #[test]
+    fn test_aruco_mip_36h12_roundtrip() {
+        let decoder = ArUcoMip36h12;
+        assert_eq!(decoder.num_codes(), 250);
+        for id in [0u16, 42, 100, 249] {
             let code = decoder.get_code(id).expect("code should exist");
             let (decoded_id, hamming, rot) = decoder.decode(code).expect("should decode");
             assert_eq!(decoded_id, u32::from(id));

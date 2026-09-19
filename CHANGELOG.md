@@ -5,6 +5,18 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Added
+
+- **`ArUcoMip36h12` tag family** (`cv2.aruco.DICT_ARUCO_MIP_36h12`: 250 codes, 6x6 bits,
+  minimum Hamming distance 12). New dictionary JSON generated with
+  `examples/dictionary_generation/extract_opencv.py`, `TagFamily` variant in `locus-core` and
+  `locus-py` (discriminant 5), decoder, regenerated `locus.pyi`, dictionary parity snapshot.
+- **Liu4K real-photo benchmark** (`bench real --dataset liu4k`, `tools/bench/liu4k.py`). Runtime
+  download from Zenodo (10.5281/zenodo.18667018, CC BY 4.0) into gitignored `tests/data/liu4k/`
+  with md5 verification; reports id-agnostic quad recall and, with `--family ArUcoMip36h12`,
+  id-aware decode recall/precision. Corners/ids ground truth only, so no pose metrics. No dataset
+  files are committed or packaged. Attribution in `docs/engineering/benchmarking.md`.
+
 ## [0.7.1] - 2026-07-19
 
 ### Documentation

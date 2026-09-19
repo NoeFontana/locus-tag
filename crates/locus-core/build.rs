@@ -15,6 +15,7 @@ const FAMILY_MAPPING: &[(&str, &str, usize)] = &[
     ("ArUco4x4_50", "dict_4x4_50", 4),
     ("ArUco4x4_100", "dict_4x4_100", 4),
     ("ArUco6x6_250", "dict_6x6_250", 6),
+    ("ArUcoMip36h12", "dict_aruco_mip_36h12", 6),
 ];
 
 #[derive(Deserialize, Debug)]

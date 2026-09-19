@@ -152,6 +152,42 @@ PYTHONPATH=. uv run --group bench tools/cli.py bench real --scenarios forward
 PYTHONPATH=. uv run --group bench tools/cli.py bench real --scenarios forward --compare
 ```
 
+### Real-World Evaluation (Liu4K)
+Liu4K is a 924-image, roughly 4K real-photo ArUco set released with the aruco_nano
+paper. Ground truth is per-marker corners and ids only (no poses, no intrinsics),
+so the CLI reports quad recall and, with the matching dictionary, id-aware decode
+recall/precision. **No pose numbers are produced**, so the Fast/Accurate pose-mode
+rule does not apply.
+
+```bash
+# Quad recall (id-agnostic; accepted + decoder-rejected quads within 20 px of a GT centre)
+PYTHONPATH=. uv run --group bench tools/cli.py bench real --dataset liu4k
+
+# Adds id-aware decode recall/precision (markers use ARUCO_MIP_36h12)
+PYTHONPATH=. uv run --group bench tools/cli.py bench real --dataset liu4k --family ArUcoMip36h12
+```
+
+The first run downloads `liu4k.zip` (about 4 GB) from Zenodo into `tests/data/liu4k/`
+(gitignored), verifies its md5 (`e8fafe5444a9e346f25123151ef1a699`, from the Zenodo record),
+extracts it and deletes the archive. The data is never committed, never packaged in wheels or
+sdist, and never republished in converted form. Corner error is not reported: without a decoded id
+the corner order is unknown, and corner error must stay order-preserving.
+
+**Attribution and license.** Dataset: Muñoz-Salinas, R., *Liu4K dataset employed for Aruco_Nano
+paper*, Zenodo, 2026, [doi:10.5281/zenodo.18667018](https://doi.org/10.5281/zenodo.18667018),
+licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/legalcode). Locus reads the
+files unmodified; any published result derived from them must credit the author, cite the DOI,
+link the license and indicate changes. The record's free-text `copyright` field also reads
+"CC0 License"; we apply the CC BY 4.0 attribution terms regardless. Funded by
+PID2023-147296NB-I00 (Ministerio de Ciencia, Innovacion y Universidades). The dataset's authors
+also ask users of aruco_nano to cite: R. Muñoz-Salinas, F. J. Romero-Ramirez, S. Garrido-Jurado,
+"ArUco Nano: a simpler, faster, and more reliable fiducial marker detector" (2026);
+S. Garrido-Jurado et al., "Automatic generation and detection of highly reliable fiducial markers
+under occlusion", Pattern Recognition, 2014; F. J. Romero-Ramirez et al., "Speeded up detection of
+squared fiducial markers", Image and Vision Computing, 2018. Any benchmark report on this dataset
+must also carry `lscpu` hardware metadata, build profile, thread count and env vars
+(`docs/engineering/constraints.md` section 6).
+
 ### Hub Dataset Evaluation
 Evaluate against rendered Hugging Face Hub datasets. These datasets include ground-truth 6-DOF poses, so the CLI reports both recall and pose error (translation RMSE in metres).
 

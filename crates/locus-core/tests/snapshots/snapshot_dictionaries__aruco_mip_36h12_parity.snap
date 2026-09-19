@@ -1,0 +1,10 @@
+---
+source: crates/locus-core/tests/snapshot_dictionaries.rs
+expression: "snapshot_dict(TagFamily::ArUcoMip36h12)"
+---
+(
+    385,
+    "14c983500bd993ca",
+    6000,
+    "d75101bc1361fd01",
+)

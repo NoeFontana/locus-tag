@@ -338,6 +338,11 @@ def visualize(
 def bench_real(
     scenarios: list[str] = typer.Option(["forward"], help="Scenarios to run"),
     hub_config: str | None = typer.Option(None, help="Hugging Face Hub configuration to run"),
+    dataset: str | None = typer.Option(
+        None,
+        help="External dataset to run instead of ICRA/Hub. Supported: 'liu4k' "
+        "(Zenodo, CC-BY-4.0; downloaded on first use, ~4 GB; id-agnostic quad recall only).",
+    ),
     data_dir: Path | None = typer.Option(None, help="Custom data directory"),
     types: list[str] = typer.Option(["tags"], help="Dataset types (tags, checkerboard)"),
     limit: int | None = typer.Option(None, help="Limit number of images"),
@@ -420,11 +425,13 @@ def bench_real(
         "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
         "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
         "ArUco6x6_250": locus.TagFamily.ArUco6x6_250,
+        "ArUcoMip36h12": locus.TagFamily.ArUcoMip36h12,
         "16h5": locus.TagFamily.AprilTag16h5,
         "36h11": locus.TagFamily.AprilTag36h11,
         "4x4_50": locus.TagFamily.ArUco4x4_50,
         "4x4_100": locus.TagFamily.ArUco4x4_100,
         "6x6_250": locus.TagFamily.ArUco6x6_250,
+        "mip_36h12": locus.TagFamily.ArUcoMip36h12,
     }
 
     tag_family_int = family_mapping.get(family)
@@ -487,7 +494,96 @@ def bench_real(
     record_run_id = new_run_id() if record_out else ""
     record_profile_label = "standard"  # CLI overrides feed a single profile per run.
 
-    if hub_config:
+    if dataset is not None:
+        if dataset != "liu4k":
+            typer.echo(f"Error: unknown dataset '{dataset}' (supported: liu4k)", err=True)
+            raise typer.Exit(code=1)
+        if hub_config or compare or record_out:
+            typer.echo(
+                "Error: --dataset liu4k does not combine with --hub-config/--compare/--record-out",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+
+        from tools.bench.liu4k import (
+            CITATION,
+            LIU4K_CACHE_DIR,
+            LIU4K_DICTIONARY,
+            candidate_quads,
+            load_liu4k,
+            prepare_liu4k,
+            quad_recall_for_image,
+        )
+        from tools.bench.matching import match_detections_to_gt
+
+        liu_dir = prepare_liu4k(data_dir if data_dir else LIU4K_CACHE_DIR)
+        samples = load_liu4k(liu_dir)
+        names = sorted(samples)[skip:]
+        if limit:
+            names = names[:limit]
+        decode_mode = tag_family_int == locus.TagFamily.ArUcoMip36h12
+        typer.echo(f"\nEvaluating Liu4K ({len(names)} images)")
+        typer.echo(f"  Dataset: {CITATION}")
+        typer.echo(
+            f"  Markers use {LIU4K_DICTIONARY}. No poses/intrinsics: corner+id ground truth only. "
+            "Quad recall = GT quads with a Locus quad centre within the match threshold "
+            "(accepted + decoder-rejected quads, id-agnostic)."
+            + (
+                " Decode recall/precision use id-aware centre matching."
+                if decode_mode
+                else " Pass --family ArUcoMip36h12 for id-aware decode recall/precision."
+            )
+        )
+        current_results["liu4k"] = {}
+        for wrapper in wrappers:
+            if not isinstance(wrapper, LocusWrapper):
+                continue
+            n_gt = n_match = n_cand = 0
+            n_dec_match = n_dec_total = 0
+            lat: list[float] = []
+            for name in tqdm(names, desc=f"{wrapper.name:<10}"):
+                img = cv2.imread(str(liu_dir / name), cv2.IMREAD_GRAYSCALE)
+                if img is None:
+                    continue
+                start = time.perf_counter()
+                batch = wrapper.detector.detect(img)
+                lat.append((time.perf_counter() - start) * 1000.0)
+                quads = candidate_quads(batch)
+                m, g = quad_recall_for_image(quads, samples[name].tags)
+                n_match += m
+                n_gt += g
+                n_cand += len(quads)
+                if decode_mode:
+                    dets = serializable_from_batch(batch)
+                    n_dec_total += len(dets)
+                    n_dec_match += len(match_detections_to_gt(dets, samples[name].tags).pairs)
+            recall = n_match / n_gt * 100 if n_gt else 0.0
+            avg_lat = float(np.mean(lat)) if lat else 0.0
+            current_results["liu4k"][wrapper.name] = {
+                "quad_recall": recall,
+                "candidates": n_cand,
+                "latency": avg_lat,
+                "images": len(lat),
+            }
+            if decode_mode:
+                current_results["liu4k"][wrapper.name].update(
+                    {
+                        "decode_recall": n_dec_match / n_gt * 100 if n_gt else 0.0,
+                        "decode_precision": n_dec_match / n_dec_total * 100 if n_dec_total else 0.0,
+                    }
+                )
+            typer.echo(
+                f"  {wrapper.name:<10} | Quad recall: {recall:>6.2f}% ({n_match}/{n_gt})"
+                f" | Candidates: {n_cand} | Latency: {avg_lat:>7.2f} ms"
+            )
+            if decode_mode:
+                typer.echo(
+                    f"  {'':<10} | Decode recall: "
+                    f"{current_results['liu4k'][wrapper.name]['decode_recall']:>6.2f}%"
+                    f" | Precision: "
+                    f"{current_results['liu4k'][wrapper.name]['decode_precision']:>6.2f}%"
+                )
+    elif hub_config:
         hub_dir = data_dir if data_dir else HUB_CACHE_DIR
         ds = HubDatasetLoader(root=hub_dir).load_dataset(hub_config)
 
