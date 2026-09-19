@@ -43,7 +43,7 @@ detector = (
     locus.DetectorBuilder()
     .with_family(locus.TagFamily.AprilTag36h11)
     .with_threads(4)
-    .with_max_concurrent_frames(8) # Enable parallel batch processing
+    .with_max_concurrent_frames(8)  # Enable parallel batch processing
     .build()
 )
 ```

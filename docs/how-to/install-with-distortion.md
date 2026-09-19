@@ -43,14 +43,20 @@ from locus import CameraIntrinsics, DistortionModel
 
 # Brown-Conrady polynomial distortion (OpenCV convention)
 intrinsics = CameraIntrinsics(
-    fx=800.0, fy=800.0, cx=640.0, cy=360.0,
+    fx=800.0,
+    fy=800.0,
+    cx=640.0,
+    cy=360.0,
     distortion_model=DistortionModel.BrownConrady,
     dist_coeffs=[-0.3, 0.1, 0.001, -0.002, 0.0],  # [k1, k2, p1, p2, k3]
 )
 
 # Kannala-Brandt equidistant fisheye
 fisheye = CameraIntrinsics(
-    fx=380.0, fy=380.0, cx=320.0, cy=240.0,
+    fx=380.0,
+    fy=380.0,
+    cx=320.0,
+    cy=240.0,
     distortion_model=DistortionModel.KannalaBrandt,
     dist_coeffs=[0.1, -0.01, 0.001, 0.0],  # [k1, k2, k3, k4]
 )

@@ -40,8 +40,8 @@ regenerated from the Pydantic model via
 ```python
 from locus._profile import DetectorConfig
 
-cfg = DetectorConfig.from_profile("standard")            # shipped
-cfg = DetectorConfig.from_profile_json(path.read_text()) # user-supplied
+cfg = DetectorConfig.from_profile("standard")  # shipped
+cfg = DetectorConfig.from_profile_json(path.read_text())  # user-supplied
 ```
 
 From Rust:

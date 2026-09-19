@@ -11,6 +11,7 @@ Before:
 
 ```python
 import locus
+
 detector = locus.Detector(preset=locus.DetectorPreset.Standard)
 ```
 
