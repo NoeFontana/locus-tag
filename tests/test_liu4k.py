@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tools.bench.liu4k import load_liu4k, quad_recall_for_image
+from tools.bench.liu4k import load_liu4k, score_detections
 from tools.bench.utils import TagGroundTruth
 
 
@@ -34,17 +34,18 @@ def test_load_liu4k_parses_markers(tmp_path: Path) -> None:
     assert samples["001.jpg"].rot == [2]
 
 
-def test_quad_recall_is_one_to_one_and_id_agnostic() -> None:
-    gt = [
-        TagGroundTruth(tag_id=1, corners=np.asarray(_square(100, 100), dtype=np.float32)),
-        TagGroundTruth(tag_id=2, corners=np.asarray(_square(400, 100), dtype=np.float32)),
-    ]
-    quads = np.asarray([_square(102, 99)])  # near GT 1 only
-    assert quad_recall_for_image(quads, gt) == (1, 2)
-    # One quad cannot satisfy two GT tags.
-    both_near = [
-        TagGroundTruth(tag_id=1, corners=np.asarray(_square(100, 100), dtype=np.float32)),
-        TagGroundTruth(tag_id=2, corners=np.asarray(_square(105, 100), dtype=np.float32)),
-    ]
-    assert quad_recall_for_image(quads, both_near) == (1, 2)
-    assert quad_recall_for_image(np.empty((0, 4, 2)), gt) == (0, 2)
+def _gt(tid: int, cx: float, cy: float) -> TagGroundTruth:
+    return TagGroundTruth(tag_id=tid, corners=np.asarray(_square(cx, cy), dtype=np.float32))
+
+
+def test_score_matches_aruco_nano_semantics() -> None:
+    gt = [_gt(1, 100, 100), _gt(2, 400, 100)]
+    quads = np.asarray([_square(108, 100), _square(400, 100), _square(700, 700)])
+    # id-aware: det 1 within 8 px (TP), det with wrong id 9 (FP), far det (FP)
+    assert score_detections([1, 9, 2], quads, gt) == (1, 2, 1)
+    # boundary is inclusive (<= 10 px), 10.5 px is a miss
+    assert score_detections([1], np.asarray([_square(110, 100)]), gt) == (1, 0, 1)
+    assert score_detections([1], np.asarray([_square(110.5, 100)]), gt) == (0, 1, 2)
+    # id-agnostic quad variant ignores ids; one quad claims one GT only
+    assert score_detections(None, quads, gt) == (2, 1, 0)
+    assert score_detections(None, np.asarray([_square(100, 100)] * 2), gt) == (1, 1, 1)

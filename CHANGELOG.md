@@ -16,6 +16,11 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   with md5 verification; reports id-agnostic quad recall and, with `--family ArUcoMip36h12`,
   id-aware decode recall/precision. Corners/ids ground truth only, so no pose metrics. No dataset
   files are committed or packaged. Attribution in `docs/engineering/benchmarking.md`.
+  The scorer mirrors aruco_nano's `testperf.cpp` (same id, centre distance `<= 10 px`, first-match
+  TP/FP/FN); the 10 px radius is a Liu4K-specific constant and the repo-wide match threshold is
+  unchanged. Adds `bench real --sharpening/--no-sharpening` and the
+  [Liu4K report](docs/engineering/benchmarking/liu4k_20260919.md) (config sweep, comparison against
+  OpenCV 4.10 and aruco_nano, and open detector findings).
 
 ## [0.7.1] - 2026-07-19
 

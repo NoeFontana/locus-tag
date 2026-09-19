@@ -124,6 +124,7 @@ TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features b
 - [Micro-Benchmarking Guide](benchmarking/micro-benchmarking-guide.md) — 3-tier validation loop
 
 ### Point-in-time reports (historical snapshots)
+- [Liu4K real-photo benchmark (2026-09-19)](benchmarking/liu4k_20260919.md)
 - [Render-tag 1080p SOTA (current, v0.7.0-refreshed)](benchmarking/render_tag_sota_20260713.md)
 - [Render-tag 2160p recall lift (2026-04-25)](benchmarking/render_tag_2160p_20260425.md)
 - [Render-tag 1080p SOTA pursuit (2026-04-25)](benchmarking/render_tag_sota_20260425.md)
@@ -160,12 +161,22 @@ recall/precision. **No pose numbers are produced**, so the Fast/Accurate pose-mo
 rule does not apply.
 
 ```bash
-# Quad recall (id-agnostic; accepted + decoder-rejected quads within 20 px of a GT centre)
+# Quad recall (id-agnostic; accepted + decoder-rejected quads within 10 px of a GT centre)
 PYTHONPATH=. uv run --group bench tools/cli.py bench real --dataset liu4k
 
-# Adds id-aware decode recall/precision (markers use ARUCO_MIP_36h12)
+# Adds id-aware decode TP/FP/FN, recall, precision, F1 (markers use ARUCO_MIP_36h12)
 PYTHONPATH=. uv run --group bench tools/cli.py bench real --dataset liu4k --family ArUcoMip36h12
+
+# Best measured Locus config on this dataset (see the Liu4K report)
+PYTHONPATH=. uv run --group bench tools/cli.py bench real --dataset liu4k --family ArUcoMip36h12 --no-sharpening
 ```
+
+The scorer mirrors aruco_nano's `testperf.cpp`: for each detection, the first unmatched GT marker with
+the same id and a centre distance `<= 10 px` makes it a TP, otherwise it is a FP; `FN = GT - TP`. The
+10 px radius is the Liu4K-specific `LIU4K_MATCH_THRESHOLD_PX` (`tools/bench/liu4k.py`); the repo-wide
+`MATCH_DISTANCE_THRESHOLD_PX` is untouched. The GT corner winding is opposite to Locus/OpenCV, so any
+future corner-error metric must remap it (0,3,2,1). Results and analysis:
+[Liu4K report](benchmarking/liu4k_20260919.md).
 
 The first run downloads `liu4k.zip` (about 4 GB) from Zenodo into `tests/data/liu4k/`
 (gitignored), verifies its md5 (`e8fafe5444a9e346f25123151ef1a699`, from the Zenodo record),

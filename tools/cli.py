@@ -363,6 +363,11 @@ def bench_real(
     min_range: int = typer.Option(10, help="Threshold min range"),
     max_hamming: int = typer.Option(2, help="Max hamming error"),
     min_edge_score: float = typer.Option(4.0, help="Min edge alignment score"),
+    sharpening: bool | None = typer.Option(
+        None,
+        "--sharpening/--no-sharpening",
+        help="Override threshold.enable_sharpening (default: keep the standard profile's value).",
+    ),
     record_out: Path | None = typer.Option(
         None,
         help="Write per-observation Tier-1 records (parquet) to this path. "
@@ -455,6 +460,8 @@ def bench_real(
     # applied at the nested-group level. Enum values round-trip through
     # Pydantic as PyO3 variant instances.
     base = locus.DetectorConfig.from_profile("standard").model_dump()
+    if sharpening is not None:
+        base["threshold"]["enable_sharpening"] = sharpening
     base["threshold"]["tile_size"] = tile_size
     base["threshold"]["constant"] = constant
     base["threshold"]["min_range"] = min_range
@@ -509,12 +516,13 @@ def bench_real(
             CITATION,
             LIU4K_CACHE_DIR,
             LIU4K_DICTIONARY,
+            LIU4K_MATCH_THRESHOLD_PX,
+            Liu4kTally,
             candidate_quads,
             load_liu4k,
             prepare_liu4k,
-            quad_recall_for_image,
+            score_detections,
         )
-        from tools.bench.matching import match_detections_to_gt
 
         liu_dir = prepare_liu4k(data_dir if data_dir else LIU4K_CACHE_DIR)
         samples = load_liu4k(liu_dir)
@@ -525,21 +533,17 @@ def bench_real(
         typer.echo(f"\nEvaluating Liu4K ({len(names)} images)")
         typer.echo(f"  Dataset: {CITATION}")
         typer.echo(
-            f"  Markers use {LIU4K_DICTIONARY}. No poses/intrinsics: corner+id ground truth only. "
-            "Quad recall = GT quads with a Locus quad centre within the match threshold "
-            "(accepted + decoder-rejected quads, id-agnostic)."
-            + (
-                " Decode recall/precision use id-aware centre matching."
-                if decode_mode
-                else " Pass --family ArUcoMip36h12 for id-aware decode recall/precision."
-            )
+            f"  Markers use {LIU4K_DICTIONARY}; corner+id ground truth only (no poses). Scorer "
+            f"mirrors aruco_nano testperf.cpp: a detection is a TP if the first unmatched GT "
+            f"(same id) has centre distance <= {LIU4K_MATCH_THRESHOLD_PX:g} px, else FP; "
+            "FN = GT - TP. Quad variant is id-agnostic over accepted + decoder-rejected quads."
+            + ("" if decode_mode else " Pass --family ArUcoMip36h12 for the id-aware score.")
         )
         current_results["liu4k"] = {}
         for wrapper in wrappers:
             if not isinstance(wrapper, LocusWrapper):
                 continue
-            n_gt = n_match = n_cand = 0
-            n_dec_match = n_dec_total = 0
+            quad, dec = Liu4kTally(), Liu4kTally()
             lat: list[float] = []
             for name in tqdm(names, desc=f"{wrapper.name:<10}"):
                 img = cv2.imread(str(liu_dir / name), cv2.IMREAD_GRAYSCALE)
@@ -548,41 +552,37 @@ def bench_real(
                 start = time.perf_counter()
                 batch = wrapper.detector.detect(img)
                 lat.append((time.perf_counter() - start) * 1000.0)
-                quads = candidate_quads(batch)
-                m, g = quad_recall_for_image(quads, samples[name].tags)
-                n_match += m
-                n_gt += g
-                n_cand += len(quads)
+                gt = samples[name].tags
+                quad.add(score_detections(None, candidate_quads(batch), gt))
                 if decode_mode:
-                    dets = serializable_from_batch(batch)
-                    n_dec_total += len(dets)
-                    n_dec_match += len(match_detections_to_gt(dets, samples[name].tags).pairs)
-            recall = n_match / n_gt * 100 if n_gt else 0.0
+                    dec.add(
+                        score_detections(
+                            [int(i) for i in batch.ids],
+                            np.asarray(batch.corners, dtype=np.float64),
+                            gt,
+                        )
+                    )
             avg_lat = float(np.mean(lat)) if lat else 0.0
-            current_results["liu4k"][wrapper.name] = {
-                "quad_recall": recall,
-                "candidates": n_cand,
-                "latency": avg_lat,
-                "images": len(lat),
-            }
-            if decode_mode:
-                current_results["liu4k"][wrapper.name].update(
+            res: dict[str, Any] = {"latency": avg_lat, "images": len(lat)}
+            for tag, t in (("quad", quad), ("decode", dec)):
+                if tag == "decode" and not decode_mode:
+                    continue
+                res.update(
                     {
-                        "decode_recall": n_dec_match / n_gt * 100 if n_gt else 0.0,
-                        "decode_precision": n_dec_match / n_dec_total * 100 if n_dec_total else 0.0,
+                        f"{tag}_tp": t.tp,
+                        f"{tag}_fp": t.fp,
+                        f"{tag}_fn": t.fn,
+                        f"{tag}_recall": t.recall,
+                        f"{tag}_precision": t.precision,
+                        f"{tag}_f1": t.f1,
                     }
                 )
-            typer.echo(
-                f"  {wrapper.name:<10} | Quad recall: {recall:>6.2f}% ({n_match}/{n_gt})"
-                f" | Candidates: {n_cand} | Latency: {avg_lat:>7.2f} ms"
-            )
-            if decode_mode:
                 typer.echo(
-                    f"  {'':<10} | Decode recall: "
-                    f"{current_results['liu4k'][wrapper.name]['decode_recall']:>6.2f}%"
-                    f" | Precision: "
-                    f"{current_results['liu4k'][wrapper.name]['decode_precision']:>6.2f}%"
+                    f"  {wrapper.name:<8} {tag:<6} | TP={t.tp} FP={t.fp} FN={t.fn} | "
+                    f"Recall {t.recall:6.2f}% Precision {t.precision:6.2f}% F1 {t.f1:6.2f}%"
                 )
+            typer.echo(f"  {wrapper.name:<8} latency {avg_lat:7.2f} ms/image")
+            current_results["liu4k"][wrapper.name] = res
     elif hub_config:
         hub_dir = data_dir if data_dir else HUB_CACHE_DIR
         ds = HubDatasetLoader(root=hub_dir).load_dataset(hub_config)
