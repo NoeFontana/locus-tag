@@ -2122,7 +2122,7 @@ source with the <code>non_rectified</code> feature — see
 <span class="n">detector</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">Detector</span><span class="p">(</span><span class="n">families</span><span class="o">=</span><span class="p">[</span><span class="n">locus</span><span class="o">.</span><span class="n">TagFamily</span><span class="o">.</span><span class="n">AprilTag36h11</span><span class="p">])</span>
 
 <span class="n">batch</span> <span class="o">=</span> <span class="n">detector</span><span class="o">.</span><span class="n">detect</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">ids</span><span class="p">)</span>            <span class="c1"># (N,)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">ids</span><span class="p">)</span>  <span class="c1"># (N,)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">corners</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>  <span class="c1"># (N, 4, 2)</span>
 </code></pre></div>
 <p>Pass <code>intrinsics</code> and <code>tag_size</code> to recover full 6-DOF poses.

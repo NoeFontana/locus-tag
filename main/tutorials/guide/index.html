@@ -2141,7 +2141,7 @@
 wheel: <code>standard</code>, <code>grid</code>, and <code>high_accuracy</code>.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">locus</span>
 
-<span class="n">detector</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">Detector</span><span class="p">(</span><span class="n">profile</span><span class="o">=</span><span class="s2">&quot;standard&quot;</span><span class="p">)</span>      <span class="c1"># default; dense multi-tag</span>
+<span class="n">detector</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">Detector</span><span class="p">(</span><span class="n">profile</span><span class="o">=</span><span class="s2">&quot;standard&quot;</span><span class="p">)</span>  <span class="c1"># default; dense multi-tag</span>
 <span class="n">tags</span> <span class="o">=</span> <span class="n">detector</span><span class="o">.</span><span class="n">detect</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
 </code></pre></div>
 <p>Per-call orchestration (<code>decimation</code>, <code>threads</code>, <code>families</code>) stays outside
@@ -2149,14 +2149,14 @@ the profile because it describes <em>how</em> the detector is invoked, not <em>w
 it detects:</p>
 <div class="highlight"><pre><span></span><code><span class="n">detector</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">Detector</span><span class="p">(</span>
     <span class="n">profile</span><span class="o">=</span><span class="s2">&quot;standard&quot;</span><span class="p">,</span>
-    <span class="n">decimation</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>                                 <span class="c1"># 4x preprocessing speedup</span>
+    <span class="n">decimation</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>  <span class="c1"># 4x preprocessing speedup</span>
     <span class="n">families</span><span class="o">=</span><span class="p">[</span><span class="n">locus</span><span class="o">.</span><span class="n">TagFamily</span><span class="o">.</span><span class="n">AprilTag36h11</span><span class="p">],</span>
 <span class="p">)</span>
 </code></pre></div>
 <h2 id="tweaking-a-profile">Tweaking a profile</h2>
 <p>Load a shipped profile, edit the relevant nested group, then pass it back:</p>
 <div class="highlight"><pre><span></span><code><span class="n">base</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">DetectorConfig</span><span class="o">.</span><span class="n">from_profile</span><span class="p">(</span><span class="s2">&quot;standard&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">model_dump</span><span class="p">()</span>
-<span class="n">base</span><span class="p">[</span><span class="s2">&quot;threshold&quot;</span><span class="p">][</span><span class="s2">&quot;tile_size&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">16</span>               <span class="c1"># larger tiles run faster</span>
+<span class="n">base</span><span class="p">[</span><span class="s2">&quot;threshold&quot;</span><span class="p">][</span><span class="s2">&quot;tile_size&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">16</span>  <span class="c1"># larger tiles run faster</span>
 <span class="n">base</span><span class="p">[</span><span class="s2">&quot;decoder&quot;</span><span class="p">][</span><span class="s2">&quot;min_contrast&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">10.0</span>
 
 <span class="n">custom</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">DetectorConfig</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">base</span><span class="p">)</span>
@@ -2192,19 +2192,21 @@ tag's internal bit-grid edges to the image to tighten rotation accuracy:</p>
 <h3 id="targeted-families">Targeted Families</h3>
 <p>Searching for fewer families reduces the decoding search space and improves
 latency:</p>
-<div class="highlight"><pre><span></span><code><span class="n">detector</span><span class="o">.</span><span class="n">set_families</span><span class="p">([</span>
-    <span class="n">locus</span><span class="o">.</span><span class="n">TagFamily</span><span class="o">.</span><span class="n">AprilTag36h11</span><span class="p">,</span>
-    <span class="n">locus</span><span class="o">.</span><span class="n">TagFamily</span><span class="o">.</span><span class="n">ArUco4x4_50</span><span class="p">,</span>
-<span class="p">])</span>
+<div class="highlight"><pre><span></span><code><span class="n">detector</span><span class="o">.</span><span class="n">set_families</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="n">locus</span><span class="o">.</span><span class="n">TagFamily</span><span class="o">.</span><span class="n">AprilTag36h11</span><span class="p">,</span>
+        <span class="n">locus</span><span class="o">.</span><span class="n">TagFamily</span><span class="o">.</span><span class="n">ArUco4x4_50</span><span class="p">,</span>
+    <span class="p">]</span>
+<span class="p">)</span>
 </code></pre></div>
 <h2 id="precise-configuration">Precise Configuration</h2>
 <p>Every detection knob lives in one of five nested groups (<code>threshold</code>,
 <code>quad</code>, <code>decoder</code>, <code>pose</code>, <code>segmentation</code>). Tweak any of them by round-
 tripping a profile through a dict:</p>
 <div class="highlight"><pre><span></span><code><span class="n">base</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">DetectorConfig</span><span class="o">.</span><span class="n">from_profile</span><span class="p">(</span><span class="s2">&quot;standard&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">model_dump</span><span class="p">()</span>
-<span class="n">base</span><span class="p">[</span><span class="s2">&quot;quad&quot;</span><span class="p">][</span><span class="s2">&quot;min_area&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">16</span>                    <span class="c1"># filter small components</span>
+<span class="n">base</span><span class="p">[</span><span class="s2">&quot;quad&quot;</span><span class="p">][</span><span class="s2">&quot;min_area&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">16</span>  <span class="c1"># filter small components</span>
 <span class="n">base</span><span class="p">[</span><span class="s2">&quot;quad&quot;</span><span class="p">][</span><span class="s2">&quot;subpixel_refinement_sigma&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.8</span>  <span class="c1"># corner-refinement kernel</span>
-<span class="n">base</span><span class="p">[</span><span class="s2">&quot;decoder&quot;</span><span class="p">][</span><span class="s2">&quot;min_contrast&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">10.0</span>           <span class="c1"># bit-transition sensitivity</span>
+<span class="n">base</span><span class="p">[</span><span class="s2">&quot;decoder&quot;</span><span class="p">][</span><span class="s2">&quot;min_contrast&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">10.0</span>  <span class="c1"># bit-transition sensitivity</span>
 
 <span class="n">detector</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">Detector</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">locus</span><span class="o">.</span><span class="n">DetectorConfig</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">base</span><span class="p">))</span>
 </code></pre></div>
@@ -2215,16 +2217,12 @@ tripping a profile through a dict:</p>
 <div class="highlight"><pre><span></span><code><span class="n">intrinsics</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">CameraIntrinsics</span><span class="p">(</span><span class="n">fx</span><span class="o">=</span><span class="mf">800.0</span><span class="p">,</span> <span class="n">fy</span><span class="o">=</span><span class="mf">800.0</span><span class="p">,</span> <span class="n">cx</span><span class="o">=</span><span class="mf">640.0</span><span class="p">,</span> <span class="n">cy</span><span class="o">=</span><span class="mf">360.0</span><span class="p">)</span>
 
 <span class="c1"># Pass intrinsics and tag size (meters) to enable pose estimation</span>
-<span class="n">tags</span> <span class="o">=</span> <span class="n">detector</span><span class="o">.</span><span class="n">detect</span><span class="p">(</span>
-    <span class="n">img</span><span class="p">,</span>
-    <span class="n">intrinsics</span><span class="o">=</span><span class="n">intrinsics</span><span class="p">,</span>
-    <span class="n">tag_size</span><span class="o">=</span><span class="mf">0.16</span>
-<span class="p">)</span>
+<span class="n">tags</span> <span class="o">=</span> <span class="n">detector</span><span class="o">.</span><span class="n">detect</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">intrinsics</span><span class="o">=</span><span class="n">intrinsics</span><span class="p">,</span> <span class="n">tag_size</span><span class="o">=</span><span class="mf">0.16</span><span class="p">)</span>
 
 <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tags</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">t</span><span class="o">.</span><span class="n">pose</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Translation: </span><span class="si">{</span><span class="n">t</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">translation</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="c1"># [x, y, z]</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Rotation: </span><span class="si">{</span><span class="n">t</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">rotation</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>       <span class="c1"># 3x3 Matrix</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Translation: </span><span class="si">{</span><span class="n">t</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">translation</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># [x, y, z]</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Rotation: </span><span class="si">{</span><span class="n">t</span><span class="o">.</span><span class="n">pose</span><span class="o">.</span><span class="n">rotation</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># 3x3 Matrix</span>
 </code></pre></div>
 <h3 id="per-tag-covariance">Per-tag Covariance</h3>
 <p>When the call supplies an <code>img</code> view (and tag-size + intrinsics), Locus

@@ -2146,7 +2146,7 @@ uv<span class="w"> </span>sync<span class="w"> </span>--group<span class="w"> </
 
 <span class="c1"># Initialize Rerun</span>
 <span class="n">rr</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="s2">&quot;my_app&quot;</span><span class="p">)</span>
-<span class="n">rr</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span> <span class="c1"># Connect to local viewer</span>
+<span class="n">rr</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>  <span class="c1"># Connect to local viewer</span>
 
 <span class="n">detector</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">Detector</span><span class="p">()</span>
 <span class="c1"># Telemetry is ONLY computed when debug_telemetry is True</span>
@@ -2155,7 +2155,7 @@ uv<span class="w"> </span>sync<span class="w"> </span>--group<span class="w"> </
 <span class="k">if</span> <span class="n">batch</span><span class="o">.</span><span class="n">telemetry</span><span class="p">:</span>
     <span class="c1"># Access raw telemetry arrays</span>
     <span class="n">bin_img</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">telemetry</span><span class="o">.</span><span class="n">binarized</span>
-    <span class="n">jitter</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">telemetry</span><span class="o">.</span><span class="n">subpixel_jitter</span> <span class="c1"># Shape: (N, 4, 2)</span>
+    <span class="n">jitter</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">telemetry</span><span class="o">.</span><span class="n">subpixel_jitter</span>  <span class="c1"># Shape: (N, 4, 2)</span>
 
     <span class="c1"># Log to Rerun</span>
     <span class="n">rr</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;debug/binarized&quot;</span><span class="p">,</span> <span class="n">rr</span><span class="o">.</span><span class="n">Image</span><span class="p">(</span><span class="n">bin_img</span><span class="p">))</span>
