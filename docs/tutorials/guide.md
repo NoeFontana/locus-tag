@@ -79,10 +79,28 @@ base["threshold"]["sharpening_mode"] = locus.SharpeningMode.ShootLimited
 detector = locus.Detector(config=locus.DetectorConfig.model_validate(base))
 ```
 
-It is opt-in: `Standard` remains the default everywhere. Prefer `ShootLimited`
-on dark / low-contrast / high-resolution imagery where markers sit on textured
-backgrounds; keep `Standard` when your tags are small and well lit, where the
-extra edge contrast buys recall.
+It is opt-in: `Standard` remains the default everywhere.
+
+**What the limiter costs depends on your extraction route, not only on your
+lighting.** Sharpening exists to buy small-tag recall, and `ShootLimited` gives
+part of that back:
+
+- On the **AdaptivePpb / EdLines** route (`quad.extraction_mode`, as in
+  `high_accuracy`), the limiter keeps essentially *all* of stock sharpening's
+  small-tag benefit. If you are on this route, `ShootLimited` is close to free.
+- On the **ContourRdp + Erf** route that the shipped `standard` profile uses,
+  the limiter keeps only about a quarter of it, so enabling `ShootLimited`
+  costs roughly one percentage point of small-tag recall on well-lit imagery.
+
+So: on dark / low-contrast / high-resolution imagery where markers sit on
+textured backgrounds, `ShootLimited` is worth measuring on either route — the
+overshoot failure above costs far more than a point of recall when it fires.
+On well-lit imagery with small tags, keep `Standard` on the `standard` route;
+on the `high_accuracy` route the choice is close to free either way.
+
+These are measurements on two specific datasets, not a guarantee for your
+imagery. `ShootLimited` changes what the thresholder sees, so re-validate your
+own recall and corner-accuracy numbers before enabling it in production.
 
 ## Specialized Profiles
 

@@ -207,8 +207,8 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
 /// - `true` — "shoot-limited": clamp to the min/max of the five samples that
 ///   produced it. Mathematically this is the stock filter followed by an
 ///   overshoot limiter; the result can never leave the local intensity range,
-///   so sharpening cannot raise a tile's maximum (or lower its minimum) above
-///   what the unsharpened image already contained.
+///   so every output pixel stays inside the extremes of its own 5-point
+///   neighbourhood in the unsharpened image.
 #[expect(
     clippy::inline_always,
     reason = "the inline is what makes this body part of the caller's multiversion clone, so it is compiled with that clone's target features instead of the baseline ISA"
@@ -276,34 +276,39 @@ pub(crate) fn laplacian_sharpen(img: &ImageView, output: &mut [u8], mode: Sharpe
     let w = img.width;
     let h = img.height;
 
-    // use rayon::prelude::*;
+    if w == 0 || h == 0 {
+        // `par_chunks_mut(0)` panics, and a zero-sized image has no work.
+        return;
+    }
 
-    (0..h).into_par_iter().for_each(|y| {
-        let y0 = y.saturating_sub(1);
-        let y1 = y;
-        let y2 = (y + 1).min(h - 1);
+    // `par_chunks_mut` hands each worker an exclusive `w`-wide row, so the row
+    // split needs no `unsafe` and no raw-pointer provenance reasoning. `.take(h)`
+    // keeps the iteration to `h` rows even if the caller over-sizes `output`;
+    // rows beyond `output.len() / w` are simply not produced.
+    output
+        .par_chunks_mut(w)
+        .take(h)
+        .enumerate()
+        .for_each(|(y, dst_row)| {
+            let y0 = y.saturating_sub(1);
+            let y1 = y;
+            let y2 = (y + 1).min(h - 1);
 
-        let r0 = img.get_row(y0);
-        let r1 = img.get_row(y1);
-        let r2 = img.get_row(y2);
+            let r0 = img.get_row(y0);
+            let r1 = img.get_row(y1);
+            let r2 = img.get_row(y2);
 
-        // SAFETY: `into_par_iter()` over `0..h` yields each `y` exactly once
-        // across rayon workers, so the `y * w .. y * w + w` slice for each
-        // `y` is disjoint from every other worker's slice. `output` has
-        // length `h * w`, so `ptr.add(y * w)` and the resulting `w`-element
-        // slice are in-bounds. The original `output` slice is borrowed
-        // mutably for the duration of `par_iter`, so no other reader exists.
-        let dst_row = unsafe {
-            let ptr = output.as_ptr().cast_mut();
-            std::slice::from_raw_parts_mut(ptr.add(y * w), w)
-        };
+            // A trailing partial chunk can only appear when `output` is not a
+            // multiple of `w`, which the documented precondition excludes;
+            // clamp anyway so the row kernel can never index out of bounds.
+            let n = dst_row.len().min(w);
 
-        // Dispatch once per row, not once per pixel.
-        match mode {
-            SharpeningMode::Standard => sharpen_row::<false>(r0, r1, r2, dst_row, w),
-            SharpeningMode::ShootLimited => sharpen_row::<true>(r0, r1, r2, dst_row, w),
-        }
-    });
+            // Dispatch once per row, not once per pixel.
+            match mode {
+                SharpeningMode::Standard => sharpen_row::<false>(r0, r1, r2, dst_row, n),
+                SharpeningMode::ShootLimited => sharpen_row::<true>(r0, r1, r2, dst_row, n),
+            }
+        });
 }
 
 #[cfg(test)]
@@ -445,34 +450,65 @@ mod tests {
         }
     }
 
-    /// `ShootLimited` still sharpens: on a blurred edge the transition must get
-    /// steeper than the input, it just saturates at the local extremes.
+    /// `ShootLimited` still sharpens — and does so *differently* from
+    /// `Standard`. The fixture is a high-contrast blurred edge, chosen so the
+    /// stock kernel genuinely overshoots past the 0/255 rails: that makes the
+    /// test fail if `ShootLimited` is ever routed back to the stock clamp,
+    /// which a fixture where the two modes agree could not detect.
     #[test]
     fn test_shoot_limited_still_steepens_edges() {
         let (w, h) = (16usize, 16usize);
         // Blurred (non-linear) edge: a linear ramp has a zero Laplacian and
         // would be left untouched, so the transition curves at both knees.
-        let mut data = vec![60u8; w * h];
+        let mut data = vec![20u8; w * h];
         for y in 0..h {
             for x in 0..w {
                 data[y * w + x] = match x {
-                    0..=5 => 60,
-                    6 => 90,
-                    7 => 150,
-                    _ => 180,
+                    0..=5 => 20,
+                    6 => 40,
+                    7 => 220,
+                    _ => 240,
                 };
             }
         }
         let img = ImageView::new(&data, w, h, w).unwrap();
-        let mut out = vec![0u8; w * h];
-        laplacian_sharpen(&img, &mut out, SharpeningMode::ShootLimited);
+        let mut limited = vec![0u8; w * h];
+        let mut stock = vec![0u8; w * h];
+        laplacian_sharpen(&img, &mut limited, SharpeningMode::ShootLimited);
+        laplacian_sharpen(&img, &mut stock, SharpeningMode::Standard);
 
         let row = h / 2;
         // Dark side of the ramp is pulled down, bright side pulled up.
-        assert!(out[row * w + 6] < data[row * w + 6]);
-        assert!(out[row * w + 7] > data[row * w + 7]);
-        // …but neither escapes the flat plateaus that bound the ramp.
-        assert!(out.iter().all(|&v| (60..=180).contains(&v)));
+        assert!(limited[row * w + 6] < data[row * w + 6]);
+        assert!(limited[row * w + 7] > data[row * w + 7]);
+
+        // The two modes must actually disagree here: `Standard` overshoots
+        // clean past both plateaus (to the 0 and 255 rails), `ShootLimited`
+        // stops at the plateaus.
+        assert_ne!(
+            limited, stock,
+            "ShootLimited produced the Standard output — the mode is not wired through"
+        );
+        assert_eq!(
+            stock[row * w + 6],
+            0,
+            "stock undershoot should hit the rail"
+        );
+        assert_eq!(
+            stock[row * w + 7],
+            255,
+            "stock overshoot should hit the rail"
+        );
+        assert_eq!(
+            limited[row * w + 6],
+            20,
+            "limited stops at the dark plateau"
+        );
+        assert_eq!(
+            limited[row * w + 7],
+            240,
+            "limited stops at the bright plateau"
+        );
     }
 
     #[test]

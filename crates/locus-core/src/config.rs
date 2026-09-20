@@ -58,6 +58,11 @@ pub enum SharpeningMode {
     /// above the background level — the background then binarises as
     /// foreground and merges with the tag border. `ShootLimited` removes that
     /// failure mode while keeping the edge-steepening that helps small tags.
+    ///
+    /// The bound is per-pixel, over each pixel's own 5-point neighbourhood, so
+    /// a tile's extremes are preserved only up to a one-pixel dilation of that
+    /// tile. That is moot in practice: `compute_tile_stats` already pools over
+    /// a 3x3 tile neighbourhood, which subsumes the one-pixel skirt.
     ShootLimited,
 }
 

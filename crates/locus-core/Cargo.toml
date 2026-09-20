@@ -190,6 +190,11 @@ path = "tests/test_pose_soa.rs"
 required-features = ["bench-internals"]
 
 [[test]]
+name = "test_sharpening_mode"
+path = "tests/test_sharpening_mode.rs"
+required-features = ["bench-internals"]
+
+[[test]]
 name = "test_quad_soa"
 path = "tests/test_quad_soa.rs"
 required-features = ["bench-internals"]
