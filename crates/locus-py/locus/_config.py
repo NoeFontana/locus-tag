@@ -170,9 +170,7 @@ class ThresholdConfig(BaseModel):
     # Output limiter for the sharpening pre-filter; inert when
     # `enable_sharpening` is False. `Standard` reproduces the historical
     # (overshooting) filter byte-for-byte.
-    sharpening_mode: _SharpeningModeField = Field(
-        default_factory=lambda: SharpeningMode.Standard
-    )
+    sharpening_mode: _SharpeningModeField = Field(default_factory=lambda: SharpeningMode.Standard)
     min_radius: int = Field(default=2, ge=1)
     max_radius: int = Field(default=15, ge=1)
     constant: int = 0

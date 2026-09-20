@@ -58,6 +58,32 @@ The shipped `standard.json` is a good starting template; copy it, edit the
 nested groups, and load the copy. The JSON Schema at
 `schemas/profile.schema.json` powers editor autocomplete.
 
+## Sharpening on low-key scenes
+
+The `standard` profile runs a Laplacian sharpening pre-filter
+(`threshold.enable_sharpening`) before thresholding, which helps small tags.
+Its stock form (`SharpeningMode.Standard`) also produces halos: overshoot
+raises the local maximum, and because the tile thresholder binarises against
+`(min + max) / 2`, that can lift the threshold above the background level on
+dark, low-contrast scenes — the background then joins the tag border as one
+connected component and the tag is lost.
+
+`SharpeningMode.ShootLimited` clamps every sharpened pixel into the min/max of
+the five samples that produced it, so the filter still steepens edges but can
+never push a pixel outside its local intensity range:
+
+```python
+base = locus.DetectorConfig.from_profile("standard").model_dump()
+base["threshold"]["sharpening_mode"] = locus.SharpeningMode.ShootLimited
+
+detector = locus.Detector(config=locus.DetectorConfig.model_validate(base))
+```
+
+It is opt-in: `Standard` remains the default everywhere. Prefer `ShootLimited`
+on dark / low-contrast / high-resolution imagery where markers sit on textured
+backgrounds; keep `Standard` when your tags are small and well lit, where the
+extra edge contrast buys recall.
+
 ## Specialized Profiles
 
 ### Checkerboard Detection
