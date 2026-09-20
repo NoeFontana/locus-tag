@@ -35,7 +35,7 @@
 use locus_core::bench_api::family_to_decoder;
 use locus_core::config::{
     AdaptivePpbConfig, CornerRefinementMode, DetectorConfig, EdLinesImbalanceGatePolicy,
-    QuadExtractionMode, QuadExtractionPolicy, SegmentationConnectivity, TagFamily,
+    QuadExtractionMode, QuadExtractionPolicy, SegmentationConnectivity, SharpeningMode, TagFamily,
 };
 use locus_core::{CameraIntrinsics, DetectorBuilder, ImageView};
 
@@ -547,6 +547,15 @@ fn cases() -> Vec<FieldCase> {
             inert_reason: None,
         },
         FieldCase {
+            field: "sharpening_mode",
+            // Prerequisite: the limiter only exists inside the sharpening
+            // pre-filter, so the field is (documented as) inert unless
+            // sharpening actually runs.
+            base: |c| c.enable_sharpening = true,
+            mutate: |c| c.sharpening_mode = SharpeningMode::ShootLimited,
+            inert_reason: None,
+        },
+        FieldCase {
             field: "threshold_min_radius",
             base: noop,
             mutate: |c| c.threshold_min_radius = 6,
@@ -772,6 +781,7 @@ fn every_config_field() -> Vec<&'static str> {
         threshold_tile_size: _,
         threshold_min_range: _,
         enable_sharpening: _,
+        sharpening_mode: _,
         threshold_min_radius: _,
         threshold_max_radius: _,
         adaptive_threshold_constant: _,
@@ -811,6 +821,7 @@ fn every_config_field() -> Vec<&'static str> {
         "threshold_tile_size",
         "threshold_min_range",
         "enable_sharpening",
+        "sharpening_mode",
         "threshold_min_radius",
         "threshold_max_radius",
         "adaptive_threshold_constant",
