@@ -20,11 +20,11 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   than an integral image (≈ 0.4 MB of scratch at 4K against 33–66 MB, and the
   result is independent of the strip size and of the rayon worker count).
   On the Liu4K 4K dataset (924 images, 9022 markers, ArUcoMip36h12, 10 px
-  scorer) it takes decode recall from 28.72 % to 55.82 % at 99.92 % precision
-  (against 99.73 % for the default),
-  and is *faster* than the default because the suppressed speckle removes
-  connected-component work. **Opt-in only: every shipped profile keeps
-  `TileMidExtreme`, and the default-profile output is byte-identical.**
+  scorer) it takes decode recall from 28.72 % to 55.82 %, at 99.92 % precision
+  against the default's 99.73 %, and is *faster* than the default because the
+  suppressed speckle removes connected-component work. **Opt-in only: every
+  shipped profile keeps `TileMidExtreme`, and the default-profile output is
+  byte-identical.**
 
 ### Changed
 
