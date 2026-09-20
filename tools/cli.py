@@ -1828,6 +1828,11 @@ def liu4k_viz_render(
     ),
     emit_rrd: bool = typer.Option(True, help="Emit the Rerun recording parts"),
     png_long_side: int = typer.Option(1600, help="Long side of the annotated overview PNGs"),
+    rrd_intermediate_scale: float = typer.Option(
+        0.5,
+        help="Resolution of the .rrd diagnostic layers relative to the image "
+        "(the input image itself is always full resolution).",
+    ),
     tile_size: int = typer.Option(8, help="threshold.tile_size of the profile under test"),
     min_range: int = typer.Option(10, help="threshold.min_range (flat-tile cut-off)"),
 ):
@@ -1864,6 +1869,7 @@ def liu4k_viz_render(
             intermediates=intermediates,
             emit_rrd=emit_rrd,
             png_long_side=png_long_side,
+            rrd_intermediate_scale=rrd_intermediate_scale,
         )
     except UnsupportedConfigError as exc:
         typer.echo(f"Error: {exc}", err=True)

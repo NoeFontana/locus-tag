@@ -1083,17 +1083,29 @@ def log_frame_to_rerun(
     result: FrameResult,
     *,
     intermediates: bool,
+    intermediate_scale: float = 0.5,
 ) -> None:
-    """Log one (image, config) as ``<config>/…`` entities of the open recording."""
+    """Log one (image, config) as ``<config>/…`` entities of the open recording.
+
+    The input image is logged at full resolution (that is what you zoom into);
+    the diagnostic layers are logged at ``intermediate_scale`` because four
+    configurations of a 16 MP frame otherwise cost ~70 MB of recording per
+    image. Pass ``1.0`` for full-resolution maps.
+    """
     import rerun as rr
 
     root = spec.name
     rr.log(f"{root}/0_input", _rr_image(img))
     if intermediates:
-        rr.log(f"{root}/1_threshold_map", _rr_image(pre.threshold_map))
-        rr.log(f"{root}/2_foreground", rr.Image((pre.foreground * 255).astype(np.uint8)))
+        rr.log(f"{root}/1_threshold_map", _rr_image(_scaled(pre.threshold_map, intermediate_scale)))
+        rr.log(
+            f"{root}/2_foreground",
+            rr.Image(
+                _scaled((pre.foreground * 255).astype(np.uint8), intermediate_scale, area=False)
+            ),
+        )
         if spec.sharpening != "none":
-            rr.log(f"{root}/3_work_sharpened", _rr_image(pre.work))
+            rr.log(f"{root}/3_work_sharpened", _rr_image(_scaled(pre.work, intermediate_scale)))
 
     gt_strips = [np.vstack([d.corners, d.corners[:1]]) for d in diagnoses]
     if gt_strips:
@@ -1170,9 +1182,27 @@ def log_frame_to_rerun(
             f"- provenance: {spec.provenance}\n"
             f"- TP {result.tp} / FP {result.fp} / FN {result.fn} of {result.n_gt} GT\n"
             f"- loss classes: {json.dumps(result.classes)}\n"
-            f"- foreground replication agreement vs telemetry threshold map: {agreement}\n",
+            f"- foreground replication agreement vs telemetry threshold map: {agreement}\n"
+            f"- `0_input` is full resolution; the diagnostic layers are at "
+            f"{intermediate_scale:g}x (`--rrd-intermediate-scale 1.0` for full).\n",
             media_type="text/markdown",
         ),
+    )
+
+
+def _scaled(img: NDArray[np.uint8], scale: float, *, area: bool = True) -> NDArray[np.uint8]:
+    """Downscale a diagnostic layer (nearest for masks, area for grey maps)."""
+    import cv2
+
+    if scale >= 1.0:
+        return img
+    h, w = img.shape[:2]
+    return _u8(
+        cv2.resize(
+            img,
+            (max(1, int(w * scale)), max(1, int(h * scale))),
+            interpolation=cv2.INTER_AREA if area else cv2.INTER_NEAREST,
+        )
     )
 
 
@@ -1224,7 +1254,7 @@ The dataset itself stays in its read-only cache and is never modified.
 | `images/<image>/` | per-config overview PNGs, intermediates strips, FN crops, per-config JSON |
 | `compare/<image>.png` | the configs side by side (one column per config) |
 | `classes/<class>.png` | contact sheet of one stage-of-loss class |
-| `rrd/<image>.rrd` | Rerun recording, full resolution, all configs as entity paths |
+| `rrd/<image>.rrd` | Rerun recording: all configs as entity paths, image at full resolution |
 | `scan_<config>.jsonl` | per-image TP/FP/FN over the whole dataset |
 | `selection.json` | the selected images and the rule that selected each |
 
@@ -1245,7 +1275,9 @@ In the Rerun viewer each config is a top-level entity (`standard`,
 `no_sharpen`, `local_mean`, `shoot_limited`); under it `0_input` carries the
 image plus the `ground_truth` / `detections` / `false_positives` /
 `missed_gt` / `rejected_candidates` overlays, and `1_threshold_map`,
-`2_foreground`, `3_work_sharpened` are the intermediate views.
+`2_foreground`, `3_work_sharpened` are the intermediate views. `0_input` is
+full resolution; the diagnostic layers are downscaled (`render
+--rrd-intermediate-scale 1.0` keeps them full size, at ~4x the file size).
 """
 
 
@@ -1407,6 +1439,7 @@ def run_render(
     intermediates: bool,
     emit_rrd: bool,
     png_long_side: int = PNG_LONG_SIDE,
+    rrd_intermediate_scale: float = 0.5,
     progress: bool = True,
 ) -> list[Path]:
     """Render annotated PNGs, crops, intermediates and an ``.rrd`` per image."""
@@ -1513,16 +1546,28 @@ def run_render(
             )
             if rec is not None:
                 log_frame_to_rerun(
-                    spec, img, pre, diagnoses, extra, result, intermediates=intermediates
+                    spec,
+                    img,
+                    pre,
+                    diagnoses,
+                    extra,
+                    result,
+                    intermediates=intermediates,
+                    intermediate_scale=rrd_intermediate_scale,
                 )
         if rec is not None:
-            _close_recording(rec)
+            _close_recording()
             written.append(parts_dir / f"{stem}__{rrd_tag}.rrd")
     return written
 
 
-def _open_recording(stem: str, path: Path) -> Any:
-    """Start a per-image recording that later merges with the other build's part."""
+def _open_recording(stem: str, path: Path) -> Path:
+    """Start a per-image recording.
+
+    The ``recording_id`` is the image, not the build, so the parts written by
+    two different builds merge into a *single* recording (``rerun rrd merge``)
+    instead of stacking as separate ones in the viewer.
+    """
     import rerun as rr
 
     rr.init(RERUN_APP_ID, recording_id=f"liu4k-{stem}")
@@ -1531,11 +1576,10 @@ def _open_recording(stem: str, path: Path) -> Any:
     return path
 
 
-def _close_recording(path: Any) -> None:
+def _close_recording() -> None:
+    """Flush the open recording so its file is complete before the next image."""
     import rerun as rr
 
-    # Dropping the global stream flushes it; `rr.init` of the next image would
-    # do the same, but an explicit flush keeps the file valid if we stop here.
     flush = getattr(rr, "flush", None)
     if callable(flush):
         flush(blocking=True)
@@ -1571,30 +1615,54 @@ def merge_rrd_parts(out_dir: Path, *, rerun_bin: str = "rerun") -> list[Path]:
 
 
 def verify_rrd(paths: Sequence[Path], *, rerun_bin: str = "rerun") -> dict[str, str]:
-    """Headless check that each recording loads: ``rerun rrd verify`` + SDK read."""
+    """Headless check that each recording really loads.
+
+    Two independent decode-level checks, because "the file exists" is not
+    evidence that the viewer can open it:
+
+    * ``rerun rrd verify`` — the CLI's own load-and-interpret check;
+    * ``rerun rrd stats`` — decodes every chunk and reports its statistics
+      (so a truncated or half-written recording fails here);
+    * plus a read-back through the Python SDK when this SDK version ships the
+      ``rerun.dataframe`` reader (0.35–0.36; it is absent in 0.34 and 0.37).
+    """
+    import importlib
     import shutil
     import subprocess
 
     out: dict[str, str] = {}
     have_cli = shutil.which(rerun_bin) is not None
+    version = ""
+    if have_cli:
+        probe = subprocess.run([rerun_bin, "--version"], capture_output=True, text=True)
+        version = probe.stdout.strip().split()[1] if probe.returncode == 0 else "?"
     for path in paths:
-        notes: list[str] = []
+        notes: list[str] = [f"size {path.stat().st_size / 1e6:.1f} MB"]
         if have_cli:
-            proc = subprocess.run(
-                [rerun_bin, "rrd", "verify", str(path)], capture_output=True, text=True
-            )
-            notes.append(
-                "rrd verify: ok"
-                if proc.returncode == 0
-                else f"rrd verify: {proc.stderr.strip()[:200]}"
-            )
+            for sub in ("verify", "stats"):
+                proc = subprocess.run(
+                    [rerun_bin, "rrd", sub, str(path)], capture_output=True, text=True
+                )
+                notes.append(
+                    f"rrd {sub} ({rerun_bin} {version}): ok"
+                    if proc.returncode == 0
+                    else f"rrd {sub}: FAILED {proc.stderr.strip()[:160]}"
+                )
         try:
-            import rerun as rr
-
-            recording = rr.dataframe.load_recording(str(path))
-            notes.append(f"sdk load: ok ({len(recording.schema().component_columns())} columns)")
+            rrd = importlib.import_module("rerun.dataframe")
+            recording = rrd.load_recording(str(path))
+            notes.append(
+                f"sdk read-back: ok ({len(recording.schema().component_columns())} columns, "
+                f"app id {recording.application_id()})"
+            )
+        except ModuleNotFoundError:  # pragma: no cover - SDK feature probe
+            with open(path, "rb") as fh:
+                notes.append(
+                    "sdk read-back: unavailable in this SDK; header "
+                    + ("ok" if fh.read(4) == b"RRF2" else "UNEXPECTED")
+                )
         except Exception as exc:  # pragma: no cover - SDK feature probe
-            notes.append(f"sdk load: {exc}")
+            notes.append(f"sdk read-back: {exc}")
         out[path.name] = "; ".join(notes)
     return out
 
