@@ -20,36 +20,42 @@ pub fn extract_rle_segments(img: &ImageView, threshold_map: &[u8]) -> Vec<RleSeg
     segments
 }
 
+/// Runs the best available fused threshold + RLE kernel over one image row,
+/// reporting each foreground run to `sink`.
 #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")))]
-fn process_row_simd(src: &[u8], thresh: &[u8], y: u16, segments: &mut Vec<RleSegment>) {
-    super::process_row_scalar(src, thresh, y, segments);
+pub fn process_row_simd<S: super::RunSink>(src: &[u8], thresh: &[u8], y: u16, sink: &mut S) {
+    super::process_row_scalar(src, thresh, y, sink);
 }
 
+/// Runs the best available fused threshold + RLE kernel over one image row,
+/// reporting each foreground run to `sink`.
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-fn process_row_simd(src: &[u8], thresh: &[u8], y: u16, segments: &mut Vec<RleSegment>) {
+pub fn process_row_simd<S: super::RunSink>(src: &[u8], thresh: &[u8], y: u16, sink: &mut S) {
     if std::is_x86_feature_detected!("avx512f") && std::is_x86_feature_detected!("avx512bw") {
         // SAFETY: Feature check above ensures AVX-512 is available.
-        unsafe { process_row_avx512(src, thresh, y, segments) }
+        unsafe { process_row_avx512(src, thresh, y, sink) }
     } else if std::is_x86_feature_detected!("avx2") {
         // SAFETY: Feature check above ensures AVX2 is available.
-        unsafe { process_row_avx2(src, thresh, y, segments) }
+        unsafe { process_row_avx2(src, thresh, y, sink) }
     } else {
-        super::process_row_scalar(src, thresh, y, segments);
+        super::process_row_scalar(src, thresh, y, sink);
     }
 }
 
+/// Runs the best available fused threshold + RLE kernel over one image row,
+/// reporting each foreground run to `sink`.
 #[cfg(target_arch = "aarch64")]
-fn process_row_simd(src: &[u8], thresh: &[u8], y: u16, segments: &mut Vec<RleSegment>) {
+pub fn process_row_simd<S: super::RunSink>(src: &[u8], thresh: &[u8], y: u16, sink: &mut S) {
     if std::arch::is_aarch64_feature_detected!("neon") {
-        unsafe { process_row_neon(src, thresh, y, segments) }
+        unsafe { process_row_neon(src, thresh, y, sink) }
     } else {
-        super::process_row_scalar(src, thresh, y, segments);
+        super::process_row_scalar(src, thresh, y, sink);
     }
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
-unsafe fn process_row_avx2(src: &[u8], thresh: &[u8], y: u16, segments: &mut Vec<RleSegment>) {
+unsafe fn process_row_avx2<S: super::RunSink>(src: &[u8], thresh: &[u8], y: u16, sink: &mut S) {
     #[cfg(target_arch = "x86")]
     use std::arch::x86::{
         _mm256_andnot_si256, _mm256_cmpeq_epi8, _mm256_loadu_si256, _mm256_min_epu8,
@@ -91,11 +97,7 @@ unsafe fn process_row_avx2(src: &[u8], thresh: &[u8], y: u16, segments: &mut Vec
                     break;
                 }
                 bit_idx += m.trailing_zeros();
-                segments.push(RleSegment::new(
-                    y,
-                    start_x,
-                    (offset as u32 + bit_idx) as u16,
-                ));
+                sink.push_run(y, start_x, (offset as u32 + bit_idx) as u16);
                 in_segment = false;
             } else {
                 let m = mask >> bit_idx;
@@ -118,17 +120,17 @@ unsafe fn process_row_avx2(src: &[u8], thresh: &[u8], y: u16, segments: &mut Vec
             start_x = ix as u16;
         } else if !is_foreground && in_segment {
             in_segment = false;
-            segments.push(RleSegment::new(y, start_x, ix as u16));
+            sink.push_run(y, start_x, ix as u16);
         }
     }
     if in_segment {
-        segments.push(RleSegment::new(y, start_x, width as u16));
+        sink.push_run(y, start_x, width as u16);
     }
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx512f,avx512bw")]
-unsafe fn process_row_avx512(src: &[u8], thresh: &[u8], y: u16, segments: &mut Vec<RleSegment>) {
+unsafe fn process_row_avx512<S: super::RunSink>(src: &[u8], thresh: &[u8], y: u16, sink: &mut S) {
     #[cfg(target_arch = "x86")]
     use std::arch::x86::{_mm512_cmp_epu8_mask, _mm512_loadu_si512};
     #[cfg(target_arch = "x86_64")]
@@ -160,11 +162,7 @@ unsafe fn process_row_avx512(src: &[u8], thresh: &[u8], y: u16, segments: &mut V
                     break;
                 }
                 bit_idx += m.trailing_zeros();
-                segments.push(RleSegment::new(
-                    y,
-                    start_x,
-                    (offset as u32 + bit_idx) as u16,
-                ));
+                sink.push_run(y, start_x, (offset as u32 + bit_idx) as u16);
                 in_segment = false;
             } else {
                 let m = mask >> bit_idx;
@@ -187,17 +185,17 @@ unsafe fn process_row_avx512(src: &[u8], thresh: &[u8], y: u16, segments: &mut V
             start_x = ix as u16;
         } else if !is_foreground && in_segment {
             in_segment = false;
-            segments.push(RleSegment::new(y, start_x, ix as u16));
+            sink.push_run(y, start_x, ix as u16);
         }
     }
     if in_segment {
-        segments.push(RleSegment::new(y, start_x, width as u16));
+        sink.push_run(y, start_x, width as u16);
     }
 }
 
 #[cfg(target_arch = "aarch64")]
 #[target_feature(enable = "neon")]
-unsafe fn process_row_neon(src: &[u8], thresh: &[u8], y: u16, segments: &mut Vec<RleSegment>) {
+unsafe fn process_row_neon<S: super::RunSink>(src: &[u8], thresh: &[u8], y: u16, sink: &mut S) {
     use std::arch::aarch64::*;
 
     let width = src.len();
@@ -229,11 +227,7 @@ unsafe fn process_row_neon(src: &[u8], thresh: &[u8], y: u16, segments: &mut Vec
                     break;
                 }
                 bit_idx += m.trailing_zeros() / 4;
-                segments.push(RleSegment::new(
-                    y,
-                    start_x,
-                    (offset as u32 + bit_idx) as u16,
-                ));
+                sink.push_run(y, start_x, (offset as u32 + bit_idx) as u16);
                 in_segment = false;
             } else {
                 let m = mask_u64 >> shift;
@@ -256,11 +250,11 @@ unsafe fn process_row_neon(src: &[u8], thresh: &[u8], y: u16, segments: &mut Vec
             start_x = ix as u16;
         } else if !is_foreground && in_segment {
             in_segment = false;
-            segments.push(RleSegment::new(y, start_x, ix as u16));
+            sink.push_run(y, start_x, ix as u16);
         }
     }
     if in_segment {
-        segments.push(RleSegment::new(y, start_x, width as u16));
+        sink.push_run(y, start_x, width as u16);
     }
 }
 

@@ -5,6 +5,27 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Performance
+
+- **Segmentation (LSL CCL) now scales with the rayon pool instead of running
+  fully serial.** `simd_ccl_fusion::label_components_lsl` was the one pipeline
+  stage with no parallelism at all — 54 ms of a 76 ms 8-thread 4K frame, capping
+  whole-frame 1→8-thread scaling at 1.69×. Three of its four sub-stages are now
+  parallel: RLE extraction (count pass → prefix sum → row-parallel write into an
+  arena slice), per-run root resolution (a read-only walk of the finished
+  Union-Find forest), and the label-buffer fill (recursive row-band split via
+  `rayon::join`). The row-pair Union-Find merge stays serial — its output depends
+  on union order, and changing that would renumber components. On an AMD
+  EPYC-Milan 8 vCPU box, `RAYON_NUM_THREADS=8`, `--release`: a textured 4K frame
+  (1.72 M runs) drops **60.3 → 39.4 ms (−34.7 %)** and a 4K ICRA frame
+  **7.52 → 4.18 ms (−44.5 %)**; stage scaling 1→8 threads goes from 1.00× to
+  1.49×. The single-worker path is within ±2.5 % (−2.7 % at 4K, +0.7…+2.5 % on
+  smaller frames), and keeps the one-pass extractor because the counting pass has
+  nothing to amortise against there. Output is **bit-exact** vs the previous
+  implementation — labels, component order and every component statistic — pinned
+  by a differential test against a verbatim copy of the old algorithm over an
+  adversarial frame zoo, run in both a 1-worker and a 4-worker pool.
+
 ## [0.7.1] - 2026-07-19
 
 ### Documentation

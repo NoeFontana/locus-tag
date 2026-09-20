@@ -29,6 +29,20 @@ impl<'a> UnionFind<'a> {
         Self { parent, rank }
     }
 
+    /// Read-only view of the parent array.
+    ///
+    /// Once all `union` calls are done the forest is immutable, and every run's
+    /// root can be resolved by walking `parent` without path compression. That
+    /// walk is pure, so it parallelises; see
+    /// `simd_ccl_fusion::label_components_lsl`. Path compression never changes
+    /// *which* index is a set's root, only how fast it is reached, so resolving
+    /// roots this way is bit-identical to repeated `find`.
+    #[inline]
+    #[must_use]
+    pub fn parents(&self) -> &[u32] {
+        self.parent
+    }
+
     /// Find the representative (root) of the set containing `i`.
     #[inline]
     pub fn find(&mut self, i: u32) -> u32 {
