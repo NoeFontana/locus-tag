@@ -35,7 +35,6 @@
     "structure_tensor_radius": 2
   },
   "segmentation": {
-    "connectivity": "Four",
-    "margin": 1
+    "connectivity": "Four"
   }
 }

@@ -193,6 +193,12 @@ class Detector:
     Per-call orchestration options (``decimation``, ``threads``, ``families``)
     stay outside the profile because they describe *how* the detector is
     invoked, not *what* it looks for.
+
+    ``threads`` sets the Rayon worker count. ``0`` or ``None`` (the default)
+    uses the global Rayon pool (``RAYON_NUM_THREADS`` / core count); ``n > 0``
+    builds one scoped ``n``-thread pool at construction and runs every
+    ``detect`` / ``detect_concurrent`` call inside it, bounding this detector's
+    CPU footprint. Detection output is identical for every value.
     """
 
     def __init__(

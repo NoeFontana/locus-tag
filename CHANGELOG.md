@@ -5,6 +5,49 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Breaking
+
+- **`segmentation.margin` removed from the profile format.** The field had no
+  reader anywhere in the workspace — its last consumer, the threshold-model CCL,
+  was deleted in `f79d04b` — so it was accepted, validated, round-tripped and
+  reported by `Detector.config()` while doing nothing. It is gone from the Rust
+  `DetectorConfig`, the serde shim, the Pydantic model, `schemas/profile.schema.json`
+  and the three shipped profiles. Because the profile shim uses
+  `deny_unknown_fields`, a **custom profile JSON that still carries
+  `segmentation.margin` will now fail to load** with a `ValueError` naming the
+  key; delete the key. Detection output is unchanged (byte-identical).
+- **`Detector(threads=n)` / `DetectorBuilder::with_threads(n)` now does what it
+  says.** Previously the value was stored and echoed back by `config()` but never
+  read: the pipeline always ran on Rayon's global pool, so `threads=1` silently
+  used every core. It now builds one scoped `rayon::ThreadPool` of `n` workers at
+  detector construction and runs `detect` / `detect_concurrent` under
+  `ThreadPool::install`. `threads=0` (the default) keeps the global pool and the
+  previous behaviour exactly. Code that passed a small `threads` value and relied
+  on the accidental full-core execution will now be slower by design — pass `0`.
+  Detection results are identical for every thread count.
+
+### Fixed
+
+- **`threshold.min_range` documented as telemetry-scoped.** The tile-validity mask
+  it drives is applied only when writing `telemetry.binarized`; the per-pixel
+  threshold map that segmentation consumes is written unconditionally, and the
+  propagation pass that would have made the knob affect detection has been
+  commented out since `996e782`. The field is kept (it is live for the debug map)
+  and its Rust/Pydantic docs now say so instead of implying a detection effect.
+
+### Added
+
+- **Config-inertness contract test** (`crates/locus-core/tests/contract_config_inertness.rs`).
+  Mutates **every** `DetectorConfig` field on a deterministic synthetic frame set
+  and requires the observable output — detections, rejected candidates, poses,
+  covariances and the `binarized` / `threshold_map` telemetry images — to change.
+  The field list comes from an exhaustive destructuring of the struct, so a new
+  field fails the build until a case exists. Provably-inert fields are allowlisted
+  with a written reason and are asserted to be *identical*, so the allowlist
+  cannot silently rot in either direction. Also pins `nthreads` determinism
+  (output invariant across 1/2/4/8 threads) and asserts the scoped pool is the one
+  the pipeline actually executes on.
+
 ## [0.7.1] - 2026-07-19
 
 ### Documentation
