@@ -63,6 +63,16 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   JSON key. **The default is unchanged and every shipped profile emits byte-identical
   detections.**
 
+### Fixed
+
+- **Unsound row split in `filter::laplacian_sharpen`.** The parallel row loop derived
+  its write pointer from `output.as_ptr().cast_mut()` — a shared reborrow of
+  `&mut [u8]` — and wrote through it, which is undefined behaviour under Stacked/Tree
+  Borrows even though the rows themselves were disjoint. Replaced with
+  `par_chunks_mut`, removing the `unsafe` block entirely. No behaviour change: the
+  dispatched-SIMD ↔ scalar-reference parity tests and the ICRA snapshot suite are
+  unchanged.
+
 ## [0.7.1] - 2026-07-19
 
 ### Documentation
