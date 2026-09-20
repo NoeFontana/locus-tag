@@ -1002,8 +1002,8 @@ impl LocusEngine {
 
     /// The Rayon thread count the pipeline actually executes under.
     ///
-    /// Measured from inside [`LocusEngine::run_scoped`], so it proves the
-    /// scoped pool really wraps pipeline work rather than merely existing.
+    /// Measured from inside the private `run_scoped` wrapper, so it proves
+    /// the scoped pool really wraps pipeline work rather than merely existing.
     #[cfg(feature = "bench-internals")]
     #[must_use]
     pub fn bench_api_pipeline_num_threads(&self) -> usize {
