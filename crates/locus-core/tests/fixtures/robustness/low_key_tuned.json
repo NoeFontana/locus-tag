@@ -5,10 +5,9 @@
     "tile_size": 2,
     "min_range": 0,
     "enable_sharpening": true,
-    "min_radius": 2,
-    "max_radius": 15,
-    "constant": -20,
-    "gradient_threshold": 10
+    "mode": "TileMidExtreme",
+    "local_mean_radius": 24,
+    "constant": -20
   },
   "quad": {
     "min_area": 16,

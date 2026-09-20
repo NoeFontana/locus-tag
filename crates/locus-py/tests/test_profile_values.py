@@ -108,9 +108,15 @@ def test_edlines_rejects_erf_refinement() -> None:
         DetectorConfig.from_profile_json(bad)
 
 
-def test_threshold_radius_ordering_enforced() -> None:
-    bad = json.dumps({"threshold": {"min_radius": 10, "max_radius": 5}})
-    with pytest.raises(ValidationError, match="min_radius"):
+def test_threshold_local_mean_radius_must_be_positive() -> None:
+    bad = json.dumps({"threshold": {"local_mean_radius": 0}})
+    with pytest.raises(ValidationError, match="local_mean_radius"):
+        DetectorConfig.from_profile_json(bad)
+
+
+def test_threshold_mode_rejects_unknown_variant() -> None:
+    bad = json.dumps({"threshold": {"mode": "NotAMode"}})
+    with pytest.raises(ValidationError, match="ThresholdMode"):
         DetectorConfig.from_profile_json(bad)
 
 

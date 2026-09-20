@@ -16,22 +16,23 @@
 
 use locus_core::config::{
     AdaptivePpbConfig, CornerRefinementMode, DetectorConfig, EdLinesImbalanceGatePolicy,
-    QuadExtractionMode, QuadExtractionPolicy, SegmentationConnectivity,
+    QuadExtractionMode, QuadExtractionPolicy, SegmentationConnectivity, ThresholdMode,
 };
 
 /// Fields that *all three* shipped profiles carry at the current repo defaults.
 fn assert_shared_defaults(cfg: &DetectorConfig) {
     let d = DetectorConfig::default();
     assert_eq!(cfg.threshold_min_range, d.threshold_min_range);
-    assert_eq!(cfg.threshold_min_radius, d.threshold_min_radius);
-    assert_eq!(cfg.threshold_max_radius, d.threshold_max_radius);
+    // Every shipped profile keeps the historical tile thresholder; the
+    // local-mean modes are opt-in only.
+    assert_eq!(cfg.threshold_mode, ThresholdMode::TileMidExtreme);
+    assert_eq!(
+        cfg.threshold_local_mean_radius,
+        d.threshold_local_mean_radius
+    );
     assert_eq!(
         cfg.adaptive_threshold_constant,
         d.adaptive_threshold_constant
-    );
-    assert_eq!(
-        cfg.adaptive_threshold_gradient_threshold,
-        d.adaptive_threshold_gradient_threshold
     );
     // `quad_min_area` is profile-specific (clean-render profiles raise it to
     // suppress small textured-quad false positives); asserted per-profile.
@@ -183,10 +184,9 @@ fn to_profile_json_round_trips_every_field() {
         threshold_tile_size: 12,
         threshold_min_range: 5,
         enable_sharpening: false,
-        threshold_min_radius: 3,
-        threshold_max_radius: 9,
+        threshold_mode: ThresholdMode::LocalMean,
+        threshold_local_mean_radius: 9,
         adaptive_threshold_constant: 4,
-        adaptive_threshold_gradient_threshold: 42,
         // Quad
         quad_min_area: 25,
         quad_max_aspect_ratio: 4.5,

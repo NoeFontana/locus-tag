@@ -35,6 +35,35 @@ regenerated from the Pydantic model via
   per-call orchestration concerns handed to the `Detector` constructor,
   not detection logic.
 
+## The `threshold` group
+
+`threshold.mode` chooses how the per-pixel foreground threshold that
+segmentation reads is built. All three shipped profiles carry
+`"TileMidExtreme"` — the historical rule, and the only one the regression
+snapshots pin:
+
+| `mode` | Rule | Reads |
+| --- | --- | --- |
+| `TileMidExtreme` | midpoint of min/max over the 3×3 tile neighbourhood | `tile_size`, `min_range` |
+| `LocalMean` | `mean` of a `(2·local_mean_radius + 1)²` window, minus `constant` | `local_mean_radius`, `constant` |
+
+`LocalMean` is opt-in and **changes detector output on every frame**; it
+exists for scenes where the tile rule's dependence on local *extremes*
+fails — textured or dark backgrounds that fuse with a marker, and uniform
+regions that speckle with foreground. It is materially better on the
+4K Liu4K dataset and has not been evaluated as a default on the ICRA /
+render-tag corpora, so switching a shipped profile to it needs its own
+evidence campaign. Set it on a *custom* profile:
+
+```json
+"threshold": { "tile_size": 8, "min_range": 10, "enable_sharpening": true,
+               "mode": "LocalMean", "local_mean_radius": 24, "constant": 15 }
+```
+
+`constant` and `local_mean_radius` are inert under `TileMidExtreme`; the
+shipped profiles still carry the tuned values so that flipping `mode`
+alone is enough.
+
 ## Loading a profile
 
 ```python

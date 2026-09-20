@@ -5,6 +5,40 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Added
+
+- **Opt-in `threshold.mode = "LocalMean"` foreground thresholder.** Segmentation
+  marks a pixel foreground when `pixel < threshold_map[pixel]`, and that map was
+  only ever the midpoint of the min/max over a 3×3 tile neighbourhood, published
+  with no validity gate. Because the value follows the local *extremes*, a flat
+  tile gets a threshold equal to its own grey level (so sensor noise speckles
+  uniform regions with foreground) and a background darker than the midpoint
+  between a marker's black border and a nearby highlight becomes foreground and
+  fuses with the marker. `LocalMean` instead thresholds each pixel against the
+  mean of a `(2·threshold.local_mean_radius + 1)²` window minus
+  `threshold.constant`, computed with a sliding column-sum accumulator rather
+  than an integral image (≈ 0.4 MB of scratch at 4K against 33–66 MB, and the
+  result is independent of the strip size and of the rayon worker count).
+  On the Liu4K 4K dataset (924 images, 9022 markers, ArUcoMip36h12, 10 px
+  scorer) it takes decode recall from 28.72 % to 55.82 % at 99.92 % precision
+  (against 99.73 % for the default),
+  and is *faster* than the default because the suppressed speckle removes
+  connected-component work. **Opt-in only: every shipped profile keeps
+  `TileMidExtreme`, and the default-profile output is byte-identical.**
+
+### Changed
+
+- **`threshold.constant` is live; `threshold.min_radius`, `threshold.max_radius`
+  and `threshold.gradient_threshold` are removed.** The three removed keys were
+  read only by `adaptive_threshold_gradient_window`, whose sole callers are
+  benchmarks — setting them changed no detection, at any value. `constant` is
+  now the local-mean offset (default `15`, chosen on Liu4K) and is still
+  ignored by `TileMidExtreme`. **Breaking for hand-written profile JSON:**
+  `#[serde(deny_unknown_fields)]` rejects the removed keys, so a custom profile
+  carrying them must drop them. `threshold.mode` and
+  `threshold.local_mean_radius` both have serde defaults, so a profile that
+  omits them keeps the historical behaviour.
+
 ## [0.7.1] - 2026-07-19
 
 ### Documentation

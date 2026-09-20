@@ -26,6 +26,7 @@ __all__ = [
     "QuadExtractionMode",
     "SegmentationConnectivity",
     "TagFamily",
+    "ThresholdMode",
     "init_tracy",
 ]
 
@@ -497,6 +498,14 @@ class TagFamily(enum.IntEnum):
     ArUco4x4_50 = ...
     ArUco4x4_100 = ...
     ArUco6x6_250 = ...
+
+@typing.final
+class ThresholdMode(enum.IntEnum):
+    r"""
+    How the per-pixel foreground threshold that feeds segmentation is built.
+    """
+    TileMidExtreme = ...
+    LocalMean = ...
 
 def _create_detector_from_config(config_json: builtins.str, decimation: typing.Optional[builtins.int] = None, threads: typing.Optional[builtins.int] = None, families: typing.Sequence[builtins.int] = []) -> Detector: ...
 
