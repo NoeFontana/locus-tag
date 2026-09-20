@@ -300,10 +300,7 @@
         "mode": {
           "enum": [
             "LocalMean",
-            "LocalMeanGated",
-            "TileGated",
-            "TileMidExtreme",
-            "TilePropagated"
+            "TileMidExtreme"
           ],
           "title": "Mode",
           "type": "string"

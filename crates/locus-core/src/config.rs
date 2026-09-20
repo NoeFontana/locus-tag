@@ -690,14 +690,14 @@ impl DetectorConfigBuilder {
         self
     }
 
-    /// Set the local-mean window radius (pixels) used by the `LocalMean*` modes.
+    /// Set the local-mean window radius (pixels) used by [`ThresholdMode::LocalMean`].
     #[must_use]
     pub fn threshold_local_mean_radius(mut self, radius: usize) -> Self {
         self.threshold_local_mean_radius = Some(radius);
         self
     }
 
-    /// Set the constant subtracted from the local mean by the `LocalMean*` modes.
+    /// Set the constant subtracted from the local mean by [`ThresholdMode::LocalMean`].
     #[must_use]
     pub fn adaptive_threshold_constant(mut self, c: i16) -> Self {
         self.adaptive_threshold_constant = Some(c);

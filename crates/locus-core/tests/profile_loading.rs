@@ -24,7 +24,7 @@ fn assert_shared_defaults(cfg: &DetectorConfig) {
     let d = DetectorConfig::default();
     assert_eq!(cfg.threshold_min_range, d.threshold_min_range);
     // Every shipped profile keeps the historical tile thresholder; the
-    // local-mean modes are opt-in only.
+    // local-mean mode is opt-in only.
     assert_eq!(cfg.threshold_mode, ThresholdMode::TileMidExtreme);
     assert_eq!(
         cfg.threshold_local_mean_radius,
