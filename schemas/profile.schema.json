@@ -305,6 +305,14 @@
           "title": "Min Range",
           "type": "integer"
         },
+        "sharpening_mode": {
+          "enum": [
+            "ShootLimited",
+            "Standard"
+          ],
+          "title": "Sharpening Mode",
+          "type": "string"
+        },
         "tile_size": {
           "default": 8,
           "maximum": 64,

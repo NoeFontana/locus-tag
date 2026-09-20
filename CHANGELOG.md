@@ -48,6 +48,21 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   (output invariant across 1/2/4/8 threads) and asserts the scoped pool is the one
   the pipeline actually executes on.
 
+- **Opt-in shoot-limited sharpening (`threshold.sharpening_mode`).** The Laplacian
+  sharpening pre-filter gained an output limiter selector. `Standard` (the default,
+  and the only behaviour before this change) keeps the historical
+  `5·centre − Σ4-neighbours` clamped to `0..=255`; `ShootLimited` additionally clamps
+  each output into the min/max of the five samples that produced it, so sharpening can
+  never push a pixel outside its local intensity range. Overshoot inflates a tile's
+  maximum, which lifts the tile thresholder's `(min+max)/2` midpoint above the
+  background level on low-key scenes — the background then binarises as foreground and
+  merges with the tag border. The new mode removes that failure mode while keeping the
+  edge steepening. Exposed as `SharpeningMode` (Rust `DetectorConfig::sharpening_mode`
+  / `DetectorBuilder::with_sharpening_mode`, Python `threshold.sharpening_mode` and
+  `DetectorBuilder.with_sharpening_mode`) and as the `threshold.sharpening_mode` profile
+  JSON key. **The default is unchanged and every shipped profile emits byte-identical
+  detections.**
+
 ## [0.7.1] - 2026-07-19
 
 ### Documentation

@@ -25,6 +25,7 @@ __all__ = [
     "PyPose",
     "QuadExtractionMode",
     "SegmentationConnectivity",
+    "SharpeningMode",
     "TagFamily",
     "init_tracy",
 ]
@@ -402,6 +403,7 @@ class DetectorBuilder:
     def with_quad_min_density(self, density: builtins.float) -> DetectorBuilder: ...
     def with_quad_extraction_mode(self, mode: QuadExtractionMode) -> DetectorBuilder: ...
     def with_sharpening(self, enable: builtins.bool) -> DetectorBuilder: ...
+    def with_sharpening_mode(self, mode: SharpeningMode) -> DetectorBuilder: ...
     def with_max_concurrent_frames(self, n: builtins.int) -> DetectorBuilder: ...
     def build(self) -> Detector:
         r"""
@@ -489,6 +491,20 @@ class QuadExtractionMode(enum.IntEnum):
 class SegmentationConnectivity(enum.IntEnum):
     Four = ...
     Eight = ...
+
+@typing.final
+class SharpeningMode(enum.IntEnum):
+    r"""
+    Output limiter for the Laplacian sharpening pre-filter.
+    """
+    Standard = ...
+    r"""
+    Stock kernel, clamped to 0..=255 (overshoot preserved).
+    """
+    ShootLimited = ...
+    r"""
+    Clamped into the 5-sample neighbourhood min/max (no overshoot).
+    """
 
 @typing.final
 class TagFamily(enum.IntEnum):

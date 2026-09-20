@@ -112,6 +112,35 @@ impl From<QuadExtractionMode> for locus_core::config::QuadExtractionMode {
     }
 }
 
+/// Output limiter for the Laplacian sharpening pre-filter.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
+#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum SharpeningMode {
+    /// Stock kernel, clamped to 0..=255 (overshoot preserved).
+    Standard = 0,
+    /// Clamped into the 5-sample neighbourhood min/max (no overshoot).
+    ShootLimited = 1,
+}
+
+impl From<SharpeningMode> for locus_core::config::SharpeningMode {
+    fn from(m: SharpeningMode) -> Self {
+        match m {
+            SharpeningMode::Standard => locus_core::config::SharpeningMode::Standard,
+            SharpeningMode::ShootLimited => locus_core::config::SharpeningMode::ShootLimited,
+        }
+    }
+}
+
+impl From<locus_core::config::SharpeningMode> for SharpeningMode {
+    fn from(m: locus_core::config::SharpeningMode) -> Self {
+        match m {
+            locus_core::config::SharpeningMode::Standard => Self::Standard,
+            locus_core::config::SharpeningMode::ShootLimited => Self::ShootLimited,
+        }
+    }
+}
+
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -1637,6 +1666,16 @@ impl DetectorBuilder {
         Ok(slf)
     }
 
+    fn with_sharpening_mode(
+        slf: Py<Self>,
+        py: Python<'_>,
+        mode: SharpeningMode,
+    ) -> PyResult<Py<Self>> {
+        let b = Self::take_inner(&slf, py)?.with_sharpening_mode(mode.into());
+        slf.borrow_mut(py).inner = Some(b);
+        Ok(slf)
+    }
+
     fn with_max_concurrent_frames(slf: Py<Self>, py: Python<'_>, n: usize) -> PyResult<Py<Self>> {
         let b = Self::take_inner(&slf, py)?.with_max_concurrent_frames(n);
         slf.borrow_mut(py).inner = Some(b);
@@ -2019,6 +2058,7 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<CornerRefinementMode>()?;
     m.add_class::<QuadExtractionMode>()?;
     m.add_class::<EdLinesImbalanceGatePolicy>()?;
+    m.add_class::<SharpeningMode>()?;
     // Config / misc structs
     m.add_class::<DistortionModel>()?;
     m.add_class::<CameraIntrinsics>()?;

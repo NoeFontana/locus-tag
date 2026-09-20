@@ -16,7 +16,7 @@
 
 use locus_core::config::{
     AdaptivePpbConfig, CornerRefinementMode, DetectorConfig, EdLinesImbalanceGatePolicy,
-    QuadExtractionMode, QuadExtractionPolicy, SegmentationConnectivity,
+    QuadExtractionMode, QuadExtractionPolicy, SegmentationConnectivity, SharpeningMode,
 };
 
 /// Fields that *all three* shipped profiles carry at the current repo defaults.
@@ -60,6 +60,7 @@ fn standard_profile_matches_former_builder() {
     // Standard-specific overrides.
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, true);
+    assert_eq!(cfg.sharpening_mode, SharpeningMode::Standard);
     assert_eq!(cfg.quad_min_area, 36);
     assert_eq!(cfg.quad_max_elongation, 20.0);
     assert_eq!(cfg.quad_min_density, 0.15);
@@ -182,6 +183,7 @@ fn to_profile_json_round_trips_every_field() {
         threshold_tile_size: 12,
         threshold_min_range: 5,
         enable_sharpening: false,
+        sharpening_mode: SharpeningMode::ShootLimited,
         threshold_min_radius: 3,
         threshold_max_radius: 9,
         adaptive_threshold_constant: 4,
