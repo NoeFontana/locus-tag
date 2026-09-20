@@ -353,7 +353,16 @@ def bench_real(
     family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
     refinement: str = typer.Option("Erf", help="Refinement mode (None, Edge, Erf, Gwlf)"),
     tile_size: int = typer.Option(8, help="Threshold tile size"),
-    constant: int = typer.Option(0, help="Adaptive threshold constant"),
+    threshold_mode: str | None = typer.Option(
+        None,
+        help="Override threshold.mode ('TileMidExtreme' | 'LocalMean'); "
+        "default: keep the standard profile's value.",
+    ),
+    constant: int | None = typer.Option(
+        None,
+        help="Override threshold.constant, the local-mean offset "
+        "(only read when threshold.mode is LocalMean).",
+    ),
     min_fill: float = typer.Option(0.10, help="Min quad fill ratio"),
     min_range: int = typer.Option(10, help="Threshold min range"),
     max_hamming: int = typer.Option(2, help="Max hamming error"),
@@ -449,7 +458,10 @@ def bench_real(
     # Pydantic as PyO3 variant instances.
     base = locus.DetectorConfig.from_profile("standard").model_dump()
     base["threshold"]["tile_size"] = tile_size
-    base["threshold"]["constant"] = constant
+    if threshold_mode is not None:
+        base["threshold"]["mode"] = threshold_mode
+    if constant is not None:
+        base["threshold"]["constant"] = constant
     base["threshold"]["min_range"] = min_range
     base["quad"]["min_fill_ratio"] = min_fill
     base["quad"]["min_edge_score"] = min_edge_score

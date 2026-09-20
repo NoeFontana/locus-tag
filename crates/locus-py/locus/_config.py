@@ -33,6 +33,7 @@ from .locus import (
     QuadExtractionMode,
     SegmentationConnectivity,
     TagFamily,
+    ThresholdMode,
     _shipped_profile_json,
 )
 
@@ -143,11 +144,13 @@ if TYPE_CHECKING:
     _QuadExtractionField: TypeAlias = QuadExtractionMode
     _SegConnField: TypeAlias = SegmentationConnectivity
     _ImbalanceGateField: TypeAlias = EdLinesImbalanceGatePolicy
+    _ThresholdModeField: TypeAlias = ThresholdMode
 else:
     _CornerRefinementField = _enum_field(CornerRefinementMode)
     _QuadExtractionField = _enum_field(QuadExtractionMode)
     _SegConnField = _enum_field(SegmentationConnectivity)
     _ImbalanceGateField = _enum_field(EdLinesImbalanceGatePolicy, _coerce_imbalance_gate)
+    _ThresholdModeField = _enum_field(ThresholdMode)
 
 
 class ThresholdConfig(BaseModel):
@@ -156,19 +159,14 @@ class ThresholdConfig(BaseModel):
     tile_size: int = Field(default=8, ge=2, le=64)
     min_range: int = Field(default=10, ge=0, le=255)
     enable_sharpening: bool = False
-    min_radius: int = Field(default=2, ge=1)
-    max_radius: int = Field(default=15, ge=1)
-    constant: int = 0
-    gradient_threshold: int = Field(default=10, ge=0, le=255)
-
-    @model_validator(mode="after")
-    def _check_radius_ordering(self) -> ThresholdConfig:
-        if self.min_radius > self.max_radius:
-            raise ValueError(
-                f"threshold.min_radius ({self.min_radius}) must be <= "
-                f"max_radius ({self.max_radius})"
-            )
-        return self
+    #: How the per-pixel foreground threshold that feeds segmentation is built.
+    #: ``TileMidExtreme`` is the shipped behaviour of every profile; ``LocalMean``
+    #: is opt-in and changes detector output on every frame.
+    mode: _ThresholdModeField = Field(default_factory=lambda: ThresholdMode.TileMidExtreme)
+    #: Window radius (px) of the local-mean thresholder; ``LocalMean`` mode only.
+    local_mean_radius: int = Field(default=24, ge=1)
+    #: Constant subtracted from the local mean; ``LocalMean`` mode only.
+    constant: int = 15
 
 
 class AdaptivePpbConfig(BaseModel):

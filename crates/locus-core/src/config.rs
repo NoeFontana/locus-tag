@@ -20,6 +20,38 @@ pub enum SegmentationConnectivity {
     Eight,
 }
 
+/// How the per-pixel foreground threshold that feeds segmentation is built.
+///
+/// The connected-component stage marks a pixel as foreground when
+/// `pixel < threshold_map[pixel]`, so this enum fully determines which pixels
+/// segmentation sees. A threshold of `0` is the canonical "never foreground"
+/// value (no `u8` is `< 0`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum ThresholdMode {
+    /// Midpoint of the min/max over a 3x3 tile neighbourhood. The historical
+    /// default; every shipped profile uses it, and it is the only mode whose
+    /// output the regression snapshots pin.
+    ///
+    /// Two fragilities follow from the threshold being a function of the local
+    /// *extremes*: a flat tile gets `t` equal to its own grey level, so sensor
+    /// noise speckles uniform regions with foreground; and a background darker
+    /// than the midpoint between a marker's black border and a nearby highlight
+    /// becomes foreground and fuses with the marker.
+    TileMidExtreme,
+    /// Per-pixel local mean over a `(2r+1)^2` window minus
+    /// [`DetectorConfig::adaptive_threshold_constant`], where `r` is
+    /// [`DetectorConfig::threshold_local_mean_radius`]. Computed with a sliding
+    /// column-sum accumulator, not an integral image.
+    ///
+    /// The threshold tracks the local *background level* instead of the local
+    /// extremes, which is what keeps a dark textured background from fusing
+    /// with a marker; the constant is what keeps sensor noise in a uniform
+    /// region below the threshold. Opt-in: it changes detector output on every
+    /// frame.
+    LocalMean,
+}
+
 /// Mode for subpixel corner refinement.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -182,14 +214,18 @@ pub struct DetectorConfig {
     /// Enable Laplacian sharpening to enhance edges for small tags (default: true).
     pub enable_sharpening: bool,
 
-    /// Minimum threshold window radius for high-gradient regions (default: 2 = 5x5).
-    pub threshold_min_radius: usize,
-    /// Maximum threshold window radius for low-gradient regions (default: 7 = 15x15).
-    pub threshold_max_radius: usize,
-    /// Constant subtracted from local mean in adaptive thresholding (default: 3).
+    /// How the per-pixel foreground threshold is built (default:
+    /// [`ThresholdMode::TileMidExtreme`], the historical behaviour).
+    pub threshold_mode: ThresholdMode,
+    /// Window radius, in pixels, of the local-mean thresholder (default: 24).
+    /// Only read by [`ThresholdMode::LocalMean`]; the window is `(2r+1)^2`.
+    pub threshold_local_mean_radius: usize,
+    /// Constant subtracted from the local mean by [`ThresholdMode::LocalMean`]
+    /// (default: 15). Larger values require a pixel to sit further below its
+    /// local mean before it counts as foreground, which suppresses the
+    /// sensor-noise speckle a bare local-mean threshold produces in uniform
+    /// regions. Ignored by [`ThresholdMode::TileMidExtreme`].
     pub adaptive_threshold_constant: i16,
-    /// Gradient magnitude threshold above which the minimum window radius is used (default: 40).
-    pub adaptive_threshold_gradient_threshold: u8,
 
     // Quad filtering parameters
     /// Minimum quad area in pixels (default: 16).
@@ -386,10 +422,9 @@ impl Default for DetectorConfig {
             threshold_tile_size: 8,
             threshold_min_range: 10,
             enable_sharpening: false,
-            threshold_min_radius: 2,
-            threshold_max_radius: 15,
-            adaptive_threshold_constant: 0,
-            adaptive_threshold_gradient_threshold: 10,
+            threshold_mode: ThresholdMode::TileMidExtreme,
+            threshold_local_mean_radius: 24,
+            adaptive_threshold_constant: 15,
             // 1 PPB on the smallest supported family's outer grid (6×6 cells:
             // AprilTag16h5, ArUco4x4) — below 36 px² a quad cannot represent
             // 1 pixel per bit on any family, so the decoder cannot succeed.
@@ -449,6 +484,11 @@ impl DetectorConfig {
 
         if self.threshold_tile_size < 2 {
             return Err(ConfigError::TileSizeTooSmall(self.threshold_tile_size));
+        }
+        if self.threshold_local_mean_radius < 1 {
+            return Err(ConfigError::InvalidLocalMeanRadius(
+                self.threshold_local_mean_radius,
+            ));
         }
         if self.decimation < 1 {
             return Err(ConfigError::InvalidDecimation(self.decimation));
@@ -535,10 +575,9 @@ pub struct DetectorConfigBuilder {
     threshold_tile_size: Option<usize>,
     threshold_min_range: Option<u8>,
     enable_sharpening: Option<bool>,
-    threshold_min_radius: Option<usize>,
-    threshold_max_radius: Option<usize>,
+    threshold_mode: Option<ThresholdMode>,
+    threshold_local_mean_radius: Option<usize>,
     adaptive_threshold_constant: Option<i16>,
-    adaptive_threshold_gradient_threshold: Option<u8>,
     quad_min_area: Option<u32>,
     quad_max_aspect_ratio: Option<f32>,
     quad_min_fill_ratio: Option<f32>,
@@ -644,31 +683,24 @@ impl DetectorConfigBuilder {
         self
     }
 
-    /// Set minimum threshold window radius.
+    /// Select how the per-pixel foreground threshold is built.
     #[must_use]
-    pub fn threshold_min_radius(mut self, radius: usize) -> Self {
-        self.threshold_min_radius = Some(radius);
+    pub fn threshold_mode(mut self, mode: ThresholdMode) -> Self {
+        self.threshold_mode = Some(mode);
         self
     }
 
-    /// Set maximum threshold window radius.
+    /// Set the local-mean window radius (pixels) used by [`ThresholdMode::LocalMean`].
     #[must_use]
-    pub fn threshold_max_radius(mut self, radius: usize) -> Self {
-        self.threshold_max_radius = Some(radius);
+    pub fn threshold_local_mean_radius(mut self, radius: usize) -> Self {
+        self.threshold_local_mean_radius = Some(radius);
         self
     }
 
-    /// Set the constant subtracted from local mean in adaptive thresholding.
+    /// Set the constant subtracted from the local mean by [`ThresholdMode::LocalMean`].
     #[must_use]
     pub fn adaptive_threshold_constant(mut self, c: i16) -> Self {
         self.adaptive_threshold_constant = Some(c);
-        self
-    }
-
-    /// Set the gradient threshold for adaptive window sizing.
-    #[must_use]
-    pub fn adaptive_threshold_gradient_threshold(mut self, threshold: u8) -> Self {
-        self.adaptive_threshold_gradient_threshold = Some(threshold);
         self
     }
 
@@ -680,14 +712,13 @@ impl DetectorConfigBuilder {
             threshold_tile_size: self.threshold_tile_size.unwrap_or(d.threshold_tile_size),
             threshold_min_range: self.threshold_min_range.unwrap_or(d.threshold_min_range),
             enable_sharpening: self.enable_sharpening.unwrap_or(d.enable_sharpening),
-            threshold_min_radius: self.threshold_min_radius.unwrap_or(d.threshold_min_radius),
-            threshold_max_radius: self.threshold_max_radius.unwrap_or(d.threshold_max_radius),
+            threshold_mode: self.threshold_mode.unwrap_or(d.threshold_mode),
+            threshold_local_mean_radius: self
+                .threshold_local_mean_radius
+                .unwrap_or(d.threshold_local_mean_radius),
             adaptive_threshold_constant: self
                 .adaptive_threshold_constant
                 .unwrap_or(d.adaptive_threshold_constant),
-            adaptive_threshold_gradient_threshold: self
-                .adaptive_threshold_gradient_threshold
-                .unwrap_or(d.adaptive_threshold_gradient_threshold),
             quad_min_area: self.quad_min_area.unwrap_or(d.quad_min_area),
             quad_max_aspect_ratio: self
                 .quad_max_aspect_ratio
@@ -1029,7 +1060,7 @@ impl DetectOptionsBuilder {
 mod profile_json {
     use super::{
         CornerRefinementMode, DetectorConfig, EdLinesImbalanceGatePolicy, QuadExtractionMode,
-        SegmentationConnectivity,
+        SegmentationConnectivity, ThresholdMode,
     };
     use serde::{Deserialize, Serialize};
 
@@ -1059,10 +1090,19 @@ mod profile_json {
         pub tile_size: usize,
         pub min_range: u8,
         pub enable_sharpening: bool,
-        pub min_radius: usize,
-        pub max_radius: usize,
+        #[serde(default = "default_threshold_mode")]
+        pub mode: ThresholdMode,
+        #[serde(default = "default_local_mean_radius")]
+        pub local_mean_radius: usize,
         pub constant: i16,
-        pub gradient_threshold: u8,
+    }
+
+    fn default_threshold_mode() -> ThresholdMode {
+        DetectorConfig::default().threshold_mode
+    }
+
+    fn default_local_mean_radius() -> usize {
+        DetectorConfig::default().threshold_local_mean_radius
     }
 
     impl ThresholdJson {
@@ -1074,10 +1114,9 @@ mod profile_json {
                 tile_size: c.threshold_tile_size,
                 min_range: c.threshold_min_range,
                 enable_sharpening: c.enable_sharpening,
-                min_radius: c.threshold_min_radius,
-                max_radius: c.threshold_max_radius,
+                mode: c.threshold_mode,
+                local_mean_radius: c.threshold_local_mean_radius,
                 constant: c.adaptive_threshold_constant,
-                gradient_threshold: c.adaptive_threshold_gradient_threshold,
             }
         }
     }
@@ -1290,10 +1329,9 @@ mod profile_json {
                 threshold_tile_size: p.threshold.tile_size,
                 threshold_min_range: p.threshold.min_range,
                 enable_sharpening: p.threshold.enable_sharpening,
-                threshold_min_radius: p.threshold.min_radius,
-                threshold_max_radius: p.threshold.max_radius,
+                threshold_mode: p.threshold.mode,
+                threshold_local_mean_radius: p.threshold.local_mean_radius,
                 adaptive_threshold_constant: p.threshold.constant,
-                adaptive_threshold_gradient_threshold: p.threshold.gradient_threshold,
                 quad_min_area: p.quad.min_area,
                 quad_max_aspect_ratio: p.quad.max_aspect_ratio,
                 quad_min_fill_ratio: p.quad.min_fill_ratio,

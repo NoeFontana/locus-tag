@@ -275,7 +275,7 @@
       "additionalProperties": false,
       "properties": {
         "constant": {
-          "default": 0,
+          "default": 15,
           "title": "Constant",
           "type": "integer"
         },
@@ -284,23 +284,10 @@
           "title": "Enable Sharpening",
           "type": "boolean"
         },
-        "gradient_threshold": {
-          "default": 10,
-          "maximum": 255,
-          "minimum": 0,
-          "title": "Gradient Threshold",
-          "type": "integer"
-        },
-        "max_radius": {
-          "default": 15,
+        "local_mean_radius": {
+          "default": 24,
           "minimum": 1,
-          "title": "Max Radius",
-          "type": "integer"
-        },
-        "min_radius": {
-          "default": 2,
-          "minimum": 1,
-          "title": "Min Radius",
+          "title": "Local Mean Radius",
           "type": "integer"
         },
         "min_range": {
@@ -309,6 +296,14 @@
           "minimum": 0,
           "title": "Min Range",
           "type": "integer"
+        },
+        "mode": {
+          "enum": [
+            "LocalMean",
+            "TileMidExtreme"
+          ],
+          "title": "Mode",
+          "type": "string"
         },
         "tile_size": {
           "default": 8,

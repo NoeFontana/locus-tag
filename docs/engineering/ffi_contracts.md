@@ -123,6 +123,7 @@ All configuration validation happens in `DetectorConfig::validate()` at
 | `0.0 <= quad_min_fill_ratio < quad_max_fill_ratio <= 1.0` | `config.rs:246-254` | `InvalidFillRatio { min, max }` |
 | `quad_min_edge_length > 0.0` | `config.rs:255-257` | `InvalidEdgeLength` |
 | `structure_tensor_radius <= 8` | `config.rs:258-262` | `InvalidStructureTensorRadius` |
+| `threshold_local_mean_radius >= 1` | `config.rs::validate` | `InvalidLocalMeanRadius` |
 | `quad_extraction_mode == EdLines` ⇒ `refinement_mode != Erf` | `config.rs:263-266` | `EdLinesIncompatibleWithErf` |
 
 ### Fields with **no** runtime validation
@@ -131,8 +132,7 @@ The following fields are passed straight through without range checks, even
 though the Pydantic `DetectorConfig` in `crates/locus-py/locus/_config.py`
 declares explicit ranges:
 
-- `threshold_min_range`, `threshold_min_radius`, `threshold_max_radius`
-- `adaptive_threshold_constant`, `adaptive_threshold_gradient_threshold`
+- `threshold_min_range`, `adaptive_threshold_constant`
 - `quad_min_area`, `quad_max_aspect_ratio`, `quad_min_edge_score`
 - `subpixel_refinement_sigma`, `segmentation_margin`
 - `decoder_min_contrast`, `max_hamming_error`, `gwlf_transversal_alpha`

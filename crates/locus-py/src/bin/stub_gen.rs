@@ -86,6 +86,7 @@ fn postprocess(content: &str) -> String {
         "QuadExtractionMode",
         "EdLinesImbalanceGatePolicy",
         "DistortionModel",
+        "ThresholdMode",
     ];
 
     let mut out = String::with_capacity(content.len() + 256);

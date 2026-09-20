@@ -142,6 +142,33 @@ impl From<locus_core::config::EdLinesImbalanceGatePolicy> for EdLinesImbalanceGa
     }
 }
 
+/// How the per-pixel foreground threshold that feeds segmentation is built.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
+#[pyclass(eq, eq_int, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum ThresholdMode {
+    TileMidExtreme = 0,
+    LocalMean = 1,
+}
+
+impl From<ThresholdMode> for locus_core::ThresholdMode {
+    fn from(m: ThresholdMode) -> Self {
+        match m {
+            ThresholdMode::TileMidExtreme => locus_core::ThresholdMode::TileMidExtreme,
+            ThresholdMode::LocalMean => locus_core::ThresholdMode::LocalMean,
+        }
+    }
+}
+
+impl From<locus_core::ThresholdMode> for ThresholdMode {
+    fn from(m: locus_core::ThresholdMode) -> Self {
+        match m {
+            locus_core::ThresholdMode::TileMidExtreme => Self::TileMidExtreme,
+            locus_core::ThresholdMode::LocalMean => Self::LocalMean,
+        }
+    }
+}
+
 // ============================================================================
 // Structs
 // ============================================================================
@@ -2019,6 +2046,7 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<CornerRefinementMode>()?;
     m.add_class::<QuadExtractionMode>()?;
     m.add_class::<EdLinesImbalanceGatePolicy>()?;
+    m.add_class::<ThresholdMode>()?;
     // Config / misc structs
     m.add_class::<DistortionModel>()?;
     m.add_class::<CameraIntrinsics>()?;

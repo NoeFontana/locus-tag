@@ -3,15 +3,24 @@
 //! This module provides the first stage of the detection pipeline, converting grayscale
 //! input into binary images while adapting to local lighting conditions.
 //!
-//! Two implementations trade accuracy for throughput:
-//! 1. **Tile-based**: one threshold per 8×8 tile from tile min/max, then
-//!    expanded to pixels. Cheap (stats computed once per tile, not per pixel);
-//!    the default hot path.
-//! 2. **Integral-image**: a true per-pixel local-mean threshold. Costlier but
-//!    resolves features smaller than a tile, where the tile grid aliases.
+//! Segmentation consumes the per-pixel **threshold map** this module writes: a
+//! pixel is foreground when `pixel < threshold_map[pixel]`, so a threshold of
+//! `0` means "never foreground". [`crate::config::ThresholdMode`] selects how
+//! the map is built:
+//! 1. **Tile-based** (`TileMidExtreme`, the default): one threshold per
+//!    `tile_size` tile from the min/max over its 3×3 tile neighbourhood, then
+//!    expanded to pixels. Cheap — stats are computed once per tile, not per
+//!    pixel — but the threshold follows the local *extremes*, which speckles
+//!    flat regions and lets a dark background fuse with a marker.
+//! 2. **Local mean** (`LocalMean`): a true per-pixel local mean over a
+//!    `(2r+1)²` window, minus a constant, from a sliding column-sum
+//!    accumulator. Tracks the local background level instead of the extremes.
+//!
+//! The integral-image kernels lower in this file are benchmark references
+//! (`benches/integral_threshold_bench.rs`); no detection path calls them.
 
 #![allow(unsafe_code, clippy::cast_sign_loss)]
-use crate::config::DetectorConfig;
+use crate::config::{DetectorConfig, ThresholdMode};
 use crate::image::ImageView;
 use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
@@ -33,6 +42,12 @@ pub struct ThresholdEngine {
     pub tile_size: usize,
     /// Minimum intensity range for a tile to be considered valid.
     pub min_range: u8,
+    /// How the per-pixel foreground threshold is built.
+    pub mode: ThresholdMode,
+    /// Window radius (pixels) for [`ThresholdMode::LocalMean`].
+    pub local_mean_radius: usize,
+    /// Constant subtracted from the local mean by [`ThresholdMode::LocalMean`].
+    pub constant: i16,
 }
 
 impl Default for ThresholdEngine {
@@ -45,9 +60,13 @@ impl ThresholdEngine {
     /// Create a new ThresholdEngine with default settings.
     #[must_use]
     pub fn new() -> Self {
+        let d = DetectorConfig::default();
         Self {
             tile_size: 8,  // Standard 8x8 tiles
             min_range: 10, // Match DetectorConfig::default()
+            mode: d.threshold_mode,
+            local_mean_radius: d.threshold_local_mean_radius,
+            constant: d.adaptive_threshold_constant,
         }
     }
 
@@ -57,6 +76,9 @@ impl ThresholdEngine {
         Self {
             tile_size: config.threshold_tile_size,
             min_range: config.threshold_min_range,
+            mode: config.threshold_mode,
+            local_mean_radius: config.threshold_local_mean_radius,
+            constant: config.adaptive_threshold_constant,
         }
     }
 
@@ -261,9 +283,17 @@ impl ThresholdEngine {
     ///
     /// This is needed for threshold-model-aware segmentation, which uses the
     /// per-pixel threshold values to connect pixels by their deviation sign.
+    ///
+    /// The exact rule is selected by [`ThresholdMode`]; segmentation reads
+    /// `threshold_output` alone, so a threshold of `0` means "this pixel can
+    /// never be foreground".
     #[expect(
         clippy::needless_range_loop,
         reason = "tx indexes both the tile-neighbourhood min/max scan and the t_row write, so the range loop is clearer than a zipped iterator here"
+    )]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one cohesive routine: mode dispatch, tile threshold, tile validity and row expansion share the tile-grid geometry computed at the top"
     )]
     #[tracing::instrument(skip_all, name = "pipeline::threshold_apply_map")]
     pub fn apply_threshold_with_map(
@@ -274,6 +304,10 @@ impl ThresholdEngine {
         binary_output: &mut [u8],
         threshold_output: &mut [u8],
     ) {
+        if self.mode == ThresholdMode::LocalMean {
+            self.apply_local_mean(arena, img, binary_output, threshold_output);
+            return;
+        }
         let ts = self.tile_size;
         let tiles_wide = img.width / ts;
         let tiles_high = img.height / ts;
@@ -345,42 +379,6 @@ impl ThresholdEngine {
             }
         }
 
-        // Propagation pass
-        /*
-        for _ in 0..2 {
-            for ty in 0..tiles_high {
-                for tx in 0..tiles_wide {
-                    let idx = ty * tiles_wide + tx;
-                    if tile_valid[idx] == 0 {
-                        let mut sum_thresh = 0u32;
-                        let mut count = 0u32;
-
-                        let y_start = ty.saturating_sub(1);
-                        let y_end = (ty + 1).min(tiles_high - 1);
-                        let x_start = tx.saturating_sub(1);
-                        let x_end = (tx + 1).min(tiles_wide - 1);
-
-                        for ny in y_start..=y_end {
-                            let row_off = ny * tiles_wide;
-                            for nx in x_start..=x_end {
-                                let n_idx = row_off + nx;
-                                if tile_valid[n_idx] > 0 {
-                                    sum_thresh += u32::from(tile_thresholds[n_idx]);
-                                    count += 1;
-                                }
-                            }
-                        }
-
-                        if count > 0 {
-                            tile_thresholds[idx] = (sum_thresh / count) as u8;
-                            tile_valid[idx] = 128;
-                        }
-                    }
-                }
-            }
-        }
-        */
-
         // Write thresholds and binary output in parallel
         let thresholds_slice = tile_thresholds.as_slice();
         let valid_slice = tile_valid.as_slice();
@@ -432,6 +430,155 @@ impl ThresholdEngine {
                     }
                 },
             );
+    }
+
+    /// Per-pixel local-mean threshold, `t(x,y) = mean_{(2r+1)²}(x,y) - constant`.
+    ///
+    /// Computed with a sliding column-sum rather than an integral image: the
+    /// only auxiliary buffer is one `u32` column accumulator per row-strip
+    /// (`strips * width * 4` bytes, ≈ 0.4 MB at 4K), against 33–66 MB for a
+    /// full-frame integral image. The accumulator is exact integer arithmetic
+    /// and every strip re-initialises it from the image, so the output does
+    /// not depend on the strip size or on the number of rayon workers.
+    #[expect(
+        clippy::many_single_char_names,
+        reason = "w/h/r/c are the conventional image-kernel names (width, height, window radius, OpenCV's C offset) and read better here than spelled-out aliases"
+    )]
+    fn apply_local_mean(
+        &self,
+        arena: &Bump,
+        img: &ImageView,
+        binary_output: &mut [u8],
+        threshold_output: &mut [u8],
+    ) {
+        let w = img.width;
+        let h = img.height;
+        if w == 0 || h == 0 {
+            return;
+        }
+        let r = self.local_mean_radius.max(1);
+        let c = i32::from(self.constant);
+
+        // A strip re-scans `2r+1` rows to prime its column sums, so keep strips
+        // comfortably taller than the window; still aim for ≥ 4 strips per
+        // worker so rayon can balance.
+        let target = h.div_ceil((rayon::current_num_threads() * 4).max(1));
+        let strip_rows = target.max(4 * r + 1).min(h).max(1);
+        let n_strips = h.div_ceil(strip_rows);
+        let col_sums = arena.alloc_slice_fill_copy(n_strips * w, 0u32);
+
+        threshold_output[..w * h]
+            .par_chunks_mut(strip_rows * w)
+            .zip(binary_output[..w * h].par_chunks_mut(strip_rows * w))
+            .zip(col_sums.par_chunks_mut(w))
+            .enumerate()
+            .for_each(|(strip, ((t_chunk, b_chunk), cols))| {
+                let y_begin = strip * strip_rows;
+                let rows = t_chunk.len() / w;
+
+                // Prime the column sums for the window of the strip's first row.
+                let mut y0 = y_begin.saturating_sub(r);
+                let mut y1 = (y_begin + r + 1).min(h);
+                cols.fill(0);
+                for y in y0..y1 {
+                    accumulate_row(cols, img.get_row(y), true);
+                }
+
+                for dy in 0..rows {
+                    let y = y_begin + dy;
+                    if dy > 0 {
+                        // The window moves down by exactly one row, so at most
+                        // one row enters and one row leaves.
+                        let ny1 = (y + r + 1).min(h);
+                        if ny1 > y1 {
+                            accumulate_row(cols, img.get_row(y1), true);
+                            y1 = ny1;
+                        }
+                        let ny0 = y.saturating_sub(r);
+                        if ny0 > y0 {
+                            accumulate_row(cols, img.get_row(y0), false);
+                            y0 = ny0;
+                        }
+                    }
+
+                    let rows_in_window = (y1 - y0) as u32;
+                    let src_row = img.get_row(y);
+                    let t_row = &mut t_chunk[dy * w..(dy + 1) * w];
+                    let b_row = &mut b_chunk[dy * w..(dy + 1) * w];
+                    local_mean_row(src_row, cols, t_row, b_row, r, rows_in_window, c);
+                }
+            });
+    }
+}
+
+/// Add (`add = true`) or subtract a source row from the column accumulator.
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+fn accumulate_row(cols: &mut [u32], src: &[u8], add: bool) {
+    if add {
+        for (col, &p) in cols.iter_mut().zip(src.iter()) {
+            *col += u32::from(p);
+        }
+    } else {
+        for (col, &p) in cols.iter_mut().zip(src.iter()) {
+            *col -= u32::from(p);
+        }
+    }
+}
+
+/// Emit one row of `threshold = local_mean - c` plus its binarization.
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+fn local_mean_row(
+    src: &[u8],
+    cols: &[u32],
+    thresholds: &mut [u8],
+    binary: &mut [u8],
+    r: usize,
+    rows_in_window: u32,
+    c: i32,
+) {
+    let w = src.len();
+    // Running horizontal sum over the column accumulator: `sum` always holds
+    // the box sum over columns `[x0, x1)`.
+    let mut x1 = (r + 1).min(w);
+    let mut x0 = 0usize;
+    // `u64` so a full-width window on a very large frame cannot overflow:
+    // `(2r+1) · 255 · w` exceeds `u32` beyond ~16.8 Mpx.
+    let mut sum: u64 = cols[..x1].iter().map(|&v| u64::from(v)).sum();
+
+    let mut last_area = 0u32;
+    let mut inv_area = 0u32;
+
+    for x in 0..w {
+        let area = rows_in_window * (x1 - x0) as u32;
+        if area != last_area {
+            // `area` only changes within `r` pixels of the left/right edge,
+            // so this reciprocal is recomputed ~2r times per row, not per pixel.
+            inv_area = ((1u64 << 31) / u64::from(area)) as u32;
+            last_area = area;
+        }
+        let mean = ((sum * u64::from(inv_area)) >> 31) as i32;
+
+        let t = (mean - c).clamp(0, 255) as u8;
+        thresholds[x] = t;
+        binary[x] = if src[x] < t { 0 } else { 255 };
+
+        // Slide the window one column to the right.
+        if x + r + 1 < w {
+            sum += u64::from(cols[x + r + 1]);
+            x1 += 1;
+        }
+        if x >= r {
+            sum -= u64::from(cols[x - r]);
+            x0 += 1;
+        }
     }
 }
 
@@ -615,6 +762,174 @@ mod tests {
         assert_eq!(output[4 * 16 + 4], 0);
         // At (0,0) in decimated image, it should be white (255)
         assert_eq!(output[0], 255);
+    }
+
+    // ========================================================================
+    // THRESHOLD MODE TESTS
+    // ========================================================================
+
+    /// Deterministic pseudo-random image (no `rand` dependency — see
+    /// `docs/engineering/constraints.md` §5).
+    fn lcg_image(w: usize, h: usize, seed: u32) -> Vec<u8> {
+        let mut s = seed | 1;
+        (0..w * h)
+            .map(|_| {
+                s = s.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                (s >> 24) as u8
+            })
+            .collect()
+    }
+
+    /// Exact `O(r²)` box mean, the reference the sliding accumulator must match.
+    #[allow(clippy::many_single_char_names)]
+    fn naive_box_mean(data: &[u8], w: usize, h: usize, x: usize, y: usize, r: usize) -> u32 {
+        let y0 = y.saturating_sub(r);
+        let y1 = (y + r + 1).min(h);
+        let x0 = x.saturating_sub(r);
+        let x1 = (x + r + 1).min(w);
+        let mut sum = 0u32;
+        for yy in y0..y1 {
+            for xx in x0..x1 {
+                sum += u32::from(data[yy * w + xx]);
+            }
+        }
+        sum / ((y1 - y0) * (x1 - x0)) as u32
+    }
+
+    fn run_mode(
+        mode: ThresholdMode,
+        radius: usize,
+        constant: i16,
+        data: &[u8],
+        w: usize,
+        h: usize,
+    ) -> (Vec<u8>, Vec<u8>) {
+        let img = ImageView::new(data, w, h, w).unwrap();
+        let engine = ThresholdEngine {
+            tile_size: 8,
+            min_range: 10,
+            mode,
+            local_mean_radius: radius,
+            constant,
+        };
+        let arena = Bump::new();
+        let stats = engine.compute_tile_stats(&arena, &img);
+        let mut binary = vec![0u8; w * h];
+        let mut map = vec![0u8; w * h];
+        engine.apply_threshold_with_map(&arena, &img, &stats, &mut binary, &mut map);
+        (binary, map)
+    }
+
+    /// The sliding column accumulator must reproduce the exact box mean.
+    ///
+    /// Tolerance 1 covers the fixed-point reciprocal (`(sum * ⌊2³¹/area⌋) >> 31`
+    /// can land one below the exact quotient); the accumulator itself is exact.
+    #[test]
+    fn local_mean_matches_naive_box_mean() {
+        for &(w, h) in &[(64usize, 48usize), (37, 29), (8, 8), (129, 5)] {
+            let data = lcg_image(w, h, 7);
+            for &r in &[1usize, 3, 12, 40] {
+                let (binary, map) = run_mode(ThresholdMode::LocalMean, r, 0, &data, w, h);
+                for y in 0..h {
+                    for x in 0..w {
+                        let expect = naive_box_mean(&data, w, h, x, y, r).min(255);
+                        let got = u32::from(map[y * w + x]);
+                        assert!(
+                            expect.abs_diff(got) <= 1,
+                            "w={w} h={h} r={r} at ({x},{y}): got {got}, exact {expect}"
+                        );
+                        // The binary map is always the map applied to the source.
+                        let want_bin = if data[y * w + x] < map[y * w + x] {
+                            0
+                        } else {
+                            255
+                        };
+                        assert_eq!(binary[y * w + x], want_bin);
+                    }
+                }
+            }
+        }
+    }
+
+    /// `constant` shifts the threshold down, so raising it can only ever turn
+    /// foreground pixels into background — the noise-suppression knob.
+    #[test]
+    fn local_mean_constant_is_monotone() {
+        let (w, h) = (96usize, 64usize);
+        let data = lcg_image(w, h, 11);
+        let (_, no_offset) = run_mode(ThresholdMode::LocalMean, 8, 0, &data, w, h);
+        let (_, with_offset) = run_mode(ThresholdMode::LocalMean, 8, 10, &data, w, h);
+        for i in 0..w * h {
+            assert!(with_offset[i] <= no_offset[i]);
+        }
+    }
+
+    /// A perfectly flat frame has no structure. The local mean equals the grey
+    /// level everywhere, so any positive `constant` drives the threshold below
+    /// it and nothing is foreground — the noise-suppression property.
+    ///
+    /// The historical mode is the one that speckles: `t = mid(97, 97) = 97` is
+    /// published to segmentation even though the tile carries no signal.
+    #[test]
+    fn local_mean_suppresses_flat_regions() {
+        let (w, h) = (64usize, 64usize);
+        let data = vec![97u8; w * h];
+
+        let (binary, map) = run_mode(ThresholdMode::LocalMean, 8, 5, &data, w, h);
+        // 97 - 5, within the 1-unit slack of the fixed-point reciprocal.
+        assert!(
+            map.iter().all(|&t| (91..=92).contains(&t)),
+            "{:?}",
+            &map[..8]
+        );
+        assert!(
+            binary.iter().all(|&b| b == 255),
+            "flat frame produced foreground"
+        );
+
+        let (_, map) = run_mode(ThresholdMode::TileMidExtreme, 8, 5, &data, w, h);
+        assert!(map.contains(&97));
+    }
+
+    /// The binary map and the threshold map segmentation reads must agree pixel
+    /// for pixel under `LocalMean`. (`TileMidExtreme` deliberately does not:
+    /// it suppresses flat tiles in the binary map only, which is the split this
+    /// mode exists to close.)
+    #[test]
+    fn local_mean_keeps_binary_and_threshold_maps_consistent() {
+        let (w, h) = (80usize, 56usize);
+        let mut data = lcg_image(w, h, 3);
+        for y in 16..40 {
+            data[y * w + 16..y * w + 48].fill(0);
+        }
+        let (binary, map) = run_mode(ThresholdMode::LocalMean, 6, 2, &data, w, h);
+        for i in 0..w * h {
+            let want = if data[i] < map[i] { 0 } else { 255 };
+            assert_eq!(binary[i], want, "disagreed at {i}");
+        }
+    }
+
+    /// A thick black square on a bright background: the local mean must mark the
+    /// *whole* square as foreground, including its flat interior, which the tile
+    /// midpoint cannot do (`mid(0, 0) = 0` there).
+    #[test]
+    fn local_mean_fills_a_thick_flat_interior() {
+        let (w, h) = (64usize, 64usize);
+        let mut data = vec![200u8; w * h];
+        for y in 16..48 {
+            data[y * w + 16..y * w + 48].fill(0);
+        }
+        let centre = 32 * w + 32;
+        let (_, tile) = run_mode(ThresholdMode::TileMidExtreme, 8, 0, &data, w, h);
+        let (_, local) = run_mode(ThresholdMode::LocalMean, 24, 15, &data, w, h);
+        assert_eq!(
+            tile[centre], 0,
+            "tile mode already thresholded the interior"
+        );
+        assert!(
+            local[centre] > 0,
+            "local mean left the flat interior unthresholded"
+        );
     }
 
     // ========================================================================
