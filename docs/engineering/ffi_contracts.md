@@ -124,6 +124,14 @@ All configuration validation happens in `DetectorConfig::validate()` at
 | `quad_min_edge_length > 0.0` | `config.rs:255-257` | `InvalidEdgeLength` |
 | `structure_tensor_radius <= 8` | `config.rs:258-262` | `InvalidStructureTensorRadius` |
 | `quad_extraction_mode == EdLines` ⇒ `refinement_mode != Erf` | `config.rs:263-266` | `EdLinesIncompatibleWithErf` |
+| `nthreads <= MAX_NTHREADS` (1024; `0` = global pool) | `DetectorConfig::validate` | `InvalidThreadCount { got, max }` |
+
+`nthreads` is checked because it spawns that many OS threads (each reserving
+8 MiB of stack) at detector construction; the ceiling is a typo guard, not a
+policy — see `config::MAX_NTHREADS`. Like `decimation` and `upscale_factor` it
+has no Pydantic counterpart (`threads` is a `Detector(...)` kwarg, not a
+profile field), so the Rust check is the single enforcement point for both
+languages and surfaces in Python as a `ValueError`.
 
 ### Fields with **no** runtime validation
 
@@ -153,8 +161,11 @@ effect it does not deliver. `crates/locus-core/tests/contract_config_inertness.r
 is the tripwire: it mutates **every** `DetectorConfig` field on a synthetic
 frame set and requires the observable output (detections, rejected candidates,
 poses, covariances *and* the `binarized` / `threshold_map` telemetry images) to
-change. The field list comes from an exhaustive destructuring of the struct, so
-a new field fails the build until a case is written for it.
+change. The field roster is declared once, in the `detector_config_fields!`
+macro, which emits both the exhaustive destructuring (no `..` rest pattern) and
+the `stringify!`d name list the coverage test compares against the case list —
+so a new struct field breaks compilation there, and silencing that break puts
+the name in front of the coverage test, which then fails until a case exists.
 
 Two categories are exempt, each with a written reason in that file's allowlist.
 The allowlist is two-way — an allowlisted field that *starts* changing output
@@ -163,7 +174,7 @@ also fails the test — so neither category can drift silently.
 | Field | Scope |
 | --- | --- |
 | `threshold_min_range` | **Telemetry-only.** The tile-validity mask it drives is applied only while writing `telemetry.binarized`; the per-pixel `threshold_map` segmentation consumes is written unconditionally (`ThresholdEngine::apply_threshold_with_map`). Detection output is invariant to it. Not allowlisted — the signature covers telemetry. |
-| `nthreads` | **Live but output-invariant** by design: it picks the scoped Rayon pool (`LocusEngine::run_scoped`). Allowlisted as inert *for output*; `nthreads_selects_the_pipeline_pool` separately proves the pool is installed. |
+| `nthreads` | **Live but output-invariant** by design: it picks the scoped Rayon pool (`LocusEngine::run_scoped`). Allowlisted as inert *for output*; `detect_runs_on_the_scoped_nthreads_pool` and `detect_concurrent_runs_on_the_scoped_nthreads_pool` separately prove the pool is installed — each reads the worker count recorded by `run_detection_pipeline` itself (`FrameContext::bench_observed_pool_threads`), so deleting either `run_scoped` call site fails them. |
 | `threshold_min_radius`, `threshold_max_radius`, `adaptive_threshold_constant`, `adaptive_threshold_gradient_threshold` | **Inert.** Read only by `threshold::adaptive_threshold_gradient_window` / `adaptive_threshold_integral`, whose only callers are `benches/integral_threshold_bench.rs`. Allowlisted with an owner; wiring or removing them is a separate decision. |
 
 ---

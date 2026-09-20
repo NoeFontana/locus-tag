@@ -21,6 +21,18 @@ pub struct FrameContext {
     pub batch: Box<DetectionBatch>,
     /// Reusable buffer for upscaling.
     pub upscale_buf: Vec<u8>,
+    /// Rayon worker count observed **from inside** `run_detection_pipeline`
+    /// on the last frame processed with this context; `0` if the context has
+    /// never been through the pipeline.
+    ///
+    /// This is the tripwire for the private `LocusEngine::run_scoped` wrapper:
+    /// it is written by the pipeline body itself, so it reports the pool the
+    /// pipeline actually executed on rather than the pool the engine merely
+    /// holds. Attaching it to the context (instead of a global) keeps the
+    /// observation paired with the exact call that produced it, which is what
+    /// makes it readable after a `detect_concurrent` fan-out.
+    #[cfg(feature = "bench-internals")]
+    pub bench_observed_pool_threads: usize,
 }
 
 impl FrameContext {
@@ -31,6 +43,8 @@ impl FrameContext {
             arena: Bump::new(),
             batch: DetectionBatch::new_boxed(),
             upscale_buf: Vec::new(),
+            #[cfg(feature = "bench-internals")]
+            bench_observed_pool_threads: 0,
         }
     }
 
@@ -219,6 +233,16 @@ fn run_detection_pipeline<'ctx>(
     }
 
     ctx.reset();
+
+    // Record the pool this pipeline body is executing on. Written here — not
+    // in a wrapper — so a test can prove `LocusEngine::run_scoped` wraps the
+    // real call site; deleting the wrapper makes this read the global pool and
+    // fails `nthreads_*` in `tests/contract_config_inertness.rs`.
+    #[cfg(feature = "bench-internals")]
+    {
+        ctx.bench_observed_pool_threads = rayon::current_num_threads();
+    }
+
     let state = ctx;
 
     let (detection_img, _effective_scale, refinement_img) = if config.decimation > 1 {
@@ -894,6 +918,20 @@ pub struct LocusEngine {
     intra_frame_pool: Option<rayon::ThreadPool>,
 }
 
+/// Stack reserved for each worker of the scoped intra-frame pool.
+///
+/// `constraints.md` §1 records that a *single* stack-resident
+/// `DetectionBatch` is ~215 KB and that debug `rustc` performs no RVO, so a
+/// construction chain can hold several copies at once — which is exactly what
+/// a `detect_concurrent` overflow path does on a worker thread
+/// (`Box::new(FrameContext::new())`). Rayon otherwise inherits the
+/// `std::thread::spawn` default (2 MiB), the size that constraints.md calls
+/// "easily overflowed". 8 MiB matches the Linux main-thread default and leaves
+/// ~37× headroom over a single batch; it costs only reserved address space
+/// (pages are committed on touch), and is paid once per worker at construction,
+/// never per frame.
+const INTRA_FRAME_WORKER_STACK_BYTES: usize = 8 * 1024 * 1024;
+
 /// Build the scoped intra-frame Rayon pool for `nthreads`.
 ///
 /// Returns `None` for `nthreads == 0` (use the global pool). A pool that fails
@@ -909,6 +947,7 @@ fn build_intra_frame_pool(nthreads: usize) -> Option<rayon::ThreadPool> {
     }
     match rayon::ThreadPoolBuilder::new()
         .num_threads(nthreads)
+        .stack_size(INTRA_FRAME_WORKER_STACK_BYTES)
         .thread_name(|i| format!("locus-detect-{i}"))
         .build()
     {
@@ -1000,14 +1039,33 @@ impl LocusEngine {
         }
     }
 
-    /// The Rayon thread count the pipeline actually executes under.
+    /// Rayon worker counts observed from inside the pipeline body, one entry
+    /// per pooled [`FrameContext`].
     ///
-    /// Measured from inside the private `run_scoped` wrapper, so it proves
-    /// the scoped pool really wraps pipeline work rather than merely existing.
+    /// Contexts that have not been through the pipeline report `0`. After a
+    /// [`LocusEngine::detect_concurrent`] call sized to the pool, every context
+    /// that served a frame reports the pool the *pipeline* ran on — which is
+    /// how a test distinguishes "the engine holds a scoped pool" from "the
+    /// scoped pool wraps the frame fan-out".
+    ///
+    /// Non-destructive: contexts are popped and pushed back, so the pool is
+    /// left with the same contexts (order is irrelevant — they are
+    /// interchangeable).
     #[cfg(feature = "bench-internals")]
     #[must_use]
-    pub fn bench_api_pipeline_num_threads(&self) -> usize {
-        self.run_scoped(rayon::current_num_threads)
+    pub fn bench_api_pooled_observed_threads(&self) -> Vec<usize> {
+        let mut taken = Vec::new();
+        while let Some(ctx) = self.pool.pop() {
+            taken.push(ctx);
+        }
+        let observed = taken
+            .iter()
+            .map(|ctx| ctx.bench_observed_pool_threads)
+            .collect();
+        for ctx in taken {
+            let _ = self.pool.push(ctx);
+        }
+        observed
     }
 
     /// Run the detection pipeline using an explicitly supplied context.

@@ -1,16 +1,36 @@
 # How to Run Concurrent Detection
 
-`Detector` supports two modes controlled by `max_concurrent_frames` at construction.
+`Detector` batches frames through `detect_concurrent`; `max_concurrent_frames` sizes the
+reusable-context pool it draws from, and `threads` bounds the workers it runs on.
 
 !!! note "API Constraint"
     Currently, `max_concurrent_frames` is only exposed through the `DetectorBuilder` API. Using the standard `locus.Detector()` constructor will default to a single-frame pool.
 
 | `max_concurrent_frames` | Behaviour |
 | :--- | :--- |
-| `1` (default) | Sequential. `detect_concurrent` processes frames one at a time. |
-| `> 1` | Parallel. `detect_concurrent` processes up to N frames simultaneously via Rayon. |
+| `1` (default) | One pooled `FrameContext`. `detect_concurrent` still fans frames out via Rayon, but every frame beyond the first in flight allocates a temporary overflow context (~200 KB). |
+| `> 1` | N pooled contexts, so up to N frames run in parallel without allocating. |
 
-`threads` (intra-frame parallelism) and `max_concurrent_frames` (inter-frame parallelism) are independent — set both to match your workload.
+## How `threads` and `max_concurrent_frames` relate
+
+They are **not** two independent parallelism dials:
+
+* `max_concurrent_frames` sizes the pool of reusable `FrameContext`s. It
+  allocates no threads at all — it decides how many frames can be in flight
+  before Locus falls back to temporary overflow contexts.
+* `threads` sizes the **worker pool**, and it is the only knob that creates
+  threads. With `threads = n > 0` the detector builds one scoped Rayon pool of
+  `n` workers at construction and runs `detect` **and the whole
+  `detect_concurrent` fan-out** inside it (`LocusEngine::run_scoped`). The
+  frame-level and intra-frame parallelism therefore *share* those `n` workers
+  instead of multiplying: the detector never uses more than `n` threads,
+  whatever `max_concurrent_frames` is set to.
+* With `threads = 0` (the default) both levels run on Rayon's global pool,
+  sized by `RAYON_NUM_THREADS` or the core count.
+
+So size `threads` to the CPU budget you want the detector to occupy, and
+`max_concurrent_frames` to your batch size (to avoid overflow allocations).
+See [Thread control](../reference/api.md#thread-control) for the full contract.
 
 ## Building a concurrent detector
 
@@ -21,8 +41,8 @@ import locus
 detector = (
     locus.DetectorBuilder()
     .with_family(locus.TagFamily.AprilTag36h11)
-    .with_threads(4)  # Rayon threads per frame
-    .with_max_concurrent_frames(8)  # up to 8 frames in parallel
+    .with_threads(4)  # 4 Rayon workers for this detector, total
+    .with_max_concurrent_frames(8)  # 8 pooled frame contexts (no extra threads)
     .build()
 )
 ```

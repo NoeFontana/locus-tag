@@ -14,6 +14,14 @@ pub enum ConfigError {
     /// Upscale factor must be >= 1.
     #[error("upscale_factor must be >= 1, got {0}")]
     InvalidUpscaleFactor(usize),
+    /// Requested Rayon worker count exceeds the supported ceiling.
+    #[error("nthreads must be <= {max} (0 = global Rayon pool), got {got}")]
+    InvalidThreadCount {
+        /// The requested worker count.
+        got: usize,
+        /// The maximum supported worker count.
+        max: usize,
+    },
     /// Minimum fill ratio must be in [0.0, 1.0].
     #[error("fill ratio range invalid: min={min}, max={max} (must be 0.0..=1.0, min < max)")]
     InvalidFillRatio {

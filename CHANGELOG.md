@@ -24,7 +24,24 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `ThreadPool::install`. `threads=0` (the default) keeps the global pool and the
   previous behaviour exactly. Code that passed a small `threads` value and relied
   on the accidental full-core execution will now be slower by design — pass `0`.
-  Detection results are identical for every thread count.
+  Detection results are identical for every thread count. For `detect_concurrent`
+  the scoped pool wraps the **whole frame fan-out**, so frame-level and
+  intra-frame parallelism now share `n` workers rather than multiplying;
+  `max_concurrent_frames` sizes the `FrameContext` pool and spawns no threads of
+  its own (see `docs/how-to/concurrent_detection.md`). Each scoped worker is
+  given an explicit 8 MiB stack instead of Rayon's inherited 2 MiB
+  `std::thread::spawn` default, per the debug-build stack budget in
+  `docs/engineering/constraints.md` §1.
+  **Benchmark scripts that pass `threads=1`** (`tools/bench/render_tag_sota_eval.py`,
+  `refine_variants_eval.py`, `model_edge_eval.py`) are now genuinely
+  single-threaded. Their published runs also set `RAYON_NUM_THREADS=1`, so those
+  numbers stand; a re-run *without* that variable is no longer silently
+  multi-threaded.
+- **`nthreads` is now range-checked** by `DetectorConfig::validate()` against
+  `config::MAX_NTHREADS` (1024; `0` = global pool), mirroring how `decimation`
+  and `upscale_factor` are validated. A value past the ceiling returns
+  `ConfigError::InvalidThreadCount` (a `ValueError` in Python) instead of
+  attempting to spawn that many OS threads.
 
 ### Fixed
 
@@ -41,12 +58,16 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   Mutates **every** `DetectorConfig` field on a deterministic synthetic frame set
   and requires the observable output — detections, rejected candidates, poses,
   covariances and the `binarized` / `threshold_map` telemetry images — to change.
-  The field list comes from an exhaustive destructuring of the struct, so a new
-  field fails the build until a case exists. Provably-inert fields are allowlisted
-  with a written reason and are asserted to be *identical*, so the allowlist
-  cannot silently rot in either direction. Also pins `nthreads` determinism
-  (output invariant across 1/2/4/8 threads) and asserts the scoped pool is the one
-  the pipeline actually executes on.
+  The field roster is declared once in a `detector_config_fields!` macro that
+  emits both the exhaustive destructuring (no `..` rest pattern) and the
+  `stringify!`d name list, so a new field fails the build, and silencing that
+  break fails the coverage assertion until a case exists. Provably-inert fields
+  are allowlisted with a written reason and are asserted to be *identical*, so
+  the allowlist cannot silently rot in either direction. Also pins `nthreads`:
+  `detect` and `detect_concurrent` output is invariant across 1/2/4/8 threads,
+  and both entry points are proven to *execute* on the scoped pool — the worker
+  count is recorded by `run_detection_pipeline` itself, so deleting either
+  `run_scoped` call site fails the suite.
 
 ## [0.7.1] - 2026-07-19
 

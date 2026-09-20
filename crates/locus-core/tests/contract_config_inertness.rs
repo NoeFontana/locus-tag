@@ -11,9 +11,12 @@
 //! wiring an allowlisted field up (or letting a live field go dead) fails the
 //! build until the entry is updated.
 //!
-//! The field list is derived from an exhaustive `let`-destructuring of
-//! `DetectorConfig`, so adding a field to the struct breaks compilation here
-//! until a case is written for it.
+//! The field roster is declared once, in the `detector_config_fields!` macro,
+//! which emits *both* an exhaustive `let`-destructuring of `DetectorConfig`
+//! (no `..` rest pattern) and the `stringify!`d name list the coverage test
+//! checks against the case list. Adding a field to the struct therefore breaks
+//! compilation here, and the only way to fix the break puts the field in front
+//! of the coverage test, which fails until a case is written for it.
 //!
 //! Requires `--features bench-internals` for the dictionary accessors used by
 //! the synthetic tag renderer.
@@ -37,7 +40,7 @@ use locus_core::config::{
     AdaptivePpbConfig, CornerRefinementMode, DetectorConfig, EdLinesImbalanceGatePolicy,
     QuadExtractionMode, QuadExtractionPolicy, SegmentationConnectivity, TagFamily,
 };
-use locus_core::{CameraIntrinsics, DetectorBuilder, ImageView};
+use locus_core::{CameraIntrinsics, DetectorBuilder, FrameContext, ImageView};
 
 // ============================================================================
 // Deterministic synthetic scene rendering
@@ -765,87 +768,69 @@ fn cases() -> Vec<FieldCase> {
     ]
 }
 
-/// Exhaustive destructuring: adding a field to `DetectorConfig` without adding
-/// a `FieldCase` fails to compile here (no `..` rest pattern).
-fn every_config_field() -> Vec<&'static str> {
-    let DetectorConfig {
-        threshold_tile_size: _,
-        threshold_min_range: _,
-        enable_sharpening: _,
-        threshold_min_radius: _,
-        threshold_max_radius: _,
-        adaptive_threshold_constant: _,
-        adaptive_threshold_gradient_threshold: _,
-        quad_min_area: _,
-        quad_max_aspect_ratio: _,
-        quad_min_fill_ratio: _,
-        quad_max_fill_ratio: _,
-        quad_min_edge_length: _,
-        quad_min_edge_score: _,
-        subpixel_refinement_sigma: _,
-        segmentation_connectivity: _,
-        upscale_factor: _,
-        decimation: _,
-        nthreads: _,
-        decoder_min_contrast: _,
-        refinement_mode: _,
-        max_hamming_error: _,
-        huber_delta_px: _,
-        tikhonov_alpha_max: _,
-        sigma_n_sq: _,
-        structure_tensor_radius: _,
-        pose_consistency_fpr: _,
-        pose_consistency_gate_sigma_px: _,
-        pose_consistency_min_decisive_ratio: _,
-        outlier_drop_d2_threshold: _,
-        pose_edge_refinement_enabled: _,
-        gwlf_transversal_alpha: _,
-        quad_max_elongation: _,
-        quad_min_density: _,
-        quad_extraction_mode: _,
-        edlines_imbalance_gate: _,
-        quad_extraction_policy: _,
-    } = DetectorConfig::default();
-
-    vec![
-        "threshold_tile_size",
-        "threshold_min_range",
-        "enable_sharpening",
-        "threshold_min_radius",
-        "threshold_max_radius",
-        "adaptive_threshold_constant",
-        "adaptive_threshold_gradient_threshold",
-        "quad_min_area",
-        "quad_max_aspect_ratio",
-        "quad_min_fill_ratio",
-        "quad_max_fill_ratio",
-        "quad_min_edge_length",
-        "quad_min_edge_score",
-        "subpixel_refinement_sigma",
-        "segmentation_connectivity",
-        "upscale_factor",
-        "decimation",
-        "nthreads",
-        "decoder_min_contrast",
-        "refinement_mode",
-        "max_hamming_error",
-        "huber_delta_px",
-        "tikhonov_alpha_max",
-        "sigma_n_sq",
-        "structure_tensor_radius",
-        "pose_consistency_fpr",
-        "pose_consistency_gate_sigma_px",
-        "pose_consistency_min_decisive_ratio",
-        "outlier_drop_d2_threshold",
-        "pose_edge_refinement_enabled",
-        "gwlf_transversal_alpha",
-        "quad_max_elongation",
-        "quad_min_density",
-        "quad_extraction_mode",
-        "edlines_imbalance_gate",
-        "quad_extraction_policy",
-    ]
+/// Declares the `DetectorConfig` field roster **once** and derives both
+/// artefacts from it:
+///
+/// 1. an exhaustive `let`-destructuring (no `..` rest pattern), so adding a
+///    field to the struct stops this test crate from compiling, and
+/// 2. the `&str` list the coverage test compares against `cases()`, via
+///    `stringify!` on the very same identifiers.
+///
+/// Deriving both from one list is what makes the "a new config field fails the
+/// build until a case exists" claim true. With a hand-maintained second list,
+/// silencing the destructuring with `new_field: _` was enough to make the suite
+/// pass again — the coverage test never learned the field existed.
+macro_rules! detector_config_fields {
+    ($($field:ident),+ $(,)?) => {
+        fn every_config_field() -> Vec<&'static str> {
+            // Destructuring is exhaustive: a new struct field is a hard
+            // compile error here until it is added to this macro invocation,
+            // at which point `every_config_field_has_an_inertness_case` fails
+            // until a `FieldCase` exists for it.
+            let DetectorConfig { $($field: _,)+ } = DetectorConfig::default();
+            vec![$(stringify!($field),)+]
+        }
+    };
 }
+
+detector_config_fields!(
+    threshold_tile_size,
+    threshold_min_range,
+    enable_sharpening,
+    threshold_min_radius,
+    threshold_max_radius,
+    adaptive_threshold_constant,
+    adaptive_threshold_gradient_threshold,
+    quad_min_area,
+    quad_max_aspect_ratio,
+    quad_min_fill_ratio,
+    quad_max_fill_ratio,
+    quad_min_edge_length,
+    quad_min_edge_score,
+    subpixel_refinement_sigma,
+    segmentation_connectivity,
+    upscale_factor,
+    decimation,
+    nthreads,
+    decoder_min_contrast,
+    refinement_mode,
+    max_hamming_error,
+    huber_delta_px,
+    tikhonov_alpha_max,
+    sigma_n_sq,
+    structure_tensor_radius,
+    pose_consistency_fpr,
+    pose_consistency_gate_sigma_px,
+    pose_consistency_min_decisive_ratio,
+    outlier_drop_d2_threshold,
+    pose_edge_refinement_enabled,
+    gwlf_transversal_alpha,
+    quad_max_elongation,
+    quad_min_density,
+    quad_extraction_mode,
+    edlines_imbalance_gate,
+    quad_extraction_policy,
+);
 
 // ============================================================================
 // Tests
@@ -928,33 +913,152 @@ fn no_detector_config_field_is_silently_inert() {
     );
 }
 
+// ----------------------------------------------------------------------------
+// `nthreads` is live: the pipeline really executes on the scoped pool
+// ----------------------------------------------------------------------------
+
+/// Thread counts that are *distinguishable* from the ambient global pool.
+///
+/// The observation these tests make is `rayon::current_num_threads()` from
+/// inside the pipeline. If a candidate happened to equal the global pool size,
+/// an unwrapped pipeline would report exactly the same number and the
+/// assertion would pass vacuously — the precise failure mode that let the
+/// unwired `nthreads` ship. `global + 1` is always present, so the list is
+/// never empty however many cores the runner has.
+fn distinguishable_thread_counts() -> Vec<usize> {
+    let global = rayon::current_num_threads();
+    [1usize, 2, 3, global + 1]
+        .into_iter()
+        .filter(|&n| n != global)
+        .collect()
+}
+
+/// Run one frame through `detect_with_context` and drop the borrowing view, so
+/// the caller can read `ctx.bench_observed_pool_threads` afterwards. Asserts
+/// the frame decoded: an observation from a pipeline that bailed out early
+/// would prove nothing.
+fn detect_once(
+    engine: &locus_core::LocusEngine,
+    img: &ImageView<'_>,
+    k: &CameraIntrinsics,
+    ctx: &mut FrameContext,
+) {
+    let view = engine
+        .detect_with_context(img, ctx, Some(k), Some(TAG_SIZE_M), false)
+        .expect("detection must not fail on the synthetic frame set");
+    assert!(
+        !view.ids.is_empty(),
+        "probe frame must decode, otherwise the pool observation is vacuous"
+    );
+}
+
+fn frame_views() -> Vec<ImageView<'static>> {
+    frames()
+        .iter()
+        .map(|f| ImageView::new(f, CANVAS, CANVAS, CANVAS).expect("valid image view"))
+        .collect()
+}
+
 #[test]
-fn nthreads_selects_the_pipeline_pool() {
+fn detect_runs_on_the_scoped_nthreads_pool() {
     // The inertness allowlist asserts `nthreads` does not change *output*.
-    // This asserts it does change what the pipeline runs on — i.e. that it is
-    // wired at all, which is what the field silently failed to do before.
-    let global = DetectorBuilder::new().build_engine();
+    // This asserts it changes what `detect` runs *on* — i.e. that it is wired
+    // at all, which is what the field silently failed to do before.
+    //
+    // The reading is taken by `run_detection_pipeline` itself
+    // (`FrameContext::bench_observed_pool_threads`), not by a helper that
+    // re-enters `run_scoped`, so deleting the `run_scoped` wrapper from
+    // `detect_with_context` makes this test fail.
+    let global = rayon::current_num_threads();
+    let k = intrinsics();
+    let img = frame_views().remove(0);
+
+    let engine = DetectorBuilder::new()
+        .with_family(TagFamily::AprilTag36h11)
+        .build_engine();
+    let mut ctx = FrameContext::new();
+    detect_once(&engine, &img, &k, &mut ctx);
     assert_eq!(
-        global.intra_frame_threads(),
+        engine.intra_frame_threads(),
         None,
         "nthreads == 0 must stay on the global Rayon pool"
     );
+    assert_eq!(
+        ctx.bench_observed_pool_threads, global,
+        "nthreads == 0 must leave the pipeline on the global pool"
+    );
 
-    for n in [1usize, 2, 3] {
-        let engine = DetectorBuilder::new().with_threads(n).build_engine();
+    for n in distinguishable_thread_counts() {
+        let engine = DetectorBuilder::new()
+            .with_family(TagFamily::AprilTag36h11)
+            .with_threads(n)
+            .build_engine();
         assert_eq!(engine.intra_frame_threads(), Some(n));
+
+        let mut ctx = FrameContext::new();
+        detect_once(&engine, &img, &k, &mut ctx);
         assert_eq!(
-            engine.bench_api_pipeline_num_threads(),
-            n,
-            "pipeline work must execute on the scoped {n}-thread pool"
+            ctx.bench_observed_pool_threads, n,
+            "`detect` must execute inside the scoped {n}-thread pool, not merely \
+             be configured with one (the pipeline saw {} threads)",
+            ctx.bench_observed_pool_threads
         );
     }
 }
 
 #[test]
+fn detect_concurrent_runs_on_the_scoped_nthreads_pool() {
+    // Same contract for the frame fan-out: `detect_concurrent` must install
+    // the scoped pool around `par_iter`, so the per-frame pipeline bodies also
+    // observe `n`. Contexts carry their observation back into the engine pool,
+    // so the reading again comes from inside the pipeline.
+    let k = intrinsics();
+    let views = frame_views();
+
+    for n in distinguishable_thread_counts() {
+        let engine = DetectorBuilder::new()
+            .with_family(TagFamily::AprilTag36h11)
+            .with_threads(n)
+            .with_max_concurrent_frames(views.len())
+            .build_engine();
+
+        let results = engine.detect_concurrent(&views, Some(&k), Some(TAG_SIZE_M));
+        assert_eq!(results.len(), views.len());
+        assert!(
+            results.iter().all(Result::is_ok),
+            "detect_concurrent failed"
+        );
+
+        // Contexts that never served a frame still read 0; drop them.
+        let observed: Vec<usize> = engine
+            .bench_api_pooled_observed_threads()
+            .into_iter()
+            .filter(|&v| v != 0)
+            .collect();
+        assert!(
+            !observed.is_empty(),
+            "no pooled context recorded a pipeline run; the probe is not wired"
+        );
+        assert!(
+            observed.iter().all(|&v| v == n),
+            "`detect_concurrent` must run its fan-out on the scoped {n}-thread \
+             pool; pipeline bodies observed {observed:?}"
+        );
+    }
+}
+
+// ----------------------------------------------------------------------------
+// `nthreads` is output-invariant
+// ----------------------------------------------------------------------------
+
+/// Thread counts pinned by the determinism tests. Kept in one place so the
+/// CHANGELOG claim and the assertions cannot drift apart.
+const PINNED_THREAD_COUNTS: [usize; 4] = [1, 2, 4, 8];
+
+#[test]
 fn detection_output_is_invariant_to_thread_count() {
     let reference = signature(DetectorConfig::default());
-    for n in [1usize, 2, 8] {
+    for n in PINNED_THREAD_COUNTS {
         let cfg = DetectorConfig {
             nthreads: n,
             ..DetectorConfig::default()
@@ -963,6 +1067,60 @@ fn detection_output_is_invariant_to_thread_count() {
             signature(cfg),
             reference,
             "detection output changed at nthreads = {n}; parallel stages must be deterministic"
+        );
+    }
+}
+
+/// FNV-1a over the owned detections `detect_concurrent` returns, in frame order.
+fn concurrent_signature(nthreads: usize) -> u64 {
+    let views = frame_views();
+    let engine = DetectorBuilder::new()
+        .with_family(TagFamily::AprilTag36h11)
+        .with_threads(nthreads)
+        .with_max_concurrent_frames(views.len())
+        .build_engine();
+    let k = intrinsics();
+    let results = engine.detect_concurrent(&views, Some(&k), Some(TAG_SIZE_M));
+
+    let mut h = Hasher::new();
+    h.usize(results.len());
+    for result in &results {
+        let dets = result.as_ref().expect("detect_concurrent must not fail");
+        h.usize(dets.len());
+        for d in dets {
+            h.write(&d.id.to_le_bytes());
+            h.write(&d.hamming.to_le_bytes());
+            h.write(&d.bits.to_le_bytes());
+            for c in &d.corners {
+                h.write(&c[0].to_le_bytes());
+                h.write(&c[1].to_le_bytes());
+            }
+            h.write(&d.decision_margin.to_le_bytes());
+            match &d.pose {
+                Some(p) => {
+                    h.usize(1);
+                    for v in p.rotation.iter().chain(p.translation.iter()) {
+                        h.write(&v.to_le_bytes());
+                    }
+                },
+                None => h.usize(0),
+            }
+        }
+    }
+    h.0
+}
+
+#[test]
+fn detect_concurrent_output_is_invariant_to_thread_count() {
+    // `detect_concurrent` fans frames out *and* parallelises inside each frame;
+    // pinning it separately from `detect` covers the interaction between the
+    // two levels now that both share one bounded pool.
+    let reference = concurrent_signature(0);
+    for n in PINNED_THREAD_COUNTS {
+        assert_eq!(
+            concurrent_signature(n),
+            reference,
+            "detect_concurrent output changed at nthreads = {n}"
         );
     }
 }

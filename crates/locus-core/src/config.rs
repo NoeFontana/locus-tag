@@ -163,6 +163,20 @@ pub enum QuadExtractionPolicy {
     AdaptivePpb(AdaptivePpbConfig),
 }
 
+/// Upper bound accepted for [`DetectorConfig::nthreads`] by
+/// [`DetectorConfig::validate`].
+///
+/// This is a typo guard, not a policy: `nthreads` spawns that many **OS
+/// threads** at detector construction, each reserving
+/// `detector::INTRA_FRAME_WORKER_STACK_BYTES` (8 MiB) of stack, so a
+/// fat-fingered `threads=100_000` would try to reserve ~780 GiB of address
+/// space and exhaust the process thread limit instead of failing with a
+/// readable message. 1024 is two orders of magnitude above any core count a
+/// single Rayon pool is sensibly given today, so no legitimate configuration
+/// is rejected. `0` (the default, meaning "use the global pool") is always
+/// valid.
+pub const MAX_NTHREADS: usize = 1024;
+
 /// Pipeline-level configuration for the detector.
 ///
 /// These settings affect the fundamental behavior of the detection pipeline
@@ -243,6 +257,8 @@ pub struct DetectorConfig {
     /// Not a profile field — set it per call site
     /// ([`crate::DetectorBuilder::with_threads`], or `Detector(threads=…)` in
     /// Python), not in a shipped JSON profile.
+    ///
+    /// Range-checked by [`DetectorConfig::validate`]: `0..=`[`MAX_NTHREADS`].
     pub nthreads: usize,
 
     // Decoder parameters
@@ -478,6 +494,12 @@ impl DetectorConfig {
         }
         if self.upscale_factor < 1 {
             return Err(ConfigError::InvalidUpscaleFactor(self.upscale_factor));
+        }
+        if self.nthreads > MAX_NTHREADS {
+            return Err(ConfigError::InvalidThreadCount {
+                got: self.nthreads,
+                max: MAX_NTHREADS,
+            });
         }
         if self.quad_min_fill_ratio < 0.0
             || self.quad_max_fill_ratio > 1.0
@@ -1547,6 +1569,28 @@ mod tests {
             ..DetectorConfig::default()
         };
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_validation_bounds_thread_count() {
+        // 0 (global pool) and the ceiling itself are accepted; one past it is
+        // not. `nthreads` spawns OS threads, so an unbounded value is a
+        // resource hazard, not just a nonsensical setting.
+        for n in [0, 1, super::MAX_NTHREADS] {
+            let config = DetectorConfig {
+                nthreads: n,
+                ..DetectorConfig::default()
+            };
+            assert!(config.validate().is_ok(), "nthreads = {n} must validate");
+        }
+        let config = DetectorConfig {
+            nthreads: super::MAX_NTHREADS + 1,
+            ..DetectorConfig::default()
+        };
+        assert!(matches!(
+            config.validate(),
+            Err(crate::error::ConfigError::InvalidThreadCount { .. })
+        ));
     }
 
     #[test]

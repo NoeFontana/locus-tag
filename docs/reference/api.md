@@ -42,8 +42,8 @@ import locus
 detector = (
     locus.DetectorBuilder()
     .with_family(locus.TagFamily.AprilTag36h11)
-    .with_threads(4)
-    .with_max_concurrent_frames(8)  # Enable parallel batch processing
+    .with_threads(4)  # 4 Rayon workers for this detector, total
+    .with_max_concurrent_frames(8)  # 8 pooled frame contexts
     .build()
 )
 ```
@@ -54,7 +54,7 @@ detector = (
 | `with_decimation(n)` | Spatial decimation factor (default 1). |
 | `with_threads(n)` | Rayon worker count for the detector (see [Thread control](#thread-control)). `0` (default) = the global Rayon pool. |
 | `with_corner_refinement(mode)` | `CornerRefinementMode` for subpixel accuracy. |
-| `with_max_concurrent_frames(n)` | Pool size for `detect_concurrent` (default 1 = sequential). |
+| `with_max_concurrent_frames(n)` | `FrameContext` pool size for `detect_concurrent` (default 1). Spawns no threads — see [Thread control](#thread-control). |
 | `build()` | Build the `Detector`. |
 
 **`detect_concurrent(frames, *, intrinsics=None, tag_size=None) -> list[DetectionResult]`**
