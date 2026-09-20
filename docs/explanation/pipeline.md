@@ -62,10 +62,29 @@ At the start of each `detect()` call, the bump arena is reset in $O(1)$ time, fr
 
 ## Stage 1: Preprocessing
 
-Two linear passes over the image produce the binarized input for segmentation.
+Two linear passes over the image produce the per-pixel **threshold map** that
+segmentation consumes: a pixel is foreground when `pixel < threshold_map[pixel]`,
+and a threshold of `0` therefore means "never foreground".
 
-1. **Integral Image** — A single-pass $O(N)$ scan computes the prefix-sum table used by the adaptive thresholder.
-2. **Adaptive Threshold** — Each pixel is compared against the local mean computed from the integral image over a configurable tile size. The output is a binary image where foreground pixels indicate potential tag edges.
+1. **Tile statistics** — A single $O(N)$ pass reduces each `tile_size × tile_size`
+   tile to its min and max.
+2. **Threshold map** — `threshold.mode` selects the rule:
+    - `TileMidExtreme` *(default, every shipped profile)* — the midpoint of the
+      min/max over the tile's 3×3 tile neighbourhood, published as-is. Cheap and
+      well-tuned for the rectified, well-lit datasets Locus is benchmarked on.
+      Because the threshold follows the local *extremes*, a flat tile gets
+      `t ≈ its own grey level` (so sensor noise speckles uniform regions) and a
+      background darker than the midpoint between a marker's black border and a
+      nearby highlight becomes foreground.
+    - `TileGated` / `TilePropagated` — add the flat-tile validity gate
+      (`range < threshold.min_range` ⇒ threshold `0`), the second also filling an
+      invalid tile from the mean of its valid neighbours.
+    - `LocalMean` / `LocalMeanGated` — a true per-pixel local mean over a
+      `(2·local_mean_radius + 1)²` window, minus `threshold.constant`. Computed
+      with a sliding column-sum accumulator rather than an integral image, so the
+      auxiliary memory is one `u32` row per row-strip (≈ 0.4 MB at 4K instead of
+      33–66 MB), and the result is independent of the strip size and of the rayon
+      worker count.
 
 **Module:** `threshold.rs` | **Complexity:** $O(N)$ | **Typical Latency:** ~0.9 ms (720p)
 

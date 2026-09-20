@@ -8,6 +8,9 @@ pub enum ConfigError {
     /// Threshold tile size must be >= 2.
     #[error("threshold_tile_size must be >= 2, got {0}")]
     TileSizeTooSmall(usize),
+    /// Local-mean window radius must be >= 1.
+    #[error("threshold_local_mean_radius must be >= 1, got {0}")]
+    InvalidLocalMeanRadius(usize),
     /// Decimation factor must be >= 1.
     #[error("decimation factor must be >= 1, got {0}")]
     InvalidDecimation(usize),
