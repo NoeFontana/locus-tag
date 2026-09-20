@@ -1065,6 +1065,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#thread-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Thread control
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2369,6 +2380,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#thread-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Thread control
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2761,6 +2783,11 @@
 </details>        <p>Per-call orchestration options (<code>decimation</code>, <code>threads</code>, <code>families</code>)
 stay outside the profile because they describe <em>how</em> the detector is
 invoked, not <em>what</em> it looks for.</p>
+<p><code>threads</code> sets the Rayon worker count. <code>0</code> or <code>None</code> (the default)
+uses the global Rayon pool (<code>RAYON_NUM_THREADS</code> / core count); <code>n &gt; 0</code>
+builds one scoped <code>n</code>-thread pool at construction and runs every
+<code>detect</code> / <code>detect_concurrent</code> call inside it, bounding this detector's
+CPU footprint. Detection output is identical for every value.</p>
 
 
 
@@ -2917,7 +2944,13 @@ invoked, not <em>what</em> it looks for.</p>
 <span class="normal">328</span>
 <span class="normal">329</span>
 <span class="normal">330</span>
-<span class="normal">331</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Detector</span><span class="p">:</span>
+<span class="normal">331</span>
+<span class="normal">332</span>
+<span class="normal">333</span>
+<span class="normal">334</span>
+<span class="normal">335</span>
+<span class="normal">336</span>
+<span class="normal">337</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Detector</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;High-level detector.</span>
 
 <span class="sd">    Construction:</span>
@@ -2928,6 +2961,12 @@ invoked, not <em>what</em> it looks for.</p>
 <span class="sd">    Per-call orchestration options (``decimation``, ``threads``, ``families``)</span>
 <span class="sd">    stay outside the profile because they describe *how* the detector is</span>
 <span class="sd">    invoked, not *what* it looks for.</span>
+
+<span class="sd">    ``threads`` sets the Rayon worker count. ``0`` or ``None`` (the default)</span>
+<span class="sd">    uses the global Rayon pool (``RAYON_NUM_THREADS`` / core count); ``n &gt; 0``</span>
+<span class="sd">    builds one scoped ``n``-thread pool at construction and runs every</span>
+<span class="sd">    ``detect`` / ``detect_concurrent`` call inside it, bounding this detector&#39;s</span>
+<span class="sd">    CPU footprint. Detection output is identical for every value.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -3096,13 +3135,7 @@ invoked, not <em>what</em> it looks for.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>crates/locus-py/locus/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">198</span>
-<span class="normal">199</span>
-<span class="normal">200</span>
-<span class="normal">201</span>
-<span class="normal">202</span>
-<span class="normal">203</span>
-<span class="normal">204</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">204</span>
 <span class="normal">205</span>
 <span class="normal">206</span>
 <span class="normal">207</span>
@@ -3119,7 +3152,13 @@ invoked, not <em>what</em> it looks for.</p>
 <span class="normal">218</span>
 <span class="normal">219</span>
 <span class="normal">220</span>
-<span class="normal">221</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+<span class="normal">221</span>
+<span class="normal">222</span>
+<span class="normal">223</span>
+<span class="normal">224</span>
+<span class="normal">225</span>
+<span class="normal">226</span>
+<span class="normal">227</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">profile</span><span class="p">:</span> <span class="n">ProfileName</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">config</span><span class="p">:</span> <span class="n">DetectorConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -3258,13 +3297,7 @@ invoked, not <em>what</em> it looks for.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>crates/locus-py/locus/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">237</span>
-<span class="normal">238</span>
-<span class="normal">239</span>
-<span class="normal">240</span>
-<span class="normal">241</span>
-<span class="normal">242</span>
-<span class="normal">243</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">243</span>
 <span class="normal">244</span>
 <span class="normal">245</span>
 <span class="normal">246</span>
@@ -3309,7 +3342,13 @@ invoked, not <em>what</em> it looks for.</p>
 <span class="normal">285</span>
 <span class="normal">286</span>
 <span class="normal">287</span>
-<span class="normal">288</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">detect</span><span class="p">(</span>
+<span class="normal">288</span>
+<span class="normal">289</span>
+<span class="normal">290</span>
+<span class="normal">291</span>
+<span class="normal">292</span>
+<span class="normal">293</span>
+<span class="normal">294</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">detect</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">img</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
     <span class="n">intrinsics</span><span class="p">:</span> <span class="n">CameraIntrinsics</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -3406,7 +3445,7 @@ invoked, not <em>what</em> it looks for.</p>
 </tr>
 <tr>
 <td style="text-align: left;"><code>with_threads(n)</code></td>
-<td style="text-align: left;">Rayon intra-frame thread count (0 = all cores).</td>
+<td style="text-align: left;">Rayon worker count for the detector (see <a href="#thread-control">Thread control</a>). <code>0</code> (default) = the global Rayon pool.</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>with_corner_refinement(mode)</code></td>
@@ -3450,6 +3489,33 @@ invoked, not <em>what</em> it looks for.</p>
 </tr>
 </tbody>
 </table>
+<h2 id="thread-control">Thread control</h2>
+<p><code>threads</code> (<code>Detector(threads=n)</code> / <code>DetectorBuilder.with_threads(n)</code>) sets the
+number of Rayon workers the detector uses.</p>
+<ul>
+<li><code>0</code> — the default — leaves the pipeline on Rayon's <strong>global</strong> pool, sized by
+  <code>RAYON_NUM_THREADS</code> or the machine's core count. No extra threads are
+  spawned.</li>
+<li><code>n &gt; 0</code> builds <strong>one scoped Rayon pool of exactly <code>n</code> threads at detector
+  construction</strong>, and runs <code>detect</code> and <code>detect_concurrent</code> inside it. The
+  detector's CPU footprint is then bounded by <code>n</code> regardless of what the rest
+  of the process does with the global pool, which is what you want when several
+  detectors (or a detector and an unrelated Rayon workload) share a machine.
+  For <code>detect_concurrent</code> the bound covers the frame-level fan-out <em>and</em> the
+  intra-frame parallelism, so the two cannot over-subscribe each other.</li>
+</ul>
+<p>The pool is built once per detector, never per frame. Detection output is
+<strong>identical</strong> for every value of <code>threads</code>: each parallel stage writes to
+disjoint, index-addressed chunks, so only latency and CPU usage change.</p>
+<div class="admonition warning">
+<p class="admonition-title">Fixed in 0.7.x</p>
+<p>Before this release <code>threads</code> was accepted, stored and reported by
+<code>Detector.config()</code> but never read — the pipeline always ran on the global
+pool. Code that relied on <code>threads=1</code> to keep the detector single-threaded
+was in fact running on all cores; it now gets one thread and will be
+correspondingly slower. Pass <code>threads=0</code> (or omit it) for the previous
+behaviour.</p>
+</div>
 <h2 id="configuration">Configuration</h2>
 <p>Locus uses Pydantic for robust configuration validation.</p>
 
@@ -3487,14 +3553,7 @@ JSON string.</p>
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>crates/locus-py/locus/_config.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">338</span>
-<span class="normal">339</span>
-<span class="normal">340</span>
-<span class="normal">341</span>
-<span class="normal">342</span>
-<span class="normal">343</span>
-<span class="normal">344</span>
-<span class="normal">345</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">345</span>
 <span class="normal">346</span>
 <span class="normal">347</span>
 <span class="normal">348</span>
@@ -3571,7 +3630,14 @@ JSON string.</p>
 <span class="normal">419</span>
 <span class="normal">420</span>
 <span class="normal">421</span>
-<span class="normal">422</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">DetectorConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="normal">422</span>
+<span class="normal">423</span>
+<span class="normal">424</span>
+<span class="normal">425</span>
+<span class="normal">426</span>
+<span class="normal">427</span>
+<span class="normal">428</span>
+<span class="normal">429</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">DetectorConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Nested detector configuration — Python source of truth.</span>
 
 <span class="sd">    The three shipped profiles live in ``crates/locus-core/profiles/*.json``</span>
@@ -3697,14 +3763,7 @@ Adaptive routing lives in explicit opt-in profiles
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>crates/locus-py/locus/_config.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">399</span>
-<span class="normal">400</span>
-<span class="normal">401</span>
-<span class="normal">402</span>
-<span class="normal">403</span>
-<span class="normal">404</span>
-<span class="normal">405</span>
-<span class="normal">406</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">406</span>
 <span class="normal">407</span>
 <span class="normal">408</span>
 <span class="normal">409</span>
@@ -3715,7 +3774,14 @@ Adaptive routing lives in explicit opt-in profiles
 <span class="normal">414</span>
 <span class="normal">415</span>
 <span class="normal">416</span>
-<span class="normal">417</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="normal">417</span>
+<span class="normal">418</span>
+<span class="normal">419</span>
+<span class="normal">420</span>
+<span class="normal">421</span>
+<span class="normal">422</span>
+<span class="normal">423</span>
+<span class="normal">424</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">from_profile</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="n">ProfileName</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectorConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Load a shipped profile by name.</span>
 
@@ -3762,10 +3828,10 @@ Adaptive routing lives in explicit opt-in profiles
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>crates/locus-py/locus/_config.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">419</span>
-<span class="normal">420</span>
-<span class="normal">421</span>
-<span class="normal">422</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">426</span>
+<span class="normal">427</span>
+<span class="normal">428</span>
+<span class="normal">429</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">from_profile_json</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">json_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DetectorConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Load a user-supplied profile from a JSON string.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="n">json_str</span><span class="p">)</span>
@@ -3811,14 +3877,7 @@ Adaptive routing lives in explicit opt-in profiles
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>crates/locus-py/locus/_config.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">425</span>
-<span class="normal">426</span>
-<span class="normal">427</span>
-<span class="normal">428</span>
-<span class="normal">429</span>
-<span class="normal">430</span>
-<span class="normal">431</span>
-<span class="normal">432</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">432</span>
 <span class="normal">433</span>
 <span class="normal">434</span>
 <span class="normal">435</span>
@@ -3829,7 +3888,14 @@ Adaptive routing lives in explicit opt-in profiles
 <span class="normal">440</span>
 <span class="normal">441</span>
 <span class="normal">442</span>
-<span class="normal">443</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">DetectOptions</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="normal">443</span>
+<span class="normal">444</span>
+<span class="normal">445</span>
+<span class="normal">446</span>
+<span class="normal">447</span>
+<span class="normal">448</span>
+<span class="normal">449</span>
+<span class="normal">450</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">DetectOptions</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Per-call options for tag detection.&quot;&quot;&quot;</span>
 
     <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>

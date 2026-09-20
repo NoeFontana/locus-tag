@@ -1294,6 +1294,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#field-scope-live-telemetry-only-inert" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Field scope: live, telemetry-only, inert
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2060,6 +2071,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#field-scope-live-telemetry-only-inert" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Field scope: live, telemetry-only, inert
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2381,7 +2403,7 @@ declares explicit ranges:</p>
 <li><code>threshold_min_range</code>, <code>threshold_min_radius</code>, <code>threshold_max_radius</code></li>
 <li><code>adaptive_threshold_constant</code>, <code>adaptive_threshold_gradient_threshold</code></li>
 <li><code>quad_min_area</code>, <code>quad_max_aspect_ratio</code>, <code>quad_min_edge_score</code></li>
-<li><code>subpixel_refinement_sigma</code>, <code>segmentation_margin</code></li>
+<li><code>subpixel_refinement_sigma</code></li>
 <li><code>decoder_min_contrast</code>, <code>max_hamming_error</code>, <code>gwlf_transversal_alpha</code></li>
 <li><code>quad_max_elongation</code>, <code>quad_min_density</code></li>
 <li><code>huber_delta_px</code>, <code>tikhonov_alpha_max</code>, <code>sigma_n_sq</code></li>
@@ -2391,6 +2413,40 @@ le=255</code>), <strong>but only when the user constructs a <code>DetectorConfig
 Values passed through <code>Detector(**kwargs)</code> skip the Pydantic model and go
 straight to the Rust builder. A1 should either route all kwargs through
 Pydantic or extend <code>validate()</code>.</p>
+<h3 id="field-scope-live-telemetry-only-inert">Field scope: live, telemetry-only, inert</h3>
+<p>A config field that is accepted, stored and echoed back by <code>Detector.config()</code>
+but never read is a contract violation in its own right — the API promises an
+effect it does not deliver. <code>crates/locus-core/tests/contract_config_inertness.rs</code>
+is the tripwire: it mutates <strong>every</strong> <code>DetectorConfig</code> field on a synthetic
+frame set and requires the observable output (detections, rejected candidates,
+poses, covariances <em>and</em> the <code>binarized</code> / <code>threshold_map</code> telemetry images) to
+change. The field list comes from an exhaustive destructuring of the struct, so
+a new field fails the build until a case is written for it.</p>
+<p>Two categories are exempt, each with a written reason in that file's allowlist.
+The allowlist is two-way — an allowlisted field that <em>starts</em> changing output
+also fails the test — so neither category can drift silently.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Scope</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>threshold_min_range</code></td>
+<td><strong>Telemetry-only.</strong> The tile-validity mask it drives is applied only while writing <code>telemetry.binarized</code>; the per-pixel <code>threshold_map</code> segmentation consumes is written unconditionally (<code>ThresholdEngine::apply_threshold_with_map</code>). Detection output is invariant to it. Not allowlisted — the signature covers telemetry.</td>
+</tr>
+<tr>
+<td><code>nthreads</code></td>
+<td><strong>Live but output-invariant</strong> by design: it picks the scoped Rayon pool (<code>LocusEngine::run_scoped</code>). Allowlisted as inert <em>for output</em>; <code>nthreads_selects_the_pipeline_pool</code> separately proves the pool is installed.</td>
+</tr>
+<tr>
+<td><code>threshold_min_radius</code>, <code>threshold_max_radius</code>, <code>adaptive_threshold_constant</code>, <code>adaptive_threshold_gradient_threshold</code></td>
+<td><strong>Inert.</strong> Read only by <code>threshold::adaptive_threshold_gradient_window</code> / <code>adaptive_threshold_integral</code>, whose only callers are <code>benches/integral_threshold_bench.rs</code>. Allowlisted with an owner; wiring or removing them is a separate decision.</td>
+</tr>
+</tbody>
+</table>
 <hr />
 <h2 id="4-detector-constructor-create_detector">4. <code>Detector</code> constructor (<code>create_detector</code>)</h2>
 <p>Rust entry at <code>crates/locus-py/src/lib.rs:1314-1422</code>. Python wrapper at
