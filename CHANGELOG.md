@@ -21,6 +21,17 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   unchanged. Adds `bench real --sharpening/--no-sharpening` and the
   [Liu4K report](docs/engineering/benchmarking/liu4k_20260919.md) (config sweep, comparison against
   OpenCV 4.10 and aruco_nano, and open detector findings).
+- **Liu4K failure-mode visualiser** (`bench liu4k-viz scan|select|render|index`,
+  `tools/bench/liu4k_viz.py`). Emits annotated PNGs and Rerun `.rrd` recordings
+  (`locus_liu4k_viz`) that show, per image and per detector configuration, the ground truth, the
+  TP/FP detections, every missed marker tagged with its diagnosed stage of loss (hollow border /
+  low contrast / merged component / quad-gate reject / decode fail), the funnel-rejected candidate
+  quads, and the intermediate views (sharpened image, threshold map, CCL foreground mask). The
+  foreground mask is recomputed as `work_image < telemetry.threshold_map` — no detector change and
+  no new FFI hook — and the replication is self-checked against the telemetry threshold map every
+  frame. Image selection is scripted from a whole-dataset scan (`selection.json` records the rule
+  behind every pick, seeded random fill). Renders are derivative images of CC-BY-4.0 data: they go
+  to a gitignored output directory with the attribution README, and are never committed.
 
 ## [0.7.1] - 2026-07-19
 

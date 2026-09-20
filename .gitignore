@@ -11,3 +11,6 @@ tests/data
 *.snap.new
 # Local debug-bench output dirs (`tools/bench/*.py`); 10s of MB each, never committed
 /diagnostics/
+# `bench liu4k-viz` renders: derivative images of the CC-BY-4.0 Liu4K dataset,
+# GBs of PNG/.rrd. Local inspection only — never committed or published.
+/.claude/liu4k_viz_out/

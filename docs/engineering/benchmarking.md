@@ -199,6 +199,49 @@ squared fiducial markers", Image and Vision Computing, 2018. Any benchmark repor
 must also carry `lscpu` hardware metadata, build profile, thread count and env vars
 (`docs/engineering/constraints.md` section 6).
 
+#### Visual failure-mode inspection (`bench liu4k-viz`)
+
+`tools/bench/liu4k_viz.py` turns a Liu4K run into something you can look at:
+annotated PNGs and a Rerun recording per image, with the ground truth, the TP/FP
+detections, every missed marker labelled with its diagnosed **stage of loss**,
+the funnel-rejected candidate quads, and the intermediate views (sharpened
+image, threshold map, CCL foreground mask). It needs no detector change: the
+foreground mask is `work_image < telemetry.threshold_map`, exactly what the CCL
+consumes, and the sharpening replication is checked against the telemetry
+threshold map on every frame.
+
+```bash
+DATA=tests/data/liu4k
+OUT=.claude/liu4k_viz_out           # gitignored; renders are CC-BY-4.0 derivatives
+
+# 1. whole-dataset scan (add --classify for the coarse stage-of-loss histogram)
+PYTHONPATH=. uv run --group bench tools/cli.py bench liu4k-viz scan \
+  --config standard --classify --data-dir $DATA --out $OUT
+PYTHONPATH=. uv run --group bench tools/cli.py bench liu4k-viz scan \
+  --config no_sharpen --data-dir $DATA --out $OUT
+
+# 2. reproducible image selection (records the rule behind every pick)
+PYTHONPATH=. uv run --group bench tools/cli.py bench liu4k-viz select --out $OUT
+
+# 3. render the selection (repeat from another build for configs it alone has,
+#    with a different --rrd-tag; the parts are merged per image in step 4)
+PYTHONPATH=. uv run --group bench tools/cli.py bench liu4k-viz render \
+  --config standard --config no_sharpen --rrd-tag base --data-dir $DATA --out $OUT
+
+# 4. contact sheets, side-by-side PNGs, index.html, .rrd merge + verification
+PYTHONPATH=. uv run --group bench tools/cli.py bench liu4k-viz index --out $OUT
+
+xdg-open $OUT/index.html
+rerun $OUT/rrd/004.rrd
+```
+
+Configurations are named (`standard`, `no_sharpen`, `local_mean`,
+`shoot_limited`); a build that does not carry the knob a config needs fails with
+a clear "absent from this build" error instead of silently running the default.
+Everything the tool writes is a derivative image of the CC-BY-4.0 dataset: keep
+it in the output directory (which carries the attribution `README.md`), never
+commit or publish it.
+
 ### Hub Dataset Evaluation
 Evaluate against rendered Hugging Face Hub datasets. These datasets include ground-truth 6-DOF poses, so the CLI reports both recall and pose error (translation RMSE in metres).
 

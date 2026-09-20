@@ -1724,5 +1724,174 @@ def bench_compare_instances(
         )
 
 
+# --- Liu4K visualisation ----------------------------------------------------
+
+liu4k_viz_app = typer.Typer(
+    help="Visualise Liu4K detections and failure modes (annotated PNGs + Rerun .rrd)."
+)
+bench_app.add_typer(liu4k_viz_app, name="liu4k-viz")
+
+_LIU4K_OUT_DEFAULT = Path(".claude/liu4k_viz_out")
+_LIU4K_LICENSE_NOTE = (
+    "Liu4K is CC-BY-4.0 (Munoz-Salinas, DOI 10.5281/zenodo.18667018). Renders are "
+    "derivative images: keep them in the output directory, do not commit or publish them."
+)
+
+
+def _liu4k_data_dir(data_dir: Path | None) -> Path:
+    """Resolve the read-only Liu4K image directory (never downloads here)."""
+    from tools.bench.liu4k import LIU4K_CACHE_DIR, LIU4K_SUBDIR
+
+    if data_dir is not None:
+        return data_dir if data_dir.name == LIU4K_SUBDIR else data_dir / LIU4K_SUBDIR
+    return LIU4K_CACHE_DIR / LIU4K_SUBDIR
+
+
+def _liu4k_family() -> int:
+    import locus
+
+    return locus.TagFamily.ArUcoMip36h12
+
+
+@liu4k_viz_app.command("scan")
+def liu4k_viz_scan(
+    config: list[str] = typer.Option(
+        ["standard"], help="Configs to scan (standard, no_sharpen, local_mean, shoot_limited)"
+    ),
+    data_dir: Path | None = typer.Option(None, help="Liu4K image directory (read-only)"),
+    out: Path = typer.Option(_LIU4K_OUT_DEFAULT, help="Output directory (not in git)"),
+    classify: bool = typer.Option(
+        False, help="Also coarse-classify every missed marker (slower; drives the selection)"
+    ),
+    limit: int | None = typer.Option(None, help="Limit number of images"),
+    skip: int = typer.Option(0, help="Skip the first N images"),
+    tile_size: int = typer.Option(8, help="threshold.tile_size of the profile under test"),
+    min_range: int = typer.Option(10, help="threshold.min_range (flat-tile cut-off)"),
+):
+    """Score every Liu4K image for one or more configs (writes scan_<config>.jsonl)."""
+    from tools.bench.liu4k import LIU4K_MATCH_THRESHOLD_PX
+    from tools.bench.liu4k_viz import CONFIGS, UnsupportedConfigError, run_scan
+
+    typer.echo(_LIU4K_LICENSE_NOTE)
+    images_dir = _liu4k_data_dir(data_dir)
+    if not images_dir.is_dir():
+        typer.echo(f"Error: Liu4K images not found at {images_dir}", err=True)
+        raise typer.Exit(code=1)
+    for name in config:
+        if name not in CONFIGS:
+            typer.echo(f"Error: unknown config '{name}' (have: {', '.join(CONFIGS)})", err=True)
+            raise typer.Exit(code=1)
+        try:
+            path = run_scan(
+                data_dir=images_dir,
+                out_dir=out,
+                config=name,
+                family=_liu4k_family(),
+                classify=classify,
+                limit=limit,
+                skip=skip,
+                tile_size=tile_size,
+                min_range=min_range,
+                match_threshold_px=LIU4K_MATCH_THRESHOLD_PX,
+            )
+        except UnsupportedConfigError as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(code=2) from exc
+        typer.echo(f"Wrote {path}")
+
+
+@liu4k_viz_app.command("select")
+def liu4k_viz_select(
+    out: Path = typer.Option(_LIU4K_OUT_DEFAULT, help="Output directory holding the scans"),
+    baseline: str = typer.Option("standard", help="Config the selection rules are relative to"),
+    target: int = typer.Option(30, help="Approximate number of images to select"),
+    seed: int = typer.Option(20260920, help="Seed of the random fill (reproducibility)"),
+):
+    """Pick the images to render from the whole-dataset scans (selection.json)."""
+    from tools.bench.liu4k_viz import load_selection, run_select
+
+    path = run_select(out_dir=out, baseline=baseline, target=target, seed=seed)
+    typer.echo(f"Wrote {path} ({len(load_selection(out))} images)")
+
+
+@liu4k_viz_app.command("render")
+def liu4k_viz_render(
+    config: list[str] = typer.Option(["standard"], help="Configs this build can run"),
+    data_dir: Path | None = typer.Option(None, help="Liu4K image directory (read-only)"),
+    out: Path = typer.Option(_LIU4K_OUT_DEFAULT, help="Output directory (not in git)"),
+    images: list[str] = typer.Option([], help="Images to render (default: selection.json)"),
+    rrd_tag: str = typer.Option(
+        "base", help="Tag of this build's .rrd part (parts are merged per image by `index`)"
+    ),
+    intermediates: bool = typer.Option(
+        True, help="Also emit the sharpened/threshold/foreground views"
+    ),
+    emit_rrd: bool = typer.Option(True, help="Emit the Rerun recording parts"),
+    png_long_side: int = typer.Option(1600, help="Long side of the annotated overview PNGs"),
+    tile_size: int = typer.Option(8, help="threshold.tile_size of the profile under test"),
+    min_range: int = typer.Option(10, help="threshold.min_range (flat-tile cut-off)"),
+):
+    """Render annotated PNGs, FN crops, intermediates and .rrd parts for the selection."""
+    from tools.bench.liu4k import LIU4K_MATCH_THRESHOLD_PX
+    from tools.bench.liu4k_viz import (
+        CONFIGS,
+        UnsupportedConfigError,
+        load_selection,
+        run_render,
+    )
+
+    typer.echo(_LIU4K_LICENSE_NOTE)
+    images_dir = _liu4k_data_dir(data_dir)
+    if not images_dir.is_dir():
+        typer.echo(f"Error: Liu4K images not found at {images_dir}", err=True)
+        raise typer.Exit(code=1)
+    for name in config:
+        if name not in CONFIGS:
+            typer.echo(f"Error: unknown config '{name}' (have: {', '.join(CONFIGS)})", err=True)
+            raise typer.Exit(code=1)
+    selected = list(images) if images else [s.image for s in load_selection(out)]
+    try:
+        written = run_render(
+            data_dir=images_dir,
+            out_dir=out,
+            configs=config,
+            images=selected,
+            family=_liu4k_family(),
+            rrd_tag=rrd_tag,
+            tile_size=tile_size,
+            min_range=min_range,
+            match_threshold_px=LIU4K_MATCH_THRESHOLD_PX,
+            intermediates=intermediates,
+            emit_rrd=emit_rrd,
+            png_long_side=png_long_side,
+        )
+    except UnsupportedConfigError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    typer.echo(f"Wrote {len(written)} files under {out}")
+
+
+@liu4k_viz_app.command("index")
+def liu4k_viz_index(
+    out: Path = typer.Option(_LIU4K_OUT_DEFAULT, help="Output directory to index"),
+    merge_rrd: bool = typer.Option(True, help="Merge the per-build .rrd parts per image"),
+    verify: bool = typer.Option(True, help="Verify each recording loads (rerun rrd verify + SDK)"),
+):
+    """Build the side-by-side PNGs, contact sheets, index.html and README."""
+    from tools.bench.liu4k_viz import merge_rrd_parts, run_index, verify_rrd
+
+    notes: dict[str, str] = {}
+    if merge_rrd and (out / "rrd" / "parts").is_dir():
+        merged = merge_rrd_parts(out)
+        typer.echo(f"Merged {len(merged)} recording(s)")
+        if verify and merged:
+            notes = verify_rrd(merged)
+            for key, value in sorted(notes.items()):
+                typer.echo(f"  {key}: {value}")
+    path = run_index(out_dir=out, rrd_notes=notes)
+    typer.echo(f"Wrote {path}")
+    typer.echo(f"Open with: xdg-open {path.resolve()}")
+
+
 if __name__ == "__main__":
     app()
