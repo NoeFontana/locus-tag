@@ -209,6 +209,10 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
 ///   overshoot limiter; the result can never leave the local intensity range,
 ///   so sharpening cannot raise a tile's maximum (or lower its minimum) above
 ///   what the unsharpened image already contained.
+#[expect(
+    clippy::inline_always,
+    reason = "the inline is what makes this body part of the caller's multiversion clone, so it is compiled with that clone's target features instead of the baseline ISA"
+)]
 #[inline(always)]
 #[expect(
     clippy::needless_range_loop,
