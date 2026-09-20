@@ -9,8 +9,8 @@ The pipeline follows a strict sequential-then-parallel execution model. Each sta
 ```mermaid
 flowchart LR
     subgraph Preprocessing
-        Integral["Integral Image"]
-        Thresh["Adaptive Threshold"]
+        TileStats["Tile Statistics"]
+        Thresh["Threshold Map"]
     end
 
     subgraph Segmentation
@@ -43,7 +43,7 @@ flowchart LR
         PoseRefine["LM Refinement"]
     end
 
-    Integral --> Thresh
+    TileStats --> Thresh
     Thresh --> RLE --> LSL
     LSL --> Contour --> DP --> Refine
     Refine -.->|ERF or GWLF| Geometry
@@ -76,15 +76,14 @@ and a threshold of `0` therefore means "never foreground".
       `t ≈ its own grey level` (so sensor noise speckles uniform regions) and a
       background darker than the midpoint between a marker's black border and a
       nearby highlight becomes foreground.
-    - `TileGated` / `TilePropagated` — add the flat-tile validity gate
-      (`range < threshold.min_range` ⇒ threshold `0`), the second also filling an
-      invalid tile from the mean of its valid neighbours.
-    - `LocalMean` / `LocalMeanGated` — a true per-pixel local mean over a
-      `(2·local_mean_radius + 1)²` window, minus `threshold.constant`. Computed
-      with a sliding column-sum accumulator rather than an integral image, so the
-      auxiliary memory is one `u32` row per row-strip (≈ 0.4 MB at 4K instead of
-      33–66 MB), and the result is independent of the strip size and of the rayon
-      worker count.
+    - `LocalMean` *(opt-in)* — a true per-pixel local mean over a
+      `(2·local_mean_radius + 1)²` window, minus `threshold.constant`. Tracks
+      the local *background level* instead of the local extremes, and the
+      constant keeps sensor noise in a uniform region below the threshold.
+      Computed with a sliding column-sum accumulator rather than an integral
+      image, so the auxiliary memory is one `u32` row per row-strip (≈ 0.4 MB
+      at 4K instead of 33–66 MB), and the result is independent of the strip
+      size and of the rayon worker count.
 
 **Module:** `threshold.rs` | **Complexity:** $O(N)$ | **Typical Latency:** ~0.9 ms (720p)
 
@@ -213,9 +212,9 @@ sequenceDiagram
 
     Note over Det: Arena Reset (O(1))
 
-    Det->>Thresh: compute_integral_image()
-    Det->>Thresh: adaptive_threshold()
-    Thresh-->>Det: Binarized Image
+    Det->>Thresh: compute_tile_stats()
+    Det->>Thresh: apply_threshold_with_map()
+    Thresh-->>Det: Threshold Map
 
     Det->>Seg: SIMD Fused RLE + LSL
     Seg-->>Det: Component Labels & Stats
@@ -252,7 +251,7 @@ sequenceDiagram
 
 | Stage | Complexity | Latency (50 Tags, 720p) | Notes |
 | :--- | :--- | :--- | :--- |
-| **Preprocessing** | $O(N)$ | ~0.9 ms | Adaptive thresholding + Integral Image. |
+| **Preprocessing** | $O(N)$ | ~0.9 ms | Tile statistics + threshold map. |
 | **Segmentation** | $O(N)$ | ~0.5 ms | SIMD Fused RLE + Light-Speed Labeling. |
 | **Quad Extraction** | $O(K \cdot M)$ | ~1.5 ms | SoA extraction + sub-pixel refinement. |
 | **Decoding (Hard)** | $O(Q)$ | ~10.0 ms | SoA math pass; SIMD bilinear sampling. |
