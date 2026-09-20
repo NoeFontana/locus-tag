@@ -47,7 +47,6 @@ fn assert_shared_defaults(cfg: &DetectorConfig) {
     assert_eq!(cfg.tikhonov_alpha_max, d.tikhonov_alpha_max);
     assert_eq!(cfg.sigma_n_sq, d.sigma_n_sq);
     assert_eq!(cfg.structure_tensor_radius, d.structure_tensor_radius);
-    assert_eq!(cfg.segmentation_margin, d.segmentation_margin);
     assert_eq!(cfg.upscale_factor, d.upscale_factor);
     // Per-call orchestration fields are never set from a profile.
     assert_eq!(cfg.decimation, d.decimation);
@@ -216,7 +215,6 @@ fn to_profile_json_round_trips_every_field() {
         outlier_drop_d2_threshold: 25.0,
         // Segmentation
         segmentation_connectivity: SegmentationConnectivity::Four,
-        segmentation_margin: 2,
         // Policy (exercises the AdaptivePpb externally-tagged enum subtree)
         quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
             threshold: 3.25,

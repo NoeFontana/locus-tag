@@ -175,8 +175,19 @@ pub struct DetectorConfig {
     /// Tile size for adaptive thresholding (default: 4).
     /// Larger tiles are faster but less adaptive to local contrast.
     pub threshold_tile_size: usize,
-    /// Minimum intensity range in a tile to be considered valid (default: 10).
-    /// Tiles with lower range are treated as uniform (no edges).
+    /// Minimum intensity range in a 3×3-tile neighbourhood for the centre tile
+    /// to be marked *valid* (default: 10).
+    ///
+    /// **Telemetry-scoped.** This gate is applied only while writing the
+    /// binarized debug map: pixels in a low-range (flat) tile are forced to
+    /// background in `telemetry.binarized`. The per-pixel `threshold_map` that
+    /// segmentation actually consumes is written unconditionally, so changing
+    /// this value changes `telemetry.binarized` and nothing else — detections
+    /// are bit-identical. See `ThresholdEngine::apply_threshold_with_map`.
+    ///
+    /// The tile-validity *propagation* pass that would have made this affect
+    /// detection was disabled in 996e782 and is still commented out there; do
+    /// not assume this knob hardens the detector against flat regions.
     pub threshold_min_range: u8,
 
     /// Enable Laplacian sharpening to enhance edges for small tags (default: true).
@@ -206,8 +217,6 @@ pub struct DetectorConfig {
     pub quad_min_edge_score: f64,
     /// PSF blur factor for subpixel refinement (e.g., 0.6)
     pub subpixel_refinement_sigma: f64,
-    /// Minimum deviation from threshold for a pixel to be connected in threshold-model CCL (default: 2).
-    pub segmentation_margin: i16,
     /// Segmentation connectivity (4-way or 8-way).
     pub segmentation_connectivity: SegmentationConnectivity,
     /// Factor to upscale the image before detection (1 = no upscaling).
@@ -222,7 +231,22 @@ pub struct DetectorConfig {
     /// Decimation factor for preprocessing (1 = no decimation).
     pub decimation: usize,
 
-    /// Number of threads for parallel processing (0 = auto).
+    /// Rayon worker count for **intra-frame** parallelism (0 = global pool).
+    ///
+    /// `0` (the default) leaves the pipeline on Rayon's global pool, whose
+    /// size is governed by `RAYON_NUM_THREADS` or the core count. A non-zero
+    /// value makes `LocusEngine` build one scoped [`rayon::ThreadPool`] of
+    /// exactly that size at construction and run `detect` /
+    /// `detect_concurrent` under `ThreadPool::install`, bounding the detector's
+    /// CPU footprint independently of the process-wide pool.
+    ///
+    /// Output is invariant to this value: every parallel stage writes to
+    /// disjoint, index-addressed chunks, so results are bit-identical across
+    /// thread counts. Only latency and CPU usage change.
+    ///
+    /// Not a profile field — set it per call site
+    /// ([`crate::DetectorBuilder::with_threads`], or `Detector(threads=…)` in
+    /// Python), not in a shipped JSON profile.
     pub nthreads: usize,
 
     // Decoder parameters
@@ -409,7 +433,6 @@ impl Default for DetectorConfig {
             quad_min_edge_score: 4.0,
             subpixel_refinement_sigma: 0.6,
 
-            segmentation_margin: 1,
             segmentation_connectivity: SegmentationConnectivity::Eight,
             upscale_factor: 1,
             decimation: 1,
@@ -552,8 +575,6 @@ pub struct DetectorConfigBuilder {
     pub quad_min_edge_score: Option<f64>,
     /// Sigma for Gaussian in subpixel refinement.
     pub subpixel_refinement_sigma: Option<f64>,
-    /// Margin for threshold-model segmentation.
-    pub segmentation_margin: Option<i16>,
     /// Connectivity mode for segmentation (4 or 8).
     pub segmentation_connectivity: Option<SegmentationConnectivity>,
     /// Upscale factor for low-res images (1 = no upscale).
@@ -703,7 +724,6 @@ impl DetectorConfigBuilder {
             subpixel_refinement_sigma: self
                 .subpixel_refinement_sigma
                 .unwrap_or(d.subpixel_refinement_sigma),
-            segmentation_margin: self.segmentation_margin.unwrap_or(d.segmentation_margin),
             segmentation_connectivity: self
                 .segmentation_connectivity
                 .unwrap_or(d.segmentation_connectivity),
@@ -752,13 +772,6 @@ impl DetectorConfigBuilder {
     #[must_use]
     pub fn segmentation_connectivity(mut self, connectivity: SegmentationConnectivity) -> Self {
         self.segmentation_connectivity = Some(connectivity);
-        self
-    }
-
-    /// Set the segmentation margin for threshold-model CCL.
-    #[must_use]
-    pub fn segmentation_margin(mut self, margin: i16) -> Self {
-        self.segmentation_margin = Some(margin);
         self
     }
 
@@ -1267,14 +1280,12 @@ mod profile_json {
     #[serde(deny_unknown_fields)]
     pub(super) struct SegmentationJson {
         pub connectivity: SegmentationConnectivity,
-        pub margin: i16,
     }
 
     impl SegmentationJson {
         fn from_config(c: &DetectorConfig) -> Self {
             Self {
                 connectivity: c.segmentation_connectivity,
-                margin: c.segmentation_margin,
             }
         }
     }
@@ -1305,7 +1316,6 @@ mod profile_json {
                 quad_min_edge_length: p.quad.min_edge_length,
                 quad_min_edge_score: p.quad.min_edge_score,
                 subpixel_refinement_sigma: p.quad.subpixel_refinement_sigma,
-                segmentation_margin: p.segmentation.margin,
                 segmentation_connectivity: p.segmentation.connectivity,
                 upscale_factor: p.quad.upscale_factor,
                 decimation: d.decimation,

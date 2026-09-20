@@ -927,6 +927,43 @@ pub struct LocusEngine {
     min_outer_dim: u32,
     /// Lock-free pool of reusable frame contexts.
     pool: crossbeam_queue::ArrayQueue<Box<FrameContext>>,
+    /// Scoped Rayon pool backing intra-frame parallelism, built **once** at
+    /// construction from [`DetectorConfig::nthreads`].
+    ///
+    /// `None` (the default, `nthreads == 0`) keeps the pipeline on the global
+    /// Rayon pool, which is what every build did before the field was wired —
+    /// so the default path allocates no extra threads and is unchanged.
+    intra_frame_pool: Option<rayon::ThreadPool>,
+}
+
+/// Build the scoped intra-frame Rayon pool for `nthreads`.
+///
+/// Returns `None` for `nthreads == 0` (use the global pool). A pool that fails
+/// to spawn degrades to the global pool with a warning rather than failing
+/// detector construction — thread-spawn failure is an environment condition,
+/// not a configuration error, and detection is still correct on the global
+/// pool.
+///
+/// Called from [`LocusEngine::new`] only; never from the per-frame hot path.
+fn build_intra_frame_pool(nthreads: usize) -> Option<rayon::ThreadPool> {
+    if nthreads == 0 {
+        return None;
+    }
+    match rayon::ThreadPoolBuilder::new()
+        .num_threads(nthreads)
+        .thread_name(|i| format!("locus-detect-{i}"))
+        .build()
+    {
+        Ok(pool) => Some(pool),
+        Err(err) => {
+            tracing::warn!(
+                nthreads,
+                error = %err,
+                "failed to build the intra-frame Rayon pool; falling back to the global pool"
+            );
+            None
+        },
+    }
 }
 
 /// Compute the minimum outer tag dimension (grid + 2 border bits) across the
@@ -967,18 +1004,62 @@ impl LocusEngine {
             let _ = pool.push(Box::new(FrameContext::new()));
         }
         let min_outer_dim = compute_min_outer_dim(&decoders);
+        let intra_frame_pool = build_intra_frame_pool(config.nthreads);
         Self {
             config,
             decoders,
             min_outer_dim,
             pool,
+            intra_frame_pool,
         }
+    }
+
+    /// Number of worker threads in the scoped intra-frame Rayon pool, or
+    /// `None` when the engine runs on the global pool (`nthreads == 0`, or a
+    /// pool that failed to spawn).
+    #[must_use]
+    pub fn intra_frame_threads(&self) -> Option<usize> {
+        self.intra_frame_pool
+            .as_ref()
+            .map(rayon::ThreadPool::current_num_threads)
+    }
+
+    /// Run `op` on the scoped intra-frame pool, or inline on the global pool
+    /// when none is configured.
+    ///
+    /// `ThreadPool::install` does not allocate per call: the pool and its
+    /// worker threads were built in [`LocusEngine::new`]. It blocks the caller
+    /// until `op` returns, so every Rayon construct inside the pipeline sees
+    /// the scoped pool as its current pool.
+    fn run_scoped<OP, R>(&self, op: OP) -> R
+    where
+        OP: FnOnce() -> R + Send,
+        R: Send,
+    {
+        match &self.intra_frame_pool {
+            Some(pool) => pool.install(op),
+            None => op(),
+        }
+    }
+
+    /// The Rayon thread count the pipeline actually executes under.
+    ///
+    /// Measured from inside the private `run_scoped` wrapper, so it proves
+    /// the scoped pool really wraps pipeline work rather than merely existing.
+    #[cfg(feature = "bench-internals")]
+    #[must_use]
+    pub fn bench_api_pipeline_num_threads(&self) -> usize {
+        self.run_scoped(rayon::current_num_threads)
     }
 
     /// Run the detection pipeline using an explicitly supplied context.
     ///
     /// The returned [`DetectionBatchView`] borrows from `ctx`; drop the view before
     /// calling this method again on the same context or returning it to the pool.
+    ///
+    /// Intra-frame Rayon work runs on the scoped pool when
+    /// [`DetectorConfig::nthreads`] is non-zero, and on the global Rayon pool
+    /// otherwise.
     ///
     /// # Errors
     ///
@@ -991,16 +1072,18 @@ impl LocusEngine {
         tag_size: Option<f64>,
         debug_telemetry: bool,
     ) -> Result<DetectionBatchView<'ctx>, DetectorError> {
-        run_detection_pipeline(
-            &self.config,
-            &self.decoders,
-            self.min_outer_dim,
-            img,
-            ctx,
-            intrinsics,
-            tag_size,
-            debug_telemetry,
-        )
+        self.run_scoped(|| {
+            run_detection_pipeline(
+                &self.config,
+                &self.decoders,
+                self.min_outer_dim,
+                img,
+                ctx,
+                intrinsics,
+                tag_size,
+                debug_telemetry,
+            )
+        })
     }
 
     /// Detect tags in multiple frames concurrently using Rayon.
@@ -1011,6 +1094,10 @@ impl LocusEngine {
     ///
     /// If the pool is exhausted (more concurrent callers than pool size), a
     /// temporary overflow context is allocated and discarded after use.
+    ///
+    /// When [`DetectorConfig::nthreads`] is non-zero the whole fan-out runs on
+    /// the scoped pool, so the frame-level *and* intra-frame parallelism share
+    /// one bounded worker set instead of over-subscribing the machine.
     pub fn detect_concurrent(
         &self,
         frames: &[ImageView<'_>],
@@ -1018,39 +1105,41 @@ impl LocusEngine {
         tag_size: Option<f64>,
     ) -> Vec<Result<Vec<crate::Detection>, DetectorError>> {
         use rayon::prelude::*;
-        frames
-            .par_iter()
-            .map(|img| {
-                // Pop a context from the pool, or create a temporary overflow context.
-                let (mut ctx, to_pool) = if let Some(c) = self.pool.pop() {
-                    (c, true)
-                } else {
-                    (Box::new(FrameContext::new()), false)
-                };
+        self.run_scoped(|| {
+            frames
+                .par_iter()
+                .map(|img| {
+                    // Pop a context from the pool, or create a temporary overflow context.
+                    let (mut ctx, to_pool) = if let Some(c) = self.pool.pop() {
+                        (c, true)
+                    } else {
+                        (Box::new(FrameContext::new()), false)
+                    };
 
-                let owned = run_detection_pipeline(
-                    &self.config,
-                    &self.decoders,
-                    self.min_outer_dim,
-                    img,
-                    &mut ctx,
-                    intrinsics,
-                    tag_size,
-                    false, // telemetry disabled: arena pointers would not survive pool return
-                )
-                .map(|view| {
-                    // Extract owned data BEFORE releasing ctx back to the pool.
-                    // `view` borrows from ctx.batch; reassemble_owned() copies into Vec.
-                    // The view is implicitly dropped at the end of this closure.
-                    view.reassemble_owned()
-                });
+                    let owned = run_detection_pipeline(
+                        &self.config,
+                        &self.decoders,
+                        self.min_outer_dim,
+                        img,
+                        &mut ctx,
+                        intrinsics,
+                        tag_size,
+                        false, // telemetry disabled: arena pointers would not survive pool return
+                    )
+                    .map(|view| {
+                        // Extract owned data BEFORE releasing ctx back to the pool.
+                        // `view` borrows from ctx.batch; reassemble_owned() copies into Vec.
+                        // The view is implicitly dropped at the end of this closure.
+                        view.reassemble_owned()
+                    });
 
-                if to_pool {
-                    let _ = self.pool.push(ctx);
-                }
-                owned
-            })
-            .collect()
+                    if to_pool {
+                        let _ = self.pool.push(ctx);
+                    }
+                    owned
+                })
+                .collect()
+        })
     }
 
     /// Clear all decoders and replace them with the given tag families.
