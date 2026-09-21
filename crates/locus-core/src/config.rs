@@ -221,7 +221,11 @@ pub struct DetectorConfig {
     pub segmentation_connectivity: SegmentationConnectivity,
     /// Factor to upscale the image before detection (1 = no upscaling).
     /// Increasing this to 2 allows detecting smaller tags (e.g., < 15px)
-    /// at the cost of processing speed (O(N^2)). Nearest-neighbor interpolation is used.
+    /// at the cost of processing speed (O(N^2)). Bilinear interpolation is used.
+    /// Thresholding, segmentation and quad extraction run on the upscaled grid
+    /// (so `quad_min_area`, `quad_min_edge_length` are in upscaled pixels), but
+    /// all outputs (corners, homography, pose, covariance) are reported in
+    /// original-image coordinates. Ignored when `decimation > 1`.
     pub upscale_factor: usize,
 
     /// Decimation factor for preprocessing (1 = no decimation).

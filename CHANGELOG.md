@@ -34,6 +34,19 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   propagation pass that would have made the knob affect detection has been
   commented out since `996e782`. The field is kept (it is live for the debug map)
   and its Rust/Pydantic docs now say so instead of implying a detection effect.
+- **`quad.upscale_factor > 1` returned corners in the upscaled frame.** The
+  detection pipeline bound the upscale factor to an unused `_effective_scale`,
+  so quad corners (and the covariances derived from them) stayed in upscaled
+  pixels (e.g. ~2x the true coordinates at factor 2) and were then fed, still
+  unscaled, to GWLF refinement, decoding and pose against the original image.
+  Corners and covariances are now mapped back to original-image coordinates
+  right after quad extraction and the funnel gate, using the centre-aware
+  convention shared with decimation (`x = (x_up + 0.5)/U - 0.5`;
+  covariance scaled by `1/U^2`); decode, GWLF and pose sample the original
+  image. `ImageView::upscale_to` now samples pixel centres
+  (`(x + 0.5)/U`) so it is the exact inverse of that mapping (it previously
+  shifted content by half an upscaled pixel). `upscale_factor == 1` and all
+  decimation paths are unchanged.
 
 ### Added
 
