@@ -134,7 +134,7 @@ declares explicit ranges:
 - `threshold_min_range`, `threshold_min_radius`, `threshold_max_radius`
 - `adaptive_threshold_constant`, `adaptive_threshold_gradient_threshold`
 - `quad_min_area`, `quad_max_aspect_ratio`, `quad_min_edge_score`
-- `subpixel_refinement_sigma`, `segmentation_margin`
+- `subpixel_refinement_sigma`
 - `decoder_min_contrast`, `max_hamming_error`, `gwlf_transversal_alpha`
 - `quad_max_elongation`, `quad_min_density`
 - `huber_delta_px`, `tikhonov_alpha_max`, `sigma_n_sq`
@@ -144,6 +144,27 @@ le=255`), **but only when the user constructs a `DetectorConfig` directly**.
 Values passed through `Detector(**kwargs)` skip the Pydantic model and go
 straight to the Rust builder. A1 should either route all kwargs through
 Pydantic or extend `validate()`.
+
+### Field scope: live, telemetry-only, inert
+
+A config field that is accepted, stored and echoed back by `Detector.config()`
+but never read is a contract violation in its own right — the API promises an
+effect it does not deliver. `crates/locus-core/tests/contract_config_inertness.rs`
+is the tripwire: it mutates **every** `DetectorConfig` field on a synthetic
+frame set and requires the observable output (detections, rejected candidates,
+poses, covariances *and* the `binarized` / `threshold_map` telemetry images) to
+change. The field list comes from an exhaustive destructuring of the struct, so
+a new field fails the build until a case is written for it.
+
+Two categories are exempt, each with a written reason in that file's allowlist.
+The allowlist is two-way — an allowlisted field that *starts* changing output
+also fails the test — so neither category can drift silently.
+
+| Field | Scope |
+| --- | --- |
+| `threshold_min_range` | **Telemetry-only.** The tile-validity mask it drives is applied only while writing `telemetry.binarized`; the per-pixel `threshold_map` segmentation consumes is written unconditionally (`ThresholdEngine::apply_threshold_with_map`). Detection output is invariant to it. Not allowlisted — the signature covers telemetry. |
+| `nthreads` | **Live but output-invariant** by design: it picks the scoped Rayon pool (`LocusEngine::run_scoped`). Allowlisted as inert *for output*; `nthreads_selects_the_pipeline_pool` separately proves the pool is installed. |
+| `threshold_min_radius`, `threshold_max_radius`, `adaptive_threshold_constant`, `adaptive_threshold_gradient_threshold` | **Inert.** Read only by `threshold::adaptive_threshold_gradient_window` / `adaptive_threshold_integral`, whose only callers are `benches/integral_threshold_bench.rs`. Allowlisted with an owner; wiring or removing them is a separate decision. |
 
 ---
 

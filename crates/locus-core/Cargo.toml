@@ -308,3 +308,8 @@ non_rectified = []
 
 [lints]
 workspace = true
+
+[[test]]
+name = "test_upscale_mapping"
+path = "tests/test_upscale_mapping.rs"
+required-features = ["bench-internals"]

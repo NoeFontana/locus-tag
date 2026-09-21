@@ -52,7 +52,7 @@ detector = (
 | :--- | :--- |
 | `with_family(family)` | Add a tag family to detect. |
 | `with_decimation(n)` | Spatial decimation factor (default 1). |
-| `with_threads(n)` | Rayon intra-frame thread count (0 = all cores). |
+| `with_threads(n)` | Rayon worker count for the detector (see [Thread control](#thread-control)). `0` (default) = the global Rayon pool. |
 | `with_corner_refinement(mode)` | `CornerRefinementMode` for subpixel accuracy. |
 | `with_max_concurrent_frames(n)` | Pool size for `detect_concurrent` (default 1 = sequential). |
 | `build()` | Build the `Detector`. |
@@ -66,6 +66,34 @@ Detect tags in multiple frames concurrently using Rayon. Releases the GIL for th
 | `frames` | `list[np.ndarray]` | List of (H, W) uint8 grayscale frames. |
 | `intrinsics` | `CameraIntrinsics \| None` | Camera intrinsics for 3D pose estimation. |
 | `tag_size` | `float \| None` | Physical tag side length in metres. |
+
+## Thread control
+
+`threads` (`Detector(threads=n)` / `DetectorBuilder.with_threads(n)`) sets the
+number of Rayon workers the detector uses.
+
+* `0` — the default — leaves the pipeline on Rayon's **global** pool, sized by
+  `RAYON_NUM_THREADS` or the machine's core count. No extra threads are
+  spawned.
+* `n > 0` builds **one scoped Rayon pool of exactly `n` threads at detector
+  construction**, and runs `detect` and `detect_concurrent` inside it. The
+  detector's CPU footprint is then bounded by `n` regardless of what the rest
+  of the process does with the global pool, which is what you want when several
+  detectors (or a detector and an unrelated Rayon workload) share a machine.
+  For `detect_concurrent` the bound covers the frame-level fan-out *and* the
+  intra-frame parallelism, so the two cannot over-subscribe each other.
+
+The pool is built once per detector, never per frame. Detection output is
+**identical** for every value of `threads`: each parallel stage writes to
+disjoint, index-addressed chunks, so only latency and CPU usage change.
+
+!!! warning "Fixed in 0.7.x"
+    Before this release `threads` was accepted, stored and reported by
+    `Detector.config()` but never read — the pipeline always ran on the global
+    pool. Code that relied on `threads=1` to keep the detector single-threaded
+    was in fact running on all cores; it now gets one thread and will be
+    correspondingly slower. Pass `threads=0` (or omit it) for the previous
+    behaviour.
 
 ## Configuration
 

@@ -50,7 +50,6 @@
     "pose_edge_refinement_enabled": true
   },
   "segmentation": {
-    "connectivity": "Eight",
-    "margin": 1
+    "connectivity": "Eight"
   }
 }

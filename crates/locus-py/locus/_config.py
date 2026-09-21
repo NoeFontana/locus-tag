@@ -155,6 +155,14 @@ class ThresholdConfig(BaseModel):
 
     tile_size: int = Field(default=8, ge=2, le=64)
     min_range: int = Field(default=10, ge=0, le=255)
+    """Minimum 3x3-tile intensity range for the centre tile to count as valid.
+
+    **Telemetry-scoped.** The validity mask is applied only when writing the
+    binarized debug map (``DetectionResult.telemetry.binarized``); the
+    per-pixel threshold map that segmentation consumes is written
+    unconditionally. Changing this value changes ``telemetry.binarized`` and
+    nothing else -- detections are bit-identical.
+    """
     enable_sharpening: bool = False
     min_radius: int = Field(default=2, ge=1)
     max_radius: int = Field(default=15, ge=1)
@@ -332,7 +340,6 @@ class SegmentationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     connectivity: _SegConnField = Field(default_factory=lambda: SegmentationConnectivity.Eight)
-    margin: int = 1
 
 
 class DetectorConfig(BaseModel):
