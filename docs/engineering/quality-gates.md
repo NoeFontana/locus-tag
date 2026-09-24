@@ -78,6 +78,13 @@ TRACY_NO_INVARIANT_CHECK=1 \
 LOCUS_ICRA_DATASET_DIR=tests/data/icra2020 \
 LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \
 cargo insta test --release --all-features --features bench-internals --review
+
+# 5. EuRoC MAV Real-Data Regression (Optional)
+# Download once: bash scripts/fetch_euroc_calibration.sh
+TRACY_NO_INVARIANT_CHECK=1 \
+LOCUS_EUROC_DATASET_DIR=tests/data/euroc \
+cargo test --release --features bench-internals,non_rectified \
+  --test regression_euroc -- --test-threads=1
 ```
 
 ## 3. Documentation Quality

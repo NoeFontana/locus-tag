@@ -294,6 +294,11 @@ name = "regression_straight_space"
 path = "tests/regression_straight_space.rs"
 required-features = ["non_rectified", "bench-internals"]
 
+[[test]]
+name = "regression_euroc"
+path = "tests/regression_euroc.rs"
+required-features = ["bench-internals"]
+
 [features]
 default = ["profiles"]
 tracy = ["dep:tracing-tracy"]
