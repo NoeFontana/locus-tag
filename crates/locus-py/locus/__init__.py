@@ -25,6 +25,7 @@ from .locus import (
     PipelineTelemetryResult,
     QuadExtractionMode,
     SegmentationConnectivity,
+    SharpeningMode,
     TagFamily,
     init_tracy,
 )
@@ -364,6 +365,7 @@ __all__ = [
     "QuadExtractionMode",
     "QuadExtractionPolicy",
     "SegmentationConnectivity",
+    "SharpeningMode",
     "TagFamily",
     "init_tracy",
 ]

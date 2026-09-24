@@ -58,6 +58,50 @@ The shipped `standard.json` is a good starting template; copy it, edit the
 nested groups, and load the copy. The JSON Schema at
 `schemas/profile.schema.json` powers editor autocomplete.
 
+## Sharpening on low-key scenes
+
+The `standard` profile runs a Laplacian sharpening pre-filter
+(`threshold.enable_sharpening`) before thresholding, which helps small tags.
+Its stock form (`SharpeningMode.Standard`) also produces halos: overshoot
+raises the local maximum, and because the tile thresholder binarises against
+`(min + max) / 2`, that can lift the threshold above the background level on
+dark, low-contrast scenes — the background then joins the tag border as one
+connected component and the tag is lost.
+
+`SharpeningMode.ShootLimited` clamps every sharpened pixel into the min/max of
+the five samples that produced it, so the filter still steepens edges but can
+never push a pixel outside its local intensity range:
+
+```python
+base = locus.DetectorConfig.from_profile("standard").model_dump()
+base["threshold"]["sharpening_mode"] = locus.SharpeningMode.ShootLimited
+
+detector = locus.Detector(config=locus.DetectorConfig.model_validate(base))
+```
+
+It is opt-in: `Standard` remains the default everywhere.
+
+**What the limiter costs depends on your extraction route, not only on your
+lighting.** Sharpening exists to buy small-tag recall, and `ShootLimited` gives
+part of that back:
+
+- On the **AdaptivePpb / EdLines** route (`quad.extraction_mode`, as in
+  `high_accuracy`), the limiter keeps essentially *all* of stock sharpening's
+  small-tag benefit. If you are on this route, `ShootLimited` is close to free.
+- On the **ContourRdp + Erf** route that the shipped `standard` profile uses,
+  the limiter keeps only about a quarter of it, so enabling `ShootLimited`
+  costs roughly one percentage point of small-tag recall on well-lit imagery.
+
+So: on dark / low-contrast / high-resolution imagery where markers sit on
+textured backgrounds, `ShootLimited` is worth measuring on either route — the
+overshoot failure above costs far more than a point of recall when it fires.
+On well-lit imagery with small tags, keep `Standard` on the `standard` route;
+on the `high_accuracy` route the choice is close to free either way.
+
+These are measurements on two specific datasets, not a guarantee for your
+imagery. `ShootLimited` changes what the thresholder sees, so re-validate your
+own recall and corner-accuracy numbers before enabling it in production.
+
 ## Specialized Profiles
 
 ### Checkerboard Detection

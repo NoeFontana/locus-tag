@@ -32,6 +32,7 @@ from .locus import (
     EdLinesImbalanceGatePolicy,
     QuadExtractionMode,
     SegmentationConnectivity,
+    SharpeningMode,
     TagFamily,
     _shipped_profile_json,
 )
@@ -143,11 +144,13 @@ if TYPE_CHECKING:
     _QuadExtractionField: TypeAlias = QuadExtractionMode
     _SegConnField: TypeAlias = SegmentationConnectivity
     _ImbalanceGateField: TypeAlias = EdLinesImbalanceGatePolicy
+    _SharpeningModeField: TypeAlias = SharpeningMode
 else:
     _CornerRefinementField = _enum_field(CornerRefinementMode)
     _QuadExtractionField = _enum_field(QuadExtractionMode)
     _SegConnField = _enum_field(SegmentationConnectivity)
     _ImbalanceGateField = _enum_field(EdLinesImbalanceGatePolicy, _coerce_imbalance_gate)
+    _SharpeningModeField = _enum_field(SharpeningMode)
 
 
 class ThresholdConfig(BaseModel):
@@ -164,6 +167,10 @@ class ThresholdConfig(BaseModel):
     nothing else -- detections are bit-identical.
     """
     enable_sharpening: bool = False
+    # Output limiter for the sharpening pre-filter; inert when
+    # `enable_sharpening` is False. `Standard` reproduces the historical
+    # (overshooting) filter byte-for-byte.
+    sharpening_mode: _SharpeningModeField = Field(default_factory=lambda: SharpeningMode.Standard)
     min_radius: int = Field(default=2, ge=1)
     max_radius: int = Field(default=15, ge=1)
     constant: int = 0

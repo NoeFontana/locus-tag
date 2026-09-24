@@ -38,6 +38,34 @@ pub enum CornerRefinementMode {
     Gwlf,
 }
 
+/// Output limiter applied by the Laplacian sharpening pre-filter.
+///
+/// Only consulted when [`DetectorConfig::enable_sharpening`] is `true`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum SharpeningMode {
+    /// Stock behaviour (default): `5·centre − Σ4-neighbours`, clamped to
+    /// `0..=255`. Over- and undershoot around high-contrast edges is kept.
+    #[default]
+    Standard,
+    /// Overshoot-limited: the same kernel, then clamped into the min/max of
+    /// the five samples that produced it, so the filter can never push a
+    /// pixel outside its local intensity range.
+    ///
+    /// Motivation: the tile thresholder derives its threshold from tile
+    /// extremes (`(min + max) / 2`). `Standard` overshoot inflates the local
+    /// maximum by roughly the local contrast, which can lift that midpoint
+    /// above the background level — the background then binarises as
+    /// foreground and merges with the tag border. `ShootLimited` removes that
+    /// failure mode while keeping the edge-steepening that helps small tags.
+    ///
+    /// The bound is per-pixel, over each pixel's own 5-point neighbourhood, so
+    /// a tile's extremes are preserved only up to a one-pixel dilation of that
+    /// tile. That is moot in practice: `compute_tile_stats` already pools over
+    /// a 3x3 tile neighbourhood, which subsumes the one-pixel skirt.
+    ShootLimited,
+}
+
 /// Quad extraction algorithm.
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -192,6 +220,10 @@ pub struct DetectorConfig {
 
     /// Enable Laplacian sharpening to enhance edges for small tags (default: true).
     pub enable_sharpening: bool,
+
+    /// Output limiter for the sharpening pre-filter (default: `Standard`).
+    /// Inert when `enable_sharpening` is `false`. See [`SharpeningMode`].
+    pub sharpening_mode: SharpeningMode,
 
     /// Minimum threshold window radius for high-gradient regions (default: 2 = 5x5).
     pub threshold_min_radius: usize,
@@ -414,6 +446,7 @@ impl Default for DetectorConfig {
             threshold_tile_size: 8,
             threshold_min_range: 10,
             enable_sharpening: false,
+            sharpening_mode: SharpeningMode::Standard,
             threshold_min_radius: 2,
             threshold_max_radius: 15,
             adaptive_threshold_constant: 0,
@@ -562,6 +595,7 @@ pub struct DetectorConfigBuilder {
     threshold_tile_size: Option<usize>,
     threshold_min_range: Option<u8>,
     enable_sharpening: Option<bool>,
+    sharpening_mode: Option<SharpeningMode>,
     threshold_min_radius: Option<usize>,
     threshold_max_radius: Option<usize>,
     adaptive_threshold_constant: Option<i16>,
@@ -669,6 +703,13 @@ impl DetectorConfigBuilder {
         self
     }
 
+    /// Set the sharpening output limiter (inert unless sharpening is enabled).
+    #[must_use]
+    pub fn sharpening_mode(mut self, mode: SharpeningMode) -> Self {
+        self.sharpening_mode = Some(mode);
+        self
+    }
+
     /// Set minimum threshold window radius.
     #[must_use]
     pub fn threshold_min_radius(mut self, radius: usize) -> Self {
@@ -705,6 +746,7 @@ impl DetectorConfigBuilder {
             threshold_tile_size: self.threshold_tile_size.unwrap_or(d.threshold_tile_size),
             threshold_min_range: self.threshold_min_range.unwrap_or(d.threshold_min_range),
             enable_sharpening: self.enable_sharpening.unwrap_or(d.enable_sharpening),
+            sharpening_mode: self.sharpening_mode.unwrap_or(d.sharpening_mode),
             threshold_min_radius: self.threshold_min_radius.unwrap_or(d.threshold_min_radius),
             threshold_max_radius: self.threshold_max_radius.unwrap_or(d.threshold_max_radius),
             adaptive_threshold_constant: self
@@ -1046,7 +1088,7 @@ impl DetectOptionsBuilder {
 mod profile_json {
     use super::{
         CornerRefinementMode, DetectorConfig, EdLinesImbalanceGatePolicy, QuadExtractionMode,
-        SegmentationConnectivity,
+        SegmentationConnectivity, SharpeningMode,
     };
     use serde::{Deserialize, Serialize};
 
@@ -1076,6 +1118,11 @@ mod profile_json {
         pub tile_size: usize,
         pub min_range: u8,
         pub enable_sharpening: bool,
+        // Optional so profiles authored before this field existed (and any
+        // third-party JSON) deserialize unchanged. Missing → `Standard`,
+        // i.e. byte-identical to the historical filter.
+        #[serde(default)]
+        pub sharpening_mode: SharpeningMode,
         pub min_radius: usize,
         pub max_radius: usize,
         pub constant: i16,
@@ -1091,6 +1138,7 @@ mod profile_json {
                 tile_size: c.threshold_tile_size,
                 min_range: c.threshold_min_range,
                 enable_sharpening: c.enable_sharpening,
+                sharpening_mode: c.sharpening_mode,
                 min_radius: c.threshold_min_radius,
                 max_radius: c.threshold_max_radius,
                 constant: c.adaptive_threshold_constant,
@@ -1305,6 +1353,7 @@ mod profile_json {
                 threshold_tile_size: p.threshold.tile_size,
                 threshold_min_range: p.threshold.min_range,
                 enable_sharpening: p.threshold.enable_sharpening,
+                sharpening_mode: p.threshold.sharpening_mode,
                 threshold_min_radius: p.threshold.min_radius,
                 threshold_max_radius: p.threshold.max_radius,
                 adaptive_threshold_constant: p.threshold.constant,

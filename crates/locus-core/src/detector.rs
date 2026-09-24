@@ -258,7 +258,7 @@ fn run_detection_pipeline<'ctx>(
         let sharpened = state
             .arena
             .alloc_slice_fill_copy(img.width * img.height, 0u8);
-        crate::filter::laplacian_sharpen(img, sharpened);
+        crate::filter::laplacian_sharpen(img, sharpened, config.sharpening_mode);
 
         ImageView::new(sharpened, img.width, img.height, img.width)
             .map_err(DetectorError::InvalidImage)?
@@ -823,6 +823,14 @@ impl DetectorBuilder {
     #[must_use]
     pub fn with_sharpening(mut self, enable: bool) -> Self {
         self.config.enable_sharpening = enable;
+        self
+    }
+
+    /// Select the sharpening output limiter (inert unless sharpening is
+    /// enabled). See [`crate::config::SharpeningMode`].
+    #[must_use]
+    pub fn with_sharpening_mode(mut self, mode: crate::config::SharpeningMode) -> Self {
+        self.config.sharpening_mode = mode;
         self
     }
 

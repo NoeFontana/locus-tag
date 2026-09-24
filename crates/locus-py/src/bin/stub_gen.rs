@@ -85,6 +85,7 @@ fn postprocess(content: &str) -> String {
         "CornerRefinementMode",
         "QuadExtractionMode",
         "EdLinesImbalanceGatePolicy",
+        "SharpeningMode",
         "DistortionModel",
     ];
 
