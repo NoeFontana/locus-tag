@@ -283,14 +283,16 @@ def visualize(
                         if rej_status is not None
                         else int(locus.FunnelStatus.NoneReason)
                     )
-                    if code == locus.FunnelStatus.RejectedSampling:
-                        colors.append([255, 165, 0, 128])  # Orange (Failed Decode)
-                        labels.append(f"Decode Fail: {int(err)} bits")
-                    elif code == locus.FunnelStatus.RejectedContrast:
-                        colors.append([255, 0, 0, 128])  # Red (Geometry Reject)
-                        labels.append("Rejected Quad")
+                    if code == locus.FunnelStatus.RejectedContrast:
+                        colors.append([255, 0, 0, 128])  # Red (contrast-gate reject)
+                        labels.append("Rejected: low contrast")
+                    elif code == locus.FunnelStatus.PassedContrast:
+                        # Passed the funnel but never became a Valid candidate
+                        # — i.e. failed decode. See locus.FunnelStatus.PassedContrast.
+                        colors.append([255, 165, 0, 128])  # Orange (failed decode)
+                        labels.append(f"Decode fail: best Hamming {int(err)}")
                     else:
-                        colors.append([128, 128, 128, 128])  # Grey (status not set)
+                        colors.append([128, 128, 128, 128])  # Grey (unclassified)
                         labels.append("Rejected Quad")
 
                 strips = np.concatenate([rejected, rejected[:, :1, :]], axis=1)
