@@ -2058,6 +2058,13 @@ uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </s
 <span class="nv">LOCUS_ICRA_DATASET_DIR</span><span class="o">=</span>tests/data/icra2020<span class="w"> </span><span class="se">\</span>
 <span class="nv">LOCUS_HUB_DATASET_DIR</span><span class="o">=</span>tests/data/hub_cache<span class="w"> </span><span class="se">\</span>
 cargo<span class="w"> </span>insta<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--release<span class="w"> </span>--all-features<span class="w"> </span>--features<span class="w"> </span>bench-internals<span class="w"> </span>--review
+
+<span class="c1"># 5. EuRoC MAV Real-Data Regression (Optional)</span>
+<span class="c1"># Download once: bash scripts/fetch_euroc_calibration.sh</span>
+<span class="nv">TRACY_NO_INVARIANT_CHECK</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
+<span class="nv">LOCUS_EUROC_DATASET_DIR</span><span class="o">=</span>tests/data/euroc<span class="w"> </span><span class="se">\</span>
+cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--release<span class="w"> </span>--features<span class="w"> </span>bench-internals,non_rectified<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--test<span class="w"> </span>regression_euroc<span class="w"> </span>--<span class="w"> </span>--test-threads<span class="o">=</span><span class="m">1</span>
 </code></pre></div>
 <h2 id="3-documentation-quality">3. Documentation Quality</h2>
 <p>Ensure the documentation builds correctly and is complete.</p>
