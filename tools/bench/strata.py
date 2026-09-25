@@ -22,9 +22,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-# ---------------------------------------------------------------------------
 # Bucket boundaries (see strata_histogram.py for derivation)
-# ---------------------------------------------------------------------------
 
 # Resolution: H pixels — corpora are deterministic, no rounding
 RES_SD_MAX = 480

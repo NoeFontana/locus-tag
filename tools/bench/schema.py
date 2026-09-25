@@ -20,9 +20,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-# ---------------------------------------------------------------------------
 # stratum_id grammar (see docs/engineering/stratification.md §4)
-# ---------------------------------------------------------------------------
 
 _STRATUM_KEYS: tuple[str, ...] = ("res", "ppm", "aoi", "dist", "mot")
 _SLUG_RE = re.compile(r"^[a-z0-9]+$")
@@ -52,9 +50,7 @@ def _validate_stratum_id(value: str) -> str:
     return value
 
 
-# ---------------------------------------------------------------------------
 # Models
-# ---------------------------------------------------------------------------
 
 
 class Provenance(BaseModel):
@@ -150,9 +146,7 @@ class BaselineV2(BaseModel):
         return entries
 
 
-# ---------------------------------------------------------------------------
 # JSON Schema export
-# ---------------------------------------------------------------------------
 
 
 def _export_json_schema() -> None:
