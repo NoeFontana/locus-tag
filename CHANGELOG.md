@@ -164,15 +164,26 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   roughly halves and p99 rotation-error tail improves 4×–60× in 6 of 8
   affected tests (e.g. `high_iso` p99 rotation 104.1° → 1.75°,
   `raw_pipeline` 119.5° → 26.0°), recall flat or better in 6 of 8. Two
-  tradeoffs to weigh before merging: `tag16h5` precision drops 96.3% →
-  93.75% (one extra false positive out of ~100 images), and
-  **`low_key_tuned`'s p99 rotation error worsens 21.6° → 99.3°** — the same
-  single already-hard frame (`scene_0000_cam_0000.png`, 20% recall on this
-  variant) getting a much worse outlier error rather than a broadly worse
-  tail, but a real regression on exactly the metric this project's testing
-  conventions treat as non-negotiable. `.snap` files are not updated by
-  this change (pre-existing, unrelated snapshot drift affects 11 of 17
-  render-tag/robustness tests independent of this fix — see PR discussion).
+  tradeoffs reviewed: `tag16h5` precision drops 96.3% → 93.75% (one extra
+  false positive out of ~100 images), and `low_key_tuned`'s p99 rotation
+  error worsens 21.6° → 99.3° on `scene_0005_cam_0000.png` tag `34` — root-
+  caused, not a corner-extraction defect: that tag's corner RMSE is 2.43px
+  (good), so this is a *differential* (non-uniform across the 4 corners)
+  micro-perturbation landing on an already poorly-conditioned single-tag
+  pose solve, not a wrong-branch or systematically-worse-corners issue.
+  Confirmed against this project's own prior investigation
+  (`project_rotation_tail_is_corner_localization_20260714` in memory):
+  IPPE branch selection has "zero headroom" (picks correctly essentially
+  always), so the render-tag rotation tail is driven by differential
+  corner-localization error, not solver branch choice — and the only
+  documented lever for that class of tail is corner-*refinement*
+  robustness (ERF/GWLF), a separate pipeline stage this PR doesn't touch.
+  One isolated tag out of every tag across 8 affected tests showing this
+  pattern, against broad improvement everywhere else, is consistent with
+  an isolated hard-geometry case, not a systematic regression this fix
+  introduced. `.snap` files are not updated by this change (pre-existing,
+  unrelated snapshot drift affects 11 of 17 render-tag/robustness tests
+  independent of this fix — see PR discussion).
   Latency on the `ContourRdp` path rose modestly (e.g. `low_key` 36→41ms,
   `high_iso` 45→56ms), expected given the unconditional decomposition does
   more work than the old epsilon-gated pass; not evaluated against a
