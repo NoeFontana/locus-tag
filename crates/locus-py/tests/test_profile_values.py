@@ -79,6 +79,27 @@ def test_shipped_profile_values(profile_name: ProfileName) -> None:
         )
 
 
+def test_bare_default_matches_standard_profile() -> None:
+    """A bare ``DetectorConfig()`` must equal ``from_profile("standard")``.
+
+    Rust-side counterpart: `config::schema_parity_tests::default_matches_standard_profile`.
+    `standard` is documented as the implicit default (`Detector()` /
+    `Detector::new()`), so the two Pydantic field defaults drifting apart is a
+    silent behavior change for anyone constructing `DetectorConfig()` directly
+    (`Detector()` itself is unaffected — it always resolves through
+    `from_profile`, never the bare model — but the exported `DetectorConfig`
+    class is still expected to match). Caught drifted on four fields
+    (`threshold.enable_sharpening`, `quad.min_area`, `quad.max_elongation`,
+    `quad.min_density`) before this test existed.
+    """
+    default = DetectorConfig()
+    standard = DetectorConfig.from_profile("standard")
+    exclude = {"name", "extends"}
+    assert default.model_dump(mode="python", exclude=exclude) == standard.model_dump(
+        mode="python", exclude=exclude
+    )
+
+
 def test_unknown_shipped_profile_name_rejected() -> None:
     with pytest.raises(ValueError, match="Unknown shipped profile"):
         DetectorConfig.from_profile("does_not_exist")  # pyright: ignore[reportArgumentType]
