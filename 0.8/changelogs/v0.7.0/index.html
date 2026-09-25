@@ -1,0 +1,2767 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-performance fiducial marker detector.">
+      
+      
+      
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/0.8/changelogs/v0.7.0/">
+      
+      
+        <link rel="prev" href="../v0.7.1/">
+      
+      
+        <link rel="next" href="../v0.6.0/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>0.7.0 — 2026-07-19 - Locus</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="purple">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#070-2026-07-19" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Locus
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              0.7.0 — 2026-07-19
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="purple"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/NoeFontana/locus-tag" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    NoeFontana/locus-tag
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Locus
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/NoeFontana/locus-tag" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    NoeFontana/locus-tag
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-To Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-To Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/add_dictionary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to: Add a custom fiducial dictionary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/debug_with_rerun/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to Guide: Debugging with Rerun
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/concurrent_detection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How to Run Concurrent Detection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/install-with-distortion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install with distortion support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/tune_and_compare/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tune detectors and compare against other libraries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/per_instance_comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compare detectors per image and find Locus's levers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Detection Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/memory_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/algorithms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Algorithms &amp; Mathematical Foundations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/coordinates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coordinate Systems
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explanation/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Changelog
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../v0.7.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.7.1 — 2026-07-19
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.7.0 — 2026-07-19
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.7.0 — 2026-07-19
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tests
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../v0.6.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.6.0 — 2026-06-14
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../v0.5.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.5.0 — 2026-05-20
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engineering (Internal)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Engineering (Internal)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/core/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Identity &amp; Engineering Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feature Development Workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/release-runbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release runbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/detection-batch-contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architectural Contract: DetectionBatch (SoA)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/constraints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strict Constraints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/ffi_contracts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FFI Contract Inventory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/profiles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Detector Profiles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/stratification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stratification Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/quality-gates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quality Gates &amp; Verification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/rust-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rust Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/python-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python Engineering Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/general-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    General Code Style Principles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7_13" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_13" id="__nav_7_13_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_13_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_13">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Benchmarking
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking &amp; Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/lessons/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarking Lessons (consolidated, 2026-05-02)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/micro-benchmarking-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Micro-Benchmarking Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/release_performance_20260418/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Locus Release Performance Report (2026-04-18)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/render_tag_sota_20260425/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Render-tag 1080p SOTA pursuit (2026-04-25)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/render_tag_sota_20260713/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    render-tag SOTA refresh — OpenCV 5.0 (2026-07-13)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/refine_variants_20260714/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Corner-refinement variants vs the rotation-p99 tail (2026-07-14)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/model_edge_refinement_20260715/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model-based edge pose refinement — beating the rotation gap (2026-07-15, tuned 2026-07-17)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engineering/benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2160p render_tag_hub recall lift (2026-04-25)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migration
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Migration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../migration/config-refactor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config refactor — migration notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tests
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="070-2026-07-19">0.7.0 — 2026-07-19</h1>
+<p><a href="../">← Back to the changelog index</a></p>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li><strong>Distorted-camera pose was silently wrong (correctness).</strong> The production
+  single-tag pose path (the weighted LM <code>refine_pose_lm_weighted</code>) and the three
+  board pose solvers minimized a <strong>pinhole</strong> reprojection error even when the
+  <code>CameraIntrinsics</code> carried a Brown–Conrady / Kannala–Brandt distortion model —
+  only the image-less corner-LM fallback was distortion-aware. On a distorted
+  camera this biased every emitted pose (in a synthetic Brown–Conrady test the
+  weighted LM converged <strong>8.6° off</strong> ground truth; the distortion-aware fix
+  recovers it exactly). Both the normal-equations builder <em>and</em> the Nielsen
+  step-evaluation cost (<code>huber_mahalanobis_cost</code>, which was still pinhole and made
+  the gain ratio inconsistent) now route through the shared distortion-aware
+  <code>pose::projection_and_gradient</code>. The board path is made distortion-consistent
+  end-to-end for the same reason (its three LM sites, RANSAC branch scoring, inlier
+  evaluation, and per-observation d² all reprojected pinhole; all now use
+  <code>distort_normalized</code>, and the DLT/IPPE seed now undistorts observations to ideal
+  normalized coords before homography fitting). <code>Pose::project</code> is likewise made
+  distortion-aware (it was pinhole despite its doc, and biased the detector's
+  reprojection-error telemetry on distorted cameras). Undistorted
+  (<code>DistortionCoeffs::None</code>) results are unchanged — all pinhole regression
+  snapshots (render-tag, ICRA, board-hub, ROC, distortion-hub) pass byte-for-byte
+  (the projection differs from the removed pinhole arithmetic only by
+  floating-point reassociation of the pixel scaling, which moves no fixture).
+  Covered by <code>weighted_lm_minimises_distorted_reprojection</code> (the
+  <code>regression_distortion_hub</code> suite only exercised routing/decode, never pose
+  accuracy).</li>
+<li><strong>Board pose LM convergence (accuracy).</strong> The three <code>board.rs</code> pose solvers
+  previously paired a camera-frame (Convention-1) rotation Jacobian with a
+  <em>non-rotated</em> translation update (Convention-2), an inconsistency that let the LM
+  take suboptimal steps and stop short of the optimum. The right-perturbation
+  migration makes Jacobian and update consistent, substantially improving board
+  rotation accuracy on the hub golden set — e.g. ChArUco board rotation error
+  mean 0.107°→0.053° (−51%) and p99 0.651°→0.218° (−67%); AprilGrid mean
+  0.073°→0.037° (−50%) — with board translation neutral and no new singular
+  covariances. Board pose snapshots re-baselined accordingly.</li>
+<li><strong><code>refine_pose_lm</code> rotation-Jacobian sign bug.</strong> The unweighted corner-pose LM
+  built its rotation Jacobian rows with the wrong sign (the negative of the
+  canonical <code>∂proj/∂ω</code> used by the weighted LM and <code>projection_jacobian</code>), making
+  <code>Jᵀr</code> an <em>ascent</em> direction for rotation. Its trust region therefore rejected
+  every rotation step, so the solver refined only translation and returned IPPE's
+  rotation unrefined. This path is reachable only via the image-less
+  <code>estimate_tag_pose(corners, None)</code> API — the full detection pipeline always
+  supplies an image and so uses the weighted (already-correct) LM, which is why
+  the bug never affected pipeline detection and shipped undetected. Fixed to the
+  canonical sign; the corner normal-equations assembly was extracted to a shared
+  <code>corner_normal_equations</code> with a committed finite-difference gradient check
+  (<code>corner_normal_equations_gradient_is_descent</code>) and a rotation-recovery test.
+  <strong>Behavior change for API consumers:</strong> callers of the image-less
+  <code>estimate_tag_pose(corners, None)</code> / <code>estimate_tag_pose_with_diagnostics(..)</code>
+  path now receive a <em>rotation-refined</em> pose (previously the returned rotation was
+  IPPE's, unrefined); translation and every image-backed pipeline result are
+  unchanged. The shipped-profile detection snapshots (render-tag, ICRA, board-hub)
+  and all 253 default-feature tests are byte-identical. One <code>bench-internals</code>-gated
+  regression snapshot <strong>does</strong> move as the direct, intended consequence of the fix:
+  <code>regression_pose_consistency_roc</code> (synthetic-isotropic) — with rotation now
+  actually refined on the fallback path, the χ²(2) pose-consistency gate's realized
+  false-positive rate tracks the modeled FPR far more closely (e.g. 0.169 → 0.101 at
+  a modeled 0.1), so the recorded snapshot was regenerated to the better-calibrated
+  values.</li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li>
+<p><strong><code>high_accuracy</code> profile now ships with model-edge pose refinement on.</strong> The
+  <code>high_accuracy</code> profile sets <code>pose.pose_edge_refinement_enabled = true</code>, turning
+  the opt-in stage (added below) on by default for the metrology profile. On the
+  render-tag suite (Accurate pose, intrinsics + <code>tag_size</code>) this tightens the whole
+  rotation distribution — <strong>p99 −47 % to −76 % at every resolution</strong> (1080p
+  0.561° → 0.290°, 2160p 1.387° → 0.277° on the regression fixtures) — and
+  <strong>reprojection RMSE improves at every resolution</strong> (mean −13 % to −22 %), with
+  recall, precision and 2D corner RMSE <strong>unchanged</strong> (the stage only refines an
+  already-accepted pose; it never writes <code>batch.corners</code>) at ~+1 ms/frame. The win
+  is larger still on the degraded-imagery robustness sets (rot p99 −56 % to −84 %).
+  The <code>regression_render_tag</code> <code>accuracy_baseline</code> snapshots are re-baselined
+  accordingly; <code>board-hub</code> and ICRA snapshots are byte-identical (the stage is
+  confined to the single-tag Accurate pose path). <strong><code>standard</code> and <code>grid</code> stay
+  off</strong> — on <code>standard</code>'s corner baseline the stage is a bulk win but does not fix
+  its catastrophic rotation-p99 tail and slightly regresses the high-resolution
+  reproj/translation tail, because <code>standard</code> lacks the pose-consistency χ² gate
+  that re-validates each refined pose (it would trade the render-tag tail); see
+  <code>docs/engineering/benchmarking/model_edge_refinement_20260715.md</code>.</p>
+</li>
+<li>
+<p><strong>Pose LM convergence: unit-sound function-tolerance gate.</strong> The shared
+  <code>nielsen_lm</code> secondary convergence gate is now a relative-cost-reduction test
+  (<code>(cost_prev − cost_new) / cost_prev &lt; func_tol</code>, <code>func_tol = 1e-6</code>, the Ceres
+  <code>function_tolerance</code> default) in place of the mixed-unit <code>‖δ‖ &lt; 1e-7</code> step gate.
+  The old gate summed translation-m² and rotation-rad² into one scalar — a
+  dimensionally-unsound quantity whose binding point drifts with the arbitrary
+  choice of length unit. Two committed diagnostics quantify the change:
+  <code>step_gate_unit_rescale_invariance</code> poses the <em>identical</em> pixel problem across a
+  10⁴× translation-scale range and shows the old gate drifts 15→20 mean iterations
+  (and on far/small tags fails to bind, running to <code>max_iters</code>), while <code>func_tol</code>
+  is exactly scale-invariant at ~7.8 iterations; <code>step_gate_board_battery</code> asserts
+  the new gate reaches the converged rotation to &lt;5e-3° on a 36-point board. The
+  switch is <strong>accuracy-neutral</strong>: every gate — old, new, and a fully-converged
+  reference — yields identical rotation p99 (the reprojection objective is flat in
+  rotation long before either gate binds, so the earlier "loosening risks the
+  rotation tail" concern was empirically falsified — the old gate's real cost was
+  unbounded, unit-dependent iteration counts on the AV long-range regime).
+  Single-tag snapshots (render-tag, ICRA, ROC) stay <strong>byte-identical</strong>; the board
+  hub snapshots move only at the convergence-point-noise floor (mixed-sign,
+  sub-1 % on p99 aggregates, shipped <code>high_accuracy</code> ChArUco rotation essentially
+  unchanged) and are re-baselined. <code>grad_tol</code> remains the primary stationarity gate.</p>
+</li>
+<li><strong>Shared Nielsen trust-region LM core.</strong> The three pose LM loops (corner
+  unweighted/weighted and the board damped LM) are unified onto one
+  <code>pose::nielsen_lm</code> core parameterised by a <code>NielsenConfig</code>. This removes three
+  hand-rolled λ/ν loops and fixes a latent board inconsistency (it previously used
+  a plain <code>λδ</code> predicted reduction that did not match its own Marquardt damping);
+  the canonical form uses <code>D = max(diag(JᵀWJ), floor)</code> for both the damping <em>and</em>
+  the Madsen gain-ratio predicted reduction. The weighted corner LM and the board
+  LM also now share one <code>mahalanobis_huber</code> robust kernel and one <code>MAHALANOBIS_HUBER_K</code>
+  constant (previously a third hand-copy of the Huber math + a duplicated literal).
+  Single-tag results (render-tag, ICRA, ROC) are <strong>byte-identical</strong>; the board snapshots move only at the FP-reorder
+  floor (max 8.5e-7 relative, net neutral / slightly better medians) and are
+  re-baselined. A <code>nielsen_config_tuning_sweep</code> diagnostic evidences the constant
+  choices (the step gate was revisited in the function-tolerance entry above).</li>
+<li><strong>Pose LMs migrated to right (body-frame) SE(3) perturbation.</strong> All four pose
+  solvers — <code>pose::refine_pose_lm</code> (unweighted corner), <code>pose_weighted</code> (weighted
+  production), and the three <code>board.rs</code> LM sites — now parameterise the update as
+  <code>T' = T·exp(δ)</code> (<code>Pose::retract</code>) with the matching body-frame Jacobian, unified
+  onto shared accumulators. Because the object points are symmetric about the body
+  origin this decouples rotation from translation in <code>JᵀWJ</code> (~3.4× better
+  conditioning; rot↔translation coupling ~0.999→0.06) and converges in fewer
+  iterations. <strong>Breaking:</strong> the emitted 6×6 pose covariance is now expressed in the
+  <strong>body</strong> frame (previously camera/left). It remains ordered <code>[t, ω]</code>; consumers
+  that need the old camera-frame covariance can convert it with the new
+  <code>Pose::covariance_body_to_camera</code>. Single-tag accuracy is unchanged — render-tag
+  and ICRA regression snapshots hold within bounds; see <code>docs/explanation/coordinates.md §5.1</code>.
+  Supersedes the earlier "<code>Pose::retract</code> extracted (left-perturbation)" note below.</li>
+<li><strong><code>Pose::retract</code>.</strong> Extracted the SE(3) left-perturbation update
+  <code>exp([t|ω])·pose</code> into one method, replacing four inline copies across the pose
+  LMs (byte-identical). First step of the LM-consolidation series, completed by the
+  body-frame perturbation, distortion-aware, shared-Nielsen-core, and
+  function-tolerance-gate changes above.</li>
+<li><strong>Unweighted corner LM cost caching.</strong> <code>corner_normal_equations</code> now returns the
+  Huber cost at the linearization point alongside <code>(JᵀWJ, JᵀWr)</code> (bit-identical to
+  a standalone <code>huber_cost</code>), and <code>refine_pose_lm</code> adopts the weighted LM's
+  <code>needs_rebuild</code> caching so it re-projects only after an accepted step instead of
+  every iteration. Pure efficiency/consistency refactor — byte-identical results,
+  and brings the unweighted loop structurally in line with <code>pose_weighted</code> ahead of
+  the shared-core phase.</li>
+</ul>
+<h3 id="added">Added</h3>
+<ul>
+<li><strong>Model-based edge pose refinement (opt-in, Accurate mode).</strong> A new post-decode
+  stage (<code>pose.pose_edge_refinement_enabled</code>, default off) aligns a decoded tag's
+  ~40 internal bit-grid edges + border to the image and refines the 6-DoF pose
+  against them (rotation from the distributed interior edges; translation
+  re-anchored to the 4 corners). It <em>adds</em> information — the decoded interior —
+  rather than reshaping the 4 corners, so unlike the trade-bound corner-level
+  levers in the 2026-07-14 study it improves rotation without giving up Locus's
+  best-in-class translation. The stage rides the shared body-frame Nielsen
+  trust-region core (<code>nielsen_lm</code> + <code>BodyFrameNormalEquations</code>): each 1-D
+  edge-normal residual enters the same distortion-aware accumulator as a corner
+  residual weighted by the rank-1 projector <code>n·nᵀ</code>, under a robust Huber loss so
+  the clean interior edges (not a few latched/biased ones) control the rotation.
+  Edge scans that leave the image or project behind the camera are
+  rejected/penalised, and the refined pose is re-validated against the
+  pose-consistency χ² gate so it can never weaken false-positive suppression (recall
+  and precision stay 100 %/100 %; mean corner RMSE is untouched — the stage only
+  refines the pose). On render-tag it tightens the <strong>whole rotation distribution</strong>
+  — mean −39…−55 %, <strong>p99 −47…−76 % at every resolution</strong> (1080p 0.600° → 0.249°,
+  p95 0.385° → 0.180° — well under OpenCV <code>apriltag</code>'s 0.376°) — keeping translation
+  best-in-class in mean and p99, against a small bounded p95 trade at high
+  resolution (the gated edges→rotation / corners→translation split). <strong>Reprojection
+  RMSE improves at every resolution</strong> (mean −13…−22 %), confirming a genuine
+  image-space accuracy gain; 2D corner RMSE is unchanged. +~1 ms/frame.
+  Requires camera intrinsics + <code>tag_size</code>; shipped profiles leave it off, so
+  detection snapshots stay byte-identical. See
+  <code>docs/engineering/benchmarking/model_edge_refinement_20260715.md</code> and
+  <code>tools/bench/model_edge_eval.py</code>.</li>
+<li><strong><code>Pose::adjoint</code> + SE(3) covariance reframing.</strong> <code>Pose::adjoint</code> returns the
+  6×6 SE(3) adjoint (<code>[t, ω]</code> ordering); <code>Pose::covariance_camera_to_body</code> and
+  <code>Pose::covariance_body_to_camera</code> convert a pose covariance between the camera
+  (left) and body (right) tangent frames exactly (<code>Σ_cam = Ad_T Σ_body Ad_Tᵀ</code>).
+  Plus <code>Pose::inverse</code>. Validated by <code>adjoint_relates_body_and_camera_tangents</code>
+  and <code>covariance_reframe_roundtrips</code>.</li>
+<li><strong>Corner-refinement variant benchmark + rotation-tail study.</strong> New
+  <code>tools/bench/refine_variants_eval.py</code> runs the shipped <code>high_accuracy</code> detector
+  with only its large-marker refinement route swapped (config-only; shipped
+  profiles and snapshots untouched). The 2026-07-14 study
+  (<code>docs/engineering/benchmarking/refine_variants_20260714.md</code>) shows apriltag-style
+  edge-line refit (GWLF) reaches the rotation p99 target but regresses translation
+  3.4× (not a Pareto win), and that the residual rotation-p99 gap is 2–3 EdLines
+  arc-partition failures rather than distributed refinement noise. No library
+  behavior change — the study's <code>EdgeLineGated</code> prototype was reverted.</li>
+<li><strong>Config field-set parity tripwire.</strong> A <code>locus-core</code> unit test
+  (<code>config::schema_parity_tests</code>) now asserts the serde profile shim
+  (<code>ProfileJson</code> + nested <code>*Json</code> structs) exposes the exact same JSON key set as
+  the referee <code>schemas/profile.schema.json</code>. Because the schema is already
+  CI-locked to the Pydantic model, this transitively pins <strong>Rust ↔ Python</strong>
+  config field-set agreement — the one seam none of the value-oriented tripwires
+  (<code>profile_loading.rs</code>, <code>test_profiles.py</code>, the schema-diff job) asserted.
+  Adding/removing a knob on only one side is now a loud red build. The <code>*Json</code>
+  shim structs gained <code>Serialize</code> (and <code>ProfileJson</code> a derived <code>Default</code>) to
+  support the reflection; no behavior change.</li>
+<li><strong>Generated <code>locus/locus.pyi</code> type stub + drift gate.</strong> The hand-maintained
+  stub (whose silent drift motivated this pass) is now generated from the
+  annotated pyo3 surface via <code>pyo3-stub-gen</code>: <code>cargo run --bin stub_gen</code>
+  (re)writes it, and a CI step (<code>stub_gen --check</code>, in the <em>Profile Schema &amp; Stub
+  Parity</em> job) fails on drift. Together with the field-set tripwire and the
+  schema-diff job this closes the loop <strong>Rust ↔ Pydantic ↔ schema ↔ .pyi</strong>.
+  <code>pyo3-stub-gen</code> is an <em>optional</em> dependency behind a non-default <code>stub-gen</code>
+  feature, so the shipped wheel and the <code>cargo deny</code> graph never pull it (or its
+  parser / unmaintained-unicode transitive deps) — the production build is
+  byte-identical to before, as the <code>#[gen_stub_*]</code> annotations compile out under
+  default features. <code>pyo3</code>'s <code>extension-module</code> became a toggleable default
+  feature so the generator binary can link libpython and run standalone.</li>
+</ul>
+<h3 id="changed_1">Changed</h3>
+<ul>
+<li><strong>Detector config crosses the Rust↔Python FFI as JSON, not a 40-field struct.</strong>
+  The Pydantic <code>DetectorConfig</code> is now shipped to Rust as its <code>model_dump_json()</code>
+  string (parsed by <code>DetectorConfig::from_profile_json</code>) and read back the same
+  way (<code>DetectorConfig::to_profile_json</code>), making the shipped JSON profile format
+  the single contract on both sides of the boundary. This deletes the
+  <code>PyDetectorConfig</code> pyclass, its 40-argument constructor, both <code>From</code> impls,
+  Python's <code>_to_ffi_config</code>, the <code>quad.extraction_policy</code> enum-flattening
+  discriminator hack, and the hand-written <code>.pyi</code> block — ~300 lines of pure
+  transcription, and the FFI seam that had no runtime coverage. Behavior-neutral:
+  render-tag / ICRA snapshots byte-identical. <code>PyDetectorConfig</code> is removed from
+  the <code>locus.locus</code> extension surface (internal FFI glue; it was never in
+  <code>__all__</code>).</li>
+<li><strong>OpenCV benchmark baseline bumped to 5.0.0 and re-tuned.</strong> Bumped
+  <code>opencv-python-headless</code> 4.13 → 5.0.0 (fixing a <code>detectMarkers</code> <code>ids</code>-shape
+  change in the comparison adapter) and re-tuned the <code>cv2.aruco</code> baseline for its
+  best 5.0 config. The reported OpenCV numbers now show two operating points:
+  fast <code>subpix</code> (tuned detection thresholds: render-tag trans p99 141 → 66.6 mm
+  for free) and best-accuracy <code>apriltag</code> refinement (55.3 mm / best rotation tail,
+  ~2× slower). <code>apriltag</code> is now the shipped <code>OpenCVWrapper._DEFAULTS</code>. On ICRA
+  its recall rises to 52.6 % (from 33.2 %) with the recall-tuned <code>subpix</code> config.
+  All render-tag latencies re-measured single-threaded on verified hardware. See
+  <code>docs/engineering/benchmarking/render_tag_sota_20260713.md</code>; the OpenCV version
+  is now captured in benchmark provenance.</li>
+</ul>
+<h3 id="removed">Removed</h3>
+<ul>
+<li><strong>Dead / unused detector config knobs.</strong> Pruned three knobs across all
+  representations (flat Rust <code>DetectorConfig</code>, serde profile shim, Pydantic
+  model, PyO3 FFI, <code>.pyi</code> stub, JSON schema):</li>
+<li><code>threshold.enable_adaptive_window</code> — plumbed through every layer but read by
+    no algorithm code (genuinely dead). Removed from the 3 shipped profiles and
+    the test fixtures that carried it.</li>
+<li><code>quad.edlines_phase3_erf</code> — set by no shipped profile (parabolic-vertex is
+    the only production path). Removing the knob let us delete the dead
+    per-micro-ray ERF branch in <code>edlines.rs</code>, the <code>fit_erf_step_lm</code> kernel and
+    its unit tests, and the enum's dual-format legacy <code>bool</code>/string deserializer.</li>
+<li><code>extended-tests</code> Cargo feature — redundant with <code>extended-bench</code>; collapsed.</li>
+</ul>
+<p><strong>Breaking (Python config API):</strong> the <code>threshold.enable_adaptive_window</code> and
+  <code>quad.edlines_phase3_erf</code> fields and the <code>EdLinesPhase3ErfPolicy</code> enum are gone.
+  No shipped profile relied on either, so detection output is unchanged
+  (render-tag / ICRA snapshots byte-identical).
+- <strong><code>max_recall_adaptive</code> profile (shipped presets 4 → 3).</strong> The opt-in
+  "Phase 1 sentinel" carried a placeholder PPB threshold, minimal coverage, and
+  was excluded from the SOTA eval; the shipped set is now <code>standard</code>, <code>grid</code>,
+  <code>high_accuracy</code> — matching what the docs already described. <strong>Breaking (Python
+  config API):</strong> <code>"max_recall_adaptive"</code> is no longer a valid <code>profile=</code> /
+  <code>DetectorConfig.from_profile()</code> argument. The <code>AdaptivePpb</code> machinery it shared
+  with <code>high_accuracy</code> is untouched; its distortion-routing regression test was
+  retargeted to build the policy inline so that dispatch coverage survives.
+- <strong>Phase C.5 post-decode corner re-refit</strong> (<code>post_decode_refinement</code>). Removed
+  its only consumer (<code>max_recall_adaptive</code>), so the feature — the
+  <code>post_decode_refinement.rs</code> module, the <code>decoder.post_decode_refinement</code> config
+  field across all representations, and the now-orphaned
+  <code>RefineConfig::post_decode_style</code> / <code>ErfEdgeFitter::line_jtj</code> helpers — is
+  deleted. <strong>Breaking (Python config API):</strong> the <code>decoder.post_decode_refinement</code>
+  field is gone. No shipped profile set it, so detection output is unchanged.
+- <strong>Phase 0 rotation-tail diagnostic harness</strong> (bench-internals-only, always
+  marked throwaway). Its stated revert precondition — the Phase 0 memo landing —
+  is met, and the single-frame rotation line of inquiry is closed. Deleted the
+  dual-branch LM / leave-one-out refit / per-iteration IRLS telemetry entry
+  points in <code>locus-core</code> (<code>pose.rs</code>, <code>pose_weighted.rs</code>), the <code>mod bench</code> FFI
+  surface and <code>locus.bench</code> Python sub-module in <code>locus-py</code>, and the
+  <code>tools/bench/rotation_tail_diag/</code> + <code>tools/bench/pose_cov_audit.py</code> tooling
+  built on it. The permanent foundation is untouched: the <code>bench-internals</code>
+  feature itself, <code>compute_image_noise_floor</code>, the <code>branch_chosen</code> field on
+  <code>PoseDiagnostics</code>, <code>bench_compute_corner_covariance</code>, and the shipped
+  pose-consistency / outlier-drop telemetry columns on <code>DetectionBatch</code>.</p>
+<h3 id="fixed_1">Fixed</h3>
+<ul>
+<li><strong><code>Detector.config()</code> now round-trips every field.</strong> The Python readback
+  previously reconstructed only ~29 of 39 config fields by hand, silently
+  substituting Pydantic defaults for the <code>pose_consistency_*</code> /
+  <code>outlier_drop_d2_threshold</code> knobs and the adaptive <code>quad.extraction_policy</code> on
+  any detector whose config set them. <code>config()</code> now reparses Rust's serialized
+  effective config (see the JSON-boundary change above), so the round-trip is
+  total. Covered by the rewritten <code>test_profiles.py</code> full-config comparison.</li>
+<li><strong><code>pose_consistency_min_decisive_ratio = math.inf</code> survives the JSON FFI
+  boundary.</strong> The documented <code>f64::INFINITY</code> value (which disables the χ²
+  escape clause) has no JSON number form; it now round-trips as <code>null</code> in both
+  directions — Rust's serde shim maps <code>∞</code>↔<code>null</code> and Pydantic parses <code>null</code>
+  back to <code>math.inf</code> — instead of raising <code>ValueError</code> at <code>Detector</code>
+  construction. Other non-finite handling is unchanged.</li>
+</ul>
+<h3 id="added_1">Added</h3>
+<ul>
+<li><strong>Per-instance comparative benchmarking + visualization</strong> (<code>tools/bench/compare/</code>,
+  Python-only). Compares locus-tag against tuned OpenCV ArUco / pupil_apriltags
+  <strong>image-by-image and per tag instance</strong> to find which library wins on which
+  strata and which specific images are Locus's improvement levers. New CLI:</li>
+<li><code>bench compare-instances</code> — end-to-end: runs four series (<code>locus:tuned</code>,
+    <code>locus:shipped</code>, <code>opencv_aruco:tuned</code>, <code>apriltag:tuned</code>) from a <code>bench tune</code>
+    <code>pareto/</code> dir across the render-tag datasets → per-instance report → rerun
+    deep-dive. Split into <code>bench compare-generate</code> (the combined Tier-1 parquet)
+    and <code>bench compare-report-instances</code> for iteration.</li>
+<li>Analysis is <strong>polars</strong>-native (<code>compare/analysis.py</code>): per-instance winners,
+    per-stratum win-rates, and a worst-Locus lever table. Figures are
+    matplotlib→<strong>SVG</strong> (<code>plots/{winrate_heatmap,error_ecdf,error_violin,
+    paired_scatter,delta_hist}.py</code>) with a two-section HTML bundle + a docs
+    markdown report. A <strong>rerun</strong> deep-dive (<code>compare/deepdive.py</code>) overlays each
+    library's corners (separate, toggleable entity paths) + GT + per-library
+    error scalars on a scrubbable timeline over the worst-Locus cases.</li>
+<li>Reuses the tuning wrappers (<code>from_params</code>), <code>Collector</code>/records, <code>pareto/*.json</code>
+    and stratification; the tune executor's frame loop was extracted to
+    <code>drive_cell</code> + <code>run_search_records</code> (same crash-isolation) rather than duplicated.</li>
+<li>Fixed a cross-library measurement bug: pupil_apriltags labels corners in a
+    different order than the GT/Locus/OpenCV convention (a fixed <code>[1,0,3,2]</code> relabel,
+    verified sub-pixel), so the collector's corner RMSE was ~200 px for apriltag and
+    incomparable. <code>AprilTagWrapper</code> now normalises corners with that fixed adapter;
+    the metric stays <strong>order-preserving</strong> (a genuine wrong-orientation detection must
+    still surface as a large error), only the deterministic convention offset is fixed.</li>
+<li><strong>Parallel tuning + comparative-benchmarking harness</strong> (<code>tools/bench/tune/</code>,
+  Python-only, no Rust or runtime change). New CLI subcommands drive it:</li>
+<li><code>bench sweep</code> — fan a declarative search space (<code>tune/spaces/*.json</code>) for
+    Locus <strong>and</strong> competitors (OpenCV ArUco, pupil_apriltags) across cores; each
+    worker is pinned to a single thread (<code>RAYON_NUM_THREADS=1</code> / <code>cv2.setNumThreads(0)</code>)
+    so N workers never oversubscribe, and the accuracy sweep is byte-identical
+    regardless of worker count. A native crash in a competitor detector is
+    isolated to one errored cell instead of failing the sweep.</li>
+<li><code>bench tune</code> — select the Pareto frontier over <em>(maximize recall, minimize
+    p99 pose error)</em> under hard precision/latency gates, then verify latency
+    <strong>serially</strong> (each frontier config in its own un-pinned subprocess:
+    production threading for trustworthy timing, plus native-crash isolation so a
+    corrupting competitor config can't take down the tune) and guard against
+    regressing the render-tag tail/mean vs shipped Locus profiles. Writes
+    <code>pareto/&lt;library&gt;.json</code>.</li>
+<li><code>bench compare-report</code> — knob-sensitivity heatmap (which lever moves which
+    metric) + per-stratum tuned-Locus-vs-best-competitor deltas + HTML bundle.</li>
+<li>Competitor detector wrappers are now fully parameterizable (<code>from_params</code>),
+    so comparisons tune all libraries fairly. Optional Bayesian search via the
+    <code>[tune]</code> extra (<code>pip install -e '.[tune]'</code>); grid/random need no extra deps.</li>
+<li>Results persist as tidy <code>tune_results.parquet</code> / <code>tune_configs.parquet</code>
+    reusing the existing Tier-1 <code>ObservationRecord</code> substrate and stratification.</li>
+</ul>
+<h3 id="changed_2">Changed</h3>
+<ul>
+<li><strong>Bench metric plumbing consolidated</strong> (behaviour-preserving, verified
+  byte-identical): the detection↔GT matcher (<code>tools/bench/matching.py</code>), the
+  percentile helper (<code>metrics.percentiles</code>), and the Pareto-frontier primitive
+  (<code>tools/bench/pareto_core.py</code>) are now single implementations shared by the
+  headline aggregator, the Tier-1 collector, and the plot layer.</li>
+</ul>
+<h3 id="tests">Tests</h3>
+<ul>
+<li><strong>Numerical test hardening (tests-only, no production-code change)</strong>: replaced
+  weak/smoke assertions with real numerical invariants and pruned redundant
+  tests across the Rust and Python suites. Highlights: the homography SoA test
+  now checks the canonical-square→quad reprojection instead of <code>data[0] != 0.0</code>;
+  <code>test_decimation_accuracy</code> gates full-res <em>and</em> decimated corner error at
+  0.01 px (was an unasserted <code>err1</code> plus a loose <code>err2 &lt; 1.5</code>) and asserts
+  decimation invariance (the observable +0.5-pixel rule); the GWLF synthetic
+  test gates a measured 0.2 px cross-seed bound (was 1.0 px) and gains an
+  idempotence check; two <code>robustness/geometry.rs</code> no-op (<code>prop_assert!(true)</code>)
+  degenerate-quad tests now assert the solvers return <code>None</code> or <em>finite</em>
+  (never NaN/Inf) output, verified over thousands of pathological quads; a new
+  cross-thread/run-to-run detection determinism test and an image-edge
+  robustness test were added; the tautological <code>DetectorConfig</code> default/builder
+  tests were replaced by a builder-isolation invariant; and the duplicated
+  <code>test_vectorized_poses</code> was de-duplicated and tightened from a <code>tz &gt; 0</code> sign
+  check to the full pose (<code>tz = 0.80 m</code>, near-identity quaternion). No public
+  API or runtime-behavior change.</li>
+</ul>
+<h3 id="changed_3">Changed</h3>
+<ul>
+<li><strong>Lint-suppression modernization</strong>: migrated production <code>#[allow(...)]</code> lint
+  suppressions to <code>#[expect(..., reason = "...")]</code> (stable since Rust 1.81)
+  across <code>locus-core</code>/<code>locus-py</code>, so a suppression that stops being needed now
+  fails the build (<code>unfulfilled_lint_expectations</code>) instead of lingering
+  silently. The migration surfaced and removed ~20 stale or redundant
+  suppressions — item allows duplicating the workspace lint table, and
+  <code>too_many_lines</code>/<code>too_many_arguments</code>/<code>similar_names</code> allows on functions that
+  no longer trip the lint — and deleted the dead
+  <code>apply_adaptive_threshold_fast</code>/<code>apply_adaptive_threshold_with_params</code>
+  integral-image path. Exported-API-sensitive lints (<code>unused_self</code>,
+  <code>struct_field_names</code>) intentionally stay <code>#[allow]</code> because their firing is
+  Cargo-feature-dependent. Comment/doc touch-ups in <code>pose.rs</code>, <code>threshold.rs</code>,
+  and <code>segmentation.rs</code> favour why-over-what. No public API or runtime-behavior
+  change.</li>
+</ul>
+<h3 id="documentation">Documentation</h3>
+<ul>
+<li><strong>Pose-covariance Phase 4 postmortem</strong> (<code>docs/engineering/pose_covariance_phase4_postmortem_2026-05-31.md</code>): records the empirical falsification of Phase 4 (per-corner ERF residual-MSE covariance inflation), the last covariance-calibration lever the 2026-05-21 sweep had not ruled out. Measured end-to-end on branch <code>feat/activate-per-corner-empirical-noise</code> (PR #290): KL stays at the baseline 13.93 against the §4 gate of &lt; 0.5, unchanged even at the theoretical upper bound, because a per-corner diagonal <code>σ_n²</code> rescale cannot fix the off-diagonal structure of <code>(JᵀWJ)⁻¹</code>; the empirical column is also all-zero in production (no low-PPB tags route through ERF on the hub corpus). The ~700 lines of SIMD/FFI/SoA plumbing are not shipped (recoverable on the branch per the §6 precedent); the audit-harness knobs and empirical bound are the salvageable artifacts. <code>pose_covariance_followup_2026-05-22.md</code> §4/§5 amended with status banners. All four covariance phases are now closed.</li>
+<li><strong>EdLines SOTA follow-up postmortem</strong> (<code>docs/engineering/edlines_sota_followup_postmortem_2026-05-25.md</code>): records two empirical falsifications of EdLines-architecture changes attempted on 2026-05-25 — a continuous arc-balance Phase-1 mode selector (replacing the static <code>&gt;40 %/&lt;16 %</code> axis-imbalance gate) and the design memo's Improvement #2 (Phase-5 8-DoF line parameterisation). Both reverted on the same day after <code>regression_render_tag</code> rejected them. The postmortem catalogues the failure mechanisms (decoder-rejection invisibility for the selector; variance amplification through the line-intersection Jacobian for Phase 5) and the re-attempt conditions that would have to be resolved before either bet is worth re-opening. <code>edlines_sota_design_2026-05-03.md</code> amended with status notes on F4, F6, and Improvement #2.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+      
+        <script src="../../javascripts/mermaid-init.js"></script>
+      
+    
+  </body>
+</html>
