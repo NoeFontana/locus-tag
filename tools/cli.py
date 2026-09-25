@@ -111,7 +111,6 @@ def visualize(
     if rerun_serve:
         rr.serve_web_viewer()
     else:
-        # Ensure address has a scheme and /proxy pathname
         url = rerun_addr
         if "://" not in url:
             url = f"rerun+http://{url}"
@@ -119,20 +118,17 @@ def visualize(
             url = url.rstrip("/") + "/proxy"
         rr.connect_grpc(url)
 
-    # Use custom data dir or default cache
     from tools.bench.utils import ICRA_CACHE_DIR
 
     search_dir = data_dir if data_dir else ICRA_CACHE_DIR
 
     loader = DatasetLoader(icra_dir=search_dir)
     if not data_dir and not loader.prepare_icra(scenario):
-        # Only attempt to download/prepare if we are using the default cache
         typer.echo(f"Failed to prepare scenario {scenario}", err=True)
         raise typer.Exit(code=1)
 
     datasets = loader.find_datasets(scenario, ["tags"])
 
-    # Derive a custom config from the `standard` profile.
     _cfg_dict = locus.DetectorConfig.from_profile("standard").model_dump()
     _cfg_dict["threshold"]["tile_size"] = tile_size
     _cfg_dict["quad"]["min_area"] = min_area
@@ -142,7 +138,6 @@ def visualize(
     for ds_name, img_dir, gt_map, meta in datasets:
         typer.echo(f"\nVisualizing {ds_name}...")
 
-        # Use metadata from dataset (intrinsics, tag_size)
         intrinsics = meta.intrinsics
         tag_size = meta.tag_size
 
@@ -161,12 +156,10 @@ def visualize(
 
             rr.set_time(timeline="frame_idx", sequence=i)
 
-            # Perform Detection (Vectorized API with debug telemetry)
             batch = detector.detect(
                 img, intrinsics=intrinsics, tag_size=tag_size, debug_telemetry=True
             )
 
-            # 1. Input & Ground Truth
             rr.log("pipeline/0_input", rr.Image(img))
 
             gt_tags = gt_map.get(img_name, [])
@@ -178,10 +171,8 @@ def visualize(
                     gt_strips.append(c)
                     gt_labels.append(f"GT:{gt.tag_id}")
 
-                    # Log GT Pose if available
                     if gt.pose is not None:
-                        # [tx, ty, tz, qx, qy, qz, qw]
-                        pos = gt.pose[:3]
+                        pos = gt.pose[:3]  # [tx, ty, tz, qx, qy, qz, qw]
                         quat = gt.pose[3:]
                         rr.log(
                             f"pipeline/0_input/ground_truth/tags/{gt.tag_id}/pose",
@@ -198,7 +189,6 @@ def visualize(
                     ),
                 )
 
-            # 2. Intermediate Telemetry
             if batch.telemetry is not None:
                 rr.log("pipeline/1_threshold", rr.Image(batch.telemetry.threshold_map))
                 rr.log("pipeline/2_binarized", rr.Image(batch.telemetry.binarized))
@@ -210,11 +200,9 @@ def visualize(
                         rr.LineStrips2D(gt_strips, colors=[0, 255, 0, 128], radii=0.5),
                     )
 
-                # Subpixel Jitter (Arrows from unrefined to refined)
                 if batch.telemetry.subpixel_jitter is not None:
                     v = len(batch)
 
-                    # 1. Jitter for Valid Detections
                     if v > 0:
                         jitter_valid = batch.telemetry.subpixel_jitter[:v]
                         refined_valid = batch.corners
@@ -229,7 +217,6 @@ def visualize(
                             ),
                         )
 
-                    # 2. Jitter for Rejected Quads
                     if batch.rejected_corners is not None:
                         m = len(batch.rejected_corners)
                         if m > 0:
@@ -249,12 +236,10 @@ def visualize(
                                 ),
                             )
 
-                # Reprojection Errors
                 if batch.telemetry.reprojection_errors is not None:
                     repro = batch.telemetry.reprojection_errors
                     for j, err in enumerate(repro):
                         tid = batch.ids[j]
-                        # Scalar plot for convergence tracking
                         rr.log(
                             f"pipeline/repro_err/tag_{tid}",
                             rr.SeriesLines(colors=[0, 255, 0]),
@@ -262,13 +247,11 @@ def visualize(
                         )
                         rr.log(f"pipeline/repro_err/tag_{tid}", rr.Scalars([err]))
 
-                        # Text log for direct inspection
                         rr.log(
                             f"pipeline/detections/tags/{tid}/repro_err",
                             rr.TextLog(f"RMSE: {err:.4f}px"),
                         )
 
-            # 3. Rejected Quads
             if batch.rejected_corners is not None and len(batch.rejected_corners) > 0:
                 rejected = batch.rejected_corners
                 rej_errs = batch.rejected_error_rates
@@ -301,7 +284,6 @@ def visualize(
                     rr.LineStrips2D(strips, colors=colors, labels=labels, radii=0.5),
                 )
 
-            # 4. Final Detections
             if len(batch) > 0:
                 det_strips = []
                 det_labels = []
@@ -407,7 +389,6 @@ def bench_real(
         if rerun_serve:
             rr.serve_web_viewer()
         else:
-            # Ensure address has a scheme and /proxy pathname
             url = rerun_addr
             if "://" not in url:
                 url = f"rerun+http://{url}"
@@ -415,7 +396,6 @@ def bench_real(
                 url = url.rstrip("/") + "/proxy"
             rr.connect_grpc(url)
 
-    # Map string to locus.TagFamily
     family_mapping = {
         "AprilTag16h5": locus.TagFamily.AprilTag16h5,
         "AprilTag36h11": locus.TagFamily.AprilTag36h11,
@@ -441,7 +421,6 @@ def bench_real(
     }
     refinement_mode = refinement_mapping.get(refinement, locus.CornerRefinementMode.Erf)
 
-    # Use custom data dir or default cache
     icra_dir = data_dir if data_dir else ICRA_CACHE_DIR
     loader = DatasetLoader(icra_dir=icra_dir)
     wrappers: list[LibraryWrapper] = []
@@ -471,8 +450,6 @@ def bench_real(
     )
 
     if compare:
-        # Map locus.TagFamily to library specific names
-        # ICRA 2020 dataset is AprilTag 36h11
         wrappers.append(OpenCVWrapper(family=tag_family_int))
         wrappers.append(AprilTagWrapper(nthreads=8, family=tag_family_int))
 
@@ -776,7 +753,6 @@ def bench_synthetic(
         generate_synthetic_image,
     )
 
-    # Map string to locus.TagFamily
     family_mapping = {
         "AprilTag16h5": locus.TagFamily.AprilTag16h5,
         "AprilTag36h11": locus.TagFamily.AprilTag36h11,
@@ -855,7 +831,6 @@ def bench_hosted(
         OpenCVWrapper,
     )
 
-    # Map string to locus.TagFamily
     family_mapping = {
         "AprilTag16h5": locus.TagFamily.AprilTag16h5,
         "AprilTag36h11": locus.TagFamily.AprilTag36h11,
@@ -970,7 +945,6 @@ def bench_profile(
 
     from tools.bench.utils import LocusWrapper, generate_synthetic_image
 
-    # Map string to locus.TagFamily
     family_mapping = {
         "AprilTag16h5": locus.TagFamily.AprilTag16h5,
         "AprilTag36h11": locus.TagFamily.AprilTag36h11,
@@ -994,7 +968,6 @@ def bench_profile(
     img, _ = generate_synthetic_image(targets, res, noise_sigma=noise, family=tag_family_int)
     typer.echo(f"\nProfiling {targets} tags (noise={noise}, family={family})...")
 
-    # In the new API, we just measure total time.
     latencies = []
     for _ in range(iterations):
         start = time.perf_counter()
@@ -1030,22 +1003,17 @@ def extract_bits(
         raise typer.Exit(code=1)
 
     dictionary = cv2.aruco.getPredefinedDictionary(cv_family)
-    # Generate a large enough image to see bits clearly
     tag_img = cv2.aruco.generateImageMarker(dictionary, tag_id, 200)
 
-    # For AprilTag 36h11, it is 8x8 (6x6 data + 1 cell border)
-    # For ArUco 4x4, it's 6x6 (4x4 data + 1 cell border)
-    # We can infer grid size from the dictionary
+    # +2: one border cell on each side of the markerSize x markerSize data grid.
     grid_size = dictionary.markerSize + 2
     cell_size = 200 // grid_size
     bits = 0
     data_size = dictionary.markerSize
 
-    # Sample the inner grid
     for row in range(data_size):
         for col in range(data_size):
-            # Inner grid starts at index 1,1
-            cy = (row + 1) * cell_size + cell_size // 2
+            cy = (row + 1) * cell_size + cell_size // 2  # +1 skips the border cell
             cx = (col + 1) * cell_size + cell_size // 2
             val = tag_img[cy, cx]
             if val > 128:
@@ -1139,10 +1107,8 @@ def debug_report(
             if limit and idx >= limit:
                 break
 
-            # Run detection with telemetry
             batch = detector.detect(img_np, debug_telemetry=True)
 
-            # Find best match for first GT tag (for illustration)
             best_det = None
             rmse = 0.0
             if gt_tags and len(batch) > 0:
@@ -1159,8 +1125,6 @@ def debug_report(
                             best_det = rotated
                 rmse = best_err
 
-            # Generate Overlay Images
-            # 1. Original with GT & Det
             img_pil = Image.fromarray(img_np).convert("RGB")
             draw = ImageDraw.Draw(img_pil)
 
@@ -1176,7 +1140,6 @@ def debug_report(
             orig_rel_path = f"images/{config}_{img_name}_orig.png"
             img_pil.save(output / orig_rel_path)
 
-            # 2. Binarized with GT & Det
             bin_rel_path = "n/a"
             if batch.telemetry:
                 bin_pil = Image.fromarray(batch.telemetry.binarized).convert("RGB")
@@ -1203,7 +1166,6 @@ def debug_report(
                 }
             )
 
-    # Generate HTML
     html = """
     <html>
     <head>

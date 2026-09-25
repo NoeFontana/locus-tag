@@ -173,9 +173,7 @@ class FamilyMapper:
         return mapping.get(int(family))
 
 
-# Canonical tag-family name/alias → integer id, including the short aliases the
-# CLI accepts. Single source of truth so `bench real` and `bench tune` agree on
-# what family names are valid.
+# Single source of truth so `bench real` and `bench tune` agree on valid family names.
 _TAG_FAMILY_BY_NAME: dict[str, int] = {
     "AprilTag16h5": int(locus.TagFamily.AprilTag16h5),
     "AprilTag36h11": int(locus.TagFamily.AprilTag36h11),
@@ -334,7 +332,6 @@ class DatasetLoader:
     def find_datasets(
         self, scenario: str, filter_types: list[str]
     ) -> list[tuple[str, Path, dict[str, list[TagGroundTruth]], DatasetMetadata]]:
-        # 1. Check for Hub (render-tag) dataset first (rich_truth.json)
         hub_dir = self.icra_dir / scenario
         if not hub_dir.exists():
             hub_dir = HUB_CACHE_DIR / scenario
@@ -344,7 +341,6 @@ class DatasetLoader:
             if rich_truth.exists():
                 return self._load_hub_dataset(hub_dir, scenario)
 
-        # 2. Fallback to ICRA (CSV) dataset
         search_dir = self.icra_dir / scenario
         if not search_dir.exists():
             search_dir = self.icra_dir
@@ -374,7 +370,6 @@ class DatasetLoader:
                 if match:
                     name = f"{scenario}/{d_name}" if subdir != parent_dir else f"{scenario}/root"
 
-                    # Estimated ICRA defaults if not present
                     meta = DatasetMetadata(
                         intrinsics=locus.CameraIntrinsics(fx=736.6, fy=736.6, cx=960.0, cy=540.0),
                         tag_size=0.16,
@@ -402,11 +397,9 @@ class DatasetLoader:
             if not img_name.endswith(".png"):
                 img_name = f"{img_name}.png"
 
-            # Map corners
             corners = np.array(entry["corners"], dtype=np.float32)
 
-            # Map pose [tx, ty, tz, qx, qy, qz, qw]
-            # Hub quaternion is [w, x, y, z]
+            # Hub quaternion is [w, x, y, z]; pose output is [tx,ty,tz,qx,qy,qz,qw].
             w, x, y, z = entry["rotation_quaternion"]
             pos = entry["position"]
             pose = np.array([pos[0], pos[1], pos[2], x, y, z, w], dtype=np.float64)
@@ -414,7 +407,6 @@ class DatasetLoader:
             gt_tags = gt_map.setdefault(img_name, [])
             gt_tags.append(TagGroundTruth(tag_id=int(entry["tag_id"]), corners=corners, pose=pose))
 
-        # Load metadata
         meta = DatasetMetadata()
         if prov_path.exists():
             with open(prov_path) as f:
@@ -454,7 +446,6 @@ class DatasetLoader:
         2020 (``tags.csv``), only ``resolution_h`` is recoverable; the rest are
         ``NaN`` per :doc:`stratification` §3.
         """
-        # 1. Hub layout (preferred when available)
         hub_dir = self.icra_dir / scenario
         if not hub_dir.exists():
             hub_dir = HUB_CACHE_DIR / scenario
@@ -462,10 +453,8 @@ class DatasetLoader:
         if rich_path.exists():
             return self._load_hub_axes(rich_path)
 
-        # 2. ICRA fallback — populate `resolution_h` from image header at most;
-        # other fields collapse to NaN. Not implemented in v1 of this method
-        # because every ICRA stratum is `unk` already and the bench harness
-        # doesn't need per-tag axes there.
+        # ICRA has no per-tag axes; every stratum there is already `unk`, so
+        # there's nothing for the bench harness to join against.
         return {}
 
     def _load_hub_axes(self, rich_path: Path) -> dict[str, dict[int, TagAxes]]:
@@ -506,7 +495,6 @@ class DatasetLoader:
 
     def _parse_csv(self, csv_file: Path) -> dict[str, list[TagGroundTruth]]:
         """Parses ICRA 2020 ground truth CSV files."""
-        # Use primitive types for interim accumulation for performance
         gt_data: dict[str, dict[int, dict[str, Any]]] = {}
         with open(csv_file) as f:
             reader = csv.DictReader(f)
@@ -557,21 +545,17 @@ class HubBenchmarkLoader:
         """
         import datasets
 
-        # Stream the dataset from the hub
         ds = datasets.load_dataset(self.repo_id, subset_name, split="train", streaming=True)
 
         for idx, item in enumerate(ds):
-            # PIL image to grayscale numpy array
             pil_img = item["image"]
             if pil_img.mode != "L":
                 pil_img = pil_img.convert("L")
             img_np = np.array(pil_img, dtype=np.uint8)
 
-            # Use native image_id if available, fallback to index
             image_id = item.get("image_id", f"{subset_name}/{idx}")
 
-            # Map tag ground truth
-            # Some datasets might have lists for tag_id and corners if multiple per image
+            # Some datasets store tag_id/corners as scalars when only one tag is present.
             tag_ids = item["tag_id"]
             corners_list = item["corners"]
 
@@ -761,13 +745,12 @@ class Metrics:
 
     @staticmethod
     def compute_corner_error(det_corners: np.ndarray, gt_corners: np.ndarray) -> float:
+        """RMSE minimized over the 8 cyclic-rotation/flip labelings of the quad."""
         min_err = float("inf")
-        # Try rotations
         for rot in range(4):
             rotated = np.roll(det_corners, rot, axis=0)
             err = np.sqrt(np.mean(np.sum((rotated - gt_corners) ** 2, axis=1)))
             min_err = min(min_err, err)
-        # Try flipped
         flipped = det_corners[::-1]
         for rot in range(4):
             rotated = np.roll(flipped, rot, axis=0)

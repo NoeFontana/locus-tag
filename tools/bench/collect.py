@@ -369,11 +369,6 @@ def _replace(record: ObservationRecord, **kwargs: Any) -> ObservationRecord:
     return dataclasses.replace(record, **kwargs)
 
 
-# ---------------------------------------------------------------------------
-# Provenance
-# ---------------------------------------------------------------------------
-
-
 def build_provenance(
     *,
     dataset_version: str = "v1.0.0",
@@ -476,11 +471,6 @@ def _rayon_threads() -> int | None:
         return n if n > 0 else None
     except ValueError:
         return None
-
-
-# ---------------------------------------------------------------------------
-# Flush helper
-# ---------------------------------------------------------------------------
 
 
 def flush_collectors(collectors: list[Collector], provenance: Provenance, path: Path | str) -> int:

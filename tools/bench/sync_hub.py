@@ -17,11 +17,9 @@ from huggingface_hub.errors import EntryNotFoundError
 from PIL import Image
 from tqdm import tqdm
 
-# Configure minimalist logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
-# Resolve project-level defaults
 PROJECT_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 DEFAULT_CACHE_DIR: Final[Path] = Path(
     os.getenv("LOCUS_HUB_DATASET_DIR", PROJECT_ROOT / "tests/data/hub_cache")
@@ -58,14 +56,12 @@ def sync_subset_to_local(subset: str, target_dir: Path, repo_id: str = DEFAULT_R
 
     logger.info(f"--> Syncing: {subset}")
 
-    # 1. Stream dataset and parallelize image saving
     try:
         ds = datasets.load_dataset(repo_id, subset, split="train", streaming=True)
     except Exception as e:
         logger.warning(f"    [!] Standard load failed for {subset}: {e}")
         logger.info("    [-->] Retrying with explicit data_files fallback...")
         try:
-            # Fallback path: try to load the parquet file directly if config discovery fails
             ds = datasets.load_dataset(
                 repo_id,
                 data_files={"train": f"{subset}/train-*.parquet"},
@@ -100,11 +96,9 @@ def sync_subset_to_local(subset: str, target_dir: Path, repo_id: str = DEFAULT_R
             item["image_filename"] = img_path.name
             f.write(json.dumps(item) + "\n")
 
-        # Wait for all images to be saved
         if futures:
             concurrent.futures.wait(futures)
 
-    # 2. Download auxiliary schema files in parallel
     aux_files: list[str] = ["coco_labels.json", "rich_truth.json"]
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(aux_files)) as executor:
         for aux_file in aux_files:
@@ -126,7 +120,6 @@ def main() -> None:
     parser.add_argument("--repo-id", type=str, default=DEFAULT_REPO_ID)
     args = parser.parse_args()
 
-    # Discover configurations
     configs: list[str] = args.configs
     if "all" in configs:
         logger.info(f"Discovering configurations for {args.repo_id}...")
@@ -151,7 +144,6 @@ def main() -> None:
                 logger.error(f"Manual discovery also failed: {e2}")
                 return
 
-    # Execute sync
     for config in configs:
         try:
             sync_subset_to_local(config, args.target_dir, args.repo_id)
