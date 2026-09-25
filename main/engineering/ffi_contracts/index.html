@@ -2445,14 +2445,11 @@ than rejecting under-padded inputs:</p>
   scratch buffer lives for the lifetime of the <code>detect()</code> call and is
   dropped afterwards.</li>
 </ul>
-<p>The fallback violates the otherwise-strict "no copies at the FFI" rule in
-<code>docs/engineering/constraints.md</code> §2. It is a deliberate trade-off —
-PR #287 PR-A initially rejected under-padded inputs and broke every
-<code>np.zeros((H, W))</code> call site in the public API; the redesign restored
-backwards-compatibility at the cost of one <code>H × W</code>-byte allocation + copy
-per <code>detect()</code> call for the tightly-packed path. PRs that touch this
-fallback should re-evaluate the trade-off if frame copy becomes a
-measurable cost.</p>
+<p>This violates the otherwise-strict "no copies at the FFI" rule in
+<code>constraints.md</code> §2, deliberately: PR #287 PR-A initially rejected
+under-padded inputs and broke every <code>np.zeros((H, W))</code> call site in the
+public API; the fallback restores compatibility at the cost of one
+<code>H × W</code> copy per <code>detect()</code> call on the tightly-packed path.</p>
 <p>To take the zero-copy fast path explicitly, allocate a wider parent and
 view a column prefix:</p>
 <div class="highlight"><pre><span></span><code><span class="n">parent</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">)))</span>  <span class="c1"># or `np.zeros((H, W + 3), ...)`</span>
@@ -2781,17 +2778,10 @@ converge.</p>
 <h2 id="7-gaps-and-follow-ups">7. Gaps and follow-ups</h2>
 <p>These feed the Phase A1 test matrix:</p>
 <ul>
-<li><strong>Image:</strong> SIMD padding is now satisfied transparently at
-  <code>prepare_image_view</code> via a copy-into-padded-scratch fallback (A1.2 —
-  shipped 2026-05-30 alongside the negative-stride and lifetime-tie fixes).
-  Tightly packed <code>np.zeros((H, W))</code> buffers are accepted at the FFI: the
-  function returns a <code>Borrowed</code> zero-copy view when the input already has
-  ≥3 trailing bytes per row, or a <code>Padded</code> owned scratch otherwise (see §1
-  SIMD-padding block). The public Python API is unchanged from pre-PR #287.
-  Test fixtures in <code>tests/</code> and <code>crates/locus-py/tests/</code> were briefly
-  flipped to the column-prefix-view pattern by PR #287 PR-A's reject
-  design and then reverted to the original tight-buffer pattern when the
-  copy fallback shipped.</li>
+<li><strong>Image:</strong> SIMD padding is satisfied transparently at
+  <code>prepare_image_view</code> (A1.2, shipped 2026-05-30): <code>Borrowed</code> zero-copy
+  when the input already has ≥3 trailing bytes/row, else a <code>Padded</code>
+  owned scratch (see §1). Public API unchanged from pre-PR #287.</li>
 <li><strong>Config:</strong> ~18 Rust fields have no range validation. With the JSON-profile
   refactor, Pydantic <code>_config.py</code> is the first-line gate and the
   <code>Detector(**kwargs)</code> escape hatch is gone, so these reach Rust only through

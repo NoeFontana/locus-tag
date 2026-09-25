@@ -1734,18 +1734,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Overview
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Overview">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
   <a href="#tier-3-mathematical-memory-isolation-divan" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1753,33 +1741,6 @@
       
     </span>
   </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#tier-2-pipeline-visual-confirmation-tracy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tier 2: Pipeline Visual Confirmation (Tracy)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#tier-1-real-world-ground-truth-python-cli" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tier 1: Real-World Ground Truth (Python CLI)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -2129,18 +2090,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Overview
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Overview">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
   <a href="#tier-3-mathematical-memory-isolation-divan" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2148,33 +2097,6 @@
       
     </span>
   </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#tier-2-pipeline-visual-confirmation-tracy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tier 2: Pipeline Visual Confirmation (Tracy)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#tier-1-real-world-ground-truth-python-cli" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tier 1: Real-World Ground Truth (Python CLI)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -2238,57 +2160,26 @@
 
 
 <h1 id="micro-benchmarking-guide">Micro-Benchmarking Guide</h1>
-<p>This document describes the 3-Tier validation loop for micro-optimizations in Locus.</p>
-<h2 id="overview">Overview</h2>
-<p>A micro-optimization in Locus is only considered successful if it survives the transition through all three tiers of the tooling stack. This process ensures that mathematical improvements translate into real-world pipeline speedups.</p>
-<hr />
-<h3 id="tier-3-mathematical-memory-isolation-divan">Tier 3: Mathematical &amp; Memory Isolation (Divan)</h3>
-<p><strong>Goal:</strong> Prove the mathematical or memory optimization works in isolation (e.g., reducing SIMD bilinear sampling cost).</p>
-<ul>
-<li><strong>Framework:</strong> <a href="https://github.com/nvzqz/divan">Divan</a></li>
-<li><strong>Location:</strong> <code>crates/locus-core/benches/</code></li>
-<li><strong>Constraint:</strong> Must run <strong>strictly single-threaded</strong> to ensure pristine Instructions Per Clock (IPC) and L1 cache utilization metrics.</li>
-<li><strong>Data:</strong> Use the <code>BenchDataset</code> utility to load real-world image gradients from the ICRA 2020 dataset or generate realistic Structure of Arrays (SoA) states.</li>
-</ul>
-<p><strong>Execution:</strong>
+<p>Detail on Tier 3 (Divan) of the <a href="../#the-3-tier-tooling-stack">3-tier tooling stack</a>;
+a micro-optimization must also survive Tier 2 (Tracy) and Tier 1 (<code>bench real</code>)
+as described there before it's considered real.</p>
+<h2 id="tier-3-mathematical-memory-isolation-divan">Tier 3: Mathematical &amp; Memory Isolation (Divan)</h2>
+<p>Proves the optimization works in isolation (e.g. SIMD bilinear sampling cost)
+before touching the pipeline. Located in <code>crates/locus-core/benches/</code>, must
+run <strong>strictly single-threaded</strong> for pristine IPC/L1 metrics. Use
+<code>BenchDataset</code> to load real ICRA 2020 gradients or generate realistic SoA
+states.</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Run a specific benchmark suite</span>
 cargo<span class="w"> </span>bench<span class="w"> </span>--bench<span class="w"> </span>comprehensive<span class="w"> </span>--features<span class="w"> </span><span class="s2">&quot;extended-bench bench-internals&quot;</span><span class="w"> </span>--<span class="w"> </span><span class="s2">&quot;bench_thresholding&quot;</span><span class="w"> </span>--threads<span class="w"> </span><span class="m">1</span>
 
 <span class="c1"># Run full resolution sweep and update baselines</span>
 cargo<span class="w"> </span>bench<span class="w"> </span>--bench<span class="w"> </span>comprehensive<span class="w"> </span>--features<span class="w"> </span><span class="s2">&quot;extended-bench bench-internals&quot;</span><span class="w"> </span>--<span class="w"> </span><span class="s2">&quot;bench_thresholding&quot;</span><span class="w"> </span><span class="s2">&quot;bench_segmentation&quot;</span><span class="w"> </span><span class="s2">&quot;bench_quad_extraction&quot;</span><span class="w"> </span>--threads<span class="w"> </span><span class="m">1</span><span class="w"> </span>&gt;<span class="w"> </span>target/profiling/divan_output.txt
 <span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>python3<span class="w"> </span>tools/bench/update_micro_baselines.py<span class="w"> </span>target/profiling/divan_output.txt
-</code></pre></div></p>
-<hr />
-<h3 id="tier-2-pipeline-visual-confirmation-tracy">Tier 2: Pipeline Visual Confirmation (Tracy)</h3>
-<p><strong>Goal:</strong> Visually confirm the specific span in the pipeline has shrunk and didn't push the bottleneck elsewhere (e.g., to a following memory allocation).</p>
-<ul>
-<li><strong>Tool:</strong> <a href="https://github.com/wolfpld/tracy">Tracy Profiler</a></li>
-<li><strong>Build:</strong> Recompile with the <code>tracy</code> feature enabled.</li>
-</ul>
-<p><strong>Execution:</strong>
-<div class="highlight"><pre><span></span><code><span class="c1"># Build and run with tracy instrumentation</span>
-uv<span class="w"> </span>run<span class="w"> </span>maturin<span class="w"> </span>develop<span class="w"> </span>-r<span class="w"> </span>-F<span class="w"> </span>tracy
-<span class="c1"># Run a trace using the Python CLI or a test script</span>
-uv<span class="w"> </span>run<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>real<span class="w"> </span>--num-frames<span class="w"> </span><span class="m">100</span>
-</code></pre></div></p>
-<hr />
-<h3 id="tier-1-real-world-ground-truth-python-cli">Tier 1: Real-World Ground Truth (Python CLI)</h3>
-<p><strong>Goal:</strong> The ultimate validation. If the total pipeline latency doesn't drop here, the optimization didn't work.</p>
-<ul>
-<li><strong>Tool:</strong> Locus Python CLI</li>
-<li><strong>Benchmark:</strong> <code>bench real</code> command</li>
-</ul>
-<p><strong>Execution:</strong>
-<div class="highlight"><pre><span></span><code><span class="c1"># Run the end-to-end benchmark</span>
-uv<span class="w"> </span>run<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>real
-</code></pre></div></p>
-<blockquote>
-<p><strong>Note:</strong> "If a micro-optimization doesn't lower this number, it didn't actually work."</p>
-</blockquote>
-<hr />
+</code></pre></div>
 <h2 id="technical-details">Technical Details</h2>
 <h3 id="single-threaded-mandate">Single-Threaded Mandate</h3>
-<p>To prevent the OS scheduler or Rayon from thrashing the L1 cache, micro-benchmarks must enforce a single-threaded environment. This is handled globally in the benchmark's <code>main()</code> function:</p>
+<p>Enforced globally in each benchmark's <code>main()</code>, to prevent the OS scheduler
+or Rayon from thrashing the L1 cache:</p>
 <div class="highlight"><pre><span></span><code><span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rayon</span><span class="p">::</span><span class="n">ThreadPoolBuilder</span><span class="p">::</span><span class="n">new</span><span class="p">().</span><span class="n">num_threads</span><span class="p">(</span><span class="mi">1</span><span class="p">).</span><span class="n">build_global</span><span class="p">();</span>
 <span class="w">    </span><span class="n">divan</span><span class="p">::</span><span class="n">Divan</span><span class="p">::</span><span class="n">from_args</span><span class="p">().</span><span class="n">threads</span><span class="p">([</span><span class="mi">1</span><span class="p">]).</span><span class="n">run_benches</span><span class="p">();</span>
@@ -2296,8 +2187,11 @@ uv<span class="w"> </span>run<span class="w"> </span>tools/cli.py<span class="w"
 </code></pre></div>
 <h3 id="realistic-data-layouts">Realistic Data Layouts</h3>
 <ul>
-<li><strong>Early Stages (Thresholding/Segmentation):</strong> Load grayscale frames into <code>ImageView</code> using <code>BenchDataset::icra_forward_0()</code>.</li>
-<li><strong>Late Stages (Decoding/Pose Estimation):</strong> Populate a <code>DetectionBatch</code> (SoA) with a realistic distribution of candidates (e.g., 50 valid tags and 200 false-positives) using <code>BenchDataset::generate_bench_batch()</code>.</li>
+<li><strong>Early stages</strong> (Thresholding/Segmentation): <code>BenchDataset::icra_forward_0()</code>
+  into <code>ImageView</code>.</li>
+<li><strong>Late stages</strong> (Decoding/Pose Estimation): <code>BenchDataset::generate_bench_batch()</code>
+  to populate a <code>DetectionBatch</code> (SoA) with a realistic candidate mix (e.g.
+  50 valid tags, 200 false-positives).</li>
 </ul>
 
 

@@ -2306,7 +2306,10 @@
 
 
 <h1 id="locus-release-performance-report-2026-04-18">Locus Release Performance Report (2026-04-18)</h1>
-<p>This report documents the performance of Locus v0.3.1, covering end-to-end latency, mathematical kernel efficiency, and regression accuracy.</p>
+<p>Historical snapshot for Locus v0.3.1. Numbers are stale (superseded by
+<code>render_tag_sota_20260713.md</code> and later reports); kept for the
+kernel-speedup trend and as the origin of the PPB investigation now
+summarized in <a href="../lessons/"><code>lessons.md</code> §4.4</a>.</p>
 <h2 id="tier-1-end-to-end-performance-python-cli">Tier 1: End-to-End Performance (Python CLI)</h2>
 <p>Validated on the <strong>ICRA 2020</strong> dataset and synthetic targets.
 Measurements taken with <code>RAYON_NUM_THREADS=1</code>.</p>
@@ -2410,17 +2413,10 @@ Substantial improvements observed compared to the March 2026 baseline.</p>
 </tbody>
 </table>
 <h4 id="investigation-highaccuracy-performance">Investigation: HighAccuracy Performance</h4>
-<p>HighAccuracy exhibits lower recall on ICRA 2020 compared to Hub datasets. 
-- <strong>ICRA 2020 (Forward):</strong> 46.3% Recall
-- <strong>Hub (1080p):</strong> 95.6% Recall</p>
-<p><strong>Root Cause: Sub-Pixel Bit Density.</strong>
-Analysis of the ICRA 2020 dataset reveals that a significant portion of tags are extremely small relative to their bit grid:
-- <strong>Forward:</strong> ~18% of tags have &lt; 1.2 pixels per bit (PPB).
-- <strong>Circle:</strong> Thousands of tags have &lt; 1.0 PPB (some as low as 0.03 PPB).</p>
-<p>The <code>HighAccuracy</code> preset is optimized for maximum precision on high-quality images. It uses <code>EdLines</code> quad extraction and disables Laplacian sharpening to avoid distorting the Point Spread Function (PSF). 
-- <strong>EdLines sensitivity:</strong> Empirical testing shows <code>EdLines</code> recall collapses on tags with &lt; 1.5 PPB (reaching &lt; 1% for &lt; 1.2 PPB), whereas the legacy <code>ContourRdp</code> algorithm remains robust down to ~1.2 PPB.
-- <strong>Sharpening impact:</strong> Disabling sharpening (as in HighAccuracy mode) further degrades recall on small tags by smearing bit boundaries. Enabling sharpening recovers <code>EdLines</code> recall to 100% for tags &gt; 2.0 PPB, but it remains ineffective for the "sub-pixel" tags prevalent in ICRA 2020.</p>
-<p>For real-world robotics tracking where high recall on distant tags is required, the <code>standard</code> profile (Soft Decode + ContourRdp + Sharpening) remains the recommended configuration. The <code>high_accuracy</code> profile should be reserved for high-resolution near-field calibration where PPB is &gt; 5.0.</p>
+<p>HighAccuracy: 46.3% recall on ICRA 2020 forward vs. 95.6% on Hub 1080p —
+root-caused to PPB (pixels-per-bit); full writeup and the resulting
+per-PPB-band recommendation table now live in
+<a href="../lessons/"><code>lessons.md</code> §4.4</a>.</p>
 <h3 id="hub-regression-rendered-tags-1080p-tag36h11">Hub Regression (Rendered Tags - 1080p Tag36h11)</h3>
 <table>
 <thead>

@@ -1591,21 +1591,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#7-review-checklist" class="md-nav__link">
+  <a href="#7-sources" class="md-nav__link">
     <span class="md-ellipsis">
       
-        7. Review checklist
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#8-sources" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        8. Sources
+        7. Sources
       
     </span>
   </a>
@@ -2306,21 +2295,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#7-review-checklist" class="md-nav__link">
+  <a href="#7-sources" class="md-nav__link">
     <span class="md-ellipsis">
       
-        7. Review checklist
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#8-sources" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        8. Sources
+        7. Sources
       
     </span>
   </a>
@@ -2357,26 +2335,16 @@ meaningful axes so we catch regressions that averaging hides.</p>
 <code>single_tag_locus_v1_tag36h11_*</code> corpora.</p>
 </blockquote>
 <h2 id="1-motivation">1. Motivation</h2>
-<p>The current baseline (<code>docs/engineering/benchmarking/baseline.json</code>) reports
-one recall number per dataset per library. A 1% drop in that number could be
-anything: a 4% drop in the 4K stratum concealed by gains at 720p, a systematic
-loss of oblique-view tags masked by improved frontal detection, or a silent
-break on distant small tags.</p>
-<p>Concretely, the four <code>locus_v1_tag36h11_{640x480, 1280x720,
-1920x1080, 3840x2160}</code> hub-configs already live under
-<code>tests/data/hub_cache/</code>. Today they are reported as a single number each;
-tomorrow every metric splits further by PPM, angle of incidence, distance,
-and motion — because those are the axes that correlate with the <em>physical
-regime</em> the detector runs in, not the <em>rendering configuration</em>.</p>
-<p>Stratification gives us:</p>
-<ol>
-<li><strong>Early-warning signal.</strong> A stratum-scoped tolerance gate fires on a 5%
-   regression in <code>dist=far</code> even when the global number holds.</li>
-<li><strong>Debuggability.</strong> When a regression fires, the <code>stratum_id</code> narrows the
-   search from "everything" to a handful of images.</li>
-<li><strong>Cross-dataset comparability.</strong> A stratum means the same thing in every
-   hub-config and in the ICRA 2020 corpus.</li>
-</ol>
+<p>The baseline (<code>benchmarking/baseline.json</code>) reports one recall number per
+dataset per library — a 1% drop could be a 4% drop in the 4K stratum
+masked by 720p gains, a systematic oblique-view loss masked by better
+frontal detection, or a silent break on distant small tags. Splitting by
+PPM/AOI/distance/motion targets the <em>physical regime</em> the detector runs
+in, not the rendering configuration, giving: early-warning (a
+stratum-scoped gate fires on a 5% <code>dist=far</code> regression even when the
+global number holds), debuggability (<code>stratum_id</code> narrows the search to
+a handful of images), and cross-dataset comparability (a stratum means
+the same thing in every hub-config and in ICRA 2020).</p>
 <h2 id="2-the-five-axes">2. The five axes</h2>
 <p>Every ground-truth record is assigned a bucket on each axis at load time.
 Source fields come from <code>tests/data/hub_cache/*/rich_truth.json</code>; see
@@ -2611,20 +2579,7 @@ and requires:</p>
 bump and does <strong>not</strong> change the <code>stratum_id</code> grammar — but it does invalidate
 existing baselines because the same raw record may map to a different bucket.
 Re-run the baseline after re-bucketing.</p>
-<h2 id="7-review-checklist">7. Review checklist</h2>
-<p>Two perception engineers sign off on:</p>
-<ul>
-<li>[ ] Axis selection is sufficient and non-redundant.</li>
-<li>[ ] Bucket counts per axis (total strata = ∏ bucket counts — keep this
-      manageable; target &lt;60 strata with <code>unk</code> excluded).</li>
-<li>[ ] Concrete cut points in §5, chosen with a histogram over
-      <code>tests/data/hub_cache/*/rich_truth.json</code> fields.</li>
-<li>[ ] <code>stratum_id</code> grammar is unambiguous.</li>
-<li>[ ] Data-quality gaps in §3 are acceptable for v1 or have mitigations
-      planned.</li>
-<li>[ ] Extension protocol §6 is understood by both reviewers.</li>
-</ul>
-<h2 id="8-sources">8. Sources</h2>
+<h2 id="7-sources">7. Sources</h2>
 <ul>
 <li>Field schema: <code>tests/data/hub_cache/*/rich_truth.json</code> (sampled).</li>
 <li>Loader types: <code>tools/bench/utils.py</code> — <code>TagGroundTruth</code>,

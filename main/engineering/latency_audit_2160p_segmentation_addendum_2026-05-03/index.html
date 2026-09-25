@@ -1989,10 +1989,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-verified-hardware" class="md-nav__link">
+  <a href="#methodology" class="md-nav__link">
     <span class="md-ellipsis">
       
-        §1 Verified hardware
+        Methodology
       
     </span>
   </a>
@@ -2000,44 +2000,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-methodology" class="md-nav__link">
+  <a href="#per-stage-timings-msframe-wall-clock-rayon-parallel-sub-tasks-included" class="md-nav__link">
     <span class="md-ellipsis">
       
-        §2 Methodology
+        Per-stage timings (ms/frame, wall-clock, Rayon-parallel sub-tasks included)
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#3-per-stage-timings" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        §3 Per-stage timings
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="§3 Per-stage timings">
+    <nav class="md-nav" aria-label="Per-stage timings (ms/frame, wall-clock, Rayon-parallel sub-tasks included)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#2160p-38402160-high_accuracy-accurate" class="md-nav__link">
+  <a href="#2160p-high_accuracy-accurate" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2160p (3840×2160), high_accuracy + Accurate
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#1080p-baseline-19201080" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        1080p baseline (1920×1080)
+        2160p, high_accuracy + Accurate
       
     </span>
   </a>
@@ -2061,10 +2039,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-implications" class="md-nav__link">
+  <a href="#implications" class="md-nav__link">
     <span class="md-ellipsis">
       
-        §4 Implications
+        Implications
       
     </span>
   </a>
@@ -2072,10 +2050,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#5-follow-ups-out-of-scope-for-this-addendum" class="md-nav__link">
+  <a href="#follow-ups" class="md-nav__link">
     <span class="md-ellipsis">
       
-        §5 Follow-ups (out of scope for this addendum)
+        Follow-ups
       
     </span>
   </a>
@@ -2103,111 +2081,25 @@
 
 
 <h1 id="2160p-latency-audit-segmentation-span-addendum-2026-05-03">2160p latency audit — Segmentation span addendum (2026-05-03)</h1>
-<p>Fills the <code>Segmentation</code> gap left by the 2026-05-03 latency audit memo
-(<code>docs/engineering/latency_audit_2160p_2026-05-03.md</code>, branch
-<code>track-v2-2160p-latency-audit</code>). That capture reported <code>—</code> for
-Segmentation because <code>simd_ccl_fusion::label_components_lsl</code> was
-uninstrumented; <code>tools/bench/aggregate_telemetry.py</code> printed
-<code>uninstrumented (folded into Quad Extraction)</code> in its place.</p>
-<p>This addendum lands a single static
-<code>#[tracing::instrument(skip_all, name = "pipeline::segmentation")]</code>
-annotation on <code>label_components_lsl</code> (matching the <code>pipeline::*</code>
-naming used by the other five stages) and re-runs V2's procedure to
-report the previously-missing Segmentation p50/p95/p99 at 2160p, with
-the within-run 1080p baseline so the 4× pixel-count expectation can be
-checked locally.</p>
-<p>This is a <strong>measurement record only</strong> — the segmentation algorithm is
-unchanged, no other pipeline code is touched. Branch:
-<code>track-v2fu1-segmentation-span</code>.</p>
-<h2 id="1-verified-hardware">§1 Verified hardware</h2>
-<p>Captured in this session via <code>lscpu</code>, <code>uname -a</code>, <code>nproc</code>, and
-<code>cargo --version &amp;&amp; rustc --version</code>. Identical box and toolchain to
-V2's audit (same KVM guest, same <code>release_max_level_info</code>).</p>
-<div class="highlight"><pre><span></span><code>Architecture:                            x86_64
-Vendor ID:                               AuthenticAMD
-Model name:                              AMD EPYC-Milan Processor
-CPU family:                              25
-Model:                                   1
-CPU(s):                                  8
-Thread(s) per core:                      2
-Core(s) per socket:                      4
-Socket(s):                               1
-BogoMIPS:                                4890.80
-L1d / L1i cache:                         128 KiB / 128 KiB (4 instances each)
-L2 cache:                                2 MiB (4 instances)
-L3 cache:                                32 MiB (1 instance, shared)
-Hypervisor vendor:                       KVM (full virtualization)
-NUMA node(s):                            1 (CPUs 0-7)
-
-Relevant SIMD flags: avx, avx2, fma, sse4_2, bmi1, bmi2, sha_ni, aes,
-                     clflushopt, clwb, rdrand, rdseed, adx, fsrm
-                     (no avx512 — multiversion will dispatch the AVX2
-                     family kernels, NOT the AVX-512 ones)
-
-Linux dev-box-2026-01 6.8.0-107-generic #107-Ubuntu SMP PREEMPT_DYNAMIC
-                      Fri Mar 13 19:51:50 UTC 2026 x86_64 GNU/Linux
-
-cargo 1.92.0 (344c4567c 2025-10-21)
-rustc 1.92.0 (ded5c06cf 2025-12-08)
-
-RAYON_NUM_THREADS=default      (i.e. 8 — equal to `nproc`)
-Profile:                        release  (cargo nextest run --release)
-</code></pre></div>
-<p><strong>Caveat — virtualised host.</strong> Same KVM guest as V2's audit. Wall-clock
-percentiles may carry a few hundred microseconds of host-noise on the
-tail. For 1080p ↔ 2160p relative comparisons inside a single session
-the noise cancels.</p>
-<h2 id="2-methodology">§2 Methodology</h2>
-<ul>
-<li><strong>Telemetry mode:</strong> <code>TELEMETRY_MODE=json</code> — same JSON subscriber V2
-  used. <code>tracing_subscriber::fmt::format::FmtSpan::CLOSE</code> writes one
-  JSON object per closed span to
-  <code>target/profiling/{test_id}_events.json</code>.</li>
-<li><strong>Span:</strong> the new
-  <code>#[tracing::instrument(skip_all, name = "pipeline::segmentation")]</code>
-  on <code>crates/locus-core/src/simd_ccl_fusion/mod.rs::label_components_lsl</code>.
-  No nested sub-stages — a single top-level span over the SIMD-fused
-  RLE extraction + Light-Speed Labeling pass, matching the granularity
-  of <code>pipeline::quad_extraction</code> over <code>extract_quads_soa</code>.</li>
-<li><strong>Frame sequencing:</strong> <code>--test-threads=1</code> so latency reflects
-  serialised per-frame work and not Rayon contention between scenes.
-  Within a single frame, Rayon is still free to parallelise across
-  cores.</li>
-<li><strong>Datasets:</strong></li>
-<li>2160p — <code>tests/data/hub_cache/locus_v1_tag36h11_3840x2160/</code>,
-    50 scenes.</li>
-<li>1080p — <code>tests/data/hub_cache/locus_v1_tag36h11_1920x1080/</code>,
-    50 scenes.</li>
-<li><strong>Build:</strong> <code>cargo nextest run --release --features bench-internals</code>
-  (no <code>--all-features</code> — V2's invocation, repeated verbatim).</li>
-<li><strong>Invocation (verbatim):</strong></li>
-</ul>
-<div class="highlight"><pre><span></span><code>TRACY_NO_INVARIANT_CHECK=1 \
-TELEMETRY_MODE=json \
-LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \
+<p>The 2026-05-03 V2 latency audit (<code>latency_audit_2160p_2026-05-03.md</code>)
+reported <code>—</code> for Segmentation because <code>label_components_lsl</code> was
+uninstrumented. This addendum adds
+<code>#[tracing::instrument(skip_all, name = "pipeline::segmentation")]</code> on
+it and re-measures. Measurement-only — no algorithm change.</p>
+<h2 id="methodology">Methodology</h2>
+<p>Same box/toolchain as V2 (AMD EPYC-Milan KVM guest, 8 vCPU, no AVX-512,
+<code>rustc 1.92.0</code>, <code>--release</code>). <code>TELEMETRY_MODE=json</code>,
+<code>--test-threads=1</code> (serialize frames; Rayon still parallelizes within
+a frame), 50-scene <code>tag36h11</code> Hub subsets at 1080p and 2160p. Repro:</p>
+<div class="highlight"><pre><span></span><code>TELEMETRY_MODE=json LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \
   cargo nextest run --release --features bench-internals \
     --test-threads=1 --no-fail-fast --ignore-default-filter \
     -E &#39;binary(regression_render_tag) and (
           test(accuracy_baseline::regression_hub_tag36h11_2160p) or
           test(accuracy_baseline::regression_hub_tag36h11_1080p))&#39;
 </code></pre></div>
-<p>Both tests now pass on this branch (no insta panic — V2's audit hit
-  one because of an unrelated accuracy snapshot delta on its tip; this
-  worktree is at the same commit as the V2 audit's baseline). The
-  telemetry stream contains 50 <code>pipeline::threshold_compute_stats</code> and
-  50 <code>pipeline::segmentation</code> close events for each resolution,
-  confirming complete coverage.
-* <strong>Aggregation:</strong> Direct extraction of top-level
-  <code>pipeline::segmentation</code> close events from the JSON stream
-  (one-liner Python; equivalent to V2's
-  <code>tools/bench/aggregate_telemetry.py</code> once that script's
-  <code>SPAN_TO_STAGE</code> map is updated to include
-  <code>"pipeline::segmentation": "Segmentation"</code>).</p>
-<h2 id="3-per-stage-timings">§3 Per-stage timings</h2>
-<p><code>samples = 50 frames</code>. Times are wall-clock per frame, in milliseconds,
-including all Rayon-parallel sub-tasks fused inside that span. Run-2
-column shows a re-run on the same binary to characterise noise.</p>
-<h3 id="2160p-38402160-high_accuracy-accurate">2160p (3840×2160), <code>high_accuracy + Accurate</code></h3>
+<h2 id="per-stage-timings-msframe-wall-clock-rayon-parallel-sub-tasks-included">Per-stage timings (ms/frame, wall-clock, Rayon-parallel sub-tasks included)</h2>
+<h3 id="2160p-high_accuracy-accurate">2160p, <code>high_accuracy + Accurate</code></h3>
 <table>
 <thead>
 <tr>
@@ -2216,7 +2108,6 @@ column shows a re-run on the same binary to characterise noise.</p>
 <th style="text-align: right;">p95 (ms)</th>
 <th style="text-align: right;">p99 (ms)</th>
 <th style="text-align: right;">mean (ms)</th>
-<th style="text-align: right;">run-2 p95 (ms)</th>
 </tr>
 </thead>
 <tbody>
@@ -2226,7 +2117,6 @@ column shows a re-run on the same binary to characterise noise.</p>
 <td style="text-align: right;">6.031</td>
 <td style="text-align: right;">9.700</td>
 <td style="text-align: right;">3.835</td>
-<td style="text-align: right;">(V2)</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>Segmentation</strong></td>
@@ -2234,7 +2124,6 @@ column shows a re-run on the same binary to characterise noise.</p>
 <td style="text-align: right;">45.17</td>
 <td style="text-align: right;">103.53</td>
 <td style="text-align: right;">24.07</td>
-<td style="text-align: right;">46.03</td>
 </tr>
 <tr>
 <td style="text-align: left;">Quad Extraction</td>
@@ -2242,7 +2131,6 @@ column shows a re-run on the same binary to characterise noise.</p>
 <td style="text-align: right;">44.78</td>
 <td style="text-align: right;">59.67</td>
 <td style="text-align: right;">8.70</td>
-<td style="text-align: right;">44.78</td>
 </tr>
 <tr>
 <td style="text-align: left;">Decoding (Hard)</td>
@@ -2250,7 +2138,6 @@ column shows a re-run on the same binary to characterise noise.</p>
 <td style="text-align: right;">1.368</td>
 <td style="text-align: right;">2.627</td>
 <td style="text-align: right;">0.459</td>
-<td style="text-align: right;">(V2)</td>
 </tr>
 <tr>
 <td style="text-align: left;">Pose Refinement</td>
@@ -2258,47 +2145,11 @@ column shows a re-run on the same binary to characterise noise.</p>
 <td style="text-align: right;">0.042</td>
 <td style="text-align: right;">0.045</td>
 <td style="text-align: right;">0.029</td>
-<td style="text-align: right;">(V2)</td>
 </tr>
 </tbody>
 </table>
-<p>The Quad Extraction p50/p95 numbers from this branch's run
-(3.21 / 44.78 ms) match V2's audit (3.925 / 46.235 ms) to within
-host-noise — confirming the new tracing span is <em>not</em> a measurable
-overhead on the dominant stage's tail.</p>
-<p><strong>Sum-of-medians ≈ 25.2 ms / frame</strong> at p50, which is ~3.3× V2's
-naively-summed 7.6 ms — because Segmentation was previously hidden.
-Segmentation is now the <strong>second-largest stage at 2160p p50</strong> behind
-preprocessing's still-zero (the preprocessing entry above is
-re-quoted from V2's audit; it was not re-measured here).</p>
-<h3 id="1080p-baseline-19201080">1080p baseline (1920×1080)</h3>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">Stage</th>
-<th style="text-align: right;">p50 (ms)</th>
-<th style="text-align: right;">p95 (ms)</th>
-<th style="text-align: right;">p99 (ms)</th>
-<th style="text-align: right;">mean (ms)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;"><strong>Segmentation</strong></td>
-<td style="text-align: right;">4.72</td>
-<td style="text-align: right;">10.00</td>
-<td style="text-align: right;">23.70</td>
-<td style="text-align: right;">5.84</td>
-</tr>
-<tr>
-<td style="text-align: left;">Quad Extraction</td>
-<td style="text-align: right;">1.00</td>
-<td style="text-align: right;">7.89</td>
-<td style="text-align: right;">9.73</td>
-<td style="text-align: right;">2.03</td>
-</tr>
-</tbody>
-</table>
+<p>Quad Extraction reproduced V2's numbers (3.21/44.78 vs 3.925/46.235 ms)
+within host noise — the new span isn't measurable overhead.</p>
 <h3 id="1080p-2160p-multiplier-segmentation-only">1080p → 2160p multiplier (Segmentation only)</h3>
 <table>
 <thead>
@@ -2308,7 +2159,6 @@ re-quoted from V2's audit; it was not re-measured here).</p>
 <th style="text-align: right;">2160p (ms)</th>
 <th style="text-align: right;">ratio</th>
 <th style="text-align: right;">expected</th>
-<th style="text-align: left;">comment</th>
 </tr>
 </thead>
 <tbody>
@@ -2318,7 +2168,6 @@ re-quoted from V2's audit; it was not re-measured here).</p>
 <td style="text-align: right;">18.30</td>
 <td style="text-align: right;">3.88</td>
 <td style="text-align: right;">~4.0</td>
-<td style="text-align: left;">Linear in pixel count — within ~3 % of expected.</td>
 </tr>
 <tr>
 <td style="text-align: left;">p95</td>
@@ -2326,7 +2175,6 @@ re-quoted from V2's audit; it was not re-measured here).</p>
 <td style="text-align: right;">45.17</td>
 <td style="text-align: right;">4.52</td>
 <td style="text-align: right;">~4.0</td>
-<td style="text-align: left;">Slight super-linear; consistent with per-frame variance and tile-scheduling tail.</td>
 </tr>
 <tr>
 <td style="text-align: left;">mean</td>
@@ -2334,47 +2182,32 @@ re-quoted from V2's audit; it was not re-measured here).</p>
 <td style="text-align: right;">24.07</td>
 <td style="text-align: right;">4.12</td>
 <td style="text-align: right;">~4.0</td>
-<td style="text-align: left;">On the nose for an O(N) stage.</td>
 </tr>
 </tbody>
 </table>
-<p>The 2160p Segmentation cost scales <strong>almost exactly 4×</strong> the 1080p
-cost on every reported percentile (1.03–1.13× the ideal 4.0 ratio),
-which is the textbook signature of an O(N) stage saturating memory
-bandwidth on a host with stable thread scheduling.</p>
-<h2 id="4-implications">§4 Implications</h2>
+<p>Segmentation scales almost exactly 4× (1.03–1.13× the ideal ratio) —
+the textbook signature of an O(N) stage saturating memory bandwidth on
+a host with stable thread scheduling.</p>
+<h2 id="implications">Implications</h2>
 <ol>
-<li><strong>Segmentation is the second-heaviest stage at 2160p p50</strong> behind
-    Quad Extraction (p50 18.30 ms ≈ 5.7× p50 quad). At p95 it's roughly
-    on par with Quad Extraction (45.17 ms vs 44.78 ms). V2's bottleneck
-    attribution to Quad Extraction's p95 tail still stands — but the
-    p50 picture is now reshaped.</li>
-<li><strong>The architecture-doc target of <code>~0.5 ms</code> segmentation latency
-    (50 tags, 720p)</strong> remains internally consistent: 4.72 ms at 1080p
-    extrapolates linearly to ~2.1 ms at 720p, but the hub <code>tag36h11</code>
-    benchmark renders ~50× more components per frame than the
-    architecture's "50 tags" target (every black blob, not just the
-    tag interiors, is segmented) — so the gap is workload, not
-    algorithmic regression.</li>
-<li><strong>No latency regression from the span itself.</strong> Quad Extraction p95
-    moves by <code>0.005 ms</code> between V2's run and this branch's run — well
-    inside the ±5% gate. The single <code>tracing::instrument</code> macro is
-    monomorphised to a single <code>info_span!</code> open/close pair per call,
-    and <code>release_max_level_info</code> ensures <code>debug!</code>/<code>trace!</code> are still
-    erased.</li>
+<li><strong>Segmentation is the 2nd-heaviest stage at 2160p p50</strong> (18.30 ms ≈
+   5.7× quad extraction's p50), and roughly on par with Quad Extraction
+   at p95 (45.17 vs 44.78 ms). V2's bottleneck attribution to Quad
+   Extraction's p95 tail still stands; the p50 picture is now reshaped.</li>
+<li>The architecture doc's <code>~0.5 ms</code> segmentation target (50 tags, 720p)
+   is workload mismatch, not regression: the hub benchmark segments
+   ~50× more components/frame (every black blob, not just tag
+   interiors).</li>
+<li>No latency regression from the instrumentation itself (Quad
+   Extraction p95 moved 0.005 ms between runs, well inside ±5%).</li>
 </ol>
-<h2 id="5-follow-ups-out-of-scope-for-this-addendum">§5 Follow-ups (out of scope for this addendum)</h2>
+<h2 id="follow-ups">Follow-ups</h2>
 <ul>
-<li><strong>Update <code>tools/bench/aggregate_telemetry.py</code></strong> on V2's branch (or a
-  successor PR) to include <code>"pipeline::segmentation": "Segmentation"</code>
-  in <code>SPAN_TO_STAGE</code> so the script's "Segmentation" row stops showing
-  <code>uninstrumented</code> and reports real numbers. Done locally for this
-  addendum's aggregation; the upstream change belongs with whichever
-  PR finally merges V2's audit tooling.</li>
-<li><strong>Sub-stage spans</strong> inside segmentation (RLE extraction vs LSL
-  Union-Find vs stats accumulation) — V2's bottleneck rank-ordering
-  doesn't yet need this granularity; defer until segmentation
-  optimisation work is actually scheduled.</li>
+<li>Add <code>"pipeline::segmentation": "Segmentation"</code> to
+  <code>tools/bench/aggregate_telemetry.py</code>'s <code>SPAN_TO_STAGE</code> upstream (done
+  locally for this addendum only).</li>
+<li>Sub-stage spans (RLE extraction vs LSL Union-Find vs stats) — defer
+  until segmentation optimization is actually scheduled.</li>
 </ul>
 
 

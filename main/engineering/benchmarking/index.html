@@ -2616,9 +2616,9 @@
 
 
 <h1 id="benchmarking-diagnostics">Benchmarking &amp; Diagnostics</h1>
-<p>Locus is built with a focus on extreme performance. To maintain this, we provide a suite of tools for benchmarking and diagnosing failures, covering both the core Rust engine and the Python bindings.</p>
+<p>Tools for benchmarking and diagnosing failures, covering both the core Rust engine and the Python bindings.</p>
 <h2 id="the-3-tier-tooling-stack">The 3-Tier Tooling Stack</h2>
-<p>To tune the Locus codebase for maximum throughput, we enforce strict boundaries between measurement tools to avoid the "Observer Effect".</p>
+<p>Strict boundaries between measurement tools, to avoid the "Observer Effect" (see Tier 2).</p>
 <h3 id="tier-1-end-to-end-regression-the-python-cli">Tier 1: End-to-End Regression (The Python CLI)</h3>
 <ul>
 <li><strong>Tool</strong>: <code>uv run tools/cli.py bench real</code> (ICRA 2020 scenarios or Hugging Face Hub datasets via <code>--hub-config</code>).</li>
@@ -2639,9 +2639,8 @@
 </ul>
 <hr />
 <h2 id="rust-benchmarking-core-engine">Rust Benchmarking (Core Engine)</h2>
-<p>The Rust benchmarking suite is the source of truth for core engine performance and regressions.</p>
+<p>Source of truth for core engine performance and regressions.</p>
 <h3 id="regression-suite-icra-2020">Regression Suite (ICRA 2020)</h3>
-<p>The regression suite validates that <code>Locus</code> matches or exceeds ground truth for thousands of images.</p>
 <ol>
 <li><strong>Set Dataset Path</strong>:
    <div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">LOCUS_ICRA_DATASET_DIR</span><span class="o">=</span>/path/to/icra2020
@@ -2662,7 +2661,6 @@ cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span
 </li>
 </ol>
 <h3 id="hub-regression-suite-hugging-face">Hub Regression Suite (Hugging Face)</h3>
-<p>Locus supports running regressions against large-scale datasets hosted on the Hugging Face Hub.</p>
 <blockquote>
 <p>[!IMPORTANT]
 <code>--release</code> is mandatory for running Hub regression tests. Running in debug mode is extremely slow and will likely timeout in CI or developer environments.</p>
@@ -2708,8 +2706,7 @@ cargo<span class="w"> </span>bench<span class="w"> </span>--bench<span class="w"
 cargo<span class="w"> </span>bench<span class="w"> </span>--bench<span class="w"> </span>decoding_real_bench
 </code></pre></div>
 <h3 id="mutually-exclusive-telemetry-matrix">Mutually Exclusive Telemetry Matrix</h3>
-<p>Locus implements a zero-cost, mutually exclusive telemetry architecture for its regression tests to avoid the "Observer Effect". You cannot simultaneously emit structured JSON logs and capture high-fidelity Tracy profiles without the JSON serialization skewing the nanosecond timings.</p>
-<p>To resolve this, we decouple the profilers at the CI level using <code>TELEMETRY_MODE</code>.</p>
+<p>Emitting structured JSON logs and capturing high-fidelity Tracy profiles simultaneously skews the nanosecond timings (JSON serialization pollutes Tracy's ring buffers). <code>TELEMETRY_MODE</code> decouples them.</p>
 <h4 id="human-mode-tracy">Human Mode (Tracy)</h4>
 <p>Captures pristine binary traces for GUI analysis.
 <div class="highlight"><pre><span></span><code><span class="c1"># Tracy client is assumed to be running or capturing headlessly</span>
@@ -2736,12 +2733,11 @@ cargo<span class="w"> </span>bench<span class="w"> </span>--bench<span class="w"
 </ul>
 <hr />
 <h2 id="python-developer-cli">Python Developer CLI</h2>
-<p>The <code>tools/cli.py</code> tool is the central entry point for high-level evaluations and development tasks.</p>
+<p><code>tools/cli.py</code> is the central entry point for high-level evaluations and development tasks.</p>
 <h3 id="data-preparation">Data Preparation</h3>
-<p>Download all required datasets (ICRA 2020 and Hugging Face Hub subsets):
+<p>Downloads ICRA 2020 scenarios and auto-discovers/syncs all Hub dataset subsets to <code>tests/data/hub_cache/</code>:
 <div class="highlight"><pre><span></span><code><span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>prepare
-</code></pre></div>
-This command downloads the ICRA 2020 scenarios and auto-discovers and syncs all Hub dataset subsets from the configured HF repository to <code>tests/data/hub_cache/</code>.</p>
+</code></pre></div></p>
 <h3 id="real-world-evaluation-icra-2020">Real-World Evaluation (ICRA 2020)</h3>
 <p>Evaluate performance on the ICRA 2020 dataset scenarios (<code>forward</code>, <code>circle</code>):
 <div class="highlight"><pre><span></span><code><span class="c1"># Basic run on Locus</span>
@@ -2798,10 +2794,9 @@ This command downloads the ICRA 2020 scenarios and auto-discovers and syncs all 
 </ol>
 <hr />
 <h2 id="visual-debugging-with-rerun">Visual Debugging with Rerun</h2>
-<p>For diagnosing recall issues or tuning parameters, use the specialized visualization tool:</p>
+<p>For diagnosing recall issues or tuning parameters:</p>
 <div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>tools/cli.py<span class="w"> </span>visualize<span class="w"> </span>--scenario<span class="w"> </span>forward<span class="w"> </span>--limit<span class="w"> </span><span class="m">5</span>
 </code></pre></div>
-<p>Locus provides a high-fidelity debugging pipeline integrated with the <a href="https://rerun.io">Rerun SDK</a>.</p>
 <h3 id="features">Features</h3>
 <ul>
 <li><strong>Convergence Tracking</strong>: Visualize subpixel jitter (yellow arrows) and reprojection errors (scalar plots) for every tag.</li>

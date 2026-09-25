@@ -2212,7 +2212,7 @@ rustup<span class="w"> </span>target<span class="w"> </span>add<span class="w"> 
 cargo<span class="w"> </span>check<span class="w"> </span>--target<span class="w"> </span>aarch64-unknown-linux-gnu<span class="w"> </span>--all-features
 </code></pre></div>
 <h2 id="2-performance-regression-gates">2. Performance &amp; Regression Gates</h2>
-<p>If you are modifying the detection pipeline, math kernels, or SIMD dispatch, you must empirically validate that latency and recall remain within acceptable bounds.</p>
+<p>Changes to the detection pipeline, math kernels, or SIMD dispatch must empirically validate that latency and recall remain within acceptable bounds.</p>
 <h3 id="micro-optimization-protocol">Micro-Optimization Protocol</h3>
 <p>Before performing any micro-performance optimization (e.g., SIMD kernels, hot-loop refactoring):
 1. <strong>Setup Benchmark:</strong> Create or update a realistic, isolated benchmark in <code>crates/locus-core/benches/</code> using the <code>divan</code> framework.
@@ -2258,7 +2258,6 @@ cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span
 <span class="w">  </span>--test<span class="w"> </span>regression_euroc<span class="w"> </span>--<span class="w"> </span>--test-threads<span class="o">=</span><span class="m">1</span>
 </code></pre></div>
 <h2 id="3-documentation-quality">3. Documentation Quality</h2>
-<p>Ensure the documentation builds correctly and is complete.</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># 1. Sync dependencies for documentation</span>
 uv<span class="w"> </span>sync<span class="w"> </span>--group<span class="w"> </span>docs
 
