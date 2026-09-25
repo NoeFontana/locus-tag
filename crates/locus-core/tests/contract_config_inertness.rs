@@ -495,6 +495,18 @@ fn base_gwlf(c: &mut DetectorConfig) {
     c.refinement_mode = CornerRefinementMode::Gwlf;
 }
 
+/// Prerequisite for `threshold_min_range`: sharpening (on by default since
+/// `DetectorConfig::default()` was synced to `standard.json`, see
+/// `config::schema_parity_tests::default_matches_standard_profile`) raises
+/// per-tile local contrast enough that no tile on this synthetic canvas falls
+/// under either `min_range = 10` or `min_range = 0`, making the mutation
+/// coincidentally inert on this specific scene. Disabling it isolates the
+/// field's real effect (an unconditional per-tile write to the debug
+/// `binarized` map, see `threshold.rs`) from that scene-specific interaction.
+fn base_sharpening_off(c: &mut DetectorConfig) {
+    c.enable_sharpening = false;
+}
+
 /// Reason shared by the four integral/gradient-window thresholder knobs.
 const INTEGRAL_THRESHOLDER_REASON: &str = concat!(
     "Read only by `threshold::adaptive_threshold_gradient_window` / ",
@@ -536,14 +548,14 @@ fn cases() -> Vec<FieldCase> {
         },
         FieldCase {
             field: "threshold_min_range",
-            base: noop,
+            base: base_sharpening_off,
             mutate: |c| c.threshold_min_range = 0,
             inert_reason: None,
         },
         FieldCase {
             field: "enable_sharpening",
             base: noop,
-            mutate: |c| c.enable_sharpening = true,
+            mutate: |c| c.enable_sharpening = false,
             inert_reason: None,
         },
         FieldCase {

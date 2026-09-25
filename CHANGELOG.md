@@ -113,6 +113,35 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   previous behaviour exactly. Code that passed a small `threads` value and relied
   on the accidental full-core execution will now be slower by design — pass `0`.
   Detection results are identical for every thread count.
+- **`DetectorConfig::default()` / bare `Detector::new()` now actually match the
+  `standard` profile they're documented to.** `docs/tutorials/guide.md` has long
+  documented `Detector()` (no args) as equivalent to `Detector(profile="standard")`,
+  and `docs/engineering/core.md` states the shipped JSON is authoritative over any
+  Rust/Pydantic constant — but the hand-written `impl Default for DetectorConfig`
+  had drifted on three fields (`threshold.enable_sharpening: false` vs `standard`'s
+  `true`; `quad.max_elongation: 0.0` vs `20.0`; `quad.min_density: 0.0` vs `0.15` —
+  the latter two are gate-disabling sentinels, so the drift silently turned off both
+  the elongation cap and the density floor for anyone constructing a bare config).
+  The independent Python Pydantic model had the same three plus a fourth
+  (`quad.min_area: 16`, the pre-fix placeholder `standard.json` moved off of;
+  see the `select_dominant_vertices` entry below), inert in practice because
+  `locus.Detector()` always resolves through `DetectorConfig.from_profile(...)`
+  and never touches the bare Pydantic defaults — but a real trap for anyone
+  constructing `locus.DetectorConfig()` directly. All four fields are now synced to
+  `standard.json` on both sides, `schemas/profile.schema.json` regenerated to match.
+  Two new value-level parity tests close the gap the existing field-*set* tripwire
+  (`schema_parity_tests::serde_shim_matches_referee_schema`) didn't cover:
+  `config::schema_parity_tests::default_matches_standard_profile` (Rust) and
+  `test_bare_default_matches_standard_profile` (Python). **Behavior change:** any
+  code path that bare-constructs a config (`Detector::new()`, Rust
+  `DetectorConfig::default()`, or Python `locus.DetectorConfig()`) now detects with
+  sharpening on and both quad geometry gates enabled — every shipped-profile
+  regression suite (render-tag, ICRA, EuRoC, board/distortion hub) already
+  specifies an explicit profile and is byte-identical; only bare-default callers
+  are affected. `contract_config_inertness`'s `threshold_min_range` case needed a
+  new prerequisite (`base_sharpening_off`) — sharpening now saturates every tile's
+  contrast on that test's tiny synthetic canvas, making the field coincidentally
+  inert on that one scene regardless of its real (telemetry-only, see above) effect.
 
 ### Fixed
 

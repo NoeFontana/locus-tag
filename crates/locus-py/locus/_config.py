@@ -163,7 +163,7 @@ class ThresholdConfig(BaseModel):
     unconditionally. Changing this value changes ``telemetry.binarized`` and
     nothing else -- detections are bit-identical.
     """
-    enable_sharpening: bool = False
+    enable_sharpening: bool = True
     min_radius: int = Field(default=2, ge=1)
     max_radius: int = Field(default=15, ge=1)
     constant: int = 0
@@ -222,7 +222,7 @@ QuadExtractionPolicy: TypeAlias = Literal["Static"] | _AdaptivePpbPolicy
 class QuadConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
-    min_area: int = Field(default=16, ge=1)
+    min_area: int = Field(default=36, ge=1)
     max_aspect_ratio: float = Field(default=10.0, ge=1.0)
     min_fill_ratio: float = Field(default=0.10, ge=0.0, le=1.0)
     max_fill_ratio: float = Field(default=0.98, ge=0.0, le=1.0)
@@ -230,8 +230,8 @@ class QuadConfig(BaseModel):
     min_edge_score: float = Field(default=4.0, ge=0.0)
     subpixel_refinement_sigma: float = Field(default=0.6, ge=0.0)
     upscale_factor: int = Field(default=1, ge=1)
-    max_elongation: float = Field(default=0.0, ge=0.0)
-    min_density: float = Field(default=0.0, ge=0.0, le=1.0)
+    max_elongation: float = Field(default=20.0, ge=0.0)
+    min_density: float = Field(default=0.15, ge=0.0, le=1.0)
     extraction_mode: _QuadExtractionField = Field(
         default_factory=lambda: QuadExtractionMode.ContourRdp
     )

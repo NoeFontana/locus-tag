@@ -191,7 +191,7 @@
           "type": "number"
         },
         "max_elongation": {
-          "default": 0.0,
+          "default": 20.0,
           "minimum": 0.0,
           "title": "Max Elongation",
           "type": "number"
@@ -204,13 +204,13 @@
           "type": "number"
         },
         "min_area": {
-          "default": 16,
+          "default": 36,
           "minimum": 1,
           "title": "Min Area",
           "type": "integer"
         },
         "min_density": {
-          "default": 0.0,
+          "default": 0.15,
           "maximum": 1.0,
           "minimum": 0.0,
           "title": "Min Density",
@@ -275,7 +275,7 @@
           "type": "integer"
         },
         "enable_sharpening": {
-          "default": false,
+          "default": true,
           "title": "Enable Sharpening",
           "type": "boolean"
         },

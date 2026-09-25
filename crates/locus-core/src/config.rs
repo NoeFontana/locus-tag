@@ -405,11 +405,16 @@ pub struct DetectorConfig {
 }
 
 impl Default for DetectorConfig {
+    /// Must stay field-for-field identical to `profiles/standard.json`
+    /// (`config::tests::default_matches_standard_profile` enforces this) —
+    /// `standard` is documented as the implicit default (`Detector()` /
+    /// `Detector::new()`), so a silent drift here is a silent behavior
+    /// change for every caller that doesn't pass a profile.
     fn default() -> Self {
         Self {
             threshold_tile_size: 8,
             threshold_min_range: 10,
-            enable_sharpening: false,
+            enable_sharpening: true,
             threshold_min_radius: 2,
             threshold_max_radius: 15,
             adaptive_threshold_constant: 0,
@@ -441,8 +446,8 @@ impl Default for DetectorConfig {
             sigma_n_sq: 4.0,
             structure_tensor_radius: 2,
             gwlf_transversal_alpha: 0.01,
-            quad_max_elongation: 0.0,
-            quad_min_density: 0.0,
+            quad_max_elongation: 20.0,
+            quad_min_density: 0.15,
             quad_extraction_mode: QuadExtractionMode::ContourRdp,
             edlines_imbalance_gate: EdLinesImbalanceGatePolicy::Disabled,
             pose_consistency_fpr: 0.0,
@@ -1839,6 +1844,26 @@ mod schema_parity_tests {
              schemas/profile.schema.json\n  only in Rust shim: {only_in_rust:?}\n  \
              only in schema:    {only_in_schema:?}\n\nAdd/remove the field on both \
              sides (and re-run tools/export_profile_schema.py).",
+        );
+    }
+
+    /// Value-level counterpart to `serde_shim_matches_referee_schema` (which
+    /// only pins the JSON *key* set). `standard` is documented as the
+    /// implicit default (`Detector()` in Python, `Detector::new()` in Rust —
+    /// see the doc comment on `impl Default for DetectorConfig`), so
+    /// `DetectorConfig::default()` must equal `from_profile("standard")`
+    /// field-for-field or that promise silently breaks. Caught this drifting
+    /// on three fields (`enable_sharpening`, `quad_max_elongation`,
+    /// `quad_min_density`) before this test existed.
+    #[test]
+    fn default_matches_standard_profile() {
+        let default = super::DetectorConfig::default();
+        let standard = super::DetectorConfig::from_profile("standard");
+        assert_eq!(
+            default, standard,
+            "DetectorConfig::default() has drifted from profiles/standard.json \
+             — standard is JSON-authoritative (docs/engineering/core.md); sync \
+             `impl Default for DetectorConfig` to match, not the other way round.",
         );
     }
 }
