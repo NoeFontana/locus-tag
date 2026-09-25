@@ -5,6 +5,8 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## [0.8.0] - 2026-09-25
+
 ### Tests
 
 - **EuRoC regression tests now use the shipped `grid` profile instead of
