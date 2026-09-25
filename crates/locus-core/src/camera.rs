@@ -38,10 +38,6 @@ pub trait CameraModel: Copy + Send + Sync + 'static {
     fn distort_jacobian(&self, xn: f64, yn: f64) -> [[f64; 2]; 2];
 }
 
-// ---------------------------------------------------------------------------
-// PinholeModel — ideal rectified camera, zero runtime cost
-// ---------------------------------------------------------------------------
-
 /// Ideal pinhole camera model (no distortion).
 ///
 /// All methods are `#[inline]` no-ops. The compiler eliminates every
@@ -68,10 +64,6 @@ impl CameraModel for PinholeModel {
         [[1.0, 0.0], [0.0, 1.0]]
     }
 }
-
-// ---------------------------------------------------------------------------
-// BrownConradyModel — standard polynomial radial + tangential distortion
-// ---------------------------------------------------------------------------
 
 #[cfg(feature = "non_rectified")]
 /// Brown-Conrady (OpenCV) lens distortion model.
@@ -196,10 +188,6 @@ impl CameraModel for BrownConradyModel {
         [[dxd_dxn, dxd_dyn], [dyd_dxn, dyd_dyn]]
     }
 }
-
-// ---------------------------------------------------------------------------
-// KannalaBrandtModel — equidistant fisheye projection
-// ---------------------------------------------------------------------------
 
 #[cfg(feature = "non_rectified")]
 /// Kannala-Brandt equidistant fisheye camera model.

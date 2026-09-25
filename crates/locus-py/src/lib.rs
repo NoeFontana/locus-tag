@@ -32,10 +32,6 @@ use pyo3_stub_gen::derive::{
     gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pyfunction, gen_stub_pymethods,
 };
 
-// ============================================================================
-// Enums
-// ============================================================================
-
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -141,10 +137,6 @@ impl From<locus_core::config::EdLinesImbalanceGatePolicy> for EdLinesImbalanceGa
         }
     }
 }
-
-// ============================================================================
-// Structs
-// ============================================================================
 
 /// Identifies which lens distortion model the [`CameraIntrinsics`] coefficients apply to.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
@@ -319,10 +311,6 @@ pub struct PyPose {
     pub translation: [f64; 3],
 }
 
-// ============================================================================
-// Result types
-// ============================================================================
-
 /// Intermediate pipeline artifacts emitted when `debug_telemetry=True`.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
 #[pyclass(get_all, frozen)]
@@ -387,10 +375,6 @@ pub struct CharucoEstimateResult {
     pub board_cov: Option<Py<PyArray2<f64>>>,
     pub telemetry: Option<Py<CharucoTelemetryResult>>,
 }
-
-// ============================================================================
-// Board topology types
-// ============================================================================
 
 /// Configuration for a ChAruco board.
 ///
@@ -495,10 +479,6 @@ impl AprilGrid {
         self.inner.cols
     }
 }
-
-// ============================================================================
-// BoardEstimator
-// ============================================================================
 
 /// Estimator for multi-tag board poses (AprilGrid).
 ///
@@ -685,10 +665,6 @@ pub struct BoardEstimateResult {
     pub board_pose: Option<Py<PyArray1<f64>>>,
     pub board_cov: Option<Py<PyArray2<f64>>>,
 }
-
-// ============================================================================
-// CharucoRefiner
-// ============================================================================
 
 /// Extracts ChAruco saddle points from decoded ArUco detections and estimates
 /// the board pose via LO-RANSAC + Anisotropic Weighted Levenberg–Marquardt.
@@ -988,10 +964,6 @@ impl CharucoRefiner {
     }
 }
 
-// ============================================================================
-// Helpers
-// ============================================================================
-
 /// Copy a (possibly row-padded) image buffer into a contiguous `dst` slice.
 ///
 /// # Safety
@@ -1131,9 +1103,6 @@ fn build_pipeline_telemetry(
         ppb_estimate,
     })
 }
-
-// Detector class
-// ============================================================================
 
 /// Wraps a raw `usize` so the address can cross the `py.detach()` `Send` boundary.
 ///
@@ -1454,10 +1423,6 @@ fn _create_detector_from_config(
         inner: Box::new(detector),
     })
 }
-
-// ============================================================================
-// DetectorBuilder
-// ============================================================================
 
 /// Fluent builder for constructing a [`Detector`].
 ///
@@ -1979,10 +1944,6 @@ fn build_detection_result_from_owned(
         telemetry: None,
     })
 }
-
-// ============================================================================
-// Profiling
-// ============================================================================
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyfunction)]
 #[pyfunction]
