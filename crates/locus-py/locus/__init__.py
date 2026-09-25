@@ -121,21 +121,28 @@ class FunnelStatus(IntEnum):
     """Status of a candidate in the fast-path decoding funnel.
 
     Mirrors the Rust ``locus_core::batch::FunnelStatus`` enum. Values match
-    the ``u8`` codes stored in :attr:`DetectionBatch.rejected_funnel_status`,
-    where only the ``Rejected*`` variants appear in practice.
+    the ``u8`` codes stored in :attr:`DetectionBatch.rejected_funnel_status`.
     """
 
     NoneReason = 0
     """Candidate had not been processed by the funnel."""
 
     PassedContrast = 1
-    """Passed the O(1) contrast gate. Never appears in ``rejected_funnel_status``."""
+    """Passed the O(1) contrast gate. In ``rejected_funnel_status`` this means
+    the candidate passed the contrast gate but still failed to decode — the
+    Rust pipeline (``crates/locus-core/src/funnel.rs``) never overwrites
+    ``funnel_status`` after the funnel gate runs, so a rejected candidate
+    carrying this value failed at the later decode stage, not the funnel."""
 
     RejectedContrast = 2
     """Rejected by the O(1) contrast gate — geometry-only failure."""
 
     RejectedSampling = 3
-    """Rejected during homography DDA / SIMD sampling / Hamming check."""
+    """Reserved for a homography-DDA/SIMD-sampling rejection. No code path in
+    ``locus-core`` currently sets this value (verified empirically: 0
+    occurrences across a 3378-candidate real-data run) — decode failures show
+    up as ``PassedContrast`` above instead. Kept distinct in case a future
+    change wires this up."""
 
 
 @dataclass(frozen=True)
