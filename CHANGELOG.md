@@ -5,6 +5,37 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Tests
+
+- **`euroc_detection_baseline` now measures relative recall (decoded /
+  present) instead of an absolute "≥15 tags" bar.** `cam_april` is a
+  calibration *sweep* recording — 62.8% of sampled frames have the board
+  absent, far away, or off-frame by construction — so the old absolute bar
+  conflated "board not in view" with "decoder missed tags that were there"
+  and measured 27.6% recall dragged down almost entirely by the former.
+  "Present" is now measured, not guessed: once ≥4 tags decode in a frame, a
+  2D affine map is fit (ordinary least squares, closed-form) from every
+  corner of every decoded tag's known board-plane position to its observed
+  pixel position, the full 6×6 grid layout is reprojected through it, and a
+  tag counts as present iff its projected corners land inside the image
+  bounds. (A full 6-DOF board-pose fit via `BoardEstimator`'s LO-RANSAC was
+  tried first and is more rigorous when it converges, but converges on under
+  20% of real frames here even with its gates loosened 25× — this affine fit
+  can't fail to converge, at the cost of not modeling perspective, which is
+  an acceptable tradeoff for the coarse "in frame or not" question it's
+  answering.) Also added: a duplicate-decoded-ID-within-a-frame invariant, a
+  periphery-vs-interior spatial recall check, and `euroc_pinhole_funnel_diagnostic`
+  (`#[ignore]`d, run explicitly) which reports exactly where candidates are
+  lost per pipeline stage (quad extraction → contrast gate → decode). Fixed
+  `scripts/fetch_euroc_calibration.sh`, whose upstream host
+  (`robotics.ethz.ch`) is permanently decommissioned; it now pulls the
+  calibration bundle from ETH's Research Collection instead. Also added
+  `tools/viz_rerun_euroc.py`, a standalone Rerun visualizer for EuRoC frames
+  (the existing `tools/cli.py visualize` is hard-wired to the ICRA/hub
+  dataset loader's ground-truth format, which EuRoC doesn't have), including
+  a board-coverage overlay (green = decoded, yellow = predicted-present-but-
+  missing, grey = predicted-out-of-frame) for exactly this recall metric.
+
 ### Performance
 
 - **Segmentation (LSL CCL) now scales with the rayon pool instead of running
