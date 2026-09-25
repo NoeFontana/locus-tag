@@ -522,8 +522,9 @@ fn gn_step_on_sample(
 /// noise across all 4 sampled tags and yields a much tighter homography
 /// estimate; running IPPE-Square on it preserves the two-branch
 /// disambiguation without losing the noise-averaging benefit.  This is the
-/// rescue path for the "catastrophic per-tag collapse" frames documented in
-/// `diagnostics/board_p99_investigation_2026-05-14/MEMO.md`.
+/// rescue path for the "catastrophic per-tag collapse" frames (e.g.
+/// `scene_0138` aprilgrid: 35 tags, per-tag rot mean 16.9°, max 69°) in
+/// `diagnostics/multi_ippe_seed_2026-05-14/MEMO.md`.
 #[expect(
     clippy::similar_names,
     reason = "DLT/homography vars (cx_o/cy_o, h_n/h_metric) mirror the math notation"
@@ -670,9 +671,9 @@ fn ippe_branches_from_sample_homography(
 /// the 4 sampled tags / 16 saddle points and yields a much tighter homography
 /// estimate; running IPPE-Square on it preserves the two-branch
 /// disambiguation without losing the noise-averaging benefit.  See
-/// `diagnostics/board_p99_investigation_2026-05-14/MEMO.md` for the
-/// catastrophic-per-tag-collapse frames this rescues, and
-/// `diagnostics/multi_ippe_seed_2026-05-14/MEMO.md` for the algorithm rationale.
+/// `diagnostics/multi_ippe_seed_2026-05-14/MEMO.md` for the
+/// catastrophic-per-tag-collapse frames this rescues and the algorithm
+/// rationale.
 ///
 /// **Why this replaces DLT + Zhang homography decomposition**: DLT minimises
 /// algebraic error rather than geometric reprojection, but that's fine here

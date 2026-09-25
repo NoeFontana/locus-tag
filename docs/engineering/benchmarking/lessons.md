@@ -261,27 +261,16 @@ not `high_accuracy`.**
 
 ### §4.6 AdaptivePpb gracefully falls back on distortion
 
-EdLines is geometrically incompatible with distorted intrinsics
-(Huber IRLS line fit + GN solver assume Euclidean pixel geometry). Two
-guards work together to keep this safe:
-
-1. **Static `EdLines` + distortion**: the run-pipeline guard at
-   `detector.rs:194-198` errors with `EdLinesUnsupportedWithDistortion`.
-   This is the user-explicit-misconfiguration signal — they asked for
-   EdLines on a distorted frame, we tell them.
-2. **AdaptivePpb with `EdLines` high route + distortion**: the per-tag
-   distortion extraction path (`extract_single_quad_with_camera`)
-   silently degrades to ContourRdp, paired with the **low-route's
-   refinement** (typically Erf) rather than the high-route's
-   refinement. The high-PPB route's `None` refinement would skip
-   sub-pixel refinement entirely on aprilgrid sub-tags, costing
-   ~5 pp recall on the Brown-Conrady regression suite.
-
-The graceful-fallback for AdaptivePpb means a single profile (e.g.
-`high_accuracy`) can
-load on either rectified or distorted frames without per-camera
-profile switching. Static EdLines stays explicit-error so the
-misconfiguration doesn't silently degrade.
+EdLines assumes Euclidean pixel geometry (Huber IRLS line fit + GN),
+incompatible with distorted intrinsics. Two guards: **Static `EdLines`
++ distortion** hard-errors (`EdLinesUnsupportedWithDistortion` at
+`detector.rs:194-198`) — explicit user misconfiguration, tell them.
+**AdaptivePpb high-route + distortion** silently degrades to
+ContourRdp paired with the *low-route's* refinement (typically Erf,
+not the high-route's `None` — skipping sub-pixel refinement here cost
+~5 pp recall on Brown-Conrady in testing). Net effect: one profile
+(e.g. `high_accuracy`) works on rectified or distorted frames without
+per-camera switching, while explicit `EdLines` still fails loud.
 
 ## §5 Benchmark methodology traps
 
@@ -356,58 +345,26 @@ regression.
 
 ## §7 ICRA 2020 community-benchmark fixture
 
-The ICRA 2020 fiducial-tag benchmark is a long-standing research
-dataset used widely in the AprilTag / fiducial-marker literature. Its
-synthesis pipeline produces hard pixel edges and no PSF (different
-imaging characteristics from real-camera and Blender-rendered data),
-which is fine for the role it plays — head-to-head detector
-comparison on a shared, reproducible reference. Its
-`forward/pure_tags_images` subset has ~18 % of tags below 1.2 PPB
-(sub-pixel bit boundaries), so the production-default recall on this
-subset is ~74 % — the rest are structurally unrecoverable on Hard
-decode without changing the decoder's noise model.
+ICRA 2020 is a widely-used research dataset with hard pixel edges and
+no PSF (unlike real-camera / Blender-rendered data) — fine for
+head-to-head detector comparison, not representative of production
+imaging. `forward/pure_tags_images` has ~18 % of tags below 1.2 PPB
+(sub-pixel bit boundaries); Hard-decode recall there is structurally
+capped at ~74 %.
 
-Soft decode bridges the gap on this dataset's imaging characteristics
-specifically: it treats each bit as an LLR and accepts ambiguous
-decodes that Hard would reject. The trade-off (precision falls on
-real-camera data with PSF) is documented in §3.2 / §5.5, so the
-tuning lives in a test-only fixture at
-`crates/locus-core/tests/fixtures/icra_synthetic.json` rather than as
-a shipped profile. Production users get Hard decode by default;
-researchers reproducing literature numbers on ICRA 2020 can opt into
-the fixture-driven Soft pathway.
-
-The `regression_icra_forward_synthetic` test records the published
-recall using the winning combination from the original sweep:
-**Soft decode + threshold `tile_size=4`**. Recall = 0.9403, with
-~6 fewer false positives per worst-case scene than Soft alone.
-
-**Sweep findings (from the original 4-variant exploration, kept here as
-documentation rather than as a permanent matrix of fixtures):**
-
-1. **Soft decode is the only recall lever.** ContourRdp + Hard sits at
-   0.738 on `forward/pure_tags_images`; Soft lifts it to 0.940 (+20.2
-   pp). The remaining ~6 pp miss is structural — those tags are below
-   1.2 PPB and decode-failed at the bit level.
-2. **`min_area=20` has zero ICRA effect.** Neither recall nor FP rate
-   changed in the sweep. Negative result: this knob is not a useful
-   ICRA lever.
-3. **`tile_size=4` is a precision win on top of Soft.** Same recall as
-   Soft alone, but ~6 fewer FPs per worst-case scene. Finer threshold
-   tiles let the gate reject background-edge candidates that Soft's
-   probabilistic decode would otherwise call. **This is what the
-   shipped fixture uses.**
-4. **The published number for community comparison** is recall = 0.9403
-   from `regression_icra_forward_synthetic`.
-
-**Why this fixture is not a shipped profile.** Soft decode causes a
-10-22 % precision collapse on data with PSF (real cameras, Blender-
-rendered hub data) per §5.5. ICRA 2020's imaging characteristics don't
-trigger that collapse because there's no PSF to amplify the LLR's
-spurious-decode candidates — but production users almost always have
-PSF and would lose precision. Keep the fixture in `tests/fixtures/`
-so researchers can opt in for community comparison; never promote it
-to `crates/locus-core/profiles/`.
+Soft decode (LLR bit acceptance) closes most of that gap but causes a
+10-22 % precision collapse on PSF-bearing data (§3.2/§5.5) — ICRA has
+no PSF to trigger that collapse, but production cameras do. So Soft
+lives only in a test-only fixture
+(`crates/locus-core/tests/fixtures/icra_synthetic.json`), never a
+shipped profile. `regression_icra_forward_synthetic` records the
+published number: **Soft decode + threshold `tile_size=4` → recall
+0.9403** (vs. 0.738 for ContourRdp+Hard; the residual ~6 pp is
+below-1.2-PPB tags, structurally unrecoverable). `tile_size=4` on top
+of Soft costs nothing on recall but drops ~6 FPs/worst-case scene by
+letting finer threshold tiles reject background-edge candidates Soft
+would otherwise accept. `min_area=20` was swept and had zero effect —
+not a useful ICRA lever.
 
 ## §8 Where to look next
 

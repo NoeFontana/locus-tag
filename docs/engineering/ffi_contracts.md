@@ -53,14 +53,11 @@ than rejecting under-padded inputs:
   scratch buffer lives for the lifetime of the `detect()` call and is
   dropped afterwards.
 
-The fallback violates the otherwise-strict "no copies at the FFI" rule in
-`docs/engineering/constraints.md` §2. It is a deliberate trade-off —
-PR #287 PR-A initially rejected under-padded inputs and broke every
-`np.zeros((H, W))` call site in the public API; the redesign restored
-backwards-compatibility at the cost of one `H × W`-byte allocation + copy
-per `detect()` call for the tightly-packed path. PRs that touch this
-fallback should re-evaluate the trade-off if frame copy becomes a
-measurable cost.
+This violates the otherwise-strict "no copies at the FFI" rule in
+`constraints.md` §2, deliberately: PR #287 PR-A initially rejected
+under-padded inputs and broke every `np.zeros((H, W))` call site in the
+public API; the fallback restores compatibility at the cost of one
+`H × W` copy per `detect()` call on the tightly-packed path.
 
 To take the zero-copy fast path explicitly, allocate a wider parent and
 view a column prefix:
@@ -231,17 +228,10 @@ converge.
 
 These feed the Phase A1 test matrix:
 
-- **Image:** SIMD padding is now satisfied transparently at
-  `prepare_image_view` via a copy-into-padded-scratch fallback (A1.2 —
-  shipped 2026-05-30 alongside the negative-stride and lifetime-tie fixes).
-  Tightly packed `np.zeros((H, W))` buffers are accepted at the FFI: the
-  function returns a `Borrowed` zero-copy view when the input already has
-  ≥3 trailing bytes per row, or a `Padded` owned scratch otherwise (see §1
-  SIMD-padding block). The public Python API is unchanged from pre-PR #287.
-  Test fixtures in `tests/` and `crates/locus-py/tests/` were briefly
-  flipped to the column-prefix-view pattern by PR #287 PR-A's reject
-  design and then reverted to the original tight-buffer pattern when the
-  copy fallback shipped.
+- **Image:** SIMD padding is satisfied transparently at
+  `prepare_image_view` (A1.2, shipped 2026-05-30): `Borrowed` zero-copy
+  when the input already has ≥3 trailing bytes/row, else a `Padded`
+  owned scratch (see §1). Public API unchanged from pre-PR #287.
 - **Config:** ~18 Rust fields have no range validation. With the JSON-profile
   refactor, Pydantic `_config.py` is the first-line gate and the
   `Detector(**kwargs)` escape hatch is gone, so these reach Rust only through

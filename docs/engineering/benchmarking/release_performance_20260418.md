@@ -1,6 +1,9 @@
 # Locus Release Performance Report (2026-04-18)
 
-This report documents the performance of Locus v0.3.1, covering end-to-end latency, mathematical kernel efficiency, and regression accuracy.
+Historical snapshot for Locus v0.3.1. Numbers are stale (superseded by
+`render_tag_sota_20260713.md` and later reports); kept for the
+kernel-speedup trend and as the origin of the PPB investigation now
+summarized in [`lessons.md` §4.4](lessons.md).
 
 ## Tier 1: End-to-End Performance (Python CLI)
 
@@ -43,20 +46,10 @@ Substantial improvements observed compared to the March 2026 baseline.
 | **Forward** | HighAccuracy | 46.31% | 0.7535 | 15.43 |
 
 #### Investigation: HighAccuracy Performance
-HighAccuracy exhibits lower recall on ICRA 2020 compared to Hub datasets. 
-- **ICRA 2020 (Forward):** 46.3% Recall
-- **Hub (1080p):** 95.6% Recall
-
-**Root Cause: Sub-Pixel Bit Density.**
-Analysis of the ICRA 2020 dataset reveals that a significant portion of tags are extremely small relative to their bit grid:
-- **Forward:** ~18% of tags have < 1.2 pixels per bit (PPB).
-- **Circle:** Thousands of tags have < 1.0 PPB (some as low as 0.03 PPB).
-
-The `HighAccuracy` preset is optimized for maximum precision on high-quality images. It uses `EdLines` quad extraction and disables Laplacian sharpening to avoid distorting the Point Spread Function (PSF). 
-- **EdLines sensitivity:** Empirical testing shows `EdLines` recall collapses on tags with < 1.5 PPB (reaching < 1% for < 1.2 PPB), whereas the legacy `ContourRdp` algorithm remains robust down to ~1.2 PPB.
-- **Sharpening impact:** Disabling sharpening (as in HighAccuracy mode) further degrades recall on small tags by smearing bit boundaries. Enabling sharpening recovers `EdLines` recall to 100% for tags > 2.0 PPB, but it remains ineffective for the "sub-pixel" tags prevalent in ICRA 2020.
-
-For real-world robotics tracking where high recall on distant tags is required, the `standard` profile (Soft Decode + ContourRdp + Sharpening) remains the recommended configuration. The `high_accuracy` profile should be reserved for high-resolution near-field calibration where PPB is > 5.0.
+HighAccuracy: 46.3% recall on ICRA 2020 forward vs. 95.6% on Hub 1080p —
+root-caused to PPB (pixels-per-bit); full writeup and the resulting
+per-PPB-band recommendation table now live in
+[`lessons.md` §4.4](lessons.md).
 
 ### Hub Regression (Rendered Tags - 1080p Tag36h11)
 | Mode | Recall | Trans P50 (mm) | Latency (ms) |

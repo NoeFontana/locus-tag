@@ -10,27 +10,16 @@
 
 ## 1. Motivation
 
-The current baseline (`docs/engineering/benchmarking/baseline.json`) reports
-one recall number per dataset per library. A 1% drop in that number could be
-anything: a 4% drop in the 4K stratum concealed by gains at 720p, a systematic
-loss of oblique-view tags masked by improved frontal detection, or a silent
-break on distant small tags.
-
-Concretely, the four `locus_v1_tag36h11_{640x480, 1280x720,
-1920x1080, 3840x2160}` hub-configs already live under
-`tests/data/hub_cache/`. Today they are reported as a single number each;
-tomorrow every metric splits further by PPM, angle of incidence, distance,
-and motion — because those are the axes that correlate with the *physical
-regime* the detector runs in, not the *rendering configuration*.
-
-Stratification gives us:
-
-1. **Early-warning signal.** A stratum-scoped tolerance gate fires on a 5%
-   regression in `dist=far` even when the global number holds.
-2. **Debuggability.** When a regression fires, the `stratum_id` narrows the
-   search from "everything" to a handful of images.
-3. **Cross-dataset comparability.** A stratum means the same thing in every
-   hub-config and in the ICRA 2020 corpus.
+The baseline (`benchmarking/baseline.json`) reports one recall number per
+dataset per library — a 1% drop could be a 4% drop in the 4K stratum
+masked by 720p gains, a systematic oblique-view loss masked by better
+frontal detection, or a silent break on distant small tags. Splitting by
+PPM/AOI/distance/motion targets the *physical regime* the detector runs
+in, not the rendering configuration, giving: early-warning (a
+stratum-scoped gate fires on a 5% `dist=far` regression even when the
+global number holds), debuggability (`stratum_id` narrows the search to
+a handful of images), and cross-dataset comparability (a stratum means
+the same thing in every hub-config and in ICRA 2020).
 
 ## 2. The five axes
 
@@ -158,21 +147,7 @@ bump and does **not** change the `stratum_id` grammar — but it does invalidate
 existing baselines because the same raw record may map to a different bucket.
 Re-run the baseline after re-bucketing.
 
-## 7. Review checklist
-
-Two perception engineers sign off on:
-
-- [ ] Axis selection is sufficient and non-redundant.
-- [ ] Bucket counts per axis (total strata = ∏ bucket counts — keep this
-      manageable; target <60 strata with `unk` excluded).
-- [ ] Concrete cut points in §5, chosen with a histogram over
-      `tests/data/hub_cache/*/rich_truth.json` fields.
-- [ ] `stratum_id` grammar is unambiguous.
-- [ ] Data-quality gaps in §3 are acceptable for v1 or have mitigations
-      planned.
-- [ ] Extension protocol §6 is understood by both reviewers.
-
-## 8. Sources
+## 7. Sources
 
 - Field schema: `tests/data/hub_cache/*/rich_truth.json` (sampled).
 - Loader types: `tools/bench/utils.py` — `TagGroundTruth`,
