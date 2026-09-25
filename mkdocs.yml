@@ -87,6 +87,7 @@ nav:
       - reference/api.md
   - Changelog:
       - changelogs/index.md
+      - changelogs/v0.8.0.md
       - changelogs/v0.7.1.md
       - changelogs/v0.7.0.md
       - changelogs/v0.6.0.md
