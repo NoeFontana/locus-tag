@@ -188,6 +188,48 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `high_iso` 45→56ms), expected given the unconditional decomposition does
   more work than the old epsilon-gated pass; not evaluated against a
   specific budget.
+- **`reduce_to_quad` could discard a real corner for an adjacent
+  staircase-rasterization pixel on an exact triangle-area tie.** Caught by
+  CI, not local validation: `regression_icra2020::regression_fixtures`
+  (real 2448×2048 photo, 190 printed `tag36h11` tags,
+  `tests/fixtures/icra2020/0037.png`) regressed mean corner RMSE 0.1315px
+  → 0.1375px. Root cause, isolated with a per-tag diff against `main`: only
+  2 of 154 matched tags moved (tags `1` and `20`, both ~0.5–0.75px on one
+  corner; the other 152 were bit-identical), and both share the same
+  contour shape — a clean 4-corner rectangle plus a 1px anti-aliasing
+  staircase notch immediately beside one true corner (7 contour points
+  total, all ≤ `POOL_CAP`, so the whole contour reaches `reduce_to_quad`
+  unfiltered). `reduce_to_quad`'s smallest-triangle-area elimination has no
+  concept of which vertex is "real": on this shape, removing the true
+  corner and removing its neighboring 1px notch cost the *exact same*
+  triangle area (`12.0px²` in both regressed cases, verified by hand), and
+  the loop's `area < min_area` scan silently keeps whichever it reaches
+  first — a coin flip that happened to discard the real corner both times.
+  This was latent in `reduce_to_quad` itself (unchanged since before this
+  PR) but only became reachable once `select_dominant_vertices` started
+  pooling low-but-nonzero-significance points like the notch instead of an
+  epsilon threshold filtering them out upstream; `reduce_to_quad` still has
+  exactly one caller, so this is fixed at the source rather than
+  papered over with a new epsilon. `select_dominant_vertices` already
+  computes exactly the signal needed to break this tie — the notch's
+  significance weight (~1.0) is over an order of magnitude below the real
+  corner's (~17.0) — so `reduce_to_quad` now takes that weight array
+  alongside the points and, **only when the area criterion is at or within
+  float-precision (`1e-9` relative) of the current minimum**, prefers to
+  discard the lower-significance point instead of leaving it to iteration
+  order. This is a numerical-precision tolerance, not a reintroduced
+  geometric epsilon — it never changes which vertex has the strictly
+  smaller area, only which one wins a real tie. Fixes both regressed tags
+  exactly (RMSE 0.5085px/0.5083px → 0.0422px/0.0446px, matching `main` to
+  4 decimal places) and the fixture snapshot **improves** on `main`,
+  0.1315px → 0.1312px (154/154 tags now bit-identical or better).
+  Re-validated against `regression_render_tag`/`_robustness` (both suites
+  byte-identical to the pre-tie-break-fix numbers already documented
+  above — this fix only changes behavior on exact/near-exact area ties,
+  which those suites' contours don't happen to hit) and
+  `euroc_detection_baseline` (unaffected). All 278 default-feature tests
+  and the full `--all-features` suite pass; `cargo fmt`/`cargo clippy
+  --all-features -- -D warnings` clean.
 
 ### Added
 

@@ -1307,11 +1307,16 @@ pub(crate) fn select_dominant_vertices<'a>(
     pool.sort_unstable();
 
     let mut pool_pts = BumpVec::from_iter_in(pool.iter().map(|&i| rotated[i]), arena);
+    let mut pool_weight = BumpVec::from_iter_in(pool.iter().map(|&i| weight[i]), arena);
     let final_pts = if pool_pts.len() == k {
         pool_pts
     } else {
-        pool_pts.push(pool_pts[0]); // close the ring for `reduce_to_quad`
-        let mut reduced = reduce_to_quad(arena, &pool_pts);
+        // Close both the point ring and its parallel significance array for
+        // `reduce_to_quad` (below) in lockstep — see its doc comment for why
+        // the significance has to travel with the points.
+        pool_pts.push(pool_pts[0]);
+        pool_weight.push(pool_weight[0]);
+        let mut reduced = reduce_to_quad(arena, &pool_pts, &pool_weight);
         reduced.pop(); // drop the closing duplicate it re-adds
         reduced
     };
@@ -1775,15 +1780,39 @@ fn calculate_edge_score_curved<C: crate::camera::CameraModel>(
 /// Reducing a polygon to a quad (4 vertices + 1 closing) by iteratively removing
 /// the vertex that forms the smallest area triangle with its neighbors.
 /// This is robust for noisy/jagged shapes that are approximately quadrilateral.
-fn reduce_to_quad<'a>(arena: &'a Bump, poly: &[Point]) -> BumpVec<'a, Point> {
+///
+/// `significance` is `select_dominant_vertices`'s per-point weight, parallel
+/// to `poly` (same length, including the closing duplicate) — the deviation
+/// each point was originally selected at during that function's unconditional
+/// Douglas-Peucker decomposition, `f64::INFINITY` for the seeded diameter
+/// pair. It exists purely to break *ties* in the area criterion above: on a
+/// real (pixel-grid) contour it's common for a true corner to sit one pixel
+/// away from a staircase-rasterization artifact, and the triangle areas
+/// formed by removing either one are then often exactly or near-exactly
+/// equal — at which point the area criterion alone has no opinion and this
+/// loop would keep whichever the `for i in 0..n` scan happened to reach
+/// first, with 50/50 odds of discarding the real corner (root-caused via a
+/// real ICRA 2020 fixture regression: `crates/locus-core/tests/fixtures/icra2020/0037.png`
+/// tag 20's corner and tag 1's corner, both dropped in favor of an
+/// immediately-adjacent 1px staircase notch, each an exact `12.0` vs.
+/// `12.0` px² tie). The significance ranking already distinguishes them —
+/// the real corner's deviation is a macroscopic fraction of the contour's
+/// own extent, the staircase artifact's is a pixel or two — so on a
+/// near-tie (within `1e-9` relative, a float-precision tolerance, not a
+/// reintroduced geometric epsilon) this prefers to discard the
+/// lower-significance point instead of leaving it to iteration order.
+fn reduce_to_quad<'a>(arena: &'a Bump, poly: &[Point], significance: &[f64]) -> BumpVec<'a, Point> {
+    debug_assert_eq!(poly.len(), significance.len());
     if poly.len() <= 5 {
         return BumpVec::from_iter_in(poly.iter().copied(), arena);
     }
 
-    // Work on a mutable copy
+    // Work on mutable copies, kept in lockstep.
     let mut current = BumpVec::from_iter_in(poly.iter().copied(), arena);
+    let mut current_sig = BumpVec::from_iter_in(significance.iter().copied(), arena);
     // Remove closing point for processing
     current.pop();
+    current_sig.pop();
 
     while current.len() > 4 {
         let n = current.len();
@@ -1802,14 +1831,17 @@ fn reduce_to_quad<'a>(arena: &'a Bump, poly: &[Point]) -> BumpVec<'a, Point> {
                 .abs()
                 * 0.5;
 
-            if area < min_area {
-                min_area = area;
+            let is_near_tie = (area - min_area).abs() <= min_area.abs() * 1e-9 + 1e-9;
+            let better = area < min_area || (is_near_tie && current_sig[i] < current_sig[min_idx]);
+            if better {
+                min_area = area.min(min_area);
                 min_idx = i;
             }
         }
 
         // Remove the vertex contributing least to the shape
         current.remove(min_idx);
+        current_sig.remove(min_idx);
     }
 
     // Re-close the loop
