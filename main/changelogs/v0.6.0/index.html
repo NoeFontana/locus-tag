@@ -10,11 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/migration/config-refactor/">
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/changelogs/v0.6.0/">
       
       
-        <link rel="prev" href="../../engineering/benchmarking/render_tag_2160p_20260425/">
+        <link rel="prev" href="../v0.7.0/">
       
+      
+        <link rel="next" href="../v0.5.0/">
       
       
         
@@ -25,7 +27,7 @@
     
     
       
-        <title>Config refactor — migration notes - Locus</title>
+        <title>0.6.0 — 2026-06-14 - Locus</title>
       
     
     
@@ -78,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#config-refactor-migration-notes" class="md-skip">
+        <a href="#060-2026-06-14" class="md-skip">
           Skip to content
         </a>
       
@@ -118,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Config refactor — migration notes
+              0.6.0 — 2026-06-14
             
           </span>
         </div>
@@ -940,6 +942,8 @@
       
   
   
+    
+  
   
   
     
@@ -961,17 +965,15 @@
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../changelogs/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -995,7 +997,7 @@
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1015,7 +1017,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../changelogs/v0.7.1/" class="md-nav__link">
+      <a href="../v0.7.1/" class="md-nav__link">
         
   
   
@@ -1043,7 +1045,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../changelogs/v0.7.0/" class="md-nav__link">
+      <a href="../v0.7.0/" class="md-nav__link">
         
   
   
@@ -1068,10 +1070,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../changelogs/v0.6.0/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.6.0 — 2026-06-14
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1087,6 +1116,92 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1099,7 +1214,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../changelogs/v0.5.0/" class="md-nav__link">
+      <a href="../v0.5.0/" class="md-nav__link">
         
   
   
@@ -1880,8 +1995,6 @@
       
   
   
-    
-  
   
   
     
@@ -1893,11 +2006,13 @@
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
         
           
           <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
@@ -1918,7 +2033,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_8">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1933,37 +2048,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Config refactor — migration notes
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../migration/config-refactor/" class="md-nav__link">
         
   
   
@@ -1979,147 +2067,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#detectorpreset-enum-profile-string" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        DetectorPreset enum → profile= string
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#flat-detector-kwargs-nested-detectorconfig" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Flat detector kwargs → nested DetectorConfig
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#detectorstandard_config-removed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Detector.standard_config() removed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#locus_profile-module-removed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        locus._profile module removed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rust-detectorconfig_default-removed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Rust DetectorConfig::*_default() removed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#decodemodesoft-removed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        DecodeMode::Soft removed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#poseestimationmode-removed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        PoseEstimationMode removed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cornerrefinementmodeedge-removed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        CornerRefinementMode::Edge removed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#decoderpost_decode_refinement-removed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        decoder.post_decode_refinement removed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#thresholdenable_adaptive_window-removed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        threshold.enable_adaptive_window removed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#quadedlines_phase3_erf-removed-and-edlinesphase3erfpolicy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        quad.edlines_phase3_erf removed (and EdLinesPhase3ErfPolicy)
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -2159,10 +2106,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#detectorpreset-enum-profile-string" class="md-nav__link">
+  <a href="#changed" class="md-nav__link">
     <span class="md-ellipsis">
       
-        DetectorPreset enum → profile= string
+        Changed
       
     </span>
   </a>
@@ -2170,10 +2117,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#flat-detector-kwargs-nested-detectorconfig" class="md-nav__link">
+  <a href="#security" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Flat detector kwargs → nested DetectorConfig
+        Security
       
     </span>
   </a>
@@ -2181,10 +2128,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#detectorstandard_config-removed" class="md-nav__link">
+  <a href="#fixed" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Detector.standard_config() removed
+        Fixed
       
     </span>
   </a>
@@ -2192,10 +2139,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#locus_profile-module-removed" class="md-nav__link">
+  <a href="#added" class="md-nav__link">
     <span class="md-ellipsis">
       
-        locus._profile module removed
+        Added
       
     </span>
   </a>
@@ -2203,10 +2150,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rust-detectorconfig_default-removed" class="md-nav__link">
+  <a href="#performance" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Rust DetectorConfig::*_default() removed
+        Performance
       
     </span>
   </a>
@@ -2214,65 +2161,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#decodemodesoft-removed" class="md-nav__link">
+  <a href="#fixed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
-        DecodeMode::Soft removed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#poseestimationmode-removed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        PoseEstimationMode removed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cornerrefinementmodeedge-removed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        CornerRefinementMode::Edge removed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#decoderpost_decode_refinement-removed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        decoder.post_decode_refinement removed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#thresholdenable_adaptive_window-removed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        threshold.enable_adaptive_window removed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#quadedlines_phase3_erf-removed-and-edlinesphase3erfpolicy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        quad.edlines_phase3_erf removed (and EdLinesPhase3ErfPolicy)
+        Fixed
       
     </span>
   </a>
@@ -2299,125 +2191,55 @@
   
 
 
-<h1 id="config-refactor-migration-notes">Config refactor — migration notes</h1>
-<p>This document covers the breaking changes in the current <code>Unreleased</code>
-section of the project <code>CHANGELOG.md</code> (at the repository root). Each
-removal lists the before/after spelling so consumers can mechanically
-port their call sites.</p>
-<h2 id="detectorpreset-enum-profile-string"><code>DetectorPreset</code> enum → <code>profile=</code> string</h2>
-<p>Before:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">locus</span>
-
-<span class="n">detector</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">Detector</span><span class="p">(</span><span class="n">preset</span><span class="o">=</span><span class="n">locus</span><span class="o">.</span><span class="n">DetectorPreset</span><span class="o">.</span><span class="n">Standard</span><span class="p">)</span>
-</code></pre></div>
-<p>After:</p>
-<div class="highlight"><pre><span></span><code><span class="n">detector</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">Detector</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">locus</span><span class="o">.</span><span class="n">DetectorConfig</span><span class="o">.</span><span class="n">from_profile</span><span class="p">(</span><span class="s2">&quot;standard&quot;</span><span class="p">))</span>
-</code></pre></div>
-<p>Valid profile names: <code>"standard"</code>, <code>"grid"</code>, <code>"high_accuracy"</code>.
-Custom JSON profiles round-trip through
-<code>DetectorConfig.from_profile_json(text)</code>.</p>
-<h2 id="flat-detector-kwargs-nested-detectorconfig">Flat detector kwargs → nested <code>DetectorConfig</code></h2>
-<p>Before:</p>
-<div class="highlight"><pre><span></span><code><span class="n">detector</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">Detector</span><span class="p">(</span>
-    <span class="n">threshold_tile_size</span><span class="o">=</span><span class="mi">24</span><span class="p">,</span>
-    <span class="n">quad_min_edge_score</span><span class="o">=</span><span class="mf">20.0</span><span class="p">,</span>
-    <span class="n">refinement_mode</span><span class="o">=</span><span class="n">locus</span><span class="o">.</span><span class="n">CornerRefinementMode</span><span class="o">.</span><span class="n">Erf</span><span class="p">,</span>
-<span class="p">)</span>
-</code></pre></div>
-<p>After:</p>
-<div class="highlight"><pre><span></span><code><span class="n">cfg</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">DetectorConfig</span><span class="o">.</span><span class="n">from_profile</span><span class="p">(</span><span class="s2">&quot;standard&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">model_copy</span><span class="p">(</span><span class="n">deep</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="n">cfg</span><span class="o">.</span><span class="n">threshold</span><span class="o">.</span><span class="n">tile_size</span> <span class="o">=</span> <span class="mi">24</span>
-<span class="n">cfg</span><span class="o">.</span><span class="n">quad</span><span class="o">.</span><span class="n">min_edge_score</span> <span class="o">=</span> <span class="mf">20.0</span>
-<span class="n">cfg</span><span class="o">.</span><span class="n">decoder</span><span class="o">.</span><span class="n">refinement_mode</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">CornerRefinementMode</span><span class="o">.</span><span class="n">Erf</span>
-<span class="n">detector</span> <span class="o">=</span> <span class="n">locus</span><span class="o">.</span><span class="n">Detector</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">cfg</span><span class="p">)</span>
-</code></pre></div>
-<p><code>Detector.__init__</code> no longer takes the <code>**kwargs</code> escape hatch; unknown
-keywords raise <code>TypeError</code>. The pre-typed PyO3 enums no longer accept
-integer values implicitly — pass the enum instance, or the variant name
-as a string when editing a JSON-shaped dict.</p>
-<h2 id="detectorstandard_config-removed"><code>Detector.standard_config()</code> removed</h2>
-<p>Use <code>locus.DetectorConfig.from_profile("standard")</code>.</p>
-<h2 id="locus_profile-module-removed"><code>locus._profile</code> module removed</h2>
-<p><code>DetectorConfig</code> lives in <code>locus._config</code> and is re-exported from the
-package root. Imports of <code>locus._profile</code> should switch to
-<code>locus.DetectorConfig</code> directly.</p>
-<h2 id="rust-detectorconfig_default-removed">Rust <code>DetectorConfig::*_default()</code> removed</h2>
-<p>Before:</p>
-<div class="highlight"><pre><span></span><code><span class="kd">let</span><span class="w"> </span><span class="n">cfg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">locus_core</span><span class="p">::</span><span class="n">DetectorConfig</span><span class="p">::</span><span class="n">high_accuracy_default</span><span class="p">();</span>
-</code></pre></div>
-<p>After:</p>
-<div class="highlight"><pre><span></span><code><span class="kd">let</span><span class="w"> </span><span class="n">cfg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">locus_core</span><span class="p">::</span><span class="n">DetectorConfig</span><span class="p">::</span><span class="n">from_profile</span><span class="p">(</span><span class="s">&quot;high_accuracy&quot;</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
-<span class="c1">// or:</span>
-<span class="kd">let</span><span class="w"> </span><span class="n">cfg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">locus_core</span><span class="p">::</span><span class="n">DetectorConfig</span><span class="p">::</span><span class="n">from_profile_json</span><span class="p">(</span><span class="fm">include_str!</span><span class="p">(</span><span class="s">&quot;...&quot;</span><span class="p">))</span><span class="o">?</span><span class="p">;</span>
-</code></pre></div>
-<p><code>ConfigPreset</code> (the test-only enum) is also gone — regression harnesses
-now take <code>.with_profile(&amp;str)</code> / <code>.with_profile_json(&amp;str)</code>.</p>
-<h2 id="decodemodesoft-removed"><code>DecodeMode::Soft</code> removed</h2>
-<p>The <code>DecodeMode</code> enum (Rust <code>locus_core::config::DecodeMode</code> and Python
-<code>locus.DecodeMode</code>) and the <code>decode_mode</code> field on <code>DetectorConfig</code>,
-<code>DetectorConfigBuilder</code>, the shipped JSON profiles, and the public
-Python API are gone. Hard-decision Hamming is the only path.</p>
-<p>Migration: drop any <code>decode_mode=</code> argument; if you relied on
-<code>DecodeMode::Soft</code> for ICRA-style noisy decodes, accept that the
-detector now uses the same hard-decision path that every shipped
-profile already used (Soft was opt-in only on a deleted synthetic
-fixture).</p>
-<p>The historical Soft-vs-Hard analysis is preserved in
-<code>docs/engineering/benchmarking/lessons.md</code> as a record-of-decisions.</p>
-<h2 id="poseestimationmode-removed"><code>PoseEstimationMode</code> removed</h2>
-<p>The <code>Fast</code> / <code>Accurate</code> toggle is gone. The pose estimator now selects
-its cost surface automatically from per-corner covariance availability:
-image view (or external GWLF covariances) routes to weighted
-Mahalanobis LM with a 6×6 covariance output; no image and no
-covariances routes to unweighted Huber LM with no covariance.</p>
-<p>Migration:</p>
-<div class="highlight"><pre><span></span><code><span class="gd">- detections = detector.detect(img, pose_estimation_mode=locus.PoseEstimationMode.Accurate)</span>
-<span class="gi">+ detections = detector.detect(img)</span>
-</code></pre></div>
-<p><code>tools/cli.py</code>'s <code>--pose-mode</code> flag is removed in the same change.</p>
-<h2 id="cornerrefinementmodeedge-removed"><code>CornerRefinementMode::Edge</code> removed</h2>
-<p><code>Edge</code> (the gradient-peak <code>fit_edge_line</code>-only refiner) is gone. No
-shipped profile referenced it; the variant existed only as a public
-surface with no production consumer. The PyO3 enum is now
-<code>{None=0, Erf=1, Gwlf=2}</code> (dense integer values; the Rust enum order
-matches).</p>
-<p>Migration:</p>
-<div class="highlight"><pre><span></span><code><span class="gd">- refinement_mode=locus.CornerRefinementMode.Edge</span>
-<span class="gi">+ refinement_mode=locus.CornerRefinementMode.Erf</span>
-</code></pre></div>
-<p>If you depended on Edge's specific failure-mode characteristics, note
-that <code>Erf</code> already falls back to the same gradient-peak fit
-(<code>fit_edge_line</code>) internally on sample shortfall or low contrast —
-choosing <code>Erf</code> is a strict superset of the old <code>Edge</code> path.</p>
-<p>If your config used <code>Edge</code> simply to skip the PSF Gauss-Newton cost on
-high-volume scenes, <code>None</code> is the right choice with <code>EdLines</code>
-extraction (whose GN corners are already sub-pixel — see
-<code>docs/engineering/benchmarking/lessons.md §4.1</code>).</p>
-<h2 id="decoderpost_decode_refinement-removed"><code>decoder.post_decode_refinement</code> removed</h2>
-<p>The Phase C.5 post-decode edge-fit re-refit (<code>post_decode_refinement</code>)
-and the <code>max_recall_adaptive</code> profile that was its only consumer are
-removed. No other shipped profile set the flag, so detection output is
-unchanged.</p>
-<p>Migration: delete the key from any custom profile JSON, and drop the
-<code>post_decode_refinement=...</code> kwarg from any nested <code>DecoderConfig</code>.
-Because the profile shim uses <code>deny_unknown_fields</code> (Rust) and
-<code>extra="forbid"</code> (Pydantic), a leftover key now fails to load rather
-than being ignored.</p>
-<h2 id="thresholdenable_adaptive_window-removed"><code>threshold.enable_adaptive_window</code> removed</h2>
-<p>This flag was plumbed through every config layer but read by no
-algorithm code — a dead knob. Removed everywhere.</p>
-<p>Migration: delete <code>"enable_adaptive_window"</code> from any custom profile
-JSON and drop the <code>enable_adaptive_window=...</code> kwarg from any nested
-<code>ThresholdConfig</code>.</p>
-<h2 id="quadedlines_phase3_erf-removed-and-edlinesphase3erfpolicy"><code>quad.edlines_phase3_erf</code> removed (and <code>EdLinesPhase3ErfPolicy</code>)</h2>
-<p>No shipped profile enabled the per-micro-ray ERF sub-pixel finder;
-parabolic-vertex was the only production path. The knob, the
-<code>EdLinesPhase3ErfPolicy</code> enum, and its dual-format legacy <code>bool</code>/string
-deserializer are removed.</p>
-<p>Migration: delete <code>"edlines_phase3_erf"</code> from any custom profile JSON
-(both the legacy <code>false</code>/<code>true</code> bool form and the <code>"Disabled"</code>/
-<code>"Enabled"</code> string form are gone) and drop the <code>edlines_phase3_erf=...</code>
-kwarg from any nested <code>QuadConfig</code>.</p>
+<h1 id="060-2026-06-14">0.6.0 — 2026-06-14</h1>
+<p><a href="../">← Back to the changelog index</a></p>
+<h3 id="changed">Changed</h3>
+<ul>
+<li><strong>Docs landing</strong>: <code>docs/index.md</code> is a hand-crafted landing page (Diátaxis-shaped: at-a-glance, install, quick-start, per-section navigator) instead of inlining <code>README.md</code> via <code>pymdownx.snippets</code>. The inlined-README approach broke under mike's per-version routing — README's absolute docs-site URLs 404'd, and cross-version navigation jumped from <code>/0.5/</code> to wherever the README's hardcoded URLs pointed. The split uses mkdocs-relative links throughout the landing so a reader on <code>/0.5/</code> stays on <code>/0.5/</code> when navigating. README cross-references now use the <code>/latest/</code> mike alias (consistent badge + body channel). <code>mkdocs.yml</code> swaps <code>pymdownx.snippets</code> for <code>admonition</code> (snippets re-used only for the new <code>docs/explanation/performance.md</code> table inclusion); the <code>admonition</code> change incidentally fixes pre-existing <code>!!! warning</code> blocks in <code>coordinates.md</code>, <code>pipeline.md</code>, and <code>concurrent_detection.md</code> that were rendering as plain text.</li>
+<li><strong>User-facing performance docs</strong>: new <code>docs/explanation/performance.md</code> surfaces the Performance Profiles table and the ICRA 2020 comparison previously buried under "Engineering (Internal) → Benchmarking". Tables are snippet-included from <code>README.md</code> (single source of truth) so the numbers never drift between the two surfaces.</li>
+<li><strong>Release pipeline</strong>: docs site is now versioned via <a href="https://github.com/jimporter/mike"><code>mike</code></a> (<code>.github/workflows/docs.yml</code>, <code>mkdocs.yml</code>). Pushes to <code>main</code> deploy under <code>/locus-tag/main/</code> and update the <code>latest</code> alias; release tags (<code>v*</code>, non-RC) deploy <code>X.Y</code> and update <code>stable</code>. The <code>extra.version.default = stable</code> block in <code>mkdocs.yml</code> redirects bare <code>/locus-tag/</code> to the stable channel. Replaces the previous <code>actions/upload-pages-artifact</code> + <code>actions/deploy-pages</code> model that overwrote <code>/latest</code> on every push.</li>
+<li><strong>PyPI publish</strong> now uses <code>pypa/gh-action-pypi-publish@release/v1</code> with <code>attestations: true</code> (<code>.github/workflows/release.yml::publish-pypi</code>), replacing <code>uv publish --trusted-publishing automatic</code>. PyPI now exposes a PEP 740 sigstore attestation on each artefact; supply-chain-conscious consumers (<code>pip --require-hashes</code>, <code>pip-audit</code>) gate installs on it. <code>uv</code> remains the local-dev publish tool — only the CI publish step changes.</li>
+<li><code>decoder.rs</code> SIMD gather blocks now carry full SAFETY justification including the 3-byte SIMD-gather padding contract (<code>crates/locus-core/src/decoder.rs</code> AVX2 + NEON paths in <code>sample_grid_values_simd</code>).</li>
+<li>Regression tests against the hub dataset cache now panic instead of silently skipping when <code>LOCUS_HUB_DATASET_DIR</code> is set but the expected subdir is missing (closes the same footgun as PR #252).</li>
+<li>Centralised SO(3) → quaternion conversion through <code>quat_from_so3</code> helper, eliminating the latent <code>UnitQuaternion::from_matrix</code> Müller-iteration hang risk on near-singular rotations across <code>board.rs</code>, <code>pose.rs</code>, and the PyO3 board-pose copy.</li>
+<li>Pose/board LM and ChAruco saddle refinement now emit NaN-filled covariance on singular <strong>or near-singular</strong> Hessian (was: identity/zero). The post-<code>try_inverse</code> finiteness gate catches the near-singular case that LU's zero-pivot test misses (tiny-but-nonzero pivot inflating the covariance to ~1e15–1e30). Production and bench LM variants are kept in sync; both now bail out after 3 consecutive Cholesky failures to surface the NaN sentinel promptly. ChAruco saddles whose per-corner Σ_c is singular (downstream of the structure-tensor gate) are dropped rather than admitted with an identity info matrix; the new rejection lane is unreachable on the production Tikhonov-regularised kernel but recorded distinctly via the new <code>CharucoTelemetry::rejected_reasons</code> discriminator buffer.</li>
+<li><strong>Python/FFI contract</strong>: <code>BoardEstimator.estimate</code> and <code>CharucoRefiner.estimate</code> now surface the NaN sentinel as <code>board_cov = None</code> so consumers branch on <code>cov is None</code> (matching the typed <code>NDArray | None</code> annotation). The bench-internals dict (<code>_bench_refine_pose_lm_weighted_with_telemetry</code>) preserves the NaN matrix to allow calibration audits to observe singular frames directly — <code>numpy.linalg.inv</code> does NOT raise <code>LinAlgError</code> on a NaN matrix; consumers must gate on <code>np.isfinite(cov).all()</code> (done in <code>tools/bench/pose_cov_audit.py</code>).</li>
+<li><strong>Telemetry</strong>: <code>CharucoTelemetryResult</code> gains a <code>rejected_reasons: NDArray[uint8]</code> buffer (0 = <code>LowStructureTensorDet</code>, 1 = <code>SingularCovariance</code>); always gate <code>rejected_determinants</code> aggregations on this discriminator, since the <code>SingularCovariance</code> lane writes NaN into the determinants buffer.</li>
+<li><strong>Regression harness</strong>: <code>regression_board_hub</code> test now skips NaN-cov frames from <code>mean_board_translation_std_m</code> / <code>mean_board_rotation_std_deg</code> (previously <code>f64::NAN.max(0.0) == 0</code> silently coerced the sentinel to a zero std contribution) and reports them under the new <code>frames_singular_covariance</code> snapshot field.</li>
+</ul>
+<h3 id="security">Security</h3>
+<ul>
+<li>Bumped <code>pyo3</code> and <code>numpy</code> from <code>0.28</code> → <code>0.29</code> to pick up the fixes for RUSTSEC-2026-0176 (OOB read in <code>nth</code> / <code>nth_back</code> on <code>PyList</code> / <code>PyTuple</code> iterators) and RUSTSEC-2026-0177 (missing <code>Sync</code> bound on <code>PyCFunction::new_closure</code>). Both advisories landed against <code>pyo3 ≤ 0.28.3</code>; only fixed releases are <code>≥ 0.29.0</code>. The 0.28 → 0.29 surface is wire-compatible with the locus-py FFI — no source-code changes needed.</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li><strong>Debug-mode stack overflow in <code>Detector::with_config</code></strong> (<code>crates/locus-core/src/{batch,detector}.rs</code>): the construction call chain (<code>Detector::with_config</code> → <code>DetectorBuilder::build</code> → <code>FrameContext::new</code> → <code>DetectionBatch::new</code>) used to hold a ~215 KB <code>DetectionBatch</code> value on every stack frame because debug rustc does not perform RVO/NRVO. The original <code>*Box::new(Self { ... })</code> "workaround" in <code>DetectionBatch::new</code> did not help — the literal is still materialized on the stack, then moved to the heap, then moved back to the stack by the outer dereference. Three or more chained copies overflowed Windows main-thread stacks (1 MB default) and Linux <code>std::thread::spawn</code> stacks (2 MB default); downstream users worked around it by spawning a thread with a bigger stack. <strong>Fix:</strong> <code>DetectionBatch::new()</code> is replaced by <code>DetectionBatch::new_boxed() -&gt; Box&lt;Self&gt;</code> (breaking — acceptable on v0.5 RC), implemented via <code>Box::&lt;Self&gt;::new_zeroed()</code> + <code>slice::fill</code> for the handful of non-zero default fields (<code>routed_to</code>, and the four <code>bench-internals</code> NaN / <code>u8::MAX</code> fields). <code>FrameContext.batch</code> is now <code>Box&lt;DetectionBatch&gt;</code> so the batch never lives inline at any level of the construction chain. <code>bench_api_get_batch_cloned</code>, <code>build_synthetic_batch</code>, and <code>generate_bench_batch</code> (which previously returned a 215 KB struct by value) now return <code>Box&lt;DetectionBatch&gt;</code>. A <code>const _: () = assert!(...)</code> block next to <code>CandidateState</code> / <code>FunnelStatus</code> pins both default variants to discriminant <code>0</code> at compile time, locking the SAFETY contract the unsafe block depends on. <code>bench_api_get_batch_cloned</code> now copies <strong>all</strong> SoA columns (the previous body silently dropped <code>routed_to</code>, <code>ppb_estimate</code>, and the four <code>bench-internals</code> telemetry columns — a pre-existing latent bug surfaced during this fix). Three new unit tests guard the contract: <code>construction_tests::detector_constructs_in_constrained_stack</code> runs the constructor inside a 256 KB stack; <code>test_new_boxed_defaults_full_coverage</code> and <code>test_new_boxed_bench_internals_defaults</code> assert the post-construction value of every non-zero default column at both endpoints (<code>[0]</code> and <code>[N-1]</code>). <code>constraints.md §1</code> now codifies the rule "Large SoA / batch structs (≥ 64 KB) must expose only <code>new_boxed() -&gt; Box&lt;Self&gt;</code>" to prevent the next 200 KB SoA struct from re-introducing the same footgun.</li>
+<li><strong><code>prepare_image_view</code> soundness gaps (F1/F2/F3)</strong>: closed the three latent UB / lifetime issues at the Python FFI image-ingestion boundary (<code>crates/locus-py/src/lib.rs</code>). F1 — AVX2 <code>sample_bilinear_v8</code>'s 32-bit gather on 8-bit data can no longer read past the NumPy buffer. The boundary now wraps every input in a new <code>FfiImageBuffer</code> enum: when the incoming buffer already exposes ≥3 trailing bytes per row (<code>has_simd_padding()</code>), the FFI takes a zero-copy <code>Borrowed</code> fast path; otherwise it copies the image into an over-allocated padded scratch (<code>Padded</code>) so the SIMD gather guard bytes always exist. The copy fallback preserves the pre-PR public API for the natural <code>np.zeros((H, W), dtype=np.uint8)</code> idiom at the cost of one <code>H × W</code>-byte allocation + copy per <code>detect()</code> call on the under-padded path. (PR #287's initial PR-A design instead rejected under-padded inputs with <code>PyValueError</code>; the project owner chose the copy fallback over reject after the xfail-comment menu at <code>crates/locus-py/tests/test_ffi_contracts.py:115-122</code> was reconsidered.) F2 — negative <code>strides[0]</code> (e.g. from reverse-row views like <code>arr[::-1, :]</code>) is rejected before the unsigned cast that previously wrapped to a huge <code>usize</code> and built a multi-gigabyte slice in <code>std::slice::from_raw_parts</code>. F3 — the function signature now ties the returned <code>FfiImageBuffer&lt;'py&gt;</code> lifetime to the input <code>&amp;'py PyReadonlyArray2&lt;'_, u8&gt;</code>, replacing the unconstrained <code>'a</code> that decoupled the borrow from the NumPy buffer; the call-site SAFETY comment cites the explicit tie. Resolves the Phase A1 follow-up listed at <code>docs/engineering/ffi_contracts.md</code> §1 (SIMD padding) and §7 — a new <code>TestNegativeStrideRejection</code> class covers the reverse-row path on both <code>detect()</code> and <code>detect_concurrent()</code>; <code>TestSimdPaddingGate.test_missing_padding_is_rejected</code> stays <code>xfail(strict=True)</code> as a TODO-style marker for any future variant that re-enables the strict gate.</li>
+</ul>
+<h3 id="added">Added</h3>
+<ul>
+<li><strong>Cross-platform wheels</strong> on every release tag (<code>.github/workflows/release.yml::build-wheels-{linux,macos,windows}</code>): Linux x86_64 + aarch64 (both <code>manylinux_2_28</code> and <code>musllinux_1_2</code> for Alpine-based containers), macOS x86_64 + aarch64, and Windows x64. Resolves the long-standing footgun where macOS / Windows users had to build from sdist (Rust toolchain required).</li>
+<li><strong>GitHub Release pages</strong> now ship release notes extracted from <code>CHANGELOG.md</code> (<code>scripts/ci/extract_changelog_section.py</code>) and attach the full artefact set (wheels, sdist, <code>.crate</code>). RC tags get <code>--prerelease</code> + a one-line "release candidate" preamble inheriting the parent or <code>Unreleased</code> block. <code>create-github-release</code> fails CI if the resulting CHANGELOG section is empty — forces operators to land notes before tagging.</li>
+<li><strong>Monthly Linux canary build</strong> (<code>schedule: cron: '0 6 1 * *'</code> on <code>release.yml</code>) exercises the Linux wheel matrix on the 1st of each month to catch toolchain drift between releases. macOS (10× billing) and Windows (2× billing) are skipped by design.</li>
+<li><strong><code>docs/engineering/release-runbook.md</code></strong> operator-facing runbook covering topology, OIDC bootstrap (PyPI + crates.io + gh-pages + <code>mike set-default</code>), per-release flow, RC convention, and partial-failure rollback. <code>.agent/skills/release/SKILL.md</code> slimmed to a quick-reference pointer.</li>
+<li><strong><code>CharucoRefiner</code> saddle path</strong>: the previous iterative Newton step was empirically inert (and the principled Förstner replacement regresses pose 4.5× on <code>regression_board_hub::board_charuco_v1_golden_forstner</code>). Replaced by an inline structure-tensor determinant gate (<code>compute_structure_tensor_det</code>); the homography-projected saddle position is taken as final. Behaviour preserved. See <code>memory/project_refine_saddle_noop.md</code>.</li>
+<li><strong>Outlier-aware pose LM</strong> (<code>pose.outlier_drop_d2_threshold</code>, default <code>0.0</code>): after the weighted LM converges, if any corner's reprojection d² = rᵢᵀ Σᵢ⁻¹ rᵢ exceeds the threshold <em>and</em> dominates the second-worst corner by ≥ 2×, the worst corner's info matrix is zeroed and the LM is re-run warm-started. The 3-corner pose is kept only when its aggregate d² over the kept corners is strictly lower than the 4-corner pose's — a self-rejection invariant that catches false-positive drops. Only <code>high_accuracy</code> opts in (threshold <code>25.0</code> ≡ 5σ²). Closes the only published SOTA gap on render-tag-hub (rotation p99 <code>0.8613° → 0.5607°</code>, −35 %) while preserving mean recall, mean corner RMSE, and translation p99.</li>
+<li>New <code>refine_pose_lm_weighted_with_info</code> — info-matrix-direct variant of <code>refine_pose_lm_weighted</code> that skips the 4 <code>Σ_c⁻¹</code> inversions for callers that already hold pre-inverted info. The existing <code>refine_pose_lm_weighted</code> becomes a thin wrapper that inverts and delegates.</li>
+<li><code>DetectionBatch::outlier_corner_idx: [u8; MAX_CANDIDATES]</code> SoA column (<code>bench-internals</code>-gated) records which corner Phase D masked during outlier-aware refinement; sentinel <code>u8::MAX</code> ⇒ no drop. When <code>idx != u8::MAX</code> the stored pose covariance reflects 6 observations instead of 8. Documented in <code>docs/engineering/detection-batch-contract.md</code>.</li>
+</ul>
+<h3 id="performance">Performance</h3>
+<ul>
+<li><code>decode_batch_soa_generic</code>, <code>decode_batch_soa_with_camera_inner</code>, and <code>refine_poses_soa_with_config</code> now write SoA columns directly from rayon workers via <code>par_iter_mut().zip(...)</code>, eliminating a per-frame <code>Vec&lt;TupleN&gt;</code> heap allocation outside the workspace arena. New <code>bench-internals</code>-gated <code>contract_decode_hot_loop_zero_alloc</code> integration test (custom counting <code>GlobalAlloc</code>) locks the byte-delta to exactly zero on warm steady-state calls. <code>decoding_bench::bench_decoding_soa_realistic</code> median latency drops from 21.25 µs → 6.60 µs (−69 %) on AMD EPYC-Milan; pose-bench medians are within ±5 % of baseline (microbench noise floor).</li>
+</ul>
+<h3 id="fixed_1">Fixed</h3>
+<ul>
+<li><code>decode_batch_soa_generic</code> now recomputes the per-candidate homography whenever <strong>either</strong> ERF corner refinement <strong>or</strong> rotation reorder mutates <code>batch.corners[i]</code>. Previously, a canonical-orientation (<code>rot == 0</code>) ERF-refined candidate kept the pre-refinement <code>h_slot</code>, leaving <code>(corners, H)</code> inconsistent and feeding stale projection geometry to <code>CharucoRefiner</code> saddle prediction — the same class of bug documented in <code>memory/project_refine_saddle_noop.md</code>. The contract is now codified in <code>docs/engineering/detection-batch-contract.md</code> §4 Phase C.</li>
+<li><code>contract_decode_hot_loop_zero_alloc</code> test fixture now seeds candidate 0 with the synthetic tag's ground-truth corners so the convergence loop exercises <strong>both</strong> branches of the hot closure — the <code>FailedDecode</code> bypass (candidates 1..50) AND the <code>state == Valid</code> write-back path (rotation reorder, ERF refined-corners write-back, homography recompute). The previous fixture's quads never overlapped the tag, so the assertion covered only the bypass branch.</li>
+<li><code>contract_decode_hot_loop_zero_alloc</code> warm-up replaced with a convergence loop (max 32 iterations, requires two consecutive <code>(0 bytes, 0 count)</code> deltas). Closes three review-flagged holes: silent <code>pin_rayon_to_one_thread</code> no-op leaving extra workers cold; shrinking <code>realloc</code> crediting 0 bytes while bumping the count; and lazily-initialised structures that need &gt;8 warm-ups to stabilise.</li>
+<li><code>contract_refine_poses_soa_zero_alloc_gwlf_route</code> added: forces <code>CornerRefinementMode::Gwlf</code> and seeds identity per-corner covariances so <code>compute_one</code>'s GWLF unpack (<code>Matrix2::new(covs_row[j*4..j*4+3])</code>) is actually exercised by the zero-alloc contract; the default route only covers the ERF branch.</li>
+<li><code>par_iter_mut().zip(...)</code> chains in <code>decoder.rs</code> and <code>pose.rs</code> now guard the disjoint-slice contract with <code>debug_assert_eq!(...len(), n)</code> so a future off-by-one fix on any column fails loudly in debug rather than silently dropping the last candidate's pose / decode cells via rayon <code>Zip</code>'s shortest-input truncation.</li>
+<li><code>docs/engineering/detection-batch-contract.md</code> §4: Phase C declared privileges now include <code>homographies[0..N]</code> writes (the post-rotation / post-ERF recompute that has been in the code path since 0.5.0 but was previously elided in the doc); Phase D declared privileges now list the four <code>bench-internals</code>-gated diagnostic columns (<code>outlier_corner_idx</code>, <code>pose_consistency_d2</code>, <code>pose_consistency_d2_max_corner</code>, <code>ippe_branch_d2_ratio</code>) and drop <code>status_mask</code> from the read set (Phase D consumes the upstream <code>partition(v)</code> invariant rather than reading the mask directly).</li>
+</ul>
 
 
 
