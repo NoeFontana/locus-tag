@@ -35,6 +35,23 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   dataset loader's ground-truth format, which EuRoC doesn't have), including
   a board-coverage overlay (green = decoded, yellow = predicted-present-but-
   missing, grey = predicted-out-of-frame) for exactly this recall metric.
+- **`scripts/fetch_euroc_calibration.sh` now fetches `cam_april` from a
+  private Hugging Face Hub mirror instead of ETH's Research Collection
+  directly.** The Research Collection host
+  (`research-collection.ethz.ch`, ETH's replacement for the dead
+  `robotics.ethz.ch`) works, but is frequently blocked by the outbound-host
+  allowlists sandboxed CI/agent environments use, making the previous fetch
+  unreliable exactly where it matters most. The `cam_april` sequence
+  (~534 MB, ETH's own "In Copyright — Non-Commercial Use Permitted"
+  license, <https://rightsstatements.org/vocab/InC-NC/1.0/>; full citation
+  and source links in the dataset card) is now mirrored, private, at
+  `NoeFontana/euroc-mav-cam-april-mirror` on the Hub and pulled via `hf
+  download`. Output layout (`$DEST/cam_april/mav0/...`), idempotency
+  (skip if already present) and the `LOCUS_EUROC_DATASET_DIR` consumer in
+  `crates/locus-core/tests/common/euroc.rs` are unchanged; only the fetch
+  path changed. Verified end-to-end: a fresh fetch into a scratch directory
+  reproduces the expected `mav0/cam0/data` (1450 PNGs) / `cam1/data` (1449
+  PNGs) / `imu0` layout, and a second run correctly no-ops.
 
 ### Performance
 
