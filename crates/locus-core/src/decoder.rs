@@ -289,13 +289,12 @@ pub fn compute_homographies_soa(
             ];
 
             if let Some(h) = Homography::square_to_quad(&dst) {
-                // Copy data to f32 batch. Nalgebra stores in column-major order.
+                // Nalgebra stores column-major.
                 for (j, val) in h.h.iter().enumerate() {
                     h_out.data[j] = *val as f32;
                 }
                 h_out.padding = [0.0; 7];
             } else {
-                // Failed to compute homography (e.g. degenerate quad).
                 h_out.data = [0.0; 9];
                 h_out.padding = [0.0; 7];
             }
@@ -319,7 +318,6 @@ pub(crate) fn refine_corners_erf(
     let sample_cfg = SampleConfig::for_decoder();
     let refine_cfg = RefineConfig::decoder_style(sigma);
 
-    // Sub-pixel edge refinement for each of the 4 edges
     for i in 0..4 {
         let next = (i + 1) % 4;
         let p1 = corners[i];
@@ -337,7 +335,6 @@ pub(crate) fn refine_corners_erf(
         return *corners;
     }
 
-    // Intersect lines to get refined corners
     let mut refined = *corners;
     for i in 0..4 {
         let prev = (i + 3) % 4;
@@ -348,7 +345,6 @@ pub(crate) fn refine_corners_erf(
             let x = (b1 * c2 - b2 * c1) / det;
             let y = (a2 * c1 - a1 * c2) / det;
 
-            // Sanity check
             let dist_sq = (x - corners[i][0]).powi(2) + (y - corners[i][1]).powi(2);
             if dist_sq < 4.0 {
                 refined[i] = [x, y];
@@ -367,7 +363,6 @@ pub(crate) fn compute_otsu_threshold(values: &[f64]) -> f64 {
     let n = values.len() as f64;
     let total_sum: f64 = values.iter().sum();
 
-    // Find min/max to define search range
     let min_val = values.iter().copied().fold(f64::MAX, f64::min);
     let max_val = values.iter().copied().fold(f64::MIN, f64::max);
 
@@ -375,11 +370,10 @@ pub(crate) fn compute_otsu_threshold(values: &[f64]) -> f64 {
         return f64::midpoint(min_val, max_val);
     }
 
-    // Search for optimal threshold
     let mut best_threshold = f64::midpoint(min_val, max_val);
     let mut best_variance = 0.0;
 
-    // Use 16 candidate thresholds between min and max
+    // Otsu-style search: maximize inter-class variance over 16 candidate splits.
     for i in 1..16 {
         let t = min_val + (max_val - min_val) * (f64::from(i) / 16.0);
 
@@ -401,7 +395,6 @@ pub(crate) fn compute_otsu_threshold(values: &[f64]) -> f64 {
         let mean0 = sum0 / w0;
         let mean1 = (total_sum - sum0) / w1;
 
-        // Inter-class variance
         let variance = w0 * w1 * (mean0 - mean1) * (mean0 - mean1);
 
         if variance > best_variance {
@@ -2038,7 +2031,6 @@ mod tests {
             let orig_id = id_idx as u16;
             let dict = crate::dictionaries::get_dictionary(config::TagFamily::AprilTag36h11);
 
-            // Get the correctly geometrically rotated code directly from our generated dictionaries
             let mut test_bits = dict.codes[(id_idx * 4) + rotation];
 
             // Flip bits
@@ -2175,10 +2167,6 @@ mod tests {
             assert!((p[1] - dst[i][1]).abs() < 1e-6);
         }
     }
-
-    // ========================================================================
-    // END-TO-END DECODER ROBUSTNESS TESTS
-    // ========================================================================
 
     use crate::config::TagFamily;
     use crate::image::ImageView;

@@ -108,7 +108,6 @@ pub fn apply_funnel_gate(
         if valid_samples > 0 {
             let avg_contrast = total_contrast / f64::from(valid_samples);
 
-            // Get local range from tile_stats safely
             let cx = (corners[0].x + corners[1].x + corners[2].x + corners[3].x) * 0.25;
             let cy = (corners[0].y + corners[1].y + corners[2].y + corners[3].y) * 0.25;
 

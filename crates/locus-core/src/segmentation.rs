@@ -418,7 +418,6 @@ mod tests {
             }
         }
 
-        // use statement moved to top of module or block
         let img =
             crate::image::ImageView::new(&binary, width, height, width).expect("valid creation");
 
@@ -486,10 +485,6 @@ mod tests {
             }
         }
     }
-
-    // ========================================================================
-    // SEGMENTATION ROBUSTNESS TESTS
-    // ========================================================================
 
     use crate::config::TagFamily;
     use crate::image::ImageView;
@@ -656,7 +651,6 @@ mod tests {
         let height = 2160; // 4K height
         let mut binary = vec![255u8; width * height];
 
-        // Create multiple separate components
         // 1. A square at the top left
         for y in 100..200 {
             for x in 100..200 {

@@ -203,9 +203,8 @@ pub struct CharucoRefiner {
     pub config: Arc<CharucoTopology>,
     /// Underlying robust pose solver (LO-RANSAC + AW-LM).
     pub solver: RobustPoseSolver,
-    // Pre-allocated scratch (one-time Box allocations in new()):
-    //
-    // No per-group seed buffer: the solver constructs minimal-sample seeds
+    // Pre-allocated scratch (one-time Box allocations in new()). No per-group
+    // seed buffer: the solver constructs minimal-sample seeds
     // via multi-IPPE-Square branch enumeration (for square groups) or a
     // centroid-translation fallback (for `group_size == 1` saddle path) from
     // the correspondence data directly — see
@@ -342,7 +341,6 @@ impl CharucoRefiner {
 
             let adj = self.config.tag_cell_corners[tag_id];
 
-            // Get the tag's TL board coordinate and the stored homography.
             let Some(obj_pts) = self.config.obj_points.get(tag_id).and_then(|o| *o) else {
                 continue;
             };
@@ -369,14 +367,13 @@ impl CharucoRefiner {
                 let [u, v] = board_to_canonical(sp[0], sp[1], tl, self.config.marker_length);
                 let [px, py] = apply_homography_col_major(&h, u, v);
 
-                // Bounds check (leave 1-pixel border for Sobel kernels).
+                // 1-pixel border for Sobel kernels.
                 let w = img.width as f64;
                 let h_px = img.height as f64;
                 if px < 1.0 || py < 1.0 || px > w - 2.0 || py > h_px - 2.0 {
                     continue;
                 }
 
-                // ── Step C: structure-tensor gate ─────────────────────────
                 // Newton refinement on this corpus is empirically inert —
                 // the step magnitude ~|∇I|/det(S) ~ 1e-5 px falls below f32
                 // precision after the downstream cast, so the predicted
@@ -401,27 +398,16 @@ impl CharucoRefiner {
                     continue;
                 }
 
-                // ── Step D: build correspondence ──────────────────────────
-                // Information matrix = covariance^{-1}. A singular Σ_c
-                // (zero-gradient / flat window that nonetheless slipped past
-                // the determinant gate above) cannot be inverted into a
-                // meaningful info matrix; defaulting to identity would advertise
-                // unit confidence for a corner with no observed structure, so
-                // the saddle is dropped instead.
-                //
-                // This branch is currently unreachable on the production
-                // kernel: `finalize_corner_covariance` applies a Tikhonov
-                // `+1.0` regularisation and falls back to a scaled identity
-                // for flat windows, so the output is always PD. The branch
-                // is retained as defensive code in case the Tikhonov
-                // invariant is ever relaxed; the `debug_assert!` makes the
-                // invariant explicit so a future weakening fails loudly in
-                // tests rather than silently inflating the saddle drop rate.
-                //
-                // Telemetry distinguishes the two rejection lanes via the
-                // `rejected_reasons` discriminator buffer (NOT via a NaN
-                // determinant marker, which would silently poison any
-                // aggregate over `rejected_determinants`).
+                // A singular Σ_c can't invert into a meaningful info matrix, and
+                // defaulting to identity would advertise unit confidence for a
+                // corner with no observed structure — so the saddle is dropped
+                // instead. Unreachable on the production kernel today (Tikhonov
+                // `+1.0` regularisation in `finalize_corner_covariance` keeps
+                // output PD); the `debug_assert!` below keeps that invariant
+                // explicit so a future weakening fails loudly rather than
+                // silently inflating the drop rate. The two rejection lanes are
+                // distinguished via the `rejected_reasons` buffer, not a NaN
+                // determinant marker (which would poison aggregates).
                 let cov =
                     compute_corner_covariance(img, [px, py], 0.1, 2.0, Self::ST_RADIUS as i32);
                 debug_assert!(

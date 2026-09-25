@@ -44,7 +44,6 @@ const MIN_OUTER_DIM_FALLBACK: u32 = 6;
 /// 5. PPB estimate (0.0 under `Static`, else `bbox_short / min_outer_dim`).
 pub(crate) type ExtractionResult = ([Point; 4], [Point; 4], CornerCovariances, u8, f32);
 
-// Re-export the canonical Point type from the crate root.
 pub use crate::Point;
 
 /// Component label indices sorted by pixel-count descending.
@@ -223,7 +222,6 @@ pub fn extract_quads_soa(
         batch.status_mask[i] = CandidateState::Active;
     }
 
-    // Ensure the rest of the batch is marked as Empty
     for i in n..MAX_CANDIDATES {
         batch.status_mask[i] = CandidateState::Empty;
     }
@@ -252,17 +250,14 @@ fn extract_single_quad(
     let min_edge_len_sq = config.quad_min_edge_length * config.quad_min_edge_length;
     let d = decimation as f64;
 
-    // Fast geometric filtering using bounding box
     let bbox_w = u32::from(stat.max_x - stat.min_x) + 1;
     let bbox_h = u32::from(stat.max_y - stat.min_y) + 1;
     let bbox_area = bbox_w * bbox_h;
 
-    // Filter: too small or too large
     if bbox_area < config.quad_min_area || bbox_area > (img.width * img.height * 9 / 10) as u32 {
         return None;
     }
 
-    // Filter: not roughly square (aspect ratio)
     let aspect = bbox_w.max(bbox_h) as f32 / bbox_w.min(bbox_h).max(1) as f32;
     if aspect > config.quad_max_aspect_ratio {
         return None;
@@ -911,7 +906,6 @@ pub fn extract_quads_with_config(
 /// Legacy extract_quads for backward compatibility.
 #[allow(dead_code)]
 pub(crate) fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detection> {
-    // Create a fake LabelResult with stats computed on-the-fly
     let mut detections = Vec::new();
     let num_labels = (labels.len() / 32) + 1;
     let processed_labels = arena.alloc_slice_fill_copy(num_labels, 0u32);
@@ -1902,7 +1896,6 @@ mod tests {
 
     #[test]
     fn test_edge_score_rejection() {
-        // Create a 20x20 image mostly gray
         let width = 20;
         let height = 20;
         let stride = 20;
@@ -2006,10 +1999,6 @@ mod tests {
             }
         }
     }
-
-    // ========================================================================
-    // SELECT_DOMINANT_VERTICES TESTS
-    // ========================================================================
 
     /// Builds a rectangle's staircase-rasterized boundary contour (the same
     /// shape `trace_boundary` would produce for a real rendered tag),
@@ -2199,10 +2188,6 @@ mod tests {
         }
     }
 
-    // ========================================================================
-    // QUAD EXTRACTION ROBUSTNESS TESTS
-    // ========================================================================
-
     use crate::config::TagFamily;
     use crate::segmentation::label_components_with_stats;
     use crate::simd::math::erf_approx;
@@ -2381,10 +2366,6 @@ mod tests {
         println!("Decimated (d={decimation}) corner error: {error:.4}px");
     }
 
-    // ========================================================================
-    // SUB-PIXEL CORNER REFINEMENT ACCURACY TESTS
-    // ========================================================================
-
     /// Generate a synthetic image with an anti-aliased vertical edge.
     ///
     /// The edge is placed at `edge_x` (sub-pixel position) using the PSF model:
@@ -2538,7 +2519,6 @@ mod tests {
         let data = generate_vertical_edge_image(width, height, true_edge_x, sigma, 0, 255);
         let img = ImageView::new(&data, width, height, width).unwrap();
 
-        // Set up a corner where two edges meet
         // For a pure vertical edge test, we'll use a simple L-corner configuration
         let corner_y = 20.0;
         let init_p = Point {

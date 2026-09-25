@@ -10,10 +10,6 @@ use crate::image::ImageView;
 
 use nalgebra::{Matrix2, Matrix3, Matrix6, Rotation3, UnitQuaternion, Vector3, Vector6};
 
-// ---------------------------------------------------------------------------
-// Distortion model storage (embedded in CameraIntrinsics)
-// ---------------------------------------------------------------------------
-
 /// Lens distortion coefficients stored alongside the intrinsic parameters.
 ///
 /// Variants correspond to the two supported distortion models plus the ideal
@@ -63,10 +59,6 @@ impl DistortionCoeffs {
         !matches!(self, Self::None)
     }
 }
-
-// ---------------------------------------------------------------------------
-// CameraIntrinsics
-// ---------------------------------------------------------------------------
 
 /// Camera intrinsics parameters with optional lens distortion.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1204,43 +1196,31 @@ fn disabled_branch_diagnostics(
 /// (tag plane at z=0, centred at origin, +x right / +y down for typical AprilTag /
 /// ArUco corner orderings `[TL, TR, BR, BL]`).
 pub(crate) fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
-    // IpPE-Square Analytical Solution (Zero Alloc)
-    // Jacobian J = [h1, h2]
+    // Analytical SVD of the 3x2 Jacobian J = [h1, h2] via the 2x2 Gram matrix
+    // B = J^T J = [[a, c], [c, b]].
     let h1 = h.column(0);
     let h2 = h.column(1);
 
-    // 1. Compute B = J^T J (2x2 symmetric matrix)
-    //    [ a  c ]
-    //    [ c  b ]
     let a = h1.dot(&h1);
     let b = h2.dot(&h2);
     let c = h1.dot(&h2);
 
-    // 2. Eigen Analysis of 2x2 Matrix B
-    //    Characteristic eq: lambda^2 - Tr(B)lambda + Det(B) = 0
     let trace = a + b;
-    // Discriminant sqrt(tr² − 4·det). Algebraically tr² − 4·det = (a−b)² + 4c², a
-    // manifestly non-negative, cancellation-free form. The naive `tr² − 4·det`
-    // suffers catastrophic cancellation exactly near frontal (a≈b, c≈0 ⇒ tr²≈4·det),
-    // degrading the precision of s1,s2 — and thus the seed rotation direction
-    // v = [s1²−b, c] — in precisely the regime where rotation accuracy is hardest.
-    // Compute the equivalent sum-of-squares form directly (cannot be negative).
+    // (a−b)² + 4c² is algebraically equal to the eigen-discriminant tr² − 4·det
+    // but manifestly non-negative and cancellation-free; the naive form loses
+    // precision near-frontal (a≈b, c≈0 ⇒ tr²≈4·det), exactly where the seed
+    // rotation direction v = [s1²−b, c] is most sensitive to it.
     let delta = ((a - b).powi(2) + 4.0 * c * c).sqrt();
 
-    // lambda1 >= lambda2
     let s1_sq = (trace + delta) * 0.5;
     let s2_sq = (trace - delta) * 0.5;
-
-    // Singular values sigma = sqrt(lambda)
     let s1 = s1_sq.sqrt();
     let s2 = s2_sq.sqrt();
 
-    // Check for Frontal View (Degeneracy: s1 ~= s2)
-    // We use a safe threshold relative to the max singular value.
+    // Frontal view: J's columns are orthogonal and equal length (s1≈s2), so the
+    // general two-solution SVD path below is degenerate; fall straight to
+    // Gram-Schmidt on [h1, h2, h1×h2] and return one pose (both slots).
     if (s1 - s2).abs() < 1e-4 * s1 {
-        // Degenerate Case: Frontal View (J columns orthogonal & equal length)
-        // R = Gram-Schmidt orthonormalization of [h1, h2, h1xh2]
-
         let mut r1 = h1.clone_owned();
         let r1_norm = r1.norm();
         // Guard the normalization: a degenerate homography with ‖h1‖→0 would make
@@ -1253,21 +1233,19 @@ pub(crate) fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
         let scale = 1.0 / r1_norm;
         r1 *= scale;
 
-        // Orthogonalize r2 w.r.t r1. If h2 ∥ r1 the residual collapses to ~0, so
-        // normalize via try_normalize and bail instead of dividing by ‖r2‖→0.
+        // If h2 ∥ r1 the residual collapses to ~0; try_normalize bails instead
+        // of dividing by ‖r2‖→0.
         let r2 = (h2 - r1 * (h2.dot(&r1))).try_normalize(1e-12)?;
 
         let r3 = r1.cross(&r2);
         let rot = Matrix3::from_columns(&[r1, r2, r3]);
 
-        // Translation: t = h3 * scale.
-        // Gamma (homography scale) is recovered from J.
-        // gamma * R = J => gamma = ||h1|| (roughly).
-        // We use average of singular values for robustness.
+        // gamma·R = J ⇒ gamma ≈ ‖h1‖; average the two singular values for
+        // robustness instead of using ‖h1‖ alone.
         let gamma = (s1 + s2) * 0.5;
         if gamma < 1e-8 {
             return None;
-        } // Avoid div/0
+        }
         let tz = 1.0 / gamma;
         let t = h.column(2) * tz;
 
@@ -1275,21 +1253,8 @@ pub(crate) fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
         return Some([pose, pose]);
     }
 
-    // 3. Recover Rotation A (Primary)
-    // We basically want R such that J ~ R * S_prj.
-    // Standard approach: R = U * V^T where J = U S V^T.
-    //
-    // Analytical 3x2 SVD reconstruction:
-    // U = [u1, u2], V = [v1, v2]
-    // U_i = J * v_i / s_i
-
-    // Eigenvectors of B (columns of V)
-    // For 2x2 matrix [a c; c b]:
-    // If c != 0:
-    //   v1 = [s1^2 - b, c], normalized
-    // else:
-    //   v1 = [1, 0] if a > b else [0, 1]
-
+    // Recover R = U·V^T (extended to 3x3) via the analytical 2x2 eigendecomposition
+    // of B above: V's columns are B's eigenvectors, U_i = J·v_i / s_i.
     let v1 = if c.abs() > 1e-8 {
         let v = nalgebra::Vector2::new(s1_sq - b, c);
         v.normalize()
@@ -1299,60 +1264,38 @@ pub(crate) fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
         nalgebra::Vector2::new(0.0, 1.0)
     };
 
-    // v2 is orthogonal to v1. For 2D, [-v1.y, v1.x]
     let v2 = nalgebra::Vector2::new(-v1.y, v1.x);
 
-    // Compute Left Singular Vectors u1, u2 inside the 3D space
-    // u1 = J * v1 / s1
-    // u2 = J * v2 / s2
     let j_v1 = h1 * v1.x + h2 * v1.y;
     let j_v2 = h1 * v2.x + h2 * v2.y;
 
-    // Safe division check
     if s1 < 1e-8 {
         return None;
     }
     let u1 = j_v1 / s1;
-    let u2 = j_v2 / s2.max(1e-8); // Avoid div/0 for s2
+    let u2 = j_v2 / s2.max(1e-8);
 
-    // Reconstruct Rotation A
-    // R = U * V^T (extended to 3x3)
-    // The columns of R are r1, r2, r3.
-    // In SVD terms:
-    // [r1 r2] = [u1 u2] * [v1 v2]^T
-    // r1 = u1 * v1.x + u2 * v2.x
-    // r2 = u1 * v1.y + u2 * v2.y
     let r1_a = u1 * v1.x + u2 * v2.x;
     let r2_a = u1 * v1.y + u2 * v2.y;
     let r3_a = r1_a.cross(&r2_a);
     let rot_a = Matrix3::from_columns(&[r1_a, r2_a, r3_a]);
 
-    // Translation A
     let gamma = (s1 + s2) * 0.5;
     let tz = 1.0 / gamma;
     let t_a = h.column(2) * tz;
     let pose_a = Pose::new(rot_a, t_a);
 
-    // 4. Recover Rotation B (Second Solution)
-    // Necker Reversal: Reflect normal across line of sight.
-    // n_b = [-nx, -ny, nz] (approx).
-    // Better analytical dual from IPPE:
-    // The second solution corresponds to rotating U's second column?
-    //
-    // Let's stick to the robust normal reflection method which works well.
+    // Second (Necker-reversed) solution: reflect the plane normal across the
+    // line of sight and rebuild rotation B via Gram-Schmidt from (h1, n_b).
     let n_a = rot_a.column(2);
-    // Safe normalize for n_b
     let n_b_raw = Vector3::new(-n_a.x, -n_a.y, n_a.z);
     let n_b = if n_b_raw.norm_squared() > 1e-8 {
         n_b_raw.normalize()
     } else {
-        // Fallback (should be impossible for unit vector n_a)
+        // Unreachable for a unit vector n_a; kept as a defensive fallback.
         Vector3::z_axis().into_inner()
     };
 
-    // Construct R_b using Gram-Schmidt from (h1, n_b)
-    // x_axis projection is h1 (roughly).
-    // x_b = (h1 - (h1.n)n).normalize
     let h1_norm = h1.normalize();
     let x_b_raw = h1_norm - n_b * h1_norm.dot(&n_b);
     let x_b = if x_b_raw.norm_squared() > 1e-8 {
@@ -3043,7 +2986,6 @@ mod tests {
             let intrinsics = CameraIntrinsics::new(800.0, 800.0, 400.0, 300.0);
             let translation = Vector3::new(tx, ty, tz);
 
-            // Create rotation from Euler angles using Rotation3
             let r_obj = nalgebra::Rotation3::from_euler_angles(roll, pitch, yaw);
             let rotation = r_obj.matrix().into_owned();
             let gt_pose = Pose::new(rotation, translation);
@@ -3069,8 +3011,6 @@ mod tests {
             }
         }
     }
-
-    // ---------- Outlier-aware corner-drop policy ----------
 
     /// Project the centred tag corners under a known pose with no noise.
     /// Tests then perturb individual corners to drive the outlier-drop policy.

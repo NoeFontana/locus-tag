@@ -40,8 +40,6 @@ pub fn compute_gradient_map(img: &ImageView, output: &mut [u8]) {
     // -10   0  10          0    0   0
     //  -3   0   3          3   10   3
 
-    // use rayon::prelude::*;
-
     // Process rows in parallel
     (0..h).into_par_iter().for_each(|y| {
         // SAFETY: `into_par_iter()` over `0..h` yields each `y` exactly once
@@ -218,8 +216,6 @@ pub(crate) fn laplacian_sharpen(img: &ImageView, output: &mut [u8]) {
     let w = img.width;
     let h = img.height;
 
-    // use rayon::prelude::*;
-
     (0..h).into_par_iter().for_each(|y| {
         let y0 = y.saturating_sub(1);
         let y1 = y;
@@ -267,7 +263,6 @@ mod tests {
 
     #[test]
     fn test_gradient_map_detects_edges() {
-        // Create test image with vertical and horizontal edges
         let width = 32;
         let height = 32;
         let mut data = vec![50u8; width * height];
@@ -318,7 +313,6 @@ mod tests {
         let width = 8;
         let height = 8;
         let mut data = vec![100u8; width * height];
-        // Create a horizontal line (edge)
         for x in 0..width {
             data[4 * width + x] = 200;
         }

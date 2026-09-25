@@ -4,10 +4,6 @@
 //! - [`DetectorConfig`]: Pipeline-level configuration (immutable after construction)
 //! - [`DetectOptions`]: Per-call options (e.g., which tag families to decode)
 
-// ============================================================================
-// DetectorConfig: Pipeline-level configuration
-// ============================================================================
-
 /// Segmentation connectivity mode.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -874,10 +870,6 @@ impl DetectorConfigBuilder {
         self
     }
 }
-
-// ============================================================================
-// DetectOptions: Per-call detection options
-// ============================================================================
 
 /// Tag family identifier for per-call decoder selection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

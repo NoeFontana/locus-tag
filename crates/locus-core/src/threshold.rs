@@ -617,10 +617,6 @@ mod tests {
         assert_eq!(output[0], 255);
     }
 
-    // ========================================================================
-    // THRESHOLD ROBUSTNESS TESTS
-    // ========================================================================
-
     use crate::config::TagFamily;
     use crate::test_utils::{
         TestImageParams, generate_test_image_with_params, measure_border_integrity,
@@ -833,18 +829,10 @@ fn compute_min_max_simd(data: &[u8]) -> (u8, u8) {
     (min, max)
 }
 
-// =============================================================================
-// INTEGRAL IMAGE-BASED ADAPTIVE THRESHOLD
-// =============================================================================
-//
-// This implements OpenCV-style ADAPTIVE_THRESH_MEAN_C using integral images:
-// 1. Compute integral image in O(W*H)
-// 2. For each pixel, compute local mean in O(1) using integral image
-// 3. Threshold: pixel < (local_mean - C) ? black : white
-//
-// This produces per-pixel adaptive thresholds for small tag detection.
-
 /// Compute integral image (cumulative sum) for fast box filter computation.
+///
+/// Backs OpenCV-style `ADAPTIVE_THRESH_MEAN_C`: an O(1) local-mean lookup per
+/// pixel instead of an O(W*H) box filter per threshold.
 ///
 /// Uses a 2-pass parallel implementation for maximum throughput on modern multicore CPUs.
 /// The `integral` buffer must have size `(img.width + 1) * (img.height + 1)`.
@@ -863,8 +851,6 @@ pub fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
     for x in 0..stride {
         integral[x] = 0;
     }
-
-    // use rayon::prelude::*;
 
     // 1st Pass: Compute horizontal cumulative sums (prefix sum per row)
     // This part is perfectly parallel.
@@ -892,9 +878,6 @@ pub fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
         let start_x = b * BLOCK_SIZE;
         let end_x = (start_x + BLOCK_SIZE).min(stride);
 
-        // Initialize cumulative sum for this column block
-        // We use a small on-stack or small-vec if needed, but since BLOCK_SIZE is small (128),
-        // we can just use a fixed-size array if we want to avoid allocation entirely.
         let mut col_sums = [0u64; BLOCK_SIZE];
 
         // SAFETY: `(0..num_blocks).into_par_iter()` partitions the column
@@ -943,8 +926,6 @@ pub fn adaptive_threshold_integral(
     let w = img.width;
     let h = img.height;
     let stride = w + 1;
-
-    // use rayon::prelude::*;
 
     // Precompute interior area inverse (fixed-point 1.31)
     let side = (2 * radius + 1) as u32;
@@ -1090,8 +1071,6 @@ pub fn adaptive_threshold_gradient_window(
         inv_area_lut[g] = ((1u64 << 31) / u64::from(area)) as u32;
     }
 
-    // use rayon::prelude::*;
-
     (0..h).into_par_iter().for_each(|y| {
         let y_offset = y * w;
         let src_row = img.get_row(y);
@@ -1159,8 +1138,6 @@ pub(crate) fn compute_threshold_map(
     let w = img.width;
     let h = img.height;
     let stride = w + 1;
-
-    // use rayon::prelude::*; // Already imported at module level
 
     // Precompute interior area inverse
     let side = (2 * radius + 1) as u32;

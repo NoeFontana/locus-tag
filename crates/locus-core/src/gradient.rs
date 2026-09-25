@@ -644,8 +644,7 @@ fn solve_quad_from_boundary_points(
     _img_width: usize, // Unused for now but kept for context if needed for boundary checks
     min_pixels: usize,
 ) -> Option<[[f32; 2]; 4]> {
-    // Cluster into 4 directions using simple k-means on angles
-    // Initialize with 4 orthogonal directions
+    // Cluster into 4 directions using simple k-means on angles, seeded orthogonal.
     let mut centroids = [
         0.0f32,
         std::f32::consts::FRAC_PI_2,

@@ -144,10 +144,6 @@ pub fn compute_rmse(detected: &[[f64; 2]; 4], ground_truth: &[[f64; 2]; 4]) -> f
     (sum_sq / 4.0).sqrt()
 }
 
-// ============================================================================
-// ROBUSTNESS TEST UTILITIES
-// ============================================================================
-
 /// Parameters for generating test images with photometric variations.
 #[derive(Clone, Debug)]
 #[allow(dead_code)]

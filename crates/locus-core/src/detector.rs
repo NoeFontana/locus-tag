@@ -899,10 +899,6 @@ impl Default for DetectorBuilder {
     }
 }
 
-// ============================================================================
-// LocusEngine
-// ============================================================================
-
 /// A shared, thread-safe detection engine.
 ///
 /// Separates the immutable pipeline configuration from mutable per-frame state,
