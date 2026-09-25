@@ -7,6 +7,25 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Tests
 
+- **EuRoC regression tests now use the shipped `grid` profile instead of
+  `Detector::new()`'s hardcoded Rust `Default`.** That default matches
+  neither shipped profile (notably `enable_sharpening: false`, where
+  `standard` ships `true`) and measurably underperforms on this dataset:
+  691 total detections for `standard` and 977 for `high_accuracy` vs.
+  `grid`'s 2299, at stride 10 across all 145 sampled frames. This isn't a
+  new convention — `regression_render_tag.rs`'s `accuracy_baseline` module
+  already documents picking `high_accuracy` for clean, large synthetic
+  renders and leaving `regression_render_tag_robustness.rs` on `standard`
+  for small-tag/noisy content; `grid` extends the same reasoning one step
+  further for real (not synthetic) sensor noise on a literal multi-tag
+  *AprilGrid* board — its looser `decoder.min_contrast`/`quad.min_edge_score`
+  suit the former, and `segmentation.connectivity: Four` (vs `standard`'s
+  `Eight`) avoids merging diagonally-adjacent tag components in the latter.
+  Applied to all four EuRoC tests uniformly. Measured together with the
+  `select_dominant_vertices` quad-extraction fix (see `Fixed` below — the
+  two changes were validated jointly, not independently): relative recall
+  63.1% → 69.9%, distorted-pose recall 49.0% → 71.0%, board-consistency
+  frames checked 50 → 78 (still 100% consistent).
 - **`euroc_detection_baseline` now measures relative recall (decoded /
   present) instead of an absolute "≥15 tags" bar.** `cam_april` is a
   calibration *sweep* recording — 62.8% of sampled frames have the board
@@ -116,6 +135,48 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   (`(x + 0.5)/U`) so it is the exact inverse of that mapping (it previously
   shifted content by half an upscaled pixel). `upscale_factor == 1` and all
   decimation paths are unchanged.
+- **`ContourRdp` quad-corner extraction silently discarded correctly
+  segmented, correctly sized tag candidates before they ever reached
+  decode.** `extract_single_quad`'s Douglas-Peucker simplification used
+  `epsilon = perimeter * 0.02` — dimensionally wrong, since the perpendicular
+  "staircase" deviation a rasterized angled edge needs absorbing is set by
+  pixel-grid quantization and edge angle, not by the object's size on
+  screen. That made epsilon too tight for small/moderate contours, which
+  then failed a `simplified.len() in [4, 11]` vertex-count gate (root-caused
+  on real EuRoC MAV imagery: one frame's segmentation found 40 tag-sized
+  components, only 10 ever became quad candidates — 13 of the 30 lost ones
+  failed exactly this gate, always with *too many* vertices). Replaced with
+  `select_dominant_vertices`: an epsilon-free significance ranking (one full
+  unconditional Douglas-Peucker decomposition, diameter-pair-seeded so the
+  two anchor points are provably real corners rather than an arbitrary
+  boundary-trace artifact) that hands a generous candidate pool to the
+  existing, unchanged `reduce_to_quad` for final 4-corner selection — a
+  single top-down "take the top 4" pass was tried first and cost ~19%
+  relative recall on real EuRoC frames vs. pooling before reducing, so the
+  final design keeps `reduce_to_quad`'s iterative robustness and only
+  replaces the epsilon it used to be gated by.
+  **Real-world**: EuRoC relative recall (decoded/present) 63.1% → 69.9%
+  (measured together with a real-camera/AprilGrid profile fix — see the
+  `regression_euroc.rs` entry above — the two changes were validated
+  together); distorted-pose recall 49.0% → 71.0%.
+  **Synthetic (`regression_render_tag`/`_robustness`, insta-snapshotted)**:
+  broad improvement on the `ContourRdp`-path tests — mean/reprojection RMSE
+  roughly halves and p99 rotation-error tail improves 4×–60× in 6 of 8
+  affected tests (e.g. `high_iso` p99 rotation 104.1° → 1.75°,
+  `raw_pipeline` 119.5° → 26.0°), recall flat or better in 6 of 8. Two
+  tradeoffs to weigh before merging: `tag16h5` precision drops 96.3% →
+  93.75% (one extra false positive out of ~100 images), and
+  **`low_key_tuned`'s p99 rotation error worsens 21.6° → 99.3°** — the same
+  single already-hard frame (`scene_0000_cam_0000.png`, 20% recall on this
+  variant) getting a much worse outlier error rather than a broadly worse
+  tail, but a real regression on exactly the metric this project's testing
+  conventions treat as non-negotiable. `.snap` files are not updated by
+  this change (pre-existing, unrelated snapshot drift affects 11 of 17
+  render-tag/robustness tests independent of this fix — see PR discussion).
+  Latency on the `ContourRdp` path rose modestly (e.g. `low_key` 36→41ms,
+  `high_iso` 45→56ms), expected given the unconditional decomposition does
+  more work than the old epsilon-gated pass; not evaluated against a
+  specific budget.
 
 ### Added
 

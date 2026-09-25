@@ -318,30 +318,11 @@ fn extract_single_quad(
 
             let simple_contour = chain_approximation(arena, &contour);
             let perimeter = contour.len() as f64;
-            let epsilon = (perimeter * 0.02).max(1.0);
-            let simplified = douglas_peucker(arena, &simple_contour, epsilon);
+            let corners = select_dominant_vertices(arena, &simple_contour, 4)?;
 
-            if simplified.len() < 4 || simplified.len() > 11 {
-                return None;
-            }
-
-            let simpl_len = simplified.len();
-            let reduced = if simpl_len == 5 {
-                simplified
-            } else if simpl_len == 4 {
-                let mut closed = BumpVec::new_in(arena);
-                for p in &simplified {
-                    closed.push(*p);
-                }
-                closed.push(simplified[0]);
-                closed
-            } else {
-                reduce_to_quad(arena, &simplified)
-            };
-
-            if reduced.len() != 5 {
-                return None;
-            }
+            let mut reduced = BumpVec::new_in(arena);
+            reduced.extend_from_slice(&corners);
+            reduced.push(corners[0]);
 
             let area = polygon_area(&reduced);
             let compactness = (12.566 * area.abs()) / (perimeter * perimeter);
@@ -700,30 +681,11 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
 
     let simple_contour = chain_approximation(arena, &rectified);
     let perimeter = rectified.len() as f64;
-    let epsilon = (perimeter * 0.02).max(1.0);
-    let simplified = douglas_peucker(arena, &simple_contour, epsilon);
+    let corners = select_dominant_vertices(arena, &simple_contour, 4)?;
 
-    if simplified.len() < 4 || simplified.len() > 11 {
-        return None;
-    }
-
-    let simpl_len = simplified.len();
-    let reduced = if simpl_len == 5 {
-        simplified
-    } else if simpl_len == 4 {
-        let mut closed = BumpVec::new_in(arena);
-        for p in &simplified {
-            closed.push(*p);
-        }
-        closed.push(simplified[0]);
-        closed
-    } else {
-        reduce_to_quad(arena, &simplified)
-    };
-
-    if reduced.len() != 5 {
-        return None;
-    }
+    let mut reduced = BumpVec::new_in(arena);
+    reduced.extend_from_slice(&corners);
+    reduced.push(corners[0]);
 
     let area = polygon_area(&reduced);
     let compactness = (12.566 * area.abs()) / (perimeter * perimeter);
@@ -1148,6 +1110,241 @@ fn find_max_distance_optimized(points: &[Point], start: usize, end: usize) -> (f
     (dmax, index)
 }
 
+/// Pool size handed to [`reduce_to_quad`] by [`select_dominant_vertices`] —
+/// matches the old fixed-epsilon path's own upper bound on how many
+/// simplified vertices it would ever hand to the same reducer.
+const POOL_CAP: usize = 11;
+
+/// Selects the `k` most geometrically significant points on a contour —
+/// self-calibrated per-contour, with no epsilon constant.
+///
+/// `douglas_peucker(..., epsilon)` (below) asks "which points survive a
+/// fixed absolute tolerance?", and callers have historically picked that
+/// tolerance as `perimeter * 0.02`. That's dimensionally wrong for a tag
+/// outline: the perpendicular "staircase" deviation introduced by
+/// rasterizing a straight edge at an angle is set by the pixel grid and the
+/// edge's angle, not by how big the object is on screen — it doesn't
+/// shrink for a smaller or more distant tag. A perimeter-scaled epsilon is
+/// therefore too loose for large/close quads (harmless — it was already
+/// generous there) and too tight for small/moderate ones, where it leaves
+/// 12+ residual "corners" from unabsorbed staircase noise instead of
+/// collapsing to 4. That silently discarded a large fraction of correctly
+/// segmented, correctly sized tag candidates in `extract_single_quad`
+/// before they ever reached decode (root-caused on real EuRoC MAV imagery:
+/// segmentation found 40 tag-sized components in a frame, only 10 became
+/// quad candidates — 13 of the 30 lost ones failed exactly this vertex-count
+/// gate, all with too *many* vertices, never too few).
+///
+/// This function asks a different, self-calibrating question instead:
+/// "which points are significant, period?" — no absolute distance
+/// threshold at all. It runs Douglas-Peucker's recursive max-deviation
+/// split *unconditionally* (no epsilon test gating the recursion) until no
+/// sub-segment has an interior point left; every point ends up assigned
+/// exactly one "significance" — the perpendicular deviation from its
+/// parent chord at the moment it was selected as that chord's split point.
+/// For a real quad, a true corner deviates from its enclosing chord by a
+/// large, macroscopic amount (a sizeable fraction of the tag's own
+/// extent); a staircase artifact deviates from *its* (much shorter,
+/// already-corner-bounded) chord by at most a pixel or two. The two scales
+/// are well separated at any tag size, so ranking by significance finds the
+/// true corners without needing to know in advance what "significant"
+/// means in absolute pixels.
+///
+/// A single top-down pass — take just the top `k` — commits to the
+/// diameter pair plus one split per resulting arc and stops there. That
+/// measurably underperforms on real, noisy contours (an ~19% relative
+/// recall regression on real EuRoC frames vs. the numbers below): it never
+/// reconsiders a locally-best-but-globally-mediocre split the way an
+/// iterative reduction can. So instead this takes a *generous* pool (up to
+/// `POOL_CAP` points, the same upper bound the old fixed-epsilon path used)
+/// of the most significant points, then hands that pool to
+/// [`reduce_to_quad`] — unchanged, proven, and specifically designed to
+/// iteratively narrow a noisy near-quadrilateral polygon down to 4 points —
+/// for the final selection. The self-calibrating ranking replaces the
+/// epsilon that broke on real data; the iterative reducer supplies the
+/// robustness a single greedy pass doesn't have.
+///
+/// Seeded with the diameter pair: the two points with maximum mutual
+/// distance, found by the standard two-hop farthest-point heuristic
+/// (farthest point from an arbitrary start, then farthest point from
+/// *that*) in O(n) rather than an O(n²) all-pairs scan — this matters
+/// because `n` is *not* reliably small (a low-contrast background region
+/// can legitimately segment into a single component spanning tens of
+/// thousands of contour points, observed directly on real EuRoC frames).
+/// For any convex polygon the diameter is always realized between two
+/// vertices ("rotating calipers" — a boundary point mid-edge can never be
+/// farther from everything else than the actual corners flanking it), so
+/// this seed is provably 2 real corners, not a trace-order artifact that
+/// may land mid-edge; the two-hop heuristic is exact for convex point sets,
+/// which a boundary-traced blob approximately is.
+///
+/// Returns `None` if `points.len() < k`, or if [`reduce_to_quad`] can't
+/// reach exactly `k` points from the pool (only possible if the pool
+/// itself has fewer than `k`, which `POOL_CAP >= k` and `n >= k` together
+/// rule out — kept as a defensive check, not a load-bearing one).
+pub(crate) fn select_dominant_vertices<'a>(
+    arena: &'a Bump,
+    points: &[Point],
+    k: usize,
+) -> Option<BumpVec<'a, Point>> {
+    let n = points.len();
+    if n < k {
+        return None;
+    }
+    if n == k {
+        let mut v = BumpVec::new_in(arena);
+        v.extend_from_slice(points);
+        return Some(v);
+    }
+
+    // Seed the decomposition with the diameter pair (the two points with
+    // maximum mutual distance) instead of the arbitrary boundary-trace
+    // start/end points. For any convex polygon the diameter is always
+    // realized between two vertices ("rotating calipers" — a boundary point
+    // mid-edge can never be farther from everything else than the actual
+    // corners flanking it), so this seed is provably 2 real corners, not a
+    // trace-order artifact that may land mid-edge.
+    //
+    // Found via the standard two-hop farthest-point heuristic (farthest
+    // point from an arbitrary start, then farthest point from *that*)
+    // rather than an exact all-pairs scan: O(n) instead of O(n^2), exact
+    // for convex point sets (which a boundary-traced blob approximately
+    // is — a real tag's contour, or any single connected component's outer
+    // boundary), and this matters here because `n` is *not* reliably
+    // small — a low-contrast background region can legitimately segment
+    // into a single component spanning tens of thousands of contour
+    // points (observed directly on real EuRoC frames), where an O(n^2)
+    // step would dominate this function's cost.
+    let farthest_from = |from: usize| -> usize {
+        let mut best_i = from;
+        let mut best_d2 = 0.0f64;
+        for (i, p) in points.iter().enumerate() {
+            let dx = p.x - points[from].x;
+            let dy = p.y - points[from].y;
+            let d2 = dx * dx + dy * dy;
+            if d2 > best_d2 {
+                best_d2 = d2;
+                best_i = i;
+            }
+        }
+        best_i
+    };
+    let ia = farthest_from(0);
+    let ib = farthest_from(ia);
+    let (ia, ib) = if ia == ib {
+        (0, 1.min(n - 1))
+    } else {
+        (ia, ib)
+    };
+
+    // Rotate so the diameter pair anchors a simple linear array: index 0
+    // and `rb` are the two diameter points, index `n` re-closes the loop
+    // back to (a duplicate of) index 0. This turns both arcs either side of
+    // the diameter into plain contiguous ranges for
+    // `find_max_distance_optimized`, with no modular-wraparound
+    // bookkeeping in the recursion below.
+    let rb = (ib + n - ia) % n;
+    let mut rotated = BumpVec::with_capacity_in(n + 1, arena);
+    for i in 0..=n {
+        rotated.push(points[(ia + i) % n]);
+    }
+
+    // `weight[i]` is the perpendicular deviation at which rotated point `i`
+    // was selected during the unconditional decomposition. The diameter
+    // pair (indices `0` and `rb`, plus the closing duplicate at `n`) is
+    // marked `f64::INFINITY` rather than competing on deviation — sound
+    // here specifically because it's the diameter pair (see above), not an
+    // arbitrary anchor choice.
+    let mut weight = BumpVec::from_iter_in(std::iter::repeat_n(0.0f64, n + 1), arena);
+    weight[0] = f64::INFINITY;
+    weight[rb] = f64::INFINITY;
+    weight[n] = f64::INFINITY;
+
+    let mut stack = BumpVec::new_in(arena);
+    stack.push((0usize, rb));
+    stack.push((rb, n));
+    while let Some((start, end)) = stack.pop() {
+        if end - start < 2 {
+            continue; // no interior point in this sub-segment
+        }
+        let (dmax, index) = find_max_distance_optimized(&rotated, start, end);
+        // `find_max_distance_optimized` falls back to `index == start` when
+        // every interior point is coincident with (or within its 1e-18
+        // squared-distance tolerance of) the chord's own start point — a
+        // real, if rare, degenerate input (near-duplicate contour points).
+        // The epsilon-gated `douglas_peucker` never acts on this (dmax = 0
+        // never exceeds a positive epsilon), but this decomposition has no
+        // epsilon test at all: pushing `(start, index)` here would push the
+        // *exact same range straight back onto the stack* — an infinite
+        // loop, not merely a wrong answer. Treat it as "no further
+        // significant point in this sub-segment" instead, matching what
+        // the epsilon-gated version does in the same situation.
+        if index == start || index == end {
+            continue;
+        }
+        weight[index] = dmax;
+        stack.push((start, index));
+        stack.push((index, end));
+    }
+
+    // Take a *generous* pool of the most significant points — not just the
+    // top `k` — and let `reduce_to_quad`'s iterative smallest-triangle
+    // elimination (below) pick the best `k` from it. A single top-down
+    // pass (pool size == k) picks the diameter pair plus exactly one split
+    // per arc and commits immediately; on real, noisy contours that greedy
+    // commitment measurably underperforms giving the reducer more
+    // candidates to weigh against each other (measured on real EuRoC
+    // frames: dropping straight to `k` here cost ~19% of real detections
+    // relative to pooling first). `POOL_CAP` (module-level) matches the old
+    // fixed-epsilon path's own upper bound on how many simplified vertices
+    // it would ever hand to `reduce_to_quad`.
+    let pool_size = POOL_CAP.min(n);
+    let mut ranked = BumpVec::from_iter_in(weight.iter().copied().enumerate().take(n), arena);
+    ranked.select_nth_unstable_by(pool_size - 1, |a, b| b.1.total_cmp(&a.1));
+    let mut pool = BumpVec::from_iter_in(ranked[..pool_size].iter().map(|&(i, _)| i), arena);
+    // Restore original contour order so the pool is a simple (non-self-
+    // intersecting) polygon, which `reduce_to_quad` requires.
+    pool.sort_unstable();
+
+    let mut pool_pts = BumpVec::from_iter_in(pool.iter().map(|&i| rotated[i]), arena);
+    let final_pts = if pool_pts.len() == k {
+        pool_pts
+    } else {
+        pool_pts.push(pool_pts[0]); // close the ring for `reduce_to_quad`
+        let mut reduced = reduce_to_quad(arena, &pool_pts);
+        reduced.pop(); // drop the closing duplicate it re-adds
+        reduced
+    };
+    if final_pts.len() != k {
+        return None;
+    }
+
+    // Anchor the cyclic order on whichever selected corner is nearest the
+    // original boundary-trace start point (`points[0]`), matching what
+    // callers already assume from the pre-existing `douglas_peucker` path
+    // (its `keep[0] = true` forces its own output to start exactly at
+    // `points[0]`). Purely a relabeling of which corner is "first" in a
+    // cyclic sequence — it doesn't change which `k` points were selected or
+    // their winding order.
+    let mut start = 0usize;
+    let mut best_d2 = f64::INFINITY;
+    for (idx, p) in final_pts.iter().enumerate() {
+        let dx = p.x - points[0].x;
+        let dy = p.y - points[0].y;
+        let d2 = dx * dx + dy * dy;
+        if d2 < best_d2 {
+            best_d2 = d2;
+            start = idx;
+        }
+    }
+
+    let mut out = BumpVec::new_in(arena);
+    for offset in 0..k {
+        out.push(final_pts[(start + offset) % k]);
+    }
+    Some(out)
+}
+
 /// Simplify a contour using the Douglas-Peucker algorithm.
 ///
 /// Leverages an iterative implementation with a manual stack to avoid
@@ -1522,55 +1719,6 @@ fn fit_edge_line_curved<C: crate::camera::CameraModel>(
     Some((n_vec.x, n_vec.y, c))
 }
 
-/// Reducing a polygon to a quad (4 vertices + 1 closing) by iteratively removing
-/// the vertex that forms the smallest area triangle with its neighbors.
-/// This is robust for noisy/jagged shapes that are approximately quadrilateral.
-fn reduce_to_quad<'a>(arena: &'a Bump, poly: &[Point]) -> BumpVec<'a, Point> {
-    if poly.len() <= 5 {
-        return BumpVec::from_iter_in(poly.iter().copied(), arena);
-    }
-
-    // Work on a mutable copy
-    let mut current = BumpVec::from_iter_in(poly.iter().copied(), arena);
-    // Remove closing point for processing
-    current.pop();
-
-    while current.len() > 4 {
-        let n = current.len();
-        let mut min_area = f64::MAX;
-        let mut min_idx = 0;
-
-        for i in 0..n {
-            let p_prev = current[(i + n - 1) % n];
-            let p_curr = current[i];
-            let p_next = current[(i + 1) % n];
-
-            // Triangle area: 0.5 * |x1(y2 - y3) + x2(y3 - y1) + x3(y1 - y2)|
-            let area = (p_prev.x * (p_curr.y - p_next.y)
-                + p_curr.x * (p_next.y - p_prev.y)
-                + p_next.x * (p_prev.y - p_curr.y))
-                .abs()
-                * 0.5;
-
-            if area < min_area {
-                min_area = area;
-                min_idx = i;
-            }
-        }
-
-        // Remove the vertex contributing least to the shape
-        current.remove(min_idx);
-    }
-
-    // Re-close the loop
-    if !current.is_empty() {
-        let first = current[0];
-        current.push(first);
-    }
-
-    current
-}
-
 /// Calculate the minimum average gradient magnitude along the 4 edges of the quad.
 ///
 /// Returns the lowest score among the 4 edges. If any edge is very weak,
@@ -1622,6 +1770,55 @@ fn calculate_edge_score_curved<C: crate::camera::CameraModel>(
         }
     }
     min_score
+}
+
+/// Reducing a polygon to a quad (4 vertices + 1 closing) by iteratively removing
+/// the vertex that forms the smallest area triangle with its neighbors.
+/// This is robust for noisy/jagged shapes that are approximately quadrilateral.
+fn reduce_to_quad<'a>(arena: &'a Bump, poly: &[Point]) -> BumpVec<'a, Point> {
+    if poly.len() <= 5 {
+        return BumpVec::from_iter_in(poly.iter().copied(), arena);
+    }
+
+    // Work on a mutable copy
+    let mut current = BumpVec::from_iter_in(poly.iter().copied(), arena);
+    // Remove closing point for processing
+    current.pop();
+
+    while current.len() > 4 {
+        let n = current.len();
+        let mut min_area = f64::MAX;
+        let mut min_idx = 0;
+
+        for i in 0..n {
+            let p_prev = current[(i + n - 1) % n];
+            let p_curr = current[i];
+            let p_next = current[(i + 1) % n];
+
+            // Triangle area: 0.5 * |x1(y2 - y3) + x2(y3 - y1) + x3(y1 - y2)|
+            let area = (p_prev.x * (p_curr.y - p_next.y)
+                + p_curr.x * (p_next.y - p_prev.y)
+                + p_next.x * (p_prev.y - p_curr.y))
+                .abs()
+                * 0.5;
+
+            if area < min_area {
+                min_area = area;
+                min_idx = i;
+            }
+        }
+
+        // Remove the vertex contributing least to the shape
+        current.remove(min_idx);
+    }
+
+    // Re-close the loop
+    if !current.is_empty() {
+        let first = current[0];
+        current.push(first);
+    }
+
+    current
 }
 
 fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
@@ -1772,6 +1969,198 @@ mod tests {
                     for op in contour.iter().take(e + 1).skip(s) {
                         let d = perpendicular_distance(*op, a, b);
                         assert!(d <= epsilon + 1e-7, "Distance {d} > epsilon {epsilon} at point");
+                    }
+                }
+            }
+        }
+    }
+
+    // ========================================================================
+    // SELECT_DOMINANT_VERTICES TESTS
+    // ========================================================================
+
+    /// Builds a rectangle's staircase-rasterized boundary contour (the same
+    /// shape `trace_boundary` would produce for a real rendered tag),
+    /// centered at the origin, rotated by `angle_rad`. Traversal starts
+    /// from an arbitrary boundary point (not a corner), matching how a real
+    /// raster scan begins wherever it first meets the shape — exactly the
+    /// property that broke the naive "always keep points[0]" approach this
+    /// function replaced.
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a..c and s..t are standard rotation/interpolation variable names"
+    )]
+    fn staircase_rect_contour(half_w: f64, half_h: f64, angle_rad: f64) -> Vec<Point> {
+        let (s, c) = angle_rad.sin_cos();
+        let rot = |x: f64, y: f64| Point {
+            x: x * c - y * s,
+            y: x * s + y * c,
+        };
+        let true_corners = [
+            rot(-half_w, -half_h),
+            rot(half_w, -half_h),
+            rot(half_w, half_h),
+            rot(-half_w, half_h),
+        ];
+        let mut contour = Vec::new();
+        let steps_per_edge = 40;
+        for i in 0..4 {
+            let a = true_corners[i];
+            let b = true_corners[(i + 1) % 4];
+            for s in 0..steps_per_edge {
+                let t = f64::from(s) / f64::from(steps_per_edge);
+                // Round to integer pixels to reproduce staircase artifacts
+                // on non-axis-aligned edges, exactly like a real raster
+                // boundary trace.
+                contour.push(Point {
+                    x: (a.x + (b.x - a.x) * t).round(),
+                    y: (a.y + (b.y - a.y) * t).round(),
+                });
+            }
+        }
+        contour
+    }
+
+    /// A real quad's true corners must be selected regardless of scale, with
+    /// no epsilon to recalibrate — the entire point of this function. Tested
+    /// from a small (near real tag size) to a large (near real close-up
+    /// size) rectangle, both axis-aligned and rotated (to exercise real
+    /// staircase noise, which only appears off-axis).
+    #[test]
+    fn select_dominant_vertices_finds_true_corners_at_any_scale() {
+        let arena = Bump::new();
+        for half_size in [16.0, 40.0, 100.0, 400.0] {
+            for angle_deg in [0.0f64, 7.0, 23.0, 45.0] {
+                let contour =
+                    staircase_rect_contour(half_size, half_size * 0.9, angle_deg.to_radians());
+                let corners = select_dominant_vertices(&arena, &contour, 4)
+                    .expect("half_size/angle_deg in message below on failure");
+                assert_eq!(corners.len(), 4);
+
+                // Each selected point should land near one of the 4 true
+                // corners (within staircase-rounding slack), and all 4 true
+                // corners should be covered (no duplicate corner picked
+                // twice).
+                let (s, c) = angle_deg.to_radians().sin_cos();
+                let rot = |x: f64, y: f64| Point {
+                    x: x * c - y * s,
+                    y: x * s + y * c,
+                };
+                let half_h = half_size * 0.9;
+                let true_corners = [
+                    rot(-half_size, -half_h),
+                    rot(half_size, -half_h),
+                    rot(half_size, half_h),
+                    rot(-half_size, half_h),
+                ];
+                let mut matched = [false; 4];
+                for p in &corners {
+                    let (best_j, best_d) = true_corners
+                        .iter()
+                        .enumerate()
+                        .map(|(j, t)| (j, ((t.x - p.x).powi(2) + (t.y - p.y).powi(2)).sqrt()))
+                        .min_by(|a, b| a.1.total_cmp(&b.1))
+                        .unwrap();
+                    assert!(
+                        best_d < 2.0,
+                        "half_size={half_size} angle={angle_deg}: point {p:?} is {best_d:.2}px from nearest true corner"
+                    );
+                    assert!(
+                        !matched[best_j],
+                        "half_size={half_size} angle={angle_deg}: true corner {best_j} matched twice"
+                    );
+                    matched[best_j] = true;
+                }
+            }
+        }
+    }
+
+    /// KNOWN LIMITATION, not fixed here: `select_dominant_vertices` always
+    /// finds *some* 4 points for any input with `>= 4` points — it has no
+    /// shape-quality opinion of its own, same as the `douglas_peucker` +
+    /// `reduce_to_quad` path it replaces. A smooth, non-quadrilateral blob
+    /// (e.g. a circle) will still produce a `Some(...)` result here; only
+    /// the caller's separate `compactness`/`area` checks in
+    /// `extract_single_quad` can reject it, and — pre-existing, not a
+    /// regression — those are loose enough (`compactness <= 0.1`) that a
+    /// circle-derived quad (compactness ≈ 0.64) clears them too. An earlier
+    /// version of this function added a significance-gap check here
+    /// specifically to close that hole, but it forced a single top-down
+    /// point selection instead of pooling candidates for
+    /// [`reduce_to_quad`], which cost ~19% relative recall on real EuRoC
+    /// frames — reverted in favor of fixing the regression first. Tightening
+    /// the compactness gate (or reintroducing a quality check compatible
+    /// with pooling) is a follow-up, not resolved by this function.
+    #[test]
+    fn select_dominant_vertices_does_not_reject_a_circle() {
+        let arena = Bump::new();
+        let radius = 60.0;
+        let n = 120;
+        let contour: Vec<Point> = (0..n)
+            .map(|i| {
+                let theta = 2.0 * std::f64::consts::PI * f64::from(i) / f64::from(n);
+                Point {
+                    x: (radius * theta.cos()).round(),
+                    y: (radius * theta.sin()).round(),
+                }
+            })
+            .collect();
+        assert!(
+            select_dominant_vertices(&arena, &contour, 4).is_some(),
+            "documents current behavior, not a desired one — see KNOWN LIMITATION above"
+        );
+    }
+
+    /// Regression test for a real infinite-loop bug found during
+    /// development: near-duplicate/coincident contour points made
+    /// `find_max_distance_optimized`'s degenerate fallback return
+    /// `index == start`, which — with no epsilon gate to filter it out —
+    /// pushed the exact same `(start, end)` range back onto the stack
+    /// forever. Must terminate (proptest below enforces this on arbitrary
+    /// input; this pins the specific coincident-point shape that triggered
+    /// it).
+    #[test]
+    fn select_dominant_vertices_terminates_on_duplicate_points() {
+        let arena = Bump::new();
+        let mut contour = vec![Point { x: 0.0, y: 0.0 }; 20];
+        contour.extend([
+            Point { x: 50.0, y: 0.0 },
+            Point { x: 50.0, y: 50.0 },
+            Point { x: 0.0, y: 50.0 },
+        ]);
+        // Must return within this call (no hang) — the assertion is just
+        // that we get here at all.
+        let _ = select_dominant_vertices(&arena, &contour, 4);
+    }
+
+    #[test]
+    fn select_dominant_vertices_too_few_points_returns_none() {
+        let arena = Bump::new();
+        let contour = vec![
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 1.0, y: 0.0 },
+            Point { x: 1.0, y: 1.0 },
+        ];
+        assert!(select_dominant_vertices(&arena, &contour, 4).is_none());
+    }
+
+    proptest! {
+        /// Arbitrary (including highly degenerate/duplicate-heavy) point
+        /// sets must never hang or panic, and any `Some` result must be a
+        /// genuine subset of the input with no repeated point.
+        #[test]
+        fn prop_select_dominant_vertices_never_hangs_or_panics(
+            points in prop::collection::vec((0.0..50.0, 0.0..50.0), 4..80),
+            k in 4usize..6,
+        ) {
+            let arena = Bump::new();
+            let contour: Vec<Point> = points.iter().map(|&(x, y)| Point { x, y }).collect();
+            if let Some(selected) = select_dominant_vertices(&arena, &contour, k) {
+                prop_assert_eq!(selected.len(), k);
+                for (i, p) in selected.iter().enumerate() {
+                    prop_assert!(contour.iter().any(|op| (op.x - p.x).abs() < 1e-9 && (op.y - p.y).abs() < 1e-9));
+                    for q in selected.iter().skip(i + 1) {
+                        prop_assert!((p.x - q.x).abs() > 1e-9 || (p.y - q.y).abs() > 1e-9, "duplicate point in output");
                     }
                 }
             }
