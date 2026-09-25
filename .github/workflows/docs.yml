@@ -60,8 +60,10 @@ jobs:
       - name: Install docs deps
         run: uv sync --group docs --no-install-project
       - name: Spell-check user-facing docs
-        # engineering/ uses domain notation and is excluded from the site
-        run: uv run --no-sync codespell docs/ --skip "docs/engineering"
+        # engineering/ uses domain notation and is excluded from the site;
+        # changelogs/ is verbatim historical CHANGELOG.md text (same domain
+        # notation) that was never spell-checked before it lived under docs/
+        run: uv run --no-sync codespell docs/ --skip "docs/engineering,docs/changelogs"
 
   # Deploy versioned site to gh-pages via mike. Pushes to main update the
   # `main` version and the `latest` alias; tag pushes deploy `X.Y` (the

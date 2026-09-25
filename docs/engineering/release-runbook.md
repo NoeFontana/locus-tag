@@ -153,6 +153,18 @@ squash-merge once approved. The `v*` tag was already pushed in §3.2,
 so `release.yml` may already be running — that's fine, it operates off
 the tag, not the PR.
 
+In the same PR, archive the released section: move the `## [X.Y.Z] -
+YYYY-MM-DD` block out of `CHANGELOG.md` into a new
+`docs/changelogs/vX.Y.Z.md` (H1 title `# X.Y.Z — YYYY-MM-DD`, a
+back-link to `index.md`, then the body verbatim — see any existing
+page under `docs/changelogs/` for the exact shape), replace it in
+`CHANGELOG.md` with a one-line entry under `## Released versions`,
+and add the page to `docs/changelogs/index.md` and the `Changelog`
+nav block in `mkdocs.yml`. Do this *after* the tag is pushed, never
+before — `scripts/ci/extract_changelog_section.py` reads the section
+out of `CHANGELOG.md` at the tagged commit, so the block must still
+be inline there when `release.yml` runs.
+
 ### 3.4 Watch the publish
 - `gh run watch <release.yml run id>` until all 8 jobs are green.
 - Verify the GitHub Release page renders the CHANGELOG body and lists
