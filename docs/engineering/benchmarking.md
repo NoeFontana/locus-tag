@@ -1,10 +1,10 @@
 # Benchmarking & Diagnostics
 
-Locus is built with a focus on extreme performance. To maintain this, we provide a suite of tools for benchmarking and diagnosing failures, covering both the core Rust engine and the Python bindings.
+Tools for benchmarking and diagnosing failures, covering both the core Rust engine and the Python bindings.
 
 ## The 3-Tier Tooling Stack
 
-To tune the Locus codebase for maximum throughput, we enforce strict boundaries between measurement tools to avoid the "Observer Effect".
+Strict boundaries between measurement tools, to avoid the "Observer Effect" (see Tier 2).
 
 ### Tier 1: End-to-End Regression (The Python CLI)
 *   **Tool**: `uv run tools/cli.py bench real` (ICRA 2020 scenarios or Hugging Face Hub datasets via `--hub-config`).
@@ -25,10 +25,9 @@ To tune the Locus codebase for maximum throughput, we enforce strict boundaries 
 
 ## Rust Benchmarking (Core Engine)
 
-The Rust benchmarking suite is the source of truth for core engine performance and regressions.
+Source of truth for core engine performance and regressions.
 
 ### Regression Suite (ICRA 2020)
-The regression suite validates that `Locus` matches or exceeds ground truth for thousands of images.
 
 1. **Set Dataset Path**:
    ```bash
@@ -49,7 +48,6 @@ The regression suite validates that `Locus` matches or exceeds ground truth for 
    > `--release` is mandatory for running `regression_icra2020` tests. Running in debug mode is blocked and will panic.
 
 ### Hub Regression Suite (Hugging Face)
-Locus supports running regressions against large-scale datasets hosted on the Hugging Face Hub.
 
 > [!IMPORTANT]
 > `--release` is mandatory for running Hub regression tests. Running in debug mode is extremely slow and will likely timeout in CI or developer environments.
@@ -97,9 +95,7 @@ cargo bench --bench decoding_real_bench
 ```
 
 ### Mutually Exclusive Telemetry Matrix
-Locus implements a zero-cost, mutually exclusive telemetry architecture for its regression tests to avoid the "Observer Effect". You cannot simultaneously emit structured JSON logs and capture high-fidelity Tracy profiles without the JSON serialization skewing the nanosecond timings.
-
-To resolve this, we decouple the profilers at the CI level using `TELEMETRY_MODE`.
+Emitting structured JSON logs and capturing high-fidelity Tracy profiles simultaneously skews the nanosecond timings (JSON serialization pollutes Tracy's ring buffers). `TELEMETRY_MODE` decouples them.
 
 #### Human Mode (Tracy)
 Captures pristine binary traces for GUI analysis.
@@ -133,14 +129,13 @@ TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features b
 
 ## Python Developer CLI
 
-The `tools/cli.py` tool is the central entry point for high-level evaluations and development tasks.
+`tools/cli.py` is the central entry point for high-level evaluations and development tasks.
 
 ### Data Preparation
-Download all required datasets (ICRA 2020 and Hugging Face Hub subsets):
+Downloads ICRA 2020 scenarios and auto-discovers/syncs all Hub dataset subsets to `tests/data/hub_cache/`:
 ```bash
 PYTHONPATH=. uv run --group bench tools/cli.py bench prepare
 ```
-This command downloads the ICRA 2020 scenarios and auto-discovers and syncs all Hub dataset subsets from the configured HF repository to `tests/data/hub_cache/`.
 
 ### Real-World Evaluation (ICRA 2020)
 Evaluate performance on the ICRA 2020 dataset scenarios (`forward`, `circle`):
@@ -210,13 +205,11 @@ Locus supports high-fidelity profiling using the [Tracy Profiler](https://github
 
 ## Visual Debugging with Rerun
 
-For diagnosing recall issues or tuning parameters, use the specialized visualization tool:
+For diagnosing recall issues or tuning parameters:
 
 ```bash
 uv run tools/cli.py visualize --scenario forward --limit 5
 ```
-
-Locus provides a high-fidelity debugging pipeline integrated with the [Rerun SDK](https://rerun.io).
 
 ### Features
 - **Convergence Tracking**: Visualize subpixel jitter (yellow arrows) and reprojection errors (scalar plots) for every tag.

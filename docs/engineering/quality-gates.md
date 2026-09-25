@@ -36,7 +36,7 @@ cargo check --target aarch64-unknown-linux-gnu --all-features
 
 ## 2. Performance & Regression Gates
 
-If you are modifying the detection pipeline, math kernels, or SIMD dispatch, you must empirically validate that latency and recall remain within acceptable bounds.
+Changes to the detection pipeline, math kernels, or SIMD dispatch must empirically validate that latency and recall remain within acceptable bounds.
 
 ### Micro-Optimization Protocol
 Before performing any micro-performance optimization (e.g., SIMD kernels, hot-loop refactoring):
@@ -88,7 +88,6 @@ cargo test --release --features bench-internals,non_rectified \
 ```
 
 ## 3. Documentation Quality
-Ensure the documentation builds correctly and is complete.
 
 ```bash
 # 1. Sync dependencies for documentation
