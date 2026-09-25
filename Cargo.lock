@@ -3852,7 +3852,7 @@ dependencies = [
 
 [[package]]
 name = "locus-core"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "askama",
  "bumpalo",
@@ -3882,7 +3882,7 @@ dependencies = [
 
 [[package]]
 name = "locus-py"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "bumpalo",
  "locus-core",
