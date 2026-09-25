@@ -7,6 +7,25 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Tests
 
+- **EuRoC regression tests now use the shipped `grid` profile instead of
+  `Detector::new()`'s hardcoded Rust `Default`.** That default matches
+  neither shipped profile (notably `enable_sharpening: false`, where
+  `standard` ships `true`) and measurably underperforms on this dataset:
+  691 total detections for `standard` and 977 for `high_accuracy` vs.
+  `grid`'s 2299, at stride 10 across all 145 sampled frames. This isn't a
+  new convention — `regression_render_tag.rs`'s `accuracy_baseline` module
+  already documents picking `high_accuracy` for clean, large synthetic
+  renders and leaving `regression_render_tag_robustness.rs` on `standard`
+  for small-tag/noisy content; `grid` extends the same reasoning one step
+  further for real (not synthetic) sensor noise on a literal multi-tag
+  *AprilGrid* board — its looser `decoder.min_contrast`/`quad.min_edge_score`
+  suit the former, and `segmentation.connectivity: Four` (vs `standard`'s
+  `Eight`) avoids merging diagonally-adjacent tag components in the latter.
+  Applied to all four EuRoC tests uniformly. Measured together with the
+  `select_dominant_vertices` quad-extraction fix (see `Fixed` below — the
+  two changes were validated jointly, not independently): relative recall
+  63.1% → 69.9%, distorted-pose recall 49.0% → 71.0%, board-consistency
+  frames checked 50 → 78 (still 100% consistent).
 - **`euroc_detection_baseline` now measures relative recall (decoded /
   present) instead of an absolute "≥15 tags" bar.** `cam_april` is a
   calibration *sweep* recording — 62.8% of sampled frames have the board
@@ -116,6 +135,101 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   (`(x + 0.5)/U`) so it is the exact inverse of that mapping (it previously
   shifted content by half an upscaled pixel). `upscale_factor == 1` and all
   decimation paths are unchanged.
+- **`ContourRdp` quad-corner extraction silently discarded correctly
+  segmented, correctly sized tag candidates before they ever reached
+  decode.** `extract_single_quad`'s Douglas-Peucker simplification used
+  `epsilon = perimeter * 0.02` — dimensionally wrong, since the perpendicular
+  "staircase" deviation a rasterized angled edge needs absorbing is set by
+  pixel-grid quantization and edge angle, not by the object's size on
+  screen. That made epsilon too tight for small/moderate contours, which
+  then failed a `simplified.len() in [4, 11]` vertex-count gate (root-caused
+  on real EuRoC MAV imagery: one frame's segmentation found 40 tag-sized
+  components, only 10 ever became quad candidates — 13 of the 30 lost ones
+  failed exactly this gate, always with *too many* vertices). Replaced with
+  `select_dominant_vertices`: an epsilon-free significance ranking (one full
+  unconditional Douglas-Peucker decomposition, diameter-pair-seeded so the
+  two anchor points are provably real corners rather than an arbitrary
+  boundary-trace artifact) that hands a generous candidate pool to the
+  existing, unchanged `reduce_to_quad` for final 4-corner selection — a
+  single top-down "take the top 4" pass was tried first and cost ~19%
+  relative recall on real EuRoC frames vs. pooling before reducing, so the
+  final design keeps `reduce_to_quad`'s iterative robustness and only
+  replaces the epsilon it used to be gated by.
+  **Real-world**: EuRoC relative recall (decoded/present) 63.1% → 69.9%
+  (measured together with a real-camera/AprilGrid profile fix — see the
+  `regression_euroc.rs` entry above — the two changes were validated
+  together); distorted-pose recall 49.0% → 71.0%.
+  **Synthetic (`regression_render_tag`/`_robustness`, insta-snapshotted)**:
+  broad improvement on the `ContourRdp`-path tests — mean/reprojection RMSE
+  roughly halves and p99 rotation-error tail improves 4×–60× in 6 of 8
+  affected tests (e.g. `high_iso` p99 rotation 104.1° → 1.75°,
+  `raw_pipeline` 119.5° → 26.0°), recall flat or better in 6 of 8. Two
+  tradeoffs reviewed: `tag16h5` precision drops 96.3% → 93.75% (one extra
+  false positive out of ~100 images), and `low_key_tuned`'s p99 rotation
+  error worsens 21.6° → 99.3° on `scene_0005_cam_0000.png` tag `34` — root-
+  caused, not a corner-extraction defect: that tag's corner RMSE is 2.43px
+  (good), so this is a *differential* (non-uniform across the 4 corners)
+  micro-perturbation landing on an already poorly-conditioned single-tag
+  pose solve, not a wrong-branch or systematically-worse-corners issue.
+  Confirmed against this project's own prior investigation
+  (`project_rotation_tail_is_corner_localization_20260714` in memory):
+  IPPE branch selection has "zero headroom" (picks correctly essentially
+  always), so the render-tag rotation tail is driven by differential
+  corner-localization error, not solver branch choice — and the only
+  documented lever for that class of tail is corner-*refinement*
+  robustness (ERF/GWLF), a separate pipeline stage this PR doesn't touch.
+  One isolated tag out of every tag across 8 affected tests showing this
+  pattern, against broad improvement everywhere else, is consistent with
+  an isolated hard-geometry case, not a systematic regression this fix
+  introduced. `.snap` files are not updated by this change (pre-existing,
+  unrelated snapshot drift affects 11 of 17 render-tag/robustness tests
+  independent of this fix — see PR discussion).
+  Latency on the `ContourRdp` path rose modestly (e.g. `low_key` 36→41ms,
+  `high_iso` 45→56ms), expected given the unconditional decomposition does
+  more work than the old epsilon-gated pass; not evaluated against a
+  specific budget.
+- **`reduce_to_quad` could discard a real corner for an adjacent
+  staircase-rasterization pixel on an exact triangle-area tie.** Caught by
+  CI, not local validation: `regression_icra2020::regression_fixtures`
+  (real 2448×2048 photo, 190 printed `tag36h11` tags,
+  `tests/fixtures/icra2020/0037.png`) regressed mean corner RMSE 0.1315px
+  → 0.1375px. Root cause, isolated with a per-tag diff against `main`: only
+  2 of 154 matched tags moved (tags `1` and `20`, both ~0.5–0.75px on one
+  corner; the other 152 were bit-identical), and both share the same
+  contour shape — a clean 4-corner rectangle plus a 1px anti-aliasing
+  staircase notch immediately beside one true corner (7 contour points
+  total, all ≤ `POOL_CAP`, so the whole contour reaches `reduce_to_quad`
+  unfiltered). `reduce_to_quad`'s smallest-triangle-area elimination has no
+  concept of which vertex is "real": on this shape, removing the true
+  corner and removing its neighboring 1px notch cost the *exact same*
+  triangle area (`12.0px²` in both regressed cases, verified by hand), and
+  the loop's `area < min_area` scan silently keeps whichever it reaches
+  first — a coin flip that happened to discard the real corner both times.
+  This was latent in `reduce_to_quad` itself (unchanged since before this
+  PR) but only became reachable once `select_dominant_vertices` started
+  pooling low-but-nonzero-significance points like the notch instead of an
+  epsilon threshold filtering them out upstream; `reduce_to_quad` still has
+  exactly one caller, so this is fixed at the source rather than
+  papered over with a new epsilon. `select_dominant_vertices` already
+  computes exactly the signal needed to break this tie — the notch's
+  significance weight (~1.0) is over an order of magnitude below the real
+  corner's (~17.0) — so `reduce_to_quad` now takes that weight array
+  alongside the points and, **only when the area criterion is at or within
+  float-precision (`1e-9` relative) of the current minimum**, prefers to
+  discard the lower-significance point instead of leaving it to iteration
+  order. This is a numerical-precision tolerance, not a reintroduced
+  geometric epsilon — it never changes which vertex has the strictly
+  smaller area, only which one wins a real tie. Fixes both regressed tags
+  exactly (RMSE 0.5085px/0.5083px → 0.0422px/0.0446px, matching `main` to
+  4 decimal places) and the fixture snapshot **improves** on `main`,
+  0.1315px → 0.1312px (154/154 tags now bit-identical or better).
+  Re-validated against `regression_render_tag`/`_robustness` (both suites
+  byte-identical to the pre-tie-break-fix numbers already documented
+  above — this fix only changes behavior on exact/near-exact area ties,
+  which those suites' contours don't happen to hit) and
+  `euroc_detection_baseline` (unaffected). All 278 default-feature tests
+  and the full `--all-features` suite pass; `cargo fmt`/`cargo clippy
+  --all-features -- -D warnings` clean.
 
 ### Added
 

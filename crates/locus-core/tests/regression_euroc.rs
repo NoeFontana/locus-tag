@@ -120,9 +120,27 @@ fn project_affine(coeffs: [f64; 6], [bx, by]: [f64; 2]) -> [f64; 2] {
 /// reasonable number of tags on real sensor imagery, and that recall isn't
 /// silently concentrated in the image interior.
 ///
+/// Uses the shipped `grid` profile, not `Detector::new()`'s hardcoded Rust
+/// `Default` (which matches neither shipped profile — notably
+/// `enable_sharpening: false` where `standard` ships `true`) and not
+/// `high_accuracy` (measured worse here: `high_accuracy` and `standard`
+/// both trail `grid` on this dataset — 977 and 691 total detections vs
+/// `grid`'s 2299, at stride 10). This mirrors an already-documented project
+/// convention, not a new one: `regression_render_tag.rs`'s
+/// `accuracy_baseline` module explicitly picks `high_accuracy` for clean,
+/// large synthetic renders ("standard's recall advantage is irrelevant" on
+/// hub renders, per its own doc comment), while
+/// `regression_render_tag_robustness.rs` stays on `standard` for
+/// small-tag/noisy/robustness content. `grid` extends that same pattern one
+/// step further for exactly this dataset: real (not synthetic) sensor
+/// noise, and a literal multi-tag *AprilGrid* board — `grid`'s looser
+/// `decoder.min_contrast`/`quad.min_edge_score` suit the former, and its
+/// `segmentation.connectivity: Four` (vs `standard`'s `Eight`) avoids
+/// merging diagonally-adjacent tag components in the latter.
+///
 /// `cam_april` is a *calibration sweep* recording, not a framed-detection
-/// benchmark: a large fraction of frames (measured 62.8% at stride 10, see
-/// `euroc_pinhole_funnel_diagnostic`) have the board absent, far away, or
+/// benchmark: a large fraction of frames (see `euroc_pinhole_funnel_diagnostic`
+/// for the live per-run split) have the board absent, far away, or
 /// off-frame by construction (sequence start, operator repositioning,
 /// deliberate extreme-angle/distance coverage for calibration). An absolute
 /// "≥15 tags" bar conflates "board not in view" with "decoder missed tags
@@ -192,7 +210,8 @@ fn euroc_detection_baseline() {
         stride
     );
 
-    let mut detector = Detector::new();
+    let mut detector =
+        Detector::with_config(locus_core::config::DetectorConfig::from_profile("grid"));
     let intrinsics = euroc::cam0_intrinsics_pinhole();
     let topology = euroc::aprilgrid_topology();
 
@@ -212,6 +231,7 @@ fn euroc_detection_baseline() {
     let mut frames_indeterminate = 0u32; // < 4 decodes: can't bootstrap a fit, true recall unknown
     let mut frames_indeterminate_suspicious = 0u32; // ...but >= 15 raw candidates anyway (likely real under-detection, not board-absent)
     let mut frames_affine_fit_failed = 0u32; // >= 4 decodes but the affine fit was singular (unexpected)
+    let mut frames_degenerate_fit = 0u32; // affine fit succeeded but present == 0 (not even its own fitting tags reproject in-bounds — untrustworthy)
 
     // Per-tag counts, indexed by AprilGrid ID (row-major 6×6), accumulated
     // only over `frames_considered`.
@@ -297,6 +317,15 @@ fn euroc_detection_baseline() {
             }
         }
 
+        // `present == 0` means not even the tags the fit was trained on
+        // reproject in-bounds — the fit itself is degenerate, not just
+        // imprecise. Exclude rather than let `present.max(1)` silently
+        // clamp this into a spurious 100%-recall data point.
+        if present == 0 {
+            frames_degenerate_fit += 1;
+            continue;
+        }
+
         for &id in &seen_ids {
             id_decoded_hits[id as usize] += 1;
         }
@@ -304,7 +333,7 @@ fn euroc_detection_baseline() {
         frames_considered += 1;
         sum_decoded += dets.len() as u64;
         sum_present += u64::from(present);
-        let ratio = dets.len() as f64 / f64::from(present.max(1));
+        let ratio = dets.len() as f64 / f64::from(present);
         per_frame_ratio_sum += ratio.min(1.0);
         if ratio > 1.0 {
             ratio_over_one_count += 1;
@@ -321,7 +350,7 @@ fn euroc_detection_baseline() {
         "Frames: {total_frames} total, {frames_considered} with an affine board fit, \
          {frames_indeterminate} indeterminate (<4 decodes; {frames_indeterminate_suspicious} \
          suspicious — ≥15 raw candidates despite that), {frames_affine_fit_failed} affine-fit \
-         failures despite ≥4 decodes"
+         failures despite ≥4 decodes, {frames_degenerate_fit} degenerate fits (present == 0)"
     );
 
     assert!(
@@ -433,7 +462,8 @@ fn euroc_distorted_pose_validation() {
         return;
     };
 
-    let mut detector = Detector::new();
+    let mut detector =
+        Detector::with_config(locus_core::config::DetectorConfig::from_profile("grid"));
     let intrinsics = euroc::cam0_intrinsics_distorted();
 
     let mut frames_with_pose = 0u32;
@@ -504,7 +534,8 @@ fn euroc_board_geometry_consistency() {
         return;
     };
 
-    let mut detector = Detector::new();
+    let mut detector =
+        Detector::with_config(locus_core::config::DetectorConfig::from_profile("grid"));
     let intrinsics = euroc::cam0_intrinsics_distorted();
     let expected_step = euroc::TAG_SIZE + euroc::TAG_SPACING_RATIO * euroc::TAG_SIZE;
 
@@ -632,7 +663,8 @@ fn euroc_pinhole_funnel_diagnostic() {
         return;
     };
 
-    let mut detector = Detector::new();
+    let mut detector =
+        Detector::with_config(locus_core::config::DetectorConfig::from_profile("grid"));
     let intrinsics = euroc::cam0_intrinsics_pinhole();
 
     let mut total_frames = 0u64;

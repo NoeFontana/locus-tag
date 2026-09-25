@@ -211,9 +211,11 @@ def log_frame(
                 continue
             board_pts.append(obj_points[tid])
             image_pts.append(batch.corners[j])
-        board_pts = np.concatenate(board_pts, axis=0)
-        image_pts = np.concatenate(image_pts, axis=0)
-        coeffs = fit_affine_board_to_image(board_pts, image_pts)
+        coeffs = None
+        if len(board_pts) >= 4:
+            board_pts = np.concatenate(board_pts, axis=0)
+            image_pts = np.concatenate(image_pts, axis=0)
+            coeffs = fit_affine_board_to_image(board_pts, image_pts)
         if coeffs is not None:
             decoded_ids = {int(i) for i in batch.ids}
             missing_strips, missing_labels = [], []
