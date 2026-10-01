@@ -9,11 +9,11 @@ summary:
   mean_rmse: 0.5634
   mean_reprojection_rmse: 0.5638
   p50_translation_error: 0.0021
-  p90_translation_error: 0.0187
-  p99_translation_error: 0.0447
+  p90_translation_error: 0.0188
+  p99_translation_error: 0.0451
   p50_rotation_error: 0.0636
-  p90_rotation_error: 0.1719
-  p99_rotation_error: 0.3375
+  p90_rotation_error: 0.1729
+  p99_rotation_error: 0.3397
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
   worst_offenders:
