@@ -57,4 +57,8 @@ fn test_dictionary_snapshots() {
         "aruco4x4_100_parity",
         snapshot_dict(TagFamily::ArUco4x4_100)
     );
+    assert_debug_snapshot!(
+        "aruco_mip_36h12_parity",
+        snapshot_dict(TagFamily::ArUcoMip36h12)
+    );
 }

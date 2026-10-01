@@ -322,6 +322,11 @@ def visualize(
 def bench_real(
     scenarios: list[str] = typer.Option(["forward"], help="Scenarios to run"),
     hub_config: str | None = typer.Option(None, help="Hugging Face Hub configuration to run"),
+    dataset: str | None = typer.Option(
+        None,
+        help="External dataset to run instead of ICRA/Hub. Supported: 'liu4k' "
+        "(Zenodo, CC-BY-4.0; downloaded on first use, ~4 GB; id-agnostic quad recall only).",
+    ),
     data_dir: Path | None = typer.Option(None, help="Custom data directory"),
     types: list[str] = typer.Option(["tags"], help="Dataset types (tags, checkerboard)"),
     limit: int | None = typer.Option(None, help="Limit number of images"),
@@ -342,6 +347,11 @@ def bench_real(
     min_range: int = typer.Option(10, help="Threshold min range"),
     max_hamming: int = typer.Option(2, help="Max hamming error"),
     min_edge_score: float = typer.Option(4.0, help="Min edge alignment score"),
+    sharpening: bool | None = typer.Option(
+        None,
+        "--sharpening/--no-sharpening",
+        help="Override threshold.enable_sharpening (default: keep the standard profile's value).",
+    ),
     record_out: Path | None = typer.Option(
         None,
         help="Write per-observation Tier-1 records (parquet) to this path. "
@@ -402,11 +412,13 @@ def bench_real(
         "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
         "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
         "ArUco6x6_250": locus.TagFamily.ArUco6x6_250,
+        "ArUcoMip36h12": locus.TagFamily.ArUcoMip36h12,
         "16h5": locus.TagFamily.AprilTag16h5,
         "36h11": locus.TagFamily.AprilTag36h11,
         "4x4_50": locus.TagFamily.ArUco4x4_50,
         "4x4_100": locus.TagFamily.ArUco4x4_100,
         "6x6_250": locus.TagFamily.ArUco6x6_250,
+        "mip_36h12": locus.TagFamily.ArUcoMip36h12,
     }
 
     tag_family_int = family_mapping.get(family)
@@ -429,6 +441,8 @@ def bench_real(
     # applied at the nested-group level. Enum values round-trip through
     # Pydantic as PyO3 variant instances.
     base = locus.DetectorConfig.from_profile("standard").model_dump()
+    if sharpening is not None:
+        base["threshold"]["enable_sharpening"] = sharpening
     base["threshold"]["tile_size"] = tile_size
     base["threshold"]["constant"] = constant
     base["threshold"]["min_range"] = min_range
@@ -466,7 +480,89 @@ def bench_real(
     record_run_id = new_run_id() if record_out else ""
     record_profile_label = "standard"  # CLI overrides feed a single profile per run.
 
-    if hub_config:
+    if dataset is not None:
+        if dataset != "liu4k":
+            typer.echo(f"Error: unknown dataset '{dataset}' (supported: liu4k)", err=True)
+            raise typer.Exit(code=1)
+        if hub_config or compare or record_out:
+            typer.echo(
+                "Error: --dataset liu4k does not combine with --hub-config/--compare/--record-out",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+
+        from tools.bench.liu4k import (
+            CITATION,
+            LIU4K_CACHE_DIR,
+            LIU4K_DICTIONARY,
+            LIU4K_MATCH_THRESHOLD_PX,
+            Liu4kTally,
+            candidate_quads,
+            load_liu4k,
+            prepare_liu4k,
+            score_detections,
+        )
+
+        liu_dir = prepare_liu4k(data_dir if data_dir else LIU4K_CACHE_DIR)
+        samples = load_liu4k(liu_dir)
+        names = sorted(samples)[skip:]
+        if limit:
+            names = names[:limit]
+        decode_mode = tag_family_int == locus.TagFamily.ArUcoMip36h12
+        typer.echo(f"\nEvaluating Liu4K ({len(names)} images)")
+        typer.echo(f"  Dataset: {CITATION}")
+        typer.echo(
+            f"  Markers use {LIU4K_DICTIONARY}; corner+id ground truth only (no poses). Scorer "
+            f"mirrors aruco_nano testperf.cpp: a detection is a TP if the first unmatched GT "
+            f"(same id) has centre distance <= {LIU4K_MATCH_THRESHOLD_PX:g} px, else FP; "
+            "FN = GT - TP. Quad variant is id-agnostic over accepted + decoder-rejected quads."
+            + ("" if decode_mode else " Pass --family ArUcoMip36h12 for the id-aware score.")
+        )
+        current_results["liu4k"] = {}
+        for wrapper in wrappers:
+            if not isinstance(wrapper, LocusWrapper):
+                continue
+            quad, dec = Liu4kTally(), Liu4kTally()
+            lat: list[float] = []
+            for name in tqdm(names, desc=f"{wrapper.name:<10}"):
+                img = cv2.imread(str(liu_dir / name), cv2.IMREAD_GRAYSCALE)
+                if img is None:
+                    continue
+                start = time.perf_counter()
+                batch = wrapper.detector.detect(img)
+                lat.append((time.perf_counter() - start) * 1000.0)
+                gt = samples[name].tags
+                quad.add(score_detections(None, candidate_quads(batch), gt))
+                if decode_mode:
+                    dec.add(
+                        score_detections(
+                            [int(i) for i in batch.ids],
+                            np.asarray(batch.corners, dtype=np.float64),
+                            gt,
+                        )
+                    )
+            avg_lat = float(np.mean(lat)) if lat else 0.0
+            res: dict[str, Any] = {"latency": avg_lat, "images": len(lat)}
+            for tag, t in (("quad", quad), ("decode", dec)):
+                if tag == "decode" and not decode_mode:
+                    continue
+                res.update(
+                    {
+                        f"{tag}_tp": t.tp,
+                        f"{tag}_fp": t.fp,
+                        f"{tag}_fn": t.fn,
+                        f"{tag}_recall": t.recall,
+                        f"{tag}_precision": t.precision,
+                        f"{tag}_f1": t.f1,
+                    }
+                )
+                typer.echo(
+                    f"  {wrapper.name:<8} {tag:<6} | TP={t.tp} FP={t.fp} FN={t.fn} | "
+                    f"Recall {t.recall:6.2f}% Precision {t.precision:6.2f}% F1 {t.f1:6.2f}%"
+                )
+            typer.echo(f"  {wrapper.name:<8} latency {avg_lat:7.2f} ms/image")
+            current_results["liu4k"][wrapper.name] = res
+    elif hub_config:
         hub_dir = data_dir if data_dir else HUB_CACHE_DIR
         ds = HubDatasetLoader(root=hub_dir).load_dataset(hub_config)
 

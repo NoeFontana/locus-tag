@@ -890,6 +890,9 @@ pub enum TagFamily {
     ArUco4x4_100,
     /// ArUco 6x6_250 dictionary.
     ArUco6x6_250,
+    /// ArUco MIP 36h12 dictionary (250 codes, 6x6 bits, 12-bit hamming distance;
+    /// `cv2.aruco.DICT_ARUCO_MIP_36h12`).
+    ArUcoMip36h12,
 }
 
 impl TagFamily {
@@ -902,6 +905,7 @@ impl TagFamily {
             TagFamily::ArUco4x4_50,
             TagFamily::ArUco4x4_100,
             TagFamily::ArUco6x6_250,
+            TagFamily::ArUcoMip36h12,
         ]
     }
 
@@ -1504,7 +1508,7 @@ mod tests {
     #[test]
     fn test_all_families() {
         let opt = DetectOptions::all_families();
-        assert_eq!(opt.families.len(), 5);
+        assert_eq!(opt.families.len(), 6);
     }
 
     #[test]

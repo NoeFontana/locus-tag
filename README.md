@@ -21,7 +21,7 @@
 
 ## Supported markers & requirements
 
-- **Tag families:** AprilTag (`16h5`, `36h11`) and ArUco (`4x4_50`, `4x4_100`, `6x6_250`). More can be registered: [Add a dictionary](https://noefontana.github.io/locus-tag/latest/how-to/add_dictionary/).
+- **Tag families:** AprilTag (`16h5`, `36h11`) and ArUco (`4x4_50`, `4x4_100`, `6x6_250`, `mip_36h12`). More can be registered: [Add a dictionary](https://noefontana.github.io/locus-tag/latest/how-to/add_dictionary/).
 - **Boards:** AprilGrid and ChArUco layouts over those families.
 - **Python:** 3.10+ (abi3 wheels).
 - **Platforms:** prebuilt wheels for Linux (x86_64 / aarch64, glibc + musl), macOS (Intel + Apple Silicon), and Windows (x64).

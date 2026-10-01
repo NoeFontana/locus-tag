@@ -40,6 +40,7 @@ STANDARD_FAMILIES = [
     ("DICT_6X6_250", 6, 36, 4),
     ("DICT_7X7_50", 7, 49, 4),
     ("DICT_7X7_100", 7, 49, 4),
+    ("DICT_ARUCO_MIP_36h12", 6, 36, 12),
     ("DICT_APRILTAG_16h5", 4, 16, 5),
     ("DICT_APRILTAG_36h11", 6, 36, 11),
 ]
