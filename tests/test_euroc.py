@@ -4,7 +4,7 @@ Exercises detection of AprilTag 36h11 markers on real grayscale frames
 from the EuRoC cam_april calibration sequence (752×480, MT9V034 sensor).
 
 Requirements:
-  - EuRoC cam_april dataset: ``bash scripts/fetch_euroc_calibration.sh``
+  - EuRoC cam_april dataset: ``cargo xtask data fetch euroc``
   - Env var ``LOCUS_EUROC_DATASET_DIR`` or auto-discovered ``tests/data/euroc``
 """
 

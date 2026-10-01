@@ -106,6 +106,7 @@ fn run(args: &[String]) -> Result<()> {
         .collect::<Vec<_>>()
         .as_slice()
     {
+        ["data", rest @ ..] => data(rest),
         ["sota", "setup", ..] => setup(&root),
         ["sota", "fetch", ds] => fetch(dataset(ds)?),
         ["sota", "run", ds, rest @ ..] => run_detectors(&root, dataset(ds)?, &Opts::parse(rest)?),
@@ -127,10 +128,16 @@ fn run(args: &[String]) -> Result<()> {
 }
 
 const USAGE: &str = "\
-usage: cargo xtask sota <command>
+usage: cargo xtask data <command>          (datasets; manifest: xtask/datasets.toml)
+
+  list                       every dataset: presence, kind, destination, license
+  fetch  <name...|--all>     fetch pinned datasets (idempotent; --force, --dest, --subsets for hub)
+  verify [name...]           check presence and that local copies match the manifest pins
+
+usage: cargo xtask sota <command>          (comparative benchmarking)
 
   setup                      build pinned OpenCV + aruco_nano and the C++ reference runner
-  fetch  <dataset>           download/verify a dataset (liu4k | euroc)
+  fetch  <dataset>           = cargo xtask data fetch <dataset> (liu4k | euroc)
   run    <dataset> [opts]    run detectors, one JSONL per detector
   score  <dataset>           score all runs of a dataset
   report <dataset>           write report.md (scores + verified hardware/run metadata)
@@ -318,15 +325,20 @@ fn setup(root: &Path) -> Result<()> {
 
 // ── fetch ────────────────────────────────────────────────────────────────────
 
-fn fetch(d: &Dataset) -> Result<()> {
-    match d.name {
-        "liu4k" => sh(python().args([
-            "-c",
-            "from tools.bench.liu4k import prepare_liu4k; print(prepare_liu4k())",
-        ])),
-        "euroc" => sh(Command::new("bash").arg("scripts/fetch_euroc_calibration.sh")),
-        _ => Err(format!("no fetcher for {}", d.name).into()),
+/// `cargo xtask data ...`: dataset provisioning is implemented once, in
+/// `tools/bench/dataset_registry.py`, driven by `xtask/datasets.toml`; this only forwards.
+fn data(args: &[&str]) -> Result<()> {
+    if args.is_empty() {
+        eprintln!("{USAGE}");
+        return Err("missing data command".into());
     }
+    sh(python()
+        .args(["-m", "tools.bench.dataset_registry"])
+        .args(args))
+}
+
+fn fetch(d: &Dataset) -> Result<()> {
+    data(&["fetch", d.name])
 }
 
 // ── run ──────────────────────────────────────────────────────────────────────

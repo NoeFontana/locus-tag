@@ -3,7 +3,6 @@ from __future__ import annotations
 import csv
 import json
 import math
-import tarfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,14 +11,12 @@ from typing import Any
 import cv2
 import locus
 import numpy as np
-from huggingface_hub import hf_hub_download
 from pupil_apriltags import Detector as AprilTagDetector
 from tqdm import tqdm
 
 from tools.bench.matching import MATCH_DISTANCE_THRESHOLD_PX, match_detections_to_gt
 from tools.bench.metrics import percentiles
 
-ICRA_REPO_ID = "NoeFontana/apriltag-validation-data"
 ICRA_CACHE_DIR = Path("tests/data/icra2020")
 HUB_CACHE_DIR = Path("tests/data/hub_cache")
 
@@ -310,25 +307,11 @@ class DatasetLoader:
         self.prepare_icra("circle")
 
     def prepare_icra(self, scenario: str) -> bool:
-        self.icra_dir.mkdir(parents=True, exist_ok=True)
-        scenario_dir = self.icra_dir / scenario
-        if scenario_dir.exists() and any(scenario_dir.iterdir()):
-            return True
+        """Fetch an ICRA 2020 scenario (pinned; ``xtask/datasets.toml``). ``False`` on failure."""
+        from tools.bench.dataset_registry import fetch  # noqa: PLC0415 - avoid import cycle
 
-        filename = f"{scenario}.tar.xz"
         try:
-            archive_path = str(
-                hf_hub_download(
-                    repo_id=ICRA_REPO_ID,
-                    filename=filename,
-                    repo_type="dataset",
-                    local_dir=str(self.icra_dir),
-                )
-            )
-            archive_path_obj = Path(archive_path)
-            with tarfile.open(archive_path_obj, "r:xz") as tar:
-                tar.extractall(path=self.icra_dir)
-            archive_path_obj.unlink()
+            fetch(f"icra2020-{scenario}", dest=self.icra_dir)
             return True
         except Exception as e:
             print(f"Error preparing ICRA scenario {scenario}: {e}")

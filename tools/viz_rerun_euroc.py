@@ -22,7 +22,7 @@ rejected-quad outline nearby) or a decode problem (yellow tag lines up with
 an orange rejected quad)".
 
 Setup:
-    bash scripts/fetch_euroc_calibration.sh
+    cargo xtask data fetch euroc
     uv run maturin develop --release --manifest-path crates/locus-py/Cargo.toml
 
 Usage:

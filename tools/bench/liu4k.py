@@ -1,8 +1,9 @@
-"""Liu4K dataset (Zenodo 10.5281/zenodo.18667018): download, verify, load, score.
+"""Liu4K dataset (Zenodo 10.5281/zenodo.18667018): load and score.
 
-Licensed CC-BY-4.0 (see ``docs/engineering/benchmarking.md`` for attribution).
-The data is fetched at runtime into ``tests/data/liu4k/`` (gitignored) and is
-never committed, packaged in wheels/sdist, or republished in converted form.
+Provisioning (pinned URL + md5, license, citation) lives in ``xtask/datasets.toml`` and
+runs through :mod:`tools.bench.dataset_registry` (``cargo xtask data fetch liu4k``). Licensed
+CC-BY-4.0; the data lands in ``tests/data/liu4k/`` (gitignored) and is never committed,
+packaged in wheels/sdist, or republished in converted form.
 
 Ground truth is per-image corners + ids + a rotation code; there are no poses
 and no intrinsics. The markers use the ``ARUCO_MIP_36h12`` dictionary
@@ -13,23 +14,16 @@ decode recall/precision via the shared centre matcher.
 
 from __future__ import annotations
 
-import hashlib
 import json
-import urllib.request
-import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from tools.bench.dataset_registry import fetch, load_manifest
 from tools.bench.utils import TagGroundTruth
 
-ZENODO_RECORD = 18667018
-ZENODO_DOI = "10.5281/zenodo.18667018"
-LIU4K_URL = f"https://zenodo.org/api/records/{ZENODO_RECORD}/files/liu4k.zip/content"
-LIU4K_ZIP_MD5 = "e8fafe5444a9e346f25123151ef1a699"  # from the Zenodo record metadata
-LIU4K_ZIP_SIZE = 4_015_411_869
 LIU4K_CACHE_DIR = Path("tests/data/liu4k")
 LIU4K_SUBDIR = "liu4k_markers_1024"
 # Dictionary the markers were generated from (per aruco_nano's testperf.cpp).
@@ -43,53 +37,13 @@ LIU4K_MATCH_THRESHOLD_PX = 10.0
 # (see tools/bench/collect.py).
 _PASSED_FUNNEL = 1
 
-CITATION = (
-    "Muñoz-Salinas, R. Liu4K dataset employed for Aruco_Nano paper. Zenodo "
-    f"(2026). https://doi.org/{ZENODO_DOI}. CC-BY-4.0."
-)
-
-
-def _md5(path: Path) -> str:
-    h = hashlib.md5(usedforsecurity=False)
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+_ENTRY = load_manifest()["liu4k"]
+CITATION = f"{_ENTRY.citation}. {_ENTRY.license}."
 
 
 def prepare_liu4k(cache_dir: Path = LIU4K_CACHE_DIR) -> Path:
-    """Download (if needed), md5-verify and extract Liu4K; return the data dir.
-
-    Idempotent: returns immediately when the extracted directory holds images.
-    The zip is streamed to ``liu4k.zip.part``, verified, extracted, then deleted.
-    """
-    data_dir = cache_dir / LIU4K_SUBDIR
-    if data_dir.is_dir() and any(data_dir.glob("*.jpg")):
-        return data_dir
-
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    zip_path = cache_dir / "liu4k.zip"
-    if not zip_path.exists() or _md5(zip_path) != LIU4K_ZIP_MD5:
-        part = cache_dir / "liu4k.zip.part"
-        h = hashlib.md5(usedforsecurity=False)
-        print(f"Downloading Liu4K ({LIU4K_ZIP_SIZE / 1e9:.1f} GB) from Zenodo, CC-BY-4.0.")
-        with urllib.request.urlopen(LIU4K_URL) as resp, open(part, "wb") as out:  # noqa: S310
-            while chunk := resp.read(1 << 20):
-                h.update(chunk)
-                out.write(chunk)
-        if h.hexdigest() != LIU4K_ZIP_MD5:
-            part.unlink(missing_ok=True)
-            raise RuntimeError(f"Liu4K md5 mismatch: got {h.hexdigest()}, expected {LIU4K_ZIP_MD5}")
-        part.replace(zip_path)
-
-    with zipfile.ZipFile(zip_path) as zf:
-        root = cache_dir.resolve()
-        for member in zf.namelist():
-            if not (root / member).resolve().is_relative_to(root):
-                raise RuntimeError(f"Unsafe path in liu4k.zip: {member}")
-        zf.extractall(cache_dir)  # noqa: S202 - member paths validated above
-    zip_path.unlink()
-    return data_dir
+    """Fetch Liu4K if needed (pinned, md5-verified; see ``xtask/datasets.toml``); return the data dir."""
+    return fetch("liu4k", dest=cache_dir) / LIU4K_SUBDIR
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,116 @@
+# Single source of truth for every external dataset Locus benchmarks or tests against.
+#
+#   cargo xtask data list | fetch <name...|--all> | verify [name...]
+#
+# Implementation: tools/bench/dataset_registry.py (shared by the bench CLI, pytest helpers and
+# `cargo xtask sota`). Rust integration tests and Python loaders read the same `dest`
+# paths, so moving a dataset means editing this file only.
+#
+# Every remote source is pinned: Hugging Face entries by repository commit (`revision`;
+# LFS objects are additionally sha256-verified by huggingface_hub), direct URLs by
+# checksum. Bumping a pin is a deliberate, reviewable change; `verify` flags local
+# copies fetched from a different pin (stamp file `.locus-dataset.json` in `dest`).
+#
+# Fields
+#   kind        hf-hub-subsets | hf-archive | url-zip
+#   dest        local directory, relative to the repository root
+#   ready       path(s) under `dest` whose existence means "already fetched" (they only
+#               appear on success: archives are staged, then renamed into place)
+#   env         optional variable that relocates the dataset (read by the Rust tests too)
+#   license     as stated by the source; `citation` / `source_url` for attribution
+#
+# Nothing fetched here is committed, packaged in wheels/sdist, or republished.
+
+[hub]
+description = "Locus synthetic render-tag / board / distortion suites (Blender), one directory per config"
+kind = "hf-hub-subsets"
+repo = "NoeFontana/locus-tag-bench"
+revision = "5346835a9ed350828472a4c83d6e3999cf94fefb"
+dest = "tests/data/hub_cache"
+env = "LOCUS_HUB_DATASET_DIR"
+# Default subsets for `fetch hub` (all configs: `--subsets all`).
+subsets = [
+    "locus_v1_tag36h11_640x480",
+    "locus_v1_tag36h11_1280x720",
+    "locus_v1_tag36h11_1920x1080",
+    "locus_v1_tag36h11_3840x2160",
+    "locus_v1_high_iso_1920x1080",
+    "locus_v1_low_key_1920x1080",
+    "locus_v1_raw_pipeline_1920x1080",
+    "locus_v1_tag16h5_1920x1080",
+]
+license = "MIT"
+source_url = "https://huggingface.co/datasets/NoeFontana/locus-tag-bench"
+consumers = ["regression_render_tag*.rs", "regression_board_hub.rs", "regression_distortion_hub.rs", "bench real --hub-config", "bench tune / sweep"]
+
+[icra2020-forward]
+description = "ICRA 2020 AprilTag localization-accuracy dataset, forward scenario"
+kind = "hf-archive"
+repo = "NoeFontana/apriltag-validation-data"
+revision = "6c7653385d480351fe8235d010dedc18fbc0b992"
+files = ["forward.tar.xz"]
+dest = "tests/data/icra2020"
+env = "LOCUS_ICRA_DATASET_DIR"
+ready = ["forward"]
+license = "unknown — all rights belong to the original authors (non-SharePoint re-hosting)"
+citation = "ICRA 2020 — Determining and Improving the Localization Accuracy of AprilTag Detection"
+source_url = "https://huggingface.co/datasets/NoeFontana/apriltag-validation-data"
+consumers = ["regression_icra2020.rs", "bench real (ICRA)"]
+
+[icra2020-circle]
+description = "ICRA 2020 AprilTag localization-accuracy dataset, circle scenario"
+kind = "hf-archive"
+repo = "NoeFontana/apriltag-validation-data"
+revision = "6c7653385d480351fe8235d010dedc18fbc0b992"
+files = ["circle.tar.xz"]
+dest = "tests/data/icra2020"
+env = "LOCUS_ICRA_DATASET_DIR"
+ready = ["circle"]
+license = "unknown — all rights belong to the original authors (non-SharePoint re-hosting)"
+citation = "ICRA 2020 — Determining and Improving the Localization Accuracy of AprilTag Detection"
+source_url = "https://huggingface.co/datasets/NoeFontana/apriltag-validation-data"
+consumers = ["regression_icra2020.rs", "bench real (ICRA)"]
+
+[icra2020-random]
+description = "ICRA 2020 AprilTag localization-accuracy dataset, random scenario"
+kind = "hf-archive"
+repo = "NoeFontana/apriltag-validation-data"
+revision = "6c7653385d480351fe8235d010dedc18fbc0b992"
+files = ["random.tar.xz"]
+dest = "tests/data/icra2020"
+env = "LOCUS_ICRA_DATASET_DIR"
+ready = ["random"]
+license = "unknown — all rights belong to the original authors (non-SharePoint re-hosting)"
+citation = "ICRA 2020 — Determining and Improving the Localization Accuracy of AprilTag Detection"
+source_url = "https://huggingface.co/datasets/NoeFontana/apriltag-validation-data"
+consumers = ["bench real (ICRA)"]
+
+[euroc]
+description = "EuRoC MAV cam_april calibration sequence (6x6 Kalibr AprilGrid, 2-bit tag border), cam0 + cam1"
+kind = "hf-archive"
+# Private mirror: ETH's original static host is decommissioned and the Research Collection
+# (DOI 10.3929/ethz-b-000690084) is often blocked by sandboxed egress allowlists.
+# Requires a Hugging Face token with read access (`hf auth login` or HF_TOKEN).
+repo = "NoeFontana/euroc-mav-cam-april-mirror"
+revision = "126678ebcaf8ee83a8998d12e07c2d9589cee320"
+files = ["cam_april.zip"]
+dest = "tests/data/euroc"
+env = "LOCUS_EUROC_DATASET_DIR"
+ready = ["cam_april/mav0"]
+license = "In Copyright – Non-Commercial Use Permitted (rightsstatements.org InC-NC/1.0)"
+citation = "Burri et al., The EuRoC micro aerial vehicle datasets, IJRR 35(10), 2016. doi:10.1177/0278364915620033"
+source_url = "https://doi.org/10.3929/ethz-b-000690084"
+consumers = ["regression_euroc.rs", "tests/test_euroc.py", "cargo xtask sota (euroc)"]
+
+[liu4k]
+description = "Liu4K: 924 4K photos with alpha-blended ARUCO_MIP_36h12 markers (aruco_nano paper)"
+kind = "url-zip"
+url = "https://zenodo.org/api/records/18667018/files/liu4k.zip/content"
+md5 = "e8fafe5444a9e346f25123151ef1a699"  # from the Zenodo record metadata
+size = 4015411869
+dest = "tests/data/liu4k"
+ready = ["liu4k_markers_1024"]
+license = "CC-BY-4.0"
+citation = "Muñoz-Salinas, R. Liu4K dataset employed for Aruco_Nano paper. Zenodo (2026). doi:10.5281/zenodo.18667018"
+source_url = "https://doi.org/10.5281/zenodo.18667018"
+consumers = ["bench real --dataset liu4k", "cargo xtask sota (liu4k)"]

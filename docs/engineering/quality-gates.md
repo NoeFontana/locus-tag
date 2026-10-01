@@ -80,7 +80,7 @@ LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \
 cargo insta test --release --all-features --features bench-internals --review
 
 # 5. EuRoC MAV Real-Data Regression (Optional)
-# Download once: bash scripts/fetch_euroc_calibration.sh
+# Download once: cargo xtask data fetch euroc
 TRACY_NO_INVARIANT_CHECK=1 \
 LOCUS_EUROC_DATASET_DIR=tests/data/euroc \
 cargo test --release --features bench-internals,non_rectified \
