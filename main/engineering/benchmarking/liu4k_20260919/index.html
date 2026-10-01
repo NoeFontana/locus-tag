@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/benchmarking/model_edge_refinement_20260715/">
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/benchmarking/liu4k_20260919/">
       
       
-        <link rel="prev" href="../refine_variants_20260714/">
+        <link rel="prev" href="../render_tag_sota_20260713/">
       
       
-        <link rel="next" href="../render_tag_2160p_20260425/">
+        <link rel="next" href="../refine_variants_20260714/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Model-based edge pose refinement — beating the rotation gap (2026-07-15, tuned 2026-07-17) - Locus</title>
+        <title>Liu4K real-photo benchmark (2026-09-19) - Locus</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#model-based-edge-pose-refinement-beating-the-rotation-gap-2026-07-15-tuned-2026-07-17" class="md-skip">
+        <a href="#liu4k-real-photo-benchmark-2026-09-19" class="md-skip">
           Skip to content
         </a>
       
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Model-based edge pose refinement — beating the rotation gap (2026-07-15, tuned 2026-07-17)
+              Liu4K real-photo benchmark (2026-09-19)
             
           </span>
         </div>
@@ -1815,10 +1815,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../liu4k_20260919/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Liu4K real-photo benchmark (2026-09-19)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1834,6 +1861,131 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#setup-verified-in-the-2026-09-20-measurement-session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Setup (verified in the 2026-09-20 measurement session)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scoring-mirrors-aruco_nano-testperfcpp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scoring (mirrors aruco_nano testperf.cpp)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#harness-sanity-checks-ruled-out-first" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Harness sanity checks (ruled out first)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-recall-is-low-quad-stage-not-decode-stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why recall is low: quad stage, not decode stage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#config-sweep-locus-all-924-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config sweep (Locus, all 924 images)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#comparison-all-924-images-same-10-px-scorer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparison (all 924 images, same 10 px scorer)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Comparison (all 924 images, same 10 px scorer)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#thread-scaling-1-8-same-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Thread scaling (1 -&gt; 8, same run)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#best-configuration-and-pareto" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best configuration and Pareto
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#findings-that-need-a-decision-no-detector-code-changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Findings that need a decision (no detector code changed)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1871,37 +2023,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Model-based edge pose refinement — beating the rotation gap (2026-07-15, tuned 2026-07-17)
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../model_edge_refinement_20260715/" class="md-nav__link">
         
   
   
@@ -1917,148 +2042,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#summary" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Summary
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#method" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Method
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Method">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#tuning-levers-2026-07-17" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tuning levers (2026-07-17)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#results-render-tag-single-thread-accurate-pose" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Results (render-tag, single-thread, Accurate pose)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Results (render-tag, single-thread, Accurate pose)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#image-space-accuracy-2d-corner-rmse-reprojection-rmse" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Image-space accuracy — 2D corner RMSE &amp; reprojection RMSE
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#robustness-degraded-imagery-corpora-does-the-render-tag-tuning-generalize" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Robustness — degraded-imagery corpora (does the render-tag tuning generalize?)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#why-this-works-where-corner-level-levers-failed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why this works where corner-level levers failed
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#provenance" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Provenance
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#reproduce" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Reproduce
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#v070-profile-decision-enabled-in-high_accuracy-not-in-standard" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        v0.7.0 profile decision — enabled in high_accuracy, NOT in standard
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -2222,10 +2205,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#summary" class="md-nav__link">
+  <a href="#setup-verified-in-the-2026-09-20-measurement-session" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Summary
+        Setup (verified in the 2026-09-20 measurement session)
       
     </span>
   </a>
@@ -2233,22 +2216,66 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#method" class="md-nav__link">
+  <a href="#scoring-mirrors-aruco_nano-testperfcpp" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Method
+        Scoring (mirrors aruco_nano testperf.cpp)
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Method">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#harness-sanity-checks-ruled-out-first" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Harness sanity checks (ruled out first)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-recall-is-low-quad-stage-not-decode-stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why recall is low: quad stage, not decode stage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#config-sweep-locus-all-924-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config sweep (Locus, all 924 images)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#comparison-all-924-images-same-10-px-scorer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparison (all 924 images, same 10 px scorer)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Comparison (all 924 images, same 10 px scorer)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#tuning-levers-2026-07-17" class="md-nav__link">
+  <a href="#thread-scaling-1-8-same-run" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tuning levers (2026-07-17)
+        Thread scaling (1 -&gt; 8, same run)
       
     </span>
   </a>
@@ -2261,49 +2288,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#results-render-tag-single-thread-accurate-pose" class="md-nav__link">
+  <a href="#best-configuration-and-pareto" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Results (render-tag, single-thread, Accurate pose)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Results (render-tag, single-thread, Accurate pose)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#image-space-accuracy-2d-corner-rmse-reprojection-rmse" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Image-space accuracy — 2D corner RMSE &amp; reprojection RMSE
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#robustness-degraded-imagery-corpora-does-the-render-tag-tuning-generalize" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Robustness — degraded-imagery corpora (does the render-tag tuning generalize?)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#why-this-works-where-corner-level-levers-failed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why this works where corner-level levers failed
+        Best configuration and Pareto
       
     </span>
   </a>
@@ -2311,32 +2299,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#provenance" class="md-nav__link">
+  <a href="#findings-that-need-a-decision-no-detector-code-changed" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Provenance
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#reproduce" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Reproduce
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#v070-profile-decision-enabled-in-high_accuracy-not-in-standard" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        v0.7.0 profile decision — enabled in high_accuracy, NOT in standard
+        Findings that need a decision (no detector code changed)
       
     </span>
   </a>
@@ -2363,355 +2329,636 @@
   
 
 
-<h1 id="model-based-edge-pose-refinement-beating-the-rotation-gap-2026-07-15-tuned-2026-07-17">Model-based edge pose refinement — beating the rotation gap (2026-07-15, tuned 2026-07-17)</h1>
-<h2 id="summary">Summary</h2>
-<p>An opt-in Accurate-mode pose-refinement stage that aligns a <strong>decoded</strong> tag's
-internal bit-grid edges (plus the border) to the image and refines the 6-DoF pose
-against them. A corner PnP pose is fixed by only 4 points; a 36h11 tag exposes
-<strong>~40 internal high-contrast edges</strong>, an order of magnitude more constraints,
-distributed across the interior where they pin orientation far better than the
-corners. On the render-tag suite this <strong>cuts rotation p99 47–76 % at every
-resolution — well under OpenCV's <code>apriltag</code> refinement — while keeping Locus's
-best-in-class translation.</strong></p>
-<p>Enabled by <code>pose.pose_edge_refinement_enabled</code> (the field default is <strong>false</strong>;
-<strong><code>high_accuracy</code> ships it on as of v0.7.0</strong> — see the profile-decision section
-below — while <code>standard</code>/<code>grid</code> leave it off). Requires camera intrinsics + <code>tag_size</code>.</p>
+<h1 id="liu4k-real-photo-benchmark-2026-09-19">Liu4K real-photo benchmark (2026-09-19)</h1>
+<p>Point-in-time report. Dataset: Muñoz-Salinas, R., <em>Liu4K dataset employed for Aruco_Nano paper</em>,
+Zenodo, 2026, <a href="https://doi.org/10.5281/zenodo.18667018">doi:10.5281/zenodo.18667018</a>, licensed
+<a href="https://creativecommons.org/licenses/by/4.0/legalcode">CC BY 4.0</a>. The record's free-text
+<code>copyright</code> field also reads "CC0 License"; CC BY 4.0 attribution is applied regardless. The data is
+read unmodified; nothing is redistributed. See
+<a href="../#real-world-evaluation-liu4k">Real-World Evaluation (Liu4K)</a> for how to run it.</p>
 <blockquote>
-<p><strong>2026-07-17 update.</strong> Rebased onto the unified pose-LM machinery (#337–#341):
-the estimator now rides the shared body-frame Nielsen trust-region core
-(<code>nielsen_lm</code> + <code>BodyFrameNormalEquations</code> + distortion-aware
-<code>projection_and_gradient</code>) instead of a bespoke left-perturbation LM loop — each
-1-D edge-normal residual enters the same accumulator as a corner residual under a
-rank-1 <code>n·nᵀ</code> weight. Two tuning levers were then added (<strong>robust Huber edge
-loss</strong> + <strong>denser edge sampling</strong>); the results below are the tuned figures, with
-the pre-tuning shipped-#336 column kept for reference.</p>
+<p><strong>Latency correction (measured 2026-09-20).</strong> The first version of this report labelled its Locus
+rows by the <code>Detector(threads=)</code> argument. That argument is <strong>dead</strong> — it is stored and never read
+(<code>detector.rs</code>), so it cannot change the thread count — and <code>RAYON_NUM_THREADS</code> was left unset, so
+the global Rayon pool used all 8 vCPUs. Every row labelled "1 thread" in that version was in fact an
+8-thread run, and the "8 threads" rows were the same 8-thread configuration measured twice. All
+latency numbers and every thread-related statement below have been re-measured with the thread count
+set <strong>only</strong> through <code>RAYON_NUM_THREADS</code>, on an otherwise idle machine. <strong>Accuracy is unaffected:</strong>
+every TP/FP/FN tally re-ran bit-identical to the published values at both thread counts, so all
+recall, precision and F1 figures in this report are the original ones.</p>
 </blockquote>
-<h2 id="method">Method</h2>
-<p>Post-decode, per tag (<code>crates/locus-core/src/model_edge.rs</code>):</p>
+<h2 id="setup-verified-in-the-2026-09-20-measurement-session">Setup (verified in the 2026-09-20 measurement session)</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Item</th>
+<th style="text-align: left;">Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">CPU</td>
+<td style="text-align: left;">AMD EPYC-Milan, 8 vCPU (4 cores x 2 threads), 1 socket, L1d 128 KiB (4 inst.), L2 2 MiB (4 inst.), L3 32 MiB, AVX2, KVM guest (<code>lscpu</code>, 2026-09-20)</td>
+</tr>
+<tr>
+<td style="text-align: left;">OS / toolchain</td>
+<td style="text-align: left;">Linux 6.8.0-139-generic, rustc 1.92.0 (ded5c06cf 2025-12-08), cargo 1.92.0, CPython 3.14.3</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus build</td>
+<td style="text-align: left;"><code>maturin develop --release</code> (<code>--release</code>, i.e. the <code>release</code> Cargo profile) at <code>8635419</code></td>
+</tr>
+<tr>
+<td style="text-align: left;">Threads</td>
+<td style="text-align: left;">Set <strong>only</strong> via <code>RAYON_NUM_THREADS</code>, explicitly <code>1</code> or <code>8</code> for every run, stated per row. <code>Detector(threads=)</code> is never passed — it is dead (finding 5). <code>OMP_NUM_THREADS=1</code>, <code>OPENBLAS_NUM_THREADS=1</code>, and <code>cv2.setNumThreads(1)</code> in the Python harness, so Rayon is the only thread knob in play</td>
+</tr>
+<tr>
+<td style="text-align: left;">Reference threads</td>
+<td style="text-align: left;">The C++ references have no Rayon; their 1/8-thread rows are <code>cv::setNumThreads(1)</code> / <code>(8)</code>. That OpenCV build uses the <code>pthreads</code> parallel framework (TBB off), verified working — <code>GaussianBlur</code> on a 4900x3300 image scales 18.97 -&gt; 4.58 ms from 1 to 8 threads</td>
+</tr>
+<tr>
+<td style="text-align: left;">Timing</td>
+<td style="text-align: left;">Serial, single process, one config at a time per process, best-of-2 <code>detect()</code> calls per image, image decode excluded (decoded once per image outside every timer), one warm-up frame per config; reported value = mean over the 924 images of each image's best</td>
+</tr>
+<tr>
+<td style="text-align: left;">Accuracy</td>
+<td style="text-align: left;">Re-scored inside the same serial timing run, all 924 images. Deterministic: identical TP/FP/FN at 1 and 8 threads, and identical to the 2026-09-19 sweep</td>
+</tr>
+<tr>
+<td style="text-align: left;">Machine state</td>
+<td style="text-align: left;"><code>uptime</code> 1-minute load average 0.50 at the start of the run and 0.55-1.8 across it; the only other processes were idle editor/agent helpers (<code>rust-analyzer</code>, <code>pyright-langserver</code>, idle CLI sessions). Nothing else of this work ran concurrently. Absolute ms still carry a few % of noise</td>
+</tr>
+</tbody>
+</table>
+<p>Pose numbers do not exist for this dataset (corners + ids only, no intrinsics), so the Fast/Accurate
+pose-mode rule does not apply.</p>
+<h2 id="scoring-mirrors-aruco_nano-testperfcpp">Scoring (mirrors aruco_nano <code>testperf.cpp</code>)</h2>
+<p>For every detection, in output order: it is a <strong>TP</strong> if the first not-yet-matched GT marker with the
+same id has a centre distance <code>&lt;= 10 px</code>; otherwise it is a <strong>FP</strong>. <strong>FN = GT - TP</strong>. Centres are the
+mean of the 4 corners. The 10 px radius is a Liu4K-specific constant
+(<code>LIU4K_MATCH_THRESHOLD_PX</code> in <code>tools/bench/liu4k.py</code>); the repo-wide
+<code>MATCH_DISTANCE_THRESHOLD_PX</code> used by other datasets is unchanged. An id-agnostic <em>quad</em> variant uses
+the same rule without the id condition, over accepted plus decoder-rejected quads (its precision is
+not meaningful: on the <code>standard</code> profile with sharpening off it reports 182k candidate FPs, because
+every funnel-passed noise quad counts).</p>
+<p>Dataset: 924 images (about 3300x4900), 9022 GT markers, ids 0-249 (<code>ARUCO_MIP_36h12</code>, 250 codes).</p>
+<h2 id="harness-sanity-checks-ruled-out-first">Harness sanity checks (ruled out first)</h2>
+<ul>
+<li>GT overlays on several images line up with the physical markers; decoded detections agree with GT
+  ids and lie within 1 px of the GT centre.</li>
+<li>No EXIF orientation tag on the images checked; image sizes vary per image and GT is in each image's
+  own pixel frame.</li>
+<li>The GT corner <strong>winding is opposite</strong> to Locus/OpenCV (counter-clockwise vs clockwise on screen,
+  corner 0 shared, order 0,3,2,1). It does not affect the centre-based scorer; any future corner-error
+  metric must map it.</li>
+<li>The +0.5 pixel convention is irrelevant at a 10 px tolerance.</li>
+</ul>
+<h2 id="why-recall-is-low-quad-stage-not-decode-stage">Why recall is low: quad stage, not decode stage</h2>
+<p>Locus <code>standard</code>, 9022 GT: <strong>2591 decoded (28.7 %)</strong>, 42 quads formed but rejected by decode, <strong>0 wrong
+ids</strong>, and <strong>6389 (70.8 %) with no quad at all</strong> within 10 px. Decode is not the bottleneck; quad
+formation is. With the best config below, 4770 decoded, 113 rejected, 4139 with no quad.</p>
+<p>Dependence on marker properties (best config, decoded %):</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Marker edge (px)</th>
+<th style="text-align: right;">&lt;20</th>
+<th style="text-align: right;">20-45</th>
+<th style="text-align: right;">45-100</th>
+<th style="text-align: right;">100-250</th>
+<th style="text-align: right;">&gt;=250</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Locus (no sharpen, relaxed)</td>
+<td style="text-align: right;">67</td>
+<td style="text-align: right;">68</td>
+<td style="text-align: right;">58</td>
+<td style="text-align: right;">51</td>
+<td style="text-align: right;">41</td>
+</tr>
+<tr>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">50</td>
+<td style="text-align: right;">70</td>
+<td style="text-align: right;">66</td>
+<td style="text-align: right;">68</td>
+<td style="text-align: right;">68</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV 4.10</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">14</td>
+<td style="text-align: right;">70</td>
+<td style="text-align: right;">66</td>
+<td style="text-align: right;">61</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Mean marker intensity</th>
+<th style="text-align: right;">&lt;30</th>
+<th style="text-align: right;">30-60</th>
+<th style="text-align: right;">60-100</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Locus</td>
+<td style="text-align: right;">32</td>
+<td style="text-align: right;">58</td>
+<td style="text-align: right;">87</td>
+</tr>
+<tr>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">52</td>
+<td style="text-align: right;">72</td>
+<td style="text-align: right;">90</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV 4.10</td>
+<td style="text-align: right;">42</td>
+<td style="text-align: right;">66</td>
+<td style="text-align: right;">75</td>
+</tr>
+</tbody>
+</table>
+<p>Recall does not depend on <code>rot</code> (52.4-53.2 % across the four values) or id (51.8-53.7 %).
+The dataset is a composite: markers are alpha-blended into photos, many are dark (about 40 % of GT
+markers have mean intensity below 30/255) and low contrast, and there are many distractor squares.
+Recall rises with sharpness (Laplacian variance quintiles: 37 % to 78 %). Locus is better than both
+references on tiny markers (&lt;20 px; OpenCV finds none) and matches aruco_nano at 20-45 px, but loses on
+<strong>large</strong> markers (&gt;=100 px) and on <strong>dark</strong> ones.</p>
+<h2 id="config-sweep-locus-all-924-images">Config sweep (Locus, all 924 images)</h2>
+<p>One factor at a time from <code>standard</code> (accuracy only; TP/FP/FN identical between parallel and serial runs).</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Config</th>
+<th style="text-align: right;">Recall %</th>
+<th style="text-align: right;">Precision %</th>
+<th style="text-align: right;">F1 %</th>
+<th style="text-align: left;">Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>standard</code></td>
+<td style="text-align: right;">28.72</td>
+<td style="text-align: right;">99.73</td>
+<td style="text-align: right;">44.60</td>
+<td style="text-align: left;">baseline</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>grid</code> profile</td>
+<td style="text-align: right;">49.71</td>
+<td style="text-align: right;">99.56</td>
+<td style="text-align: right;">66.31</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>high_accuracy</code> profile</td>
+<td style="text-align: right;">44.69</td>
+<td style="text-align: right;">99.93</td>
+<td style="text-align: right;">61.76</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong><code>enable_sharpening=false</code></strong></td>
+<td style="text-align: right;"><strong>49.68</strong></td>
+<td style="text-align: right;">99.78</td>
+<td style="text-align: right;">66.33</td>
+<td style="text-align: left;">dominant lever, +21 pp</td>
+</tr>
+<tr>
+<td style="text-align: left;">sharpening off + <code>min_edge_score=0</code></td>
+<td style="text-align: right;">50.74</td>
+<td style="text-align: right;">99.39</td>
+<td style="text-align: right;">67.19</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr>
+<td style="text-align: left;">sharpening off + <code>min_density=0</code></td>
+<td style="text-align: right;">50.92</td>
+<td style="text-align: right;">99.70</td>
+<td style="text-align: right;">67.41</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr>
+<td style="text-align: left;">sharpening off + <code>max_hamming_error=3</code></td>
+<td style="text-align: right;">49.82</td>
+<td style="text-align: right;">99.05</td>
+<td style="text-align: right;">66.30</td>
+<td style="text-align: left;">more FPs, no gain</td>
+</tr>
+<tr>
+<td style="text-align: left;">sharpening off + refinement <code>None</code></td>
+<td style="text-align: right;">46.71</td>
+<td style="text-align: right;">99.91</td>
+<td style="text-align: right;">63.66</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr>
+<td style="text-align: left;">sharpening off + EdLines + refinement <code>None</code></td>
+<td style="text-align: right;">44.52</td>
+<td style="text-align: right;">99.90</td>
+<td style="text-align: right;">61.60</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr>
+<td style="text-align: left;">sharpening off, <code>tile_size</code> 16 / 32</td>
+<td style="text-align: right;">48.16 / 44.54</td>
+<td style="text-align: right;">99.77 / 99.83</td>
+<td style="text-align: right;">64.96 / 61.59</td>
+<td style="text-align: left;">faster, less recall</td>
+</tr>
+<tr>
+<td style="text-align: left;">sharpening off, <code>connectivity=Four</code></td>
+<td style="text-align: right;">49.04</td>
+<td style="text-align: right;">99.73</td>
+<td style="text-align: right;">65.75</td>
+<td style="text-align: left;">+6 pp only while sharpening is on</td>
+</tr>
+<tr>
+<td style="text-align: left;">sharpening off + all four gates relaxed</td>
+<td style="text-align: right;"><strong>52.87</strong></td>
+<td style="text-align: right;">99.25</td>
+<td style="text-align: right;"><strong>68.99</strong></td>
+<td style="text-align: left;">see below</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>decimation</code> 2 / 4 (on <code>standard</code>)</td>
+<td style="text-align: right;">27.08 / 12.08</td>
+<td style="text-align: right;">99.88 / 99.45</td>
+<td style="text-align: right;"></td>
+<td style="text-align: left;"></td>
+</tr>
+<tr>
+<td style="text-align: left;">sharpening off + <code>decimation</code> 2 / 3</td>
+<td style="text-align: right;">46.42 / 33.98</td>
+<td style="text-align: right;">99.86 / 99.90</td>
+<td style="text-align: right;"></td>
+<td style="text-align: left;">subsampling, not area-averaging</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>quad.upscale_factor=2</code></td>
+<td style="text-align: right;"><strong>0.00</strong></td>
+<td style="text-align: right;">0.00</td>
+<td style="text-align: right;"></td>
+<td style="text-align: left;">see the bug below</td>
+</tr>
+</tbody>
+</table>
+<p>"All four gates relaxed" = <code>quad.min_edge_score=0</code>, <code>quad.min_density=0</code>, <code>quad.max_elongation=0</code>,
+<code>quad.min_fill_ratio=0.05</code>. Other tunables changed nothing measurable (see the inert-knob note).
+The <code>tools/bench/tune</code> harness is tied to the hub datasets, strata and pose metrics, so this sweep used
+a scratch driver that builds <code>DetectorConfig</code> objects from the shipped profiles; the shipped JSON
+profiles were not edited.</p>
+<p>External preprocessing (Locus config: sharpening off): Gaussian blur sigma 1 gives 50.62 % (+0.9 pp)
+but sigma 2 and 3 lose recall (46.95 %, 41.58 %). An area-averaged 2x downscale (<code>cv2.INTER_AREA</code>)
+gives 48.05 % at roughly a quarter of the latency (36.7 vs 140.4 ms at 1 thread, 22.6 vs 80.0 ms at
+8). Running full-resolution plus 2x plus 4x detectors and taking the union of decoded markers reaches
+55.4 % recall (FPs at most 48), a +2.5 pp gain over the best single pass. The union was never timed;
+the 4x pass was not timed either, so no latency figure is quoted for it here.</p>
+<h2 id="comparison-all-924-images-same-10-px-scorer">Comparison (all 924 images, same 10 px scorer)</h2>
+<p>Re-measured 2026-09-20 under the protocol in the Setup table: serial, best-of-2 per image, decode
+excluded, thread count set only by <code>RAYON_NUM_THREADS</code> (Locus) or <code>cv::setNumThreads</code> (references).
+References are built in the scratchpad (not the repo): OpenCV 4.10.0 from source
+(<code>errorCorrectionRate=0</code>, as in aruco_nano's benchmark; <code>DICT_ARUCO_MIP_36h12</code>) and aruco_nano commit
+<code>961b18b</code>, driven by a scorer copied from <code>testperf.cpp</code>. Every accuracy tally below is unchanged from
+the 2026-09-19 run; only the latency column and the thread labels are new.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Detector</th>
+<th style="text-align: right;">Threads</th>
+<th style="text-align: right;">TP</th>
+<th style="text-align: right;">FP</th>
+<th style="text-align: right;">FN</th>
+<th style="text-align: right;">Recall %</th>
+<th style="text-align: right;">Precision %</th>
+<th style="text-align: right;">F1 %</th>
+<th style="text-align: right;">Latency ms / image</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Locus <code>standard</code></td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">2591</td>
+<td style="text-align: right;">7</td>
+<td style="text-align: right;">6431</td>
+<td style="text-align: right;">28.72</td>
+<td style="text-align: right;">99.73</td>
+<td style="text-align: right;">44.60</td>
+<td style="text-align: right;">163.9</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>standard</code></td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">2591</td>
+<td style="text-align: right;">7</td>
+<td style="text-align: right;">6431</td>
+<td style="text-align: right;">28.72</td>
+<td style="text-align: right;">99.73</td>
+<td style="text-align: right;">44.60</td>
+<td style="text-align: right;">118.8</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>grid</code></td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">4485</td>
+<td style="text-align: right;">20</td>
+<td style="text-align: right;">4537</td>
+<td style="text-align: right;">49.71</td>
+<td style="text-align: right;">99.56</td>
+<td style="text-align: right;">66.31</td>
+<td style="text-align: right;">156.1</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>grid</code></td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">4485</td>
+<td style="text-align: right;">20</td>
+<td style="text-align: right;">4537</td>
+<td style="text-align: right;">49.71</td>
+<td style="text-align: right;">99.56</td>
+<td style="text-align: right;">66.31</td>
+<td style="text-align: right;">85.9</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>high_accuracy</code></td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">4032</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">4990</td>
+<td style="text-align: right;">44.69</td>
+<td style="text-align: right;">99.93</td>
+<td style="text-align: right;">61.76</td>
+<td style="text-align: right;">138.0</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>high_accuracy</code></td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">4032</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">4990</td>
+<td style="text-align: right;">44.69</td>
+<td style="text-align: right;">99.93</td>
+<td style="text-align: right;">61.76</td>
+<td style="text-align: right;">101.7</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>standard</code> + sharpening off</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">4482</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">4540</td>
+<td style="text-align: right;">49.68</td>
+<td style="text-align: right;">99.78</td>
+<td style="text-align: right;">66.33</td>
+<td style="text-align: right;">140.4</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>standard</code> + sharpening off</td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">4482</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">4540</td>
+<td style="text-align: right;">49.68</td>
+<td style="text-align: right;">99.78</td>
+<td style="text-align: right;">66.33</td>
+<td style="text-align: right;">80.0</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus sharpening off + relaxed gates</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">4770</td>
+<td style="text-align: right;">36</td>
+<td style="text-align: right;">4252</td>
+<td style="text-align: right;">52.87</td>
+<td style="text-align: right;">99.25</td>
+<td style="text-align: right;">68.99</td>
+<td style="text-align: right;">169.7</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus sharpening off + relaxed gates</td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">4770</td>
+<td style="text-align: right;">36</td>
+<td style="text-align: right;">4252</td>
+<td style="text-align: right;">52.87</td>
+<td style="text-align: right;">99.25</td>
+<td style="text-align: right;">68.99</td>
+<td style="text-align: right;">89.4</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus sharpening off + 2x area downscale</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">4335</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">4687</td>
+<td style="text-align: right;">48.05</td>
+<td style="text-align: right;">99.86</td>
+<td style="text-align: right;">64.88</td>
+<td style="text-align: right;">36.7</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus sharpening off + 2x area downscale</td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">4335</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">4687</td>
+<td style="text-align: right;">48.05</td>
+<td style="text-align: right;">99.86</td>
+<td style="text-align: right;">64.88</td>
+<td style="text-align: right;">22.6</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV 4.10 <code>aruco</code></td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">5205</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">3817</td>
+<td style="text-align: right;">57.69</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: right;">73.17</td>
+<td style="text-align: right;">333.8</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV 4.10 <code>aruco</code></td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">5205</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">3817</td>
+<td style="text-align: right;">57.69</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: right;">73.17</td>
+<td style="text-align: right;">249.7</td>
+</tr>
+<tr>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">6039</td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">2983</td>
+<td style="text-align: right;">66.94</td>
+<td style="text-align: right;">99.87</td>
+<td style="text-align: right;">80.15</td>
+<td style="text-align: right;">55.6</td>
+</tr>
+<tr>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">6039</td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">2983</td>
+<td style="text-align: right;">66.94</td>
+<td style="text-align: right;">99.87</td>
+<td style="text-align: right;">80.15</td>
+<td style="text-align: right;">55.6</td>
+</tr>
+</tbody>
+</table>
+<p>The 2x-downscale row includes its <code>cv2.resize</code> inside the timer, but that resize is always
+single-threaded (<code>cv2.setNumThreads(1)</code>), so only the detection part of that row scales.</p>
+<h3 id="thread-scaling-1-8-same-run">Thread scaling (1 -&gt; 8, same run)</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Config</th>
+<th style="text-align: right;">1 thread</th>
+<th style="text-align: right;">8 threads</th>
+<th style="text-align: right;">Speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Locus <code>standard</code></td>
+<td style="text-align: right;">163.9</td>
+<td style="text-align: right;">118.8</td>
+<td style="text-align: right;">1.38x</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>grid</code></td>
+<td style="text-align: right;">156.1</td>
+<td style="text-align: right;">85.9</td>
+<td style="text-align: right;">1.82x</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>high_accuracy</code></td>
+<td style="text-align: right;">138.0</td>
+<td style="text-align: right;">101.7</td>
+<td style="text-align: right;">1.36x</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus sharpening off</td>
+<td style="text-align: right;">140.4</td>
+<td style="text-align: right;">80.0</td>
+<td style="text-align: right;">1.76x</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus sharpening off + relaxed gates</td>
+<td style="text-align: right;">169.7</td>
+<td style="text-align: right;">89.4</td>
+<td style="text-align: right;">1.90x</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus sharpening off + 2x downscale</td>
+<td style="text-align: right;">36.7</td>
+<td style="text-align: right;">22.6</td>
+<td style="text-align: right;">1.62x</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV 4.10 <code>aruco</code></td>
+<td style="text-align: right;">333.8</td>
+<td style="text-align: right;">249.7</td>
+<td style="text-align: right;">1.34x</td>
+</tr>
+<tr>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">55.6</td>
+<td style="text-align: right;">55.6</td>
+<td style="text-align: right;">1.00x</td>
+</tr>
+</tbody>
+</table>
+<p>No detector on this table comes close to 8x on 8 vCPUs (4 physical cores + SMT). Locus tops out at
+1.9x; <code>standard</code> and <code>high_accuracy</code> scale worst (1.36-1.38x). aruco_nano does not scale at all, and
+OpenCV's aruco gains only 1.34x — its adaptive-threshold stage is not parallelised in this build
+(<code>adaptiveThreshold</code> on a 4900x3300 image measures 15.0 ms at 1 thread and 15.0 ms at 8), while
+<code>GaussianBlur</code> on the same image scales 4.1x, so the backend itself is working. Locus's own ceiling is
+a large serial section inside <code>detect()</code>, not a missing thread knob: with eight workers available only
+about two are ever busy (finding 5).</p>
+<p>Detection overlap with the best Locus config: aruco_nano finds 1515 GT markers that Locus misses and
+Locus finds 246 that aruco_nano misses; against OpenCV the numbers are 1382 and 947.</p>
+<h2 id="best-configuration-and-pareto">Best configuration and Pareto</h2>
+<p>On this dataset <code>standard</code> with <strong><code>threshold.enable_sharpening=false</code></strong> is the best default: it
+recovers +21 pp of recall at unchanged precision and is faster at both thread counts (140.4 vs
+163.9 ms at 1 thread, 80.0 vs 118.8 ms at 8).
+<code>bench real --dataset liu4k --family ArUcoMip36h12 --no-sharpening</code> reproduces it exactly
+(4482 / 10 / 4540). Non-dominated points on (recall, precision, latency), at both thread counts: the
+2x-downscale pipeline (36.7 / 22.6 ms, 64.9 F1, highest precision among the usable points),
+sharpening-off (140.4 / 80.0 ms, 66.3 F1) and sharpening-off with relaxed gates (169.7 / 89.4 ms,
+69.0 F1, lowest precision at 99.25 %). <code>grid</code> is dominated by sharpening-off (same F1, slower at both
+thread counts); <code>standard</code> is dominated. <code>high_accuracy</code> is dominated at 8 threads, and at 1 thread it
+is only nominally non-dominated: it is 2.4 ms faster than sharpening-off (138.0 vs 140.4) for 5 pp
+less recall, and 2.4 ms is inside this harness's run-to-run noise.
+Precision stays at or above 99.25 % everywhere, so recall and latency decide.
+Even the best Locus config trails aruco_nano (66.9 %) and OpenCV (57.7 %) in recall on the same
+scorer. On latency it beats OpenCV at both thread counts (169.7 vs 333.8 ms at 1 thread, 89.4 vs
+249.7 ms at 8) and loses to aruco_nano at both (55.6 ms, which does not change with threads).</p>
+<h2 id="findings-that-need-a-decision-no-detector-code-changed">Findings that need a decision (no detector code changed)</h2>
 <ol>
-<li><strong>Sample</strong> every candidate cell-boundary + border line in the tag frame (7
-   interior points per boundary), project under the current pose, and measure the
-   sub-pixel edge by the <strong>50 %-intensity crossing</strong> along each edge normal
-   (unbiased for a symmetric PSF). Low-contrast samples (same-colour boundaries)
-   are dropped automatically — the image contrast selects the real edges, so no
-   bit-pattern reconstruction is needed. Junction, out-of-image, and large-offset
-   (spurious) samples are excluded.</li>
-<li><strong><code>measure → fit</code></strong> iterations: hold the measured edge points fixed and refine
-   the full 6-DoF pose to them with the shared <strong>Nielsen trust-region LM</strong> under a
-   robust <strong>Huber</strong> loss (δ = 0.5 px, so the clean interior edges — not a few
-   latched/biased ones — control the fit), then re-measure. This gives an excellent
-   <strong>rotation</strong> but weakly constrains depth/scale.</li>
-<li><strong>Re-anchor translation</strong> with a translation-only solve against the 4 trusted
-   corners under the refined rotation. <em>Edges → rotation, corners → translation.</em></li>
-<li>A <strong>no-worse gate</strong> rejects untrustworthy refinements (too few edges, or an
-   implausible pose jump), falling back to the corner pose. The refined pose is
-   re-validated against the pose-consistency χ² gate before it is emitted.</li>
+<li><strong><code>quad.upscale_factor &gt; 1</code> returns corners in the upscaled frame.</strong> On <code>004.jpg</code>, id 79 decodes
+   with centre (3088, 3002) at factor 2 versus (1543.8, 1500.8) at factor 1 (GT 1543.4, 1500.6); a full
+   run gives TP=0, FP=3238. In <code>detector.rs</code> (<code>detect</code> preprocessing) the scale from the upscale branch
+   is bound to <code>_effective_scale</code> and never used, and the funnel gate is given <code>1.0 / config.decimation</code>.
+   Ids decode, so only the coordinate mapping is wrong.</li>
+<li><strong>Two config fields are inert here.</strong> <code>threshold.constant</code> (<code>adaptive_threshold_constant</code>) has no
+   reader outside config plumbing, and <code>threshold.gradient_threshold</code> gave bit-identical TP/FP/FN for
+   0, 5, 20 and 40; <code>threshold.min_range</code> (0-40) and <code>decoder.min_contrast</code> (0-40) also gave identical
+   results on all 924 images (they are read but never bind on this data).</li>
+<li><strong>Sharpening default.</strong> <code>standard</code> enables Laplacian sharpening; on this noisy, low-key data it costs
+   21 pp of recall. This is a tuning question for the shipped default, not proven to be a defect;
+   changing it needs the ICRA and render-tag regression suites.</li>
+<li><strong>Large clean markers are missed on textured backgrounds.</strong> <code>004.jpg</code> marker 229 (edge about
+   310 px, crisp black border on water) yields no quad, not even a rejected one, at full resolution on
+   every shipped profile and on EdLines. It is found after a 2x or 4x area downscale or a sigma-2 blur.
+   A numpy emulation of the tile threshold (3x3 tiles, midpoint of min/max, range gate 10) shows the
+   marker's foreground merging with water-texture speckle and its deep black interior flagged as
+   low-range, which is consistent with the miss. That is a hypothesis about the Rust internals, not a
+   confirmed root cause. OpenCV uses several adaptive-threshold window sizes and aruco_nano a
+   contour tracer, which is one plausible reason both do better on markers of 100 px and larger.</li>
+<li><strong><code>Detector(threads=)</code> is dead, and real thread scaling tops out at 1.9x.</strong> Two separate facts,
+   both re-verified on 2026-09-20:</li>
+<li><em>The parameter does nothing.</em> <code>DetectorBuilder::with_threads</code> writes <code>config.nthreads</code>
+     (<code>detector.rs:642</code>) and nothing ever reads it: <code>nthreads</code> appears only in its declaration
+     (<code>config.rs:222</code>), its defaults and the serde copy, and there is no <code>rayon::ThreadPool</code>,
+     <code>build_global</code> or <code>num_threads</code> call anywhere in <code>locus-core</code> or <code>locus-py</code>. Measured: at a fixed
+     <code>RAYON_NUM_THREADS</code>, <code>threads=None/1/8/64</code> give <strong>bit-identical ids and corners</strong> and the same
+     latency (183-193 ms at <code>RAYON_NUM_THREADS=1</code>, 132-134 ms at 8 — the spread is noise, and the two
+     groups differ only by the env var). The thread count is decided solely by <code>RAYON_NUM_THREADS</code>, or
+     by the core count when it is unset. <code>docs/reference/api.md</code> still describes the argument as the
+     "Rayon intra-frame thread count (0 = all cores)". It must be wired (a scoped
+     <code>ThreadPool::install</code> that does not allocate in the hot loop) or removed along with its docs.
+     This is what invalidated the first version of this report's latency table.</li>
+<li><em>Scaling is Amdahl-limited, not thread-starved.</em> With <code>RAYON_NUM_THREADS</code> actually set, 1 -&gt; 8
+     threads buys only 1.38x on <code>standard</code> and at best 1.90x on the relaxed config, on 8 vCPUs.
+     <code>detect()</code> is genuinely handed the eight workers and keeps only about two of them busy: over a
+     25-image subset on <code>standard</code>, CPU time / wall time during the detection loop is <strong>1.00 cores at
+     <code>RAYON_NUM_THREADS=1</code> and 1.98 cores at 8</strong>, while total CPU work rises 8.56 s -&gt; 10.98 s
+     (+28 % parallel overhead) for a wall drop of 8.56 s -&gt; 5.55 s. A 1.38x speedup on 8 workers
+     implies a parallel fraction of only about 0.31, i.e. roughly two thirds of a <code>standard</code> 4K frame
+     is serial. Locating that serial section is a detector-internals question and is <strong>not measured in
+     this report</strong>; a separate root-cause investigation attributes it to the connected-components
+     stage (<code>pipeline::segmentation</code> / <code>label_components_lsl</code>, which contains no rayon), which would
+     also mean <code>pipeline.md</code>'s "0.5 ms segmentation @720p" budget does not survive textured 4K input.
+     That attribution needs its own instrumented measurement before it is treated as established.</li>
 </ol>
-<h3 id="tuning-levers-2026-07-17">Tuning levers (2026-07-17)</h3>
-<p>Both attack the rotation <strong>p99 tail</strong>, ranked on render-tag with hard
-translation/RMSE/recall guardrails (corners are untouched by this stage, so mean
-corner RMSE is unaffected):</p>
-<ul>
-<li><strong>Robust Huber edge loss (δ = 0.5 px).</strong> An L2 fit lets a few edges that latch
-  onto an adjacent boundary or carry PSF-asymmetry bias drag the rotation; the
-  Huber weight <code>w·n·nᵀ</code> down-weights them. δ = 0.5 px was the sweep optimum (0.35
-  regressed p95, 0.75 was weaker). <em>1080p rot p99 0.409° → 0.364°.</em></li>
-<li><strong>7 (was 3) samples per cell boundary.</strong> More <em>independent</em> edge measurements
-  average per-scan noise down, tightening the tail further. Seven is the knee under
-  the 64 KB on-stack sample budget (<code>constraints.md §1</code>); denser would force a
-  per-tag heap allocation on the pose path. <em>1080p rot p99 0.364° → 0.249°.</em></li>
-</ul>
-<p>The <code>measure → fit</code> count (4) was already converged (6 gave no change) and the
-inner LM reuses the vetted <code>NielsenConfig::POSE</code>, so no per-geometry calibration.</p>
-<h2 id="results-render-tag-single-thread-accurate-pose">Results (render-tag, single-thread, Accurate pose)</h2>
-<p><strong>Recall and precision are 100 % / 100 % for both baseline and the enabled stage
-at every resolution</strong> — the refinement only sharpens an already-accepted pose (the
-no-worse + pose-consistency χ² gates never null one), so it neither drops nor adds
-a detection. <strong>Mean corner RMSE is unchanged by construction</strong>: the stage never
-writes <code>batch.corners</code>; it reads them as fixed input and emits only the pose.</p>
-<p>Locus <code>high_accuracy</code>, <strong>baseline</strong> (no edge stage) → <strong>tuned</strong> (Huber δ = 0.5 + 7
-samples/boundary), full rotation/translation distribution:</p>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">resolution</th>
-<th style="text-align: right;">rot mean (°)</th>
-<th style="text-align: right;">rot p50 (°)</th>
-<th style="text-align: right;">rot p95 (°)</th>
-<th style="text-align: right;">rot p99 (°)</th>
-<th style="text-align: right;">t mean (mm)</th>
-<th style="text-align: right;">t p95 (mm)</th>
-<th style="text-align: right;">t p99 (mm)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;">640×480</td>
-<td style="text-align: right;">0.155→<strong>0.095</strong></td>
-<td style="text-align: right;">0.120→<strong>0.084</strong></td>
-<td style="text-align: right;">0.373→<strong>0.201</strong></td>
-<td style="text-align: right;">0.508→<strong>0.269</strong></td>
-<td style="text-align: right;">1.09→<strong>1.03</strong></td>
-<td style="text-align: right;">3.62→4.15</td>
-<td style="text-align: right;">8.11→<strong>7.60</strong></td>
-</tr>
-<tr>
-<td style="text-align: left;">1280×720</td>
-<td style="text-align: right;">0.131→<strong>0.064</strong></td>
-<td style="text-align: right;">0.058→<strong>0.046</strong></td>
-<td style="text-align: right;">0.464→<strong>0.194</strong></td>
-<td style="text-align: right;">0.624→<strong>0.262</strong></td>
-<td style="text-align: right;">1.56→<strong>1.47</strong></td>
-<td style="text-align: right;">8.16→8.26</td>
-<td style="text-align: right;">15.97→<strong>14.46</strong></td>
-</tr>
-<tr>
-<td style="text-align: left;">1920×1080</td>
-<td style="text-align: right;">0.122→<strong>0.062</strong></td>
-<td style="text-align: right;">0.057→<strong>0.041</strong></td>
-<td style="text-align: right;">0.385→<strong>0.180</strong></td>
-<td style="text-align: right;">0.600→<strong>0.249</strong></td>
-<td style="text-align: right;">1.95→<strong>1.88</strong></td>
-<td style="text-align: right;">8.62→9.75</td>
-<td style="text-align: right;">18.62→20.10</td>
-</tr>
-<tr>
-<td style="text-align: left;">3840×2160</td>
-<td style="text-align: right;">0.139→<strong>0.063</strong></td>
-<td style="text-align: right;">0.055→<strong>0.041</strong></td>
-<td style="text-align: right;">0.432→<strong>0.203</strong></td>
-<td style="text-align: right;">1.113→<strong>0.267</strong></td>
-<td style="text-align: right;">3.81→4.07</td>
-<td style="text-align: right;">12.82→17.72</td>
-<td style="text-align: right;">39.02→<strong>36.98</strong></td>
-</tr>
-</tbody>
-</table>
-<p>Rotation p99 for reference — <strong>baseline → L2-edge (pre-tuning) → tuned</strong>:
-640 <code>0.508→0.314→0.269</code>, 720 <code>0.624→0.472→0.262</code>, 1080 <code>0.600→0.409→0.249</code>,
-2160 <code>1.113→0.429→0.267</code>. The tuning (Huber + denser sampling) cuts rot p99 a
-further −11 % to −44 % over the L2 stage.</p>
-<p>Reading the table:</p>
-<ul>
-<li><strong>Rotation improves across the <em>entire</em> distribution, not just the tail.</strong> Mean
-  −39 % to −55 %, p50 roughly halved, p95 roughly halved, p99 −47 % to −76 %. At
-  1080p the tuned rot p99 <strong>0.249°</strong> (p95 <strong>0.180°</strong>) is well under OpenCV
-  <code>cv2.aruco</code> apriltag's <strong>0.376°</strong>, at trans p99 ~20 mm vs apriltag's ~55 mm —
-  <strong>apriltag-class-and-better rotation at ~2.7× better translation.</strong></li>
-<li><strong>Translation carries a bounded trade</strong> — the edges→rotation / corners→translation
-  split. <strong>t mean is flat-to-better</strong> at 640/720/1080 (−0.06 to −0.09 mm) and
-  +0.26 mm only at 2160; <strong>t p99 is better</strong> at 640/720/2160 and +1.5 mm at 1080p.
-  The regression concentrates in <strong>t p95</strong> at higher resolution (1080p +1.1 mm,
-  2160p +4.9 mm) — the 1-2-tag pose-tail where a large rotation correction pulls the
-  corner-anchored translation. This is the known, gated trade; it stays inside the
-  opt-in stage (shipped profiles are byte-identical) and never touches recall,
-  precision, or corner RMSE.</li>
-<li><strong>Latency</strong> (single-thread, best-effort): +~1 ms/frame at 640/720/1080, roughly
-  flat at 2160 (baseline → tuned: 2.4→3.8 / 6.3→7.5 / 14.3→15.3 / 57.4→58.2 ms).
-  The stage is a bounded per-tag Gauss-Newton on the opt-in Accurate path.</li>
-</ul>
-<h3 id="image-space-accuracy-2d-corner-rmse-reprojection-rmse">Image-space accuracy — 2D corner RMSE &amp; reprojection RMSE</h3>
-<p>Two RMSEs make the "translation trades but the pose is still more accurate" story
-concrete (harness: <code>tools/bench/model_edge_rmse.py</code>):</p>
-<ul>
-<li><strong>2D corner RMSE</strong> (detected vs GT corners, px) — <strong>identical</strong> baseline vs edge
-  at every resolution (the detected corners are byte-identical; the stage emits only
-  the pose): mean 0.210 / 0.208 / 0.215 / 0.178 px for 640/720/1080/2160.</li>
-<li><strong>Reprojection RMSE</strong> (model corners reprojected through the <em>estimated pose</em> vs
-  GT corners, px — the <code>hub.rs</code> <code>mean_reprojection_rmse</code> quantity) — <strong>improves at
-  every resolution and percentile</strong>:</li>
-</ul>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">resolution</th>
-<th style="text-align: right;">reproj mean (px)</th>
-<th style="text-align: right;">reproj p95 (px)</th>
-<th style="text-align: right;">reproj p99 (px)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;">640×480</td>
-<td style="text-align: right;">0.181 → <strong>0.151</strong></td>
-<td style="text-align: right;">0.400 → <strong>0.290</strong></td>
-<td style="text-align: right;">0.456 → <strong>0.370</strong></td>
-</tr>
-<tr>
-<td style="text-align: left;">1280×720</td>
-<td style="text-align: right;">0.185 → <strong>0.144</strong></td>
-<td style="text-align: right;">0.418 → <strong>0.278</strong></td>
-<td style="text-align: right;">0.457 → <strong>0.339</strong></td>
-</tr>
-<tr>
-<td style="text-align: left;">1920×1080</td>
-<td style="text-align: right;">0.173 → <strong>0.141</strong></td>
-<td style="text-align: right;">0.406 → <strong>0.254</strong></td>
-<td style="text-align: right;">0.759 → <strong>0.553</strong></td>
-</tr>
-<tr>
-<td style="text-align: left;">3840×2160</td>
-<td style="text-align: right;">0.158 → <strong>0.132</strong></td>
-<td style="text-align: right;">0.395 → <strong>0.254</strong></td>
-<td style="text-align: right;">0.411 → <strong>0.393</strong></td>
-</tr>
-</tbody>
-</table>
-<p>Reprojection RMSE (mean −13…−22 %, p95 −27…−36 %, p99 −4…−27 %) falls everywhere:
-in <strong>image space</strong> the refined pose is uniformly <em>closer to truth</em>, so the small
-metric-translation p95 trade above is a depth/scale artefact of the corner re-anchor,
-not a loss of pose accuracy where it is observable. Corner localization is untouched.</p>
-<h3 id="robustness-degraded-imagery-corpora-does-the-render-tag-tuning-generalize">Robustness — degraded-imagery corpora (does the render-tag tuning generalize?)</h3>
-<p>The tuning constants (Huber δ, sampling density, gates) were fit on the <em>clean</em>
-render-tag suite. To check they are not render-tag-PSF-specific overfit, the stage
-was run on the three degraded-imagery robustness sets (1080p, baseline vs edge):</p>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">dataset</th>
-<th style="text-align: center;">rec/prec</th>
-<th style="text-align: right;">rot mean (°)</th>
-<th style="text-align: right;">rot p99 (°)</th>
-<th style="text-align: right;">t mean (mm)</th>
-<th style="text-align: right;">t p99 (mm)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;"><code>high_iso</code> (sensor noise)</td>
-<td style="text-align: center;">100/100 both</td>
-<td style="text-align: right;">0.119 → <strong>0.062</strong></td>
-<td style="text-align: right;">0.568 → <strong>0.250</strong></td>
-<td style="text-align: right;">1.86 → 1.84</td>
-<td style="text-align: right;">18.7 → 19.1</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>low_key</code> (dark/low-key)</td>
-<td style="text-align: center;">100/100 both</td>
-<td style="text-align: right;">0.127 → <strong>0.020</strong></td>
-<td style="text-align: right;">0.953 → <strong>0.154</strong></td>
-<td style="text-align: right;">7.46 → 7.88</td>
-<td style="text-align: right;">51.3 → 51.4</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>raw_pipeline</code></td>
-<td style="text-align: center;">100/100 both</td>
-<td style="text-align: right;">0.119 → <strong>0.029</strong></td>
-<td style="text-align: right;">0.867 → <strong>0.145</strong></td>
-<td style="text-align: right;">4.17 → 4.52</td>
-<td style="text-align: right;">36.1 → 37.7</td>
-</tr>
-</tbody>
-</table>
-<p>The rotation win is <strong>larger</strong> on degraded imagery (p99 −56 % to −84 %) than on clean
-render-tag, because the corner baseline is noisier there while the ~40 distributed
-edges still average that noise down. Crucially <strong>recall and precision stay 100 %/100 %</strong>:
-the <code>CONTRAST_MIN=50</code> selection gate does <em>not</em> silently decline, and the absolute-pixel
-Huber δ does <em>not</em> mis-clip, on high-ISO / low-key / raw-pipeline inputs — the two
-failure modes an absolute-unit constant tuned on one corpus would be most prone to.
-(These are still synthetic Blender degradations, not real-camera; the absolute δ and
-the reused <code>NielsenConfig::POSE</code> absolute <code>grad_tol</code>/<code>damping_floor</code> remain the natural
-first place to make scale-relative if real-camera data ever shows a regression.)</p>
-<h2 id="why-this-works-where-corner-level-levers-failed">Why this works where corner-level levers failed</h2>
-<p>The 2026-07-14 study (<code>refine_variants_20260714.md</code>) proved every <em>corner-level</em>
-lever is trade-bound: GWLF/apriltag-edge, per-corner repair, per-tag switch, and
-fusion all trade rotation for translation because they only reshape the same 4
-corner observations. This stage instead <strong>adds independent single-frame
-information</strong> — the decoded interior pattern's ~40 edges — which over-constrains
-rotation without disturbing the corner-anchored translation. No multi-tag or
-temporal fusion required.</p>
-<h2 id="provenance">Provenance</h2>
-<p>AMD EPYC-Milan (Zen 3), 1 socket × 4 cores × 2 threads = 8 vCPU (<code>avx2</code>, <code>fma</code>,
-<code>sse4_2</code>); <code>rustc 1.92.0</code>; <code>--release</code>; <code>RAYON_NUM_THREADS=1</code>, Locus <code>threads=1</code>;
-<code>locus_v1_tag36h11_{640x480,1280x720,1920x1080,3840x2160}</code> and the robustness sets
-<code>locus_v1_{high_iso,low_key,raw_pipeline}_1920x1080</code> (50 frames each); pose mode
-<strong>Accurate</strong>. Accuracy columns are deterministic (verified identical across repeated
-runs); the latency column is a best-effort single-thread wall-time.</p>
-<h2 id="reproduce">Reproduce</h2>
-<div class="highlight"><pre><span></span><code><span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span><span class="nv">LOCUS_HUB_DATASET_DIR</span><span class="o">=</span>tests/data/hub_cache<span class="w"> </span><span class="nv">RAYON_NUM_THREADS</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/bench/model_edge_eval.py<span class="w">    </span><span class="c1"># pose: recall/precision/rot/trans</span>
-<span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span><span class="nv">LOCUS_HUB_DATASET_DIR</span><span class="o">=</span>tests/data/hub_cache<span class="w"> </span><span class="nv">RAYON_NUM_THREADS</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/bench/model_edge_rmse.py<span class="w">    </span><span class="c1"># image-space: 2D corner + reproj RMSE</span>
-</code></pre></div>
-<p>Both harnesses take <code>MODEL_EDGE_BASE_PROFILE</code> (default <code>high_accuracy</code>; set
-<code>=standard</code> to measure the gain against the <code>standard</code> corner baseline).</p>
-<h2 id="v070-profile-decision-enabled-in-high_accuracy-not-in-standard">v0.7.0 profile decision — enabled in <code>high_accuracy</code>, NOT in <code>standard</code></h2>
-<p>For the v0.7.0 cut the stage is turned <strong>on in <code>high_accuracy</code></strong> (the numbers above
-reproduced on the release hardware — AMD EPYC-Milan, <code>rustc 1.92.0</code>, <code>--release</code>,
-<code>RAYON_NUM_THREADS=1</code>; clean render-tag + all three degraded sets, recall/precision
-100 %/100 % throughout) and left <strong>off in <code>standard</code></strong>.</p>
-<p><strong>Why <code>standard</code> stays off</strong> (measured 2026-07-19, <code>MODEL_EDGE_BASE_PROFILE=standard</code>,
-Accurate pose). Against <code>standard</code>'s own corner baseline (<code>ContourRdp</code> + <code>Erf</code>, and —
-critically — <strong>no pose-consistency χ² gate and no outlier-drop</strong>), edge refinement is
-a large win on the <em>bulk</em> of the distribution but does <strong>not</strong> clean the tail:</p>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">res</th>
-<th style="text-align: right;">rot mean (°) base→edge</th>
-<th style="text-align: right;">rot p95 (°)</th>
-<th style="text-align: right;">rot p99 (°)</th>
-<th style="text-align: right;">t p99 (mm)</th>
-<th style="text-align: right;">reproj mean (px)</th>
-<th style="text-align: right;">reproj p99 (px)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;">640</td>
-<td style="text-align: right;">0.831→<strong>0.261</strong></td>
-<td style="text-align: right;">2.556→<strong>0.269</strong></td>
-<td style="text-align: right;">4.270→4.270</td>
-<td style="text-align: right;">22.7→<strong>20.7</strong></td>
-<td style="text-align: right;">0.966→<strong>0.696</strong></td>
-<td style="text-align: right;">2.520→<strong>2.044</strong></td>
-</tr>
-<tr>
-<td style="text-align: left;">720</td>
-<td style="text-align: right;">0.934→<strong>0.567</strong></td>
-<td style="text-align: right;">1.840→<strong>0.228</strong></td>
-<td style="text-align: right;">14.11→<strong>12.99</strong></td>
-<td style="text-align: right;">41.3→<strong>39.5</strong></td>
-<td style="text-align: right;">0.888→<strong>0.688</strong></td>
-<td style="text-align: right;">2.164→<strong>1.791</strong></td>
-</tr>
-<tr>
-<td style="text-align: left;">1080</td>
-<td style="text-align: right;">0.974→<strong>0.594</strong></td>
-<td style="text-align: right;">1.508→<strong>0.196</strong></td>
-<td style="text-align: right;">14.76→<strong>13.77</strong></td>
-<td style="text-align: right;">50.4→50.0</td>
-<td style="text-align: right;">0.939→<strong>0.776</strong></td>
-<td style="text-align: right;">2.046→<strong>3.030</strong></td>
-</tr>
-<tr>
-<td style="text-align: left;">2160</td>
-<td style="text-align: right;">7.058→<strong>6.740</strong></td>
-<td style="text-align: right;">40.16→40.16</td>
-<td style="text-align: right;">108.4→108.3</td>
-<td style="text-align: right;">120.8→123.8</td>
-<td style="text-align: right;">1.096→<strong>0.942</strong></td>
-<td style="text-align: right;">4.691→<strong>5.280</strong></td>
-</tr>
-</tbody>
-</table>
-<p>Recall/precision stay 100 %/100 % and 2D corner RMSE is unchanged (as on
-<code>high_accuracy</code> — the stage never writes <code>batch.corners</code>). But <code>standard</code>'s <strong>rotation
-p99 tail is essentially untouched</strong> (4–108° gross IPPE-ambiguity outliers the edge fit
-cannot recover from a flipped seed), and the <strong>high-resolution reproj/translation p99
-tail regresses</strong> (reproj p99 1080 2.05→3.03, 2160 4.69→5.28). The mechanism is the
-missing safety net: on <code>high_accuracy</code> the refined pose is re-validated against the
-pose-consistency <strong>χ²</strong> gate (<code>pose_consistency_fpr = 1e-3</code>), so a refinement that
-worsens reprojection is rejected — reproj RMSE improves at <em>every</em> percentile there. On
-<code>standard</code> (<code>pose_consistency_fpr = 0</code>) there is no such re-validation, so the tail can
-drift. Enabling the stage on <code>standard</code> would therefore <strong>trade the render-tag tail</strong>,
-which the project rules forbid doing silently.</p>
-<p><code>standard</code>'s real gap is the absent pose gates, not corner refinement. A fuller
-<code>standard</code> overhaul (edge refinement <strong>+</strong> χ² consistency gate <strong>+</strong> outlier-drop, the
-levers <code>high_accuracy</code> already ships) is the candidate that would fix the tail too, but
-it changes rejection behaviour and needs its own recall/precision benchmark (ICRA
-included) — deferred to a follow-up, not v0.7.0. <code>standard</code> stays the byte-compatible
-fast default this release.</p>
 
 
 
