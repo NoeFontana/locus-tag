@@ -1,7 +1,7 @@
 # Pose rotation-error tail — lessons
 
-**Status:** RESOLVED for single-frame — model-edge pose refinement shipped in v0.7.0 (`high_accuracy`); corner-level levers remain trade-bound.
-**Last updated:** 2026-07-19
+**Status:** RESOLVED for single-frame — model-edge pose refinement shipped in v0.7.0 (`high_accuracy`); corner-level levers remain trade-bound. The [2026-10-01 photometric finding](#2026-10-01-corner-bias-is-photometric-not-a-psf-floor) is ACTIVE and qualifies the "~0.6 px edge-line floor" below.
+**Last updated:** 2026-10-01
 **Owning code:** `crates/locus-core/src/model_edge.rs` and the pose LM stack (`pose.rs` / `pose_weighted.rs`).
 
 ## TL;DR
@@ -18,6 +18,67 @@ The residual rotation-p99 tail on `high_accuracy` Accurate-mode pose (≈0.60° 
 | 5 | **Per-corner repair / per-tag switch / internal fusion** can be steered to a Pareto win. | Swap-worst-only; greedy per-tag GWLF switch (oracle); per-corner median of {EdLines, GWLF, ContourRdp+Erf}. | **Falsified — trade is fundamental at the per-tag level.** One-corner swap is *worse* than all-four (you can't mix corner systems). Oracle per-tag switch reaches rot p99 0.377° only at trans p99 26.4 mm (+42%), and switch-worthy vs not overlaps fully (undetectable). Fusion drags to the offset cluster: trans p99 19.9→34.3 mm. | `refine_variants_20260714.md` Result 4. Corner-refinement level **exhausted**; only remaining win = *add independent information*. |
 | 6 | **Phase C.5 post-decode re-refit** (re-fit the 4 outer edges, intersect, re-solve homography) improves accuracy. | Optional stage behind `decoder.post_decode_refinement`. | **Superseded.** Real but marginal: means improve uniformly (ICRA RMSE −5.1%, render-tag −0.3…−0.7%) but **p99 rotation stays within sub-1% noise** — it does not close the tail. Also learned: writing the optimistic CRB covariance regressed render-tag p99 rotation 3–5%, so the covariance column is deliberately preserved. Same edge-intersection floor as GWLF; only touches the 4 outer edges. | `post_decode_refinement_20260426`. |
 | 7 | **Add information: model-edge pose refinement** — refine 6-DoF pose against the decoded tag's ~40 *internal* bit-grid edges, not just 4 corners. | Opt-in Accurate-mode stage (`model_edge.rs`): measure→fit Nielsen-LM against 50%-intensity edge crossings under Huber δ=0.5 px + 7 samples/boundary; re-anchor translation to the 4 trusted corners; no-worse + χ² gates. | **WON — shipped v0.7.0.** Over-constrains rotation from the interior without disturbing corner-anchored translation. Rot p99 −47…−76% at every resolution; reprojection RMSE falls everywhere; recall/precision 100%/100%; corner RMSE unchanged by construction. | `model_edge_refinement_20260715.md`. 1080p rot p99 0.600°→**0.249°** (p95 0.385°→0.180°), under OpenCV apriltag's 0.376°, at trans p99 ~20 mm vs apriltag ~55 mm. Larger win on degraded imagery (p99 −56…−84%). On by default in `high_accuracy`; left off in `standard` (no χ² gate there → tail would drift). |
+
+## 2026-10-01 — Corner bias is photometric, not a PSF floor
+
+**Status:** ACTIVE — mechanism established on controlled renders; no fix shipped.
+Reproduce: `PYTHONPATH=. uv run --group bench python tools/bench/photometric_corner_bias.py`.
+
+On clean render-tag images `standard` (ContourRdp + ERF) corners sit **0.59 px inward**
+(radial, mean) of the GT corners, and ERF moves the integer contour seed *further* inward
+(−0.50 → −0.59 px). The image itself explains it. Across 1800 GT-edge profiles the 50 %
+intensity crossing lies **0.40 px inside** the GT edge, and the normalized intensity *at*
+the GT edge is **0.74 = sRGB(0.5)**. Blender integrates coverage in linear light and writes
+sRGB-encoded PNGs, so a blurred edge's midpoint *in encoded intensity* sits on the dark
+side. Every refiner that fits a symmetric step or gradient peak to encoded intensities
+inherits this.
+
+A controlled experiment with analytically exact GT (area-coverage render, blur in linear
+light, optional sRGB encoding, `photometric_corner_bias.py`) separates three defects
+(radial bias / RMSE in px; 40 and 120 px tags agree):
+
+| Photometry, blur σ | `standard` (ContourRdp + ERF) | `high_accuracy` (EdLines) |
+| :--- | :--- | :--- |
+| linear, 0.5 | −0.02 / 0.46–0.51 | **+0.52…+0.54** / 0.54–0.70 |
+| linear, 1.0 | −0.03 / 0.46–0.52 | **+0.58…+0.61** / 0.62–0.79 |
+| sRGB, 0.5 | −0.30 / 0.50–0.67 | +0.18…+0.25 / 0.23–0.38 |
+| sRGB, 1.0 | −0.66 / 0.82–0.91 | −0.11…−0.16 / 0.21–0.31 |
+| sRGB, 1.5 | −0.97…−1.02 / 1.18–1.22 | −0.34…−0.51 / 0.46–0.54 |
+
+1. **Gamma bias.** Both refiners assume a linear photometric response. On gamma-encoded
+   input (sRGB renders, phones, webcams, JPEG) they move edges toward the dark side, in
+   proportion to blur. The prediction is quantitative: for this render's 8–92 % intensity
+   range the encoded midpoint corresponds to 34 % linear coverage, i.e. an offset of
+   Φ⁻¹(0.34)·σ_eff per edge, giving −0.33 / −0.60 / −0.88 px radial at σ = 0.5 / 1.0 / 1.5
+   against −0.31 / −0.65 / −0.95 measured.
+2. **EdLines carries an intrinsic ~+0.5 px outward bias in linear light**, which the sRGB
+   bias cancels near σ ≈ 1 — the render-tag regime. See
+   [EdLines 2026-10-01](edlines-segmentation.md#2026-10-01-intrinsic-outward-bias-masked-by-srgb).
+3. **ERF is unbiased in linear light but scatters 0.46–0.80 px RMSE on clean renders.**
+   The quad-path fit is 1-DOF: it re-fits each edge's offset and keeps the edge *direction*
+   of the integer RDP vertices, so seed quantization passes straight into the corner.
+
+**Real data (EuRoC, Kalibr AprilGrid).** Against the grid's X-junctions, which are unbiased
+by symmetry, ERF corners sit −0.39 px inward and EdLines corners +0.17 px outward. That is
+the signature the sRGB rows predict at σ ≈ 0.5, so the sensor output is likely
+gamma-like (an earlier "printed-target shrink" reading was retracted after the synthetic
+control). Replacing only the refiner on Locus quads with `cv2.cornerSubPix` cuts
+leave-one-tag-out corner error 0.695 → 0.248 px. That gain is junction symmetry, not a
+general win: on plain L-corners `cornerSubPix` is itself biased inward by 0.14–0.41 px as
+blur grows.
+
+**What this changes in the saga above (hypotheses, not conclusions).** Row 3 attributes
+GWLF's 0.63 px absolute error to "the ~0.6 px edge-line floor on Blender PSF". GWLF is a
+gradient-weighted line fit on encoded intensities, so the gamma bias above is a
+competing explanation of that floor. If it holds, the corner-level frontier ("consistency
+vs. absolute error") was partly measured against a biased reference. Likewise the
+AprilGrid saddle-refinement negative (saddles ~1 px "away from the tag interior") is
+consistent with line-fit corners being biased inward, rather than with saddle leakage.
+**Re-attempt condition now met for GWLF-style corners:** evaluate them through a
+linearized sampler (photometric response applied as an f32 LUT inside the sampler, never by
+re-quantizing the 8-bit image, which cost 10–12 pp recall in a probe), with EdLines'
+outward bias fixed in the same change. Otherwise render-tag regresses when the
+cancellation breaks.
 
 ## Durable conclusion
 Every "reshape the same 4 corners" lever is trade-bound because a corner-refinement method has a fixed error *profile*: you can trade Locus's low-absolute-error/high-variance EdLines corners for apriltag/GWLF's high-absolute-error/low-variance corners, buying rotation consistency at the cost of translation bias — but you cannot escape the frontier, because rotation and translation are read off the *same four observations*. The only way to improve both at once is to add observations the corners don't carry. Model-edge refinement does exactly that: the decoded interior pattern supplies ~40 independent, interior-distributed edge constraints that pin orientation an order of magnitude better than 4 corners, while translation stays anchored to the trusted corners. Adding information beat reshaping information.

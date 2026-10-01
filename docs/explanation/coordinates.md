@@ -17,6 +17,20 @@ Locus uses the **pixel-center at 0.5** convention.
 
 This convention is strictly followed to ensure that sub-pixel corner refinement and RMSE calculations are compatible with standard computer vision datasets like **ICRA 2020**.
 
+!!! warning "Interop with OpenCV, Kalibr and integer-centre data"
+    The axes and origin match OpenCV, but the pixel-centre convention does **not**. OpenCV
+    (`cornerSubPix`, `cv2.aruco`, camera matrices from `calibrateCamera`), Kalibr calibrations and
+    datasets annotated in that convention (e.g. Liu4K) put the centre of the top-left pixel at
+    $(0, 0)$. Convert before mixing them: $x_\text{OpenCV} = x_\text{Locus} - 0.5$ (same for $y$).
+    Passing Locus corners unchanged to `cv2.solvePnP` with an OpenCV-calibrated $K$ shifts the
+    principal point by half a pixel. The offset is measured at $+0.50$ px against `cornerSubPix`
+    on EuRoC; `tools/bench/sota/` converts per detector.
+
+    **Open question:** `CameraIntrinsics` does not state which convention its principal point
+    $(c_x, c_y)$ follows, and pose estimation applies it as given to +0.5-convention corners.
+    Until this is specified and tested, check single-tag pose against a known target when using an
+    OpenCV- or Kalibr-calibrated camera matrix.
+
 !!! info "ICRA 2020 Parity"
     While Locus uses the same pixel coordinate system as the ICRA 2020 benchmark, the **corner indexing** differs due to winding conventions:
     - **ICRA 2020**: Uses UMich-style Counter-Clockwise (CCW) winding starting from the bottom-left $[BL, BR, TR, TL]$.
