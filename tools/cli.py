@@ -1298,35 +1298,20 @@ def debug_report(
 
 @bench_app.command("prepare")
 def bench_prepare():
-    """Download and prepare all benchmarking datasets."""
-    from tools.bench.sync_hub import DEFAULT_CACHE_DIR, DEFAULT_REPO_ID, sync_subset_to_local
-    from tools.bench.utils import DatasetLoader
+    """Download and prepare the benchmarking datasets (ICRA forward/circle + every Hub config).
 
-    loader = DatasetLoader()
+    Thin wrapper over the pinned manifest (``xtask/datasets.toml``); equivalent to
+    ``cargo xtask data fetch icra2020-forward icra2020-circle`` + ``fetch hub --subsets all``.
+    """
+    from tools.bench.dataset_registry import fetch
+
     typer.echo("Preparing ICRA datasets...")
-    loader.prepare_all()
+    for name in ("icra2020-forward", "icra2020-circle"):
+        fetch(name)
 
     typer.echo("Preparing Hub datasets...")
     try:
-        import datasets
-        from huggingface_hub import HfApi
-
-        try:
-            configs = datasets.get_dataset_config_names(DEFAULT_REPO_ID)
-        except Exception:
-            api = HfApi()
-            files = api.list_repo_tree(DEFAULT_REPO_ID, repo_type="dataset")
-            configs = [
-                f.path.rstrip("/")
-                for f in files
-                if "/" not in f.path.rstrip("/")
-                and not f.path.startswith(".")
-                and f.path.lower() != "readme.md"
-            ]
-
-        for config in configs:
-            sync_subset_to_local(config, DEFAULT_CACHE_DIR, DEFAULT_REPO_ID)
-
+        fetch("hub", subsets="all")
     except Exception as e:
         typer.echo(f"Warning: Failed to sync Hub datasets: {e}", err=True)
 

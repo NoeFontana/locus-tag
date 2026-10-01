@@ -28,6 +28,20 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and scores them (aruco_nano rule on Liu4K; ground-truth-free board-consistency protocol on
   EuRoC). Every run records verified hardware/thread metadata (`xtask/README.md`).
 
+- **`cargo xtask data`: pinned dataset provisioning** (`xtask/datasets.toml`,
+  `tools/bench/dataset_registry.py`). One manifest declares every external dataset (Hub suites, ICRA
+  2020 scenarios, EuRoC, Liu4K) with its Hugging Face revision or URL checksum, licence, citation
+  and destination; `list` / `fetch` / `verify` replace four ad-hoc downloaders. Hugging Face sources
+  are now pinned to a repository commit (previously the default branch), and a per-destination stamp
+  lets `verify` flag copies fetched from an older pin. `bench prepare`, `prepare_liu4k`,
+  `DatasetLoader.prepare_icra` and `xtask sota fetch` delegate to it; `sync_subset_to_local` gains a
+  `revision` argument.
+
+### Removed
+
+- `scripts/fetch_euroc_calibration.sh` (and its `LOCUS_EUROC_HF_REPO` override): use
+  `cargo xtask data fetch euroc`, which no longer needs the `hf` CLI or `unzip`.
+
 ## Released versions
 
 Full per-release notes live under [`docs/changelogs/`](docs/changelogs/index.md).

@@ -11,7 +11,7 @@
 //!
 //! Download once:
 //! ```text
-//! bash scripts/fetch_euroc_calibration.sh
+//! cargo xtask data fetch euroc
 //! ```
 //!
 //! Then either set `LOCUS_EUROC_DATASET_DIR` or let the loader auto-discover

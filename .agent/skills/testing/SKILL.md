@@ -39,17 +39,15 @@ TRACY_NO_INVARIANT_CHECK=1 INSTA_UPDATE=always cargo test --release --test regre
 TRACY_NO_INVARIANT_CHECK=1 LOCUS_HUB_DATASET_DIR=../../tests/data/hub_cache INSTA_UPDATE=always cargo test --release --test regression_render_tag -- --test-threads=1
 
 # Distortion-aware suite (Brown-Conrady + Kannala-Brandt)
-# One-time setup: sync the two configs into tests/data/hub_cache/ via
-#   uv run python tools/bench/sync_hub.py --configs \
-#     aprilgrid_distortion_brown_conrady_v1_1920x1080 aprilgrid_distortion_kannala_brandt_v1_1920x1080
-# If sync_hub.py fails due to upstream dataset schema drift, fall back to
-# direct parquet download via `huggingface_hub.hf_hub_download`.
+# One-time setup (pinned; xtask/datasets.toml):
+#   cargo xtask data fetch hub --subsets \
+#     aprilgrid_distortion_brown_conrady_v1_1920x1080,aprilgrid_distortion_kannala_brandt_v1_1920x1080
 TRACY_NO_INVARIANT_CHECK=1 LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \
   cargo insta test --release --all-features --features bench-internals \
   --test regression_distortion_hub --review
 
 # EuRoC MAV Calibration Dataset Suite (Real-world 752x480 global-shutter frames)
-# One-time setup: bash scripts/fetch_euroc_calibration.sh
+# One-time setup: cargo xtask data fetch euroc
 TRACY_NO_INVARIANT_CHECK=1 LOCUS_EUROC_DATASET_DIR=tests/data/euroc \
   cargo test --release --features bench-internals,non_rectified \
   --test regression_euroc -- --test-threads=1

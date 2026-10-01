@@ -53,19 +53,17 @@ Source of truth for core engine performance and regressions.
 > `--release` is mandatory for running Hub regression tests. Running in debug mode is extremely slow and will likely timeout in CI or developer environments.
 
 1. **Synchronize Data**:
-   Download all Hub subsets to the local cache (`tests/data/hub_cache/`). The script auto-discovers every available config by default:
+   Download Hub subsets to the local cache (`tests/data/hub_cache/`) at the revision pinned in
+   `xtask/datasets.toml` (`cargo xtask data list` shows every dataset). With no `--subsets` the
+   manifest's default render-tag set is fetched; `all` discovers every config:
    ```bash
-   uv run python tools/bench/sync_hub.py --configs all
+   cargo xtask data fetch hub --subsets all
    ```
-   Or sync a specific subset:
+   Or sync specific subsets:
    ```bash
-   uv run python tools/bench/sync_hub.py --configs \
-     locus_v1_tag36h11_640x480 \
-     locus_v1_tag36h11_1280x720 \
-     locus_v1_tag36h11_1920x1080 \
-     locus_v1_tag36h11_3840x2160 \
-     charuco_golden_v1_1920x1080 \
-     aprilgrid_golden_v1_1920x1080
+   cargo xtask data fetch hub --subsets \
+   locus_v1_tag36h11_640x480,locus_v1_tag36h11_1280x720,locus_v1_tag36h11_1920x1080,\
+   locus_v1_tag36h11_3840x2160,charuco_golden_v1_1920x1080,aprilgrid_golden_v1_1920x1080
    ```
 
 2. **Run Hub Tests**:

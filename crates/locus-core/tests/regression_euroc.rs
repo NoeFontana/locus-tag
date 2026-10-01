@@ -27,7 +27,7 @@
 //! # Setup
 //!
 //! ```text
-//! bash scripts/fetch_euroc_calibration.sh
+//! cargo xtask data fetch euroc
 //! ```
 //!
 //! # Running
@@ -199,9 +199,7 @@ fn euroc_detection_baseline() {
     let _g = common::telemetry::init("euroc_detection_baseline");
     let stride = sample_stride();
     let Some(provider) = EurocProvider::cam0(stride) else {
-        println!(
-            "EuRoC dataset not found — skipping. Run: bash scripts/fetch_euroc_calibration.sh"
-        );
+        println!("EuRoC dataset not found — skipping. Run: cargo xtask data fetch euroc");
         return;
     };
     println!(
@@ -657,9 +655,7 @@ fn euroc_pinhole_funnel_diagnostic() {
     let _g = common::telemetry::init("euroc_pinhole_funnel_diagnostic");
     let stride = sample_stride();
     let Some(provider) = EurocProvider::cam0(stride) else {
-        println!(
-            "EuRoC dataset not found — skipping. Run: bash scripts/fetch_euroc_calibration.sh"
-        );
+        println!("EuRoC dataset not found — skipping. Run: cargo xtask data fetch euroc");
         return;
     };
 

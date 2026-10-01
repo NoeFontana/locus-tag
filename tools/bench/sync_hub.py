@@ -33,7 +33,9 @@ def _save_image(img: Image.Image, path: Path) -> None:
         img.save(path)
 
 
-def _download_aux(repo_id: str, subset: str, aux_file: str, target_dir: Path) -> None:
+def _download_aux(
+    repo_id: str, subset: str, aux_file: str, target_dir: Path, revision: str | None = None
+) -> None:
     """Helper to download auxiliary files from HF Hub."""
     try:
         hf_hub_download(
@@ -41,6 +43,7 @@ def _download_aux(repo_id: str, subset: str, aux_file: str, target_dir: Path) ->
             repo_type="dataset",
             filename=f"{subset}/{aux_file}",
             local_dir=str(target_dir),
+            revision=revision,
         )
     except EntryNotFoundError:
         logger.debug(f"Auxiliary file {aux_file} not found for subset {subset}, skipping.")
@@ -48,8 +51,14 @@ def _download_aux(repo_id: str, subset: str, aux_file: str, target_dir: Path) ->
         logger.warning(f"    [!] Failed auxiliary download {aux_file}: {e}")
 
 
-def sync_subset_to_local(subset: str, target_dir: Path, repo_id: str = DEFAULT_REPO_ID) -> None:
-    """Synchronizes a single dataset subset (images + metadata) to local disk."""
+def sync_subset_to_local(
+    subset: str, target_dir: Path, repo_id: str = DEFAULT_REPO_ID, revision: str | None = None
+) -> None:
+    """Synchronizes a single dataset subset (images + metadata) to local disk.
+
+    ``revision`` pins the Hugging Face repository commit (``xtask/datasets.toml``);
+    ``None`` follows the default branch.
+    """
     subset_dir: Path = target_dir / subset
     images_dir: Path = subset_dir / "images"
     images_dir.mkdir(parents=True, exist_ok=True)
@@ -57,7 +66,9 @@ def sync_subset_to_local(subset: str, target_dir: Path, repo_id: str = DEFAULT_R
     logger.info(f"--> Syncing: {subset}")
 
     try:
-        ds = datasets.load_dataset(repo_id, subset, split="train", streaming=True)
+        ds = datasets.load_dataset(
+            repo_id, subset, split="train", streaming=True, revision=revision
+        )
     except Exception as e:
         logger.warning(f"    [!] Standard load failed for {subset}: {e}")
         logger.info("    [-->] Retrying with explicit data_files fallback...")
@@ -67,6 +78,7 @@ def sync_subset_to_local(subset: str, target_dir: Path, repo_id: str = DEFAULT_R
                 data_files={"train": f"{subset}/train-*.parquet"},
                 split="train",
                 streaming=True,
+                revision=revision,
             )
         except Exception as e2:
             logger.error(
@@ -102,7 +114,7 @@ def sync_subset_to_local(subset: str, target_dir: Path, repo_id: str = DEFAULT_R
     aux_files: list[str] = ["coco_labels.json", "rich_truth.json"]
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(aux_files)) as executor:
         for aux_file in aux_files:
-            executor.submit(_download_aux, repo_id, subset, aux_file, target_dir)
+            executor.submit(_download_aux, repo_id, subset, aux_file, target_dir, revision)
 
 
 def main() -> None:

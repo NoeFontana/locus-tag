@@ -3,6 +3,30 @@
 `cargo xtask <command>` (alias in `.cargo/config.toml`). Dependency-free: it only
 orchestrates `git`, `cmake`, a C++ compiler and `uv`.
 
+## `cargo xtask data` — pinned dataset provisioning
+
+Every external dataset (Hub synthetic suites, ICRA 2020, EuRoC, Liu4K) is declared once in
+[`datasets.toml`](datasets.toml): source, **pin** (Hugging Face repository commit or URL
+checksum), size, licence, citation, destination under `tests/data/`, and readiness markers.
+
+```bash
+cargo xtask data list                                # presence, kind, destination, licence
+cargo xtask data fetch euroc liu4k                   # idempotent; --force to refetch
+cargo xtask data fetch hub --subsets all             # or a comma-separated config list
+cargo xtask data verify                              # missing or stale-pin copies → exit 1
+```
+
+The implementation is `tools/bench/dataset_registry.py`; the Python bench CLI
+(`bench prepare`, `bench real`), `prepare_liu4k` / `DatasetLoader.prepare_icra` and
+`cargo xtask sota fetch` all go through it. Rust integration tests and Python loaders read
+the same `tests/data/` paths, so they need no configuration. Each fetch writes a
+`.locus-dataset.json` stamp in its destination; `verify` compares it with the manifest, so
+a local copy from an older pin is reported instead of silently used (copies fetched before
+pinning show as "unstamped" — a warning; `--force` refetches and stamps them).
+
+Bumping a pin is a reviewable one-line change to `datasets.toml`. The EuRoC mirror is
+private: authenticate with `hf auth login` or `HF_TOKEN`.
+
 ## `cargo xtask sota` — comparative benchmarking against pinned references
 
 Reproducible, long-lived comparison of Locus against the published state of the
