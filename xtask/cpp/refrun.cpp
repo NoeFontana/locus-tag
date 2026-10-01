@@ -1,6 +1,6 @@
 // Reference-detector runner for `cargo xtask sota` (built by `cargo xtask sota setup`).
 //
-//   refrun <nano|opencv|opencv-subpix> <dict> <threads> <list.txt> <out.jsonl> [reps] [border_bits]
+//   refrun <nano|opencv|opencv-subpix|opencv-apriltag> <dict> <threads> <list.txt> <out.jsonl> [reps] [border_bits]
 //
 // Runs one *published, unpatched* reference detector over every image in
 // `list.txt` and writes one JSON object per image:
@@ -9,8 +9,9 @@
 //
 // Protocol (mirrors aruco_nano's testperf.cpp so published numbers are comparable):
 //   * image decode is outside the timer; one untimed warm-up call on the first image;
-//   * OpenCV runs with errorCorrectionRate = 0 (as testperf.cpp) and CORNER_REFINE_NONE
-//     unless `opencv-subpix` is requested;
+//   * OpenCV runs with errorCorrectionRate = 0 (as testperf.cpp) and CORNER_REFINE_NONE;
+//     `opencv-subpix` / `opencv-apriltag` select its other published corner refiners
+//     (CORNER_REFINE_SUBPIX / CORNER_REFINE_APRILTAG), all other parameters at defaults;
 //   * `border_bits` is passed through public parameters only. aruco_nano ignores
 //     values != 1 (its bit grid is hard-coded to markerSize + 2), so datasets with
 //     2-bit borders (Kalibr AprilGrid) are reported as unsupported for it rather than
@@ -39,19 +40,28 @@ std::string json_escape(const std::string& s) {
 
 int main(int argc, char** argv) {
     if (argc < 6) {
-        std::cerr << "usage: refrun <nano|opencv|opencv-subpix> <dict> <threads> <list> <out> [reps] [border_bits]\n";
+        std::cerr << "usage: refrun <nano|opencv|opencv-subpix|opencv-apriltag> <dict> <threads> <list> <out> [reps] [border_bits]\n";
         return 2;
     }
     const std::string mode = argv[1], dname = argv[2];
     const int threads = std::stoi(argv[3]);
     const int reps = argc > 6 ? std::stoi(argv[6]) : 2;
     const int border = argc > 7 ? std::stoi(argv[7]) : 1;
+    // Every dictionary Locus ships (`TagFamily`) that cv::aruco also predefines.
     const std::map<std::string, int> dicts = {
         {"ARUCO_MIP_36h12", cv::aruco::DICT_ARUCO_MIP_36h12},
         {"APRILTAG_36h11", cv::aruco::DICT_APRILTAG_36h11},
         {"APRILTAG_16h5", cv::aruco::DICT_APRILTAG_16h5},
+        {"4X4_50", cv::aruco::DICT_4X4_50},
+        {"4X4_100", cv::aruco::DICT_4X4_100},
+        {"6X6_250", cv::aruco::DICT_6X6_250},
     };
-    if (!dicts.count(dname) || (mode != "nano" && mode != "opencv" && mode != "opencv-subpix")) {
+    const std::map<std::string, int> refiners = {
+        {"opencv", cv::aruco::CORNER_REFINE_NONE},
+        {"opencv-subpix", cv::aruco::CORNER_REFINE_SUBPIX},
+        {"opencv-apriltag", cv::aruco::CORNER_REFINE_APRILTAG},
+    };
+    if (!dicts.count(dname) || (mode != "nano" && !refiners.count(mode))) {
         std::cerr << "unknown dictionary or mode\n";
         return 2;
     }
@@ -61,7 +71,7 @@ int main(int argc, char** argv) {
     cv::aruco::DetectorParameters cv_params;
     cv_params.errorCorrectionRate = 0;
     cv_params.markerBorderBits = border;
-    if (mode == "opencv-subpix") cv_params.cornerRefinementMethod = cv::aruco::CORNER_REFINE_SUBPIX;
+    if (refiners.count(mode)) cv_params.cornerRefinementMethod = refiners.at(mode);
     const cv::aruco::ArucoDetector cv_det(dict, cv_params);
 
     aruco_nano::DetectorParameters nano_params;

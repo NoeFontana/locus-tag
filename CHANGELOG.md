@@ -28,6 +28,16 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and scores them (aruco_nano rule on Liu4K; ground-truth-free board-consistency protocol on
   EuRoC). Every run records verified hardware/thread metadata (`xtask/README.md`).
 
+- **SOTA scoreboard over every compatible dataset** (`cargo xtask sota list | scoreboard`).
+  Benchmarks are `[sota.*]` tables in `xtask/datasets.toml` (resolved by
+  `tools/bench/sota/spec.py`) and now cover ICRA 2020 forward/circle/random, the render-tag Hub
+  suites and the AprilGrid / ChArUco board renders besides Liu4K and EuRoC. New ground-truth
+  scorers report recall/precision/F1, recall by marker side and order-preserving corner RMSE
+  (one corner relabelling per detector; a common-tag variant compares detectors on the same
+  tags); Liu4K gains corner error. `refrun` covers every dictionary Locus ships that OpenCV
+  predefines and OpenCV's `CORNER_REFINE_APRILTAG` operating point (`opencv-apriltag`). Each
+  report ends with a win table: Locus against the best reference operating point per metric.
+
 - **`cargo xtask data`: pinned dataset provisioning** (`xtask/datasets.toml`,
   `tools/bench/dataset_registry.py`). One manifest declares every external dataset (Hub suites, ICRA
   2020 scenarios, EuRoC, Liu4K) with its Hugging Face revision or URL checksum, licence, citation
