@@ -14,7 +14,9 @@
 # Fields
 #   kind        hf-hub-subsets | hf-archive | url-zip
 #   dest        local directory, relative to the repository root
-#   ready       path(s) under `dest` whose existence means "already fetched"
+#   ready       path(s) under `dest` whose existence means "already fetched" (they only
+#               appear on success: archives are staged, then renamed into place)
+#   env         optional variable that relocates the dataset (read by the Rust tests too)
 #   license     as stated by the source; `citation` / `source_url` for attribution
 #
 # Nothing fetched here is committed, packaged in wheels/sdist, or republished.
@@ -25,6 +27,7 @@ kind = "hf-hub-subsets"
 repo = "NoeFontana/locus-tag-bench"
 revision = "5346835a9ed350828472a4c83d6e3999cf94fefb"
 dest = "tests/data/hub_cache"
+env = "LOCUS_HUB_DATASET_DIR"
 # Default subsets for `fetch hub` (all configs: `--subsets all`).
 subsets = [
     "locus_v1_tag36h11_640x480",
@@ -47,6 +50,7 @@ repo = "NoeFontana/apriltag-validation-data"
 revision = "6c7653385d480351fe8235d010dedc18fbc0b992"
 files = ["forward.tar.xz"]
 dest = "tests/data/icra2020"
+env = "LOCUS_ICRA_DATASET_DIR"
 ready = ["forward"]
 license = "unknown — all rights belong to the original authors (non-SharePoint re-hosting)"
 citation = "ICRA 2020 — Determining and Improving the Localization Accuracy of AprilTag Detection"
@@ -60,6 +64,7 @@ repo = "NoeFontana/apriltag-validation-data"
 revision = "6c7653385d480351fe8235d010dedc18fbc0b992"
 files = ["circle.tar.xz"]
 dest = "tests/data/icra2020"
+env = "LOCUS_ICRA_DATASET_DIR"
 ready = ["circle"]
 license = "unknown — all rights belong to the original authors (non-SharePoint re-hosting)"
 citation = "ICRA 2020 — Determining and Improving the Localization Accuracy of AprilTag Detection"
@@ -73,6 +78,7 @@ repo = "NoeFontana/apriltag-validation-data"
 revision = "6c7653385d480351fe8235d010dedc18fbc0b992"
 files = ["random.tar.xz"]
 dest = "tests/data/icra2020"
+env = "LOCUS_ICRA_DATASET_DIR"
 ready = ["random"]
 license = "unknown — all rights belong to the original authors (non-SharePoint re-hosting)"
 citation = "ICRA 2020 — Determining and Improving the Localization Accuracy of AprilTag Detection"
@@ -89,6 +95,7 @@ repo = "NoeFontana/euroc-mav-cam-april-mirror"
 revision = "126678ebcaf8ee83a8998d12e07c2d9589cee320"
 files = ["cam_april.zip"]
 dest = "tests/data/euroc"
+env = "LOCUS_EUROC_DATASET_DIR"
 ready = ["cam_april/mav0"]
 license = "In Copyright – Non-Commercial Use Permitted (rightsstatements.org InC-NC/1.0)"
 citation = "Burri et al., The EuRoC micro aerial vehicle datasets, IJRR 35(10), 2016. doi:10.1177/0278364915620033"

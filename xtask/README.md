@@ -19,10 +19,16 @@ cargo xtask data verify                              # missing or stale-pin copi
 The implementation is `tools/bench/dataset_registry.py`; the Python bench CLI
 (`bench prepare`, `bench real`), `prepare_liu4k` / `DatasetLoader.prepare_icra` and
 `cargo xtask sota fetch` all go through it. Rust integration tests and Python loaders read
-the same `tests/data/` paths, so they need no configuration. Each fetch writes a
-`.locus-dataset.json` stamp in its destination; `verify` compares it with the manifest, so
-a local copy from an older pin is reported instead of silently used (copies fetched before
-pinning show as "unstamped" — a warning; `--force` refetches and stamps them).
+the same `tests/data/` paths, so they need no configuration; `LOCUS_HUB_DATASET_DIR`,
+`LOCUS_ICRA_DATASET_DIR` and `LOCUS_EUROC_DATASET_DIR` relocate a dataset for both (`--dest`
+overrides everything).
+
+Readiness markers appear only on success (archives are extracted into a staging directory
+and renamed into place; a Hub subset's `annotations.jsonl` is renamed in last), so an
+interrupted fetch is retried rather than mistaken for a complete one. Each successful fetch
+records its pin in a `.locus-dataset.json` stamp (per subset for the Hub); `verify` exits 1
+for missing or stale-pin copies and warns for copies that predate stamping (`--force`
+refetches and stamps them).
 
 Bumping a pin is a reviewable one-line change to `datasets.toml`. The EuRoC mirror is
 private: authenticate with `hf auth login` or `HF_TOKEN`.

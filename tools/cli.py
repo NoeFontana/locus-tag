@@ -1305,15 +1305,17 @@ def bench_prepare():
     """
     from tools.bench.dataset_registry import fetch
 
-    typer.echo("Preparing ICRA datasets...")
-    for name in ("icra2020-forward", "icra2020-circle"):
-        fetch(name)
-
-    typer.echo("Preparing Hub datasets...")
-    try:
-        fetch("hub", subsets="all")
-    except Exception as e:
-        typer.echo(f"Warning: Failed to sync Hub datasets: {e}", err=True)
+    # Each dataset degrades independently: one unreachable source must not block the rest.
+    for label, name, subsets in (
+        ("ICRA forward", "icra2020-forward", None),
+        ("ICRA circle", "icra2020-circle", None),
+        ("Hub (all configs)", "hub", "all"),
+    ):
+        typer.echo(f"Preparing {label}...")
+        try:
+            fetch(name, subsets=subsets)
+        except Exception as e:
+            typer.echo(f"Warning: failed to prepare {label}: {e}", err=True)
 
     typer.echo("Done.")
 

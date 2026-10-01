@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Final
 
 import datasets
-from huggingface_hub import HfApi, hf_hub_download
+from huggingface_hub import hf_hub_download
 from huggingface_hub.errors import EntryNotFoundError
 from PIL import Image
 from tqdm import tqdm
@@ -36,7 +36,7 @@ def _save_image(img: Image.Image, path: Path) -> None:
 def _download_aux(
     repo_id: str, subset: str, aux_file: str, target_dir: Path, revision: str | None = None
 ) -> None:
-    """Helper to download auxiliary files from HF Hub."""
+    """Download one auxiliary file; a file absent from the repo is not an error."""
     try:
         hf_hub_download(
             repo_id=repo_id,
@@ -47,8 +47,6 @@ def _download_aux(
         )
     except EntryNotFoundError:
         logger.debug(f"Auxiliary file {aux_file} not found for subset {subset}, skipping.")
-    except Exception as e:
-        logger.warning(f"    [!] Failed auxiliary download {aux_file}: {e}")
 
 
 def sync_subset_to_local(
@@ -57,7 +55,10 @@ def sync_subset_to_local(
     """Synchronizes a single dataset subset (images + metadata) to local disk.
 
     ``revision`` pins the Hugging Face repository commit (``xtask/datasets.toml``);
-    ``None`` follows the default branch.
+    ``None`` follows the default branch. ``annotations.jsonl`` is the subset's completion
+    marker: it is written as ``annotations.jsonl.part`` and renamed only after every image
+    and auxiliary file landed, so an interrupted or failed sync never looks complete.
+    Raises on any image-write or auxiliary-download failure.
     """
     subset_dir: Path = target_dir / subset
     images_dir: Path = subset_dir / "images"
@@ -87,9 +88,11 @@ def sync_subset_to_local(
             raise
 
     jsonl_path: Path = subset_dir / "annotations.jsonl"
+    part_path: Path = subset_dir / "annotations.jsonl.part"
+    jsonl_path.unlink(missing_ok=True)
 
     with (
-        jsonl_path.open("w", encoding="utf-8") as f,
+        part_path.open("w", encoding="utf-8") as f,
         concurrent.futures.ThreadPoolExecutor(
             max_workers=min(32, (os.cpu_count() or 1) * 4)
         ) as executor,
@@ -108,18 +111,28 @@ def sync_subset_to_local(
             item["image_filename"] = img_path.name
             f.write(json.dumps(item) + "\n")
 
-        if futures:
-            concurrent.futures.wait(futures)
+        for fut in concurrent.futures.as_completed(futures):
+            fut.result()  # propagate image-write failures
 
     aux_files: list[str] = ["coco_labels.json", "rich_truth.json"]
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(aux_files)) as executor:
-        for aux_file in aux_files:
+        aux = [
             executor.submit(_download_aux, repo_id, subset, aux_file, target_dir, revision)
+            for aux_file in aux_files
+        ]
+        for fut in aux:
+            fut.result()  # propagate real download failures (absence is handled inside)
+
+    part_path.replace(jsonl_path)
 
 
 def main() -> None:
-    """CLI Entrypoint."""
-    parser = argparse.ArgumentParser(description="Sync HF datasets to local cache.")
+    """CLI entry point; delegates to the pinned registry (``cargo xtask data fetch hub``)."""
+    from tools.bench.dataset_registry import fetch  # noqa: PLC0415 - avoid import cycle
+
+    parser = argparse.ArgumentParser(
+        description="Sync Hub subsets at the revision pinned in xtask/datasets.toml."
+    )
     parser.add_argument(
         "--configs", nargs="*", default=["all"], help="Subsets to sync (default: all)"
     )
@@ -129,38 +142,9 @@ def main() -> None:
         default=DEFAULT_CACHE_DIR,
         help="Target directory (default: $LOCUS_HUB_DATASET_DIR or project tests/data/hub_cache)",
     )
-    parser.add_argument("--repo-id", type=str, default=DEFAULT_REPO_ID)
     args = parser.parse_args()
-
-    configs: list[str] = args.configs
-    if "all" in configs:
-        logger.info(f"Discovering configurations for {args.repo_id}...")
-        try:
-            configs = datasets.get_dataset_config_names(args.repo_id)
-            logger.info(f"Found {len(configs)} configs: {', '.join(configs)}\n")
-        except Exception as e:
-            logger.warning(f"Discovery failed via datasets: {e}")
-            logger.info("Attempting manual discovery via Hugging Face API...")
-            try:
-                api = HfApi()
-                files = api.list_repo_tree(args.repo_id, repo_type="dataset")
-                configs = [
-                    f.path.rstrip("/")
-                    for f in files
-                    if "/" not in f.path.rstrip("/")
-                    and not f.path.startswith(".")
-                    and f.path.lower() != "readme.md"
-                ]
-                logger.info(f"Manually found {len(configs)} configs: {', '.join(configs)}\n")
-            except Exception as e2:
-                logger.error(f"Manual discovery also failed: {e2}")
-                return
-
-    for config in configs:
-        try:
-            sync_subset_to_local(config, args.target_dir, args.repo_id)
-        except Exception as e:
-            logger.error(f"Failed to sync {config}: {e}")
+    subsets = "all" if "all" in args.configs else ",".join(args.configs)
+    fetch("hub", dest=args.target_dir, subsets=subsets)
 
 
 if __name__ == "__main__":

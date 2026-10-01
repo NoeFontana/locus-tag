@@ -32,10 +32,13 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `tools/bench/dataset_registry.py`). One manifest declares every external dataset (Hub suites, ICRA
   2020 scenarios, EuRoC, Liu4K) with its Hugging Face revision or URL checksum, licence, citation
   and destination; `list` / `fetch` / `verify` replace four ad-hoc downloaders. Hugging Face sources
-  are now pinned to a repository commit (previously the default branch), and a per-destination stamp
-  lets `verify` flag copies fetched from an older pin. `bench prepare`, `prepare_liu4k`,
-  `DatasetLoader.prepare_icra` and `xtask sota fetch` delegate to it; `sync_subset_to_local` gains a
-  `revision` argument.
+  are now pinned to a repository commit (previously the default branch); readiness markers appear
+  only on success (staged extraction, Hub `annotations.jsonl` renamed in last); per-dataset /
+  per-subset stamps let `verify` flag missing or stale-pin copies; `LOCUS_*_DATASET_DIR` overrides
+  are honoured. `bench prepare`, `prepare_liu4k`,
+  `DatasetLoader.prepare_icra`, `xtask sota fetch` and `sync_hub.py`'s CLI delegate to it.
+  `sync_subset_to_local` gains a `revision` argument and now raises on image-write or auxiliary
+  download failures (a file absent from the repo stays benign) instead of only logging them.
 
 ### Removed
 
