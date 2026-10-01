@@ -375,11 +375,10 @@ fn run_detection_pipeline<'ctx>(
     // image with `sampling_scale = 1`) ran on the upscaled grid, so `corners`
     // are still in upscaled pixels. Map them back to original-image
     // coordinates before anything downstream (GWLF, homography, decode, pose)
-    // consumes them. Uses the same centre-aware convention as decimation
-    // (`quad.rs::to_full` with `d = 1/upscale`): `x_orig = (x_up + 0.5)/U - 0.5`,
-    // the exact inverse of `ImageView::upscale_to`. No-op (skipped) for `U = 1`.
+    // consumes them, with the inverse of `ImageView::upscale_to`
+    // (`image::upscaled_to_full`). No-op (skipped) for `U = 1`.
     let inv_upscale = 1.0 / upscale as f64;
-    let map_f64 = |v: f64| (v + 0.5) * inv_upscale - 0.5;
+    let map_f64 = |v: f64| crate::image::upscaled_to_full(v, upscale);
     if upscale > 1 {
         let map = |v: f32| map_f64(f64::from(v)) as f32;
         let cov_scale = (inv_upscale * inv_upscale) as f32;

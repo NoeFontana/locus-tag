@@ -642,7 +642,7 @@ fn project_gradients_optimized(
                     if mask != 0 {
                         for j in 0..4 {
                             if (mask >> j) & 1 != 0 {
-                                let g = img.sample_gradient_bilinear((px + j) as f64, y);
+                                let g = img.sample_gradient_bilinear((px + j) as f64 + 0.5, y);
                                 sum_g += (g[0] * nx + g[1] * ny).abs();
                                 count += 1;
                             }
@@ -832,6 +832,42 @@ fn collect_samples_strided<'a>(
 mod tests {
     use super::*;
     use crate::test_utils::subpixel::{Line, SubpixelEdgeRenderer};
+
+    /// The SIMD and scalar paths of `project_gradients_optimized` must sample the same
+    /// pixel centres (`px + 0.5`): compare against a scalar reference on a slanted edge.
+    #[test]
+    fn project_gradients_simd_matches_scalar_reference() {
+        let (width, height) = (64, 48);
+        let renderer = SubpixelEdgeRenderer::new(width, height)
+            .with_intensities(30.0, 220.0)
+            .with_sigma(0.8);
+        let line = Line::from_points_cw([10.3, 4.0], [41.7, 44.0]);
+        let data = renderer.render_edge_u8(&line);
+        let img = ImageView::new(&data, width, height, width).expect("invalid image view");
+        let (dx, dy) = (41.7 - 10.3, 44.0 - 4.0);
+        let len = f64::hypot(dx, dy);
+        let (nx, ny) = (-dy / len, dx / len);
+        for scan_d in [-20.0, -18.7, -17.25] {
+            let (x0, x1, y0, y1) = (2, 60, 2, 45);
+            let (sum, count) = project_gradients_optimized(&img, nx, ny, x0, x1, y0, y1, scan_d);
+            let (mut ref_sum, mut ref_count) = (0.0, 0usize);
+            for py in y0..=y1 {
+                for px in x0..=x1 {
+                    let (x, y) = (px as f64 + 0.5, py as f64 + 0.5);
+                    if (nx * x + ny * y + scan_d).abs() < 1.0 {
+                        let g = img.sample_gradient_bilinear(x, y);
+                        ref_sum += (g[0] * nx + g[1] * ny).abs();
+                        ref_count += 1;
+                    }
+                }
+            }
+            assert_eq!(count, ref_count, "scan_d={scan_d}");
+            assert!(
+                (sum - ref_sum).abs() < 1e-9 * ref_sum.max(1.0),
+                "scan_d={scan_d}: optimized {sum} vs reference {ref_sum}"
+            );
+        }
+    }
 
     #[test]
     fn quad_style_recovers_axis_aligned_subpixel_edge() {
