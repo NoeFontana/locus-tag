@@ -1465,6 +1465,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#phase-b7-detector-level-gwlf-refinement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase B.7: Detector-Level GWLF Refinement
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#phase-c-batched-sampling-decoding" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2294,6 +2305,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#phase-b7-detector-level-gwlf-refinement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase B.7: Detector-Level GWLF Refinement
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#phase-c-batched-sampling-decoding" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2375,6 +2397,10 @@ If a quad exists at index 7, then corners[7], homographies[7], ids[7], and poses
 *   <code>outlier_corner_idx</code>: <code>[u8; MAX_CANDIDATES]</code> (Phase D telemetry only, <code>bench-internals</code>-gated. Sentinel <code>u8::MAX</code> ⇒ no corner was dropped for this candidate. Values <code>0..=3</code> identify which corner the outlier-aware LM masked when the 3-corner pose was kept; in that case the stored pose covariance reflects 6 observations instead of 8. Inert when <code>pose.outlier_drop_d2_threshold = 0.0</code>).</p>
 <h2 id="4-phase-isolated-execution-privileges">4. Phase-Isolated Execution Privileges</h2>
 <p>To prevent data contention and enable lock-free parallelization (Rayon), engineers must adhere to strict Read/Write privileges for each phase of the pipeline. These privileges are enforced by the <code>contract_detection_batch</code> integration test (see <code>crates/locus-core/tests/contract_detection_batch.rs</code>), which seeds every column with sentinel values and asserts that a single phase only mutates its declared write set.</p>
+<p><strong>Execution order.</strong> Phase labels are stable identifiers (the contract test refers to them), not
+the execution order. <code>run_detection_pipeline</code> (<code>crates/locus-core/src/detector.rs</code>) runs:
+A → B.5 (funnel) → B → B.7 (detector-level GWLF, when a route uses it) → B again (only if B.7
+moved corners) → C → partition → D.</p>
 <h3 id="phase-a-contour-extraction">Phase A: Contour Extraction</h3>
 <ul>
 <li><strong>Privileges</strong>: Write to <code>corners</code>, <code>status_mask</code>, and <code>corner_covariances</code>.</li>
@@ -2389,6 +2415,11 @@ If a quad exists at index 7, then corners[7], homographies[7], ids[7], and poses
 <ul>
 <li><strong>Privileges</strong>: Read-Only on the Image Tensor and <code>corners[0..N]</code>. Write-Only to <code>status_mask[0..N]</code> and <code>funnel_status[0..N]</code>.</li>
 <li><strong>Contract</strong>: This phase performs <span class="arithmatex">\(O(1)\)</span> edge contrast rejection. If a candidate lacks photometric evidence of an edge, its <code>status_mask</code> is flipped to <code>FailedDecode</code> and <code>funnel_status</code> is updated to <code>RejectedContrast</code>.</li>
+</ul>
+<h3 id="phase-b7-detector-level-gwlf-refinement">Phase B.7: Detector-Level GWLF Refinement</h3>
+<ul>
+<li><strong>Privileges</strong>: Read-Only on the Image Tensor, <code>status_mask[0..N]</code> and <code>routed_to[0..N]</code>. Write to <code>corners[0..N]</code> and <code>corner_covariances[0..N]</code> of <code>Active</code> candidates whose route resolves to <code>Gwlf</code>.</li>
+<li><strong>Contract</strong>: Funnel-rejected candidates (<code>status_mask != Active</code>) are skipped: they are never decoded, so refining them is wasted work. Because corners may move, Phase B is re-run before Phase C whenever this phase refined anything.</li>
 </ul>
 <h3 id="phase-c-batched-sampling-decoding">Phase C: Batched Sampling &amp; Decoding</h3>
 <ul>
