@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/benchmarking/liu4k_20260919/">
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/benchmarking/liu4k_euroc_sota_20261001/">
       
       
         <link rel="prev" href="../render_tag_sota_20260713/">
@@ -27,7 +27,7 @@
     
     
       
-        <title>Liu4K real-photo benchmark (2026-09-19) - Locus</title>
+        <title>Real-image competitiveness: Liu4K + EuRoC (2026-10-01) - Locus</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#liu4k-real-photo-benchmark-2026-09-19" class="md-skip">
+        <a href="#real-image-competitiveness-liu4k-euroc-2026-10-01" class="md-skip">
           Skip to content
         </a>
       
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Liu4K real-photo benchmark (2026-09-19)
+              Real-image competitiveness: Liu4K + EuRoC (2026-10-01)
             
           </span>
         </div>
@@ -1834,7 +1834,7 @@
   <span class="md-ellipsis">
     
   
-    Liu4K real-photo benchmark (2026-09-19)
+    Real-image competitiveness: Liu4K + EuRoC (2026-10-01)
   
 
     
@@ -1852,7 +1852,7 @@
   <span class="md-ellipsis">
     
   
-    Liu4K real-photo benchmark (2026-09-19)
+    Real-image competitiveness: Liu4K + EuRoC (2026-10-01)
   
 
     
@@ -1878,10 +1878,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#setup-verified-in-the-2026-09-20-measurement-session" class="md-nav__link">
+  <a href="#setup" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Setup (verified in the 2026-09-20 measurement session)
+        Setup
       
     </span>
   </a>
@@ -1889,66 +1889,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#scoring-mirrors-aruco_nano-testperfcpp" class="md-nav__link">
+  <a href="#liu4k" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Scoring (mirrors aruco_nano testperf.cpp)
+        Liu4K
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#harness-sanity-checks-ruled-out-first" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Harness sanity checks (ruled out first)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#why-recall-is-low-quad-stage-not-decode-stage" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why recall is low: quad stage, not decode stage
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#config-sweep-locus-all-924-images" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Config sweep (Locus, all 924 images)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#comparison-all-924-images-same-10-px-scorer" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Comparison (all 924 images, same 10 px scorer)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Comparison (all 924 images, same 10 px scorer)">
+    <nav class="md-nav" aria-label="Liu4K">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#thread-scaling-1-8-same-run" class="md-nav__link">
+  <a href="#latency-231-image-stride-4-subset-serial" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Thread scaling (1 -&gt; 8, same run)
+        Latency (231-image stride-4 subset, serial)
       
     </span>
   </a>
@@ -1961,10 +1917,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#best-configuration-and-pareto" class="md-nav__link">
+  <a href="#euroc-cam_april" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Best configuration and Pareto
+        EuRoC cam_april
       
     </span>
   </a>
@@ -1972,10 +1928,54 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#findings-that-need-a-decision-no-detector-code-changed" class="md-nav__link">
+  <a href="#generality-checks" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Findings that need a decision (no detector code changed)
+        Generality checks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#root-causes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Root causes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#external-proposals-evaluated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        External proposals evaluated
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#harness-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Harness notes
       
     </span>
   </a>
@@ -2205,10 +2205,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#setup-verified-in-the-2026-09-20-measurement-session" class="md-nav__link">
+  <a href="#setup" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Setup (verified in the 2026-09-20 measurement session)
+        Setup
       
     </span>
   </a>
@@ -2216,66 +2216,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#scoring-mirrors-aruco_nano-testperfcpp" class="md-nav__link">
+  <a href="#liu4k" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Scoring (mirrors aruco_nano testperf.cpp)
+        Liu4K
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#harness-sanity-checks-ruled-out-first" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Harness sanity checks (ruled out first)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#why-recall-is-low-quad-stage-not-decode-stage" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why recall is low: quad stage, not decode stage
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#config-sweep-locus-all-924-images" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Config sweep (Locus, all 924 images)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#comparison-all-924-images-same-10-px-scorer" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Comparison (all 924 images, same 10 px scorer)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Comparison (all 924 images, same 10 px scorer)">
+    <nav class="md-nav" aria-label="Liu4K">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#thread-scaling-1-8-same-run" class="md-nav__link">
+  <a href="#latency-231-image-stride-4-subset-serial" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Thread scaling (1 -&gt; 8, same run)
+        Latency (231-image stride-4 subset, serial)
       
     </span>
   </a>
@@ -2288,10 +2244,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#best-configuration-and-pareto" class="md-nav__link">
+  <a href="#euroc-cam_april" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Best configuration and Pareto
+        EuRoC cam_april
       
     </span>
   </a>
@@ -2299,10 +2255,54 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#findings-that-need-a-decision-no-detector-code-changed" class="md-nav__link">
+  <a href="#generality-checks" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Findings that need a decision (no detector code changed)
+        Generality checks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#root-causes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Root causes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#external-proposals-evaluated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        External proposals evaluated
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#harness-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Harness notes
       
     </span>
   </a>
@@ -2329,25 +2329,14 @@
   
 
 
-<h1 id="liu4k-real-photo-benchmark-2026-09-19">Liu4K real-photo benchmark (2026-09-19)</h1>
-<p>Point-in-time report. Dataset: Muñoz-Salinas, R., <em>Liu4K dataset employed for Aruco_Nano paper</em>,
-Zenodo, 2026, <a href="https://doi.org/10.5281/zenodo.18667018">doi:10.5281/zenodo.18667018</a>, licensed
-<a href="https://creativecommons.org/licenses/by/4.0/legalcode">CC BY 4.0</a>. The record's free-text
-<code>copyright</code> field also reads "CC0 License"; CC BY 4.0 attribution is applied regardless. The data is
-read unmodified; nothing is redistributed. See
-<a href="../#real-world-evaluation-liu4k">Real-World Evaluation (Liu4K)</a> for how to run it.</p>
-<blockquote>
-<p><strong>Latency correction (measured 2026-09-20).</strong> The first version of this report labelled its Locus
-rows by the <code>Detector(threads=)</code> argument. That argument is <strong>dead</strong> — it is stored and never read
-(<code>detector.rs</code>), so it cannot change the thread count — and <code>RAYON_NUM_THREADS</code> was left unset, so
-the global Rayon pool used all 8 vCPUs. Every row labelled "1 thread" in that version was in fact an
-8-thread run, and the "8 threads" rows were the same 8-thread configuration measured twice. All
-latency numbers and every thread-related statement below have been re-measured with the thread count
-set <strong>only</strong> through <code>RAYON_NUM_THREADS</code>, on an otherwise idle machine. <strong>Accuracy is unaffected:</strong>
-every TP/FP/FN tally re-ran bit-identical to the published values at both thread counts, so all
-recall, precision and F1 figures in this report are the original ones.</p>
-</blockquote>
-<h2 id="setup-verified-in-the-2026-09-20-measurement-session">Setup (verified in the 2026-09-20 measurement session)</h2>
+<h1 id="real-image-competitiveness-liu4k-euroc-2026-10-01">Real-image competitiveness: Liu4K + EuRoC (2026-10-01)</h1>
+<p>Live snapshot (supersedes the 2026-09-19 Liu4K report). Locus against OpenCV <code>aruco</code> and
+the current SOTA, aruco_nano, on the two real-image datasets. Reproduce any row with
+<code>cargo xtask sota</code> (<code>xtask/README.md</code>). Mechanisms and fix directions live in the lessons
+pages linked under <a href="#root-causes">Root causes</a>; this page carries the numbers. Pose
+metrics are not reported: Liu4K has no poses, and EuRoC is scored on corners only, so the
+Fast/Accurate pose-mode rule does not apply.</p>
+<h2 id="setup">Setup</h2>
 <table>
 <thead>
 <tr>
@@ -2358,607 +2347,616 @@ recall, precision and F1 figures in this report are the original ones.</p>
 <tbody>
 <tr>
 <td style="text-align: left;">CPU</td>
-<td style="text-align: left;">AMD EPYC-Milan, 8 vCPU (4 cores x 2 threads), 1 socket, L1d 128 KiB (4 inst.), L2 2 MiB (4 inst.), L3 32 MiB, AVX2, KVM guest (<code>lscpu</code>, 2026-09-20)</td>
+<td style="text-align: left;">AMD EPYC-Milan, 8 vCPU (4 cores × 2 threads), AVX2, KVM guest (<code>lscpu</code>, measurement session)</td>
 </tr>
 <tr>
 <td style="text-align: left;">OS / toolchain</td>
-<td style="text-align: left;">Linux 6.8.0-139-generic, rustc 1.92.0 (ded5c06cf 2025-12-08), cargo 1.92.0, CPython 3.14.3</td>
+<td style="text-align: left;">Linux 6.8.0-139-generic, rustc 1.92.0, CPython 3.14</td>
 </tr>
 <tr>
-<td style="text-align: left;">Locus build</td>
-<td style="text-align: left;"><code>maturin develop --release</code> (<code>--release</code>, i.e. the <code>release</code> Cargo profile) at <code>8635419</code></td>
+<td style="text-align: left;">Locus</td>
+<td style="text-align: left;"><code>maturin develop --release</code>; <code>main</code> <code>531b5aa</code> + the Liu4K harness; <code>LocalMean</code> rows use PR #383</td>
 </tr>
 <tr>
-<td style="text-align: left;">Threads</td>
-<td style="text-align: left;">Set <strong>only</strong> via <code>RAYON_NUM_THREADS</code>, explicitly <code>1</code> or <code>8</code> for every run, stated per row. <code>Detector(threads=)</code> is never passed — it is dead (finding 5). <code>OMP_NUM_THREADS=1</code>, <code>OPENBLAS_NUM_THREADS=1</code>, and <code>cv2.setNumThreads(1)</code> in the Python harness, so Rayon is the only thread knob in play</td>
-</tr>
-<tr>
-<td style="text-align: left;">Reference threads</td>
-<td style="text-align: left;">The C++ references have no Rayon; their 1/8-thread rows are <code>cv::setNumThreads(1)</code> / <code>(8)</code>. That OpenCV build uses the <code>pthreads</code> parallel framework (TBB off), verified working — <code>GaussianBlur</code> on a 4900x3300 image scales 18.97 -&gt; 4.58 ms from 1 to 8 threads</td>
-</tr>
-<tr>
-<td style="text-align: left;">Timing</td>
-<td style="text-align: left;">Serial, single process, one config at a time per process, best-of-2 <code>detect()</code> calls per image, image decode excluded (decoded once per image outside every timer), one warm-up frame per config; reported value = mean over the 924 images of each image's best</td>
+<td style="text-align: left;">References</td>
+<td style="text-align: left;">OpenCV 4.10.0 (minimal build), aruco_nano <code>961b18b</code>, both unpatched; AprilTag 3 (<code>pupil-apriltags</code>)</td>
 </tr>
 <tr>
 <td style="text-align: left;">Accuracy</td>
-<td style="text-align: left;">Re-scored inside the same serial timing run, all 924 images. Deterministic: identical TP/FP/FN at 1 and 8 threads, and identical to the 2026-09-19 sweep</td>
+<td style="text-align: left;"><code>RAYON_NUM_THREADS=1</code>, detector processes in parallel (deterministic; latency from these runs is not reported)</td>
 </tr>
 <tr>
-<td style="text-align: left;">Machine state</td>
-<td style="text-align: left;"><code>uptime</code> 1-minute load average 0.50 at the start of the run and 0.55-1.8 across it; the only other processes were idle editor/agent helpers (<code>rust-analyzer</code>, <code>pyright-langserver</code>, idle CLI sessions). Nothing else of this work ran concurrently. Absolute ms still carry a few % of noise</td>
+<td style="text-align: left;">Latency</td>
+<td style="text-align: left;">serial <code>--jobs 1</code>, best of 2 per image, decode excluded, thread count only via <code>RAYON_NUM_THREADS</code> / <code>cv::setNumThreads</code></td>
 </tr>
 </tbody>
 </table>
-<p>Pose numbers do not exist for this dataset (corners + ids only, no intrinsics), so the Fast/Accurate
-pose-mode rule does not apply.</p>
-<h2 id="scoring-mirrors-aruco_nano-testperfcpp">Scoring (mirrors aruco_nano <code>testperf.cpp</code>)</h2>
-<p>For every detection, in output order: it is a <strong>TP</strong> if the first not-yet-matched GT marker with the
-same id has a centre distance <code>&lt;= 10 px</code>; otherwise it is a <strong>FP</strong>. <strong>FN = GT - TP</strong>. Centres are the
-mean of the 4 corners. The 10 px radius is a Liu4K-specific constant
-(<code>LIU4K_MATCH_THRESHOLD_PX</code> in <code>tools/bench/liu4k.py</code>); the repo-wide
-<code>MATCH_DISTANCE_THRESHOLD_PX</code> used by other datasets is unchanged. An id-agnostic <em>quad</em> variant uses
-the same rule without the id condition, over accepted plus decoder-rejected quads (its precision is
-not meaningful: on the <code>standard</code> profile with sharpening off it reports 182k candidate FPs, because
-every funnel-passed noise quad counts).</p>
-<p>Dataset: 924 images (about 3300x4900), 9022 GT markers, ids 0-249 (<code>ARUCO_MIP_36h12</code>, 250 codes).</p>
-<h2 id="harness-sanity-checks-ruled-out-first">Harness sanity checks (ruled out first)</h2>
-<ul>
-<li>GT overlays on several images line up with the physical markers; decoded detections agree with GT
-  ids and lie within 1 px of the GT centre.</li>
-<li>No EXIF orientation tag on the images checked; image sizes vary per image and GT is in each image's
-  own pixel frame.</li>
-<li>The GT corner <strong>winding is opposite</strong> to Locus/OpenCV (counter-clockwise vs clockwise on screen,
-  corner 0 shared, order 0,3,2,1). It does not affect the centre-based scorer; any future corner-error
-  metric must map it.</li>
-<li>The +0.5 pixel convention is irrelevant at a 10 px tolerance.</li>
-</ul>
-<h2 id="why-recall-is-low-quad-stage-not-decode-stage">Why recall is low: quad stage, not decode stage</h2>
-<p>Locus <code>standard</code>, 9022 GT: <strong>2591 decoded (28.7 %)</strong>, 42 quads formed but rejected by decode, <strong>0 wrong
-ids</strong>, and <strong>6389 (70.8 %) with no quad at all</strong> within 10 px. Decode is not the bottleneck; quad
-formation is. With the best config below, 4770 decoded, 113 rejected, 4139 with no quad.</p>
-<p>Dependence on marker properties (best config, decoded %):</p>
+<p>"Candidate" below = <code>standard</code> with <code>threshold.mode = LocalMean</code> (PR #383),
+<code>local_mean_radius = 7</code>, <code>constant = 3</code>, <code>enable_sharpening = false</code>,
+<code>quad.min_fill_ratio = min_density = max_elongation = 0</code>, <code>segmentation.connectivity = Four</code>.
+"k·σ̂ₙ" = the same with <code>constant = clamp(round(k · σ̂ₙ), 2, 20)</code> per image (σ̂ₙ:
+<code>compute_image_noise_floor</code> formula), emulated from Python.</p>
+<h2 id="liu4k">Liu4K</h2>
+<p>924 images (~3300×4900), 9022 GT markers, <code>ARUCO_MIP_36h12</code>. Scorer = aruco_nano
+<code>testperf.cpp</code>: same id, centre distance ≤ 10 px, first-match TP/FP/FN.</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Marker edge (px)</th>
-<th style="text-align: right;">&lt;20</th>
-<th style="text-align: right;">20-45</th>
-<th style="text-align: right;">45-100</th>
-<th style="text-align: right;">100-250</th>
-<th style="text-align: right;">&gt;=250</th>
+<th style="text-align: left;">Detector / config</th>
+<th style="text-align: right;">Recall %</th>
+<th style="text-align: right;">Prec %</th>
+<th style="text-align: right;">F1</th>
+<th style="text-align: right;">R % &lt;20 px</th>
+<th style="text-align: right;">20–45</th>
+<th style="text-align: right;">45–100</th>
+<th style="text-align: right;">100–250</th>
+<th style="text-align: right;">≥250</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">Locus (no sharpen, relaxed)</td>
-<td style="text-align: right;">67</td>
-<td style="text-align: right;">68</td>
-<td style="text-align: right;">58</td>
-<td style="text-align: right;">51</td>
-<td style="text-align: right;">41</td>
-</tr>
-<tr>
 <td style="text-align: left;">aruco_nano</td>
-<td style="text-align: right;">50</td>
-<td style="text-align: right;">70</td>
-<td style="text-align: right;">66</td>
-<td style="text-align: right;">68</td>
-<td style="text-align: right;">68</td>
+<td style="text-align: right;">66.27</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: right;">79.71</td>
+<td style="text-align: right;">46.7</td>
+<td style="text-align: right;">69.7</td>
+<td style="text-align: right;">66.1</td>
+<td style="text-align: right;">67.0</td>
+<td style="text-align: right;">66.8</td>
 </tr>
 <tr>
 <td style="text-align: left;">OpenCV 4.10</td>
-<td style="text-align: right;">0</td>
-<td style="text-align: right;">14</td>
-<td style="text-align: right;">70</td>
-<td style="text-align: right;">66</td>
-<td style="text-align: right;">61</td>
+<td style="text-align: right;">57.69</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: right;">73.17</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">13.5</td>
+<td style="text-align: right;">69.6</td>
+<td style="text-align: right;">66.2</td>
+<td style="text-align: right;">60.9</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>standard</code></td>
+<td style="text-align: right;">29.11</td>
+<td style="text-align: right;">99.58</td>
+<td style="text-align: right;">45.05</td>
+<td style="text-align: right;">39.1</td>
+<td style="text-align: right;">38.7</td>
+<td style="text-align: right;">33.5</td>
+<td style="text-align: right;">29.0</td>
+<td style="text-align: right;">18.3</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>grid</code></td>
+<td style="text-align: right;">50.22</td>
+<td style="text-align: right;">99.56</td>
+<td style="text-align: right;">66.76</td>
+<td style="text-align: right;">62.9</td>
+<td style="text-align: right;">67.9</td>
+<td style="text-align: right;">59.3</td>
+<td style="text-align: right;">51.4</td>
+<td style="text-align: right;">27.7</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>high_accuracy</code></td>
+<td style="text-align: right;">44.69</td>
+<td style="text-align: right;">99.93</td>
+<td style="text-align: right;">61.76</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">54.2</td>
+<td style="text-align: right;">55.7</td>
+<td style="text-align: right;">48.0</td>
+<td style="text-align: right;">30.5</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>standard</code>, sharpening off</td>
+<td style="text-align: right;">50.58</td>
+<td style="text-align: right;">99.80</td>
+<td style="text-align: right;">67.13</td>
+<td style="text-align: right;">67.7</td>
+<td style="text-align: right;">67.6</td>
+<td style="text-align: right;">58.1</td>
+<td style="text-align: right;">50.5</td>
+<td style="text-align: right;">31.6</td>
+</tr>
+<tr>
+<td style="text-align: left;">+ <code>LocalMean</code> r24/C15 (PR #383 default)</td>
+<td style="text-align: right;">59.92</td>
+<td style="text-align: right;">99.72</td>
+<td style="text-align: right;">74.86</td>
+<td style="text-align: right;">63.2</td>
+<td style="text-align: right;">70.5</td>
+<td style="text-align: right;">66.1</td>
+<td style="text-align: right;">60.4</td>
+<td style="text-align: right;">46.9</td>
+</tr>
+<tr>
+<td style="text-align: left;">+ <code>LocalMean</code> r24/C15, sharpening on</td>
+<td style="text-align: right;">56.73</td>
+<td style="text-align: right;">99.80</td>
+<td style="text-align: right;">72.34</td>
+<td style="text-align: right;">61.8</td>
+<td style="text-align: right;">66.5</td>
+<td style="text-align: right;">62.6</td>
+<td style="text-align: right;">57.1</td>
+<td style="text-align: right;">44.2</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>grid</code> + <code>LocalMean</code> r24/C15</td>
+<td style="text-align: right;">60.65</td>
+<td style="text-align: right;">99.73</td>
+<td style="text-align: right;">75.43</td>
+<td style="text-align: right;">60.9</td>
+<td style="text-align: right;">70.7</td>
+<td style="text-align: right;">67.3</td>
+<td style="text-align: right;">61.4</td>
+<td style="text-align: right;">47.4</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>LocalMean</code> r7/C3, gates <strong>on</strong></td>
+<td style="text-align: right;">38.49</td>
+<td style="text-align: right;">99.29</td>
+<td style="text-align: right;">55.48</td>
+<td style="text-align: right;">72.2</td>
+<td style="text-align: right;">75.5</td>
+<td style="text-align: right;">69.3</td>
+<td style="text-align: right;">29.6</td>
+<td style="text-align: right;">0.2</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>LocalMean</code> r7/C3, gates off</td>
+<td style="text-align: right;">65.16</td>
+<td style="text-align: right;">99.42</td>
+<td style="text-align: right;">78.73</td>
+<td style="text-align: right;">71.4</td>
+<td style="text-align: right;">75.6</td>
+<td style="text-align: right;">70.1</td>
+<td style="text-align: right;">63.8</td>
+<td style="text-align: right;">56.6</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>LocalMean</code> r7/C3, gates off, edge-score gate off</td>
+<td style="text-align: right;">65.26</td>
+<td style="text-align: right;">99.36</td>
+<td style="text-align: right;">78.78</td>
+<td style="text-align: right;">66.3</td>
+<td style="text-align: right;">75.7</td>
+<td style="text-align: right;">70.2</td>
+<td style="text-align: right;">64.2</td>
+<td style="text-align: right;">57.0</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Candidate</strong> (r7/C3, gates off, 4-conn)</td>
+<td style="text-align: right;"><strong>67.19</strong></td>
+<td style="text-align: right;">99.61</td>
+<td style="text-align: right;"><strong>80.25</strong></td>
+<td style="text-align: right;">71.4</td>
+<td style="text-align: right;">76.6</td>
+<td style="text-align: right;">72.0</td>
+<td style="text-align: right;">66.1</td>
+<td style="text-align: right;">59.1</td>
+</tr>
+<tr>
+<td style="text-align: left;">Candidate, C = 8</td>
+<td style="text-align: right;">65.22</td>
+<td style="text-align: right;">99.61</td>
+<td style="text-align: right;">78.83</td>
+<td style="text-align: right;">68.6</td>
+<td style="text-align: right;">77.6</td>
+<td style="text-align: right;">69.6</td>
+<td style="text-align: right;">64.2</td>
+<td style="text-align: right;">56.1</td>
+</tr>
+<tr>
+<td style="text-align: left;">Candidate, k·σ̂ₙ, k = 3 / 4 / 5</td>
+<td style="text-align: right;">67.22 / 67.29 / 67.17</td>
+<td style="text-align: right;">99.33–99.35</td>
+<td style="text-align: right;">80.15–80.24</td>
+<td style="text-align: right;"></td>
+<td style="text-align: right;"></td>
+<td style="text-align: right;"></td>
+<td style="text-align: right;"></td>
+<td style="text-align: right;"></td>
+</tr>
+<tr>
+<td style="text-align: left;">Candidate, refinement off</td>
+<td style="text-align: right;">65.95</td>
+<td style="text-align: right;">99.78</td>
+<td style="text-align: right;">79.41</td>
+<td style="text-align: right;"></td>
+<td style="text-align: right;"></td>
+<td style="text-align: right;"></td>
+<td style="text-align: right;"></td>
+<td style="text-align: right;"></td>
+</tr>
+<tr>
+<td style="text-align: left;">Candidate (r4/C3), 2× <code>INTER_AREA</code> pre-downscale</td>
+<td style="text-align: right;">62.04</td>
+<td style="text-align: right;">99.68</td>
+<td style="text-align: right;">76.48</td>
+<td style="text-align: right;">20.7</td>
+<td style="text-align: right;">70.8</td>
+<td style="text-align: right;">69.8</td>
+<td style="text-align: right;">63.1</td>
+<td style="text-align: right;">55.3</td>
 </tr>
 </tbody>
 </table>
+<h3 id="latency-231-image-stride-4-subset-serial">Latency (231-image stride-4 subset, serial)</h3>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Mean marker intensity</th>
-<th style="text-align: right;">&lt;30</th>
-<th style="text-align: right;">30-60</th>
-<th style="text-align: right;">60-100</th>
+<th style="text-align: left;">Detector</th>
+<th style="text-align: right;">Recall % (subset)</th>
+<th style="text-align: right;">1 thread ms</th>
+<th style="text-align: right;">8 threads ms</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">Locus</td>
-<td style="text-align: right;">32</td>
-<td style="text-align: right;">58</td>
-<td style="text-align: right;">87</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">65.44</td>
+<td style="text-align: right;"><strong>52.2</strong></td>
+<td style="text-align: right;">52.9</td>
 </tr>
 <tr>
-<td style="text-align: left;">aruco_nano</td>
-<td style="text-align: right;">52</td>
-<td style="text-align: right;">72</td>
-<td style="text-align: right;">90</td>
+<td style="text-align: left;">Locus candidate</td>
+<td style="text-align: right;"><strong>65.57</strong></td>
+<td style="text-align: right;">313.7</td>
+<td style="text-align: right;">84.6</td>
 </tr>
 <tr>
 <td style="text-align: left;">OpenCV 4.10</td>
-<td style="text-align: right;">42</td>
-<td style="text-align: right;">66</td>
-<td style="text-align: right;">75</td>
+<td style="text-align: right;">56.63</td>
+<td style="text-align: right;">316.3</td>
+<td style="text-align: right;">132.2</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>standard</code></td>
+<td style="text-align: right;">29.08</td>
+<td style="text-align: right;">193.6</td>
+<td style="text-align: right;">77.1</td>
 </tr>
 </tbody>
 </table>
-<p>Recall does not depend on <code>rot</code> (52.4-53.2 % across the four values) or id (51.8-53.7 %).
-The dataset is a composite: markers are alpha-blended into photos, many are dark (about 40 % of GT
-markers have mean intensity below 30/255) and low contrast, and there are many distractor squares.
-Recall rises with sharpness (Laplacian variance quintiles: 37 % to 78 %). Locus is better than both
-references on tiny markers (&lt;20 px; OpenCV finds none) and matches aruco_nano at 20-45 px, but loses on
-<strong>large</strong> markers (&gt;=100 px) and on <strong>dark</strong> ones.</p>
-<h2 id="config-sweep-locus-all-924-images">Config sweep (Locus, all 924 images)</h2>
-<p>One factor at a time from <code>standard</code> (accuracy only; TP/FP/FN identical between parallel and serial runs).</p>
+<p>Load average 1.0–2.4 during the run (editor helpers only). Stage busy time from the
+pipeline's <code>tracing</code> spans, 1 thread, 29 images:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Stage</th>
+<th style="text-align: right;"><code>standard</code> ms</th>
+<th style="text-align: right;">candidate ms</th>
+<th style="text-align: right;">candidate, refinement off ms</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>quad_extraction</code></td>
+<td style="text-align: right;">81.8</td>
+<td style="text-align: right;">239.7</td>
+<td style="text-align: right;">51.8</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>segmentation</code></td>
+<td style="text-align: right;">79.2</td>
+<td style="text-align: right;">34.7</td>
+<td style="text-align: right;">35.3</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>threshold_apply_map</code></td>
+<td style="text-align: right;">8.2</td>
+<td style="text-align: right;">29.9</td>
+<td style="text-align: right;">29.9</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>decoding_pass</code></td>
+<td style="text-align: right;">5.8</td>
+<td style="text-align: right;">18.0</td>
+<td style="text-align: right;">9.2</td>
+</tr>
+<tr>
+<td style="text-align: left;">total</td>
+<td style="text-align: right;">205.9</td>
+<td style="text-align: right;">327.3</td>
+<td style="text-align: right;">131.1</td>
+</tr>
+</tbody>
+</table>
+<p>The candidate refines ~776 quads per image to decode 6, and the O(1) contrast funnel rejects
+~1 of them.</p>
+<h2 id="euroc-cam_april">EuRoC <code>cam_april</code></h2>
+<p>1450 frames, 6×6 Kalibr AprilGrid (tag36h11 with a <strong>2-bit</strong> black border), MT9V034,
+strong radtan distortion. No per-corner GT, so the scorer is GT-free (<code>tools/bench/sota/score.py</code>):
+presence and precision come from a RANSAC board homography fitted, after undistortion, to
+corners pooled over all detectors; accuracy is leave-one-tag-out (LOO) corner error
+predicted from the same detector's other tags.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Detector / config</th>
+<th style="text-align: right;">Recall %</th>
+<th style="text-align: right;">LOO median px (own set)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">OpenCV 4.10, <code>markerBorderBits = 2</code></td>
+<td style="text-align: right;">36.9</td>
+<td style="text-align: right;">1.69</td>
+</tr>
+<tr>
+<td style="text-align: left;">aruco_nano / AprilTag 3</td>
+<td style="text-align: right;">4.6 / 3.1 — unsupported (2-bit border)</td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>standard</code></td>
+<td style="text-align: right;">20.4</td>
+<td style="text-align: right;">0.99</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>grid</code></td>
+<td style="text-align: right;">70.2</td>
+<td style="text-align: right;">0.64</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>high_accuracy</code></td>
+<td style="text-align: right;">29.5</td>
+<td style="text-align: right;">0.40</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>grid</code> + <code>LocalMean</code> r24/C15</td>
+<td style="text-align: right;">91.1</td>
+<td style="text-align: right;">0.60</td>
+</tr>
+<tr>
+<td style="text-align: left;">Candidate, C = 3</td>
+<td style="text-align: right;">80.4</td>
+<td style="text-align: right;">0.61</td>
+</tr>
+<tr>
+<td style="text-align: left;">Candidate, C = 8</td>
+<td style="text-align: right;">90.4</td>
+<td style="text-align: right;">0.58</td>
+</tr>
+<tr>
+<td style="text-align: left;">Candidate, k·σ̂ₙ, k = 3 / 4 / 5</td>
+<td style="text-align: right;">82.8 / 86.9 / 88.7</td>
+<td style="text-align: right;">0.59–0.60</td>
+</tr>
+</tbody>
+</table>
+<p>Corner accuracy: replacing only the refiner on <code>grid</code>'s quads with <code>cv2.cornerSubPix</code>
+(half-window 4) cuts LOO error from 0.695 to 0.248 px (median, 10 591 common tags).
+<code>grid</code>'s ERF corners sit 0.39 px inward of the Kalibr X-junctions, and EdLines corners
+0.17 px outward.</p>
+<h2 id="generality-checks">Generality checks</h2>
+<p>ICRA 2020 <code>forward/pure_tags</code> (7700 GT, detection level, <code>Metrics.match_detections</code>):</p>
 <table>
 <thead>
 <tr>
 <th style="text-align: left;">Config</th>
 <th style="text-align: right;">Recall %</th>
-<th style="text-align: right;">Precision %</th>
-<th style="text-align: right;">F1 %</th>
-<th style="text-align: left;">Notes</th>
+<th style="text-align: right;">Prec %</th>
+<th style="text-align: right;">Corner RMSE px</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align: left;"><code>standard</code></td>
-<td style="text-align: right;">28.72</td>
-<td style="text-align: right;">99.73</td>
-<td style="text-align: right;">44.60</td>
-<td style="text-align: left;">baseline</td>
+<td style="text-align: right;">73.75</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: right;">0.2796</td>
 </tr>
 <tr>
-<td style="text-align: left;"><code>grid</code> profile</td>
-<td style="text-align: right;">49.71</td>
-<td style="text-align: right;">99.56</td>
-<td style="text-align: right;">66.31</td>
-<td style="text-align: left;"></td>
+<td style="text-align: left;"><code>high_accuracy</code></td>
+<td style="text-align: right;">17.04</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: right;">0.7657</td>
 </tr>
 <tr>
-<td style="text-align: left;"><code>high_accuracy</code> profile</td>
-<td style="text-align: right;">44.69</td>
-<td style="text-align: right;">99.93</td>
-<td style="text-align: right;">61.76</td>
-<td style="text-align: left;"></td>
+<td style="text-align: left;"><code>standard</code> + <code>LocalMean</code> r24/C15 (PR #383)</td>
+<td style="text-align: right;">73.61</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: right;">0.2824</td>
 </tr>
 <tr>
-<td style="text-align: left;"><strong><code>enable_sharpening=false</code></strong></td>
-<td style="text-align: right;"><strong>49.68</strong></td>
-<td style="text-align: right;">99.78</td>
-<td style="text-align: right;">66.33</td>
-<td style="text-align: left;">dominant lever, +21 pp</td>
+<td style="text-align: left;">Candidate, C = 3</td>
+<td style="text-align: right;">73.39</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: right;">0.2981</td>
 </tr>
 <tr>
-<td style="text-align: left;">sharpening off + <code>min_edge_score=0</code></td>
-<td style="text-align: right;">50.74</td>
-<td style="text-align: right;">99.39</td>
-<td style="text-align: right;">67.19</td>
-<td style="text-align: left;"></td>
-</tr>
-<tr>
-<td style="text-align: left;">sharpening off + <code>min_density=0</code></td>
-<td style="text-align: right;">50.92</td>
-<td style="text-align: right;">99.70</td>
-<td style="text-align: right;">67.41</td>
-<td style="text-align: left;"></td>
-</tr>
-<tr>
-<td style="text-align: left;">sharpening off + <code>max_hamming_error=3</code></td>
-<td style="text-align: right;">49.82</td>
-<td style="text-align: right;">99.05</td>
-<td style="text-align: right;">66.30</td>
-<td style="text-align: left;">more FPs, no gain</td>
-</tr>
-<tr>
-<td style="text-align: left;">sharpening off + refinement <code>None</code></td>
-<td style="text-align: right;">46.71</td>
-<td style="text-align: right;">99.91</td>
-<td style="text-align: right;">63.66</td>
-<td style="text-align: left;"></td>
-</tr>
-<tr>
-<td style="text-align: left;">sharpening off + EdLines + refinement <code>None</code></td>
-<td style="text-align: right;">44.52</td>
-<td style="text-align: right;">99.90</td>
-<td style="text-align: right;">61.60</td>
-<td style="text-align: left;"></td>
-</tr>
-<tr>
-<td style="text-align: left;">sharpening off, <code>tile_size</code> 16 / 32</td>
-<td style="text-align: right;">48.16 / 44.54</td>
-<td style="text-align: right;">99.77 / 99.83</td>
-<td style="text-align: right;">64.96 / 61.59</td>
-<td style="text-align: left;">faster, less recall</td>
-</tr>
-<tr>
-<td style="text-align: left;">sharpening off, <code>connectivity=Four</code></td>
-<td style="text-align: right;">49.04</td>
-<td style="text-align: right;">99.73</td>
-<td style="text-align: right;">65.75</td>
-<td style="text-align: left;">+6 pp only while sharpening is on</td>
-</tr>
-<tr>
-<td style="text-align: left;">sharpening off + all four gates relaxed</td>
-<td style="text-align: right;"><strong>52.87</strong></td>
-<td style="text-align: right;">99.25</td>
-<td style="text-align: right;"><strong>68.99</strong></td>
-<td style="text-align: left;">see below</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>decimation</code> 2 / 4 (on <code>standard</code>)</td>
-<td style="text-align: right;">27.08 / 12.08</td>
-<td style="text-align: right;">99.88 / 99.45</td>
-<td style="text-align: right;"></td>
-<td style="text-align: left;"></td>
-</tr>
-<tr>
-<td style="text-align: left;">sharpening off + <code>decimation</code> 2 / 3</td>
-<td style="text-align: right;">46.42 / 33.98</td>
-<td style="text-align: right;">99.86 / 99.90</td>
-<td style="text-align: right;"></td>
-<td style="text-align: left;">subsampling, not area-averaging</td>
-</tr>
-<tr>
-<td style="text-align: left;"><code>quad.upscale_factor=2</code></td>
-<td style="text-align: right;"><strong>0.00</strong></td>
-<td style="text-align: right;">0.00</td>
-<td style="text-align: right;"></td>
-<td style="text-align: left;">see the bug below</td>
+<td style="text-align: left;">Candidate, k·σ̂ₙ, k = 5</td>
+<td style="text-align: right;">73.39</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: right;">0.2984</td>
 </tr>
 </tbody>
 </table>
-<p>"All four gates relaxed" = <code>quad.min_edge_score=0</code>, <code>quad.min_density=0</code>, <code>quad.max_elongation=0</code>,
-<code>quad.min_fill_ratio=0.05</code>. Other tunables changed nothing measurable (see the inert-knob note).
-The <code>tools/bench/tune</code> harness is tied to the hub datasets, strata and pose metrics, so this sweep used
-a scratch driver that builds <code>DetectorConfig</code> objects from the shipped profiles; the shipped JSON
-profiles were not edited.</p>
-<p>External preprocessing (Locus config: sharpening off): Gaussian blur sigma 1 gives 50.62 % (+0.9 pp)
-but sigma 2 and 3 lose recall (46.95 %, 41.58 %). An area-averaged 2x downscale (<code>cv2.INTER_AREA</code>)
-gives 48.05 % at roughly a quarter of the latency (36.7 vs 140.4 ms at 1 thread, 22.6 vs 80.0 ms at
-8). Running full-resolution plus 2x plus 4x detectors and taking the union of decoded markers reaches
-55.4 % recall (FPs at most 48), a +2.5 pp gain over the best single pass. The union was never timed;
-the 4x pass was not timed either, so no latency figure is quoted for it here.</p>
-<h2 id="comparison-all-924-images-same-10-px-scorer">Comparison (all 924 images, same 10 px scorer)</h2>
-<p>Re-measured 2026-09-20 under the protocol in the Setup table: serial, best-of-2 per image, decode
-excluded, thread count set only by <code>RAYON_NUM_THREADS</code> (Locus) or <code>cv::setNumThreads</code> (references).
-References are built in the scratchpad (not the repo): OpenCV 4.10.0 from source
-(<code>errorCorrectionRate=0</code>, as in aruco_nano's benchmark; <code>DICT_ARUCO_MIP_36h12</code>) and aruco_nano commit
-<code>961b18b</code>, driven by a scorer copied from <code>testperf.cpp</code>. Every accuracy tally below is unchanged from
-the 2026-09-19 run; only the latency column and the thread labels are new.</p>
+<p>Render-tag hub sets, detection level (no intrinsics), recall % / precision % / mean corner RMSE px:</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Detector</th>
-<th style="text-align: right;">Threads</th>
-<th style="text-align: right;">TP</th>
-<th style="text-align: right;">FP</th>
-<th style="text-align: right;">FN</th>
-<th style="text-align: right;">Recall %</th>
-<th style="text-align: right;">Precision %</th>
-<th style="text-align: right;">F1 %</th>
-<th style="text-align: right;">Latency ms / image</th>
+<th style="text-align: left;">Set</th>
+<th style="text-align: left;"><code>standard</code></th>
+<th style="text-align: left;"><code>standard</code> + candidate (k = 5)</th>
+<th style="text-align: left;"><code>high_accuracy</code></th>
+<th style="text-align: left;"><code>high_accuracy</code> + candidate (k = 5)</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">Locus <code>standard</code></td>
-<td style="text-align: right;">1</td>
-<td style="text-align: right;">2591</td>
-<td style="text-align: right;">7</td>
-<td style="text-align: right;">6431</td>
-<td style="text-align: right;">28.72</td>
-<td style="text-align: right;">99.73</td>
-<td style="text-align: right;">44.60</td>
-<td style="text-align: right;">163.9</td>
+<td style="text-align: left;">tag36h11 640×480</td>
+<td style="text-align: left;">100 / 100 / 0.759</td>
+<td style="text-align: left;">100 / 100 / 0.860</td>
+<td style="text-align: left;">100 / 100 / 0.210</td>
+<td style="text-align: left;">100 / 100 / 0.255</td>
 </tr>
 <tr>
-<td style="text-align: left;">Locus <code>standard</code></td>
-<td style="text-align: right;">8</td>
-<td style="text-align: right;">2591</td>
-<td style="text-align: right;">7</td>
-<td style="text-align: right;">6431</td>
-<td style="text-align: right;">28.72</td>
-<td style="text-align: right;">99.73</td>
-<td style="text-align: right;">44.60</td>
-<td style="text-align: right;">118.8</td>
+<td style="text-align: left;">tag36h11 1920×1080</td>
+<td style="text-align: left;">100 / 100 / 0.741</td>
+<td style="text-align: left;">100 / 100 / 0.780</td>
+<td style="text-align: left;">100 / 100 / 0.215</td>
+<td style="text-align: left;">100 / 100 / 0.218</td>
 </tr>
 <tr>
-<td style="text-align: left;">Locus <code>grid</code></td>
-<td style="text-align: right;">1</td>
-<td style="text-align: right;">4485</td>
-<td style="text-align: right;">20</td>
-<td style="text-align: right;">4537</td>
-<td style="text-align: right;">49.71</td>
-<td style="text-align: right;">99.56</td>
-<td style="text-align: right;">66.31</td>
-<td style="text-align: right;">156.1</td>
+<td style="text-align: left;">tag36h11 3840×2160</td>
+<td style="text-align: left;">100 / 100 / 0.777</td>
+<td style="text-align: left;">100 / 100 / 0.781</td>
+<td style="text-align: left;">100 / 100 / 0.178</td>
+<td style="text-align: left;">100 / 100 / 0.223</td>
 </tr>
 <tr>
-<td style="text-align: left;">Locus <code>grid</code></td>
-<td style="text-align: right;">8</td>
-<td style="text-align: right;">4485</td>
-<td style="text-align: right;">20</td>
-<td style="text-align: right;">4537</td>
-<td style="text-align: right;">49.71</td>
-<td style="text-align: right;">99.56</td>
-<td style="text-align: right;">66.31</td>
-<td style="text-align: right;">85.9</td>
+<td style="text-align: left;">high_iso</td>
+<td style="text-align: left;">100 / 100 / 0.739</td>
+<td style="text-align: left;">100 / 96.2 / 0.765</td>
+<td style="text-align: left;">100 / 100 / 0.210</td>
+<td style="text-align: left;">100 / 100 / 0.263</td>
 </tr>
 <tr>
-<td style="text-align: left;">Locus <code>high_accuracy</code></td>
-<td style="text-align: right;">1</td>
-<td style="text-align: right;">4032</td>
-<td style="text-align: right;">3</td>
-<td style="text-align: right;">4990</td>
-<td style="text-align: right;">44.69</td>
-<td style="text-align: right;">99.93</td>
-<td style="text-align: right;">61.76</td>
-<td style="text-align: right;">138.0</td>
+<td style="text-align: left;">low_key</td>
+<td style="text-align: left;"><strong>14</strong> / 100 / 0.921</td>
+<td style="text-align: left;"><strong>98</strong> / 100 / 0.441</td>
+<td style="text-align: left;">100 / 100 / 0.527</td>
+<td style="text-align: left;">98 / 100 / 0.824</td>
 </tr>
 <tr>
-<td style="text-align: left;">Locus <code>high_accuracy</code></td>
-<td style="text-align: right;">8</td>
-<td style="text-align: right;">4032</td>
-<td style="text-align: right;">3</td>
-<td style="text-align: right;">4990</td>
-<td style="text-align: right;">44.69</td>
-<td style="text-align: right;">99.93</td>
-<td style="text-align: right;">61.76</td>
-<td style="text-align: right;">101.7</td>
+<td style="text-align: left;">raw_pipeline</td>
+<td style="text-align: left;">60 / 100 / 1.456</td>
+<td style="text-align: left;">100 / 96.2 / 1.812</td>
+<td style="text-align: left;">100 / 100 / 0.292</td>
+<td style="text-align: left;">100 / 100 / 0.606</td>
 </tr>
 <tr>
-<td style="text-align: left;">Locus <code>standard</code> + sharpening off</td>
-<td style="text-align: right;">1</td>
-<td style="text-align: right;">4482</td>
-<td style="text-align: right;">10</td>
-<td style="text-align: right;">4540</td>
-<td style="text-align: right;">49.68</td>
-<td style="text-align: right;">99.78</td>
-<td style="text-align: right;">66.33</td>
-<td style="text-align: right;">140.4</td>
-</tr>
-<tr>
-<td style="text-align: left;">Locus <code>standard</code> + sharpening off</td>
-<td style="text-align: right;">8</td>
-<td style="text-align: right;">4482</td>
-<td style="text-align: right;">10</td>
-<td style="text-align: right;">4540</td>
-<td style="text-align: right;">49.68</td>
-<td style="text-align: right;">99.78</td>
-<td style="text-align: right;">66.33</td>
-<td style="text-align: right;">80.0</td>
-</tr>
-<tr>
-<td style="text-align: left;">Locus sharpening off + relaxed gates</td>
-<td style="text-align: right;">1</td>
-<td style="text-align: right;">4770</td>
-<td style="text-align: right;">36</td>
-<td style="text-align: right;">4252</td>
-<td style="text-align: right;">52.87</td>
-<td style="text-align: right;">99.25</td>
-<td style="text-align: right;">68.99</td>
-<td style="text-align: right;">169.7</td>
-</tr>
-<tr>
-<td style="text-align: left;">Locus sharpening off + relaxed gates</td>
-<td style="text-align: right;">8</td>
-<td style="text-align: right;">4770</td>
-<td style="text-align: right;">36</td>
-<td style="text-align: right;">4252</td>
-<td style="text-align: right;">52.87</td>
-<td style="text-align: right;">99.25</td>
-<td style="text-align: right;">68.99</td>
-<td style="text-align: right;">89.4</td>
-</tr>
-<tr>
-<td style="text-align: left;">Locus sharpening off + 2x area downscale</td>
-<td style="text-align: right;">1</td>
-<td style="text-align: right;">4335</td>
-<td style="text-align: right;">6</td>
-<td style="text-align: right;">4687</td>
-<td style="text-align: right;">48.05</td>
-<td style="text-align: right;">99.86</td>
-<td style="text-align: right;">64.88</td>
-<td style="text-align: right;">36.7</td>
-</tr>
-<tr>
-<td style="text-align: left;">Locus sharpening off + 2x area downscale</td>
-<td style="text-align: right;">8</td>
-<td style="text-align: right;">4335</td>
-<td style="text-align: right;">6</td>
-<td style="text-align: right;">4687</td>
-<td style="text-align: right;">48.05</td>
-<td style="text-align: right;">99.86</td>
-<td style="text-align: right;">64.88</td>
-<td style="text-align: right;">22.6</td>
-</tr>
-<tr>
-<td style="text-align: left;">OpenCV 4.10 <code>aruco</code></td>
-<td style="text-align: right;">1</td>
-<td style="text-align: right;">5205</td>
-<td style="text-align: right;">0</td>
-<td style="text-align: right;">3817</td>
-<td style="text-align: right;">57.69</td>
-<td style="text-align: right;">100.00</td>
-<td style="text-align: right;">73.17</td>
-<td style="text-align: right;">333.8</td>
-</tr>
-<tr>
-<td style="text-align: left;">OpenCV 4.10 <code>aruco</code></td>
-<td style="text-align: right;">8</td>
-<td style="text-align: right;">5205</td>
-<td style="text-align: right;">0</td>
-<td style="text-align: right;">3817</td>
-<td style="text-align: right;">57.69</td>
-<td style="text-align: right;">100.00</td>
-<td style="text-align: right;">73.17</td>
-<td style="text-align: right;">249.7</td>
-</tr>
-<tr>
-<td style="text-align: left;">aruco_nano</td>
-<td style="text-align: right;">1</td>
-<td style="text-align: right;">6039</td>
-<td style="text-align: right;">8</td>
-<td style="text-align: right;">2983</td>
-<td style="text-align: right;">66.94</td>
-<td style="text-align: right;">99.87</td>
-<td style="text-align: right;">80.15</td>
-<td style="text-align: right;">55.6</td>
-</tr>
-<tr>
-<td style="text-align: left;">aruco_nano</td>
-<td style="text-align: right;">8</td>
-<td style="text-align: right;">6039</td>
-<td style="text-align: right;">8</td>
-<td style="text-align: right;">2983</td>
-<td style="text-align: right;">66.94</td>
-<td style="text-align: right;">99.87</td>
-<td style="text-align: right;">80.15</td>
-<td style="text-align: right;">55.6</td>
+<td style="text-align: left;">tag16h5</td>
+<td style="text-align: left;">100 / <strong>83.3</strong> / 0.753</td>
+<td style="text-align: left;">100 / <strong>50.3</strong> / 0.956</td>
+<td style="text-align: left;">98 / 48.5 / 0.176</td>
+<td style="text-align: left;">100 / 45.5 / 0.213</td>
 </tr>
 </tbody>
 </table>
-<p>The 2x-downscale row includes its <code>cv2.resize</code> inside the timer, but that resize is always
-single-threaded (<code>cv2.setNumThreads(1)</code>), so only the detection part of that row scales.</p>
-<h3 id="thread-scaling-1-8-same-run">Thread scaling (1 -&gt; 8, same run)</h3>
+<h2 id="root-causes">Root causes</h2>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Config</th>
-<th style="text-align: right;">1 thread</th>
-<th style="text-align: right;">8 threads</th>
-<th style="text-align: right;">Speedup</th>
+<th style="text-align: left;"></th>
+<th style="text-align: left;">Root cause</th>
+<th style="text-align: left;">Lesson</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">Locus <code>standard</code></td>
-<td style="text-align: right;">163.9</td>
-<td style="text-align: right;">118.8</td>
-<td style="text-align: right;">1.38x</td>
+<td style="text-align: left;">RC1</td>
+<td style="text-align: left;">CCL threshold = min/max midpoint, no validity gate, no bright-side guard band: markers merge with texture or shatter</td>
+<td style="text-align: left;"><a href="../../lessons/recall-quad-icra/#2026-10-01-real-image-recall-liu4k-euroc-the-segmentation-model">recall 2026-10-01</a></td>
 </tr>
 <tr>
-<td style="text-align: left;">Locus <code>grid</code></td>
-<td style="text-align: right;">156.1</td>
-<td style="text-align: right;">85.9</td>
-<td style="text-align: right;">1.82x</td>
+<td style="text-align: left;">RC2</td>
+<td style="text-align: left;">Quad pre-gates assume a filled blob (and 8-connectivity bridges to clutter); they also carry FP control for weak dictionaries</td>
+<td style="text-align: left;">same</td>
 </tr>
 <tr>
-<td style="text-align: left;">Locus <code>high_accuracy</code></td>
-<td style="text-align: right;">138.0</td>
-<td style="text-align: right;">101.7</td>
-<td style="text-align: right;">1.36x</td>
+<td style="text-align: left;">RC3</td>
+<td style="text-align: left;">Threshold offset in grey levels instead of noise units</td>
+<td style="text-align: left;">same</td>
 </tr>
 <tr>
-<td style="text-align: left;">Locus sharpening off</td>
-<td style="text-align: right;">140.4</td>
-<td style="text-align: right;">80.0</td>
-<td style="text-align: right;">1.76x</td>
+<td style="text-align: left;">RC4</td>
+<td style="text-align: left;">Border width not in the layout model: Kalibr 2-bit tags decode via a 0.9 scale retry, with false ids</td>
+<td style="text-align: left;">same</td>
 </tr>
 <tr>
-<td style="text-align: left;">Locus sharpening off + relaxed gates</td>
-<td style="text-align: right;">169.7</td>
-<td style="text-align: right;">89.4</td>
-<td style="text-align: right;">1.90x</td>
+<td style="text-align: left;">L1–L3</td>
+<td style="text-align: left;">Sub-pixel refinement before decode on every candidate; funnel ineffective on texture</td>
+<td style="text-align: left;">same</td>
 </tr>
 <tr>
-<td style="text-align: left;">Locus sharpening off + 2x downscale</td>
-<td style="text-align: right;">36.7</td>
-<td style="text-align: right;">22.6</td>
-<td style="text-align: right;">1.62x</td>
+<td style="text-align: left;">RC5</td>
+<td style="text-align: left;">Corner refiners assume linear photometry (sRGB gamma bias ∝ blur); ERF 1-DOF seed-direction scatter</td>
+<td style="text-align: left;"><a href="../../lessons/rotation-tail-and-edge-refinement/#2026-10-01-corner-bias-is-photometric-not-a-psf-floor">rotation-tail 2026-10-01</a></td>
 </tr>
 <tr>
-<td style="text-align: left;">OpenCV 4.10 <code>aruco</code></td>
-<td style="text-align: right;">333.8</td>
-<td style="text-align: right;">249.7</td>
-<td style="text-align: right;">1.34x</td>
+<td style="text-align: left;">RC5b</td>
+<td style="text-align: left;">EdLines ~+0.5 px outward bias in linear light, cancelled by sRGB on render-tag</td>
+<td style="text-align: left;"><a href="../../lessons/edlines-segmentation/#2026-10-01-intrinsic-outward-bias-masked-by-srgb">EdLines 2026-10-01</a></td>
 </tr>
 <tr>
-<td style="text-align: left;">aruco_nano</td>
-<td style="text-align: right;">55.6</td>
-<td style="text-align: right;">55.6</td>
-<td style="text-align: right;">1.00x</td>
+<td style="text-align: left;">RC6</td>
+<td style="text-align: left;">Pixel-centre interop: Locus +0.5 vs OpenCV/Kalibr/Liu4K integer centres (measured +0.50 px); <code>CameraIntrinsics</code> convention unspecified</td>
+<td style="text-align: left;"><a href="../../../explanation/coordinates/">coordinates</a></td>
 </tr>
 </tbody>
 </table>
-<p>No detector on this table comes close to 8x on 8 vCPUs (4 physical cores + SMT). Locus tops out at
-1.9x; <code>standard</code> and <code>high_accuracy</code> scale worst (1.36-1.38x). aruco_nano does not scale at all, and
-OpenCV's aruco gains only 1.34x — its adaptive-threshold stage is not parallelised in this build
-(<code>adaptiveThreshold</code> on a 4900x3300 image measures 15.0 ms at 1 thread and 15.0 ms at 8), while
-<code>GaussianBlur</code> on the same image scales 4.1x, so the backend itself is working. Locus's own ceiling is
-a large serial section inside <code>detect()</code>, not a missing thread knob: with eight workers available only
-about two are ever busy (finding 5).</p>
-<p>Detection overlap with the best Locus config: aruco_nano finds 1515 GT markers that Locus misses and
-Locus finds 246 that aruco_nano misses; against OpenCV the numbers are 1382 and 947.</p>
-<h2 id="best-configuration-and-pareto">Best configuration and Pareto</h2>
-<p>On this dataset <code>standard</code> with <strong><code>threshold.enable_sharpening=false</code></strong> is the best default: it
-recovers +21 pp of recall at unchanged precision and is faster at both thread counts (140.4 vs
-163.9 ms at 1 thread, 80.0 vs 118.8 ms at 8).
-<code>bench real --dataset liu4k --family ArUcoMip36h12 --no-sharpening</code> reproduces it exactly
-(4482 / 10 / 4540). Non-dominated points on (recall, precision, latency), at both thread counts: the
-2x-downscale pipeline (36.7 / 22.6 ms, 64.9 F1, highest precision among the usable points),
-sharpening-off (140.4 / 80.0 ms, 66.3 F1) and sharpening-off with relaxed gates (169.7 / 89.4 ms,
-69.0 F1, lowest precision at 99.25 %). <code>grid</code> is dominated by sharpening-off (same F1, slower at both
-thread counts); <code>standard</code> is dominated. <code>high_accuracy</code> is dominated at 8 threads, and at 1 thread it
-is only nominally non-dominated: it is 2.4 ms faster than sharpening-off (138.0 vs 140.4) for 5 pp
-less recall, and 2.4 ms is inside this harness's run-to-run noise.
-Precision stays at or above 99.25 % everywhere, so recall and latency decide.
-Even the best Locus config trails aruco_nano (66.9 %) and OpenCV (57.7 %) in recall on the same
-scorer. On latency it beats OpenCV at both thread counts (169.7 vs 333.8 ms at 1 thread, 89.4 vs
-249.7 ms at 8) and loses to aruco_nano at both (55.6 ms, which does not change with threads).</p>
-<h2 id="findings-that-need-a-decision-no-detector-code-changed">Findings that need a decision (no detector code changed)</h2>
+<p>Findings of the superseded 2026-09-19 report were resolved by #382 (<code>upscale_factor</code>
+corner mapping) and #385 (<code>Detector(threads=)</code> wired, dead config removed); its inert
+<code>threshold.constant</code> / <code>gradient_threshold</code> / <code>min_radius</code> / <code>max_radius</code> knobs are
+removed or wired by PR #383.</p>
+<h2 id="next-steps">Next steps</h2>
+<p>Ordered so each step is independently measurable; every step re-runs render-tag, ICRA,
+board hub, Liu4K and EuRoC.</p>
 <ol>
-<li><strong><code>quad.upscale_factor &gt; 1</code> returns corners in the upscaled frame.</strong> On <code>004.jpg</code>, id 79 decodes
-   with centre (3088, 3002) at factor 2 versus (1543.8, 1500.8) at factor 1 (GT 1543.4, 1500.6); a full
-   run gives TP=0, FP=3238. In <code>detector.rs</code> (<code>detect</code> preprocessing) the scale from the upscale branch
-   is bound to <code>_effective_scale</code> and never used, and the funnel gate is given <code>1.0 / config.decimation</code>.
-   Ids decode, so only the coordinate mapping is wrong.</li>
-<li><strong>Two config fields are inert here.</strong> <code>threshold.constant</code> (<code>adaptive_threshold_constant</code>) has no
-   reader outside config plumbing, and <code>threshold.gradient_threshold</code> gave bit-identical TP/FP/FN for
-   0, 5, 20 and 40; <code>threshold.min_range</code> (0-40) and <code>decoder.min_contrast</code> (0-40) also gave identical
-   results on all 924 images (they are read but never bind on this data).</li>
-<li><strong>Sharpening default.</strong> <code>standard</code> enables Laplacian sharpening; on this noisy, low-key data it costs
-   21 pp of recall. This is a tuning question for the shipped default, not proven to be a defect;
-   changing it needs the ICRA and render-tag regression suites.</li>
-<li><strong>Large clean markers are missed on textured backgrounds.</strong> <code>004.jpg</code> marker 229 (edge about
-   310 px, crisp black border on water) yields no quad, not even a rejected one, at full resolution on
-   every shipped profile and on EdLines. It is found after a 2x or 4x area downscale or a sigma-2 blur.
-   A numpy emulation of the tile threshold (3x3 tiles, midpoint of min/max, range gate 10) shows the
-   marker's foreground merging with water-texture speckle and its deep black interior flagged as
-   low-range, which is consistent with the miss. That is a hypothesis about the Rust internals, not a
-   confirmed root cause. OpenCV uses several adaptive-threshold window sizes and aruco_nano a
-   contour tracer, which is one plausible reason both do better on markers of 100 px and larger.</li>
-<li><strong><code>Detector(threads=)</code> is dead, and real thread scaling tops out at 1.9x.</strong> Two separate facts,
-   both re-verified on 2026-09-20:</li>
-<li><em>The parameter does nothing.</em> <code>DetectorBuilder::with_threads</code> writes <code>config.nthreads</code>
-     (<code>detector.rs:642</code>) and nothing ever reads it: <code>nthreads</code> appears only in its declaration
-     (<code>config.rs:222</code>), its defaults and the serde copy, and there is no <code>rayon::ThreadPool</code>,
-     <code>build_global</code> or <code>num_threads</code> call anywhere in <code>locus-core</code> or <code>locus-py</code>. Measured: at a fixed
-     <code>RAYON_NUM_THREADS</code>, <code>threads=None/1/8/64</code> give <strong>bit-identical ids and corners</strong> and the same
-     latency (183-193 ms at <code>RAYON_NUM_THREADS=1</code>, 132-134 ms at 8 — the spread is noise, and the two
-     groups differ only by the env var). The thread count is decided solely by <code>RAYON_NUM_THREADS</code>, or
-     by the core count when it is unset. <code>docs/reference/api.md</code> still describes the argument as the
-     "Rayon intra-frame thread count (0 = all cores)". It must be wired (a scoped
-     <code>ThreadPool::install</code> that does not allocate in the hot loop) or removed along with its docs.
-     This is what invalidated the first version of this report's latency table.</li>
-<li><em>Scaling is Amdahl-limited, not thread-starved.</em> With <code>RAYON_NUM_THREADS</code> actually set, 1 -&gt; 8
-     threads buys only 1.38x on <code>standard</code> and at best 1.90x on the relaxed config, on 8 vCPUs.
-     <code>detect()</code> is genuinely handed the eight workers and keeps only about two of them busy: over a
-     25-image subset on <code>standard</code>, CPU time / wall time during the detection loop is <strong>1.00 cores at
-     <code>RAYON_NUM_THREADS=1</code> and 1.98 cores at 8</strong>, while total CPU work rises 8.56 s -&gt; 10.98 s
-     (+28 % parallel overhead) for a wall drop of 8.56 s -&gt; 5.55 s. A 1.38x speedup on 8 workers
-     implies a parallel fraction of only about 0.31, i.e. roughly two thirds of a <code>standard</code> 4K frame
-     is serial. Locating that serial section is a detector-internals question and is <strong>not measured in
-     this report</strong>; a separate root-cause investigation attributes it to the connected-components
-     stage (<code>pipeline::segmentation</code> / <code>label_components_lsl</code>, which contains no rayon), which would
-     also mean <code>pipeline.md</code>'s "0.5 ms segmentation @720p" budget does not survive textured 4K input.
-     That attribution needs its own instrumented measurement before it is treated as established.</li>
+<li><strong>Threshold model</strong>: land PR #383 and extend it with the noise-calibrated offset
+   (σ̂ₙ from a subsampled |Laplacian| histogram, no <code>Vec</code> in <code>detect()</code>).</li>
+<li><strong>Topology-invariant candidate validation</strong>: contour-shape checks plus dictionary-aware
+   false-positive control in place of fill/density/elongation, and 4-connectivity for the
+   local-mean foreground.</li>
+<li><strong>Decode-first ordering</strong>: bound 131 ms/img at 1 thread before the near-miss retry.</li>
+<li><strong>Border width as a layout parameter</strong> (Kalibr AprilGrid), retiring the scale retry as
+   a layout workaround.</li>
+<li><strong>Photometric response model</strong> (f32 LUT inside the samplers) together with the EdLines
+   outward-bias fix; then re-evaluate GWLF-style corners (rotation-tail re-attempt condition).</li>
+<li><strong>ERF seed-direction decoupling</strong>, within the constraints of the 2-DOF Tukey negative.</li>
+<li><strong>Area-averaged decimation</strong> as the 4K latency Pareto option (<code>decimate_to</code> subsamples).</li>
 </ol>
+<h2 id="external-proposals-evaluated">External proposals evaluated</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Idea</th>
+<th style="text-align: left;">Verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">PR #383 <code>LocalMean</code></td>
+<td style="text-align: left;">Correct root cause (RC1): +31 pp Liu4K with sharpening off, +21 pp EuRoC. Needs RC2/RC3 for SOTA, and a corner-accuracy gate.</td>
+</tr>
+<tr>
+<td style="text-align: left;">PR #384 shoot-limited sharpening</td>
+<td style="text-align: left;">Ties sharpening-off on Liu4K (49.47 vs 49.68 %), slower than off at 1 and 8 threads; superseded on Liu4K by fixing RC1.</td>
+</tr>
+<tr>
+<td style="text-align: left;">Contrast-scaled offset (Sauvola/Wolf)</td>
+<td style="text-align: left;">Not measured; the noise-scaled offset (RC3) is measured robust on both datasets.</td>
+</tr>
+<tr>
+<td style="text-align: left;">Octave discovery + full-res refinement</td>
+<td style="text-align: left;">Supported: 62 % at about a quarter of the cost, losing &lt; 20 px markers. Pareto option, not default.</td>
+</tr>
+<tr>
+<td style="text-align: left;">Gate run generation by tile range</td>
+<td style="text-align: left;">Equivalent to the validity gate (−0.18 pp, PR #383): latency lever at most.</td>
+</tr>
+<tr>
+<td style="text-align: left;">Decouple corners from the binary mask</td>
+<td style="text-align: left;">Partly true (ERF keeps the seed direction); the dominant corner effect is photometric (RC5).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="harness-notes">Harness notes</h2>
+<ul>
+<li>Liu4K GT corner winding is counter-clockwise (0, 3, 2, 1) vs Locus/OpenCV clockwise; the
+  centre-based scorer is unaffected, any corner-error metric must remap. No EXIF rotation;
+  GT is in each image's own pixel frame, integer-centre convention.</li>
+<li>Liu4K is CC BY 4.0 (Zenodo 10.5281/zenodo.18667018), fetched at runtime and never
+  committed or packaged.</li>
+<li>EuRoC runs record which detectors were skipped as unsupported; references are compared
+  as published and never patched.</li>
+</ul>
 
 
 

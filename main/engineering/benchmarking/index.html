@@ -2154,14 +2154,14 @@
   
   
     <li class="md-nav__item">
-      <a href="liu4k_20260919/" class="md-nav__link">
+      <a href="liu4k_euroc_sota_20261001/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Liu4K real-photo benchmark (2026-09-19)
+    Real-image competitiveness: Liu4K + EuRoC (2026-10-01)
   
 
     
@@ -2806,7 +2806,7 @@ cargo<span class="w"> </span>bench<span class="w"> </span>--bench<span class="w"
 </ul>
 <h3 id="point-in-time-reports-historical-snapshots">Point-in-time reports (historical snapshots)</h3>
 <ul>
-<li><a href="liu4k_20260919/">Liu4K real-photo benchmark (2026-09-19)</a></li>
+<li><a href="liu4k_euroc_sota_20261001/">Real-image competitiveness: Liu4K + EuRoC (2026-10-01)</a> — reproduce with <code>cargo xtask sota</code> (<code>xtask/README.md</code>)</li>
 <li><a href="render_tag_sota_20260713/">Render-tag 1080p SOTA (current, v0.7.0-refreshed)</a></li>
 <li><a href="render_tag_2160p_20260425/">Render-tag 2160p recall lift (2026-04-25)</a></li>
 <li><a href="render_tag_sota_20260425/">Render-tag 1080p SOTA pursuit (2026-04-25)</a></li>
@@ -2839,7 +2839,7 @@ rule does not apply.</p>
 <span class="c1"># Adds id-aware decode TP/FP/FN, recall, precision, F1 (markers use ARUCO_MIP_36h12)</span>
 <span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>real<span class="w"> </span>--dataset<span class="w"> </span>liu4k<span class="w"> </span>--family<span class="w"> </span>ArUcoMip36h12
 
-<span class="c1"># Best measured Locus config on this dataset (see the Liu4K report)</span>
+<span class="c1"># Best config reachable with shipped options alone (the stronger LocalMean-based candidate needs PR #383; see the real-image competitiveness snapshot)</span>
 <span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>real<span class="w"> </span>--dataset<span class="w"> </span>liu4k<span class="w"> </span>--family<span class="w"> </span>ArUcoMip36h12<span class="w"> </span>--no-sharpening
 </code></pre></div>
 <p>The scorer mirrors aruco_nano's <code>testperf.cpp</code>: for each detection, the first unmatched GT marker with
@@ -2847,7 +2847,7 @@ the same id and a centre distance <code>&lt;= 10 px</code> makes it a TP, otherw
 10 px radius is the Liu4K-specific <code>LIU4K_MATCH_THRESHOLD_PX</code> (<code>tools/bench/liu4k.py</code>); the repo-wide
 <code>MATCH_DISTANCE_THRESHOLD_PX</code> is untouched. The GT corner winding is opposite to Locus/OpenCV, so any
 future corner-error metric must remap it (0,3,2,1). Results and analysis:
-<a href="liu4k_20260919/">Liu4K report</a>.</p>
+<a href="liu4k_euroc_sota_20261001/">real-image competitiveness snapshot</a>.</p>
 <p>The first run downloads <code>liu4k.zip</code> (about 4 GB) from Zenodo into <code>tests/data/liu4k/</code>
 (gitignored), verifies its md5 (<code>e8fafe5444a9e346f25123151ef1a699</code>, from the Zenodo record),
 extracts it and deletes the archive. The data is never committed, never packaged in wheels or

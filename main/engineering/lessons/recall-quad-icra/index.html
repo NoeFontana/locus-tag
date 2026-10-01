@@ -1814,14 +1814,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../benchmarking/liu4k_20260919/" class="md-nav__link">
+      <a href="../../benchmarking/liu4k_euroc_sota_20261001/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Liu4K real-photo benchmark (2026-09-19)
+    Real-image competitiveness: Liu4K + EuRoC (2026-10-01)
   
 
     
@@ -2071,6 +2071,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#2026-10-01-real-image-recall-liu4k-euroc-the-segmentation-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2026-10-01 — Real-image recall (Liu4K, EuRoC): the segmentation model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#re-attempt-watch-outs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2113,8 +2124,8 @@
 
 
 <h1 id="recall-quad-extraction-icra-lessons">Recall, quad extraction &amp; ICRA — lessons</h1>
-<p><strong>Status:</strong> CLOSED — the diagnosed issues shipped fixes; <code>max_recall_adaptive</code> profile was since removed.
-<strong>Last updated:</strong> 2026-07-19
+<p><strong>Status:</strong> ACTIVE — the 2026-07 issues are CLOSED (fixes shipped; <code>max_recall_adaptive</code> removed); the <a href="#2026-10-01-real-image-recall-liu4k-euroc-the-segmentation-model">2026-10-01 real-image recall</a> findings are open.
+<strong>Last updated:</strong> 2026-10-01
 <strong>Owning code:</strong> quad extraction (<code>extract_quads_soa</code> / <code>extract_quads_soa_with_camera</code> and <code>pixel_count_descending_order</code> in the quad module), the AdaptivePpb extraction router (<code>quad.extraction_policy</code>), the decoder Hamming/bit-sample path, and the shipped profiles under <code>crates/locus-core/profiles/</code> (<code>standard.json</code>, <code>high_accuracy.json</code>).</p>
 <h2 id="tldr">TL;DR</h2>
 <p>Extraction-mode choice, not funnel/threshold/refinement knobs, governs recall vs. pose-tail trade-offs: EdLines wins the clean-render pose tail but culls ~50% of dense small-tag candidates; ContourRdp wins crude-render recall but destroys the render-tag rotation tail. No single static <code>(extraction, refinement)</code> pair wins both regimes — the durable fix is PPB-based adaptive routing (<code>AdaptivePpb</code>, threshold 2.5), which lets <code>high_accuracy</code> recover ICRA recall (+14.2 pt) while staying byte-identical on render-tag. A separate quad-truncation bug (truncating candidates by pixel_count <em>before</em> geometric filtering) silently dropped tag-sized candidates behind large background blobs; the fix moved truncation caller-side, post-filter. The <code>max_recall_adaptive</code> profile validated this routing but was later removed in the config consolidation — its behavior lives on inside <code>high_accuracy</code>'s AdaptivePpb block.</p>
@@ -2123,12 +2134,85 @@
 <p><strong>ICRA-forward high_accuracy diagnostic.</strong> <code>high_accuracy</code> (EdLines + <code>refinement_mode=None</code>) collapsed on ICRA forward frames — mean recall <code>0.4631</code> vs <code>standard</code>'s <code>0.7236</code>, with 5 of 6 dense frames detecting zero tags. The <code>icra_forward_diagnostic.rs</code> harness (per-frame funnel / rejected-size / decode-Hamming attribution) root-caused it: the funnel was <em>not</em> the bottleneck (both profiles pass 100% through contrast), so threshold/sharpening flips could not help. EdLines under-produced by ~50% (<code>~110</code> candidates/frame vs <code>~206</code>), and its imprecise corners pushed decode Hamming into the 6–10 bucket (97/102 rejected on one frame). Cause was attributable to <code>extraction_mode=EdLines</code> on dense small-tag scenes. Resolution: adopt the <code>AdaptivePpb</code> router (threshold 2.5; low = ContourRdp+Erf, high = EdLines+None) — a Pareto win: ICRA forward recall <code>0.4631→0.6053</code> (+14.2 pt), RMSE <code>0.7535→0.5572</code>, render-tag / distortion / board snapshots byte-identical (well-resolved tags have PPB≫2.5 and stay on EdLines+None; far-field PPB&lt;2.5 tags route to ContourRdp+Erf).</p>
 <p><strong>max_recall_adaptive calibration (REMOVED profile).</strong> A now-removed profile that first shipped the <code>AdaptivePpb</code> routing (threshold 2.5, sharpening on): ICRA forward recall <code>0.7380</code> (+27 pp vs high_accuracy, matching <code>standard</code>), every render-tag p99 rotation under budget. Its calibration sweep is the durable evidence: disabling sharpening cost <code>-19 pp</code> ICRA recall <em>and</em> worsened the render-tag p99 tail (3°+ outliers), so sharpening does real work on both extraction paths; lowering the threshold <code>2.5→1.5</code> had near-zero effect (candidates already sit above 2.5) with a small ICRA cost — the shipped config was a local Pareto optimum. Its residual render-tag RMSE gap (~0.6 px vs high_accuracy's ~0.2 px) is intrinsic to ContourRdp+Erf, which yields robust corners but no per-corner Fisher covariance prior. <strong>The profile was dropped in the config consolidation</strong> — its routing was absorbed into <code>high_accuracy</code>, so nothing was lost, but do not resurrect the standalone profile expecting new behavior.</p>
 <p><strong>Hub regression snapshot.</strong> A point-in-time perf/accuracy table (AMD EPYC-Milan, <code>--release</code>, single-threaded), now historical. Durable methodology notes: (a) <code>high_accuracy</code> is the accuracy <em>baseline</em> because its 4–6× tighter pose bounds catch pose-solver regressions that <code>standard</code>'s wide thresholds mask; small-tag recall is instead carried by the <code>standard</code>-profile robustness suite. (b) Latency scales ~linearly with pixel count; <code>high_accuracy</code> is ~2× faster than <code>standard</code> (EdLines cheaper than ContourRdp). (c) The robustness subsets are KPI watchlists, not regressions: <code>tag16h5</code> precision is codebook-bound (halving allowed Hamming is the dominant lever, remainder is dense-codebook ambiguity); <code>low_key</code> has a hard config recall ceiling (KPI for future contrast-robust threshold work); <code>raw_pipeline</code> is largely config-bound.</p>
+<h2 id="2026-10-01-real-image-recall-liu4k-euroc-the-segmentation-model">2026-10-01 — Real-image recall (Liu4K, EuRoC): the segmentation model</h2>
+<p><strong>Status:</strong> ACTIVE — root causes established; fixes proposed, none shipped.
+Numbers: <a href="../../benchmarking/liu4k_euroc_sota_20261001/"><code>benchmarking/liu4k_euroc_sota_20261001.md</code></a>;
+reproduce with <code>cargo xtask sota</code> (<code>xtask/README.md</code>).</p>
+<p>On Liu4K (4K photos, markers blended into textured backgrounds) shipped <code>standard</code> finds
+29 % of markers against aruco_nano's 66 % and OpenCV's 58 %; on EuRoC <code>cam_april</code>
+(Kalibr AprilGrid) it decodes 20 % of the in-view tags. Four causes, all upstream of decode,
+explain the recall gap. Together they took Locus to <strong>67.2 % recall / F1 80.3 on Liu4K
+(aruco_nano: 66.3 % / 79.7) and 90 % on EuRoC</strong>.</p>
+<p><strong>RC1 — The CCL threshold is a min/max midpoint, with no validity gate and no guard band.</strong>
+Segmentation does not read the binarized image: it marks <code>pixel &lt; threshold_map</code>, and that
+map is <code>(min + max) / 2</code> over a fixed 3×3-tile (24 px) neighbourhood. <code>threshold.min_range</code>
+reaches only the <code>binarized</code> buffer, which nothing downstream consumes. Measured on the
+detector's own <code>threshold_map</code> (debug telemetry), ≥ 95 % of Liu4K misses fail before a quad
+exists. Small and mid-size markers <strong>merge</strong> with texture (81–89 % of misses): near an
+edge the threshold is midpoint(black, brightest texture), so darker texture joins the
+marker. Large markers <strong>shatter</strong> (88 % of ≥ 250 px misses): inside a border thicker than
+about two tiles, min ≈ max and the threshold falls to the noise midpoint. A local-mean
+rule (<code>I &lt; μ − C</code>, as OpenCV and aruco_nano use) leaves a guard band on the bright side of
+every edge, which is the mechanism PR #383 (<code>LocalMean</code>) targets. Do <strong>not</strong> re-try the
+validity gate alone: PR #383 measured it at −0.18 pp, because merging happens in
+<em>valid</em> tiles.</p>
+<p><strong>RC2 — The quad pre-gates assume a filled blob.</strong> <code>quad.min_fill_ratio</code>, <code>min_density</code> and
+<code>max_elongation</code> were calibrated on filled dark components. A scale-free local-mean
+threshold produces a hollow edge band (fill ≈ 4w/L: 0.09 for a 7 px band on a 300 px
+marker). With r=7 / C=3 the gates cut ≥ 250 px recall to 0.2 %; with the gates off it is
+56.6 %. PR #383's r=24 partly works because a wide window thickens the band.
+8-connectivity also bridges edge bands to clutter through single diagonal contacts:
+<code>Four</code> is worth +2.0 pp (65.2 → 67.2 %). Turning the gates off is not shippable as is,
+though. On render-tag <code>tag16h5</code> precision falls from 83 % to 50 %, because the gates were
+also doing false-positive control for a weak dictionary. That job belongs to a
+dictionary-aware criterion (expected false accepts ∝ candidates × P(random code within
+the Hamming budget)), not to geometric shape statistics.</p>
+<p><strong>RC3 — The threshold offset C is in grey levels, not in units of noise.</strong> Liu4K prefers
+C ≈ 3 and EuRoC C ≈ 8; their median noise (<code>compute_image_noise_floor</code> estimator) is
+0.87 vs 1.72, and both optima sit near 3.5–4.7 σ̂ₙ. <code>C = clamp(round(k·σ̂ₙ), 2, 20)</code> is flat
+for k = 3…5 on Liu4K (67.2–67.3 %) and selects C ≈ 6–7 on EuRoC by itself (88.7 % at
+k = 5). "Darker than the local mean by k noise standard deviations" is the statistically
+meaningful form of the foreground test, and it replaces a per-dataset constant with one
+physical parameter.</p>
+<p><strong>RC4 — Tag border width is not part of the layout model.</strong> Kalibr AprilGrids (EuRoC)
+print tag36h11 with a <strong>2-bit</strong> black border (10 cells across). Locus samples the 8-cell
+lattice; on a correctly localized EuRoC tag that reads 8 bit errors from any code, while
+the 10-cell lattice reads the true id with 0 errors. Locus decodes these grids at all only
+because the decoder retries homography scales 0.9 / 1.1: 0.9 approximates the exact 0.8,
+with samples about 0.2 cells from cell boundaries. Recall therefore degrades with blur and
+obliquity for a reason unrelated to image quality. The wrong lattice plus a 2-error
+Hamming budget also yields <strong>false ids</strong>: <code>tests/test_euroc.py::test_euroc_no_false_positives</code>
+(id 549 on a 36-tag grid) and <code>::test_euroc_detection_recall</code> (10.3 %) fail on <code>main</code>
+whenever the dataset is present; CI skips them. OpenCV decodes the grid with
+<code>markerBorderBits = 2</code>; aruco_nano hard-codes <code>markerSize + 2</code> and AprilTag 3 a 1-bit
+border, so <code>cargo xtask sota</code> reports both as unsupported (references are never patched).
+Fix direction: generate the sampling lattice from (data bits, border bits) and add a Kalibr
+layout, rather than relying on the scale retry.</p>
+<p><strong>Latency follows from the same pipeline order (L1–L3).</strong> Serial, 1 thread, 4K: aruco_nano
+52 ms/image; the Locus RC1–RC3 candidate 314 ms; <code>standard</code> 194 ms. Stage spans show the
+candidate spending 240 of 327 ms in <code>quad_extraction</code>, <strong>78 % of it sub-pixel refinement</strong>:
+about 776 quads are refined per image to decode 6, and the O(1) contrast funnel rejects
+about 1 of them on textured photos. With refinement disabled it runs at 131 ms for −1.24 pp
+recall. The fix direction is <strong>decode-first ordering</strong>: coarse-decode unrefined quads, refine
+only decoded tags (emitted corners unchanged), and refine-and-retry Hamming near-misses.
+Separately, the local-mean rule halves CCL cost (79 → 35 ms) by removing flat-region
+speckle.</p>
+<p><strong>Revisions to earlier statements on this page.</strong> The "<code>low_key</code> hard config recall
+ceiling" was the threshold model: the local-mean candidate takes <code>low_key</code> from 14 % to 98 %
+(detection level). "The render-tag RMSE gap on ContourRdp+Erf routes is intrinsic" is
+refuted: it is a photometric bias plus the 1-DOF ERF's seed-direction scatter (see
+<a href="../rotation-tail-and-edge-refinement/#2026-10-01-corner-bias-is-photometric-not-a-psf-floor">rotation-tail 2026-10-01</a>).</p>
+<p><strong>Ship gates still open for the candidate</strong> (r=7, C = k·σ̂ₙ, sharpening off, 4-conn, gates
+off): ICRA forward −0.36 pp recall and +0.019 px corner RMSE (0.280 → 0.298); render-tag
+<code>tag16h5</code> precision (RC2); serial latency (L1). Sharpening, and PR #384's shoot-limited
+variant, are a crutch for RC1 on the ContourRdp route; on Liu4K, sharpening off is best
+once the threshold model is fixed.</p>
 <h2 id="re-attempt-watch-outs">Re-attempt / watch-outs</h2>
 <ul>
 <li>Do <strong>not</strong> reintroduce a standalone <code>max_recall_adaptive</code> profile — its <code>AdaptivePpb</code> block already lives in <code>high_accuracy</code>. Any revival must justify why the shared router isn't sufficient.</li>
 <li>Do <strong>not</strong> try to fix the ICRA/high_accuracy gap by knob-flipping (sharpening, static ContourRdp, static Erf): every static extraction/refinement pair either destroys the render-tag pose tail (<code>0.56°→102°</code>) or blows mean RMSE 4× (<code>0.20→0.86</code>). "No static pair wins both regimes" still holds — PPB routing sidesteps it, it does not refute it.</li>
 <li>Keep the quad-truncation edge case covered: truncation must stay <strong>caller-side, after geometric filtering</strong> (small tags hide behind large-pixel-count background blobs). Never truncate <code>component_stats</code> pre-filter. Preserve the pixel_count-descending order (with deterministic index tie-break) — load-bearing for order-sensitive dedup on crude renders.</li>
-<li>The render-tag RMSE gap on ContourRdp+Erf routes is intrinsic (no Fisher covariance prior). Closing it needs post-decode corner re-refinement (emitting its own per-corner covariance) or an image pyramid, not a config change.</li>
+<li>~~The render-tag RMSE gap on ContourRdp+Erf routes is intrinsic (no Fisher covariance prior).~~ Superseded 2026-10-01: the gap is a photometric (sRGB gamma) bias plus the 1-DOF ERF's seed-direction scatter. See the rotation-tail page.</li>
 <li>Test-infra trap: a relative <code>LOCUS_ICRA_DATASET_DIR</code> once resolved against the crate root and silently fell through to a 1-frame stub, producing a false "byte-identical" result. Relative paths now resolve against the workspace root and missing dataset dirs panic rather than skip. Verify ICRA snapshots against the real 50-frame dataset.</li>
 </ul>
 <h2 id="provenance">Provenance</h2>

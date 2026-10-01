@@ -2066,14 +2066,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../engineering/benchmarking/liu4k_20260919/" class="md-nav__link">
+      <a href="../../engineering/benchmarking/liu4k_euroc_sota_20261001/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Liu4K real-photo benchmark (2026-09-19)
+    Real-image competitiveness: Liu4K + EuRoC (2026-10-01)
   
 
     
@@ -2535,6 +2535,20 @@
 - The center of the top-left pixel is <span class="arithmatex">\((0.5, 0.5)\)</span>.
 - The top-left corner of the image (the boundary of the first pixel) is <span class="arithmatex">\((0.0, 0.0)\)</span>.</p>
 <p>This convention is strictly followed to ensure that sub-pixel corner refinement and RMSE calculations are compatible with standard computer vision datasets like <strong>ICRA 2020</strong>.</p>
+<div class="admonition warning">
+<p class="admonition-title">Interop with OpenCV, Kalibr and integer-centre data</p>
+<p>The axes and origin match OpenCV, but the pixel-centre convention does <strong>not</strong>. OpenCV
+(<code>cornerSubPix</code>, <code>cv2.aruco</code>, camera matrices from <code>calibrateCamera</code>), Kalibr calibrations and
+datasets annotated in that convention (e.g. Liu4K) put the centre of the top-left pixel at
+<span class="arithmatex">\((0, 0)\)</span>. Convert before mixing them: <span class="arithmatex">\(x_\text{OpenCV} = x_\text{Locus} - 0.5\)</span> (same for <span class="arithmatex">\(y\)</span>).
+Passing Locus corners unchanged to <code>cv2.solvePnP</code> with an OpenCV-calibrated <span class="arithmatex">\(K\)</span> shifts the
+principal point by half a pixel. The offset is measured at <span class="arithmatex">\(+0.50\)</span> px against <code>cornerSubPix</code>
+on EuRoC; <code>tools/bench/sota/</code> converts per detector.</p>
+<p><strong>Open question:</strong> <code>CameraIntrinsics</code> does not state which convention its principal point
+<span class="arithmatex">\((c_x, c_y)\)</span> follows, and pose estimation applies it as given to +0.5-convention corners.
+Until this is specified and tested, check single-tag pose against a known target when using an
+OpenCV- or Kalibr-calibrated camera matrix.</p>
+</div>
 <div class="admonition info">
 <p class="admonition-title">ICRA 2020 Parity</p>
 <p>While Locus uses the same pixel coordinate system as the ICRA 2020 benchmark, the <strong>corner indexing</strong> differs due to winding conventions:

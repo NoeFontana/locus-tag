@@ -1814,14 +1814,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../benchmarking/liu4k_20260919/" class="md-nav__link">
+      <a href="../../benchmarking/liu4k_euroc_sota_20261001/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Liu4K real-photo benchmark (2026-09-19)
+    Real-image competitiveness: Liu4K + EuRoC (2026-10-01)
   
 
     
@@ -2071,6 +2071,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#2026-10-01-corner-bias-is-photometric-not-a-psf-floor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2026-10-01 — Corner bias is photometric, not a PSF floor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#durable-conclusion" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2135,8 +2146,8 @@
 
 
 <h1 id="pose-rotation-error-tail-lessons">Pose rotation-error tail — lessons</h1>
-<p><strong>Status:</strong> RESOLVED for single-frame — model-edge pose refinement shipped in v0.7.0 (<code>high_accuracy</code>); corner-level levers remain trade-bound.
-<strong>Last updated:</strong> 2026-07-19
+<p><strong>Status:</strong> RESOLVED for single-frame — model-edge pose refinement shipped in v0.7.0 (<code>high_accuracy</code>); corner-level levers remain trade-bound. The <a href="#2026-10-01-corner-bias-is-photometric-not-a-psf-floor">2026-10-01 photometric finding</a> is ACTIVE and qualifies the "~0.6 px edge-line floor" below.
+<strong>Last updated:</strong> 2026-10-01
 <strong>Owning code:</strong> <code>crates/locus-core/src/model_edge.rs</code> and the pose LM stack (<code>pose.rs</code> / <code>pose_weighted.rs</code>).</p>
 <h2 id="tldr">TL;DR</h2>
 <p>The residual rotation-p99 tail on <code>high_accuracy</code> Accurate-mode pose (≈0.60° at 1080p) was first read as a <em>physical law</em> — the IPPE planar-pose ambiguity that any 4-corner PnP inherits. That belief was refuted: the tail is not physics but <strong>corner localization</strong>, and it concentrates in a handful of scenes (removing the worst 2 tags already hits the target). We then chased it at the corner level — GWLF/apriltag-edge refit, per-corner repair, per-tag switching (even an oracle), and internal fusion — and every one proved <strong>trade-bound</strong>: rotation improved only by adopting a common-mode corner profile that structurally regressed translation (e.g. GWLF: rot p99 0.600°→0.398° but trans p99 18.6→63.0 mm). The reframe that finally won was to stop reshaping the same 4 corners and <strong>add independent information</strong>: refine the 6-DoF pose against the decoded tag's ~40 internal bit-grid edges. That over-constrains rotation without disturbing corner-anchored translation, cutting rot p99 47–76% across resolutions (1080p 0.600°→0.249°, under OpenCV apriltag's 0.376°) at Locus's best-in-class translation. It shipped <strong>on by default in <code>high_accuracy</code> in v0.7.0</strong>.</p>
@@ -2203,6 +2214,90 @@
 </tr>
 </tbody>
 </table>
+<h2 id="2026-10-01-corner-bias-is-photometric-not-a-psf-floor">2026-10-01 — Corner bias is photometric, not a PSF floor</h2>
+<p><strong>Status:</strong> ACTIVE — mechanism established on controlled renders; no fix shipped.
+Reproduce: <code>PYTHONPATH=. uv run --group bench python tools/bench/photometric_corner_bias.py</code>.</p>
+<p>On clean render-tag images <code>standard</code> (ContourRdp + ERF) corners sit <strong>0.59 px inward</strong>
+(radial, mean) of the GT corners, and ERF moves the integer contour seed <em>further</em> inward
+(−0.50 → −0.59 px). The image itself explains it. Across 1800 GT-edge profiles the 50 %
+intensity crossing lies <strong>0.40 px inside</strong> the GT edge, and the normalized intensity <em>at</em>
+the GT edge is <strong>0.74 = sRGB(0.5)</strong>. Blender integrates coverage in linear light and writes
+sRGB-encoded PNGs, so a blurred edge's midpoint <em>in encoded intensity</em> sits on the dark
+side. Every refiner that fits a symmetric step or gradient peak to encoded intensities
+inherits this.</p>
+<p>A controlled experiment with analytically exact GT (area-coverage render, blur in linear
+light, optional sRGB encoding, <code>photometric_corner_bias.py</code>) separates three defects
+(radial bias / RMSE in px; 40 and 120 px tags agree):</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Photometry, blur σ</th>
+<th style="text-align: left;"><code>standard</code> (ContourRdp + ERF)</th>
+<th style="text-align: left;"><code>high_accuracy</code> (EdLines)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">linear, 0.5</td>
+<td style="text-align: left;">−0.02 / 0.46–0.51</td>
+<td style="text-align: left;"><strong>+0.52…+0.54</strong> / 0.54–0.70</td>
+</tr>
+<tr>
+<td style="text-align: left;">linear, 1.0</td>
+<td style="text-align: left;">−0.03 / 0.46–0.52</td>
+<td style="text-align: left;"><strong>+0.58…+0.61</strong> / 0.62–0.79</td>
+</tr>
+<tr>
+<td style="text-align: left;">sRGB, 0.5</td>
+<td style="text-align: left;">−0.30 / 0.50–0.67</td>
+<td style="text-align: left;">+0.18…+0.25 / 0.23–0.38</td>
+</tr>
+<tr>
+<td style="text-align: left;">sRGB, 1.0</td>
+<td style="text-align: left;">−0.66 / 0.82–0.91</td>
+<td style="text-align: left;">−0.11…−0.16 / 0.21–0.31</td>
+</tr>
+<tr>
+<td style="text-align: left;">sRGB, 1.5</td>
+<td style="text-align: left;">−0.97…−1.02 / 1.18–1.22</td>
+<td style="text-align: left;">−0.34…−0.51 / 0.46–0.54</td>
+</tr>
+</tbody>
+</table>
+<ol>
+<li><strong>Gamma bias.</strong> Both refiners assume a linear photometric response. On gamma-encoded
+   input (sRGB renders, phones, webcams, JPEG) they move edges toward the dark side, in
+   proportion to blur. The prediction is quantitative: for this render's 8–92 % intensity
+   range the encoded midpoint corresponds to 34 % linear coverage, i.e. an offset of
+   Φ⁻¹(0.34)·σ_eff per edge, giving −0.33 / −0.60 / −0.88 px radial at σ = 0.5 / 1.0 / 1.5
+   against −0.31 / −0.65 / −0.95 measured.</li>
+<li><strong>EdLines carries an intrinsic ~+0.5 px outward bias in linear light</strong>, which the sRGB
+   bias cancels near σ ≈ 1 — the render-tag regime. See
+   <a href="../edlines-segmentation/#2026-10-01-intrinsic-outward-bias-masked-by-srgb">EdLines 2026-10-01</a>.</li>
+<li><strong>ERF is unbiased in linear light but scatters 0.46–0.80 px RMSE on clean renders.</strong>
+   The quad-path fit is 1-DOF: it re-fits each edge's offset and keeps the edge <em>direction</em>
+   of the integer RDP vertices, so seed quantization passes straight into the corner.</li>
+</ol>
+<p><strong>Real data (EuRoC, Kalibr AprilGrid).</strong> Against the grid's X-junctions, which are unbiased
+by symmetry, ERF corners sit −0.39 px inward and EdLines corners +0.17 px outward. That is
+the signature the sRGB rows predict at σ ≈ 0.5, so the sensor output is likely
+gamma-like (an earlier "printed-target shrink" reading was retracted after the synthetic
+control). Replacing only the refiner on Locus quads with <code>cv2.cornerSubPix</code> cuts
+leave-one-tag-out corner error 0.695 → 0.248 px. That gain is junction symmetry, not a
+general win: on plain L-corners <code>cornerSubPix</code> is itself biased inward by 0.14–0.41 px as
+blur grows.</p>
+<p><strong>What this changes in the saga above (hypotheses, not conclusions).</strong> Row 3 attributes
+GWLF's 0.63 px absolute error to "the ~0.6 px edge-line floor on Blender PSF". GWLF is a
+gradient-weighted line fit on encoded intensities, so the gamma bias above is a
+competing explanation of that floor. If it holds, the corner-level frontier ("consistency
+vs. absolute error") was partly measured against a biased reference. Likewise the
+AprilGrid saddle-refinement negative (saddles ~1 px "away from the tag interior") is
+consistent with line-fit corners being biased inward, rather than with saddle leakage.
+<strong>Re-attempt condition now met for GWLF-style corners:</strong> evaluate them through a
+linearized sampler (photometric response applied as an f32 LUT inside the sampler, never by
+re-quantizing the 8-bit image, which cost 10–12 pp recall in a probe), with EdLines'
+outward bias fixed in the same change. Otherwise render-tag regresses when the
+cancellation breaks.</p>
 <h2 id="durable-conclusion">Durable conclusion</h2>
 <p>Every "reshape the same 4 corners" lever is trade-bound because a corner-refinement method has a fixed error <em>profile</em>: you can trade Locus's low-absolute-error/high-variance EdLines corners for apriltag/GWLF's high-absolute-error/low-variance corners, buying rotation consistency at the cost of translation bias — but you cannot escape the frontier, because rotation and translation are read off the <em>same four observations</em>. The only way to improve both at once is to add observations the corners don't carry. Model-edge refinement does exactly that: the decoded interior pattern supplies ~40 independent, interior-distributed edge constraints that pin orientation an order of magnitude better than 4 corners, while translation stays anchored to the trusted corners. Adding information beat reshaping information.</p>
 <h2 id="still-open-re-attempt-only-if">Still open / re-attempt only if</h2>

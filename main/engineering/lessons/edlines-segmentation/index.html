@@ -1814,14 +1814,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../benchmarking/liu4k_20260919/" class="md-nav__link">
+      <a href="../../benchmarking/liu4k_euroc_sota_20261001/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Liu4K real-photo benchmark (2026-09-19)
+    Real-image competitiveness: Liu4K + EuRoC (2026-10-01)
   
 
     
@@ -2082,6 +2082,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#2026-10-01-intrinsic-outward-bias-masked-by-srgb" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2026-10-01 — Intrinsic outward bias, masked by sRGB
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#motivating-case" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2135,8 +2146,8 @@
 
 
 <h1 id="edlines-quad-extraction-segmentation-lessons">EdLines quad extraction &amp; segmentation — lessons</h1>
-<p><strong>Status:</strong> ACTIVE (EdLines ships in <code>high_accuracy</code>); two follow-up improvements FALSIFIED, listed below.
-<strong>Last updated:</strong> 2026-07-19
+<p><strong>Status:</strong> ACTIVE (EdLines ships in <code>high_accuracy</code>); two follow-up improvements FALSIFIED, listed below; <a href="#2026-10-01-intrinsic-outward-bias-masked-by-srgb">open defect 2026-10-01</a>: intrinsic outward corner bias.
+<strong>Last updated:</strong> 2026-10-01
 <strong>Owning code:</strong> <code>crates/locus-core/src/edlines.rs</code> (5-phase pipeline: <code>extract_boundary_segments</code>, IRLS line fit, <code>refine_edge_subpixel</code>, sub-pixel IRLS re-fit, <code>refine_corners_gauss_newton</code>); imbalance gate ~<code>edlines.rs:1088</code>/<code>:1224</code>; called from <code>quad.rs:280</code>; post-EdLines <code>refine_corner</code>/<code>fit_edge_line</code> at <code>quad.rs:1286</code>/<code>:1340</code>; ERF finder in <code>edge_refinement.rs</code> (opt-in <code>edlines_phase3_erf</code>). Routed via <code>crates/locus-core/profiles/high_accuracy.json</code>.</p>
 <h2 id="tldr">TL;DR</h2>
 <p>EdLines is the line-based quad extractor <code>high_accuracy</code> uses for high-PPB tags: it segments the component boundary into four angular arcs, fits an IRLS line per arc in binary space, refines each to sub-pixel via a micro-ray parabolic gradient fit, re-fits, then runs a joint 8-DoF (4-corner) chord-locked Gauss-Newton. What ships is exactly that pipeline — static axis-imbalance gate, chord-coupling regulariser, ±1.5px parabolic clamp, 5% corner-bleed exclusion zone. Two principled-looking follow-ups were built and reverted the same day when <code>regression_render_tag</code> rejected them: (F-a) a continuous arc-balance Phase-1 mode selector to replace the static <code>&gt;40%/&lt;16%</code> gate, and (F-b) design-memo "Improvement #2", an 8-DoF <em>line</em>-parameterised Phase 5 that drops the chord-coupling. They matter because both encode a durable lesson: the decoder's Hamming-margin rejection is invisible to any geometry-only selector, and chord-coupling is a genuine variance-reducing regulariser, not a hack. The motivating case (scene_0008) is a detector-internal ~3.8px corner bias with no small-surface single-frame fix; it is bounded at runtime by PR #281's outlier-aware corner-drop + Σ_pose inflation gates.</p>
@@ -2207,6 +2218,28 @@
 </tr>
 </tbody>
 </table>
+<h2 id="2026-10-01-intrinsic-outward-bias-masked-by-srgb">2026-10-01 — Intrinsic outward bias, masked by sRGB</h2>
+<p><strong>Status:</strong> ACTIVE — open defect; mechanism not yet isolated.
+Reproduce: <code>PYTHONPATH=. uv run --group bench python tools/bench/photometric_corner_bias.py</code>.</p>
+<p>On controlled renders with analytically exact GT, EdLines corners are biased <strong>outward by
++0.52 to +0.65 px</strong> (radial mean, 40 and 120 px tags) under a <em>linear</em> photometric
+response, growing slowly with blur. sRGB encoding adds an inward bias proportional to blur
+(see <a href="../rotation-tail-and-edge-refinement/#2026-10-01-corner-bias-is-photometric-not-a-psf-floor">rotation-tail 2026-10-01</a>),
+and the two cancel near σ ≈ 1. That is the regime of the sRGB-encoded render-tag sets, where
+<code>high_accuracy</code> measures as unbiased (+0.002 px). <strong>The render-tag corner accuracy that
+makes <code>high_accuracy</code> SOTA there rests partly on offsetting errors matched to that
+benchmark's photometry.</strong> On a linear-response machine-vision camera the outward bias
+remains: tags read larger and single-tag pose depth comes out short. EuRoC shows the
+signature against Kalibr X-junctions (+0.17 px).</p>
+<p>Ruled out: <code>ImageView::sample_bilinear</code> applies the +0.5 pixel-centre convention, and the
+micro-ray samples are built in that convention, so it is not a convention slip in the
+sampler. <em>Hypothesis (unverified):</em> the Phase-3 parabola vertex is clamped to ±1.5 px
+around a probe line anchored to the binary boundary. If that line sits on the bright side
+of the true edge, truncated peaks are pulled outward, increasingly so with blur. Next step:
+log <code>k_star</code> saturation and the Phase-2 line's signed offset on the linear renders.</p>
+<p><strong>Fix constraint.</strong> Correct this together with the photometric response model
+(linearized sampling in ERF/EdLines/GWLF). Fixing either alone breaks the cancellation and
+regresses <code>regression_render_tag</code>.</p>
 <h2 id="motivating-case">Motivating case</h2>
 <p><code>scene_0008_cam_0000</code> (<code>locus_v1_tag36h11_1920x1080</code>) is a tag rotated ≈90° but axis-aligned in image space — the degenerate geometry where TRBL extremals land on corners, not edge midpoints. Its canonical corner-1 is detected 3.8px off <em>along the top edge</em>, while the actual image edges fit GT to 0.06px RMS (intersection 0.24px from GT) — a detector-internal failure with no support in the pixel data. The bias originates in the Phase 1→2 cascade (integer-pixel rounding floor, Phase-2 IRLS collapsing to exact <code>y=456.5</code>), is fully upstream of Phase 5, and has no small-surface single-frame fix. The practical resolution is the runtime gate: the <code>corner_geometry_outlier</code> classifier (<code>min_irls=0.219</code>, <code>max_corner_d²=37.7</code> vs χ²(1) α=1e-4=15.137) drops the corner / inflates Σ_pose / rejects the tag (PR #281), for a p99-rotation drop of 0.171° at zero architectural risk.</p>
 <h2 id="re-attempt-only-if">Re-attempt only if</h2>
