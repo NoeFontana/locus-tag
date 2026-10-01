@@ -1,0 +1,13 @@
+[package]
+name = "xtask"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Repository automation: reproducible comparative benchmarking against pinned reference detectors."
+
+# Deliberately dependency-free: this crate only orchestrates processes
+# (git, cmake, c++, uv). It must never pull new crates into the workspace graph.
+[dependencies]
+
+[lints]
+workspace = true

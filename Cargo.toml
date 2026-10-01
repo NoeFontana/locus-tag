@@ -2,6 +2,7 @@
 members = [
     "crates/locus-core",
     "crates/locus-py",
+    "xtask",
 ]
 resolver = "2"
 

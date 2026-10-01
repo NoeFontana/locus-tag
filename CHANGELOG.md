@@ -22,6 +22,12 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   [Liu4K report](docs/engineering/benchmarking/liu4k_20260919.md) (config sweep, comparison against
   OpenCV 4.10 and aruco_nano, and open detector findings).
 
+- **`cargo xtask sota` comparative benchmarking** (`xtask/`, `tools/bench/sota/`). Builds pinned,
+  unpatched references (OpenCV 4.10.0 minimal build, aruco_nano `961b18b`) plus a C++ runner,
+  fetches Liu4K / EuRoC, runs Locus, aruco_nano, OpenCV and AprilTag 3 under one timing protocol,
+  and scores them (aruco_nano rule on Liu4K; ground-truth-free board-consistency protocol on
+  EuRoC). Every run records verified hardware/thread metadata (`xtask/README.md`).
+
 ## Released versions
 
 Full per-release notes live under [`docs/changelogs/`](docs/changelogs/index.md).
