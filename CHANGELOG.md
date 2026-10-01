@@ -19,7 +19,7 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   The scorer mirrors aruco_nano's `testperf.cpp` (same id, centre distance `<= 10 px`, first-match
   TP/FP/FN); the 10 px radius is a Liu4K-specific constant and the repo-wide match threshold is
   unchanged. Adds `bench real --sharpening/--no-sharpening` and the
-  [Liu4K report](docs/engineering/benchmarking/liu4k_20260919.md) (config sweep, comparison against
+  [Liu4K report](docs/engineering/benchmarking/liu4k_euroc_sota_20261001.md) (config sweep, comparison against
   OpenCV 4.10 and aruco_nano, and open detector findings).
 
 - **`cargo xtask sota` comparative benchmarking** (`xtask/`, `tools/bench/sota/`). Builds pinned,
@@ -44,6 +44,18 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 - `scripts/fetch_euroc_calibration.sh` (and its `LOCUS_EUROC_HF_REPO` override): use
   `cargo xtask data fetch euroc`, which no longer needs the `hf` CLI or `unzip`.
+
+### Documentation
+
+- **Real-image competitiveness root causes (Liu4K, EuRoC).** Dated `lessons/` subsections record why
+  Locus trailed aruco_nano / OpenCV on real photos and how a Locus configuration closes the recall
+  gap: the segmentation threshold model, filled-blob quad pre-gates, a grey-level (not noise-scaled)
+  offset, Kalibr's 2-bit tag border, refine-before-decode latency, and photometric (sRGB gamma)
+  corner bias, including an EdLines outward bias that the sRGB render-tag benchmark masks.
+  [Real-image competitiveness snapshot](docs/engineering/benchmarking/liu4k_euroc_sota_20261001.md)
+  supersedes the 2026-09-19 Liu4K report; controlled reproducer
+  `tools/bench/photometric_corner_bias.py`; `coordinates.md` gains an OpenCV/Kalibr pixel-centre
+  interop note.
 
 ## Released versions
 

@@ -1,7 +1,7 @@
 # EdLines quad extraction & segmentation — lessons
 
-**Status:** ACTIVE (EdLines ships in `high_accuracy`); two follow-up improvements FALSIFIED, listed below.
-**Last updated:** 2026-07-19
+**Status:** ACTIVE (EdLines ships in `high_accuracy`); two follow-up improvements FALSIFIED, listed below; [open defect 2026-10-01](#2026-10-01-intrinsic-outward-bias-masked-by-srgb): intrinsic outward corner bias.
+**Last updated:** 2026-10-01
 **Owning code:** `crates/locus-core/src/edlines.rs` (5-phase pipeline: `extract_boundary_segments`, IRLS line fit, `refine_edge_subpixel`, sub-pixel IRLS re-fit, `refine_corners_gauss_newton`); imbalance gate ~`edlines.rs:1088`/`:1224`; called from `quad.rs:280`; post-EdLines `refine_corner`/`fit_edge_line` at `quad.rs:1286`/`:1340`; ERF finder in `edge_refinement.rs` (opt-in `edlines_phase3_erf`). Routed via `crates/locus-core/profiles/high_accuracy.json`.
 
 ## TL;DR
@@ -26,6 +26,33 @@ EdLines is the line-based quad extractor `high_accuracy` uses for high-PPB tags:
 | **F5: shrink Phase-5 exclusion zone 5%→1%** | Widen α to [0.01,0.99] | Two-sided: corner-residual improves but pose-d² regresses (removing points shrinks σ² faster than ‖r‖ → confidently-wrong Σ) | c1 ‖r‖ −4.6% (only −0.18px), corpus mean ‖r‖ −2.1%, but **mean d² +7.6%** | — (metric-pleasing on ‖r‖ proxy only) |
 | **S1: corner-region pixel exclusion** (2026-05-04) | Drop boundary points within Δ of each arc's two extremals | Confirmed hypothesis (corner-pixel contamination biases IRLS slope) but insufficient: the remaining ~1.1px is everything-along-edge integer rounding (Phase-2 collapses to exact `y=456.5`) that no point-removal fixes — needs a gradient-from-the-start extractor | Δ-sweep {1,2,3,5}px: best −1.19px on scene_0008 at Δ=5 (target −2px, NOT MET; drops 1 scene to no-detection). Corpus mean ‖r‖ **−14%** but **mean d² +12–23%** | Real-camera evidence of scene_0008-class failures at non-trivial rates; ship as opt-in corpus-bias reducer only if d² regression acceptable |
 | **S3: ED-Lines gradient-anchor walk** (design only, never built) | Replace binary boundary tracing with Akinlar–Topal anchor/chain/NFA on the gray image | Deferred — inherits the ~0.6px Blender-PSF sub-pixel floor; multi-day on synthetic data; converging negative memos say the needed data is real-camera | Not executed; sketch preserved | Real-camera evidence; revival should measure rotation tail directly, not ‖r‖ proxies |
+
+## 2026-10-01 — Intrinsic outward bias, masked by sRGB
+
+**Status:** ACTIVE — open defect; mechanism not yet isolated.
+Reproduce: `PYTHONPATH=. uv run --group bench python tools/bench/photometric_corner_bias.py`.
+
+On controlled renders with analytically exact GT, EdLines corners are biased **outward by
++0.52 to +0.65 px** (radial mean, 40 and 120 px tags) under a *linear* photometric
+response, growing slowly with blur. sRGB encoding adds an inward bias proportional to blur
+(see [rotation-tail 2026-10-01](rotation-tail-and-edge-refinement.md#2026-10-01-corner-bias-is-photometric-not-a-psf-floor)),
+and the two cancel near σ ≈ 1. That is the regime of the sRGB-encoded render-tag sets, where
+`high_accuracy` measures as unbiased (+0.002 px). **The render-tag corner accuracy that
+makes `high_accuracy` SOTA there rests partly on offsetting errors matched to that
+benchmark's photometry.** On a linear-response machine-vision camera the outward bias
+remains: tags read larger and single-tag pose depth comes out short. EuRoC shows the
+signature against Kalibr X-junctions (+0.17 px).
+
+Ruled out: `ImageView::sample_bilinear` applies the +0.5 pixel-centre convention, and the
+micro-ray samples are built in that convention, so it is not a convention slip in the
+sampler. *Hypothesis (unverified):* the Phase-3 parabola vertex is clamped to ±1.5 px
+around a probe line anchored to the binary boundary. If that line sits on the bright side
+of the true edge, truncated peaks are pulled outward, increasingly so with blur. Next step:
+log `k_star` saturation and the Phase-2 line's signed offset on the linear renders.
+
+**Fix constraint.** Correct this together with the photometric response model
+(linearized sampling in ERF/EdLines/GWLF). Fixing either alone breaks the cancellation and
+regresses `regression_render_tag`.
 
 ## Motivating case
 `scene_0008_cam_0000` (`locus_v1_tag36h11_1920x1080`) is a tag rotated ≈90° but axis-aligned in image space — the degenerate geometry where TRBL extremals land on corners, not edge midpoints. Its canonical corner-1 is detected 3.8px off *along the top edge*, while the actual image edges fit GT to 0.06px RMS (intersection 0.24px from GT) — a detector-internal failure with no support in the pixel data. The bias originates in the Phase 1→2 cascade (integer-pixel rounding floor, Phase-2 IRLS collapsing to exact `y=456.5`), is fully upstream of Phase 5, and has no small-surface single-frame fix. The practical resolution is the runtime gate: the `corner_geometry_outlier` classifier (`min_irls=0.219`, `max_corner_d²=37.7` vs χ²(1) α=1e-4=15.137) drops the corner / inflates Σ_pose / rejects the tag (PR #281), for a p99-rotation drop of 0.171° at zero architectural risk.

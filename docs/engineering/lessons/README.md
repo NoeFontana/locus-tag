@@ -15,9 +15,9 @@ conditions.
 | Lesson | Status | One-line takeaway |
 | :--- | :--- | :--- |
 | [Pose covariance calibration](pose-covariance.md) | CLOSED | Every diagonal/scalar rescale of `(JᵀWJ)⁻¹` is falsified; the miscalibration is off-diagonal structure. Frontier: model-edge Fisher covariance (unmerged). |
-| [Pose rotation-error tail & edge refinement](rotation-tail-and-edge-refinement.md) | RESOLVED (single-frame) | Corner-level levers are all trade-bound; adding information (model-edge refinement, v0.7.0) beat reshaping the 4 corners. |
-| [EdLines quad extraction & segmentation](edlines-segmentation.md) | ACTIVE | EdLines ships in `high_accuracy`; the arc-balance selector and the Phase-5 line decoupling were both falsified (decoder-rejection invisibility; chord-cost is a real regulariser). |
-| [Recall, quad extraction & ICRA](recall-quad-icra.md) | CLOSED | No static `(extraction, refinement)` pair wins both regimes; PPB adaptive routing does. `max_recall_adaptive` was folded into `high_accuracy`. |
+| [Pose rotation-error tail & edge refinement](rotation-tail-and-edge-refinement.md) | RESOLVED (single-frame); 2026-10-01 ACTIVE | Corner-level levers are all trade-bound; adding information (model-edge refinement, v0.7.0) beat reshaping the 4 corners. 2026-10-01: corner bias is photometric (sRGB gamma), not a PSF floor. |
+| [EdLines quad extraction & segmentation](edlines-segmentation.md) | ACTIVE | EdLines ships in `high_accuracy`; the arc-balance selector and the Phase-5 line decoupling were both falsified (decoder-rejection invisibility; chord-cost is a real regulariser). Open defect: ~+0.5 px outward bias in linear light, masked by sRGB on render-tag. |
+| [Recall, quad extraction & ICRA](recall-quad-icra.md) | ACTIVE | No static `(extraction, refinement)` pair wins both regimes; PPB adaptive routing does. 2026-10-01: real-image recall is limited by the segmentation model (min/max threshold, filled-blob gates, grey-level C, 2-bit borders) and latency by refine-before-decode. |
 
 ## Convention — how to record a new learning (keeps this from re-sprawling)
 
