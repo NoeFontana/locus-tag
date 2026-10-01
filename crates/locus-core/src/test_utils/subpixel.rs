@@ -374,10 +374,8 @@ mod tests {
         );
 
         if let Some((_nx, _ny, d)) = result {
-            // Mapping back to full res should be x_full = (x_dec - 0.5) * (decimation as f64) + 0.5
-            // because SubpixelEdgeRenderer::render_edge uses subsampling (pick top-left).
-            let x_dec_recovered = d;
-            let x_full_recovered = (x_dec_recovered - 0.5) * (decimation as f64) + 0.5;
+            // `decimate_to` area-averages, so the pipeline's own inverse maps back.
+            let x_full_recovered = crate::image::decimated_to_full(d, decimation);
 
             let error = (x_full_recovered - x_gt).abs();
             println!("Decimated (d=2) recovered: {x_full_recovered:.4}, error: {error:.4}");

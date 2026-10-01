@@ -40,6 +40,25 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `sync_subset_to_local` gains a `revision` argument and now raises on image-write or auxiliary
   download failures (a file absent from the repo stays benign) instead of only logging them.
 
+### Fixed
+
+- **Resampling coordinate maps (`decimation > 1`, `upscale_factor > 1`).** Corners found on a
+  decimated or upscaled grid were mapped back with the integer-pixel-centre formula
+  `(v + 0.5)·d − 0.5` inside Locus's +0.5 convention: seeds landed 1 px off at `decimation = 2`
+  and refined corners 0.25 px off at `upscale_factor = 2`. One pair of maps,
+  `image::decimated_to_full` / `image::upscaled_to_full` (pure scalings), now serves quad
+  extraction, the camera-aware path, `ScaledIntrinsics` and the upscale corner/covariance mapping,
+  with resampler-consistency tests. `ImageView::decimate_to` now area-averages each `d × d`
+  block (it point-sampled one pixel, aliasing fine texture), and `upscale_to` rounds instead of
+  truncating (which darkened every pixel by 0.5 grey). Shipped profiles use neither, so their
+  output is unchanged.
+- **`sample_gradient_bilinear` border fallback** sampled 0.5 px off the requested point within
+  ~1.5 px of the image border (only AprilGrid board snapshots move, by ~1e-6 relative).
+- **AVX2 branch of the ERF gradient projection** sampled `px` instead of the pixel centre
+  `px + 0.5` (compiled only with `target_feature = "avx2"`; regression test added).
+- **Detector-level GWLF** no longer refines candidates the contrast funnel already rejected.
+- `detection-batch-contract.md` documents the real phase execution order and the GWLF phase.
+
 ### Removed
 
 - `scripts/fetch_euroc_calibration.sh` (and its `LOCUS_EUROC_HF_REPO` override): use

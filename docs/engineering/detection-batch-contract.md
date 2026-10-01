@@ -27,6 +27,11 @@ The DetectionBatch struct encapsulates the following parallel arrays (slices):
 ## 4. Phase-Isolated Execution Privileges
 To prevent data contention and enable lock-free parallelization (Rayon), engineers must adhere to strict Read/Write privileges for each phase of the pipeline. These privileges are enforced by the `contract_detection_batch` integration test (see `crates/locus-core/tests/contract_detection_batch.rs`), which seeds every column with sentinel values and asserts that a single phase only mutates its declared write set.
 
+**Execution order.** Phase labels are stable identifiers (the contract test refers to them), not
+the execution order. `run_detection_pipeline` (`crates/locus-core/src/detector.rs`) runs:
+A → B.5 (funnel) → B → B.7 (detector-level GWLF, when a route uses it) → B again (only if B.7
+moved corners) → C → partition → D.
+
 ### Phase A: Contour Extraction
 *   **Privileges**: Write to `corners`, `status_mask`, and `corner_covariances`.
 *   **Contract**: The extractor sequentially writes quad vertices into memory, zeroes the covariance blocks (or fills them with Structure-Tensor estimates when GWLF is enabled), and marks each populated slot `Active`. It returns a single integer N representing the total active candidates found in the frame.
@@ -38,6 +43,10 @@ To prevent data contention and enable lock-free parallelization (Rayon), enginee
 ### Phase B.5: Fast-Path Funnel
 *   **Privileges**: Read-Only on the Image Tensor and `corners[0..N]`. Write-Only to `status_mask[0..N]` and `funnel_status[0..N]`.
 *   **Contract**: This phase performs $O(1)$ edge contrast rejection. If a candidate lacks photometric evidence of an edge, its `status_mask` is flipped to `FailedDecode` and `funnel_status` is updated to `RejectedContrast`.
+
+### Phase B.7: Detector-Level GWLF Refinement
+*   **Privileges**: Read-Only on the Image Tensor, `status_mask[0..N]` and `routed_to[0..N]`. Write to `corners[0..N]` and `corner_covariances[0..N]` of `Active` candidates whose route resolves to `Gwlf`.
+*   **Contract**: Funnel-rejected candidates (`status_mask != Active`) are skipped: they are never decoded, so refining them is wasted work. Because corners may move, Phase B is re-run before Phase C whenever this phase refined anything.
 
 ### Phase C: Batched Sampling & Decoding
 *   **Privileges**: Read-Only on the Image Tensor. Write to `ids[0..N]`, `payloads[0..N]`, `error_rates[0..N]`, `status_mask[0..N]`, `corners[0..N]` (rotation-permutation + ERF refinement — see below), and `homographies[0..N]` (recomputed iff corners changed — see below).

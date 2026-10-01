@@ -248,7 +248,6 @@ fn extract_single_quad(
     min_outer_dim: u32,
 ) -> Option<ExtractionResult> {
     let min_edge_len_sq = config.quad_min_edge_length * config.quad_min_edge_length;
-    let d = decimation as f64;
 
     let bbox_w = u32::from(stat.max_x - stat.min_x) + 1;
     let bbox_h = u32::from(stat.max_y - stat.min_y) + 1;
@@ -341,13 +340,9 @@ fn extract_single_quad(
         },
     };
 
-    // Scale to full resolution using the center-aware decimation mapping: a point
-    // at `x` in decimated coordinates maps to `(x + 0.5)·d − 0.5` in full-res (the
-    // exact inverse of the `p_dec = (p_full + 0.5)/d − 0.5` convention applied to the
-    // intrinsics in `ScaledIntrinsics`). At the shipped `decimation = 1` this is the
-    // identity `x`, so it is byte-stable on every shipped profile; for user `d > 1`
-    // it removes a `0.5·(d−1)` bias that the naive `x·d` introduced.
-    let to_full = |v: f64| (v + 0.5) * d - 0.5;
+    // Scale to full resolution with the inverse of the area decimation
+    // (`ImageView::decimate_to`); the identity at the shipped `decimation = 1`.
+    let to_full = |v: f64| crate::image::decimated_to_full(v, decimation);
     let quad_pts = [
         Point {
             x: to_full(quad_pts_dec[0].x),
@@ -423,9 +418,9 @@ fn extract_single_quad(
 #[cfg(feature = "non_rectified")]
 const MAX_UNDISTORT_RESIDUAL: f64 = 2e-4;
 
-/// Intrinsics rescaled to the decimation grid: `p_dec = (p_full + 0.5) / d − 0.5`
-/// on the principal point, focals divided by `d`. The +0.5 shifts come from
-/// the project's center-aware decimation convention (see `.agent/rules/core.md`).
+/// Intrinsics rescaled to the decimation grid: every coordinate (focals and principal
+/// point) divided by `d`, the inverse of [`crate::image::decimated_to_full`] for
+/// pixel-centre-at-0.5 coordinates.
 #[cfg(feature = "non_rectified")]
 #[derive(Clone, Copy, Debug)]
 struct ScaledIntrinsics {
@@ -443,8 +438,8 @@ impl ScaledIntrinsics {
         Self {
             fx: intrinsics.fx / d,
             fy: intrinsics.fy / d,
-            cx: (intrinsics.cx + 0.5) / d - 0.5,
-            cy: (intrinsics.cy + 0.5) / d - 0.5,
+            cx: intrinsics.cx / d,
+            cy: intrinsics.cy / d,
         }
     }
 }
@@ -609,7 +604,6 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     }
 
     let min_edge_len_sq = config.quad_min_edge_length * config.quad_min_edge_length;
-    let d = decimation as f64;
 
     let bbox_w = u32::from(stat.max_x - stat.min_x) + 1;
     let bbox_h = u32::from(stat.max_y - stat.min_y) + 1;
@@ -712,8 +706,8 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     };
 
     let quad_pts = quad_pts_dec.map(|p| Point {
-        x: p.x * d,
-        y: p.y * d,
+        x: crate::image::decimated_to_full(p.x, decimation),
+        y: crate::image::decimated_to_full(p.y, decimation),
     });
 
     // Gate the +0.5 outward expansion on `C::IS_RECTIFIED`: corners produced
@@ -745,8 +739,8 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     // Full-res rectified corners — only meaningful on the distorted path,
     // where `refine_corner_with_camera` expects its triplet in straight space.
     let quad_rect_full = quad_rect.map(|p| Point {
-        x: p.x * d,
-        y: p.y * d,
+        x: crate::image::decimated_to_full(p.x, decimation),
+        y: crate::image::decimated_to_full(p.y, decimation),
     });
 
     // Distortion path is ContourRdp-only. `force_low_route=true` collapses

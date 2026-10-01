@@ -219,7 +219,10 @@ pub(crate) fn apply_detector_gwlf(
     let mut count: usize = 0;
 
     for i in 0..n {
-        if resolve_route_refinement(config, batch.routed_to[i]) != CornerRefinementMode::Gwlf {
+        // Candidates the contrast funnel already rejected are never decoded: skip them.
+        if batch.status_mask[i] != crate::batch::CandidateState::Active
+            || resolve_route_refinement(config, batch.routed_to[i]) != CornerRefinementMode::Gwlf
+        {
             continue;
         }
 

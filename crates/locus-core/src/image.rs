@@ -182,8 +182,10 @@ impl<'a> ImageView<'a> {
         // and interpolate their finite-difference gradients.
 
         if x < 1.0 || x >= (self.width - 2) as f64 || y < 1.0 || y >= (self.height - 2) as f64 {
-            let gx = (self.sample_bilinear(x + 1.0, y) - self.sample_bilinear(x - 1.0, y)) * 0.5;
-            let gy = (self.sample_bilinear(x, y + 1.0) - self.sample_bilinear(x, y - 1.0)) * 0.5;
+            // `sample_bilinear` takes pixel-centre-at-0.5 coordinates: undo the shift above.
+            let (u, v) = (x + 0.5, y + 0.5);
+            let gx = (self.sample_bilinear(u + 1.0, v) - self.sample_bilinear(u - 1.0, v)) * 0.5;
+            let gy = (self.sample_bilinear(u, v + 1.0) - self.sample_bilinear(u, v - 1.0)) * 0.5;
             return [gx, gy];
         }
 
@@ -241,9 +243,12 @@ impl<'a> ImageView<'a> {
         unsafe { &self.data.get_unchecked(start..start + self.width) }
     }
 
-    /// Create a decimated copy of the image by subsampling every `factor` pixels.
+    /// Create a decimated copy of the image by averaging each `factor × factor` block
+    /// (area resampling: anti-aliased, and every source pixel contributes).
     ///
-    /// The `output` buffer must have size at least `(width/factor) * (height/factor)`.
+    /// Output pixel `j` covers source pixels `[j·factor, (j + 1)·factor)`; map coordinates
+    /// back with [`decimated_to_full`]. Trailing rows/columns that do not fill a block are
+    /// dropped. The `output` buffer must have size at least `(width/factor) * (height/factor)`.
     pub fn decimate_to<'b>(
         &self,
         factor: usize,
@@ -279,10 +284,19 @@ impl<'a> ImageView<'a> {
             .enumerate()
             .take(new_h)
             .for_each(|(y, out_row)| {
-                let src_y = y * factor;
-                let src_row = self.get_row(src_y);
-                for x in 0..new_w {
-                    out_row[x] = src_row[x * factor];
+                let area = (factor * factor) as u32;
+                let half = area / 2;
+                for (x, out) in out_row.iter_mut().enumerate() {
+                    let mut sum = 0u32;
+                    for dy in 0..factor {
+                        let row = self.get_row(y * factor + dy);
+                        sum += row[x * factor..(x + 1) * factor]
+                            .iter()
+                            .map(|&v| u32::from(v))
+                            .sum::<u32>();
+                    }
+                    // Round to nearest; the mean of u8 values always fits in u8.
+                    *out = ((sum + half) / area) as u8;
                 }
             });
 
@@ -326,9 +340,8 @@ impl<'a> ImageView<'a> {
 
         // Centre-aware mapping: output pixel `x` has its centre at `x + 0.5`
         // in output space, i.e. `(x + 0.5) / factor` in source space
-        // (`sample_bilinear` takes pixel-centre-at-0.5 coordinates). This is
-        // the inverse of the `(v + 0.5) * d - 0.5` decimation mapping with
-        // `d = 1/factor`, so `x_src = (x_up + 0.5)/factor - 0.5` in index units.
+        // (`sample_bilinear` takes pixel-centre-at-0.5 coordinates): a pure scaling,
+        // inverted by `upscaled_to_full`.
         output
             .par_chunks_exact_mut(new_w)
             .enumerate()
@@ -342,12 +355,32 @@ impl<'a> ImageView<'a> {
                     // Given we are inside image bounds, it should be fine.
                     // To maximize perf we might want a localized optimized loop here,
                     // but for now reusing sample_bilinear is safe and clean.
-                    *val = self.sample_bilinear(src_x, src_y) as u8;
+                    // Round to nearest: truncation would darken every pixel by 0.5 grey.
+                    *val = (self.sample_bilinear(src_x, src_y) + 0.5) as u8;
                 }
             });
 
         ImageView::new(&output[..new_w * new_h], new_w, new_h, new_w)
     }
+}
+
+/// Maps a coordinate on the [`ImageView::decimate_to`] grid back to the full-resolution grid.
+///
+/// Coordinates are continuous with pixel centres at `+0.5` (the project-wide convention), so
+/// pixel `j` of the decimated grid spans `[j, j + 1)` there and `[j·d, (j + 1)·d)` at full
+/// resolution: the map is a pure scaling. (The `(v + 0.5)·d − 0.5` form is the same map in
+/// *integer-centre* index units, i.e. OpenCV's convention, and is wrong here by `(d − 1)/2`.)
+#[must_use]
+pub fn decimated_to_full(v: f64, factor: usize) -> f64 {
+    v * factor as f64
+}
+
+/// Maps a coordinate on the [`ImageView::upscale_to`] grid back to the original grid: the
+/// inverse of the pure scaling [`ImageView::upscale_to`] samples with (see
+/// [`decimated_to_full`] for the convention).
+#[must_use]
+pub fn upscaled_to_full(v: f64, factor: usize) -> f64 {
+    v / factor as f64
 }
 
 #[cfg(test)]
@@ -366,6 +399,81 @@ mod tests {
         assert_eq!(view.get_row(0), &[1, 2, 3]);
         assert_eq!(view.get_row(1), &[4, 5, 6]);
         assert_eq!(view.get_pixel(1, 1), 5);
+    }
+
+    /// Ramp image `I(x, y) = slope * x` (pixel centre at `x + 0.5`).
+    fn ramp(width: usize, height: usize, slope: usize) -> Vec<u8> {
+        (0..height)
+            .flat_map(|_| (0..width).map(move |x| (slope * x) as u8))
+            .collect()
+    }
+
+    /// A resampler and its coordinate mapping must agree: on a ramp, the value a resampled
+    /// pixel holds identifies the source coordinate it was taken from, and mapping that
+    /// pixel's centre back to the source grid must land on that same coordinate.
+    #[test]
+    fn decimation_mapping_matches_resampler() {
+        let (w, h, slope) = (60, 12, 4);
+        let data = ramp(w, h, slope);
+        let img = ImageView::new(&data, w, h, w).expect("valid image");
+        for d in [2usize, 3] {
+            let mut out = vec![0u8; (w / d) * (h / d)];
+            let dec = img.decimate_to(d, &mut out).expect("decimate");
+            for j in 1..dec.width - 1 {
+                let value = f64::from(dec.get_pixel(j, 2));
+                let source_u = value / slope as f64 + 0.5;
+                let mapped = decimated_to_full(j as f64 + 0.5, d);
+                assert!(
+                    (mapped - source_u).abs() < 0.5 / slope as f64 + 1e-9,
+                    "d={d} j={j}: mapping gives {mapped}, resampler took {source_u}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn upscale_mapping_matches_resampler() {
+        let (w, h, slope) = (30, 8, 8);
+        let data = ramp(w, h, slope);
+        let img = ImageView::new(&data, w, h, w).expect("valid image");
+        for u in [2usize, 3] {
+            let mut out = vec![0u8; w * u * h * u];
+            let up = img.upscale_to(u, &mut out).expect("upscale");
+            // Stay clear of the border clamp.
+            for j in 2 * u..up.width - 2 * u {
+                let value = f64::from(up.get_pixel(j, 3 * u));
+                let source_u = value / slope as f64 + 0.5;
+                let mapped = upscaled_to_full(j as f64 + 0.5, u);
+                assert!(
+                    (mapped - source_u).abs() < 0.5 / slope as f64 + 1e-9,
+                    "U={u} j={j}: mapping gives {mapped}, resampler took {source_u}"
+                );
+            }
+        }
+    }
+
+    /// The border fallback of `sample_gradient_bilinear` must sample the same point as the
+    /// interior path: on an image that varies only in x, gx near the top border equals gx
+    /// in the interior at the same x.
+    #[test]
+    fn gradient_border_fallback_samples_the_requested_point() {
+        // q(i) = i(i-1)/2 is integer-valued, and both gradient paths are exact on it
+        // (gx = u - 1 at continuous coordinate u), so any disagreement is a sampling shift.
+        let (w, h) = (23usize, 32usize);
+        let data: Vec<u8> = (0..h)
+            .flat_map(|_| (0..w).map(|x| (x * x.saturating_sub(1) / 2) as u8))
+            .collect();
+        let img = ImageView::new(&data, w, h, w).expect("valid image");
+        for x in [8.3, 10.75, 12.5] {
+            let border = img.sample_gradient_bilinear(x, 1.0);
+            let interior = img.sample_gradient_bilinear(x, 16.0);
+            assert!(
+                (border[0] - interior[0]).abs() < 0.02,
+                "x={x}: border gx {} vs interior gx {}",
+                border[0],
+                interior[0]
+            );
+        }
     }
 
     #[test]
