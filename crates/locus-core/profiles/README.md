@@ -35,6 +35,44 @@ regenerated from the Pydantic model via
   per-call orchestration concerns handed to the `Detector` constructor,
   not detection logic.
 
+## The `threshold` group
+
+`threshold.mode` chooses how the per-pixel foreground threshold that
+segmentation reads is built. All three shipped profiles carry
+`"TileMidExtreme"` — the historical rule, and the only one the regression
+snapshots pin:
+
+| `mode` | Rule | Reads |
+| --- | --- | --- |
+| `TileMidExtreme` | midpoint of min/max over the 3×3 tile neighbourhood | `tile_size`, `min_range` |
+| `LocalMean` | `mean` of a `(2·local_mean_radius + 1)²` window, minus an offset: `constant`, or `clamp(round(noise_k · σ̂ₙ), 2, 20)` when `noise_k > 0` | `local_mean_radius`, `constant`, `noise_k` |
+
+`LocalMean` is opt-in and **changes detector output on every frame**; it
+exists for scenes where the tile rule's dependence on local *extremes*
+fails — textured or dark backgrounds that fuse with a marker, and uniform
+regions that speckle with foreground. Its foreground is a hollow ring around
+dark markers, so the filled-blob quad gates (`quad.min_fill_ratio`,
+`min_density`, `max_elongation`) must be relaxed with it, and shipping it in a
+profile waits on decoder-side false-positive control (the SOTA plan's M3).
+`noise_k` (σ̂ₙ the frame's estimated sensor noise) replaces the per-camera
+grey-level `constant` with one physical parameter: a flat pixel turns
+foreground with probability ≈ Φ(−k). Set it on a *custom* profile:
+
+```json
+"threshold": { "tile_size": 8, "min_range": 10, "enable_sharpening": false,
+               "mode": "LocalMean", "local_mean_radius": 7, "constant": 15,
+               "noise_k": 4.0 }
+```
+
+Run `LocalMean` **unsharpened**. The noise σ is estimated on the raw frame and carried through
+the pre-filters' white-noise gain; the Laplacian sharpen alone multiplies it by √29 ≈ 5.4, so
+with sharpening on the honest offset `k · σ` exceeds the 20-level ceiling on essentially every
+real sensor and `noise_k` degenerates to a constant 20.
+
+`constant`, `local_mean_radius` and `noise_k` are inert under `TileMidExtreme`; the
+shipped profiles still carry the tuned values so that flipping `mode`
+alone is enough.
+
 ## Loading a profile
 
 ```python

@@ -836,40 +836,63 @@ fn angle_diff(a: f32, b: f32) -> f32 {
 /// matches observed noise. Phase 3 will reuse this for adaptive σ.
 #[must_use]
 pub fn compute_image_noise_floor(img: &ImageView) -> f64 {
-    let w = img.width;
-    let h = img.height;
-    if w < 3 || h < 3 {
+    estimate_noise_sigma(img, 1)
+}
+
+/// Bins of the `|L|` histogram behind [`estimate_noise_sigma`]: one per possible value.
+/// The kernel's positive (and negative) coefficients sum to 8, so `|L| ≤ 8 · 255 = 2040`
+/// and the median is exact for every input (8 KB of stack, once per frame).
+const NOISE_HIST_BINS: usize = 8 * 255 + 1;
+
+/// Immerkær noise estimate (σ, grey levels) on every `stride`-th pixel in x and y.
+///
+/// Same estimator as [`compute_image_noise_floor`] — the median of `|L|` over the 3×3
+/// Laplacian-difference kernel, divided by `0.6745 · 6` — but allocation-free: `|L|` is an
+/// integer, so a stack histogram yields the exact median. `stride` trades samples for time
+/// (the per-frame hot path uses [`noise_stride`]); `stride = 1` reproduces the dense
+/// estimate.
+#[must_use]
+pub fn estimate_noise_sigma(img: &ImageView, stride: usize) -> f64 {
+    let (width, height) = (img.width, img.height);
+    if width < 3 || height < 3 {
         return 0.0;
     }
-
-    let mut abs_l: Vec<u32> = Vec::with_capacity((w - 2) * (h - 2));
-    for y in 1..h - 1 {
-        for x in 1..w - 1 {
-            let p00 = i32::from(img.get_pixel(x - 1, y - 1));
-            let p10 = i32::from(img.get_pixel(x, y - 1));
-            let p20 = i32::from(img.get_pixel(x + 1, y - 1));
-            let p01 = i32::from(img.get_pixel(x - 1, y));
-            let p11 = i32::from(img.get_pixel(x, y));
-            let p21 = i32::from(img.get_pixel(x + 1, y));
-            let p02 = i32::from(img.get_pixel(x - 1, y + 1));
-            let p12 = i32::from(img.get_pixel(x, y + 1));
-            let p22 = i32::from(img.get_pixel(x + 1, y + 1));
-
-            let l = (p00 - 2 * p10 + p20) + (-2 * p01 + 4 * p11 - 2 * p21) + (p02 - 2 * p12 + p22);
-            abs_l.push(l.unsigned_abs());
+    let stride = stride.max(1);
+    let mut hist = [0u32; NOISE_HIST_BINS];
+    let mut samples = 0u32;
+    for y in (1..height - 1).step_by(stride) {
+        let (above, row, below) = (img.get_row(y - 1), img.get_row(y), img.get_row(y + 1));
+        for x in (1..width - 1).step_by(stride) {
+            let px = |r: &[u8], dx: usize| i32::from(r[x + dx - 1]);
+            let lap = (px(above, 0) - 2 * px(above, 1) + px(above, 2))
+                + (-2 * px(row, 0) + 4 * px(row, 1) - 2 * px(row, 2))
+                + (px(below, 0) - 2 * px(below, 1) + px(below, 2));
+            hist[lap.unsigned_abs() as usize] += 1;
+            samples += 1;
         }
     }
-
-    if abs_l.is_empty() {
-        return 0.0;
+    // Element of rank samples/2 (0-based), as `select_nth_unstable(len / 2)` picks.
+    let rank = samples / 2;
+    let mut cumulative = 0u32;
+    let mut median = NOISE_HIST_BINS - 1;
+    for (bin, &count) in hist.iter().enumerate() {
+        cumulative += count;
+        if cumulative > rank {
+            median = bin;
+            break;
+        }
     }
-
-    let mid = abs_l.len() / 2;
-    let (_, m, _) = abs_l.select_nth_unstable(mid);
-    let median = f64::from(*m);
-
     // Convert MAD → σ for Gaussian (1/0.6745) and divide by kernel norm √36 = 6.
-    median / (0.6745 * 6.0)
+    median as f64 / (0.6745 * 6.0)
+}
+
+/// Sampling stride for a per-frame [`estimate_noise_sigma`]: about 2¹⁸ samples whatever
+/// the resolution (stride 1 at VGA, 3 at 1080p, 6 at 4K UHD), which keeps the estimate's
+/// standard error far below one grey level at a cost of well under a millisecond.
+#[must_use]
+pub fn noise_stride(width: usize, height: usize) -> usize {
+    const TARGET_SAMPLES: f64 = 262_144.0;
+    (((width * height) as f64 / TARGET_SAMPLES).sqrt().round() as usize).max(1)
 }
 
 #[cfg(test)]
@@ -962,6 +985,69 @@ mod tests {
             sigma < 0.1,
             "uniform image should have ~zero noise: {sigma}"
         );
+    }
+
+    /// Reference: the dense `select_nth_unstable` median the histogram replaces.
+    fn noise_sigma_reference(img: &ImageView) -> f64 {
+        let mut abs_l = Vec::new();
+        for y in 1..img.height - 1 {
+            for x in 1..img.width - 1 {
+                let p = |dx: usize, dy: usize| i32::from(img.get_pixel(x + dx - 1, y + dy - 1));
+                let l = (p(0, 0) - 2 * p(1, 0) + p(2, 0))
+                    + (-2 * p(0, 1) + 4 * p(1, 1) - 2 * p(2, 1))
+                    + (p(0, 2) - 2 * p(1, 2) + p(2, 2));
+                abs_l.push(l.unsigned_abs());
+            }
+        }
+        let mid = abs_l.len() / 2;
+        let (_, m, _) = abs_l.select_nth_unstable(mid);
+        f64::from(*m) / (0.6745 * 6.0)
+    }
+
+    /// Flat field + bar pattern + LCG noise of amplitude `amp`.
+    fn noisy_scene(w: usize, h: usize, amp: i32, seed: u32) -> Vec<u8> {
+        let mut state = seed | 1;
+        (0..w * h)
+            .map(|i| {
+                state = state.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+                let noise = ((state >> 16) & 0xFFFF) as i32 % (2 * amp + 1) - amp;
+                let bar = if (i % w / 16).is_multiple_of(2) {
+                    60
+                } else {
+                    190
+                };
+                (bar + noise).clamp(0, 255) as u8
+            })
+            .collect()
+    }
+
+    proptest! {
+        #[test]
+        fn prop_noise_histogram_median_is_exact(
+            w in 3usize..40, h in 3usize..40, amp in 0i32..40, seed in any::<u32>()
+        ) {
+            let data = noisy_scene(w, h, amp, seed);
+            let view = ImageView::new(&data, w, h, w).unwrap();
+            prop_assert_eq!(estimate_noise_sigma(&view, 1), noise_sigma_reference(&view));
+        }
+    }
+
+    #[test]
+    fn strided_noise_estimate_tracks_dense() {
+        for amp in [2, 6, 12] {
+            let (w, h) = (960, 540);
+            let data = noisy_scene(w, h, amp, 7);
+            let view = ImageView::new(&data, w, h, w).unwrap();
+            let dense = estimate_noise_sigma(&view, 1);
+            let strided = estimate_noise_sigma(&view, noise_stride(w, h));
+            assert!(
+                (strided - dense).abs() <= 0.05 * dense + 0.2,
+                "amp={amp}: strided {strided} vs dense {dense}"
+            );
+        }
+        assert_eq!(noise_stride(640, 480), 1);
+        assert_eq!(noise_stride(1920, 1080), 3);
+        assert_eq!(noise_stride(3840, 2160), 6);
     }
 
     #[test]

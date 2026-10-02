@@ -266,16 +266,40 @@ fn run_detection_pipeline<'ctx>(
         *img
     };
 
-    let binarized = state
-        .arena
-        .alloc_slice_fill_copy(img.width * img.height, 0u8);
+    // The binarized image is telemetry only (segmentation reads `threshold_map`). The
+    // local-mean thresholder skips it when handed an empty slice; the tile thresholder
+    // writes it as a by-product of its SIMD kernel.
+    let binarized_len = if debug_telemetry
+        || config.threshold_mode == crate::config::ThresholdMode::TileMidExtreme
+    {
+        img.width * img.height
+    } else {
+        0
+    };
+    let binarized = state.arena.alloc_slice_fill_copy(binarized_len, 0u8);
     let threshold_map = state
         .arena
         .alloc_slice_fill_copy(img.width * img.height, 0u8);
 
     // 1. Thresholding & 2. Segmentation & 3. Quad Extraction
     let (n, unrefined) = {
-        let engine = crate::threshold::ThresholdEngine::from_config(config);
+        let mut engine = crate::threshold::ThresholdEngine::from_config(config);
+        if config.threshold_mode == crate::config::ThresholdMode::LocalMean
+            && config.threshold_noise_k > 0.0
+        {
+            // Estimate on the raw sensor image (where the white-noise model holds) and carry
+            // it through the resampling / sharpening gain, rather than estimating on the
+            // filtered, spatially correlated image the thresholder sees.
+            let sigma = crate::gradient::estimate_noise_sigma(
+                &full_img,
+                crate::gradient::noise_stride(full_img.width, full_img.height),
+            ) * crate::threshold::prefilter_noise_gain(
+                config.decimation,
+                upscale,
+                config.enable_sharpening,
+            );
+            engine = engine.with_noise_sigma(sigma);
+        }
         let tile_stats = engine.compute_tile_stats(&state.arena, &sharpened_img);
         engine.apply_threshold_with_map(
             &state.arena,

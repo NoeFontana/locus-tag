@@ -9,8 +9,8 @@ The pipeline follows a strict sequential-then-parallel execution model. Each sta
 ```mermaid
 flowchart LR
     subgraph Preprocessing
-        Integral["Integral Image"]
-        Thresh["Adaptive Threshold"]
+        TileStats["Tile Statistics"]
+        Thresh["Threshold Map"]
     end
 
     subgraph Segmentation
@@ -43,7 +43,7 @@ flowchart LR
         PoseRefine["LM Refinement"]
     end
 
-    Integral --> Thresh
+    TileStats --> Thresh
     Thresh --> RLE --> LSL
     LSL --> Contour --> DP --> Refine
     Refine -.->|ERF or GWLF| Geometry
@@ -62,10 +62,28 @@ At the start of each `detect()` call, the bump arena is reset in $O(1)$ time, fr
 
 ## Stage 1: Preprocessing
 
-Two linear passes over the image produce the binarized input for segmentation.
+Two linear passes over the image produce the per-pixel **threshold map** that
+segmentation consumes: a pixel is foreground when `pixel < threshold_map[pixel]`,
+and a threshold of `0` therefore means "never foreground".
 
-1. **Integral Image** — A single-pass $O(N)$ scan computes the prefix-sum table used by the adaptive thresholder.
-2. **Adaptive Threshold** — Each pixel is compared against the local mean computed from the integral image over a configurable tile size. The output is a binary image where foreground pixels indicate potential tag edges.
+1. **Tile statistics** — A single $O(N)$ pass reduces each `tile_size × tile_size`
+   tile to its min and max.
+2. **Threshold map** — `threshold.mode` selects the rule:
+    - `TileMidExtreme` *(default, every shipped profile)* — the midpoint of the
+      min/max over the tile's 3×3 tile neighbourhood, published as-is. Cheap and
+      well-tuned for the rectified, well-lit datasets Locus is benchmarked on.
+      Because the threshold follows the local *extremes*, a flat tile gets
+      `t ≈ its own grey level` (so sensor noise speckles uniform regions) and a
+      background darker than the midpoint between a marker's black border and a
+      nearby highlight becomes foreground.
+    - `LocalMean` *(opt-in)* — a true per-pixel local mean over a
+      `(2·local_mean_radius + 1)²` window, minus `threshold.constant`. Tracks
+      the local *background level* instead of the local extremes, and the
+      constant keeps sensor noise in a uniform region below the threshold.
+      Computed with a sliding column-sum accumulator rather than an integral
+      image, so the auxiliary memory is one `u32` row per row-strip (≈ 0.4 MB
+      at 4K instead of 33–66 MB), and the result is independent of the strip
+      size and of the rayon worker count.
 
 **Module:** `threshold.rs` | **Complexity:** $O(N)$ | **Typical Latency:** ~0.9 ms (720p)
 
@@ -194,9 +212,9 @@ sequenceDiagram
 
     Note over Det: Arena Reset (O(1))
 
-    Det->>Thresh: compute_integral_image()
-    Det->>Thresh: adaptive_threshold()
-    Thresh-->>Det: Binarized Image
+    Det->>Thresh: compute_tile_stats()
+    Det->>Thresh: apply_threshold_with_map()
+    Thresh-->>Det: Threshold Map
 
     Det->>Seg: SIMD Fused RLE + LSL
     Seg-->>Det: Component Labels & Stats
@@ -233,7 +251,7 @@ sequenceDiagram
 
 | Stage | Complexity | Latency (50 Tags, 720p) | Notes |
 | :--- | :--- | :--- | :--- |
-| **Preprocessing** | $O(N)$ | ~0.9 ms | Adaptive thresholding + Integral Image. |
+| **Preprocessing** | $O(N)$ | ~0.9 ms | Tile statistics + threshold map. |
 | **Segmentation** | $O(N)$ | ~0.5 ms | SIMD Fused RLE + Light-Speed Labeling. |
 | **Quad Extraction** | $O(K \cdot M)$ | ~1.5 ms | SoA extraction + sub-pixel refinement. |
 | **Decoding (Hard)** | $O(Q)$ | ~10.0 ms | SoA math pass; SIMD bilinear sampling. |

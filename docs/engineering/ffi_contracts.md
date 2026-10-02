@@ -120,6 +120,8 @@ All configuration validation happens in `DetectorConfig::validate()` at
 | `0.0 <= quad_min_fill_ratio < quad_max_fill_ratio <= 1.0` | `config.rs:246-254` | `InvalidFillRatio { min, max }` |
 | `quad_min_edge_length > 0.0` | `config.rs:255-257` | `InvalidEdgeLength` |
 | `structure_tensor_radius <= 8` | `config.rs:258-262` | `InvalidStructureTensorRadius` |
+| `1 <= threshold_local_mean_radius <= 127` (`threshold::MAX_LOCAL_MEAN_RADIUS`: keeps box sums `< 2²⁴`, exact in the local-mean arithmetic) | `config.rs::validate` | `InvalidLocalMeanRadius` |
+| `threshold_noise_k` finite and `>= 0` | `config.rs::validate` | `InvalidNoiseK` |
 | `quad_extraction_mode == EdLines` ⇒ `refinement_mode != Erf` | `config.rs:263-266` | `EdLinesIncompatibleWithErf` |
 
 ### Fields with **no** runtime validation
@@ -128,8 +130,7 @@ The following fields are passed straight through without range checks, even
 though the Pydantic `DetectorConfig` in `crates/locus-py/locus/_config.py`
 declares explicit ranges:
 
-- `threshold_min_range`, `threshold_min_radius`, `threshold_max_radius`
-- `adaptive_threshold_constant`, `adaptive_threshold_gradient_threshold`
+- `threshold_min_range`, `adaptive_threshold_constant`
 - `quad_min_area`, `quad_max_aspect_ratio`, `quad_min_edge_score`
 - `subpixel_refinement_sigma`
 - `decoder_min_contrast`, `max_hamming_error`, `gwlf_transversal_alpha`
@@ -161,7 +162,7 @@ also fails the test — so neither category can drift silently.
 | --- | --- |
 | `threshold_min_range` | **Telemetry-only.** The tile-validity mask it drives is applied only while writing `telemetry.binarized`; the per-pixel `threshold_map` segmentation consumes is written unconditionally (`ThresholdEngine::apply_threshold_with_map`). Detection output is invariant to it. Not allowlisted — the signature covers telemetry. |
 | `nthreads` | **Live but output-invariant** by design: it picks the scoped Rayon pool (`LocusEngine::run_scoped`). Allowlisted as inert *for output*; `nthreads_selects_the_pipeline_pool` separately proves the pool is installed. |
-| `threshold_min_radius`, `threshold_max_radius`, `adaptive_threshold_constant`, `adaptive_threshold_gradient_threshold` | **Inert.** Read only by `threshold::adaptive_threshold_gradient_window` / `adaptive_threshold_integral`, whose only callers are `benches/integral_threshold_bench.rs`. Allowlisted with an owner; wiring or removing them is a separate decision. |
+| `threshold_local_mean_radius`, `adaptive_threshold_constant`, `threshold_noise_k` | **Live under `threshold_mode = LocalMean` only** (the local-mean window and its offset); ignored by `TileMidExtreme`. Not allowlisted: their cases switch the mode on first. |
 
 ---
 

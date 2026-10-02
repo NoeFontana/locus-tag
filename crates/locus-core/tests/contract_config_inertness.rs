@@ -35,7 +35,7 @@
 use locus_core::bench_api::family_to_decoder;
 use locus_core::config::{
     AdaptivePpbConfig, CornerRefinementMode, DetectorConfig, EdLinesImbalanceGatePolicy,
-    QuadExtractionMode, QuadExtractionPolicy, SegmentationConnectivity, TagFamily,
+    QuadExtractionMode, QuadExtractionPolicy, SegmentationConnectivity, TagFamily, ThresholdMode,
 };
 use locus_core::{CameraIntrinsics, DetectorBuilder, ImageView};
 
@@ -507,16 +507,10 @@ fn base_sharpening_off(c: &mut DetectorConfig) {
     c.enable_sharpening = false;
 }
 
-/// Reason shared by the four integral/gradient-window thresholder knobs.
-const INTEGRAL_THRESHOLDER_REASON: &str = concat!(
-    "Read only by `threshold::adaptive_threshold_gradient_window` / ",
-    "`adaptive_threshold_integral`, whose only callers are ",
-    "`benches/integral_threshold_bench.rs`. The shipped pipeline runs the ",
-    "tile thresholder (`apply_threshold_with_map`), so the value cannot reach ",
-    "detection or telemetry. Wiring-or-removing is owned by the ",
-    "robust-threshold work; this entry exists so the decision cannot be ",
-    "forgotten -- it fails the moment the field becomes live."
-);
+/// Prerequisite: the local-mean thresholder, the only reader of its radius and constant.
+fn base_local_mean(c: &mut DetectorConfig) {
+    c.threshold_mode = ThresholdMode::LocalMean;
+}
 
 const HUBER_DELTA_REASON: &str = concat!(
     "Unreachable from `Detector::detect`. It parametrises the *unweighted* ",
@@ -559,28 +553,28 @@ fn cases() -> Vec<FieldCase> {
             inert_reason: None,
         },
         FieldCase {
-            field: "threshold_min_radius",
+            field: "threshold_mode",
             base: noop,
-            mutate: |c| c.threshold_min_radius = 6,
-            inert_reason: Some(INTEGRAL_THRESHOLDER_REASON),
+            mutate: |c| c.threshold_mode = ThresholdMode::LocalMean,
+            inert_reason: None,
         },
         FieldCase {
-            field: "threshold_max_radius",
-            base: noop,
-            mutate: |c| c.threshold_max_radius = 31,
-            inert_reason: Some(INTEGRAL_THRESHOLDER_REASON),
+            field: "threshold_local_mean_radius",
+            base: base_local_mean,
+            mutate: |c| c.threshold_local_mean_radius = 4,
+            inert_reason: None,
         },
         FieldCase {
             field: "adaptive_threshold_constant",
-            base: noop,
+            base: base_local_mean,
             mutate: |c| c.adaptive_threshold_constant = 60,
-            inert_reason: Some(INTEGRAL_THRESHOLDER_REASON),
+            inert_reason: None,
         },
         FieldCase {
-            field: "adaptive_threshold_gradient_threshold",
-            base: noop,
-            mutate: |c| c.adaptive_threshold_gradient_threshold = 200,
-            inert_reason: Some(INTEGRAL_THRESHOLDER_REASON),
+            field: "threshold_noise_k",
+            base: base_local_mean,
+            mutate: |c| c.threshold_noise_k = 8.0,
+            inert_reason: None,
         },
         FieldCase {
             field: "quad_min_area",
@@ -784,10 +778,10 @@ fn every_config_field() -> Vec<&'static str> {
         threshold_tile_size: _,
         threshold_min_range: _,
         enable_sharpening: _,
-        threshold_min_radius: _,
-        threshold_max_radius: _,
+        threshold_mode: _,
+        threshold_local_mean_radius: _,
         adaptive_threshold_constant: _,
-        adaptive_threshold_gradient_threshold: _,
+        threshold_noise_k: _,
         quad_min_area: _,
         quad_max_aspect_ratio: _,
         quad_min_fill_ratio: _,
@@ -823,10 +817,10 @@ fn every_config_field() -> Vec<&'static str> {
         "threshold_tile_size",
         "threshold_min_range",
         "enable_sharpening",
-        "threshold_min_radius",
-        "threshold_max_radius",
+        "threshold_mode",
+        "threshold_local_mean_radius",
         "adaptive_threshold_constant",
-        "adaptive_threshold_gradient_threshold",
+        "threshold_noise_k",
         "quad_min_area",
         "quad_max_aspect_ratio",
         "quad_min_fill_ratio",
