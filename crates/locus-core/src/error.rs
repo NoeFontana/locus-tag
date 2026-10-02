@@ -14,6 +14,9 @@ pub enum ConfigError {
     /// Noise-calibrated threshold offset must be finite and >= 0.
     #[error("threshold_noise_k must be finite and >= 0, got {0}")]
     InvalidNoiseK(f32),
+    /// Border-ring error budget must lie in [0, 1].
+    #[error("decoder_max_border_error_rate must be in [0, 1], got {0}")]
+    InvalidBorderErrorRate(f32),
     /// Decimation factor must be >= 1.
     #[error("decimation factor must be >= 1, got {0}")]
     InvalidDecimation(usize),

@@ -15,6 +15,26 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `LocalMean` thresholds each pixel against the mean of a `(2·local_mean_radius + 1)²` window
   minus an offset, from a sliding column-sum accumulator (≈ 0.4 MB scratch at 4K, independent
   of strip size and worker count).
+- **Border-ring marker evidence (`decoder.max_border_error_rate`, opt-in).** A decoded
+  candidate can be required to show the one-cell black border around its payload: the
+  `4·(d + 1)` ring cells are sampled through the candidate homography, and a cell is an error
+  when it reaches 90 % of the way from the payload's dark to its bright class mean (a midpoint
+  cut is fooled by blur on small markers). The rate is the error budget (`0` = every ring cell
+  dark; default `1.0` = off). Evidence is checked on the *reported* quad, so an outer
+  quiet-zone contour that decodes only through the 0.9 scale retry is rejected; it applies to
+  the pinhole and the distortion-aware decode paths, and evidence that cannot be evaluated
+  (samples outside the image, a single-class payload) never rejects. Measured with
+  `cargo xtask sota` at rate 0 (setup as above):
+
+  | Benchmark | `standard` | `standard` + ring | LocalMean front end | + ring | Best reference |
+  | :-- | --: | --: | --: | --: | --: |
+  | render-tag tag16h5, precision % | 83.33 | **99.01** | 47.17 | **97.09** | 100 |
+  | Liu4K, recall / precision % | 29.11 / 99.58 | 28.84 / **100** | 67.07 / 99.42 | **66.74 / 100** | aruco_nano 66.27 / 100 |
+  | ICRA forward, recall % | 73.75 | 72.17 | 73.39 | 71.56 | aruco_nano 53.71 |
+  | AprilGrid board, recall / precision % | 97.01 / 99.40 | 96.97 / 99.44 | — | 99.52 / 99.61 | aruco_nano 92.17 / 99.73 |
+
+  Opt-in: shipped output is byte-identical; the default is decided with the profile switch.
+
 - **Noise-calibrated local-mean offset (`threshold.noise_k`, RC3).** With `noise_k = k > 0` the
   offset is `clamp(round(k · σ̂ₙ), 2, 20)` grey levels per frame, `σ̂ₙ` the noise of the
   thresholded image: the Immerkær estimate on the raw frame (`gradient::estimate_noise_sigma`,
@@ -90,6 +110,11 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **Multi-family decoding picked the last matching family, not the best.** Within a scale, a
+  later decoder matching within its budget replaced an earlier one with a lower Hamming
+  distance (`best_code.is_none() || …` was always true). The distortion-aware path accepted on
+  the frame-wide budget even when the best distance came from a decoder whose own budget it
+  exceeded. Both now keep the lowest-distance match within its own decoder's budget.
 - **Resampling coordinate maps (`decimation > 1`, `upscale_factor > 1`).** Corners found on a
   decimated or upscaled grid were mapped back with the integer-pixel-centre formula
   `(v + 0.5)·d − 0.5` inside Locus's +0.5 convention: seeds landed 1 px off at `decimation = 2`

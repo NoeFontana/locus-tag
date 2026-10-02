@@ -297,6 +297,15 @@ pub struct DetectorConfig {
     /// For checkerboard patterns with densely packed tags, lower values (e.g., 10.0)
     /// can improve recall on small/blurry tags.
     pub decoder_min_contrast: f64,
+    /// Largest fraction of the one-cell black border ring that may read bright for a decoded
+    /// candidate to be accepted (default: 1.0, check disabled).
+    ///
+    /// The ring (`4·(d + 1)` cells around a `d×d` payload) is sampled through the candidate
+    /// homography; a cell is an error when brighter than the midpoint of the payload's dark
+    /// and bright class means. It is marker evidence the codeword does not carry, which matters
+    /// for small dictionaries (tag16h5) where textured candidates decode by chance. Partial
+    /// occlusion of the border consumes the budget.
+    pub decoder_max_border_error_rate: f32,
     /// Strategy for refining corner positions (default: Edge).
     pub refinement_mode: CornerRefinementMode,
     /// Maximum number of Hamming errors allowed for tag decoding.
@@ -486,6 +495,7 @@ impl Default for DetectorConfig {
             decimation: 1,
             nthreads: 0,
             decoder_min_contrast: 20.0,
+            decoder_max_border_error_rate: 1.0,
             refinement_mode: CornerRefinementMode::Erf,
             max_hamming_error: None,
             huber_delta_px: 1.5,
@@ -530,6 +540,11 @@ impl DetectorConfig {
         {
             return Err(ConfigError::InvalidLocalMeanRadius(
                 self.threshold_local_mean_radius,
+            ));
+        }
+        if !(0.0..=1.0).contains(&self.decoder_max_border_error_rate) {
+            return Err(ConfigError::InvalidBorderErrorRate(
+                self.decoder_max_border_error_rate,
             ));
         }
         if !(self.threshold_noise_k.is_finite() && self.threshold_noise_k >= 0.0) {
@@ -639,6 +654,8 @@ pub struct DetectorConfigBuilder {
     pub upscale_factor: Option<usize>,
     /// Minimum contrast for decoder to accept a tag.
     pub decoder_min_contrast: Option<f64>,
+    /// Border-ring error budget.
+    pub decoder_max_border_error_rate: Option<f32>,
     /// Refinement mode.
     pub refinement_mode: Option<CornerRefinementMode>,
     /// Maximum Hamming errors.
@@ -790,6 +807,9 @@ impl DetectorConfigBuilder {
             decimation: 1, // Default to 1, as it's typically set via builder
             nthreads: 0,   // Default to 0
             decoder_min_contrast: self.decoder_min_contrast.unwrap_or(d.decoder_min_contrast),
+            decoder_max_border_error_rate: self
+                .decoder_max_border_error_rate
+                .unwrap_or(d.decoder_max_border_error_rate),
             refinement_mode: self.refinement_mode.unwrap_or(d.refinement_mode),
             max_hamming_error: self.max_hamming_error.or(d.max_hamming_error),
             huber_delta_px: self.huber_delta_px.unwrap_or(d.huber_delta_px),
@@ -846,6 +866,14 @@ impl DetectorConfigBuilder {
     #[must_use]
     pub fn decoder_min_contrast(mut self, contrast: f64) -> Self {
         self.decoder_min_contrast = Some(contrast);
+        self
+    }
+
+    /// Set the border-ring error budget (see
+    /// [`DetectorConfig::decoder_max_border_error_rate`]; `1.0` disables the check).
+    #[must_use]
+    pub fn decoder_max_border_error_rate(mut self, rate: f32) -> Self {
+        self.decoder_max_border_error_rate = Some(rate);
         self
     }
 
@@ -1229,6 +1257,12 @@ mod profile_json {
         #[serde(default)]
         pub max_hamming_error: Option<u32>,
         pub gwlf_transversal_alpha: f64,
+        #[serde(default = "default_max_border_error_rate")]
+        pub max_border_error_rate: f32,
+    }
+
+    fn default_max_border_error_rate() -> f32 {
+        DetectorConfig::default().decoder_max_border_error_rate
     }
 
     impl DecoderJson {
@@ -1238,6 +1272,7 @@ mod profile_json {
                 refinement_mode: c.refinement_mode,
                 max_hamming_error: c.max_hamming_error,
                 gwlf_transversal_alpha: c.gwlf_transversal_alpha,
+                max_border_error_rate: c.decoder_max_border_error_rate,
             }
         }
     }
@@ -1391,6 +1426,7 @@ mod profile_json {
                 decimation: d.decimation,
                 nthreads: d.nthreads,
                 decoder_min_contrast: p.decoder.min_contrast,
+                decoder_max_border_error_rate: p.decoder.max_border_error_rate,
                 refinement_mode: p.decoder.refinement_mode,
                 max_hamming_error: p.decoder.max_hamming_error,
                 huber_delta_px: p.pose.huber_delta_px,

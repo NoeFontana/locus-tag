@@ -58,6 +58,13 @@
           "title": "Gwlf Transversal Alpha",
           "type": "number"
         },
+        "max_border_error_rate": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Max Border Error Rate",
+          "type": "number"
+        },
         "max_hamming_error": {
           "anyOf": [
             {

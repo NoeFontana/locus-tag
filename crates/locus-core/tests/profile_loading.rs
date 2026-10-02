@@ -35,6 +35,10 @@ fn assert_shared_defaults(cfg: &DetectorConfig) {
         d.adaptive_threshold_constant
     );
     assert_eq!(cfg.threshold_noise_k, d.threshold_noise_k);
+    assert_eq!(
+        cfg.decoder_max_border_error_rate,
+        d.decoder_max_border_error_rate
+    );
     // `quad_min_area` is profile-specific (clean-render profiles raise it to
     // suppress small textured-quad false positives); asserted per-profile.
     // `max_hamming_error` is profile-specific (high_accuracy tightens to 1 to
@@ -203,6 +207,7 @@ fn to_profile_json_round_trips_every_field() {
         edlines_imbalance_gate: EdLinesImbalanceGatePolicy::Enabled,
         // Decoder
         decoder_min_contrast: 12.5,
+        decoder_max_border_error_rate: 0.25,
         refinement_mode: CornerRefinementMode::Erf,
         max_hamming_error: Some(2),
         gwlf_transversal_alpha: 0.03,

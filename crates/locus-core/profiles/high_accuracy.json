@@ -37,7 +37,8 @@
     "min_contrast": 20.0,
     "max_hamming_error": 1,
     "refinement_mode": "None",
-    "gwlf_transversal_alpha": 0.01
+    "gwlf_transversal_alpha": 0.01,
+    "max_border_error_rate": 1.0
   },
   "pose": {
     "huber_delta_px": 1.5,
