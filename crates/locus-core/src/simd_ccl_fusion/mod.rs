@@ -452,7 +452,15 @@ pub fn label_components_lsl<'a>(
         let c = if parallel {
             comp[i]
         } else {
-            let c = slot[resolve_root(parent, i as u32) as usize];
+            // root(i) = root(parent[i]), and runs are visited in index order: a parent that
+            // precedes `i` already has its slot in `comp`, so most runs cost one load
+            // instead of a walk through the forest.
+            let p = parent[i] as usize;
+            let c = if p < i {
+                comp[p]
+            } else {
+                slot[resolve_root(parent, i as u32) as usize]
+            };
             comp[i] = c;
             c
         };
