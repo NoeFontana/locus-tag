@@ -601,7 +601,7 @@ pub fn prefilter_noise_gain(decimation: usize, upscale: usize, sharpening: bool)
 
 /// Largest supported local-mean radius. It bounds the window area to `255²`, which keeps
 /// every box sum below `2²⁴`: exact in the wrapping `u32` prefix arithmetic and in the
-/// reciprocal-multiply mean of [`local_mean_row`].
+/// reciprocal-multiply local mean.
 pub const MAX_LOCAL_MEAN_RADIUS: usize = 127;
 
 /// Slide the column accumulator by one row: add `enter`, subtract `leave` (either may be

@@ -237,7 +237,8 @@ pub struct DetectorConfig {
     ///
     /// When positive, the local-mean constant is chosen per frame as
     /// `clamp(round(k · σ̂ₙ), 2, 20)` grey levels, where `σ̂ₙ` is the sensor-noise standard
-    /// deviation of the thresholded image ([`crate::gradient::estimate_noise_sigma`]), and
+    /// deviation of the thresholded image (Immerkær estimate on the raw frame, scaled by the
+    /// pre-filter white-noise gain), and
     /// [`Self::adaptive_threshold_constant`] is ignored. A flat background pixel then becomes
     /// foreground with probability ≈ Φ(−k), whatever the camera's noise level — one
     /// physical parameter instead of a per-camera grey-level constant. Ignored by
