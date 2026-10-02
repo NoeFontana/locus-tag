@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/benchmarking/render_tag_sota_20260425/">
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/benchmarking/sota_scoreboard_20261002/">
       
       
-        <link rel="prev" href="../release_performance_20260418/">
+        <link rel="prev" href="../liu4k_euroc_sota_20261001/">
       
       
-        <link rel="next" href="../render_tag_sota_20260713/">
+        <link rel="next" href="../refine_variants_20260714/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Render-tag 1080p SOTA pursuit (2026-04-25) - Locus</title>
+        <title>SOTA scoreboard baseline (2026-10-02) - Locus</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#render-tag-1080p-sota-pursuit-2026-04-25" class="md-skip">
+        <a href="#sota-scoreboard-baseline-2026-10-02" class="md-skip">
           Skip to content
         </a>
       
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Render-tag 1080p SOTA pursuit (2026-04-25)
+              SOTA scoreboard baseline (2026-10-02)
             
           </span>
         </div>
@@ -1761,19 +1761,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../render_tag_sota_20260425/" class="md-nav__link">
         
   
   
@@ -1789,7 +1780,6 @@
   
 
       </a>
-      
     </li>
   
 
@@ -1855,10 +1845,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../sota_scoreboard_20261002/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SOTA scoreboard baseline (2026-10-02)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1874,6 +1891,59 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Setup
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#win-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Win table
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reading-the-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading the table
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -2086,6 +2156,47 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Setup
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#win-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Win table
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reading-the-table" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading the table
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -2104,49 +2215,800 @@
   
 
 
-<h1 id="render-tag-1080p-sota-pursuit-2026-04-25">Render-tag 1080p SOTA pursuit (2026-04-25)</h1>
-<blockquote>
-<p><strong>Superseded</strong>: see <a href="../render_tag_sota_20260713/"><code>render_tag_sota_20260713.md</code></a>
-for current numbers. Kept as the historical record of how <code>render_tag_hub</code>
-(later folded into <code>high_accuracy</code>) reached SOTA.</p>
-</blockquote>
-<p>Goal: beat AprilTag-C and OpenCV <code>cv2.aruco</code> on <code>locus_v1_tag36h11_1920x1080</code>
-(50 scenes, single tag each). Result achieved via two changes:</p>
-<ol>
-<li><strong><code>enable_sharpening</code> + minor threshold/geometry tuning</strong>: 94% → 96%
-   recall, mean RMSE 0.2162 → 0.1734 px. Every JSON-exposed knob beyond
-   this was a no-op for the remaining 2 misses (scenes 0002, 0033) — they
-   rejected inside EdLines's own hard-coded gates, not the JSON-tunable
-   ones. <code>ContourRdp</code> recovers those 2 scenes but blows mean RMSE to 1.33px
-   (2.3× the SOTA gate) — EdLines's sub-pixel fit is doing real work that a
-   coarser extractor can't replace.</li>
-<li><strong>EdLines axis-aligned imbalance gate</strong> (opt-in
-   <code>edlines_imbalance_gate</code>, shipped in <code>render_tag_hub.json</code>, later
-   folded into <code>high_accuracy</code>): fixes a TRBL boundary-segmentation
-   degeneracy on near-axis-aligned tags. Full rationale in
-   <a href="../lessons/"><code>lessons.md</code> §4.3</a>. Opt-in because it regresses
-   brown_conrady distortion recall (0.929 → 0.869) if left global — many
-   legitimate distorted aprilgrid sub-tags sit in the 8-15% min-arc band
-   the gate would misfire on.</li>
-</ol>
-<p>Net result (1920×1080, vs. toughest external competitor per metric):
-recall tied at 100% (OpenCV/AprilTag-C), translation p50/p95/p99 2-7×
-tighter than AprilTag-C, rotation p50 tied, rotation p95/p99 lost to
-OpenCV by 1.4-1.5× (EdLines grazing-angle pose ambiguity — same effect
-noted in the 2160p report), latency tied with <code>high_accuracy</code> (11.67ms)
-and 2.2-3.8× faster than the externals. First Locus profile to clear
-AprilTag-C on every translation percentile at 100% recall.</p>
-<p>2160p stayed at 94% in this pass (pre- the <code>MAX_CANDIDATES</code> truncation
-fix — see <code>render_tag_2160p_20260425.md</code>). No regression on any other
-regression suite; the gate defaults <code>false</code> everywhere except
-<code>render_tag_hub.json</code>.</p>
-<p><strong>External pose-convention gotchas</strong> (still relevant, see
-<code>tools/bench/utils.py</code>): AprilTag-C's tag frame is 180° rotated about z
-vs. Locus/GT (<code>R @ diag(-1,-1,1)</code> fix); OpenCV must use
-<code>solvePnP(SOLVEPNP_ITERATIVE)</code> with explicit y-down center-origin object
-points — <code>SOLVEPNP_IPPE_SQUARE</code> picks an inconsistent branch on ~half of
-symmetric synthetic tags. Without these fixes rotation error reads
-~180° even when translation is correct.</p>
+<h1 id="sota-scoreboard-baseline-2026-10-02">SOTA scoreboard baseline (2026-10-02)</h1>
+<p>Live snapshot. It is the starting point of the SOTA programme (<code>#409</code> root causes, then
+milestones M1–M8): shipped Locus <code>standard</code> against the <strong>best published operating point of
+each reference</strong> on every benchmark both references can decode. Reproduce any cell with
+<code>cargo xtask sota</code> (<code>xtask/README.md</code>). Mechanisms live in the
+real-image root-cause snapshot (<a href="../liu4k_euroc_sota_20261001/">Liu4K + EuRoC, 2026-10-01</a>) and
+the lessons pages; this page carries the numbers.</p>
+<p><strong>Result: <code>standard</code> wins 31 / 88 judged cells.</strong> "Industrial SOTA" here means every judged
+cell green. Pose metrics are not reported: the win table is corner-level, so the Fast/Accurate
+pose-mode rule does not apply.</p>
+<h2 id="setup">Setup</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Item</th>
+<th style="text-align: left;">Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">CPU</td>
+<td style="text-align: left;">AMD EPYC-Milan, 8 vCPU (4 cores × 2 threads), AVX2, KVM guest (<code>lscpu</code>, measurement session)</td>
+</tr>
+<tr>
+<td style="text-align: left;">OS / toolchain</td>
+<td style="text-align: left;">Linux 6.8.0-139-generic, rustc 1.92.0</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus</td>
+<td style="text-align: left;"><code>maturin develop --release</code> at <code>main</code> <code>0324fd0</code> (+ harness-only commits of this PR)</td>
+</tr>
+<tr>
+<td style="text-align: left;">References</td>
+<td style="text-align: left;">OpenCV 4.10.0 (minimal build; <code>CORNER_REFINE_NONE</code> / <code>SUBPIX</code> / <code>APRILTAG</code>, <code>errorCorrectionRate = 0</code>), aruco_nano <code>961b18b</code>; both unpatched</td>
+</tr>
+<tr>
+<td style="text-align: left;">Accuracy</td>
+<td style="text-align: left;">full datasets, <code>--jobs 8</code> (detectors in parallel; latency from these runs is not judged)</td>
+</tr>
+<tr>
+<td style="text-align: left;">Latency</td>
+<td style="text-align: left;">separate serial runs <code>&lt;benchmark&gt;@t1</code>: <code>--jobs 1</code>, 1 thread (<code>RAYON_NUM_THREADS=1</code> / <code>cv::setNumThreads(1)</code>), best of 2 per image, decode excluded, strided (Liu4K 8, EuRoC 15, ICRA forward 2, circle 4, random 8, render-tag 2, tag16h5 4, boards 6)</td>
+</tr>
+<tr>
+<td style="text-align: left;">Load</td>
+<td style="text-align: left;">1.1–2.5 load average during the timing runs (another session's builds); latency ratios below are ≥ 4×, far above that noise</td>
+</tr>
+</tbody>
+</table>
+<h2 id="win-table">Win table</h2>
+<p>Locus value vs the best reference value per metric; a tie is a win. Corner error is
+order-preserving, in the OpenCV pixel convention, on the tags every reference with ≥ 20 %
+recall matched (<code>tools/bench/sota/score.py</code>).</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Benchmark</th>
+<th style="text-align: left;">Metric</th>
+<th style="text-align: right;">Locus</th>
+<th style="text-align: left;">Best reference</th>
+<th style="text-align: right;">Value</th>
+<th style="text-align: center;">Verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">liu4k</td>
+<td style="text-align: left;">Recall %</td>
+<td style="text-align: right;">29.11</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">66.27</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">liu4k</td>
+<td style="text-align: left;">Precision %</td>
+<td style="text-align: right;">99.58</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">liu4k</td>
+<td style="text-align: left;">F1</td>
+<td style="text-align: right;">45.05</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">79.71</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">liu4k</td>
+<td style="text-align: left;">Corner px, common tags (median)</td>
+<td style="text-align: right;">0.686</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">0.473</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">liu4k</td>
+<td style="text-align: left;">ms/img</td>
+<td style="text-align: right;">194.6</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">53.7</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">euroc</td>
+<td style="text-align: left;">Recall %</td>
+<td style="text-align: right;">20.42</td>
+<td style="text-align: left;">opencv_apriltag</td>
+<td style="text-align: right;">44.53</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">euroc</td>
+<td style="text-align: left;">Precision %</td>
+<td style="text-align: right;">97.81</td>
+<td style="text-align: left;">opencv_apriltag</td>
+<td style="text-align: right;">99.58</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">euroc</td>
+<td style="text-align: left;">LOO px, common tags (median)</td>
+<td style="text-align: right;">0.911</td>
+<td style="text-align: left;">opencv_apriltag</td>
+<td style="text-align: right;">0.529</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">euroc</td>
+<td style="text-align: left;">LOO px, common tags (p90)</td>
+<td style="text-align: right;">1.474</td>
+<td style="text-align: left;">opencv_apriltag</td>
+<td style="text-align: right;">1.005</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">euroc</td>
+<td style="text-align: left;">ms/img</td>
+<td style="text-align: right;">8.5</td>
+<td style="text-align: left;">opencv</td>
+<td style="text-align: right;">8.2</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-forward</td>
+<td style="text-align: left;">Recall %</td>
+<td style="text-align: right;">73.75</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">53.71</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-forward</td>
+<td style="text-align: left;">Precision %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-forward</td>
+<td style="text-align: left;">F1</td>
+<td style="text-align: right;">84.89</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">69.89</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-forward</td>
+<td style="text-align: left;">Corner RMSE px, common tags (mean)</td>
+<td style="text-align: right;">0.139</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">0.241</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-forward</td>
+<td style="text-align: left;">Corner RMSE px, common tags (p90)</td>
+<td style="text-align: right;">0.359</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">0.523</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-forward</td>
+<td style="text-align: left;">ms/img</td>
+<td style="text-align: right;">98.0</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">10.3</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-circle</td>
+<td style="text-align: left;">Recall %</td>
+<td style="text-align: right;">83.29</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">80.60</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-circle</td>
+<td style="text-align: left;">Precision %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-circle</td>
+<td style="text-align: left;">F1</td>
+<td style="text-align: right;">90.88</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">89.26</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-circle</td>
+<td style="text-align: left;">Corner RMSE px, common tags (mean)</td>
+<td style="text-align: right;">0.252</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">0.185</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-circle</td>
+<td style="text-align: left;">Corner RMSE px, common tags (p90)</td>
+<td style="text-align: right;">0.432</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">0.234</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-circle</td>
+<td style="text-align: left;">ms/img</td>
+<td style="text-align: right;">98.8</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">12.5</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-random</td>
+<td style="text-align: left;">Recall %</td>
+<td style="text-align: right;">99.95</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-random</td>
+<td style="text-align: left;">Precision %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-random</td>
+<td style="text-align: left;">F1</td>
+<td style="text-align: right;">99.97</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-random</td>
+<td style="text-align: left;">Corner RMSE px, common tags (mean)</td>
+<td style="text-align: right;">0.323</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">0.178</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-random</td>
+<td style="text-align: left;">Corner RMSE px, common tags (p90)</td>
+<td style="text-align: right;">0.473</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">0.219</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">icra-random</td>
+<td style="text-align: left;">ms/img</td>
+<td style="text-align: right;">96.8</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">13.3</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-640</td>
+<td style="text-align: left;">Recall %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-640</td>
+<td style="text-align: left;">Precision %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-640</td>
+<td style="text-align: left;">F1</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-640</td>
+<td style="text-align: left;">Corner RMSE px, common tags (mean)</td>
+<td style="text-align: right;">0.759</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.712</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-640</td>
+<td style="text-align: left;">Corner RMSE px, common tags (p90)</td>
+<td style="text-align: right;">0.968</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.804</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-640</td>
+<td style="text-align: left;">ms/img</td>
+<td style="text-align: right;">6.7</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">1.3</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-720p</td>
+<td style="text-align: left;">Recall %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-720p</td>
+<td style="text-align: left;">Precision %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-720p</td>
+<td style="text-align: left;">F1</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-720p</td>
+<td style="text-align: left;">Corner RMSE px, common tags (mean)</td>
+<td style="text-align: right;">0.864</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.713</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-720p</td>
+<td style="text-align: left;">Corner RMSE px, common tags (p90)</td>
+<td style="text-align: right;">0.997</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.828</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-720p</td>
+<td style="text-align: left;">ms/img</td>
+<td style="text-align: right;">17.8</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">3.4</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-1080p</td>
+<td style="text-align: left;">Recall %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-1080p</td>
+<td style="text-align: left;">Precision %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-1080p</td>
+<td style="text-align: left;">F1</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-1080p</td>
+<td style="text-align: left;">Corner RMSE px, common tags (mean)</td>
+<td style="text-align: right;">0.740</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.706</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-1080p</td>
+<td style="text-align: left;">Corner RMSE px, common tags (p90)</td>
+<td style="text-align: right;">0.931</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.798</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-1080p</td>
+<td style="text-align: left;">ms/img</td>
+<td style="text-align: right;">39.9</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">7.6</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-4k</td>
+<td style="text-align: left;">Recall %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-4k</td>
+<td style="text-align: left;">Precision %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-4k</td>
+<td style="text-align: left;">F1</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-4k</td>
+<td style="text-align: left;">Corner RMSE px, common tags (mean)</td>
+<td style="text-align: right;">0.777</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.713</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-4k</td>
+<td style="text-align: left;">Corner RMSE px, common tags (p90)</td>
+<td style="text-align: right;">0.958</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.831</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-4k</td>
+<td style="text-align: left;">ms/img</td>
+<td style="text-align: right;">153.7</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">31.5</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-high-iso</td>
+<td style="text-align: left;">Recall %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-high-iso</td>
+<td style="text-align: left;">Precision %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-high-iso</td>
+<td style="text-align: left;">F1</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-high-iso</td>
+<td style="text-align: left;">Corner RMSE px, common tags (mean)</td>
+<td style="text-align: right;">0.739</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.708</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-high-iso</td>
+<td style="text-align: left;">Corner RMSE px, common tags (p90)</td>
+<td style="text-align: right;">0.933</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.799</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-high-iso</td>
+<td style="text-align: left;">ms/img</td>
+<td style="text-align: right;">38.0</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">8.2</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-low-key</td>
+<td style="text-align: left;">Recall %</td>
+<td style="text-align: right;">14.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-low-key</td>
+<td style="text-align: left;">Precision %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-low-key</td>
+<td style="text-align: left;">F1</td>
+<td style="text-align: right;">24.56</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-low-key</td>
+<td style="text-align: left;">Corner RMSE px, common tags (mean)</td>
+<td style="text-align: right;">0.921</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.226</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-low-key</td>
+<td style="text-align: left;">Corner RMSE px, common tags (p90)</td>
+<td style="text-align: right;">1.798</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.285</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-low-key</td>
+<td style="text-align: left;">ms/img</td>
+<td style="text-align: right;">18.1</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">6.3</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-raw-pipeline</td>
+<td style="text-align: left;">Recall %</td>
+<td style="text-align: right;">60.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-raw-pipeline</td>
+<td style="text-align: left;">Precision %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-raw-pipeline</td>
+<td style="text-align: left;">F1</td>
+<td style="text-align: right;">75.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-raw-pipeline</td>
+<td style="text-align: left;">Corner RMSE px, common tags (mean)</td>
+<td style="text-align: right;">1.456</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.389</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-raw-pipeline</td>
+<td style="text-align: left;">Corner RMSE px, common tags (p90)</td>
+<td style="text-align: right;">2.504</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.464</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-raw-pipeline</td>
+<td style="text-align: left;">ms/img</td>
+<td style="text-align: right;">23.2</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">9.0</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-tag16h5</td>
+<td style="text-align: left;">Recall %</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-tag16h5</td>
+<td style="text-align: left;">Precision %</td>
+<td style="text-align: right;">83.33</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-tag16h5</td>
+<td style="text-align: left;">F1</td>
+<td style="text-align: right;">90.91</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">100.00</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-tag16h5</td>
+<td style="text-align: left;">Corner RMSE px, common tags (mean)</td>
+<td style="text-align: right;">0.753</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">0.701</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-tag16h5</td>
+<td style="text-align: left;">Corner RMSE px, common tags (p90)</td>
+<td style="text-align: right;">0.878</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.825</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-tag16h5</td>
+<td style="text-align: left;">ms/img</td>
+<td style="text-align: right;">26.8</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">7.7</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-aprilgrid</td>
+<td style="text-align: left;">Recall %</td>
+<td style="text-align: right;">97.01</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">92.17</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-aprilgrid</td>
+<td style="text-align: left;">Precision %</td>
+<td style="text-align: right;">99.40</td>
+<td style="text-align: left;">opencv</td>
+<td style="text-align: right;">99.91</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-aprilgrid</td>
+<td style="text-align: left;">F1</td>
+<td style="text-align: right;">98.19</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">95.80</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-aprilgrid</td>
+<td style="text-align: left;">Corner RMSE px, common tags (mean)</td>
+<td style="text-align: right;">0.915</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">0.056</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-aprilgrid</td>
+<td style="text-align: left;">Corner RMSE px, common tags (p90)</td>
+<td style="text-align: right;">1.075</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">0.074</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-aprilgrid</td>
+<td style="text-align: left;">ms/img</td>
+<td style="text-align: right;">49.9</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">9.9</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-charuco</td>
+<td style="text-align: left;">Recall %</td>
+<td style="text-align: right;">99.81</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">90.36</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-charuco</td>
+<td style="text-align: left;">Precision %</td>
+<td style="text-align: right;">99.39</td>
+<td style="text-align: left;">opencv</td>
+<td style="text-align: right;">99.96</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-charuco</td>
+<td style="text-align: left;">F1</td>
+<td style="text-align: right;">99.60</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">94.78</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-charuco</td>
+<td style="text-align: left;">Corner RMSE px, common tags (mean)</td>
+<td style="text-align: right;">0.880</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.819</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-charuco</td>
+<td style="text-align: left;">Corner RMSE px, common tags (p90)</td>
+<td style="text-align: right;">1.043</td>
+<td style="text-align: left;">opencv_subpix</td>
+<td style="text-align: right;">0.875</td>
+<td style="text-align: center;">❌</td>
+</tr>
+<tr>
+<td style="text-align: left;">hub-charuco</td>
+<td style="text-align: left;">ms/img</td>
+<td style="text-align: right;">31.9</td>
+<td style="text-align: left;">aruco_nano</td>
+<td style="text-align: right;">9.5</td>
+<td style="text-align: center;">❌</td>
+</tr>
+</tbody>
+</table>
+<h2 id="reading-the-table">Reading the table</h2>
+<ul>
+<li><strong>Latency is lost everywhere</strong> (aruco_nano is 4–10× faster at 1 thread: ICRA 1080p 10 vs 98
+  ms, Liu4K 54 vs 195 ms). aruco_nano thresholds with a box mean, traces contours without CCL,
+  decodes from integer corners and refines only decoded markers. Locus refines every candidate
+  before decoding (M4) and runs a full CCL plus a materialised threshold map (M8).</li>
+<li><strong>Recall on hard photometry</strong> (Liu4K 29 %, render-tag low_key 14 %, raw_pipeline 60 %) is the
+  tile min/max threshold (RC1). The opt-in LocalMean front end (#413) with border-ring evidence
+  (#414) reaches Liu4K 66.74 % / 100 % (aruco_nano 66.27 % / 100 %) and 98–100 % on the
+  render-tag sets.</li>
+<li><strong>tag16h5 precision</strong> (83 % vs 100 %) is missing marker evidence beyond the codeword: #414
+  takes it to 99 %.</li>
+<li><strong>Corner accuracy</strong> is lost on most render-tag and ICRA sets against OpenCV SUBPIX and
+  aruco_nano (<code>cornerSubPix</code>), and by an order of magnitude on the AprilGrid board, where tag
+  corners are X-junctions <code>cornerSubPix</code> models exactly. <code>high_accuracy</code> already wins the
+  render-tag corner cells; bringing <code>standard</code> there is M6 (photometric linearisation, EdLines
+  bias, ERF seed decoupling) and M7 (profile switch).</li>
+<li><strong>EuRoC</strong>: Locus <code>standard</code> loses recall to OpenCV with <code>markerBorderBits = 2</code>; the Kalibr
+  2-bit border is decoded only by the 0.9 scale retry (RC4, M5). With the LocalMean front end
+  Locus reaches 86.9 % against 44.5 %.</li>
+</ul>
+<p>Detector crashes are listed per report: pupil-apriltags (AprilTag 3, not part of the win
+criterion) segfaults on several 1080p sets.</p>
 
 
 
