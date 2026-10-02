@@ -76,6 +76,9 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Documentation
 
+- **SOTA scoreboard baseline (2026-10-02)** (`docs/engineering/benchmarking/sota_scoreboard_20261002.md`):
+  `standard` wins 31 of 88 judged cells against the best OpenCV 4.10 / aruco_nano operating point
+  on 15 benchmarks; every 1-thread latency cell is lost (aruco_nano 4–10× faster).
 - **Real-image competitiveness root causes (Liu4K, EuRoC).** Dated `lessons/` subsections record why
   Locus trailed aruco_nano / OpenCV on real photos and how a Locus configuration closes the recall
   gap: the segmentation threshold model, filled-blob quad pre-gates, a grey-level (not noise-scaled)
