@@ -420,39 +420,34 @@ const MAX_RING_CELLS: usize = 4 * (8 + 1);
 /// that are genuinely bright. Measured with `cargo xtask sota` (LocalMean front end, zero
 /// error budget), moving the cut from the midpoint (0.5) to 0.9 keeps tag16h5 false
 /// positives at 3 (112 without the check) and recovers ICRA `forward` recall from 64.6 %
-/// to 72.7 % (73.4 % without the check).
+/// to 72.7 % (73.4 % without the check). Setup: full datasets, release build, 1 thread per
+/// detector, AMD EPYC-Milan (see `docs/engineering/benchmarking/sota_scoreboard_20261002.md`).
 const RING_BRIGHT_FRACTION: f64 = 0.9;
 
 /// Marker evidence beyond the codeword: the one-cell black border around the payload.
 ///
 /// The canonical square `[-1, 1]²` spans the `d×d` data cells plus one border cell on each
-/// side, so border-cell centres sit at `±(d + 1)/(d + 2)`. The ring (`4·(d + 1)` cells) is
-/// sampled through `h`, and a cell counts as an error when it reaches
-/// [`RING_BRIGHT_FRACTION`] of the way from the data cells' dark to bright class mean (Otsu
-/// split of the payload samples). Returns `None` when a sample falls outside the image.
+/// side, so border-cell centres sit at `±(d + 1)/(d + 2)`. `sample` maps canonical points to
+/// image intensities (pinhole or distortion-aware). Payload cells are classified dark/bright
+/// exactly as decoding does (adaptive per-cell thresholds), and a ring cell counts as an
+/// error when it reaches [`RING_BRIGHT_FRACTION`] of the way from the dark to the bright class
+/// mean. Returns `(errors, ring_cells)`, or `None` when the evidence cannot be evaluated (a
+/// sample outside the image, a single-class payload, an unsupported grid size).
 ///
 /// A codeword match alone is weak evidence for small dictionaries: with `N` codes of `n` bits
 /// and Hamming budget `h`, a random candidate decodes with probability
 /// `4·N·Σ_{k≤h} C(n, k) / 2ⁿ` (≈ 1.8e-3 for tag16h5 at h = 0), so frames with hundreds of
 /// textured candidates produce false positives. A uniformly dark ring of `4·(d + 1)` cells is
 /// independent evidence that texture rarely supplies.
-fn border_ring_errors(
-    img: &crate::image::ImageView,
-    roi: &RoiCache,
-    homography: &Matrix3x3,
+fn ring_evidence(
     decoder: &(impl TagDecoder + ?Sized),
+    mut sample: impl FnMut(&[(f64, f64)], &mut [f64]) -> bool,
 ) -> Option<(u32, u32)> {
     let d = decoder.dimension();
     let n_ring = 4 * (d + 1);
     if n_ring > MAX_RING_CELLS {
         return None;
     }
-    let mut h_mat = SMatrix::<f64, 3, 3>::identity();
-    for (i, val) in homography.data.iter().enumerate() {
-        h_mat.as_mut_slice()[i] = f64::from(*val);
-    }
-    let h = Homography { h: h_mat };
-
     let pitch = 2.0 / (d + 2) as f64;
     let centre = |k: usize| -1.0 + pitch * (k as f64 + 0.5);
     let mut ring_pts = [(0.0f64, 0.0f64); MAX_RING_CELLS];
@@ -467,25 +462,25 @@ fn border_ring_errors(
     }
     debug_assert_eq!(m, n_ring);
     let mut ring = [0.0f64; MAX_RING_CELLS];
-    if !sample_grid_values_optimized(img, &h, roi, &ring_pts[..n_ring], &mut ring, n_ring) {
+    if !sample(&ring_pts[..n_ring], &mut ring[..n_ring]) {
         return None;
     }
 
     let points = decoder.sample_points();
     let n = points.len().min(MAX_BIT_COUNT);
     let mut data = [0.0f64; MAX_BIT_COUNT];
-    if !sample_grid_values_optimized(img, &h, roi, points, &mut data, n) {
+    if !sample(&points[..n], &mut data[..n]) {
         return None;
     }
-    let split = compute_otsu_threshold(&data[..n]);
+    let thresholds = compute_adaptive_thresholds(&data[..n], &points[..n]);
     let (mut dark, mut n_dark, mut bright, mut n_bright) = (0.0, 0u32, 0.0, 0u32);
-    for &v in &data[..n] {
-        if v <= split {
-            dark += v;
-            n_dark += 1;
-        } else {
+    for (&v, &t) in data[..n].iter().zip(&thresholds[..n]) {
+        if v > t {
             bright += v;
             n_bright += 1;
+        } else {
+            dark += v;
+            n_dark += 1;
         }
     }
     if n_dark == 0 || n_bright == 0 {
@@ -497,8 +492,33 @@ fn border_ring_errors(
     Some((errors, n_ring as u32))
 }
 
-/// Whether the border ring through `homography` is dark enough: at most
-/// `max_error_rate · 4·(d + 1)` bright cells. A rate `>= 1` disables the check.
+/// [`ring_evidence`] through a pinhole homography with the ROI-cached sampler.
+fn rectified_ring_evidence(
+    img: &crate::image::ImageView,
+    roi: &RoiCache,
+    homography: &Matrix3x3,
+    decoder: &(impl TagDecoder + ?Sized),
+) -> Option<(u32, u32)> {
+    let mut h_mat = SMatrix::<f64, 3, 3>::identity();
+    for (i, val) in homography.data.iter().enumerate() {
+        h_mat.as_mut_slice()[i] = f64::from(*val);
+    }
+    let h = Homography { h: h_mat };
+    ring_evidence(decoder, |pts, out| {
+        sample_grid_values_optimized(img, &h, roi, pts, out, pts.len())
+    })
+}
+
+/// Whether ring evidence fits the budget `max_error_rate · ring_cells`. Evidence that cannot
+/// be evaluated (`None`) does not reject: the check only ever removes candidates it can see.
+fn ring_budget_ok(evidence: Option<(u32, u32)>, max_error_rate: f32) -> bool {
+    evidence.is_none_or(|(errors, cells)| {
+        // The epsilon absorbs the f32 → f64 widening error (0.35f32 · 20 = 6.99999988).
+        f64::from(errors) <= (f64::from(max_error_rate) * f64::from(cells) + 1e-6).floor()
+    })
+}
+
+/// Pinhole border-ring check for one homography; a rate `>= 1` disables it.
 fn border_ring_ok(
     img: &crate::image::ImageView,
     roi: &RoiCache,
@@ -506,12 +526,11 @@ fn border_ring_ok(
     decoder: &(impl TagDecoder + ?Sized),
     max_error_rate: f32,
 ) -> bool {
-    if max_error_rate >= 1.0 {
-        return true;
-    }
-    border_ring_errors(img, roi, homography, decoder).is_some_and(|(errors, cells)| {
-        f64::from(errors) <= (f64::from(max_error_rate) * f64::from(cells)).floor()
-    })
+    max_error_rate >= 1.0
+        || ring_budget_ok(
+            rectified_ring_evidence(img, roi, homography, decoder),
+            max_error_rate,
+        )
 }
 
 /// Sample values from the image using DDA-based coordinate generation and SIMD bilinear sampling.
@@ -999,10 +1018,6 @@ pub fn rotate90(bits: u64, dim: usize) -> u64 {
 /// This path is only called for non-rectified cameras (`!C::IS_RECTIFIED`). For rectified
 /// cameras the faster SIMD path in [`sample_grid_soa_precomputed`] is used instead.
 #[cfg(feature = "non_rectified")]
-#[expect(
-    clippy::similar_names,
-    reason = "paired coordinate-component bindings (px/py, xn/yn, xd/yd, ix/iy, nx/ny) follow the x/y and ideal-vs-distorted math notation and are intentionally similar"
-)]
 fn sample_grid_values_distorted<C: crate::camera::CameraModel>(
     img: &crate::image::ImageView,
     h_ideal: &Homography,
@@ -1012,6 +1027,32 @@ fn sample_grid_values_distorted<C: crate::camera::CameraModel>(
     intensities: &mut [f64; MAX_BIT_COUNT],
 ) -> bool {
     let points = decoder.sample_points();
+    let n = points.len().min(MAX_BIT_COUNT);
+    sample_points_distorted(
+        img,
+        h_ideal,
+        &points[..n],
+        intrinsics,
+        model,
+        &mut intensities[..n],
+    )
+}
+
+/// Sample arbitrary canonical points through the ideal homography and the distortion map
+/// (see [`sample_grid_values_distorted`]).
+#[cfg(feature = "non_rectified")]
+#[expect(
+    clippy::similar_names,
+    reason = "paired coordinate-component bindings (px/py, xn/yn, xd/yd, ix/iy, nx/ny) follow the x/y and ideal-vs-distorted math notation and are intentionally similar"
+)]
+fn sample_points_distorted<C: crate::camera::CameraModel>(
+    img: &crate::image::ImageView,
+    h_ideal: &Homography,
+    points: &[(f64, f64)],
+    intrinsics: &crate::pose::CameraIntrinsics,
+    model: &C,
+    intensities: &mut [f64],
+) -> bool {
     if points.is_empty() {
         return false;
     }
@@ -1089,9 +1130,13 @@ fn decode_candidate_distorted<C: crate::camera::CameraModel>(
     ];
 
     let mut best_h = u32::MAX;
-    let mut best_id = 0u32;
-    let mut best_rot = 0u8;
     let mut best_bits = 0u64;
+    // Lowest-Hamming candidate that is within its own decoder's budget and shows the
+    // border ring: `(id, rotation, code, hamming)`.
+    let mut accepted: Option<(u32, u8, u64, u32)> = None;
+    // Ring evidence on the reported (unscaled) quad, at most once per decoder.
+    let h_report = Homography::square_to_quad(&ideal);
+    let mut ring_cache = [None::<bool>; 8];
 
     // Resolve `max_hamming_error` once per registered decoder; see the
     // matching block in `decode_batch_soa_generic` for rationale.
@@ -1102,11 +1147,6 @@ fn decode_candidate_distorted<C: crate::camera::CameraModel>(
             .max_hamming_error
             .unwrap_or_else(|| d.default_max_hamming());
     }
-    let frame_max_h_floor = decoder_max_h_buf[..decoders.len()]
-        .iter()
-        .copied()
-        .max()
-        .unwrap_or(0);
 
     for &scale in &[1.0f64, 0.9, 1.1] {
         let scaled: [[f64; 2]; 4] = core::array::from_fn(|j| {
@@ -1143,29 +1183,37 @@ fn decode_candidate_distorted<C: crate::camera::CameraModel>(
                 if hamming < best_h {
                     best_h = hamming;
                     best_bits = code;
-                    if hamming <= decoder_max_h_buf[decoder_idx] {
-                        best_id = id;
-                        best_rot = rot;
-                    }
                 }
-                if best_h == 0 {
-                    break;
+                let improves = accepted.is_none_or(|(_, _, _, h)| hamming < h);
+                if improves
+                    && hamming <= decoder_max_h_buf[decoder_idx]
+                    && *ring_cache[decoder_idx].get_or_insert_with(|| {
+                        let rate = config.decoder_max_border_error_rate;
+                        rate >= 1.0
+                            || ring_budget_ok(
+                                h_report.as_ref().and_then(|h| {
+                                    ring_evidence(decoder.as_ref(), |pts, out| {
+                                        sample_points_distorted(img, h, pts, intrinsics, model, out)
+                                    })
+                                }),
+                                rate,
+                            )
+                    })
+                {
+                    accepted = Some((id, rot, code, hamming));
                 }
             }
+            if accepted.is_some_and(|(_, _, _, h)| h == 0) {
+                break;
+            }
         }
-        if best_h == 0 {
+        if accepted.is_some_and(|(_, _, _, h)| h == 0) {
             break;
         }
     }
 
-    if best_h <= frame_max_h_floor {
-        (
-            CandidateState::Valid,
-            best_id,
-            best_rot,
-            best_bits,
-            best_h as f32,
-        )
+    if let Some((id, rot, code, hamming)) = accepted {
+        (CandidateState::Valid, id, rot, code, hamming as f32)
     } else {
         (
             CandidateState::FailedDecode,
@@ -1463,6 +1511,9 @@ fn decode_batch_soa_generic(
                         let mut best_id = 0;
                         let mut best_rot = 0;
                         let mut best_overall_code = None;
+                        // Ring evidence is evaluated on the reported (unscaled) quad, so it
+                        // depends only on the decoder: compute it at most once per decoder.
+                        let mut ring_cache = [None::<bool>; 8];
 
                         let scales = [1.0, 0.9, 1.1];
                         let center = [
@@ -1538,20 +1589,23 @@ fn decode_batch_soa_generic(
                                             best_overall_code = Some(code);
                                         }
 
+                                        // Lowest Hamming distance wins across decoders.
+                                        // Evidence must hold for the geometry that is
+                                        // reported: the unscaled quad (`homography`), not the
+                                        // scaled one that happened to decode. A quiet zone's
+                                        // outer contour decodes at scale 0.9 but its ring is
+                                        // white.
                                         if hamming <= decoder_max_h[decoder_idx]
-                                            && (best_code.is_none() || hamming < best_h_in_scale)
-                                            // Evidence must hold for the geometry that is
-                                            // reported: the unscaled quad (`homography`), not
-                                            // the scaled one that happened to decode. A quiet
-                                            // zone's outer contour decodes at scale 0.9 but
-                                            // its ring is white.
-                                            && border_ring_ok(
-                                                img,
-                                                &roi,
-                                                homography,
-                                                decoder.as_ref(),
-                                                config.decoder_max_border_error_rate,
-                                            )
+                                            && hamming < best_h_in_scale
+                                            && *ring_cache[decoder_idx].get_or_insert_with(|| {
+                                                border_ring_ok(
+                                                    img,
+                                                    &roi,
+                                                    homography,
+                                                    decoder.as_ref(),
+                                                    config.decoder_max_border_error_rate,
+                                                )
+                                            })
                                         {
                                             best_h_in_scale = hamming;
                                             best_match_in_scale =
@@ -2369,7 +2423,7 @@ mod tests {
         for (j, v) in h.h.iter().enumerate() {
             m.data[j] = *v as f32;
         }
-        border_ring_errors(&img, &roi, &m, &AprilTag36h11)
+        rectified_ring_evidence(&img, &roi, &m, &AprilTag36h11)
     }
 
     #[test]
@@ -2403,6 +2457,43 @@ mod tests {
         assert!(!border_ring_ok(&img, &roi, &m, &AprilTag36h11, 0.1));
         assert!(border_ring_ok(&img, &roi, &m, &AprilTag36h11, 0.11));
         assert!(border_ring_ok(&img, &roi, &m, &AprilTag36h11, 1.0));
+    }
+
+    #[test]
+    fn ring_budget_survives_f32_rounding_and_skips_unevaluable() {
+        // 0.35f32 · 20 = 6.99999988 in f64: the budget must still be 7 cells.
+        assert!(ring_budget_ok(Some((7, 20)), 0.35));
+        assert!(!ring_budget_ok(Some((8, 20)), 0.35));
+        // Evidence that cannot be evaluated never rejects.
+        assert!(ring_budget_ok(None, 0.0));
+    }
+
+    /// The distortion-aware decode path honours the ring budget too (zero distortion, so the
+    /// probe renders exactly as in the pinhole test).
+    #[cfg(feature = "non_rectified")]
+    #[test]
+    fn distorted_decode_applies_the_ring_budget() {
+        let model = crate::camera::BrownConradyModel {
+            k1: 0.0,
+            k2: 0.0,
+            p1: 0.0,
+            p2: 0.0,
+            k3: 0.0,
+        };
+        let intrinsics = crate::pose::CameraIntrinsics::new(100.0, 100.0, 60.0, 60.0);
+        let ideal = [[20.0, 20.0], [100.0, 20.0], [100.0, 100.0], [20.0, 100.0]];
+        let h = Homography::square_to_quad(&ideal).unwrap();
+        for (white, expect) in [
+            (&[][..], Some((0, 28))),
+            (&[(3, 0), (7, 4), (2, 7)][..], Some((3, 28))),
+        ] {
+            let data = ring_probe(white);
+            let img = crate::image::ImageView::new(&data, 120, 120, 120).unwrap();
+            let got = ring_evidence(&AprilTag36h11, |pts, out| {
+                sample_points_distorted(&img, &h, pts, &intrinsics, &model, out)
+            });
+            assert_eq!(got, expect);
+        }
     }
 
     #[test]

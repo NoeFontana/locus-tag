@@ -21,8 +21,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   when it reaches 90 % of the way from the payload's dark to its bright class mean (a midpoint
   cut is fooled by blur on small markers). The rate is the error budget (`0` = every ring cell
   dark; default `1.0` = off). Evidence is checked on the *reported* quad, so an outer
-  quiet-zone contour that decodes only through the 0.9 scale retry is rejected. Measured with
-  `cargo xtask sota` at rate 0:
+  quiet-zone contour that decodes only through the 0.9 scale retry is rejected; it applies to
+  the pinhole and the distortion-aware decode paths, and evidence that cannot be evaluated
+  (samples outside the image, a single-class payload) never rejects. Measured with
+  `cargo xtask sota` at rate 0 (setup as above):
 
   | Benchmark | `standard` | `standard` + ring | LocalMean front end | + ring | Best reference |
   | :-- | --: | --: | --: | --: | --: |
@@ -108,6 +110,11 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **Multi-family decoding picked the last matching family, not the best.** Within a scale, a
+  later decoder matching within its budget replaced an earlier one with a lower Hamming
+  distance (`best_code.is_none() || …` was always true). The distortion-aware path accepted on
+  the frame-wide budget even when the best distance came from a decoder whose own budget it
+  exceeded. Both now keep the lowest-distance match within its own decoder's budget.
 - **Resampling coordinate maps (`decimation > 1`, `upscale_factor > 1`).** Corners found on a
   decimated or upscaled grid were mapped back with the integer-pixel-centre formula
   `(v + 0.5)·d − 0.5` inside Locus's +0.5 convention: seeds landed 1 px off at `decimation = 2`
