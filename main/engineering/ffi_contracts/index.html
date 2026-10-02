@@ -2667,6 +2667,16 @@ calibration concern, not a correctness concern.</p>
 <td><code>InvalidStructureTensorRadius</code></td>
 </tr>
 <tr>
+<td><code>1 &lt;= threshold_local_mean_radius &lt;= 127</code> (<code>threshold::MAX_LOCAL_MEAN_RADIUS</code>: keeps box sums <code>&lt; 2²⁴</code>, exact in the local-mean arithmetic)</td>
+<td><code>config.rs::validate</code></td>
+<td><code>InvalidLocalMeanRadius</code></td>
+</tr>
+<tr>
+<td><code>threshold_noise_k</code> finite and <code>&gt;= 0</code></td>
+<td><code>config.rs::validate</code></td>
+<td><code>InvalidNoiseK</code></td>
+</tr>
+<tr>
 <td><code>quad_extraction_mode == EdLines</code> ⇒ <code>refinement_mode != Erf</code></td>
 <td><code>config.rs:263-266</code></td>
 <td><code>EdLinesIncompatibleWithErf</code></td>
@@ -2678,8 +2688,7 @@ calibration concern, not a correctness concern.</p>
 though the Pydantic <code>DetectorConfig</code> in <code>crates/locus-py/locus/_config.py</code>
 declares explicit ranges:</p>
 <ul>
-<li><code>threshold_min_range</code>, <code>threshold_min_radius</code>, <code>threshold_max_radius</code></li>
-<li><code>adaptive_threshold_constant</code>, <code>adaptive_threshold_gradient_threshold</code></li>
+<li><code>threshold_min_range</code>, <code>adaptive_threshold_constant</code></li>
 <li><code>quad_min_area</code>, <code>quad_max_aspect_ratio</code>, <code>quad_min_edge_score</code></li>
 <li><code>subpixel_refinement_sigma</code></li>
 <li><code>decoder_min_contrast</code>, <code>max_hamming_error</code>, <code>gwlf_transversal_alpha</code></li>
@@ -2720,8 +2729,8 @@ also fails the test — so neither category can drift silently.</p>
 <td><strong>Live but output-invariant</strong> by design: it picks the scoped Rayon pool (<code>LocusEngine::run_scoped</code>). Allowlisted as inert <em>for output</em>; <code>nthreads_selects_the_pipeline_pool</code> separately proves the pool is installed.</td>
 </tr>
 <tr>
-<td><code>threshold_min_radius</code>, <code>threshold_max_radius</code>, <code>adaptive_threshold_constant</code>, <code>adaptive_threshold_gradient_threshold</code></td>
-<td><strong>Inert.</strong> Read only by <code>threshold::adaptive_threshold_gradient_window</code> / <code>adaptive_threshold_integral</code>, whose only callers are <code>benches/integral_threshold_bench.rs</code>. Allowlisted with an owner; wiring or removing them is a separate decision.</td>
+<td><code>threshold_local_mean_radius</code>, <code>adaptive_threshold_constant</code>, <code>threshold_noise_k</code></td>
+<td><strong>Live under <code>threshold_mode = LocalMean</code> only</strong> (the local-mean window and its offset); ignored by <code>TileMidExtreme</code>. Not allowlisted: their cases switch the mode on first.</td>
 </tr>
 </tbody>
 </table>

@@ -2643,8 +2643,8 @@
 <p>The pipeline follows a strict sequential-then-parallel execution model. Each stage operates on the shared <a href="../../engineering/detection-batch-contract/">DetectionBatch (SoA)</a> with well-defined read/write privileges.</p>
 <pre class="mermaid"><code>flowchart LR
     subgraph Preprocessing
-        Integral["Integral Image"]
-        Thresh["Adaptive Threshold"]
+        TileStats["Tile Statistics"]
+        Thresh["Threshold Map"]
     end
 
     subgraph Segmentation
@@ -2677,7 +2677,7 @@
         PoseRefine["LM Refinement"]
     end
 
-    Integral --&gt; Thresh
+    TileStats --&gt; Thresh
     Thresh --&gt; RLE --&gt; LSL
     LSL --&gt; Contour --&gt; DP --&gt; Refine
     Refine -.-&gt;|ERF or GWLF| Geometry
@@ -2690,10 +2690,30 @@
 <p>At the start of each <code>detect()</code> call, the bump arena is reset in <span class="arithmatex">\(O(1)\)</span> time, freeing all per-frame ephemeral data. If the input image is below the minimum resolution threshold, it is upscaled into a pre-allocated buffer.</p>
 <p><strong>Module:</strong> <code>detector.rs</code></p>
 <h2 id="stage-1-preprocessing">Stage 1: Preprocessing</h2>
-<p>Two linear passes over the image produce the binarized input for segmentation.</p>
+<p>Two linear passes over the image produce the per-pixel <strong>threshold map</strong> that
+segmentation consumes: a pixel is foreground when <code>pixel &lt; threshold_map[pixel]</code>,
+and a threshold of <code>0</code> therefore means "never foreground".</p>
 <ol>
-<li><strong>Integral Image</strong> — A single-pass <span class="arithmatex">\(O(N)\)</span> scan computes the prefix-sum table used by the adaptive thresholder.</li>
-<li><strong>Adaptive Threshold</strong> — Each pixel is compared against the local mean computed from the integral image over a configurable tile size. The output is a binary image where foreground pixels indicate potential tag edges.</li>
+<li><strong>Tile statistics</strong> — A single <span class="arithmatex">\(O(N)\)</span> pass reduces each <code>tile_size × tile_size</code>
+   tile to its min and max.</li>
+<li><strong>Threshold map</strong> — <code>threshold.mode</code> selects the rule:<ul>
+<li><code>TileMidExtreme</code> <em>(default, every shipped profile)</em> — the midpoint of the
+  min/max over the tile's 3×3 tile neighbourhood, published as-is. Cheap and
+  well-tuned for the rectified, well-lit datasets Locus is benchmarked on.
+  Because the threshold follows the local <em>extremes</em>, a flat tile gets
+  <code>t ≈ its own grey level</code> (so sensor noise speckles uniform regions) and a
+  background darker than the midpoint between a marker's black border and a
+  nearby highlight becomes foreground.</li>
+<li><code>LocalMean</code> <em>(opt-in)</em> — a true per-pixel local mean over a
+  <code>(2·local_mean_radius + 1)²</code> window, minus <code>threshold.constant</code>. Tracks
+  the local <em>background level</em> instead of the local extremes, and the
+  constant keeps sensor noise in a uniform region below the threshold.
+  Computed with a sliding column-sum accumulator rather than an integral
+  image, so the auxiliary memory is one <code>u32</code> row per row-strip (≈ 0.4 MB
+  at 4K instead of 33–66 MB), and the result is independent of the strip
+  size and of the rayon worker count.</li>
+</ul>
+</li>
 </ol>
 <p><strong>Module:</strong> <code>threshold.rs</code> | <strong>Complexity:</strong> <span class="arithmatex">\(O(N)\)</span> | <strong>Typical Latency:</strong> ~0.9 ms (720p)</p>
 <h2 id="stage-2-segmentation-simd-fused">Stage 2: Segmentation (SIMD Fused)</h2>
@@ -2817,9 +2837,9 @@
 
     Note over Det: Arena Reset (O(1))
 
-    Det-&gt;&gt;Thresh: compute_integral_image()
-    Det-&gt;&gt;Thresh: adaptive_threshold()
-    Thresh--&gt;&gt;Det: Binarized Image
+    Det-&gt;&gt;Thresh: compute_tile_stats()
+    Det-&gt;&gt;Thresh: apply_threshold_with_map()
+    Thresh--&gt;&gt;Det: Threshold Map
 
     Det-&gt;&gt;Seg: SIMD Fused RLE + LSL
     Seg--&gt;&gt;Det: Component Labels &amp; Stats
@@ -2865,7 +2885,7 @@
 <td style="text-align: left;"><strong>Preprocessing</strong></td>
 <td style="text-align: left;"><span class="arithmatex">\(O(N)\)</span></td>
 <td style="text-align: left;">~0.9 ms</td>
-<td style="text-align: left;">Adaptive thresholding + Integral Image.</td>
+<td style="text-align: left;">Tile statistics + threshold map.</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>Segmentation</strong></td>
