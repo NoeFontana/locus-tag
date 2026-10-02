@@ -7,6 +7,37 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **Opt-in `threshold.mode = "LocalMean"` foreground thresholder** (supersedes #383; root
+  cause RC1 of #409). Segmentation marks a pixel foreground when `pixel < threshold_map[pixel]`,
+  and that map was only ever the midpoint of the min/max over a 3×3 tile neighbourhood, with no
+  validity gate: it follows the local *extremes*, so flat tiles speckle with sensor noise and a
+  dark background between a marker border and a nearby highlight fuses with the marker.
+  `LocalMean` thresholds each pixel against the mean of a `(2·local_mean_radius + 1)²` window
+  minus an offset, from a sliding column-sum accumulator (≈ 0.4 MB scratch at 4K, independent
+  of strip size and worker count).
+- **Noise-calibrated local-mean offset (`threshold.noise_k`, RC3).** With `noise_k = k > 0` the
+  offset is `clamp(round(k · σ̂ₙ), 2, 20)` grey levels per frame, `σ̂ₙ` the Immerkær noise
+  estimate of the thresholded image (`gradient::estimate_noise_sigma`, allocation-free, ~2¹⁸
+  strided samples), so a flat pixel turns foreground with probability ≈ Φ(−k) on any sensor
+  instead of a per-camera grey-level constant. `compute_image_noise_floor` shares the estimator
+  and no longer allocates.
+- Measured with `cargo xtask sota` (accuracy runs; latency not judged here). `standard` +
+  `LocalMean` r = 7, k = 4, with sharpening off, the filled-blob quad gates off and
+  4-connectivity (the M3 front end, still opt-in):
+
+  | Benchmark | Recall % | Precision % | Reference |
+  | :-- | --: | --: | :-- |
+  | Liu4K (924 images) | 67.07 (`standard` 29.11) | 99.42 | aruco_nano 66.27 / 100 |
+  | EuRoC (`grid` + LocalMean k = 5) | 88.37 (`grid` 70.07) | 97.50 | OpenCV APRILTAG 44.53 / 99.65 |
+  | render-tag 1080p / low_key / raw_pipeline | 100 / 98 / 100 | 98.0 / 100 / 96.2 | aruco_nano 100 / 100 |
+  | render-tag tag16h5 | 100 | **47.2** | aruco_nano 100 / 100 |
+
+  With the filled-blob gates *on*, `LocalMean` r = 7 collapses render-tag recall (32 % at
+  1080p): local-mean foreground is a hollow ring, which the fill/density/elongation gates reject.
+  The precision loss on weak dictionaries is the gates' false-positive control moving out, to
+  be replaced by decoder-side marker evidence. **Opt-in only: every shipped profile keeps
+  `TileMidExtreme` and `noise_k = 0`; shipped output is byte-identical.**
+
 - **`ArUcoMip36h12` tag family** (`cv2.aruco.DICT_ARUCO_MIP_36h12`: 250 codes, 6x6 bits,
   minimum Hamming distance 12). New dictionary JSON generated with
   `examples/dictionary_generation/extract_opencv.py`, `TagFamily` variant in `locus-core` and
@@ -58,6 +89,16 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `px + 0.5` (compiled only with `target_feature = "avx2"`; regression test added).
 - **Detector-level GWLF** no longer refines candidates the contrast funnel already rejected.
 - `detection-batch-contract.md` documents the real phase execution order and the GWLF phase.
+
+### Changed
+
+- **Threshold knobs.** `threshold.min_radius`, `threshold.max_radius` and
+  `threshold.gradient_threshold` are removed: they were read only by
+  `adaptive_threshold_gradient_window`, whose sole callers are benchmarks, so no value changed a
+  detection. `threshold.constant` is now the local-mean offset (default `15`) and is ignored by
+  `TileMidExtreme`. **Breaking for hand-written profile JSON:** `deny_unknown_fields` rejects the
+  removed keys. `threshold.mode`, `threshold.local_mean_radius` and `threshold.noise_k` have serde
+  defaults, so a profile that omits them keeps the historical behaviour.
 
 ### Removed
 

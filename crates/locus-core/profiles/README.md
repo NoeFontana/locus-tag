@@ -45,22 +45,26 @@ snapshots pin:
 | `mode` | Rule | Reads |
 | --- | --- | --- |
 | `TileMidExtreme` | midpoint of min/max over the 3×3 tile neighbourhood | `tile_size`, `min_range` |
-| `LocalMean` | `mean` of a `(2·local_mean_radius + 1)²` window, minus `constant` | `local_mean_radius`, `constant` |
+| `LocalMean` | `mean` of a `(2·local_mean_radius + 1)²` window, minus an offset: `constant`, or `clamp(round(noise_k · σ̂ₙ), 2, 20)` when `noise_k > 0` | `local_mean_radius`, `constant`, `noise_k` |
 
 `LocalMean` is opt-in and **changes detector output on every frame**; it
 exists for scenes where the tile rule's dependence on local *extremes*
 fails — textured or dark backgrounds that fuse with a marker, and uniform
-regions that speckle with foreground. It is materially better on the
-4K Liu4K dataset and has not been evaluated as a default on the ICRA /
-render-tag corpora, so switching a shipped profile to it needs its own
-evidence campaign. Set it on a *custom* profile:
+regions that speckle with foreground. Its foreground is a hollow ring around
+dark markers, so the filled-blob quad gates (`quad.min_fill_ratio`,
+`min_density`, `max_elongation`) must be relaxed with it, and shipping it in a
+profile waits on decoder-side false-positive control (the SOTA plan's M3).
+`noise_k` (σ̂ₙ the frame's estimated sensor noise) replaces the per-camera
+grey-level `constant` with one physical parameter: a flat pixel turns
+foreground with probability ≈ Φ(−k). Set it on a *custom* profile:
 
 ```json
 "threshold": { "tile_size": 8, "min_range": 10, "enable_sharpening": true,
-               "mode": "LocalMean", "local_mean_radius": 24, "constant": 15 }
+               "mode": "LocalMean", "local_mean_radius": 7, "constant": 15,
+               "noise_k": 4.0 }
 ```
 
-`constant` and `local_mean_radius` are inert under `TileMidExtreme`; the
+`constant`, `local_mean_radius` and `noise_k` are inert under `TileMidExtreme`; the
 shipped profiles still carry the tuned values so that flipping `mode`
 alone is enough.
 
