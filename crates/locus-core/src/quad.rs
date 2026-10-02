@@ -304,7 +304,16 @@ fn extract_single_quad(
             let sx = stat.first_pixel_x as usize;
             let sy = stat.first_pixel_y as usize;
 
-            let contour = trace_boundary(arena, labels, img.width, img.height, sx, sy, label);
+            let contour = trace_boundary(
+                arena,
+                labels,
+                img.width,
+                img.height,
+                sx,
+                sy,
+                label,
+                2 * (bbox_w + bbox_h) as usize,
+            );
 
             if contour.len() < 12 {
                 return None;
@@ -415,12 +424,8 @@ fn extract_single_quad(
 
         // Unrefined contour corners sit up to ~1 px off a sharp edge, whose gradient is about
         // that wide: search the seed's uncertainty band across the edge, not just the chord.
-        let edge_score = if refined {
-            calculate_edge_score(refinement_img, corners, &[0.0])
-        } else {
-            calculate_edge_score(refinement_img, corners, &[-1.0, 0.0, 1.0])
-        };
-        if edge_score > config.quad_min_edge_score {
+        let band: &[f64] = if refined { &[0.0] } else { &[-1.0, 0.0, 1.0] };
+        if edge_contrast_exceeds(refinement_img, corners, band, config.quad_min_edge_score) {
             return Some((corners, quad_pts, out_covs, route_label, ppb_estimate));
         }
     }
@@ -652,7 +657,16 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
 
     let sx = stat.first_pixel_x as usize;
     let sy = stat.first_pixel_y as usize;
-    let contour = trace_boundary(arena, labels, img.width, img.height, sx, sy, label);
+    let contour = trace_boundary(
+        arena,
+        labels,
+        img.width,
+        img.height,
+        sx,
+        sy,
+        label,
+        2 * (bbox_w + bbox_h) as usize,
+    );
 
     if contour.len() < 12 {
         return None;
@@ -834,12 +848,15 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     // straight-line edge score would sample the tag interior and spuriously
     // reject. Sample along the rectified straight line and forward-distort
     // each point to read pixels from the real (distorted) image.
-    let edge_score = if C::IS_RECTIFIED {
-        calculate_edge_score(refinement_img, corners, &[0.0])
+    let passes = if C::IS_RECTIFIED {
+        edge_contrast_exceeds(refinement_img, corners, &[0.0], config.quad_min_edge_score)
     } else {
-        calculate_edge_score_curved(refinement_img, &quad_rect, camera, scaled, decimation)
+        // `<=` rejects, so a NaN score passes, as in the rectified gate.
+        let score =
+            calculate_edge_score_curved(refinement_img, &quad_rect, camera, scaled, decimation);
+        score > config.quad_min_edge_score || score.is_nan()
     };
-    if edge_score <= config.quad_min_edge_score {
+    if !passes {
         return None;
     }
 
@@ -946,7 +963,7 @@ pub(crate) fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Ve
             }
 
             processed_labels[bit_idx] |= bit_mask;
-            let contour = trace_boundary(arena, labels, width, height, x, y, label);
+            let contour = trace_boundary(arena, labels, width, height, x, y, label, 0);
 
             if contour.len() >= 12 {
                 // Lowered from 30 to support 8px+ tags
@@ -1857,55 +1874,92 @@ fn reduce_to_quad<'a>(arena: &'a Bump, poly: &[Point], significance: &[f64]) -> 
     current
 }
 
-/// Minimum over the four edges of the mean gradient magnitude along the chord. At each chord
-/// sample the strongest response over `normal_offsets` (pixels along the edge normal) counts,
-/// so a seed known only to ~1 px can be scored without refining it first.
-pub(crate) fn calculate_edge_score(
+/// Mean gradient magnitude along the chord `p1 → p2`: `clamp(len, 3, 10)` samples, corners
+/// excluded, each taking the strongest response over `normal_offsets` (pixels along the edge
+/// normal). `None` when the edge is shorter than 4 px.
+fn edge_mean_gradient(
+    img: &ImageView,
+    p1: Point,
+    p2: Point,
+    normal_offsets: &[f64],
+) -> Option<f64> {
+    let dx = p2.x - p1.x;
+    let dy = p2.y - p1.y;
+    let len = (dx * dx + dy * dy).sqrt();
+    if len < 4.0 {
+        return None;
+    }
+    let n_samples = (len as usize).clamp(3, 10);
+    let (nx, ny) = (-dy / len, dx / len);
+    let mut edge_mag_sum = 0.0;
+    for k in 1..=n_samples {
+        // t runs over roughly 0.1..0.9 to avoid the corners.
+        let t = k as f64 / (n_samples + 1) as f64;
+        let x = p1.x + dx * t;
+        let y = p1.y + dy * t;
+        edge_mag_sum += normal_offsets
+            .iter()
+            .map(|&o| {
+                let g = img.sample_gradient_bilinear(x + nx * o, y + ny * o);
+                (g[0] * g[0] + g[1] * g[1]).sqrt()
+            })
+            .fold(0.0, f64::max);
+    }
+    Some(edge_mag_sum / n_samples as f64)
+}
+
+/// The edge-contrast gate: whether the minimum over the four edges of
+/// [`edge_mean_gradient`] exceeds `threshold`, an edge under 4 px scoring 0. Scoring a seed
+/// known only to ~1 px uses `normal_offsets = [-1, 0, 1]`.
+///
+/// Stops at the first failing edge, and in band mode accepts an edge whose chord alone
+/// (offset 0) already exceeds `threshold` without resampling it: each band term is a max over
+/// offsets that include 0, so the band mean dominates the chord mean term by term. The
+/// decision equals `calculate_edge_score(..) > threshold` exactly.
+pub(crate) fn edge_contrast_exceeds(
     img: &ImageView,
     corners: [Point; 4],
     normal_offsets: &[f64],
-) -> f64 {
+    threshold: f64,
+) -> bool {
+    let edge = |i: usize| (corners[i], corners[(i + 1) % 4]);
+    let edge_len =
+        |(a, b): (Point, Point)| ((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y)).sqrt();
+    if (0..4).any(|i| edge_len(edge(i)) < 4.0) {
+        return 0.0 > threshold;
+    }
+    (0..4).all(|i| {
+        let (a, b) = edge(i);
+        let Some(chord) = edge_mean_gradient(img, a, b, &[0.0]) else {
+            return 0.0 > threshold;
+        };
+        if chord > threshold {
+            return true;
+        }
+        let mean = if normal_offsets == [0.0] {
+            chord
+        } else {
+            edge_mean_gradient(img, a, b, normal_offsets).unwrap_or(0.0)
+        };
+        // A NaN mean is skipped by the minimum, so only `mean <= threshold` fails.
+        mean > threshold || mean.is_nan()
+    })
+}
+
+/// Minimum over the four edges of [`edge_mean_gradient`]; 0 if an edge is under 4 px.
+#[cfg(test)]
+fn calculate_edge_score(img: &ImageView, corners: [Point; 4], normal_offsets: &[f64]) -> f64 {
     let mut min_score = f64::MAX;
-
     for i in 0..4 {
-        let p1 = corners[i];
-        let p2 = corners[(i + 1) % 4];
-
-        let dx = p2.x - p1.x;
-        let dy = p2.y - p1.y;
-        let len = (dx * dx + dy * dy).sqrt();
-
-        if len < 4.0 {
-            // Tiny edge, likely noise or degenerate
+        let Some(avg_mag) =
+            edge_mean_gradient(img, corners[i], corners[(i + 1) % 4], normal_offsets)
+        else {
             return 0.0;
-        }
-
-        // Sample points along the edge (excluding corners to avoid corner effects)
-        let n_samples = (len as usize).clamp(3, 10); // At least 3, at most 10
-        let mut edge_mag_sum = 0.0;
-
-        for k in 1..=n_samples {
-            // t goes from roughly 0.1 to 0.9 to avoid corners
-            let t = k as f64 / (n_samples + 1) as f64;
-            let x = p1.x + dx * t;
-            let y = p1.y + dy * t;
-
-            let (nx, ny) = (-dy / len, dx / len);
-            edge_mag_sum += normal_offsets
-                .iter()
-                .map(|&o| {
-                    let g = img.sample_gradient_bilinear(x + nx * o, y + ny * o);
-                    (g[0] * g[0] + g[1] * g[1]).sqrt()
-                })
-                .fold(0.0, f64::max);
-        }
-
-        let avg_mag = edge_mag_sum / n_samples as f64;
+        };
         if avg_mag < min_score {
             min_score = avg_mag;
         }
     }
-
     min_score
 }
 
@@ -1970,6 +2024,39 @@ mod tests {
         let img = ImageView::new(&data, width, height, stride).unwrap();
         let score = calculate_edge_score(&img, corners, &[0.0]);
         assert!(score > 40.0, "Score {score} should be > 40.0");
+    }
+
+    proptest! {
+        /// The early-exit gate makes exactly the decision of thresholding the full score,
+        /// on the chord and on the ±1 px band.
+        #[test]
+        fn prop_edge_contrast_gate_matches_score(
+            seed in any::<u64>(),
+            corners in prop::array::uniform4((2.0..62.0f64, 2.0..62.0f64)),
+            threshold in 0.0..60.0f64,
+            band in any::<bool>(),
+        ) {
+            let (w, h) = (64usize, 64usize);
+            let mut state = seed | 1;
+            let data: Vec<u8> = (0..w * h)
+                .map(|i| {
+                    state ^= state << 13;
+                    state ^= state >> 7;
+                    state ^= state << 17;
+                    // Blocky texture with real edges plus noise.
+                    let (x, y) = (i % w, i / w);
+                    let block = if (x / 9 + y / 7) % 2 == 0 { 40 } else { 200 };
+                    (block + (state % 23) as i32 - 11).clamp(0, 255) as u8
+                })
+                .collect();
+            let img = ImageView::new(&data, w, h, w).unwrap();
+            let quad = corners.map(|(x, y)| Point { x, y });
+            let offsets: &[f64] = if band { &[-1.0, 0.0, 1.0] } else { &[0.0] };
+            prop_assert_eq!(
+                edge_contrast_exceeds(&img, quad, offsets, threshold),
+                calculate_edge_score(&img, quad, offsets) > threshold
+            );
+        }
     }
 
     proptest! {
@@ -2576,6 +2663,9 @@ mod tests {
     }
 }
 
+/// Boundary tracing gives up after this many steps.
+const MAX_TRACE_STEPS: usize = 10_000;
+
 #[multiversion(targets(
     "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
@@ -2585,6 +2675,7 @@ mod tests {
 ///
 /// This implementation uses a state-machine based approach to follow the border
 /// of a connected component. Uses precomputed offsets for speed.
+#[allow(clippy::too_many_arguments)]
 fn trace_boundary<'a>(
     arena: &'a Bump,
     labels: &[u32],
@@ -2593,8 +2684,11 @@ fn trace_boundary<'a>(
     start_x: usize,
     start_y: usize,
     target_label: u32,
+    capacity_hint: usize,
 ) -> BumpVec<'a, Point> {
-    let mut points = BumpVec::new_in(arena);
+    // An outer boundary visits about the bounding-box perimeter; reserving it up front
+    // spares the arena vector its doubling copies.
+    let mut points = BumpVec::with_capacity_in(capacity_hint.min(MAX_TRACE_STEPS), arena);
 
     // Precompute offsets for Moore neighborhood (CW order starting from Top)
     // This avoids repeated multiplication in the hot loop
@@ -2619,7 +2713,7 @@ fn trace_boundary<'a>(
     let mut curr_idx = start_y * width + start_x;
     let mut walk_dir = 2usize; // Initial: move Right
 
-    for _ in 0..10000 {
+    for _ in 0..MAX_TRACE_STEPS {
         points.push(Point {
             x: curr_x as f64 + 0.5,
             y: curr_y as f64 + 0.5,

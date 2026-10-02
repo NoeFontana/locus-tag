@@ -187,6 +187,20 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     unchanged;
   - ICRA forward recall 73.74 → 73.69 % (checkerboard grid 70.12 → 70.03 %);
   - the main render-tag, board and distortion snapshots are byte-identical.
+- **Faster candidate generation (output byte-identical).**
+  - The quad edge-contrast gate is now a decision with early exit: it stops at the first
+    failing edge. On unrefined decode-first seeds it accepts an edge whose chord alone passes
+    without resampling the ±1 px band, since the band mean dominates the chord mean term by
+    term. Property-tested equal to thresholding the full score.
+  - The boundary tracer preallocates its point buffer from the component's bounding-box
+    perimeter.
+  - Single-worker root resolution reuses the already-resolved slot of a parent that precedes
+    a run, instead of walking the union-find forest.
+
+  Quad extraction is 12–18 % faster at 1 thread. The whole pipeline is 4–9 % faster: Liu4K
+  104.9 → 98.0 ms, render-tag 4K 73.7 → 67.0 ms, ICRA 53.1 → 50.8 ms. These are medians of 12
+  interleaved runs of the span-instrumented pipeline on the decode-first front end. Output
+  hashes and every snapshot are unchanged.
 - **Faster codebook search.** `TagDictionary::decode` makes one branch-free pass over
   `hamming << 16 | index` keys, dispatched at runtime to `popcnt`/AVX2/NEON, so the default
   x86-64 wheel no longer runs software popcount. Results are identical (lowest index on ties,
