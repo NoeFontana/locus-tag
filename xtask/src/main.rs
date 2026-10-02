@@ -8,7 +8,6 @@
 //! deliberately dependency-free so it never adds crates to the workspace graph.
 
 use std::env;
-use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -33,60 +32,36 @@ const OPENCV_LIBS: &[&str] = &[
     "opencv_core",
 ];
 
-/// A benchmark dataset and how each detector family must be configured for it.
+/// A benchmark and how each detector family must be configured for it. Defined by a
+/// `[sota.<name>]` table in `xtask/datasets.toml` and resolved by
+/// `tools/bench/sota/spec.py` (this crate stays dependency-free, so it does not parse TOML).
 struct Dataset {
-    name: &'static str,
-    images: &'static str,
-    ext: &'static str,
-    locus_family: &'static str,
-    opencv_dict: &'static str,
-    apriltag_family: Option<&'static str>,
+    /// Benchmark name (`[sota.<name>]`).
+    name: String,
+    /// Run directory name: `<name>` or `<name>@<tag>` (e.g. a strided serial timing run
+    /// kept apart from the full accuracy run).
+    run: String,
+    locus_family: String,
+    opencv_dict: String,
+    apriltag_family: Option<String>,
     /// Black-border width in bits (Kalibr AprilGrid prints 2).
     border_bits: u32,
     /// Detectors that cannot decode this dataset *as published*, with the reason.
     /// They are skipped unless `--include-unsupported` is passed; references are
     /// never patched to support a dataset.
-    unsupported: &'static [(&'static str, &'static str)],
+    unsupported: Vec<(String, String)>,
 }
 
-const DATASETS: &[Dataset] = &[
-    Dataset {
-        name: "liu4k",
-        images: "tests/data/liu4k/liu4k_markers_1024",
-        ext: "jpg",
-        locus_family: "ArUcoMip36h12",
-        opencv_dict: "ARUCO_MIP_36h12",
-        apriltag_family: None,
-        border_bits: 1,
-        unsupported: &[],
-    },
-    Dataset {
-        name: "euroc",
-        images: "tests/data/euroc/cam_april/mav0/cam0/data",
-        ext: "png",
-        locus_family: "AprilTag36h11",
-        opencv_dict: "APRILTAG_36h11",
-        apriltag_family: Some("tag36h11"),
-        border_bits: 2,
-        unsupported: &[
-            (
-                "aruco_nano",
-                "2-bit black border (Kalibr AprilGrid): its bit grid is hard-coded to markerSize + 2",
-            ),
-            (
-                "apriltag3",
-                "2-bit black border (Kalibr AprilGrid): tag36h11 layout fixes a 1-bit border",
-            ),
-        ],
-    },
-];
-
+/// Every published operating point of each reference, so the scoreboard compares
+/// Locus against the best one per metric.
 const DEFAULT_DETECTORS: &[&str] = &[
     "locus:standard",
     "locus:grid",
     "locus:high_accuracy",
     "aruco_nano",
     "opencv",
+    "opencv-subpix",
+    "opencv-apriltag",
     "apriltag3",
 ];
 
@@ -108,17 +83,19 @@ fn run(args: &[String]) -> Result<()> {
     {
         ["data", rest @ ..] => data(rest),
         ["sota", "setup", ..] => setup(&root),
-        ["sota", "fetch", ds] => fetch(dataset(ds)?),
-        ["sota", "run", ds, rest @ ..] => run_detectors(&root, dataset(ds)?, &Opts::parse(rest)?),
-        ["sota", "score", ds] => score(&root, dataset(ds)?),
-        ["sota", "report", ds] => report(&root, dataset(ds)?),
+        ["sota", "list"] => spec_cmd(&["list"]),
+        ["sota", "fetch", ds] => fetch(&dataset(ds)?),
+        ["sota", "run", ds, rest @ ..] => run_detectors(&root, &dataset(ds)?, &Opts::parse(rest)?),
+        ["sota", "score", ds] => score(&root, &dataset(ds)?),
+        ["sota", "report", ds] => report(&root, &dataset(ds)?),
+        ["sota", "scoreboard", rest @ ..] => scoreboard(&root, rest),
         ["sota", "all", ds, rest @ ..] => {
             let d = dataset(ds)?;
             setup(&root)?;
-            fetch(d)?;
-            run_detectors(&root, d, &Opts::parse(rest)?)?;
-            score(&root, d)?;
-            report(&root, d)
+            fetch(&d)?;
+            run_detectors(&root, &d, &Opts::parse(rest)?)?;
+            score(&root, &d)?;
+            report(&root, &d)
         },
         _ => {
             eprintln!("{USAGE}");
@@ -137,16 +114,23 @@ usage: cargo xtask data <command>          (datasets; manifest: xtask/datasets.t
 usage: cargo xtask sota <command>          (comparative benchmarking)
 
   setup                      build pinned OpenCV + aruco_nano and the C++ reference runner
-  fetch  <dataset>           = cargo xtask data fetch <dataset> (liu4k | euroc)
+  list                       benchmark names (`[sota.*]` tables of xtask/datasets.toml)
+  fetch  <dataset>           fetch the data a benchmark needs (via cargo xtask data)
   run    <dataset> [opts]    run detectors, one JSONL per detector
   score  <dataset>           score all runs of a dataset
-  report <dataset>           write report.md (scores + verified hardware/run metadata)
+  report <dataset>           write report.md (scores, win table, verified run metadata)
+  scoreboard [--champion L]  win table of Locus run L (default locus_standard) against the
+                             best reference operating point, over every scored dataset
   all    <dataset> [opts]    setup + fetch + run + score + report
 
+  <dataset> may be <name>@<tag>: same benchmark, separate run directory
+  (e.g. `run liu4k@t1 --jobs 1 --stride 4` for serial timing next to the accuracy run).
+
 run options:
-  --detectors a,b,...        default: locus:standard,locus:grid,locus:high_accuracy,aruco_nano,opencv,apriltag3
+  --detectors a,b,...        default: locus:standard,locus:grid,locus:high_accuracy,aruco_nano,
+                             opencv,opencv-subpix,opencv-apriltag,apriltag3
                              locus:<profile> | locus:<label>=<profile>+<overrides.json> |
-                             aruco_nano | opencv | opencv-subpix | apriltag3
+                             aruco_nano | opencv | opencv-subpix | opencv-apriltag | apriltag3
   --threads N                worker threads for every detector (default 1)
   --reps N                   timed detect() calls per image, best kept (default 2)
   --stride N                 use every N-th image (default 1)
@@ -193,11 +177,47 @@ impl Opts {
     }
 }
 
-fn dataset(name: &str) -> Result<&'static Dataset> {
-    DATASETS
-        .iter()
-        .find(|d| d.name == name)
-        .ok_or_else(|| format!("unknown dataset {name} (liu4k | euroc)").into())
+fn dataset(run: &str) -> Result<Dataset> {
+    let name = run.split_once('@').map_or(run, |(name, _)| name);
+    let out = python()
+        .args(["-m", "tools.bench.sota.spec", "show", name])
+        .output()?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr)
+            .trim()
+            .to_string()
+            .into());
+    }
+    let mut d = Dataset {
+        name: name.to_string(),
+        run: run.to_string(),
+        locus_family: String::new(),
+        opencv_dict: String::new(),
+        apriltag_family: None,
+        border_bits: 1,
+        unsupported: Vec::new(),
+    };
+    for line in String::from_utf8_lossy(&out.stdout).lines() {
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let value = value.to_string();
+        match key {
+            "family" => d.locus_family = value,
+            "opencv_dict" => d.opencv_dict = value,
+            "apriltag_family" => d.apriltag_family = Some(value).filter(|v| !v.is_empty()),
+            "border_bits" => d.border_bits = value.parse()?,
+            _ => {
+                if let Some(detector) = key.strip_prefix("unsupported.") {
+                    d.unsupported.push((detector.to_string(), value));
+                }
+            },
+        }
+    }
+    if d.locus_family.is_empty() || d.opencv_dict.is_empty() {
+        return Err(format!("incomplete spec for {name}").into());
+    }
+    Ok(d)
 }
 
 fn workspace_root() -> Result<PathBuf> {
@@ -337,38 +357,38 @@ fn data(args: &[&str]) -> Result<()> {
         .args(args))
 }
 
+fn spec_cmd(args: &[&str]) -> Result<()> {
+    sh(python().args(["-m", "tools.bench.sota.spec"]).args(args))
+}
+
 fn fetch(d: &Dataset) -> Result<()> {
-    data(&["fetch", d.name])
+    spec_cmd(&["fetch", &d.name])
 }
 
 // ── run ──────────────────────────────────────────────────────────────────────
 
 fn runs_dir(root: &Path, d: &Dataset) -> PathBuf {
-    sota_dir(root).join("runs").join(d.name)
+    sota_dir(root).join("runs").join(&d.run)
 }
 
-fn image_list(root: &Path, d: &Dataset, stride: usize, out: &Path) -> Result<usize> {
-    let dir = root.join(d.images);
-    let mut imgs: Vec<PathBuf> = fs::read_dir(&dir)
-        .map_err(|e| {
-            format!(
-                "{}: {e} (run `cargo xtask sota fetch {}`)",
-                dir.display(),
-                d.name
-            )
-        })?
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|e| e == d.ext))
-        .collect();
-    imgs.sort();
-    let mut list = String::new();
-    let mut n = 0;
-    for p in imgs.iter().step_by(stride) {
-        let _ = writeln!(list, "{}", p.display());
-        n += 1;
+fn image_list(d: &Dataset, stride: usize, out: &Path) -> Result<usize> {
+    let res = python()
+        .args([
+            "-m",
+            "tools.bench.sota.spec",
+            "images",
+            &d.name,
+            &stride.to_string(),
+        ])
+        .arg(out)
+        .output()?;
+    if !res.status.success() {
+        return Err(String::from_utf8_lossy(&res.stderr)
+            .trim()
+            .to_string()
+            .into());
     }
-    fs::write(out, list)?;
-    Ok(n)
+    Ok(String::from_utf8_lossy(&res.stdout).trim().parse()?)
 }
 
 /// Builds the command for one detector spec, or `None` when it is unsupported
@@ -412,7 +432,7 @@ fn detector_cmd(
             "-m",
             "tools.bench.sota.run",
             "locus",
-            d.locus_family,
+            &d.locus_family,
             &profile,
             &overrides,
         ])
@@ -421,20 +441,23 @@ fn detector_cmd(
         .arg(&reps)
         .env("RAYON_NUM_THREADS", &threads);
         (label, c)
-    } else if matches!(spec, "aruco_nano" | "opencv" | "opencv-subpix") {
+    } else if matches!(
+        spec,
+        "aruco_nano" | "opencv" | "opencv-subpix" | "opencv-apriltag"
+    ) {
         if !refrun.exists() {
             return Err("reference runner missing: run `cargo xtask sota setup`".into());
         }
         let mode = if spec == "aruco_nano" { "nano" } else { spec };
         let label = spec.replace('-', "_");
         let mut c = Command::new(&refrun);
-        c.args([mode, d.opencv_dict, &threads])
+        c.args([mode, &d.opencv_dict, &threads])
             .arg(list)
             .arg(out_dir.join(format!("{label}.jsonl")))
             .args([&reps, &d.border_bits.to_string()]);
         (label, c)
     } else if spec == "apriltag3" {
-        let Some(fam) = d.apriltag_family else {
+        let Some(fam) = &d.apriltag_family else {
             eprintln!(
                 "skipping apriltag3 on {}: family {} not available in AprilTag 3",
                 d.name, d.locus_family
@@ -457,12 +480,19 @@ fn detector_cmd(
     Ok(Some((label, cmd)))
 }
 
+/// Runs on one image list accumulate in a run directory: `detectors.txt` lists the
+/// detectors whose JSONL belongs to the current `images.txt` (a new image list resets it),
+/// and `failed.txt` records detectors that crashed, as `label<TAB>exit status`. A crashed
+/// detector does not abort the others; its partial output is kept as `<label>.jsonl.failed`
+/// and is never scored.
 fn run_detectors(root: &Path, d: &Dataset, o: &Opts) -> Result<()> {
     let out_dir = runs_dir(root, d);
     fs::create_dir_all(&out_dir)?;
     let list = out_dir.join("images.txt");
-    let n = image_list(root, d, o.stride, &list)?;
+    let previous_list = fs::read_to_string(&list).ok();
+    let n = image_list(d, o.stride, &list)?;
     eprintln!("{}: {n} images", d.name);
+    let same_images = previous_list.as_deref() == fs::read_to_string(&list).ok().as_deref();
 
     let mut cmds = Vec::new();
     for spec in &o.detectors {
@@ -470,19 +500,60 @@ fn run_detectors(root: &Path, d: &Dataset, o: &Opts) -> Result<()> {
             cmds.push(c);
         }
     }
+    let mut succeeded = Vec::new();
+    let mut crashed = Vec::new();
     for chunk in cmds.chunks_mut(o.jobs) {
         let mut children = Vec::new();
         for (label, cmd) in chunk.iter_mut() {
             eprintln!("+ [{label}] {cmd:?}");
             children.push((label.clone(), cmd.spawn()?));
         }
+        // Wait for every child before reporting, so none is left running.
         for (label, mut child) in children {
             let status = child.wait()?;
-            if !status.success() {
-                return Err(format!("detector {label} failed ({status})").into());
+            if status.success() {
+                succeeded.push(label);
+            } else {
+                eprintln!("xtask: detector {label} failed ({status}); continuing without it");
+                let jsonl = out_dir.join(format!("{label}.jsonl"));
+                fs::rename(&jsonl, out_dir.join(format!("{label}.jsonl.failed"))).ok();
+                crashed.push(format!("{label}\t{status}"));
             }
         }
     }
+
+    // Merge into the bookkeeping only now (read-modify-write), so a concurrent run on the
+    // same image list does not lose this run's detectors or the other way round.
+    let read_lines = |name: &str| -> Vec<String> {
+        if !same_images {
+            return Vec::new();
+        }
+        fs::read_to_string(out_dir.join(name))
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_string)
+            .collect()
+    };
+    let label_of = |line: &str| line.split('\t').next().unwrap_or_default().to_string();
+    let touched: Vec<String> = succeeded
+        .iter()
+        .cloned()
+        .chain(crashed.iter().map(|l| label_of(l)))
+        .collect();
+    let mut done = read_lines("detectors.txt");
+    let mut failed = read_lines("failed.txt");
+    done.retain(|l| !touched.contains(l));
+    failed.retain(|l| !touched.contains(&label_of(l)));
+    done.extend(succeeded);
+    failed.extend(crashed);
+    done.sort();
+    let lines = |v: &[String]| {
+        v.iter()
+            .flat_map(|l| [l.as_str(), "\n"])
+            .collect::<String>()
+    };
+    fs::write(out_dir.join("detectors.txt"), lines(&done))?;
+    fs::write(out_dir.join("failed.txt"), lines(&failed))?;
     write_meta(root, d, o, n, &out_dir)
 }
 
@@ -527,7 +598,7 @@ fn write_meta(root: &Path, d: &Dataset, o: &Opts, n_images: usize, out_dir: &Pat
 fn score(root: &Path, d: &Dataset) -> Result<()> {
     let dir = runs_dir(root, d);
     sh(python()
-        .args(["-m", "tools.bench.sota.score", d.name])
+        .args(["-m", "tools.bench.sota.score", &d.run])
         .arg(&dir)
         .arg(dir.join("score.json")))
 }
@@ -540,7 +611,19 @@ fn report(root: &Path, d: &Dataset) -> Result<()> {
         .map(|(n, why)| format!("{n}={why}"))
         .collect();
     sh(python()
-        .args(["-m", "tools.bench.sota.report", d.name])
+        .args(["-m", "tools.bench.sota.report", &d.run])
         .arg(&dir)
         .args(unsupported))
+}
+
+fn scoreboard(root: &Path, args: &[&str]) -> Result<()> {
+    let champion = match args {
+        [] => "locus_standard",
+        ["--champion", label] => label,
+        _ => return Err("usage: cargo xtask sota scoreboard [--champion <run label>]".into()),
+    };
+    sh(python()
+        .args(["-m", "tools.bench.sota.scoreboard"])
+        .arg(sota_dir(root).join("runs"))
+        .arg(champion))
 }

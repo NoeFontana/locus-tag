@@ -36,27 +36,39 @@ private: authenticate with `hf auth login` or `HF_TOKEN`.
 ## `cargo xtask sota` — comparative benchmarking against pinned references
 
 Reproducible, long-lived comparison of Locus against the published state of the
-art on real-image datasets, so competitiveness is a re-runnable measurement
-rather than a number in a dated report.
+art on every dataset the references can decode, so competitiveness is a re-runnable
+measurement rather than a number in a dated report.
 
 ```bash
 uv sync --group bench                                   # once
 uv run maturin develop --release --manifest-path crates/locus-py/Cargo.toml
 cargo xtask sota setup                                  # once (~10 min): OpenCV + aruco_nano + runner
+cargo xtask sota list                                   # benchmark names
 cargo xtask sota all liu4k                              # fetch, run, score, report
 cargo xtask sota run euroc --jobs 4 --stride 2          # quick accuracy-only pass
 cargo xtask sota run liu4k --detectors 'locus:standard,locus:mine=standard+my.json,aruco_nano'
+cargo xtask sota scoreboard                             # win table over every scored benchmark
 ```
 
-Outputs land in `target/sota/runs/<dataset>/`: one `<detector>.jsonl` per
+Outputs land in `target/sota/runs/<benchmark>/`: one `<detector>.jsonl` per
 detector (ids + corners + per-image latency), `meta.json` (verified hardware,
 git revision, threads, protocol), `score.json`, and `report.md`.
+`scoreboard` writes `target/sota/scoreboard.md`.
+
+### Win table
+
+Every report ends with a **win table**: the champion Locus run (`locus_standard`;
+`scoreboard --champion <label>` for another) against the *best* reference operating point
+(`aruco_nano`, `opencv`, `opencv_subpix`, `opencv_apriltag`) on each metric, with the margin.
+A tie is a win; latency is judged only for runs with valid timing. AprilTag 3 is scored and
+reported but is not part of the criterion. "Industrial SOTA" here means every judged cell
+green on every benchmark.
 
 ### References (pinned, never patched)
 
 | Reference | Pin | Configuration |
 | :-- | :-- | :-- |
-| OpenCV `aruco` | `4.10.0`, minimal module build | `errorCorrectionRate = 0` (as aruco_nano's `testperf.cpp`), `CORNER_REFINE_NONE` (`opencv-subpix` for `CORNER_REFINE_SUBPIX`), `markerBorderBits` from the dataset |
+| OpenCV `aruco` | `4.10.0`, minimal module build | `errorCorrectionRate = 0` (as aruco_nano's `testperf.cpp`), `markerBorderBits` from the dataset; three published corner refiners: `opencv` (`CORNER_REFINE_NONE`), `opencv-subpix` (`SUBPIX`), `opencv-apriltag` (`APRILTAG`) |
 | aruco_nano | `961b18b` | library defaults, dataset dictionary |
 | AprilTag 3 | `pupil-apriltags` from the `bench` group | `quad_decimate = 1`, `refine_edges = True` |
 
@@ -64,12 +76,26 @@ References are compared **as published**. When one cannot decode a dataset
 through its public parameters (aruco_nano and AprilTag 3 on Kalibr's 2-bit-border
 AprilGrid), it is listed as unsupported in the report, not patched.
 
-### Datasets
+### Benchmarks
 
-| Dataset | Content | Ground truth | Scorer |
+Declared as `[sota.<name>]` tables in [`datasets.toml`](datasets.toml) (dictionary, border
+width, scorer, ground truth and its pixel convention, unsupported references) and resolved by
+`tools/bench/sota/spec.py`; adding one is a manifest edit.
+
+| Benchmark | Content | Ground truth | Scorer |
 | :-- | :-- | :-- | :-- |
-| `liu4k` | 924 4K photos, `ARUCO_MIP_36h12` (Zenodo 10.5281/zenodo.18667018, CC BY 4.0) | ids + corners | aruco_nano `testperf.cpp` rule: same id, centre ≤ 10 px, first-match TP/FP/FN; recall by marker side |
+| `liu4k` | 924 4K photos, `ARUCO_MIP_36h12` (Zenodo 10.5281/zenodo.18667018, CC BY 4.0) | ids + corners | aruco_nano `testperf.cpp` rule: same id, centre ≤ 10 px, first-match TP/FP/FN; recall by marker side; corner error |
 | `euroc` | 1450 frames of the EuRoC `cam_april` sequence, 6×6 Kalibr AprilGrid (tag36h11, **2-bit border**), strong radtan distortion | none per corner | GT-free: pooled-detector homography after undistortion defines presence/precision; leave-one-tag-out corner error on a common tag set |
+| `icra-{forward,circle,random}` | ICRA 2020 AprilTag localization dataset, `pure_tags` images, tag36h11 | corners (`tags.csv`) | `gt-csv` |
+| `hub-{640,720p,1080p,4k,high-iso,low-key,raw-pipeline,tag16h5}` | Locus render-tag suites (Blender), one tag per frame | corners (`rich_truth.json`) | `gt-hub` |
+| `hub-aprilgrid`, `hub-charuco` | Board renders (tag36h11 1-bit AprilGrid; ArUco 6x6_250 ChArUco), scored per marker | corners | `gt-hub` |
+
+`gt-*` scorers: a detection is a TP when it pairs with a same-id GT tag whose centre is
+within 20 px (`tools/bench/matching.py`); detections of tags the GT marks partly visible or
+not evaluable are neither TP nor FP. Corner error is **order-preserving**: one dihedral
+relabelling of the GT corners is fixed per (benchmark, detector), never chosen per instance,
+and per-tag error is the RMSE of the four corners. `corner_common_*` restricts to tags every
+detector with ≥ 20 % recall matched, so detectors are compared on the same tags.
 
 ### Protocol
 

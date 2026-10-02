@@ -41,7 +41,7 @@ subsets = [
 ]
 license = "MIT"
 source_url = "https://huggingface.co/datasets/NoeFontana/locus-tag-bench"
-consumers = ["regression_render_tag*.rs", "regression_board_hub.rs", "regression_distortion_hub.rs", "bench real --hub-config", "bench tune / sweep"]
+consumers = ["regression_render_tag*.rs", "regression_board_hub.rs", "regression_distortion_hub.rs", "bench real --hub-config", "bench tune / sweep", "cargo xtask sota (hub-*)"]
 
 [icra2020-forward]
 description = "ICRA 2020 AprilTag localization-accuracy dataset, forward scenario"
@@ -55,7 +55,7 @@ ready = ["forward"]
 license = "unknown — all rights belong to the original authors (non-SharePoint re-hosting)"
 citation = "ICRA 2020 — Determining and Improving the Localization Accuracy of AprilTag Detection"
 source_url = "https://huggingface.co/datasets/NoeFontana/apriltag-validation-data"
-consumers = ["regression_icra2020.rs", "bench real (ICRA)"]
+consumers = ["regression_icra2020.rs", "bench real (ICRA)", "cargo xtask sota (icra-*)"]
 
 [icra2020-circle]
 description = "ICRA 2020 AprilTag localization-accuracy dataset, circle scenario"
@@ -69,7 +69,7 @@ ready = ["circle"]
 license = "unknown — all rights belong to the original authors (non-SharePoint re-hosting)"
 citation = "ICRA 2020 — Determining and Improving the Localization Accuracy of AprilTag Detection"
 source_url = "https://huggingface.co/datasets/NoeFontana/apriltag-validation-data"
-consumers = ["regression_icra2020.rs", "bench real (ICRA)"]
+consumers = ["regression_icra2020.rs", "bench real (ICRA)", "cargo xtask sota (icra-*)"]
 
 [icra2020-random]
 description = "ICRA 2020 AprilTag localization-accuracy dataset, random scenario"
@@ -83,7 +83,7 @@ ready = ["random"]
 license = "unknown — all rights belong to the original authors (non-SharePoint re-hosting)"
 citation = "ICRA 2020 — Determining and Improving the Localization Accuracy of AprilTag Detection"
 source_url = "https://huggingface.co/datasets/NoeFontana/apriltag-validation-data"
-consumers = ["bench real (ICRA)"]
+consumers = ["bench real (ICRA)", "cargo xtask sota (icra-random)"]
 
 [euroc]
 description = "EuRoC MAV cam_april calibration sequence (6x6 Kalibr AprilGrid, 2-bit tag border), cam0 + cam1"
@@ -114,3 +114,199 @@ license = "CC-BY-4.0"
 citation = "Muñoz-Salinas, R. Liu4K dataset employed for Aruco_Nano paper. Zenodo (2026). doi:10.5281/zenodo.18667018"
 source_url = "https://doi.org/10.5281/zenodo.18667018"
 consumers = ["bench real --dataset liu4k", "cargo xtask sota (liu4k)"]
+
+# ── Comparative benchmarks (`cargo xtask sota`) ──────────────────────────────────────────
+#
+# `[sota.<name>]` declares how one benchmark runs on a dataset above. It is not a dataset
+# itself (the registry skips this table); `tools/bench/sota/spec.py` resolves it for xtask.
+#
+# Fields
+#   data            registry entry to fetch (`hub` entries also name their `subset`)
+#   images          glob, relative to the registry `dest` (and subset), of the frames to run
+#   family          Locus `TagFamily`; `opencv_dict` the cv::aruco dictionary (`refrun`)
+#   apriltag_family AprilTag 3 family, when the layout is one AprilTag 3 can decode
+#   border_bits     black-border width in bits (Kalibr AprilGrid prints 2)
+#   scorer          liu4k (aruco_nano testperf rule) | euroc (GT-free board protocol) |
+#                   gt-csv (ICRA `tags.csv`) | gt-hub (render-tag `rich_truth.json`)
+#   gt              ground-truth file, relative to the same root as `images`
+#   gt_convention   pixel-centre convention of the GT corners: "opencv" (integer centres) or
+#                   "locus" (+0.5); every scorer compares in the OpenCV convention
+#   unsupported     reference -> reason it cannot decode the dataset *as published*; it is
+#                   skipped unless `--include-unsupported`, and never patched
+
+[sota.liu4k]
+data = "liu4k"
+images = "liu4k_markers_1024/*.jpg"
+family = "ArUcoMip36h12"
+opencv_dict = "ARUCO_MIP_36h12"
+border_bits = 1
+scorer = "liu4k"
+gt_convention = "opencv"
+
+[sota.euroc]
+data = "euroc"
+images = "cam_april/mav0/cam0/data/*.png"
+family = "AprilTag36h11"
+opencv_dict = "APRILTAG_36h11"
+apriltag_family = "tag36h11"
+border_bits = 2
+scorer = "euroc"
+gt_convention = "opencv"
+[sota.euroc.unsupported]
+aruco_nano = "2-bit black border (Kalibr AprilGrid): its bit grid is hard-coded to markerSize + 2"
+apriltag3 = "2-bit black border (Kalibr AprilGrid): tag36h11 layout fixes a 1-bit border"
+
+[sota.icra-forward]
+data = "icra2020-forward"
+images = "forward/pure_tags_images/*.png"
+family = "AprilTag36h11"
+opencv_dict = "APRILTAG_36h11"
+apriltag_family = "tag36h11"
+border_bits = 1
+scorer = "gt-csv"
+gt = "forward/tags.csv"
+gt_convention = "locus"
+
+[sota.icra-circle]
+data = "icra2020-circle"
+images = "circle/pure_tags_images/*.png"
+family = "AprilTag36h11"
+opencv_dict = "APRILTAG_36h11"
+apriltag_family = "tag36h11"
+border_bits = 1
+scorer = "gt-csv"
+gt = "circle/tags.csv"
+gt_convention = "locus"
+
+[sota.icra-random]
+data = "icra2020-random"
+images = "random/pure_tags_images/*.png"
+family = "AprilTag36h11"
+opencv_dict = "APRILTAG_36h11"
+apriltag_family = "tag36h11"
+border_bits = 1
+scorer = "gt-csv"
+gt = "random/tags.csv"
+gt_convention = "locus"
+
+[sota.hub-640]
+data = "hub"
+subset = "locus_v1_tag36h11_640x480"
+images = "images/*.png"
+family = "AprilTag36h11"
+opencv_dict = "APRILTAG_36h11"
+apriltag_family = "tag36h11"
+border_bits = 1
+scorer = "gt-hub"
+gt = "rich_truth.json"
+gt_convention = "locus"
+
+[sota.hub-720p]
+data = "hub"
+subset = "locus_v1_tag36h11_1280x720"
+images = "images/*.png"
+family = "AprilTag36h11"
+opencv_dict = "APRILTAG_36h11"
+apriltag_family = "tag36h11"
+border_bits = 1
+scorer = "gt-hub"
+gt = "rich_truth.json"
+gt_convention = "locus"
+
+[sota.hub-1080p]
+data = "hub"
+subset = "locus_v1_tag36h11_1920x1080"
+images = "images/*.png"
+family = "AprilTag36h11"
+opencv_dict = "APRILTAG_36h11"
+apriltag_family = "tag36h11"
+border_bits = 1
+scorer = "gt-hub"
+gt = "rich_truth.json"
+gt_convention = "locus"
+
+[sota.hub-4k]
+data = "hub"
+subset = "locus_v1_tag36h11_3840x2160"
+images = "images/*.png"
+family = "AprilTag36h11"
+opencv_dict = "APRILTAG_36h11"
+apriltag_family = "tag36h11"
+border_bits = 1
+scorer = "gt-hub"
+gt = "rich_truth.json"
+gt_convention = "locus"
+
+[sota.hub-high-iso]
+data = "hub"
+subset = "locus_v1_high_iso_1920x1080"
+images = "images/*.png"
+family = "AprilTag36h11"
+opencv_dict = "APRILTAG_36h11"
+apriltag_family = "tag36h11"
+border_bits = 1
+scorer = "gt-hub"
+gt = "rich_truth.json"
+gt_convention = "locus"
+
+[sota.hub-low-key]
+data = "hub"
+subset = "locus_v1_low_key_1920x1080"
+images = "images/*.png"
+family = "AprilTag36h11"
+opencv_dict = "APRILTAG_36h11"
+apriltag_family = "tag36h11"
+border_bits = 1
+scorer = "gt-hub"
+gt = "rich_truth.json"
+gt_convention = "locus"
+
+[sota.hub-raw-pipeline]
+data = "hub"
+subset = "locus_v1_raw_pipeline_1920x1080"
+images = "images/*.png"
+family = "AprilTag36h11"
+opencv_dict = "APRILTAG_36h11"
+apriltag_family = "tag36h11"
+border_bits = 1
+scorer = "gt-hub"
+gt = "rich_truth.json"
+gt_convention = "locus"
+
+[sota.hub-tag16h5]
+data = "hub"
+subset = "locus_v1_tag16h5_1920x1080"
+images = "images/*.png"
+family = "AprilTag16h5"
+opencv_dict = "APRILTAG_16h5"
+apriltag_family = "tag16h5"
+border_bits = 1
+scorer = "gt-hub"
+gt = "rich_truth.json"
+gt_convention = "locus"
+
+# Board renders (fetch with `cargo xtask sota fetch hub-aprilgrid` etc.; not in the default
+# hub subsets). Scored at marker level. The render-tag AprilGrid prints a 1-bit border
+# (verified on the images), unlike the 2-bit Kalibr target of EuRoC.
+[sota.hub-aprilgrid]
+data = "hub"
+subset = "aprilgrid_golden_v1_1920x1080"
+images = "images/*.png"
+family = "AprilTag36h11"
+opencv_dict = "APRILTAG_36h11"
+apriltag_family = "tag36h11"
+border_bits = 1
+scorer = "gt-hub"
+gt = "rich_truth.json"
+gt_convention = "locus"
+
+[sota.hub-charuco]
+data = "hub"
+subset = "charuco_golden_v1_1920x1080"
+images = "images/*.png"
+family = "ArUco6x6_250"
+opencv_dict = "6X6_250"
+border_bits = 1
+scorer = "gt-hub"
+gt = "rich_truth.json"
+gt_convention = "locus"

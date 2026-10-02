@@ -45,6 +45,8 @@ ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "xtask" / "datasets.toml"
 STAMP = ".locus-dataset.json"
 KINDS = ("hf-hub-subsets", "hf-archive", "url-zip")
+# Reserved top-level table: benchmark definitions (`tools/bench/sota/spec.py`), not datasets.
+SOTA_TABLE = "sota"
 URL_TIMEOUT_S = 60  # per socket operation; a stalled server fails instead of hanging
 
 
@@ -101,6 +103,8 @@ def load_manifest(path: Path = MANIFEST) -> dict[str, Dataset]:
         raw: dict[str, dict[str, Any]] = tomllib.load(f)
     out = {}
     for name, entry in raw.items():
+        if name == SOTA_TABLE:
+            continue
         tuples = {k: tuple(v) for k, v in entry.items() if isinstance(v, list)}
         ds = Dataset(name=name, **{**entry, **tuples})
         if ds.kind not in KINDS:
