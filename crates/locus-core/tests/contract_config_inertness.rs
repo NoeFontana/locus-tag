@@ -793,6 +793,12 @@ fn cases() -> Vec<FieldCase> {
             },
             inert_reason: None,
         },
+        FieldCase {
+            field: "quad_refine_before_decode",
+            base: noop,
+            mutate: |c| c.quad_refine_before_decode = false,
+            inert_reason: None,
+        },
     ]
 }
 
@@ -837,6 +843,7 @@ fn every_config_field() -> Vec<&'static str> {
         quad_extraction_mode: _,
         edlines_imbalance_gate: _,
         quad_extraction_policy: _,
+        quad_refine_before_decode: _,
     } = DetectorConfig::default();
 
     vec![
@@ -877,6 +884,7 @@ fn every_config_field() -> Vec<&'static str> {
         "quad_extraction_mode",
         "edlines_imbalance_gate",
         "quad_extraction_policy",
+        "quad_refine_before_decode",
     ]
 }
 

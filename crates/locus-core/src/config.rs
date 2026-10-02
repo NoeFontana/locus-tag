@@ -458,6 +458,19 @@ pub struct DetectorConfig {
     /// snapshot-review campaign: every downstream test that constructs a
     /// default config would silently exercise new code.
     pub quad_extraction_policy: QuadExtractionPolicy,
+    /// Refine every candidate's corners during quad extraction, before decoding (default:
+    /// true, the historical order).
+    ///
+    /// When false (decode-first), candidates are decoded from their contour corners and only
+    /// the ones that decode, or miss the Hamming budget by a few bits, are refined: the
+    /// decoder runs the skipped quad-stage refinement and its edge-contrast gate, then its ERF
+    /// pass, and keeps the match only if the refined quad decodes the same id within budget
+    /// (and passes `decoder.max_border_error_rate`). A marker that decodes under both orders
+    /// gets the same corners. Real images produce hundreds of candidates per marker, so this
+    /// removes most of the quad stage's refinement work. Applies to the ERF route on
+    /// undistorted cameras; other refinement modes and the distortion-aware path always refine
+    /// first.
+    pub quad_refine_before_decode: bool,
 }
 
 impl Default for DetectorConfig {
@@ -513,6 +526,7 @@ impl Default for DetectorConfig {
             outlier_drop_d2_threshold: 0.0,
             pose_edge_refinement_enabled: false,
             quad_extraction_policy: QuadExtractionPolicy::Static,
+            quad_refine_before_decode: true,
         }
     }
 }
@@ -670,6 +684,8 @@ pub struct DetectorConfigBuilder {
     pub quad_extraction_mode: Option<QuadExtractionMode>,
     /// Quad extraction policy (Static or AdaptivePpb).
     pub quad_extraction_policy: Option<QuadExtractionPolicy>,
+    /// Refine corners before decoding.
+    pub quad_refine_before_decode: Option<bool>,
     /// Huber delta for LM reprojection (pixels).
     pub huber_delta_px: Option<f64>,
     /// Maximum Tikhonov regularisation alpha for Accurate mode.
@@ -833,6 +849,9 @@ impl DetectorConfigBuilder {
             quad_extraction_policy: self
                 .quad_extraction_policy
                 .unwrap_or(d.quad_extraction_policy),
+            quad_refine_before_decode: self
+                .quad_refine_before_decode
+                .unwrap_or(d.quad_refine_before_decode),
         }
     }
 
@@ -1221,6 +1240,12 @@ mod profile_json {
         pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
         #[serde(default)]
         pub extraction_policy: super::QuadExtractionPolicy,
+        #[serde(default = "default_refine_before_decode")]
+        pub refine_before_decode: bool,
+    }
+
+    fn default_refine_before_decode() -> bool {
+        DetectorConfig::default().quad_refine_before_decode
     }
 
     impl QuadJson {
@@ -1239,6 +1264,7 @@ mod profile_json {
                 extraction_mode: c.quad_extraction_mode,
                 edlines_imbalance_gate: c.edlines_imbalance_gate,
                 extraction_policy: c.quad_extraction_policy,
+                refine_before_decode: c.quad_refine_before_decode,
             }
         }
     }
@@ -1444,6 +1470,7 @@ mod profile_json {
                 outlier_drop_d2_threshold: p.pose.outlier_drop_d2_threshold,
                 pose_edge_refinement_enabled: p.pose.pose_edge_refinement_enabled,
                 quad_extraction_policy: p.quad.extraction_policy,
+                quad_refine_before_decode: p.quad.refine_before_decode,
             }
         }
     }

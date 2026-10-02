@@ -15,6 +15,41 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `LocalMean` thresholds each pixel against the mean of a `(2·local_mean_radius + 1)²` window
   minus an offset, from a sliding column-sum accumulator (≈ 0.4 MB scratch at 4K, independent
   of strip size and worker count).
+- **Decode-first ordering (`quad.refine_before_decode = false`, opt-in; L1–L3 of #409).**
+  Refine-first ordering (the default) sub-pixel refines every candidate quad before decoding.
+  Real images produce hundreds of candidates per marker, so most of the quad stage refines
+  texture that is then rejected. Decode-first decodes from the contour corners and refines
+  only the candidates that decode, or miss the Hamming budget by at most 4 bits:
+  - The edge-contrast gate scores unrefined seeds over ±1 px across the edge.
+  - Decoded candidates run the skipped quad-stage refinement and its edge gate, then the
+    decoder's ERF pass.
+  - A match stands only if the refined quad decodes the same id within budget (and passes
+    `decoder.max_border_error_rate`) at the scale that matched.
+  - A marker that decodes under both orders gets the same corners (`regression_decode_first`).
+
+  Scope: the ERF route on undistorted cameras; other refinement modes and the
+  distortion-aware path still refine first. Measured with `cargo xtask sota` (setup as below;
+  accuracy runs on full datasets; latency is a serial 1-thread run, mean ms/image over a
+  stride-8 Liu4K and stride-2 ICRA/render-tag subset). Front end = LocalMean r = 7, k = 4,
+  sharpening off, quad gates off, 4-connectivity, ring rate 0:
+
+  | Benchmark | Front end | + decode-first | `standard` | + decode-first | Best reference |
+  | :-- | --: | --: | --: | --: | :-- |
+  | Liu4K recall / precision % | 66.74 / 100 | 66.48 / 99.98 | 29.11 / 99.58 | 29.02 / 99.85 | aruco_nano 66.27 / 100 |
+  | Liu4K corner mean / p99 px | 0.768 / 1.893 | 0.768 / 1.879 | 0.827 / 3.287 | 0.836 / 3.467 | OpenCV APRILTAG 0.526 / 0.839 |
+  | Liu4K, 1 thread, ms | 308.3 | **123.8** | 194.6 | 158.6 | aruco_nano 53.7 |
+  | ICRA forward recall % | 71.56 | 73.65 | 73.75 | 74.88 | aruco_nano 53.71 |
+  | ICRA forward, 1 thread, ms | 142.2 | 82.1 | 98.0 | 80.8 | aruco_nano 10.3 |
+  | EuRoC recall / precision % | 86.93 / 97.98 | 87.07 / 98.16 | 20.43 / 97.93 | 20.47 / 98.24 | OpenCV APRILTAG 44.57 / 99.69 |
+  | render-tag 4K, 1 thread, ms | 313.3 | 165.3 | 153.7 | 122.8 | aruco_nano 31.5 |
+  | render-tag tag16h5 precision % | 97.09 | **90.91** | 83.33 | **76.92** | 100 |
+
+  Corner error is unchanged or lower on every benchmark. The known cost is tag16h5
+  precision: more tiny candidates reach the decoder, and a 16-bit code decodes texture at 2 px
+  per cell by coincidence. Those false positives pass every check refine-first applies.
+  Bit-bimodality evidence is the planned fix. The `standard` latency figures come from an
+  earlier serial run in the same session.
+
 - **Border-ring marker evidence (`decoder.max_border_error_rate`, opt-in).** A decoded
   candidate can be required to show the one-cell black border around its payload: the
   `4·(d + 1)` ring cells are sampled through the candidate homography, and a cell is an error

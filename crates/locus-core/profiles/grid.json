@@ -23,7 +23,8 @@
     "min_density": 0.15,
     "extraction_mode": "ContourRdp",
     "edlines_imbalance_gate": "Disabled",
-    "extraction_policy": "Static"
+    "extraction_policy": "Static",
+    "refine_before_decode": true
   },
   "decoder": {
     "min_contrast": 10.0,

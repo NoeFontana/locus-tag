@@ -301,6 +301,24 @@ pub fn compute_homographies_soa(
         });
 }
 
+/// Decode-first ordering skipped the quad-stage corner refinement and the edge-contrast gate
+/// on its output; run both on a decoded (or near-miss) seed, then the decoder's ERF pass, so a
+/// candidate is accepted with the same corners, and only if, refine-first ordering would
+/// have accepted it. `None` when the refined quad fails the gate.
+fn refine_decode_first_seed(
+    arena: &bumpalo::Bump,
+    img: &crate::image::ImageView,
+    seed: &[[f64; 2]; 4],
+    config: &crate::config::DetectorConfig,
+) -> Option<[[f64; 2]; 4]> {
+    let sigma = config.subpixel_refinement_sigma;
+    let pts = seed.map(|p| crate::Point { x: p[0], y: p[1] });
+    let quad =
+        crate::refinement::refine_all_quad_corners(arena, img, pts, sigma, config.decimation, true);
+    (crate::quad::calculate_edge_score(img, quad, &[0.0]) > config.quad_min_edge_score)
+        .then(|| refine_corners_erf(arena, img, &quad.map(|p| [p.x, p.y]), sigma))
+}
+
 /// Refine corners using "Erf-Fit" (Gaussian fit to intensity profile).
 ///
 /// This assumes the edge intensity profile is an Error Function (convolution of step edge with Gaussian PSF).
@@ -408,6 +426,14 @@ pub(crate) fn compute_otsu_threshold(values: &[f64]) -> f64 {
 
 /// Maximum number of bits in a supported tag family payload.
 const MAX_BIT_COUNT: usize = 64;
+
+/// Decode-first ordering re-decodes a candidate on refined corners only when it missed its
+/// Hamming budget by at most this many bits. For tag36h11 (budget 2) that is a best match
+/// within 6 bits, which random 36-bit texture reaches with probability ≈ 0.08 against the
+/// 587 × 4 rotated codes, so most of the retries go to markers whose coarse corners cost a
+/// few bits. Measured on Liu4K, ICRA and EuRoC: 2 loses EuRoC and ICRA recall, 6 adds ICRA
+/// recall at +30 % ICRA latency.
+const DECODE_FIRST_RETRY_MARGIN: u32 = 4;
 
 /// Border-ring cells of the largest supported family: `4·(d + 1)` for a `d×d` payload.
 const MAX_RING_CELLS: usize = 4 * (8 + 1);
@@ -1632,12 +1658,20 @@ fn decode_batch_soa_generic(
                                             [f64::from(corners[j].x), f64::from(corners[j].y)];
                                     }
 
-                                    let refined_corners = refine_corners_erf(
-                                        arena,
-                                        img,
-                                        &current_corners,
-                                        config.subpixel_refinement_sigma,
-                                    );
+                                    let refined_corners = if config.quad_refine_before_decode {
+                                        refine_corners_erf(
+                                            arena,
+                                            img,
+                                            &current_corners,
+                                            config.subpixel_refinement_sigma,
+                                        )
+                                    } else if let Some(refined) =
+                                        refine_decode_first_seed(arena, img, &current_corners, config)
+                                    {
+                                        refined
+                                    } else {
+                                        continue;
+                                    };
 
                                     // Verify that refined corners still yield a valid decode
                                     let mut refined_corners_f32 = [Point2f::default(); 4];
@@ -1661,6 +1695,63 @@ fn decode_batch_soa_generic(
                                         }
                                     } else {
                                         // Degenerate refinement, reject
+                                        continue;
+                                    }
+
+                                    if !config.quad_refine_before_decode {
+                                        // Decode-first: the match came from unrefined corners,
+                                        // so it stands only if the refined quad decodes the
+                                        // same id within budget at the scale that matched and
+                                        // shows its border ring; otherwise it is discarded.
+                                        let c = [0, 1].map(|k| {
+                                            refined_corners.iter().map(|p| p[k]).sum::<f64>() / 4.0
+                                        });
+                                        let scaled_quad = refined_corners.map(|p| {
+                                            [
+                                                c[0] + (p[0] - c[0]) * f64::from(scale),
+                                                c[1] + (p[1] - c[1]) * f64::from(scale),
+                                            ]
+                                        });
+                                        let verified = Homography::square_to_quad(&scaled_quad)
+                                            .and_then(|h_new| {
+                                                let mut m = Matrix3x3 {
+                                                    data: [0.0; 9],
+                                                    padding: [0.0; 7],
+                                                };
+                                                for (j, val) in h_new.h.iter().enumerate() {
+                                                    m.data[j] = *val as f32;
+                                                }
+                                                sample_grid_soa_precomputed(img, &roi, &m, decoder)
+                                            })
+                                            .and_then(|code_ref| {
+                                                decoder.decode_full(code_ref, 255).map(
+                                                    |(id_ref, hamming_ref, rot_ref)| {
+                                                        (code_ref, id_ref, hamming_ref, rot_ref)
+                                                    },
+                                                )
+                                            })
+                                            .filter(|&(_, id_ref, hamming_ref, _)| {
+                                                id_ref == id
+                                                    && hamming_ref <= decoder_max_h[decoder_idx]
+                                                    && border_ring_ok(
+                                                        img,
+                                                        &roi,
+                                                        &ref_h_mat,
+                                                        decoder,
+                                                        config.decoder_max_border_error_rate,
+                                                    )
+                                            });
+                                        if let Some((code_ref, _, hamming_ref, rot_ref)) = verified
+                                        {
+                                            return (
+                                                CandidateState::Valid,
+                                                best_id,
+                                                rot_ref,
+                                                code_ref,
+                                                hamming_ref as f32,
+                                                Some(refined_corners_f32),
+                                            );
+                                        }
                                         continue;
                                     }
 
@@ -1725,6 +1816,95 @@ fn decode_batch_soa_generic(
                                     let nudge = 0.2;
                                     let mut current_corners = [Point2f::default(); 4];
                                     current_corners.copy_from_slice(corners);
+
+                                    // Decode-first ordering left these corners unrefined: a
+                                    // near miss gets the refinement it skipped, then one more
+                                    // decode at each scale, before the coarse nudge search.
+                                    if !config.quad_refine_before_decode
+                                        && best_h <= frame_max_h_floor + DECODE_FIRST_RETRY_MARGIN
+                                        && let Some(refined) = refine_decode_first_seed(
+                                            arena,
+                                            img,
+                                            &current_corners.map(|c| [f64::from(c.x), f64::from(c.y)]),
+                                            config,
+                                        )
+                                    {
+                                        let refined_f32 = refined.map(|c| Point2f {
+                                            x: c[0] as f32,
+                                            y: c[1] as f32,
+                                        });
+                                        // Replay the scale retries on the refined quad, as
+                                        // refine-first ordering does; the ring is checked on
+                                        // the reported (unscaled) quad.
+                                        let to_mat = |q: &[[f64; 2]; 4]| {
+                                            Homography::square_to_quad(q).map(|h| {
+                                                let mut m = Matrix3x3 {
+                                                    data: [0.0; 9],
+                                                    padding: [0.0; 7],
+                                                };
+                                                for (j, val) in h.h.iter().enumerate() {
+                                                    m.data[j] = *val as f32;
+                                                }
+                                                m
+                                            })
+                                        };
+                                        if let Some(h_unscaled) = to_mat(&refined) {
+                                            let c = [0, 1].map(|k| {
+                                                refined.iter().map(|p| p[k]).sum::<f64>() / 4.0
+                                            });
+                                            for scale in scales {
+                                                let scaled_quad = refined.map(|p| {
+                                                    [
+                                                        c[0] + (p[0] - c[0]) * f64::from(scale),
+                                                        c[1] + (p[1] - c[1]) * f64::from(scale),
+                                                    ]
+                                                });
+                                                let Some(h_mat) = to_mat(&scaled_quad) else {
+                                                    continue;
+                                                };
+                                                for (decoder_idx, decoder) in
+                                                    decoders.iter().enumerate()
+                                                {
+                                                    let Some(code) = sample_grid_soa_precomputed(
+                                                        img,
+                                                        &roi,
+                                                        &h_mat,
+                                                        decoder.as_ref(),
+                                                    ) else {
+                                                        continue;
+                                                    };
+                                                    let Some((id, hamming, rot)) =
+                                                        decoder.decode_full(code, 255)
+                                                    else {
+                                                        continue;
+                                                    };
+                                                    if hamming < best_h {
+                                                        best_h = hamming;
+                                                        best_overall_code = Some(code);
+                                                        current_corners = refined_f32;
+                                                    }
+                                                    if hamming <= decoder_max_h[decoder_idx]
+                                                        && border_ring_ok(
+                                                            img,
+                                                            &roi,
+                                                            &h_unscaled,
+                                                            decoder.as_ref(),
+                                                            config.decoder_max_border_error_rate,
+                                                        )
+                                                    {
+                                                        return (
+                                                            CandidateState::Valid,
+                                                            id,
+                                                            rot,
+                                                            code,
+                                                            hamming as f32,
+                                                            Some(refined_f32),
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
 
                                     for _pass in 0..2 {
                                         let mut pass_improved = false;
