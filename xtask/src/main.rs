@@ -493,6 +493,37 @@ fn run_detectors(root: &Path, d: &Dataset, o: &Opts) -> Result<()> {
     let n = image_list(d, o.stride, &list)?;
     eprintln!("{}: {n} images", d.name);
     let same_images = previous_list.as_deref() == fs::read_to_string(&list).ok().as_deref();
+
+    let mut cmds = Vec::new();
+    for spec in &o.detectors {
+        if let Some(c) = detector_cmd(root, d, spec, &list, &out_dir, o)? {
+            cmds.push(c);
+        }
+    }
+    let mut succeeded = Vec::new();
+    let mut crashed = Vec::new();
+    for chunk in cmds.chunks_mut(o.jobs) {
+        let mut children = Vec::new();
+        for (label, cmd) in chunk.iter_mut() {
+            eprintln!("+ [{label}] {cmd:?}");
+            children.push((label.clone(), cmd.spawn()?));
+        }
+        // Wait for every child before reporting, so none is left running.
+        for (label, mut child) in children {
+            let status = child.wait()?;
+            if status.success() {
+                succeeded.push(label);
+            } else {
+                eprintln!("xtask: detector {label} failed ({status}); continuing without it");
+                let jsonl = out_dir.join(format!("{label}.jsonl"));
+                fs::rename(&jsonl, out_dir.join(format!("{label}.jsonl.failed"))).ok();
+                crashed.push(format!("{label}\t{status}"));
+            }
+        }
+    }
+
+    // Merge into the bookkeeping only now (read-modify-write), so a concurrent run on the
+    // same image list does not lose this run's detectors or the other way round.
     let read_lines = |name: &str| -> Vec<String> {
         if !same_images {
             return Vec::new();
@@ -503,36 +534,18 @@ fn run_detectors(root: &Path, d: &Dataset, o: &Opts) -> Result<()> {
             .map(str::to_string)
             .collect()
     };
+    let label_of = |line: &str| line.split('\t').next().unwrap_or_default().to_string();
+    let touched: Vec<String> = succeeded
+        .iter()
+        .cloned()
+        .chain(crashed.iter().map(|l| label_of(l)))
+        .collect();
     let mut done = read_lines("detectors.txt");
     let mut failed = read_lines("failed.txt");
-
-    let mut cmds = Vec::new();
-    for spec in &o.detectors {
-        if let Some(c) = detector_cmd(root, d, spec, &list, &out_dir, o)? {
-            cmds.push(c);
-        }
-    }
-    for chunk in cmds.chunks_mut(o.jobs) {
-        let mut children = Vec::new();
-        for (label, cmd) in chunk.iter_mut() {
-            eprintln!("+ [{label}] {cmd:?}");
-            children.push((label.clone(), cmd.spawn()?));
-        }
-        // Wait for every child before reporting, so none is left running.
-        for (label, mut child) in children {
-            let status = child.wait()?;
-            done.retain(|l| *l != label);
-            failed.retain(|l| l.split('\t').next() != Some(label.as_str()));
-            let jsonl = out_dir.join(format!("{label}.jsonl"));
-            if status.success() {
-                done.push(label);
-            } else {
-                eprintln!("xtask: detector {label} failed ({status}); continuing without it");
-                fs::rename(&jsonl, out_dir.join(format!("{label}.jsonl.failed"))).ok();
-                failed.push(format!("{label}\t{status}"));
-            }
-        }
-    }
+    done.retain(|l| !touched.contains(l));
+    failed.retain(|l| !touched.contains(&label_of(l)));
+    done.extend(succeeded);
+    failed.extend(crashed);
     done.sort();
     let lines = |v: &[String]| {
         v.iter()
