@@ -21,7 +21,9 @@ nor FP); such tags are not counted as misses.
 is selected per (benchmark, detector) — the one minimising the median error over all its
 matches — and then applied to every match; it is never chosen per instance. Per-tag error is
 the RMSE over the four corners. ``corner_common_*`` restricts to the GT tags matched by every
-detector with >= 20 % recall, so detectors are compared on the same tags.
+*reference* detector with >= 20 % recall (Locus runs never shape the set, so adding a Locus
+configuration cannot move anyone's numbers); ``corner_common_coverage`` is the share of that
+set a detector matched.
 
 **euroc** (``cam_april``, no per-corner GT) uses a ground-truth-free protocol:
 
@@ -33,7 +35,7 @@ detector with >= 20 % recall, so detectors are compared on the same tags.
   corners lie within 4 px (undistorted) of the reference projection.
 * **Accuracy** — leave-one-tag-out: a tag's corners are predicted from a DLT
   homography fitted to the *same detector's* other tags in the frame; reported on
-  the (frame, tag) set common to every detector with >= 20 % recall.
+  the (frame, tag) set common to every *reference* detector with >= 20 % recall.
 """
 
 from __future__ import annotations
@@ -55,8 +57,13 @@ from tools.bench.sota.spec import Spec, load_specs
 from tools.bench.utils import TagGroundTruth
 
 Dets = dict[int, list[np.ndarray]]
-# Detectors below this recall do not restrict the common-tag set (they would empty it).
+# Reference detectors below this recall do not restrict the common-tag set (they would
+# empty it).
 COMMON_MIN_RECALL = 20.0
+# Prefix of Locus run labels (`locus:<label>` -> `locus_<label>`). The common-tag set is
+# defined by the references alone, so adding or removing Locus configurations never moves
+# the corner numbers of any detector.
+LOCUS_PREFIX = "locus_"
 
 
 def run_labels(runs_dir: Path) -> list[str] | None:
@@ -191,7 +198,11 @@ def _stats(errs: list[float], prefix: str) -> dict[str, float | None]:
 
 def _summarise(tallies: dict[str, Tally]) -> dict[str, Any]:
     errors = {n: _corner_errors(t) for n, t in tallies.items()}
-    eligible = [n for n, t in tallies.items() if t.recall >= COMMON_MIN_RECALL]
+    eligible = [
+        n
+        for n, t in tallies.items()
+        if not n.startswith(LOCUS_PREFIX) and t.recall >= COMMON_MIN_RECALL
+    ]
     common = set.intersection(*(set(errors[n][1]) for n in eligible)) if eligible else set[Any]()
     out: dict[str, Any] = {"_meta": {"common_tags": len(common), "common_detectors": eligible}}
     for n, t in tallies.items():
@@ -210,7 +221,10 @@ def _summarise(tallies: dict[str, Tally]) -> dict[str, Any]:
             },
             "corner_perm": perm,
             **_stats(list(errs.values()), "corner"),
-            **_stats([errs[k] for k in common] if n in eligible else [], "corner_common"),
+            # On the reference-defined common set; a detector that missed some of those tags
+            # is scored on the ones it found (its recall already counts the misses).
+            **_stats([errs[k] for k in common if k in errs], "corner_common"),
+            "corner_common_coverage": _pct(sum(k in errs for k in common), len(common)),
         }
     return out
 
@@ -469,12 +483,15 @@ def score_euroc(runs_dir: Path) -> dict[str, Any]:
                         e = np.linalg.norm(_proj(h, _board(t, perms[n])) - good[t], axis=1)
                         loo[n][(fr, t)] = e
     recall = {n: _pct(st[n]["hit"], st[n]["present"]) for n in names}
-    eligible = [n for n in names if recall[n] >= 20.0]
+    eligible = [
+        n for n in names if not n.startswith(LOCUS_PREFIX) and recall[n] >= COMMON_MIN_RECALL
+    ]
     common = set.intersection(*(set(loo[n]) for n in eligible)) if eligible else set()
     out: dict[str, Any] = {"_meta": {"reference_frames": n_ref, "common_loo_tags": len(common)}}
     for n in names:
         own = np.concatenate(list(loo[n].values())) if loo[n] else np.array([np.nan])
-        com = np.concatenate([loo[n][k] for k in common]) if (common and n in eligible) else None
+        mine = [loo[n][k] for k in common if k in loo[n]]
+        com = np.concatenate(mine) if mine else None
         out[n] = {
             "recall": recall[n],
             "fp": int(st[n]["fp"]),
@@ -488,7 +505,7 @@ def score_euroc(runs_dir: Path) -> dict[str, Any]:
 
 
 def score(name: str, runs_dir: Path) -> dict[str, Any]:
-    spec = load_specs()[name]
+    spec = load_specs()[name.split("@")[0]]
     if spec.scorer == "liu4k":
         return score_liu4k(spec, runs_dir)
     if spec.scorer == "euroc":

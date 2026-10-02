@@ -6,7 +6,8 @@ Usage::
 
 Reads every ``<runs_root>/<benchmark>/score.json`` (+ ``meta.json``) whose directory name is
 a ``[sota.*]`` benchmark and writes ``<runs_root>/../scoreboard.md``. Latency cells are only
-judged for runs whose timing is valid (detectors run serially).
+judged from runs whose timing is valid (detectors run serially): the benchmark's own run, or
+else a ``<name>@<tag>`` timing run next to it.
 """
 
 from __future__ import annotations
@@ -26,20 +27,39 @@ from tools.bench.sota.report import (
 from tools.bench.sota.spec import load_specs
 
 
+def _load(run_dir: Path) -> tuple[dict[str, dict], bool] | None:
+    score_path, meta_path = run_dir / "score.json", run_dir / "meta.json"
+    if not (score_path.exists() and meta_path.exists()):
+        return None
+    score = json.loads(score_path.read_text())
+    rows = {k: v for k, v in score.items() if not k.startswith("_")}
+    return rows, bool(json.loads(meta_path.read_text())["timing_valid"])
+
+
 def collect(runs_root: Path, champion: str) -> dict[str, list[Verdict]]:
+    """Accuracy cells from ``<runs_root>/<name>``; latency cells from it when its timing is
+    valid, else from the first timing-valid ``<name>@<tag>`` run (e.g. a strided serial run)."""
     specs = load_specs()
     out: dict[str, list[Verdict]] = {}
     for name, spec in specs.items():
-        score_path = runs_root / name / "score.json"
-        meta_path = runs_root / name / "meta.json"
-        if not (score_path.exists() and meta_path.exists()):
+        loaded = _load(runs_root / name)
+        if loaded is None or champion not in loaded[0]:
             continue
-        score = json.loads(score_path.read_text())
-        rows = {k: v for k, v in score.items() if not k.startswith("_")}
-        if champion not in rows:
-            continue
-        timing_valid = bool(json.loads(meta_path.read_text())["timing_valid"])
-        out[name] = win_table(rows, spec.scorer, champion, timing_valid)
+        rows, timing_valid = loaded
+        verdicts = win_table(rows, spec.scorer, champion, timing_valid)
+        if not timing_valid:
+            for tagged in sorted(runs_root.glob(f"{name}@*")):
+                timed = _load(tagged)
+                if timed is None or not timed[1] or champion not in timed[0]:
+                    continue
+                latency = {
+                    v.metric.key: v
+                    for v in win_table(timed[0], spec.scorer, champion, True)
+                    if v.metric.timing
+                }
+                verdicts = [latency.get(v.metric.key, v) for v in verdicts]
+                break
+        out[name] = verdicts
     return out
 
 

@@ -205,6 +205,7 @@ def test_gt_scorer_conventions_ignores_and_counts(tmp_path: Path) -> None:
         assert (r["tp"], r["fp"], r["fn"]) == (1, 1, 1)
         assert r["corner_mean"] == pytest.approx(0.0, abs=1e-9)
     assert out["_meta"]["common_tags"] == 1
+    assert out["_meta"]["common_detectors"] == ["ref"]  # Locus runs never shape the set
 
 
 # ── win table ────────────────────────────────────────────────────────────────
@@ -246,3 +247,25 @@ def test_only_current_runs_are_scored_and_crashes_are_reported(tmp_path: Path) -
     (tmp_path / "failed.txt").write_text("crash\tsignal: 11 (SIGSEGV)\n")
     assert set(score._load_runs(tmp_path)) == {"cur"}
     assert score.failed_runs(tmp_path) == {"crash": "signal: 11 (SIGSEGV)"}
+
+
+def test_scoreboard_takes_latency_from_a_timing_valid_tagged_run(tmp_path: Path) -> None:
+    from tools.bench.sota import scoreboard  # noqa: PLC0415
+
+    def write(run: str, timing_valid: bool, ms_locus: float) -> None:
+        d = tmp_path / run
+        d.mkdir()
+        rows = {
+            "locus_standard": {"recall": 90.0, "precision": 100.0, "f1": 95.0, "ms_mean": ms_locus},
+            "aruco_nano": {"recall": 80.0, "precision": 100.0, "f1": 89.0, "ms_mean": 10.0},
+        }
+        (d / "score.json").write_text(json.dumps(rows))
+        (d / "meta.json").write_text(json.dumps({"timing_valid": timing_valid}))
+
+    write("hub-640", timing_valid=False, ms_locus=1.0)  # concurrent: latency not judged
+    write("hub-640@t1", timing_valid=True, ms_locus=20.0)  # serial: judged, and lost
+    board = scoreboard.collect(tmp_path, "locus_standard")
+    cells = {v.metric.key: v for v in board["hub-640"]}
+    assert cells["recall"].win is True
+    assert cells["ms_mean"].champion == 20.0
+    assert cells["ms_mean"].win is False

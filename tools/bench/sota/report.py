@@ -182,7 +182,7 @@ def render(
     unsupported: dict[str, str],
     champion: str = DEFAULT_CHAMPION,
 ) -> str:
-    spec = load_specs()[name]
+    spec = load_specs()[name.split("@")[0]]
     score = json.loads((runs_dir / "score.json").read_text())
     meta = json.loads((runs_dir / "meta.json").read_text())
     rows = {k: v for k, v in score.items() if not k.startswith("_")}
@@ -210,14 +210,14 @@ def render(
         out += [
             f"Ground-truth-free protocol (see `tools/bench/sota/score.py`): "
             f"{m.get('reference_frames')} frames with a pooled board fit; leave-one-tag-out "
-            f"corner error on {m.get('common_loo_tags')} (frame, tag) pairs common to every "
+            f"corner error on {m.get('common_loo_tags')} (frame, tag) pairs common to every reference "
             "detector with >= 20 % recall.",
             "",
         ]
     else:
         out += [
             f"Corner error in the OpenCV pixel convention, one fixed corner relabelling per "
-            f"detector; common tags = {m.get('common_tags')} GT tags matched by "
+            f"detector; common tags = {m.get('common_tags')} GT tags matched by the references "
             f"{', '.join(m.get('common_detectors', []))}.",
             "",
         ]

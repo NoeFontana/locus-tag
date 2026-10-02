@@ -36,7 +36,11 @@ const OPENCV_LIBS: &[&str] = &[
 /// `[sota.<name>]` table in `xtask/datasets.toml` and resolved by
 /// `tools/bench/sota/spec.py` (this crate stays dependency-free, so it does not parse TOML).
 struct Dataset {
+    /// Benchmark name (`[sota.<name>]`).
     name: String,
+    /// Run directory name: `<name>` or `<name>@<tag>` (e.g. a strided serial timing run
+    /// kept apart from the full accuracy run).
+    run: String,
     locus_family: String,
     opencv_dict: String,
     apriltag_family: Option<String>,
@@ -119,6 +123,9 @@ usage: cargo xtask sota <command>          (comparative benchmarking)
                              best reference operating point, over every scored dataset
   all    <dataset> [opts]    setup + fetch + run + score + report
 
+  <dataset> may be <name>@<tag>: same benchmark, separate run directory
+  (e.g. `run liu4k@t1 --jobs 1 --stride 4` for serial timing next to the accuracy run).
+
 run options:
   --detectors a,b,...        default: locus:standard,locus:grid,locus:high_accuracy,aruco_nano,
                              opencv,opencv-subpix,opencv-apriltag,apriltag3
@@ -170,7 +177,8 @@ impl Opts {
     }
 }
 
-fn dataset(name: &str) -> Result<Dataset> {
+fn dataset(run: &str) -> Result<Dataset> {
+    let name = run.split_once('@').map_or(run, |(name, _)| name);
     let out = python()
         .args(["-m", "tools.bench.sota.spec", "show", name])
         .output()?;
@@ -182,6 +190,7 @@ fn dataset(name: &str) -> Result<Dataset> {
     }
     let mut d = Dataset {
         name: name.to_string(),
+        run: run.to_string(),
         locus_family: String::new(),
         opencv_dict: String::new(),
         apriltag_family: None,
@@ -359,7 +368,7 @@ fn fetch(d: &Dataset) -> Result<()> {
 // ── run ──────────────────────────────────────────────────────────────────────
 
 fn runs_dir(root: &Path, d: &Dataset) -> PathBuf {
-    sota_dir(root).join("runs").join(&d.name)
+    sota_dir(root).join("runs").join(&d.run)
 }
 
 fn image_list(d: &Dataset, stride: usize, out: &Path) -> Result<usize> {
@@ -576,7 +585,7 @@ fn write_meta(root: &Path, d: &Dataset, o: &Opts, n_images: usize, out_dir: &Pat
 fn score(root: &Path, d: &Dataset) -> Result<()> {
     let dir = runs_dir(root, d);
     sh(python()
-        .args(["-m", "tools.bench.sota.score", &d.name])
+        .args(["-m", "tools.bench.sota.score", &d.run])
         .arg(&dir)
         .arg(dir.join("score.json")))
 }
@@ -589,7 +598,7 @@ fn report(root: &Path, d: &Dataset) -> Result<()> {
         .map(|(n, why)| format!("{n}={why}"))
         .collect();
     sh(python()
-        .args(["-m", "tools.bench.sota.report", &d.name])
+        .args(["-m", "tools.bench.sota.report", &d.run])
         .arg(&dir)
         .args(unsupported))
 }
