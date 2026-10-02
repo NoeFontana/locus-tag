@@ -233,6 +233,16 @@ pub struct DetectorConfig {
     /// sensor-noise speckle a bare local-mean threshold produces in uniform
     /// regions. Ignored by [`ThresholdMode::TileMidExtreme`].
     pub adaptive_threshold_constant: i16,
+    /// Noise-calibrated offset for [`ThresholdMode::LocalMean`] (default: 0.0, off).
+    ///
+    /// When positive, the local-mean constant is chosen per frame as
+    /// `clamp(round(k · σ̂ₙ), 2, 20)` grey levels, where `σ̂ₙ` is the sensor-noise standard
+    /// deviation of the thresholded image ([`crate::gradient::estimate_noise_sigma`]), and
+    /// [`Self::adaptive_threshold_constant`] is ignored. A flat background pixel then becomes
+    /// foreground with probability ≈ Φ(−k), whatever the camera's noise level — one
+    /// physical parameter instead of a per-camera grey-level constant. Ignored by
+    /// [`ThresholdMode::TileMidExtreme`].
+    pub threshold_noise_k: f32,
 
     // Quad filtering parameters
     /// Minimum quad area in pixels (default: 16).
@@ -454,6 +464,7 @@ impl Default for DetectorConfig {
             threshold_mode: ThresholdMode::TileMidExtreme,
             threshold_local_mean_radius: 24,
             adaptive_threshold_constant: 15,
+            threshold_noise_k: 0.0,
             // 1 PPB on the smallest supported family's outer grid (6×6 cells:
             // AprilTag16h5, ArUco4x4) — below 36 px² a quad cannot represent
             // 1 pixel per bit on any family, so the decoder cannot succeed.
@@ -517,6 +528,9 @@ impl DetectorConfig {
             return Err(ConfigError::InvalidLocalMeanRadius(
                 self.threshold_local_mean_radius,
             ));
+        }
+        if !(self.threshold_noise_k.is_finite() && self.threshold_noise_k >= 0.0) {
+            return Err(ConfigError::InvalidNoiseK(self.threshold_noise_k));
         }
         if self.decimation < 1 {
             return Err(ConfigError::InvalidDecimation(self.decimation));
@@ -606,6 +620,7 @@ pub struct DetectorConfigBuilder {
     threshold_mode: Option<ThresholdMode>,
     threshold_local_mean_radius: Option<usize>,
     adaptive_threshold_constant: Option<i16>,
+    threshold_noise_k: Option<f32>,
     quad_min_area: Option<u32>,
     quad_max_aspect_ratio: Option<f32>,
     quad_min_fill_ratio: Option<f32>,
@@ -730,6 +745,14 @@ impl DetectorConfigBuilder {
         self
     }
 
+    /// Set the noise-calibrated local-mean offset `k` (see
+    /// [`DetectorConfig::threshold_noise_k`]; `0.0` disables it).
+    #[must_use]
+    pub fn threshold_noise_k(mut self, k: f32) -> Self {
+        self.threshold_noise_k = Some(k);
+        self
+    }
+
     /// Build the configuration, using defaults for unset fields.
     #[must_use]
     pub fn build(self) -> DetectorConfig {
@@ -745,6 +768,7 @@ impl DetectorConfigBuilder {
             adaptive_threshold_constant: self
                 .adaptive_threshold_constant
                 .unwrap_or(d.adaptive_threshold_constant),
+            threshold_noise_k: self.threshold_noise_k.unwrap_or(d.threshold_noise_k),
             quad_min_area: self.quad_min_area.unwrap_or(d.quad_min_area),
             quad_max_aspect_ratio: self
                 .quad_max_aspect_ratio
@@ -1113,6 +1137,8 @@ mod profile_json {
         #[serde(default = "default_local_mean_radius")]
         pub local_mean_radius: usize,
         pub constant: i16,
+        #[serde(default)]
+        pub noise_k: f32,
     }
 
     fn default_threshold_mode() -> ThresholdMode {
@@ -1135,6 +1161,7 @@ mod profile_json {
                 mode: c.threshold_mode,
                 local_mean_radius: c.threshold_local_mean_radius,
                 constant: c.adaptive_threshold_constant,
+                noise_k: c.threshold_noise_k,
             }
         }
     }
@@ -1347,6 +1374,7 @@ mod profile_json {
                 enable_sharpening: p.threshold.enable_sharpening,
                 threshold_mode: p.threshold.mode,
                 threshold_local_mean_radius: p.threshold.local_mean_radius,
+                threshold_noise_k: p.threshold.noise_k,
                 adaptive_threshold_constant: p.threshold.constant,
                 quad_min_area: p.quad.min_area,
                 quad_max_aspect_ratio: p.quad.max_aspect_ratio,

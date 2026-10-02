@@ -175,6 +175,10 @@ class ThresholdConfig(BaseModel):
     local_mean_radius: int = Field(default=24, ge=1)
     #: Constant subtracted from the local mean; ``LocalMean`` mode only.
     constant: int = 15
+    #: Noise-calibrated offset ``k``: when > 0, ``LocalMean`` subtracts
+    #: ``clamp(round(k * sigma_n), 2, 20)`` grey levels, with ``sigma_n`` the frame's
+    #: estimated sensor noise, instead of ``constant``. ``0`` disables it.
+    noise_k: float = Field(default=0.0, ge=0.0, allow_inf_nan=False)
 
 
 class AdaptivePpbConfig(BaseModel):

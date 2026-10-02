@@ -571,6 +571,12 @@ fn cases() -> Vec<FieldCase> {
             inert_reason: None,
         },
         FieldCase {
+            field: "threshold_noise_k",
+            base: base_local_mean,
+            mutate: |c| c.threshold_noise_k = 8.0,
+            inert_reason: None,
+        },
+        FieldCase {
             field: "quad_min_area",
             base: noop,
             mutate: |c| c.quad_min_area = 40_000,
@@ -775,6 +781,7 @@ fn every_config_field() -> Vec<&'static str> {
         threshold_mode: _,
         threshold_local_mean_radius: _,
         adaptive_threshold_constant: _,
+        threshold_noise_k: _,
         quad_min_area: _,
         quad_max_aspect_ratio: _,
         quad_min_fill_ratio: _,
@@ -813,6 +820,7 @@ fn every_config_field() -> Vec<&'static str> {
         "threshold_mode",
         "threshold_local_mean_radius",
         "adaptive_threshold_constant",
+        "threshold_noise_k",
         "quad_min_area",
         "quad_max_aspect_ratio",
         "quad_min_fill_ratio",

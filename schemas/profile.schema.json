@@ -300,6 +300,12 @@
           "title": "Mode",
           "type": "string"
         },
+        "noise_k": {
+          "default": 0.0,
+          "minimum": 0.0,
+          "title": "Noise K",
+          "type": "number"
+        },
         "tile_size": {
           "default": 8,
           "maximum": 64,

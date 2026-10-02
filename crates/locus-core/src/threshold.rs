@@ -27,6 +27,14 @@ use bumpalo::collections::Vec as BumpVec;
 use multiversion::multiversion;
 use rayon::prelude::*;
 
+/// Floor of the noise-calibrated local-mean offset (grey levels). Below it the 8-bit
+/// quantisation step, not sensor noise, decides foreground on clean or synthetic frames.
+pub const NOISE_OFFSET_MIN: i32 = 2;
+/// Ceiling of the noise-calibrated offset: past ~20 grey levels low-contrast markers
+/// (low-key exposure, long range) stop reaching the foreground at all, so a very noisy
+/// frame is better served by speckle the quad stage rejects than by missing markers.
+pub const NOISE_OFFSET_MAX: i32 = 20;
+
 /// Statistics for a single threshold tile.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TileStats {
@@ -48,6 +56,9 @@ pub struct ThresholdEngine {
     pub local_mean_radius: usize,
     /// Constant subtracted from the local mean by [`ThresholdMode::LocalMean`].
     pub constant: i16,
+    /// Noise-calibrated offset `k` ([`DetectorConfig::threshold_noise_k`]); `0.0` = use
+    /// [`Self::constant`].
+    pub noise_k: f32,
 }
 
 impl Default for ThresholdEngine {
@@ -67,6 +78,7 @@ impl ThresholdEngine {
             mode: d.threshold_mode,
             local_mean_radius: d.threshold_local_mean_radius,
             constant: d.adaptive_threshold_constant,
+            noise_k: d.threshold_noise_k,
         }
     }
 
@@ -79,6 +91,7 @@ impl ThresholdEngine {
             mode: config.threshold_mode,
             local_mean_radius: config.threshold_local_mean_radius,
             constant: config.adaptive_threshold_constant,
+            noise_k: config.threshold_noise_k,
         }
     }
 
@@ -432,7 +445,23 @@ impl ThresholdEngine {
             );
     }
 
-    /// Per-pixel local-mean threshold, `t(x,y) = mean_{(2r+1)²}(x,y) - constant`.
+    /// Offset subtracted from the local mean: [`Self::constant`], or, when
+    /// [`Self::noise_k`] is set, `clamp(round(k · σ̂ₙ), NOISE_OFFSET_MIN, NOISE_OFFSET_MAX)`
+    /// from this frame's noise estimate.
+    #[must_use]
+    pub fn local_mean_offset(&self, img: &ImageView) -> i32 {
+        if self.noise_k <= 0.0 {
+            return i32::from(self.constant);
+        }
+        let stride = crate::gradient::noise_stride(img.width, img.height);
+        let sigma = crate::gradient::estimate_noise_sigma(img, stride);
+        let offset = (f64::from(self.noise_k) * sigma).round() as i32;
+        tracing::debug!(sigma, offset, "threshold::noise_calibrated_offset");
+        offset.clamp(NOISE_OFFSET_MIN, NOISE_OFFSET_MAX)
+    }
+
+    /// Per-pixel local-mean threshold, `t(x,y) = mean_{(2r+1)²}(x,y) - offset`
+    /// ([`Self::local_mean_offset`]).
     ///
     /// Computed with a sliding column-sum rather than an integral image: the
     /// only auxiliary buffer is one `u32` column accumulator per row-strip
@@ -457,7 +486,7 @@ impl ThresholdEngine {
             return;
         }
         let r = self.local_mean_radius.max(1);
-        let c = i32::from(self.constant);
+        let c = self.local_mean_offset(img);
 
         // A strip re-scans `2r+1` rows to prime its column sums, so keep strips
         // comfortably taller than the window; still aim for ≥ 4 strips per
@@ -811,6 +840,7 @@ mod tests {
             mode,
             local_mean_radius: radius,
             constant,
+            noise_k: 0.0,
         };
         let arena = Bump::new();
         let stats = engine.compute_tile_stats(&arena, &img);

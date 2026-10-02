@@ -34,6 +34,7 @@ fn assert_shared_defaults(cfg: &DetectorConfig) {
         cfg.adaptive_threshold_constant,
         d.adaptive_threshold_constant
     );
+    assert_eq!(cfg.threshold_noise_k, d.threshold_noise_k);
     // `quad_min_area` is profile-specific (clean-render profiles raise it to
     // suppress small textured-quad false positives); asserted per-profile.
     // `max_hamming_error` is profile-specific (high_accuracy tightens to 1 to
@@ -186,6 +187,7 @@ fn to_profile_json_round_trips_every_field() {
         threshold_mode: ThresholdMode::LocalMean,
         threshold_local_mean_radius: 9,
         adaptive_threshold_constant: 4,
+        threshold_noise_k: 3.5,
         // Quad
         quad_min_area: 25,
         quad_max_aspect_ratio: 4.5,

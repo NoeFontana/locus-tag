@@ -11,6 +11,9 @@ pub enum ConfigError {
     /// Local-mean window radius must be >= 1.
     #[error("threshold_local_mean_radius must be >= 1, got {0}")]
     InvalidLocalMeanRadius(usize),
+    /// Noise-calibrated threshold offset must be finite and >= 0.
+    #[error("threshold_noise_k must be finite and >= 0, got {0}")]
+    InvalidNoiseK(f32),
     /// Decimation factor must be >= 1.
     #[error("decimation factor must be >= 1, got {0}")]
     InvalidDecimation(usize),

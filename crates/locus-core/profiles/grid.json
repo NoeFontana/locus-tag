@@ -7,7 +7,8 @@
     "enable_sharpening": false,
     "mode": "TileMidExtreme",
     "local_mean_radius": 24,
-    "constant": 15
+    "constant": 15,
+    "noise_k": 0.0
   },
   "quad": {
     "min_area": 36,
