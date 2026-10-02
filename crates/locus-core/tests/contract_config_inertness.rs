@@ -314,6 +314,8 @@ fn render_frames() -> Vec<Vec<u8>> {
         },
         // 4: the funnel-gate probe. See `FUNNEL_PROBE` below.
         FUNNEL_PROBE,
+        // 5: the border-ring probe. See `BORDER_PROBE` below.
+        BORDER_PROBE,
     ];
     specs
         .iter()
@@ -346,6 +348,22 @@ const FUNNEL_PROBE: SceneSpec = SceneSpec {
     noise: 0,
     corrupt: &[],
     center_dot: true,
+};
+
+/// A frame built for the decoder's border-ring evidence
+/// (`decoder_max_border_error_rate`): a valid payload whose one-cell black border has three
+/// non-adjacent cells painted white (3 of 28 ring cells). Clean frames have a fully dark
+/// ring, so the budget is unobservable on them however it is set.
+const BORDER_PROBE: SceneSpec = SceneSpec {
+    family: TagFamily::AprilTag36h11,
+    id: 29,
+    quad: [[40.0, 40.0], [168.0, 41.5], [167.0, 168.0], [41.0, 167.0]],
+    white: 230,
+    black: 22,
+    texture: 20,
+    noise: 2,
+    corrupt: &[(3, 0), (7, 4), (2, 7)],
+    center_dot: false,
 };
 
 fn intrinsics() -> CameraIntrinsics {
@@ -652,6 +670,13 @@ fn cases() -> Vec<FieldCase> {
             inert_reason: None,
         },
         FieldCase {
+            field: "decoder_max_border_error_rate",
+            base: noop,
+            // Observable only on `BORDER_PROBE`, whose ring has 3 bright cells.
+            mutate: |c| c.decoder_max_border_error_rate = 0.0,
+            inert_reason: None,
+        },
+        FieldCase {
             field: "refinement_mode",
             base: noop,
             mutate: |c| c.refinement_mode = CornerRefinementMode::None,
@@ -794,6 +819,7 @@ fn every_config_field() -> Vec<&'static str> {
         decimation: _,
         nthreads: _,
         decoder_min_contrast: _,
+        decoder_max_border_error_rate: _,
         refinement_mode: _,
         max_hamming_error: _,
         huber_delta_px: _,
@@ -833,6 +859,7 @@ fn every_config_field() -> Vec<&'static str> {
         "decimation",
         "nthreads",
         "decoder_min_contrast",
+        "decoder_max_border_error_rate",
         "refinement_mode",
         "max_hamming_error",
         "huber_delta_px",

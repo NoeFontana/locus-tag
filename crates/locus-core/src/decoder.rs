@@ -409,6 +409,111 @@ pub(crate) fn compute_otsu_threshold(values: &[f64]) -> f64 {
 /// Maximum number of bits in a supported tag family payload.
 const MAX_BIT_COUNT: usize = 64;
 
+/// Border-ring cells of the largest supported family: `4·(d + 1)` for a `d×d` payload.
+const MAX_RING_CELLS: usize = 4 * (8 + 1);
+
+/// A ring cell counts as bright (an error) only once it reaches this fraction of the way from
+/// the payload's dark class mean to its bright class mean.
+///
+/// On small markers (≲ 20 px, ≈ 2 px per cell) the PSF pulls ring cells next to the white
+/// surround well above the class midpoint, while a textured false positive has ring cells
+/// that are genuinely bright. Measured with `cargo xtask sota` (LocalMean front end, zero
+/// error budget), moving the cut from the midpoint (0.5) to 0.9 keeps tag16h5 false
+/// positives at 3 (112 without the check) and recovers ICRA `forward` recall from 64.6 %
+/// to 72.7 % (73.4 % without the check).
+const RING_BRIGHT_FRACTION: f64 = 0.9;
+
+/// Marker evidence beyond the codeword: the one-cell black border around the payload.
+///
+/// The canonical square `[-1, 1]²` spans the `d×d` data cells plus one border cell on each
+/// side, so border-cell centres sit at `±(d + 1)/(d + 2)`. The ring (`4·(d + 1)` cells) is
+/// sampled through `h`, and a cell counts as an error when it reaches
+/// [`RING_BRIGHT_FRACTION`] of the way from the data cells' dark to bright class mean (Otsu
+/// split of the payload samples). Returns `None` when a sample falls outside the image.
+///
+/// A codeword match alone is weak evidence for small dictionaries: with `N` codes of `n` bits
+/// and Hamming budget `h`, a random candidate decodes with probability
+/// `4·N·Σ_{k≤h} C(n, k) / 2ⁿ` (≈ 1.8e-3 for tag16h5 at h = 0), so frames with hundreds of
+/// textured candidates produce false positives. A uniformly dark ring of `4·(d + 1)` cells is
+/// independent evidence that texture rarely supplies.
+fn border_ring_errors(
+    img: &crate::image::ImageView,
+    roi: &RoiCache,
+    homography: &Matrix3x3,
+    decoder: &(impl TagDecoder + ?Sized),
+) -> Option<(u32, u32)> {
+    let d = decoder.dimension();
+    let n_ring = 4 * (d + 1);
+    if n_ring > MAX_RING_CELLS {
+        return None;
+    }
+    let mut h_mat = SMatrix::<f64, 3, 3>::identity();
+    for (i, val) in homography.data.iter().enumerate() {
+        h_mat.as_mut_slice()[i] = f64::from(*val);
+    }
+    let h = Homography { h: h_mat };
+
+    let pitch = 2.0 / (d + 2) as f64;
+    let centre = |k: usize| -1.0 + pitch * (k as f64 + 0.5);
+    let mut ring_pts = [(0.0f64, 0.0f64); MAX_RING_CELLS];
+    let mut m = 0;
+    for k in 0..d + 2 {
+        for l in 0..d + 2 {
+            if k == 0 || l == 0 || k == d + 1 || l == d + 1 {
+                ring_pts[m] = (centre(l), centre(k));
+                m += 1;
+            }
+        }
+    }
+    debug_assert_eq!(m, n_ring);
+    let mut ring = [0.0f64; MAX_RING_CELLS];
+    if !sample_grid_values_optimized(img, &h, roi, &ring_pts[..n_ring], &mut ring, n_ring) {
+        return None;
+    }
+
+    let points = decoder.sample_points();
+    let n = points.len().min(MAX_BIT_COUNT);
+    let mut data = [0.0f64; MAX_BIT_COUNT];
+    if !sample_grid_values_optimized(img, &h, roi, points, &mut data, n) {
+        return None;
+    }
+    let split = compute_otsu_threshold(&data[..n]);
+    let (mut dark, mut n_dark, mut bright, mut n_bright) = (0.0, 0u32, 0.0, 0u32);
+    for &v in &data[..n] {
+        if v <= split {
+            dark += v;
+            n_dark += 1;
+        } else {
+            bright += v;
+            n_bright += 1;
+        }
+    }
+    if n_dark == 0 || n_bright == 0 {
+        return None;
+    }
+    let (dark_mean, bright_mean) = (dark / f64::from(n_dark), bright / f64::from(n_bright));
+    let bright_cut = dark_mean + RING_BRIGHT_FRACTION * (bright_mean - dark_mean);
+    let errors = ring[..n_ring].iter().filter(|&&v| v > bright_cut).count() as u32;
+    Some((errors, n_ring as u32))
+}
+
+/// Whether the border ring through `homography` is dark enough: at most
+/// `max_error_rate · 4·(d + 1)` bright cells. A rate `>= 1` disables the check.
+fn border_ring_ok(
+    img: &crate::image::ImageView,
+    roi: &RoiCache,
+    homography: &Matrix3x3,
+    decoder: &(impl TagDecoder + ?Sized),
+    max_error_rate: f32,
+) -> bool {
+    if max_error_rate >= 1.0 {
+        return true;
+    }
+    border_ring_errors(img, roi, homography, decoder).is_some_and(|(errors, cells)| {
+        f64::from(errors) <= (f64::from(max_error_rate) * f64::from(cells)).floor()
+    })
+}
+
 /// Sample values from the image using DDA-based coordinate generation and SIMD bilinear sampling.
 #[multiversion(targets("x86_64+avx2+fma", "aarch64+neon"))]
 fn sample_grid_values_dda_simd(
@@ -1435,6 +1540,18 @@ fn decode_batch_soa_generic(
 
                                         if hamming <= decoder_max_h[decoder_idx]
                                             && (best_code.is_none() || hamming < best_h_in_scale)
+                                            // Evidence must hold for the geometry that is
+                                            // reported: the unscaled quad (`homography`), not
+                                            // the scaled one that happened to decode. A quiet
+                                            // zone's outer contour decodes at scale 0.9 but
+                                            // its ring is white.
+                                            && border_ring_ok(
+                                                img,
+                                                &roi,
+                                                homography,
+                                                decoder.as_ref(),
+                                                config.decoder_max_border_error_rate,
+                                            )
                                         {
                                             best_h_in_scale = hamming;
                                             best_match_in_scale =
@@ -1622,6 +1739,13 @@ fn decode_batch_soa_generic(
                                                                     if hamming
                                                                         <= decoder_max_h
                                                                             [decoder_idx]
+                                                                        && border_ring_ok(
+                                                                            img,
+                                                                            &roi,
+                                                                            &h_mat,
+                                                                            decoder.as_ref(),
+                                                                            config.decoder_max_border_error_rate,
+                                                                        )
                                                                     {
                                                                         best_id = id;
                                                                         best_rot = rot;
@@ -2200,6 +2324,85 @@ mod tests {
         assert_eq!(bits & 1, 1, "Bit 0 should be 1");
         // bit 35 should be 0 (low intensity)
         assert_eq!((bits >> 35) & 1, 0, "Bit 35 should be 0");
+    }
+
+    /// 8×8-cell AprilTag36h11-layout tag, 10 px per cell, at (20, 20) on a 120×120 page;
+    /// payload cells alternate so both classes are present. `white_ring` lists ring cells
+    /// `(gx, gy)` to paint white.
+    fn ring_probe(white_ring: &[(usize, usize)]) -> Vec<u8> {
+        let (w, cell, origin) = (120usize, 10usize, 20usize);
+        let mut data = vec![220u8; w * w];
+        for gy in 0..8 {
+            for gx in 0..8 {
+                let ring = gx == 0 || gy == 0 || gx == 7 || gy == 7;
+                let white = if ring {
+                    white_ring.contains(&(gx, gy))
+                } else {
+                    (gx + gy) % 2 == 0
+                };
+                for y in 0..cell {
+                    for x in 0..cell {
+                        let (px, py) = (origin + gx * cell + x, origin + gy * cell + y);
+                        data[py * w + px] = if white { 220 } else { 20 };
+                    }
+                }
+            }
+        }
+        data
+    }
+
+    fn ring_errors_of(data: &[u8]) -> Option<(u32, u32)> {
+        let img = crate::image::ImageView::new(data, 120, 120, 120).unwrap();
+        let arena = Bump::new();
+        let roi = RoiCache::new(&img, &arena, 0, 0, 119, 119);
+        let h = Homography::square_to_quad(&[
+            [20.0, 20.0],
+            [100.0, 20.0],
+            [100.0, 100.0],
+            [20.0, 100.0],
+        ])
+        .unwrap();
+        let mut m = Matrix3x3 {
+            data: [0.0; 9],
+            padding: [0.0; 7],
+        };
+        for (j, v) in h.h.iter().enumerate() {
+            m.data[j] = *v as f32;
+        }
+        border_ring_errors(&img, &roi, &m, &AprilTag36h11)
+    }
+
+    #[test]
+    fn border_ring_counts_bright_ring_cells() {
+        assert_eq!(ring_errors_of(&ring_probe(&[])), Some((0, 28)));
+        let corrupted = ring_probe(&[(3, 0), (7, 4), (2, 7), (0, 0)]);
+        assert_eq!(ring_errors_of(&corrupted), Some((4, 28)));
+    }
+
+    #[test]
+    fn border_ring_budget_is_a_floor_of_the_rate() {
+        let data = ring_probe(&[(3, 0), (7, 4), (2, 7)]);
+        let img = crate::image::ImageView::new(&data, 120, 120, 120).unwrap();
+        let arena = Bump::new();
+        let roi = RoiCache::new(&img, &arena, 0, 0, 119, 119);
+        let h = Homography::square_to_quad(&[
+            [20.0, 20.0],
+            [100.0, 20.0],
+            [100.0, 100.0],
+            [20.0, 100.0],
+        ])
+        .unwrap();
+        let mut m = Matrix3x3 {
+            data: [0.0; 9],
+            padding: [0.0; 7],
+        };
+        for (j, v) in h.h.iter().enumerate() {
+            m.data[j] = *v as f32;
+        }
+        // 3 errors of 28: floor(0.1 · 28) = 2 rejects, floor(0.11 · 28) = 3 accepts.
+        assert!(!border_ring_ok(&img, &roi, &m, &AprilTag36h11, 0.1));
+        assert!(border_ring_ok(&img, &roi, &m, &AprilTag36h11, 0.11));
+        assert!(border_ring_ok(&img, &roi, &m, &AprilTag36h11, 1.0));
     }
 
     #[test]

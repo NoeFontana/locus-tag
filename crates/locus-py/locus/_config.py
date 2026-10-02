@@ -267,6 +267,9 @@ class DecoderConfig(BaseModel):
     explicit integer overrides every family uniformly.
     """
     gwlf_transversal_alpha: float = Field(default=0.01, ge=0.0)
+    max_border_error_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    """Largest fraction of the black border ring that may read bright for a decoded
+    candidate to be accepted. ``1.0`` disables the check."""
 
 
 class PoseConfig(BaseModel):
