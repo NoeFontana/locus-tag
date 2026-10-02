@@ -392,18 +392,34 @@ fn extract_single_quad(
     }
 
     if ok {
-        let (corners, out_covs) = crate::refinement::refine_quad_corners(
-            arena,
-            refinement_img,
-            quad_pts,
-            gn_covs,
-            route_extraction,
-            route_refinement,
-            config.subpixel_refinement_sigma,
-            decimation,
-        );
+        // Decode-first ordering (`quad_refine_before_decode = false`) keeps the contour
+        // corners; the decoder refines only the candidates that decode or nearly do. Only the
+        // ERF route has that decoder-side refinement, so every other route refines here.
+        let refined = config.quad_refine_before_decode
+            || route_refinement != crate::config::CornerRefinementMode::Erf
+            || config.refinement_mode != crate::config::CornerRefinementMode::Erf;
+        let (corners, out_covs) = if refined {
+            crate::refinement::refine_quad_corners(
+                arena,
+                refinement_img,
+                quad_pts,
+                gn_covs,
+                route_extraction,
+                route_refinement,
+                config.subpixel_refinement_sigma,
+                decimation,
+            )
+        } else {
+            (quad_pts, gn_covs)
+        };
 
-        let edge_score = calculate_edge_score(refinement_img, corners);
+        // Unrefined contour corners sit up to ~1 px off a sharp edge, whose gradient is about
+        // that wide: search the seed's uncertainty band across the edge, not just the chord.
+        let edge_score = if refined {
+            calculate_edge_score(refinement_img, corners, &[0.0])
+        } else {
+            calculate_edge_score(refinement_img, corners, &[-1.0, 0.0, 1.0])
+        };
         if edge_score > config.quad_min_edge_score {
             return Some((corners, quad_pts, out_covs, route_label, ppb_estimate));
         }
@@ -819,7 +835,7 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     // reject. Sample along the rectified straight line and forward-distort
     // each point to read pixels from the real (distorted) image.
     let edge_score = if C::IS_RECTIFIED {
-        calculate_edge_score(refinement_img, corners)
+        calculate_edge_score(refinement_img, corners, &[0.0])
     } else {
         calculate_edge_score_curved(refinement_img, &quad_rect, camera, scaled, decimation)
     };
@@ -1841,7 +1857,14 @@ fn reduce_to_quad<'a>(arena: &'a Bump, poly: &[Point], significance: &[f64]) -> 
     current
 }
 
-fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
+/// Minimum over the four edges of the mean gradient magnitude along the chord. At each chord
+/// sample the strongest response over `normal_offsets` (pixels along the edge normal) counts,
+/// so a seed known only to ~1 px can be scored without refining it first.
+pub(crate) fn calculate_edge_score(
+    img: &ImageView,
+    corners: [Point; 4],
+    normal_offsets: &[f64],
+) -> f64 {
     let mut min_score = f64::MAX;
 
     for i in 0..4 {
@@ -1867,8 +1890,14 @@ fn calculate_edge_score(img: &ImageView, corners: [Point; 4]) -> f64 {
             let x = p1.x + dx * t;
             let y = p1.y + dy * t;
 
-            let g = img.sample_gradient_bilinear(x, y);
-            edge_mag_sum += (g[0] * g[0] + g[1] * g[1]).sqrt();
+            let (nx, ny) = (-dy / len, dx / len);
+            edge_mag_sum += normal_offsets
+                .iter()
+                .map(|&o| {
+                    let g = img.sample_gradient_bilinear(x + nx * o, y + ny * o);
+                    (g[0] * g[0] + g[1] * g[1]).sqrt()
+                })
+                .fold(0.0, f64::max);
         }
 
         let avg_mag = edge_mag_sum / n_samples as f64;
@@ -1914,7 +1943,7 @@ mod tests {
             Point { x: 6.0, y: 14.0 },
         ];
 
-        let score = calculate_edge_score(&img, corners);
+        let score = calculate_edge_score(&img, corners, &[0.0]);
         // Gradient should be roughly (138-128)/2 = 5 per pixel boundary?
         // Sobel-like (p(x+1)-p(x-1))/2.
         // At edge x=6: left=128, right=138. (138-128)/2 = 5.
@@ -1939,7 +1968,7 @@ mod tests {
             }
         }
         let img = ImageView::new(&data, width, height, stride).unwrap();
-        let score = calculate_edge_score(&img, corners);
+        let score = calculate_edge_score(&img, corners, &[0.0]);
         assert!(score > 40.0, "Score {score} should be > 40.0");
     }
 

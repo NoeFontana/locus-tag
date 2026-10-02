@@ -39,6 +39,7 @@ fn assert_shared_defaults(cfg: &DetectorConfig) {
         cfg.decoder_max_border_error_rate,
         d.decoder_max_border_error_rate
     );
+    assert_eq!(cfg.quad_refine_before_decode, d.quad_refine_before_decode);
     // `quad_min_area` is profile-specific (clean-render profiles raise it to
     // suppress small textured-quad false positives); asserted per-profile.
     // `max_hamming_error` is profile-specific (high_accuracy tightens to 1 to
@@ -230,6 +231,7 @@ fn to_profile_json_round_trips_every_field() {
             low_refinement: CornerRefinementMode::Erf,
             high_refinement: CornerRefinementMode::None,
         }),
+        quad_refine_before_decode: false,
         // `decimation` / `nthreads` are per-call orchestration, not profile
         // fields — left at default (they are intentionally not round-tripped).
         ..DetectorConfig::default()

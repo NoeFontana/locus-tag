@@ -242,6 +242,11 @@
           "title": "Min Fill Ratio",
           "type": "number"
         },
+        "refine_before_decode": {
+          "default": true,
+          "title": "Refine Before Decode",
+          "type": "boolean"
+        },
         "subpixel_refinement_sigma": {
           "default": 0.6,
           "minimum": 0.0,

@@ -241,6 +241,11 @@ class QuadConfig(BaseModel):
         default_factory=lambda: EdLinesImbalanceGatePolicy.Disabled
     )
     extraction_policy: QuadExtractionPolicy = "Static"
+    refine_before_decode: bool = True
+    """Refine every candidate's corners before decoding (historical order). ``False``
+    (decode-first) decodes from contour corners and refines only candidates that decode or
+    nearly do, keeping a match only if the refined quad still decodes it. ERF refinement on
+    undistorted cameras only; other configurations always refine first."""
 
     @model_validator(mode="after")
     def _check_fill_ratio_ordering(self) -> QuadConfig:

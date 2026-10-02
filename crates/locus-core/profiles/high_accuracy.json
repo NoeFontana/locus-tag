@@ -31,7 +31,8 @@
         "low_refinement": "Erf",
         "high_refinement": "None"
       }
-    }
+    },
+    "refine_before_decode": true
   },
   "decoder": {
     "min_contrast": 20.0,
