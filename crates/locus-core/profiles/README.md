@@ -59,10 +59,15 @@ grey-level `constant` with one physical parameter: a flat pixel turns
 foreground with probability ≈ Φ(−k). Set it on a *custom* profile:
 
 ```json
-"threshold": { "tile_size": 8, "min_range": 10, "enable_sharpening": true,
+"threshold": { "tile_size": 8, "min_range": 10, "enable_sharpening": false,
                "mode": "LocalMean", "local_mean_radius": 7, "constant": 15,
                "noise_k": 4.0 }
 ```
+
+Run `LocalMean` **unsharpened**. The noise σ is estimated on the raw frame and carried through
+the pre-filters' white-noise gain; the Laplacian sharpen alone multiplies it by √29 ≈ 5.4, so
+with sharpening on the honest offset `k · σ` exceeds the 20-level ceiling on essentially every
+real sensor and `noise_k` degenerates to a constant 20.
 
 `constant`, `local_mean_radius` and `noise_k` are inert under `TileMidExtreme`; the
 shipped profiles still carry the tuned values so that flipping `mode`

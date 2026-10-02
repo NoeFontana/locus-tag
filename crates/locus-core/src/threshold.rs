@@ -304,8 +304,9 @@ impl ThresholdEngine {
     ///
     /// The exact rule is selected by [`ThresholdMode`]; segmentation reads
     /// `threshold_output` alone, so a threshold of `0` means "this pixel can
-    /// never be foreground". In [`ThresholdMode::LocalMean`], `binary_output` may be empty:
-    /// the binarized image (telemetry) is then not produced.
+    /// never be foreground". `binary_output` may be empty when the binarized image (telemetry)
+    /// is not needed: the local-mean thresholder then skips it, the tile thresholder writes it
+    /// to arena scratch.
     #[expect(
         clippy::needless_range_loop,
         reason = "tx indexes both the tile-neighbourhood min/max scan and the t_row write, so the range loop is clearer than a zipped iterator here"
@@ -327,6 +328,14 @@ impl ThresholdEngine {
             self.apply_local_mean(arena, img, binary_output, threshold_output);
             return;
         }
+        // The tile kernel produces the binarized image as a by-product of the same SIMD pass
+        // and drives its rows from that buffer: back an empty one with scratch so the threshold
+        // map is still written.
+        let binary_output = if binary_output.is_empty() {
+            arena.alloc_slice_fill_copy(img.width * img.height, 0u8)
+        } else {
+            binary_output
+        };
         let ts = self.tile_size;
         let tiles_wide = img.width / ts;
         let tiles_high = img.height / ts;
@@ -513,9 +522,10 @@ impl ThresholdEngine {
         let write_binary = !binary_output.is_empty();
 
         // A strip re-scans `2r + 1` rows to prime its column sums. Aim for ≥ 4 strips per
-        // worker so rayon can balance, but never shorter than the window.
+        // worker so rayon can balance, but keep strips at least twice the window so priming
+        // costs at most half of the strip's own accumulation.
         let target = h.div_ceil((rayon::current_num_threads() * 4).max(1));
-        let strip_rows = target.max(2 * r + 1).min(h);
+        let strip_rows = target.max(2 * (2 * r + 1)).min(h);
         let n_strips = h.div_ceil(strip_rows);
         let scratch = arena.alloc_slice_fill_copy(n_strips * (2 * w + 1), 0u32);
 
@@ -524,6 +534,7 @@ impl ThresholdEngine {
                        mut b_chunk: Option<&mut [u8]>,
                        scratch: &mut [u32]| {
             let (cols, prefix) = scratch.split_at_mut(w);
+            let mut border_divs = BorderDivs::new();
             let y_begin = strip * strip_rows;
             let rows = t_chunk.len() / w;
 
@@ -547,7 +558,15 @@ impl ThresholdEngine {
                     y0 = ny0;
                 }
                 let t_row = &mut t_chunk[dy * w..(dy + 1) * w];
-                local_mean_row(cols, prefix, t_row, r, (y1 - y0) as u32, c);
+                local_mean_row(
+                    cols,
+                    prefix,
+                    t_row,
+                    &mut border_divs,
+                    r,
+                    (y1 - y0) as u32,
+                    c,
+                );
                 if let Some(b) = b_chunk.as_deref_mut() {
                     binarize_row(img.get_row(y), t_row, &mut b[dy * w..(dy + 1) * w]);
                 }
@@ -637,9 +656,9 @@ fn slide_columns(cols: &mut [u32], enter: Option<&[u8]>, leave: Option<&[u8]>) {
 /// round-up method: with `l = ⌈log₂ area⌉`, `m = ⌈2^(24 + l) / area⌉ < 2²⁵`). Box sums are
 /// `≤ 255 · area ≤ 255³ < 2²⁴`, so the mean is exact, and both factors fit in 32 bits, which
 /// lets the interior loop use the native 32×32→64 SIMD multiply.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 struct ExactDiv {
-    m: u64,
+    m: u32,
     shift: u32,
 }
 
@@ -648,13 +667,47 @@ impl ExactDiv {
     fn new(area: u32) -> Self {
         let l = u32::BITS - (area - 1).leading_zeros(); // ⌈log₂ area⌉ (0 for area = 1)
         let shift = 24 + l;
-        let m = (1u64 << shift).div_ceil(u64::from(area));
+        // `m ≤ 2²⁵`, so it fits in `u32` and the product is a 32×32→64 multiply.
+        let m = (1u64 << shift).div_ceil(u64::from(area)) as u32;
         Self { m, shift }
     }
 
     #[inline]
     fn apply(self, n: u32) -> i32 {
-        ((u64::from(n) * self.m) >> self.shift) as i32
+        ((u64::from(n) * u64::from(self.m)) >> self.shift) as i32
+    }
+}
+
+/// Dividers of the `≤ 2r` clipped border windows of a row. They depend only on the window's
+/// row count (which changes only within `r` rows of the top and bottom edge) and on `x`, so a
+/// strip computes them once per distinct row count instead of once per border pixel.
+struct BorderDivs {
+    rows: u32,
+    divs: [ExactDiv; 2 * MAX_LOCAL_MEAN_RADIUS],
+}
+
+impl BorderDivs {
+    fn new() -> Self {
+        Self {
+            rows: 0,
+            divs: [ExactDiv::default(); 2 * MAX_LOCAL_MEAN_RADIUS],
+        }
+    }
+
+    /// Refresh for `rows_in_window`; slot `i` covers border column `i` (left edge) or
+    /// `w − (lo + hi_count) + i` (right edge), as laid out by [`local_mean_row`].
+    fn refresh(&mut self, rows_in_window: u32, w: usize, r: usize, lo: usize, hi: usize) {
+        if self.rows == rows_in_window {
+            return;
+        }
+        self.rows = rows_in_window;
+        let cols = |x: usize| ((x + r + 1).min(w) - x.saturating_sub(r)) as u32;
+        for x in 0..lo {
+            self.divs[x] = ExactDiv::new(rows_in_window * cols(x));
+        }
+        for (slot, x) in (hi..w).enumerate() {
+            self.divs[lo + slot] = ExactDiv::new(rows_in_window * cols(x));
+        }
     }
 }
 
@@ -673,6 +726,7 @@ fn local_mean_row(
     cols: &[u32],
     prefix: &mut [u32],
     thresholds: &mut [u8],
+    border_divs: &mut BorderDivs,
     r: usize,
     rows_in_window: u32,
     c: i32,
@@ -684,18 +738,18 @@ fn local_mean_row(
         acc = acc.wrapping_add(v);
         *p = acc;
     }
-    let border = |x: usize| {
-        let x0 = x.saturating_sub(r);
-        let x1 = (x + r + 1).min(w);
-        let div = ExactDiv::new(rows_in_window * (x1 - x0) as u32);
-        (div.apply(prefix[x1].wrapping_sub(prefix[x0])) - c).clamp(0, 255) as u8
-    };
-
     // Interior: the full window fits, i.e. `x ≥ r` and `x + r + 1 ≤ w`.
     let lo = r.min(w);
     let hi = w.saturating_sub(r).max(lo);
+    border_divs.refresh(rows_in_window, w, r, lo, hi);
+    let divs = &border_divs.divs;
+    let border = |x: usize, div: ExactDiv| {
+        let sum = prefix[(x + r + 1).min(w)].wrapping_sub(prefix[x.saturating_sub(r)]);
+        (div.apply(sum) - c).clamp(0, 255) as u8
+    };
+
     for (x, t) in thresholds[..lo].iter_mut().enumerate() {
-        *t = border(x);
+        *t = border(x, divs[x]);
     }
     if hi > lo {
         let div = ExactDiv::new(rows_in_window * (2 * r + 1) as u32);
@@ -704,8 +758,8 @@ fn local_mean_row(
             *t = (div.apply(p1.wrapping_sub(p0)) - c).clamp(0, 255) as u8;
         }
     }
-    for (x, t) in thresholds.iter_mut().enumerate().skip(hi) {
-        *t = border(x);
+    for (slot, (x, t)) in thresholds.iter_mut().enumerate().skip(hi).enumerate() {
+        *t = border(x, divs[lo + slot]);
     }
 }
 
@@ -1071,6 +1125,20 @@ mod tests {
             ..DetectorConfig::default()
         };
         let engine = ThresholdEngine::from_config(&config);
+        let arena = Bump::new();
+        let stats = engine.compute_tile_stats(&arena, &img);
+        let mut map = vec![0u8; w * h];
+        engine.apply_threshold_with_map(&arena, &img, &stats, &mut [], &mut map);
+        assert_eq!(map, with_binary);
+    }
+
+    #[test]
+    fn tile_threshold_map_does_not_depend_on_binary_output() {
+        let (w, h) = (96usize, 64usize);
+        let data = lcg_image(w, h, 5);
+        let (_, with_binary) = run_mode(ThresholdMode::TileMidExtreme, 7, 0, &data, w, h);
+        let img = ImageView::new(&data, w, h, w).unwrap();
+        let engine = ThresholdEngine::from_config(&DetectorConfig::default());
         let arena = Bump::new();
         let stats = engine.compute_tile_stats(&arena, &img);
         let mut map = vec![0u8; w * h];

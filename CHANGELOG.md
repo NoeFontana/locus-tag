@@ -16,12 +16,19 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   minus an offset, from a sliding column-sum accumulator (≈ 0.4 MB scratch at 4K, independent
   of strip size and worker count).
 - **Noise-calibrated local-mean offset (`threshold.noise_k`, RC3).** With `noise_k = k > 0` the
-  offset is `clamp(round(k · σ̂ₙ), 2, 20)` grey levels per frame, `σ̂ₙ` the Immerkær noise
-  estimate of the thresholded image (`gradient::estimate_noise_sigma`, allocation-free, ~2¹⁸
-  strided samples), so a flat pixel turns foreground with probability ≈ Φ(−k) on any sensor
-  instead of a per-camera grey-level constant. `compute_image_noise_floor` shares the estimator
-  and no longer allocates.
-- Measured with `cargo xtask sota` (accuracy runs; latency not judged here). `standard` +
+  offset is `clamp(round(k · σ̂ₙ), 2, 20)` grey levels per frame, `σ̂ₙ` the noise of the
+  thresholded image: the Immerkær estimate on the raw frame (`gradient::estimate_noise_sigma`,
+  allocation-free, exact median, ~2¹⁸ strided samples) times the pre-filters' white-noise gain
+  (`threshold::prefilter_noise_gain`: area decimation, bilinear upscale, sharpening √29). A flat
+  pixel then turns foreground with probability ≈ Φ(−k) on any sensor instead of a per-camera
+  grey-level constant; with sharpening on the honest offset saturates the 20-level ceiling, so
+  run `LocalMean` unsharpened. `compute_image_noise_floor` shares the estimator and no longer
+  allocates. The local mean is exact (`⌊box_sum / area⌋`, radius ≤ 127) and vectorised: 1080p,
+  1 thread, fastest of 100, 9.09 → 3.03 ms (tile thresholder 2.69 ms).
+- Measured with `cargo xtask sota` (accuracy runs, full datasets; latency not judged here) on
+  an AMD EPYC-Milan KVM guest (8 vCPU, AVX2), Linux 6.8, rustc 1.92, `maturin develop
+  --release`, each detector on 1 thread (`RAYON_NUM_THREADS=1`); setup and baseline in
+  `docs/engineering/benchmarking/sota_scoreboard_20261002.md`. `standard` +
   `LocalMean` r = 7, k = 4, with sharpening off, the filled-blob quad gates off and
   4-connectivity (the M3 front end, still opt-in):
 
