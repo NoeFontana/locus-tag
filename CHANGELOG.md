@@ -19,7 +19,7 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   Refine-first ordering (the default) sub-pixel refines every candidate quad before decoding.
   Real images produce hundreds of candidates per marker, so most of the quad stage refines
   texture that is then rejected. Decode-first decodes from the contour corners and refines
-  only the candidates that decode, or miss the Hamming budget by at most 4 bits:
+  only the candidates that decode, or are near misses within the recovery window (see Changed):
   - The edge-contrast gate scores unrefined seeds over ±1 px across the edge.
   - Decoded candidates run the skipped quad-stage refinement and its edge gate, then the
     decoder's ERF pass.
@@ -168,6 +168,41 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - `detection-batch-contract.md` documents the real phase execution order and the GWLF phase.
 
 ### Changed
+
+- **Decoder near-miss recovery is budgeted by probability, not a fixed window.** Before
+  rejecting a candidate, the decoder tries to recover it: corner nudging, and under
+  decode-first, refine-and-redecode. Each attempt costs tens of decodes or a corner
+  refinement. The trigger used to be a hard-coded Hamming window (≤ 10 for tag36h11, ≤ 4
+  otherwise), and that window is reached by almost every texture candidate: tag36h11 texture
+  lies within 10 bits of about 13 codes on average, and tag16h5 within 4 bits of about 5.
+  Recovery now runs only when both hold:
+  - the best match is within the family's *recovery window*: the largest Hamming distance that
+    random bits reach with probability ≤ 0.1 (union bound over the 4 · N rotated codes). That
+    gives 36h11 6, ArUcoMip36h12 and 6x6_250 6, tag16h5 and 4x4_50 1, and 4x4_100 0.
+  - the seed quad shows a marker's dark border ring, with ≤ 20 % of ring cells bright. Every
+    successful recovery but one on Liu4K, ICRA, EuRoC and render-tag had < 10 % bright.
+
+  Shipped `standard` output changes:
+  - render-tag tag16h5 1080p precision 93.4 → 97.0 % (tuned 93.6 → 97.5 %), recall and RMSE
+    unchanged;
+  - ICRA forward recall 73.74 → 73.69 % (checkerboard grid 70.12 → 70.03 %);
+  - the main render-tag, board and distortion snapshots are byte-identical.
+- **Faster codebook search.** `TagDictionary::decode` makes one branch-free pass over
+  `hamming << 16 | index` keys, dispatched at runtime to `popcnt`/AVX2/NEON, so the default
+  x86-64 wheel no longer runs software popcount. Results are identical (lowest index on ties,
+  property-tested against exhaustive search). Texture query, full search, 1 thread:
+  tag36h11 5.6 → 0.67 µs, ArUcoMip36h12 2.4 → 0.30 µs.
+
+  Together, 1-thread latency, measured with `cargo xtask sota` interleaved against the previous
+  build (A-B-B-A, mean ms per image). The machine was shared (load average 1–8), so read the
+  ratios:
+
+  | Benchmark | `standard` | Decode-first front end |
+  | :-- | --: | --: |
+  | render-tag 1080p | −21 % | −74 % (110.2 → 28.7 ms) |
+  | render-tag 4K | −25 % | −58 % (206.2 → 86.2 ms) |
+  | ICRA forward | −9 % | −35 % |
+  | Liu4K | −6 % | −5 % |
 
 - **Threshold knobs.** `threshold.min_radius`, `threshold.max_radius` and
   `threshold.gradient_threshold` are removed: they were read only by

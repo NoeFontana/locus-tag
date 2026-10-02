@@ -427,13 +427,35 @@ pub(crate) fn compute_otsu_threshold(values: &[f64]) -> f64 {
 /// Maximum number of bits in a supported tag family payload.
 const MAX_BIT_COUNT: usize = 64;
 
-/// Decode-first ordering re-decodes a candidate on refined corners only when it missed its
-/// Hamming budget by at most this many bits. For tag36h11 (budget 2) that is a best match
-/// within 6 bits, which random 36-bit texture reaches with probability ≈ 0.08 against the
-/// 587 × 4 rotated codes, so most of the retries go to markers whose coarse corners cost a
-/// few bits. Measured on Liu4K, ICRA and EuRoC: 2 loses EuRoC and ICRA recall, 6 adds ICRA
-/// recall at +30 % ICRA latency.
-const DECODE_FIRST_RETRY_MARGIN: u32 = 4;
+/// Near-miss recovery (decode-first refinement, corner nudging) costs tens of decodes per
+/// candidate, so it runs only for a best match within the family's recovery window: the largest
+/// Hamming distance that uniformly random bits (texture) reach with probability at most this.
+const RECOVERY_FALSE_TRIGGER_RATE: f64 = 0.1;
+
+/// Recovery also requires the seed quad to show a marker's dark border ring: at most this
+/// fraction of ring cells may read bright (see [`ring_evidence`]). On Liu4K, ICRA, EuRoC and
+/// render-tag, every successful recovery but one had under 10 % bright cells, while texture
+/// near-misses spread over the whole range; this skips 75–90 % of the futile ones.
+const RECOVERY_RING_MAX_ERROR_RATE: f32 = 0.2;
+
+/// Largest `h` with `4 · num_codes · Σ_{k ≤ h} C(bit_count, k) / 2^bit_count ≤
+/// RECOVERY_FALSE_TRIGGER_RATE`: the union bound, over every rotated code, on the probability
+/// that random bits land within `h` of one. 36h11 → 6 (0.08), ArUcoMip36h12 → 6 (0.03),
+/// tag16h5 → 1 (0.03), ArUco 4x4_100 → 0.
+fn recovery_window(bit_count: usize, num_codes: usize) -> u32 {
+    let n = bit_count as u32;
+    let scale = 4.0 * num_codes as f64 * (-f64::from(n)).exp2();
+    let (mut window, mut binom, mut cum) = (0, 1.0_f64, 0.0_f64);
+    for k in 0..=n {
+        cum += binom;
+        if cum * scale > RECOVERY_FALSE_TRIGGER_RATE {
+            break;
+        }
+        window = k;
+        binom = binom * f64::from(n - k) / f64::from(k + 1);
+    }
+    window
+}
 
 /// Border-ring cells of the largest supported family: `4·(d + 1)` for a `d×d` payload.
 const MAX_RING_CELLS: usize = 4 * (8 + 1);
@@ -1446,6 +1468,11 @@ fn decode_batch_soa_generic(
     // equals the family default; in multi-family setups it preserves
     // today's behaviour of still considering recovery.
     let frame_max_h_floor = decoder_max_h.iter().copied().max().unwrap_or(0);
+    let recovery_max_h = decoders
+        .iter()
+        .map(|d| recovery_window(d.bit_count(), d.num_codes()))
+        .max()
+        .unwrap_or(0);
 
     // Split the batch into disjoint per-column mutable slices so each
     // rayon worker can write its target SoA cells directly, eliminating
@@ -1797,15 +1824,15 @@ fn decode_batch_soa_generic(
                         }
 
                         // Stage 2: Configurable Corner Refinement (Recovery for near-misses)
-                        let max_h_for_refine = if decoders.iter().any(|d| d.name() == "36h11") {
-                            10
-                        } else {
-                            4
-                        };
-
                         if best_h > frame_max_h_floor
-                            && best_h <= max_h_for_refine
+                            && best_h <= recovery_max_h
                             && best_overall_code.is_some()
+                            && decoders.iter().any(|d| {
+                                ring_budget_ok(
+                                    rectified_ring_evidence(img, &roi, homography, d.as_ref()),
+                                    RECOVERY_RING_MAX_ERROR_RATE,
+                                )
+                            })
                         {
                             match config.refinement_mode {
                                 crate::config::CornerRefinementMode::None
@@ -1821,7 +1848,6 @@ fn decode_batch_soa_generic(
                                     // near miss gets the refinement it skipped, then one more
                                     // decode at each scale, before the coarse nudge search.
                                     if !config.quad_refine_before_decode
-                                        && best_h <= frame_max_h_floor + DECODE_FIRST_RETRY_MARGIN
                                         && let Some(refined) = refine_decode_first_seed(
                                             arena,
                                             img,
@@ -2487,6 +2513,21 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn recovery_window_bounds_texture_false_trigger_rate() {
+        use crate::config::TagFamily;
+        let window = |f| {
+            let d = family_to_decoder(f);
+            recovery_window(d.bit_count(), d.num_codes())
+        };
+        assert_eq!(window(TagFamily::AprilTag36h11), 6);
+        assert_eq!(window(TagFamily::ArUcoMip36h12), 6);
+        assert_eq!(window(TagFamily::ArUco6x6_250), 6);
+        assert_eq!(window(TagFamily::AprilTag16h5), 1);
+        assert_eq!(window(TagFamily::ArUco4x4_50), 1);
+        assert_eq!(window(TagFamily::ArUco4x4_100), 0);
     }
 
     #[test]

@@ -111,3 +111,24 @@ fn bench_rejection(bencher: Bencher) {
 
     bencher.bench_local(move || divan::black_box(dict.decode(noise, 1)));
 }
+
+/// The hot query on real images: texture bits, far from every code, full search.
+#[divan::bench(args = [TagFamily::AprilTag36h11, TagFamily::ArUcoMip36h12, TagFamily::AprilTag16h5])]
+fn bench_texture_full_search(bencher: Bencher, family: TagFamily) {
+    let dict = get_dictionary(family);
+    let mut state = 0x9E37_79B9_7F4A_7C15_u64;
+    let queries: Vec<u64> = (0..256)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        })
+        .collect();
+    bencher.bench_local(|| {
+        queries
+            .iter()
+            .map(|&bits| dict.decode(divan::black_box(bits), 255).map_or(0, |d| d.1))
+            .sum::<u32>()
+    });
+}

@@ -217,6 +217,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 compute_rotations(base_code, ir.payload_length, &ir.canonical_sampling_points);
             all_codes.extend_from_slice(&rots);
         }
+        // `dictionaries::nearest_key` packs a code index into 16 bits.
+        assert!(
+            all_codes.len() <= 1 << 16,
+            "{file_prefix}: {} rotated codes exceed the 16-bit decode index",
+            all_codes.len()
+        );
 
         let (
             mih_chunks,

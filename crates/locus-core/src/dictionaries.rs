@@ -58,8 +58,8 @@ impl TagDictionary {
         self.codes.get(id as usize * 4).copied()
     }
 
-    /// Decode bits, trying all 4 rotations via O(1) lookup then Hamming search.
-    /// Returns (id, hamming_distance, rotation) if found within tolerance.
+    /// Decode bits against all 4 rotations of every code: the nearest code (lowest index on
+    /// ties) if it is within `max_hamming`. Returns `(id, hamming_distance, rotation)`.
     #[must_use]
     pub fn decode(&self, bits: u64, max_hamming: u32) -> Option<(u16, u32, u8)> {
         let mask = if self.payload_length < 64 {
@@ -68,49 +68,17 @@ impl TagDictionary {
             u64::MAX
         };
         let bits = bits & mask;
-
-        if max_hamming > 0 {
-            // First check exactly
-            let mut best: Option<(u16, u32, u8)> = None;
-            for (idx, &code) in self.codes.iter().enumerate() {
-                if bits == code {
-                    return Some(((idx / 4) as u16, 0, (idx % 4) as u8));
-                }
-            }
-            // If not found exactly, do full or indexed search
-            if self.payload_length <= 36 {
-                // For small dictionaries, linear search is fast enough and guaranteed optimal
-                for (idx, &code) in self.codes.iter().enumerate() {
-                    let hamming = (bits ^ code).count_ones();
-                    if hamming <= max_hamming {
-                        if let Some((_, b_h, _)) = best {
-                            if hamming < b_h {
-                                best = Some(((idx / 4) as u16, hamming, (idx % 4) as u8));
-                            }
-                        } else {
-                            best = Some(((idx / 4) as u16, hamming, (idx % 4) as u8));
-                        }
-                        // Early exit if perfect match found
-                        if hamming == 0 {
-                            return best;
-                        }
-                    }
-                }
-                best
-            } else {
-                self.decode_indexed(bits, max_hamming)
-            }
-        } else {
-            // Exactly matching
-            for (idx, &code) in self.codes.iter().enumerate() {
-                if bits == code {
-                    let id = (idx / 4) as u16;
-                    let rot = (idx % 4) as u8;
-                    return Some((id, 0, rot));
-                }
-            }
-            None
+        if max_hamming > 0 && self.payload_length > 36 {
+            return self.decode_indexed(bits, max_hamming);
         }
+        // One branch-free pass (vectorised popcount and min) over `hamming << 16 | index`
+        // keys: the minimum is the nearest code, lowest index on ties.
+        let key = nearest_key(self.codes, bits)?;
+        let (hamming, idx) = (key >> 16, (key & 0xFFFF) as usize);
+        if hamming > max_hamming {
+            return None;
+        }
+        Some(((idx / 4) as u16, hamming, (idx % 4) as u8))
     }
 
     fn decode_indexed(&self, bits: u64, max_hamming: u32) -> Option<(u16, u32, u8)> {
@@ -159,6 +127,22 @@ impl TagDictionary {
     }
 }
 
+/// `hamming << 16 | index` of the nearest of `codes` to `bits`, lowest index on ties (`None`
+/// when empty). Shipped x86-64 wheels target the baseline ISA, which has no `popcnt`, so
+/// dispatch at runtime. `build.rs` bounds code tables to 2¹⁶ entries (36h11: 2348).
+#[multiversion::multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+popcnt",
+    "aarch64+neon"
+))]
+fn nearest_key(codes: &[u64], bits: u64) -> Option<u32> {
+    codes
+        .iter()
+        .zip(0u32..)
+        .map(|(&code, i)| ((bits ^ code).count_ones() << 16) | i)
+        .min()
+}
+
 // Generate all static datasets using build.rs macro inclusion
 include!(concat!(env!("OUT_DIR"), "/dictionaries.rs"));
 
@@ -172,5 +156,55 @@ pub fn get_dictionary(family: crate::config::TagFamily) -> &'static TagDictionar
         crate::config::TagFamily::ArUco4x4_100 => &DICT_ARUCO4X4_100,
         crate::config::TagFamily::ArUco6x6_250 => &DICT_ARUCO6X6_250,
         crate::config::TagFamily::ArUcoMip36h12 => &DICT_ARUCOMIP36H12,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::TagFamily;
+    use proptest::prelude::*;
+
+    /// Nearest code by exhaustive search, lowest index on ties.
+    fn reference(dict: &TagDictionary, bits: u64, max_hamming: u32) -> Option<(u16, u32, u8)> {
+        let bits = bits & ((1u64 << dict.payload_length) - 1);
+        let (idx, h) = dict
+            .codes
+            .iter()
+            .enumerate()
+            .map(|(i, &c)| (i, (bits ^ c).count_ones()))
+            .min_by_key(|&(i, h)| (h, i))?;
+        (h <= max_hamming).then_some(((idx / 4) as u16, h, (idx % 4) as u8))
+    }
+
+    const FAMILIES: [TagFamily; 6] = [
+        TagFamily::AprilTag16h5,
+        TagFamily::AprilTag36h11,
+        TagFamily::ArUco4x4_50,
+        TagFamily::ArUco4x4_100,
+        TagFamily::ArUco6x6_250,
+        TagFamily::ArUcoMip36h12,
+    ];
+
+    proptest! {
+        #[test]
+        fn decode_matches_exhaustive_search(fam in 0usize..6, bits: u64, max_hamming in 0u32..40) {
+            let dict = get_dictionary(FAMILIES[fam]);
+            prop_assert_eq!(dict.decode(bits, max_hamming), reference(dict, bits, max_hamming));
+        }
+
+        #[test]
+        fn decode_near_codes_matches_exhaustive_search(
+            fam in 0usize..6, idx: prop::sample::Index, flips: u64, max_hamming in 0u32..8,
+        ) {
+            // Random bits are far from every code; also probe each code's neighbourhood.
+            let dict = get_dictionary(FAMILIES[fam]);
+            let code = dict.codes[idx.index(dict.codes.len())];
+            let noise = flips & flips.rotate_left(17) & flips.rotate_left(31);
+            prop_assert_eq!(
+                dict.decode(code ^ noise, max_hamming),
+                reference(dict, code ^ noise, max_hamming)
+            );
+        }
     }
 }
