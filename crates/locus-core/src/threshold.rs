@@ -59,6 +59,9 @@ pub struct ThresholdEngine {
     /// Noise-calibrated offset `k` ([`DetectorConfig::threshold_noise_k`]); `0.0` = use
     /// [`Self::constant`].
     pub noise_k: f32,
+    /// Noise σ of the image being thresholded, when the caller knows it better than an
+    /// estimate on that image can (see [`Self::with_noise_sigma`]).
+    pub noise_sigma: Option<f64>,
 }
 
 impl Default for ThresholdEngine {
@@ -79,6 +82,7 @@ impl ThresholdEngine {
             local_mean_radius: d.threshold_local_mean_radius,
             constant: d.adaptive_threshold_constant,
             noise_k: d.threshold_noise_k,
+            noise_sigma: None,
         }
     }
 
@@ -92,6 +96,7 @@ impl ThresholdEngine {
             local_mean_radius: config.threshold_local_mean_radius,
             constant: config.adaptive_threshold_constant,
             noise_k: config.threshold_noise_k,
+            noise_sigma: None,
         }
     }
 
@@ -299,7 +304,8 @@ impl ThresholdEngine {
     ///
     /// The exact rule is selected by [`ThresholdMode`]; segmentation reads
     /// `threshold_output` alone, so a threshold of `0` means "this pixel can
-    /// never be foreground".
+    /// never be foreground". In [`ThresholdMode::LocalMean`], `binary_output` may be empty:
+    /// the binarized image (telemetry) is then not produced.
     #[expect(
         clippy::needless_range_loop,
         reason = "tx indexes both the tile-neighbourhood min/max scan and the t_row write, so the range loop is clearer than a zipped iterator here"
@@ -445,30 +451,47 @@ impl ThresholdEngine {
             );
     }
 
+    /// Supply the noise σ of the image that will be thresholded.
+    ///
+    /// The Immerkær estimator assumes white noise, so it is only calibrated on the raw
+    /// sensor image. When a linear pre-filter (resampling, sharpening) sits between the
+    /// sensor and the thresholder, estimate on the raw image and scale by the filter's
+    /// white-noise gain ([`prefilter_noise_gain`]) instead of estimating on the filtered,
+    /// spatially correlated result.
+    #[must_use]
+    pub fn with_noise_sigma(mut self, sigma: f64) -> Self {
+        self.noise_sigma = Some(sigma);
+        self
+    }
+
     /// Offset subtracted from the local mean: [`Self::constant`], or, when
-    /// [`Self::noise_k`] is set, `clamp(round(k · σ̂ₙ), NOISE_OFFSET_MIN, NOISE_OFFSET_MAX)`
-    /// from this frame's noise estimate.
+    /// [`Self::noise_k`] is set, `clamp(round(k · σ), NOISE_OFFSET_MIN, NOISE_OFFSET_MAX)`
+    /// with σ from [`Self::with_noise_sigma`], else estimated on `img`.
     #[must_use]
     pub fn local_mean_offset(&self, img: &ImageView) -> i32 {
         if self.noise_k <= 0.0 {
             return i32::from(self.constant);
         }
-        let stride = crate::gradient::noise_stride(img.width, img.height);
-        let sigma = crate::gradient::estimate_noise_sigma(img, stride);
+        let sigma = self.noise_sigma.unwrap_or_else(|| {
+            let stride = crate::gradient::noise_stride(img.width, img.height);
+            crate::gradient::estimate_noise_sigma(img, stride)
+        });
         let offset = (f64::from(self.noise_k) * sigma).round() as i32;
         tracing::debug!(sigma, offset, "threshold::noise_calibrated_offset");
         offset.clamp(NOISE_OFFSET_MIN, NOISE_OFFSET_MAX)
     }
 
-    /// Per-pixel local-mean threshold, `t(x,y) = mean_{(2r+1)²}(x,y) - offset`
-    /// ([`Self::local_mean_offset`]).
+    /// Per-pixel local-mean threshold, `t(x,y) = ⌊box_sum / area⌋ − offset` over the
+    /// `(2r+1)²` window clipped to the image ([`Self::local_mean_offset`] gives the offset).
     ///
-    /// Computed with a sliding column-sum rather than an integral image: the
-    /// only auxiliary buffer is one `u32` column accumulator per row-strip
-    /// (`strips * width * 4` bytes, ≈ 0.4 MB at 4K), against 33–66 MB for a
-    /// full-frame integral image. The accumulator is exact integer arithmetic
-    /// and every strip re-initialises it from the image, so the output does
-    /// not depend on the strip size or on the number of rayon workers.
+    /// Vertical sums come from a sliding column accumulator (one fused enter/leave pass per
+    /// row), horizontal sums from a per-row prefix scan, so the interior of every row is a
+    /// branch-free, vectorisable `prefix[x + r + 1] − prefix[x − r]`. Scratch is two `u32`
+    /// rows per strip (≈ 0.8 MB at 4K) and every strip re-primes its accumulator from the
+    /// image, so the output does not depend on the strip size or the rayon worker count.
+    ///
+    /// `binary_output` may be empty, in which case only the threshold map is written (the
+    /// binarized image is telemetry; segmentation reads the threshold map).
     #[expect(
         clippy::many_single_char_names,
         reason = "w/h/r/c are the conventional image-kernel names (width, height, window radius, OpenCV's C offset) and read better here than spelled-out aliases"
@@ -485,129 +508,216 @@ impl ThresholdEngine {
         if w == 0 || h == 0 {
             return;
         }
-        let r = self.local_mean_radius.max(1);
+        let r = self.local_mean_radius.clamp(1, MAX_LOCAL_MEAN_RADIUS);
         let c = self.local_mean_offset(img);
+        let write_binary = !binary_output.is_empty();
 
-        // A strip re-scans `2r+1` rows to prime its column sums, so keep strips
-        // comfortably taller than the window; still aim for ≥ 4 strips per
-        // worker so rayon can balance.
+        // A strip re-scans `2r + 1` rows to prime its column sums. Aim for ≥ 4 strips per
+        // worker so rayon can balance, but never shorter than the window.
         let target = h.div_ceil((rayon::current_num_threads() * 4).max(1));
-        let strip_rows = target.max(4 * r + 1).min(h).max(1);
+        let strip_rows = target.max(2 * r + 1).min(h);
         let n_strips = h.div_ceil(strip_rows);
-        let col_sums = arena.alloc_slice_fill_copy(n_strips * w, 0u32);
+        let scratch = arena.alloc_slice_fill_copy(n_strips * (2 * w + 1), 0u32);
 
-        threshold_output[..w * h]
-            .par_chunks_mut(strip_rows * w)
-            .zip(binary_output[..w * h].par_chunks_mut(strip_rows * w))
-            .zip(col_sums.par_chunks_mut(w))
-            .enumerate()
-            .for_each(|(strip, ((t_chunk, b_chunk), cols))| {
-                let y_begin = strip * strip_rows;
-                let rows = t_chunk.len() / w;
+        let process = |strip: usize,
+                       t_chunk: &mut [u8],
+                       mut b_chunk: Option<&mut [u8]>,
+                       scratch: &mut [u32]| {
+            let (cols, prefix) = scratch.split_at_mut(w);
+            let y_begin = strip * strip_rows;
+            let rows = t_chunk.len() / w;
 
-                // Prime the column sums for the window of the strip's first row.
-                let mut y0 = y_begin.saturating_sub(r);
-                let mut y1 = (y_begin + r + 1).min(h);
-                cols.fill(0);
-                for y in y0..y1 {
-                    accumulate_row(cols, img.get_row(y), true);
+            // Prime the column sums for the window of the strip's first row.
+            let mut y0 = y_begin.saturating_sub(r);
+            let mut y1 = (y_begin + r + 1).min(h);
+            for y in y0..y1 {
+                slide_columns(cols, Some(img.get_row(y)), None);
+            }
+
+            for dy in 0..rows {
+                let y = y_begin + dy;
+                if dy > 0 {
+                    // The window moves down one row: at most one row enters and one leaves.
+                    let ny1 = (y + r + 1).min(h);
+                    let ny0 = y.saturating_sub(r);
+                    let enter = (ny1 > y1).then(|| img.get_row(y1));
+                    let leave = (ny0 > y0).then(|| img.get_row(y0));
+                    slide_columns(cols, enter, leave);
+                    y1 = ny1;
+                    y0 = ny0;
                 }
-
-                for dy in 0..rows {
-                    let y = y_begin + dy;
-                    if dy > 0 {
-                        // The window moves down by exactly one row, so at most
-                        // one row enters and one row leaves.
-                        let ny1 = (y + r + 1).min(h);
-                        if ny1 > y1 {
-                            accumulate_row(cols, img.get_row(y1), true);
-                            y1 = ny1;
-                        }
-                        let ny0 = y.saturating_sub(r);
-                        if ny0 > y0 {
-                            accumulate_row(cols, img.get_row(y0), false);
-                            y0 = ny0;
-                        }
-                    }
-
-                    let rows_in_window = (y1 - y0) as u32;
-                    let src_row = img.get_row(y);
-                    let t_row = &mut t_chunk[dy * w..(dy + 1) * w];
-                    let b_row = &mut b_chunk[dy * w..(dy + 1) * w];
-                    local_mean_row(src_row, cols, t_row, b_row, r, rows_in_window, c);
+                let t_row = &mut t_chunk[dy * w..(dy + 1) * w];
+                local_mean_row(cols, prefix, t_row, r, (y1 - y0) as u32, c);
+                if let Some(b) = b_chunk.as_deref_mut() {
+                    binarize_row(img.get_row(y), t_row, &mut b[dy * w..(dy + 1) * w]);
                 }
-            });
+            }
+        };
+
+        let t_chunks = threshold_output[..w * h].par_chunks_mut(strip_rows * w);
+        let scratch_chunks = scratch.par_chunks_mut(2 * w + 1);
+        if write_binary {
+            t_chunks
+                .zip(binary_output[..w * h].par_chunks_mut(strip_rows * w))
+                .zip(scratch_chunks)
+                .enumerate()
+                .for_each(|(strip, ((t, b), s))| process(strip, t, Some(b), s));
+        } else {
+            t_chunks
+                .zip(scratch_chunks)
+                .enumerate()
+                .for_each(|(strip, (t, s))| process(strip, t, None, s));
+        }
     }
 }
 
-/// Add (`add = true`) or subtract a source row from the column accumulator.
+/// White-noise standard-deviation gain of the detector's pre-threshold filters: area
+/// decimation by `decimation` (σ/d), bilinear upscaling by `upscale` (per output pixel the
+/// bilinear weights `w` scale variance by `Σw²`; averaged over the output phases, per axis),
+/// then the Laplacian sharpen `5·c − Σ₄ n` (gain `√29`).
+///
+/// Exact for decimation and for sharpening of white noise; for upscaling followed by
+/// sharpening the input to the sharpen is correlated, so the product is an approximation.
+#[must_use]
+pub fn prefilter_noise_gain(decimation: usize, upscale: usize, sharpening: bool) -> f64 {
+    let mut gain = 1.0 / decimation.max(1) as f64;
+    if decimation <= 1 && upscale > 1 {
+        let u = upscale as f64;
+        let per_axis_variance = (0..upscale)
+            .map(|j| {
+                let phase = ((j as f64 + 0.5) / u - 0.5).rem_euclid(1.0);
+                (1.0 - phase).powi(2) + phase.powi(2)
+            })
+            .sum::<f64>()
+            / u;
+        // Two axes: variance factor per_axis², std factor per_axis.
+        gain *= per_axis_variance;
+    }
+    if sharpening {
+        gain *= 29f64.sqrt();
+    }
+    gain
+}
+
+/// Largest supported local-mean radius. It bounds the window area to `255²`, which keeps
+/// every box sum below `2²⁴`: exact in the wrapping `u32` prefix arithmetic and in the
+/// reciprocal-multiply mean of [`local_mean_row`].
+pub const MAX_LOCAL_MEAN_RADIUS: usize = 127;
+
+/// Slide the column accumulator by one row: add `enter`, subtract `leave` (either may be
+/// absent at the image border). One fused pass over `cols`.
 #[multiversion(targets(
     "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
-fn accumulate_row(cols: &mut [u32], src: &[u8], add: bool) {
-    if add {
-        for (col, &p) in cols.iter_mut().zip(src.iter()) {
-            *col += u32::from(p);
-        }
-    } else {
-        for (col, &p) in cols.iter_mut().zip(src.iter()) {
-            *col -= u32::from(p);
-        }
+fn slide_columns(cols: &mut [u32], enter: Option<&[u8]>, leave: Option<&[u8]>) {
+    match (enter, leave) {
+        (Some(e), Some(l)) => {
+            for ((col, &a), &b) in cols.iter_mut().zip(e).zip(l) {
+                // `col + a ≥ b` always (b was added earlier), so no wrap occurs.
+                *col = *col + u32::from(a) - u32::from(b);
+            }
+        },
+        (Some(e), None) => {
+            for (col, &a) in cols.iter_mut().zip(e) {
+                *col += u32::from(a);
+            }
+        },
+        (None, Some(l)) => {
+            for (col, &b) in cols.iter_mut().zip(l) {
+                *col -= u32::from(b);
+            }
+        },
+        (None, None) => {},
     }
 }
 
-/// Emit one row of `threshold = local_mean - c` plus its binarization.
+/// Exact `⌊n / area⌋` for every `n < 2²⁴` as `(n · m) >> shift` (Granlund–Montgomery
+/// round-up method: with `l = ⌈log₂ area⌉`, `m = ⌈2^(24 + l) / area⌉ < 2²⁵`). Box sums are
+/// `≤ 255 · area ≤ 255³ < 2²⁴`, so the mean is exact, and both factors fit in 32 bits, which
+/// lets the interior loop use the native 32×32→64 SIMD multiply.
+#[derive(Clone, Copy)]
+struct ExactDiv {
+    m: u64,
+    shift: u32,
+}
+
+impl ExactDiv {
+    #[inline]
+    fn new(area: u32) -> Self {
+        let l = u32::BITS - (area - 1).leading_zeros(); // ⌈log₂ area⌉ (0 for area = 1)
+        let shift = 24 + l;
+        let m = (1u64 << shift).div_ceil(u64::from(area));
+        Self { m, shift }
+    }
+
+    #[inline]
+    fn apply(self, n: u32) -> i32 {
+        ((u64::from(n) * self.m) >> self.shift) as i32
+    }
+}
+
+/// One row of `threshold = ⌊box_sum / area⌋ − c`, from the column sums `cols`.
+///
+/// `prefix` (length `w + 1`) receives the running sum of `cols`; window sums are prefix
+/// differences in wrapping `u32` arithmetic, exact because every window sum is `< 2²⁴`.
+/// The interior `[r, w − r)` has a constant area and is branch-free; only the `2r`
+/// border columns recompute their (clipped) area.
 #[multiversion(targets(
     "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
     "aarch64+neon"
 ))]
 fn local_mean_row(
-    src: &[u8],
     cols: &[u32],
+    prefix: &mut [u32],
     thresholds: &mut [u8],
-    binary: &mut [u8],
     r: usize,
     rows_in_window: u32,
     c: i32,
 ) {
-    let w = src.len();
-    // Running horizontal sum over the column accumulator: `sum` always holds
-    // the box sum over columns `[x0, x1)`.
-    let mut x1 = (r + 1).min(w);
-    let mut x0 = 0usize;
-    // `u64` so a full-width window on a very large frame cannot overflow:
-    // `(2r+1) · 255 · w` exceeds `u32` beyond ~16.8 Mpx.
-    let mut sum: u64 = cols[..x1].iter().map(|&v| u64::from(v)).sum();
+    let w = cols.len();
+    prefix[0] = 0;
+    let mut acc = 0u32;
+    for (p, &v) in prefix[1..=w].iter_mut().zip(cols) {
+        acc = acc.wrapping_add(v);
+        *p = acc;
+    }
+    let border = |x: usize| {
+        let x0 = x.saturating_sub(r);
+        let x1 = (x + r + 1).min(w);
+        let div = ExactDiv::new(rows_in_window * (x1 - x0) as u32);
+        (div.apply(prefix[x1].wrapping_sub(prefix[x0])) - c).clamp(0, 255) as u8
+    };
 
-    let mut last_area = 0u32;
-    let mut inv_area = 0u32;
-
-    for x in 0..w {
-        let area = rows_in_window * (x1 - x0) as u32;
-        if area != last_area {
-            // `area` only changes within `r` pixels of the left/right edge,
-            // so this reciprocal is recomputed ~2r times per row, not per pixel.
-            inv_area = ((1u64 << 31) / u64::from(area)) as u32;
-            last_area = area;
+    // Interior: the full window fits, i.e. `x ≥ r` and `x + r + 1 ≤ w`.
+    let lo = r.min(w);
+    let hi = w.saturating_sub(r).max(lo);
+    for (x, t) in thresholds[..lo].iter_mut().enumerate() {
+        *t = border(x);
+    }
+    if hi > lo {
+        let div = ExactDiv::new(rows_in_window * (2 * r + 1) as u32);
+        let (ahead, behind) = (&prefix[(lo + r + 1)..=(hi + r)], &prefix[lo - r..hi - r]);
+        for ((t, &p1), &p0) in thresholds[lo..hi].iter_mut().zip(ahead).zip(behind) {
+            *t = (div.apply(p1.wrapping_sub(p0)) - c).clamp(0, 255) as u8;
         }
-        let mean = ((sum * u64::from(inv_area)) >> 31) as i32;
+    }
+    for (x, t) in thresholds.iter_mut().enumerate().skip(hi) {
+        *t = border(x);
+    }
+}
 
-        let t = (mean - c).clamp(0, 255) as u8;
-        thresholds[x] = t;
-        binary[x] = if src[x] < t { 0 } else { 255 };
-
-        // Slide the window one column to the right.
-        if x + r + 1 < w {
-            sum += u64::from(cols[x + r + 1]);
-            x1 += 1;
-        }
-        if x >= r {
-            sum -= u64::from(cols[x - r]);
-            x0 += 1;
-        }
+/// `binary = 0` where `src < threshold` (foreground), else 255. Telemetry only.
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+fn binarize_row(src: &[u8], thresholds: &[u8], binary: &mut [u8]) {
+    for ((b, &s), &t) in binary.iter_mut().zip(src).zip(thresholds) {
+        *b = if s < t { 0 } else { 255 };
     }
 }
 
@@ -841,6 +951,7 @@ mod tests {
             local_mean_radius: radius,
             constant,
             noise_k: 0.0,
+            noise_sigma: None,
         };
         let arena = Bump::new();
         let stats = engine.compute_tile_stats(&arena, &img);
@@ -856,16 +967,16 @@ mod tests {
     /// can land one below the exact quotient); the accumulator itself is exact.
     #[test]
     fn local_mean_matches_naive_box_mean() {
-        for &(w, h) in &[(64usize, 48usize), (37, 29), (8, 8), (129, 5)] {
+        for &(w, h) in &[(64usize, 48usize), (37, 29), (8, 8), (129, 5), (300, 9)] {
             let data = lcg_image(w, h, 7);
-            for &r in &[1usize, 3, 12, 40] {
+            for &r in &[1usize, 3, 7, 12, 40, 127] {
                 let (binary, map) = run_mode(ThresholdMode::LocalMean, r, 0, &data, w, h);
                 for y in 0..h {
                     for x in 0..w {
                         let expect = naive_box_mean(&data, w, h, x, y, r).min(255);
                         let got = u32::from(map[y * w + x]);
-                        assert!(
-                            expect.abs_diff(got) <= 1,
+                        assert_eq!(
+                            got, expect,
                             "w={w} h={h} r={r} at ({x},{y}): got {got}, exact {expect}"
                         );
                         // The binary map is always the map applied to the source.
@@ -900,18 +1011,148 @@ mod tests {
     ///
     /// The historical mode is the one that speckles: `t = mid(97, 97) = 97` is
     /// published to segmentation even though the tile carries no signal.
+    /// Deterministic Gaussian noise around `mean` (Box–Muller over an LCG).
+    fn gaussian_image(w: usize, h: usize, mean: f64, sigma: f64, seed: u64) -> Vec<u8> {
+        let mut state = seed | 1;
+        let mut uniform = move || {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            ((state >> 11) as f64 + 0.5) / (1u64 << 53) as f64
+        };
+        (0..w * h)
+            .map(|_| {
+                let z = (-2.0 * uniform().ln()).sqrt() * (std::f64::consts::TAU * uniform()).cos();
+                (mean + sigma * z).round().clamp(0.0, 255.0) as u8
+            })
+            .collect()
+    }
+
+    fn std_dev(data: &[u8], w: usize, h: usize, margin: usize) -> f64 {
+        let vals: Vec<f64> = (margin..h - margin)
+            .flat_map(|y| (margin..w - margin).map(move |x| (x, y)))
+            .map(|(x, y)| f64::from(data[y * w + x]))
+            .collect();
+        let mean = vals.iter().sum::<f64>() / vals.len() as f64;
+        (vals.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / vals.len() as f64).sqrt()
+    }
+
+    /// `ExactDiv` against integer division for every area a radius ≤ 127 window can have
+    /// and the dividends where a reciprocal is most likely to slip.
+    #[test]
+    fn exact_div_matches_integer_division() {
+        let max_area = (2 * MAX_LOCAL_MEAN_RADIUS as u32 + 1).pow(2);
+        for area in 1..=max_area {
+            let div = ExactDiv::new(area);
+            for k in [0u32, 1, 2, 127, 254, 255] {
+                for n in [k * area, (k * area).saturating_sub(1), k * area + area / 2] {
+                    if n <= 255 * area {
+                        assert_eq!(
+                            div.apply(n),
+                            i32::try_from(n / area).unwrap(),
+                            "n={n} area={area}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn local_mean_threshold_map_does_not_depend_on_binary_output() {
+        let (w, h) = (97usize, 61usize);
+        let data = lcg_image(w, h, 11);
+        let (_, with_binary) = run_mode(ThresholdMode::LocalMean, 7, 3, &data, w, h);
+        let img = ImageView::new(&data, w, h, w).unwrap();
+        let config = DetectorConfig {
+            threshold_mode: ThresholdMode::LocalMean,
+            threshold_local_mean_radius: 7,
+            adaptive_threshold_constant: 3,
+            ..DetectorConfig::default()
+        };
+        let engine = ThresholdEngine::from_config(&config);
+        let arena = Bump::new();
+        let stats = engine.compute_tile_stats(&arena, &img);
+        let mut map = vec![0u8; w * h];
+        engine.apply_threshold_with_map(&arena, &img, &stats, &mut [], &mut map);
+        assert_eq!(map, with_binary);
+    }
+
+    /// `prefilter_noise_gain` against white noise pushed through the real kernels.
+    #[test]
+    fn prefilter_noise_gain_matches_the_filters() {
+        let (w, h, sigma) = (256usize, 256usize, 8.0);
+        let data = gaussian_image(w, h, 128.0, sigma, 3);
+        let img = ImageView::new(&data, w, h, w).unwrap();
+        let measured = std_dev(&data, w, h, 2);
+        let check = |label: &str, out: &[u8], ow: usize, oh: usize, gain: f64| {
+            let got = std_dev(out, ow, oh, 4) / measured;
+            assert!(
+                (got - gain).abs() < 0.05 * gain,
+                "{label}: measured gain {got}, predicted {gain}"
+            );
+        };
+
+        let mut dec = vec![0u8; (w / 2) * (h / 2)];
+        let dec_img = img.decimate_to(2, &mut dec).unwrap();
+        check(
+            "decimate 2",
+            dec_img.data,
+            w / 2,
+            h / 2,
+            prefilter_noise_gain(2, 1, false),
+        );
+
+        let mut up = vec![0u8; w * 2 * h * 2];
+        let up_img = img.upscale_to(2, &mut up).unwrap();
+        check(
+            "upscale 2",
+            up_img.data,
+            w * 2,
+            h * 2,
+            prefilter_noise_gain(1, 2, false),
+        );
+
+        let mut sharp = vec![0u8; w * h];
+        crate::filter::laplacian_sharpen(&img, &mut sharp);
+        check("sharpen", &sharp, w, h, prefilter_noise_gain(1, 1, true));
+    }
+
+    /// The noise-calibrated offset delivers its promise: on a flat frame of white noise a
+    /// pixel turns foreground with probability ≈ Φ(−k).
+    #[test]
+    fn noise_calibrated_offset_controls_false_foreground_rate() {
+        let (w, h) = (512usize, 512usize);
+        let data = gaussian_image(w, h, 128.0, 4.0, 9);
+        let img = ImageView::new(&data, w, h, w).unwrap();
+        let config = DetectorConfig {
+            threshold_mode: ThresholdMode::LocalMean,
+            threshold_local_mean_radius: 7,
+            threshold_noise_k: 3.0,
+            ..DetectorConfig::default()
+        };
+        let engine = ThresholdEngine::from_config(&config);
+        let arena = Bump::new();
+        let stats = engine.compute_tile_stats(&arena, &img);
+        let mut binary = vec![0u8; w * h];
+        let mut map = vec![0u8; w * h];
+        engine.apply_threshold_with_map(&arena, &img, &stats, &mut binary, &mut map);
+        let rate = binary.iter().filter(|&&b| b == 0).count() as f64 / (w * h) as f64;
+        // Φ(−3) = 1.35e-3; allow the offset's integer rounding and the σ̂ error (Φ(−3.5)…Φ(−2.5)).
+        assert!(
+            (2.3e-4..6.2e-3).contains(&rate),
+            "false-foreground rate {rate}"
+        );
+    }
+
     #[test]
     fn local_mean_suppresses_flat_regions() {
         let (w, h) = (64usize, 64usize);
         let data = vec![97u8; w * h];
 
         let (binary, map) = run_mode(ThresholdMode::LocalMean, 8, 5, &data, w, h);
-        // 97 - 5, within the 1-unit slack of the fixed-point reciprocal.
-        assert!(
-            map.iter().all(|&t| (91..=92).contains(&t)),
-            "{:?}",
-            &map[..8]
-        );
+        // Exactly 97 − 5 everywhere, including the clipped border windows.
+        assert!(map.iter().all(|&t| t == 92), "{:?}", &map[..8]);
         assert!(
             binary.iter().all(|&b| b == 255),
             "flat frame produced foreground"

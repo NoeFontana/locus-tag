@@ -68,3 +68,30 @@ fn bench_threshold_real_icra_apply(bencher: divan::Bencher) {
         engine.apply_threshold(&arena, &img, &stats, &mut output);
     });
 }
+
+/// `LocalMean` threshold map (radius 7, the Liu4K/EuRoC candidate) on the 1080p ICRA frame,
+/// telemetry off (empty binary output) as in production.
+#[bench]
+fn bench_threshold_real_icra_local_mean(bencher: divan::Bencher) {
+    let dataset = BenchDataset::icra_forward_0();
+    let img = ImageView::new(
+        &dataset.raw_data,
+        dataset.width,
+        dataset.height,
+        dataset.width,
+    )
+    .unwrap();
+    let mut config = DetectorConfig::default();
+    config.threshold_mode = locus_core::config::ThresholdMode::LocalMean;
+    config.threshold_local_mean_radius = 7;
+    let engine = ThresholdEngine::from_config(&config);
+    let arena_init = bumpalo::Bump::new();
+    let stats = engine.compute_tile_stats(&arena_init, &img).to_vec();
+    let mut threshold_map = vec![0u8; dataset.width * dataset.height];
+    let mut arena = bumpalo::Bump::new();
+
+    bencher.bench_local(move || {
+        arena.reset();
+        engine.apply_threshold_with_map(&arena, &img, &stats, &mut [], &mut threshold_map);
+    });
+}

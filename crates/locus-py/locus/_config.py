@@ -172,7 +172,7 @@ class ThresholdConfig(BaseModel):
     #: is opt-in and changes detector output on every frame.
     mode: _ThresholdModeField = Field(default_factory=lambda: ThresholdMode.TileMidExtreme)
     #: Window radius (px) of the local-mean thresholder; ``LocalMean`` mode only.
-    local_mean_radius: int = Field(default=24, ge=1)
+    local_mean_radius: int = Field(default=24, ge=1, le=127)
     #: Constant subtracted from the local mean; ``LocalMean`` mode only.
     constant: int = 15
     #: Noise-calibrated offset ``k``: when > 0, ``LocalMean`` subtracts

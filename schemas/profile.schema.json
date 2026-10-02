@@ -281,6 +281,7 @@
         },
         "local_mean_radius": {
           "default": 24,
+          "maximum": 127,
           "minimum": 1,
           "title": "Local Mean Radius",
           "type": "integer"

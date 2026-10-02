@@ -8,8 +8,8 @@ pub enum ConfigError {
     /// Threshold tile size must be >= 2.
     #[error("threshold_tile_size must be >= 2, got {0}")]
     TileSizeTooSmall(usize),
-    /// Local-mean window radius must be >= 1.
-    #[error("threshold_local_mean_radius must be >= 1, got {0}")]
+    /// Local-mean window radius must be in `[1, 127]` (`threshold::MAX_LOCAL_MEAN_RADIUS`).
+    #[error("threshold_local_mean_radius must be in [1, 127], got {0}")]
     InvalidLocalMeanRadius(usize),
     /// Noise-calibrated threshold offset must be finite and >= 0.
     #[error("threshold_noise_k must be finite and >= 0, got {0}")]

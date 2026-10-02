@@ -839,10 +839,10 @@ pub fn compute_image_noise_floor(img: &ImageView) -> f64 {
     estimate_noise_sigma(img, 1)
 }
 
-/// Bins of the `|L|` histogram behind [`estimate_noise_sigma`]. The median of `|L|` is
-/// `0.6745 · 6 σ`, so 256 bins cover σ up to ≈ 63 grey levels exactly; a larger median
-/// saturates at the last bin.
-const NOISE_HIST_BINS: usize = 256;
+/// Bins of the `|L|` histogram behind [`estimate_noise_sigma`]: one per possible value.
+/// The kernel's positive (and negative) coefficients sum to 8, so `|L| ≤ 8 · 255 = 2040`
+/// and the median is exact for every input (8 KB of stack, once per frame).
+const NOISE_HIST_BINS: usize = 8 * 255 + 1;
 
 /// Immerkær noise estimate (σ, grey levels) on every `stride`-th pixel in x and y.
 ///
@@ -867,7 +867,7 @@ pub fn estimate_noise_sigma(img: &ImageView, stride: usize) -> f64 {
             let lap = (px(above, 0) - 2 * px(above, 1) + px(above, 2))
                 + (-2 * px(row, 0) + 4 * px(row, 1) - 2 * px(row, 2))
                 + (px(below, 0) - 2 * px(below, 1) + px(below, 2));
-            hist[(lap.unsigned_abs() as usize).min(NOISE_HIST_BINS - 1)] += 1;
+            hist[lap.unsigned_abs() as usize] += 1;
             samples += 1;
         }
     }

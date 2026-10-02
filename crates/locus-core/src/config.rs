@@ -524,7 +524,9 @@ impl DetectorConfig {
         if self.threshold_tile_size < 2 {
             return Err(ConfigError::TileSizeTooSmall(self.threshold_tile_size));
         }
-        if self.threshold_local_mean_radius < 1 {
+        if !(1..=crate::threshold::MAX_LOCAL_MEAN_RADIUS)
+            .contains(&self.threshold_local_mean_radius)
+        {
             return Err(ConfigError::InvalidLocalMeanRadius(
                 self.threshold_local_mean_radius,
             ));
