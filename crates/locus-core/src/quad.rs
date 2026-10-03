@@ -256,6 +256,12 @@ fn extract_single_quad(
     if bbox_area < config.quad_min_area || bbox_area > (img.width * img.height * 9 / 10) as u32 {
         return None;
     }
+    // An outline fills at most its bounding box, so this is implied by the contour test below;
+    // it just skips the trace.
+    let min_fill = min_marker_fill(min_outer_dim, decimation);
+    if f64::from(bbox_area) < min_fill {
+        return None;
+    }
 
     let aspect = bbox_w.max(bbox_h) as f32 / bbox_w.min(bbox_h).max(1) as f32;
     if aspect > config.quad_max_aspect_ratio {
@@ -318,9 +324,20 @@ fn extract_single_quad(
             if contour.len() < 12 {
                 return None;
             }
+            // Cheap rejections before the O(n log n) vertex selection. A marker outline is a
+            // quadrilateral: isoperimetric compactness 4π·A/L² ≈ 0.6–0.8. Ragged texture
+            // outlines are long for their area and fail the quad compactness floor (0.1) below
+            // anyway; rejecting them at half that floor skips their simplification, which costs
+            // the most for exactly these long contours.
+            let fill = contour_fill(&contour);
+            let perimeter = contour.len() as f64;
+            if fill < min_fill
+                || 12.566 * fill / (perimeter * perimeter) < 0.5 * MIN_QUAD_COMPACTNESS
+            {
+                return None;
+            }
 
             let simple_contour = chain_approximation(arena, &contour);
-            let perimeter = contour.len() as f64;
             let corners = select_dominant_vertices(arena, &simple_contour, 4)?;
 
             let mut reduced = BumpVec::new_in(arena);
@@ -330,7 +347,8 @@ fn extract_single_quad(
             let area = polygon_area(&reduced);
             let compactness = (12.566 * area.abs()) / (perimeter * perimeter);
 
-            if area.abs() <= f64::from(config.quad_min_area) || compactness <= 0.1 {
+            if area.abs() <= f64::from(config.quad_min_area) || compactness <= MIN_QUAD_COMPACTNESS
+            {
                 return None;
             }
 
@@ -430,6 +448,33 @@ fn extract_single_quad(
         }
     }
     None
+}
+
+/// Quads with isoperimetric compactness `4π·area / perimeter²` at or below this are rejected.
+const MIN_QUAD_COMPACTNESS: f64 = 0.1;
+
+/// Smallest filled area, in (decimated) pixels, of a dark outline that can hold a decodable
+/// marker: the smallest active family is `min_outer_dim` cells across, a cell must cover at
+/// least one pixel to be sampled, and the threshold may shave up to half a pixel off each side
+/// of the outline. 49 px² for 36h11, ArUcoMip36h12 and 6x6; 25 px² for tag16h5 and 4x4.
+fn min_marker_fill(min_outer_dim: u32, decimation: usize) -> f64 {
+    let side = f64::from(min_outer_dim) / decimation as f64 - 1.0;
+    if side > 0.0 { side * side } else { 0.0 }
+}
+
+/// Pixels enclosed by a traced outer contour, holes included. Its points are pixel centres with
+/// no other lattice point on the unit or diagonal steps between them, so by Pick's theorem the
+/// count is the centre polygon's area plus half the boundary points plus one (exact for a
+/// simple contour).
+fn contour_fill(contour: &[Point]) -> f64 {
+    let n = contour.len();
+    let twice_area: f64 = (0..n)
+        .map(|i| {
+            let (p, q) = (contour[i], contour[(i + 1) % n]);
+            p.x * q.y - q.x * p.y
+        })
+        .sum();
+    twice_area.abs() * 0.5 + n as f64 * 0.5 + 1.0
 }
 
 /// Max per-point `distort(undistort(xd)) − xd` drift tolerated during
@@ -633,6 +678,12 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     if bbox_area < config.quad_min_area || bbox_area > (img.width * img.height * 9 / 10) as u32 {
         return None;
     }
+    // An outline fills at most its bounding box, so this is implied by the contour test below;
+    // it just skips the trace.
+    let min_fill = min_marker_fill(min_outer_dim, decimation);
+    if f64::from(bbox_area) < min_fill {
+        return None;
+    }
 
     let aspect = bbox_w.max(bbox_h) as f32 / bbox_w.min(bbox_h).max(1) as f32;
     if aspect > config.quad_max_aspect_ratio {
@@ -668,7 +719,7 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
         2 * (bbox_w + bbox_h) as usize,
     );
 
-    if contour.len() < 12 {
+    if contour.len() < 12 || contour_fill(&contour) < min_fill {
         return None;
     }
 
@@ -2024,6 +2075,42 @@ mod tests {
         let img = ImageView::new(&data, width, height, stride).unwrap();
         let score = calculate_edge_score(&img, corners, &[0.0]);
         assert!(score > 40.0, "Score {score} should be > 40.0");
+    }
+
+    #[test]
+    fn contour_fill_counts_enclosed_pixels() {
+        let (w, h) = (40usize, 40usize);
+        let trace_fill = |inside: &dyn Fn(usize, usize) -> bool| {
+            let labels: Vec<u32> = (0..w * h)
+                .map(|i| u32::from(inside(i % w, i / w)))
+                .collect();
+            let first = labels.iter().position(|&l| l == 1).unwrap();
+            let arena = Bump::new();
+            let contour = trace_boundary(&arena, &labels, w, h, first % w, first / w, 1, 0);
+            let enclosed = (0..w * h).filter(|&i| inside(i % w, i / w)).count();
+            (contour_fill(&contour), enclosed)
+        };
+        // Filled 8x8 square: 64 pixels.
+        let (fill, n) = trace_fill(&|x, y| (10..18).contains(&x) && (5..13).contains(&y));
+        assert_eq!((fill, n), (64.0, 64));
+        // Hollow 10x10 ring, 1 px thick: the outline encloses all 100 pixels.
+        let (fill, _) = trace_fill(&|x, y| {
+            (5..15).contains(&x)
+                && (5..15).contains(&y)
+                && !((6..14).contains(&x) && (6..14).contains(&y))
+        });
+        assert_eq!(fill, 100.0);
+        // Diamond |x-20| + |y-20| <= 6 (diagonal boundary steps).
+        let (fill, n) = trace_fill(&|x, y| x.abs_diff(20) + y.abs_diff(20) <= 6);
+        assert_eq!(fill, n as f64);
+    }
+
+    #[test]
+    fn min_marker_fill_is_one_pixel_per_cell_less_the_threshold_margin() {
+        assert_eq!(min_marker_fill(8, 1), 49.0); // 36h11, ArUcoMip36h12, 6x6
+        assert_eq!(min_marker_fill(6, 1), 25.0); // tag16h5, 4x4
+        assert_eq!(min_marker_fill(8, 2), 9.0);
+        assert_eq!(min_marker_fill(1, 2), 0.0);
     }
 
     proptest! {
