@@ -63,7 +63,31 @@ def collect(runs_root: Path, champion: str) -> dict[str, list[Verdict]]:
     return out
 
 
-def render(board: dict[str, list[Verdict]], champion: str) -> str:
+def collect_bias(runs_root: Path, champion: str) -> dict[str, dict[str, float]]:
+    """Mean radial corner offset (px, + = outward) of the champion and each reference on the
+    common tags, per benchmark: the photometric part of corner error the debiased cells set
+    aside, reported so a systematic offset stays visible."""
+    out: dict[str, dict[str, float]] = {}
+    for name in load_specs():
+        loaded = _load(runs_root / name)
+        if loaded is None or champion not in loaded[0]:
+            continue
+        rows = loaded[0]
+        biases = {
+            d: float(rows[d]["corner_bias_common"])
+            for d in (champion, *REFERENCES)
+            if rows.get(d, {}).get("corner_bias_common") is not None
+        }
+        if champion in biases:
+            out[name] = biases
+    return out
+
+
+def render(
+    board: dict[str, list[Verdict]],
+    champion: str,
+    bias: dict[str, dict[str, float]] | None = None,
+) -> str:
     wins = sum(v.win is True for vs in board.values() for v in vs)
     judged = sum(v.win is not None for vs in board.values() for v in vs)
     out = [
@@ -83,6 +107,20 @@ def render(board: dict[str, list[Verdict]], champion: str) -> str:
                 f"| {name} | {v.metric.label} | {fmt(v.champion, nd)} | {v.reference or '—'} | "
                 f"{fmt(v.best, nd)} | {verdict_cell(v)} |"
             )
+    if bias:
+        out += [
+            "",
+            "Corner cells are judged on the RMSE left after removing each detector's mean radial",
+            "offset on the benchmark; the offsets themselves (px, + = outward) are not judged:",
+            "",
+            f"| Benchmark | {champion} | " + " | ".join(REFERENCES) + " |",
+            "| :-- " + "| --: " * (1 + len(REFERENCES)) + "|",
+        ]
+        for name, b in bias.items():
+            cells = [b.get(d) for d in (champion, *REFERENCES)]
+            out.append(
+                f"| {name} | " + " | ".join("—" if c is None else f"{c:+.3f}" for c in cells) + " |"
+            )
     return "\n".join(out) + "\n"
 
 
@@ -92,7 +130,7 @@ def main(argv: list[str]) -> None:
     board = collect(runs_root, champion)
     if not board:
         raise SystemExit(f"no scored benchmark with a `{champion}` run under {runs_root}")
-    md = render(board, champion)
+    md = render(board, champion, collect_bias(runs_root, champion))
     (runs_root.parent / "scoreboard.md").write_text(md)
     print(md)
 

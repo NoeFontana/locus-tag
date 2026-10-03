@@ -190,6 +190,15 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **SOTA scoreboard judges corners on debiased error** (`tools/bench/sota`).
+  - **What:** each detector's mean radial corner offset on a benchmark
+    (`corner_bias_common`, + = outward) is removed before the per-tag RMSE that the win
+    table judges (`corner_debiased_common_*`).
+  - **Why:** a tone curve moves every gradient edge the same way. render-tag is
+    sRGB-encoded linear blur, which puts every gradient detector about 0.6 px inward. That
+    offset belongs to the dataset, not to corner localisation.
+  - **Visibility:** the offsets are listed under the scoreboard and in each report, so a
+    systematic error stays visible.
 - **Decoder near-miss recovery is budgeted by probability, not a fixed window.** Before
   rejecting a candidate, the decoder tries to recover it: corner nudging, and under
   decode-first, refine-and-redecode. Each attempt costs tens of decodes or a corner

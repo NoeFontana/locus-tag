@@ -25,6 +25,14 @@ the RMSE over the four corners. ``corner_common_*`` restricts to the GT tags mat
 configuration cannot move anyone's numbers); ``corner_common_coverage`` is the share of that
 set a detector matched.
 
+**Debiased corner error.** ``corner_bias_common`` is a detector's mean signed radial corner
+offset on that set (px, + = outward from the GT centroid). ``corner_debiased_common_*`` is
+the per-tag RMSE with that offset removed. These are the judged corner metrics. A constant
+photometric edge shift moves every gradient detector's corners the same way: render-tag is
+sRGB-encoded linear blur, about −0.6 px for every gradient detector. That shift is a
+property of the dataset's tone curve, not of corner localisation, so the bias is reported
+and the scatter around it is judged.
+
 **euroc** (``cam_april``, no per-corner GT) uses a ground-truth-free protocol:
 
 * **Presence** — corners pooled over all detectors are undistorted with the
@@ -184,6 +192,35 @@ def _corner_errors(t: Tally) -> tuple[list[int], dict[tuple[str, int], float]]:
     return perm.tolist(), {k: _rmse(d, g, perm) for k, (d, g) in t.matches.items()}
 
 
+def _radial_debias(
+    pairs: list[tuple[np.ndarray, np.ndarray]], perm: list[int]
+) -> tuple[float | None, list[float]]:
+    """Mean signed radial corner offset over ``pairs`` and each match's RMSE without it.
+
+    The offset is measured along the unit vector from the GT quad's centroid to each GT corner
+    (positive = outward). A constant photometric edge shift (e.g. an sRGB-encoded blur that
+    moves every gradient edge toward the dark side) moves all four corners along that vector
+    by the same amount, so the mean is the detector's bias on this dataset. The residual RMSE
+    is its scatter around that bias.
+    """
+    if not pairs:
+        return None, []
+    radial: list[np.ndarray] = []
+    offsets: list[np.ndarray] = []
+    for det, gt in pairs:
+        g = gt[perm]
+        u = g - g.mean(axis=0)
+        u /= np.linalg.norm(u, axis=1, keepdims=True)
+        radial.append(u)
+        offsets.append(det - g)
+    bias = float(np.mean([np.sum(e * u, axis=1) for e, u in zip(offsets, radial, strict=True)]))
+    rmse = [
+        float(np.sqrt(np.mean(np.sum((e - bias * u) ** 2, axis=1))))
+        for e, u in zip(offsets, radial, strict=True)
+    ]
+    return bias, rmse
+
+
 def _stats(errs: list[float], prefix: str) -> dict[str, float | None]:
     if not errs:
         return {f"{prefix}_{k}": None for k in ("mean", "median", "p90", "p99")}
@@ -226,6 +263,9 @@ def _summarise(tallies: dict[str, Tally]) -> dict[str, Any]:
             **_stats([errs[k] for k in common if k in errs], "corner_common"),
             "corner_common_coverage": _pct(sum(k in errs for k in common), len(common)),
         }
+        bias, debiased = _radial_debias([t.matches[k] for k in sorted(common) if k in errs], perm)
+        out[n]["corner_bias_common"] = bias
+        out[n].update(_stats(debiased, "corner_debiased_common"))
     return out
 
 
