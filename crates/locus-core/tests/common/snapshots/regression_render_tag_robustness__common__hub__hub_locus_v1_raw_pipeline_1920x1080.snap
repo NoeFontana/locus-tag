@@ -5,16 +5,16 @@ expression: report
 ---
 summary:
   dataset_size: 50
-  mean_recall: 0.58
+  mean_recall: 0.6
   mean_precision: 1
-  mean_rmse: 0.3694
-  mean_reprojection_rmse: 0.2701
-  p50_translation_error: 0.0018
-  p90_translation_error: 0.0115
+  mean_rmse: 0.4967
+  mean_reprojection_rmse: 0.4195
+  p50_translation_error: 0.0019
+  p90_translation_error: 0.0128
   p99_translation_error: 0.0406
-  p50_rotation_error: 0.0556
-  p90_rotation_error: 0.197
-  p99_rotation_error: 0.2831
+  p50_rotation_error: 0.0689
+  p90_rotation_error: 0.2058
+  p99_rotation_error: 2.5696
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
   worst_offenders:
@@ -26,15 +26,15 @@ summary:
       missed: 1
       extra: 0
       rmse: 0
-    - filename: scene_0004_cam_0000.png
-      missed: 1
-      extra: 0
-      rmse: 0
     - filename: scene_0005_cam_0000.png
       missed: 1
       extra: 0
       rmse: 0
     - filename: scene_0006_cam_0000.png
+      missed: 1
+      extra: 0
+      rmse: 0
+    - filename: scene_0007_cam_0000.png
       missed: 1
       extra: 0
       rmse: 0

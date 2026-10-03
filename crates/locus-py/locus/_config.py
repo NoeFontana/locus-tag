@@ -241,9 +241,9 @@ class QuadConfig(BaseModel):
         default_factory=lambda: EdLinesImbalanceGatePolicy.Disabled
     )
     extraction_policy: QuadExtractionPolicy = "Static"
-    refine_before_decode: bool = True
-    """Refine every candidate's corners before decoding (historical order). ``False``
-    (decode-first) decodes from contour corners and refines only candidates that decode or
+    refine_before_decode: bool = False
+    """Refine every candidate's corners before decoding (the historical order, kept by
+    ``high_accuracy``). ``False`` (decode-first, the default) decodes from contour corners and refines only candidates that decode or
     nearly do, keeping a match only if the refined quad still decodes it. ERF refinement on
     undistorted cameras only; other configurations always refine first."""
 
@@ -272,7 +272,7 @@ class DecoderConfig(BaseModel):
     explicit integer overrides every family uniformly.
     """
     gwlf_transversal_alpha: float = Field(default=0.01, ge=0.0)
-    max_border_error_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    max_border_error_rate: float = Field(default=0.0, ge=0.0, le=1.0)
     """Largest fraction of the black border ring that may read bright for a decoded
     candidate to be accepted. ``1.0`` disables the check."""
     corner_subpix: bool = True
