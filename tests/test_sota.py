@@ -225,7 +225,7 @@ def test_win_table_compares_against_best_reference_and_ties_win() -> None:
     # apriltag3 is reported but is not a reference of the win criterion.
     assert all(x.reference != "apriltag3" for x in v.values())
     # Missing corner metrics are not judged.
-    assert v["corner_common_mean"].win is None
+    assert v["corner_debiased_common_mean"].win is None
 
 
 def test_win_table_does_not_judge_invalid_timing() -> None:
@@ -269,3 +269,24 @@ def test_scoreboard_takes_latency_from_a_timing_valid_tagged_run(tmp_path: Path)
     assert cells["recall"].win is True
     assert cells["ms_mean"].champion == 20.0
     assert cells["ms_mean"].win is False
+
+
+def test_radial_debias_separates_a_photometric_offset_from_scatter() -> None:
+    gt = _square(0, 0)
+    u = (gt - gt.mean(axis=0)) / np.linalg.norm(gt - gt.mean(axis=0), axis=1, keepdims=True)
+    jitter = np.array([[0.1, 0.0], [0.0, -0.1], [-0.1, 0.0], [0.0, 0.1]])
+    # Every corner 0.6 px inward (an sRGB-like edge shift) plus a small per-corner jitter.
+    pairs = [(gt - 0.6 * u + jitter, gt), (gt - 0.6 * u - jitter, gt)]
+    bias, rmse = score._radial_debias(pairs, [0, 1, 2, 3])
+    assert bias == pytest.approx(-0.6, abs=1e-9)
+    # What is left is the jitter alone (its radial parts cancel over the two matches).
+    assert rmse == pytest.approx([0.1, 0.1], abs=1e-9)
+    assert score._radial_debias([], [0, 1, 2, 3]) == (None, [])
+
+
+def test_scoreboard_reports_bias_without_judging_it() -> None:
+    from tools.bench.sota import scoreboard  # noqa: PLC0415
+
+    board = {"hub-640": report.win_table({"locus_x": {"recall": 1.0}}, "gt-hub", "locus_x", True)}
+    md = scoreboard.render(board, "locus_x", {"hub-640": {"locus_x": -0.6, "aruco_nano": -0.68}})
+    assert "| hub-640 | -0.600 | -0.680 |" in md

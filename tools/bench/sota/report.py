@@ -41,7 +41,9 @@ METRICS: dict[str, list[Metric]] = {
         Metric("recall", "Recall %", True),
         Metric("precision", "Precision %", True),
         Metric("f1", "F1", True),
-        Metric("corner_common_median", "Corner px, common tags (median)", False, 3),
+        Metric(
+            "corner_debiased_common_median", "Corner px, debiased, common tags (median)", False, 3
+        ),
         _LATENCY,
     ],
     "euroc": [
@@ -55,8 +57,12 @@ METRICS: dict[str, list[Metric]] = {
         Metric("recall", "Recall %", True),
         Metric("precision", "Precision %", True),
         Metric("f1", "F1", True),
-        Metric("corner_common_mean", "Corner RMSE px, common tags (mean)", False, 3),
-        Metric("corner_common_p90", "Corner RMSE px, common tags (p90)", False, 3),
+        Metric(
+            "corner_debiased_common_mean", "Corner RMSE px, debiased, common tags (mean)", False, 3
+        ),
+        Metric(
+            "corner_debiased_common_p90", "Corner RMSE px, debiased, common tags (p90)", False, 3
+        ),
         _LATENCY,
     ],
 }
@@ -160,16 +166,21 @@ def _detector_table(scorer: str, rows: dict[str, dict[str, Any]], order: list[st
     bins = _side_cols(rows)
     out = [
         "| Detector | Recall % | Precision % | F1 | TP | FP | ms/img | Corner px mean / median "
-        "/ p90 / p99 | Common mean / p90 | " + " | ".join(f"R% side {b}" for b in bins) + " |",
-        "| :-- " + "| --: " * (8 + len(bins)) + "|",
+        "/ p90 / p99 | Common mean / p90 | Common bias | Common debiased mean / p90 | "
+        + " | ".join(f"R% side {b}" for b in bins)
+        + " |",
+        "| :-- " + "| --: " * (10 + len(bins)) + "|",
     ]
     for n in order:
         r = rows[n]
         own = " / ".join(fmt(r.get(f"corner_{k}"), 3) for k in ("mean", "median", "p90", "p99"))
         com = " / ".join(fmt(r.get(f"corner_common_{k}"), 3) for k in ("mean", "p90"))
+        bias = r.get("corner_bias_common")
+        deb = " / ".join(fmt(r.get(f"corner_debiased_common_{k}"), 3) for k in ("mean", "p90"))
         out.append(
             f"| {n} | {fmt(r['recall'])} | {fmt(r['precision'])} | {fmt(r['f1'])} | "
             f"{r['tp']} | {r['fp']} | {fmt(r['ms_mean'], 1)} | {own} | {com} | "
+            f"{'—' if bias is None else f'{bias:+.3f}'} | {deb} | "
             + " | ".join(fmt(r["recall_by_side"][b], 1) for b in bins)
             + " |"
         )

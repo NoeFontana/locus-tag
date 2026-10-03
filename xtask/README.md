@@ -101,6 +101,14 @@ relabelling of the GT corners is fixed per (benchmark, detector), never chosen p
 and per-tag error is the RMSE of the four corners. `corner_common_*` restricts to tags every
 detector with ≥ 20 % recall matched, so detectors are compared on the same tags.
 
+The judged corner cells are `corner_debiased_common_*`: the per-tag RMSE after removing the
+detector's mean radial offset on the benchmark (`corner_bias_common`, + = outward).
+- **Why:** a tone curve shifts every gradient edge the same way. render-tag images are
+  sRGB-encoded linear blur, which puts every gradient detector about 0.6 px inward. That
+  offset belongs to the dataset, not to the detector's localisation.
+- **Visibility:** the scoreboard lists each detector's offset under the win table, so a
+  systematic error stays visible.
+
 ### Protocol
 
 - Image decode is outside every timer; one untimed warm-up call; best of
