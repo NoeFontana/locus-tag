@@ -293,9 +293,33 @@ pub(crate) fn apply_detector_gwlf(
     Some((gwlf_fallback_count, gwlf_avg_delta))
 }
 
+/// Window half-width bounds of [`corner_subpix`] (px); see [`corner_subpix_half_window`].
+const SUBPIX_MIN_HALF: u32 = 2;
+const SUBPIX_MAX_HALF: u32 = 4;
+/// Largest window half-width as a fraction of the marker cell.
+const SUBPIX_CELL_FRACTION: f64 = 0.75;
 /// Patch side for the largest window: `2·(MAX + 1) + 1` samples, one ring beyond the window
 /// for the central-difference gradients.
-const SUBPIX_PATCH_MAX: usize = 2 * (crate::config::MAX_CORNER_SUBPIX_HALF_WINDOW as usize + 1) + 1;
+const SUBPIX_PATCH_MAX: usize = 2 * (SUBPIX_MAX_HALF as usize + 1) + 1;
+
+/// Window half-width of [`corner_subpix`] for a marker whose side spans `cells` cells over
+/// `side_px` pixels: `clamp(min(4, round(0.75·cell)), 2, 4)`.
+///
+/// Both bounds come from the corner model. The estimator assumes an ideal L-junction, so
+/// gradients near the blurred apex are not orthogonal to `p − c`; the window must reach past
+/// the blur, and 4 px covers the PSFs measured on the benchmarks. The junction model holds
+/// only within the black border cell inside the marker and the quiet zone outside, so the
+/// window may not exceed a cell: on small markers a fixed 4 px window reaches the data bits
+/// (ICRA forward: 0.96 → 0.14 px debiased scatter at 0.75 cell). The 2 px floor keeps a 5×5
+/// window.
+pub(crate) fn corner_subpix_half_window(side_px: f64, cells: usize) -> u32 {
+    let cell = side_px / cells.max(1) as f64;
+    let by_cell = (SUBPIX_CELL_FRACTION * cell).round();
+    // In [2, 4] after the clamp, so the cast is exact.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let half = by_cell.clamp(f64::from(SUBPIX_MIN_HALF), f64::from(SUBPIX_MAX_HALF)) as u32;
+    half
+}
 /// Iteration cap and step tolerance (px) of [`corner_subpix`] (the `cv::cornerSubPix` values
 /// aruco_nano uses).
 const SUBPIX_MAX_ITER: u32 = 12;
@@ -313,9 +337,9 @@ const SUBPIX_EPS: f64 = 0.005;
 /// Returns `seed` when the result leaves the `half`-px box around it, the window leaves the
 /// image, or the normal matrix is singular (a flat or single-edge patch). Locus pixel
 /// convention (+0.5 centres), like the rest of the crate. `half` must be in
-/// `1..=MAX_CORNER_SUBPIX_HALF_WINDOW`.
+/// `1..=SUBPIX_MAX_HALF`.
 pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> [f64; 2] {
-    debug_assert!((1..=crate::config::MAX_CORNER_SUBPIX_HALF_WINDOW).contains(&half));
+    debug_assert!((1..=SUBPIX_MAX_HALF).contains(&half));
     let hw = half as usize;
     let span = 2 * hw + 1; // window side
     let side = span + 2; // plus one gradient ring
@@ -462,6 +486,19 @@ mod subpix_tests {
                 opencv[k]
             );
         }
+    }
+
+    #[test]
+    fn half_window_follows_the_cell_up_to_the_blur_bound() {
+        use super::corner_subpix_half_window as hw;
+        // 8-cell markers: cell = side / 8; half = round(0.75·cell) within [2, 4].
+        assert_eq!(hw(16.0, 8), 2); // cell 2 px
+        assert_eq!(hw(24.0, 8), 2); // cell 3 px → 2.25
+        assert_eq!(hw(32.0, 8), 3); // cell 4 px
+        assert_eq!(hw(48.0, 8), 4); // cell 6 px → 4.5, capped
+        assert_eq!(hw(400.0, 8), 4);
+        assert_eq!(hw(36.0, 6), 4); // tag16h5: cell 6 px
+        assert_eq!(hw(0.0, 8), 2);
     }
 
     #[test]

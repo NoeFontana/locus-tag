@@ -7,25 +7,28 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
-- **Opt-in gradient-orthogonality corner refinement (`decoder.corner_subpix_half_window`,
-  default `0` = off).**
+- **Opt-in gradient-orthogonality corner refinement (`decoder.corner_subpix`, default off).**
   - **Model:** the `cv::cornerSubPix` model, run on every decoded marker after the configured
     `refinement_mode`. Each corner moves to the least-squares point that every gradient in a
-    `(2h + 1)²` Gaussian-weighted window is orthogonal to, iterated (12 iterations, 0.005 px).
+    Gaussian-weighted window is orthogonal to, iterated (12 iterations, 0.005 px).
+  - **Window:** sized from the marker, not configured: `clamp(min(4 px, 0.75 cell), 2, 4)`.
+    The window must clear the blurred apex, where gradients are not orthogonal to `p − c`
+    (4 px covers the measured PSFs). It must also stay inside the black border cell and the
+    quiet zone, where the L-junction model holds.
   - **Homography:** recomputed from the moved corners, so board refiners and pose see one
     consistent quad.
-  - **Parity:** matches OpenCV's `cornerSubPix` to 0.007 px on synthetic corners
-    (`refinement::subpix_tests`). The implementation is allocation-free, on a stack patch.
+  - **Parity:** matches OpenCV's `cornerSubPix` to 0.007 px on synthetic corners. The
+    implementation is allocation-free, on a stack patch.
   - **Scope:** undistorted cameras.
   - **Why:** with each detector's mean radial bias removed, the 1-DOF ERF corners scatter
     about 2× more than `cornerSubPix` (render-tag 1080p 0.41 vs 0.21 px; ICRA random 0.30 vs
     0.12 px). The 1-DOF fit keeps the seed edge direction.
-  - **Results** with `h = 4` (`cargo xtask sota`, main `a6199d4`):
-    - Corner cells won: `standard` 31 → 39 of 88, the decode-first candidate 37 → 40.
+  - **Results** (`cargo xtask sota`, full datasets):
+    - Accuracy cells won: `standard` 31 → 40, the decode-first candidate 36 → 42.
     - EuRoC LOO median 0.70 → 0.26 px (OpenCV 2-bit 0.53).
     - Liu4K corner median 0.72 → 0.47 px.
     - AprilGrid corner mean 0.94 → 0.06 px.
-    - ICRA circle/random corner mean 0.25/0.32 → 0.18 px.
+    - ICRA forward / circle / random mean 0.16 / 0.30 / 0.35 → 0.18 / 0.18 / 0.19 px.
     - Latency: within 4 % at 1 thread.
     - No cell is lost.
 - **Opt-in `threshold.mode = "LocalMean"` foreground thresholder** (supersedes #383; root
