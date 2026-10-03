@@ -17,6 +17,9 @@ pub enum ConfigError {
     /// Border-ring error budget must lie in [0, 1].
     #[error("decoder_max_border_error_rate must be in [0, 1], got {0}")]
     InvalidBorderErrorRate(f32),
+    /// Corner sub-pixel refinement half-window must lie in [0, 16].
+    #[error("decoder_corner_subpix_half_window must be in [0, 16], got {0}")]
+    InvalidCornerSubpixHalfWindow(u32),
     /// Decimation factor must be >= 1.
     #[error("decimation factor must be >= 1, got {0}")]
     InvalidDecimation(usize),
