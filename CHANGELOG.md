@@ -11,10 +11,15 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   - **Model:** the `cv::cornerSubPix` model, run on every decoded marker after the configured
     `refinement_mode`. Each corner moves to the least-squares point that every gradient in a
     Gaussian-weighted window is orthogonal to, iterated (12 iterations, 0.005 px).
-  - **Window:** sized from the marker, not configured: `clamp(min(4 px, 0.75 cell), 2, 4)`.
-    The window must clear the blurred apex, where gradients are not orthogonal to `p − c`
-    (4 px covers the measured PSFs). It must also stay inside the black border cell and the
-    quiet zone, where the L-junction model holds.
+  - **Window:** chosen per corner, not configured.
+    - **Bounds:** 2–4 px, below one cell. The window must clear the blurred apex, where
+      gradients are not orthogonal to `p − c` (4 px covers the measured PSFs). It must also stay
+      inside the black border cell and the quiet zone, where the L-junction model holds.
+    - **Selection:** candidates at 0.3, 0.5 and 0.75 cell are each solved. The largest
+      accepted window is kept unless its covariance trace, `Σ w·r² · tr(A⁻¹)`, is more than 2×
+      a smaller window's. A larger clean window averages more gradients; structure entering the
+      window (ChArUco chessboard corners, clutter) inflates the residual far beyond that factor.
+      Taking the plain minimum instead picks small windows on noise (EuRoC LOO 0.30 → 0.39 px).
   - **Junction check:** a refined corner is kept only if the image around it is still the
     corner of this marker's black border. Half a cell along the inward diagonal must be
     darker than the two side diagonals, which must agree; the outward diagonal is free, as
@@ -23,6 +28,11 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     such as ChArUco chessboard corners.
     - Debiased corner mean: ChArUco 0.279 → 0.223 px; render-tag 1080p 0.250 → 0.230 px.
     - +2 accuracy cells for each of `standard` and the candidate; none lost.
+  - **Per-corner window selection** (added after the junction check):
+    - ChArUco debiased mean / p90 0.223 / 0.453 → 0.151 / 0.203 px (OpenCV 0.170 / 0.233).
+    - render-tag 640 and 4K now beat OpenCV.
+    - Accuracy cells: `standard` 40 → 46, the candidate 44 → 50; none lost.
+    - Latency within 1 %.
   - **Homography:** recomputed from the moved corners, so board refiners and pose see one
     consistent quad.
   - **Parity:** matches OpenCV's `cornerSubPix` to 0.007 px on synthetic corners. The
