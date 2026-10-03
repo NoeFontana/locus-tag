@@ -5,6 +5,9 @@ Usage::
     python -m tools.bench.sota.run locus <family> <profile> <overrides-json> <list> <out> [reps]
     python -m tools.bench.sota.run apriltag3 <family> <list> <out> <threads>
 
+``overrides-json`` merges into the profile; its optional ``"detector"`` object holds per-call
+``Detector`` options instead (e.g. ``{"detector": {"decimation": 2}}``).
+
 Image decode is outside every timer; ``ms`` is the best of ``reps`` ``detect()``
 calls after one untimed warm-up call. Threads are controlled by the caller
 (``RAYON_NUM_THREADS`` for Locus, ``nthreads`` for AprilTag 3).
@@ -51,9 +54,14 @@ def run_locus(
     import locus  # noqa: PLC0415 - deferred so `apriltag3` runs without the wheel
 
     base = locus.DetectorConfig.from_profile(cast(locus.ProfileName, profile))
-    cfg = merge(base.model_dump(mode="json"), json.loads(overrides))
+    over = json.loads(overrides)
+    # `detector` holds per-call options (e.g. `decimation`), not profile keys.
+    options = over.pop("detector", {})
+    cfg = merge(base.model_dump(mode="json"), over)
     det = locus.Detector(
-        config=locus.DetectorConfig.model_validate(cfg), families=[getattr(locus.TagFamily, family)]
+        config=locus.DetectorConfig.model_validate(cfg),
+        families=[getattr(locus.TagFamily, family)],
+        **options,
     )
     warmed = False
     with open(out, "w") as f:
