@@ -24,13 +24,13 @@
     "extraction_mode": "ContourRdp",
     "edlines_imbalance_gate": "Disabled",
     "extraction_policy": "Static",
-    "refine_before_decode": true
+    "refine_before_decode": false
   },
   "decoder": {
     "min_contrast": 20.0,
     "refinement_mode": "Erf",
     "gwlf_transversal_alpha": 0.01,
-    "max_border_error_rate": 1.0,
+    "max_border_error_rate": 0.0,
     "corner_subpix": true
   },
   "pose": {

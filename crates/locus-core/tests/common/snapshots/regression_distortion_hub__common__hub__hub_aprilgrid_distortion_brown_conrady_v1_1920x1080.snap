@@ -5,23 +5,23 @@ expression: report
 ---
 summary:
   dataset_size: 50
-  mean_recall: 0.9401445551338812
-  mean_precision: 0.9943428530899331
-  mean_rmse: 0.1538
-  mean_reprojection_rmse: 0.347
-  p50_translation_error: 0.0372
-  p90_translation_error: 0.2459
-  p99_translation_error: 1.0953
-  p50_rotation_error: 1.7267
-  p90_rotation_error: 8.8569
-  p99_rotation_error: 112.9038
-  mean_hamming: 0.0083
+  mean_recall: 0.9362556662449922
+  mean_precision: 0.9956130143802556
+  mean_rmse: 0.1542
+  mean_reprojection_rmse: 0.3479
+  p50_translation_error: 0.0371
+  p90_translation_error: 0.2387
+  p99_translation_error: 1.1069
+  p50_rotation_error: 1.7236
+  p90_rotation_error: 8.6055
+  p99_rotation_error: 111.52
+  mean_hamming: 0.0092
   mean_total_ms: "[DURATION]"
   worst_offenders:
     - filename: scene_0036_cam_0000.png
       missed: 11
       extra: 0
-      rmse: 0.6889
+      rmse: 0.7183
     - filename: scene_0010_cam_0000.png
       missed: 8
       extra: 0

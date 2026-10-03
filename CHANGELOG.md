@@ -211,6 +211,29 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **Breaking (default output): `standard`, `grid` and `DetectorConfig::default()` decode first
+  and require a dark border ring** (`quad.refine_before_decode = false`,
+  `decoder.max_border_error_rate = 0.0`). `high_accuracy` keeps both historical settings.
+  - **Decode-first:** decoded markers get the same corners as before, and only candidates that
+    decode are refined.
+  - **Ring check:** the marker evidence that offsets decode-first's extra decode attempts on
+    small dictionaries.
+  - **1-thread latency of `standard`** (ms):
+
+    | Benchmark | Before | After |
+    | :-- | --: | --: |
+    | Liu4K | 157.6 | 128.3 |
+    | ICRA forward | 51.2 | 42.6 |
+    | render-tag 1080p | 21.7 | 18.3 |
+    | render-tag 4K | 87.8 | 72.3 |
+
+  - **Snapshots improved:**
+    - tag16h5 precision 97 → 99 %;
+    - ICRA checkerboard recall 70.0 → 71.9 %;
+    - board rotation p99: AprilGrid 0.20° → 0.15°, ChArUco 0.26° → 0.23°.
+  - **Minor regressions:**
+    - distortion-board recall −0.4 pp (Brown–Conrady) and −0.1 pp (Kannala–Brandt);
+    - one extra marginal raw_pipeline detection whose pose sets that set's rotation tail.
 - **Board pose models the marker-corner photometric inset.**
   - **Why:** gradient corner detectors place blurred marker edges where the tone curve puts
     them. On sRGB-encoded images every marker corner of a frame reads about 0.6–0.8 px inside.

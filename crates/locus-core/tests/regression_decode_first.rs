@@ -29,11 +29,11 @@ fn decode_first_matches_refine_first_on_icra_fixture() {
     let view = ImageView::new(&data, w, h, w).expect("view");
 
     for profile in ["standard", "grid"] {
-        let refine_first = DetectorConfig::from_profile(profile);
-        assert!(refine_first.quad_refine_before_decode);
-        let decode_first = DetectorConfig {
-            quad_refine_before_decode: false,
-            ..refine_first
+        let decode_first = DetectorConfig::from_profile(profile);
+        assert!(!decode_first.quad_refine_before_decode);
+        let refine_first = DetectorConfig {
+            quad_refine_before_decode: true,
+            ..decode_first
         };
         let a = detect(refine_first, &view);
         let b = detect(decode_first, &view);

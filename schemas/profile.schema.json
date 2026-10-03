@@ -64,7 +64,7 @@
           "type": "number"
         },
         "max_border_error_rate": {
-          "default": 1.0,
+          "default": 0.0,
           "maximum": 1.0,
           "minimum": 0.0,
           "title": "Max Border Error Rate",
@@ -248,7 +248,7 @@
           "type": "number"
         },
         "refine_before_decode": {
-          "default": true,
+          "default": false,
           "title": "Refine Before Decode",
           "type": "boolean"
         },

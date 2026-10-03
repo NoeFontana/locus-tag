@@ -673,7 +673,7 @@ fn cases() -> Vec<FieldCase> {
             field: "decoder_max_border_error_rate",
             base: noop,
             // Observable only on `BORDER_PROBE`, whose ring has 3 bright cells.
-            mutate: |c| c.decoder_max_border_error_rate = 0.0,
+            mutate: |c| c.decoder_max_border_error_rate = 1.0,
             inert_reason: None,
         },
         FieldCase {
@@ -804,7 +804,7 @@ fn cases() -> Vec<FieldCase> {
             // With `decoder_corner_subpix` on, both orders converge to the same corners on these
             // frames, so the ordering is observed with the corner pass off.
             base: |c| c.decoder_corner_subpix = false,
-            mutate: |c| c.quad_refine_before_decode = false,
+            mutate: |c| c.quad_refine_before_decode = true,
             inert_reason: None,
         },
     ]

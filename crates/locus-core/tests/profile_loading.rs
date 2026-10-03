@@ -35,11 +35,6 @@ fn assert_shared_defaults(cfg: &DetectorConfig) {
         d.adaptive_threshold_constant
     );
     assert_eq!(cfg.threshold_noise_k, d.threshold_noise_k);
-    assert_eq!(
-        cfg.decoder_max_border_error_rate,
-        d.decoder_max_border_error_rate
-    );
-    assert_eq!(cfg.quad_refine_before_decode, d.quad_refine_before_decode);
     // `quad_min_area` is profile-specific (clean-render profiles raise it to
     // suppress small textured-quad false positives); asserted per-profile.
     // `max_hamming_error` is profile-specific (high_accuracy tightens to 1 to
@@ -66,6 +61,8 @@ fn standard_profile_matches_former_builder() {
 
     // Standard-specific overrides.
     assert_eq!(cfg.decoder_corner_subpix, true);
+    assert_eq!(cfg.quad_refine_before_decode, false);
+    assert_eq!(cfg.decoder_max_border_error_rate, 0.0);
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, true);
     assert_eq!(cfg.quad_min_area, 36);
@@ -91,6 +88,8 @@ fn standard_profile_matches_former_builder() {
 fn grid_profile_matches_former_builder() {
     let cfg = DetectorConfig::from_profile("grid");
     assert_eq!(cfg.decoder_corner_subpix, true);
+    assert_eq!(cfg.quad_refine_before_decode, false);
+    assert_eq!(cfg.decoder_max_border_error_rate, 0.0);
 
     // Grid-specific overrides.
     assert_eq!(cfg.threshold_tile_size, 8);
@@ -121,6 +120,8 @@ fn high_accuracy_profile_routes_low_ppb_to_contour_rdp() {
     // High-accuracy overrides. EdLines' whole-edge corners stay unrefined until a fused
     // corner estimator replaces them.
     assert_eq!(cfg.decoder_corner_subpix, false);
+    assert_eq!(cfg.quad_refine_before_decode, true);
+    assert_eq!(cfg.decoder_max_border_error_rate, 1.0);
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, false);
     assert_eq!(cfg.quad_min_area, 400);
@@ -236,7 +237,7 @@ fn to_profile_json_round_trips_every_field() {
             low_refinement: CornerRefinementMode::Erf,
             high_refinement: CornerRefinementMode::None,
         }),
-        quad_refine_before_decode: false,
+        quad_refine_before_decode: true,
         // `decimation` / `nthreads` are per-call orchestration, not profile
         // fields — left at default (they are intentionally not round-tripped).
         ..DetectorConfig::default()

@@ -302,7 +302,8 @@ pub struct DetectorConfig {
     /// can improve recall on small/blurry tags.
     pub decoder_min_contrast: f64,
     /// Largest fraction of the one-cell black border ring that may read bright for a decoded
-    /// candidate to be accepted (default: 1.0, check disabled).
+    /// candidate to be accepted (default: 0.0, every ring cell must read dark; `high_accuracy`
+    /// disables the check with 1.0).
     ///
     /// The ring (`4·(d + 1)` cells around a `d×d` payload) is sampled through the candidate
     /// homography; a cell is an error when brighter than the midpoint of the payload's dark
@@ -471,7 +472,7 @@ pub struct DetectorConfig {
     /// default config would silently exercise new code.
     pub quad_extraction_policy: QuadExtractionPolicy,
     /// Refine every candidate's corners during quad extraction, before decoding (default:
-    /// true, the historical order).
+    /// false, decode-first; `high_accuracy` keeps the historical refine-first order).
     ///
     /// When false (decode-first), candidates are decoded from their contour corners and only
     /// the ones that decode, or miss the Hamming budget by a few bits, are refined: the
@@ -520,7 +521,7 @@ impl Default for DetectorConfig {
             decimation: 1,
             nthreads: 0,
             decoder_min_contrast: 20.0,
-            decoder_max_border_error_rate: 1.0,
+            decoder_max_border_error_rate: 0.0,
             decoder_corner_subpix: true,
             refinement_mode: CornerRefinementMode::Erf,
             max_hamming_error: None,
@@ -539,7 +540,7 @@ impl Default for DetectorConfig {
             outlier_drop_d2_threshold: 0.0,
             pose_edge_refinement_enabled: false,
             quad_extraction_policy: QuadExtractionPolicy::Static,
-            quad_refine_before_decode: true,
+            quad_refine_before_decode: false,
         }
     }
 }

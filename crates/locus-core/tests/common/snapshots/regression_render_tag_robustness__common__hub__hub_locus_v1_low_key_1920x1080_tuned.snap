@@ -1,5 +1,6 @@
 ---
 source: crates/locus-core/tests/common/hub.rs
+assertion_line: 473
 expression: report
 ---
 summary:
@@ -12,7 +13,7 @@ summary:
   p90_translation_error: 0.0141
   p99_translation_error: 0.0278
   p50_rotation_error: 0.33
-  p90_rotation_error: 3.7163
+  p90_rotation_error: 3.7162
   p99_rotation_error: 99.3192
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
