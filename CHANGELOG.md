@@ -216,10 +216,12 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     them. On sRGB-encoded images every marker corner of a frame reads about 0.6–0.8 px inside.
     On a single tag that is indistinguishable from depth; on a board the layout fixes the
     marker centres, so it is a separable nuisance parameter.
-  - **Model:** `BoardEstimator` estimates one edge offset δ per frame. Each corner's own
-    least-squares inset along `(n₁ + n₂)/(1 + n₁·n₂)` (its two edges' inward image normals) is
-    combined with a Huber M-estimator. δ is kept only when it exceeds three standard errors,
-    and is alternated with the pose LM.
+  - **Model:** `BoardEstimator` estimates an edge offset δ per frame for each corner estimator
+    (`DetectionBatch::corner_refined`, new). The ERF edge fit and the gradient-orthogonality
+    junction fit carry different offsets: equal on L-corners, not on AprilGrid's X-junctions.
+    Each corner's own least-squares inset along `(n₁ + n₂)/(1 + n₁·n₂)` (its two edges' inward
+    image normals) is combined with a Huber M-estimator. Each δ is kept only when it exceeds
+    three standard errors, and is alternated with the pose LM.
   - **Effect vs the previous release**, render-tag boards:
 
     | Board | Translation mean (mm) | Translation p95 (mm) | Translation p99 (mm) |
@@ -228,7 +230,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     | AprilGrid | 2.62 → 0.30 | 11.4 → 1.0 | 19.1 → 6.4 |
 
     Rotation mean and p95 improve on both. Rotation p99 rises (ChArUco 0.225° → 0.259°,
-    AprilGrid 0.173° → 0.202°) on frames that mix gradient-refined and unrefined markers.
+    AprilGrid 0.173° → 0.202°) on a few small-marker frames.
+  - **Small-marker trade-off:** the cell bound below keeps the ERF corners of markers under
+    ~3.3 px cells. It is right for ChArUco's L-corners but costs AprilGrid's X-junction corners,
+    which the gradient estimator handles even at 2.5 px.
 - **`decoder.corner_subpix` skips markers whose cells are under ~3.3 px.** There, even its
   smallest window covers more than 0.6 of a cell. Measured on ChArUco boards of 2.3–2.9 px
   cells (board rotation 0.07° → 0.21°); neutral on ICRA, render-tag, AprilGrid, Liu4K and EuRoC.

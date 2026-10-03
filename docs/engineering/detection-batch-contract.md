@@ -22,6 +22,7 @@ The DetectionBatch struct encapsulates the following parallel arrays (slices):
 *   `status_mask`: `[CandidateState; MAX_CANDIDATES]` (A dense byte-array tracking the lifecycle. e.g., Empty, Active, FailedDecode, Valid).
 *   `funnel_status`: `[FunnelStatus; MAX_CANDIDATES]` (Detailed status from the fast-path funnel for rejected quads).
 *   `corner_covariances`: `[[f32; 16]; MAX_CANDIDATES]` (Four 2×2 per-corner covariance matrices, packed row-major as 16 floats; populated by GWLF refinement and consumed by the weighted pose solver).
+*   `corner_refined`: `[u8; MAX_CANDIDATES]` (Bit `j` set ⇔ corner `j` was placed by the decoder's gradient-orthogonality pass, `decoder.corner_subpix`; consumed by the board pose, which models each corner estimator's photometric inset separately).
 *   `outlier_corner_idx`: `[u8; MAX_CANDIDATES]` (Phase D telemetry only, `bench-internals`-gated. Sentinel `u8::MAX` ⇒ no corner was dropped for this candidate. Values `0..=3` identify which corner the outlier-aware LM masked when the 3-corner pose was kept; in that case the stored pose covariance reflects 6 observations instead of 8. Inert when `pose.outlier_drop_d2_threshold = 0.0`).
 
 ## 4. Phase-Isolated Execution Privileges
@@ -33,7 +34,7 @@ A → B.5 (funnel) → B → B.7 (detector-level GWLF, when a route uses it) →
 moved corners) → C → partition → D.
 
 ### Phase A: Contour Extraction
-*   **Privileges**: Write to `corners`, `status_mask`, and `corner_covariances`.
+*   **Privileges**: Write to `corners`, `status_mask`, `corner_covariances`, and `corner_refined` (cleared).
 *   **Contract**: The extractor sequentially writes quad vertices into memory, zeroes the covariance blocks (or fills them with Structure-Tensor estimates when GWLF is enabled), and marks each populated slot `Active`. It returns a single integer N representing the total active candidates found in the frame. With `quad.refine_before_decode = false` (decode-first) on the ERF route of an undistorted camera, the written corners are the unrefined contour corners; Phase C refines the candidates that decode.
 
 ### Phase B: Homography Computation
@@ -49,7 +50,7 @@ moved corners) → C → partition → D.
 *   **Contract**: Funnel-rejected candidates (`status_mask != Active`) are skipped: they are never decoded, so refining them is wasted work. Because corners may move, Phase B is re-run before Phase C whenever this phase refined anything.
 
 ### Phase C: Batched Sampling & Decoding
-*   **Privileges**: Read-Only on the Image Tensor. Write to `ids[0..N]`, `payloads[0..N]`, `error_rates[0..N]`, `status_mask[0..N]`, `corners[0..N]` (rotation-permutation + ERF refinement — see below), and `homographies[0..N]` (recomputed iff corners changed — see below).
+*   **Privileges**: Read-Only on the Image Tensor. Write to `ids[0..N]`, `payloads[0..N]`, `error_rates[0..N]`, `status_mask[0..N]`, `corners[0..N]` (rotation-permutation + ERF refinement + gradient-orthogonality pass — see below), `corner_refined[0..N]` (undistorted path; bits follow the rotation permutation), and `homographies[0..N]` (recomputed iff corners changed — see below).
 *   **Contract**: This phase executes the SIMD bilinear interpolation. If a candidate fails the Hamming distance check, its `status_mask` at index i is flipped to `FailedDecode`. On successful decode with non-zero rotation, the four corners are cyclically permuted in place to match the decoded rotation so that downstream consumers see canonical orientation. When soft-decoding / ERF refinement is active, refined sub-pixel corners are also written back. Under decode-first ordering this is where a decoded (or near-miss) candidate gets the quad-stage refinement Phase A skipped, its edge-contrast gate, and the ERF pass; the match is kept only if the refined quad decodes the same id within the Hamming budget. This is the single exception to the "corners is read-only after Phase A" principle: the rotation permutation preserves the identity invariant (index `i` still refers to the same marker) but renames the four corner slots. **Whenever Phase C writes corners** (rotation, ERF refinement, or both), it MUST also recompute and write `homographies[i]` so the (corners, H) pair stays consistent — downstream `CharucoRefiner` projects saddle predictions through `batch.homographies[i]`, and a stale `h_slot` against refined corners is the same hazard documented in `memory/project_refine_saddle_noop.md`.
 
 ### Phase D: Pose Refinement

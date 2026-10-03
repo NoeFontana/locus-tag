@@ -362,12 +362,12 @@ const SUBPIX_EPS: f64 = 0.005;
 /// chessboard corner next to the marker's white square, or clutter beside a small tag. A
 /// refined corner is therefore kept only if the image around it still shows the corner of this
 /// marker's black border, as checked by [`marker_corner_consistent`]. A rejected corner keeps
-/// its seed.
+/// its seed. Also returns which corners moved (bit `j` = corner `j`).
 pub(crate) fn subpix_marker_corners(
     img: &ImageView,
     seed: [[f64; 2]; 4],
     cells: usize,
-) -> [[f64; 2]; 4] {
+) -> ([[f64; 2]; 4], u8) {
     let side = (0..4)
         .map(|j| {
             let (p, q) = (seed[j], seed[(j + 1) % 4]);
@@ -378,6 +378,7 @@ pub(crate) fn subpix_marker_corners(
     let (halves, count) = corner_subpix_half_windows(side, cells);
     let probe = (0.5 * side / cells.max(1) as f64).max(1.0);
     let mut out = seed;
+    let mut refined_bits = 0u8;
     for j in 0..4 {
         // Accepted solutions, ascending window size.
         let mut accepted = [None::<Subpix>; 3];
@@ -406,9 +407,10 @@ pub(crate) fn subpix_marker_corners(
             .find(|r| r.uncertainty <= SUBPIX_SIGNIFICANT_RATIO * least)
         {
             out[j] = pick.corner;
+            refined_bits |= 1 << j;
         }
     }
-    out
+    (out, refined_bits)
 }
 
 /// Whether `corner` looks like the corner of a dark-bordered marker whose adjacent corners are

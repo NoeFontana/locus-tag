@@ -202,6 +202,7 @@ pub fn extract_quads_soa(
         // Write per-corner 2×2 covariances (4 floats each, 16 total per candidate).
         if covs.is_empty() {
             batch.corner_covariances[i].fill(0.0);
+            batch.corner_refined[i] = 0;
         } else {
             for (chunk, cov) in batch.corner_covariances[i]
                 .chunks_exact_mut(4)
@@ -599,6 +600,7 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
         }
         if covs.is_empty() {
             batch.corner_covariances[i].fill(0.0);
+            batch.corner_refined[i] = 0;
         } else {
             for (chunk, cov) in batch.corner_covariances[i]
                 .chunks_exact_mut(4)
