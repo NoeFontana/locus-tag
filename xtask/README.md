@@ -50,6 +50,10 @@ cargo xtask sota run liu4k --detectors 'locus:standard,locus:mine=standard+my.js
 cargo xtask sota scoreboard                             # win table over every scored benchmark
 ```
 
+`locus:<name>=<profile>+<file.json>` merges the JSON into the profile. A top-level
+`"detector"` object in it holds per-call `Detector` options instead of profile keys, e.g.
+`{"detector": {"decimation": 2}}`.
+
 Outputs land in `target/sota/runs/<benchmark>/`: one `<detector>.jsonl` per
 detector (ids + corners + per-image latency), `meta.json` (verified hardware,
 git revision, threads, protocol), `score.json`, and `report.md`.
