@@ -281,7 +281,8 @@ impl<'a> ErfEdgeFitter<'a> {
     /// Run the Gauss-Newton refinement on the collected samples.
     ///
     /// Updates `self.d` in place to minimize the residual between observed
-    /// intensities and the ERF model.
+    /// intensities and the ERF model. `samples` are [`Self::collect_samples`] output: pixel
+    /// centres with their pixel value, which the per-iteration A/B estimate reuses.
     pub fn refine(&mut self, samples: &[(f64, f64, f64)], config: &RefineConfig) {
         if samples.len() < 10 {
             return;
@@ -306,7 +307,7 @@ impl<'a> ErfEdgeFitter<'a> {
             // Preserve previous (a, b) on zero-weight iterations, matching legacy.
             if config.re_estimate_ab
                 && let Some((new_a, new_b)) =
-                    estimate_ab_per_iter(self.img, samples, self.nx, self.ny, self.d)
+                    estimate_ab_per_iter(samples, self.nx, self.ny, self.d)
             {
                 a = new_a;
                 b = new_b;
@@ -422,7 +423,6 @@ fn estimate_ab_oneshot(samples: &[(f64, f64, f64)], nx: f64, ny: f64, d: f64) ->
 /// callers are expected to keep the previous iteration's estimate in that
 /// case, matching the legacy decoder behavior.
 fn estimate_ab_per_iter(
-    img: &ImageView,
     samples: &[(f64, f64, f64)],
     nx: f64,
     ny: f64,
@@ -433,9 +433,9 @@ fn estimate_ab_per_iter(
     let mut light_sum = 0.0;
     let mut light_weight = 0.0;
 
-    for &(x, y, _) in samples {
+    // Samples sit on pixel centres, where bilinear sampling returns the stored pixel value.
+    for &(x, y, val) in samples {
         let dist = nx * x + ny * y + d;
-        let val = img.sample_bilinear(x, y);
         if dist < -1.0 {
             let w = (-dist - 0.5).clamp(0.1, 2.0);
             dark_sum += val * w;
@@ -567,9 +567,12 @@ fn refine_accumulate_optimized(
         let dist = nx * x + ny * y + d;
         let s = dist * inv_sigma;
         if s.abs() <= 3.0 {
-            let model = (a + b) * 0.5 + (b - a) * 0.5 * crate::simd::math::erf_approx(s);
+            // One exp(-s²) serves both the erf approximation and the Jacobian.
+            let gauss = (-s * s).exp();
+            let model =
+                (a + b) * 0.5 + (b - a) * 0.5 * crate::simd::math::erf_approx_with_gauss(s, gauss);
             let residual = img_val - model;
-            let jac = k * (-s * s).exp();
+            let jac = k * gauss;
             sum_jtj += jac * jac;
             sum_jt_res += jac * residual;
         }

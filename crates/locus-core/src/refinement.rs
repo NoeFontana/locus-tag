@@ -73,7 +73,10 @@ pub(crate) fn refine_quad_corners(
 ///
 /// Indices: corner `i` is refined using `(i-1, i, i+1)` mod 4. With
 /// CW-ordered corners this gives the conventional `(prev, current,
-/// next)` triplet that [`refine_corner`] expects.
+/// next)` triplet that `refine_corner` expects. The result equals four
+/// `refine_corner` calls, but each edge line is fitted once: corner `i`
+/// uses the lines of edges `(i-1, i)` and `(i, i+1)`, which corner `i±1`
+/// fits from the same unrefined endpoints.
 pub(crate) fn refine_all_quad_corners(
     arena: &Bump,
     img: &ImageView,
@@ -82,20 +85,18 @@ pub(crate) fn refine_all_quad_corners(
     decimation: usize,
     use_erf: bool,
 ) -> [Point; 4] {
-    [
-        refine_corner(
-            arena, img, pts[0], pts[3], pts[1], sigma, decimation, use_erf,
-        ),
-        refine_corner(
-            arena, img, pts[1], pts[0], pts[2], sigma, decimation, use_erf,
-        ),
-        refine_corner(
-            arena, img, pts[2], pts[1], pts[3], sigma, decimation, use_erf,
-        ),
-        refine_corner(
-            arena, img, pts[3], pts[2], pts[0], sigma, decimation, use_erf,
-        ),
-    ]
+    let lines: [Option<(f64, f64, f64)>; 4] = std::array::from_fn(|i| {
+        edge_line(
+            arena,
+            img,
+            pts[i],
+            pts[(i + 1) % 4],
+            sigma,
+            decimation,
+            use_erf,
+        )
+    });
+    std::array::from_fn(|i| intersect_corner(pts[i], lines[(i + 3) % 4], lines[i], decimation))
 }
 
 /// Single-corner refinement: intersect two edge-line fits at point `p`,
@@ -104,6 +105,7 @@ pub(crate) fn refine_all_quad_corners(
 /// `use_erf = true` runs the PSF-blurred Gauss-Newton fit and falls
 /// back to the gradient-peak fit on sample shortfall. `use_erf = false`
 /// runs only the gradient-peak fit.
+#[cfg(test)]
 #[expect(
     clippy::too_many_arguments,
     reason = "single-corner refinement primitive; the point, its two neighbours, arena, image, sigma, decimation and use_erf flag are each distinct geometric or tuning inputs with no natural struct grouping"
@@ -118,20 +120,38 @@ pub(crate) fn refine_corner(
     decimation: usize,
     use_erf: bool,
 ) -> Point {
-    let line1 = if use_erf {
-        refine_edge_erf(arena, img, p_prev, p, sigma, decimation)
-            .or_else(|| fit_edge_line(img, p_prev, p, decimation))
-    } else {
-        fit_edge_line(img, p_prev, p, decimation)
-    };
+    let line1 = edge_line(arena, img, p_prev, p, sigma, decimation, use_erf);
+    let line2 = edge_line(arena, img, p, p_next, sigma, decimation, use_erf);
+    intersect_corner(p, line1, line2, decimation)
+}
 
-    let line2 = if use_erf {
-        refine_edge_erf(arena, img, p, p_next, sigma, decimation)
-            .or_else(|| fit_edge_line(img, p, p_next, decimation))
+/// Line fit of the edge `a → b`: the ERF fit with a gradient-peak fallback, or the
+/// gradient-peak fit alone.
+fn edge_line(
+    arena: &Bump,
+    img: &ImageView,
+    a: Point,
+    b: Point,
+    sigma: f64,
+    decimation: usize,
+    use_erf: bool,
+) -> Option<(f64, f64, f64)> {
+    if use_erf {
+        refine_edge_erf(arena, img, a, b, sigma, decimation)
+            .or_else(|| fit_edge_line(img, a, b, decimation))
     } else {
-        fit_edge_line(img, p, p_next, decimation)
-    };
+        fit_edge_line(img, a, b, decimation)
+    }
+}
 
+/// Intersection of two edge lines as the refined corner, or `p` unchanged when the lines are
+/// missing, near-parallel, or meet farther than the sanity radius from `p`.
+fn intersect_corner(
+    p: Point,
+    line1: Option<(f64, f64, f64)>,
+    line2: Option<(f64, f64, f64)>,
+    decimation: usize,
+) -> Point {
     if let (Some(l1), Some(l2)) = (line1, line2) {
         let det = l1.0 * l2.1 - l2.0 * l1.1;
         if det.abs() > 1e-6 {

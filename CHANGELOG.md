@@ -204,6 +204,18 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `standard` and the decode-first front end, and every snapshot is unchanged. 1 thread, medians
   of interleaved runs: quad extraction −11 to −20 %; pipeline −5 % (Liu4K 98.7 → 93.6 ms),
   −6 % (render-tag 4K), −11 % (1080p).
+||||||| parent of 4df78d5 (perf(refine): fit each quad edge once; share exp(-s^2) in the ERF loop)
+- **Faster corner refinement (output byte-identical).**
+  - The quad-stage refinement fits each of a quad's four edge lines once. Each edge had been
+    fitted twice, once per adjacent corner, from the same endpoints.
+  - The ERF Gauss–Newton loop computes `exp(−s²)` once per sample and shares it between the
+    erf approximation and the Jacobian; a proptest pins the bit-identity.
+  - Decoder-style A/B estimation reuses each sample's stored pixel value. Sampling bilinearly at
+    a pixel centre returns exactly that value.
+
+  These matter most on ICRA, where about 110 markers per frame are refined. 1 thread: ICRA
+  decode −36 % and pipeline −24 %; render-tag 4K decode −25 %; Liu4K decode −12 %. Output
+  hashes and every snapshot are unchanged.
 - **Faster candidate generation (output byte-identical).**
   - The quad edge-contrast gate is now a decision with early exit: it stops at the first
     failing edge. On unrefined decode-first seeds it accepts an edge whose chord alone passes

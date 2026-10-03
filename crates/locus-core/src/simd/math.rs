@@ -85,6 +85,15 @@ pub(crate) fn bilinear_interpolate_fixed(x: f32, y: f32, p00: u8, p10: u8, p01: 
 /// to serve as a foundational leaf dependency for both quad refinement and decoder stages.
 #[must_use]
 pub(crate) fn erf_approx(x: f64) -> f64 {
+    let a = x.abs();
+    erf_approx_with_gauss(x, (-a * a).exp())
+}
+
+/// [`erf_approx`] given `gauss = exp(-x²)`, for callers that also need the Gaussian (the ERF
+/// edge model's Jacobian): the result is bit-identical to `erf_approx(x)` when `gauss` is
+/// computed as `(-|x| * |x|).exp()` (equivalently `(-x * x).exp()`).
+#[inline]
+pub(crate) fn erf_approx_with_gauss(x: f64, gauss: f64) -> f64 {
     if x == 0.0 {
         return 0.0;
     }
@@ -100,7 +109,7 @@ pub(crate) fn erf_approx(x: f64) -> f64 {
     let p = 0.327_591_1;
 
     let t = 1.0 / (1.0 + p * x);
-    let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-x * x).exp();
+    let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * gauss;
 
     sign * y
 }
@@ -188,6 +197,18 @@ pub(crate) fn erf_approx_v4(x: [f64; 4]) -> [f64; 4] {
 #[allow(clippy::expect_used, clippy::float_cmp, clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// Sharing exp(-s²) between erf and the ERF Jacobian changes no bit.
+        #[test]
+        fn erf_with_shared_gauss_is_bit_identical(x in -6.0..6.0f64) {
+            prop_assert_eq!(
+                erf_approx_with_gauss(x, (-x * x).exp()).to_bits(),
+                erf_approx(x).to_bits()
+            );
+        }
+    }
 
     #[test]
     fn test_rcp_nr_precision() {
