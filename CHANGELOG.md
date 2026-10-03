@@ -15,6 +15,14 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     The window must clear the blurred apex, where gradients are not orthogonal to `p − c`
     (4 px covers the measured PSFs). It must also stay inside the black border cell and the
     quiet zone, where the L-junction model holds.
+  - **Junction check:** a refined corner is kept only if the image around it is still the
+    corner of this marker's black border. Half a cell along the inward diagonal must be
+    darker than the two side diagonals, which must agree; the outward diagonal is free, as
+    AprilGrid connectors touch it. Otherwise the corner keeps its seed. The estimator
+    converges on any junction in its window, so this rejects captures by outside structure
+    such as ChArUco chessboard corners.
+    - Debiased corner mean: ChArUco 0.279 → 0.223 px; render-tag 1080p 0.250 → 0.230 px.
+    - +2 accuracy cells for each of `standard` and the candidate; none lost.
   - **Homography:** recomputed from the moved corners, so board refiners and pose see one
     consistent quad.
   - **Parity:** matches OpenCV's `cornerSubPix` to 0.007 px on synthetic corners. The

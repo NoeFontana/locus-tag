@@ -2087,21 +2087,13 @@ fn decode_batch_soa_generic(
                 // configured refinement mode (`decoder.corner_subpix`).
                 let subpix = state == CandidateState::Valid && config.decoder_corner_subpix;
                 if subpix {
-                    let side = (0..4)
-                        .map(|j| {
-                            let (p, q) = (corners_slot[j], corners_slot[(j + 1) % 4]);
-                            f64::from(q.x - p.x).hypot(f64::from(q.y - p.y))
-                        })
-                        .sum::<f64>()
-                        * 0.25;
-                    let half = crate::refinement::corner_subpix_half_window(side, subpix_cells);
-                    for corner in corners_slot.iter_mut() {
-                        let r = crate::refinement::corner_subpix(
-                            img,
-                            [f64::from(corner.x), f64::from(corner.y)],
-                            half,
-                        );
-                        *corner = Point2f {
+                    let seed = core::array::from_fn(|j| {
+                        [f64::from(corners_slot[j].x), f64::from(corners_slot[j].y)]
+                    });
+                    let refined =
+                        crate::refinement::subpix_marker_corners(img, seed, subpix_cells);
+                    for (slot, r) in corners_slot.iter_mut().zip(refined) {
+                        *slot = Point2f {
                             x: r[0] as f32,
                             y: r[1] as f32,
                         };

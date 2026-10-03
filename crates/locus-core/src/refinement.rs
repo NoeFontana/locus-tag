@@ -325,6 +325,84 @@ pub(crate) fn corner_subpix_half_window(side_px: f64, cells: usize) -> u32 {
 const SUBPIX_MAX_ITER: u32 = 12;
 const SUBPIX_EPS: f64 = 0.005;
 
+/// Gradient-orthogonality refinement of a decoded marker's four corners (the
+/// `decoder.corner_subpix` pass), keeping only moves the marker model accepts.
+///
+/// The window is sized from the marker ([`corner_subpix_half_window`]). The estimator converges
+/// on any junction in its window, including structure outside the marker: a ChArUco
+/// chessboard corner next to the marker's white square, or clutter beside a small tag. A
+/// refined corner is therefore kept only if the image around it still shows the corner of this
+/// marker's black border, as checked by [`marker_corner_consistent`]. A rejected corner keeps
+/// its seed.
+pub(crate) fn subpix_marker_corners(
+    img: &ImageView,
+    seed: [[f64; 2]; 4],
+    cells: usize,
+) -> [[f64; 2]; 4] {
+    let side = (0..4)
+        .map(|j| {
+            let (p, q) = (seed[j], seed[(j + 1) % 4]);
+            (q[0] - p[0]).hypot(q[1] - p[1])
+        })
+        .sum::<f64>()
+        * 0.25;
+    let half = corner_subpix_half_window(side, cells);
+    let probe = (0.5 * side / cells.max(1) as f64).max(1.0);
+    let mut out = seed;
+    for j in 0..4 {
+        if let Some(refined) = corner_subpix(img, seed[j], half)
+            && marker_corner_consistent(
+                img,
+                refined,
+                seed[(j + 3) % 4],
+                seed[(j + 1) % 4],
+                seed[j],
+                probe,
+            )
+        {
+            out[j] = refined;
+        }
+    }
+    out
+}
+
+/// Whether `corner` looks like the corner of a dark-bordered marker whose adjacent corners are
+/// `prev` and `next` (seed positions; `at` is the seed of this corner, for the edge directions).
+///
+/// With unit vectors `u`, `v` along the two edges from the corner, the image is sampled half a
+/// cell along the inward diagonal (`u + v`, inside the black border cell) and the two side
+/// diagonals (`u − v`, `v − u`, in the quiet zone beside each edge). The inward sample must be
+/// darker than the side samples, and the side samples must agree within half that contrast.
+/// The outward diagonal is not constrained: on an AprilGrid board the tag corner touches a
+/// black connector square there, and the corner is still the true junction. A capture by
+/// outside structure fails this test, because the inward probe then lands in the bright quiet
+/// zone or one side probe lands on the other structure.
+fn marker_corner_consistent(
+    img: &ImageView,
+    corner: [f64; 2],
+    prev: [f64; 2],
+    next: [f64; 2],
+    at: [f64; 2],
+    probe: f64,
+) -> bool {
+    let unit = |to: [f64; 2]| {
+        let (dx, dy) = (to[0] - at[0], to[1] - at[1]);
+        let n = dx.hypot(dy);
+        [dx / n, dy / n]
+    };
+    let (u, v) = (unit(prev), unit(next));
+    let at_offset = |a: f64, b: f64| {
+        img.sample_bilinear(
+            corner[0] + probe * (a * u[0] + b * v[0]),
+            corner[1] + probe * (a * u[1] + b * v[1]),
+        )
+    };
+    let inward = at_offset(1.0, 1.0);
+    let (side_u, side_v) = (at_offset(1.0, -1.0), at_offset(-1.0, 1.0));
+    let contrast = 0.5 * (side_u + side_v) - inward;
+    contrast > 0.0 && (side_u - side_v).abs() < 0.5 * contrast
+}
+
 /// Gradient-orthogonality corner refinement, the `cv::cornerSubPix` model.
 ///
 /// At a corner `c`, every gradient `∇I(p)` in the neighbourhood is orthogonal to `p − c`: on a
@@ -334,11 +412,11 @@ const SUBPIX_EPS: f64 = 0.005;
 /// until the step is under `SUBPIX_EPS` px (at most `SUBPIX_MAX_ITER` times). Gradients are
 /// central differences of a bilinearly resampled patch, as OpenCV computes them.
 ///
-/// Returns `seed` when the result leaves the `half`-px box around it, the window leaves the
-/// image, or the normal matrix is singular (a flat or single-edge patch). Locus pixel
+/// Returns `None` when the result leaves the `half`-px box around the seed, the window leaves
+/// the image, or the normal matrix is singular (a flat or single-edge patch). Locus pixel
 /// convention (+0.5 centres), like the rest of the crate. `half` must be in
 /// `1..=SUBPIX_MAX_HALF`.
-pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> [f64; 2] {
+pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> Option<[f64; 2]> {
     debug_assert!((1..=SUBPIX_MAX_HALF).contains(&half));
     let hw = half as usize;
     let span = 2 * hw + 1; // window side
@@ -362,7 +440,7 @@ pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> [f64;
             || x0 + (side as f64) >= img.width as f64
             || y0 + (side as f64) >= img.height as f64
         {
-            return seed;
+            return None;
         }
         // Non-negative and in range: checked just above.
         #[allow(clippy::cast_sign_loss)]
@@ -406,7 +484,7 @@ pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> [f64;
         }
         let det = sxx * syy - sxy * sxy;
         if det.abs() <= f64::EPSILON * f64::EPSILON {
-            return seed;
+            return None;
         }
         let step = [
             (syy * rhs_x - sxy * rhs_y) / det,
@@ -419,9 +497,9 @@ pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> [f64;
     }
     let limit = f64::from(half);
     if (corner[0] - seed[0]).abs() <= limit && (corner[1] - seed[1]).abs() <= limit {
-        corner
+        Some(corner)
     } else {
-        seed
+        None
     }
 }
 
@@ -429,9 +507,7 @@ pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> [f64;
 #[allow(
     clippy::unwrap_used,
     clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    // The fallbacks return `seed` itself, so the comparison is exact by contract.
-    clippy::float_cmp
+    clippy::cast_sign_loss
 )]
 mod subpix_tests {
     use super::corner_subpix;
@@ -478,7 +554,7 @@ mod subpix_tests {
             let apex = [31.27 + 0.11 * k as f64, 30.64 - 0.07 * k as f64];
             let data = wedge(apex, theta);
             let img = ImageView::new(&data, W, W, W).unwrap();
-            let got = corner_subpix(&img, [apex[0] + 1.3, apex[1] - 0.9], 4);
+            let got = corner_subpix(&img, [apex[0] + 1.3, apex[1] - 0.9], 4).unwrap();
             let d = (got[0] - opencv[k][0]).hypot(got[1] - opencv[k][1]);
             assert!(
                 d < 0.01,
@@ -501,24 +577,58 @@ mod subpix_tests {
         assert_eq!(hw(0.0, 8), 2);
     }
 
+    /// Bright canvas with the given dark axis-aligned squares `[x0, x1) × [y0, y1)`.
+    fn squares(dark: &[[usize; 4]]) -> Vec<u8> {
+        let mut img = vec![220u8; W * W];
+        for &[x0, x1, y0, y1] in dark {
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    img[y * W + x] = 40;
+                }
+            }
+        }
+        img
+    }
+
     #[test]
-    fn keeps_the_seed_without_a_corner() {
+    fn marker_corner_check_accepts_marker_corners_and_rejects_outside_junctions() {
+        use super::marker_corner_consistent as consistent;
+        // Marker [20, 44)²; its top-left corner sits at (20, 20) in Locus coordinates, with
+        // adjacent corners (20, 44) and (44, 20).
+        let (at, prev, next) = ([20.0, 20.0], [20.0, 44.0], [44.0, 20.0]);
+        let marker = squares(&[[20, 44, 20, 44]]);
+        let img = ImageView::new(&marker, W, W, W).unwrap();
+        assert!(consistent(&img, at, prev, next, at, 3.0));
+
+        // AprilGrid: a black connector square touches the corner from outside.
+        let grid = squares(&[[20, 44, 20, 44], [8, 20, 8, 20]]);
+        let img = ImageView::new(&grid, W, W, W).unwrap();
+        assert!(consistent(&img, at, prev, next, at, 3.0));
+
+        // ChArUco-like capture: the corner of an outside square in the quiet zone.
+        let board = squares(&[[20, 44, 20, 44], [4, 14, 4, 14]]);
+        let img = ImageView::new(&board, W, W, W).unwrap();
+        assert!(!consistent(&img, [14.0, 14.0], prev, next, at, 3.0));
+    }
+
+    #[test]
+    fn declines_without_a_corner() {
         let flat = vec![128u8; W * W];
         let img = ImageView::new(&flat, W, W, W).unwrap();
-        assert_eq!(corner_subpix(&img, [32.2, 31.7], 4), [32.2, 31.7]);
+        assert_eq!(corner_subpix(&img, [32.2, 31.7], 4), None);
 
         // A single straight edge constrains one direction only: the normal matrix is singular.
         let edge: Vec<u8> = (0..W * W)
             .map(|i| if i % W < 32 { 40 } else { 220 })
             .collect();
         let img = ImageView::new(&edge, W, W, W).unwrap();
-        assert_eq!(corner_subpix(&img, [32.0, 30.5], 4), [32.0, 30.5]);
+        assert_eq!(corner_subpix(&img, [32.0, 30.5], 4), None);
     }
 
     #[test]
-    fn keeps_the_seed_when_the_window_leaves_the_image() {
+    fn declines_when_the_window_leaves_the_image() {
         let data = wedge([3.0, 3.0], 0.0);
         let img = ImageView::new(&data, W, W, W).unwrap();
-        assert_eq!(corner_subpix(&img, [3.4, 2.6], 4), [3.4, 2.6]);
+        assert_eq!(corner_subpix(&img, [3.4, 2.6], 4), None);
     }
 }
