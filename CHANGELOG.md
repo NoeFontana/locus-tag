@@ -211,6 +211,27 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **Board pose models the marker-corner photometric inset.**
+  - **Why:** gradient corner detectors place blurred marker edges where the tone curve puts
+    them. On sRGB-encoded images every marker corner of a frame reads about 0.6–0.8 px inside.
+    On a single tag that is indistinguishable from depth; on a board the layout fixes the
+    marker centres, so it is a separable nuisance parameter.
+  - **Model:** `BoardEstimator` estimates one edge offset δ per frame. Each corner's own
+    least-squares inset along `(n₁ + n₂)/(1 + n₁·n₂)` (its two edges' inward image normals) is
+    combined with a Huber M-estimator. δ is kept only when it exceeds three standard errors,
+    and is alternated with the pose LM.
+  - **Effect vs the previous release**, render-tag boards:
+
+    | Board | Translation mean (mm) | Translation p95 (mm) | Translation p99 (mm) |
+    | :-- | --: | --: | --: |
+    | ChArUco | 2.39 → 0.51 | 9.3 → 2.3 | 12.7 → 8.4 |
+    | AprilGrid | 2.62 → 0.30 | 11.4 → 1.0 | 19.1 → 6.4 |
+
+    Rotation mean and p95 improve on both. Rotation p99 rises (ChArUco 0.225° → 0.259°,
+    AprilGrid 0.173° → 0.202°) on frames that mix gradient-refined and unrefined markers.
+- **`decoder.corner_subpix` skips markers whose cells are under ~3.3 px.** There, even its
+  smallest window covers more than 0.6 of a cell. Measured on ChArUco boards of 2.3–2.9 px
+  cells (board rotation 0.07° → 0.21°); neutral on ICRA, render-tag, AprilGrid, Liu4K and EuRoC.
 - **Breaking (default output): `standard` and `grid` enable `decoder.corner_subpix`.** Decoded
   corners move to the gradient-orthogonality solution, so default corner and pose outputs
   change (15 snapshots re-baselined).

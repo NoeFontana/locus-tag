@@ -6,16 +6,16 @@ expression: report
 summary:
   dataset_size: 150
   frames_with_board: 150
-  mean_board_translation_error_m: 0.004324834511818152
-  p50_board_translation_error_m: 0.00127467373706633
-  p95_board_translation_error_m: 0.0210861502070944
-  p99_board_translation_error_m: 0.04251915739853228
-  mean_board_rotation_error_deg: 0.07488993168111455
-  p50_board_rotation_error_deg: 0.030741294620607394
-  p95_board_rotation_error_deg: 0.39868944005448204
-  p99_board_rotation_error_deg: 0.7877597105817559
-  mean_board_translation_std_m: 0.0029251531559402024
-  mean_board_rotation_std_deg: 0.22404697170681867
+  mean_board_translation_error_m: 0.004452491491068847
+  p50_board_translation_error_m: 0.0007327685355900041
+  p95_board_translation_error_m: 0.029197735360959598
+  p99_board_translation_error_m: 0.06159908177877564
+  mean_board_rotation_error_deg: 0.06606369008535645
+  p50_board_rotation_error_deg: 0.026004676451629367
+  p95_board_rotation_error_deg: 0.30171767723408977
+  p99_board_rotation_error_deg: 0.634599800905436
+  mean_board_translation_std_m: 0.0029074125508539443
+  mean_board_rotation_std_deg: 0.22321160614373
   mean_tag_coverage: 0.9985185185185185
   mean_total_ms: "[DURATION]"
   frames_no_estimate: 0
